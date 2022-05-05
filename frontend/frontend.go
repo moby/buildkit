@@ -3,6 +3,7 @@ package frontend
 import (
 	"context"
 
+	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client/llb"
 	gw "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/session"
@@ -16,6 +17,7 @@ type Frontend interface {
 
 type FrontendLLBBridge interface {
 	Solve(ctx context.Context, req SolveRequest, sid string) (*Result, error)
+	Export(ctx context.Context, refs map[string]cache.ImmutableRef, metadata map[string][]byte) error
 	ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt) (digest.Digest, []byte, error)
 	Warn(ctx context.Context, dgst digest.Digest, msg string, opts WarnOpts) error
 }

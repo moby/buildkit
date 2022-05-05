@@ -9,9 +9,11 @@ import (
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/mitchellh/hashstructure/v2"
+	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
 	gw "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/identity"
@@ -168,6 +170,55 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest, sid st
 	}
 
 	return
+}
+
+// getExporter is earthly specific code which extracts the configured exporter
+// from the job's metadata
+func (b *llbBridge) getExporter(ctx context.Context) (*ExporterRequest, error) {
+	var exp *ExporterRequest
+	numExporters := 0
+	b.builder.EachValue(context.TODO(), keyEarthlyExporterInstance, func(v interface{}) error {
+		numExporters++
+		exp = v.(*ExporterRequest)
+		return nil
+	})
+	if numExporters != 1 {
+		return nil, fmt.Errorf("Export found %d exporters (should have been 1)", numExporters) // shouldn't happen
+	}
+	return exp, nil
+}
+
+func (b *llbBridge) Export(ctx context.Context, refs map[string]cache.ImmutableRef, metadata map[string][]byte) error {
+	// generate an ID that's consistent for the refs
+	refKeys := []string{}
+	for k := range refs {
+		refKeys = append(refKeys, k)
+	}
+	id := strings.Join(refKeys, "-")
+
+	inp := exporter.Source{
+		Refs:     refs,
+		Metadata: metadata,
+	}
+
+	exp, err := b.getExporter(ctx)
+	if err != nil {
+		return err
+	}
+	if exp.Exporter == nil {
+		return fmt.Errorf("Export had no exporter configured")
+	}
+
+	return inBuilderContext(ctx, b.builder, exp.Exporter.Name(), id, func(ctx context.Context, g session.Group) error {
+		sessionIDs := session.AllSessionIDs(g)
+		if len(sessionIDs) == 0 {
+			return fmt.Errorf("group has no session IDs") // shouldnt happen
+		}
+		sessionID := sessionIDs[0]
+		var err error
+		_, err = exp.Exporter.Export(ctx, inp, sessionID)
+		return err
+	})
 }
 
 type resultProxy struct {

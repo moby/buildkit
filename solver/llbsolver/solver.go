@@ -28,6 +28,7 @@ import (
 )
 
 const keyEntitlements = "llb.entitlements"
+const keyEarthlyExporterInstance = "earthly-hack-exporter-instance"
 
 type ExporterRequest struct {
 	Exporter        exporter.ExporterInstance
@@ -104,6 +105,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		return nil, err
 	}
 	j.SetValue(keyEntitlements, set)
+	j.SetValue(keyEarthlyExporterInstance, &exp)
 
 	j.SessionID = sessionID
 
