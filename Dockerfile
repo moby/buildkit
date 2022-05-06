@@ -6,7 +6,7 @@ ARG CONTAINERD_VERSION=v1.6.3
 ARG CONTAINERD_ALT_VERSION_15=v1.5.11
 # containerd v1.4 for integration tests
 ARG CONTAINERD_ALT_VERSION_14=v1.4.13
-# available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
+# BUILDKIT_TARGET defines buildkitd worker mode (buildkitd, buildkitd.oci_only, buildkitd.containerd_only)
 ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=2.8.0
 ARG ROOTLESSKIT_VERSION=v0.14.6
@@ -14,6 +14,7 @@ ARG CNI_VERSION=v1.1.0
 ARG STARGZ_SNAPSHOTTER_VERSION=v0.11.4
 ARG NERDCTL_VERSION=v0.17.1
 
+# ALPINE_VERSION sets version for the base layers
 ARG ALPINE_VERSION=3.15
 
 # git stage is used for checking out remote repository sources
@@ -73,6 +74,7 @@ RUN --mount=target=. --mount=target=/root/.cache,type=cache \
 
 # build buildkitd binary
 FROM buildkit-base AS buildkitd
+# BUILDKITD_TAGS defines additional Go build tags for compiling buildkitd
 ARG BUILDKITD_TAGS
 ARG TARGETPLATFORM
 RUN --mount=target=. --mount=target=/root/.cache,type=cache \
@@ -140,7 +142,6 @@ RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target
 # containerd v1.5 for integration tests
 FROM containerd-base as containerd-alt-15
 ARG CONTAINERD_ALT_VERSION_15
-ARG GO111MODULE=off
 RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target=/root/.cache,type=cache \
   git fetch origin \
   && git checkout -q "$CONTAINERD_ALT_VERSION_15" \
@@ -151,7 +152,6 @@ RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target
 # containerd v1.4 for integration tests
 FROM containerd-base as containerd-alt-14
 ARG CONTAINERD_ALT_VERSION_14
-ARG GO111MODULE=off
 RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target=/root/.cache,type=cache \
   git fetch origin \
   && git checkout -q "$CONTAINERD_ALT_VERSION_14" \
@@ -252,6 +252,7 @@ COPY --link --from=cni-plugins /opt/cni/bin/bridge /opt/cni/bin/host-local /opt/
 COPY --link hack/fixtures/cni.json /etc/buildkit/cni.json
 COPY --link --from=binaries / /usr/bin/
 
+# integration-tests prepares an image suitable for running all tests
 FROM integration-tests-base AS integration-tests
 COPY . .
 ENV BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS=1 BUILDKIT_CNI_INIT_LOCK_PATH=/run/buildkit_cni_bridge.lock
@@ -279,7 +280,7 @@ ENV BUILDKIT_HOST=unix:///run/user/1000/buildkit/buildkitd.sock
 VOLUME /home/user/.local/share/buildkit
 ENTRYPOINT ["rootlesskit", "buildkitd"]
 
-
-FROM buildkit-${BUILDKIT_TARGET}
+# buildkit builds the buildkit container image
+FROM buildkit-${BUILDKIT_TARGET} AS buildkit
 
 
