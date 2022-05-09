@@ -5342,6 +5342,8 @@ COPY --from=base /out /
 	require.NoError(t, err)
 	require.True(t, len(dt) > 0)
 
+	integration.SkipIfDockerd(t, sb, "direct push")
+
 	// Now test with an image with custom envs
 	dockerfile = []byte(`
 FROM alpine:latest
