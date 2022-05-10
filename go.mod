@@ -8,10 +8,10 @@ require (
 	github.com/agext/levenshtein v1.2.3
 	github.com/armon/circbuf v0.0.0-20190214190532-5111143e8da2
 	github.com/containerd/console v1.0.3
-	github.com/containerd/containerd v1.6.3
+	github.com/containerd/containerd v1.6.4
 	github.com/containerd/continuity v0.3.0
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
-	github.com/containerd/go-cni v1.1.4
+	github.com/containerd/go-cni v1.1.5
 	github.com/containerd/go-runc v1.0.0
 	github.com/containerd/stargz-snapshotter v0.11.4
 	github.com/containerd/stargz-snapshotter/estargz v0.11.4
@@ -42,7 +42,7 @@ require (
 	github.com/opencontainers/image-spec v1.0.3-0.20211202183452-c5a74bcca799
 	github.com/opencontainers/runc v1.1.1
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417
-	github.com/opencontainers/selinux v1.10.0
+	github.com/opencontainers/selinux v1.10.1
 	github.com/pelletier/go-toml v1.9.4
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.5.0
@@ -83,7 +83,7 @@ require (
 	github.com/containerd/cgroups v1.0.3 // indirect
 	github.com/containerd/fifo v1.0.0 // indirect
 	github.com/containerd/ttrpc v1.1.0 // indirect
-	github.com/containernetworking/cni v1.0.1 // indirect
+	github.com/containernetworking/cni v1.1.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
