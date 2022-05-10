@@ -236,7 +236,6 @@ github.com/docker/docker/client
 github.com/docker/docker/errdefs
 github.com/docker/docker/libnetwork/ipamutils
 github.com/docker/docker/libnetwork/resolvconf
-github.com/docker/docker/libnetwork/types
 github.com/docker/docker/opts
 github.com/docker/docker/pkg/archive
 github.com/docker/docker/pkg/chrootarchive
@@ -353,9 +352,6 @@ github.com/hashicorp/go-retryablehttp
 # github.com/hashicorp/golang-lru v0.5.3
 ## explicit; go 1.12
 github.com/hashicorp/golang-lru/simplelru
-# github.com/ishidawataru/sctp v0.0.0-20210226210310-f2269e66cdee
-## explicit; go 1.12
-github.com/ishidawataru/sctp
 # github.com/klauspost/compress v1.15.1
 ## explicit; go 1.15
 github.com/klauspost/compress
