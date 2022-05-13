@@ -12,7 +12,6 @@ import (
 	"runtime"
 	"sort"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -23,7 +22,6 @@ import (
 	"github.com/moby/buildkit/util/contentutil"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/semaphore"
 )
@@ -151,20 +149,7 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 	mirror, cleanup, err := runMirror(t, tc.mirroredImages)
 	require.NoError(t, err)
 
-	var mu sync.Mutex
-	var count int
-	cleanOnComplete := func() func() {
-		count++
-		return func() {
-			mu.Lock()
-			count--
-			if count == 0 {
-				cleanup()
-			}
-			mu.Unlock()
-		}
-	}
-	defer cleanOnComplete()()
+	t.Cleanup(func() { _ = cleanup() })
 
 	matrix := prepareValueMatrix(tc)
 
@@ -182,8 +167,6 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 				func(fn, testName string, br Worker, tc Test, mv matrixValue) {
 					ok := t.Run(testName, func(t *testing.T) {
 						ctx := appcontext.Context()
-
-						defer cleanOnComplete()()
 						if !strings.HasSuffix(fn, "NoParallel") {
 							t.Parallel()
 						}
@@ -192,8 +175,8 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 
 						sb, closer, err := newSandbox(ctx, br, mirror, mv)
 						require.NoError(t, err)
+						t.Cleanup(func() { _ = closer() })
 						defer func() {
-							assert.NoError(t, closer())
 							if t.Failed() {
 								sb.PrintLogs(t)
 							}
