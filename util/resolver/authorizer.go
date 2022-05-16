@@ -88,6 +88,20 @@ func (a *authHandlerNS) get(ctx context.Context, host string, sm *session.Manage
 		}
 	}
 
+	// if no handler found or linked, then a new one needs to be created
+	session, username, password, err := sessionauth.CredentialsFunc(sm, g)(host)
+	if err == nil {
+		if username != "" {
+			common := auth.TokenOptions{
+				Username: username,
+				Secret:   password,
+			}
+			a.handlers[host+"/"+session] = newAuthHandler(host, nil, auth.BasicAuth, nil, common)
+			a.handlers[host+"/"+session].lastUsed = time.Now()
+			return a.handlers[host+"/"+session]
+		}
+	}
+
 	return nil
 }
 
