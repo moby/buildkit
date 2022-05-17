@@ -33,17 +33,19 @@ const defaultExpiration = 60
 
 func NewDockerAuthProvider(stderr io.Writer) session.Attachable {
 	return &authProvider{
-		config:      config.LoadDefaultConfigFile(stderr),
-		seeds:       &tokenSeeds{dir: config.Dir()},
-		loggerCache: map[string]struct{}{},
+		authConfigCache: map[string]*types.AuthConfig{},
+		config:          config.LoadDefaultConfigFile(stderr),
+		seeds:           &tokenSeeds{dir: config.Dir()},
+		loggerCache:     map[string]struct{}{},
 	}
 }
 
 type authProvider struct {
-	config      *configfile.ConfigFile
-	seeds       *tokenSeeds
-	logger      progresswriter.Logger
-	loggerCache map[string]struct{}
+	authConfigCache map[string]*types.AuthConfig
+	config          *configfile.ConfigFile
+	seeds           *tokenSeeds
+	logger          progresswriter.Logger
+	loggerCache     map[string]struct{}
 
 	// The need for this mutex is not well understood.
 	// Without it, the docker cli on OS X hangs when
@@ -180,16 +182,20 @@ func (ap *authProvider) VerifyTokenAuthority(ctx context.Context, req *auth.Veri
 }
 
 func (ap *authProvider) getAuthConfig(host string) (*types.AuthConfig, error) {
-	ap.mu.Lock()
-	defer ap.mu.Unlock()
-	if host == "registry-1.docker.io" {
-		host = "https://index.docker.io/v1/"
+	if _, exists := ap.authConfigCache[host]; !exists {
+		ap.mu.Lock()
+		defer ap.mu.Unlock()
+		if host == "registry-1.docker.io" {
+			host = "https://index.docker.io/v1/"
+		}
+		ac, err := ap.config.GetAuthConfig(host)
+		if err != nil {
+			return nil, err
+		}
+		ap.authConfigCache[host] = &ac
 	}
-	ac, err := ap.config.GetAuthConfig(host)
-	if err != nil {
-		return nil, err
-	}
-	return &ac, nil
+
+	return ap.authConfigCache[host], nil
 }
 
 func (ap *authProvider) getAuthorityKey(host string, salt []byte) (ed25519.PrivateKey, error) {
