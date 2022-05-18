@@ -182,9 +182,9 @@ func (ap *authProvider) VerifyTokenAuthority(ctx context.Context, req *auth.Veri
 }
 
 func (ap *authProvider) getAuthConfig(host string) (*types.AuthConfig, error) {
+	ap.mu.Lock()
+	defer ap.mu.Unlock()
 	if _, exists := ap.authConfigCache[host]; !exists {
-		ap.mu.Lock()
-		defer ap.mu.Unlock()
 		if host == "registry-1.docker.io" {
 			host = "https://index.docker.io/v1/"
 		}
