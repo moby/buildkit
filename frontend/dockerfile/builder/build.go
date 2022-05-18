@@ -824,6 +824,10 @@ func contextByName(ctx context.Context, c client.Client, name string, platform *
 	if len(vv) != 2 {
 		return nil, nil, nil, errors.Errorf("invalid context specifier %s for %s", v, name)
 	}
+	// allow git@ without protocol for SSH URLs for backwards compatibility
+	if strings.HasPrefix(vv[0], "git@") {
+		vv[0] = "git"
+	}
 	switch vv[0] {
 	case "docker-image":
 		ref := strings.TrimPrefix(vv[1], "//")
