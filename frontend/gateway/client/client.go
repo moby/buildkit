@@ -14,6 +14,7 @@ import (
 
 type Client interface {
 	Solve(ctx context.Context, req SolveRequest) (*Result, error)
+	Export(ctx context.Context, req ExportRequest) error
 	ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt) (digest.Digest, []byte, error)
 	BuildOpts() BuildOpts
 	Inputs(ctx context.Context) (map[string]llb.State, error)
@@ -118,6 +119,11 @@ type SolveRequest struct {
 type CacheOptionsEntry struct {
 	Type  string
 	Attrs map[string]string
+}
+
+type ExportRequest struct {
+	Refs     map[string]Reference
+	Metadata map[string][]byte
 }
 
 type WorkerInfo struct {

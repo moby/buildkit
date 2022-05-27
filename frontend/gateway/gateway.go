@@ -813,6 +813,26 @@ func (lbf *llbBridgeForwarder) ReadDir(ctx context.Context, req *pb.ReadDirReque
 	return &pb.ReadDirResponse{Entries: entries}, nil
 }
 
+func (lbf *llbBridgeForwarder) Export(ctx context.Context, req *pb.ExportRequest) (*pb.ExportResponse, error) {
+	var err error
+	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
+
+	refs := map[string]cache.ImmutableRef{}
+	for k, ref := range req.Refs.Refs {
+		ref, err := lbf.getImmutableRef(ctx, ref.Id, "/") // the path is only used in error messages, in our case we want the full image
+		if err != nil {
+			return nil, err
+		}
+		refs[k] = ref
+	}
+
+	err = lbf.llbBridge.Export(ctx, refs, req.Metadata)
+	if err != nil {
+		return nil, lbf.wrapSolveError(err)
+	}
+	return &pb.ExportResponse{}, nil
+}
+
 func (lbf *llbBridgeForwarder) StatFile(ctx context.Context, req *pb.StatFileRequest) (*pb.StatFileResponse, error) {
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
 

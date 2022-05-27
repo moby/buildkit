@@ -30,6 +30,8 @@ service LLBBridge {
 	// apicaps:CapFrontendInputs
 	rpc Inputs(InputsRequest) returns (InputsResponse);
 
+	rpc Export(ExportRequest) returns (ExportResponse);
+
 	rpc NewContainer(NewContainerRequest) returns (NewContainerResponse);
 	rpc ReleaseContainer(ReleaseContainerRequest) returns (ReleaseContainerResponse);
 	rpc ExecProcess(stream ExecMessage) returns (stream ExecMessage);
@@ -154,6 +156,15 @@ message ReadDirRequest {
 
 message ReadDirResponse {
 	repeated fsutil.types.Stat entries = 1;
+}
+
+message ExportRequest {
+	RefMap refs = 1;
+	map<string, bytes> metadata = 2;
+}
+
+message ExportResponse {
+	// nothing yet
 }
 
 message StatFileRequest {

@@ -443,6 +443,25 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (res *
 	return res, nil
 }
 
+func (c *grpcClient) Export(ctx context.Context, req client.ExportRequest) error {
+	m := map[string]*pb.Ref{}
+	for k, r := range req.Refs {
+		pbRef, err := convertRef(r)
+		if err != nil {
+			return err
+		}
+		m[k] = pbRef
+	}
+	_, err := c.client.Export(ctx, &pb.ExportRequest{
+		Refs:     &pb.RefMap{Refs: m},
+		Metadata: req.Metadata,
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (c *grpcClient) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt) (digest.Digest, []byte, error) {
 	var p *opspb.Platform
 	if platform := opt.Platform; platform != nil {

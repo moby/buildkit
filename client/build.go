@@ -99,6 +99,11 @@ func (g *gatewayClientForBuild) ReadDir(ctx context.Context, in *gatewayapi.Read
 	return g.gateway.ReadDir(ctx, in, opts...)
 }
 
+func (g *gatewayClientForBuild) Export(ctx context.Context, in *gatewayapi.ExportRequest, opts ...grpc.CallOption) (*gatewayapi.ExportResponse, error) {
+	ctx = buildid.AppendToOutgoingContext(ctx, g.buildID)
+	return g.gateway.Export(ctx, in, opts...)
+}
+
 func (g *gatewayClientForBuild) StatFile(ctx context.Context, in *gatewayapi.StatFileRequest, opts ...grpc.CallOption) (*gatewayapi.StatFileResponse, error) {
 	if err := g.caps.Supports(gatewayapi.CapStatFile); err != nil {
 		return nil, err
