@@ -11,6 +11,8 @@ import (
 
 const defaultPort = 22
 
+var defaultPortStr = fmt.Sprintf("%d", defaultPort)
+
 var errCallbackDone = fmt.Errorf("callback failed on purpose")
 
 // addDefaultPort appends a default port if hostport doesn't contain one
@@ -24,14 +26,21 @@ func addDefaultPort(hostport string, defaultPort int) string {
 }
 
 // SSHKeyScan scans a ssh server for the hostkey; server should be in the form hostname, or hostname:port
+// the returned keyscan should be <ip> <alg> <alg-data>, or [<ip>]:<port> <alg> <alg-data> for non-standard ports
 func SSHKeyScan(server string) (string, error) {
 	var key string
 	KeyScanCallback := func(hostport string, remote net.Addr, pubKey ssh.PublicKey) error {
-		hostname, _, err := net.SplitHostPort(hostport)
+		hostname, port, err := net.SplitHostPort(hostport)
 		if err != nil {
 			return err
 		}
-		key = strings.TrimSpace(fmt.Sprintf("%s %s", hostname, string(ssh.MarshalAuthorizedKey(pubKey))))
+		var serverID string
+		if port == defaultPortStr {
+			serverID = hostname
+		} else {
+			serverID = fmt.Sprintf("[%s]:%s", hostname, port)
+		}
+		key = strings.TrimSpace(fmt.Sprintf("%s %s", serverID, string(ssh.MarshalAuthorizedKey(pubKey))))
 		return errCallbackDone
 	}
 	config := &ssh.ClientConfig{

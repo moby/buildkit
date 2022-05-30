@@ -4,6 +4,8 @@ import (
 	"context"
 	_ "crypto/sha256" // for opencontainers/go-digest
 	"encoding/json"
+	"fmt"
+	neturl "net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -210,23 +212,31 @@ type ImageInfo struct {
 func Git(remote, ref string, opts ...GitOption) State {
 	url := strings.Split(remote, "#")[0]
 
-	var protocolType int
-	remote, protocolType = gitutil.ParseProtocol(remote)
+	remoteSuffix, protocolType := gitutil.ParseProtocol(remote)
 
 	var sshHost string
 	if protocolType == gitutil.SSHProtocol {
-		parts := strings.SplitN(remote, ":", 2)
-		if len(parts) == 2 {
-			sshHost = parts[0]
-			// keep remote consistent with http(s) version
-			remote = parts[0] + "/" + parts[1]
+		if sshutil.IsImplicitSSHTransport(remote) {
+			parts := strings.SplitN(remoteSuffix, ":", 2)
+			if len(parts) == 2 {
+				sshHost = parts[0]
+				// keep remote consistent with http(s) version
+				remoteSuffix = parts[0] + "/" + parts[1]
+			}
+		} else {
+			p, err := neturl.Parse(remote)
+			if err != nil {
+				// function doesn't return errors; previously errors were just ignored
+				panic(fmt.Sprintf("failed to parse remote %v: %v", remote, err))
+			}
+			sshHost = strings.TrimSuffix(p.Host, ":22")
 		}
 	}
 	if protocolType == gitutil.UnknownProtocol {
 		url = "https://" + url
 	}
 
-	id := remote
+	id := remoteSuffix
 
 	if ref != "" {
 		id += "#" + ref
@@ -265,10 +275,10 @@ func Git(remote, ref string, opts ...GitOption) State {
 			attrs[pb.AttrKnownSSHHosts] = gi.KnownSSHHosts
 		} else if sshHost != "" {
 			keyscan, err := sshutil.SSHKeyScan(sshHost)
-			if err == nil {
-				// best effort
-				attrs[pb.AttrKnownSSHHosts] = keyscan
+			if err != nil {
+				panic(fmt.Sprintf("Git(%s,%s) failed to scan ssh keys: %v", remote, ref, err))
 			}
+			attrs[pb.AttrKnownSSHHosts] = keyscan
 		}
 		addCap(&gi.Constraints, pb.CapSourceGitKnownSSHHosts)
 
