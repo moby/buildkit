@@ -630,12 +630,19 @@ func gitWithinDir(ctx context.Context, gitDir, workDir, sshAuthSock, knownHosts 
 	return git(ctx, workDir, sshAuthSock, knownHosts, append(a, args...)...)
 }
 
+func gitDebug() bool {
+	return os.Getenv("BUILDKIT_DEBUG_GIT") == "1"
+}
+
 func getGitSSHCommand(knownHosts string) string {
 	gitSSHCommand := "ssh -F /dev/null"
 	if knownHosts != "" {
 		gitSSHCommand += " -o UserKnownHostsFile=" + knownHosts
 	} else {
 		gitSSHCommand += " -o StrictHostKeyChecking=no"
+	}
+	if gitDebug() {
+		gitSSHCommand += " -vvvv"
 	}
 	return gitSSHCommand
 }
@@ -662,7 +669,9 @@ func git(ctx context.Context, dir, sshAuthSock, knownHosts string, args ...strin
 			"HOME=" + os.Getenv("HOME"), // earthly needs this for git to read /root/.gitconfig
 			"GIT_TERMINAL_PROMPT=0",
 			"GIT_SSH_COMMAND=" + getGitSSHCommand(knownHosts),
-			//	"GIT_TRACE=1",
+		}
+		if gitDebug() {
+			cmd.Env = append(cmd.Env, "GIT_TRACE=1")
 		}
 		if sshAuthSock != "" {
 			cmd.Env = append(cmd.Env, "SSH_AUTH_SOCK="+sshAuthSock)
@@ -677,6 +686,10 @@ func git(ctx context.Context, dir, sshAuthSock, knownHosts string, args ...strin
 					continue
 				}
 			}
+		}
+		if gitDebug() {
+			bklog.G(ctx).Infof("git stdout: %s", buf.String())
+			bklog.G(ctx).Infof("git stderr: %s", errbuf.String())
 		}
 		return buf, err
 	}
@@ -705,6 +718,14 @@ func tokenScope(remote string) string {
 
 // getDefaultBranch gets the default branch of a repository using ls-remote
 func getDefaultBranch(ctx context.Context, gitDir, workDir, sshAuthSock, knownHosts string, auth []string, remoteURL string) (string, error) {
+	if gitDebug() {
+		knownHostsContents, err := ioutil.ReadFile(knownHosts)
+		if err != nil {
+			bklog.G(ctx).Warnf("failed to read %s: %v", knownHosts, err)
+		} else {
+			bklog.G(ctx).Infof("%s contents: %s", knownHosts, knownHostsContents)
+		}
+	}
 	buf, err := gitWithinDir(ctx, gitDir, workDir, sshAuthSock, knownHosts, auth, "ls-remote", "--symref", remoteURL, "HEAD")
 	if err != nil {
 		return "", errors.Wrapf(err, "error fetching default branch for repository %s", urlutil.RedactCredentials(remoteURL))
