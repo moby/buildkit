@@ -28,7 +28,7 @@ func TestDirectives(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, v.Value, "FOO bar")
 
-	// for some reason Moby implementation in case insensitive for escape
+	// for some reason Moby implementation is case insensitive for escape
 	dt = `# EScape=\
 # KEY = FOO bar
 
