@@ -11,8 +11,8 @@ import (
 
 const keySyntax = "syntax"
 
-var reShebang = regexp.MustCompile(`^#!.*$`)
-var reDirective = regexp.MustCompile(`^#\s*([a-zA-Z][a-zA-Z0-9]*)\s*=\s*(.+?)\s*$`)
+var reShebang = regexp.MustCompile(`^#!.+$`)
+var reDirective = regexp.MustCompile(`^(?:#|\/{2})\s*([a-zA-Z][a-zA-Z0-9]*)\s*=\s*(.+?)\s*$`)
 
 type Directive struct {
 	Name     string
