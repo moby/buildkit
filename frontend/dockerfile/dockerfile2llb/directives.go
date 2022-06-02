@@ -42,7 +42,7 @@ func ParseDirectives(r io.Reader) map[string]Directive {
 		if reShebang.MatchString(s.Text()) {
 			// If a line contains a shebang, skip the
 			// line and continue parsing directives.
-			continue;	
+			continue
 		}
 		match := reDirective.FindStringSubmatch(s.Text())
 		if len(match) == 0 {
