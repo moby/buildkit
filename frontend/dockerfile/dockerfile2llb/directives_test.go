@@ -11,10 +11,11 @@ import (
 func TestDirectives(t *testing.T) {
 	t.Parallel()
 
+	// Test basic directive parsing
 	dt := `#escape=\
 # key = FOO bar
 
-# smth
+# something
 `
 
 	d := ParseDirectives(bytes.NewBuffer([]byte(dt)))
@@ -28,11 +29,11 @@ func TestDirectives(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, v.Value, "FOO bar")
 
-	// for some reason Moby implementation is case insensitive for escape
+	// Keys are treated as lower-case
 	dt = `# EScape=\
 # KEY = FOO bar
 
-# smth
+# something
 `
 
 	d = ParseDirectives(bytes.NewBuffer([]byte(dt)))
@@ -45,6 +46,21 @@ func TestDirectives(t *testing.T) {
 	v, ok = d["key"]
 	require.True(t, ok)
 	require.Equal(t, v.Value, "FOO bar")
+
+	// Test with shebang line(s), even with an = symbol
+	dt = `#!/usr/bin/env=1
+#! /usr/bin/env 1
+#KEY=FOO
+
+# something
+`
+
+	d = ParseDirectives(bytes.NewBuffer([]byte(dt)))
+	require.Equal(t, len(d), 1, fmt.Sprintf("%+v", d))
+
+	v, ok = d["key"]
+	require.True(t, ok)
+	require.Equal(t, v.Value, "FOO")
 }
 
 func TestSyntaxDirective(t *testing.T) {
