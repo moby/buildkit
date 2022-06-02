@@ -11,6 +11,7 @@ import (
 
 const keySyntax = "syntax"
 
+var reShebang = regexp.MustCompile(`^#!.*$`)
 var reDirective = regexp.MustCompile(`^#\s*([a-zA-Z][a-zA-Z0-9]*)\s*=\s*(.+?)\s*$`)
 
 type Directive struct {
@@ -38,8 +39,15 @@ func ParseDirectives(r io.Reader) map[string]Directive {
 	var l int
 	for s.Scan() {
 		l++
+		if reShebang.MatchString(s.Text()) {
+			// If a line contains a shebang, skip the
+			// line and continue parsing directives.
+			continue;	
+		}
 		match := reDirective.FindStringSubmatch(s.Text())
 		if len(match) == 0 {
+			// If a line is encountered which does not
+			// contain a directive, stop parsing.
 			return m
 		}
 		m[strings.ToLower(match[1])] = Directive{
