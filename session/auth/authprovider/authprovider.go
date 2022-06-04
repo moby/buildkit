@@ -6,7 +6,6 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -31,10 +30,10 @@ import (
 
 const defaultExpiration = 60
 
-func NewDockerAuthProvider(stderr io.Writer) session.Attachable {
+func NewDockerAuthProvider(cfg *configfile.ConfigFile) session.Attachable {
 	return &authProvider{
 		authConfigCache: map[string]*types.AuthConfig{},
-		config:          config.LoadDefaultConfigFile(stderr),
+		config:          cfg,
 		seeds:           &tokenSeeds{dir: config.Dir()},
 		loggerCache:     map[string]struct{}{},
 	}
