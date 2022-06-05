@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/containerd/continuity"
+	"github.com/docker/cli/cli/config"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/cmd/buildctl/build"
@@ -139,7 +140,8 @@ func buildAction(clicontext *cli.Context) error {
 		logrus.Infof("tracing logs to %s", traceFile.Name())
 	}
 
-	attachable := []session.Attachable{authprovider.NewDockerAuthProvider(os.Stderr)}
+	dockerConfig := config.LoadDefaultConfigFile(os.Stderr)
+	attachable := []session.Attachable{authprovider.NewDockerAuthProvider(dockerConfig)}
 
 	if ssh := clicontext.StringSlice("ssh"); len(ssh) > 0 {
 		configs, err := build.ParseSSH(ssh)
