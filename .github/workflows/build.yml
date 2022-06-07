@@ -27,6 +27,8 @@ env:
   CACHE_GHA_SCOPE_IT: "integration-tests"
   CACHE_GHA_SCOPE_BINARIES: "binaries"
   CACHE_GHA_SCOPE_CROSS: "cross"
+  GO_VERSION: "1.18"  # same as one in Dockerfile
+  GOTESTSUM_VERSION: "v1.8.1"  # same as one in Dockerfile
   BUILDX_VERSION: "v0.8.2"  # leave empty to use the one available on GitHub virtual environment
 
 jobs:
@@ -112,23 +114,27 @@ jobs:
       -
         name: Test pkg=${{ matrix.pkg }} ; typ=${{ matrix.typ }} ; skipit=${{ matrix.skip-integration-tests }} ; worker=${{ matrix.worker }}
         run: |
-          export TESTFLAGS="-v --parallel=6 --timeout=20m"
+          export TEST_REPORT_SUFFIX=-${{ github.job }}-$(echo "${{ matrix.pkg }}-${{ matrix.skip-integration-tests }}-${{ matrix.typ }}-${{ matrix.worker }}" | tr -dc '[:alnum:]-\n\r' | tr '[:upper:]' '[:lower:]')
+          export TESTFLAGS="-v --parallel=6 --timeout=30m"
           if [ -n "${{ matrix.worker }}" ]; then
             export TESTFLAGS="${TESTFLAGS} --run=//worker=${{ matrix.worker }}$"
           fi
           ./hack/test ${{ matrix.typ }}
-          mv ./coverage/coverage.txt ./coverage/coverage-${{ github.job }}-$(echo "${{ matrix.pkg }}-${{ matrix.skip-integration-tests }}-${{ matrix.typ }}-${{ matrix.worker }}" | tr -dc '[:alnum:]-\n\r' | tr '[:upper:]' '[:lower:]').txt
         env:
-          TEST_COVERAGE: 1
           TESTPKGS: ${{ matrix.pkg }}
           SKIP_INTEGRATION_TESTS: ${{ matrix.skip-integration-tests }}
           CACHE_FROM: type=gha,scope=${{ env.CACHE_GHA_SCOPE_IT }} type=gha,scope=${{ env.CACHE_GHA_SCOPE_BINARIES }}
       -
-        name: Upload coverage file
-        uses: actions/upload-artifact@v2
+        name: Send to Codecov
+        uses: codecov/codecov-action@v3
         with:
-          name: coverage
-          path: ./coverage
+          directory: ./bin/testreports
+      -
+        name: Upload test reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-reports
+          path: ./bin/testreports
 
   test-s3:
     runs-on: ubuntu-latest
@@ -170,7 +176,7 @@ jobs:
         name: Set up Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.18
+          go-version: ${{ env.GO_VERSION }}
       -
         name: Cache Go modules
         uses: actions/cache@v2
@@ -179,6 +185,10 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
+      -
+        name: Install gotestsum
+        run: |
+          go install gotest.tools/gotestsum@${{ env.GOTESTSUM_VERSION }}
       -
         name: Go mod
         run: |
@@ -189,45 +199,28 @@ jobs:
           TMPDIR: ${{ runner.temp }}
           SKIP_INTEGRATION_TESTS: 1
         run: |
-          mkdir -p ./coverage
-          go test -coverprofile=./coverage/coverage-${{ github.job }}-${{ matrix.os }}.txt -covermode=atomic ./...
+          TEST_REPORT_SUFFIX=-${{ github.job }}-${{ matrix.os }}
+          mkdir -p ./bin/testreports
+          gotestsum \
+            --format=standard-verbose \
+            --jsonfile="./bin/testreports/go-test-report${TEST_REPORT_SUFFIX}.json" \
+            --junitfile="./bin/testreports/junit-report${TEST_REPORT_SUFFIX}.xml" \
+            --packages="./..." \
+            -- \
+              "-coverprofile" "./bin/testreports/coverage-report${TEST_REPORT_SUFFIX}.txt" \
+              "-covermode" "atomic"
         shell: bash
       -
-        name: Upload coverage file
-        uses: actions/upload-artifact@v2
-        with:
-          name: coverage
-          path: ./coverage
-
-  upload-coverage:
-    runs-on: ubuntu-latest
-    needs: [test, test-os]
-    steps:
-      -
-        name: Checkout
-        uses: actions/checkout@v2
-      -
-        name: Download coverage files
-        uses: actions/download-artifact@v2
-        with:
-          name: coverage
-          path: ./coverage
-      -
-        name: List coverage files
-        uses: actions/github-script@v3
-        id: files
-        with:
-          result-encoding: string
-          script: |
-            return require('fs').readdirSync('./coverage', {withFileTypes: true})
-              .filter(item => !item.isDirectory())
-              .map(item => `./coverage/${item.name}`)
-              .join(',');
-      -
         name: Send to Codecov
-        uses: codecov/codecov-action@v2
+        uses: codecov/codecov-action@v3
         with:
-          files: ${{ steps.files.outputs.result }}
+          directory: ./bin/testreports
+      -
+        name: Upload test reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-reports
+          path: ./bin/testreports
 
   cross:
     runs-on: ubuntu-latest
