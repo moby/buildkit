@@ -9,6 +9,10 @@
 #         moby/buildkit:v0.8.1-rootless > moby/buildkit:buildx-stable-1-rootless
 name: buildx-image
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   workflow_dispatch:
     inputs:
