@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/Microsoft/go-winio v0.5.2
-	github.com/Microsoft/hcsshim v0.9.2
+	github.com/Microsoft/hcsshim v0.9.3
 	github.com/agext/levenshtein v1.2.3
 	github.com/armon/circbuf v0.0.0-20190214190532-5111143e8da2
 	github.com/aws/aws-sdk-go-v2/config v1.15.5
@@ -13,10 +13,10 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.26.9
 	github.com/aws/smithy-go v1.11.2
 	github.com/containerd/console v1.0.3
-	github.com/containerd/containerd v1.6.4
+	github.com/containerd/containerd v1.6.6
 	github.com/containerd/continuity v0.3.0
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
-	github.com/containerd/go-cni v1.1.5
+	github.com/containerd/go-cni v1.1.6
 	github.com/containerd/go-runc v1.0.0
 	github.com/containerd/stargz-snapshotter v0.11.4
 	github.com/containerd/stargz-snapshotter/estargz v0.11.4
@@ -45,7 +45,7 @@ require (
 	github.com/morikuni/aec v1.0.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.0.3-0.20211202183452-c5a74bcca799
-	github.com/opencontainers/runc v1.1.1
+	github.com/opencontainers/runc v1.1.2
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417
 	github.com/opencontainers/selinux v1.10.1
 	github.com/pelletier/go-toml v1.9.4
@@ -75,7 +75,7 @@ require (
 	golang.org/x/crypto v0.0.0-20220315160706-3147a52a75dd
 	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20220405210540-1e041c57c461
+	golang.org/x/sys v0.0.0-20220412211240-33da011f77ad
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
 	google.golang.org/genproto v0.0.0-20220107163113-42d7afdf6368
 	google.golang.org/grpc v1.45.0
@@ -101,7 +101,7 @@ require (
 	github.com/containerd/cgroups v1.0.3 // indirect
 	github.com/containerd/fifo v1.0.0 // indirect
 	github.com/containerd/ttrpc v1.1.0 // indirect
-	github.com/containernetworking/cni v1.1.0 // indirect
+	github.com/containernetworking/cni v1.1.1 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
