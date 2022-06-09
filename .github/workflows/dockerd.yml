@@ -1,5 +1,9 @@
 name: dockerd
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   # TODO: add event to build on command in PR (e.g., /test-dockerd)
   workflow_dispatch:
