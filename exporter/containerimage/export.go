@@ -75,12 +75,13 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 			RefCfg: cacheconfig.RefConfig{
 				Compression: compression.New(compression.Default),
 			},
-			BuildInfo: true,
+			BuildInfo:   true,
+			Annotations: make(AnnotationsGroup),
 		},
 		store: true,
 	}
 
-	opt, err := i.opts.Parse(opt)
+	opt, err := i.opts.Load(opt)
 	if err != nil {
 		return nil, err
 	}
@@ -201,13 +202,20 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 		src.Metadata[k] = v
 	}
 
+	opts := e.opts
+	as, _, err := ParseAnnotations(src.Metadata)
+	if err != nil {
+		return nil, err
+	}
+	opts.Annotations = as.Merge(opts.Annotations)
+
 	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
 		return nil, err
 	}
 	defer done(context.TODO())
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, sessionID, &e.opts)
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, sessionID, &opts)
 	if err != nil {
 		return nil, err
 	}

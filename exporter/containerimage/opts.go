@@ -30,12 +30,20 @@ type ImageWriterOpts struct {
 	OCITypes       bool
 	BuildInfo      bool
 	BuildInfoAttrs bool
+	Annotations    AnnotationsGroup
 }
 
-func (c *ImageWriterOpts) Parse(opt map[string]string) (map[string]string, error) {
+func (c *ImageWriterOpts) Load(opt map[string]string) (map[string]string, error) {
 	rest := make(map[string]string)
 
 	esgz := false
+
+	as, optb, err := ParseAnnotations(toBytesMap(opt))
+	if err != nil {
+		return nil, err
+	}
+	c.Annotations = as
+	opt = toStringMap(optb)
 
 	for k, v := range opt {
 		var err error
@@ -106,4 +114,20 @@ func parseBoolWithDefault(dest *bool, key string, value string, defaultValue boo
 		return nil
 	}
 	return parseBool(dest, key, value)
+}
+
+func toBytesMap(m map[string]string) map[string][]byte {
+	result := make(map[string][]byte)
+	for k, v := range m {
+		result[k] = []byte(v)
+	}
+	return result
+}
+
+func toStringMap(m map[string][]byte) map[string]string {
+	result := make(map[string]string)
+	for k, v := range m {
+		result[k] = string(v)
+	}
+	return result
 }
