@@ -565,7 +565,10 @@ func unaryInterceptor(globalCtx context.Context, tp trace.TracerProvider) grpc.U
 
 		resp, err = withTrace(ctx, req, info, handler)
 		if err != nil {
-			logrus.Errorf("%s returned error: %+v", info.FullMethod, stack.Formatter(err))
+			logrus.Errorf("%s returned error: %v", info.FullMethod, err)
+			if logrus.GetLevel() >= logrus.DebugLevel {
+				fmt.Fprintf(os.Stderr, "%+v", stack.Formatter(grpcerrors.FromGRPC(err)))
+			}
 		}
 		return
 	}
