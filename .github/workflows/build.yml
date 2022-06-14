@@ -30,6 +30,7 @@ env:
   GO_VERSION: "1.18"  # same as one in Dockerfile
   GOTESTSUM_VERSION: "v1.8.1"  # same as one in Dockerfile
   BUILDX_VERSION: "v0.8.2"  # leave empty to use the one available on GitHub virtual environment
+  TESTSTAT_VERSION: "v0.1.3"
 
 jobs:
   base:
@@ -131,6 +132,7 @@ jobs:
           directory: ./bin/testreports
       -
         name: Upload test reports
+        if: always()
         uses: actions/upload-artifact@v3
         with:
           name: test-reports
@@ -217,10 +219,64 @@ jobs:
           directory: ./bin/testreports
       -
         name: Upload test reports
+        if: always()
         uses: actions/upload-artifact@v3
         with:
           name: test-reports
           path: ./bin/testreports
+
+  test-report:
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - test
+      - test-os
+    strategy:
+      fail-fast: false
+      matrix:
+        filter:
+          - unit
+          - integration-containerd
+          - integration-containerd-14
+          - integration-containerd-15
+          - integration-containerd-rootless
+          - integration-containerd-snapshotter-stargz
+          - integration-oci
+          - integration-oci-rootless
+          - integration-oci-snapshotter-stargz
+    steps:
+      -
+        name: Set up Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      -
+        name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: test-reports
+          path: /tmp/testreports
+      -
+        name: Install teststat
+        run: |
+          go install github.com/vearutop/teststat@${{ env.TESTSTAT_VERSION }}
+      -
+        name: Filter test reports
+        run: |
+          filter=(! -name "*${{ matrix.filter}}.*")
+          if [ "${{ matrix.filter}}" = "unit" ]; then
+            filter=(! -name "*integrationgateway-.*" -a ! -name "*test-os-*.*")
+          fi
+          find /tmp/testreports -type f ${filter[@]} -delete
+      -
+        name: Run test-summary
+        uses: test-summary/action@v1
+        with:
+          paths: /tmp/testreports/**/*.xml
+      -
+        name: Run teststat
+        run: |
+          teststat -markdown $(find /tmp/testreports -type f -name "*.json" -print0 | xargs -0) >> $GITHUB_STEP_SUMMARY
 
   cross:
     runs-on: ubuntu-latest
