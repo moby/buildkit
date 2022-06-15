@@ -242,6 +242,10 @@ Keys supported by image output:
 * `buildinfo=true`: inline build info in [image config](docs/build-repro.md#image-config) (default `true`).
 * `buildinfo-attrs=true`: inline build info attributes in [image config](docs/build-repro.md#image-config) (default `false`).
 * `store=true`: stores the result images to the worker's (e.g. containerd) image store as well as ensures that the image has all blobs in the content store (default `true`). Ignored if the worker doesn't have image store (e.g. OCI worker).
+* `annotation.key=value`: attaches an annotation with the respective `key` and `value` to the built image.
+  * Using the extended syntaxes, `annotation-<type>.key=value`, `annotation[<platform>].key=value` and both combined with `annotation-<type>[<platform>].key=value`, allows configuring exactly where to attach the annotation.
+  * `<type>` specifies what object to attach to, and can be any of `manifest` (the default), `manifest-descriptor`, `index` and `index-descriptor`
+  * `<platform>` specifies which objects to attach to (by default, all), and is the same key passed into the `platform` opt, see [`docs/multi-platform.md`](docs/multi-platform.md).
 
 If credentials are required, `buildctl` will attempt to read Docker configuration file `$DOCKER_CONFIG/config.json`.
 `$DOCKER_CONFIG` defaults to `~/.docker`.
