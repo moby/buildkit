@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/docker/distribution/reference"
@@ -71,6 +72,7 @@ type ConvertOpt struct {
 	ContextLocalName string
 	SourceMap        *llb.SourceMap
 	Hostname         string
+	SourceDateEpoch  *time.Time
 	Warn             func(short, url string, detail [][]byte, location *parser.Range)
 	ContextByName    func(ctx context.Context, name, resolveMode string, p *ocispecs.Platform) (*llb.State, *Image, *binfotypes.BuildInfo, error)
 }
@@ -227,6 +229,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			stageName:      st.Name,
 			prefixPlatform: opt.PrefixPlatform,
 			outline:        outline.clone(),
+			epoch:          opt.SourceDateEpoch,
 		}
 
 		if v := st.Platform; v != "" {
@@ -254,7 +257,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 				ds.noinit = true
 				ds.state = *s
 				if img != nil {
-					ds.image = *img
+					ds.image = clampTimes(*img, opt.SourceDateEpoch)
 					if img.Architecture != "" && img.OS != "" {
 						ds.platform = &ocispecs.Platform{
 							OS:           img.OS,
@@ -802,6 +805,7 @@ type dispatchState struct {
 	prefixPlatform bool
 	buildInfo      binfotypes.BuildInfo
 	outline        outlineCapture
+	epoch          *time.Time
 }
 
 type dispatchStates struct {
@@ -878,7 +882,7 @@ func dispatchEnv(d *dispatchState, c *instructions.EnvCommand) error {
 		d.state = d.state.AddEnv(e.Key, e.Value)
 		d.image.Config.Env = addEnv(d.image.Config.Env, e.Key, e.Value)
 	}
-	return commitToHistory(&d.image, commitMessage.String(), false, nil)
+	return commitToHistory(&d.image, commitMessage.String(), false, nil, d.epoch)
 }
 
 func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyEnv, sources []*dispatchState, dopt dispatchOpt) error {
@@ -1008,7 +1012,7 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 	}
 
 	d.state = d.state.Run(opt...).Root()
-	return commitToHistory(&d.image, "RUN "+runCommandString(args, d.buildArgs, shell.BuildEnvs(env)), true, &d.state)
+	return commitToHistory(&d.image, "RUN "+runCommandString(args, d.buildArgs, shell.BuildEnvs(env)), true, &d.state, d.epoch)
 }
 
 func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bool, opt *dispatchOpt) error {
@@ -1039,7 +1043,7 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bo
 			)
 			withLayer = true
 		}
-		return commitToHistory(&d.image, "WORKDIR "+wd, withLayer, nil)
+		return commitToHistory(&d.image, "WORKDIR "+wd, withLayer, nil, d.epoch)
 	}
 	return nil
 }
@@ -1219,7 +1223,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		d.state = d.state.File(a, fileOpt...)
 	}
 
-	return commitToHistory(&d.image, commitMessage.String(), true, &d.state)
+	return commitToHistory(&d.image, commitMessage.String(), true, &d.state, d.epoch)
 }
 
 type copyConfig struct {
@@ -1237,7 +1241,7 @@ type copyConfig struct {
 
 func dispatchMaintainer(d *dispatchState, c *instructions.MaintainerCommand) error {
 	d.image.Author = c.Maintainer
-	return commitToHistory(&d.image, fmt.Sprintf("MAINTAINER %v", c.Maintainer), false, nil)
+	return commitToHistory(&d.image, fmt.Sprintf("MAINTAINER %v", c.Maintainer), false, nil, d.epoch)
 }
 
 func dispatchLabel(d *dispatchState, c *instructions.LabelCommand) error {
@@ -1249,7 +1253,7 @@ func dispatchLabel(d *dispatchState, c *instructions.LabelCommand) error {
 		d.image.Config.Labels[v.Key] = v.Value
 		commitMessage.WriteString(" " + v.String())
 	}
-	return commitToHistory(&d.image, commitMessage.String(), false, nil)
+	return commitToHistory(&d.image, commitMessage.String(), false, nil, d.epoch)
 }
 
 func dispatchOnbuild(d *dispatchState, c *instructions.OnbuildCommand) error {
@@ -1265,7 +1269,7 @@ func dispatchCmd(d *dispatchState, c *instructions.CmdCommand) error {
 	d.image.Config.Cmd = args
 	d.image.Config.ArgsEscaped = true
 	d.cmdSet = true
-	return commitToHistory(&d.image, fmt.Sprintf("CMD %q", args), false, nil)
+	return commitToHistory(&d.image, fmt.Sprintf("CMD %q", args), false, nil, d.epoch)
 }
 
 func dispatchEntrypoint(d *dispatchState, c *instructions.EntrypointCommand) error {
@@ -1277,7 +1281,7 @@ func dispatchEntrypoint(d *dispatchState, c *instructions.EntrypointCommand) err
 	if !d.cmdSet {
 		d.image.Config.Cmd = nil
 	}
-	return commitToHistory(&d.image, fmt.Sprintf("ENTRYPOINT %q", args), false, nil)
+	return commitToHistory(&d.image, fmt.Sprintf("ENTRYPOINT %q", args), false, nil, d.epoch)
 }
 
 func dispatchHealthcheck(d *dispatchState, c *instructions.HealthCheckCommand) error {
@@ -1288,7 +1292,7 @@ func dispatchHealthcheck(d *dispatchState, c *instructions.HealthCheckCommand) e
 		StartPeriod: c.Health.StartPeriod,
 		Retries:     c.Health.Retries,
 	}
-	return commitToHistory(&d.image, fmt.Sprintf("HEALTHCHECK %q", d.image.Config.Healthcheck), false, nil)
+	return commitToHistory(&d.image, fmt.Sprintf("HEALTHCHECK %q", d.image.Config.Healthcheck), false, nil, d.epoch)
 }
 
 func dispatchExpose(d *dispatchState, c *instructions.ExposeCommand, shlex *shell.Lex) error {
@@ -1318,14 +1322,14 @@ func dispatchExpose(d *dispatchState, c *instructions.ExposeCommand, shlex *shel
 		d.image.Config.ExposedPorts[string(p)] = struct{}{}
 	}
 
-	return commitToHistory(&d.image, fmt.Sprintf("EXPOSE %v", ps), false, nil)
+	return commitToHistory(&d.image, fmt.Sprintf("EXPOSE %v", ps), false, nil, d.epoch)
 }
 
 func dispatchUser(d *dispatchState, c *instructions.UserCommand, commit bool) error {
 	d.state = d.state.User(c.User)
 	d.image.Config.User = c.User
 	if commit {
-		return commitToHistory(&d.image, fmt.Sprintf("USER %v", c.User), false, nil)
+		return commitToHistory(&d.image, fmt.Sprintf("USER %v", c.User), false, nil, d.epoch)
 	}
 	return nil
 }
@@ -1340,7 +1344,7 @@ func dispatchVolume(d *dispatchState, c *instructions.VolumeCommand) error {
 		}
 		d.image.Config.Volumes[v] = struct{}{}
 	}
-	return commitToHistory(&d.image, fmt.Sprintf("VOLUME %v", c.Volumes), false, nil)
+	return commitToHistory(&d.image, fmt.Sprintf("VOLUME %v", c.Volumes), false, nil, d.epoch)
 }
 
 func dispatchStopSignal(d *dispatchState, c *instructions.StopSignalCommand) error {
@@ -1348,12 +1352,12 @@ func dispatchStopSignal(d *dispatchState, c *instructions.StopSignalCommand) err
 		return err
 	}
 	d.image.Config.StopSignal = c.Signal
-	return commitToHistory(&d.image, fmt.Sprintf("STOPSIGNAL %v", c.Signal), false, nil)
+	return commitToHistory(&d.image, fmt.Sprintf("STOPSIGNAL %v", c.Signal), false, nil, d.epoch)
 }
 
 func dispatchShell(d *dispatchState, c *instructions.ShellCommand) error {
 	d.image.Config.Shell = c.Shell
-	return commitToHistory(&d.image, fmt.Sprintf("SHELL %v", c.Shell), false, nil)
+	return commitToHistory(&d.image, fmt.Sprintf("SHELL %v", c.Shell), false, nil, d.epoch)
 }
 
 func dispatchArg(d *dispatchState, c *instructions.ArgCommand, metaArgs []instructions.KeyValuePairOptional, buildArgValues map[string]string) error {
@@ -1391,7 +1395,7 @@ func dispatchArg(d *dispatchState, c *instructions.ArgCommand, metaArgs []instru
 
 		d.buildArgs = append(d.buildArgs, buildArg)
 	}
-	return commitToHistory(&d.image, "ARG "+strings.Join(commitStrs, " "), false, nil)
+	return commitToHistory(&d.image, "ARG "+strings.Join(commitStrs, " "), false, nil, d.epoch)
 }
 
 func pathRelativeToWorkingDir(s llb.State, p string) (string, error) {
@@ -1468,7 +1472,7 @@ func runCommandString(args []string, buildArgs []instructions.KeyValuePairOption
 	return strings.Join(append(tmpBuildEnv, args...), " ")
 }
 
-func commitToHistory(img *Image, msg string, withLayer bool, st *llb.State) error {
+func commitToHistory(img *Image, msg string, withLayer bool, st *llb.State, tm *time.Time) error {
 	if st != nil {
 		msg += " # buildkit"
 	}
@@ -1477,6 +1481,7 @@ func commitToHistory(img *Image, msg string, withLayer bool, st *llb.State) erro
 		CreatedBy:  msg,
 		Comment:    historyComment,
 		EmptyLayer: !withLayer,
+		Created:    tm,
 	})
 	return nil
 }
@@ -1731,4 +1736,19 @@ func commonImageNames() []string {
 		out = append(out, name, "docker.io/library"+name, name+":latest", "docker.io/library"+name+":latest")
 	}
 	return out
+}
+
+func clampTimes(img Image, tm *time.Time) Image {
+	if tm == nil {
+		return img
+	}
+	for i, h := range img.History {
+		if h.Created == nil || h.Created.After(*tm) {
+			img.History[i].Created = tm
+		}
+	}
+	if img.Created != nil && img.Created.After(*tm) {
+		img.Created = tm
+	}
+	return img
 }

@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/docker/distribution/reference"
@@ -71,6 +72,7 @@ const (
 	keyHostnameArg          = "build-arg:BUILDKIT_SANDBOX_HOSTNAME"
 	keyMultiPlatformArg     = "build-arg:BUILDKIT_MULTI_PLATFORM"
 	keySyntaxArg            = "build-arg:BUILDKIT_SYNTAX"
+	keySourceDateEpoch      = "build-arg:SOURCE_DATE_EPOCH"
 )
 
 var httpPrefix = regexp.MustCompile(`^https?://`)
@@ -423,6 +425,11 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 		opts[keyHostname] = v
 	}
 
+	epoch, err := parseSourceDateEpoch(opts[keySourceDateEpoch])
+	if err != nil {
+		return nil, err
+	}
+
 	convertOpt := dockerfile2llb.ConvertOpt{
 		Target:           opts[keyTarget],
 		MetaResolver:     c,
@@ -445,6 +452,7 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 		LLBCaps:          &caps,
 		SourceMap:        sourceMap,
 		Hostname:         opts[keyHostname],
+		SourceDateEpoch:  epoch,
 		Warn: func(msg, url string, detail [][]byte, location *parser.Range) {
 			c.Warn(ctx, defVtx, msg, warnOpts(sourceMap, location, detail, url))
 		},
@@ -1061,4 +1069,16 @@ func wrapSource(err error, sm *llb.SourceMap, ranges []parser.Range) error {
 		})
 	}
 	return errdefs.WithSource(err, s)
+}
+
+func parseSourceDateEpoch(v string) (*time.Time, error) {
+	if v == "" {
+		return nil, nil
+	}
+	sde, err := strconv.ParseInt(v, 10, 64)
+	if err != nil {
+		return nil, errors.Wrapf(err, "invalid SOURCE_DATE_EPOCH: %s", v)
+	}
+	tm := time.Unix(sde, 0)
+	return &tm, nil
 }
