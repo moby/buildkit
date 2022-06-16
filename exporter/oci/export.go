@@ -53,7 +53,7 @@ func New(opt Opt) (exporter.Exporter, error) {
 func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
 	i := &imageExporterInstance{
 		imageExporter: e,
-		opts: containerimage.ImageWriterOpts{
+		opts: containerimage.ImageCommitOpts{
 			RefCfg: cacheconfig.RefConfig{
 				Compression: compression.New(compression.Default),
 			},
@@ -79,7 +79,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 
 type imageExporterInstance struct {
 	*imageExporter
-	opts containerimage.ImageWriterOpts
+	opts containerimage.ImageCommitOpts
 	meta map[string][]byte
 }
 

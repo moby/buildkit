@@ -21,10 +21,10 @@ const (
 	// preferNondistLayersKey is an exporter option which can be used to mark a layer as non-distributable if the layer reference was
 	// already found to use a non-distributable media type.
 	// When this option is not set, the exporter will change the media type of the layer to a distributable one.
-	preferNondistLayersKey = "prefer-nondist-layers"
+	keyPreferNondistLayers = "prefer-nondist-layers"
 )
 
-type ImageWriterOpts struct {
+type ImageCommitOpts struct {
 	ImageName      string
 	RefCfg         cacheconfig.RefConfig
 	OCITypes       bool
@@ -33,7 +33,7 @@ type ImageWriterOpts struct {
 	Annotations    AnnotationsGroup
 }
 
-func (c *ImageWriterOpts) Load(opt map[string]string) (map[string]string, error) {
+func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error) {
 	rest := make(map[string]string)
 
 	esgz := false
@@ -80,7 +80,7 @@ func (c *ImageWriterOpts) Load(opt map[string]string) (map[string]string, error)
 			err = parseBoolWithDefault(&c.BuildInfo, k, v, true)
 		case keyBuildInfoAttrs:
 			err = parseBoolWithDefault(&c.BuildInfoAttrs, k, v, false)
-		case preferNondistLayersKey:
+		case keyPreferNondistLayers:
 			err = parseBool(&c.RefCfg.PreferNonDistributable, k, v)
 		default:
 			rest[k] = v
