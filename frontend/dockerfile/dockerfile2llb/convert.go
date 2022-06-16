@@ -332,9 +332,10 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 						}
 						prefix += "internal]"
 						dgst, dt, err := metaResolver.ResolveImageConfig(ctx, d.stage.BaseName, llb.ResolveImageConfigOpt{
-							Platform:    platform,
-							ResolveMode: opt.ImageResolveMode.String(),
-							LogName:     fmt.Sprintf("%s load metadata for %s", prefix, d.stage.BaseName),
+							Platform:     platform,
+							ResolveMode:  opt.ImageResolveMode.String(),
+							LogName:      fmt.Sprintf("%s load metadata for %s", prefix, d.stage.BaseName),
+							ResolverType: llb.ResolverTypeRegistry,
 						})
 						if err != nil {
 							return suggest.WrapError(errors.Wrap(err, origName), origName, append(allStageNames, commonImageNames()...), true)

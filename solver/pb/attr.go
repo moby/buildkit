@@ -28,6 +28,9 @@ const AttrImageResolveModePreferLocal = "local"
 const AttrImageRecordType = "image.recordtype"
 const AttrImageLayerLimit = "image.layerlimit"
 
+const AttrOCILayoutSessionID = "oci.session"
+const AttrOCILayoutLayerLimit = "oci.layerlimit"
+
 const AttrLocalDiffer = "local.differ"
 const AttrLocalDifferNone = "none"
 const AttrLocalDifferMetadata = "metadata"

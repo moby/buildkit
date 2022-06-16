@@ -455,6 +455,7 @@ type ConstraintsOpt interface {
 	HTTPOption
 	ImageOption
 	GitOption
+	OCILayoutOption
 }
 
 type constraintsOptFunc func(m *Constraints)
@@ -469,6 +470,10 @@ func (fn constraintsOptFunc) SetRunOption(ei *ExecInfo) {
 
 func (fn constraintsOptFunc) SetLocalOption(li *LocalInfo) {
 	li.applyConstraints(fn)
+}
+
+func (fn constraintsOptFunc) SetOCILayoutOption(oi *OCILayoutInfo) {
+	oi.applyConstraints(fn)
 }
 
 func (fn constraintsOptFunc) SetHTTPOption(hi *HTTPInfo) {

@@ -189,6 +189,7 @@ func buildAction(clicontext *cli.Context) error {
 		// LocalDirs is set later
 		Frontend: clicontext.String("frontend"),
 		// FrontendAttrs is set later
+		// OCILayouts is set later
 		CacheExports:        cacheExports,
 		CacheImports:        cacheImports,
 		Session:             attachable,
@@ -203,6 +204,11 @@ func buildAction(clicontext *cli.Context) error {
 	solveOpt.LocalDirs, err = build.ParseLocal(clicontext.StringSlice("local"))
 	if err != nil {
 		return errors.Wrap(err, "invalid local")
+	}
+
+	solveOpt.OCIStores, err = build.ParseOCILayout(clicontext.StringSlice("oci-layout"))
+	if err != nil {
+		return errors.Wrap(err, "invalid oci-layout")
 	}
 
 	var def *llb.Definition

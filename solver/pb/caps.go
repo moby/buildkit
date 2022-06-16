@@ -35,6 +35,10 @@ const (
 	CapSourceHTTPPerm     apicaps.CapID = "source.http.perm"
 	CapSourceHTTPUIDGID   apicaps.CapID = "soruce.http.uidgid"
 
+	CapSourceOCILayout           apicaps.CapID = "source.ocilayout"
+	CapSourceOCILayoutSessionID  apicaps.CapID = "source.ocilayout.sessionid"
+	CapSourceOCILayoutLayerLimit apicaps.CapID = "source.ocilayout.layerlimit"
+
 	CapBuildOpLLBFileName apicaps.CapID = "source.buildop.llbfilename"
 
 	CapExecMetaBase                      apicaps.CapID = "exec.meta.base"
@@ -199,6 +203,24 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapSourceHTTPPerm,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapSourceOCILayout,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapSourceOCILayoutSessionID,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapSourceOCILayoutLayerLimit,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

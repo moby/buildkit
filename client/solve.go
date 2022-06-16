@@ -33,6 +33,7 @@ import (
 type SolveOpt struct {
 	Exports               []ExportEntry
 	LocalDirs             map[string]string
+	OCIStores             map[string]content.Store
 	SharedKey             string
 	Frontend              string
 	FrontendAttrs         map[string]string
@@ -158,8 +159,27 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			}
 		}
 
-		if len(cacheOpt.contentStores) > 0 {
-			s.Allow(sessioncontent.NewAttachable(cacheOpt.contentStores))
+		// this is a new map that contains both cacheOpt stores and OCILayout stores
+		contentStores := make(map[string]content.Store, len(cacheOpt.contentStores)+len(opt.OCIStores))
+		// copy over the stores references from cacheOpt
+		for key, store := range cacheOpt.contentStores {
+			contentStores[key] = store
+		}
+		// copy over the stores references from ociLayout opts
+		for key, store := range opt.OCIStores {
+			// conflicts are not allowed
+			if _, ok := contentStores[key]; ok {
+				// we probably should check if the store is identical, but given that
+				// https://pkg.go.dev/github.com/containerd/containerd/content#Store
+				// is just an interface, composing 4 others, that is rather hard to do.
+				// For a future iteration.
+				return nil, errors.Errorf("contentStore key %s exists in both cache and OCI layouts", key)
+			}
+			contentStores[key] = store
+		}
+
+		if len(contentStores) > 0 {
+			s.Allow(sessioncontent.NewAttachable(contentStores))
 		}
 
 		eg.Go(func() error {
