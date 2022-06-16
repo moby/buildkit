@@ -179,6 +179,7 @@ func TestIntegration(t *testing.T) {
 		testSourceDateEpochLayerTimestamps,
 		testSourceDateEpochClamp,
 		testSourceDateEpochReset,
+		testSourceDateEpochLocalExporter,
 	)
 	tests = append(tests, diffOpTestCases()...)
 	integration.Run(t, tests, mirrors)
@@ -2511,6 +2512,56 @@ func testSourceDateEpochReset(t *testing.T, sb integration.Sandbox) {
 
 	require.Equal(t, tms[0], tms[2])
 	require.NotEqual(t, tms[2], tms[1])
+
+	checkAllReleasable(t, c, sb, true)
+}
+
+func testSourceDateEpochLocalExporter(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "oci exporter")
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+
+	run := func(cmd string) {
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+
+	run(`sh -c "echo -n first > foo"`)
+	run(`sh -c "echo -n second > bar"`)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir, err := os.MkdirTemp("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	tm := time.Date(2015, time.October, 21, 7, 28, 0, 0, time.UTC)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:SOURCE_DATE_EPOCH": fmt.Sprintf("%d", tm.Unix()),
+		},
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	fi, err := os.Stat(filepath.Join(destDir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, fi.ModTime().Format(time.RFC3339), tm.UTC().Format(time.RFC3339))
+
+	fi, err = os.Stat(filepath.Join(destDir, "bar"))
+	require.NoError(t, err)
+	require.Equal(t, fi.ModTime().Format(time.RFC3339), tm.UTC().Format(time.RFC3339))
 
 	checkAllReleasable(t, c, sb, true)
 }

@@ -19,6 +19,7 @@ import (
 	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
+	"github.com/moby/buildkit/exporter/util/epoch"
 	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
@@ -72,12 +73,10 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 	}
 
 	if opts.Epoch == nil {
-		if v, ok := inp.Metadata[exptypes.ExporterEpochKey]; ok {
-			epoch, err := parseTime("", string(v))
-			if err != nil {
-				return nil, errors.Wrapf(err, "invalid SOURCE_DATE_EPOCH from frontend: %q", v)
-			}
-			opts.Epoch = epoch
+		if tm, ok, err := epoch.ParseSource(inp); err != nil {
+			return nil, err
+		} else if ok {
+			opts.Epoch = tm
 		}
 	}
 

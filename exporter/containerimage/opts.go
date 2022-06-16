@@ -5,6 +5,7 @@ import (
 	"time"
 
 	cacheconfig "github.com/moby/buildkit/cache/config"
+	"github.com/moby/buildkit/exporter/util/epoch"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -18,7 +19,6 @@ const (
 	keyOCITypes         = "oci-mediatypes"
 	keyBuildInfo        = "buildinfo"
 	keyBuildInfoAttrs   = "buildinfo-attrs"
-	keySourceDateEpoch  = "source-date-epoch"
 
 	// preferNondistLayersKey is an exporter option which can be used to mark a layer as non-distributable if the layer reference was
 	// already found to use a non-distributable media type.
@@ -46,6 +46,11 @@ func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error)
 		return nil, err
 	}
 	opt = toStringMap(optb)
+
+	c.Epoch, opt, err = epoch.ParseAttr(opt)
+	if err != nil {
+		return nil, err
+	}
 
 	for k, v := range opt {
 		var err error
@@ -84,8 +89,6 @@ func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error)
 			err = parseBoolWithDefault(&c.BuildInfoAttrs, k, v, false)
 		case keyPreferNondistLayers:
 			err = parseBool(&c.RefCfg.PreferNonDistributable, k, v)
-		case keySourceDateEpoch:
-			c.Epoch, err = parseTime(k, v)
 		default:
 			rest[k] = v
 		}
@@ -129,18 +132,6 @@ func (c *ImageCommitOpts) EnableOCITypes(reason string) {
 
 		c.OCITypes = true
 	}
-}
-
-func parseTime(key, value string) (*time.Time, error) {
-	if value == "" {
-		return nil, nil
-	}
-	sde, err := strconv.ParseInt(value, 10, 64)
-	if err != nil {
-		return nil, errors.Errorf("invalid %s: %s", key, err)
-	}
-	tm := time.Unix(sde, 0)
-	return &tm, nil
 }
 
 func parseBool(dest *bool, key string, value string) error {
