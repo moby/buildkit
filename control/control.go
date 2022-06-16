@@ -267,6 +267,17 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	if err != nil {
 		return nil, err
 	}
+
+	// if SOURCE_DATE_EPOCH is set, enable it for the exporter
+	if epoch, ok := req.FrontendAttrs["build-arg:SOURCE_DATE_EPOCH"]; ok {
+		if _, ok := req.ExporterAttrs["source-date-epoch"]; !ok {
+			if req.ExporterAttrs == nil {
+				req.ExporterAttrs = make(map[string]string)
+			}
+			req.ExporterAttrs["source-date-epoch"] = epoch
+		}
+	}
+
 	if req.Exporter != "" {
 		exp, err := w.Exporter(req.Exporter, c.opt.SessionManager)
 		if err != nil {

@@ -82,6 +82,9 @@ const (
 
 	CapAnnotations  apicaps.CapID = "exporter.image.annotations"
 	CapAttestations apicaps.CapID = "exporter.image.attestations"
+
+	// CapSourceDateEpoch is the capability to automatically handle the date epoch
+	CapSourceDateEpoch apicaps.CapID = "exporter.sourcedateepoch"
 )
 
 func init() {
@@ -451,6 +454,13 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapAttestations,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapSourceDateEpoch,
+		Name:    "source date epoch",
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

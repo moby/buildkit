@@ -71,6 +71,16 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		}
 	}
 
+	if opts.Epoch == nil {
+		if v, ok := inp.Metadata[exptypes.ExporterEpochKey]; ok {
+			epoch, err := parseTime("", string(v))
+			if err != nil {
+				return nil, errors.Wrapf(err, "invalid SOURCE_DATE_EPOCH from frontend: %q", v)
+			}
+			opts.Epoch = epoch
+		}
+	}
+
 	if len(inp.Refs) == 0 {
 		remotes, err := ic.exportLayers(ctx, opts.RefCfg, session.NewGroup(sessionID), inp.Ref)
 		if err != nil {
@@ -86,7 +96,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 			}
 		}
 
-		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, opts, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], opts.Annotations.Platform(nil), inp.Metadata[exptypes.ExporterInlineCache], dtbi)
+		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, opts, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], opts.Annotations.Platform(nil), inp.Metadata[exptypes.ExporterInlineCache], dtbi, opts.Epoch)
 		if err != nil {
 			return nil, err
 		}
@@ -166,7 +176,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 			}
 		}
 
-		desc, _, err := ic.commitDistributionManifest(ctx, opts, r, config, &remotes[remotesMap[p.ID]], opts.Annotations.Platform(&p.Platform), inlineCache, dtbi)
+		desc, _, err := ic.commitDistributionManifest(ctx, opts, r, config, &remotes[remotesMap[p.ID]], opts.Annotations.Platform(&p.Platform), inlineCache, dtbi, opts.Epoch)
 		if err != nil {
 			return nil, err
 		}
@@ -353,7 +363,7 @@ func (ic *ImageWriter) extractAttestations(ctx context.Context, opts *ImageCommi
 	return statements, nil
 }
 
-func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *ImageCommitOpts, ref cache.ImmutableRef, config []byte, remote *solver.Remote, annotations *Annotations, inlineCache []byte, buildInfo []byte) (*ocispecs.Descriptor, *ocispecs.Descriptor, error) {
+func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *ImageCommitOpts, ref cache.ImmutableRef, config []byte, remote *solver.Remote, annotations *Annotations, inlineCache []byte, buildInfo []byte, epoch *time.Time) (*ocispecs.Descriptor, *ocispecs.Descriptor, error) {
 	if len(config) == 0 {
 		var err error
 		config, err = defaultImageConfig()
@@ -375,7 +385,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *Ima
 
 	remote, history = normalizeLayersAndHistory(ctx, remote, history, ref, opts.OCITypes)
 
-	config, err = patchImageConfig(config, remote.Descriptors, history, inlineCache, buildInfo)
+	config, err = patchImageConfig(config, remote.Descriptors, history, inlineCache, buildInfo, epoch)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -619,7 +629,7 @@ func parseHistoryFromConfig(dt []byte) ([]ocispecs.History, error) {
 	return config.History, nil
 }
 
-func patchImageConfig(dt []byte, descs []ocispecs.Descriptor, history []ocispecs.History, cache []byte, buildInfo []byte) ([]byte, error) {
+func patchImageConfig(dt []byte, descs []ocispecs.Descriptor, history []ocispecs.History, cache []byte, buildInfo []byte, epoch *time.Time) ([]byte, error) {
 	m := map[string]json.RawMessage{}
 	if err := json.Unmarshal(dt, &m); err != nil {
 		return nil, errors.Wrap(err, "failed to parse image config for patch")
@@ -636,11 +646,34 @@ func patchImageConfig(dt []byte, descs []ocispecs.Descriptor, history []ocispecs
 	}
 	m["rootfs"] = dt
 
+	if epoch != nil {
+		for i, h := range history {
+			if h.Created == nil || h.Created.After(*epoch) {
+				history[i].Created = epoch
+			}
+		}
+	}
+
 	dt, err = json.Marshal(history)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to marshal history")
 	}
 	m["history"] = dt
+
+	// if epoch is set then clamp creation time
+	if v, ok := m["created"]; ok && epoch != nil {
+		var tm time.Time
+		if err := json.Unmarshal(v, &tm); err != nil {
+			return nil, errors.Wrapf(err, "failed to unmarshal creation time %q", m["created"])
+		}
+		if tm.After(*epoch) {
+			dt, err = json.Marshal(&epoch)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to marshal creation time")
+			}
+			m["created"] = dt
+		}
+	}
 
 	if _, ok := m["created"]; !ok {
 		var tm *time.Time

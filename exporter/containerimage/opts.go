@@ -2,6 +2,7 @@ package containerimage
 
 import (
 	"strconv"
+	"time"
 
 	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/util/compression"
@@ -17,6 +18,7 @@ const (
 	keyOCITypes         = "oci-mediatypes"
 	keyBuildInfo        = "buildinfo"
 	keyBuildInfoAttrs   = "buildinfo-attrs"
+	keySourceDateEpoch  = "source-date-epoch"
 
 	// preferNondistLayersKey is an exporter option which can be used to mark a layer as non-distributable if the layer reference was
 	// already found to use a non-distributable media type.
@@ -31,6 +33,7 @@ type ImageCommitOpts struct {
 	BuildInfo      bool
 	BuildInfoAttrs bool
 	Annotations    AnnotationsGroup
+	Epoch          *time.Time
 }
 
 func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error) {
@@ -81,6 +84,8 @@ func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error)
 			err = parseBoolWithDefault(&c.BuildInfoAttrs, k, v, false)
 		case keyPreferNondistLayers:
 			err = parseBool(&c.RefCfg.PreferNonDistributable, k, v)
+		case keySourceDateEpoch:
+			c.Epoch, err = parseTime(k, v)
 		default:
 			rest[k] = v
 		}
@@ -124,6 +129,18 @@ func (c *ImageCommitOpts) EnableOCITypes(reason string) {
 
 		c.OCITypes = true
 	}
+}
+
+func parseTime(key, value string) (*time.Time, error) {
+	if value == "" {
+		return nil, nil
+	}
+	sde, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return nil, errors.Errorf("invalid %s: %s", key, err)
+	}
+	tm := time.Unix(sde, 0)
+	return &tm, nil
 }
 
 func parseBool(dest *bool, key string, value string) error {
