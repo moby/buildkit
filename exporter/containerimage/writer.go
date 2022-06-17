@@ -50,7 +50,7 @@ type ImageWriter struct {
 	opt WriterOpt
 }
 
-func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool, refCfg cacheconfig.RefConfig, buildInfo bool, buildInfoAttrs bool, sessionID string) (*ocispecs.Descriptor, error) {
+func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, sessionID string, opts *ImageCommitOpts) (*ocispecs.Descriptor, error) {
 	platformsBytes, ok := inp.Metadata[exptypes.ExporterPlatformsKey]
 
 	if len(inp.Refs) > 0 && !ok {
@@ -58,21 +58,21 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 	}
 
 	if len(inp.Refs) == 0 {
-		remotes, err := ic.exportLayers(ctx, refCfg, session.NewGroup(sessionID), inp.Ref)
+		remotes, err := ic.exportLayers(ctx, opts.RefCfg, session.NewGroup(sessionID), inp.Ref)
 		if err != nil {
 			return nil, err
 		}
 
 		var dtbi []byte
-		if buildInfo {
+		if opts.BuildInfo {
 			if dtbi, err = buildinfo.Format(inp.Metadata[exptypes.ExporterBuildInfo], buildinfo.FormatOpts{
-				RemoveAttrs: !buildInfoAttrs,
+				RemoveAttrs: !opts.BuildInfoAttrs,
 			}); err != nil {
 				return nil, err
 			}
 		}
 
-		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], oci, inp.Metadata[exptypes.ExporterInlineCache], dtbi)
+		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], opts.Annotations.Platform(nil), opts.OCITypes, inp.Metadata[exptypes.ExporterInlineCache], dtbi)
 		if err != nil {
 			return nil, err
 		}
@@ -100,7 +100,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 		refs = append(refs, r)
 	}
 
-	remotes, err := ic.exportLayers(ctx, refCfg, session.NewGroup(sessionID), refs...)
+	remotes, err := ic.exportLayers(ctx, opts.RefCfg, session.NewGroup(sessionID), refs...)
 	if err != nil {
 		return nil, err
 	}
@@ -114,13 +114,14 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 	}{
 		MediaType: ocispecs.MediaTypeImageIndex,
 		Index: ocispecs.Index{
+			Annotations: opts.Annotations.Platform(nil).Index,
 			Versioned: specs.Versioned{
 				SchemaVersion: 2,
 			},
 		},
 	}
 
-	if !oci {
+	if !opts.OCITypes {
 		idx.MediaType = images.MediaTypeDockerSchema2ManifestList
 	}
 
@@ -135,15 +136,15 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 		inlineCache := inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, p.ID)]
 
 		var dtbi []byte
-		if buildInfo {
+		if opts.BuildInfo {
 			if dtbi, err = buildinfo.Format(inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, p.ID)], buildinfo.FormatOpts{
-				RemoveAttrs: !buildInfoAttrs,
+				RemoveAttrs: !opts.BuildInfoAttrs,
 			}); err != nil {
 				return nil, err
 			}
 		}
 
-		desc, _, err := ic.commitDistributionManifest(ctx, r, config, &remotes[remotesMap[p.ID]], oci, inlineCache, dtbi)
+		desc, _, err := ic.commitDistributionManifest(ctx, r, config, &remotes[remotesMap[p.ID]], opts.Annotations.Platform(&p.Platform), opts.OCITypes, inlineCache, dtbi)
 		if err != nil {
 			return nil, err
 		}
@@ -161,9 +162,10 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 
 	idxDigest := digest.FromBytes(idxBytes)
 	idxDesc := ocispecs.Descriptor{
-		Digest:    idxDigest,
-		Size:      int64(len(idxBytes)),
-		MediaType: idx.MediaType,
+		Digest:      idxDigest,
+		Size:        int64(len(idxBytes)),
+		MediaType:   idx.MediaType,
+		Annotations: opts.Annotations.Platform(nil).IndexDescriptor,
 	}
 	idxDone := oneOffProgress(ctx, "exporting manifest list "+idxDigest.String())
 
@@ -212,7 +214,7 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, refCfg cacheconfig.RefC
 	return out, err
 }
 
-func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache.ImmutableRef, config []byte, remote *solver.Remote, oci bool, inlineCache []byte, buildInfo []byte) (*ocispecs.Descriptor, *ocispecs.Descriptor, error) {
+func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache.ImmutableRef, config []byte, remote *solver.Remote, annotations *Annotations, oci bool, inlineCache []byte, buildInfo []byte) (*ocispecs.Descriptor, *ocispecs.Descriptor, error) {
 	if len(config) == 0 {
 		var err error
 		config, err = emptyImageConfig()
@@ -260,6 +262,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 	}{
 		MediaType: manifestType,
 		Manifest: ocispecs.Manifest{
+			Annotations: annotations.Manifest,
 			Versioned: specs.Versioned{
 				SchemaVersion: 2,
 			},
@@ -323,9 +326,10 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 	configDone(nil)
 
 	return &ocispecs.Descriptor{
-		Digest:    mfstDigest,
-		Size:      int64(len(mfstJSON)),
-		MediaType: manifestType,
+		Annotations: annotations.ManifestDescriptor,
+		Digest:      mfstDigest,
+		Size:        int64(len(mfstJSON)),
+		MediaType:   manifestType,
 	}, &configDesc, nil
 }
 

@@ -30,28 +30,16 @@ import (
 	"github.com/opencontainers/image-spec/identity"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 const (
-	keyImageName        = "name"
-	keyPush             = "push"
-	keyPushByDigest     = "push-by-digest"
-	keyInsecure         = "registry.insecure"
-	keyUnpack           = "unpack"
-	keyDanglingPrefix   = "dangling-name-prefix"
-	keyNameCanonical    = "name-canonical"
-	keyLayerCompression = "compression"
-	keyForceCompression = "force-compression"
-	keyCompressionLevel = "compression-level"
-	keyBuildInfo        = "buildinfo"
-	keyBuildInfoAttrs   = "buildinfo-attrs"
-	ociTypes            = "oci-mediatypes"
-	// preferNondistLayersKey is an exporter option which can be used to mark a layer as non-distributable if the layer reference was
-	// already found to use a non-distributable media type.
-	// When this option is not set, the exporter will change the media type of the layer to a distributable one.
-	preferNondistLayersKey = "prefer-nondist-layers"
-	keyStore               = "store"
+	keyPush           = "push"
+	keyPushByDigest   = "push-by-digest"
+	keyInsecure       = "registry.insecure"
+	keyUnpack         = "unpack"
+	keyDanglingPrefix = "dangling-name-prefix"
+	keyNameCanonical  = "name-canonical"
+	keyStore          = "store"
 
 	// keyUnsafeInternalStoreAllowIncomplete should only be used for tests. This option allows exporting image to the image store
 	// as well as lacking some blobs in the content store. Some integration tests for lazyref behaviour depends on this option.
@@ -82,17 +70,24 @@ func New(opt Opt) (exporter.Exporter, error) {
 
 func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
 	i := &imageExporterInstance{
-		imageExporter:    e,
-		layerCompression: compression.Default,
-		buildInfo:        true,
-		store:            true,
+		imageExporter: e,
+		opts: ImageCommitOpts{
+			RefCfg: cacheconfig.RefConfig{
+				Compression: compression.New(compression.Default),
+			},
+			BuildInfo:   true,
+			Annotations: make(AnnotationsGroup),
+		},
+		store: true,
 	}
 
-	var esgz bool
+	opt, err := i.opts.Load(opt)
+	if err != nil {
+		return nil, err
+	}
+
 	for k, v := range opt {
 		switch k {
-		case keyImageName:
-			i.targetName = v
 		case keyPush:
 			if v == "" {
 				i.push = true
@@ -153,16 +148,6 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
 			i.storeAllowIncomplete = b
-		case ociTypes:
-			if v == "" {
-				i.ociTypes = true
-				continue
-			}
-			b, err := strconv.ParseBool(v)
-			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
-			}
-			i.ociTypes = b
 		case keyDanglingPrefix:
 			i.danglingPrefix = v
 		case keyNameCanonical:
@@ -175,63 +160,6 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
 			i.nameCanonical = b
-		case keyLayerCompression:
-			switch v {
-			case "gzip":
-				i.layerCompression = compression.Gzip
-			case "estargz":
-				i.layerCompression = compression.EStargz
-				esgz = true
-			case "zstd":
-				i.layerCompression = compression.Zstd
-			case "uncompressed":
-				i.layerCompression = compression.Uncompressed
-			default:
-				return nil, errors.Errorf("unsupported layer compression type: %v", v)
-			}
-		case keyForceCompression:
-			if v == "" {
-				i.forceCompression = true
-				continue
-			}
-			b, err := strconv.ParseBool(v)
-			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value %s specified for %s", v, k)
-			}
-			i.forceCompression = b
-		case keyCompressionLevel:
-			ii, err := strconv.ParseInt(v, 10, 64)
-			if err != nil {
-				return nil, errors.Wrapf(err, "non-integer value %s specified for %s", v, k)
-			}
-			v := int(ii)
-			i.compressionLevel = &v
-		case keyBuildInfo:
-			if v == "" {
-				i.buildInfo = true
-				continue
-			}
-			b, err := strconv.ParseBool(v)
-			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
-			}
-			i.buildInfo = b
-		case keyBuildInfoAttrs:
-			if v == "" {
-				i.buildInfoAttrs = false
-				continue
-			}
-			b, err := strconv.ParseBool(v)
-			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
-			}
-			i.buildInfoAttrs = b
-		case preferNondistLayersKey:
-			b, err := strconv.ParseBool(v)
-			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value %s specified for %s", v, k)
-			}
-			i.preferNondistLayers = b
 		default:
 			if i.meta == nil {
 				i.meta = make(map[string][]byte)
@@ -239,32 +167,21 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 			i.meta[k] = []byte(v)
 		}
 	}
-	if esgz && !i.ociTypes {
-		logrus.Warn("forcibly turning on oci-mediatype mode for estargz")
-		i.ociTypes = true
-	}
 	return i, nil
 }
 
 type imageExporterInstance struct {
 	*imageExporter
-	targetName           string
+	opts                 ImageCommitOpts
 	push                 bool
 	pushByDigest         bool
 	unpack               bool
 	store                bool
 	storeAllowIncomplete bool
 	insecure             bool
-	ociTypes             bool
 	nameCanonical        bool
 	danglingPrefix       string
-	layerCompression     compression.Type
-	forceCompression     bool
-	compressionLevel     *int
-	buildInfo            bool
-	buildInfoAttrs       bool
 	meta                 map[string][]byte
-	preferNondistLayers  bool
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -273,16 +190,8 @@ func (e *imageExporterInstance) Name() string {
 
 func (e *imageExporterInstance) Config() exporter.Config {
 	return exporter.Config{
-		Compression: e.compression(),
+		Compression: e.opts.RefCfg.Compression,
 	}
-}
-
-func (e *imageExporterInstance) compression() compression.Config {
-	c := compression.New(e.layerCompression).SetForce(e.forceCompression)
-	if e.compressionLevel != nil {
-		c = c.SetLevel(*e.compressionLevel)
-	}
-	return c
 }
 
 func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source, sessionID string) (map[string]string, error) {
@@ -293,14 +202,20 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 		src.Metadata[k] = v
 	}
 
+	opts := e.opts
+	as, _, err := ParseAnnotations(src.Metadata)
+	if err != nil {
+		return nil, err
+	}
+	opts.Annotations = as.Merge(opts.Annotations)
+
 	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
 		return nil, err
 	}
 	defer done(context.TODO())
 
-	refCfg := e.refCfg()
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, refCfg, e.buildInfo, e.buildInfoAttrs, sessionID)
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, sessionID, &opts)
 	if err != nil {
 		return nil, err
 	}
@@ -311,18 +226,18 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 
 	resp := make(map[string]string)
 
-	if n, ok := src.Metadata["image.name"]; e.targetName == "*" && ok {
-		e.targetName = string(n)
+	if n, ok := src.Metadata["image.name"]; e.opts.ImageName == "*" && ok {
+		e.opts.ImageName = string(n)
 	}
 
 	nameCanonical := e.nameCanonical
-	if e.targetName == "" && e.danglingPrefix != "" {
-		e.targetName = e.danglingPrefix + "@" + desc.Digest.String()
+	if e.opts.ImageName == "" && e.danglingPrefix != "" {
+		e.opts.ImageName = e.danglingPrefix + "@" + desc.Digest.String()
 		nameCanonical = false
 	}
 
-	if e.targetName != "" {
-		targetNames := strings.Split(e.targetName, ",")
+	if e.opts.ImageName != "" {
+		targetNames := strings.Split(e.opts.ImageName, ",")
 		for _, targetName := range targetNames {
 			if e.opt.Images != nil && e.store {
 				tagDone := oneOffProgress(ctx, "naming to "+targetName)
@@ -356,7 +271,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 
 				if !e.storeAllowIncomplete {
 					if src.Ref != nil {
-						remotes, err := src.Ref.GetRemotes(ctx, false, refCfg, false, session.NewGroup(sessionID))
+						remotes, err := src.Ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
 						if err != nil {
 							return nil, err
 						}
@@ -369,7 +284,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 					}
 					if len(src.Refs) > 0 {
 						for _, r := range src.Refs {
-							remotes, err := r.GetRemotes(ctx, false, refCfg, false, session.NewGroup(sessionID))
+							remotes, err := r.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
 							if err != nil {
 								return nil, err
 							}
@@ -387,7 +302,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 				annotations := map[digest.Digest]map[string]string{}
 				mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
 				if src.Ref != nil {
-					remotes, err := src.Ref.GetRemotes(ctx, false, refCfg, false, session.NewGroup(sessionID))
+					remotes, err := src.Ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
 					if err != nil {
 						return nil, err
 					}
@@ -399,7 +314,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 				}
 				if len(src.Refs) > 0 {
 					for _, r := range src.Refs {
-						remotes, err := r.GetRemotes(ctx, false, refCfg, false, session.NewGroup(sessionID))
+						remotes, err := r.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
 						if err != nil {
 							return nil, err
 						}
@@ -416,7 +331,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 				}
 			}
 		}
-		resp["image.name"] = e.targetName
+		resp["image.name"] = e.opts.ImageName
 	}
 
 	resp[exptypes.ExporterImageDigestKey] = desc.Digest.String()
@@ -432,13 +347,6 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	resp[exptypes.ExporterImageDescriptorKey] = base64.StdEncoding.EncodeToString(dtdesc)
 
 	return resp, nil
-}
-
-func (e *imageExporterInstance) refCfg() cacheconfig.RefConfig {
-	return cacheconfig.RefConfig{
-		Compression:            e.compression(),
-		PreferNonDistributable: e.preferNondistLayers,
-	}
 }
 
 func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Image, src exporter.Source, s session.Group) (err0 error) {
@@ -468,7 +376,7 @@ func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Imag
 		}
 	}
 
-	remotes, err := topLayerRef.GetRemotes(ctx, true, e.refCfg(), false, s)
+	remotes, err := topLayerRef.GetRemotes(ctx, true, e.opts.RefCfg, false, s)
 	if err != nil {
 		return err
 	}

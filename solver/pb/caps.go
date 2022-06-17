@@ -78,6 +78,8 @@ const (
 
 	CapMergeOp apicaps.CapID = "mergeop"
 	CapDiffOp  apicaps.CapID = "diffop"
+
+	CapAnnotations apicaps.CapID = "exporter.image.annotations"
 )
 
 func init() {
@@ -414,18 +416,27 @@ func init() {
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})
+
 	Caps.Init(apicaps.Cap{
 		ID:      CapRemoteCacheS3,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})
+
 	Caps.Init(apicaps.Cap{
 		ID:      CapMergeOp,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})
+
 	Caps.Init(apicaps.Cap{
 		ID:      CapDiffOp,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapAnnotations,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})
