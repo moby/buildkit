@@ -239,3 +239,17 @@ func TestRunCmdFlagsUsed(t *testing.T) {
 	require.IsType(t, c, &RunCommand{})
 	require.Equal(t, []string{"mount"}, c.(*RunCommand).FlagsUsed)
 }
+
+func TestParseTimestamp(t *testing.T) {
+	x, err := parseTimestamp("")
+	require.NoError(t, err)
+	require.Nil(t, x)
+
+	x, err = parseTimestamp("2006-01-02T15:04:05Z")
+	require.NoError(t, err)
+	require.NotNil(t, x)
+
+	_, err = parseTimestamp("2006-01-02")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "the string format must be like \"2006-01-02T15:04:05Z\"")
+}

@@ -24,6 +24,25 @@ The images are published on two channels: *latest* and *labs*. The latest channe
 incrementing the major component of a version and you may want to pin the image to a specific revision. Even when syntaxes
 change in between releases on labs channel, the old versions are guaranteed to be backward compatible.
 
+## Timestamped copies `COPY --timestamp`, `ADD --timestamp`
+
+<!-- TODO: dockerfile-upstream:master -> dockerfile:1.5 after the release of 1.5 -->
+To use this instruction, set the frontend to `docker/dockerfile-upstream:master`:
+
+```dockerfile
+# syntax=docker/dockerfile-upstream:master`
+```
+
+This instruction allows you to specify a tiemstamp in the RFC3339Nano format.
+
+```dockerfile
+# syntax=docker/dockerfile-upstream:master`
+FROM busybox AS base
+RUN echo hello >/hello
+
+FROM scratch
+COPY --from=base --timestamp="2006-01-02T15:04:05Z" /hello /hello
+```
 
 ## Linked copies `COPY --link`, `ADD --link`
 

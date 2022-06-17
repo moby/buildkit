@@ -274,6 +274,17 @@ func parseSourcesAndDest(req parseRequest, command string) (*SourcesAndDest, err
 	}, nil
 }
 
+func parseTimestamp(s string) (*time.Time, error) {
+	if s == "" {
+		return nil, nil
+	}
+	timestamp, err := time.Parse(time.RFC3339Nano, s)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to parse timestamp %q, the string format must be like \"2006-01-02T15:04:05Z\" (RFC3339Nano)", s)
+	}
+	return &timestamp, nil
+}
+
 func parseAdd(req parseRequest) (*AddCommand, error) {
 	if len(req.args) < 2 {
 		return nil, errNoDestinationArgument("ADD")
@@ -281,11 +292,17 @@ func parseAdd(req parseRequest) (*AddCommand, error) {
 	flChown := req.flags.AddString("chown", "")
 	flChmod := req.flags.AddString("chmod", "")
 	flLink := req.flags.AddBool("link", false)
+	flTimestamp := req.flags.AddString("timestamp", "")
 	if err := req.flags.Parse(); err != nil {
 		return nil, err
 	}
 
 	sourcesAndDest, err := parseSourcesAndDest(req, "ADD")
+	if err != nil {
+		return nil, err
+	}
+
+	timestamp, err := parseTimestamp(flTimestamp.Value)
 	if err != nil {
 		return nil, err
 	}
@@ -296,6 +313,7 @@ func parseAdd(req parseRequest) (*AddCommand, error) {
 		Chown:           flChown.Value,
 		Chmod:           flChmod.Value,
 		Link:            flLink.Value == "true",
+		Timestamp:       timestamp,
 	}, nil
 }
 
@@ -307,11 +325,17 @@ func parseCopy(req parseRequest) (*CopyCommand, error) {
 	flFrom := req.flags.AddString("from", "")
 	flChmod := req.flags.AddString("chmod", "")
 	flLink := req.flags.AddBool("link", false)
+	flTimestamp := req.flags.AddString("timestamp", "")
 	if err := req.flags.Parse(); err != nil {
 		return nil, err
 	}
 
 	sourcesAndDest, err := parseSourcesAndDest(req, "COPY")
+	if err != nil {
+		return nil, err
+	}
+
+	timestamp, err := parseTimestamp(flTimestamp.Value)
 	if err != nil {
 		return nil, err
 	}
@@ -323,6 +347,7 @@ func parseCopy(req parseRequest) (*CopyCommand, error) {
 		Chown:           flChown.Value,
 		Chmod:           flChmod.Value,
 		Link:            flLink.Value == "true",
+		Timestamp:       timestamp,
 	}, nil
 }
 

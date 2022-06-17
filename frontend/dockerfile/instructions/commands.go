@@ -2,6 +2,7 @@ package instructions
 
 import (
 	"strings"
+	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/strslice"
@@ -224,9 +225,10 @@ func (s *SourcesAndDest) ExpandRaw(expander SingleWordExpander) error {
 type AddCommand struct {
 	withNameAndCode
 	SourcesAndDest
-	Chown string
-	Chmod string
-	Link  bool
+	Chown     string
+	Chmod     string
+	Link      bool
+	Timestamp *time.Time
 }
 
 // Expand variables
@@ -247,10 +249,11 @@ func (c *AddCommand) Expand(expander SingleWordExpander) error {
 type CopyCommand struct {
 	withNameAndCode
 	SourcesAndDest
-	From  string
-	Chown string
-	Chmod string
-	Link  bool
+	From      string
+	Chown     string
+	Chmod     string
+	Link      bool
+	Timestamp *time.Time
 }
 
 // Expand variables

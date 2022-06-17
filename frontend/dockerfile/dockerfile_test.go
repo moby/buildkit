@@ -138,6 +138,7 @@ var allTests = integration.TestFuncs(
 	testWorkdirCopyIgnoreRelative,
 	testCopyFollowAllSymlinks,
 	testDockerfileAddChownExpand,
+	testCopyTimestamp,
 )
 
 // Tests that depend on the `security.*` entitlements
@@ -5657,6 +5658,53 @@ COPY --from=build /foo /out /
 	dt, err = os.ReadFile(filepath.Join(destDir, "linux_arm64/foo"))
 	require.NoError(t, err)
 	require.Equal(t, "foo is bar-arm64\n", string(dt))
+}
+
+func testCopyTimestamp(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+	f.RequiresBuildctl(t)
+
+	dockerfile := []byte(`
+FROM busybox AS base
+RUN echo hello >/hello
+
+FROM scratch
+COPY --from=base --timestamp="2006-01-02T15:04:05Z" /hello /hello
+`)
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := tmpdir()
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	st, err := os.Stat(filepath.Join(destDir, "hello"))
+	require.NoError(t, err)
+	actualTimestamp := st.ModTime()
+	expectedTimestamp, err := time.Parse(time.RFC3339Nano, "2006-01-02T15:04:05Z")
+	require.NoError(t, err)
+	require.True(t, expectedTimestamp.Equal(actualTimestamp))
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {

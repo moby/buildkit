@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/docker/distribution/reference"
@@ -647,6 +648,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 			chown:        c.Chown,
 			chmod:        c.Chmod,
 			link:         c.Link,
+			timestamp:    c.Timestamp,
 			location:     c.Location(),
 			opt:          opt,
 		})
@@ -692,6 +694,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 			chown:        c.Chown,
 			chmod:        c.Chmod,
 			link:         c.Link,
+			timestamp:    c.Timestamp,
 			location:     c.Location(),
 			opt:          opt,
 		})
@@ -1024,6 +1027,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 			opts := append([]llb.CopyOption{&llb.CopyInfo{
 				Mode:           mode,
 				CreateDestPath: true,
+				CreatedTime:    cfg.timestamp,
 			}}, copyOpt...)
 
 			if a == nil {
@@ -1040,6 +1044,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 				CreateDestPath:      true,
 				AllowWildcard:       true,
 				AllowEmptyWildcard:  true,
+				CreatedTime:         cfg.timestamp,
 			}}, copyOpt...)
 
 			if a == nil {
@@ -1063,6 +1068,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		opts := append([]llb.CopyOption{&llb.CopyInfo{
 			Mode:           mode,
 			CreateDestPath: true,
+			CreatedTime:    cfg.timestamp,
 		}}, copyOpt...)
 
 		if a == nil {
@@ -1124,6 +1130,7 @@ type copyConfig struct {
 	chown        string
 	chmod        string
 	link         bool
+	timestamp    *time.Time
 	location     []parser.Range
 	opt          dispatchOpt
 }
