@@ -13,7 +13,7 @@ If you are using Docker v18.09 or later, BuildKit mode can be enabled by setting
 BuildKit supports loading frontends dynamically from container images. Images for Dockerfile frontends are available at [`docker/dockerfile`](https://hub.docker.com/r/docker/dockerfile/tags/) repository.
 
 To use the external frontend, the first line of your Dockerfile needs to be `# syntax=docker/dockerfile:1.3` pointing to the
-specific image you want to use.
+specific image you want to use. Alternatively, you can use [Built-in build args](#built-in-build-args).
 
 BuildKit also ships with Dockerfile frontend builtin but it is recommended to use an external image to make sure that all
 users use the same version on the builder and to pick up bugfixes automatically without waiting for a new version of BuildKit
