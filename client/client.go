@@ -222,6 +222,11 @@ func WithCredentials(serverName, ca, cert, key string) ClientOpt {
 }
 
 func loadCredentials(opts *withCredentials) (grpc.DialOption, error) {
+	if opts.ServerName == "" && opts.CACert == "" && opts.Cert == "" && opts.Key == "" {
+		// earthly-specific: make use of default TLS settings (but still forces a TLS connection)
+		return grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})), nil
+	}
+
 	ca, err := ioutil.ReadFile(opts.CACert)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not read ca certificate")
