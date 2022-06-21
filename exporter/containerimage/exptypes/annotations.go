@@ -17,7 +17,8 @@ const (
 )
 
 var (
-	keyAnnotationRegexp = regexp.MustCompile(`^annotation(?:-([a-z-]+))?(?:\[([A-Za-z0-9_/-]+)\])?\.(\S+)$`)
+	keyAnnotationRegexp       = regexp.MustCompile(`^annotation(?:-([a-z-]+))?(?:\[([A-Za-z0-9_/-]+)\])?\.(\S+)$`)
+	keyAnnotationPrefixRegexp = regexp.MustCompile(`^annotation[-.\[]`)
 )
 
 type AnnotationKey struct {
@@ -82,10 +83,14 @@ func AnnotationManifestDescriptorKey(p *ocispecs.Platform, key string) string {
 	}.String()
 }
 
-func ParseAnnotationKey(result string) (AnnotationKey, bool, error) {
+func ParseAnnotationKey(result string) (*AnnotationKey, error) {
+	if !keyAnnotationPrefixRegexp.MatchString(result) {
+		return nil, nil
+	}
+
 	groups := keyAnnotationRegexp.FindStringSubmatch(result)
 	if groups == nil {
-		return AnnotationKey{}, false, nil
+		return nil, errors.Errorf("could not fully parse annotation %s", result)
 	}
 
 	tp, platform, key := groups[1], groups[2], groups[3]
@@ -94,22 +99,22 @@ func ParseAnnotationKey(result string) (AnnotationKey, bool, error) {
 	case "":
 		tp = AnnotationManifest
 	default:
-		return AnnotationKey{}, true, errors.Errorf("unrecognized annotation type %s", tp)
+		return nil, errors.Errorf("unrecognized annotation type %s", tp)
 	}
 
 	var ociPlatform *ocispecs.Platform
 	if platform != "" {
 		p, err := platforms.Parse(platform)
 		if err != nil {
-			return AnnotationKey{}, true, err
+			return nil, err
 		}
 		ociPlatform = &p
 	}
 
-	annotation := AnnotationKey{
+	annotation := &AnnotationKey{
 		Type:     tp,
 		Platform: ociPlatform,
 		Key:      key,
 	}
-	return annotation, true, nil
+	return annotation, nil
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
+	"github.com/moby/buildkit/exporter/containerimage/opts"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/util/compression"
@@ -53,33 +54,28 @@ func New(opt Opt) (exporter.Exporter, error) {
 func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
 	i := &imageExporterInstance{
 		imageExporter: e,
-		opts: containerimage.ImageCommitOpts{
+		opts: opts.ImageCommitOpts{
 			RefCfg: cacheconfig.RefConfig{
 				Compression: compression.New(compression.Default),
 			},
 			BuildInfo:   true,
 			OCITypes:    e.opt.Variant == VariantOCI,
-			Annotations: make(containerimage.AnnotationsGroup),
+			Annotations: make(opts.AnnotationsGroup),
 		},
 	}
 
-	opt, err := i.opts.Load(opt)
-	if err != nil {
+	x := opts.NewExtractor(opt)
+	i.opts.Load(x)
+	i.meta = x.RestBytes()
+	if err := x.Error(); err != nil {
 		return nil, err
-	}
-
-	for k, v := range opt {
-		if i.meta == nil {
-			i.meta = make(map[string][]byte)
-		}
-		i.meta[k] = []byte(v)
 	}
 	return i, nil
 }
 
 type imageExporterInstance struct {
 	*imageExporter
-	opts containerimage.ImageCommitOpts
+	opts opts.ImageCommitOpts
 	meta map[string][]byte
 }
 
@@ -105,12 +101,13 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 		src.Metadata[k] = v
 	}
 
-	opts := e.opts
-	as, _, err := containerimage.ParseAnnotations(src.Metadata)
-	if err != nil {
+	x := opts.NewExtractorBytes(src.Metadata)
+	as := opts.ParseAnnotations(x)
+	if err := x.Error(); err != nil {
 		return nil, err
 	}
-	opts.Annotations = as.Merge(opts.Annotations)
+	os := e.opts
+	os.Annotations = as.Merge(os.Annotations)
 
 	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
@@ -118,7 +115,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 	defer done(context.TODO())
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, sessionID, &opts)
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, sessionID, &os)
 	if err != nil {
 		return nil, err
 	}

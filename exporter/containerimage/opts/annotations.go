@@ -1,9 +1,8 @@
-package containerimage
+package opts
 
 import (
-	"fmt"
-
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/pkg/errors"
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
@@ -19,22 +18,30 @@ type Annotations struct {
 // AnnotationsGroup is a map of annotations keyed by the reference key
 type AnnotationsGroup map[string]*Annotations
 
-func ParseAnnotations(data map[string][]byte) (AnnotationsGroup, map[string][]byte, error) {
-	ag := make(AnnotationsGroup)
-	rest := make(map[string][]byte)
+func ParseAnnotations(opts *OptsExtractor) AnnotationsGroup {
+	annotations := map[string]*exptypes.AnnotationKey{}
 
-	for k, v := range data {
-		a, ok, err := exptypes.ParseAnnotationKey(k)
-		if !ok {
-			rest[k] = v
-			continue
-		}
+	annotationKey := OptKeyFunc(func(k string) (bool, error) {
+		a, err := exptypes.ParseAnnotationKey(k)
 		if err != nil {
-			return nil, nil, err
+			return false, err
 		}
+		if a != nil {
+			annotations[k] = a
+			return true, nil
+		}
+		return false, nil
+	})
+
+	ag := make(AnnotationsGroup)
+	for {
+		k, v, ok := opts.ExtractString(annotationKey, nil)
+		if !ok {
+			break
+		}
+		a := annotations[k]
 
 		p := a.PlatformString()
-
 		if ag[p] == nil {
 			ag[p] = &Annotations{
 				IndexDescriptor:    make(map[string]string),
@@ -54,10 +61,10 @@ func ParseAnnotations(data map[string][]byte) (AnnotationsGroup, map[string][]by
 		case exptypes.AnnotationManifestDescriptor:
 			ag[p].ManifestDescriptor[a.Key] = string(v)
 		default:
-			return nil, nil, fmt.Errorf("unrecognized annotation type %s", a.Type)
+			opts.SetError(errors.Errorf("unrecognized annotation type %s", a.Type))
 		}
 	}
-	return ag, rest, nil
+	return ag
 }
 
 func (ag AnnotationsGroup) Platform(p *ocispecs.Platform) *Annotations {

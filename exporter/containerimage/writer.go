@@ -16,6 +16,7 @@ import (
 	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
+	"github.com/moby/buildkit/exporter/containerimage/opts"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
@@ -50,7 +51,7 @@ type ImageWriter struct {
 	opt WriterOpt
 }
 
-func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, sessionID string, opts *ImageCommitOpts) (*ocispecs.Descriptor, error) {
+func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, sessionID string, opt *opts.ImageCommitOpts) (*ocispecs.Descriptor, error) {
 	platformsBytes, ok := inp.Metadata[exptypes.ExporterPlatformsKey]
 
 	if len(inp.Refs) > 0 && !ok {
@@ -58,21 +59,21 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, sessionI
 	}
 
 	if len(inp.Refs) == 0 {
-		remotes, err := ic.exportLayers(ctx, opts.RefCfg, session.NewGroup(sessionID), inp.Ref)
+		remotes, err := ic.exportLayers(ctx, opt.RefCfg, session.NewGroup(sessionID), inp.Ref)
 		if err != nil {
 			return nil, err
 		}
 
 		var dtbi []byte
-		if opts.BuildInfo {
+		if opt.BuildInfo {
 			if dtbi, err = buildinfo.Format(inp.Metadata[exptypes.ExporterBuildInfo], buildinfo.FormatOpts{
-				RemoveAttrs: !opts.BuildInfoAttrs,
+				RemoveAttrs: !opt.BuildInfoAttrs,
 			}); err != nil {
 				return nil, err
 			}
 		}
 
-		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], opts.Annotations.Platform(nil), opts.OCITypes, inp.Metadata[exptypes.ExporterInlineCache], dtbi)
+		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], opt.Annotations.Platform(nil), opt.OCITypes, inp.Metadata[exptypes.ExporterInlineCache], dtbi)
 		if err != nil {
 			return nil, err
 		}
@@ -100,7 +101,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, sessionI
 		refs = append(refs, r)
 	}
 
-	remotes, err := ic.exportLayers(ctx, opts.RefCfg, session.NewGroup(sessionID), refs...)
+	remotes, err := ic.exportLayers(ctx, opt.RefCfg, session.NewGroup(sessionID), refs...)
 	if err != nil {
 		return nil, err
 	}
@@ -114,14 +115,14 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, sessionI
 	}{
 		MediaType: ocispecs.MediaTypeImageIndex,
 		Index: ocispecs.Index{
-			Annotations: opts.Annotations.Platform(nil).Index,
+			Annotations: opt.Annotations.Platform(nil).Index,
 			Versioned: specs.Versioned{
 				SchemaVersion: 2,
 			},
 		},
 	}
 
-	if !opts.OCITypes {
+	if !opt.OCITypes {
 		idx.MediaType = images.MediaTypeDockerSchema2ManifestList
 	}
 
@@ -136,15 +137,15 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, sessionI
 		inlineCache := inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, p.ID)]
 
 		var dtbi []byte
-		if opts.BuildInfo {
+		if opt.BuildInfo {
 			if dtbi, err = buildinfo.Format(inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, p.ID)], buildinfo.FormatOpts{
-				RemoveAttrs: !opts.BuildInfoAttrs,
+				RemoveAttrs: !opt.BuildInfoAttrs,
 			}); err != nil {
 				return nil, err
 			}
 		}
 
-		desc, _, err := ic.commitDistributionManifest(ctx, r, config, &remotes[remotesMap[p.ID]], opts.Annotations.Platform(&p.Platform), opts.OCITypes, inlineCache, dtbi)
+		desc, _, err := ic.commitDistributionManifest(ctx, r, config, &remotes[remotesMap[p.ID]], opt.Annotations.Platform(&p.Platform), opt.OCITypes, inlineCache, dtbi)
 		if err != nil {
 			return nil, err
 		}
@@ -165,7 +166,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, sessionI
 		Digest:      idxDigest,
 		Size:        int64(len(idxBytes)),
 		MediaType:   idx.MediaType,
-		Annotations: opts.Annotations.Platform(nil).IndexDescriptor,
+		Annotations: opt.Annotations.Platform(nil).IndexDescriptor,
 	}
 	idxDone := oneOffProgress(ctx, "exporting manifest list "+idxDigest.String())
 
@@ -214,7 +215,7 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, refCfg cacheconfig.RefC
 	return out, err
 }
 
-func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache.ImmutableRef, config []byte, remote *solver.Remote, annotations *Annotations, oci bool, inlineCache []byte, buildInfo []byte) (*ocispecs.Descriptor, *ocispecs.Descriptor, error) {
+func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache.ImmutableRef, config []byte, remote *solver.Remote, annotations *opts.Annotations, oci bool, inlineCache []byte, buildInfo []byte) (*ocispecs.Descriptor, *ocispecs.Descriptor, error) {
 	if len(config) == 0 {
 		var err error
 		config, err = emptyImageConfig()

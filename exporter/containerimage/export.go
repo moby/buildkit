@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -20,6 +19,7 @@ import (
 	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
+	"github.com/moby/buildkit/exporter/containerimage/opts"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/compression"
@@ -71,108 +71,38 @@ func New(opt Opt) (exporter.Exporter, error) {
 func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
 	i := &imageExporterInstance{
 		imageExporter: e,
-		opts: ImageCommitOpts{
+		opts: opts.ImageCommitOpts{
 			RefCfg: cacheconfig.RefConfig{
 				Compression: compression.New(compression.Default),
 			},
 			BuildInfo:   true,
-			Annotations: make(AnnotationsGroup),
+			Annotations: make(opts.AnnotationsGroup),
 		},
 		store: true,
 	}
 
-	opt, err := i.opts.Load(opt)
-	if err != nil {
-		return nil, err
-	}
+	x := opts.NewExtractor(opt)
+	i.opts.Load(x)
 
-	for k, v := range opt {
-		switch k {
-		case keyPush:
-			if v == "" {
-				i.push = true
-				continue
-			}
-			b, err := strconv.ParseBool(v)
-			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
-			}
-			i.push = b
-		case keyPushByDigest:
-			if v == "" {
-				i.pushByDigest = true
-				continue
-			}
-			b, err := strconv.ParseBool(v)
-			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
-			}
-			i.pushByDigest = b
-		case keyInsecure:
-			if v == "" {
-				i.insecure = true
-				continue
-			}
-			b, err := strconv.ParseBool(v)
-			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
-			}
-			i.insecure = b
-		case keyUnpack:
-			if v == "" {
-				i.unpack = true
-				continue
-			}
-			b, err := strconv.ParseBool(v)
-			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
-			}
-			i.unpack = b
-		case keyStore:
-			if v == "" {
-				i.store = true
-				continue
-			}
-			b, err := strconv.ParseBool(v)
-			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
-			}
-			i.store = b
-		case keyUnsafeInternalStoreAllowIncomplete:
-			if v == "" {
-				i.storeAllowIncomplete = true
-				continue
-			}
-			b, err := strconv.ParseBool(v)
-			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
-			}
-			i.storeAllowIncomplete = b
-		case keyDanglingPrefix:
-			i.danglingPrefix = v
-		case keyNameCanonical:
-			if v == "" {
-				i.nameCanonical = true
-				continue
-			}
-			b, err := strconv.ParseBool(v)
-			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
-			}
-			i.nameCanonical = b
-		default:
-			if i.meta == nil {
-				i.meta = make(map[string][]byte)
-			}
-			i.meta[k] = []byte(v)
-		}
+	x.ExtractBoolDefault(opts.OptKey(keyPush), &i.push, true)
+	x.ExtractBoolDefault(opts.OptKey(keyPushByDigest), &i.pushByDigest, true)
+	x.ExtractBoolDefault(opts.OptKey(keyInsecure), &i.insecure, true)
+	x.ExtractBoolDefault(opts.OptKey(keyUnpack), &i.unpack, true)
+	x.ExtractBoolDefault(opts.OptKey(keyStore), &i.store, true)
+	x.ExtractBoolDefault(opts.OptKey(keyUnsafeInternalStoreAllowIncomplete), &i.storeAllowIncomplete, true)
+	x.ExtractBoolDefault(opts.OptKey(keyNameCanonical), &i.nameCanonical, true)
+	x.ExtractString(opts.OptKey(keyDanglingPrefix), &i.danglingPrefix)
+
+	i.meta = x.RestBytes()
+	if err := x.Error(); err != nil {
+		return nil, err
 	}
 	return i, nil
 }
 
 type imageExporterInstance struct {
 	*imageExporter
-	opts                 ImageCommitOpts
+	opts                 opts.ImageCommitOpts
 	push                 bool
 	pushByDigest         bool
 	unpack               bool
@@ -202,12 +132,13 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 		src.Metadata[k] = v
 	}
 
-	opts := e.opts
-	as, _, err := ParseAnnotations(src.Metadata)
-	if err != nil {
+	x := opts.NewExtractorBytes(src.Metadata)
+	as := opts.ParseAnnotations(x)
+	if err := x.Error(); err != nil {
 		return nil, err
 	}
-	opts.Annotations = as.Merge(opts.Annotations)
+	os := e.opts
+	os.Annotations = as.Merge(os.Annotations)
 
 	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
@@ -215,7 +146,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 	defer done(context.TODO())
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, sessionID, &opts)
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, sessionID, &os)
 	if err != nil {
 		return nil, err
 	}
