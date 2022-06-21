@@ -861,6 +861,7 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 		if err := json.Unmarshal(data, &img); err != nil {
 			return nil, nil, nil, err
 		}
+		img.Created = nil
 
 		st := llb.Image(ref, imgOpt...)
 		st, err = st.WithImageConfig(data)
