@@ -1,20 +1,10 @@
 ---
 title: Dockerfile reference
 description: "Dockerfiles use a simple DSL which allows you to automate the steps you would normally manually take to create an image."
-keywords: "builder, docker, Dockerfile, automation, image creation"
+keywords: "build, dockerfile, reference"
 redirect_from:
 - /reference/builder/
 ---
-
-<!-- This file is maintained within the docker/cli GitHub
-     repository at https://github.com/docker/cli/. Make all
-     pull requests against that repo. If you see this file in
-     another repository, consider it read-only there, as it will
-     periodically be overwritten by the definitive file. Pull
-     requests which include edits to this file in other repositories
-     will be rejected.
--->
-
 
 Docker can build images automatically by reading the instructions from a
 `Dockerfile`. A `Dockerfile` is a text document that contains all the commands a
@@ -28,10 +18,10 @@ Practices](https://docs.docker.com/engine/userguide/eng-image/dockerfile_best-pr
 
 ## Usage
 
-The [docker build](commandline/build.md) command builds an image from
-a `Dockerfile` and a *context*. The build's context is the set of files at a
-specified location `PATH` or `URL`. The `PATH` is a directory on your local
-filesystem. The `URL` is a Git repository location.
+The [docker build](https://docs.docker.com/engine/reference/commandline/build/)
+command builds an image from a `Dockerfile` and a *context*. The build's context
+is the set of files at a specified location `PATH` or `URL`. The `PATH` is a
+directory on your local filesystem. The `URL` is a Git repository location.
 
 The build context is processed recursively. So, a `PATH` includes any subdirectories
 and the `URL` includes the repository and its submodules. This example shows a
@@ -134,7 +124,7 @@ $ docker build -t svendowideit/ambassador .
 By default, the build cache is based on results from previous builds on the machine
 on which you are building. The `--cache-from` option also allows you to use a
 build-cache that's distributed through an image registry refer to the
-[specifying external cache sources](commandline/build.md#specifying-external-cache-sources)
+[specifying external cache sources](https://docs.docker.com/engine/reference/commandline/build/#specifying-external-cache-sources)
 section in the `docker build` command reference.
 
 When you're done with your build, you're ready to look into [scanning your image with `docker scan`](https://docs.docker.com/engine/scan/),
@@ -1011,7 +1001,7 @@ the `-p` flag. For example
 $ docker run -p 80:80/tcp -p 80:80/udp ...
 ```
 
-To set up port redirection on the host system, see [using the -P flag](run.md#expose-incoming-ports).
+To set up port redirection on the host system, see [using the -P flag](https://docs.docker.com/engine/reference/run/#expose-incoming-ports).
 The `docker network` command supports creating networks for communication among
 containers without the need to expose or publish specific ports, because the
 containers connected to the network can communicate with each other over any
