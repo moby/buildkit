@@ -94,6 +94,7 @@ BuildKit is used by the following projects:
 -   [Earthly earthfiles](https://github.com/vladaionescu/earthly)
 -   [Gitpod](https://github.com/gitpod-io/gitpod)
 -   [Dagger](https://dagger.io)
+-   [envd](https://github.com/tensorchord/envd/)
 
 ## Quick start
 
@@ -160,6 +161,7 @@ Currently, the following high-level languages has been implemented for LLB:
 -   [Cargo Wharf (Rust)](https://github.com/denzp/cargo-wharf)
 -   [Nix](https://github.com/AkihiroSuda/buildkit-nix)
 -   [mopy (Python)](https://github.com/cmdjulian/mopy)
+-   [envd (starlark)](https://github.com/tensorchord/envd/)
 -   (open a PR to add your own language)
 
 ### Exploring Dockerfiles
@@ -659,4 +661,3 @@ Please refer to [`docs/multi-platform.md`](docs/multi-platform.md).
 ## Contributing
 
 Want to contribute to BuildKit? Awesome! You can find information about contributing to this project in the [CONTRIBUTING.md](/.github/CONTRIBUTING.md)
-
