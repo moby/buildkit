@@ -217,6 +217,12 @@ By default, the build result and intermediate cache will only remain internally 
 buildctl build ... --output type=image,name=docker.io/username/image,push=true
 ```
 
+To export the image to multiple registries:
+
+```bash
+buildctl build ... --output type=image,\"name=docker.io/username/image,docker.io/username2/image2\",push=true
+```
+
 To export the cache embed with the image and pushing them to registry together, type `registry` is required to import the cache, you should specify `--export-cache type=inline` and `--import-cache type=registry,ref=...`. To export the cache to a local directy, you should specify `--export-cache type=local`.
 Details in [Export cache](#export-cache).
 
