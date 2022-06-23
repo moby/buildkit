@@ -234,22 +234,22 @@ buildctl build ...\
 ```
 
 Keys supported by image output:
-* `name=[value]`: image name
+* `name=<value>`: specify image name(s)
 * `push=true`: push after creating the image
 * `push-by-digest=true`: push unnamed image
 * `registry.insecure=true`: push to insecure HTTP registry
 * `oci-mediatypes=true`: use OCI mediatypes in configuration JSON instead of Docker's
 * `unpack=true`: unpack image after creation (for use with containerd)
-* `dangling-name-prefix=[value]`: name image with `prefix@<digest>` , used for anonymous images
+* `dangling-name-prefix=<value>`: name image with `prefix@<digest>`, used for anonymous images
 * `name-canonical=true`: add additional canonical name `name@<digest>`
-* `compression=[uncompressed,gzip,estargz,zstd]`: choose compression type for layers newly created and cached, gzip is default value. estargz should be used with `oci-mediatypes=true`.
-* `compression-level=[value]`: compression level for gzip, estargz (0-9) and zstd (0-22)
-* `force-compression=true`: forcefully apply `compression` option to all layers (including already existing layers).
-* `buildinfo=true`: inline build info in [image config](docs/build-repro.md#image-config) (default `true`).
-* `buildinfo-attrs=true`: inline build info attributes in [image config](docs/build-repro.md#image-config) (default `false`).
-* `store=true`: stores the result images to the worker's (e.g. containerd) image store as well as ensures that the image has all blobs in the content store (default `true`). Ignored if the worker doesn't have image store (e.g. OCI worker).
-* `annotation.key=value`: attaches an annotation with the respective `key` and `value` to the built image.
-  * Using the extended syntaxes, `annotation-<type>.key=value`, `annotation[<platform>].key=value` and both combined with `annotation-<type>[<platform>].key=value`, allows configuring exactly where to attach the annotation.
+* `compression=<uncompressed|gzip|estargz|zstd>`: choose compression type for layers newly created and cached, gzip is default value. estargz should be used with `oci-mediatypes=true`.
+* `compression-level=<value>`: compression level for gzip, estargz (0-9) and zstd (0-22)
+* `force-compression=true`: forcefully apply `compression` option to all layers (including already existing layers)
+* `buildinfo=true`: attach inline build info in [image config](docs/build-repro.md#image-config) (default `true`)
+* `buildinfo-attrs=true`: attach inline build info attributes in [image config](docs/build-repro.md#image-config) (default `false`)
+* `store=true`: store the result images to the worker's (e.g. containerd) image store as well as ensures that the image has all blobs in the content store (default `true`). Ignored if the worker doesn't have image store (e.g. OCI worker).
+* `annotation.<key>=<value>`: attach an annotation with the respective `key` and `value` to the built image
+  * Using the extended syntaxes, `annotation-<type>.<key>=<value>`, `annotation[<platform>].<key>=<value>` and both combined with `annotation-<type>[<platform>].<key>=<value>`, allows configuring exactly where to attach the annotation.
   * `<type>` specifies what object to attach to, and can be any of `manifest` (the default), `manifest-descriptor`, `index` and `index-descriptor`
   * `<platform>` specifies which objects to attach to (by default, all), and is the same key passed into the `platform` opt, see [`docs/multi-platform.md`](docs/multi-platform.md).
 
@@ -298,6 +298,7 @@ buildctl build ... --output type=docker,name=myimage | docker load
 buildctl build ... --output type=oci,dest=path/to/output.tar
 buildctl build ... --output type=oci > output.tar
 ```
+
 #### containerd image store
 
 The containerd worker needs to be used
@@ -308,7 +309,6 @@ ctr --namespace=buildkit images ls
 ```
 
 To change the containerd namespace, you need to change `worker.containerd.namespace` in [`/etc/buildkit/buildkitd.toml`](./docs/buildkitd.toml.md).
-
 
 ## Cache
 
@@ -369,17 +369,18 @@ buildctl build ... \
 
 `--export-cache` options:
 * `type=registry`
-* `mode=min` (default): only export layers for the resulting image
-* `mode=max`: export all the layers of all intermediate steps.
-* `ref=docker.io/user/image:tag`: reference
-* `oci-mediatypes=true|false`: whether to use OCI mediatypes in exported manifests. Since BuildKit `v0.8` defaults to true.
-* `compression=[uncompressed,gzip,estargz,zstd]`: choose compression type for layers newly created and cached, gzip is default value. estargz and zstd should be used with `oci-mediatypes=true`.
-* `compression-level=[value]`: compression level for gzip, estargz (0-9) and zstd (0-22)
-* `force-compression=true`: forcibly apply `compression` option to all layers.
+* `mode=<min|max>`: specify cache layers to export (default: `min`)
+  * `min`: only export layers for the resulting image
+  * `max`: export all the layers of all intermediate steps
+* `ref=<ref>`: specify repository reference to store cache, e.g. `docker.io/user/image:tag`
+* `oci-mediatypes=<true|false>`: whether to use OCI mediatypes in exported manifests (default: `true`, since BuildKit `v0.8`)
+* `compression=<uncompressed|gzip|estargz|zstd>`: choose compression type for layers newly created and cached, gzip is default value. estargz and zstd should be used with `oci-mediatypes=true`
+* `compression-level=<value>`: choose compression level for gzip, estargz (0-9) and zstd (0-22)
+* `force-compression=true`: forcibly apply `compression` option to all layers
 
 `--import-cache` options:
 * `type=registry`
-* `ref=docker.io/user/image:tag`: reference
+* `ref=<ref>`: specify repository reference to retrieve cache from, e.g. `docker.io/user/image:tag`
 
 #### Local directory
 
@@ -392,19 +393,20 @@ The directory layout conforms to OCI Image Spec v1.0.
 
 `--export-cache` options:
 * `type=local`
-* `mode=min` (default): only export layers for the resulting image
-* `mode=max`: export all the layers of all intermediate steps.
-* `dest=path/to/output-dir`: destination directory for cache exporter
-* `oci-mediatypes=true|false`: whether to use OCI mediatypes in exported manifests. Since BuildKit `v0.8` defaults to true.
-* `compression=[uncompressed,gzip,estargz,zstd]`: choose compression type for layers newly created and cached, gzip is default value. estargz and zstd should be used with `oci-mediatypes=true`.
-* `compression-level=[value]`: compression level for gzip, estargz (0-9) and zstd (0-22)
-* `force-compression=true`: forcibly apply `compression` option to all layers.
+* `mode=<min|max>`: specify cache layers to export (default: `min`)
+  * `min`: only export layers for the resulting image
+  * `max`: export all the layers of all intermediate steps
+* `dest=<path>`: destination directory for cache exporter
+* `oci-mediatypes=<true|false>`: whether to use OCI mediatypes in exported manifests (default `true`, since BuildKit `v0.8`)
+* `compression=<uncompressed|gzip|estargz|zstd>`: choose compression type for layers newly created and cached, gzip is default value. estargz and zstd should be used with `oci-mediatypes=true`.
+* `compression-level=<value>`: compression level for gzip, estargz (0-9) and zstd (0-22)
+* `force-compression=true`: forcibly apply `compression` option to all layers
 
 `--import-cache` options:
 * `type=local`
-* `src=path/to/input-dir`: source directory for cache importer
-* `digest=sha256:deadbeef`: digest of the manifest list to import.
-* `tag=customtag`: custom tag of image. Defaults "latest" tag digest in `index.json` is for digest, not for tag
+* `src=<path>`: source directory for cache importer
+* `digest=sha256:<sha256digest>`: specify explicit digest of the manifest list to import
+* `tag=<tag>`: determine custom tag of image. Defaults "latest" tag digest in `index.json` is for digest, not for tag
 
 #### GitHub Actions cache (experimental)
 
@@ -429,13 +431,14 @@ in your workflow to expose the runtime.
 
 `--export-cache` options:
 * `type=gha`
-* `mode=min` (default): only export layers for the resulting image
-* `mode=max`: export all the layers of all intermediate steps.
-* `scope=buildkit`: which scope cache object belongs to (default `buildkit`)
+* `mode=<min|max>`: specify cache layers to export (default: `min`)
+  * `min`: only export layers for the resulting image
+  * `max`: export all the layers of all intermediate steps
+* `scope=<scope>`: which scope cache object belongs to (default `buildkit`)
 
 `--import-cache` options:
 * `type=gha`
-* `scope=buildkit`: which scope cache object belongs to (default `buildkit`)
+* `scope=<scope>`: which scope cache object belongs to (default `buildkit`)
 
 #### S3 cache (experimental)
 
@@ -455,10 +458,10 @@ Storage locations:
 * manifests: `s3://<bucket>/<prefix><manifests_prefix>/<name>`, default: `s3://<bucket>/manifests/<name>`
 
 S3 configuration:
-* `blobs_prefix`: global prefix to store / read blobs on s3. (default: `blobs/`)
-* `manifests_prefix`: global prefix to store / read blobs on s3. (default: `manifests/`)
-* `endpoint_url`: specify a specific S3 endpoint. (default: empty)
-* `use_path_style`: if set to `true`, put the bucket name in the URL instead of in the hostname. (default: `false`)
+* `blobs_prefix`: global prefix to store / read blobs on s3 (default: `blobs/`)
+* `manifests_prefix`: global prefix to store / read blobs on s3 (default: `manifests/`)
+* `endpoint_url`: specify a specific S3 endpoint (default: empty)
+* `use_path_style`: if set to `true`, put the bucket name in the URL instead of in the hostname (default: `false`)
 
 AWS Authentication:
 
@@ -468,20 +471,21 @@ Others options are:
 * Any system using environment variables / config files supported by the [AWS Go SDK](https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html). The configuration must be available for the buildkit daemon, not for the client.
 * Access key ID and Secret Access Key, using the `access_key_id` and `secret_access_key` attributes.
 
-
 `--export-cache` options:
 * `type=s3`
-* `mode=min` (default): only export layers for the resulting image
-* `mode=max`: export all the layers of all intermediate steps.
-* `prefix`: global prefix to store / read files on s3. Default: empty
-* `name=buildkit`: name of the manifest to use (default `buildkit`). Multiple manifest names can be specified at the same time, separated by `;`. The standard use case is to use the git sha1 as name, and the branch name as duplicate, and load both with 2 `import-cache` commands.
+* `mode=<min|max>`: specify cache layers to export (default: `min`)
+  * `min`: only export layers for the resulting image
+  * `max`: export all the layers of all intermediate steps
+* `prefix=<prefix>`: set global prefix to store / read files on s3 (default: empty)
+* `name=<manifest>`: specify name of the manifest to use (default `buildkit`)
+  * Multiple manifest names can be specified at the same time, separated by `;`. The standard use case is to use the git sha1 as name, and the branch name as duplicate, and load both with 2 `import-cache` commands.
 
 `--import-cache` options:
 * `type=s3`
-* `prefix=`: global prefix to store / read files on s3. Default: empty
-* `blobs_prefix=`: global prefix to store / read blobs on s3. (default: `blobs/`)
-* `manifests_prefix=`: global prefix to store / read blobs on s3. (default: `manifests/`)
-* `name=buildkit`: name of the manifest to use (default `buildkit`)
+* `prefix=<prefix>`: set global prefix to store / read files on s3 (default: empty)
+* `blobs_prefix=<prefix>`: set global prefix to store / read blobs on s3 (default: `blobs/`)
+* `manifests_prefix=<prefix>`: set global prefix to store / read manifests on s3 (default: `manifests/`)
+* `name=<manifest>`: name of the manifest to use (default `buildkit`)
 
 ### Consistent hashing
 
