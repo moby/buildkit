@@ -1053,11 +1053,11 @@ image, consider setting a value for a single command instead:
 RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y ...
 ```
  
-Or using [`ARG`](#arg), which is not persisted in the final image:
+Or parametrized using [`ARG`](#arg), which is not persisted in the final image:
 
 ```dockerfile
 ARG DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y ...
+RUN DEBIAN_FRONTEND=$DEBIAN_FRONTEND apt-get update && apt-get install -y ...
 ```
 
 > **Alternative syntax**
