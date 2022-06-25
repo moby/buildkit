@@ -46,7 +46,7 @@ func NewFileOp(v solver.Vertex, op *pb.Op_File, cm cache.Manager, parallelism *s
 		md:          cm,
 		numInputs:   len(v.Inputs()),
 		w:           w,
-		solver:      NewFileOpSolver(w, &file.Backend{}, file.NewRefManager(cm)),
+		solver:      NewFileOpSolver(w, &file.Backend{}, file.NewRefManager(cm, v.Name())),
 		parallelism: parallelism,
 	}, nil
 }
