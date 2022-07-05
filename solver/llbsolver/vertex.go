@@ -1,11 +1,13 @@
 package llbsolver
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/solver/llbsolver/llbmutator"
 	"github.com/moby/buildkit/solver/llbsolver/ops/opsutils"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
@@ -144,8 +146,8 @@ func (dpc *detectPrunedCacheID) Load(op *pb.Op, md *pb.OpMetadata, opt *solver.V
 	return nil
 }
 
-func Load(def *pb.Definition, opts ...LoadOpt) (solver.Edge, error) {
-	return loadLLB(def, func(dgst digest.Digest, pbOp *pb.Op, load func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error) {
+func Load(ctx context.Context, def *pb.Definition, mutator llbmutator.LLBMutator, opts ...LoadOpt) (solver.Edge, error) {
+	return loadLLB(ctx, def, mutator, func(dgst digest.Digest, pbOp *pb.Op, load func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error) {
 		opMetadata := def.Metadata[dgst]
 		vtx, err := newVertex(dgst, pbOp, &opMetadata, load, opts...)
 		if err != nil {
@@ -188,12 +190,13 @@ func newVertex(dgst digest.Digest, op *pb.Op, opMeta *pb.OpMetadata, load func(d
 
 // loadLLB loads LLB.
 // fn is executed sequentially.
-func loadLLB(def *pb.Definition, fn func(digest.Digest, *pb.Op, func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error)) (solver.Edge, error) {
+func loadLLB(ctx context.Context, def *pb.Definition, mutator llbmutator.LLBMutator, fn func(digest.Digest, *pb.Op, func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error)) (solver.Edge, error) {
 	if len(def.Def) == 0 {
 		return solver.Edge{}, errors.New("invalid empty definition")
 	}
 
 	allOps := make(map[digest.Digest]*pb.Op)
+	mutatedDigests := make(map[digest.Digest]digest.Digest) // key: old, val: new
 
 	var dgst digest.Digest
 
@@ -203,7 +206,31 @@ func loadLLB(def *pb.Definition, fn func(digest.Digest, *pb.Op, func(digest.Dige
 			return solver.Edge{}, errors.Wrap(err, "failed to parse llb proto op")
 		}
 		dgst = digest.FromBytes(dt)
+		if mutator != nil {
+			mutated, err := mutator.Mutate(ctx, &op)
+			if err != nil {
+				return solver.Edge{}, errors.Wrap(err, "failed to call the LLB Mutator")
+			}
+			if mutated {
+				dtMutated, err := op.Marshal()
+				if err != nil {
+					return solver.Edge{}, err
+				}
+				dgstMutated := digest.FromBytes(dtMutated)
+				mutatedDigests[dgst] = dgstMutated
+				dgst = dgstMutated
+			}
+		}
 		allOps[dgst] = &op
+	}
+
+	// Rewrite the input digests if some op was mutated
+	for _, op := range allOps {
+		for _, inp := range op.Inputs {
+			if mutatedDgst, ok := mutatedDigests[inp.Digest]; ok {
+				inp.Digest = mutatedDgst
+			}
+		}
 	}
 
 	if len(allOps) < 2 {

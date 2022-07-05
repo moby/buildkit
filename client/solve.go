@@ -22,6 +22,7 @@ import (
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/session/grpchijack"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/sourcepolicy"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/entitlements"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -47,6 +48,7 @@ type SolveOpt struct {
 	SharedSession         *session.Session // TODO: refactor to better session syncing
 	SessionPreInitialized bool             // TODO: refactor to better session syncing
 	Internal              bool
+	SourcePolicy          *sourcepolicy.SourcePolicy
 }
 
 type ExportEntry struct {
@@ -219,6 +221,18 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		frontendAttrs[k] = v
 	}
 
+	var srcPol *controlapi.SourcePolicy
+	if opt.SourcePolicy != nil {
+		srcPol = &controlapi.SourcePolicy{}
+		for _, f := range opt.SourcePolicy.Sources {
+			srcPol.Sources = append(srcPol.Sources, &controlapi.SourcePolicySource{
+				Type: string(f.Type),
+				Ref:  f.Ref,
+				Pin:  f.Pin,
+			})
+		}
+	}
+
 	solveCtx, cancelSolve := context.WithCancel(ctx)
 	var res *SolveResponse
 	eg.Go(func() error {
@@ -261,6 +275,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			Cache:          cacheOpt.options,
 			Entitlements:   opt.AllowedEntitlements,
 			Internal:       opt.Internal,
+			SourcePolicy:   srcPol,
 		})
 		if err != nil {
 			return errors.Wrap(err, "failed to solve")

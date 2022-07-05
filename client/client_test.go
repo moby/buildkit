@@ -47,6 +47,7 @@ import (
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/solver/result"
+	"github.com/moby/buildkit/sourcepolicy"
 	"github.com/moby/buildkit/util/attestation"
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/contentutil"
@@ -188,6 +189,7 @@ func TestIntegration(t *testing.T) {
 		testMultipleCacheExports,
 		testMountStubsDirectory,
 		testMountStubsTimestamp,
+		testSourcePolicy,
 	)
 }
 
@@ -8471,5 +8473,85 @@ var bridgeDNSNetwork integration.ConfigUpdater = &netModeBridgeDNS{}
 func fixedWriteCloser(wc io.WriteCloser) func(map[string]string) (io.WriteCloser, error) {
 	return func(map[string]string) (io.WriteCloser, error) {
 		return wc, nil
+	}
+}
+
+func testSourcePolicy(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		st := llb.Image("busybox:1.34.1-uclibc").File(
+			llb.Copy(llb.HTTP("https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md"),
+				"README.md", "README.md"))
+		def, err := st.Marshal(sb.Context())
+		if err != nil {
+			return nil, err
+		}
+		return c.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+	}
+
+	type testCase struct {
+		srcPol      *sourcepolicy.SourcePolicy
+		expectedErr string
+	}
+	testCases := []testCase{
+		{
+			// Valid
+			srcPol: &sourcepolicy.SourcePolicy{
+				Sources: []sourcepolicy.Source{
+					{
+						Type: "docker-image",
+						Ref:  "docker.io/library/busybox:1.34.1-uclibc",
+						Pin:  "sha256:3614ca5eacf0a3a1bcc361c939202a974b4902b9334ff36eb29ffe9011aaad83",
+					},
+					{
+						Type: "http",
+						Ref:  "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md",
+						Pin:  "sha256:6e4b94fc270e708e1068be28bd3551dc6917a4fc5a61293d51bb36e6b75c4b53",
+					},
+				},
+			},
+			expectedErr: "",
+		},
+		{
+			// Invalid docker-image source
+			srcPol: &sourcepolicy.SourcePolicy{
+				Sources: []sourcepolicy.Source{
+					{
+						Type: "docker-image",
+						Ref:  "docker.io/library/busybox:1.34.1-uclibc",
+						Pin:  "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", // invalid
+					},
+				},
+			},
+			expectedErr: "docker.io/library/busybox:1.34.1-uclibc@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: not found",
+		},
+		{
+			// Invalid http source
+			srcPol: &sourcepolicy.SourcePolicy{
+				Sources: []sourcepolicy.Source{
+					{
+						Type: "http",
+						Ref:  "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md",
+						Pin:  "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", // invalid
+					},
+				},
+			},
+			expectedErr: "digest mismatch sha256:6e4b94fc270e708e1068be28bd3551dc6917a4fc5a61293d51bb36e6b75c4b53: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		},
+	}
+	for _, tc := range testCases {
+		_, err = c.Build(sb.Context(), SolveOpt{SourcePolicy: tc.srcPol}, "", frontend, nil)
+		if tc.expectedErr == "" {
+			require.NoError(t, err)
+		} else {
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tc.expectedErr)
+		}
 	}
 }

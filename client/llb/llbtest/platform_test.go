@@ -27,7 +27,7 @@ func TestCustomPlatform(t *testing.T) {
 	def, err := s.Marshal(context.TODO())
 	require.NoError(t, err)
 
-	e, err := llbsolver.Load(def.ToPB())
+	e, err := llbsolver.Load(context.TODO(), def.ToPB(), nil)
 	require.NoError(t, err)
 
 	require.Equal(t, depth(e), 5)
@@ -56,7 +56,7 @@ func TestDefaultPlatform(t *testing.T) {
 	def, err := s.Marshal(context.TODO())
 	require.NoError(t, err)
 
-	e, err := llbsolver.Load(def.ToPB())
+	e, err := llbsolver.Load(context.TODO(), def.ToPB(), nil)
 	require.NoError(t, err)
 
 	require.Equal(t, depth(e), 2)
@@ -80,7 +80,7 @@ func TestPlatformOnMarshal(t *testing.T) {
 	def, err := s.Marshal(context.TODO(), llb.Windows)
 	require.NoError(t, err)
 
-	e, err := llbsolver.Load(def.ToPB())
+	e, err := llbsolver.Load(context.TODO(), def.ToPB(), nil)
 	require.NoError(t, err)
 
 	expected := ocispecs.Platform{OS: "windows", Architecture: "amd64"}
@@ -100,7 +100,7 @@ func TestPlatformMixed(t *testing.T) {
 	def, err := s1.Marshal(context.TODO(), llb.LinuxAmd64)
 	require.NoError(t, err)
 
-	e, err := llbsolver.Load(def.ToPB())
+	e, err := llbsolver.Load(context.TODO(), def.ToPB(), nil)
 	require.NoError(t, err)
 
 	require.Equal(t, depth(e), 4)
@@ -129,7 +129,7 @@ func TestFallbackPath(t *testing.T) {
 	// the cap.
 	def, err := llb.Scratch().Run(llb.Shlex("cmd")).Marshal(context.TODO(), llb.LinuxAmd64)
 	require.NoError(t, err)
-	e, err := llbsolver.Load(def.ToPB())
+	e, err := llbsolver.Load(context.TODO(), def.ToPB(), nil)
 	require.NoError(t, err)
 	require.False(t, def.Metadata[e.Vertex.Digest()].Caps[pb.CapExecMetaSetsDefaultPath])
 	_, ok := getenv(e, "PATH")
@@ -141,7 +141,7 @@ func TestFallbackPath(t *testing.T) {
 	require.Error(t, cs.Supports(pb.CapExecMetaSetsDefaultPath))
 	def, err = llb.Scratch().Run(llb.Shlex("cmd")).Marshal(context.TODO(), llb.LinuxAmd64, llb.WithCaps(cs))
 	require.NoError(t, err)
-	e, err = llbsolver.Load(def.ToPB())
+	e, err = llbsolver.Load(context.TODO(), def.ToPB(), nil)
 	require.NoError(t, err)
 	require.False(t, def.Metadata[e.Vertex.Digest()].Caps[pb.CapExecMetaSetsDefaultPath])
 	v, ok := getenv(e, "PATH")
@@ -155,7 +155,7 @@ func TestFallbackPath(t *testing.T) {
 	require.NoError(t, cs.Supports(pb.CapExecMetaSetsDefaultPath))
 	def, err = llb.Scratch().Run(llb.Shlex("cmd")).Marshal(context.TODO(), llb.LinuxAmd64, llb.WithCaps(cs))
 	require.NoError(t, err)
-	e, err = llbsolver.Load(def.ToPB())
+	e, err = llbsolver.Load(context.TODO(), def.ToPB(), nil)
 	require.NoError(t, err)
 	require.True(t, def.Metadata[e.Vertex.Digest()].Caps[pb.CapExecMetaSetsDefaultPath])
 	_, ok = getenv(e, "PATH")
@@ -171,7 +171,7 @@ func TestFallbackPath(t *testing.T) {
 	} {
 		def, err = llb.Scratch().AddEnv("PATH", "foo").Run(llb.Shlex("cmd")).Marshal(context.TODO(), append(cos, llb.LinuxAmd64)...)
 		require.NoError(t, err)
-		e, err = llbsolver.Load(def.ToPB())
+		e, err = llbsolver.Load(context.TODO(), def.ToPB(), nil)
 		require.NoError(t, err)
 		// pb.CapExecMetaSetsDefaultPath setting is irrelevant (and variable).
 		v, ok = getenv(e, "PATH")

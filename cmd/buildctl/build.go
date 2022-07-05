@@ -20,6 +20,7 @@ import (
 	"github.com/moby/buildkit/session/auth/authprovider"
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/sourcepolicy"
 	"github.com/moby/buildkit/util/progress/progresswriter"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -94,6 +95,10 @@ var buildCommand = cli.Command{
 		cli.StringFlag{
 			Name:  "metadata-file",
 			Usage: "Output build metadata (e.g., image digest) to a file as JSON",
+		},
+		cli.StringFlag{
+			Name:  "source-policy-file",
+			Usage: "Read source policy file from a JSON file",
 		},
 	},
 }
@@ -189,6 +194,19 @@ func buildAction(clicontext *cli.Context) error {
 		return err
 	}
 
+	var srcPol *sourcepolicy.SourcePolicy
+	if srcPolFile := clicontext.String("source-policy-file"); srcPolFile != "" {
+		b, err := os.ReadFile(srcPolFile)
+		if err != nil {
+			return err
+		}
+		var srcPolStruct sourcepolicy.SourcePolicy
+		if err := json.Unmarshal(b, &srcPolStruct); err != nil {
+			return errors.Wrapf(err, "failed to unmarshal source-policy-file %q", srcPolFile)
+		}
+		srcPol = &srcPolStruct
+	}
+
 	eg, ctx := errgroup.WithContext(bccommon.CommandContext(clicontext))
 
 	solveOpt := client.SolveOpt{
@@ -201,6 +219,7 @@ func buildAction(clicontext *cli.Context) error {
 		CacheImports:        cacheImports,
 		Session:             attachable,
 		AllowedEntitlements: allowed,
+		SourcePolicy:        srcPol,
 	}
 
 	solveOpt.FrontendAttrs, err = build.ParseOpt(clicontext.StringSlice("opt"))

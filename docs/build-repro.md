@@ -127,3 +127,38 @@ jq '.' metadata.json
   "containerimage.digest": "sha256:..."
 }
 ```
+
+### Reproducing the pinned dependencies
+
+<!-- TODO: s/master/v0.11/ after the release -->
+Reproducing the pinned dependencies is supported in the master branch of BuildKit.
+
+e.g.,
+```bash
+buildctl build --frontend dockerfile.v0 --local dockerfile=. --local context=. --source-policy-file Dockerfile.pol
+```
+
+An example `Dockerfile.pol`:
+```json
+{
+    "sources": [
+      {
+        "type": "docker-image",
+        "ref": "docker.io/library/alpine:latest",
+        "pin": "sha256:4edbd2beb5f78b1014028f4fbb99f3237d9561100b6881aabbf5acce2c4f9454"
+      },
+      {
+        "type": "http",
+        "ref": "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md",
+        "pin": "sha256:6e4b94fc270e708e1068be28bd3551dc6917a4fc5a61293d51bb36e6b75c4b53"
+      }
+    ]
+}
+```
+
+* `sources`: a subset of the `."containerimage.buildinfo".sources` property of the `metadata.json`
+
+Reproduction is currently supported for the following source types:
+* `docker-image`
+* `http`
+<!-- TODO: git -->

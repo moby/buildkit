@@ -68,6 +68,7 @@ message SolveRequest {
 	repeated string Entitlements = 9 [(gogoproto.customtype) = "github.com/moby/buildkit/util/entitlements.Entitlement" ];
 	map<string, pb.Definition> FrontendInputs = 10;
 	bool Internal = 11; // Internal builds are not recorded in build history
+	SourcePolicy SourcePolicy = 12;
 }
 
 message CacheOptions {
@@ -230,4 +231,15 @@ message BuildResultInfo {
 message Exporter {
 	string Type = 1;
 	map<string, string> Attrs = 2;
+}
+message SourcePolicy {
+	// 1 is reserved for versioning
+	repeated SourcePolicySource Sources = 2;
+}
+
+message SourcePolicySource {
+	string Type = 1;
+	string Ref = 2;
+	string Pin = 3;
+	// TODO: string (?) Replace = 4;
 }
