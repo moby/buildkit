@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/docker/distribution/reference"
@@ -72,6 +73,7 @@ type ConvertOpt struct {
 
 func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, *binfotypes.BuildInfo, error) {
 	buildInfo := &binfotypes.BuildInfo{}
+	buildInfoDepsMu := sync.Mutex{}
 	contextByName := opt.ContextByName
 	opt.ContextByName = func(ctx context.Context, name, resolveMode string) (*llb.State, *Image, *binfotypes.BuildInfo, error) {
 		if !strings.EqualFold(name, "scratch") && !strings.EqualFold(name, "context") {
@@ -81,12 +83,14 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 					return nil, nil, nil, err
 				}
 				if bi != nil && bi.Deps != nil {
+					buildInfoDepsMu.Lock()
+					if buildInfo.Deps == nil {
+						buildInfo.Deps = make(map[string]binfotypes.BuildInfo)
+					}
 					for k := range bi.Deps {
-						if buildInfo.Deps == nil {
-							buildInfo.Deps = make(map[string]binfotypes.BuildInfo)
-						}
 						buildInfo.Deps[k] = bi.Deps[k]
 					}
+					buildInfoDepsMu.Unlock()
 				}
 				return st, img, bi, nil
 			}
