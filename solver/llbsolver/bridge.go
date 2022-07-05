@@ -143,9 +143,6 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest, sid st
 
 	if req.Definition != nil && req.Definition.Def != nil {
 		res = &frontend.Result{Ref: newResultProxy(b, req)}
-		if req.Evaluate {
-			_, err = res.Ref.Result(ctx)
-		}
 	} else if req.Frontend != "" {
 		f, ok := b.frontends[req.Frontend]
 		if !ok {
@@ -157,6 +154,9 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest, sid st
 		}
 	} else {
 		return &frontend.Result{}, nil
+	}
+	if req.Evaluate {
+		_, err = res.Ref.Result(ctx)
 	}
 
 	if len(res.Refs) > 0 {
