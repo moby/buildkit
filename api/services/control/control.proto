@@ -62,6 +62,7 @@ message SolveRequest {
 	CacheOptions Cache = 8 [(gogoproto.nullable) = false];
 	repeated string Entitlements = 9 [(gogoproto.customtype) = "github.com/moby/buildkit/util/entitlements.Entitlement" ];
 	map<string, pb.Definition> FrontendInputs = 10;
+	SourcePolicy SourcePolicy = 11;
 }
 
 message CacheOptions {
@@ -162,4 +163,16 @@ message InfoRequest {}
 
 message InfoResponse {
 	moby.buildkit.v1.types.BuildkitVersion buildkitVersion = 1;
+}
+
+message SourcePolicy {
+	// 1 is reserved for versioning
+	repeated SourcePolicySource Sources = 2;
+}
+
+message SourcePolicySource {
+	string Type = 1;
+	string Ref = 2;
+	string Pin = 3;
+	// TODO: string (?) Replace = 4;
 }

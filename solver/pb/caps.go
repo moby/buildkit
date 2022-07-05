@@ -80,6 +80,8 @@ const (
 	CapDiffOp  apicaps.CapID = "diffop"
 
 	CapAnnotations apicaps.CapID = "exporter.image.annotations"
+
+	CapSourcePolicy apicaps.CapID = "source.policy"
 )
 
 func init() {
@@ -437,6 +439,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapAnnotations,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapSourcePolicy,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

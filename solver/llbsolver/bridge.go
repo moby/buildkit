@@ -19,7 +19,9 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/errdefs"
 	llberrdefs "github.com/moby/buildkit/solver/llbsolver/errdefs"
+	"github.com/moby/buildkit/solver/llbsolver/llbmutator"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/sourcepolicy/sourcepolicyllbmutator"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/flightcontrol"
@@ -72,6 +74,17 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 	if err != nil {
 		return nil, nil, err
 	}
+	srcPol, err := loadSourcePolicy(b.builder)
+	if err != nil {
+		return nil, nil, err
+	}
+	var llbMutator llbmutator.LLBMutator
+	if srcPol != nil {
+		llbMutator, err = sourcepolicyllbmutator.New(srcPol)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
 	var cms []solver.CacheManager
 	for _, im := range cacheImports {
 		cmID, err := cmKey(im)
@@ -111,7 +124,7 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 	}
 	dpc := &detectPrunedCacheID{}
 
-	edge, err := Load(def, dpc.Load, ValidateEntitlements(ent), WithCacheSources(cms), NormalizeRuntimePlatforms(), WithValidateCaps())
+	edge, err := Load(ctx, def, llbMutator, dpc.Load, ValidateEntitlements(ent), WithCacheSources(cms), NormalizeRuntimePlatforms(), WithValidateCaps())
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to load LLB")
 	}

@@ -19,6 +19,7 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/sourcepolicy"
 	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/entitlements"
@@ -29,7 +30,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const keyEntitlements = "llb.entitlements"
+const (
+	keyEntitlements = "llb.entitlements"
+	keySourcePolicy = "llb.sourcepolicy"
+)
 
 type ExporterRequest struct {
 	Exporter        exporter.ExporterInstance
@@ -104,7 +108,7 @@ func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 	}
 }
 
-func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement) (*client.SolveResponse, error) {
+func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement, srcPol *sourcepolicy.SourcePolicy) (*client.SolveResponse, error) {
 	j, err := s.solver.NewJob(id)
 	if err != nil {
 		return nil, err
@@ -117,6 +121,10 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		return nil, err
 	}
 	j.SetValue(keyEntitlements, set)
+
+	if srcPol != nil {
+		j.SetValue(keySourcePolicy, *srcPol)
+	}
 
 	j.SessionID = sessionID
 
@@ -490,4 +498,29 @@ func loadEntitlements(b solver.Builder) (entitlements.Set, error) {
 		return nil, err
 	}
 	return ent, nil
+}
+
+func loadSourcePolicy(b solver.Builder) (*sourcepolicy.SourcePolicy, error) {
+	set := make(map[sourcepolicy.Source]struct{}, 0)
+	err := b.EachValue(context.TODO(), keySourcePolicy, func(v interface{}) error {
+		x, ok := v.(sourcepolicy.SourcePolicy)
+		if !ok {
+			return errors.Errorf("invalid source policy %T", v)
+		}
+		for _, f := range x.Sources {
+			set[f] = struct{}{}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	var srcPol *sourcepolicy.SourcePolicy
+	if len(set) > 0 {
+		srcPol = &sourcepolicy.SourcePolicy{}
+		for k := range set {
+			srcPol.Sources = append(srcPol.Sources, k)
+		}
+	}
+	return srcPol, nil
 }

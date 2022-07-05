@@ -18,6 +18,7 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/sourcepolicy"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/throttle"
@@ -306,6 +307,18 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 			Attrs: im.Attrs,
 		})
 	}
+	var srcPol *sourcepolicy.SourcePolicy
+	if req.SourcePolicy != nil {
+		srcPol = &sourcepolicy.SourcePolicy{}
+		for _, f := range req.SourcePolicy.Sources {
+			s := sourcepolicy.Source{
+				Type: sourcepolicy.SourceType(f.Type),
+				Ref:  f.Ref,
+				Pin:  f.Pin,
+			}
+			srcPol.Sources = append(srcPol.Sources, s)
+		}
+	}
 
 	resp, err := c.solver.Solve(ctx, req.Ref, req.Session, frontend.SolveRequest{
 		Frontend:       req.Frontend,
@@ -317,7 +330,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		Exporter:        expi,
 		CacheExporter:   cacheExporter,
 		CacheExportMode: cacheExportMode,
-	}, req.Entitlements)
+	}, req.Entitlements, srcPol)
 	if err != nil {
 		return nil, err
 	}
