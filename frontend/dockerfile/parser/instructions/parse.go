@@ -1,3 +1,6 @@
+// The instructions package contains the definitions of the high-level
+// Dockerfile commands, as well as low-level primitives for extracting these
+// commands from a pre-parsed Abstract Syntax Tree.
 package instructions
 
 import (
@@ -140,35 +143,42 @@ func (e *parseError) Unwrap() error {
 	return e.inner
 }
 
+// Result is the result of parsing an AST
+type Result struct {
+	Stages   []Stage
+	MetaArgs []ArgCommand
+}
+
 // Parse a Dockerfile into a collection of buildable stages.
 // metaArgs is a collection of ARG instructions that occur before the first FROM.
-func Parse(root *ast.Node) (stages []Stage, metaArgs []ArgCommand, err error) {
+func Parse(root *ast.Node) (*Result, error) {
+	result := &Result{}
 	for _, n := range root.Children {
 		cmd, err := ParseInstruction(n)
 		if err != nil {
-			return nil, nil, &parseError{inner: err, node: n}
+			return nil, &parseError{inner: err, node: n}
 		}
-		if len(stages) == 0 {
+		if len(result.Stages) == 0 {
 			// meta arg case
 			if a, isArg := cmd.(*ArgCommand); isArg {
-				metaArgs = append(metaArgs, *a)
+				result.MetaArgs = append(result.MetaArgs, *a)
 				continue
 			}
 		}
 		switch c := cmd.(type) {
 		case *Stage:
-			stages = append(stages, *c)
+			result.Stages = append(result.Stages, *c)
 		case Command:
-			stage, err := CurrentStage(stages)
+			stage, err := CurrentStage(result.Stages)
 			if err != nil {
-				return nil, nil, ast.WithLocation(err, n.Location())
+				return nil, ast.WithLocation(err, n.Location())
 			}
 			stage.AddCommand(c)
 		default:
-			return nil, nil, ast.WithLocation(errors.Errorf("%T is not a command type", cmd), n.Location())
+			return nil, ast.WithLocation(errors.Errorf("%T is not a command type", cmd), n.Location())
 		}
 	}
-	return stages, metaArgs, nil
+	return result, nil
 }
 
 func parseKvps(args []string, cmdName string) (KeyValuePairs, error) {

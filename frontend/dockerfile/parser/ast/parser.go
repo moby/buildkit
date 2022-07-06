@@ -1,4 +1,5 @@
-// Package parser implements a parser and parse tree dumper for Dockerfiles.
+// The parser package implements a parser that transforms a raw byte-stream
+// into a low-level Abstract Syntax Tree.
 package ast
 
 import (
@@ -274,13 +275,14 @@ func newNodeFromLine(line string, d *directives, comments []string) (*Node, erro
 	}, nil
 }
 
-// Result is the result of parsing a Dockerfile
+// Result contains the bundled outputs from parsing a Dockerfile.
 type Result struct {
 	AST         *Node
 	EscapeToken rune
 	Warnings    []Warning
 }
 
+// Warning contains information to identify and locate a warning generated during parsing.
 type Warning struct {
 	Short    string
 	Detail   [][]byte
@@ -301,8 +303,8 @@ func (r *Result) PrintWarnings(out io.Writer) {
 	}
 }
 
-// Parse reads lines from a Reader, parses the lines into an AST and returns
-// the AST and escape token
+// Parse consumes lines from a provided Reader, parses each line into an AST
+// and returns the results of doing so.
 func Parse(rwc io.Reader) (*Result, error) {
 	d := newDefaultDirectives()
 	currentLine := 0
@@ -421,7 +423,7 @@ func Parse(rwc io.Reader) (*Result, error) {
 	}, withLocation(handleScannerError(scanner.Err()), currentLine, 0)
 }
 
-// Extracts a heredoc from a possible heredoc regex match
+// heredocFromMatch extracts a heredoc from a possible heredoc regex match.
 func heredocFromMatch(match []string) (*Heredoc, error) {
 	if len(match) == 0 {
 		return nil, nil
@@ -475,9 +477,14 @@ func heredocFromMatch(match []string) (*Heredoc, error) {
 	}, nil
 }
 
+// ParseHeredoc parses a heredoc word from a target string, returning the
+// components from the doc.
 func ParseHeredoc(src string) (*Heredoc, error) {
 	return heredocFromMatch(reHeredoc.FindStringSubmatch(src))
 }
+
+// MustParseHeredoc is a variant of ParseHeredoc that discards the error, if
+// there was one present.
 func MustParseHeredoc(src string) *Heredoc {
 	heredoc, _ := ParseHeredoc(src)
 	return heredoc
@@ -503,6 +510,7 @@ func heredocsFromLine(line string) ([]Heredoc, error) {
 	return docs, nil
 }
 
+// ChompHeredocContent chomps leading tabs from the heredoc
 func ChompHeredocContent(src string) string {
 	return reLeadingTabs.ReplaceAllString(src, "")
 }

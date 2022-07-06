@@ -157,14 +157,14 @@ ARG bar baz=123
 	ast, err := ast.Parse(bytes.NewBuffer([]byte(dt)))
 	require.NoError(t, err)
 
-	stages, meta, err := Parse(ast.AST)
+	result, err := Parse(ast.AST)
 	require.NoError(t, err)
 
-	require.Equal(t, "defines first stage", stages[0].Comment)
-	require.Equal(t, "foo", meta[0].Args[0].Key)
-	require.Equal(t, "sets foo", meta[0].Args[0].Comment)
+	require.Equal(t, "defines first stage", result.Stages[0].Comment)
+	require.Equal(t, "foo", result.MetaArgs[0].Args[0].Key)
+	require.Equal(t, "sets foo", result.MetaArgs[0].Args[0].Comment)
 
-	st := stages[0]
+	st := result.Stages[0]
 
 	require.Equal(t, "foo", st.Commands[0].(*ArgCommand).Args[0].Key)
 	require.Equal(t, "", st.Commands[0].(*ArgCommand).Args[0].Comment)
