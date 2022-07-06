@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/docker/docker/api/types/strslice"
-	"github.com/moby/buildkit/frontend/dockerfile/parser"
+	"github.com/moby/buildkit/frontend/dockerfile/parser/ast"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,7 +23,7 @@ func TestErrorCasesHeredoc(t *testing.T) {
 	}
 	for _, c := range cases {
 		r := strings.NewReader(c.dockerfile)
-		ast, err := parser.Parse(r)
+		ast, err := ast.Parse(r)
 
 		if err != nil {
 			t.Fatalf("Error when parsing Dockerfile: %s", err)
@@ -163,7 +163,7 @@ EOF`,
 
 	for _, c := range cases {
 		r := strings.NewReader(c.dockerfile)
-		ast, err := parser.Parse(r)
+		ast, err := ast.Parse(r)
 		require.NoError(t, err)
 
 		n := ast.AST.Children[0]
@@ -245,7 +245,7 @@ EOF`,
 
 	for _, c := range cases {
 		r := strings.NewReader(c.dockerfile)
-		ast, err := parser.Parse(r)
+		ast, err := ast.Parse(r)
 		require.NoError(t, err)
 
 		n := ast.AST.Children[0]

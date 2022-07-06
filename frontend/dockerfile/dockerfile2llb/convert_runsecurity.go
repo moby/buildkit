@@ -7,7 +7,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/moby/buildkit/client/llb"
-	"github.com/moby/buildkit/frontend/dockerfile/instructions"
+	"github.com/moby/buildkit/frontend/dockerfile/parser/instructions"
 	"github.com/moby/buildkit/solver/pb"
 )
 

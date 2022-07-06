@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/moby/buildkit/frontend/dockerfile/instructions"
+	"github.com/moby/buildkit/frontend/dockerfile/parser/instructions"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/moby/buildkit/util/appcontext"
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"

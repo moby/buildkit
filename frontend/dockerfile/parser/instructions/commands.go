@@ -5,7 +5,7 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/strslice"
-	"github.com/moby/buildkit/frontend/dockerfile/parser"
+	"github.com/moby/buildkit/frontend/dockerfile/parser/ast"
 	"github.com/pkg/errors"
 )
 
@@ -37,7 +37,7 @@ func (kvpo *KeyValuePairOptional) ValueString() string {
 // Command is implemented by every command present in a dockerfile
 type Command interface {
 	Name() string
-	Location() []parser.Range
+	Location() []ast.Range
 }
 
 // KeyValuePairs is a slice of KeyValuePair
@@ -47,7 +47,7 @@ type KeyValuePairs []KeyValuePair
 type withNameAndCode struct {
 	code     string
 	name     string
-	location []parser.Range
+	location []ast.Range
 }
 
 func (c *withNameAndCode) String() string {
@@ -60,7 +60,7 @@ func (c *withNameAndCode) Name() string {
 }
 
 // Location of the command in source
-func (c *withNameAndCode) Location() []parser.Range {
+func (c *withNameAndCode) Location() []ast.Range {
 	return c.location
 }
 
@@ -475,7 +475,7 @@ type Stage struct {
 	BaseName   string
 	SourceCode string
 	Platform   string
-	Location   []parser.Range
+	Location   []ast.Range
 	Comment    string
 }
 

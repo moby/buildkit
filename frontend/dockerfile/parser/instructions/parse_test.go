@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/moby/buildkit/frontend/dockerfile/command"
-	"github.com/moby/buildkit/frontend/dockerfile/parser"
+	"github.com/moby/buildkit/frontend/dockerfile/parser/ast"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,7 +19,7 @@ func TestCommandsExactlyOneArgument(t *testing.T) {
 	}
 
 	for _, cmd := range commands {
-		ast, err := parser.Parse(strings.NewReader(cmd))
+		ast, err := ast.Parse(strings.NewReader(cmd))
 		require.NoError(t, err)
 		_, err = ParseInstruction(ast.AST.Children[0])
 		require.EqualError(t, err, errExactlyOneArgument(cmd).Error())
@@ -37,7 +37,7 @@ func TestCommandsAtLeastOneArgument(t *testing.T) {
 	}
 
 	for _, cmd := range commands {
-		ast, err := parser.Parse(strings.NewReader(cmd))
+		ast, err := ast.Parse(strings.NewReader(cmd))
 		require.NoError(t, err)
 		_, err = ParseInstruction(ast.AST.Children[0])
 		require.EqualError(t, err, errAtLeastOneArgument(cmd).Error())
@@ -51,7 +51,7 @@ func TestCommandsNoDestinationArgument(t *testing.T) {
 	}
 
 	for _, cmd := range commands {
-		ast, err := parser.Parse(strings.NewReader(cmd + " arg1"))
+		ast, err := ast.Parse(strings.NewReader(cmd + " arg1"))
 		require.NoError(t, err)
 		_, err = ParseInstruction(ast.AST.Children[0])
 		require.EqualError(t, err, errNoDestinationArgument(cmd).Error())
@@ -65,14 +65,14 @@ func TestCommandsTooManyArguments(t *testing.T) {
 	}
 
 	for _, command := range commands {
-		node := &parser.Node{
+		node := &ast.Node{
 			Original: command + "arg1 arg2 arg3",
 			Value:    strings.ToLower(command),
-			Next: &parser.Node{
+			Next: &ast.Node{
 				Value: "arg1",
-				Next: &parser.Node{
+				Next: &ast.Node{
 					Value: "arg2",
-					Next: &parser.Node{
+					Next: &ast.Node{
 						Value: "arg3",
 					},
 				},
@@ -90,12 +90,12 @@ func TestCommandsBlankNames(t *testing.T) {
 	}
 
 	for _, cmd := range commands {
-		node := &parser.Node{
+		node := &ast.Node{
 			Original: cmd + " =arg2",
 			Value:    strings.ToLower(cmd),
-			Next: &parser.Node{
+			Next: &ast.Node{
 				Value: "",
-				Next: &parser.Node{
+				Next: &ast.Node{
 					Value: "arg2",
 				},
 			},
@@ -106,13 +106,13 @@ func TestCommandsBlankNames(t *testing.T) {
 }
 
 func TestHealthCheckCmd(t *testing.T) {
-	node := &parser.Node{
+	node := &ast.Node{
 		Value: command.Healthcheck,
-		Next: &parser.Node{
+		Next: &ast.Node{
 			Value: "CMD",
-			Next: &parser.Node{
+			Next: &ast.Node{
 				Value: "hello",
-				Next: &parser.Node{
+				Next: &ast.Node{
 					Value: "world",
 				},
 			},
@@ -154,7 +154,7 @@ ARG foo
 ARG bar baz=123
 `
 
-	ast, err := parser.Parse(bytes.NewBuffer([]byte(dt)))
+	ast, err := ast.Parse(bytes.NewBuffer([]byte(dt)))
 	require.NoError(t, err)
 
 	stages, meta, err := Parse(ast.AST)
@@ -215,7 +215,7 @@ func TestErrorCases(t *testing.T) {
 	}
 	for _, c := range cases {
 		r := strings.NewReader(c.dockerfile)
-		ast, err := parser.Parse(r)
+		ast, err := ast.Parse(r)
 
 		if err != nil {
 			t.Fatalf("Error when parsing Dockerfile: %s", err)
@@ -230,7 +230,7 @@ func TestErrorCases(t *testing.T) {
 func TestRunCmdFlagsUsed(t *testing.T) {
 	dockerfile := "RUN --mount=type=tmpfs,target=/foo/ echo hello"
 	r := strings.NewReader(dockerfile)
-	ast, err := parser.Parse(r)
+	ast, err := ast.Parse(r)
 	require.NoError(t, err)
 
 	n := ast.AST.Children[0]

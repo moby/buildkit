@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/moby/buildkit/frontend/dockerfile/parser"
+	"github.com/moby/buildkit/frontend/dockerfile/parser/ast"
 )
 
 func main() {
@@ -23,7 +23,7 @@ func main() {
 		}
 		defer f.Close()
 
-		result, err := parser.Parse(f)
+		result, err := ast.Parse(f)
 		if err != nil {
 			panic(err)
 		}

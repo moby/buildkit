@@ -21,7 +21,7 @@ import (
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
 	"github.com/moby/buildkit/frontend/dockerfile/dockerignore"
-	"github.com/moby/buildkit/frontend/dockerfile/parser"
+	"github.com/moby/buildkit/frontend/dockerfile/parser/ast"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	gwpb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/solver/errdefs"
@@ -422,7 +422,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		func(i int, tp *ocispecs.Platform) {
 			eg.Go(func() (err error) {
 				defer func() {
-					var el *parser.ErrorLocation
+					var el *ast.ErrorLocation
 					if errors.As(err, &el) {
 						err = wrapSource(err, sourceMap, el.Location)
 					}
@@ -450,7 +450,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 					LLBCaps:          &caps,
 					SourceMap:        sourceMap,
 					Hostname:         opts[keyHostname],
-					Warn: func(msg, url string, detail [][]byte, location *parser.Range) {
+					Warn: func(msg, url string, detail [][]byte, location *ast.Range) {
 						if i != 0 {
 							return
 						}
@@ -765,7 +765,7 @@ func scopeToSubDir(c *llb.State, dir string) *llb.State {
 	return &bc
 }
 
-func warnOpts(sm *llb.SourceMap, r *parser.Range, detail [][]byte, url string) client.WarnOpts {
+func warnOpts(sm *llb.SourceMap, r *ast.Range, detail [][]byte, url string) client.WarnOpts {
 	opts := client.WarnOpts{Level: 1, Detail: detail, URL: url}
 	if r == nil {
 		return opts
@@ -1010,7 +1010,7 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 	}
 }
 
-func wrapSource(err error, sm *llb.SourceMap, ranges []parser.Range) error {
+func wrapSource(err error, sm *llb.SourceMap, ranges []ast.Range) error {
 	if sm == nil {
 		return err
 	}

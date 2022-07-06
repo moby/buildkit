@@ -1,4 +1,4 @@
-package parser
+package ast
 
 import (
 	"github.com/moby/buildkit/util/stack"

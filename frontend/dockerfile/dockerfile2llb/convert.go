@@ -20,8 +20,9 @@ import (
 	"github.com/docker/go-connections/nat"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/imagemetaresolver"
-	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
+	"github.com/moby/buildkit/frontend/dockerfile/parser/ast"
+	"github.com/moby/buildkit/frontend/dockerfile/parser/instructions"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver/pb"
@@ -67,7 +68,7 @@ type ConvertOpt struct {
 	ContextLocalName string
 	SourceMap        *llb.SourceMap
 	Hostname         string
-	Warn             func(short, url string, detail [][]byte, location *parser.Range)
+	Warn             func(short, url string, detail [][]byte, location *ast.Range)
 	ContextByName    func(ctx context.Context, name, resolveMode string) (*llb.State, *Image, *binfotypes.BuildInfo, error)
 }
 
@@ -117,24 +118,16 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	if err != nil {
 		return nil, nil, nil, err
 	}
-
 	for _, w := range dockerfile.Warnings {
 		opt.Warn(w.Short, w.URL, w.Detail, w.Location)
 	}
 
 	proxyEnv := proxyEnvFromBuildArgs(opt.BuildArgs)
 
-	stages, metaArgs, err := instructions.Parse(dockerfile.AST)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	shlex := shell.NewLex(dockerfile.EscapeToken)
-
-	for _, cmd := range metaArgs {
+	for _, cmd := range dockerfile.MetaArgs {
 		for _, metaArg := range cmd.Args {
 			if metaArg.Value != nil {
-				*metaArg.Value, _ = shlex.ProcessWordWithMap(*metaArg.Value, metaArgsToMap(optMetaArgs))
+				*metaArg.Value, _ = dockerfile.Shlex.ProcessWordWithMap(*metaArg.Value, metaArgsToMap(optMetaArgs))
 			}
 			optMetaArgs = append(optMetaArgs, setKVValue(metaArg, opt.BuildArgs))
 		}
@@ -148,13 +141,13 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	allDispatchStates := newDispatchStates()
 
 	// set base state for every image
-	for i, st := range stages {
-		name, err := shlex.ProcessWordWithMap(st.BaseName, metaArgsToMap(optMetaArgs))
+	for i, st := range dockerfile.Stages {
+		name, err := dockerfile.Shlex.ProcessWordWithMap(st.BaseName, metaArgsToMap(optMetaArgs))
 		if err != nil {
-			return nil, nil, nil, parser.WithLocation(err, st.Location)
+			return nil, nil, nil, ast.WithLocation(err, st.Location)
 		}
 		if name == "" {
-			return nil, nil, nil, parser.WithLocation(errors.Errorf("base name (%s) should not be blank", st.BaseName), st.Location)
+			return nil, nil, nil, ast.WithLocation(errors.Errorf("base name (%s) should not be blank", st.BaseName), st.Location)
 		}
 		st.BaseName = name
 
@@ -197,14 +190,14 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		}
 
 		if v := st.Platform; v != "" {
-			v, err := shlex.ProcessWordWithMap(v, metaArgsToMap(optMetaArgs))
+			v, err := dockerfile.Shlex.ProcessWordWithMap(v, metaArgsToMap(optMetaArgs))
 			if err != nil {
-				return nil, nil, nil, parser.WithLocation(errors.Wrapf(err, "failed to process arguments for platform %s", v), st.Location)
+				return nil, nil, nil, ast.WithLocation(errors.Wrapf(err, "failed to process arguments for platform %s", v), st.Location)
 			}
 
 			p, err := platforms.Parse(v)
 			if err != nil {
-				return nil, nil, nil, parser.WithLocation(errors.Wrapf(err, "failed to parse platform %s", v), st.Location)
+				return nil, nil, nil, ast.WithLocation(errors.Wrapf(err, "failed to parse platform %s", v), st.Location)
 			}
 			ds.platform = &p
 		}
@@ -297,7 +290,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 				eg.Go(func() (err error) {
 					defer func() {
 						if err != nil {
-							err = parser.WithLocation(err, d.stage.Location)
+							err = ast.WithLocation(err, d.stage.Location)
 						}
 					}()
 					origName := d.stage.BaseName
@@ -451,12 +444,12 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		}
 		if d.image.Config.WorkingDir != "" {
 			if err = dispatchWorkdir(d, &instructions.WorkdirCommand{Path: d.image.Config.WorkingDir}, false, nil); err != nil {
-				return nil, nil, nil, parser.WithLocation(err, d.stage.Location)
+				return nil, nil, nil, ast.WithLocation(err, d.stage.Location)
 			}
 		}
 		if d.image.Config.User != "" {
 			if err = dispatchUser(d, &instructions.UserCommand{User: d.image.Config.User}, false); err != nil {
-				return nil, nil, nil, parser.WithLocation(err, d.stage.Location)
+				return nil, nil, nil, ast.WithLocation(err, d.stage.Location)
 			}
 		}
 		d.state = d.state.Network(opt.ForceNetMode)
@@ -465,7 +458,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			allDispatchStates: allDispatchStates,
 			metaArgs:          optMetaArgs,
 			buildArgValues:    opt.BuildArgs,
-			shlex:             shlex,
+			shlex:             dockerfile.Shlex,
 			sessionID:         opt.SessionID,
 			buildContext:      llb.NewState(buildContext),
 			proxyEnv:          proxyEnv,
@@ -481,13 +474,13 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		}
 
 		if err = dispatchOnBuildTriggers(d, d.image.Config.OnBuild, opt); err != nil {
-			return nil, nil, nil, parser.WithLocation(err, d.stage.Location)
+			return nil, nil, nil, ast.WithLocation(err, d.stage.Location)
 		}
 		d.image.Config.OnBuild = nil
 
 		for _, cmd := range d.commands {
 			if err := dispatch(d, cmd, opt); err != nil {
-				return nil, nil, nil, parser.WithLocation(err, cmd.Location())
+				return nil, nil, nil, ast.WithLocation(err, cmd.Location())
 			}
 		}
 
@@ -775,7 +768,7 @@ type command struct {
 
 func dispatchOnBuildTriggers(d *dispatchState, triggers []string, opt dispatchOpt) error {
 	for _, trigger := range triggers {
-		ast, err := parser.Parse(strings.NewReader(trigger))
+		ast, err := ast.Parse(strings.NewReader(trigger))
 		if err != nil {
 			return err
 		}
@@ -818,7 +811,7 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 			return fmt.Errorf("parsing produced an invalid run command: %v", args)
 		}
 
-		if heredoc := parser.MustParseHeredoc(args[0]); heredoc != nil {
+		if heredoc := ast.MustParseHeredoc(args[0]); heredoc != nil {
 			if d.image.OS != "windows" && strings.HasPrefix(c.Files[0].Data, "#!") {
 				// This is a single heredoc with a shebang, so create a file
 				// and run it.
@@ -830,7 +823,7 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 				f := c.Files[0].Name
 				data := c.Files[0].Data
 				if c.Files[0].Chomp {
-					data = parser.ChompHeredocContent(data)
+					data = ast.ChompHeredocContent(data)
 				}
 				st := llb.Scratch().Dir(sourcePath).File(
 					llb.Mkfile(f, 0755, []byte(data)),
@@ -849,7 +842,7 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 				// NOTE: like above, we ignore the expand option.
 				data := c.Files[0].Data
 				if c.Files[0].Chomp {
-					data = parser.ChompHeredocContent(data)
+					data = ast.ChompHeredocContent(data)
 				}
 				args = []string{data}
 			}
@@ -1129,7 +1122,7 @@ type copyConfig struct {
 	chown        string
 	chmod        string
 	link         bool
-	location     []parser.Range
+	location     []ast.Range
 	opt          dispatchOpt
 }
 
@@ -1582,7 +1575,7 @@ func platformFromEnv(env []string) *ocispecs.Platform {
 	return &p
 }
 
-func location(sm *llb.SourceMap, locations []parser.Range) llb.ConstraintsOpt {
+func location(sm *llb.SourceMap, locations []ast.Range) llb.ConstraintsOpt {
 	loc := make([]*pb.Range, 0, len(locations))
 	for _, l := range locations {
 		loc = append(loc, &pb.Range{

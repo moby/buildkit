@@ -11,7 +11,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/strslice"
 	"github.com/moby/buildkit/frontend/dockerfile/command"
-	"github.com/moby/buildkit/frontend/dockerfile/parser"
+	"github.com/moby/buildkit/frontend/dockerfile/parser/ast"
 	"github.com/moby/buildkit/util/suggest"
 	"github.com/pkg/errors"
 )
@@ -19,18 +19,18 @@ import (
 type parseRequest struct {
 	command    string
 	args       []string
-	heredocs   []parser.Heredoc
+	heredocs   []ast.Heredoc
 	attributes map[string]bool
 	flags      *BFlags
 	original   string
-	location   []parser.Range
+	location   []ast.Range
 	comments   []string
 }
 
 var parseRunPreHooks []func(*RunCommand, parseRequest) error
 var parseRunPostHooks []func(*RunCommand, parseRequest) error
 
-func nodeArgs(node *parser.Node) []string {
+func nodeArgs(node *ast.Node) []string {
 	result := []string{}
 	for ; node.Next != nil; node = node.Next {
 		arg := node.Next
@@ -45,7 +45,7 @@ func nodeArgs(node *parser.Node) []string {
 	return result
 }
 
-func newParseRequestFromNode(node *parser.Node) parseRequest {
+func newParseRequestFromNode(node *ast.Node) parseRequest {
 	return parseRequest{
 		command:    node.Value,
 		args:       nodeArgs(node),
@@ -59,9 +59,9 @@ func newParseRequestFromNode(node *parser.Node) parseRequest {
 }
 
 // ParseInstruction converts an AST to a typed instruction (either a command or a build stage beginning when encountering a `FROM` statement)
-func ParseInstruction(node *parser.Node) (v interface{}, err error) {
+func ParseInstruction(node *ast.Node) (v interface{}, err error) {
 	defer func() {
-		err = parser.WithLocation(err, node.Location())
+		err = ast.WithLocation(err, node.Location())
 	}()
 	req := newParseRequestFromNode(node)
 	switch strings.ToLower(node.Value) {
@@ -106,7 +106,7 @@ func ParseInstruction(node *parser.Node) (v interface{}, err error) {
 }
 
 // ParseCommand converts an AST to a typed Command
-func ParseCommand(node *parser.Node) (Command, error) {
+func ParseCommand(node *ast.Node) (Command, error) {
 	s, err := ParseInstruction(node)
 	if err != nil {
 		return nil, err
@@ -114,7 +114,7 @@ func ParseCommand(node *parser.Node) (Command, error) {
 	if c, ok := s.(Command); ok {
 		return c, nil
 	}
-	return nil, parser.WithLocation(errors.Errorf("%T is not a command type", s), node.Location())
+	return nil, ast.WithLocation(errors.Errorf("%T is not a command type", s), node.Location())
 }
 
 // UnknownInstructionError represents an error occurring when a command is unresolvable
@@ -129,7 +129,7 @@ func (e *UnknownInstructionError) Error() string {
 
 type parseError struct {
 	inner error
-	node  *parser.Node
+	node  *ast.Node
 }
 
 func (e *parseError) Error() string {
@@ -142,8 +142,8 @@ func (e *parseError) Unwrap() error {
 
 // Parse a Dockerfile into a collection of buildable stages.
 // metaArgs is a collection of ARG instructions that occur before the first FROM.
-func Parse(ast *parser.Node) (stages []Stage, metaArgs []ArgCommand, err error) {
-	for _, n := range ast.Children {
+func Parse(root *ast.Node) (stages []Stage, metaArgs []ArgCommand, err error) {
+	for _, n := range root.Children {
 		cmd, err := ParseInstruction(n)
 		if err != nil {
 			return nil, nil, &parseError{inner: err, node: n}
@@ -161,11 +161,11 @@ func Parse(ast *parser.Node) (stages []Stage, metaArgs []ArgCommand, err error) 
 		case Command:
 			stage, err := CurrentStage(stages)
 			if err != nil {
-				return nil, nil, parser.WithLocation(err, n.Location())
+				return nil, nil, ast.WithLocation(err, n.Location())
 			}
 			stage.AddCommand(c)
 		default:
-			return nil, nil, parser.WithLocation(errors.Errorf("%T is not a command type", cmd), n.Location())
+			return nil, nil, ast.WithLocation(errors.Errorf("%T is not a command type", cmd), n.Location())
 		}
 	}
 	return stages, metaArgs, nil
@@ -238,11 +238,11 @@ func parseLabel(req parseRequest) (*LabelCommand, error) {
 func parseSourcesAndDest(req parseRequest, command string) (*SourcesAndDest, error) {
 	srcs := req.args[:len(req.args)-1]
 	dest := req.args[len(req.args)-1]
-	if heredoc := parser.MustParseHeredoc(dest); heredoc != nil {
+	if heredoc := ast.MustParseHeredoc(dest); heredoc != nil {
 		return nil, errBadHeredoc(command, "a destination")
 	}
 
-	heredocLookup := make(map[string]parser.Heredoc)
+	heredocLookup := make(map[string]ast.Heredoc)
 	for _, heredoc := range req.heredocs {
 		heredocLookup[heredoc.Name] = heredoc
 	}
@@ -250,10 +250,10 @@ func parseSourcesAndDest(req parseRequest, command string) (*SourcesAndDest, err
 	var sourcePaths []string
 	var sourceContents []SourceContent
 	for _, src := range srcs {
-		if heredoc := parser.MustParseHeredoc(src); heredoc != nil {
+		if heredoc := ast.MustParseHeredoc(src); heredoc != nil {
 			content := heredocLookup[heredoc.Name].Content
 			if heredoc.Chomp {
-				content = parser.ChompHeredocContent(content)
+				content = ast.ChompHeredocContent(content)
 			}
 			sourceContents = append(sourceContents,
 				SourceContent{

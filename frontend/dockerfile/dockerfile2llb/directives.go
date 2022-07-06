@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/moby/buildkit/frontend/dockerfile/parser"
+	"github.com/moby/buildkit/frontend/dockerfile/parser/ast"
 )
 
 const keySyntax = "syntax"
@@ -16,10 +16,10 @@ var reDirective = regexp.MustCompile(`^#\s*([a-zA-Z][a-zA-Z0-9]*)\s*=\s*(.+?)\s*
 type Directive struct {
 	Name     string
 	Value    string
-	Location []parser.Range
+	Location []ast.Range
 }
 
-func DetectSyntax(r io.Reader) (string, string, []parser.Range, bool) {
+func DetectSyntax(r io.Reader) (string, string, []ast.Range, bool) {
 	directives := ParseDirectives(r)
 	if len(directives) == 0 {
 		return "", "", nil, false
@@ -45,9 +45,9 @@ func ParseDirectives(r io.Reader) map[string]Directive {
 		m[strings.ToLower(match[1])] = Directive{
 			Name:  match[1],
 			Value: match[2],
-			Location: []parser.Range{{
-				Start: parser.Position{Line: l},
-				End:   parser.Position{Line: l},
+			Location: []ast.Range{{
+				Start: ast.Position{Line: l},
+				End:   ast.Position{Line: l},
 			}},
 		}
 	}

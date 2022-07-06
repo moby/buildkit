@@ -1,4 +1,4 @@
-package parser
+package ast
 
 // line parsers are dispatch calls that parse a single unit of text into a
 // Node object which contains the whole statement. Dockerfiles have varied
