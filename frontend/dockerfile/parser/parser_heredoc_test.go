@@ -1,6 +1,3 @@
-//go:build dfheredoc
-// +build dfheredoc
-
 package parser
 
 import (

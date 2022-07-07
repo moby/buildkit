@@ -8,10 +8,10 @@ import (
 	"context"
 	"io"
 
-	ctdcompression "github.com/containerd/containerd/archive/compression"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/mount"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/overlay"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -33,20 +33,6 @@ func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper 
 		return emptyDesc, false, nil
 	}
 
-	if compressorFunc == nil {
-		switch mediaType {
-		case ocispecs.MediaTypeImageLayer:
-		case ocispecs.MediaTypeImageLayerGzip:
-			compressorFunc = func(dest io.Writer, requiredMediaType string) (io.WriteCloser, error) {
-				return ctdcompression.CompressStream(dest, ctdcompression.Gzip)
-			}
-		case ocispecs.MediaTypeImageLayer + "+zstd":
-			compressorFunc = zstdWriter
-		default:
-			return emptyDesc, false, errors.Errorf("unsupported diff media type: %v", mediaType)
-		}
-	}
-
 	cw, err := sr.cm.ContentStore.Writer(ctx,
 		content.WithRef(ref),
 		content.WithDescriptor(ocispecs.Descriptor{
@@ -56,8 +42,10 @@ func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper 
 		return emptyDesc, false, errors.Wrap(err, "failed to open writer")
 	}
 	defer func() {
-		if err != nil {
-			cw.Close()
+		if cw != nil {
+			if cerr := cw.Close(); cerr != nil {
+				bklog.G(ctx).WithError(cerr).Warnf("failed to close writer %q", ref)
+			}
 		}
 	}()
 
@@ -97,6 +85,10 @@ func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper 
 			return emptyDesc, false, errors.Wrap(err, "failed to commit")
 		}
 	}
+	if err := cw.Close(); err != nil {
+		return emptyDesc, false, err
+	}
+	cw = nil
 	cinfo, err := sr.cm.ContentStore.Info(ctx, dgst)
 	if err != nil {
 		return emptyDesc, false, errors.Wrap(err, "failed to get info from content store")

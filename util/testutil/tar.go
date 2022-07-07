@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"io"
-	"io/ioutil"
 
 	"github.com/pkg/errors"
 )
@@ -41,7 +40,7 @@ func ReadTarToMap(dt []byte, compressed bool) (map[string]*TarItem, error) {
 
 		var dt []byte
 		if h.Typeflag == tar.TypeReg {
-			dt, err = ioutil.ReadAll(tr)
+			dt, err = io.ReadAll(tr)
 			if err != nil {
 				return nil, errors.Wrapf(err, "error reading file")
 			}

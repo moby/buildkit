@@ -19,7 +19,6 @@ package snapshot
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,7 +32,6 @@ import (
 	"github.com/containerd/continuity/fs"
 	"github.com/containerd/stargz-snapshotter/snapshot/overlayutils"
 	"github.com/moby/sys/mountinfo"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
@@ -74,6 +72,7 @@ type FileSystem interface {
 // SnapshotterConfig is used to configure the remote snapshotter instance
 type SnapshotterConfig struct {
 	asyncRemove bool
+	noRestore   bool
 }
 
 // Opt is an option to configure the remote snapshotter
@@ -88,6 +87,11 @@ func AsynchronousRemove(config *SnapshotterConfig) error {
 	return nil
 }
 
+func NoRestore(config *SnapshotterConfig) error {
+	config.noRestore = true
+	return nil
+}
+
 type snapshotter struct {
 	root        string
 	ms          *storage.MetaStore
@@ -96,6 +100,7 @@ type snapshotter struct {
 	// fs is a filesystem that this snapshotter recognizes.
 	fs        FileSystem
 	userxattr bool // whether to enable "userxattr" mount option
+	noRestore bool
 }
 
 // NewSnapshotter returns a Snapshotter which can use unpacked remote layers
@@ -144,10 +149,11 @@ func NewSnapshotter(ctx context.Context, root string, targetFs FileSystem, opts 
 		asyncRemove: config.asyncRemove,
 		fs:          targetFs,
 		userxattr:   userxattr,
+		noRestore:   config.noRestore,
 	}
 
 	if err := o.restoreRemoteSnapshot(ctx); err != nil {
-		return nil, errors.Wrap(err, "failed to restore remote snapshot")
+		return nil, fmt.Errorf("failed to restore remote snapshot: %w", err)
 	}
 
 	return o, nil
@@ -255,7 +261,7 @@ func (o *snapshotter) Prepare(ctx context.Context, key, parent string, opts ...s
 			if err == nil || errdefs.IsAlreadyExists(err) {
 				// count also AlreadyExists as "success"
 				log.G(lCtx).WithField(remoteSnapshotLogKey, prepareSucceeded).Debug("prepared remote snapshot")
-				return nil, errors.Wrapf(errdefs.ErrAlreadyExists, "target snapshot %q", target)
+				return nil, fmt.Errorf("target snapshot %q: %w", target, errdefs.ErrAlreadyExists)
 			}
 			log.G(lCtx).WithField(remoteSnapshotLogKey, prepareFailed).
 				WithError(err).Warn("failed to internally commit remote snapshot")
@@ -287,7 +293,7 @@ func (o *snapshotter) Mounts(ctx context.Context, key string) ([]mount.Mount, er
 	s, err := storage.GetSnapshot(ctx, key)
 	t.Rollback()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get active mount")
+		return nil, fmt.Errorf("failed to get active mount: %w", err)
 	}
 	return o.mounts(ctx, s, key)
 }
@@ -325,7 +331,7 @@ func (o *snapshotter) commit(ctx context.Context, isRemote bool, name, key strin
 	}
 
 	if _, err = storage.CommitActive(ctx, key, name, usage, opts...); err != nil {
-		return errors.Wrap(err, "failed to commit snapshot")
+		return fmt.Errorf("failed to commit snapshot: %w", err)
 	}
 
 	return t.Commit()
@@ -349,7 +355,7 @@ func (o *snapshotter) Remove(ctx context.Context, key string) (err error) {
 
 	_, _, err = storage.Remove(ctx, key)
 	if err != nil {
-		return errors.Wrap(err, "failed to remove")
+		return fmt.Errorf("failed to remove: %w", err)
 	}
 
 	if !o.asyncRemove {
@@ -357,7 +363,7 @@ func (o *snapshotter) Remove(ctx context.Context, key string) (err error) {
 		const cleanupCommitted = false
 		removals, err = o.getCleanupDirectories(ctx, t, cleanupCommitted)
 		if err != nil {
-			return errors.Wrap(err, "unable to get directories for removal")
+			return fmt.Errorf("unable to get directories for removal: %w", err)
 		}
 
 		// Remove directories after the transaction is closed, failures must not
@@ -464,7 +470,7 @@ func (o *snapshotter) cleanupSnapshotDirectory(ctx context.Context, dir string) 
 		log.G(ctx).WithError(err).WithField("dir", mp).Debug("failed to unmount")
 	}
 	if err := os.RemoveAll(dir); err != nil {
-		return errors.Wrapf(err, "failed to remove directory %q", dir)
+		return fmt.Errorf("failed to remove directory %q: %w", dir, err)
 	}
 	return nil
 }
@@ -486,7 +492,7 @@ func (o *snapshotter) createSnapshot(ctx context.Context, kind snapshots.Kind, k
 			if path != "" {
 				if err1 := o.cleanupSnapshotDirectory(ctx, path); err1 != nil {
 					log.G(ctx).WithError(err1).WithField("path", path).Error("failed to reclaim snapshot directory, directory may need removal")
-					err = errors.Wrapf(err, "failed to remove path: %v", err1)
+					err = fmt.Errorf("failed to remove path: %v: %w", err1, err)
 				}
 			}
 		}
@@ -498,7 +504,7 @@ func (o *snapshotter) createSnapshot(ctx context.Context, kind snapshots.Kind, k
 		if rerr := t.Rollback(); rerr != nil {
 			log.G(ctx).WithError(rerr).Warn("failed to rollback transaction")
 		}
-		return storage.Snapshot{}, errors.Wrap(err, "failed to create prepare snapshot dir")
+		return storage.Snapshot{}, fmt.Errorf("failed to create prepare snapshot dir: %w", err)
 	}
 	rollback := true
 	defer func() {
@@ -511,13 +517,13 @@ func (o *snapshotter) createSnapshot(ctx context.Context, kind snapshots.Kind, k
 
 	s, err := storage.CreateSnapshot(ctx, kind, key, parent, opts...)
 	if err != nil {
-		return storage.Snapshot{}, errors.Wrap(err, "failed to create snapshot")
+		return storage.Snapshot{}, fmt.Errorf("failed to create snapshot: %w", err)
 	}
 
 	if len(s.ParentIDs) > 0 {
 		st, err := os.Stat(o.upperPath(s.ParentIDs[0]))
 		if err != nil {
-			return storage.Snapshot{}, errors.Wrap(err, "failed to stat parent")
+			return storage.Snapshot{}, fmt.Errorf("failed to stat parent: %w", err)
 		}
 
 		stat := st.Sys().(*syscall.Stat_t)
@@ -526,28 +532,28 @@ func (o *snapshotter) createSnapshot(ctx context.Context, kind snapshots.Kind, k
 			if rerr := t.Rollback(); rerr != nil {
 				log.G(ctx).WithError(rerr).Warn("failed to rollback transaction")
 			}
-			return storage.Snapshot{}, errors.Wrap(err, "failed to chown")
+			return storage.Snapshot{}, fmt.Errorf("failed to chown: %w", err)
 		}
 	}
 
 	path = filepath.Join(snapshotDir, s.ID)
 	if err = os.Rename(td, path); err != nil {
-		return storage.Snapshot{}, errors.Wrap(err, "failed to rename")
+		return storage.Snapshot{}, fmt.Errorf("failed to rename: %w", err)
 	}
 	td = ""
 
 	rollback = false
 	if err = t.Commit(); err != nil {
-		return storage.Snapshot{}, errors.Wrap(err, "commit failed")
+		return storage.Snapshot{}, fmt.Errorf("commit failed: %w", err)
 	}
 
 	return s, nil
 }
 
 func (o *snapshotter) prepareDirectory(ctx context.Context, snapshotDir string, kind snapshots.Kind) (string, error) {
-	td, err := ioutil.TempDir(snapshotDir, "new-")
+	td, err := os.MkdirTemp(snapshotDir, "new-")
 	if err != nil {
-		return "", errors.Wrap(err, "failed to create temp dir")
+		return "", fmt.Errorf("failed to create temp dir: %w", err)
 	}
 
 	if err := os.Mkdir(filepath.Join(td, "fs"), 0755); err != nil {
@@ -566,7 +572,7 @@ func (o *snapshotter) prepareDirectory(ctx context.Context, snapshotDir string, 
 func (o *snapshotter) mounts(ctx context.Context, s storage.Snapshot, checkKey string) ([]mount.Mount, error) {
 	// Make sure that all layers lower than the target layer are available
 	if checkKey != "" && !o.checkAvailability(ctx, checkKey) {
-		return nil, errors.Wrapf(errdefs.ErrUnavailable, "layer %q unavailable", s.ID)
+		return nil, fmt.Errorf("layer %q unavailable: %w", s.ID, errdefs.ErrUnavailable)
 	}
 
 	if len(s.ParentIDs) == 0 {
@@ -715,9 +721,13 @@ func (o *snapshotter) restoreRemoteSnapshot(ctx context.Context) error {
 	for _, m := range mounts {
 		if strings.HasPrefix(m.Mountpoint, filepath.Join(o.root, "snapshots")) {
 			if err := syscall.Unmount(m.Mountpoint, syscall.MNT_FORCE); err != nil {
-				return errors.Wrapf(err, "failed to unmount %s", m.Mountpoint)
+				return fmt.Errorf("failed to unmount %s: %w", m.Mountpoint, err)
 			}
 		}
+	}
+
+	if o.noRestore {
+		return nil
 	}
 
 	var task []snapshots.Info
@@ -731,7 +741,7 @@ func (o *snapshotter) restoreRemoteSnapshot(ctx context.Context) error {
 	}
 	for _, info := range task {
 		if err := o.prepareRemoteSnapshot(ctx, info.Name, info.Labels); err != nil {
-			return errors.Wrapf(err, "failed to prepare remote snapshot: %s", info.Name)
+			return fmt.Errorf("failed to prepare remote snapshot: %s: %w", info.Name, err)
 		}
 	}
 

@@ -1,7 +1,6 @@
 package bboltcachestorage
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,7 +12,7 @@ import (
 
 func TestBoltCacheStorage(t *testing.T) {
 	testutil.RunCacheStorageTests(t, func() (solver.CacheKeyStorage, func()) {
-		tmpDir, err := ioutil.TempDir("", "storage")
+		tmpDir, err := os.MkdirTemp("", "storage")
 		require.NoError(t, err)
 
 		cleanup := func() {

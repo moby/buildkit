@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,6 +25,7 @@ type backend struct {
 	containerdAddress string
 	rootless          bool
 	snapshotter       string
+	isDockerd         bool
 }
 
 func (b backend) Address() string {
@@ -51,6 +51,11 @@ type sandbox struct {
 	cleanup *multiCloser
 	mv      matrixValue
 	ctx     context.Context
+	name    string
+}
+
+func (sb *sandbox) Name() string {
+	return sb.name
 }
 
 func (sb *sandbox) Context() context.Context {
@@ -135,6 +140,7 @@ func newSandbox(ctx context.Context, w Worker, mirror string, mv matrixValue) (s
 		cleanup: deferF,
 		mv:      mv,
 		ctx:     ctx,
+		name:    w.Name(),
 	}, cl, nil
 }
 
@@ -161,7 +167,7 @@ func runBuildkitd(ctx context.Context, conf *BackendConfig, args []string, logs 
 		args = append(args, "--config="+conf.ConfigFile)
 	}
 
-	tmpdir, err := ioutil.TempDir("", "bktest_buildkitd")
+	tmpdir, err := os.MkdirTemp("", "bktest_buildkitd")
 	if err != nil {
 		return "", nil, err
 	}

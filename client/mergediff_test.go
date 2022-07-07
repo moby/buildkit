@@ -3,7 +3,6 @@ package client
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 
@@ -20,12 +19,14 @@ import (
 )
 
 func diffOpTestCases() (tests []integration.Test) {
-	alpine := llb.Image("alpine:latest", llb.ResolveDigest(true))
+	alpine := func() llb.State { return llb.Image("alpine:latest", llb.ResolveDigest(true)) }
 	// busybox doesn't have /proc or /sys in its base image, add them
 	// so they don't show up in every diff of an exec on it
-	busybox := llb.Image("busybox:latest", llb.ResolveDigest(true)).
-		File(llb.Mkdir("/proc", 0755)).
-		File(llb.Mkdir("/sys", 0755))
+	busybox := func() llb.State {
+		return llb.Image("busybox:latest", llb.ResolveDigest(true)).
+			File(llb.Mkdir("/proc", 0755)).
+			File(llb.Mkdir("/sys", 0755))
+	}
 
 	// Diffs of identical states are empty
 	tests = append(tests,
@@ -36,13 +37,13 @@ func diffOpTestCases() (tests []integration.Test) {
 		},
 		verifyContents{
 			name:     "TestDiffSelf",
-			state:    llb.Diff(alpine, alpine),
+			state:    llb.Diff(alpine(), alpine()),
 			contents: empty,
 		},
 		verifyContents{
 			name:     "TestDiffSelfDeletes",
-			state:    llb.Merge([]llb.State{alpine, llb.Diff(alpine, alpine)}),
-			contents: contentsOf(alpine),
+			state:    llb.Merge([]llb.State{alpine(), llb.Diff(alpine(), alpine())}),
+			contents: contentsOf(alpine()),
 		},
 	)
 
@@ -50,8 +51,8 @@ func diffOpTestCases() (tests []integration.Test) {
 	tests = append(tests,
 		verifyContents{
 			name:     "TestDiffLowerScratch",
-			state:    llb.Diff(llb.Scratch(), alpine),
-			contents: contentsOf(alpine),
+			state:    llb.Diff(llb.Scratch(), alpine()),
+			contents: contentsOf(alpine()),
 		},
 		verifyContents{
 			name: "TestDiffLowerScratchDeletes",
@@ -74,9 +75,9 @@ func diffOpTestCases() (tests []integration.Test) {
 		verifyContents{
 			name: "TestDiffUpperScratch",
 			state: llb.Merge([]llb.State{
-				alpine,
+				alpine(),
 				llb.Scratch().File(llb.Mkfile("/foo", 0644, []byte("foo"))),
-				llb.Diff(alpine, llb.Scratch()),
+				llb.Diff(alpine(), llb.Scratch()),
 			}),
 			contents: apply(
 				fstest.CreateFile("/foo", []byte("foo"), 0644),
@@ -86,48 +87,50 @@ func diffOpTestCases() (tests []integration.Test) {
 
 	// Basic diff slices
 	tests = append(tests, func() (tests []integration.Test) {
-		base := alpine.
-			File(llb.Mkfile("/shuffleFile1", 0644, []byte("shuffleFile1"))).
-			File(llb.Mkdir("/shuffleDir1", 0755)).
-			File(llb.Mkdir("/shuffleDir1/shuffleSubdir1", 0755)).
-			File(llb.Mkfile("/shuffleDir1/shuffleSubfile1", 0644, nil)).
-			File(llb.Mkfile("/shuffleDir1/shuffleSubdir1/shuffleSubfile2", 0644, nil)).
-			File(llb.Mkdir("/unmodifiedDir", 0755)).
-			File(llb.Mkdir("/unmodifiedDir/chmodSubdir1", 0755)).
-			File(llb.Mkdir("/unmodifiedDir/deleteSubdir1", 0755)).
-			File(llb.Mkdir("/unmodifiedDir/opaqueDir1", 0755)).
-			File(llb.Mkdir("/unmodifiedDir/opaqueDir1/opaqueSubdir1", 0755)).
-			File(llb.Mkdir("/unmodifiedDir/overrideSubdir1", 0755)).
-			File(llb.Mkdir("/unmodifiedDir/shuffleDir2", 0755)).
-			File(llb.Mkdir("/unmodifiedDir/shuffleDir2/shuffleSubdir2", 0755)).
-			File(llb.Mkfile("/unmodifiedDir/chmodFile1", 0644, []byte("chmodFile1"))).
-			File(llb.Mkfile("/unmodifiedDir/modifyContentFile1", 0644, []byte("modifyContentFile1"))).
-			File(llb.Mkfile("/unmodifiedDir/deleteFile1", 0644, nil)).
-			File(llb.Mkfile("/unmodifiedDir/opaqueDir1/opaqueFile1", 0644, nil)).
-			File(llb.Mkfile("/unmodifiedDir/opaqueDir1/opaqueSubdir1/opaqueFile2", 0644, nil)).
-			File(llb.Mkfile("/unmodifiedDir/overrideFile1", 0644, nil)).
-			File(llb.Mkfile("/unmodifiedDir/overrideFile2", 0644, nil)).
-			File(llb.Mkfile("/unmodifiedDir/shuffleFile2", 0644, []byte("shuffleFile2"))).
-			File(llb.Mkfile("/unmodifiedDir/shuffleDir2/shuffleSubfile3", 0644, nil)).
-			File(llb.Mkfile("/unmodifiedDir/shuffleDir2/shuffleSubdir2/shuffleSubfile4", 0644, nil)).
-			File(llb.Mkdir("/modifyDir", 0755)).
-			File(llb.Mkdir("/modifyDir/chmodSubdir2", 0755)).
-			File(llb.Mkdir("/modifyDir/deleteSubdir2", 0755)).
-			File(llb.Mkdir("/modifyDir/opaqueDir2", 0755)).
-			File(llb.Mkdir("/modifyDir/opaqueDir2/opaqueSubdir2", 0755)).
-			File(llb.Mkdir("/modifyDir/overrideSubdir2", 0755)).
-			File(llb.Mkdir("/modifyDir/shuffleDir3", 0755)).
-			File(llb.Mkdir("/modifyDir/shuffleDir3/shuffleSubdir3", 0755)).
-			File(llb.Mkfile("/modifyDir/chmodFile2", 0644, []byte("chmodFile2"))).
-			File(llb.Mkfile("/modifyDir/modifyContentFile2", 0644, []byte("modifyContentFile2"))).
-			File(llb.Mkfile("/modifyDir/deleteFile2", 0644, nil)).
-			File(llb.Mkfile("/modifyDir/opaqueDir2/opaqueFile3", 0644, nil)).
-			File(llb.Mkfile("/modifyDir/opaqueDir2/opaqueSubdir2/opaqueFile4", 0644, nil)).
-			File(llb.Mkfile("/modifyDir/overrideFile3", 0644, nil)).
-			File(llb.Mkfile("/modifyDir/overrideFile4", 0644, nil)).
-			File(llb.Mkfile("/modifyDir/shuffleFile3", 0644, []byte("shuffleFile3"))).
-			File(llb.Mkfile("/modifyDir/shuffleDir3/shuffleSubfile4", 0644, nil)).
-			File(llb.Mkfile("/modifyDir/shuffleDir3/shuffleSubdir3/shuffleSubfile6", 0644, nil))
+		base := func() llb.State {
+			return alpine().
+				File(llb.Mkfile("/shuffleFile1", 0644, []byte("shuffleFile1"))).
+				File(llb.Mkdir("/shuffleDir1", 0755)).
+				File(llb.Mkdir("/shuffleDir1/shuffleSubdir1", 0755)).
+				File(llb.Mkfile("/shuffleDir1/shuffleSubfile1", 0644, nil)).
+				File(llb.Mkfile("/shuffleDir1/shuffleSubdir1/shuffleSubfile2", 0644, nil)).
+				File(llb.Mkdir("/unmodifiedDir", 0755)).
+				File(llb.Mkdir("/unmodifiedDir/chmodSubdir1", 0755)).
+				File(llb.Mkdir("/unmodifiedDir/deleteSubdir1", 0755)).
+				File(llb.Mkdir("/unmodifiedDir/opaqueDir1", 0755)).
+				File(llb.Mkdir("/unmodifiedDir/opaqueDir1/opaqueSubdir1", 0755)).
+				File(llb.Mkdir("/unmodifiedDir/overrideSubdir1", 0755)).
+				File(llb.Mkdir("/unmodifiedDir/shuffleDir2", 0755)).
+				File(llb.Mkdir("/unmodifiedDir/shuffleDir2/shuffleSubdir2", 0755)).
+				File(llb.Mkfile("/unmodifiedDir/chmodFile1", 0644, []byte("chmodFile1"))).
+				File(llb.Mkfile("/unmodifiedDir/modifyContentFile1", 0644, []byte("modifyContentFile1"))).
+				File(llb.Mkfile("/unmodifiedDir/deleteFile1", 0644, nil)).
+				File(llb.Mkfile("/unmodifiedDir/opaqueDir1/opaqueFile1", 0644, nil)).
+				File(llb.Mkfile("/unmodifiedDir/opaqueDir1/opaqueSubdir1/opaqueFile2", 0644, nil)).
+				File(llb.Mkfile("/unmodifiedDir/overrideFile1", 0644, nil)).
+				File(llb.Mkfile("/unmodifiedDir/overrideFile2", 0644, nil)).
+				File(llb.Mkfile("/unmodifiedDir/shuffleFile2", 0644, []byte("shuffleFile2"))).
+				File(llb.Mkfile("/unmodifiedDir/shuffleDir2/shuffleSubfile3", 0644, nil)).
+				File(llb.Mkfile("/unmodifiedDir/shuffleDir2/shuffleSubdir2/shuffleSubfile4", 0644, nil)).
+				File(llb.Mkdir("/modifyDir", 0755)).
+				File(llb.Mkdir("/modifyDir/chmodSubdir2", 0755)).
+				File(llb.Mkdir("/modifyDir/deleteSubdir2", 0755)).
+				File(llb.Mkdir("/modifyDir/opaqueDir2", 0755)).
+				File(llb.Mkdir("/modifyDir/opaqueDir2/opaqueSubdir2", 0755)).
+				File(llb.Mkdir("/modifyDir/overrideSubdir2", 0755)).
+				File(llb.Mkdir("/modifyDir/shuffleDir3", 0755)).
+				File(llb.Mkdir("/modifyDir/shuffleDir3/shuffleSubdir3", 0755)).
+				File(llb.Mkfile("/modifyDir/chmodFile2", 0644, []byte("chmodFile2"))).
+				File(llb.Mkfile("/modifyDir/modifyContentFile2", 0644, []byte("modifyContentFile2"))).
+				File(llb.Mkfile("/modifyDir/deleteFile2", 0644, nil)).
+				File(llb.Mkfile("/modifyDir/opaqueDir2/opaqueFile3", 0644, nil)).
+				File(llb.Mkfile("/modifyDir/opaqueDir2/opaqueSubdir2/opaqueFile4", 0644, nil)).
+				File(llb.Mkfile("/modifyDir/overrideFile3", 0644, nil)).
+				File(llb.Mkfile("/modifyDir/overrideFile4", 0644, nil)).
+				File(llb.Mkfile("/modifyDir/shuffleFile3", 0644, []byte("shuffleFile3"))).
+				File(llb.Mkfile("/modifyDir/shuffleDir3/shuffleSubfile4", 0644, nil)).
+				File(llb.Mkfile("/modifyDir/shuffleDir3/shuffleSubdir3/shuffleSubfile6", 0644, nil))
+		}
 
 		joinCmds := func(cmds ...[]string) []string {
 			var all []string
@@ -169,7 +172,7 @@ func diffOpTestCases() (tests []integration.Test) {
 		allContents = append(allContents, newFileContents)
 		tests = append(tests, verifyContents{
 			name: "TestDiffNewFiles",
-			state: llb.Diff(base, runShell(base, joinCmds(
+			state: llb.Diff(base(), runShell(base(), joinCmds(
 				baseDiffCmds,
 				newFileCmds,
 			)...)),
@@ -199,7 +202,7 @@ func diffOpTestCases() (tests []integration.Test) {
 		allContents = append(allContents, modifyFileContents)
 		tests = append(tests, verifyContents{
 			name: "TestDiffModifiedFiles",
-			state: llb.Diff(base, runShell(base, joinCmds(
+			state: llb.Diff(base(), runShell(base(), joinCmds(
 				baseDiffCmds,
 				modifyFileCmds,
 			)...)),
@@ -229,7 +232,7 @@ func diffOpTestCases() (tests []integration.Test) {
 		allContents = append(allContents, createNewDirContents)
 		tests = append(tests, verifyContents{
 			name: "TestDiffNewDirs",
-			state: llb.Diff(base, runShell(base, joinCmds(
+			state: llb.Diff(base(), runShell(base(), joinCmds(
 				baseDiffCmds,
 				createNewDirCmds,
 			)...)),
@@ -254,7 +257,7 @@ func diffOpTestCases() (tests []integration.Test) {
 		allContents = append(allContents, modifyDirContents)
 		tests = append(tests, verifyContents{
 			name: "TestDiffModifiedDirs",
-			state: llb.Diff(base, runShell(base, joinCmds(
+			state: llb.Diff(base(), runShell(base(), joinCmds(
 				baseDiffCmds,
 				modifyDirCmds,
 			)...)),
@@ -279,7 +282,7 @@ func diffOpTestCases() (tests []integration.Test) {
 		allContents = append(allContents, overrideDirContents)
 		tests = append(tests, verifyContents{
 			name: "TestDiffOverrideDirs",
-			state: llb.Diff(base, runShell(base, joinCmds(
+			state: llb.Diff(base(), runShell(base(), joinCmds(
 				baseDiffCmds,
 				overrideDirCmds,
 			)...)),
@@ -323,7 +326,7 @@ func diffOpTestCases() (tests []integration.Test) {
 		allContents = append(allContents, overrideFileContents)
 		tests = append(tests, verifyContents{
 			name: "TestDiffOverrideFiles",
-			state: llb.Diff(base, runShell(base, joinCmds(
+			state: llb.Diff(base(), runShell(base(), joinCmds(
 				baseDiffCmds,
 				overrideFileCmds,
 			)...)),
@@ -340,7 +343,7 @@ func diffOpTestCases() (tests []integration.Test) {
 		allCmds = append(allCmds, deleteFileCmds)
 		tests = append(tests, verifyContents{
 			name: "TestDiffDeleteFiles",
-			state: llb.Diff(base, runShell(base, joinCmds(
+			state: llb.Diff(base(), runShell(base(), joinCmds(
 				baseDiffCmds,
 				deleteFileCmds,
 			)...)),
@@ -351,14 +354,14 @@ func diffOpTestCases() (tests []integration.Test) {
 		tests = append(tests, verifyContents{
 			name: "TestDiffDeleteFilesMerge",
 			state: llb.Merge([]llb.State{
-				base,
-				llb.Diff(base, runShell(base, joinCmds(
+				base(),
+				llb.Diff(base(), runShell(base(), joinCmds(
 					baseDiffCmds,
 					deleteFileCmds,
 				)...)),
 			}),
 			contents: mergeContents(
-				contentsOf(base),
+				contentsOf(base()),
 				baseDiffContents,
 				apply(
 					fstest.Remove("/unmodifiedDir/deleteFile1"),
@@ -374,7 +377,7 @@ func diffOpTestCases() (tests []integration.Test) {
 		allCmds = append(allCmds, deleteDirCmds)
 		tests = append(tests, verifyContents{
 			name: "TestDiffDeleteDirs",
-			state: llb.Diff(base, runShell(base, joinCmds(
+			state: llb.Diff(base(), runShell(base(), joinCmds(
 				baseDiffCmds,
 				deleteDirCmds,
 			)...)),
@@ -385,14 +388,14 @@ func diffOpTestCases() (tests []integration.Test) {
 		tests = append(tests, verifyContents{
 			name: "TestDiffDeleteDirsMerge",
 			state: llb.Merge([]llb.State{
-				base,
-				llb.Diff(base, runShell(base, joinCmds(
+				base(),
+				llb.Diff(base(), runShell(base(), joinCmds(
 					baseDiffCmds,
 					deleteDirCmds,
 				)...)),
 			}),
 			contents: mergeContents(
-				contentsOf(base),
+				contentsOf(base()),
 				baseDiffContents,
 				apply(
 					fstest.RemoveAll("/unmodifiedDir/deleteSubdir1"),
@@ -401,17 +404,19 @@ func diffOpTestCases() (tests []integration.Test) {
 			),
 		})
 
-		basePlusExtra := base.
-			File(llb.Mkdir("/extradir", 0755)).
-			File(llb.Mkfile("/extradir/extrafile", 0755, nil))
+		basePlusExtra := func() llb.State {
+			return base().
+				File(llb.Mkdir("/extradir", 0755)).
+				File(llb.Mkfile("/extradir/extrafile", 0755, nil))
+		}
 		tests = append(tests, verifyContents{
 			name: "TestDiffUnmatchedDelete",
 			state: llb.Merge([]llb.State{
-				base,
-				llb.Diff(basePlusExtra, basePlusExtra.File(llb.Rm("/extradir/extrafile"))),
+				base(),
+				llb.Diff(basePlusExtra(), basePlusExtra().File(llb.Rm("/extradir/extrafile"))),
 			}),
 			contents: mergeContents(
-				contentsOf(base),
+				contentsOf(base()),
 				apply(
 					// Surprisingly, it's expected that /extradir shows up in the diff.
 					// This is the behavior of the exporter, so we have to enforce
@@ -450,7 +455,7 @@ func diffOpTestCases() (tests []integration.Test) {
 		allContents = append(allContents, opaqueDirContents)
 		tests = append(tests, verifyContents{
 			name: "TestDiffOpaqueDirs",
-			state: llb.Diff(base, runShell(base, joinCmds(
+			state: llb.Diff(base(), runShell(base(), joinCmds(
 				baseDiffCmds,
 				opaqueDirCmds,
 			)...)),
@@ -462,18 +467,18 @@ func diffOpTestCases() (tests []integration.Test) {
 		tests = append(tests, verifyContents{
 			name: "TestDiffOpaqueDirsMerge",
 			state: llb.Merge([]llb.State{
-				base.
+				base().
 					File(llb.Mkfile("/unmodifiedDir/opaqueDir1/rebaseFile1", 0644, nil)).
 					File(llb.Mkfile("/unmodifiedDir/opaqueDir1/opaqueSubdir1/rebaseFile2", 0644, nil)).
 					File(llb.Mkfile("/modifyDir/opaqueDir2/rebaseFile3", 0644, nil)).
 					File(llb.Mkfile("/modifyDir/opaqueDir2/opaqueSubdir2/rebaseFile4", 0644, nil)),
-				llb.Diff(base, runShell(base, joinCmds(
+				llb.Diff(base(), runShell(base(), joinCmds(
 					baseDiffCmds,
 					opaqueDirCmds,
 				)...)),
 			}),
 			contents: mergeContents(
-				contentsOf(base),
+				contentsOf(base()),
 				baseDiffContents,
 				apply(
 					fstest.RemoveAll("/unmodifiedDir/opaqueDir1"),
@@ -513,7 +518,7 @@ func diffOpTestCases() (tests []integration.Test) {
 		allCmds = append(allCmds, shuffleFileCmds)
 		tests = append(tests, verifyContents{
 			name: "TestDiffShuffleFiles",
-			state: llb.Diff(base, runShell(base, joinCmds(
+			state: llb.Diff(base(), runShell(base(), joinCmds(
 				baseDiffCmds,
 				shuffleFileCmds,
 			)...)),
@@ -525,14 +530,14 @@ func diffOpTestCases() (tests []integration.Test) {
 		tests = append(tests, verifyContents{
 			name: "TestDiffShuffleFilesMerge",
 			state: llb.Merge([]llb.State{
-				base,
-				llb.Diff(base, runShell(base, joinCmds(
+				base(),
+				llb.Diff(base(), runShell(base(), joinCmds(
 					baseDiffCmds,
 					shuffleFileCmds,
 				)...)),
 			}),
 			contents: mergeContents(
-				contentsOf(base),
+				contentsOf(base()),
 				baseDiffContents,
 			),
 		})
@@ -553,7 +558,7 @@ func diffOpTestCases() (tests []integration.Test) {
 		allContents = append(allContents, mknodFifosContents)
 		tests = append(tests, verifyContents{
 			name: "TestDiffFifos",
-			state: llb.Diff(base, runShell(base, joinCmds(
+			state: llb.Diff(base(), runShell(base(), joinCmds(
 				baseDiffCmds,
 				mknodFifosCmds,
 			)...)),
@@ -574,7 +579,7 @@ func diffOpTestCases() (tests []integration.Test) {
 		tests = append(tests, verifyContents{
 			name:           "TestDiffChardevs",
 			skipOnRootless: true, // you need root user namespace privilege to create device nodes
-			state: llb.Diff(base, runShell(base, joinCmds(
+			state: llb.Diff(base(), runShell(base(), joinCmds(
 				baseDiffCmds,
 				mknodChardevCmds,
 			)...)),
@@ -592,38 +597,40 @@ func diffOpTestCases() (tests []integration.Test) {
 		}
 		tests = append(tests, verifyContents{
 			name:     "TestDiffCombinedSingleLayer",
-			state:    llb.Diff(base, runShell(base, flattenedCmds...)),
+			state:    llb.Diff(base(), runShell(base(), flattenedCmds...)),
 			contents: mergeContents(allContents...),
 		})
 
 		tests = append(tests, verifyContents{
 			name:     "TestDiffCombinedMultiLayer",
-			state:    llb.Diff(base, chainRunShells(base, allCmds...)),
+			state:    llb.Diff(base(), chainRunShells(base(), allCmds...)),
 			contents: mergeContents(allContents...),
 		})
 		return tests
 	}()...)
 
 	tests = append(tests, func() []integration.Test {
-		base := runShell(alpine,
-			"mkdir -p /parentdir/dir/subdir",
-			"touch /parentdir/dir/A /parentdir/dir/B /parentdir/dir/subdir/C",
-		)
+		base := func() llb.State {
+			return runShell(alpine(),
+				"mkdir -p /parentdir/dir/subdir",
+				"touch /parentdir/dir/A /parentdir/dir/B /parentdir/dir/subdir/C",
+			)
+		}
 		return []integration.Test{
 			verifyContents{
 				name: "TestDiffOpaqueDirs",
 				state: llb.Merge([]llb.State{
-					runShell(busybox,
+					runShell(busybox(),
 						"mkdir -p /parentdir/dir/subdir",
 						"touch /parentdir/dir/A /parentdir/dir/B /parentdir/dir/D",
 					),
-					llb.Diff(base, runShell(base,
+					llb.Diff(base(), runShell(base(),
 						"rm -rf /parentdir/dir",
 						"mkdir /parentdir/dir",
 						"touch /parentdir/dir/E",
 					)),
 				}),
-				contents: contentsOf(runShell(busybox,
+				contents: contentsOf(runShell(busybox(),
 					"mkdir -p /parentdir/dir",
 					"touch /parentdir/dir/D",
 					"touch /parentdir/dir/E",
@@ -634,21 +641,29 @@ func diffOpTestCases() (tests []integration.Test) {
 
 	// Symlink handling tests
 	tests = append(tests, func() []integration.Test {
-		linkFooToBar := llb.Diff(alpine, runShell(alpine, "mkdir -p /bar", "ln -s /bar /foo"))
+		linkFooToBar := func() llb.State {
+			return llb.Diff(alpine(), runShell(alpine(), "mkdir -p /bar", "ln -s /bar /foo"))
+		}
 
-		alpinePlusFoo := runShell(alpine, "mkdir /foo")
-		deleteFoo := llb.Diff(alpinePlusFoo, runShell(alpinePlusFoo, "rm -rf /foo"))
-		createFooFile := llb.Diff(alpinePlusFoo, runShell(alpinePlusFoo, "touch /foo/file"))
+		alpinePlusFoo := func() llb.State {
+			return runShell(alpine(), "mkdir /foo")
+		}
+		deleteFoo := func() llb.State {
+			return llb.Diff(alpinePlusFoo(), runShell(alpinePlusFoo(), "rm -rf /foo"))
+		}
+		createFooFile := func() llb.State {
+			return llb.Diff(alpinePlusFoo(), runShell(alpinePlusFoo(), "touch /foo/file"))
+		}
 
 		return []integration.Test{
 			verifyContents{
 				name: "TestDiffDirOverridesSymlink",
 				state: llb.Merge([]llb.State{
-					busybox,
-					linkFooToBar,
-					createFooFile,
+					busybox(),
+					linkFooToBar(),
+					createFooFile(),
 				}),
-				contents: contentsOf(runShell(busybox,
+				contents: contentsOf(runShell(busybox(),
 					"mkdir /bar",
 					"mkdir /foo",
 					"touch /foo/file",
@@ -657,11 +672,11 @@ func diffOpTestCases() (tests []integration.Test) {
 			verifyContents{
 				name: "TestDiffSymlinkOverridesDir",
 				state: llb.Merge([]llb.State{
-					busybox,
-					createFooFile,
-					linkFooToBar,
+					busybox(),
+					createFooFile(),
+					linkFooToBar(),
 				}),
-				contents: contentsOf(runShell(busybox,
+				contents: contentsOf(runShell(busybox(),
 					"mkdir /bar",
 					"ln -s /bar /foo",
 				)),
@@ -669,18 +684,18 @@ func diffOpTestCases() (tests []integration.Test) {
 			verifyContents{
 				name: "TestDiffSymlinkOverridesSymlink",
 				state: llb.Merge([]llb.State{
-					busybox,
-					llb.Diff(alpine, runShell(alpine,
+					busybox(),
+					llb.Diff(alpine(), runShell(alpine(),
 						"mkdir /1 /2",
 						"ln -s /1 /a",
 						"ln -s /2 /a/b",
 					)),
-					llb.Diff(alpine, runShell(alpine,
+					llb.Diff(alpine(), runShell(alpine(),
 						"mkdir /3",
 						"ln -s /3 /a",
 					)),
 				}),
-				contents: contentsOf(runShell(busybox,
+				contents: contentsOf(runShell(busybox(),
 					"mkdir /1 /2 /3",
 					"ln -s /3 /a",
 					"ln -s /2 /1/b",
@@ -690,22 +705,22 @@ func diffOpTestCases() (tests []integration.Test) {
 			verifyContents{
 				name: "TestDiffDeleteDoesNotFollowSymlink",
 				state: llb.Merge([]llb.State{
-					busybox,
-					linkFooToBar,
-					deleteFoo,
+					busybox(),
+					linkFooToBar(),
+					deleteFoo(),
 				}),
-				contents: contentsOf(runShell(busybox,
+				contents: contentsOf(runShell(busybox(),
 					"mkdir /bar",
 				)),
 			},
 			verifyContents{
 				name: "TestDiffDeleteDoesNotFollowParentSymlink",
 				state: llb.Merge([]llb.State{
-					busybox,
-					linkFooToBar.File(llb.Mkfile("/bar/file", 0644, nil)),
-					llb.Diff(createFooFile, createFooFile.File(llb.Rm("/foo/file"))),
+					busybox(),
+					linkFooToBar().File(llb.Mkfile("/bar/file", 0644, nil)),
+					llb.Diff(createFooFile(), createFooFile().File(llb.Rm("/foo/file"))),
 				}),
-				contents: contentsOf(runShell(busybox,
+				contents: contentsOf(runShell(busybox(),
 					"mkdir /bar",
 					"touch /bar/file",
 					"mkdir /foo",
@@ -715,12 +730,12 @@ func diffOpTestCases() (tests []integration.Test) {
 			verifyContents{
 				name: "TestDiffCircularSymlinks",
 				state: llb.Merge([]llb.State{
-					busybox,
-					llb.Diff(alpine, runShell(alpine, "ln -s /2 /1", "ln -s /1 /2")),
+					busybox(),
+					llb.Diff(alpine(), runShell(alpine(), "ln -s /2 /1", "ln -s /1 /2")),
 					llb.Scratch().
 						File(llb.Mkfile("/1", 0644, []byte("foo"))),
 				}),
-				contents: contentsOf(runShell(busybox,
+				contents: contentsOf(runShell(busybox(),
 					"echo -n foo > /1",
 					"ln -s /1 /2",
 				)),
@@ -728,11 +743,11 @@ func diffOpTestCases() (tests []integration.Test) {
 			verifyContents{
 				name: "TestDiffCircularDirSymlink",
 				state: llb.Merge([]llb.State{
-					busybox,
-					llb.Diff(alpine, runShell(alpine, "mkdir /foo", "ln -s ../foo /foo/link")),
-					llb.Diff(alpine, runShell(alpine, "mkdir -p /foo/link", "touch /foo/link/file")),
+					busybox(),
+					llb.Diff(alpine(), runShell(alpine(), "mkdir /foo", "ln -s ../foo /foo/link")),
+					llb.Diff(alpine(), runShell(alpine(), "mkdir -p /foo/link", "touch /foo/link/file")),
 				}),
-				contents: contentsOf(runShell(busybox,
+				contents: contentsOf(runShell(busybox(),
 					"mkdir -p /foo/link",
 					"touch /foo/link/file",
 				)),
@@ -740,11 +755,11 @@ func diffOpTestCases() (tests []integration.Test) {
 			verifyContents{
 				name: "TestDiffCircularParentDirSymlinks",
 				state: llb.Merge([]llb.State{
-					busybox,
-					llb.Diff(alpine, runShell(alpine, "ln -s /2 /1", "ln -s /1 /2")),
-					llb.Diff(alpine, runShell(alpine, "mkdir /1", "echo -n foo > /1/file")),
+					busybox(),
+					llb.Diff(alpine(), runShell(alpine(), "ln -s /2 /1", "ln -s /1 /2")),
+					llb.Diff(alpine(), runShell(alpine(), "mkdir /1", "echo -n foo > /1/file")),
 				}),
-				contents: contentsOf(runShell(busybox,
+				contents: contentsOf(runShell(busybox(),
 					"mkdir /1",
 					"echo -n foo > /1/file",
 					"ln -s /1 /2",
@@ -761,19 +776,23 @@ func diffOpTestCases() (tests []integration.Test) {
 	// they were originally created). See the overlay docs for more details:
 	// https://www.kernel.org/doc/html/latest/filesystems/overlayfs.html?highlight=overlayfs#non-standard-behavior
 	tests = append(tests, func() []integration.Test {
-		linkedFiles := llb.Diff(alpine, runShell(alpine,
-			"mkdir /dir",
-			"touch /dir/1",
-			"ln /dir/1 /dir/2",
-			"chmod 0600 /dir/2",
-		))
-		chmodExecState := runShellExecState(busybox, "chmod 0777 /A/dir/1")
-		chmodExecState.AddMount("/A", linkedFiles)
-		mntB := chmodExecState.AddMount("/B", linkedFiles)
+		linkedFiles := func() llb.State {
+			return llb.Diff(alpine(), runShell(alpine(),
+				"mkdir /dir",
+				"touch /dir/1",
+				"ln /dir/1 /dir/2",
+				"chmod 0600 /dir/2",
+			))
+		}
+		mntB := func() llb.State {
+			chmodExecState := runShellExecState(busybox(), "chmod 0777 /A/dir/1")
+			chmodExecState.AddMount("/A", linkedFiles())
+			return chmodExecState.AddMount("/B", linkedFiles())
+		}
 		return []integration.Test{
 			verifyContents{
 				name:  "TestDiffHardlinks",
-				state: linkedFiles,
+				state: linkedFiles(),
 				contents: apply(
 					fstest.CreateDir("/dir", 0755),
 					fstest.CreateFile("/dir/1", nil, 0600),
@@ -782,7 +801,7 @@ func diffOpTestCases() (tests []integration.Test) {
 			},
 			verifyContents{
 				name:  "TestDiffHardlinkChangesDoNotPropagateBetweenSnapshots",
-				state: mntB,
+				state: mntB(),
 				contents: apply(
 					fstest.CreateDir("/dir", 0755),
 					fstest.CreateFile("/dir/1", nil, 0600),
@@ -797,20 +816,22 @@ func diffOpTestCases() (tests []integration.Test) {
 		verifyContents{
 			name: "TestDiffLazyBlobMerge",
 			// Merge(A, Diff(A,B)) == B
-			state:    llb.Merge([]llb.State{busybox, llb.Diff(busybox, alpine)}),
-			contents: contentsOf(alpine),
+			state:    llb.Merge([]llb.State{busybox(), llb.Diff(busybox(), alpine())}),
+			contents: contentsOf(alpine()),
 		},
 	)
 
 	// Diffs of exec mounts should only include the changes made under the mount
 	tests = append(tests, func() []integration.Test {
-		splitDiffExecState := runShellExecState(alpine, "touch /root/A", "touch /mnt/B")
-		splitDiffRoot := splitDiffExecState.Root()
-		splitDiffMnt := splitDiffExecState.AddMount("/mnt", busybox)
+		splitDiffExecState := func() llb.ExecState {
+			execState := runShellExecState(alpine(), "touch /root/A", "touch /mnt/B")
+			execState.AddMount("/mnt", busybox())
+			return execState
+		}
 		return []integration.Test{
 			verifyContents{
 				name:  "TestDiffExecRoot",
-				state: llb.Diff(alpine, splitDiffRoot),
+				state: llb.Diff(alpine(), splitDiffExecState().Root()),
 				contents: apply(
 					fstest.CreateDir("/root", 0700),
 					fstest.CreateFile("/root/A", nil, 0644),
@@ -818,7 +839,7 @@ func diffOpTestCases() (tests []integration.Test) {
 			},
 			verifyContents{
 				name:  "TestDiffExecMount",
-				state: llb.Diff(busybox, splitDiffMnt),
+				state: llb.Diff(busybox(), splitDiffExecState().GetMount("/mnt")),
 				contents: apply(
 					fstest.CreateFile("/B", nil, 0644),
 				),
@@ -828,43 +849,59 @@ func diffOpTestCases() (tests []integration.Test) {
 
 	// Diff+Merge combinations
 	tests = append(tests, func() []integration.Test {
-		a := llb.Scratch().File(llb.Mkfile("A", 0644, []byte("A")))
-		b := llb.Scratch().File(llb.Mkfile("B", 0644, []byte("B")))
-		c := llb.Scratch().File(llb.Mkfile("C", 0644, []byte("C")))
-		deleteC := c.File(llb.Rm("C"))
+		a := func() llb.State {
+			return llb.Scratch().File(llb.Mkfile("A", 0644, []byte("A")))
+		}
+		b := func() llb.State {
+			return llb.Scratch().File(llb.Mkfile("B", 0644, []byte("B")))
+		}
+		c := func() llb.State {
+			return llb.Scratch().File(llb.Mkfile("C", 0644, []byte("C")))
+		}
+		deleteC := func() llb.State {
+			return c().File(llb.Rm("C"))
+		}
 
-		ab := llb.Merge([]llb.State{a, b})
-		abc := llb.Merge([]llb.State{a, b, c})
-		abDeleteC := llb.Merge([]llb.State{a, b, deleteC})
+		ab := func() llb.State {
+			return llb.Merge([]llb.State{a(), b()})
+		}
+		abc := func() llb.State {
+			return llb.Merge([]llb.State{a(), b(), c()})
+		}
+		abDeleteC := func() llb.State {
+			return llb.Merge([]llb.State{a(), b(), deleteC()})
+		}
 
 		// nested is abcdae-a
-		nested := llb.Merge([]llb.State{
-			abc.File(llb.Mkfile("D", 0644, []byte("D"))),
-			llb.Merge([]llb.State{
-				a,
-				llb.Scratch().File(llb.Mkfile("E", 0644, []byte("E"))),
-			}).File(llb.Rm("A")),
-		})
+		nested := func() llb.State {
+			return llb.Merge([]llb.State{
+				abc().File(llb.Mkfile("D", 0644, []byte("D"))),
+				llb.Merge([]llb.State{
+					a(),
+					llb.Scratch().File(llb.Mkfile("E", 0644, []byte("E"))),
+				}).File(llb.Rm("A")),
+			})
+		}
 		return []integration.Test{
 			verifyContents{
 				name: "TestDiffOnlyMerge",
 				state: llb.Merge([]llb.State{
-					llb.Diff(a, b),
-					llb.Diff(b, a),
+					llb.Diff(a(), b()),
+					llb.Diff(b(), a()),
 				}),
-				contents: contentsOf(a),
+				contents: contentsOf(a()),
 			},
 
 			verifyContents{
 				name:  "TestDiffOfMerges",
-				state: llb.Diff(ab, abc),
+				state: llb.Diff(ab(), abc()),
 				contents: apply(
 					fstest.CreateFile("/C", []byte("C"), 0644),
 				),
 			},
 			verifyContents{
 				name:  "TestDiffOfMergesWithDeletes",
-				state: llb.Merge([]llb.State{abc, llb.Diff(abc, abDeleteC)}),
+				state: llb.Merge([]llb.State{abc(), llb.Diff(abc(), abDeleteC())}),
 				contents: apply(
 					fstest.CreateFile("/A", []byte("A"), 0644),
 					fstest.CreateFile("/B", []byte("B"), 0644),
@@ -873,7 +910,7 @@ func diffOpTestCases() (tests []integration.Test) {
 
 			verifyContents{
 				name:  "TestDiffSingleLayerOnMerge",
-				state: llb.Diff(abDeleteC, abDeleteC.File(llb.Mkfile("D", 0644, []byte("D")))),
+				state: llb.Diff(abDeleteC(), abDeleteC().File(llb.Mkfile("D", 0644, []byte("D")))),
 				contents: apply(
 					fstest.CreateFile("/D", []byte("D"), 0644),
 				),
@@ -881,8 +918,8 @@ func diffOpTestCases() (tests []integration.Test) {
 			verifyContents{
 				name: "TestDiffSingleDeleteLayerOnMerge",
 				state: llb.Merge([]llb.State{
-					abDeleteC,
-					llb.Diff(abc, abc.File(llb.Rm("A"))),
+					abDeleteC(),
+					llb.Diff(abc(), abc().File(llb.Rm("A"))),
 				}),
 				contents: apply(
 					fstest.CreateFile("/B", []byte("B"), 0644),
@@ -891,8 +928,8 @@ func diffOpTestCases() (tests []integration.Test) {
 			verifyContents{
 				name: "TestDiffMultipleLayerOnMerge",
 				state: llb.Merge([]llb.State{
-					abDeleteC,
-					llb.Diff(abc, abc.
+					abDeleteC(),
+					llb.Diff(abc(), abc().
 						File(llb.Mkfile("D", 0644, []byte("D"))).
 						File(llb.Rm("A")),
 					),
@@ -905,7 +942,7 @@ func diffOpTestCases() (tests []integration.Test) {
 
 			verifyContents{
 				name:  "TestDiffNestedLayeredMerges",
-				state: llb.Diff(abc, nested.File(llb.Mkfile("F", 0644, []byte("F")))),
+				state: llb.Diff(abc(), nested().File(llb.Mkfile("F", 0644, []byte("F")))),
 				contents: apply(
 					fstest.CreateFile("/D", []byte("D"), 0644),
 					fstest.CreateFile("/E", []byte("E"), 0644),
@@ -916,8 +953,8 @@ func diffOpTestCases() (tests []integration.Test) {
 				name: "TestDiffNestedLayeredMergeDeletes",
 				// this is "ab" + "d" + Diff("abc", "abcdae-a"+"-d") == "abd" + "dae-a-d" == abddae-a-d
 				state: llb.Merge([]llb.State{
-					ab.File(llb.Mkfile("D", 0644, []byte("D"))),
-					llb.Diff(abc, nested.File(llb.Rm("D"))),
+					ab().File(llb.Mkfile("D", 0644, []byte("D"))),
+					llb.Diff(abc(), nested().File(llb.Rm("D"))),
 				}),
 				contents: apply(
 					fstest.CreateFile("/B", []byte("B"), 0644),
@@ -927,17 +964,23 @@ func diffOpTestCases() (tests []integration.Test) {
 		}
 	}()...)
 
-	// Diffs of diffs
 	tests = append(tests, func() []integration.Test {
-		a := llb.Scratch().File(llb.Mkfile("A", 0644, []byte("A")))
-		ab := a.File(llb.Mkfile("B", 0644, []byte("B")))
-		abc := ab.File(llb.Mkfile("C", 0644, []byte("C")))
+		a := func() llb.State {
+			return llb.Scratch().File(llb.Mkfile("A", 0644, []byte("A")))
+		}
+		ab := func() llb.State {
+			return a().File(llb.Mkfile("B", 0644, []byte("B")))
+		}
+		abc := func() llb.State {
+			return ab().File(llb.Mkfile("C", 0644, []byte("C")))
+		}
 		return []integration.Test{
+			// Diffs of diffs
 			verifyContents{
 				name: "TestDiffOfDiffs",
 				state: llb.Diff(
-					llb.Diff(a, ab),
-					llb.Diff(a, abc),
+					llb.Diff(a(), ab()),
+					llb.Diff(a(), abc()),
 				),
 				contents: apply(
 					fstest.CreateFile("/C", []byte("C"), 0644),
@@ -946,10 +989,10 @@ func diffOpTestCases() (tests []integration.Test) {
 			verifyContents{
 				name: "TestDiffOfDiffsWithDeletes",
 				state: llb.Merge([]llb.State{
-					abc,
+					abc(),
 					llb.Diff(
-						llb.Diff(a, abc),
-						llb.Diff(a, ab),
+						llb.Diff(a(), abc()),
+						llb.Diff(a(), ab()),
 					),
 				}),
 				contents: apply(
@@ -957,18 +1000,11 @@ func diffOpTestCases() (tests []integration.Test) {
 					fstest.CreateFile("/B", []byte("B"), 0644),
 				),
 			},
-		}
-	}()...)
 
-	// Diffs can be used as layer parents
-	tests = append(tests, func() []integration.Test {
-		a := llb.Scratch().File(llb.Mkfile("A", 0644, []byte("A")))
-		ab := a.File(llb.Mkfile("B", 0644, []byte("B")))
-		abc := ab.File(llb.Mkfile("C", 0644, []byte("C")))
-		return []integration.Test{
+			// Diffs can be used as layer parents
 			verifyContents{
 				name:  "TestDiffAsParentSingleLayer",
-				state: llb.Diff(a, ab).File(llb.Mkfile("D", 0644, []byte("D"))),
+				state: llb.Diff(a(), ab()).File(llb.Mkfile("D", 0644, []byte("D"))),
 				contents: apply(
 					fstest.CreateFile("B", []byte("B"), 0644),
 					fstest.CreateFile("D", []byte("D"), 0644),
@@ -977,8 +1013,8 @@ func diffOpTestCases() (tests []integration.Test) {
 			verifyContents{
 				name: "TestDiffAsParentSingleLayerDelete",
 				state: llb.Merge([]llb.State{
-					ab,
-					llb.Diff(a, ab).File(llb.Rm("B")),
+					ab(),
+					llb.Diff(a(), ab()).File(llb.Rm("B")),
 				}),
 				contents: apply(
 					fstest.CreateFile("A", []byte("A"), 0644),
@@ -986,7 +1022,7 @@ func diffOpTestCases() (tests []integration.Test) {
 			},
 			verifyContents{
 				name:  "TestDiffAsParentMultipleLayers",
-				state: llb.Diff(a, abc).File(llb.Mkfile("D", 0644, []byte("D"))),
+				state: llb.Diff(a(), abc()).File(llb.Mkfile("D", 0644, []byte("D"))),
 				contents: apply(
 					fstest.CreateFile("B", []byte("B"), 0644),
 					fstest.CreateFile("C", []byte("C"), 0644),
@@ -996,8 +1032,8 @@ func diffOpTestCases() (tests []integration.Test) {
 			verifyContents{
 				name: "TestDiffAsParentMultipleLayerDelete",
 				state: llb.Merge([]llb.State{
-					ab,
-					llb.Diff(a, abc).File(llb.Rm("B")),
+					ab(),
+					llb.Diff(a(), abc()).File(llb.Rm("B")),
 				}),
 				contents: apply(
 					fstest.CreateFile("A", []byte("A"), 0644),
@@ -1009,23 +1045,63 @@ func diffOpTestCases() (tests []integration.Test) {
 
 	// Single layer diffs should reuse blobs
 	tests = append(tests, func() []integration.Test {
-		mergeBase := llb.Merge([]llb.State{
-			alpine,
-			llb.Scratch().File(llb.Mkfile("/foo", 0644, []byte("/foo"))),
-		})
+		mergeBase := func() llb.State {
+			return llb.Merge([]llb.State{
+				alpine(),
+				llb.Scratch().File(llb.Mkfile("/foo", 0644, []byte("/foo"))),
+			})
+		}
 		return []integration.Test{
 			verifyBlobReuse{
 				name: "TestDiffSingleLayerBlobReuse",
-				base: alpine,
-				upper: runShell(alpine,
+				base: alpine(),
+				upper: runShell(alpine(),
 					"cat /dev/urandom | head -c 100 | sha256sum > /randomfile",
 				),
 			},
 			verifyBlobReuse{
 				name: "TestDiffSingleLayerOnMergeBlobReuse",
-				base: mergeBase,
-				upper: runShell(mergeBase,
+				base: mergeBase(),
+				upper: runShell(mergeBase(),
 					"cat /dev/urandom | head -c 100 | sha256sum > /randomfile",
+				),
+			},
+		}
+	}()...)
+
+	// Regression tests
+	tests = append(tests, func() []integration.Test {
+		base := func() llb.State {
+			return llb.Scratch().File(llb.Mkdir("/dir", 0755))
+		}
+		return []integration.Test{
+			verifyContents{
+				// Verifies that when a directory with contents is used as a base layer
+				// in a merge, subsequent merges that first delete the dir (resulting in
+				// a whiteout device w/ overlay snapshotters) and then recreate the dir
+				// correctly set it as opaque.
+				name: "TestDiffMergeOpaqueRegression",
+				state: llb.Merge([]llb.State{
+					base().File(llb.Mkfile("/dir/a", 0644, nil)),
+					base().File(llb.Rm("/dir")),
+					base().File(llb.Mkfile("/dir/b", 0644, nil)),
+				}),
+				contents: apply(
+					fstest.CreateDir("/dir", 0755),
+					fstest.CreateFile("/dir/b", nil, 0644),
+				),
+			},
+			verifyContents{
+				// Same as above, but with a file overwrite instead of an rm
+				name: "TestDiffMergeOpaqueRegressionWithFileOverwrite",
+				state: llb.Merge([]llb.State{
+					base().File(llb.Mkfile("/dir/a", 0644, nil)),
+					llb.Scratch().File(llb.Mkfile("/dir", 0644, nil)),
+					base().File(llb.Mkfile("/dir/b", 0644, nil)),
+				}),
+				contents: apply(
+					fstest.CreateDir("/dir", 0755),
+					fstest.CreateFile("/dir/b", nil, 0644),
 				),
 			},
 		}
@@ -1115,6 +1191,13 @@ func (tc verifyContents) Run(t *testing.T, sb integration.Sandbox) {
 		t.Skip("rootless")
 	}
 
+	// FIXME: TestDiffUpperScratch broken on dockerd and seems flaky with containerd.
+	// 	see https://github.com/moby/buildkit/pull/2726#issuecomment-1070978499
+	// 	and https://github.com/moby/buildkit/pull/2725#issuecomment-1066521712
+	if integration.IsTestDockerd() && tc.name == "TestDiffUpperScratch" {
+		t.Skip("TestDiffUpperScratch is temporarily broken on dockerd")
+	}
+
 	requiresLinux(t)
 	cdAddress := sb.ContainerdAddress()
 
@@ -1141,7 +1224,7 @@ func (tc verifyContents) Run(t *testing.T, sb integration.Sandbox) {
 	var exportInlineCacheOpts []CacheOptionsEntry
 	var importRegistryCacheOpts []CacheOptionsEntry
 	var exportRegistryCacheOpts []CacheOptionsEntry
-	if os.Getenv("TEST_DOCKERD") != "1" {
+	if !integration.IsTestDockerd() {
 		importInlineCacheOpts = []CacheOptionsEntry{{
 			Type: "registry",
 			Attrs: map[string]string{
@@ -1168,7 +1251,7 @@ func (tc verifyContents) Run(t *testing.T, sb integration.Sandbox) {
 	resetState(t, c, sb)
 	requireContents(ctx, t, c, sb, tc.state, nil, exportInlineCacheOpts, imageTarget, tc.contents(sb))
 
-	if os.Getenv("TEST_DOCKERD") == "1" {
+	if integration.IsTestDockerd() {
 		return
 	}
 
@@ -1189,8 +1272,9 @@ func (tc verifyContents) Run(t *testing.T, sb integration.Sandbox) {
 					{
 						Type: ExporterImage,
 						Attrs: map[string]string{
-							"name": imageTarget,
-							"push": "true",
+							"name":                                   imageTarget,
+							"push":                                   "true",
+							"unsafe-internal-store-allow-incomplete": "true",
 						},
 					},
 				},
@@ -1233,7 +1317,6 @@ func (tc verifyBlobReuse) Name() string {
 }
 
 func (tc verifyBlobReuse) Run(t *testing.T, sb integration.Sandbox) {
-	skipDockerd(t, sb)
 	requiresLinux(t)
 
 	cdAddress := sb.ContainerdAddress()

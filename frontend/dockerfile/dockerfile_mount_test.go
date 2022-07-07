@@ -1,10 +1,8 @@
 package dockerfile
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 
 	"github.com/containerd/continuity/fs/fstest"
@@ -26,12 +24,11 @@ var mountTests = integration.TestFuncs(
 	testMountFromError,
 	testMountInvalid,
 	testMountTmpfsSize,
+	testCacheMountUser,
 )
 
 func init() {
 	allTests = append(allTests, mountTests...)
-
-	fileOpTests = append(fileOpTests, integration.TestFuncs(testCacheMountUser)...)
 }
 
 func testMountContext(t *testing.T, sb integration.Sandbox) {
@@ -187,7 +184,7 @@ COPY --from=second /unique /unique
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -205,7 +202,7 @@ COPY --from=second /unique /unique
 	}, nil)
 	require.NoError(t, err)
 
-	dt1, err := ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	dt1, err := os.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
 
 	// repeat with changed file that should be still cached by content
@@ -216,7 +213,7 @@ COPY --from=second /unique /unique
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	destDir, err = ioutil.TempDir("", "buildkit")
+	destDir, err = os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -234,14 +231,13 @@ COPY --from=second /unique /unique
 	}, nil)
 	require.NoError(t, err)
 
-	dt2, err := ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	dt2, err := os.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
 	require.Equal(t, dt1, dt2)
 }
 
 func testCacheMountUser(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
-	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM busybox
@@ -259,9 +255,6 @@ RUN --mount=type=cache,target=/mycache,uid=1001,gid=1002,mode=0751 [ "$(stat -c 
 	defer c.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -474,7 +467,7 @@ COPY --from=base /tmpfssize /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -492,7 +485,7 @@ COPY --from=base /tmpfssize /
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "tmpfssize"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "tmpfssize"))
 	require.NoError(t, err)
 	require.Contains(t, string(dt), `size=131072k`)
 }

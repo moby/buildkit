@@ -2,7 +2,6 @@ package http
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -36,7 +35,7 @@ func TestHTTPSource(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -159,7 +158,7 @@ func TestHTTPDefaultName(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -209,7 +208,7 @@ func TestHTTPInvalidURL(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -237,7 +236,7 @@ func TestHTTPChecksum(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -328,7 +327,7 @@ func readFile(ctx context.Context, ref cache.ImmutableRef, fp string) ([]byte, e
 
 	defer lm.Unmount()
 
-	dt, err := ioutil.ReadFile(filepath.Join(dir, fp))
+	dt, err := os.ReadFile(filepath.Join(dir, fp))
 	if err != nil {
 		return nil, err
 	}
@@ -373,6 +372,7 @@ func newHTTPSource(tmpdir string) (source.Source, error) {
 		Applier:        applier,
 		Differ:         differ,
 		GarbageCollect: mdb.GarbageCollect,
+		MountPoolRoot:  filepath.Join(tmpdir, "cachemounts"),
 	})
 	if err != nil {
 		return nil, err

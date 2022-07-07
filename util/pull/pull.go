@@ -17,7 +17,6 @@ import (
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/progress/logs"
 	"github.com/moby/buildkit/util/pull/pullprogress"
-	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/util/resolver/limited"
 	"github.com/moby/buildkit/util/resolver/retryhandler"
 	digest "github.com/opencontainers/go-digest"
@@ -25,9 +24,11 @@ import (
 	"github.com/pkg/errors"
 )
 
+type SessionResolver func(g session.Group) remotes.Resolver
+
 type Puller struct {
 	ContentStore content.Store
-	Resolver     *resolver.Resolver
+	Resolver     remotes.Resolver
 	Src          reference.Spec
 	Platform     ocispecs.Platform
 
@@ -105,7 +106,7 @@ func (p *Puller) tryLocalResolve(ctx context.Context) error {
 	return nil
 }
 
-func (p *Puller) PullManifests(ctx context.Context) (*PulledManifests, error) {
+func (p *Puller) PullManifests(ctx context.Context, getResolver SessionResolver) (*PulledManifests, error) {
 	err := p.resolve(ctx, p.Resolver)
 	if err != nil {
 		return nil, err
@@ -196,7 +197,7 @@ func (p *Puller) PullManifests(ctx context.Context) (*PulledManifests, error) {
 		Nonlayers:        p.nonlayers,
 		Descriptors:      p.layers,
 		Provider: func(g session.Group) content.Provider {
-			return &provider{puller: p, resolver: p.Resolver.WithSession(g)}
+			return &provider{puller: p, resolver: getResolver(g)}
 		},
 	}, nil
 }
@@ -225,7 +226,17 @@ func (p *provider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (cont
 func filterLayerBlobs(metadata map[digest.Digest]ocispecs.Descriptor, mu sync.Locker) images.HandlerFunc {
 	return func(ctx context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
 		switch desc.MediaType {
-		case ocispecs.MediaTypeImageLayer, images.MediaTypeDockerSchema2Layer, ocispecs.MediaTypeImageLayerGzip, images.MediaTypeDockerSchema2LayerGzip, images.MediaTypeDockerSchema2LayerForeign, images.MediaTypeDockerSchema2LayerForeignGzip:
+		case
+			ocispecs.MediaTypeImageLayer,
+			ocispecs.MediaTypeImageLayerNonDistributable,
+			images.MediaTypeDockerSchema2Layer,
+			images.MediaTypeDockerSchema2LayerForeign,
+			ocispecs.MediaTypeImageLayerGzip,
+			images.MediaTypeDockerSchema2LayerGzip,
+			ocispecs.MediaTypeImageLayerNonDistributableGzip,
+			images.MediaTypeDockerSchema2LayerForeignGzip,
+			ocispecs.MediaTypeImageLayerZstd,
+			ocispecs.MediaTypeImageLayerNonDistributableZstd:
 			return nil, images.ErrSkipDesc
 		default:
 			if metadata != nil {

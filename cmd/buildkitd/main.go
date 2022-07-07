@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"os/user"
@@ -15,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/pkg/seed"
 	"github.com/containerd/containerd/pkg/userns"
 	"github.com/containerd/containerd/platforms"
@@ -30,6 +28,7 @@ import (
 	inlineremotecache "github.com/moby/buildkit/cache/remotecache/inline"
 	localremotecache "github.com/moby/buildkit/cache/remotecache/local"
 	registryremotecache "github.com/moby/buildkit/cache/remotecache/registry"
+	s3remotecache "github.com/moby/buildkit/cache/remotecache/s3"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/control"
@@ -77,9 +76,6 @@ func init() {
 	if reexec.Init() {
 		os.Exit(0)
 	}
-
-	// overwrites containerd/log.G
-	log.G = bklog.GetLogger
 }
 
 var propagators = propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
@@ -396,7 +392,7 @@ func defaultConf() (config.Config, error) {
 		if !errors.As(err, &pe) {
 			return config.Config{}, err
 		}
-		return cfg, nil
+		logrus.Warnf("failed to load default config: %v", err)
 	}
 	setDefaultConfig(&cfg)
 
@@ -428,10 +424,10 @@ func setDefaultConfig(cfg *config.Config) {
 	}
 
 	if cfg.Workers.OCI.Platforms == nil {
-		cfg.Workers.OCI.Platforms = archutil.SupportedPlatforms(false)
+		cfg.Workers.OCI.Platforms = formatPlatforms(archutil.SupportedPlatforms(false))
 	}
 	if cfg.Workers.Containerd.Platforms == nil {
-		cfg.Workers.Containerd.Platforms = archutil.SupportedPlatforms(false)
+		cfg.Workers.Containerd.Platforms = formatPlatforms(archutil.SupportedPlatforms(false))
 	}
 
 	cfg.Workers.OCI.NetworkConfig = setDefaultNetworkConfig(cfg.Workers.OCI.NetworkConfig)
@@ -462,15 +458,7 @@ func applyMainFlags(c *cli.Context, cfg *config.Config) error {
 	}
 
 	if c.IsSet("addr") || len(cfg.GRPC.Address) == 0 {
-		addrs := c.StringSlice("addr")
-		if len(addrs) > 1 {
-			addrs = addrs[1:] // https://github.com/urfave/cli/issues/160
-		}
-
-		cfg.GRPC.Address = make([]string, 0, len(addrs))
-		for _, v := range addrs {
-			cfg.GRPC.Address = append(cfg.GRPC.Address, v)
-		}
+		cfg.GRPC.Address = c.StringSlice("addr")
 	}
 
 	if c.IsSet("allow-insecure-entitlement") {
@@ -598,7 +586,10 @@ func unaryInterceptor(globalCtx context.Context, tp trace.TracerProvider) grpc.U
 
 		resp, err = withTrace(ctx, req, info, handler)
 		if err != nil {
-			logrus.Errorf("%s returned error: %+v", info.FullMethod, stack.Formatter(err))
+			logrus.Errorf("%s returned error: %v", info.FullMethod, err)
+			if logrus.GetLevel() >= logrus.DebugLevel {
+				fmt.Fprintf(os.Stderr, "%+v", stack.Formatter(grpcerrors.FromGRPC(err)))
+			}
 		}
 		return
 	}
@@ -627,7 +618,7 @@ func serverCredentials(cfg config.TLSConfig) (*tls.Config, error) {
 	}
 	if caFile != "" {
 		certPool := x509.NewCertPool()
-		ca, err := ioutil.ReadFile(caFile)
+		ca, err := os.ReadFile(caFile)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not read ca certificate")
 		}
@@ -689,13 +680,14 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 		"local":    localremotecache.ResolveCacheExporterFunc(sessionManager),
 		"inline":   inlineremotecache.ResolveCacheExporterFunc(),
 		"gha":      gha.ResolveCacheExporterFunc(),
+		"s3":       s3remotecache.ResolveCacheExporterFunc(),
 	}
 	remoteCacheImporterFuncs := map[string]remotecache.ResolveCacheImporterFunc{
 		"registry": registryremotecache.ResolveCacheImporterFunc(sessionManager, w.ContentStore(), resolverFn),
 		"local":    localremotecache.ResolveCacheImporterFunc(sessionManager),
 		"gha":      gha.ResolveCacheImporterFunc(),
+		"s3":       s3remotecache.ResolveCacheImporterFunc(),
 	}
-
 	return control.NewController(control.Opt{
 		SessionManager:            sessionManager,
 		WorkerController:          wc,
@@ -721,8 +713,8 @@ func newWorkerController(c *cli.Context, wiOpt workerInitializerOpt) (*worker.Co
 			return nil, err
 		}
 		for _, w := range ws {
-			p := formatPlatforms(w.Platforms(false))
-			logrus.Infof("found worker %q, labels=%v, platforms=%v", w.ID(), w.Labels(), p)
+			p := w.Platforms(false)
+			logrus.Infof("found worker %q, labels=%v, platforms=%v", w.ID(), w.Labels(), formatPlatforms(p))
 			archutil.WarnIfUnsupported(p)
 			if err = wc.Add(w); err != nil {
 				return nil, err
@@ -791,6 +783,14 @@ func getGCPolicy(cfg config.GCConfig, root string) []client.PruneInfo {
 		})
 	}
 	return out
+}
+
+func getBuildkitVersion() client.BuildkitVersion {
+	return client.BuildkitVersion{
+		Package:  version.Package,
+		Version:  version.Version,
+		Revision: version.Revision,
+	}
 }
 
 func getDNSConfig(cfg *config.DNSConfig) *oci.DNSConfig {

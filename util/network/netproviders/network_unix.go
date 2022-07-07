@@ -12,7 +12,7 @@ func getHostProvider() (network.Provider, bool) {
 	return network.NewHostProvider(), true
 }
 
-func getFallback() network.Provider {
+func getFallback() (network.Provider, string) {
 	logrus.Warn("using host network as the default")
-	return network.NewHostProvider()
+	return network.NewHostProvider(), "host"
 }

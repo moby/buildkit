@@ -2,6 +2,7 @@ package cache
 
 import (
 	"archive/tar"
+	"compress/gzip"
 	"context"
 	"fmt"
 	"io"
@@ -21,7 +22,7 @@ var eStargzAnnotations = []string{estargz.TOCJSONDigestAnnotation, estargz.Store
 
 // compressEStargz writes the passed blobs stream as an eStargz-compressed blob.
 // finalize function finalizes the written blob metadata and returns all eStargz annotations.
-func compressEStargz() (compressorFunc compressor, finalize func(context.Context, content.Store) (map[string]string, error)) {
+func compressEStargz(comp compression.Config) (compressorFunc compressor, finalize func(context.Context, content.Store) (map[string]string, error)) {
 	var cInfo *compressionInfo
 	var writeErr error
 	var mu sync.Mutex
@@ -43,7 +44,11 @@ func compressEStargz() (compressorFunc compressor, finalize func(context.Context
 
 				blobInfoW, bInfoCh := calculateBlobInfo()
 				defer blobInfoW.Close()
-				w := estargz.NewWriter(io.MultiWriter(dest, blobInfoW))
+				level := gzip.DefaultCompression
+				if comp.Level != nil {
+					level = *comp.Level
+				}
+				w := estargz.NewWriterLevel(io.MultiWriter(dest, blobInfoW), level)
 
 				// Using lossless API here to make sure that decompressEStargz provides the exact
 				// same tar as the original.

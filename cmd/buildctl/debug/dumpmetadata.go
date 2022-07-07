@@ -2,7 +2,6 @@ package debug
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
@@ -41,7 +40,7 @@ var DumpMetadataCommand = cli.Command{
 }
 
 func findMetadataDBFiles(root string) ([]string, error) {
-	dirs, err := ioutil.ReadDir(root)
+	dirs, err := os.ReadDir(root)
 	if err != nil {
 		return nil, err
 	}

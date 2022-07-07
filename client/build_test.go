@@ -3,17 +3,20 @@ package client
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	gatewayapi "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
@@ -22,6 +25,7 @@ import (
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
+	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/entitlements"
 	utilsystem "github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/util/testutil/echoserver"
@@ -52,7 +56,9 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewaySlowCacheExecError,
 		testClientGatewayExecFileActionError,
 		testClientGatewayContainerExtraHosts,
+		testClientGatewayContainerSignal,
 		testWarnings,
+		testClientGatewayFrontendAttrs,
 	), integration.WithMirroredImages(integration.OfficialImages("busybox:latest")))
 
 	integration.Run(t, integration.TestFuncs(
@@ -127,7 +133,7 @@ func testClientGatewaySolve(t *testing.T, sb integration.Sandbox) {
 		return r, nil
 	}
 
-	tmpdir, err := ioutil.TempDir("", "buildkit")
+	tmpdir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -146,7 +152,7 @@ func testClientGatewaySolve(t *testing.T, sb integration.Sandbox) {
 	}, product, b, nil)
 	require.NoError(t, err)
 
-	read, err := ioutil.ReadFile(filepath.Join(tmpdir, "foo"))
+	read, err := os.ReadFile(filepath.Join(tmpdir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, testStr, string(read))
 
@@ -469,7 +475,7 @@ func testClientGatewayContainerExecPipe(t *testing.T, sb integration.Sandbox) {
 			Args:   []string{"cat"},
 			Cwd:    "/",
 			Tty:    false,
-			Stdin:  ioutil.NopCloser(stdin2),
+			Stdin:  io.NopCloser(stdin2),
 			Stdout: stdout2,
 		})
 
@@ -681,11 +687,11 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	tmpdir, err := ioutil.TempDir("", "buildkit-buildctl")
+	tmpdir, err := os.MkdirTemp("", "buildkit-buildctl")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
-	err = ioutil.WriteFile(filepath.Join(tmpdir, "local-file"), []byte("local"), 0644)
+	err = os.WriteFile(filepath.Join(tmpdir, "local-file"), []byte("local"), 0644)
 	require.NoError(t, err)
 
 	a := agent.NewKeyring()
@@ -1643,7 +1649,7 @@ func testClientGatewayContainerSecurityMode(t *testing.T, sb integration.Sandbox
 		}
 		allowedEntitlements = []entitlements.Entitlement{}
 	} else {
-		skipDockerd(t, sb)
+		integration.SkipIfDockerd(t, sb)
 		assertCaps = func(caps uint64) {
 			/*
 				$ capsh --decode=0000003fffffffff
@@ -1890,6 +1896,162 @@ func testClientGatewayContainerHostNetworking(t *testing.T, sb integration.Sandb
 	}
 	_, err = c.Build(ctx, solveOpts, product, b, nil)
 	require.NoError(t, err)
+
+	checkAllReleasable(t, c, sb, true)
+}
+
+// testClientGatewayContainerSignal is testing that we can send a signal
+func testClientGatewayContainerSignal(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	ctx := sb.Context()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	product := "buildkit_test"
+
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		ctx, timeout := context.WithTimeout(ctx, 10*time.Second)
+		defer timeout()
+
+		st := llb.Image("busybox:latest")
+
+		def, err := st.Marshal(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to marshal state")
+		}
+
+		r, err := c.Solve(ctx, client.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to solve")
+		}
+
+		ctr1, err := c.NewContainer(ctx, client.NewContainerRequest{
+			Mounts: []client.Mount{{
+				Dest:      "/",
+				MountType: pb.MountType_BIND,
+				Ref:       r.Ref,
+			}},
+		})
+		require.NoError(t, err)
+		defer ctr1.Release(ctx)
+
+		pid1, err := ctr1.Start(ctx, client.StartRequest{
+			Args: []string{"sh", "-c", `trap 'kill $(jobs -p); exit 99' HUP; sleep 10 & wait`},
+		})
+		require.NoError(t, err)
+
+		// allow for the shell script to setup the trap before we signal it
+		time.Sleep(time.Second)
+
+		err = pid1.Signal(ctx, syscall.SIGHUP)
+		require.NoError(t, err)
+
+		err = pid1.Wait()
+		var exitError *gatewayapi.ExitError
+		require.ErrorAs(t, err, &exitError)
+		require.Equal(t, uint32(99), exitError.ExitCode)
+
+		// Now try again to signal an exec process
+
+		ctr2, err := c.NewContainer(ctx, client.NewContainerRequest{
+			Mounts: []client.Mount{{
+				Dest:      "/",
+				MountType: pb.MountType_BIND,
+				Ref:       r.Ref,
+			}},
+		})
+		require.NoError(t, err)
+		defer ctr2.Release(ctx)
+
+		pid1, err = ctr2.Start(ctx, client.StartRequest{
+			Args: []string{"sleep", "10"},
+		})
+		require.NoError(t, err)
+
+		pid2, err := ctr2.Start(ctx, client.StartRequest{
+			Args: []string{"sh", "-c", `trap 'kill $(jobs -p); exit 111' INT; sleep 10 & wait`},
+		})
+		require.NoError(t, err)
+
+		// allow for the shell script to setup the trap before we signal it
+		time.Sleep(time.Second)
+
+		err = pid2.Signal(ctx, syscall.SIGINT)
+		require.NoError(t, err)
+
+		err = pid2.Wait()
+		require.ErrorAs(t, err, &exitError)
+		require.Equal(t, uint32(111), exitError.ExitCode)
+
+		pid1.Signal(ctx, syscall.SIGKILL)
+		pid1.Wait()
+		return &client.Result{}, err
+	}
+
+	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
+	require.Error(t, err)
+
+	checkAllReleasable(t, c, sb, true)
+}
+
+// moby/buildkit#2476
+func testClientGatewayFrontendAttrs(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	fooattrval := "bar"
+	bazattrval := "fuu"
+
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		st := llb.Image("busybox:latest").Run(
+			llb.ReadonlyRootFS(),
+			llb.Args([]string{"/bin/sh", "-c", `echo hello`}),
+		)
+		def, err := st.Marshal(sb.Context())
+		if err != nil {
+			return nil, err
+		}
+		res, err := c.Solve(ctx, client.SolveRequest{
+			Definition: def.ToPB(),
+			FrontendOpt: map[string]string{
+				"build-arg:foo": fooattrval,
+			},
+		})
+		require.NoError(t, err)
+		require.Contains(t, res.Metadata, exptypes.ExporterBuildInfo)
+
+		var bi binfotypes.BuildInfo
+		require.NoError(t, json.Unmarshal(res.Metadata[exptypes.ExporterBuildInfo], &bi))
+		require.Contains(t, bi.Attrs, "build-arg:foo")
+		bi.Attrs["build-arg:baz"] = &bazattrval
+
+		bmbi, err := json.Marshal(bi)
+		require.NoError(t, err)
+
+		res.AddMeta(exptypes.ExporterBuildInfo, bmbi)
+		return res, err
+	}
+
+	res, err := c.Build(sb.Context(), SolveOpt{}, "", b, nil)
+	require.NoError(t, err)
+
+	require.Contains(t, res.ExporterResponse, exptypes.ExporterBuildInfo)
+	decbi, err := base64.StdEncoding.DecodeString(res.ExporterResponse[exptypes.ExporterBuildInfo])
+	require.NoError(t, err)
+
+	var bi binfotypes.BuildInfo
+	require.NoError(t, json.Unmarshal(decbi, &bi))
+
+	require.Contains(t, bi.Attrs, "build-arg:foo")
+	require.Equal(t, &fooattrval, bi.Attrs["build-arg:foo"])
+	require.Contains(t, bi.Attrs, "build-arg:baz")
+	require.Equal(t, &bazattrval, bi.Attrs["build-arg:baz"])
 
 	checkAllReleasable(t, c, sb, true)
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/docker/distribution/reference"
@@ -126,7 +127,7 @@ func Push(ctx context.Context, sm *session.Manager, sid string, provider content
 	}
 
 	layersDone := oneOffProgress(ctx, "pushing layers")
-	err = images.Dispatch(ctx, images.Handlers(handlers...), nil, ocispecs.Descriptor{
+	err = images.Dispatch(ctx, skipNonDistributableBlobs(images.Handlers(handlers...)), nil, ocispecs.Descriptor{
 		Digest:    dgst,
 		Size:      ra.Size(),
 		MediaType: mtype,
@@ -142,6 +143,18 @@ func Push(ctx context.Context, sm *session.Manager, sid string, provider content
 		}
 	}
 	return mfstDone(nil)
+}
+
+// TODO: the containerd function for this is filtering too much, that needs to be fixed.
+// For now we just carry this.
+func skipNonDistributableBlobs(f images.HandlerFunc) images.HandlerFunc {
+	return func(ctx context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
+		if images.IsNonDistributable(desc.MediaType) {
+			log.G(ctx).WithField("digest", desc.Digest).WithField("mediatype", desc.MediaType).Debug("Skipping non-distributable blob")
+			return nil, images.ErrSkipDesc
+		}
+		return f(ctx, desc)
+	}
 }
 
 func annotateDistributionSourceHandler(manager content.Manager, annotations map[digest.Digest]map[string]string, f images.HandlerFunc) func(ctx context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {

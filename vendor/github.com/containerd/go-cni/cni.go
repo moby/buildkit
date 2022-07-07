@@ -19,19 +19,26 @@ package cni
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 
 	cnilibrary "github.com/containernetworking/cni/libcni"
+	"github.com/containernetworking/cni/pkg/invoke"
 	"github.com/containernetworking/cni/pkg/types"
 	types100 "github.com/containernetworking/cni/pkg/types/100"
+	"github.com/containernetworking/cni/pkg/version"
 )
 
 type CNI interface {
 	// Setup setup the network for the namespace
 	Setup(ctx context.Context, id string, path string, opts ...NamespaceOpts) (*Result, error)
+	// SetupSerially sets up each of the network interfaces for the namespace in serial
+	SetupSerially(ctx context.Context, id string, path string, opts ...NamespaceOpts) (*Result, error)
 	// Remove tears down the network of the namespace.
 	Remove(ctx context.Context, id string, path string, opts ...NamespaceOpts) error
+	// Check checks if the network is still in desired state
+	Check(ctx context.Context, id string, path string, opts ...NamespaceOpts) error
 	// Load loads the cni network config
 	Load(opts ...Opt) error
 	// Status checks the status of the cni initialization
@@ -84,9 +91,15 @@ func defaultCNIConfig() *libcni {
 			pluginMaxConfNum: DefaultMaxConfNum,
 			prefix:           DefaultPrefix,
 		},
-		cniConfig: &cnilibrary.CNIConfig{
-			Path: []string{DefaultCNIDir},
-		},
+		cniConfig: cnilibrary.NewCNIConfig(
+			[]string{
+				DefaultCNIDir,
+			},
+			&invoke.DefaultExec{
+				RawExec:       &invoke.RawExec{Stderr: os.Stderr},
+				PluginDecoder: version.PluginDecoder{},
+			},
+		),
 		networkCount: 1,
 	}
 }
@@ -154,6 +167,34 @@ func (c *libcni) Setup(ctx context.Context, id string, path string, opts ...Name
 	return c.createResult(result)
 }
 
+// SetupSerially setups the network in the namespace and returns a Result
+func (c *libcni) SetupSerially(ctx context.Context, id string, path string, opts ...NamespaceOpts) (*Result, error) {
+	if err := c.Status(); err != nil {
+		return nil, err
+	}
+	ns, err := newNamespace(id, path, opts...)
+	if err != nil {
+		return nil, err
+	}
+	result, err := c.attachNetworksSerially(ctx, ns)
+	if err != nil {
+		return nil, err
+	}
+	return c.createResult(result)
+}
+
+func (c *libcni) attachNetworksSerially(ctx context.Context, ns *Namespace) ([]*types100.Result, error) {
+	var results []*types100.Result
+	for _, network := range c.Networks() {
+		r, err := network.Attach(ctx, ns)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, r)
+	}
+	return results, nil
+}
+
 type asynchAttachResult struct {
 	index int
 	res   *types100.Result
@@ -214,6 +255,25 @@ func (c *libcni) Remove(ctx context.Context, id string, path string, opts ...Nam
 			return err
 		}
 	}
+	return nil
+}
+
+// Check checks if the network is still in desired state
+func (c *libcni) Check(ctx context.Context, id string, path string, opts ...NamespaceOpts) error {
+	if err := c.Status(); err != nil {
+		return err
+	}
+	ns, err := newNamespace(id, path, opts...)
+	if err != nil {
+		return err
+	}
+	for _, network := range c.Networks() {
+		err := network.Check(ctx, ns)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

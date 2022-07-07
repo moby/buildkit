@@ -2,7 +2,6 @@ package oci
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -27,13 +26,13 @@ nameserver 8.8.4.4
 nameserver 2001:4860:4860::8888
 nameserver 2001:4860:4860::8844`
 
-	dir, err := ioutil.TempDir("", "buildkit-test")
+	dir, err := os.MkdirTemp("", "buildkit-test")
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 	ctx := context.Background()
 	p, err := GetResolvConf(ctx, dir, nil, nil)
 	require.NoError(t, err)
-	b, err := ioutil.ReadFile(p)
+	b, err := os.ReadFile(p)
 	require.NoError(t, err)
 	require.Equal(t, string(b), defaultResolvConf)
 }

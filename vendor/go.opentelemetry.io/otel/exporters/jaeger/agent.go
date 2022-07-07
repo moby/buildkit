@@ -28,8 +28,13 @@ import (
 	"go.opentelemetry.io/otel/exporters/jaeger/internal/third_party/thrift/lib/go/thrift"
 )
 
-// udpPacketMaxLength is the max size of UDP packet we want to send, synced with jaeger-agent
-const udpPacketMaxLength = 65000
+const (
+	// udpPacketMaxLength is the max size of UDP packet we want to send, synced with jaeger-agent
+	udpPacketMaxLength = 65000
+	// emitBatchOverhead is the additional overhead bytes used for enveloping the datagram,
+	// synced with jaeger-agent https://github.com/jaegertracing/jaeger-client-go/blob/master/transport_udp.go#L37
+	emitBatchOverhead = 70
+)
 
 // agentClientUDP is a UDP client to Jaeger agent that implements gen.Agent interface.
 type agentClientUDP struct {
@@ -66,7 +71,7 @@ func newAgentClientUDP(params agentClientUDPParams) (*agentClientUDP, error) {
 		return nil, err
 	}
 
-	if params.MaxPacketSize <= 0 {
+	if params.MaxPacketSize <= 0 || params.MaxPacketSize > udpPacketMaxLength {
 		params.MaxPacketSize = udpPacketMaxLength
 	}
 
@@ -121,6 +126,11 @@ func (a *agentClientUDP) EmitBatch(ctx context.Context, batch *gen.Batch) error 
 		// drop the batch if serialization of process fails.
 		return err
 	}
+
+	maxPacketSize := a.maxPacketSize
+	if maxPacketSize > udpPacketMaxLength-emitBatchOverhead {
+		maxPacketSize = udpPacketMaxLength - emitBatchOverhead
+	}
 	totalSize := processSize
 	var spans []*gen.Span
 	for _, span := range batch.Spans {
@@ -129,12 +139,12 @@ func (a *agentClientUDP) EmitBatch(ctx context.Context, batch *gen.Batch) error 
 			errs = append(errs, fmt.Errorf("thrift serialization failed: %v", span))
 			continue
 		}
-		if spanSize+processSize >= a.maxPacketSize {
+		if spanSize+processSize >= maxPacketSize {
 			// drop the span that exceeds the limit.
 			errs = append(errs, fmt.Errorf("span too large to send: %v", span))
 			continue
 		}
-		if totalSize+spanSize >= a.maxPacketSize {
+		if totalSize+spanSize >= maxPacketSize {
 			if err := a.flush(ctx, &gen.Batch{
 				Process: batch.Process,
 				Spans:   spans,

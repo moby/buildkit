@@ -3,6 +3,6 @@
 
 package archutil
 
-func i386Supported() error {
-	return check(Binary386)
+func i386Supported() (string, error) {
+	return check("386", Binary386)
 }

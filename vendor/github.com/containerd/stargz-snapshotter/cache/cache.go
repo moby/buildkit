@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
@@ -28,7 +27,6 @@ import (
 	"github.com/containerd/stargz-snapshotter/util/cacheutil"
 	"github.com/containerd/stargz-snapshotter/util/namedmutex"
 	"github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -223,7 +221,7 @@ func (dc *directoryCache) Get(key string, opts ...Option) (Reader, error) {
 	//       or simply report the cache miss?
 	file, err := os.Open(dc.cachePath(key))
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to open blob file for %q", key)
+		return nil, fmt.Errorf("failed to open blob file for %q: %w", key, err)
 	}
 
 	// If "direct" option is specified, do not cache the file on memory.
@@ -280,7 +278,7 @@ func (dc *directoryCache) Add(key string, opts ...Option) (Writer, error) {
 					allErr = multierror.Append(allErr, err)
 				}
 				return multierror.Append(allErr,
-					errors.Wrapf(err, "failed to create cache directory %q", c))
+					fmt.Errorf("failed to create cache directory %q: %w", c, err))
 			}
 			return os.Rename(wip.Name(), c)
 		},
@@ -366,7 +364,7 @@ func (dc *directoryCache) cachePath(key string) string {
 }
 
 func (dc *directoryCache) wipFile(key string) (*os.File, error) {
-	return ioutil.TempFile(dc.wipDirectory, key+"-*")
+	return os.CreateTemp(dc.wipDirectory, key+"-*")
 }
 
 func NewMemoryCache() BlobCache {

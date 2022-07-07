@@ -3,6 +3,7 @@ package resolver
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -14,6 +15,7 @@ import (
 	distreference "github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/source"
+	"github.com/moby/buildkit/version"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
@@ -104,8 +106,11 @@ func newResolver(hosts docker.RegistryHosts, handler *authHandlerNS, sm *session
 		g:       g,
 		handler: handler,
 	}
+	headers := http.Header{}
+	headers.Set("User-Agent", version.UserAgent())
 	r.Resolver = docker.NewResolver(docker.ResolverOptions{
-		Hosts: r.HostsFunc,
+		Hosts:   r.HostsFunc,
+		Headers: headers,
 	})
 	return r
 }
@@ -166,6 +171,9 @@ func (r *Resolver) WithSession(s session.Group) *Resolver {
 	r2 := *r
 	r2.auth = nil
 	r2.g = s
+	r2.Resolver = docker.NewResolver(docker.ResolverOptions{
+		Hosts: r2.HostsFunc, // this refers to the newly-configured session so we need to recreate the resolver.
+	})
 	return &r2
 }
 

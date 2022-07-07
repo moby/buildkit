@@ -7,6 +7,7 @@ import (
 	_ "github.com/moby/buildkit/client/connhelper/dockercontainer"
 	_ "github.com/moby/buildkit/client/connhelper/kubepod"
 	_ "github.com/moby/buildkit/client/connhelper/podmancontainer"
+	_ "github.com/moby/buildkit/client/connhelper/ssh"
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/util/apicaps"

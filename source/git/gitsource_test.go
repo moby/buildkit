@@ -2,7 +2,6 @@ package git
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -52,13 +51,13 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
 	gs := setupGitSource(t, tmpdir)
 
-	repodir, err := ioutil.TempDir("", "buildkit-gitsource")
+	repodir, err := os.MkdirTemp("", "buildkit-gitsource")
 	require.NoError(t, err)
 	defer os.RemoveAll(repodir)
 
@@ -94,7 +93,7 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	defer lm.Unmount()
 
-	dt, err := ioutil.ReadFile(filepath.Join(dir, "def"))
+	dt, err := os.ReadFile(filepath.Join(dir, "def"))
 	require.NoError(t, err)
 
 	require.Equal(t, "bar\n", string(dt))
@@ -145,12 +144,12 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	defer lm.Unmount()
 
-	dt, err = ioutil.ReadFile(filepath.Join(dir, "ghi"))
+	dt, err = os.ReadFile(filepath.Join(dir, "ghi"))
 	require.NoError(t, err)
 
 	require.Equal(t, "baz\n", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(dir, "sub/subfile"))
+	dt, err = os.ReadFile(filepath.Join(dir, "sub/subfile"))
 	require.NoError(t, err)
 
 	require.Equal(t, "subcontents\n", string(dt))
@@ -171,13 +170,13 @@ func testFetchBySHA(t *testing.T, keepGitDir bool) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
 	gs := setupGitSource(t, tmpdir)
 
-	repodir, err := ioutil.TempDir("", "buildkit-gitsource")
+	repodir, err := os.MkdirTemp("", "buildkit-gitsource")
 	require.NoError(t, err)
 	defer os.RemoveAll(repodir)
 
@@ -222,12 +221,12 @@ func testFetchBySHA(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	defer lm.Unmount()
 
-	dt, err := ioutil.ReadFile(filepath.Join(dir, "ghi"))
+	dt, err := os.ReadFile(filepath.Join(dir, "ghi"))
 	require.NoError(t, err)
 
 	require.Equal(t, "baz\n", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(dir, "sub/subfile"))
+	dt, err = os.ReadFile(filepath.Join(dir, "sub/subfile"))
 	require.NoError(t, err)
 
 	require.Equal(t, "subcontents\n", string(dt))
@@ -257,13 +256,13 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
 	gs := setupGitSource(t, tmpdir)
 
-	repodir, err := ioutil.TempDir("", "buildkit-gitsource")
+	repodir, err := os.MkdirTemp("", "buildkit-gitsource")
 	require.NoError(t, err)
 	defer os.RemoveAll(repodir)
 
@@ -299,11 +298,11 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 	require.NoError(t, err)
 	defer lm.Unmount()
 
-	dt, err := ioutil.ReadFile(filepath.Join(dir, "def"))
+	dt, err := os.ReadFile(filepath.Join(dir, "def"))
 	require.NoError(t, err)
 	require.Equal(t, "bar\n", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(dir, "foo13"))
+	dt, err = os.ReadFile(filepath.Join(dir, "foo13"))
 	if hasFoo13File {
 		require.Nil(t, err)
 		require.Equal(t, "sbb\n", string(dt))
@@ -351,20 +350,20 @@ func testMultipleRepos(t *testing.T, keepGitDir bool) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
 	gs := setupGitSource(t, tmpdir)
 
-	repodir, err := ioutil.TempDir("", "buildkit-gitsource")
+	repodir, err := os.MkdirTemp("", "buildkit-gitsource")
 	require.NoError(t, err)
 	defer os.RemoveAll(repodir)
 
 	repodir, err = setupGitRepo(repodir)
 	require.NoError(t, err)
 
-	repodir2, err := ioutil.TempDir("", "buildkit-gitsource")
+	repodir2, err := os.MkdirTemp("", "buildkit-gitsource")
 	require.NoError(t, err)
 	defer os.RemoveAll(repodir2)
 
@@ -429,12 +428,12 @@ func testMultipleRepos(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	defer lm.Unmount()
 
-	dt, err := ioutil.ReadFile(filepath.Join(dir, "def"))
+	dt, err := os.ReadFile(filepath.Join(dir, "def"))
 	require.NoError(t, err)
 
 	require.Equal(t, "bar\n", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(dir2, "xyz"))
+	dt, err = os.ReadFile(filepath.Join(dir2, "xyz"))
 	require.NoError(t, err)
 
 	require.Equal(t, "xyz\n", string(dt))
@@ -448,7 +447,7 @@ func TestCredentialRedaction(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -480,13 +479,13 @@ func testSubdir(t *testing.T, keepGitDir bool) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
 	gs := setupGitSource(t, tmpdir)
 
-	repodir, err := ioutil.TempDir("", "buildkit-gitsource")
+	repodir, err := os.MkdirTemp("", "buildkit-gitsource")
 	require.NoError(t, err)
 	defer os.RemoveAll(repodir)
 
@@ -531,12 +530,12 @@ func testSubdir(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	defer lm.Unmount()
 
-	fis, err := ioutil.ReadDir(dir)
+	fis, err := os.ReadDir(dir)
 	require.NoError(t, err)
 
 	require.Equal(t, 1, len(fis))
 
-	dt, err := ioutil.ReadFile(filepath.Join(dir, "bar"))
+	dt, err := os.ReadFile(filepath.Join(dir, "bar"))
 	require.NoError(t, err)
 
 	require.Equal(t, "abc\n", string(dt))
@@ -571,6 +570,7 @@ func setupGitSource(t *testing.T, tmpdir string) source.Source {
 		Applier:        applier,
 		Differ:         differ,
 		GarbageCollect: mdb.GarbageCollect,
+		MountPoolRoot:  filepath.Join(tmpdir, "cachemounts"),
 	})
 	require.NoError(t, err)
 

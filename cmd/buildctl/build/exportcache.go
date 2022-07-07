@@ -39,37 +39,28 @@ func parseExportCacheCSV(s string) (client.CacheOptionsEntry, error) {
 	if _, ok := ex.Attrs["mode"]; !ok {
 		ex.Attrs["mode"] = "min"
 	}
+	if ex.Type == "gha" {
+		return loadGithubEnv(ex)
+	}
 	return ex, nil
 }
 
-// ParseExportCache parses --export-cache (and legacy --export-cache-opt)
-func ParseExportCache(exportCaches, legacyExportCacheOpts []string) ([]client.CacheOptionsEntry, error) {
+// ParseExportCache parses --export-cache
+func ParseExportCache(exportCaches []string) ([]client.CacheOptionsEntry, error) {
 	var exports []client.CacheOptionsEntry
-	if len(legacyExportCacheOpts) > 0 {
-		if len(exportCaches) != 1 {
-			return nil, errors.New("--export-cache-opt requires exactly single --export-cache")
-		}
-	}
 	for _, exportCache := range exportCaches {
 		legacy := !strings.Contains(exportCache, "type=")
 		if legacy {
-			logrus.Warnf("--export-cache <ref> --export-cache-opt <opt>=<optval> is deprecated. Please use --export-cache type=registry,ref=<ref>,<opt>=<optval>[,<opt>=<optval>] instead")
-			attrs, err := attrMap(legacyExportCacheOpts)
-			if err != nil {
-				return nil, err
-			}
-			if _, ok := attrs["mode"]; !ok {
-				attrs["mode"] = "min"
-			}
-			attrs["ref"] = exportCache
+			// Deprecated since BuildKit v0.4.0, but no plan to remove: https://github.com/moby/buildkit/pull/2783#issuecomment-1093449772
+			logrus.Warnf("--export-cache <ref> is deprecated. Please use --export-cache type=registry,ref=<ref>,<opt>=<optval>[,<opt>=<optval>] instead")
 			exports = append(exports, client.CacheOptionsEntry{
-				Type:  "registry",
-				Attrs: attrs,
+				Type: "registry",
+				Attrs: map[string]string{
+					"mode": "min",
+					"ref":  exportCache,
+				},
 			})
 		} else {
-			if len(legacyExportCacheOpts) > 0 {
-				return nil, errors.New("--export-cache-opt is not supported for the specified --export-cache. Please use --export-cache type=<type>,<opt>=<optval>[,<opt>=<optval>] instead")
-			}
 			ex, err := parseExportCacheCSV(exportCache)
 			if err != nil {
 				return nil, err

@@ -47,6 +47,7 @@ message ExecOp {
 	repeated Mount mounts = 2;
 	NetMode network = 3;
 	SecurityMode security = 4;
+	repeated SecretEnv secretenv = 5;
 }
 
 // Meta is a set of arguments for ExecOp.
@@ -84,6 +85,13 @@ enum NetMode {
 enum SecurityMode {
 	SANDBOX = 0;
 	INSECURE = 1; // privileged mode
+}
+
+// SecretEnv is an environment variable that is backed by a secret.
+message SecretEnv {
+	string ID = 1;
+	string name = 2;
+	bool optional = 3;
 }
 
 // Mount specifies how to mount an input Op as a filesystem.
@@ -150,7 +158,7 @@ message SecretOpt {
 	bool optional = 5;
 }
 
-// SSHOpt defines options describing secret mounts
+// SSHOpt defines options describing ssh mounts
 message SSHOpt {
 	// ID of exposed ssh rule. Used for quering the value.
 	string ID = 1;
@@ -200,6 +208,8 @@ message OpMetadata {
 	ExportCache export_cache = 4;
 
 	map<string, bool> caps = 5 [(gogoproto.castkey) = "github.com/moby/buildkit/util/apicaps.CapID", (gogoproto.nullable) = false];
+
+	ProgressGroup progress_group = 6;
 }
 
 // Source is a source mapping description for a file
@@ -240,6 +250,12 @@ message Position {
 
 message ExportCache {
 	bool Value = 1;
+}
+
+message ProgressGroup {
+	string id = 1;
+	string name = 2;
+	bool weak = 3;
 }
 
 message ProxyEnv {

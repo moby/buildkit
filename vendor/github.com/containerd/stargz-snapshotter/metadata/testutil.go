@@ -20,7 +20,6 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -521,7 +520,7 @@ func hasFile(name, content string, size int64) check {
 			t.Errorf("cannot open file %q: %v", name, err)
 			return
 		}
-		data, err := ioutil.ReadAll(io.NewSectionReader(sr, 0, attr.Size))
+		data, err := io.ReadAll(io.NewSectionReader(sr, 0, attr.Size))
 		if err != nil {
 			t.Errorf("cannot read file %q: %v", name, err)
 			return

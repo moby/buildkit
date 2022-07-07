@@ -64,7 +64,7 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -76,9 +76,11 @@ const (
 type Option func(*options)
 
 type options struct {
-	getSources      source.GetSources
-	resolveHandlers map[string]remote.Handler
-	metadataStore   metadata.Store
+	getSources        source.GetSources
+	resolveHandlers   map[string]remote.Handler
+	metadataStore     metadata.Store
+	metricsLogLevel   *logrus.Level
+	overlayOpaqueType layer.OverlayOpaqueType
 }
 
 func WithGetSources(s source.GetSources) Option {
@@ -99,6 +101,18 @@ func WithResolveHandler(name string, handler remote.Handler) Option {
 func WithMetadataStore(metadataStore metadata.Store) Option {
 	return func(opts *options) {
 		opts.metadataStore = metadataStore
+	}
+}
+
+func WithMetricsLogLevel(logLevel logrus.Level) Option {
+	return func(opts *options) {
+		opts.metricsLogLevel = &logLevel
+	}
+}
+
+func WithOverlayOpaqueType(overlayOpaqueType layer.OverlayOpaqueType) Option {
+	return func(opts *options) {
+		opts.overlayOpaqueType = overlayOpaqueType
 	}
 }
 
@@ -134,15 +148,19 @@ func NewFilesystem(root string, cfg config.Config, opts ...Option) (_ snapshot.F
 		})
 	}
 	tm := task.NewBackgroundTaskManager(maxConcurrency, 5*time.Second)
-	r, err := layer.NewResolver(root, tm, cfg, fsOpts.resolveHandlers, metadataStore)
+	r, err := layer.NewResolver(root, tm, cfg, fsOpts.resolveHandlers, metadataStore, fsOpts.overlayOpaqueType)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to setup resolver")
+		return nil, fmt.Errorf("failed to setup resolver: %w", err)
 	}
 
 	var ns *metrics.Namespace
 	if !cfg.NoPrometheus {
 		ns = metrics.NewNamespace("stargz", "fs", nil)
-		commonmetrics.Register() // Register common metrics. This will happen only once.
+		logLevel := logrus.DebugLevel
+		if fsOpts.metricsLogLevel != nil {
+			logLevel = *fsOpts.metricsLogLevel
+		}
+		commonmetrics.Register(logLevel) // Register common metrics. This will happen only once.
 	}
 	c := layermetrics.NewLayerMetrics(ns)
 	if ns != nil {
@@ -223,7 +241,7 @@ func (fs *filesystem) Mount(ctx context.Context, mountpoint string, labels map[s
 				fs.prefetch(ctx, l, defaultPrefetchSize, start)
 				return
 			}
-			rErr = errors.Wrapf(rErr, "failed to resolve layer %q from %q: %v", s.Target.Digest, s.Name, err)
+			rErr = fmt.Errorf("failed to resolve layer %q from %q: %v: %w", s.Target.Digest, s.Name, err, rErr)
 		}
 		errChan <- rErr
 	}()
@@ -254,7 +272,7 @@ func (fs *filesystem) Mount(ctx context.Context, mountpoint string, labels map[s
 	case l = <-resultChan:
 	case err := <-errChan:
 		log.G(ctx).WithError(err).Debug("failed to resolve layer")
-		return errors.Wrapf(err, "failed to resolve layer")
+		return fmt.Errorf("failed to resolve layer: %w", err)
 	case <-time.After(30 * time.Second):
 		log.G(ctx).Debug("failed to resolve layer (timeout)")
 		return fmt.Errorf("failed to resolve layer (timeout)")
@@ -275,11 +293,11 @@ func (fs *filesystem) Mount(ctx context.Context, mountpoint string, labels map[s
 		dgst, err := digest.Parse(tocDigest)
 		if err != nil {
 			log.G(ctx).WithError(err).Debugf("failed to parse passed TOC digest %q", dgst)
-			return errors.Wrapf(err, "invalid TOC digest: %v", tocDigest)
+			return fmt.Errorf("invalid TOC digest: %v: %w", tocDigest, err)
 		}
 		if err := l.Verify(dgst); err != nil {
 			log.G(ctx).WithError(err).Debugf("invalid layer")
-			return errors.Wrapf(err, "invalid stargz layer")
+			return fmt.Errorf("invalid stargz layer: %w", err)
 		}
 		log.G(ctx).Debugf("verified")
 	} else if _, ok := labels[config.TargetSkipVerifyLabel]; ok && fs.allowNoVerification {
@@ -295,7 +313,7 @@ func (fs *filesystem) Mount(ctx context.Context, mountpoint string, labels map[s
 	node, err := l.RootNode(0)
 	if err != nil {
 		log.G(ctx).WithError(err).Warnf("Failed to get root node")
-		return errors.Wrapf(err, "failed to get root node")
+		return fmt.Errorf("failed to get root node: %w", err)
 	}
 
 	// Measuring duration of Mount operation for resolved layer.
@@ -395,10 +413,8 @@ func (fs *filesystem) check(ctx context.Context, l layer.Layer, labels map[strin
 				log.G(ctx).Debug("Successfully refreshed connection")
 				return nil
 			}
-			log.G(ctx).WithError(err).Warnf("failed to refresh the layer %q from %q",
-				s.Target.Digest, s.Name)
-			rErr = errors.Wrapf(rErr, "failed(layer:%q, ref:%q): %v",
-				s.Target.Digest, s.Name, err)
+			log.G(ctx).WithError(err).Warnf("failed to refresh the layer %q from %q", s.Target.Digest, s.Name)
+			rErr = fmt.Errorf("failed(layer:%q, ref:%q): %v: %w", s.Target.Digest, s.Name, err, rErr)
 		}
 	}
 

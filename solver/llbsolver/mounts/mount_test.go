@@ -2,7 +2,6 @@ package mounts
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
@@ -53,7 +52,7 @@ func newCacheManager(ctx context.Context, opt cmOpt) (co *cmOut, cleanup func() 
 		opt.snapshotterName = "native"
 	}
 
-	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -128,6 +127,7 @@ func newCacheManager(ctx context.Context, opt cmOpt) (co *cmOut, cleanup func() 
 		Differ:         differ,
 		LeaseManager:   lm,
 		GarbageCollect: mdb.GarbageCollect,
+		MountPoolRoot:  filepath.Join(tmpdir, "cachemounts"),
 	})
 	if err != nil {
 		return nil, nil, err
@@ -152,7 +152,7 @@ func TestCacheMountPrivateRefs(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -219,7 +219,7 @@ func TestCacheMountSharedRefs(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -269,7 +269,7 @@ func TestCacheMountLockedRefs(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -332,7 +332,7 @@ func TestCacheMountSharedRefsDeadlock(t *testing.T) {
 	// not parallel
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 

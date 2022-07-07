@@ -3,6 +3,10 @@
 
 package archutil
 
-func amd64Supported() error {
-	return nil
+import (
+	archvariant "github.com/tonistiigi/go-archvariant"
+)
+
+func amd64Supported() (string, error) {
+	return archvariant.AMD64Variant(), nil
 }

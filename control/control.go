@@ -6,8 +6,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/moby/buildkit/util/bklog"
-
 	controlapi "github.com/moby/buildkit/api/services/control"
 	apitypes "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/cache/remotecache"
@@ -20,9 +18,11 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/throttle"
 	"github.com/moby/buildkit/util/tracing/transform"
+	"github.com/moby/buildkit/version"
 	"github.com/moby/buildkit/worker"
 	"github.com/pkg/errors"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -61,14 +61,23 @@ func NewController(opt Opt) (*Controller, error) {
 
 	gatewayForwarder := controlgateway.NewGatewayForwarder()
 
-	solver, err := llbsolver.New(opt.WorkerController, opt.Frontends, cache, opt.ResolveCacheImporterFuncs, gatewayForwarder, opt.SessionManager, opt.Entitlements)
+	s, err := llbsolver.New(llbsolver.Opt{
+		WorkerController: opt.WorkerController,
+		Frontends:        opt.Frontends,
+		CacheManager:     cache,
+		CacheResolvers:   opt.ResolveCacheImporterFuncs,
+		GatewayForwarder: gatewayForwarder,
+		SessionManager:   opt.SessionManager,
+		Entitlements:     opt.Entitlements,
+	})
+
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create solver")
 	}
 
 	c := &Controller{
 		opt:              opt,
-		solver:           solver,
+		solver:           s,
 		cache:            cache,
 		gatewayForwarder: gatewayForwarder,
 	}
@@ -81,11 +90,10 @@ func NewController(opt Opt) (*Controller, error) {
 	return c, nil
 }
 
-func (c *Controller) Register(server *grpc.Server) error {
+func (c *Controller) Register(server *grpc.Server) {
 	controlapi.RegisterControlServer(server, c)
 	c.gatewayForwarder.Register(server)
 	tracev1.RegisterTraceServiceServer(server, c)
-	return nil
 }
 
 func (c *Controller) DiskUsage(ctx context.Context, r *controlapi.DiskUsageRequest) (*controlapi.DiskUsageResponse, error) {
@@ -338,13 +346,14 @@ func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Con
 				sr := controlapi.StatusResponse{}
 				for _, v := range ss.Vertexes {
 					sr.Vertexes = append(sr.Vertexes, &controlapi.Vertex{
-						Digest:    v.Digest,
-						Inputs:    v.Inputs,
-						Name:      v.Name,
-						Started:   v.Started,
-						Completed: v.Completed,
-						Error:     v.Error,
-						Cached:    v.Cached,
+						Digest:        v.Digest,
+						Inputs:        v.Inputs,
+						Name:          v.Name,
+						Started:       v.Started,
+						Completed:     v.Completed,
+						Error:         v.Error,
+						Cached:        v.Cached,
+						ProgressGroup: v.ProgressGroup,
 					})
 				}
 				for _, v := range ss.Statuses {
@@ -425,13 +434,24 @@ func (c *Controller) ListWorkers(ctx context.Context, r *controlapi.ListWorkersR
 	}
 	for _, w := range workers {
 		resp.Record = append(resp.Record, &apitypes.WorkerRecord{
-			ID:        w.ID(),
-			Labels:    w.Labels(),
-			Platforms: pb.PlatformsFromSpec(w.Platforms(true)),
-			GCPolicy:  toPBGCPolicy(w.GCPolicy()),
+			ID:              w.ID(),
+			Labels:          w.Labels(),
+			Platforms:       pb.PlatformsFromSpec(w.Platforms(true)),
+			GCPolicy:        toPBGCPolicy(w.GCPolicy()),
+			BuildkitVersion: toPBBuildkitVersion(w.BuildkitVersion()),
 		})
 	}
 	return resp, nil
+}
+
+func (c *Controller) Info(ctx context.Context, r *controlapi.InfoRequest) (*controlapi.InfoResponse, error) {
+	return &controlapi.InfoResponse{
+		BuildkitVersion: &apitypes.BuildkitVersion{
+			Package:  version.Package,
+			Version:  version.Version,
+			Revision: version.Revision,
+		},
+	}, nil
 }
 
 func (c *Controller) gc() {
@@ -498,4 +518,12 @@ func toPBGCPolicy(in []client.PruneInfo) []*apitypes.GCPolicy {
 		})
 	}
 	return policy
+}
+
+func toPBBuildkitVersion(in client.BuildkitVersion) *apitypes.BuildkitVersion {
+	return &apitypes.BuildkitVersion{
+		Package:  in.Package,
+		Version:  in.Version,
+		Revision: in.Revision,
+	}
 }

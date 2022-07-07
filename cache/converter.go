@@ -1,10 +1,11 @@
 package cache
 
 import (
-	"compress/gzip"
+	"bufio"
 	"context"
 	"fmt"
 	"io"
+	"sync"
 
 	cdcompression "github.com/containerd/containerd/archive/compression"
 	"github.com/containerd/containerd/content"
@@ -12,8 +13,8 @@ import (
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/images/converter"
 	"github.com/containerd/containerd/labels"
-	"github.com/klauspost/compress/zstd"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -57,15 +58,15 @@ func needsConversion(ctx context.Context, cs content.Store, desc ocispecs.Descri
 
 // getConverter returns converter function according to the specified compression type.
 // If no conversion is needed, this returns nil without error.
-func getConverter(ctx context.Context, cs content.Store, desc ocispecs.Descriptor, compressionType compression.Type) (converter.ConvertFunc, error) {
-	if needs, err := needsConversion(ctx, cs, desc, compressionType); err != nil {
+func getConverter(ctx context.Context, cs content.Store, desc ocispecs.Descriptor, comp compression.Config) (converter.ConvertFunc, error) {
+	if needs, err := needsConversion(ctx, cs, desc, comp.Type); err != nil {
 		return nil, errors.Wrapf(err, "failed to determine conversion needs")
 	} else if !needs {
 		// No conversion. No need to return an error here.
 		return nil, nil
 	}
 
-	c := conversion{target: compressionType}
+	c := conversion{target: comp}
 
 	from := compression.FromMediaType(desc.MediaType)
 	switch from {
@@ -96,40 +97,43 @@ func getConverter(ctx context.Context, cs content.Store, desc ocispecs.Descripto
 		return nil, errors.Errorf("unsupported source compression type %q from mediatype %q", from, desc.MediaType)
 	}
 
-	switch compressionType {
+	switch comp.Type {
 	case compression.Uncompressed:
 	case compression.Gzip:
-		c.compress = func(w io.Writer) (io.WriteCloser, error) {
-			return gzip.NewWriter(w), nil
-		}
+		c.compress = gzipWriter(comp)
 	case compression.Zstd:
-		c.compress = func(w io.Writer) (io.WriteCloser, error) {
-			return zstd.NewWriter(w)
-		}
+		c.compress = zstdWriter(comp)
 	case compression.EStargz:
-		compressorFunc, finalize := compressEStargz()
+		compressorFunc, finalize := compressEStargz(comp)
 		c.compress = func(w io.Writer) (io.WriteCloser, error) {
 			return compressorFunc(w, ocispecs.MediaTypeImageLayerGzip)
 		}
 		c.finalize = finalize
 	default:
-		return nil, errors.Errorf("unknown target compression type during conversion: %q", compressionType)
+		return nil, errors.Errorf("unknown target compression type during conversion: %q", comp.Type)
 	}
 
 	return (&c).convert, nil
 }
 
 type conversion struct {
-	target     compression.Type
+	target     compression.Config
 	decompress func(context.Context, ocispecs.Descriptor) (io.ReadCloser, error)
 	compress   func(w io.Writer) (io.WriteCloser, error)
 	finalize   func(context.Context, content.Store) (map[string]string, error)
 }
 
+var bufioPool = sync.Pool{
+	New: func() interface{} {
+		return nil
+	},
+}
+
 func (c *conversion) convert(ctx context.Context, cs content.Store, desc ocispecs.Descriptor) (*ocispecs.Descriptor, error) {
+	bklog.G(ctx).WithField("blob", desc).WithField("target", c.target).Debugf("converting blob to the target compression")
 	// prepare the source and destination
 	labelz := make(map[string]string)
-	ref := fmt.Sprintf("convert-from-%s-to-%s-%s", desc.Digest, c.target.String(), identity.NewID())
+	ref := fmt.Sprintf("convert-from-%s-to-%s-%s", desc.Digest, c.target.Type.String(), identity.NewID())
 	w, err := cs.Writer(ctx, content.WithRef(ref))
 	if err != nil {
 		return nil, err
@@ -138,16 +142,24 @@ func (c *conversion) convert(ctx context.Context, cs content.Store, desc ocispec
 	if err := w.Truncate(0); err != nil { // Old written data possibly remains
 		return nil, err
 	}
-	var zw io.WriteCloser = w
-	var compress io.WriteCloser
+
+	var bufW *bufio.Writer
+	if pooledW := bufioPool.Get(); pooledW != nil {
+		bufW = pooledW.(*bufio.Writer)
+		bufW.Reset(w)
+	} else {
+		bufW = bufio.NewWriterSize(w, 128*1024)
+	}
+	defer bufioPool.Put(bufW)
+	var zw io.WriteCloser = &nopWriteCloser{bufW}
 	if c.compress != nil {
 		zw, err = c.compress(zw)
 		if err != nil {
 			return nil, err
 		}
-		defer zw.Close()
-		compress = zw
 	}
+	zw = &onceWriteCloser{WriteCloser: zw}
+	defer zw.Close()
 
 	// convert this layer
 	diffID := digest.Canonical.Digester()
@@ -170,10 +182,11 @@ func (c *conversion) convert(ctx context.Context, cs content.Store, desc ocispec
 	if _, err := io.Copy(zw, io.TeeReader(rdr, diffID.Hash())); err != nil {
 		return nil, err
 	}
-	if compress != nil {
-		if err := compress.Close(); err != nil { // Flush the writer
-			return nil, err
-		}
+	if err := zw.Close(); err != nil { // Flush the writer
+		return nil, err
+	}
+	if err := bufW.Flush(); err != nil { // Flush the buffer
+		return nil, errors.Wrap(err, "failed to flush diff during conversion")
 	}
 	labelz[labels.LabelUncompressed] = diffID.Digest().String() // update diffID label
 	if err = w.Commit(ctx, 0, "", content.WithLabels(labelz)); err != nil && !errdefs.IsAlreadyExists(err) {
@@ -188,7 +201,7 @@ func (c *conversion) convert(ctx context.Context, cs content.Store, desc ocispec
 	}
 
 	newDesc := desc
-	newDesc.MediaType = c.target.DefaultMediaType()
+	newDesc.MediaType = c.target.Type.DefaultMediaType()
 	newDesc.Digest = info.Digest
 	newDesc.Size = info.Size
 	newDesc.Annotations = map[string]string{labels.LabelUncompressed: diffID.Digest().String()}
@@ -216,4 +229,24 @@ func (rc *readCloser) Close() error {
 		return errors.Wrapf(err1, "failed to close: %v", err2)
 	}
 	return err2
+}
+
+type nopWriteCloser struct {
+	io.Writer
+}
+
+func (w *nopWriteCloser) Close() error {
+	return nil
+}
+
+type onceWriteCloser struct {
+	io.WriteCloser
+	closeOnce sync.Once
+}
+
+func (w *onceWriteCloser) Close() (err error) {
+	w.closeOnce.Do(func() {
+		err = w.WriteCloser.Close()
+	})
+	return
 }

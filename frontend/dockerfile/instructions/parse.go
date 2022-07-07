@@ -280,6 +280,7 @@ func parseAdd(req parseRequest) (*AddCommand, error) {
 	}
 	flChown := req.flags.AddString("chown", "")
 	flChmod := req.flags.AddString("chmod", "")
+	flLink := req.flags.AddBool("link", false)
 	if err := req.flags.Parse(); err != nil {
 		return nil, err
 	}
@@ -294,6 +295,7 @@ func parseAdd(req parseRequest) (*AddCommand, error) {
 		SourcesAndDest:  *sourcesAndDest,
 		Chown:           flChown.Value,
 		Chmod:           flChmod.Value,
+		Link:            flLink.Value == "true",
 	}, nil
 }
 
@@ -304,6 +306,7 @@ func parseCopy(req parseRequest) (*CopyCommand, error) {
 	flChown := req.flags.AddString("chown", "")
 	flFrom := req.flags.AddString("from", "")
 	flChmod := req.flags.AddString("chmod", "")
+	flLink := req.flags.AddBool("link", false)
 	if err := req.flags.Parse(); err != nil {
 		return nil, err
 	}
@@ -319,6 +322,7 @@ func parseCopy(req parseRequest) (*CopyCommand, error) {
 		From:            flFrom.Value,
 		Chown:           flChown.Value,
 		Chmod:           flChmod.Value,
+		Link:            flLink.Value == "true",
 	}, nil
 }
 
@@ -721,7 +725,7 @@ func errExactlyOneArgument(command string) error {
 }
 
 func errNoDestinationArgument(command string) error {
-	return errors.Errorf("%s requires at least two arguments, but only one was provided. Destination could not be determined.", command)
+	return errors.Errorf("%s requires at least two arguments, but only one was provided. Destination could not be determined", command)
 }
 
 func errBadHeredoc(command string, option string) error {

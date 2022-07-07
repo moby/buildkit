@@ -25,6 +25,7 @@ import (
 	"github.com/moby/buildkit/util/entitlements"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
@@ -33,6 +34,7 @@ import (
 type SolveOpt struct {
 	Exports               []ExportEntry
 	LocalDirs             map[string]string
+	OCIStores             map[string]content.Store
 	SharedKey             string
 	Frontend              string
 	FrontendAttrs         map[string]string
@@ -78,7 +80,7 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 	return c.solve(ctx, def, nil, opt, statusChan)
 }
 
-type runGatewayCB func(ref string, s *session.Session) error
+type runGatewayCB func(ref string, s *session.Session, opts map[string]string) error
 
 func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runGatewayCB, opt SolveOpt, statusChan chan *SolveStatus) (*SolveResponse, error) {
 	if def != nil && runGateway != nil {
@@ -112,7 +114,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		}
 	}
 
-	cacheOpt, err := parseCacheOptions(ctx, opt)
+	cacheOpt, err := parseCacheOptions(ctx, runGateway != nil, opt)
 	if err != nil {
 		return nil, err
 	}
@@ -171,8 +173,27 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			}
 		}
 
-		if len(cacheOpt.contentStores) > 0 {
-			s.Allow(sessioncontent.NewAttachable(cacheOpt.contentStores))
+		// this is a new map that contains both cacheOpt stores and OCILayout stores
+		contentStores := make(map[string]content.Store, len(cacheOpt.contentStores)+len(opt.OCIStores))
+		// copy over the stores references from cacheOpt
+		for key, store := range cacheOpt.contentStores {
+			contentStores[key] = store
+		}
+		// copy over the stores references from ociLayout opts
+		for key, store := range opt.OCIStores {
+			// conflicts are not allowed
+			if _, ok := contentStores[key]; ok {
+				// we probably should check if the store is identical, but given that
+				// https://pkg.go.dev/github.com/containerd/containerd/content#Store
+				// is just an interface, composing 4 others, that is rather hard to do.
+				// For a future iteration.
+				return nil, errors.Errorf("contentStore key %s exists in both cache and OCI layouts", key)
+			}
+			contentStores[key] = store
+		}
+
+		if len(contentStores) > 0 {
+			s.Allow(sessioncontent.NewAttachable(contentStores))
 		}
 
 		eg.Go(func() error {
@@ -185,6 +206,9 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	}
 
 	for k, v := range cacheOpt.frontendAttrs {
+		if opt.FrontendAttrs == nil {
+			opt.FrontendAttrs = map[string]string{}
+		}
 		opt.FrontendAttrs[k] = v
 	}
 
@@ -239,7 +263,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 
 	if runGateway != nil {
 		eg.Go(func() error {
-			err := runGateway(ref, s)
+			err := runGateway(ref, s, opt.FrontendAttrs)
 			if err == nil {
 				return nil
 			}
@@ -277,13 +301,14 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			s := SolveStatus{}
 			for _, v := range resp.Vertexes {
 				s.Vertexes = append(s.Vertexes, &Vertex{
-					Digest:    v.Digest,
-					Inputs:    v.Inputs,
-					Name:      v.Name,
-					Started:   v.Started,
-					Completed: v.Completed,
-					Error:     v.Error,
-					Cached:    v.Cached,
+					Digest:        v.Digest,
+					Inputs:        v.Inputs,
+					Name:          v.Name,
+					Started:       v.Started,
+					Completed:     v.Completed,
+					Error:         v.Error,
+					Cached:        v.Cached,
+					ProgressGroup: v.ProgressGroup,
 				})
 			}
 			for _, v := range resp.Statuses {
@@ -356,10 +381,10 @@ func prepareSyncedDirs(def *llb.Definition, localDirs map[string]string) ([]file
 			return nil, errors.Errorf("%s not a directory", d)
 		}
 	}
-	resetUIDAndGID := func(p string, st *fstypes.Stat) bool {
+	resetUIDAndGID := func(p string, st *fstypes.Stat) fsutil.MapResult {
 		st.Uid = 0
 		st.Gid = 0
-		return true
+		return fsutil.MapResultKeep
 	}
 
 	dirs := make([]filesync.SyncedDir, 0, len(localDirs))
@@ -403,7 +428,7 @@ type cacheOptions struct {
 	frontendAttrs   map[string]string
 }
 
-func parseCacheOptions(ctx context.Context, opt SolveOpt) (*cacheOptions, error) {
+func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cacheOptions, error) {
 	var (
 		cacheExports []*controlapi.CacheOptionsEntry
 		cacheImports []*controlapi.CacheOptionsEntry
@@ -488,7 +513,7 @@ func parseCacheOptions(ctx context.Context, opt SolveOpt) (*cacheOptions, error)
 			})
 		}
 	}
-	if opt.Frontend != "" {
+	if opt.Frontend != "" || isGateway {
 		// use legacy API for registry importers, because the frontend might not support the new API
 		if len(legacyImportRefs) > 0 {
 			frontendAttrs["cache-from"] = strings.Join(legacyImportRefs, ",")

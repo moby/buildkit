@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/containerd/containerd/mount"
@@ -38,10 +39,12 @@ import (
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/stack"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/worker"
+	"github.com/moby/sys/signal"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -544,9 +547,10 @@ func (lbf *llbBridgeForwarder) ResolveImageConfig(ctx context.Context, req *pb.R
 		}
 	}
 	dgst, dt, err := lbf.llbBridge.ResolveImageConfig(ctx, req.Ref, llb.ResolveImageConfigOpt{
-		Platform:    platform,
-		ResolveMode: req.ResolveMode,
-		LogName:     req.LogName,
+		Platform:     platform,
+		ResolveMode:  req.ResolveMode,
+		LogName:      req.LogName,
+		ResolverType: llb.ResolverType(req.ResolverType),
 	})
 	if err != nil {
 		return nil, err
@@ -555,20 +559,6 @@ func (lbf *llbBridgeForwarder) ResolveImageConfig(ctx context.Context, req *pb.R
 		Digest: dgst,
 		Config: dt,
 	}, nil
-}
-
-func translateLegacySolveRequest(req *pb.SolveRequest) error {
-	// translates ImportCacheRefs to new CacheImports (v0.4.0)
-	for _, legacyImportRef := range req.ImportCacheRefsDeprecated {
-		im := &pb.CacheOptionsEntry{
-			Type:  "registry",
-			Attrs: map[string]string{"ref": legacyImportRef},
-		}
-		// FIXME(AkihiroSuda): skip append if already exists
-		req.CacheImports = append(req.CacheImports, im)
-	}
-	req.ImportCacheRefsDeprecated = nil
-	return nil
 }
 
 func (lbf *llbBridgeForwarder) wrapSolveError(solveErr error) error {
@@ -625,9 +615,6 @@ func (lbf *llbBridgeForwarder) registerResultIDs(results ...solver.Result) (ids 
 }
 
 func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) (*pb.SolveResponse, error) {
-	if err := translateLegacySolveRequest(req); err != nil {
-		return nil, err
-	}
 	var cacheImports []frontend.CacheOptionsEntry
 	for _, e := range req.CacheImports {
 		cacheImports = append(cacheImports, frontend.CacheOptionsEntry{
@@ -668,6 +655,16 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 			if ref == nil {
 				id = ""
 			} else {
+				dtbi, err := buildinfo.Encode(ctx, pbRes.Metadata, fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, k), ref.BuildSources())
+				if err != nil {
+					return nil, err
+				}
+				if len(dtbi) > 0 {
+					if pbRes.Metadata == nil {
+						pbRes.Metadata = make(map[string][]byte)
+					}
+					pbRes.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, k)] = dtbi
+				}
 				lbf.refs[id] = ref
 			}
 			ids[k] = id
@@ -691,6 +688,16 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 		if ref == nil {
 			id = ""
 		} else {
+			dtbi, err := buildinfo.Encode(ctx, pbRes.Metadata, exptypes.ExporterBuildInfo, ref.BuildSources())
+			if err != nil {
+				return nil, err
+			}
+			if len(dtbi) > 0 {
+				if pbRes.Metadata == nil {
+					pbRes.Metadata = make(map[string][]byte)
+				}
+				pbRes.Metadata[exptypes.ExporterBuildInfo] = dtbi
+			}
 			def = ref.Definition()
 			lbf.refs[id] = ref
 		}
@@ -1035,6 +1042,7 @@ type processIO struct {
 	id       string
 	mu       sync.Mutex
 	resize   func(context.Context, gwclient.WinSize) error
+	signal   func(context.Context, syscall.Signal) error
 	done     chan struct{}
 	doneOnce sync.Once
 	// these track the process side of the io pipe for
@@ -1173,6 +1181,8 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 				}
 			case *pb.ExecMessage_Resize:
 				bklog.G(ctx).Debugf("|<--- Resize Message %s", execMsg.ProcessID)
+			case *pb.ExecMessage_Signal:
+				bklog.G(ctx).Debugf("|<--- Signal Message %s: %s", execMsg.ProcessID, m.Signal.Name)
 			}
 			select {
 			case <-ctx.Done():
@@ -1225,6 +1235,15 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 					Cols: resize.Cols,
 					Rows: resize.Rows,
 				})
+			} else if sig := execMsg.GetSignal(); sig != nil {
+				if !pioFound {
+					return stack.Enable(status.Errorf(codes.NotFound, "IO for process %q not found", pid))
+				}
+				syscallSignal, ok := signal.SignalMap[sig.Name]
+				if !ok {
+					return stack.Enable(status.Errorf(codes.InvalidArgument, "Unknown signal %s", sig.Name))
+				}
+				pio.signal(ctx, syscallSignal)
 			} else if init := execMsg.GetInit(); init != nil {
 				if pioFound {
 					return stack.Enable(status.Errorf(codes.AlreadyExists, "Process %s already exists", pid))
@@ -1258,6 +1277,7 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 					return stack.Enable(err)
 				}
 				pio.resize = proc.Resize
+				pio.signal = proc.Signal
 
 				eg.Go(func() error {
 					<-pio.done

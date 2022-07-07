@@ -40,8 +40,7 @@ type (
 		ExcludePatterns  []string
 		Compression      Compression
 		NoLchown         bool
-		UIDMaps          []idtools.IDMap
-		GIDMaps          []idtools.IDMap
+		IDMap            idtools.IdentityMapping
 		ChownOpts        *idtools.Identity
 		IncludeSourceDir bool
 		// WhiteoutFormat is the expected on disk format for whiteout files.
@@ -63,12 +62,12 @@ type (
 // mappings for untar, an Archiver can be created with maps which will then be passed to Untar operations.
 type Archiver struct {
 	Untar     func(io.Reader, string, *TarOptions) error
-	IDMapping *idtools.IdentityMapping
+	IDMapping idtools.IdentityMapping
 }
 
 // NewDefaultArchiver returns a new Archiver without any IdentityMapping
 func NewDefaultArchiver() *Archiver {
-	return &Archiver{Untar: Untar, IDMapping: &idtools.IdentityMapping{}}
+	return &Archiver{Untar: Untar}
 }
 
 // breakoutError is used to differentiate errors related to breaking out
@@ -403,12 +402,64 @@ func (compression *Compression) Extension() string {
 	return ""
 }
 
+// nosysFileInfo hides the system-dependent info of the wrapped FileInfo to
+// prevent tar.FileInfoHeader from introspecting it and potentially calling into
+// glibc.
+type nosysFileInfo struct {
+	os.FileInfo
+}
+
+func (fi nosysFileInfo) Sys() interface{} {
+	// A Sys value of type *tar.Header is safe as it is system-independent.
+	// The tar.FileInfoHeader function copies the fields into the returned
+	// header without performing any OS lookups.
+	if sys, ok := fi.FileInfo.Sys().(*tar.Header); ok {
+		return sys
+	}
+	return nil
+}
+
+// sysStat, if non-nil, populates hdr from system-dependent fields of fi.
+var sysStat func(fi os.FileInfo, hdr *tar.Header) error
+
+// FileInfoHeaderNoLookups creates a partially-populated tar.Header from fi.
+//
+// Compared to the archive/tar.FileInfoHeader function, this function is safe to
+// call from a chrooted process as it does not populate fields which would
+// require operating system lookups. It behaves identically to
+// tar.FileInfoHeader when fi is a FileInfo value returned from
+// tar.Header.FileInfo().
+//
+// When fi is a FileInfo for a native file, such as returned from os.Stat() and
+// os.Lstat(), the returned Header value differs from one returned from
+// tar.FileInfoHeader in the following ways. The Uname and Gname fields are not
+// set as OS lookups would be required to populate them. The AccessTime and
+// ChangeTime fields are not currently set (not yet implemented) although that
+// is subject to change. Callers which require the AccessTime or ChangeTime
+// fields to be zeroed should explicitly zero them out in the returned Header
+// value to avoid any compatibility issues in the future.
+func FileInfoHeaderNoLookups(fi os.FileInfo, link string) (*tar.Header, error) {
+	hdr, err := tar.FileInfoHeader(nosysFileInfo{fi}, link)
+	if err != nil {
+		return nil, err
+	}
+	if sysStat != nil {
+		return hdr, sysStat(fi, hdr)
+	}
+	return hdr, nil
+}
+
 // FileInfoHeader creates a populated Header from fi.
-// Compared to archive pkg this function fills in more information.
-// Also, regardless of Go version, this function fills file type bits (e.g. hdr.Mode |= modeISDIR),
-// which have been deleted since Go 1.9 archive/tar.
+//
+// Compared to the archive/tar package, this function fills in less information
+// but is safe to call from a chrooted process. The AccessTime and ChangeTime
+// fields are not set in the returned header, ModTime is truncated to one-second
+// precision, and the Uname and Gname fields are only set when fi is a FileInfo
+// value returned from tar.Header.FileInfo(). Also, regardless of Go version,
+// this function fills file type bits (e.g. hdr.Mode |= modeISDIR), which have
+// been deleted since Go 1.9 archive/tar.
 func FileInfoHeader(name string, fi os.FileInfo, link string) (*tar.Header, error) {
-	hdr, err := tar.FileInfoHeader(fi, link)
+	hdr, err := FileInfoHeaderNoLookups(fi, link)
 	if err != nil {
 		return nil, err
 	}
@@ -418,9 +469,6 @@ func FileInfoHeader(name string, fi os.FileInfo, link string) (*tar.Header, erro
 	hdr.ChangeTime = time.Time{}
 	hdr.Mode = fillGo18FileTypeBits(int64(chmodTarEntry(os.FileMode(hdr.Mode))), fi)
 	hdr.Name = canonicalTarName(name, fi.IsDir())
-	if err := setHeaderForSpecialDevice(hdr, name, fi.Sys()); err != nil {
-		return nil, err
-	}
 	return hdr, nil
 }
 
@@ -485,7 +533,7 @@ type tarAppender struct {
 
 	// for hardlink mapping
 	SeenFiles       map[uint64]string
-	IdentityMapping *idtools.IdentityMapping
+	IdentityMapping idtools.IdentityMapping
 	ChownOpts       *idtools.Identity
 
 	// For packing and unpacking whiteout files in the
@@ -495,7 +543,7 @@ type tarAppender struct {
 	WhiteoutConverter tarWhiteoutConverter
 }
 
-func newTarAppender(idMapping *idtools.IdentityMapping, writer io.Writer, chownOpts *idtools.Identity) *tarAppender {
+func newTarAppender(idMapping idtools.IdentityMapping, writer io.Writer, chownOpts *idtools.Identity) *tarAppender {
 	return &tarAppender{
 		SeenFiles:       make(map[uint64]string),
 		TarWriter:       tar.NewWriter(writer),
@@ -680,6 +728,7 @@ func createTarFile(path, extractDir string, hdr *tar.Header, reader io.Reader, L
 		}
 
 	case tar.TypeLink:
+		//#nosec G305 -- The target path is checked for path traversal.
 		targetPath := filepath.Join(extractDir, hdr.Linkname)
 		// check for hardlink breakout
 		if !strings.HasPrefix(targetPath, extractDir) {
@@ -692,7 +741,7 @@ func createTarFile(path, extractDir string, hdr *tar.Header, reader io.Reader, L
 	case tar.TypeSymlink:
 		// 	path 				-> hdr.Linkname = targetPath
 		// e.g. /extractDir/path/to/symlink 	-> ../2/file	= /extractDir/path/2/file
-		targetPath := filepath.Join(filepath.Dir(path), hdr.Linkname)
+		targetPath := filepath.Join(filepath.Dir(path), hdr.Linkname) //#nosec G305 -- The target path is checked for path traversal.
 
 		// the reason we don't need to check symlinks in the path (with FollowSymlinkInScope) is because
 		// that symlink would first have to be created, which would be caught earlier, at this very check:
@@ -810,7 +859,7 @@ func TarWithOptions(srcPath string, options *TarOptions) (io.ReadCloser, error) 
 
 	go func() {
 		ta := newTarAppender(
-			idtools.NewIDMappingsFromMaps(options.UIDMaps, options.GIDMaps),
+			options.IDMap,
 			compressWriter,
 			options.ChownOpts,
 		)
@@ -994,8 +1043,7 @@ func Unpack(decompressedArchive io.Reader, dest string, options *TarOptions) err
 	defer pools.BufioReader32KPool.Put(trBuf)
 
 	var dirs []*tar.Header
-	idMapping := idtools.NewIDMappingsFromMaps(options.UIDMaps, options.GIDMaps)
-	rootIDs := idMapping.RootPair()
+	rootIDs := options.IDMap.RootPair()
 	whiteoutConverter, err := getWhiteoutConverter(options.WhiteoutFormat, options.InUserNS)
 	if err != nil {
 		return err
@@ -1045,6 +1093,7 @@ loop:
 			}
 		}
 
+		//#nosec G305 -- The joined path is checked for path traversal.
 		path := filepath.Join(dest, hdr.Name)
 		rel, err := filepath.Rel(dest, path)
 		if err != nil {
@@ -1083,7 +1132,7 @@ loop:
 		}
 		trBuf.Reset(tr)
 
-		if err := remapIDs(idMapping, hdr); err != nil {
+		if err := remapIDs(options.IDMap, hdr); err != nil {
 			return err
 		}
 
@@ -1109,6 +1158,7 @@ loop:
 	}
 
 	for _, hdr := range dirs {
+		//#nosec G305 -- The header was checked for path traversal before it was appended to the dirs slice.
 		path := filepath.Join(dest, hdr.Name)
 
 		if err := system.Chtimes(path, hdr.AccessTime, hdr.ModTime); err != nil {
@@ -1169,8 +1219,7 @@ func (archiver *Archiver) TarUntar(src, dst string) error {
 	}
 	defer archive.Close()
 	options := &TarOptions{
-		UIDMaps: archiver.IDMapping.UIDs(),
-		GIDMaps: archiver.IDMapping.GIDs(),
+		IDMap: archiver.IDMapping,
 	}
 	return archiver.Untar(archive, dst, options)
 }
@@ -1183,8 +1232,7 @@ func (archiver *Archiver) UntarPath(src, dst string) error {
 	}
 	defer archive.Close()
 	options := &TarOptions{
-		UIDMaps: archiver.IDMapping.UIDs(),
-		GIDMaps: archiver.IDMapping.GIDs(),
+		IDMap: archiver.IDMapping,
 	}
 	return archiver.Untar(archive, dst, options)
 }
@@ -1251,7 +1299,7 @@ func (archiver *Archiver) CopyFileWithTar(src, dst string) (err error) {
 			}
 			defer srcF.Close()
 
-			hdr, err := tar.FileInfoHeader(srcSt, "")
+			hdr, err := FileInfoHeaderNoLookups(srcSt, "")
 			if err != nil {
 				return err
 			}
@@ -1291,11 +1339,11 @@ func (archiver *Archiver) CopyFileWithTar(src, dst string) (err error) {
 }
 
 // IdentityMapping returns the IdentityMapping of the archiver.
-func (archiver *Archiver) IdentityMapping() *idtools.IdentityMapping {
+func (archiver *Archiver) IdentityMapping() idtools.IdentityMapping {
 	return archiver.IDMapping
 }
 
-func remapIDs(idMapping *idtools.IdentityMapping, hdr *tar.Header) error {
+func remapIDs(idMapping idtools.IdentityMapping, hdr *tar.Header) error {
 	ids, err := idMapping.ToHost(idtools.Identity{UID: hdr.Uid, GID: hdr.Gid})
 	hdr.Uid, hdr.Gid = ids.UID, ids.GID
 	return err

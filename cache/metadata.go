@@ -37,6 +37,7 @@ const keyMediaType = "cache.mediatype"
 const keyImageRefs = "cache.imageRefs"
 const keyDeleted = "cache.deleted"
 const keyBlobSize = "cache.blobsize" // the packed blob size as specified in the oci descriptor
+const keyURLs = "cache.layer.urls"
 
 // Indexes
 const blobchainIndex = "blobchainid:"
@@ -281,6 +282,17 @@ func (md *cacheMetadata) queueBlob(str digest.Digest) error {
 	return md.queueValue(keyBlob, str, "")
 }
 
+func (md *cacheMetadata) appendURLs(urls []string) error {
+	if len(urls) == 0 {
+		return nil
+	}
+	return md.appendStringSlice(keyURLs, urls...)
+}
+
+func (md *cacheMetadata) getURLs() []string {
+	return md.GetStringSlice(keyURLs)
+}
+
 func (md *cacheMetadata) getBlob() digest.Digest {
 	return digest.Digest(md.GetString(keyBlob))
 }
@@ -468,6 +480,18 @@ func (md *cacheMetadata) GetString(key string) string {
 	return str
 }
 
+func (md *cacheMetadata) GetStringSlice(key string) []string {
+	v := md.si.Get(key)
+	if v == nil {
+		return nil
+	}
+	var val []string
+	if err := v.Unmarshal(&val); err != nil {
+		return nil
+	}
+	return val
+}
+
 func (md *cacheMetadata) setTime(key string, value time.Time, index string) error {
 	return md.setValue(key, value.UnixNano(), index)
 }
@@ -512,7 +536,7 @@ func (md *cacheMetadata) getInt64(key string) (int64, bool) {
 	return i, true
 }
 
-func (md *cacheMetadata) appendStringSlice(key string, value string) error {
+func (md *cacheMetadata) appendStringSlice(key string, values ...string) error {
 	return md.si.GetAndSetValue(key, func(v *metadata.Value) (*metadata.Value, error) {
 		var slice []string
 		if v != nil {
@@ -520,12 +544,23 @@ func (md *cacheMetadata) appendStringSlice(key string, value string) error {
 				return nil, err
 			}
 		}
-		for _, existing := range slice {
-			if existing == value {
-				return nil, metadata.ErrSkipSetValue
-			}
+
+		idx := make(map[string]struct{}, len(values))
+		for _, v := range values {
+			idx[v] = struct{}{}
 		}
-		slice = append(slice, value)
+
+		for _, existing := range slice {
+			delete(idx, existing)
+		}
+
+		if len(idx) == 0 {
+			return nil, metadata.ErrSkipSetValue
+		}
+
+		for value := range idx {
+			slice = append(slice, value)
+		}
 		v, err := metadata.NewValue(slice)
 		if err != nil {
 			return nil, err
