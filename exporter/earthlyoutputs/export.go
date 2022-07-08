@@ -243,9 +243,6 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	for k, v := range e.meta {
 		src.Metadata[k] = v
 	}
-
-	// TODO These need to be per-image.
-
 	images := make(map[string]*imgData)
 	hasAnyTarExport := false
 	hasAnyLocalRegExport := false
