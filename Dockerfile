@@ -57,10 +57,11 @@ ENV GOFLAGS=-mod=vendor
 # scan the version/revision info
 FROM buildkit-base AS buildkit-version
 # TODO: PKG should be inferred from go modules
+ARG RELEASE_VERSION=v0.0.0+earthlyunknown
 RUN --mount=target=. \
-  PKG=github.com/moby/buildkit VERSION=$(git describe --match 'v[0-9]*' --dirty='.m' --always --tags) REVISION=$(git rev-parse HEAD)$(if ! git diff --no-ext-diff --quiet --exit-code; then echo .m; fi); \
-  echo "-X ${PKG}/version.Version=${VERSION} -X ${PKG}/version.Revision=${REVISION} -X ${PKG}/version.Package=${PKG}" | tee /tmp/.ldflags; \
-  echo -n "${VERSION}" | tee /tmp/.version;
+  PKG=github.com/moby/buildkit EARTHLY_PKG=github.com/earthly/buildkit REVISION=$(git rev-parse HEAD)$(if ! git diff --no-ext-diff --quiet --exit-code; then echo .m; fi); \
+  echo "-X ${PKG}/version.Version=${RELEASE_VERSION} -X ${PKG}/version.Revision=${REVISION} -X ${PKG}/version.Package=${EARTHLY_PKG}" | tee /tmp/.ldflags; \
+  echo -n "${RELEASE_VERSION}" | tee /tmp/.version;
 
 # build buildctl binary
 FROM buildkit-base AS buildctl

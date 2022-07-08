@@ -19,11 +19,11 @@ import (
 	"github.com/moby/buildkit/solver/llbsolver/ops/fileoptypes"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/flightcontrol"
+	"github.com/moby/buildkit/util/semutil"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
-	"golang.org/x/sync/semaphore"
 )
 
 const fileCacheType = "buildkit.file.v0"
@@ -34,10 +34,10 @@ type fileOp struct {
 	w           worker.Worker
 	solver      *FileOpSolver
 	numInputs   int
-	parallelism *semaphore.Weighted
+	parallelism *semutil.Weighted
 }
 
-func NewFileOp(v solver.Vertex, op *pb.Op_File, cm cache.Manager, parallelism *semaphore.Weighted, w worker.Worker) (solver.Op, error) {
+func NewFileOp(v solver.Vertex, op *pb.Op_File, cm cache.Manager, parallelism *semutil.Weighted, w worker.Worker) (solver.Op, error) {
 	if err := llbsolver.ValidateOp(&pb.Op{Op: op}); err != nil {
 		return nil, err
 	}

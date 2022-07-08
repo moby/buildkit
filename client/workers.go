@@ -18,6 +18,11 @@ type WorkerInfo struct {
 	Platforms       []ocispecs.Platform `json:"platforms"`
 	GCPolicy        []PruneInfo         `json:"gcPolicy"`
 	BuildkitVersion BuildkitVersion     `json:"buildkitVersion"`
+
+	// Earthly-specific.
+	ParallelismCurrent int `json:"parallelismCurrent"`
+	ParallelismMax     int `json:"parallelismMax"`
+	ParallelismWaiting int `json:"parallelismWaiting"`
 }
 
 // ListWorkers lists all active workers
@@ -42,6 +47,10 @@ func (c *Client) ListWorkers(ctx context.Context, opts ...ListWorkersOption) ([]
 			Platforms:       pb.ToSpecPlatforms(w.Platforms),
 			GCPolicy:        fromAPIGCPolicy(w.GCPolicy),
 			BuildkitVersion: fromAPIBuildkitVersion(w.BuildkitVersion),
+
+			ParallelismCurrent: int(w.ParallelismCurrent),
+			ParallelismMax:     int(w.ParallelismMax),
+			ParallelismWaiting: int(w.ParallelismWaiting),
 		})
 	}
 

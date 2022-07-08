@@ -15,13 +15,13 @@ import (
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/util/network/cniprovider"
 	"github.com/moby/buildkit/util/network/netproviders"
+	"github.com/moby/buildkit/util/semutil"
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/containerd"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
-	"golang.org/x/sync/semaphore"
 )
 
 const (
@@ -250,9 +250,9 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 		},
 	}
 
-	var parallelismSem *semaphore.Weighted
+	var parallelismSem *semutil.Weighted
 	if cfg.MaxParallelism > 0 {
-		parallelismSem = semaphore.NewWeighted(int64(cfg.MaxParallelism))
+		parallelismSem = semutil.NewWeighted(int64(cfg.MaxParallelism))
 	}
 
 	snapshotter := ctd.DefaultSnapshotter

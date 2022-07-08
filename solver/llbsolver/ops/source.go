@@ -10,9 +10,9 @@ import (
 	"github.com/moby/buildkit/solver/llbsolver"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
+	"github.com/moby/buildkit/util/semutil"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
-	"golang.org/x/sync/semaphore"
 )
 
 const sourceCacheType = "buildkit.source.v0"
@@ -26,10 +26,10 @@ type sourceOp struct {
 	sessM       *session.Manager
 	w           worker.Worker
 	vtx         solver.Vertex
-	parallelism *semaphore.Weighted
+	parallelism *semutil.Weighted
 }
 
-func NewSourceOp(vtx solver.Vertex, op *pb.Op_Source, platform *pb.Platform, sm *source.Manager, parallelism *semaphore.Weighted, sessM *session.Manager, w worker.Worker) (solver.Op, error) {
+func NewSourceOp(vtx solver.Vertex, op *pb.Op_Source, platform *pb.Platform, sm *source.Manager, parallelism *semutil.Weighted, sessM *session.Manager, w worker.Worker) (solver.Op, error) {
 	if err := llbsolver.ValidateOp(&pb.Op{Op: op}); err != nil {
 		return nil, err
 	}

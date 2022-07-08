@@ -433,12 +433,17 @@ func (c *Controller) ListWorkers(ctx context.Context, r *controlapi.ListWorkersR
 		return nil, err
 	}
 	for _, w := range workers {
+		pc, pm, pw := w.ParallelismStatus()
 		resp.Record = append(resp.Record, &apitypes.WorkerRecord{
 			ID:              w.ID(),
 			Labels:          w.Labels(),
 			Platforms:       pb.PlatformsFromSpec(w.Platforms(true)),
 			GCPolicy:        toPBGCPolicy(w.GCPolicy()),
 			BuildkitVersion: toPBBuildkitVersion(w.BuildkitVersion()),
+
+			ParallelismCurrent: pc,
+			ParallelismMax:     pm,
+			ParallelismWaiting: pw,
 		})
 	}
 	return resp, nil
@@ -451,6 +456,7 @@ func (c *Controller) Info(ctx context.Context, r *controlapi.InfoRequest) (*cont
 			Version:  version.Version,
 			Revision: version.Revision,
 		},
+		NumSessions: uint64(c.opt.SessionManager.NumSessions()),
 	}, nil
 }
 

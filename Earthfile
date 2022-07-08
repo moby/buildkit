@@ -5,12 +5,9 @@ FROM alpine:3.13
 WORKDIR /buildkit
 
 build:
-    FROM DOCKERFILE --target buildkit-buildkitd-linux .
+    ARG RELEASE_VERSION=v0.0.0+earthlyunknown
+    FROM DOCKERFILE --build-arg RELEASE_VERSION=$RELEASE_VERSION --target buildkit-buildkitd-linux .
 
 code:
     COPY . .
     SAVE ARTIFACT /buildkit
-
-image:
-    FROM +build
-    SAVE IMAGE earthly/raw-buildkitd:latest
