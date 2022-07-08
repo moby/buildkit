@@ -10,6 +10,9 @@ import (
 
 type Info struct {
 	BuildkitVersion BuildkitVersion
+
+	// Earthly-specific.
+	NumSessions int
 }
 
 type BuildkitVersion struct {
@@ -25,6 +28,7 @@ func (c *Client) Info(ctx context.Context) (*Info, error) {
 	}
 	return &Info{
 		BuildkitVersion: fromAPIBuildkitVersion(res.BuildkitVersion),
+		NumSessions:     int(res.NumSessions),
 	}, nil
 }
 

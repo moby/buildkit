@@ -22,6 +22,7 @@ type Worker interface {
 	Labels() map[string]string
 	Platforms(noCache bool) []ocispecs.Platform
 	BuildkitVersion() client.BuildkitVersion
+	ParallelismStatus() (int64, int64, int64)
 
 	GCPolicy() []client.PruneInfo
 	LoadRef(ctx context.Context, id string, hidden bool) (cache.ImmutableRef, error)

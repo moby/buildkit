@@ -162,4 +162,7 @@ message InfoRequest {}
 
 message InfoResponse {
 	moby.buildkit.v1.types.BuildkitVersion buildkitVersion = 1;
+
+	// Earthly-specific.
+	uint64 numSessions = 101;
 }

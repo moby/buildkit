@@ -36,6 +36,7 @@ import (
 	"github.com/moby/buildkit/util/network/cniprovider"
 	"github.com/moby/buildkit/util/network/netproviders"
 	"github.com/moby/buildkit/util/resolver"
+	"github.com/moby/buildkit/util/semutil"
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/runc"
@@ -43,7 +44,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
-	"golang.org/x/sync/semaphore"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials/insecure"
@@ -285,9 +285,9 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 		},
 	}
 
-	var parallelismSem *semaphore.Weighted
+	var parallelismSem *semutil.Weighted
 	if cfg.MaxParallelism > 0 {
-		parallelismSem = semaphore.NewWeighted(int64(cfg.MaxParallelism))
+		parallelismSem = semutil.NewWeighted(int64(cfg.MaxParallelism))
 	}
 
 	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping, nc, dns, cfg.Binary, cfg.ApparmorProfile, parallelismSem, common.traceSocket, cfg.DefaultCgroupParent)

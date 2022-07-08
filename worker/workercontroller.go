@@ -61,11 +61,16 @@ func (c *Controller) Get(id string) (Worker, error) {
 func (c *Controller) WorkerInfos() []client.WorkerInfo {
 	out := make([]client.WorkerInfo, 0, len(c.workers))
 	for _, w := range c.workers {
+		taken, size, waiting := w.ParallelismStatus()
 		out = append(out, client.WorkerInfo{
 			ID:              w.ID(),
 			Labels:          w.Labels(),
 			Platforms:       w.Platforms(false),
 			BuildkitVersion: w.BuildkitVersion(),
+
+			ParallelismCurrent: int(taken),
+			ParallelismMax:     int(size),
+			ParallelismWaiting: int(waiting),
 		})
 	}
 	return out

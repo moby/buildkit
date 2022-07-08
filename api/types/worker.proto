@@ -15,6 +15,11 @@ message WorkerRecord {
 	repeated pb.Platform platforms = 3 [(gogoproto.nullable) = false];
 	repeated GCPolicy GCPolicy = 4;
 	BuildkitVersion BuildkitVersion = 5;
+
+	// Earthly-specific.
+	int64 parallelismCurrent = 101;
+	int64 parallelismMax = 102;
+	int64 parallelismWaiting = 103;
 }
 
 message GCPolicy {

@@ -44,11 +44,11 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/progress/controller"
+	"github.com/moby/buildkit/util/semutil"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
-	"golang.org/x/sync/semaphore"
 )
 
 const labelCreatedAt = "buildkit/createdat"
@@ -73,7 +73,7 @@ type WorkerOpt struct {
 	IdentityMapping *idtools.IdentityMapping
 	LeaseManager    leases.Manager
 	GarbageCollect  func(context.Context) (gc.Stats, error)
-	ParallelismSem  *semaphore.Weighted
+	ParallelismSem  *semutil.Weighted
 	MetadataStore   *metadata.Store
 	MountPoolRoot   string
 }
@@ -202,6 +202,13 @@ func NewWorker(ctx context.Context, opt WorkerOpt) (*Worker, error) {
 		ImageSource:     is,
 		OCILayoutSource: os,
 	}, nil
+}
+
+func (w *Worker) ParallelismStatus() (int64, int64, int64) {
+	if w.ParallelismSem == nil {
+		return 0, 0, 0
+	}
+	return w.ParallelismSem.Status()
 }
 
 func (w *Worker) ContentStore() content.Store {

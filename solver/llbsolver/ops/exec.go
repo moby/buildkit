@@ -26,13 +26,13 @@ import (
 	"github.com/moby/buildkit/solver/llbsolver/mounts"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/progress/logs"
+	"github.com/moby/buildkit/util/semutil"
 	utilsystem "github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
-	"golang.org/x/sync/semaphore"
 )
 
 const execCacheType = "buildkit.exec.v0"
@@ -46,10 +46,10 @@ type execOp struct {
 	w           worker.Worker
 	platform    *pb.Platform
 	numInputs   int
-	parallelism *semaphore.Weighted
+	parallelism *semutil.Weighted
 }
 
-func NewExecOp(v solver.Vertex, op *pb.Op_Exec, platform *pb.Platform, cm cache.Manager, parallelism *semaphore.Weighted, sm *session.Manager, exec executor.Executor, w worker.Worker) (solver.Op, error) {
+func NewExecOp(v solver.Vertex, op *pb.Op_Exec, platform *pb.Platform, cm cache.Manager, parallelism *semutil.Weighted, sm *session.Manager, exec executor.Executor, w worker.Worker) (solver.Op, error) {
 	if err := llbsolver.ValidateOp(&pb.Op{Op: op}); err != nil {
 		return nil, err
 	}

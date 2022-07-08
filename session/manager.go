@@ -42,6 +42,13 @@ func NewManager() (*Manager, error) {
 	return sm, nil
 }
 
+// NumSessions returns the number of active sessions.
+func (sm *Manager) NumSessions() int {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	return len(sm.sessions)
+}
+
 // HandleHTTPRequest handles an incoming HTTP request
 func (sm *Manager) HandleHTTPRequest(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	hijacker, ok := w.(http.Hijacker)
