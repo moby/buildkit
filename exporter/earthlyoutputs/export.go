@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache"
+	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
@@ -26,18 +26,15 @@ import (
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/session/pullping"
 	"github.com/moby/buildkit/snapshot"
-	"github.com/moby/buildkit/solver"
-	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/push"
-	"github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	digest "github.com/opencontainers/go-digest"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
 	"golang.org/x/sync/errgroup"
@@ -48,13 +45,18 @@ import (
 type ExporterVariant string
 
 const (
-	keyImageName        = "name"
-	keyLayerCompression = "compression"
-	keyForceCompression = "force-compression"
-	VariantOCI          = "oci"
-	VariantDocker       = "docker"
-	ociTypes            = "oci-mediatypes"
-	keyBuildInfo        = "buildinfo"
+	keyPush           = "push"
+	keyPushByDigest   = "push-by-digest"
+	keyInsecure       = "registry.insecure"
+	keyUnpack         = "unpack"
+	keyDanglingPrefix = "dangling-name-prefix"
+	keyNameCanonical  = "name-canonical"
+	keyStore          = "store"
+
+	// keyUnsafeInternalStoreAllowIncomplete should only be used for tests. This option allows exporting image to the image store
+	// as well as lacking some blobs in the content store. Some integration tests for lazyref behaviour depends on this option.
+	// Ignored when store=false.
+	keyUnsafeInternalStoreAllowIncomplete = "unsafe-internal-store-allow-incomplete"
 )
 
 type Opt struct {
@@ -75,61 +77,97 @@ func New(opt Opt) (exporter.Exporter, error) {
 }
 
 func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
-	var ot *bool
 	i := &imageExporterInstance{
-		imageExporter:    e,
-		layerCompression: compression.Default,
+		imageExporter: e,
+		opts: containerimage.ImageCommitOpts{
+			RefCfg: cacheconfig.RefConfig{
+				Compression: compression.New(compression.Default),
+			},
+			BuildInfo:   true,
+			Annotations: make(containerimage.AnnotationsGroup),
+		},
+		store: true,
 	}
-	var esgz bool
+
+	opt, err := i.opts.Load(opt)
+	if err != nil {
+		return nil, err
+	}
+
 	for k, v := range opt {
 		switch k {
-		case keyImageName:
-			i.name = v
-		case keyLayerCompression:
-			switch v {
-			case "gzip":
-				i.layerCompression = compression.Gzip
-			case "estargz":
-				i.layerCompression = compression.EStargz
-				esgz = true
-			case "zstd":
-				i.layerCompression = compression.Zstd
-			case "uncompressed":
-				i.layerCompression = compression.Uncompressed
-			default:
-				return nil, errors.Errorf("unsupported layer compression type: %v", v)
-			}
-		case keyForceCompression:
+		case keyPush:
 			if v == "" {
-				i.forceCompression = true
+				i.push = true
 				continue
 			}
 			b, err := strconv.ParseBool(v)
 			if err != nil {
 				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
-			i.forceCompression = b
-
-		case ociTypes:
-			ot = new(bool)
+			i.push = b
+		case keyPushByDigest:
 			if v == "" {
-				*ot = true
+				i.pushByDigest = true
 				continue
 			}
 			b, err := strconv.ParseBool(v)
 			if err != nil {
 				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
-			*ot = b
-		case keyBuildInfo:
+			i.pushByDigest = b
+		case keyInsecure:
 			if v == "" {
+				i.insecure = true
 				continue
 			}
-			bimode, err := buildinfo.ParseExportMode(v)
+			b, err := strconv.ParseBool(v)
 			if err != nil {
-				return nil, err
+				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
-			i.buildInfoMode = bimode
+			i.insecure = b
+		case keyUnpack:
+			if v == "" {
+				i.unpack = true
+				continue
+			}
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+			}
+			i.unpack = b
+		case keyStore:
+			if v == "" {
+				i.store = true
+				continue
+			}
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+			}
+			i.store = b
+		case keyUnsafeInternalStoreAllowIncomplete:
+			if v == "" {
+				i.storeAllowIncomplete = true
+				continue
+			}
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+			}
+			i.storeAllowIncomplete = b
+		case keyDanglingPrefix:
+			i.danglingPrefix = v
+		case keyNameCanonical:
+			if v == "" {
+				i.nameCanonical = true
+				continue
+			}
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+			}
+			i.nameCanonical = b
 		default:
 			if i.meta == nil {
 				i.meta = make(map[string][]byte)
@@ -137,26 +175,21 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 			i.meta[k] = []byte(v)
 		}
 	}
-	if ot == nil {
-		i.ociTypes = e.opt.Variant == VariantOCI
-	} else {
-		i.ociTypes = *ot
-	}
-	if esgz && !i.ociTypes {
-		logrus.Warn("forcibly turning on oci-mediatype mode for estargz")
-		i.ociTypes = true
-	}
 	return i, nil
 }
 
 type imageExporterInstance struct {
 	*imageExporter
-	meta             map[string][]byte
-	name             string
-	ociTypes         bool
-	layerCompression compression.Type
-	forceCompression bool
-	buildInfoMode    buildinfo.ExportMode
+	opts                 containerimage.ImageCommitOpts
+	push                 bool
+	pushByDigest         bool
+	unpack               bool
+	store                bool
+	storeAllowIncomplete bool
+	insecure             bool
+	nameCanonical        bool
+	danglingPrefix       string
+	meta                 map[string][]byte
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -187,7 +220,7 @@ type imgData struct {
 	expSrc *exporter.Source
 
 	// mfstDesc is the image manifest descriptor.
-	mfstDesc *ocispec.Descriptor
+	mfstDesc *ocispecs.Descriptor
 
 	// tarWriter is the image tar writer (set only if localExport is true).
 	tarWriter io.WriteCloser
@@ -196,6 +229,8 @@ type imgData struct {
 	localRegExportReport func()
 	// localExportReport is the one-off progress reporter for the tar export.
 	localExportReport func()
+
+	opts containerimage.ImageCommitOpts
 }
 
 func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source, sessionID string) (map[string]string, error) {
@@ -208,6 +243,9 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	for k, v := range e.meta {
 		src.Metadata[k] = v
 	}
+
+	// TODO These need to be per-image.
+
 	images := make(map[string]*imgData)
 	hasAnyTarExport := false
 	hasAnyLocalRegExport := false
@@ -225,6 +263,13 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 		if ok {
 			simpleMd[exptypes.ExporterInlineCache] = inlineCache
 		}
+
+		opts := e.opts
+		as, _, err := containerimage.ParseAnnotations(simpleMd)
+		if err != nil {
+			return nil, err
+		}
+		opts.Annotations = as.Merge(opts.Annotations)
 
 		le := false
 		isImage := false
@@ -288,6 +333,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 				img.localRegExport = eilr
 				img.shouldPush = img.shouldPush || sp
 				img.insecurePush = img.insecurePush || ip
+				img.opts = opts
 
 				img.expSrc.Metadata["image.name"] = []byte(imgName)
 				if eilr != "" {
@@ -346,7 +392,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	defer done(context.TODO())
 
 	for _, img := range images {
-		desc, err := e.opt.ImageWriter.Commit(ctx, *img.expSrc, e.ociTypes, e.layerCompression, e.buildInfoMode, false, sessionID)
+		desc, err := e.opt.ImageWriter.Commit(ctx, *img.expSrc, sessionID, &img.opts)
 		if err != nil {
 			return nil, err
 		}
@@ -357,7 +403,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 		if desc.Annotations == nil {
 			desc.Annotations = map[string]string{}
 		}
-		desc.Annotations[ocispec.AnnotationCreated] = time.Now().UTC().Format(time.RFC3339)
+		desc.Annotations[ocispecs.AnnotationCreated] = time.Now().UTC().Format(time.RFC3339)
 	}
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -410,13 +456,8 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 			img.mp = contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
 		}
 
-		compressionopt := solver.CompressionOpt{
-			Type:  e.layerCompression,
-			Force: e.forceCompression,
-		}
-
 		for _, r := range img.expSrc.Refs {
-			remotes, err := r.GetRemotes(ctx, false, compressionopt, false, session.NewGroup(sessionID))
+			remotes, err := r.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
 			if err != nil {
 				return nil, err
 			}
@@ -442,7 +483,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 			}
 		}
 		if img.expSrc.Ref != nil { // This is a copy and paste of the above code
-			remotes, err := img.expSrc.Ref.GetRemotes(ctx, false, compressionopt, false, session.NewGroup(sessionID))
+			remotes, err := img.expSrc.Ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
 			if err != nil {
 				return nil, err
 			}
@@ -515,13 +556,6 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 				continue
 			}
 			expOpts := []archiveexporter.ExportOpt{archiveexporter.WithManifest(*img.mfstDesc, imgName)}
-			switch e.opt.Variant {
-			case VariantOCI:
-				expOpts = append(expOpts, archiveexporter.WithAllPlatforms(), archiveexporter.WithSkipDockerManifest())
-			case VariantDocker:
-			default:
-				return nil, errors.Errorf("invalid variant %q", e.opt.Variant)
-			}
 			if err := archiveexporter.Export(ctx, img.mp, img.tarWriter, expOpts...); err != nil {
 				img.tarWriter.Close()
 				if grpcerrors.Code(err) == codes.AlreadyExists {
@@ -567,10 +601,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 
 func (e *imageExporterInstance) Config() exporter.Config {
 	return exporter.Config{
-		Compression: solver.CompressionOpt{
-			Type:  e.layerCompression,
-			Force: e.forceCompression,
-		},
+		Compression: e.opts.RefCfg.Compression,
 	}
 }
 
@@ -639,7 +670,7 @@ func exportDirFunc(ctx context.Context, md map[string]string, caller session.Cal
 		var err error
 		var idmap *idtools.IdentityMapping
 		if ref == nil {
-			src, err = ioutil.TempDir("", "buildkit")
+			src, err = os.MkdirTemp("", "buildkit")
 			if err != nil {
 				return err
 			}
@@ -665,17 +696,17 @@ func exportDirFunc(ctx context.Context, md map[string]string, caller session.Cal
 		walkOpt := &fsutil.WalkOpt{}
 
 		if idmap != nil {
-			walkOpt.Map = func(p string, st *fstypes.Stat) bool {
+			walkOpt.Map = func(p string, st *fstypes.Stat) fsutil.MapResult {
 				uid, gid, err := idmap.ToContainer(idtools.Identity{
 					UID: int(st.Uid),
 					GID: int(st.Gid),
 				})
 				if err != nil {
-					return false
+					return fsutil.MapResultExclude
 				}
 				st.Uid = uint32(uid)
 				st.Gid = uint32(gid)
-				return true
+				return fsutil.MapResultKeep
 			}
 		}
 
@@ -697,7 +728,7 @@ func exportDirFunc(ctx context.Context, md map[string]string, caller session.Cal
 	}
 }
 
-func addAnnotations(m map[digest.Digest]map[string]string, desc ocispec.Descriptor) {
+func addAnnotations(m map[digest.Digest]map[string]string, desc ocispecs.Descriptor) {
 	if desc.Annotations == nil {
 		return
 	}

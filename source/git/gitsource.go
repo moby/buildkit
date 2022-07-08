@@ -718,7 +718,7 @@ func tokenScope(remote string) string {
 // getDefaultBranch gets the default branch of a repository using ls-remote
 func getDefaultBranch(ctx context.Context, gitDir, workDir, sshAuthSock, knownHosts string, auth []string, remoteURL string) (string, error) {
 	if gitDebug() {
-		knownHostsContents, err := ioutil.ReadFile(knownHosts)
+		knownHostsContents, err := os.ReadFile(knownHosts)
 		if err != nil {
 			bklog.G(ctx).Warnf("failed to read %s: %v", knownHosts, err)
 		} else {

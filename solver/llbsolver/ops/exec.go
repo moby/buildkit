@@ -447,7 +447,6 @@ func (e *execOp) copyLocally(ctx context.Context, root executor.Mount, g session
 		defer lm.Unmount()
 
 		finalDest := rootfsPath + "/" + dst
-		bklog.G(ctx).Debugf("calling LocalhostGet src=%s dst=%s", src, finalDest)
 		err = localhost.LocalhostGet(ctx, caller, src, finalDest, mountable)
 		if err != nil {
 			return err
@@ -531,7 +530,6 @@ func (e *execOp) sendLocally(ctx context.Context, root executor.Mount, mounts []
 			if !strings.HasPrefix(dst, "/") && meta.Cwd != "" {
 				finalDst = path.Join(meta.Cwd, finalDst)
 			}
-			bklog.G(ctx).Debugf("calling LocalhostPut src=%s dst=%s", finalSrc, finalDst)
 			err = localhost.LocalhostPut(ctx, caller, finalSrc, finalDst)
 			if err != nil {
 				return errors.Wrap(err, "error calling LocalhostExec")
@@ -549,7 +547,6 @@ func (e *execOp) execLocally(ctx context.Context, root executor.Mount, g session
 	cwd := meta.Cwd
 
 	return e.sm.Any(ctx, g, func(ctx context.Context, _ string, caller session.Caller) error {
-		bklog.G(ctx).Debugf("localexec dir=%s; args=%v", cwd, args)
 		err := localhost.LocalhostExec(ctx, caller, args, cwd, stdout, stderr)
 		if err != nil {
 			return errors.Wrap(err, "error calling LocalhostExec")

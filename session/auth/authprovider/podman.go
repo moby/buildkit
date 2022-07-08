@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/docker/cli/cli/config"
 	"github.com/docker/cli/cli/config/configfile"
 	"github.com/pkg/errors"
 
@@ -31,7 +32,8 @@ func NewPodmanAuthProvider(stderr io.Writer) session.Attachable {
 		// Podman uses docker's default settings location when the XDG_RUNTIME_DIR is missing.
 		// See here for more details: https://docs.podman.io/en/latest/markdown/podman-login.1.html
 		bklog.G(context.TODO()).Debugf("WARNING: XDG_RUNTIME_DIR is not set, trying Docker config")
-		return NewDockerAuthProvider(stderr)
+		cfg := config.LoadDefaultConfigFile(stderr)
+		return NewDockerAuthProvider(cfg)
 	}
 
 	filename := filepath.Join(xdgRuntime, XDGSubPath, PodmanConfigFileName)
@@ -46,25 +48,18 @@ func NewPodmanAuthProvider(stderr io.Writer) session.Attachable {
 			fmt.Fprintf(stderr, "WARNING: Error loading config file: %v\n", err)
 		}
 
-		return &authProvider{
-			config:      configFile,
-			seeds:       &tokenSeeds{dir: filepath.Dir(filename)},
-			loggerCache: map[string]struct{}{},
-		}
+		return NewDockerAuthProvider(configFile)
 	} else if !os.IsNotExist(err) {
 		// if file is there but we can't stat it for any reason other
 		// than it doesn't exist then stop
 		fmt.Fprintf(stderr, "WARNING: Error loading config file: %v\n", err)
-		return &authProvider{
-			config:      configFile,
-			seeds:       &tokenSeeds{dir: filepath.Dir(filename)},
-			loggerCache: map[string]struct{}{},
-		}
+		return NewDockerAuthProvider(configFile)
 	}
 
 	// No Podman config file, just use the docker one then to pick up docker credentials.
 	// Podman uses docker's default settings location when the XDG path does not exist.
 	// See here for more details: https://docs.podman.io/en/latest/markdown/podman-login.1.html
 	bklog.G(context.TODO()).Debugf("WARNING: %s did not exist, trying Docker config", filename)
-	return NewDockerAuthProvider(stderr)
+	cfg := config.LoadDefaultConfigFile(stderr)
+	return NewDockerAuthProvider(cfg)
 }
