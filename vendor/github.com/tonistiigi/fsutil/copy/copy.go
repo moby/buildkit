@@ -335,7 +335,7 @@ func (c *copier) copy(ctx context.Context, src, srcComponents, target string, ov
 		}
 	}
 
-	copyFileInfo := true
+	copyFileInfo := include
 	notify := true
 
 	switch {
@@ -345,7 +345,9 @@ func (c *copier) copy(ctx context.Context, src, srcComponents, target string, ov
 			include, includeMatchInfo, excludeMatchInfo,
 		); err != nil {
 			return err
-		} else if !overwriteTargetMetadata || c.includePatternMatcher != nil {
+		} else if !overwriteTargetMetadata {
+			// if we aren't supposed to overwrite existing target metadata,
+			// then we only need to copy file info if we newly created it
 			copyFileInfo = created
 		}
 		notify = false
@@ -369,13 +371,12 @@ func (c *copier) copy(ctx context.Context, src, srcComponents, target string, ov
 		if err := os.Symlink(link, target); err != nil {
 			return errors.Wrapf(err, "failed to create symlink: %s", target)
 		}
-	case (fi.Mode() & os.ModeDevice) == os.ModeDevice:
+	case (fi.Mode() & os.ModeDevice) == os.ModeDevice,
+		(fi.Mode() & os.ModeNamedPipe) == os.ModeNamedPipe,
+		(fi.Mode() & os.ModeSocket) == os.ModeSocket:
 		if err := copyDevice(target, fi); err != nil {
 			return errors.Wrapf(err, "failed to create device")
 		}
-	default:
-		// TODO: Support pipes and sockets
-		return errors.Wrapf(err, "unsupported mode %s", fi.Mode())
 	}
 
 	if copyFileInfo {
