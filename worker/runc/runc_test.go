@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,7 +29,7 @@ import (
 )
 
 func newWorkerOpt(t *testing.T, processMode oci.ProcessMode) (base.WorkerOpt, func()) {
-	tmpdir, err := ioutil.TempDir("", "workertest")
+	tmpdir, err := os.MkdirTemp("", "workertest")
 	require.NoError(t, err)
 	cleanup := func() { os.RemoveAll(tmpdir) }
 
@@ -41,7 +40,7 @@ func newWorkerOpt(t *testing.T, processMode oci.ProcessMode) (base.WorkerOpt, fu
 		},
 	}
 	rootless := false
-	workerOpt, err := NewWorkerOpt(tmpdir, snFactory, rootless, processMode, nil, nil, netproviders.Opt{Mode: "host"}, nil, "", "", nil, "")
+	workerOpt, err := NewWorkerOpt(tmpdir, snFactory, rootless, processMode, nil, nil, netproviders.Opt{Mode: "host"}, nil, "", "", nil, "", "")
 	require.NoError(t, err)
 
 	return workerOpt, cleanup
@@ -143,7 +142,7 @@ func TestRuncWorker(t *testing.T) {
 	require.NoError(t, err)
 
 	//Verifies fix for issue https://github.com/moby/buildkit/issues/429
-	dt, err := ioutil.ReadFile(filepath.Join(target, "run", "bar"))
+	dt, err := os.ReadFile(filepath.Join(target, "run", "bar"))
 
 	require.NoError(t, err)
 	require.Equal(t, string(dt), "foo\n")
@@ -199,7 +198,7 @@ func TestRuncWorkerNoProcessSandbox(t *testing.T) {
 
 	// ensure the procfs is shared
 	selfPID := os.Getpid()
-	selfCmdline, err := ioutil.ReadFile(fmt.Sprintf("/proc/%d/cmdline", selfPID))
+	selfCmdline, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", selfPID))
 	require.NoError(t, err)
 	meta := executor.Meta{
 		Args: []string{"/bin/cat", fmt.Sprintf("/proc/%d/cmdline", selfPID)},

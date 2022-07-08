@@ -27,7 +27,6 @@ import (
 	"github.com/containerd/stargz-snapshotter/estargz"
 	"github.com/containerd/stargz-snapshotter/metadata"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 )
 
 type reader struct {
@@ -58,7 +57,7 @@ func NewReader(sr *io.SectionReader, opts ...metadata.Option) (metadata.Reader, 
 	var rOpts metadata.Options
 	for _, o := range opts {
 		if err := o(&rOpts); err != nil {
-			return nil, errors.Wrapf(err, "failed to apply option")
+			return nil, fmt.Errorf("failed to apply option: %w", err)
 		}
 	}
 

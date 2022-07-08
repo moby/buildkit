@@ -3,6 +3,6 @@
 
 package archutil
 
-func i386Supported() error {
-	return nil
+func i386Supported() (string, error) {
+	return "", nil
 }

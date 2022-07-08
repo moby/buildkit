@@ -2,7 +2,6 @@ package llbsolver
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/containerd/containerd/platforms"
@@ -163,6 +162,7 @@ func newVertex(dgst digest.Digest, op *pb.Op, opMeta *pb.OpMetadata, load func(d
 		if opMeta.ExportCache != nil {
 			opt.ExportCache = &opMeta.ExportCache.Value
 		}
+		opt.ProgressGroup = opMeta.ProgressGroup
 	}
 	for _, fn := range opts {
 		if err := fn(op, opMeta, &opt); err != nil {
@@ -271,9 +271,9 @@ func llbOpName(pbOp *pb.Op, load func(digest.Digest) (solver.Vertex, error)) (st
 			if err != nil {
 				return "", err
 			}
-			subnames[i] = strconv.Quote(subvtx.Name())
+			subnames[i] = subvtx.Name()
 		}
-		return "merge " + strings.Join(subnames, " + "), nil
+		return "merge " + fmt.Sprintf("(%s)", strings.Join(subnames, ", ")), nil
 	case *pb.Op_Diff:
 		var lowerName string
 		if op.Diff.Lower.Input == -1 {
@@ -283,7 +283,7 @@ func llbOpName(pbOp *pb.Op, load func(digest.Digest) (solver.Vertex, error)) (st
 			if err != nil {
 				return "", err
 			}
-			lowerName = strconv.Quote(lowerVtx.Name())
+			lowerName = fmt.Sprintf("(%s)", lowerVtx.Name())
 		}
 		var upperName string
 		if op.Diff.Upper.Input == -1 {
@@ -293,7 +293,7 @@ func llbOpName(pbOp *pb.Op, load func(digest.Digest) (solver.Vertex, error)) (st
 			if err != nil {
 				return "", err
 			}
-			upperName = strconv.Quote(upperVtx.Name())
+			upperName = fmt.Sprintf("(%s)", upperVtx.Name())
 		}
 		return "diff " + lowerName + " -> " + upperName, nil
 	default:

@@ -55,6 +55,7 @@ type VertexOptions struct {
 	Description  map[string]string // text values with no special meaning for solver
 	ExportCache  *bool
 	// WorkerConstraint
+	ProgressGroup *pb.ProgressGroup
 }
 
 // Result is an abstract return value for a solve
@@ -75,7 +76,7 @@ type ResultProxy interface {
 	Result(context.Context) (CachedResult, error)
 	Release(context.Context) error
 	Definition() *pb.Definition
-	BuildInfo() BuildInfo
+	BuildSources() BuildSources
 }
 
 // CacheExportMode is the type for setting cache exporting modes
@@ -102,13 +103,7 @@ type CacheExportOpt struct {
 	Session session.Group
 	// CompressionOpt is an option to specify the compression of the object to load.
 	// If specified, all objects that meet the option will be cached.
-	CompressionOpt *CompressionOpt
-}
-
-// CompressionOpt is compression information of a blob
-type CompressionOpt struct {
-	Type  compression.Type
-	Force bool
+	CompressionOpt *compression.Config
 }
 
 // CacheExporter can export the artifacts of the build chain
@@ -202,13 +197,13 @@ type CacheMap struct {
 	// the cache. Opts should not have any impact on the computed cache key.
 	Opts CacheOpts
 
-	// BuildInfo contains build dependencies that will be set from source
+	// BuildSources contains build dependencies that will be set from source
 	// operation.
-	BuildInfo map[string]string
+	BuildSources BuildSources
 }
 
-// BuildInfo contains solved build dependencies.
-type BuildInfo map[string]string
+// BuildSources contains solved build dependencies.
+type BuildSources map[string]string
 
 // ExportableCacheKey is a cache key connected with an exporter that can export
 // a chain of cacherecords pointing to that key

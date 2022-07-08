@@ -8,13 +8,14 @@ import (
 )
 
 type Vertex struct {
-	Digest    digest.Digest
-	Inputs    []digest.Digest
-	Name      string
-	Started   *time.Time
-	Completed *time.Time
-	Cached    bool
-	Error     string
+	Digest        digest.Digest
+	Inputs        []digest.Digest
+	Name          string
+	Started       *time.Time
+	Completed     *time.Time
+	Cached        bool
+	Error         string
+	ProgressGroup *pb.ProgressGroup
 }
 
 type VertexStatus struct {

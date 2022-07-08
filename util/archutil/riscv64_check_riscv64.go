@@ -3,6 +3,6 @@
 
 package archutil
 
-func riscv64Supported() error {
-	return nil
+func riscv64Supported() (string, error) {
+	return "", nil
 }

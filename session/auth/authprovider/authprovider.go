@@ -6,7 +6,6 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -18,6 +17,7 @@ import (
 	remoteserrors "github.com/containerd/containerd/remotes/errors"
 	"github.com/docker/cli/cli/config"
 	"github.com/docker/cli/cli/config/configfile"
+	"github.com/docker/cli/cli/config/types"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth"
 	"github.com/moby/buildkit/util/progress/progresswriter"
@@ -28,19 +28,23 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func NewDockerAuthProvider(stderr io.Writer) session.Attachable {
+const defaultExpiration = 60
+
+func NewDockerAuthProvider(cfg *configfile.ConfigFile) session.Attachable {
 	return &authProvider{
-		config:      config.LoadDefaultConfigFile(stderr),
-		seeds:       &tokenSeeds{dir: config.Dir()},
-		loggerCache: map[string]struct{}{},
+		authConfigCache: map[string]*types.AuthConfig{},
+		config:          cfg,
+		seeds:           &tokenSeeds{dir: config.Dir()},
+		loggerCache:     map[string]struct{}{},
 	}
 }
 
 type authProvider struct {
-	config      *configfile.ConfigFile
-	seeds       *tokenSeeds
-	logger      progresswriter.Logger
-	loggerCache map[string]struct{}
+	authConfigCache map[string]*types.AuthConfig
+	config          *configfile.ConfigFile
+	seeds           *tokenSeeds
+	logger          progresswriter.Logger
+	loggerCache     map[string]struct{}
 
 	// The need for this mutex is not well understood.
 	// Without it, the docker cli on OS X hangs when
@@ -60,6 +64,16 @@ func (ap *authProvider) Register(server *grpc.Server) {
 }
 
 func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequest) (rr *auth.FetchTokenResponse, err error) {
+	ac, err := ap.getAuthConfig(req.Host)
+	if err != nil {
+		return nil, err
+	}
+
+	// check for statically configured bearer token
+	if ac.RegistryToken != "" {
+		return toTokenResponse(ac.RegistryToken, time.Time{}, 0), nil
+	}
+
 	creds, err := ap.credentials(req.Host)
 	if err != nil {
 		return nil, err
@@ -115,12 +129,7 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 }
 
 func (ap *authProvider) credentials(host string) (*auth.CredentialsResponse, error) {
-	ap.mu.Lock()
-	defer ap.mu.Unlock()
-	if host == "registry-1.docker.io" {
-		host = "https://index.docker.io/v1/"
-	}
-	ac, err := ap.config.GetAuthConfig(host)
+	ac, err := ap.getAuthConfig(host)
 	if err != nil {
 		return nil, err
 	}
@@ -171,6 +180,23 @@ func (ap *authProvider) VerifyTokenAuthority(ctx context.Context, req *auth.Veri
 	return &auth.VerifyTokenAuthorityResponse{Signed: sign.Sign(nil, req.Payload, priv)}, nil
 }
 
+func (ap *authProvider) getAuthConfig(host string) (*types.AuthConfig, error) {
+	ap.mu.Lock()
+	defer ap.mu.Unlock()
+	if _, exists := ap.authConfigCache[host]; !exists {
+		if host == "registry-1.docker.io" {
+			host = "https://index.docker.io/v1/"
+		}
+		ac, err := ap.config.GetAuthConfig(host)
+		if err != nil {
+			return nil, err
+		}
+		ap.authConfigCache[host] = &ac
+	}
+
+	return ap.authConfigCache[host], nil
+}
+
 func (ap *authProvider) getAuthorityKey(host string, salt []byte) (ed25519.PrivateKey, error) {
 	if v, err := strconv.ParseBool(os.Getenv("BUILDKIT_NO_CLIENT_TOKEN")); err == nil && v {
 		return nil, status.Errorf(codes.Unavailable, "client side tokens disabled")
@@ -196,6 +222,9 @@ func (ap *authProvider) getAuthorityKey(host string, salt []byte) (ed25519.Priva
 }
 
 func toTokenResponse(token string, issuedAt time.Time, expires int) *auth.FetchTokenResponse {
+	if expires == 0 {
+		expires = defaultExpiration
+	}
 	resp := &auth.FetchTokenResponse{
 		Token:     token,
 		ExpiresIn: int64(expires),

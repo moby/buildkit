@@ -3,9 +3,16 @@ package bklog
 import (
 	"context"
 
+	"github.com/containerd/containerd/log"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/trace"
 )
+
+func init() {
+	// overwrites containerd/log
+	log.G = GetLogger
+	log.L = L
+}
 
 var (
 	G = GetLogger
@@ -37,6 +44,8 @@ func GetLogger(ctx context.Context) (l *logrus.Entry) {
 
 	if logger != nil {
 		l = logger.(*logrus.Entry)
+	} else if logger := log.GetLogger(ctx); logger != nil {
+		l = logger
 	} else {
 		l = L
 	}

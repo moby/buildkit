@@ -3,25 +3,32 @@ package cache
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/hashicorp/go-multierror"
+	"github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/leaseutil"
+	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/winlayers"
+	"github.com/moby/sys/mountinfo"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -46,7 +53,7 @@ type ImmutableRef interface {
 	Finalize(context.Context) error
 
 	Extract(ctx context.Context, s session.Group) error // +progress
-	GetRemotes(ctx context.Context, createIfNeeded bool, compressionopt solver.CompressionOpt, all bool, s session.Group) ([]*solver.Remote, error)
+	GetRemotes(ctx context.Context, createIfNeeded bool, cfg config.RefConfig, all bool, s session.Group) ([]*solver.Remote, error)
 	LayerChain() RefList
 }
 
@@ -87,11 +94,12 @@ type cacheRecord struct {
 }
 
 // hold ref lock before calling
-func (cr *cacheRecord) ref(triggerLastUsed bool, descHandlers DescHandlers) *immutableRef {
+func (cr *cacheRecord) ref(triggerLastUsed bool, descHandlers DescHandlers, pg progress.Controller) *immutableRef {
 	ref := &immutableRef{
 		cacheRecord:     cr,
 		triggerLastUsed: triggerLastUsed,
 		descHandlers:    descHandlers,
+		progress:        pg,
 	}
 	cr.refs[ref] = struct{}{}
 	return ref
@@ -299,6 +307,10 @@ func (cr *cacheRecord) viewLeaseID() string {
 	return cr.ID() + "-view"
 }
 
+func (cr *cacheRecord) compressionVariantsLeaseID() string {
+	return cr.ID() + "-variants"
+}
+
 func (cr *cacheRecord) viewSnapshotID() string {
 	return cr.getSnapshotID() + "-view"
 }
@@ -334,24 +346,21 @@ func (cr *cacheRecord) size(ctx context.Context) (int64, error) {
 			}
 		}
 		if dgst := cr.getBlob(); dgst != "" {
+			added := make(map[digest.Digest]struct{})
 			info, err := cr.cm.ContentStore.Info(ctx, digest.Digest(dgst))
 			if err == nil {
 				usage.Size += info.Size
+				added[digest.Digest(dgst)] = struct{}{}
 			}
-			for k, v := range info.Labels {
-				// accumulate size of compression variant blobs
-				if strings.HasPrefix(k, compressionVariantDigestLabelPrefix) {
-					if cdgst, err := digest.Parse(v); err == nil {
-						if digest.Digest(dgst) == cdgst {
-							// do not double count if the label points to this content itself.
-							continue
-						}
-						if info, err := cr.cm.ContentStore.Info(ctx, cdgst); err == nil {
-							usage.Size += info.Size
-						}
+			walkBlobVariantsOnly(ctx, cr.cm.ContentStore, digest.Digest(dgst), func(desc ocispecs.Descriptor) bool {
+				if _, ok := added[desc.Digest]; !ok {
+					if info, err := cr.cm.ContentStore.Info(ctx, desc.Digest); err == nil {
+						usage.Size += info.Size
+						added[desc.Digest] = struct{}{}
 					}
 				}
-			}
+				return true
+			}, nil)
 		}
 		cr.mu.Lock()
 		cr.queueSize(usage.Size)
@@ -432,6 +441,11 @@ func (cr *cacheRecord) remove(ctx context.Context, removeSnapshot bool) error {
 		}); err != nil && !errdefs.IsNotFound(err) {
 			return errors.Wrapf(err, "failed to delete lease for %s", cr.ID())
 		}
+		if err := cr.cm.LeaseManager.Delete(ctx, leases.Lease{
+			ID: cr.compressionVariantsLeaseID(),
+		}); err != nil && !errdefs.IsNotFound(err) {
+			return errors.Wrapf(err, "failed to delete compression variant lease for %s", cr.ID())
+		}
 	}
 	if err := cr.cm.MetadataStore.Clear(cr.ID()); err != nil {
 		return errors.Wrapf(err, "failed to delete metadata of %s", cr.ID())
@@ -446,6 +460,8 @@ type immutableRef struct {
 	*cacheRecord
 	triggerLastUsed bool
 	descHandlers    DescHandlers
+	// TODO:(sipsma) de-dupe progress with the same field inside descHandlers?
+	progress progress.Controller
 }
 
 // Order is from parent->child, sr will be at end of slice. Refs should not
@@ -516,7 +532,7 @@ func (cr *cacheRecord) layerDigestChain() []digest.Digest {
 	}
 	switch cr.kind() {
 	case Diff:
-		if cr.getBlob() == "" {
+		if cr.getBlob() == "" && cr.diffParents.upper != nil {
 			// this diff just reuses the upper blob
 			cr.layerDigestChainCache = cr.diffParents.upper.layerDigestChain()
 		} else {
@@ -576,7 +592,7 @@ func (sr *mutableRef) DescHandler(dgst digest.Digest) *DescHandler {
 
 func (sr *immutableRef) clone() *immutableRef {
 	sr.mu.Lock()
-	ref := sr.ref(false, sr.descHandlers)
+	ref := sr.ref(false, sr.descHandlers, sr.progress)
 	sr.mu.Unlock()
 	return ref
 }
@@ -585,7 +601,48 @@ func (sr *immutableRef) Clone() ImmutableRef {
 	return sr.clone()
 }
 
-func (sr *immutableRef) ociDesc(ctx context.Context, dhs DescHandlers) (ocispecs.Descriptor, error) {
+// layertoDistributable changes the passed in media type to the "distributable" version of the media type.
+func layerToDistributable(mt string) string {
+	if !images.IsNonDistributable(mt) {
+		// Layer is already a distributable media type (or this is not even a layer).
+		// No conversion needed
+		return mt
+	}
+
+	switch mt {
+	case ocispecs.MediaTypeImageLayerNonDistributable:
+		return ocispecs.MediaTypeImageLayer
+	case ocispecs.MediaTypeImageLayerNonDistributableGzip:
+		return ocispecs.MediaTypeImageLayerGzip
+	case ocispecs.MediaTypeImageLayerNonDistributableZstd:
+		return ocispecs.MediaTypeImageLayerZstd
+	case images.MediaTypeDockerSchema2LayerForeign:
+		return images.MediaTypeDockerSchema2Layer
+	case images.MediaTypeDockerSchema2LayerForeignGzip:
+		return images.MediaTypeDockerSchema2LayerGzip
+	default:
+		return mt
+	}
+}
+
+func layerToNonDistributable(mt string) string {
+	switch mt {
+	case ocispecs.MediaTypeImageLayer:
+		return ocispecs.MediaTypeImageLayerNonDistributable
+	case ocispecs.MediaTypeImageLayerGzip:
+		return ocispecs.MediaTypeImageLayerNonDistributableGzip
+	case ocispecs.MediaTypeImageLayerZstd:
+		return ocispecs.MediaTypeImageLayerNonDistributableZstd
+	case images.MediaTypeDockerSchema2Layer:
+		return images.MediaTypeDockerSchema2LayerForeign
+	case images.MediaTypeDockerSchema2LayerForeignGzip:
+		return images.MediaTypeDockerSchema2LayerForeignGzip
+	default:
+		return mt
+	}
+}
+
+func (sr *immutableRef) ociDesc(ctx context.Context, dhs DescHandlers, preferNonDist bool) (ocispecs.Descriptor, error) {
 	dgst := sr.getBlob()
 	if dgst == "" {
 		return ocispecs.Descriptor{}, errors.Errorf("no blob set for cache record %s", sr.ID())
@@ -594,8 +651,21 @@ func (sr *immutableRef) ociDesc(ctx context.Context, dhs DescHandlers) (ocispecs
 	desc := ocispecs.Descriptor{
 		Digest:      sr.getBlob(),
 		Size:        sr.getBlobSize(),
-		MediaType:   sr.getMediaType(),
 		Annotations: make(map[string]string),
+		MediaType:   sr.getMediaType(),
+	}
+
+	if preferNonDist {
+		if urls := sr.getURLs(); len(urls) > 0 {
+			// Make sure the media type is the non-distributable version
+			// We don't want to rely on the stored media type here because it could have been stored as distributable originally.
+			desc.MediaType = layerToNonDistributable(desc.MediaType)
+			desc.URLs = urls
+		}
+	}
+	if len(desc.URLs) == 0 {
+		// If there are no URL's, there is no reason to have this be non-dsitributable
+		desc.MediaType = layerToDistributable(desc.MediaType)
 	}
 
 	if blobDesc, err := getBlobDesc(ctx, sr.cm.ContentStore, desc.Digest); err == nil {
@@ -627,92 +697,184 @@ func (sr *immutableRef) ociDesc(ctx context.Context, dhs DescHandlers) (ocispecs
 }
 
 const (
-	compressionVariantDigestLabelPrefix      = "buildkit.io/compression/digest."
-	compressionVariantAnnotationsLabelPrefix = "buildkit.io/compression/annotation."
-	compressionVariantMediaTypeLabel         = "buildkit.io/compression/mediatype"
+	blobVariantGCLabel         = "containerd.io/gc.ref.content.blob-"
+	blobAnnotationsLabelPrefix = "buildkit.io/blob/annotation."
+	blobMediaTypeLabel         = "buildkit.io/blob/mediatype"
 )
 
-func compressionVariantDigestLabel(compressionType compression.Type) string {
-	return compressionVariantDigestLabelPrefix + compressionType.String()
-}
-
-func getCompressionVariants(ctx context.Context, cs content.Store, dgst digest.Digest) (res []compression.Type, _ error) {
-	info, err := cs.Info(ctx, dgst)
-	if errors.Is(err, errdefs.ErrNotFound) {
-		return nil, nil
-	} else if err != nil {
-		return nil, err
+// linkBlob makes a link between this ref and the passed blob. The linked blob can be
+// acquired during walkBlob. This is useful to associate a compression variant blob to
+// this ref. This doesn't record the blob to the cache record (i.e. the passed blob can't
+// be acquired through getBlob). Use setBlob for that purpose.
+func (sr *immutableRef) linkBlob(ctx context.Context, desc ocispecs.Descriptor) error {
+	if _, err := sr.cm.LeaseManager.Create(ctx, func(l *leases.Lease) error {
+		l.ID = sr.compressionVariantsLeaseID()
+		// do not make it flat lease to allow linking blobs using gc label
+		return nil
+	}); err != nil && !errdefs.IsAlreadyExists(err) {
+		return err
 	}
-	for k := range info.Labels {
-		if strings.HasPrefix(k, compressionVariantDigestLabelPrefix) {
-			if t := compression.Parse(strings.TrimPrefix(k, compressionVariantDigestLabelPrefix)); t != compression.UnknownCompression {
-				res = append(res, t)
-			}
-		}
-	}
-	return
-}
-
-func (sr *immutableRef) getCompressionBlob(ctx context.Context, compressionType compression.Type) (ocispecs.Descriptor, error) {
-	return getCompressionVariantBlob(ctx, sr.cm.ContentStore, sr.getBlob(), compressionType)
-}
-
-func getCompressionVariantBlob(ctx context.Context, cs content.Store, dgst digest.Digest, compressionType compression.Type) (ocispecs.Descriptor, error) {
-	info, err := cs.Info(ctx, dgst)
-	if err != nil {
-		return ocispecs.Descriptor{}, err
-	}
-	dgstS, ok := info.Labels[compressionVariantDigestLabel(compressionType)]
-	if ok {
-		dgst, err := digest.Parse(dgstS)
-		if err != nil {
-			return ocispecs.Descriptor{}, err
-		}
-		return getBlobDesc(ctx, cs, dgst)
-	}
-	return ocispecs.Descriptor{}, errdefs.ErrNotFound
-}
-
-func (sr *immutableRef) addCompressionBlob(ctx context.Context, desc ocispecs.Descriptor, compressionType compression.Type) error {
-	cs := sr.cm.ContentStore
-	if err := sr.cm.LeaseManager.AddResource(ctx, leases.Lease{ID: sr.ID()}, leases.Resource{
+	if err := sr.cm.LeaseManager.AddResource(ctx, leases.Lease{ID: sr.compressionVariantsLeaseID()}, leases.Resource{
 		ID:   desc.Digest.String(),
 		Type: "content",
 	}); err != nil {
 		return err
 	}
-	info, err := cs.Info(ctx, sr.getBlob())
+	cs := sr.cm.ContentStore
+	blobDigest := sr.getBlob()
+	info, err := cs.Info(ctx, blobDigest)
 	if err != nil {
 		return err
+	}
+	vInfo, err := cs.Info(ctx, desc.Digest)
+	if err != nil {
+		return err
+	}
+	vInfo.Labels = map[string]string{
+		blobVariantGCLabel + blobDigest.String(): blobDigest.String(),
+	}
+	vInfo = addBlobDescToInfo(desc, vInfo)
+	if _, err := cs.Update(ctx, vInfo, fieldsFromLabels(vInfo.Labels)...); err != nil {
+		return err
+	}
+	// let the future call to size() recalcultate the new size
+	sr.mu.Lock()
+	sr.queueSize(sizeUnknown)
+	if err := sr.commitMetadata(); err != nil {
+		sr.mu.Unlock()
+		return err
+	}
+	sr.mu.Unlock()
+	if desc.Digest == blobDigest {
+		return nil
+	}
+	info.Labels = map[string]string{
+		blobVariantGCLabel + desc.Digest.String(): desc.Digest.String(),
+	}
+	_, err = cs.Update(ctx, info, fieldsFromLabels(info.Labels)...)
+	return err
+}
+
+func (sr *immutableRef) getBlobWithCompression(ctx context.Context, compressionType compression.Type) (ocispecs.Descriptor, error) {
+	if _, err := sr.cm.ContentStore.Info(ctx, sr.getBlob()); err != nil {
+		return ocispecs.Descriptor{}, err
+	}
+	desc, err := sr.ociDesc(ctx, nil, true)
+	if err != nil {
+		return ocispecs.Descriptor{}, err
+	}
+	return getBlobWithCompression(ctx, sr.cm.ContentStore, desc, compressionType)
+}
+
+func getBlobWithCompression(ctx context.Context, cs content.Store, desc ocispecs.Descriptor, compressionType compression.Type) (ocispecs.Descriptor, error) {
+	if compressionType == compression.UnknownCompression {
+		return ocispecs.Descriptor{}, fmt.Errorf("cannot get unknown compression type")
+	}
+	var target *ocispecs.Descriptor
+	if err := walkBlob(ctx, cs, desc, func(desc ocispecs.Descriptor) bool {
+		if needs, err := needsConversion(ctx, cs, desc, compressionType); err == nil && !needs {
+			target = &desc
+			return false
+		}
+		return true
+	}); err != nil || target == nil {
+		return ocispecs.Descriptor{}, errdefs.ErrNotFound
+	}
+	return *target, nil
+}
+
+func walkBlob(ctx context.Context, cs content.Store, desc ocispecs.Descriptor, f func(ocispecs.Descriptor) bool) error {
+	if !f(desc) {
+		return nil
+	}
+	if _, err := walkBlobVariantsOnly(ctx, cs, desc.Digest, func(desc ocispecs.Descriptor) bool { return f(desc) }, nil); err != nil {
+		return err
+	}
+	return nil
+}
+
+func walkBlobVariantsOnly(ctx context.Context, cs content.Store, dgst digest.Digest, f func(ocispecs.Descriptor) bool, visited map[digest.Digest]struct{}) (bool, error) {
+	if visited == nil {
+		visited = make(map[digest.Digest]struct{})
+	}
+	visited[dgst] = struct{}{}
+	info, err := cs.Info(ctx, dgst)
+	if errors.Is(err, errdefs.ErrNotFound) {
+		return true, nil
+	} else if err != nil {
+		return false, err
+	}
+	var children []digest.Digest
+	for k, dgstS := range info.Labels {
+		if !strings.HasPrefix(k, blobVariantGCLabel) {
+			continue
+		}
+		cDgst, err := digest.Parse(dgstS)
+		if err != nil || cDgst == dgst {
+			continue
+		}
+		if cDesc, err := getBlobDesc(ctx, cs, cDgst); err == nil {
+			if !f(cDesc) {
+				return false, nil
+			}
+		}
+		children = append(children, cDgst)
+	}
+	for _, c := range children {
+		if _, isVisited := visited[c]; isVisited {
+			continue
+		}
+		if isContinue, err := walkBlobVariantsOnly(ctx, cs, c, f, visited); !isContinue || err != nil {
+			return isContinue, err
+		}
+	}
+	return true, nil
+}
+
+func getBlobDesc(ctx context.Context, cs content.Store, dgst digest.Digest) (ocispecs.Descriptor, error) {
+	info, err := cs.Info(ctx, dgst)
+	if err != nil {
+		return ocispecs.Descriptor{}, err
+	}
+	if info.Labels == nil {
+		return ocispecs.Descriptor{}, fmt.Errorf("no blob metadata is stored for %q", info.Digest)
+	}
+	mt, ok := info.Labels[blobMediaTypeLabel]
+	if !ok {
+		return ocispecs.Descriptor{}, fmt.Errorf("no media type is stored for %q", info.Digest)
+	}
+	desc := ocispecs.Descriptor{
+		Digest:    info.Digest,
+		Size:      info.Size,
+		MediaType: mt,
+	}
+	for k, v := range info.Labels {
+		if strings.HasPrefix(k, blobAnnotationsLabelPrefix) {
+			if desc.Annotations == nil {
+				desc.Annotations = make(map[string]string)
+			}
+			desc.Annotations[strings.TrimPrefix(k, blobAnnotationsLabelPrefix)] = v
+		}
+	}
+	if len(desc.URLs) == 0 {
+		// If there are no URL's, there is no reason to have this be non-dsitributable
+		desc.MediaType = layerToDistributable(desc.MediaType)
+	}
+	return desc, nil
+}
+
+func addBlobDescToInfo(desc ocispecs.Descriptor, info content.Info) content.Info {
+	if _, ok := info.Labels[blobMediaTypeLabel]; ok {
+		return info // descriptor information already stored
 	}
 	if info.Labels == nil {
 		info.Labels = make(map[string]string)
 	}
-	cachedVariantLabel := compressionVariantDigestLabel(compressionType)
-	info.Labels[cachedVariantLabel] = desc.Digest.String()
-	if _, err := cs.Update(ctx, info, "labels."+cachedVariantLabel); err != nil {
-		return err
-	}
-
-	info, err = cs.Info(ctx, desc.Digest)
-	if err != nil {
-		return err
-	}
-	var fields []string
-	info.Labels = map[string]string{
-		compressionVariantMediaTypeLabel: desc.MediaType,
-	}
-	fields = append(fields, "labels."+compressionVariantMediaTypeLabel)
+	info.Labels[blobMediaTypeLabel] = desc.MediaType
 	for k, v := range filterAnnotationsForSave(desc.Annotations) {
-		k2 := compressionVariantAnnotationsLabelPrefix + k
-		info.Labels[k2] = v
-		fields = append(fields, "labels."+k2)
+		info.Labels[blobAnnotationsLabelPrefix+k] = v
 	}
-	if _, err := cs.Update(ctx, info, fields...); err != nil {
-		return err
-	}
-
-	return nil
+	return info
 }
 
 func filterAnnotationsForSave(a map[string]string) (b map[string]string) {
@@ -732,32 +894,11 @@ func filterAnnotationsForSave(a map[string]string) (b map[string]string) {
 	return
 }
 
-func getBlobDesc(ctx context.Context, cs content.Store, dgst digest.Digest) (ocispecs.Descriptor, error) {
-	info, err := cs.Info(ctx, dgst)
-	if err != nil {
-		return ocispecs.Descriptor{}, err
+func fieldsFromLabels(labels map[string]string) (fields []string) {
+	for k := range labels {
+		fields = append(fields, "labels."+k)
 	}
-	if info.Labels == nil {
-		return ocispecs.Descriptor{}, fmt.Errorf("no blob metadata is stored for %q", info.Digest)
-	}
-	mt, ok := info.Labels[compressionVariantMediaTypeLabel]
-	if !ok {
-		return ocispecs.Descriptor{}, fmt.Errorf("no media type is stored for %q", info.Digest)
-	}
-	desc := ocispecs.Descriptor{
-		Digest:    info.Digest,
-		Size:      info.Size,
-		MediaType: mt,
-	}
-	for k, v := range info.Labels {
-		if strings.HasPrefix(k, compressionVariantAnnotationsLabelPrefix) {
-			if desc.Annotations == nil {
-				desc.Annotations = make(map[string]string)
-			}
-			desc.Annotations[strings.TrimPrefix(k, compressionVariantAnnotationsLabelPrefix)] = v
-		}
-	}
-	return desc, nil
+	return
 }
 
 func (sr *immutableRef) Mount(ctx context.Context, readonly bool, s session.Group) (_ snapshot.Mountable, rerr error) {
@@ -811,14 +952,14 @@ func (sr *immutableRef) Extract(ctx context.Context, s session.Group) (rerr erro
 			if rerr = sr.prepareRemoteSnapshotsStargzMode(ctx, s); rerr != nil {
 				return
 			}
-			rerr = sr.unlazy(ctx, sr.descHandlers, s)
+			rerr = sr.unlazy(ctx, sr.descHandlers, sr.progress, s, true)
 		}); err != nil {
 			return err
 		}
 		return rerr
 	}
 
-	return sr.unlazy(ctx, sr.descHandlers, s)
+	return sr.unlazy(ctx, sr.descHandlers, sr.progress, s, true)
 }
 
 func (sr *immutableRef) withRemoteSnapshotLabelsStargzMode(ctx context.Context, s session.Group, f func()) error {
@@ -949,7 +1090,7 @@ func makeTmpLabelsStargzMode(labels map[string]string, s session.Group) (fields 
 	return
 }
 
-func (sr *immutableRef) unlazy(ctx context.Context, dhs DescHandlers, s session.Group) error {
+func (sr *immutableRef) unlazy(ctx context.Context, dhs DescHandlers, pg progress.Controller, s session.Group, topLevel bool) error {
 	_, err := sr.sizeG.Do(ctx, sr.ID()+"-unlazy", func(ctx context.Context) (_ interface{}, rerr error) {
 		if _, err := sr.cm.Snapshotter.Stat(ctx, sr.getSnapshotID()); err == nil {
 			return nil, nil
@@ -957,9 +1098,9 @@ func (sr *immutableRef) unlazy(ctx context.Context, dhs DescHandlers, s session.
 
 		switch sr.kind() {
 		case Merge, Diff:
-			return nil, sr.unlazyDiffMerge(ctx, dhs, s)
+			return nil, sr.unlazyDiffMerge(ctx, dhs, pg, s, topLevel)
 		case Layer, BaseLayer:
-			return nil, sr.unlazyLayer(ctx, dhs, s)
+			return nil, sr.unlazyLayer(ctx, dhs, pg, s)
 		}
 		return nil, nil
 	})
@@ -967,7 +1108,7 @@ func (sr *immutableRef) unlazy(ctx context.Context, dhs DescHandlers, s session.
 }
 
 // should be called within sizeG.Do call for this ref's ID
-func (sr *immutableRef) unlazyDiffMerge(ctx context.Context, dhs DescHandlers, s session.Group) error {
+func (sr *immutableRef) unlazyDiffMerge(ctx context.Context, dhs DescHandlers, pg progress.Controller, s session.Group, topLevel bool) (rerr error) {
 	eg, egctx := errgroup.WithContext(ctx)
 	var diffs []snapshot.Diff
 	sr.layerWalk(func(sr *immutableRef) {
@@ -977,13 +1118,13 @@ func (sr *immutableRef) unlazyDiffMerge(ctx context.Context, dhs DescHandlers, s
 			if sr.diffParents.lower != nil {
 				diff.Lower = sr.diffParents.lower.getSnapshotID()
 				eg.Go(func() error {
-					return sr.diffParents.lower.unlazy(egctx, dhs, s)
+					return sr.diffParents.lower.unlazy(egctx, dhs, pg, s, false)
 				})
 			}
 			if sr.diffParents.upper != nil {
 				diff.Upper = sr.diffParents.upper.getSnapshotID()
 				eg.Go(func() error {
-					return sr.diffParents.upper.unlazy(egctx, dhs, s)
+					return sr.diffParents.upper.unlazy(egctx, dhs, pg, s, false)
 				})
 			}
 		case Layer:
@@ -992,7 +1133,7 @@ func (sr *immutableRef) unlazyDiffMerge(ctx context.Context, dhs DescHandlers, s
 		case BaseLayer:
 			diff.Upper = sr.getSnapshotID()
 			eg.Go(func() error {
-				return sr.unlazy(egctx, dhs, s)
+				return sr.unlazy(egctx, dhs, pg, s, false)
 			})
 		}
 		diffs = append(diffs, diff)
@@ -1000,11 +1141,30 @@ func (sr *immutableRef) unlazyDiffMerge(ctx context.Context, dhs DescHandlers, s
 	if err := eg.Wait(); err != nil {
 		return err
 	}
+
+	if pg != nil {
+		action := "merging"
+		if sr.kind() == Diff {
+			action = "diffing"
+		}
+		progressID := sr.GetDescription()
+		if topLevel {
+			progressID = action
+		}
+		if progressID == "" {
+			progressID = fmt.Sprintf("%s %s", action, sr.ID())
+		}
+		_, stopProgress := pg.Start(ctx)
+		defer stopProgress(rerr)
+		statusDone := pg.Status(progressID, action)
+		defer statusDone()
+	}
+
 	return sr.cm.Snapshotter.Merge(ctx, sr.getSnapshotID(), diffs)
 }
 
 // should be called within sizeG.Do call for this ref's ID
-func (sr *immutableRef) unlazyLayer(ctx context.Context, dhs DescHandlers, s session.Group) (rerr error) {
+func (sr *immutableRef) unlazyLayer(ctx context.Context, dhs DescHandlers, pg progress.Controller, s session.Group) (rerr error) {
 	if !sr.getBlobOnly() {
 		return nil
 	}
@@ -1031,7 +1191,7 @@ func (sr *immutableRef) unlazyLayer(ctx context.Context, dhs DescHandlers, s ses
 	parentID := ""
 	if sr.layerParent != nil {
 		eg.Go(func() error {
-			if err := sr.layerParent.unlazy(egctx, dhs, s); err != nil {
+			if err := sr.layerParent.unlazy(egctx, dhs, pg, s, false); err != nil {
 				return err
 			}
 			parentID = sr.layerParent.getSnapshotID()
@@ -1039,7 +1199,7 @@ func (sr *immutableRef) unlazyLayer(ctx context.Context, dhs DescHandlers, s ses
 		})
 	}
 
-	desc, err := sr.ociDesc(ctx, dhs)
+	desc, err := sr.ociDesc(ctx, dhs, true)
 	if err != nil {
 		return err
 	}
@@ -1059,10 +1219,13 @@ func (sr *immutableRef) unlazyLayer(ctx context.Context, dhs DescHandlers, s ses
 		return err
 	}
 
-	if dh != nil && dh.Progress != nil {
-		_, stopProgress := dh.Progress.Start(ctx)
+	if pg == nil && dh != nil {
+		pg = dh.Progress
+	}
+	if pg != nil {
+		_, stopProgress := pg.Start(ctx)
 		defer stopProgress(rerr)
-		statusDone := dh.Progress.Status("extracting "+desc.Digest.String(), "extracting")
+		statusDone := pg.Status("extracting "+desc.Digest.String(), "extracting")
 		defer statusDone()
 	}
 
@@ -1251,7 +1414,7 @@ func (sr *mutableRef) commit(ctx context.Context) (_ *immutableRef, rerr error) 
 		return nil, err
 	}
 
-	ref := rec.ref(true, sr.descHandlers)
+	ref := rec.ref(true, sr.descHandlers, nil)
 	sr.equalImmutable = ref
 	return ref, nil
 }
@@ -1281,6 +1444,10 @@ func (sr *mutableRef) Mount(ctx context.Context, readonly bool, s session.Group)
 		return nil, rerr
 	}
 
+	// Make the mounts sharable. We don't do this for immutableRef mounts because
+	// it requires the raw []mount.Mount for computing diff on overlayfs.
+	mnt = sr.cm.mountPool.setSharable(mnt)
+	sr.mountCache = mnt
 	if readonly {
 		mnt = setReadonly(mnt)
 	}
@@ -1379,4 +1546,146 @@ func readonlyOverlay(opt []string) []string {
 		}
 	}
 	return out
+}
+
+func newSharableMountPool(tmpdirRoot string) (sharableMountPool, error) {
+	if tmpdirRoot != "" {
+		if err := os.MkdirAll(tmpdirRoot, 0700); err != nil {
+			return sharableMountPool{}, fmt.Errorf("failed to prepare mount pool: %w", err)
+		}
+		// If tmpdirRoot is specified, remove existing mounts to avoid conflict.
+		files, err := os.ReadDir(tmpdirRoot)
+		if err != nil {
+			return sharableMountPool{}, fmt.Errorf("failed to read mount pool: %w", err)
+		}
+		for _, file := range files {
+			if file.IsDir() {
+				dir := filepath.Join(tmpdirRoot, file.Name())
+				bklog.G(context.Background()).Debugf("cleaning up existing temporary mount %q", dir)
+				if err := mount.Unmount(dir, 0); err != nil {
+					if mounted, merr := mountinfo.Mounted(dir); merr != nil || mounted {
+						bklog.G(context.Background()).WithError(err).WithError(merr).
+							WithField("mounted", mounted).Warnf("failed to unmount existing temporary mount %q", dir)
+						continue
+					}
+				}
+				if err := os.Remove(dir); err != nil {
+					bklog.G(context.Background()).WithError(err).Warnf("failed to remove existing temporary mount %q", dir)
+				}
+			}
+		}
+	}
+	return sharableMountPool{tmpdirRoot}, nil
+}
+
+type sharableMountPool struct {
+	tmpdirRoot string
+}
+
+func (p sharableMountPool) setSharable(mounts snapshot.Mountable) snapshot.Mountable {
+	return &sharableMountable{Mountable: mounts, mountPoolRoot: p.tmpdirRoot}
+}
+
+// sharableMountable allows sharing underlying (possibly writable) mounts among callers.
+// This is useful to share writable overlayfs mounts.
+//
+// NOTE: Mount() method doesn't return the underlying mount configuration (e.g. overlayfs mounts)
+//       instead it always return bind mounts of the temporary mount point. So if the caller
+//       needs to inspect the underlying mount configuration (e.g. for optimized differ for
+//       overlayfs), this wrapper shouldn't be used.
+type sharableMountable struct {
+	snapshot.Mountable
+
+	count         int32
+	mu            sync.Mutex
+	mountPoolRoot string
+
+	curMounts     []mount.Mount
+	curMountPoint string
+	curRelease    func() error
+}
+
+func (sm *sharableMountable) Mount() (_ []mount.Mount, _ func() error, retErr error) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	if sm.curMounts == nil {
+		mounts, release, err := sm.Mountable.Mount()
+		if err != nil {
+			return nil, nil, err
+		}
+		defer func() {
+			if retErr != nil {
+				release()
+			}
+		}()
+		var isOverlay bool
+		for _, m := range mounts {
+			if m.Type == "overlay" {
+				isOverlay = true
+				break
+			}
+		}
+		if !isOverlay {
+			// Don't need temporary mount wrapper for non-overlayfs mounts
+			return mounts, release, nil
+		}
+		dir, err := os.MkdirTemp(sm.mountPoolRoot, "buildkit")
+		if err != nil {
+			return nil, nil, err
+		}
+		defer func() {
+			if retErr != nil {
+				os.Remove(dir)
+			}
+		}()
+		if err := mount.All(mounts, dir); err != nil {
+			return nil, nil, err
+		}
+		defer func() {
+			if retErr != nil {
+				mount.Unmount(dir, 0)
+			}
+		}()
+		sm.curMounts = []mount.Mount{
+			{
+				Source: dir,
+				Type:   "bind",
+				Options: []string{
+					"rw",
+					"rbind",
+				},
+			},
+		}
+		sm.curMountPoint = dir
+		sm.curRelease = release
+	}
+
+	mounts := make([]mount.Mount, len(sm.curMounts))
+	copy(mounts, sm.curMounts)
+
+	sm.count++
+	return mounts, func() error {
+		sm.mu.Lock()
+		defer sm.mu.Unlock()
+
+		sm.count--
+		if sm.count < 0 {
+			if v := os.Getenv("BUILDKIT_DEBUG_PANIC_ON_ERROR"); v == "1" {
+				panic("release of released mount")
+			}
+		} else if sm.count > 0 {
+			return nil
+		}
+
+		// no mount exist. release the current mount.
+		sm.curMounts = nil
+		if err := mount.Unmount(sm.curMountPoint, 0); err != nil {
+			return err
+		}
+		if err := sm.curRelease(); err != nil {
+			return err
+		}
+		return os.Remove(sm.curMountPoint)
+	}, nil
 }

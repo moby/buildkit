@@ -3,6 +3,6 @@
 
 package archutil
 
-func armSupported() error {
-	return nil
+func armSupported() (string, error) {
+	return "", nil
 }

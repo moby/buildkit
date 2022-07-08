@@ -37,7 +37,7 @@ const (
 
 // Option applies an option to the HTTP client.
 type Option interface {
-	applyHTTPOption(*otlpconfig.Config)
+	applyHTTPOption(otlpconfig.Config) otlpconfig.Config
 }
 
 // RetryConfig defines configuration for retrying batches in case of export
@@ -48,8 +48,8 @@ type wrappedOption struct {
 	otlpconfig.HTTPOption
 }
 
-func (w wrappedOption) applyHTTPOption(cfg *otlpconfig.Config) {
-	w.ApplyHTTPOption(cfg)
+func (w wrappedOption) applyHTTPOption(cfg otlpconfig.Config) otlpconfig.Config {
+	return w.ApplyHTTPOption(cfg)
 }
 
 // WithEndpoint allows one to set the address of the collector

@@ -25,6 +25,52 @@ incrementing the major component of a version and you may want to pin the image 
 change in between releases on labs channel, the old versions are guaranteed to be backward compatible.
 
 
+## Linked copies `COPY --link`, `ADD --link`
+
+To use this flag set Dockerfile version to at least `1.4`.
+
+```dockerfile
+# syntax=docker/dockerfile:1.4
+```
+
+Enabling this flag in `COPY` or `ADD` commands allows you to copy files with enhanced semantics where your files remain independent on their own layer and don't get invalidated when commands on previous layers are changed.
+
+When `--link` is used your source files are copied into an empty destination directory. That directory is turned into a layer that is linked on top of your previous state.
+
+```dockerfile
+# syntax=docker/dockerfile:1.4
+FROM alpine
+COPY --link /foo /bar
+```
+
+Is equivalent of doing two builds:
+
+```dockerfile
+FROM alpine
+```
+
+and
+
+```dockerfile
+FROM scratch
+COPY /foo /bar
+```
+
+and merging all the layers of both images together.
+
+#### Benefits of using `--link`
+
+Using `--link` allows to reuse already built layers in subsequent builds with `--cache-from` even if the previous layers have changed. This is especially important for multi-stage builds where a `COPY --from` statement would previously get invalidated if any previous commands in the same stage changed, causing the need to rebuild the intermediate stages again. With `--link` the layer the previous build generated is reused and merged on top of the new layers. This also means you can easily rebase your images when the base images receive updates, without having to execute the whole build again. In backends that support it, BuildKit can do this rebase action without the need to push or pull any layers between the client and the registry. BuildKit will detect this case and only create new image manifest that contains the new layers and old layers in correct order.
+
+The same behavior where BuildKit can avoid pulling down the base image can also happen when using `--link` and no other commands that would require access to the files in the base image. In that case BuildKit will only build the layers for the `COPY` commands and push them to the registry directly on top of the layers of the base image.
+
+#### Incompatibilities with `--link=false`
+
+When using `--link` the `COPY/ADD` commands are not allowed to read any files from the previous state. This means that if in previous state the destination directory was a path that contained a symlink, `COPY/ADD` can not follow it. In the final image the destination path created with `--link` will always be a path containing only directories.
+
+If you don't rely on the behavior of following symlinks in the destination path, using `--link` is always recommended. The performance of `--link` is equivalent or better than the default behavior and it creates much better conditions for cache reuse. 
+
+
 ## Build Mounts `RUN --mount=...`
 
 To use this flag set Dockerfile version to at least `1.2`
@@ -207,6 +253,86 @@ RUN --network=none pip install --find-links wheels mypackage
 `pip` will only be able to install the packages provided in the tarfile, which
 can be controlled by an earlier build stage.
 
+## Here-Documents
+
+This feature is available since `docker/dockerfile:1.4.0` release.
+
+```
+# syntax=docker/dockerfile:1.4
+```
+
+Here-documents allow redirection of subsequent Dockerfile lines to the input of `RUN` or `COPY` commands.
+If such command contains a [here-document](https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_07_04)
+Dockerfile will consider the next lines until the line only containing a here-doc delimiter as part of the same command.
+
+#### Example: running a multi-line script
+
+```dockerfile
+# syntax = docker/dockerfile:1.4
+FROM debian
+RUN <<eot bash
+  apt-get update
+  apt-get install -y vim
+eot
+```
+
+If the command only contains a here-document, its contents is evaluated with the default shell.
+
+```dockerfile
+# syntax = docker/dockerfile:1.4
+FROM debian
+RUN <<eot
+  mkdir -p foo/bar
+eot
+```
+
+Alternatively, shebang header can be used to define an interpreter.
+
+```dockerfile
+# syntax = docker/dockerfile:1.4
+FROM python:3.6
+RUN <<eot
+#!/usr/bin/env python
+print("hello world")
+eot
+```
+
+More complex examples may use multiple here-documents.
+
+```dockerfile
+# syntax = docker/dockerfile:1.4
+FROM alpine
+RUN <<FILE1 cat > file1 && <<FILE2 cat > file2
+I am
+first
+FILE1
+I am
+second
+FILE2
+```
+
+#### Example: creating inline files
+
+In `COPY` commands source parameters can be replaced with here-doc indicators.
+Regular here-doc [variable expansion and tab stripping rules](https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_07_04) apply.
+
+```dockerfile
+# syntax = docker/dockerfile:1.4
+FROM alpine
+ARG FOO=bar
+COPY <<-eot /app/foo
+	hello ${FOO}
+eot
+```
+
+```dockerfile
+# syntax = docker/dockerfile:1.4
+FROM alpine
+COPY <<-"eot" /app/script.sh
+	echo hello ${FOO}
+eot
+RUN FOO=abc ash /app/script.sh
+```
 
 ## Security context `RUN --security=insecure|sandbox`
 
@@ -237,93 +363,14 @@ RUN --security=insecure cat /proc/self/status | grep CapEff
 #84 0.093 CapEff:	0000003fffffffff
 ```
 
-## Here-Documents
-
-To use this flag, set Dockerfile version to `labs` channel. This feature is available
-since `docker/dockerfile:1.3.0-labs` release.
-
-```
-# syntax=docker/dockerfile:1.3-labs
-```
-
-Here-documents allow redirection of subsequent Dockerfile lines to the input of `RUN` or `COPY` commands.
-If such command contains a [here-document](https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_07_04)
-Dockerfile will consider the next lines until the line only containing a here-doc delimiter as part of the same command.
-
-#### Example: running a multi-line script
-
-```dockerfile
-# syntax = docker/dockerfile:1.3-labs
-FROM debian
-RUN <<eot bash
-  apt-get update
-  apt-get install -y vim
-eot
-```
-
-If the command only contains a here-document, its contents is evaluated with the default shell.
-
-```dockerfile
-# syntax = docker/dockerfile:1.3-labs
-FROM debian
-RUN <<eot
-  mkdir -p foo/bar
-eot
-```
-
-Alternatively, shebang header can be used to define an interpreter.
-
-```dockerfile
-# syntax = docker/dockerfile:1.3-labs
-FROM python:3.6
-RUN <<eot
-#!/usr/bin/env python
-print("hello world")
-eot
-```
-
-More complex examples may use multiple here-documents.
-
-```dockerfile
-# syntax = docker/dockerfile:1.3-labs
-FROM alpine
-RUN <<FILE1 cat > file1 && <<FILE2 cat > file2
-I am
-first
-FILE1
-I am
-second
-FILE2
-```
-
-#### Example: creating inline files
-
-In `COPY` commands source parameters can be replaced with here-doc indicators.
-Regular here-doc [variable expansion and tab stripping rules](https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_07_04) apply.
-
-```dockerfile
-# syntax = docker/dockerfile:1.3-labs
-FROM alpine
-ARG FOO=bar
-COPY <<-eot /app/foo
-	hello ${FOO}
-eot
-```
-
-```dockerfile
-# syntax = docker/dockerfile:1.3-labs
-FROM alpine
-COPY <<-"eot" /app/script.sh
-	echo hello ${FOO}
-eot
-RUN FOO=abc ash /app/script.sh
-```
-
 ## Built-in build args
 
 * `BUILDKIT_CACHE_MOUNT_NS=<string>` set optional cache ID namespace
 * `BUILDKIT_CONTEXT_KEEP_GIT_DIR=<bool>` trigger git context to keep the `.git` directory
-* `BUILDKIT_INLINE_CACHE=<bool>` inline cache metadata to image configuration or not (for Docker-integrated BuildKit (`DOCKER_BUILDKIT=1 docker build`) and `docker buildx`)
+* `BUILDKIT_INLINE_BUILDINFO_ATTRS=<bool>`¹ inline build info attributes in image config or not
+* `BUILDKIT_INLINE_CACHE=<bool>`¹ inline cache metadata to image config or not
 * `BUILDKIT_MULTI_PLATFORM=<bool>` opt into determnistic output regardless of multi-platform output or not
 * `BUILDKIT_SANDBOX_HOSTNAME=<string>` set the hostname (default `buildkitsandbox`)
 * `BUILDKIT_SYNTAX=<image>` set frontend image
+
+> **¹** For Docker-integrated BuildKit (`DOCKER_BUILDKIT=1 docker build`) and `docker buildx`

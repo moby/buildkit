@@ -56,12 +56,20 @@ func (s *Lex) ProcessWordWithMap(word string, env map[string]string) (string, er
 	return word, err
 }
 
+// ProcessWordWithMatches will use the 'env' list of environment variables,
+// replace any env var references in 'word' and return the env that were used.
+func (s *Lex) ProcessWordWithMatches(word string, env map[string]string) (string, map[string]struct{}, error) {
+	sw := s.init(word, env)
+	word, _, err := sw.process(word)
+	return word, sw.matches, err
+}
+
 func (s *Lex) ProcessWordsWithMap(word string, env map[string]string) ([]string, error) {
 	_, words, err := s.process(word, env)
 	return words, err
 }
 
-func (s *Lex) process(word string, env map[string]string) (string, []string, error) {
+func (s *Lex) init(word string, env map[string]string) *shellWord {
 	sw := &shellWord{
 		envs:              env,
 		escapeToken:       s.escapeToken,
@@ -69,8 +77,14 @@ func (s *Lex) process(word string, env map[string]string) (string, []string, err
 		skipProcessQuotes: s.SkipProcessQuotes,
 		rawQuotes:         s.RawQuotes,
 		rawEscapes:        s.RawEscapes,
+		matches:           make(map[string]struct{}),
 	}
 	sw.scanner.Init(strings.NewReader(word))
+	return sw
+}
+
+func (s *Lex) process(word string, env map[string]string) (string, []string, error) {
+	sw := s.init(word, env)
 	return sw.process(word)
 }
 
@@ -82,6 +96,7 @@ type shellWord struct {
 	rawEscapes        bool
 	skipUnsetEnv      bool
 	skipProcessQuotes bool
+	matches           map[string]struct{}
 }
 
 func (sw *shellWord) process(source string) (string, []string, error) {
@@ -456,6 +471,7 @@ func isSpecialParam(char rune) bool {
 func (sw *shellWord) getEnv(name string) (string, bool) {
 	for key, value := range sw.envs {
 		if EqualEnvKeys(name, key) {
+			sw.matches[name] = struct{}{}
 			return value, true
 		}
 	}

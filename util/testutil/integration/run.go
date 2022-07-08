@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -13,7 +12,6 @@ import (
 	"runtime"
 	"sort"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -24,7 +22,6 @@ import (
 	"github.com/moby/buildkit/util/contentutil"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/semaphore"
 )
@@ -51,6 +48,7 @@ type Sandbox interface {
 	PrintLogs(*testing.T)
 	NewRegistry() (string, error)
 	Value(string) interface{} // chosen matrix value
+	Name() string
 }
 
 // BackendConfig is used to configure backends created by a worker.
@@ -151,20 +149,7 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 	mirror, cleanup, err := runMirror(t, tc.mirroredImages)
 	require.NoError(t, err)
 
-	var mu sync.Mutex
-	var count int
-	cleanOnComplete := func() func() {
-		count++
-		return func() {
-			mu.Lock()
-			count--
-			if count == 0 {
-				cleanup()
-			}
-			mu.Unlock()
-		}
-	}
-	defer cleanOnComplete()()
+	t.Cleanup(func() { _ = cleanup() })
 
 	matrix := prepareValueMatrix(tc)
 
@@ -182,8 +167,6 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 				func(fn, testName string, br Worker, tc Test, mv matrixValue) {
 					ok := t.Run(testName, func(t *testing.T) {
 						ctx := appcontext.Context()
-
-						defer cleanOnComplete()()
 						if !strings.HasSuffix(fn, "NoParallel") {
 							t.Parallel()
 						}
@@ -192,8 +175,8 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 
 						sb, closer, err := newSandbox(ctx, br, mirror, mv)
 						require.NoError(t, err)
+						t.Cleanup(func() { _ = closer() })
 						defer func() {
-							assert.NoError(t, closer())
 							if t.Failed() {
 								sb.PrintLogs(t)
 							}
@@ -210,7 +193,7 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 func getFunctionName(i interface{}) string {
 	fullname := runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
 	dot := strings.LastIndex(fullname, ".") + 1
-	return strings.Title(fullname[dot:])
+	return strings.Title(fullname[dot:]) //nolint:staticcheck // ignoring "SA1019: strings.Title is deprecated", as for our use we don't need full unicode support
 }
 
 var localImageCache map[string]map[string]struct{}
@@ -294,7 +277,7 @@ mirrors=["%s"]
 }
 
 func writeConfig(updaters []ConfigUpdater) (string, error) {
-	tmpdir, err := ioutil.TempDir("", "bktest_config")
+	tmpdir, err := os.MkdirTemp("", "bktest_config")
 	if err != nil {
 		return "", err
 	}
@@ -307,7 +290,7 @@ func writeConfig(updaters []ConfigUpdater) (string, error) {
 		s = upt.UpdateConfigFile(s)
 	}
 
-	if err := ioutil.WriteFile(filepath.Join(tmpdir, buildkitdConfigFile), []byte(s), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpdir, buildkitdConfigFile), []byte(s), 0644); err != nil {
 		return "", err
 	}
 	return tmpdir, nil
@@ -427,7 +410,7 @@ func runStargzSnapshotter(cfg *BackendConfig) (address string, cl func() error, 
 		}
 	}()
 
-	tmpStargzDir, err := ioutil.TempDir("", "bktest_containerd_stargz_grpc")
+	tmpStargzDir, err := os.MkdirTemp("", "bktest_containerd_stargz_grpc")
 	if err != nil {
 		return "", nil, err
 	}

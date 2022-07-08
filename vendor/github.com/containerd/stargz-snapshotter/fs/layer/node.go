@@ -59,19 +59,36 @@ const (
 	stateDirMode      = syscall.S_IFDIR | 0500 // dr-x------
 )
 
-var opaqueXattrs = []string{"trusted.overlay.opaque", "user.overlay.opaque"}
+type OverlayOpaqueType int
 
-func newNode(layerDgst digest.Digest, r reader.Reader, blob remote.Blob, baseInode uint32) (fusefs.InodeEmbedder, error) {
+const (
+	OverlayOpaqueAll OverlayOpaqueType = iota
+	OverlayOpaqueTrusted
+	OverlayOpaqueUser
+)
+
+var opaqueXattrs = map[OverlayOpaqueType][]string{
+	OverlayOpaqueAll:     {"trusted.overlay.opaque", "user.overlay.opaque"},
+	OverlayOpaqueTrusted: {"trusted.overlay.opaque"},
+	OverlayOpaqueUser:    {"user.overlay.opaque"},
+}
+
+func newNode(layerDgst digest.Digest, r reader.Reader, blob remote.Blob, baseInode uint32, opaque OverlayOpaqueType) (fusefs.InodeEmbedder, error) {
 	rootID := r.Metadata().RootID()
 	rootAttr, err := r.Metadata().GetAttr(rootID)
 	if err != nil {
 		return nil, err
 	}
+	opq, ok := opaqueXattrs[opaque]
+	if !ok {
+		return nil, fmt.Errorf("Unknown overlay opaque type")
+	}
 	ffs := &fs{
-		r:           r,
-		layerDigest: layerDgst,
-		baseInode:   baseInode,
-		rootID:      rootID,
+		r:            r,
+		layerDigest:  layerDgst,
+		baseInode:    baseInode,
+		rootID:       rootID,
+		opaqueXattrs: opq,
 	}
 	ffs.s = ffs.newState(layerDgst, blob)
 	return &node{
@@ -83,11 +100,12 @@ func newNode(layerDgst digest.Digest, r reader.Reader, blob remote.Blob, baseIno
 
 // fs contains global metadata used by nodes
 type fs struct {
-	r           reader.Reader
-	s           *state
-	layerDigest digest.Digest
-	baseInode   uint32
-	rootID      uint32
+	r            reader.Reader
+	s            *state
+	layerDigest  digest.Digest
+	baseInode    uint32
+	rootID       uint32
+	opaqueXattrs []string
 }
 
 func (fs *fs) inodeOfState() uint64 {
@@ -335,7 +353,7 @@ var _ = (fusefs.NodeGetxattrer)((*node)(nil))
 func (n *node) Getxattr(ctx context.Context, attr string, dest []byte) (uint32, syscall.Errno) {
 	ent := n.attr
 	opq := n.isOpaque()
-	for _, opaqueXattr := range opaqueXattrs {
+	for _, opaqueXattr := range n.fs.opaqueXattrs {
 		if attr == opaqueXattr && opq {
 			// This node is an opaque directory so give overlayfs-compliant indicator.
 			if len(dest) < len(opaqueXattrValue) {
@@ -361,7 +379,7 @@ func (n *node) Listxattr(ctx context.Context, dest []byte) (uint32, syscall.Errn
 	var attrs []byte
 	if opq {
 		// This node is an opaque directory so add overlayfs-compliant indicator.
-		for _, opaqueXattr := range opaqueXattrs {
+		for _, opaqueXattr := range n.fs.opaqueXattrs {
 			attrs = append(attrs, []byte(opaqueXattr+"\x00")...)
 		}
 	}
@@ -619,6 +637,9 @@ func (sf *statFile) updateStatUnlocked() ([]byte, error) {
 func entryToAttr(ino uint64, e metadata.Attr, out *fuse.Attr) fusefs.StableAttr {
 	out.Ino = ino
 	out.Size = uint64(e.Size)
+	if e.Mode&os.ModeSymlink != 0 {
+		out.Size = uint64(len(e.LinkName))
+	}
 	out.Blksize = blockSize
 	out.Blocks = out.Size / uint64(out.Blksize)
 	if out.Size%uint64(out.Blksize) > 0 {

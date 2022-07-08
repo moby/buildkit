@@ -58,6 +58,7 @@ You don't need to read this document unless you want to use the full-featured st
     - [Registry (push image and cache separately)](#registry-push-image-and-cache-separately)
     - [Local directory](#local-directory-1)
     - [GitHub Actions cache (experimental)](#github-actions-cache-experimental)
+    - [S3 cache (experimental)](#s3-cache-experimental)
   - [Consistent hashing](#consistent-hashing)
 - [Metadata](#metadata)
 - [Systemd socket activation](#systemd-socket-activation)
@@ -92,6 +93,8 @@ BuildKit is used by the following projects:
 -   [Okteto Cloud](https://okteto.com/)
 -   [Earthly earthfiles](https://github.com/vladaionescu/earthly)
 -   [Gitpod](https://github.com/gitpod-io/gitpod)
+-   [Dagger](https://dagger.io)
+-   [envd](https://github.com/tensorchord/envd/)
 
 ## Quick start
 
@@ -157,6 +160,8 @@ Currently, the following high-level languages has been implemented for LLB:
 -   [Earthfile (Earthly)](https://github.com/earthly/earthly)
 -   [Cargo Wharf (Rust)](https://github.com/denzp/cargo-wharf)
 -   [Nix](https://github.com/AkihiroSuda/buildkit-nix)
+-   [mopy (Python)](https://github.com/cmdjulian/mopy)
+-   [envd (starlark)](https://github.com/tensorchord/envd/)
 -   (open a PR to add your own language)
 
 ### Exploring Dockerfiles
@@ -214,6 +219,12 @@ By default, the build result and intermediate cache will only remain internally 
 buildctl build ... --output type=image,name=docker.io/username/image,push=true
 ```
 
+To export the image to multiple registries:
+
+```bash
+buildctl build ... --output type=image,\"name=docker.io/username/image,docker.io/username2/image2\",push=true
+```
+
 To export the cache embed with the image and pushing them to registry together, type `registry` is required to import the cache, you should specify `--export-cache type=inline` and `--import-cache type=registry,ref=...`. To export the cache to a local directy, you should specify `--export-cache type=local`.
 Details in [Export cache](#export-cache).
 
@@ -225,17 +236,24 @@ buildctl build ...\
 ```
 
 Keys supported by image output:
-* `name=[value]`: image name
+* `name=<value>`: specify image name(s)
 * `push=true`: push after creating the image
 * `push-by-digest=true`: push unnamed image
 * `registry.insecure=true`: push to insecure HTTP registry
 * `oci-mediatypes=true`: use OCI mediatypes in configuration JSON instead of Docker's
 * `unpack=true`: unpack image after creation (for use with containerd)
-* `dangling-name-prefix=[value]`: name image with `prefix@<digest>` , used for anonymous images
+* `dangling-name-prefix=<value>`: name image with `prefix@<digest>`, used for anonymous images
 * `name-canonical=true`: add additional canonical name `name@<digest>`
-* `compression=[uncompressed,gzip,estargz,zstd]`: choose compression type for layers newly created and cached, gzip is default value. estargz should be used with `oci-mediatypes=true`.
-* `force-compression=true`: forcefully apply `compression` option to all layers (including already existing layers).
-* `buildinfo=[all,imageconfig,metadata,none]`: choose [build dependency](docs/build-repro.md#build-dependencies) version to export (default `all`).
+* `compression=<uncompressed|gzip|estargz|zstd>`: choose compression type for layers newly created and cached, gzip is default value. estargz should be used with `oci-mediatypes=true`.
+* `compression-level=<value>`: compression level for gzip, estargz (0-9) and zstd (0-22)
+* `force-compression=true`: forcefully apply `compression` option to all layers (including already existing layers)
+* `buildinfo=true`: attach inline build info in [image config](docs/build-repro.md#image-config) (default `true`)
+* `buildinfo-attrs=true`: attach inline build info attributes in [image config](docs/build-repro.md#image-config) (default `false`)
+* `store=true`: store the result images to the worker's (e.g. containerd) image store as well as ensures that the image has all blobs in the content store (default `true`). Ignored if the worker doesn't have image store (e.g. OCI worker).
+* `annotation.<key>=<value>`: attach an annotation with the respective `key` and `value` to the built image
+  * Using the extended syntaxes, `annotation-<type>.<key>=<value>`, `annotation[<platform>].<key>=<value>` and both combined with `annotation-<type>[<platform>].<key>=<value>`, allows configuring exactly where to attach the annotation.
+  * `<type>` specifies what object to attach to, and can be any of `manifest` (the default), `manifest-descriptor`, `index` and `index-descriptor`
+  * `<platform>` specifies which objects to attach to (by default, all), and is the same key passed into the `platform` opt, see [`docs/multi-platform.md`](docs/multi-platform.md).
 
 If credentials are required, `buildctl` will attempt to read Docker configuration file `$DOCKER_CONFIG/config.json`.
 `$DOCKER_CONFIG` defaults to `~/.docker`.
@@ -282,6 +300,7 @@ buildctl build ... --output type=docker,name=myimage | docker load
 buildctl build ... --output type=oci,dest=path/to/output.tar
 buildctl build ... --output type=oci > output.tar
 ```
+
 #### containerd image store
 
 The containerd worker needs to be used
@@ -292,7 +311,6 @@ ctr --namespace=buildkit images ls
 ```
 
 To change the containerd namespace, you need to change `worker.containerd.namespace` in [`/etc/buildkit/buildkitd.toml`](./docs/buildkitd.toml.md).
-
 
 ## Cache
 
@@ -353,14 +371,18 @@ buildctl build ... \
 
 `--export-cache` options:
 * `type=registry`
-* `mode=min` (default): only export layers for the resulting image
-* `mode=max`: export all the layers of all intermediate steps.
-* `ref=docker.io/user/image:tag`: reference
-* `oci-mediatypes=true|false`: whether to use OCI mediatypes in exported manifests. Since BuildKit `v0.8` defaults to true.
+* `mode=<min|max>`: specify cache layers to export (default: `min`)
+  * `min`: only export layers for the resulting image
+  * `max`: export all the layers of all intermediate steps
+* `ref=<ref>`: specify repository reference to store cache, e.g. `docker.io/user/image:tag`
+* `oci-mediatypes=<true|false>`: whether to use OCI mediatypes in exported manifests (default: `true`, since BuildKit `v0.8`)
+* `compression=<uncompressed|gzip|estargz|zstd>`: choose compression type for layers newly created and cached, gzip is default value. estargz and zstd should be used with `oci-mediatypes=true`
+* `compression-level=<value>`: choose compression level for gzip, estargz (0-9) and zstd (0-22)
+* `force-compression=true`: forcibly apply `compression` option to all layers
 
 `--import-cache` options:
 * `type=registry`
-* `ref=docker.io/user/image:tag`: reference
+* `ref=<ref>`: specify repository reference to retrieve cache from, e.g. `docker.io/user/image:tag`
 
 #### Local directory
 
@@ -373,16 +395,20 @@ The directory layout conforms to OCI Image Spec v1.0.
 
 `--export-cache` options:
 * `type=local`
-* `mode=min` (default): only export layers for the resulting image
-* `mode=max`: export all the layers of all intermediate steps.
-* `dest=path/to/output-dir`: destination directory for cache exporter
-* `oci-mediatypes=true|false`: whether to use OCI mediatypes in exported manifests. Since BuildKit `v0.8` defaults to true.
+* `mode=<min|max>`: specify cache layers to export (default: `min`)
+  * `min`: only export layers for the resulting image
+  * `max`: export all the layers of all intermediate steps
+* `dest=<path>`: destination directory for cache exporter
+* `oci-mediatypes=<true|false>`: whether to use OCI mediatypes in exported manifests (default `true`, since BuildKit `v0.8`)
+* `compression=<uncompressed|gzip|estargz|zstd>`: choose compression type for layers newly created and cached, gzip is default value. estargz and zstd should be used with `oci-mediatypes=true`.
+* `compression-level=<value>`: compression level for gzip, estargz (0-9) and zstd (0-22)
+* `force-compression=true`: forcibly apply `compression` option to all layers
 
 `--import-cache` options:
 * `type=local`
-* `src=path/to/input-dir`: source directory for cache importer
-* `digest=sha256:deadbeef`: digest of the manifest list to import.
-* `tag=customtag`: custom tag of image. Defaults "latest" tag digest in `index.json` is for digest, not for tag
+* `src=<path>`: source directory for cache importer
+* `digest=sha256:<sha256digest>`: specify explicit digest of the manifest list to import
+* `tag=<tag>`: determine custom tag of image. Defaults "latest" tag digest in `index.json` is for digest, not for tag
 
 #### GitHub Actions cache (experimental)
 
@@ -407,13 +433,61 @@ in your workflow to expose the runtime.
 
 `--export-cache` options:
 * `type=gha`
-* `mode=min` (default): only export layers for the resulting image
-* `mode=max`: export all the layers of all intermediate steps.
-* `scope=buildkit`: which scope cache object belongs to (default `buildkit`)
+* `mode=<min|max>`: specify cache layers to export (default: `min`)
+  * `min`: only export layers for the resulting image
+  * `max`: export all the layers of all intermediate steps
+* `scope=<scope>`: which scope cache object belongs to (default `buildkit`)
 
 `--import-cache` options:
 * `type=gha`
-* `scope=buildkit`: which scope cache object belongs to (default `buildkit`)
+* `scope=<scope>`: which scope cache object belongs to (default `buildkit`)
+
+#### S3 cache (experimental)
+
+```bash
+buildctl build ... \
+  --output type=image,name=docker.io/username/image,push=true \
+  --export-cache type=s3,region=eu-west-1,bucket=my_bucket,name=my_image \
+  --import-cache type=s3,region=eu-west-1,bucket=my_bucket,name=my_image
+```
+
+The following attributes are required:
+* `bucket`: AWS S3 bucket (default: `$AWS_BUCKET`)
+* `region`: AWS region (default: `$AWS_REGION`)
+
+Storage locations:
+* blobs: `s3://<bucket>/<prefix><blobs_prefix>/<sha256>`, default: `s3://<bucket>/blobs/<sha256>`
+* manifests: `s3://<bucket>/<prefix><manifests_prefix>/<name>`, default: `s3://<bucket>/manifests/<name>`
+
+S3 configuration:
+* `blobs_prefix`: global prefix to store / read blobs on s3 (default: `blobs/`)
+* `manifests_prefix`: global prefix to store / read blobs on s3 (default: `manifests/`)
+* `endpoint_url`: specify a specific S3 endpoint (default: empty)
+* `use_path_style`: if set to `true`, put the bucket name in the URL instead of in the hostname (default: `false`)
+
+AWS Authentication:
+
+The simplest way is to use an IAM Instance profile.
+Others options are:
+
+* Any system using environment variables / config files supported by the [AWS Go SDK](https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html). The configuration must be available for the buildkit daemon, not for the client.
+* Access key ID and Secret Access Key, using the `access_key_id` and `secret_access_key` attributes.
+
+`--export-cache` options:
+* `type=s3`
+* `mode=<min|max>`: specify cache layers to export (default: `min`)
+  * `min`: only export layers for the resulting image
+  * `max`: export all the layers of all intermediate steps
+* `prefix=<prefix>`: set global prefix to store / read files on s3 (default: empty)
+* `name=<manifest>`: specify name of the manifest to use (default `buildkit`)
+  * Multiple manifest names can be specified at the same time, separated by `;`. The standard use case is to use the git sha1 as name, and the branch name as duplicate, and load both with 2 `import-cache` commands.
+
+`--import-cache` options:
+* `type=s3`
+* `prefix=<prefix>`: set global prefix to store / read files on s3 (default: empty)
+* `blobs_prefix=<prefix>`: set global prefix to store / read blobs on s3 (default: `blobs/`)
+* `manifests_prefix=<prefix>`: set global prefix to store / read manifests on s3 (default: `manifests/`)
+* `name=<manifest>`: name of the manifest to use (default `buildkit`)
 
 ### Consistent hashing
 
@@ -432,8 +506,43 @@ The directory of the specified file must already exist and be writable.
 buildctl build ... --metadata-file metadata.json
 ```
 
+```shell
+jq '.' metadata.json
 ```
-{"containerimage.digest": "sha256:ea0cfb27fd41ea0405d3095880c1efa45710f5bcdddb7d7d5a7317ad4825ae14",...}
+```json
+{
+  "containerimage.buildinfo": {
+    "frontend": "dockerfile.v0",
+    "attrs": {
+      "context": "https://github.com/crazy-max/buildkit-buildsources-test.git#master",
+      "filename": "Dockerfile",
+      "source": "docker/dockerfile:master"
+    },
+    "sources": [
+      {
+        "type": "docker-image",
+        "ref": "docker.io/docker/buildx-bin:0.6.1@sha256:a652ced4a4141977c7daaed0a074dcd9844a78d7d2615465b12f433ae6dd29f0",
+        "pin": "sha256:a652ced4a4141977c7daaed0a074dcd9844a78d7d2615465b12f433ae6dd29f0"
+      },
+      {
+        "type": "docker-image",
+        "ref": "docker.io/library/alpine:3.13",
+        "pin": "sha256:026f721af4cf2843e07bba648e158fb35ecc876d822130633cc49f707f0fc88c"
+      }
+    ]
+  },
+  "containerimage.config.digest": "sha256:2937f66a9722f7f4a2df583de2f8cb97fc9196059a410e7f00072fc918930e66",
+  "containerimage.descriptor": {
+    "annotations": {
+      "config.digest": "sha256:2937f66a9722f7f4a2df583de2f8cb97fc9196059a410e7f00072fc918930e66",
+      "org.opencontainers.image.created": "2022-02-08T21:28:03Z"
+    },
+    "digest": "sha256:19ffeab6f8bc9293ac2c3fdf94ebe28396254c993aea0b5a542cfb02e0883fa3",
+    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+    "size": 506
+  },
+  "containerimage.digest": "sha256:19ffeab6f8bc9293ac2c3fdf94ebe28396254c993aea0b5a542cfb02e0883fa3"
+}
 ```
 
 ## Systemd socket activation
@@ -562,4 +671,3 @@ Please refer to [`docs/multi-platform.md`](docs/multi-platform.md).
 ## Contributing
 
 Want to contribute to BuildKit? Awesome! You can find information about contributing to this project in the [CONTRIBUTING.md](/.github/CONTRIBUTING.md)
-

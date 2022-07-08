@@ -3,7 +3,6 @@ package authprovider
 import (
 	"crypto/rand"
 	"encoding/json"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
@@ -47,7 +46,7 @@ func (ts *tokenSeeds) getSeed(host string) ([]byte, error) {
 	fp := filepath.Join(ts.dir, ".token_seed")
 
 	// we include client side randomness to avoid chosen plaintext attack from the daemon side
-	dt, err := ioutil.ReadFile(fp)
+	dt, err := os.ReadFile(fp)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) && !errors.Is(err, syscall.ENOTDIR) && !errors.Is(err, os.ErrPermission) {
 			return nil, err
@@ -68,7 +67,7 @@ func (ts *tokenSeeds) getSeed(host string) ([]byte, error) {
 		return nil, err
 	}
 
-	if err := ioutil.WriteFile(fp, dt, 0600); err != nil {
+	if err := os.WriteFile(fp, dt, 0600); err != nil {
 		if !errors.Is(err, syscall.EROFS) && !errors.Is(err, os.ErrPermission) {
 			return nil, err
 		}

@@ -9,7 +9,7 @@ import (
 	"github.com/containerd/containerd/errdefs"
 	"github.com/moby/buildkit/util/contentutil"
 	digest "github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
@@ -39,7 +39,7 @@ type MultiMultiProvider struct {
 	digests map[digest.Digest]map[string]bool // digest -> set of imgName
 }
 
-func (mmp *MultiMultiProvider) ReaderAt(ctx context.Context, desc ocispec.Descriptor) (content.ReaderAt, error) {
+func (mmp *MultiMultiProvider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
 	mmp.mu.RLock()
 	defer mmp.mu.RUnlock()
 	imgs := mmp.digests[desc.Digest]
@@ -90,7 +90,7 @@ func (mmp *MultiMultiProvider) AddImgSub(imgName string, dgst digest.Digest, p c
 func (mmp *MultiMultiProvider) AddImg(ctx context.Context, imgName string, base content.Provider, baseDigest digest.Digest) error {
 	// The config digest needs to be mapped manually - read out the manifest
 	// and find the config digest in there. Do most of this outside of the lock.
-	mfstRa, err := base.ReaderAt(ctx, ocispec.Descriptor{Digest: baseDigest})
+	mfstRa, err := base.ReaderAt(ctx, ocispecs.Descriptor{Digest: baseDigest})
 	if err != nil {
 		return err
 	}

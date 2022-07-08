@@ -85,6 +85,8 @@ message ResolveImageConfigRequest {
 	pb.Platform Platform = 2;
 	string ResolveMode = 3;
 	string LogName = 4;
+	int32 ResolverType = 5;
+	string SessionID = 6;
 }
 
 message ResolveImageConfigResponse {
@@ -96,11 +98,7 @@ message SolveRequest {
 	pb.Definition Definition = 1;
 	string Frontend = 2;
 	map<string, string> FrontendOpt = 3;
-	// ImportCacheRefsDeprecated is deprecated in favor or the new Imports since BuildKit v0.4.0.
-	// When ImportCacheRefsDeprecated is set, the solver appends
-	// {.Type = "registry", .Attrs = {"ref": importCacheRef}}
-	// for each of the ImportCacheRefs entry to CacheImports for compatibility. (planned to be removed)
-	repeated string ImportCacheRefsDeprecated = 4;
+	// 4 was removed in BuildKit v0.11.0.
 	bool allowResultReturn = 5;
 	bool allowResultArrayRef = 6;
 	
@@ -234,6 +232,8 @@ message ExecMessage {
 		// DoneMessage from server to client will be the last message for any
 		// process.  Note that FdMessage might be sent after ExitMessage.
 		DoneMessage Done = 7;
+		// SignalMessage is used from client to server to send signal events
+		SignalMessage Signal = 8;
 	}
 }
 
@@ -263,4 +263,10 @@ message FdMessage{
 message ResizeMessage{
 	uint32 Rows = 1;
 	uint32 Cols = 2;
+}
+
+message SignalMessage {
+	// we only send name (ie HUP, INT) because the int values
+	// are platform dependent.
+	string Name = 1;
 }

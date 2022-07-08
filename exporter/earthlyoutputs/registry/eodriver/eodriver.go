@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"strings"
 	"time"
 
@@ -14,7 +13,7 @@ import (
 	"github.com/docker/distribution/registry/storage/driver/base"
 	"github.com/docker/distribution/registry/storage/driver/factory"
 	digest "github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
@@ -119,7 +118,7 @@ func (d *driver) GetContent(ctx context.Context, path string) ([]byte, error) {
 	}
 	defer rc.Close()
 
-	p, err := ioutil.ReadAll(rc)
+	p, err := io.ReadAll(rc)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +199,7 @@ func (d *driver) get(ctx context.Context, path string, offset int64) (io.ReadClo
 			return nil, 0, storagedriver.PathNotFoundError{}
 		}
 		sha := subSubPathSplit[1]
-		desc := ocispec.Descriptor{
+		desc := ocispecs.Descriptor{
 			Digest: digest.Digest(fmt.Sprintf("sha256:%s", sha)),
 		}
 		ra, err := d.mmp.ReaderAt(ctx, desc)
@@ -302,7 +301,7 @@ func stringReadCloserOffset(str string, offset int64) (io.ReadCloser, int64, err
 	}
 	size := len(dt)
 	dt = dt[offset:]
-	reader := ioutil.NopCloser(bytes.NewReader(dt))
+	reader := io.NopCloser(bytes.NewReader(dt))
 	return reader, int64(size), nil
 }
 

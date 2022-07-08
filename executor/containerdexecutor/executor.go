@@ -3,7 +3,6 @@ package containerdexecutor
 import (
 	"context"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
@@ -11,6 +10,8 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/util/bklog"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/cio"
@@ -25,6 +26,7 @@ import (
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/network"
+	rootlessspecconv "github.com/moby/buildkit/util/rootless/specconv"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )
@@ -39,10 +41,11 @@ type containerdExecutor struct {
 	mu               sync.Mutex
 	apparmorProfile  string
 	traceSocket      string
+	rootless         bool
 }
 
 // New creates a new executor backed by connection to containerd API
-func New(client *containerd.Client, root, cgroup string, networkProviders map[pb.NetMode]network.Provider, dnsConfig *oci.DNSConfig, apparmorProfile string, traceSocket string) executor.Executor {
+func New(client *containerd.Client, root, cgroup string, networkProviders map[pb.NetMode]network.Provider, dnsConfig *oci.DNSConfig, apparmorProfile string, traceSocket string, rootless bool) executor.Executor {
 	// clean up old hosts/resolv.conf file. ignore errors
 	os.RemoveAll(filepath.Join(root, "hosts"))
 	os.RemoveAll(filepath.Join(root, "resolv.conf"))
@@ -56,6 +59,7 @@ func New(client *containerd.Client, root, cgroup string, networkProviders map[pb
 		running:          make(map[string]chan error),
 		apparmorProfile:  apparmorProfile,
 		traceSocket:      traceSocket,
+		rootless:         rootless,
 	}
 }
 
@@ -164,6 +168,11 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 	}
 	defer cleanup()
 	spec.Process.Terminal = meta.Tty
+	if w.rootless {
+		if err := rootlessspecconv.ToRootless(spec); err != nil {
+			return err
+		}
+	}
 
 	container, err := w.client.NewContainer(ctx, id,
 		containerd.WithSpec(spec),
@@ -199,8 +208,10 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 		}
 	}()
 
-	err = w.runProcess(ctx, task, process.Resize, func() {
+	trace.SpanFromContext(ctx).AddEvent("Container created")
+	err = w.runProcess(ctx, task, process.Resize, process.Signal, func() {
 		startedOnce.Do(func() {
+			trace.SpanFromContext(ctx).AddEvent("Container started")
 			if started != nil {
 				close(started)
 			}
@@ -293,7 +304,7 @@ func (w *containerdExecutor) Exec(ctx context.Context, id string, process execut
 		return errors.WithStack(err)
 	}
 
-	err = w.runProcess(ctx, taskProcess, process.Resize, nil)
+	err = w.runProcess(ctx, taskProcess, process.Resize, process.Signal, nil)
 	return err
 }
 
@@ -303,14 +314,14 @@ func fixProcessOutput(process *executor.ProcessInfo) {
 	// failed to start io pipe copy: unable to copy pipes: containerd-shim: opening file "" failed: open : no such file or directory: unknown
 	// So just stub out any missing output
 	if process.Stdout == nil {
-		process.Stdout = &nopCloser{ioutil.Discard}
+		process.Stdout = &nopCloser{io.Discard}
 	}
 	if process.Stderr == nil {
-		process.Stderr = &nopCloser{ioutil.Discard}
+		process.Stderr = &nopCloser{io.Discard}
 	}
 }
 
-func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Process, resize <-chan executor.WinSize, started func()) error {
+func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Process, resize <-chan executor.WinSize, signal <-chan syscall.Signal, started func()) error {
 	// Not using `ctx` here because the context passed only affects the statusCh which we
 	// don't want cancelled when ctx.Done is sent.  We want to process statusCh on cancel.
 	statusCh, err := p.Wait(context.Background())
@@ -335,22 +346,38 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Proces
 
 	p.CloseIO(ctx, containerd.WithStdinCloser)
 
-	// resize in separate go loop so it does not potentially block
-	// the container cancel/exit status loop below.
-	resizeCtx, resizeCancel := context.WithCancel(ctx)
-	defer resizeCancel()
+	// handle signals (and resize) in separate go loop so it does not
+	// potentially block the container cancel/exit status loop below.
+	eventCtx, eventCancel := context.WithCancel(ctx)
+	defer eventCancel()
 	go func() {
 		for {
 			select {
-			case <-resizeCtx.Done():
+			case <-eventCtx.Done():
 				return
 			case size, ok := <-resize:
 				if !ok {
 					return // chan closed
 				}
-				err = p.Resize(resizeCtx, size.Cols, size.Rows)
+				err = p.Resize(eventCtx, size.Cols, size.Rows)
 				if err != nil {
-					bklog.G(resizeCtx).Warnf("Failed to resize %s: %s", p.ID(), err)
+					bklog.G(eventCtx).Warnf("Failed to resize %s: %s", p.ID(), err)
+				}
+			}
+		}
+	}()
+	go func() {
+		for {
+			select {
+			case <-eventCtx.Done():
+				return
+			case sig, ok := <-signal:
+				if !ok {
+					return // chan closed
+				}
+				err = p.Kill(eventCtx, sig)
+				if err != nil {
+					bklog.G(eventCtx).Warnf("Failed to signal %s: %s", p.ID(), err)
 				}
 			}
 		}
@@ -372,6 +399,12 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Proces
 			if cancel != nil {
 				cancel()
 			}
+			trace.SpanFromContext(ctx).AddEvent(
+				"Container exited",
+				trace.WithAttributes(
+					attribute.Int("exit.code", int(status.ExitCode())),
+				),
+			)
 			if status.ExitCode() != 0 {
 				exitErr := &gatewayapi.ExitError{
 					ExitCode: status.ExitCode(),

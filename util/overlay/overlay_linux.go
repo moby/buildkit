@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -114,7 +113,7 @@ func GetOverlayLayers(m mount.Mount) ([]string, error) {
 // WriteUpperdir writes a layer tar archive into the specified writer, based on
 // the diff information stored in the upperdir.
 func WriteUpperdir(ctx context.Context, w io.Writer, upperdir string, lower []mount.Mount) error {
-	emptyLower, err := ioutil.TempDir("", "buildkit") // empty directory used for the lower of diff view
+	emptyLower, err := os.MkdirTemp("", "buildkit") // empty directory used for the lower of diff view
 	if err != nil {
 		return errors.Wrapf(err, "failed to create temp dir")
 	}
@@ -128,16 +127,28 @@ func WriteUpperdir(ctx context.Context, w io.Writer, upperdir string, lower []mo
 	}
 	return mount.WithTempMount(ctx, lower, func(lowerRoot string) error {
 		return mount.WithTempMount(ctx, upperView, func(upperViewRoot string) error {
-			cw := archive.NewChangeWriter(w, upperViewRoot)
+			cw := archive.NewChangeWriter(&cancellableWriter{ctx, w}, upperViewRoot)
 			if err := Changes(ctx, cw.HandleChange, upperdir, upperViewRoot, lowerRoot); err != nil {
 				if err2 := cw.Close(); err2 != nil {
-					return errors.Wrapf(err, "failed torecord upperdir changes (close error: %v)", err2)
+					return errors.Wrapf(err, "failed to record upperdir changes (close error: %v)", err2)
 				}
-				return errors.Wrapf(err, "failed torecord upperdir changes")
+				return errors.Wrapf(err, "failed to record upperdir changes")
 			}
 			return cw.Close()
 		})
 	})
+}
+
+type cancellableWriter struct {
+	ctx context.Context
+	w   io.Writer
+}
+
+func (w *cancellableWriter) Write(p []byte) (int, error) {
+	if err := w.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return w.w.Write(p)
 }
 
 // Changes is continuty's `fs.Change`-like method but leverages overlayfs's
@@ -148,6 +159,9 @@ func Changes(ctx context.Context, changeFn fs.ChangeFunc, upperdir, upperdirView
 	return filepath.Walk(upperdir, func(path string, f os.FileInfo, err error) error {
 		if err != nil {
 			return err
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
 		}
 
 		// Rebase path

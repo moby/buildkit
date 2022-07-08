@@ -24,6 +24,7 @@ import (
 	"github.com/containerd/containerd/log"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -129,6 +130,7 @@ var (
 )
 
 var register sync.Once
+var logLevel logrus.Level = logrus.DebugLevel
 
 // sinceInMilliseconds gets the time since the specified start in milliseconds.
 // The division by 1e6 is made to have the milliseconds value as floating point number, since the native method
@@ -145,8 +147,9 @@ func sinceInMicroseconds(start time.Time) float64 {
 }
 
 // Register registers metrics. This is always called only once.
-func Register() {
+func Register(l logrus.Level) {
 	register.Do(func() {
+		logLevel = l
 		prometheus.MustRegister(operationLatencyMilliseconds)
 		prometheus.MustRegister(operationLatencyMicroseconds)
 		prometheus.MustRegister(operationCount)
@@ -185,14 +188,14 @@ func AddBytesCount(operation string, layer digest.Digest, bytes int64) {
 // WriteLatencyLogValue wraps writing the log info record for latency in milliseconds. The log record breaks down by operation and layer digest.
 func WriteLatencyLogValue(ctx context.Context, layer digest.Digest, operation string, start time.Time) {
 	ctx = log.WithLogger(ctx, log.G(ctx).WithField("metrics", "latency").WithField("operation", operation).WithField("layer_sha", layer.String()))
-	log.G(ctx).Infof("value=%v milliseconds", sinceInMilliseconds(start))
+	log.G(ctx).Logf(logLevel, "value=%v milliseconds", sinceInMilliseconds(start))
 }
 
 // WriteLatencyWithBytesLogValue wraps writing the log info record for latency in milliseconds with adding the size in bytes.
 // The log record breaks down by operation, layer digest and byte value.
 func WriteLatencyWithBytesLogValue(ctx context.Context, layer digest.Digest, latencyOperation string, start time.Time, bytesMetricName string, bytesMetricValue int64) {
 	ctx = log.WithLogger(ctx, log.G(ctx).WithField("metrics", "latency").WithField("operation", latencyOperation).WithField("layer_sha", layer.String()))
-	log.G(ctx).Infof("value=%v milliseconds; %v=%v bytes", sinceInMilliseconds(start), bytesMetricName, bytesMetricValue)
+	log.G(ctx).Logf(logLevel, "value=%v milliseconds; %v=%v bytes", sinceInMilliseconds(start), bytesMetricName, bytesMetricValue)
 }
 
 // LogLatencyForLastOnDemandFetch implements a special case for measuring the latency of last on demand fetch, which must be invoked at the end of
@@ -209,6 +212,6 @@ func LogLatencyForLastOnDemandFetch(ctx context.Context, layer digest.Digest, st
 	// this can happen if there were no on-demand fetch for the particular layer
 	if diffInMilliseconds > 0 {
 		ctx = log.WithLogger(ctx, log.G(ctx).WithField("metrics", "latency").WithField("operation", MountLayerToLastOnDemandFetch).WithField("layer_sha", layer.String()))
-		log.G(ctx).Infof("value=%v milliseconds", diffInMilliseconds)
+		log.G(ctx).Logf(logLevel, "value=%v milliseconds", diffInMilliseconds)
 	}
 }

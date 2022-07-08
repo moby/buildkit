@@ -27,7 +27,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
@@ -50,7 +49,6 @@ import (
 	fusefs "github.com/hanwen/go-fuse/v2/fs"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -125,10 +123,11 @@ type Resolver struct {
 	resolveLock           *namedmutex.NamedMutex
 	config                config.Config
 	metadataStore         metadata.Store
+	overlayOpaqueType     OverlayOpaqueType
 }
 
 // NewResolver returns a new layer resolver.
-func NewResolver(root string, backgroundTaskManager *task.BackgroundTaskManager, cfg config.Config, resolveHandlers map[string]remote.Handler, metadataStore metadata.Store) (*Resolver, error) {
+func NewResolver(root string, backgroundTaskManager *task.BackgroundTaskManager, cfg config.Config, resolveHandlers map[string]remote.Handler, metadataStore metadata.Store, overlayOpaqueType OverlayOpaqueType) (*Resolver, error) {
 	resolveResultEntryTTL := time.Duration(cfg.ResolveResultEntryTTLSec) * time.Second
 	if resolveResultEntryTTL == 0 {
 		resolveResultEntryTTL = defaultResolveResultEntryTTLSec * time.Second
@@ -175,6 +174,7 @@ func NewResolver(root string, backgroundTaskManager *task.BackgroundTaskManager,
 		config:                cfg,
 		resolveLock:           new(namedmutex.NamedMutex),
 		metadataStore:         metadataStore,
+		overlayOpaqueType:     overlayOpaqueType,
 	}, nil
 }
 
@@ -210,9 +210,9 @@ func newCache(root string, cacheType string, cfg config.Config) (cache.BlobCache
 	if err := os.MkdirAll(root, 0700); err != nil {
 		return nil, err
 	}
-	cachePath, err := ioutil.TempDir(root, "")
+	cachePath, err := os.MkdirTemp(root, "")
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to initialize directory cache")
+		return nil, fmt.Errorf("failed to initialize directory cache: %w", err)
 	}
 	return cache.NewDirectoryCache(
 		cachePath,
@@ -258,7 +258,7 @@ func (r *Resolver) Resolve(ctx context.Context, hosts source.RegistryHosts, refs
 	// Resolve the blob.
 	blobR, err := r.resolveBlob(ctx, hosts, refspec, desc)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to resolve the blob")
+		return nil, fmt.Errorf("failed to resolve the blob: %w", err)
 	}
 	defer func() {
 		if retErr != nil {
@@ -268,7 +268,7 @@ func (r *Resolver) Resolve(ctx context.Context, hosts source.RegistryHosts, refs
 
 	fsCache, err := newCache(filepath.Join(r.rootDir, "fscache"), r.config.FSCacheType, r.config)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to create fs cache")
+		return nil, fmt.Errorf("failed to create fs cache: %w", err)
 	}
 	defer func() {
 		if retErr != nil {
@@ -304,7 +304,7 @@ func (r *Resolver) Resolve(ctx context.Context, hosts source.RegistryHosts, refs
 	}
 	vr, err := reader.NewReader(meta, fsCache, desc.Digest)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to read layer")
+		return nil, fmt.Errorf("failed to read layer: %w", err)
 	}
 
 	// Combine layer information together and cache it.
@@ -341,7 +341,7 @@ func (r *Resolver) resolveBlob(ctx context.Context, hosts source.RegistryHosts, 
 
 	httpCache, err := newCache(filepath.Join(r.rootDir, "httpcache"), r.config.HTTPCacheType, r.config)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to create http cache")
+		return nil, fmt.Errorf("failed to create http cache: %w", err)
 	}
 	defer func() {
 		if retErr != nil {
@@ -352,7 +352,7 @@ func (r *Resolver) resolveBlob(ctx context.Context, hosts source.RegistryHosts, 
 	// Resolve the blob and cache the result.
 	b, err := r.resolver.Resolve(ctx, hosts, refspec, desc, httpCache)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to resolve the source")
+		return nil, fmt.Errorf("failed to resolve the source: %w", err)
 	}
 	r.blobCacheMu.Lock()
 	cachedB, done, added := r.blobCache.Add(name, b)
@@ -483,7 +483,7 @@ func (l *layer) prefetch(ctx context.Context, prefetchSize int64) error {
 	} else if id, _, err := l.verifiableReader.Metadata().GetChild(rootID, estargz.PrefetchLandmark); err == nil {
 		offset, err := l.verifiableReader.Metadata().GetOffset(id)
 		if err != nil {
-			return errors.Wrapf(err, "failed to get offset of prefetch landmark")
+			return fmt.Errorf("failed to get offset of prefetch landmark: %w", err)
 		}
 		// override the prefetch size with optimized value
 		prefetchSize = offset
@@ -498,7 +498,7 @@ func (l *layer) prefetch(ctx context.Context, prefetchSize int64) error {
 	commonmetrics.WriteLatencyLogValue(ctx, l.desc.Digest, commonmetrics.PrefetchDownload, downloadStart) // time to download prefetch data
 
 	if err != nil {
-		return errors.Wrap(err, "failed to prefetch layer")
+		return fmt.Errorf("failed to prefetch layer: %w", err)
 	}
 
 	// Set prefetch size for metrics after prefetch completed
@@ -513,7 +513,7 @@ func (l *layer) prefetch(ctx context.Context, prefetchSize int64) error {
 	}))
 	commonmetrics.WriteLatencyLogValue(ctx, l.desc.Digest, commonmetrics.PrefetchDecompress, decompressStart) // time to decompress prefetch data
 	if err != nil {
-		return errors.Wrap(err, "failed to cache prefetched layer")
+		return fmt.Errorf("failed to cache prefetched layer: %w", err)
 	}
 
 	return nil
@@ -575,7 +575,7 @@ func (l *layer) RootNode(baseInode uint32) (fusefs.InodeEmbedder, error) {
 	if l.r == nil {
 		return nil, fmt.Errorf("layer hasn't been verified yet")
 	}
-	return newNode(l.desc.Digest, l.r, l.blob, baseInode)
+	return newNode(l.desc.Digest, l.r, l.blob, baseInode, l.resolver.overlayOpaqueType)
 }
 
 func (l *layer) ReadAt(p []byte, offset int64, opts ...remote.Option) (int, error) {

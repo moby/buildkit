@@ -41,3 +41,9 @@ docker run --privileged --rm tonistiigi/binfmt --install all
 ```
 
 See also [`tonistiigi/binfmt` documentation](https://github.com/tonistiigi/binfmt/).
+
+### Builds are very slow through emulation
+
+Running binaries made for a different architecture through a software emulation layer is much slower than running binaries natively. Therefore this approach is not recommended for CPU intensive tasks like compiling binaries. It is provided as a simple solution to build existing Dockerfiles and usually works well for common tasks like installing packages and running scripts. To get native performance for compilation steps you should modify your Dockerfile to perform cross-compilation using [predefined platform ARGs](https://docs.docker.com/engine/reference/builder/#automatic-platform-args-in-the-global-scope). Learn more from https://medium.com/@tonistiigi/faster-multi-platform-builds-dockerfile-cross-compilation-guide-part-1-ec087c719eaf . You can also use [xx](https://github.com/tonistiigi/xx) project to add cross-compilation toolchains into Dockerfiles with minimal changes.
+
+[Docker Buildx](https://github.com/docker/buildx) also supports multi-node builders where single image can be built with multiple machines that each build components for their native architectures.

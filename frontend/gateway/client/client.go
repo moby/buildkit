@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"io"
+	"syscall"
 
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/solver/pb"
@@ -77,7 +78,7 @@ type WinSize struct {
 type ContainerProcess interface {
 	Wait() error
 	Resize(ctx context.Context, size WinSize) error
-	// TODO Signal(ctx context.Context, sig os.Signal)
+	Signal(ctx context.Context, sig syscall.Signal) error
 }
 
 type Reference interface {

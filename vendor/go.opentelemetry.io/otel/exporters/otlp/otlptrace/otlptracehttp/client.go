@@ -80,9 +80,9 @@ var _ otlptrace.Client = (*client)(nil)
 // NewClient creates a new HTTP trace client.
 func NewClient(opts ...Option) otlptrace.Client {
 	cfg := otlpconfig.NewDefaultConfig()
-	otlpconfig.ApplyHTTPEnvConfigs(&cfg)
+	cfg = otlpconfig.ApplyHTTPEnvConfigs(cfg)
 	for _, opt := range opts {
-		opt.applyHTTPOption(&cfg)
+		cfg = opt.applyHTTPOption(cfg)
 	}
 
 	for pathPtr, defaultPath := range map[*string]string{

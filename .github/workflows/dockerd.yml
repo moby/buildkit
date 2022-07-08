@@ -1,0 +1,146 @@
+name: dockerd
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  # TODO: add event to build on command in PR (e.g., /test-dockerd)
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Docker version'
+        required: true
+        default: '20.10.13'
+
+env:
+  REPO_SLUG_ORIGIN: "moby/buildkit:latest"
+  CACHE_GHA_SCOPE_IT: "integration-tests"
+  CACHE_GHA_SCOPE_BINARIES: "binaries"
+  BUILDX_VERSION: "v0.8.2"  # leave empty to use the one available on GitHub virtual environment
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Check version
+        run: |
+          version=${{ github.event.inputs.version }}
+          if [ -z "$version" ]; then
+            version=20.10.13
+          fi
+          echo "DOCKER_VERSION=$version" >> $GITHUB_ENV
+      -
+        name: Check build
+        uses: actions/github-script@v6
+        id: build
+        with:
+          result-encoding: string
+          script: |
+            try {
+              new URL("${{ env.DOCKER_VERSION }}");
+            } catch (e) {
+              return false;
+            }
+            return true;
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          version: ${{ env.BUILDX_VERSION }}
+          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
+          buildkitd-flags: --debug
+      -
+        name: Build
+        if: steps.build.outputs.result == 'true'
+        uses: docker/build-push-action@v2
+        with:
+          context: ${{ env.DOCKER_VERSION }}
+          target: binary
+          outputs: /tmp/moby
+      -
+        # FIXME: remove symlink and rename bin. should be fixed upstream on moby.
+        name: Rename binary
+        if: steps.build.outputs.result == 'true'
+        run: |
+          rm /tmp/moby/binary-daemon/dockerd
+          mv /tmp/moby/binary-daemon/dockerd-dev /tmp/moby/binary-daemon/dockerd
+      -
+        name: Download
+        if: steps.build.outputs.result != 'true'
+        run: |
+          mkdir -p /tmp/moby/binary-daemon
+          cd /tmp/moby/binary-daemon
+          wget -qO- "https://download.docker.com/linux/static/stable/x86_64/docker-${{ env.DOCKER_VERSION }}.tgz" | tar xvz --strip 1
+      -
+        name: Upload dockerd
+        uses: actions/upload-artifact@v2
+        with:
+          name: dockerd
+          path: /tmp/moby/binary-daemon/dockerd
+          if-no-files-found: error
+
+  test:
+    runs-on: ubuntu-latest
+    needs:
+      - prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        pkg:
+          - ./client
+          - ./cmd/buildctl
+          - ./solver
+          - ./frontend
+          - ./frontend/dockerfile
+        typ:
+          - integration
+        include:
+          - pkg: ./...
+            skip-integration-tests: 1
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Expose GitHub Runtime
+        uses: crazy-max/ghaction-github-runtime@v1
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          version: ${{ env.BUILDX_VERSION }}
+          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
+          buildkitd-flags: --debug
+      -
+        name: Download dockerd
+        uses: actions/download-artifact@v2
+        with:
+          name: dockerd
+          path: ./build/
+      -
+        name: Fix dockerd perms
+        run: |
+          chmod +x ./build/dockerd
+      -
+        name: Update daemon.json
+        run: |
+          sudo rm /etc/docker/daemon.json
+          sudo service docker restart
+          docker version
+          docker info
+      -
+        name: Test
+        run: |
+          ./hack/test ${{ matrix.typ }}
+        env:
+          TEST_DOCKERD: "1"
+          TEST_DOCKERD_BINARY: "./build/dockerd"
+          TESTPKGS: "${{ matrix.pkg }}"
+          TESTFLAGS: "-v --parallel=1 --timeout=30m --run=//worker=dockerd$"
+          SKIP_INTEGRATION_TESTS: "${{ matrix.skip-integration-tests }}"
+          CACHE_FROM: "type=gha,scope=${{ env.CACHE_GHA_SCOPE_IT }} type=gha,scope=${{ env.CACHE_GHA_SCOPE_BINARIES }}"

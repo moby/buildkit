@@ -3,6 +3,6 @@
 
 package archutil
 
-func ppc64leSupported() error {
-	return check(Binaryppc64le)
+func ppc64leSupported() (string, error) {
+	return check("ppc64le", Binaryppc64le)
 }

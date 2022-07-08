@@ -29,7 +29,6 @@ import (
 	"github.com/containerd/stargz-snapshotter/estargz"
 	"github.com/klauspost/compress/zstd"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -70,7 +69,7 @@ func (zz *Decompressor) ParseTOC(r io.Reader) (toc *estargz.JTOC, tocDgst digest
 	dgstr := digest.Canonical.Digester()
 	toc = new(estargz.JTOC)
 	if err := json.NewDecoder(io.TeeReader(zr, dgstr.Hash())).Decode(&toc); err != nil {
-		return nil, "", errors.Wrap(err, "error decoding TOC JSON")
+		return nil, "", fmt.Errorf("error decoding TOC JSON: %w", err)
 	}
 	return toc, dgstr.Digest(), nil
 }

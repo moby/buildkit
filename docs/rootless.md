@@ -24,10 +24,8 @@ You may have to disable SELinux, or run BuildKit with `--oci-worker-snapshotter=
   On kernel >= 4.18, the `fuse-overlayfs` snapshotter is used instead of `overlayfs`.
   On kernel < 4.18, the `native` snapshotter is used.
 * Network mode is always set to `network.host`.
-* No support for `containerd` worker.
-  ("worker" here is a BuildKit term, not a Kubernetes term. Running rootless BuildKit in containerd is fully supported.)
 
-## Running BuildKit in Rootless mode
+## Running BuildKit in Rootless mode (OCI worker)
 
 [RootlessKit](https://github.com/rootless-containers/rootlesskit/) needs to be installed.
 
@@ -42,6 +40,22 @@ $ buildctl --addr unix:///run/user/$UID/buildkit/buildkitd.sock build ...
 To isolate BuildKit daemon's network namespace from the host (recommended):
 ```console
 $ rootlesskit --net=slirp4netns --copy-up=/etc --disable-host-loopback buildkitd
+```
+
+## Running BuildKit in Rootless mode (containerd worker)
+
+[RootlessKit](https://github.com/rootless-containers/rootlesskit/) needs to be installed.
+
+Run containerd in rootless mode using rootlesskit following [containerd's document](https://github.com/containerd/containerd/blob/main/docs/rootless.md).
+
+```
+$ containerd-rootless.sh
+```
+
+Then let buildkitd join the same namespace as containerd.
+
+```
+$ containerd-rootless-setuptool.sh nsenter -- buildkitd --oci-worker=false --containerd-worker=true --containerd-worker-snapshotter=native
 ```
 
 ## Troubleshooting

@@ -226,6 +226,7 @@ type AddCommand struct {
 	SourcesAndDest
 	Chown string
 	Chmod string
+	Link  bool
 }
 
 // Expand variables
@@ -249,6 +250,7 @@ type CopyCommand struct {
 	From  string
 	Chown string
 	Chmod string
+	Link  bool
 }
 
 // Expand variables

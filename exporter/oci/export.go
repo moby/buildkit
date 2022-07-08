@@ -2,7 +2,8 @@ package oci
 
 import (
 	"context"
-	"strconv"
+	"encoding/base64"
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -10,13 +11,12 @@ import (
 	"github.com/containerd/containerd/leases"
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/cache"
+	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
-	"github.com/moby/buildkit/solver"
-	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/grpcerrors"
@@ -24,20 +24,14 @@ import (
 	"github.com/moby/buildkit/util/progress"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 )
 
 type ExporterVariant string
 
 const (
-	keyImageName        = "name"
-	keyLayerCompression = "compression"
-	VariantOCI          = "oci"
-	VariantDocker       = "docker"
-	ociTypes            = "oci-mediatypes"
-	keyForceCompression = "force-compression"
-	keyBuildInfo        = "buildinfo"
+	VariantOCI    = "oci"
+	VariantDocker = "docker"
 )
 
 type Opt struct {
@@ -57,88 +51,36 @@ func New(opt Opt) (exporter.Exporter, error) {
 }
 
 func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
-	var ot *bool
 	i := &imageExporterInstance{
-		imageExporter:    e,
-		layerCompression: compression.Default,
-		buildInfoMode:    buildinfo.ExportDefault,
+		imageExporter: e,
+		opts: containerimage.ImageCommitOpts{
+			RefCfg: cacheconfig.RefConfig{
+				Compression: compression.New(compression.Default),
+			},
+			BuildInfo:   true,
+			OCITypes:    e.opt.Variant == VariantOCI,
+			Annotations: make(containerimage.AnnotationsGroup),
+		},
 	}
-	var esgz bool
+
+	opt, err := i.opts.Load(opt)
+	if err != nil {
+		return nil, err
+	}
+
 	for k, v := range opt {
-		switch k {
-		case keyImageName:
-			i.name = v
-		case keyLayerCompression:
-			switch v {
-			case "gzip":
-				i.layerCompression = compression.Gzip
-			case "estargz":
-				i.layerCompression = compression.EStargz
-				esgz = true
-			case "zstd":
-				i.layerCompression = compression.Zstd
-			case "uncompressed":
-				i.layerCompression = compression.Uncompressed
-			default:
-				return nil, errors.Errorf("unsupported layer compression type: %v", v)
-			}
-		case keyForceCompression:
-			if v == "" {
-				i.forceCompression = true
-				continue
-			}
-			b, err := strconv.ParseBool(v)
-			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
-			}
-			i.forceCompression = b
-		case ociTypes:
-			ot = new(bool)
-			if v == "" {
-				*ot = true
-				continue
-			}
-			b, err := strconv.ParseBool(v)
-			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
-			}
-			*ot = b
-		case keyBuildInfo:
-			if v == "" {
-				continue
-			}
-			bimode, err := buildinfo.ParseExportMode(v)
-			if err != nil {
-				return nil, err
-			}
-			i.buildInfoMode = bimode
-		default:
-			if i.meta == nil {
-				i.meta = make(map[string][]byte)
-			}
-			i.meta[k] = []byte(v)
+		if i.meta == nil {
+			i.meta = make(map[string][]byte)
 		}
-	}
-	if ot == nil {
-		i.ociTypes = e.opt.Variant == VariantOCI
-	} else {
-		i.ociTypes = *ot
-	}
-	if esgz && !i.ociTypes {
-		logrus.Warn("forcibly turning on oci-mediatype mode for estargz")
-		i.ociTypes = true
+		i.meta[k] = []byte(v)
 	}
 	return i, nil
 }
 
 type imageExporterInstance struct {
 	*imageExporter
-	meta             map[string][]byte
-	name             string
-	ociTypes         bool
-	layerCompression compression.Type
-	forceCompression bool
-	buildInfoMode    buildinfo.ExportMode
+	opts containerimage.ImageCommitOpts
+	meta map[string][]byte
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -147,10 +89,7 @@ func (e *imageExporterInstance) Name() string {
 
 func (e *imageExporterInstance) Config() exporter.Config {
 	return exporter.Config{
-		Compression: solver.CompressionOpt{
-			Type:  e.layerCompression,
-			Force: e.forceCompression,
-		},
+		Compression: e.opts.RefCfg.Compression,
 	}
 }
 
@@ -166,13 +105,20 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 		src.Metadata[k] = v
 	}
 
+	opts := e.opts
+	as, _, err := containerimage.ParseAnnotations(src.Metadata)
+	if err != nil {
+		return nil, err
+	}
+	opts.Annotations = as.Merge(opts.Annotations)
+
 	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
 		return nil, err
 	}
 	defer done(context.TODO())
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.layerCompression, e.buildInfoMode, e.forceCompression, sessionID)
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, sessionID, &opts)
 	if err != nil {
 		return nil, err
 	}
@@ -180,32 +126,30 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 		e.opt.ImageWriter.ContentStore().Delete(context.TODO(), desc.Digest)
 	}()
 
-	if e.buildInfoMode&buildinfo.ExportMetadata == 0 {
-		for k := range src.Metadata {
-			if !strings.HasPrefix(k, exptypes.ExporterBuildInfo) {
-				continue
-			}
-			delete(src.Metadata, k)
-		}
-	}
-
 	if desc.Annotations == nil {
 		desc.Annotations = map[string]string{}
 	}
 	desc.Annotations[ocispecs.AnnotationCreated] = time.Now().UTC().Format(time.RFC3339)
 
 	resp := make(map[string]string)
+
 	resp[exptypes.ExporterImageDigestKey] = desc.Digest.String()
 	if v, ok := desc.Annotations[exptypes.ExporterConfigDigestKey]; ok {
 		resp[exptypes.ExporterImageConfigDigestKey] = v
 		delete(desc.Annotations, exptypes.ExporterConfigDigestKey)
 	}
 
-	if n, ok := src.Metadata["image.name"]; e.name == "*" && ok {
-		e.name = string(n)
+	dtdesc, err := json.Marshal(desc)
+	if err != nil {
+		return nil, err
+	}
+	resp[exptypes.ExporterImageDescriptorKey] = base64.StdEncoding.EncodeToString(dtdesc)
+
+	if n, ok := src.Metadata["image.name"]; e.opts.ImageName == "*" && ok {
+		e.opts.ImageName = string(n)
 	}
 
-	names, err := normalizedNames(e.name)
+	names, err := normalizedNames(e.opts.ImageName)
 	if err != nil {
 		return nil, err
 	}
@@ -237,12 +181,8 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 
 	mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
-	compressionopt := solver.CompressionOpt{
-		Type:  e.layerCompression,
-		Force: e.forceCompression,
-	}
 	if src.Ref != nil {
-		remotes, err := src.Ref.GetRemotes(ctx, false, compressionopt, false, session.NewGroup(sessionID))
+		remotes, err := src.Ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
 		if err != nil {
 			return nil, err
 		}
@@ -260,7 +200,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 	if len(src.Refs) > 0 {
 		for _, r := range src.Refs {
-			remotes, err := r.GetRemotes(ctx, false, compressionopt, false, session.NewGroup(sessionID))
+			remotes, err := r.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
 			if err != nil {
 				return nil, err
 			}

@@ -11,6 +11,7 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/imageutil"
+	"github.com/moby/buildkit/version"
 	"github.com/moby/locker"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -40,9 +41,12 @@ func New(with ...ImageMetaResolverOpt) llb.ImageMetaResolver {
 	for _, f := range with {
 		f(&opts)
 	}
+	headers := http.Header{}
+	headers.Set("User-Agent", version.UserAgent())
 	return &imageMetaResolver{
 		resolver: docker.NewResolver(docker.ResolverOptions{
-			Client: http.DefaultClient,
+			Client:  http.DefaultClient,
+			Headers: headers,
 		}),
 		platform: opts.platform,
 		buffer:   contentutil.NewBuffer(),

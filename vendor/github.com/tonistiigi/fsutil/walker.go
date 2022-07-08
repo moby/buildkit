@@ -19,9 +19,29 @@ type WalkOpt struct {
 	// FollowPaths contains symlinks that are resolved into include patterns
 	// before performing the fs walk
 	FollowPaths       []string
-	Map               FilterFunc
+	Map               MapFunc
 	VerboseProgressCB VerboseProgressCB // earthly-specific
 }
+
+type MapFunc func(string, *types.Stat) MapResult
+
+// The result of the walk function controls
+// both how WalkDir continues and whether the path is kept.
+type MapResult int
+
+const (
+	// Keep the current path and continue.
+	MapResultKeep MapResult = iota
+
+	// Exclude the current path and continue.
+	MapResultExclude
+
+	// Exclude the current path, and skip the rest of the dir.
+	// If path is a dir, skip the current directory.
+	// If path is a file, skip the rest of the parent directory.
+	// (This matches the semantics of fs.SkipDir.)
+	MapResultSkipDir
+)
 
 func Walk(ctx context.Context, p string, opt *WalkOpt, fn filepath.WalkFunc) error {
 	root, err := filepath.EvalSymlinks(p)
@@ -124,7 +144,13 @@ func Walk(ctx context.Context, p string, opt *WalkOpt, fn filepath.WalkFunc) err
 			return nil
 		}
 
-		var dir visitedDir
+		var (
+			dir   visitedDir
+			isDir bool
+		)
+		if fi != nil {
+			isDir = fi.IsDir()
+		}
 
 		if includeMatcher != nil || excludeMatcher != nil {
 			for len(parentDirs) != 0 {
@@ -135,7 +161,7 @@ func Walk(ctx context.Context, p string, opt *WalkOpt, fn filepath.WalkFunc) err
 				parentDirs = parentDirs[:len(parentDirs)-1]
 			}
 
-			if fi.IsDir() {
+			if isDir {
 				dir = visitedDir{
 					fi:          fi,
 					path:        path,
@@ -157,12 +183,12 @@ func Walk(ctx context.Context, p string, opt *WalkOpt, fn filepath.WalkFunc) err
 				return errors.Wrap(err, "failed to match includepatterns")
 			}
 
-			if fi.IsDir() {
+			if isDir {
 				dir.includeMatchInfo = matchInfo
 			}
 
 			if !m {
-				if fi.IsDir() && onlyPrefixIncludes {
+				if isDir && onlyPrefixIncludes {
 					// Optimization: we can skip walking this dir if no include
 					// patterns could match anything inside it.
 					dirSlash := path + string(filepath.Separator)
@@ -192,7 +218,7 @@ func Walk(ctx context.Context, p string, opt *WalkOpt, fn filepath.WalkFunc) err
 				return errors.Wrap(err, "failed to match excludepatterns")
 			}
 
-			if fi.IsDir() {
+			if isDir {
 				dir.excludeMatchInfo = matchInfo
 			}
 
@@ -200,7 +226,7 @@ func Walk(ctx context.Context, p string, opt *WalkOpt, fn filepath.WalkFunc) err
 				if opt.VerboseProgressCB != nil { // earthly-specific
 					opt.VerboseProgressCB(path, StatusSkipped, 0)
 				}
-				if fi.IsDir() && onlyPrefixExcludeExceptions {
+				if isDir && onlyPrefixExcludeExceptions {
 					// Optimization: we can skip walking this dir if no
 					// exceptions to exclude patterns could match anything
 					// inside it.
@@ -234,7 +260,7 @@ func Walk(ctx context.Context, p string, opt *WalkOpt, fn filepath.WalkFunc) err
 
 		if includeMatcher != nil || excludeMatcher != nil {
 			defer func() {
-				if fi.IsDir() {
+				if isDir {
 					parentDirs = append(parentDirs, dir)
 				}
 			}()
@@ -256,7 +282,10 @@ func Walk(ctx context.Context, p string, opt *WalkOpt, fn filepath.WalkFunc) err
 			return ctx.Err()
 		default:
 			if opt != nil && opt.Map != nil {
-				if allowed := opt.Map(stat.Path, stat); !allowed {
+				result := opt.Map(stat.Path, stat)
+				if result == MapResultSkipDir {
+					return filepath.SkipDir
+				} else if result == MapResultExclude {
 					return nil
 				}
 			}
@@ -275,7 +304,8 @@ func Walk(ctx context.Context, p string, opt *WalkOpt, fn filepath.WalkFunc) err
 				default:
 				}
 				if opt != nil && opt.Map != nil {
-					if allowed := opt.Map(parentStat.Path, parentStat); !allowed {
+					result := opt.Map(parentStat.Path, parentStat)
+					if result == MapResultSkipDir || result == MapResultExclude {
 						continue
 					}
 				}

@@ -159,7 +159,6 @@ func (lp *localhostProvider) Exec(stream localhost.Localhost_ExecServer) error {
 		} else {
 			status = localhost.KILLED
 		}
-		return err
 	}
 
 	resp := localhost.OutputMessage{

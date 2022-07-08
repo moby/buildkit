@@ -44,6 +44,10 @@ const (
 	// /etc/hosts for containers created via gateway exec.
 	CapGatewayExecExtraHosts apicaps.CapID = "gateway.exec.extrahosts"
 
+	// CapGatewayExecExtraHosts is the capability to send signals to a process
+	// created via gateway exec.
+	CapGatewayExecSignals apicaps.CapID = "gateway.exec.signals"
+
 	// CapFrontendCaps can be used to check that frontends define support for certain capabilities
 	CapFrontendCaps apicaps.CapID = "frontend.caps"
 
@@ -165,6 +169,13 @@ func init() {
 	Caps.Init(apicaps.Cap{
 		ID:      CapGatewayExecExtraHosts,
 		Name:    "gateway exec extra-hosts",
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapGatewayExecSignals,
+		Name:    "gateway exec signals",
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

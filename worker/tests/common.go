@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"io/ioutil"
 	"testing"
 	"time"
 
@@ -126,7 +125,7 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 		Meta: executor.Meta{
 			Args: []string{"sh", "-c", "cat > /tmp/msg"},
 		},
-		Stdin:  ioutil.NopCloser(stdin),
+		Stdin:  io.NopCloser(stdin),
 		Stdout: &nopCloser{stdout},
 		Stderr: &nopCloser{stderr},
 	})

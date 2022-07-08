@@ -35,6 +35,17 @@ const (
 	NoProcessSandbox
 )
 
+func (pm ProcessMode) String() string {
+	switch pm {
+	case ProcessSandbox:
+		return "sandbox"
+	case NoProcessSandbox:
+		return "no-sandbox"
+	default:
+		return ""
+	}
+}
+
 // Ideally we don't have to import whole containerd just for the default spec
 
 // GenerateSpec generates spec using containerd functionality.

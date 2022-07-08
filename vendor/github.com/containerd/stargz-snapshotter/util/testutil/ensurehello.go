@@ -19,16 +19,16 @@ package testutil
 import (
 	"compress/gzip"
 	"context"
+	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
+	"os"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/content/local"
 	"github.com/containerd/containerd/images/archive"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -57,7 +57,7 @@ func EnsureHello(ctx context.Context) (*ocispec.Descriptor, content.Store, error
 		return nil, nil, err
 	}
 
-	tempDir, err := ioutil.TempDir("", "test-estargz")
+	tempDir, err := os.MkdirTemp("", "test-estargz")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -73,7 +73,7 @@ func EnsureHello(ctx context.Context) (*ocispec.Descriptor, content.Store, error
 	}
 	resp.Body.Close()
 	if d := sha256Digester.Digest().String(); d != HelloArchiveDigest {
-		err = errors.Errorf("expected digest of %q to be %q, got %q", HelloArchiveURL, HelloArchiveDigest, d)
+		err = fmt.Errorf("expected digest of %q to be %q, got %q", HelloArchiveURL, HelloArchiveDigest, d)
 		return nil, nil, err
 	}
 	return &desc, cs, nil

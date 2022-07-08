@@ -1,7 +1,6 @@
 package solver
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 	"time"
@@ -62,7 +61,7 @@ func testParallelism(t *testing.T, sb integration.Sandbox) {
 
 	timeStart := time.Now()
 	eg, egCtx := errgroup.WithContext(ctx)
-	tmpDir, err := ioutil.TempDir("", "solver-jobs-test-")
+	tmpDir, err := os.MkdirTemp("", "solver-jobs-test-")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 	solveOpt := client.SolveOpt{

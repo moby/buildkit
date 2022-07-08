@@ -34,6 +34,28 @@ const (
 	UnknownCompression Type = -1
 )
 
+type Config struct {
+	Type  Type
+	Force bool
+	Level *int
+}
+
+func New(t Type) Config {
+	return Config{
+		Type: t,
+	}
+}
+
+func (c Config) SetForce(v bool) Config {
+	c.Force = v
+	return c
+}
+
+func (c Config) SetLevel(l int) Config {
+	c.Level = &l
+	return c
+}
+
 const (
 	mediaTypeDockerSchema2LayerZstd = images.MediaTypeDockerSchema2Layer + ".zstd"
 	mediaTypeImageLayerZstd         = ocispecs.MediaTypeImageLayer + "+zstd" // unreleased image-spec#790
@@ -94,11 +116,11 @@ func (ct Type) IsMediaType(mt string) bool {
 
 func FromMediaType(mediaType string) Type {
 	switch toOCILayerType[mediaType] {
-	case ocispecs.MediaTypeImageLayer:
+	case ocispecs.MediaTypeImageLayer, ocispecs.MediaTypeImageLayerNonDistributable:
 		return Uncompressed
-	case ocispecs.MediaTypeImageLayerGzip:
+	case ocispecs.MediaTypeImageLayerGzip, ocispecs.MediaTypeImageLayerNonDistributableGzip:
 		return Gzip
-	case mediaTypeImageLayerZstd:
+	case mediaTypeImageLayerZstd, ocispecs.MediaTypeImageLayerNonDistributableZstd:
 		return Zstd
 	default:
 		return UnknownCompression
@@ -171,25 +193,30 @@ func detectCompressionType(cr *io.SectionReader) (Type, error) {
 }
 
 var toDockerLayerType = map[string]string{
-	ocispecs.MediaTypeImageLayer:                  images.MediaTypeDockerSchema2Layer,
-	images.MediaTypeDockerSchema2Layer:            images.MediaTypeDockerSchema2Layer,
-	ocispecs.MediaTypeImageLayerGzip:              images.MediaTypeDockerSchema2LayerGzip,
-	images.MediaTypeDockerSchema2LayerGzip:        images.MediaTypeDockerSchema2LayerGzip,
-	images.MediaTypeDockerSchema2LayerForeign:     images.MediaTypeDockerSchema2Layer,
-	images.MediaTypeDockerSchema2LayerForeignGzip: images.MediaTypeDockerSchema2LayerGzip,
-	mediaTypeImageLayerZstd:                       mediaTypeDockerSchema2LayerZstd,
-	mediaTypeDockerSchema2LayerZstd:               mediaTypeDockerSchema2LayerZstd,
+	ocispecs.MediaTypeImageLayer:                     images.MediaTypeDockerSchema2Layer,
+	images.MediaTypeDockerSchema2Layer:               images.MediaTypeDockerSchema2Layer,
+	ocispecs.MediaTypeImageLayerGzip:                 images.MediaTypeDockerSchema2LayerGzip,
+	images.MediaTypeDockerSchema2LayerGzip:           images.MediaTypeDockerSchema2LayerGzip,
+	images.MediaTypeDockerSchema2LayerForeign:        images.MediaTypeDockerSchema2LayerForeign,
+	images.MediaTypeDockerSchema2LayerForeignGzip:    images.MediaTypeDockerSchema2LayerForeignGzip,
+	ocispecs.MediaTypeImageLayerNonDistributable:     images.MediaTypeDockerSchema2LayerForeign,
+	ocispecs.MediaTypeImageLayerNonDistributableGzip: images.MediaTypeDockerSchema2LayerForeignGzip,
+	mediaTypeImageLayerZstd:                          mediaTypeDockerSchema2LayerZstd,
+	mediaTypeDockerSchema2LayerZstd:                  mediaTypeDockerSchema2LayerZstd,
 }
 
 var toOCILayerType = map[string]string{
-	ocispecs.MediaTypeImageLayer:                  ocispecs.MediaTypeImageLayer,
-	images.MediaTypeDockerSchema2Layer:            ocispecs.MediaTypeImageLayer,
-	ocispecs.MediaTypeImageLayerGzip:              ocispecs.MediaTypeImageLayerGzip,
-	images.MediaTypeDockerSchema2LayerGzip:        ocispecs.MediaTypeImageLayerGzip,
-	images.MediaTypeDockerSchema2LayerForeign:     ocispecs.MediaTypeImageLayer,
-	images.MediaTypeDockerSchema2LayerForeignGzip: ocispecs.MediaTypeImageLayerGzip,
-	mediaTypeImageLayerZstd:                       mediaTypeImageLayerZstd,
-	mediaTypeDockerSchema2LayerZstd:               mediaTypeImageLayerZstd,
+	ocispecs.MediaTypeImageLayer:                     ocispecs.MediaTypeImageLayer,
+	ocispecs.MediaTypeImageLayerNonDistributable:     ocispecs.MediaTypeImageLayerNonDistributable,
+	ocispecs.MediaTypeImageLayerNonDistributableGzip: ocispecs.MediaTypeImageLayerNonDistributableGzip,
+	ocispecs.MediaTypeImageLayerNonDistributableZstd: ocispecs.MediaTypeImageLayerNonDistributableZstd,
+	images.MediaTypeDockerSchema2Layer:               ocispecs.MediaTypeImageLayer,
+	ocispecs.MediaTypeImageLayerGzip:                 ocispecs.MediaTypeImageLayerGzip,
+	images.MediaTypeDockerSchema2LayerGzip:           ocispecs.MediaTypeImageLayerGzip,
+	images.MediaTypeDockerSchema2LayerForeign:        ocispecs.MediaTypeImageLayerNonDistributable,
+	images.MediaTypeDockerSchema2LayerForeignGzip:    ocispecs.MediaTypeImageLayerNonDistributableGzip,
+	mediaTypeImageLayerZstd:                          mediaTypeImageLayerZstd,
+	mediaTypeDockerSchema2LayerZstd:                  mediaTypeImageLayerZstd,
 }
 
 func convertLayerMediaType(mediaType string, oci bool) string {

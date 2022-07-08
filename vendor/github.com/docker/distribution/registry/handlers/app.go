@@ -2,10 +2,11 @@ package handlers
 
 import (
 	"context"
-	cryptorand "crypto/rand"
+	"crypto/rand"
 	"expvar"
 	"fmt"
-	"math/rand"
+	"math"
+	"math/big"
 	"net"
 	"net/http"
 	"net/url"
@@ -24,7 +25,7 @@ import (
 	"github.com/docker/distribution/notifications"
 	"github.com/docker/distribution/reference"
 	"github.com/docker/distribution/registry/api/errcode"
-	"github.com/docker/distribution/registry/api/v2"
+	v2 "github.com/docker/distribution/registry/api/v2"
 	"github.com/docker/distribution/registry/auth"
 	registrymiddleware "github.com/docker/distribution/registry/middleware/registry"
 	repositorymiddleware "github.com/docker/distribution/registry/middleware/repository"
@@ -610,7 +611,7 @@ func (app *App) configureLogHook(configuration *configuration.Configuration) {
 func (app *App) configureSecret(configuration *configuration.Configuration) {
 	if configuration.HTTP.Secret == "" {
 		var secretBytes [randomSecretSize]byte
-		if _, err := cryptorand.Read(secretBytes[:]); err != nil {
+		if _, err := rand.Read(secretBytes[:]); err != nil {
 			panic(fmt.Sprintf("could not generate random bytes for HTTP secret: %v", err))
 		}
 		configuration.HTTP.Secret = string(secretBytes[:])
@@ -753,20 +754,18 @@ func (app *App) logError(ctx context.Context, errors errcode.Errors) {
 	for _, e1 := range errors {
 		var c context.Context
 
-		switch e1.(type) {
+		switch e := e1.(type) {
 		case errcode.Error:
-			e, _ := e1.(errcode.Error)
 			c = context.WithValue(ctx, errCodeKey{}, e.Code)
 			c = context.WithValue(c, errMessageKey{}, e.Message)
 			c = context.WithValue(c, errDetailKey{}, e.Detail)
 		case errcode.ErrorCode:
-			e, _ := e1.(errcode.ErrorCode)
 			c = context.WithValue(ctx, errCodeKey{}, e)
 			c = context.WithValue(c, errMessageKey{}, e.Message())
 		default:
 			// just normal go 'error'
 			c = context.WithValue(ctx, errCodeKey{}, errcode.ErrorCodeUnknown)
-			c = context.WithValue(c, errMessageKey{}, e1.Error())
+			c = context.WithValue(c, errMessageKey{}, e.Error())
 		}
 
 		c = dcontext.WithLogger(c, dcontext.GetLogger(c,
@@ -1062,8 +1061,13 @@ func startUploadPurger(ctx context.Context, storageDriver storagedriver.StorageD
 	}
 
 	go func() {
-		rand.Seed(time.Now().Unix())
-		jitter := time.Duration(rand.Int()%60) * time.Minute
+		randInt, err := rand.Int(rand.Reader, new(big.Int).SetInt64(math.MaxInt64))
+		if err != nil {
+			log.Infof("Failed to generate random jitter: %v", err)
+			// sleep 30min for failure case
+			randInt = big.NewInt(30)
+		}
+		jitter := time.Duration(randInt.Int64()%60) * time.Minute
 		log.Infof("Starting upload purge in %s", jitter)
 		time.Sleep(jitter)
 
