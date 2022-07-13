@@ -434,6 +434,33 @@ func (c *Controller) ListWorkers(ctx context.Context, r *controlapi.ListWorkersR
 	}
 	for _, w := range workers {
 		pc, pm, pw := w.ParallelismStatus()
+		gcSummary, gcCurrent, gcLast := w.GCAnalytics()
+		gca := &apitypes.GCAnalytics{
+			NumRuns:              int64(gcSummary.NumRuns),
+			NumFailures:          int64(gcSummary.NumFailures),
+			AvgDurationMs:        gcSummary.AvgDuration.Milliseconds(),
+			AvgRecordsCleared:    gcSummary.AvgRecordsCleared,
+			AvgRecordsBefore:     gcSummary.AvgRecordsBefore,
+			AvgSizeCleared:       gcSummary.AvgSizeCleared,
+			AvgSizeBefore:        gcSummary.AvgSizeBefore,
+			AllTimeRuns:          gcSummary.AllTimeRuns,
+			AllTimeMaxDurationMs: gcSummary.AllTimeMaxDuration.Milliseconds(),
+			AllTimeDurationMs:    gcSummary.AllTimeDuration.Milliseconds(),
+		}
+		if gcCurrent != nil {
+			gca.CurrentStartTimeSecEpoch = gcCurrent.Start.Unix()
+			gca.CurrentNumRecordsBefore = int64(gcCurrent.NumRecordsBefore)
+			gca.CurrentSizeBefore = int64(gcCurrent.SizeBefore)
+		}
+		if gcLast != nil {
+			gca.LastStartTimeSecEpoch = gcLast.Start.Unix()
+			gca.LastEndTimeSecEpoch = gcLast.End.Unix()
+			gca.LastNumRecordsBefore = int64(gcLast.NumRecordsBefore)
+			gca.LastSizeBefore = int64(gcLast.SizeBefore)
+			gca.LastNumRecordsCleared = int64(gcLast.ClearedRecords)
+			gca.LastSizeCleared = int64(gcLast.ClearedSize)
+			gca.LastSuccess = gcLast.Success
+		}
 		resp.Record = append(resp.Record, &apitypes.WorkerRecord{
 			ID:              w.ID(),
 			Labels:          w.Labels(),
@@ -444,6 +471,8 @@ func (c *Controller) ListWorkers(ctx context.Context, r *controlapi.ListWorkersR
 			ParallelismCurrent: pc,
 			ParallelismMax:     pm,
 			ParallelismWaiting: pw,
+
+			GCAnalytics: gca,
 		})
 	}
 	return resp, nil
