@@ -62,6 +62,33 @@ func (c *Controller) WorkerInfos() []client.WorkerInfo {
 	out := make([]client.WorkerInfo, 0, len(c.workers))
 	for _, w := range c.workers {
 		taken, size, waiting := w.ParallelismStatus()
+		gcSummary, gcCurrent, gcLast := w.GCAnalytics()
+		gcAnalytics := client.GCAnalytics{
+			NumRuns:            gcSummary.NumRuns,
+			NumFailures:        gcSummary.NumFailures,
+			AvgDuration:        gcSummary.AvgDuration,
+			AvgRecordsCleared:  gcSummary.AvgRecordsCleared,
+			AvgSizeCleared:     gcSummary.AvgSizeCleared,
+			AvgRecordsBefore:   gcSummary.AvgRecordsBefore,
+			AvgSizeBefore:      gcSummary.AvgSizeBefore,
+			AllTimeRuns:        gcSummary.AllTimeRuns,
+			AllTimeMaxDuration: gcSummary.AllTimeMaxDuration,
+			AllTimeDuration:    gcSummary.AllTimeDuration,
+		}
+		if gcCurrent != nil {
+			gcAnalytics.CurrentStartTime = gcCurrent.Start
+			gcAnalytics.CurrentNumRecordsBefore = gcCurrent.NumRecordsBefore
+			gcAnalytics.CurrentSizeBefore = gcCurrent.SizeBefore
+		}
+		if gcLast != nil {
+			gcAnalytics.LastStartTime = gcLast.Start
+			gcAnalytics.LastEndTime = gcLast.End
+			gcAnalytics.LastNumRecordsBefore = gcLast.NumRecordsBefore
+			gcAnalytics.LastSizeBefore = gcLast.SizeBefore
+			gcAnalytics.LastNumRecordsCleared = gcLast.ClearedRecords
+			gcAnalytics.LastSizeCleared = gcLast.ClearedSize
+			gcAnalytics.LastSuccess = gcLast.Success
+		}
 		out = append(out, client.WorkerInfo{
 			ID:              w.ID(),
 			Labels:          w.Labels(),
@@ -71,6 +98,7 @@ func (c *Controller) WorkerInfos() []client.WorkerInfo {
 			ParallelismCurrent: int(taken),
 			ParallelismMax:     int(size),
 			ParallelismWaiting: int(waiting),
+			GCAnalytics:        gcAnalytics,
 		})
 	}
 	return out

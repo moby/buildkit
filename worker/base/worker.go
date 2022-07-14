@@ -211,6 +211,10 @@ func (w *Worker) ParallelismStatus() (int64, int64, int64) {
 	return w.ParallelismSem.Status()
 }
 
+func (w *Worker) GCAnalytics() (cache.GCSummary, *cache.GCRunAnalytics, *cache.GCRunAnalytics) {
+	return w.CacheMgr.GetGCAnalytics()
+}
+
 func (w *Worker) ContentStore() content.Store {
 	return w.WorkerOpt.ContentStore
 }
