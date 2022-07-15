@@ -7,6 +7,7 @@ import (
 	context "context"
 	fmt "fmt"
 	proto "github.com/gogo/protobuf/proto"
+	github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -29,7 +30,8 @@ var _ = math.Inf
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type PullRequest struct {
-	Images []string `protobuf:"bytes,1,rep,name=images,proto3" json:"images,omitempty"`
+	Images []string          `protobuf:"bytes,1,rep,name=images,proto3" json:"images,omitempty"`
+	Resp   map[string]string `protobuf:"bytes,2,rep,name=resp,proto3" json:"resp,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
 
 func (m *PullRequest) Reset()      { *m = PullRequest{} }
@@ -71,6 +73,13 @@ func (m *PullRequest) GetImages() []string {
 	return nil
 }
 
+func (m *PullRequest) GetResp() map[string]string {
+	if m != nil {
+		return m.Resp
+	}
+	return nil
+}
+
 type PullResponse struct {
 }
 
@@ -108,26 +117,31 @@ var xxx_messageInfo_PullResponse proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*PullRequest)(nil), "moby.pullping.v1.PullRequest")
+	proto.RegisterMapType((map[string]string)(nil), "moby.pullping.v1.PullRequest.RespEntry")
 	proto.RegisterType((*PullResponse)(nil), "moby.pullping.v1.PullResponse")
 }
 
 func init() { proto.RegisterFile("pullping.proto", fileDescriptor_64ad22311ddb8457) }
 
 var fileDescriptor_64ad22311ddb8457 = []byte{
-	// 195 bytes of a gzipped FileDescriptorProto
+	// 269 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0xe2, 0x2b, 0x28, 0xcd, 0xc9,
 	0x29, 0xc8, 0xcc, 0x4b, 0xd7, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0x12, 0xc8, 0xcd, 0x4f, 0xaa,
-	0xd4, 0x83, 0x0b, 0x96, 0x19, 0x2a, 0xa9, 0x72, 0x71, 0x07, 0x94, 0xe6, 0xe4, 0x04, 0xa5, 0x16,
-	0x96, 0xa6, 0x16, 0x97, 0x08, 0x89, 0x71, 0xb1, 0x65, 0xe6, 0x26, 0xa6, 0xa7, 0x16, 0x4b, 0x30,
-	0x2a, 0x30, 0x6b, 0x70, 0x06, 0x41, 0x79, 0x4a, 0x7c, 0x5c, 0x3c, 0x10, 0x65, 0xc5, 0x05, 0xf9,
-	0x79, 0xc5, 0xa9, 0x46, 0xc1, 0x5c, 0x1c, 0x20, 0x7e, 0x40, 0x66, 0x5e, 0xba, 0x90, 0x3b, 0x17,
-	0x0b, 0x88, 0x2d, 0x24, 0xab, 0x87, 0x6e, 0xba, 0x1e, 0x92, 0xd1, 0x52, 0x72, 0xb8, 0xa4, 0x21,
-	0x46, 0x1a, 0x30, 0x3a, 0xd9, 0x5d, 0x78, 0x28, 0xc7, 0x70, 0xe3, 0xa1, 0x1c, 0xc3, 0x87, 0x87,
-	0x72, 0x8c, 0x0d, 0x8f, 0xe4, 0x18, 0x57, 0x3c, 0x92, 0x63, 0x3c, 0xf1, 0x48, 0x8e, 0xf1, 0xc2,
-	0x23, 0x39, 0xc6, 0x07, 0x8f, 0xe4, 0x18, 0x5f, 0x3c, 0x92, 0x63, 0xf8, 0xf0, 0x48, 0x8e, 0x71,
-	0xc2, 0x63, 0x39, 0x86, 0x0b, 0x8f, 0xe5, 0x18, 0x6e, 0x3c, 0x96, 0x63, 0x88, 0xe2, 0x80, 0x99,
-	0x98, 0xc4, 0x06, 0xf6, 0xa4, 0x31, 0x20, 0x00, 0x00, 0xff, 0xff, 0xcb, 0xaf, 0x87, 0xf2, 0xf6,
-	0x00, 0x00, 0x00,
+	0xd4, 0x83, 0x0b, 0x96, 0x19, 0x2a, 0xcd, 0x66, 0xe4, 0xe2, 0x0e, 0x28, 0xcd, 0xc9, 0x09, 0x4a,
+	0x2d, 0x2c, 0x4d, 0x2d, 0x2e, 0x11, 0x12, 0xe3, 0x62, 0xcb, 0xcc, 0x4d, 0x4c, 0x4f, 0x2d, 0x96,
+	0x60, 0x54, 0x60, 0xd6, 0xe0, 0x0c, 0x82, 0xf2, 0x84, 0xac, 0xb9, 0x58, 0x8a, 0x52, 0x8b, 0x0b,
+	0x24, 0x98, 0x14, 0x98, 0x35, 0xb8, 0x8d, 0xd4, 0xf5, 0xd0, 0x0d, 0xd2, 0x43, 0x32, 0x44, 0x2f,
+	0x28, 0xb5, 0xb8, 0xc0, 0x35, 0xaf, 0xa4, 0xa8, 0x32, 0x08, 0xac, 0x49, 0xca, 0x9c, 0x8b, 0x13,
+	0x2e, 0x24, 0x24, 0xc0, 0xc5, 0x9c, 0x9d, 0x5a, 0x29, 0xc1, 0xa8, 0xc0, 0xa8, 0xc1, 0x19, 0x04,
+	0x62, 0x0a, 0x89, 0x70, 0xb1, 0x96, 0x25, 0xe6, 0x94, 0xa6, 0x4a, 0x30, 0x81, 0xc5, 0x20, 0x1c,
+	0x2b, 0x26, 0x0b, 0x46, 0x25, 0x3e, 0x2e, 0x1e, 0x88, 0xb9, 0xc5, 0x05, 0xf9, 0x79, 0xc5, 0xa9,
+	0x46, 0xc1, 0x5c, 0x1c, 0x20, 0x7e, 0x40, 0x66, 0x5e, 0xba, 0x90, 0x3b, 0x17, 0x0b, 0x88, 0x2d,
+	0x24, 0x8b, 0xd7, 0x2d, 0x52, 0x72, 0xb8, 0xa4, 0x21, 0x46, 0x1a, 0x30, 0x3a, 0xd9, 0x5d, 0x78,
+	0x28, 0xc7, 0x70, 0xe3, 0xa1, 0x1c, 0xc3, 0x87, 0x87, 0x72, 0x8c, 0x0d, 0x8f, 0xe4, 0x18, 0x57,
+	0x3c, 0x92, 0x63, 0x3c, 0xf1, 0x48, 0x8e, 0xf1, 0xc2, 0x23, 0x39, 0xc6, 0x07, 0x8f, 0xe4, 0x18,
+	0x5f, 0x3c, 0x92, 0x63, 0xf8, 0xf0, 0x48, 0x8e, 0x71, 0xc2, 0x63, 0x39, 0x86, 0x0b, 0x8f, 0xe5,
+	0x18, 0x6e, 0x3c, 0x96, 0x63, 0x88, 0xe2, 0x80, 0x99, 0x98, 0xc4, 0x06, 0x0e, 0x5b, 0x63, 0x40,
+	0x00, 0x00, 0x00, 0xff, 0xff, 0x57, 0xe1, 0x26, 0xd7, 0x6d, 0x01, 0x00, 0x00,
 }
 
 func (this *PullRequest) Equal(that interface{}) bool {
@@ -154,6 +168,14 @@ func (this *PullRequest) Equal(that interface{}) bool {
 	}
 	for i := range this.Images {
 		if this.Images[i] != that1.Images[i] {
+			return false
+		}
+	}
+	if len(this.Resp) != len(that1.Resp) {
+		return false
+	}
+	for i := range this.Resp {
+		if this.Resp[i] != that1.Resp[i] {
 			return false
 		}
 	}
@@ -184,9 +206,22 @@ func (this *PullRequest) GoString() string {
 	if this == nil {
 		return "nil"
 	}
-	s := make([]string, 0, 5)
+	s := make([]string, 0, 6)
 	s = append(s, "&pullping.PullRequest{")
 	s = append(s, "Images: "+fmt.Sprintf("%#v", this.Images)+",\n")
+	keysForResp := make([]string, 0, len(this.Resp))
+	for k, _ := range this.Resp {
+		keysForResp = append(keysForResp, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForResp)
+	mapStringForResp := "map[string]string{"
+	for _, k := range keysForResp {
+		mapStringForResp += fmt.Sprintf("%#v: %#v,", k, this.Resp[k])
+	}
+	mapStringForResp += "}"
+	if this.Resp != nil {
+		s = append(s, "Resp: "+mapStringForResp+",\n")
+	}
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -335,6 +370,25 @@ func (m *PullRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if len(m.Resp) > 0 {
+		for k := range m.Resp {
+			v := m.Resp[k]
+			baseI := i
+			i -= len(v)
+			copy(dAtA[i:], v)
+			i = encodeVarintPullping(dAtA, i, uint64(len(v)))
+			i--
+			dAtA[i] = 0x12
+			i -= len(k)
+			copy(dAtA[i:], k)
+			i = encodeVarintPullping(dAtA, i, uint64(len(k)))
+			i--
+			dAtA[i] = 0xa
+			i = encodeVarintPullping(dAtA, i, uint64(baseI-i))
+			i--
+			dAtA[i] = 0x12
+		}
+	}
 	if len(m.Images) > 0 {
 		for iNdEx := len(m.Images) - 1; iNdEx >= 0; iNdEx-- {
 			i -= len(m.Images[iNdEx])
@@ -393,6 +447,14 @@ func (m *PullRequest) Size() (n int) {
 			n += 1 + l + sovPullping(uint64(l))
 		}
 	}
+	if len(m.Resp) > 0 {
+		for k, v := range m.Resp {
+			_ = k
+			_ = v
+			mapEntrySize := 1 + len(k) + sovPullping(uint64(len(k))) + 1 + len(v) + sovPullping(uint64(len(v)))
+			n += mapEntrySize + 1 + sovPullping(uint64(mapEntrySize))
+		}
+	}
 	return n
 }
 
@@ -415,8 +477,19 @@ func (this *PullRequest) String() string {
 	if this == nil {
 		return "nil"
 	}
+	keysForResp := make([]string, 0, len(this.Resp))
+	for k, _ := range this.Resp {
+		keysForResp = append(keysForResp, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForResp)
+	mapStringForResp := "map[string]string{"
+	for _, k := range keysForResp {
+		mapStringForResp += fmt.Sprintf("%v: %v,", k, this.Resp[k])
+	}
+	mapStringForResp += "}"
 	s := strings.Join([]string{`&PullRequest{`,
 		`Images:` + fmt.Sprintf("%v", this.Images) + `,`,
+		`Resp:` + mapStringForResp + `,`,
 		`}`,
 	}, "")
 	return s
@@ -498,6 +571,133 @@ func (m *PullRequest) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Images = append(m.Images, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Resp", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowPullping
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthPullping
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthPullping
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Resp == nil {
+				m.Resp = make(map[string]string)
+			}
+			var mapkey string
+			var mapvalue string
+			for iNdEx < postIndex {
+				entryPreIndex := iNdEx
+				var wire uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowPullping
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					wire |= uint64(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				fieldNum := int32(wire >> 3)
+				if fieldNum == 1 {
+					var stringLenmapkey uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowPullping
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapkey |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapkey := int(stringLenmapkey)
+					if intStringLenmapkey < 0 {
+						return ErrInvalidLengthPullping
+					}
+					postStringIndexmapkey := iNdEx + intStringLenmapkey
+					if postStringIndexmapkey < 0 {
+						return ErrInvalidLengthPullping
+					}
+					if postStringIndexmapkey > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapkey = string(dAtA[iNdEx:postStringIndexmapkey])
+					iNdEx = postStringIndexmapkey
+				} else if fieldNum == 2 {
+					var stringLenmapvalue uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowPullping
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapvalue |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapvalue := int(stringLenmapvalue)
+					if intStringLenmapvalue < 0 {
+						return ErrInvalidLengthPullping
+					}
+					postStringIndexmapvalue := iNdEx + intStringLenmapvalue
+					if postStringIndexmapvalue < 0 {
+						return ErrInvalidLengthPullping
+					}
+					if postStringIndexmapvalue > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapvalue = string(dAtA[iNdEx:postStringIndexmapvalue])
+					iNdEx = postStringIndexmapvalue
+				} else {
+					iNdEx = entryPreIndex
+					skippy, err := skipPullping(dAtA[iNdEx:])
+					if err != nil {
+						return err
+					}
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
+						return ErrInvalidLengthPullping
+					}
+					if (iNdEx + skippy) > postIndex {
+						return io.ErrUnexpectedEOF
+					}
+					iNdEx += skippy
+				}
+			}
+			m.Resp[mapkey] = mapvalue
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
