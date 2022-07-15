@@ -30,6 +30,7 @@ import (
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 type llbBridge struct {
@@ -75,6 +76,12 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 	if err != nil {
 		return nil, nil, err
 	}
+
+	// TODO FIXME earthly-specific wait group is required to ensure the remotecache/registry's ResolveCacheImporterFunc can run
+	// which requires the session to remain open in order to get dockerhub (or any other registry) credentials.
+	// It seems like the cleaner approach is to bake this in somewhere into the edge or Load
+	eg, _ := errgroup.WithContext(ctx)
+
 	var cms []solver.CacheManager
 	for _, im := range cacheImports {
 		cmID, err := cmKey(im)
@@ -104,22 +111,25 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 					}
 					return cmNew, nil
 				})
+
+				cmInst := cm
+				eg.Go(func() error {
+					if lcm, ok := cmInst.(*lazyCacheManager); ok {
+						lcm.wait()
+					}
+					return nil
+				})
 			}(cmID, im)
 			b.cms[cmID] = cm
 		} else {
 			cm = prevCm
 		}
-
-		// TODO FIXME earthly-specific this wait is required to ensure the remotecache/registry's ResolveCacheImporterFunc can run
-		// which requires the session to remain open in order to get dockerhub (or any other registry) credentials.
-		// It seems like the cleaner approach is to bake this in somewhere into the edge or Load
-		if lcm, ok := cm.(*lazyCacheManager); ok {
-			bklog.G(ctx).Debugf("forcing lazyCacheManager.wait()")
-			lcm.wait()
-		}
-
 		cms = append(cms, cm)
 		b.cmsMu.Unlock()
+	}
+	err = eg.Wait()
+	if err != nil {
+		return nil, nil, err
 	}
 	dpc := &detectPrunedCacheID{}
 
