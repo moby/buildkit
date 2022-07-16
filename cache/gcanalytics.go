@@ -61,9 +61,7 @@ func (g *GCAnalytics) End(success bool, clearedRecords int64, clearedSize int64)
 	if len(g.past) > maxPastGCAnalytics {
 		prev := g.past
 		g.past = make([]GCRunAnalytics, 0, maxPastGCAnalytics)
-		for _, run := range prev[1:] {
-			g.past = append(g.past, run)
-		}
+		g.past = append(g.past, prev[1:]...)
 	}
 	g.current = GCRunAnalytics{}
 	g.allTimeRuns++

@@ -2,6 +2,7 @@ package earthlyoutputs
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -388,7 +389,8 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 	defer done(context.TODO())
 
-	for _, img := range images {
+	resp := make(map[string]string)
+	for imgName, img := range images {
 		desc, err := e.opt.ImageWriter.Commit(ctx, *img.expSrc, sessionID, &img.opts)
 		if err != nil {
 			return nil, err
@@ -401,6 +403,18 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 			desc.Annotations = map[string]string{}
 		}
 		desc.Annotations[ocispecs.AnnotationCreated] = time.Now().UTC().Format(time.RFC3339)
+
+		if v, ok := desc.Annotations[exptypes.ExporterConfigDigestKey]; ok {
+			cfgDgstKey := fmt.Sprintf("%s|%s", imgName, exptypes.ExporterConfigDigestKey)
+			resp[cfgDgstKey] = v
+			delete(desc.Annotations, exptypes.ExporterConfigDigestKey)
+		}
+		dtDesc, err := json.Marshal(desc)
+		if err != nil {
+			return nil, err
+		}
+		descKey := fmt.Sprintf("%s|%s", imgName, exptypes.ExporterImageDescriptorKey)
+		resp[descKey] = base64.StdEncoding.EncodeToString(dtDesc)
 	}
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -409,9 +423,6 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	if err != nil {
 		return nil, err
 	}
-
-	resp := make(map[string]string)
-	// TODO(vladaionescu): Fill resp
 
 	for _, img := range images {
 		if !img.localExport {
@@ -526,7 +537,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 				pullImgs = append(pullImgs, img.localRegExport)
 			}
 		}
-		pullPingChan = pullping.PullPingChannel(ctx, pullImgs, caller)
+		pullPingChan = pullping.PullPingChannel(ctx, pullImgs, resp, caller)
 		ctxTimeout, cancel := context.WithTimeout(ctx, 1*time.Hour)
 		defer cancel()
 		// wait for the client to finish pulling

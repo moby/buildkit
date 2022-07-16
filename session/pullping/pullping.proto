@@ -10,6 +10,7 @@ service PullPing {
 
 message PullRequest {
     repeated string images = 1;
+    map<string, string> resp = 2;
 }
 
 message PullResponse {

@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-type PullCallback func(ctx context.Context, images []string) error
+type PullCallback func(ctx context.Context, images []string, resp map[string]string) error
 
 type pullPing struct {
 	callback PullCallback
@@ -29,7 +29,7 @@ func (pp *pullPing) Register(server *grpc.Server) {
 // Pull implements the gRPC Pull message. It calls the callback and sends a
 // message to the client when the callback has completed.
 func (pp *pullPing) Pull(pr *PullRequest, ps PullPing_PullServer) error {
-	err := pp.callback(ps.Context(), pr.GetImages())
+	err := pp.callback(ps.Context(), pr.GetImages(), pr.GetResp())
 	if err != nil {
 		return err
 	}
@@ -43,11 +43,12 @@ func (pp *pullPing) Pull(pr *PullRequest, ps PullPing_PullServer) error {
 // PullPingChannel returns a channel which signals an error when the pull
 // operation has completed from the client-side. The error is nil
 // if the operation has been completed successfully.
-func PullPingChannel(ctx context.Context, images []string, c session.Caller) chan error {
+func PullPingChannel(ctx context.Context, images []string, resp map[string]string, c session.Caller) chan error {
 	respChan := make(chan error, 1)
 	ppc := NewPullPingClient(c.Conn())
 	pc, err := ppc.Pull(ctx, &PullRequest{
 		Images: images,
+		Resp:   resp,
 	})
 	if err != nil {
 		respChan <- errors.Wrap(err, "pull ping request")
