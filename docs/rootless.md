@@ -30,7 +30,7 @@ You may have to disable SELinux, or run BuildKit with `--oci-worker-snapshotter=
 [RootlessKit](https://github.com/rootless-containers/rootlesskit/) needs to be installed.
 
 ```console
-$ rootlesskit buildkitd
+$ rootlesskit buildkitd --containerd-worker=false --oci-worker=true
 ```
 
 ```console
@@ -39,7 +39,7 @@ $ buildctl --addr unix:///run/user/$UID/buildkit/buildkitd.sock build ...
 
 To isolate BuildKit daemon's network namespace from the host (recommended):
 ```console
-$ rootlesskit --net=slirp4netns --copy-up=/etc --disable-host-loopback buildkitd
+$ rootlesskit --net=slirp4netns --copy-up=/etc --disable-host-loopback buildkitd --containerd-worker=false --oci-worker=true
 ```
 
 ## Running BuildKit in Rootless mode (containerd worker)
@@ -64,14 +64,14 @@ $ containerd-rootless-setuptool.sh nsenter -- buildkitd --oci-worker=false --con
 Try running `buildkitd` with `--oci-worker-snapshotter=fuse-overlayfs`:
 
 ```console
-$ rootlesskit buildkitd --oci-worker-snapshotter=fuse-overlayfs
+$ rootlesskit buildkitd --oci-worker-snapshotter=fuse-overlayfs --containerd-worker=false --oci-worker=true
 ```
 
 ### Error related to `fuse-overlayfs`
 Try running `buildkitd` with `--oci-worker-snapshotter=native`:
 
 ```console
-$ rootlesskit buildkitd --oci-worker-snapshotter=native
+$ rootlesskit buildkitd --oci-worker-snapshotter=native --containerd-worker=false --oci-worker=true
 ```
 
 ### Error related to `newuidmap` or `/etc/subuid`
