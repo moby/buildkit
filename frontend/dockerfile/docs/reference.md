@@ -2416,6 +2416,7 @@ RUN echo "I'm building for $TARGETPLATFORM"
 | `BUILDKIT_MULTI_PLATFORM`             | Bool    | Opt into determnistic output regardless of multi-platform output or not. |
 | `BUILDKIT_SANDBOX_HOSTNAME`           | String  | Set the hostname (default `buildkitsandbox`)                             |
 | `BUILDKIT_SYNTAX`                     | String  | Set frontend image                                                       |
+| `SOURCE_DATE_EPOCH`                   | Int     | Set the UNIX timestamp for created image and layers. More info from [reproducible builds](https://reproducible-builds.org/docs/source-date-epoch/). Supported since Dockerfile 1.5, BuildKit 0.11 (unreleased) |
 
 #### Example: keep `.git` dir
 
