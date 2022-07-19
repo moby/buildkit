@@ -242,7 +242,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 			inp.Refs = m
 		}
 		if _, ok := asInlineCache(exp.CacheExporter); ok {
-			if err := inBuilderContext(ctx, j, "preparing layers for inline cache", "", func(ctx context.Context, _ session.Group) error {
+			if err := inBuilderContext(ctx, j, "preparing layers for inline cache", j.SessionID+"-cache-inline", func(ctx context.Context, _ session.Group) error {
 				if cr != nil {
 					dtic, err := inlineCache(ctx, exp.CacheExporter, cr, e.Config().Compression, session.NewGroup(sessionID))
 					if err != nil {
@@ -267,7 +267,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 				return nil, err
 			}
 		}
-		if err := inBuilderContext(ctx, j, e.Name(), "", func(ctx context.Context, _ session.Group) error {
+		if err := inBuilderContext(ctx, j, e.Name(), j.SessionID+"-export", func(ctx context.Context, _ session.Group) error {
 			exporterResponse, err = e.Export(ctx, inp, j.SessionID)
 			return err
 		}); err != nil {
@@ -278,7 +278,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	g := session.NewGroup(j.SessionID)
 	var cacheExporterResponse map[string]string
 	if e := exp.CacheExporter; e != nil {
-		if err := inBuilderContext(ctx, j, "exporting cache", "", func(ctx context.Context, _ session.Group) error {
+		if err := inBuilderContext(ctx, j, "exporting cache", j.SessionID+"-cache", func(ctx context.Context, _ session.Group) error {
 			prepareDone := oneOffProgress(ctx, "preparing build cache for export")
 			if err := res.EachRef(func(res solver.ResultProxy) error {
 				r, err := res.Result(ctx)
