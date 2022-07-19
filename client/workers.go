@@ -70,18 +70,18 @@ func (c *Client) ListWorkers(ctx context.Context, opts ...ListWorkersOption) ([]
 
 	for _, w := range resp.Record {
 		var currentStartTime *time.Time
-		if w.GCAnalytics.CurrentStartTimeSecEpoch != 0 {
-			t := time.Unix(w.GCAnalytics.CurrentStartTimeSecEpoch, 0)
+		if w.GetGCAnalytics().GetCurrentStartTimeSecEpoch() != 0 {
+			t := time.Unix(w.GetGCAnalytics().GetCurrentStartTimeSecEpoch(), 0)
 			currentStartTime = &t
 		}
 		var lastStartTime *time.Time
-		if w.GCAnalytics.LastStartTimeSecEpoch != 0 {
-			t := time.Unix(w.GCAnalytics.LastStartTimeSecEpoch, 0)
+		if w.GetGCAnalytics().GetLastStartTimeSecEpoch() != 0 {
+			t := time.Unix(w.GetGCAnalytics().GetLastStartTimeSecEpoch(), 0)
 			lastStartTime = &t
 		}
 		var lastEndTime *time.Time
-		if w.GCAnalytics.LastEndTimeSecEpoch != 0 {
-			t := time.Unix(w.GCAnalytics.LastEndTimeSecEpoch, 0)
+		if w.GetGCAnalytics().GetLastEndTimeSecEpoch() != 0 {
+			t := time.Unix(w.GetGCAnalytics().GetLastEndTimeSecEpoch(), 0)
 			lastEndTime = &t
 		}
 		wi = append(wi, &WorkerInfo{
@@ -96,26 +96,26 @@ func (c *Client) ListWorkers(ctx context.Context, opts ...ListWorkersOption) ([]
 			ParallelismWaiting: int(w.ParallelismWaiting),
 
 			GCAnalytics: GCAnalytics{
-				NumRuns:                 int(w.GCAnalytics.NumRuns),
-				NumFailures:             int(w.GCAnalytics.NumFailures),
-				AvgDuration:             time.Duration(w.GCAnalytics.AvgDurationMs) * time.Millisecond,
-				AvgRecordsCleared:       w.GCAnalytics.AvgRecordsCleared,
-				AvgSizeCleared:          w.GCAnalytics.AvgSizeCleared,
-				AvgRecordsBefore:        w.GCAnalytics.AvgRecordsBefore,
-				AvgSizeBefore:           w.GCAnalytics.AvgSizeBefore,
-				AllTimeRuns:             w.GCAnalytics.AllTimeRuns,
-				AllTimeMaxDuration:      time.Duration(w.GCAnalytics.AllTimeMaxDurationMs) * time.Millisecond,
-				AllTimeDuration:         time.Duration(w.GCAnalytics.AllTimeDurationMs) * time.Millisecond,
+				NumRuns:                 int(w.GetGCAnalytics().GetNumRuns()),
+				NumFailures:             int(w.GetGCAnalytics().GetNumFailures()),
+				AvgDuration:             time.Duration(w.GetGCAnalytics().GetAvgDurationMs()) * time.Millisecond,
+				AvgRecordsCleared:       w.GetGCAnalytics().GetAvgRecordsCleared(),
+				AvgSizeCleared:          w.GetGCAnalytics().GetAvgSizeCleared(),
+				AvgRecordsBefore:        w.GetGCAnalytics().GetAvgRecordsBefore(),
+				AvgSizeBefore:           w.GetGCAnalytics().GetAvgSizeBefore(),
+				AllTimeRuns:             w.GetGCAnalytics().GetAllTimeRuns(),
+				AllTimeMaxDuration:      time.Duration(w.GetGCAnalytics().GetAllTimeMaxDurationMs()) * time.Millisecond,
+				AllTimeDuration:         time.Duration(w.GetGCAnalytics().GetAllTimeDurationMs()) * time.Millisecond,
 				CurrentStartTime:        currentStartTime,
-				CurrentNumRecordsBefore: w.GCAnalytics.CurrentNumRecordsBefore,
-				CurrentSizeBefore:       w.GCAnalytics.CurrentSizeBefore,
+				CurrentNumRecordsBefore: w.GetGCAnalytics().GetCurrentNumRecordsBefore(),
+				CurrentSizeBefore:       w.GetGCAnalytics().GetCurrentSizeBefore(),
 				LastStartTime:           lastStartTime,
 				LastEndTime:             lastEndTime,
-				LastNumRecordsBefore:    w.GCAnalytics.LastNumRecordsBefore,
-				LastSizeBefore:          w.GCAnalytics.LastSizeBefore,
-				LastNumRecordsCleared:   w.GCAnalytics.LastNumRecordsCleared,
-				LastSizeCleared:         w.GCAnalytics.LastSizeCleared,
-				LastSuccess:             w.GCAnalytics.LastSuccess,
+				LastNumRecordsBefore:    w.GetGCAnalytics().GetLastNumRecordsBefore(),
+				LastSizeBefore:          w.GetGCAnalytics().GetLastSizeBefore(),
+				LastNumRecordsCleared:   w.GetGCAnalytics().GetLastNumRecordsCleared(),
+				LastSizeCleared:         w.GetGCAnalytics().GetLastSizeCleared(),
+				LastSuccess:             w.GetGCAnalytics().GetLastSuccess(),
 			},
 		})
 	}
