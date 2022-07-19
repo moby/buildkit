@@ -28,10 +28,16 @@ Introductory blog post https://blog.mobyproject.org/introducing-buildkit-17e056c
 
 Join `#buildkit` channel on [Docker Community Slack](http://dockr.ly/slack)
 
-:information_source: If you are visiting this repo for the usage of BuildKit-only Dockerfile features like `RUN --mount=type=(bind|cache|tmpfs|secret|ssh)`, please refer to [`frontend/dockerfile/docs/syntax.md`](frontend/dockerfile/docs/syntax.md).
+> **Note**
+>
+> If you are visiting this repo for the usage of BuildKit-only Dockerfile features
+> like `RUN --mount=type=(bind|cache|tmpfs|secret|ssh)`, please refer to [`frontend/dockerfile/docs/reference.md`](frontend/dockerfile/docs/reference.md)
 
-:information_source: [BuildKit has been integrated to `docker build` since Docker 18.06 .](https://docs.docker.com/develop/develop-images/build_enhancements/)
-You don't need to read this document unless you want to use the full-featured standalone version of BuildKit.
+> **Note**
+>
+> [BuildKit has been integrated to `docker build` since Docker 18.09](https://docs.docker.com/develop/develop-images/build_enhancements/).
+> You don't need to read this document unless you want to use the full-featured
+> standalone version of BuildKit.
 
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
@@ -44,7 +50,6 @@ You don't need to read this document unless you want to use the full-featured st
   - [Exploring Dockerfiles](#exploring-dockerfiles)
     - [Building a Dockerfile with `buildctl`](#building-a-dockerfile-with-buildctl)
     - [Building a Dockerfile using external frontend:](#building-a-dockerfile-using-external-frontend)
-    - [Building a Dockerfile with experimental features like `RUN --mount=type=(bind|cache|tmpfs|secret|ssh)`](#building-a-dockerfile-with-experimental-features-like-run---mounttypebindcachetmpfssecretssh)
   - [Output](#output)
     - [Image/Registry](#imageregistry)
     - [Local directory](#local-directory)
@@ -204,10 +209,6 @@ buildctl build \
     --opt context=https://github.com/moby/moby.git \
     --opt build-arg:APT_MIRROR=cdn-fastly.deb.debian.org
 ```
-
-#### Building a Dockerfile with experimental features like `RUN --mount=type=(bind|cache|tmpfs|secret|ssh)`
-
-See [`frontend/dockerfile/docs/experimental.md`](frontend/dockerfile/docs/experimental.md).
 
 ### Output
 

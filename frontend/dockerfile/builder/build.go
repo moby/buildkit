@@ -61,7 +61,7 @@ const (
 	keyUlimit           = "ulimit"
 
 	// Don't forget to update frontend documentation if you add
-	// a new build-arg: frontend/dockerfile/docs/syntax.md
+	// a new build-arg: frontend/dockerfile/docs/reference.md
 	keyCacheNSArg           = "build-arg:BUILDKIT_CACHE_MOUNT_NS"
 	keyContextKeepGitDirArg = "build-arg:BUILDKIT_CONTEXT_KEEP_GIT_DIR"
 	keyHostnameArg          = "build-arg:BUILDKIT_SANDBOX_HOSTNAME"
