@@ -228,7 +228,7 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 
 	cfg := common.config.Workers.Containerd
 
-	if (cfg.Enabled == nil && !validContainerdSocket(cfg.Address)) || (cfg.Enabled != nil && !*cfg.Enabled) {
+	if (cfg.Enabled == nil && !validContainerdSocket(cfg)) || (cfg.Enabled != nil && !*cfg.Enabled) {
 		return nil, nil
 	}
 
@@ -280,7 +280,8 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 	return []worker.Worker{w}, nil
 }
 
-func validContainerdSocket(socket string) bool {
+func validContainerdSocket(cfg config.ContainerdConfig) bool {
+	socket := cfg.Address
 	if strings.HasPrefix(socket, "tcp://") {
 		// FIXME(AkihiroSuda): prohibit tcp?
 		return true
@@ -291,6 +292,14 @@ func validContainerdSocket(socket string) bool {
 		logrus.Warnf("skipping containerd worker, as %q does not exist", socketPath)
 		return false
 	}
-	// TODO: actually dial and call introspection API
+	c, err := ctd.New(socketPath, ctd.WithDefaultNamespace(cfg.Namespace))
+	if err != nil {
+		logrus.Warnf("skipping containerd worker, as failed to connect client to %q: %v", socketPath, err)
+		return false
+	}
+	if _, err := c.Server(context.Background()); err != nil {
+		logrus.Warnf("skipping containerd worker, as failed to call introspection API on %q: %v", socketPath, err)
+		return false
+	}
 	return true
 }
