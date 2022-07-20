@@ -609,7 +609,7 @@ func Chown(uid, gid int) HTTPOption {
 }
 
 func platformSpecificSource(id string) bool {
-	return strings.HasPrefix(id, "docker-image://")
+	return strings.HasPrefix(id, "docker-image://") || strings.HasPrefix(id, "oci-layout://")
 }
 
 func addCap(c *Constraints, id apicaps.CapID) {
