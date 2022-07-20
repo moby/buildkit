@@ -209,8 +209,10 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 				<-time.After(3 * time.Second)
 				cancelStatus()
 			}()
-			bklog.G(ctx).Debugf("stopping session")
-			s.Close()
+			if !opt.SessionPreInitialized {
+				bklog.G(ctx).Debugf("stopping session")
+				s.Close()
+			}
 		}()
 		var pbd *pb.Definition
 		if def != nil {
