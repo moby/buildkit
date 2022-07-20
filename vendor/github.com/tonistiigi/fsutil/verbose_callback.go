@@ -7,6 +7,8 @@ const (
 	StatusSkipped
 	StatusSending
 	StatusSent
+	StatusReceiving
+	StatusReceived
 	StatusFailed
 )
 

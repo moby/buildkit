@@ -224,26 +224,29 @@ func FSSync(ctx context.Context, c session.Caller, opt FSSendRequestOpt) error {
 }
 
 // NewFSSyncTargetDir allows writing into a directory
-func NewFSSyncTargetDir(outdir string) session.Attachable {
+func NewFSSyncTargetDir(outdir string, verboseProgressCB fsutil.VerboseProgressCB) session.Attachable {
 	p := &fsSyncTarget{
-		outdir: outdir,
+		outdir:            outdir,
+		verboseProgressCB: verboseProgressCB,
 	}
 	return p
 }
 
 // NewFSSyncTarget allows writing into an io.WriteCloser
-func NewFSSyncTarget(f func(map[string]string) (io.WriteCloser, error)) session.Attachable {
+func NewFSSyncTarget(f func(map[string]string) (io.WriteCloser, error), verboseProgressCB fsutil.VerboseProgressCB) session.Attachable {
 	p := &fsSyncTarget{
-		f: f,
+		f:                 f,
+		verboseProgressCB: verboseProgressCB,
 	}
 	return p
 }
 
 // NewFSSyncTarget allows writing into an io.WriteCloser; it is earthly-specific
-func NewFSSyncMultiTarget(f func(map[string]string) (io.WriteCloser, error), outdirFunc func(map[string]string) (string, error)) session.Attachable {
+func NewFSSyncMultiTarget(f func(map[string]string) (io.WriteCloser, error), outdirFunc func(map[string]string) (string, error), verboseProgressCB fsutil.VerboseProgressCB) session.Attachable {
 	p := &fsSyncTarget{
-		f:          f,
-		outdirFunc: outdirFunc,
+		f:                 f,
+		outdirFunc:        outdirFunc,
+		verboseProgressCB: verboseProgressCB,
 	}
 	return p
 }
@@ -252,6 +255,8 @@ type fsSyncTarget struct {
 	outdir     string
 	outdirFunc func(map[string]string) (string, error) //earthly
 	f          func(map[string]string) (io.WriteCloser, error)
+
+	verboseProgressCB fsutil.VerboseProgressCB
 }
 
 func (sp *fsSyncTarget) Register(server *grpc.Server) {
@@ -260,7 +265,7 @@ func (sp *fsSyncTarget) Register(server *grpc.Server) {
 
 func (sp *fsSyncTarget) DiffCopy(stream FileSend_DiffCopyServer) (err error) {
 	if sp.outdir != "" {
-		return syncTargetDiffCopy(stream, sp.outdir)
+		return syncTargetDiffCopy(stream, sp.outdir, sp.verboseProgressCB)
 	}
 
 	if sp.f == nil {
@@ -279,7 +284,7 @@ func (sp *fsSyncTarget) DiffCopy(stream FileSend_DiffCopyServer) (err error) {
 			return err
 		}
 		if outdir != "" {
-			return syncTargetDiffCopy(stream, outdir)
+			return syncTargetDiffCopy(stream, outdir, sp.verboseProgressCB)
 		}
 	}
 	wc, err := sp.f(md)

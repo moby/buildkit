@@ -98,7 +98,7 @@ func recvDiffCopy(ds grpc.ClientStream, dest string, cu CacheUpdater, progress p
 	}))
 }
 
-func syncTargetDiffCopy(ds grpc.ServerStream, dest string) error {
+func syncTargetDiffCopy(ds grpc.ServerStream, dest string, verboseProgressCB fsutil.VerboseProgressCB) error {
 	if err := os.MkdirAll(dest, 0700); err != nil {
 		return errors.Wrapf(err, "failed to create synctarget dest dir %s", dest)
 	}
@@ -115,6 +115,7 @@ func syncTargetDiffCopy(ds grpc.ServerStream, dest string) error {
 				return true
 			}
 		}(),
+		VerboseProgressCb: verboseProgressCB,
 	}))
 }
 
