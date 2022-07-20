@@ -1,6 +1,6 @@
 [![asciicinema example](https://asciinema.org/a/gPEIEo1NzmDTUu2bEPsUboqmU.png)](https://asciinema.org/a/gPEIEo1NzmDTUu2bEPsUboqmU)
 
-# BuildKit
+# BuildKit <!-- omit in toc -->
 
 [![GoDoc](https://godoc.org/github.com/moby/buildkit?status.svg)](https://godoc.org/github.com/moby/buildkit/client/llb)
 [![Build Status](https://github.com/moby/buildkit/workflows/build/badge.svg)](https://github.com/moby/buildkit/actions?query=workflow%3Abuild)
@@ -45,11 +45,11 @@ Join `#buildkit` channel on [Docker Community Slack](http://dockr.ly/slack)
 
 - [Used by](#used-by)
 - [Quick start](#quick-start)
-  - [Starting the `buildkitd` daemon:](#starting-the-buildkitd-daemon)
+  - [Starting the `buildkitd` daemon](#starting-the-buildkitd-daemon)
   - [Exploring LLB](#exploring-llb)
   - [Exploring Dockerfiles](#exploring-dockerfiles)
     - [Building a Dockerfile with `buildctl`](#building-a-dockerfile-with-buildctl)
-    - [Building a Dockerfile using external frontend:](#building-a-dockerfile-using-external-frontend)
+    - [Building a Dockerfile using external frontend](#building-a-dockerfile-using-external-frontend)
   - [Output](#output)
     - [Image/Registry](#imageregistry)
     - [Local directory](#local-directory)
@@ -76,6 +76,8 @@ Join `#buildkit` channel on [Docker Community Slack](http://dockr.ly/slack)
 - [Opentracing support](#opentracing-support)
 - [Running BuildKit without root privileges](#running-buildkit-without-root-privileges)
 - [Building multi-platform images](#building-multi-platform-images)
+  - [Configuring `buildctl`](#configuring-buildctl)
+    - [Color Output Controls](#color-output-controls)
 - [Contributing](#contributing)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
@@ -121,7 +123,7 @@ $ brew install buildkit
 
 To build BuildKit from source, see [`.github/CONTRIBUTING.md`](./.github/CONTRIBUTING.md).
 
-### Starting the `buildkitd` daemon:
+### Starting the `buildkitd` daemon
 
 You need to run `buildkitd` as the root user on the host.
 
@@ -193,7 +195,7 @@ buildctl build \
 
 `--local` exposes local source files from client to the builder. `context` and `dockerfile` are the names Dockerfile frontend looks for build context and Dockerfile location.
 
-#### Building a Dockerfile using external frontend:
+#### Building a Dockerfile using external frontend
 
 External versions of the Dockerfile frontend are pushed to https://hub.docker.com/r/docker/dockerfile-upstream and https://hub.docker.com/r/docker/dockerfile and can be used with the gateway frontend. The source for the external frontend is currently located in `./frontend/dockerfile/cmd/dockerfile-frontend` but will move out of this repository in the future ([#163](https://github.com/moby/buildkit/issues/163)). For automatic build from master branch of this repository `docker/dockerfile-upstream:master` or `docker/dockerfile-upstream:master-labs` image can be used.
 
@@ -668,6 +670,16 @@ Please refer to [`docs/rootless.md`](docs/rootless.md).
 ## Building multi-platform images
 
 Please refer to [`docs/multi-platform.md`](docs/multi-platform.md).
+
+### Configuring `buildctl`
+
+#### Color Output Controls
+
+`buildctl` has support for modifying the colors that are used to output information to the terminal. You can set the environment variable `BUILDKIT_COLORS` to something like `run=blue;cancel=yellow;warn=orange;error=123,12,0` to set the colors that you would like to use. Setting `NO_COLOR` to anything will disable any colorized output as recommended by [no-color.org](https://no-color.org/).
+
+Parsing errors will be reported but ignored. This will result in default color values being used where needed.
+
+- [The list of pre-defined colors](https://github.com/moby/buildkit/blob/master/util/progress/progressui/colors.go).
 
 ## Contributing
 
