@@ -1,10 +1,4 @@
----
-title: Dockerfile reference
-description: "Dockerfiles use a simple DSL which allows you to automate the steps you would normally manually take to create an image."
-keywords: build, dockerfile, reference
-redirect_from:
-- /reference/builder/
----
+# Dockerfile reference
 
 Docker can build images automatically by reading the instructions from a
 `Dockerfile`. A `Dockerfile` is a text document that contains all the commands a
