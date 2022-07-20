@@ -108,7 +108,7 @@ type job struct {
 	name        string
 	status      string
 	hasError    bool
-	hasWarning  bool
+	hasWarning  bool // This is currently unused, but it's here for future use.
 	isCanceled  bool
 	vertex      *vertex
 	showTerm    bool
@@ -831,6 +831,7 @@ func (disp *display) print(d displayInfo, width, height int, all bool) {
 			} else if j.hasError {
 				color = colorError
 			} else if j.hasWarning {
+				// This is currently unused, but it's here for future use.
 				color = colorWarning
 			}
 			if color != nil {
