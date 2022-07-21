@@ -610,7 +610,7 @@ github.com/sirupsen/logrus
 ## explicit; go 1.13
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
-# github.com/tonistiigi/fsutil v0.0.0-20220510150904-0dbf3a8a7d58 => github.com/earthly/fsutil v0.0.0-20220707234217-feae5c0ecda9
+# github.com/tonistiigi/fsutil v0.0.0-20220510150904-0dbf3a8a7d58 => github.com/earthly/fsutil v0.0.0-20220719234708-392da7eebeb5
 ## explicit; go 1.13
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy
@@ -857,5 +857,5 @@ gopkg.in/yaml.v2
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
-# github.com/tonistiigi/fsutil => github.com/earthly/fsutil v0.0.0-20220707234217-feae5c0ecda9
+# github.com/tonistiigi/fsutil => github.com/earthly/fsutil v0.0.0-20220719234708-392da7eebeb5
 # github.com/docker/docker => github.com/docker/docker v20.10.3-0.20220414164044-61404de7df1a+incompatible

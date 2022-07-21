@@ -54,6 +54,7 @@ type ExportEntry struct {
 	OutputDir          string                                          // for ExporterLocal
 	OutputDirFunc      func(map[string]string) (string, error)         // for ExporterEarthly
 	OutputPullCallback pullping.PullCallback                           // for ExporterEarthly
+	VerboseProgressCB  fsutil.VerboseProgressCB
 }
 
 type CacheOptionsEntry struct {
@@ -144,7 +145,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			if ex.OutputDir == "" {
 				return nil, errors.New("output directory is required for local exporter")
 			}
-			s.Allow(filesync.NewFSSyncTargetDir(ex.OutputDir))
+			s.Allow(filesync.NewFSSyncTargetDir(ex.OutputDir, ex.VerboseProgressCB))
 		case ExporterOCI, ExporterDocker, ExporterTar:
 			if ex.OutputDir != "" {
 				return nil, errors.Errorf("output directory %s is not supported by %s exporter", ex.OutputDir, ex.Type)
@@ -152,7 +153,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			if ex.Output == nil {
 				return nil, errors.Errorf("output file writer is required for %s exporter", ex.Type)
 			}
-			s.Allow(filesync.NewFSSyncTarget(ex.Output))
+			s.Allow(filesync.NewFSSyncTarget(ex.Output, ex.VerboseProgressCB))
 		case ExporterEarthly:
 			if ex.OutputDir != "" {
 				return nil, errors.Errorf("output directory %s is not supported by %s exporter", ex.OutputDir, ex.Type)
@@ -163,7 +164,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			if ex.OutputPullCallback != nil {
 				s.Allow(pullping.NewPullPing(ex.OutputPullCallback))
 			}
-			s.Allow(filesync.NewFSSyncMultiTarget(ex.Output, ex.OutputDirFunc))
+			s.Allow(filesync.NewFSSyncMultiTarget(ex.Output, ex.OutputDirFunc, ex.VerboseProgressCB))
 		default:
 			if ex.Output != nil {
 				return nil, errors.Errorf("output file writer is not supported by %s exporter", ex.Type)
