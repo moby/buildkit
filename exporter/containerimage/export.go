@@ -301,7 +301,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 			if e.push {
 				err := e.pushImage(ctx, src, sessionID, targetName, desc.Digest)
 				if err != nil {
-					return nil, err
+					return nil, errors.Wrapf(err, "failed to push %v", targetName)
 				}
 			}
 		}
