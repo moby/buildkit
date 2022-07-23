@@ -847,8 +847,8 @@ Syntax: `--mount=[type=<TYPE>][,option=<value>[,option=<value>]...]`
 |------------------------------------------|-----------------------------------------------------------------------------------------------------------|
 | [`bind`](#run---mounttypebind) (default) | Bind-mount context directories (read-only).                                                               |
 | [`cache`](#run---mounttypecache)         | Mount a temporary directory for to cache directories for compilers and package managers.                  |
-| [`secret`](#run---mounttypesecret)       | Allow the build container to access SSH keys via SSH agents, with support for passphrases.                |
-| [`ssh`](#run---mounttypessh)             | Allow the build container to access secure files such as private keys without baking them into the image. |
+| [`secret`](#run---mounttypesecret)       | Allow the build container to access secure files such as private keys without baking them into the image. |
+| [`ssh`](#run---mounttypessh)             | Allow the build container to access SSH keys via SSH agents, with support for passphrases.                |
 
 ### RUN --mount=type=bind
 
