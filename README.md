@@ -676,7 +676,7 @@ Please refer to [`docs/multi-platform.md`](docs/multi-platform.md).
 
 #### Color Output Controls
 
-`buildctl` has support for modifying the colors that are used to output information to the terminal. You can set the environment variable `BUILDKIT_COLORS` to something like `run=blue;cancel=yellow;warn=orange;error=123,12,0` to set the colors that you would like to use. Setting `NO_COLOR` to anything will disable any colorized output as recommended by [no-color.org](https://no-color.org/).
+`buildctl` has support for modifying the colors that are used to output information to the terminal. You can set the environment variable `BUILDKIT_COLORS` to something like `run=green:warning=yellow:error=red:cancel=255,165,0` to set the colors that you would like to use. Setting `NO_COLOR` to anything will disable any colorized output as recommended by [no-color.org](https://no-color.org/).
 
 Parsing errors will be reported but ignored. This will result in default color values being used where needed.
 
