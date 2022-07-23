@@ -1,7 +1,6 @@
 package solver
 
 import (
-	"os"
 	"testing"
 	"time"
 
@@ -61,11 +60,8 @@ func testParallelism(t *testing.T, sb integration.Sandbox) {
 
 	timeStart := time.Now()
 	eg, egCtx := errgroup.WithContext(ctx)
-	tmpDir, err := os.MkdirTemp("", "solver-jobs-test-")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
 	solveOpt := client.SolveOpt{
-		LocalDirs: map[string]string{"cache": tmpDir},
+		LocalDirs: map[string]string{"cache": t.TempDir()},
 	}
 	eg.Go(func() error {
 		_, err := c.Solve(egCtx, d1, solveOpt, nil)

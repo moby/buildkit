@@ -1,7 +1,6 @@
 package metadata
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -12,9 +11,7 @@ import (
 func TestGetSetSearch(t *testing.T) {
 	t.Parallel()
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-storage")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	dbPath := filepath.Join(tmpdir, "storage.db")
 
@@ -111,9 +108,7 @@ func TestGetSetSearch(t *testing.T) {
 func TestIndexes(t *testing.T) {
 	t.Parallel()
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-storage")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	dbPath := filepath.Join(tmpdir, "storage.db")
 
@@ -171,9 +166,7 @@ func TestIndexes(t *testing.T) {
 func TestExternalData(t *testing.T) {
 	t.Parallel()
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-storage")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	dbPath := filepath.Join(tmpdir, "storage.db")
 

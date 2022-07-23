@@ -42,41 +42,19 @@ type cmOut struct {
 	cs      content.Store
 }
 
-func newCacheManager(ctx context.Context, opt cmOpt) (co *cmOut, cleanup func() error, err error) {
+func newCacheManager(ctx context.Context, t *testing.T, opt cmOpt) (co *cmOut, err error) {
 	ns, ok := namespaces.Namespace(ctx)
 	if !ok {
-		return nil, nil, errors.Errorf("namespace required for test")
+		return nil, errors.Errorf("namespace required for test")
 	}
 
 	if opt.snapshotterName == "" {
 		opt.snapshotterName = "native"
 	}
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
-	if err != nil {
-		return nil, nil, err
-	}
+	tmpdir := t.TempDir()
 
-	defers := make([]func() error, 0)
-	cleanup = func() error {
-		var err error
-		for i := range defers {
-			if err1 := defers[len(defers)-1-i](); err1 != nil && err == nil {
-				err = err1
-			}
-		}
-		return err
-	}
-	defer func() {
-		if err != nil {
-			cleanup()
-		}
-	}()
-	if opt.tmpdir == "" {
-		defers = append(defers, func() error {
-			return os.RemoveAll(tmpdir)
-		})
-	} else {
+	if opt.tmpdir != "" {
 		os.RemoveAll(tmpdir)
 		tmpdir = opt.tmpdir
 	}
@@ -84,29 +62,29 @@ func newCacheManager(ctx context.Context, opt cmOpt) (co *cmOut, cleanup func() 
 	if opt.snapshotter == nil {
 		snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		opt.snapshotter = snapshotter
 	}
 
 	store, err := local.NewStore(tmpdir)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	db, err := bolt.Open(filepath.Join(tmpdir, "containerdmeta.db"), 0644, nil)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	defers = append(defers, func() error {
-		return db.Close()
+	t.Cleanup(func() {
+		require.NoError(t, db.Close())
 	})
 
 	mdb := ctdmetadata.NewDB(db, store, map[string]snapshots.Snapshotter{
 		opt.snapshotterName: opt.snapshotter,
 	})
 	if err := mdb.Init(context.TODO()); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	lm := leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), ns)
@@ -116,8 +94,11 @@ func newCacheManager(ctx context.Context, opt cmOpt) (co *cmOut, cleanup func() 
 
 	md, err := metadata.NewStore(filepath.Join(tmpdir, "metadata.db"))
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
+	t.Cleanup(func() {
+		require.NoError(t, md.Close())
+	})
 
 	cm, err := cache.NewManager(cache.ManagerOpt{
 		Snapshotter:    snapshot.FromContainerdSnapshotter(opt.snapshotterName, containerdsnapshot.NSSnapshotter(ns, mdb.Snapshotter(opt.snapshotterName)), nil),
@@ -130,13 +111,17 @@ func newCacheManager(ctx context.Context, opt cmOpt) (co *cmOut, cleanup func() 
 		MountPoolRoot:  filepath.Join(tmpdir, "cachemounts"),
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
+	t.Cleanup(func() {
+		require.NoError(t, cm.Close())
+	})
+
 	return &cmOut{
 		manager: cm,
 		lm:      lm,
 		cs:      mdb.ContentStore(),
-	}, cleanup, nil
+	}, nil
 }
 
 func newRefGetter(m cache.Manager, shared *cacheRefs) *cacheRefGetter {
@@ -152,20 +137,19 @@ func TestCacheMountPrivateRefs(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
 
-	co, cleanup, err := newCacheManager(ctx, cmOpt{
+	co, err := newCacheManager(ctx, t, cmOpt{
 		snapshotter:     snapshotter,
 		snapshotterName: "native",
 	})
 	require.NoError(t, err)
-
-	defer cleanup()
 
 	g1 := newRefGetter(co.manager, sharedCacheRefs)
 	g2 := newRefGetter(co.manager, sharedCacheRefs)
@@ -219,20 +203,19 @@ func TestCacheMountSharedRefs(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
 
-	co, cleanup, err := newCacheManager(ctx, cmOpt{
+	co, err := newCacheManager(ctx, t, cmOpt{
 		snapshotter:     snapshotter,
 		snapshotterName: "native",
 	})
 	require.NoError(t, err)
-
-	defer cleanup()
 
 	g1 := newRefGetter(co.manager, sharedCacheRefs)
 	g2 := newRefGetter(co.manager, sharedCacheRefs)
@@ -269,20 +252,19 @@ func TestCacheMountLockedRefs(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
 
-	co, cleanup, err := newCacheManager(ctx, cmOpt{
+	co, err := newCacheManager(ctx, t, cmOpt{
 		snapshotter:     snapshotter,
 		snapshotterName: "native",
 	})
 	require.NoError(t, err)
-
-	defer cleanup()
 
 	g1 := newRefGetter(co.manager, sharedCacheRefs)
 	g2 := newRefGetter(co.manager, sharedCacheRefs)
@@ -332,20 +314,19 @@ func TestCacheMountSharedRefsDeadlock(t *testing.T) {
 	// not parallel
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
 
-	co, cleanup, err := newCacheManager(ctx, cmOpt{
+	co, err := newCacheManager(ctx, t, cmOpt{
 		snapshotter:     snapshotter,
 		snapshotterName: "native",
 	})
 	require.NoError(t, err)
-
-	defer cleanup()
 
 	var sharedCacheRefs = &cacheRefs{}
 

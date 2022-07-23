@@ -7,7 +7,5 @@ import (
 )
 
 func TestMemoryCacheStorage(t *testing.T) {
-	RunCacheStorageTests(t, func() (solver.CacheKeyStorage, func()) {
-		return solver.NewInMemoryCacheStorage(), func() {}
-	})
+	RunCacheStorageTests(t, solver.NewInMemoryCacheStorage)
 }

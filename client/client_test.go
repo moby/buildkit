@@ -205,9 +205,7 @@ func testCacheExportCacheKeyLoop(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-buildctl")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	err = os.WriteFile(filepath.Join(tmpdir, "foo"), []byte("foodata"), 0600)
 	require.NoError(t, err)
@@ -304,9 +302,7 @@ func testExportBusyboxLocal(t *testing.T, sb integration.Sandbox) {
 	def, err := llb.Image("busybox").Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -397,9 +393,8 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 	err = a.Add(agent.AddedKey{PrivateKey: k})
 	require.NoError(t, err)
 
-	sockPath, clean, err := makeSSHAgentSock(a)
+	sockPath, err := makeSSHAgentSock(t, a)
 	require.NoError(t, err)
-	defer clean()
 
 	ssh, err := sshprovider.NewSSHAgentProvider([]sshprovider.AgentConfig{{
 		Paths: []string{sockPath},
@@ -446,9 +441,7 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 	def, err = out.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -517,9 +510,7 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 		},
 	)
 
-	tmpDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	err = os.WriteFile(filepath.Join(tmpDir, "key"), dt, 0600)
 	require.NoError(t, err)
@@ -529,9 +520,7 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 	}})
 	require.NoError(t, err)
 
-	destDir, err = os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir = t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -579,9 +568,7 @@ func testShmSize(t *testing.T, sb integration.Sandbox) {
 	def, err := out.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -616,9 +603,7 @@ func testUlimit(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -661,9 +646,7 @@ func testCgroupParent(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -803,9 +786,7 @@ func testSecurityMode(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -995,9 +976,7 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 			for _, exp := range []string{ExporterOCI, ExporterDocker, ExporterImage} {
 				exp := exp // capture loop variable.
 				t.Run(exp, func(t *testing.T) {
-					destDir, err := os.MkdirTemp("", "buildkit")
-					require.NoError(t, err)
-					defer os.RemoveAll(destDir)
+					destDir := t.TempDir()
 
 					so := SolveOpt{
 						Exports: []ExportEntry{
@@ -1208,7 +1187,8 @@ func testLocalSymlinkEscape(t *testing.T, sb integration.Sandbox) {
 [[ $(readlink /mount/sub/bar) == "../../../etc/group" ]]
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		// point to absolute path that is not part of dir
 		fstest.Symlink("/etc/passwd", "foo"),
 		fstest.CreateDir("sub", 0700),
@@ -1226,7 +1206,6 @@ func testLocalSymlinkEscape(t *testing.T, sb integration.Sandbox) {
 		fstest.CreateFile("test.sh", test, 0700),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	local := llb.Local("mylocal", llb.FollowPaths([]string{
 		"test.sh", "foo", "sub/bar", "bax", "sub/sub2/file",
@@ -1261,9 +1240,7 @@ func testRelativeWorkDir(t *testing.T, sb integration.Sandbox) {
 	def, err := pwd.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -1292,9 +1269,7 @@ func testFileOpMkdirMkfile(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -1321,20 +1296,20 @@ func testFileOpCopyRm(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("myfile", []byte("data0"), 0600),
 		fstest.CreateDir("sub", 0700),
 		fstest.CreateFile("sub/foo", []byte("foo0"), 0600),
 		fstest.CreateFile("sub/bar", []byte("bar0"), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
-	dir2, err := tmpdir(
+	dir2, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("file2", []byte("file2"), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	st := llb.Scratch().
 		File(
@@ -1346,9 +1321,7 @@ func testFileOpCopyRm(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -1390,14 +1363,14 @@ func testFileOpCopyIncludeExclude(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("myfile", []byte("data0"), 0600),
 		fstest.CreateDir("sub", 0700),
 		fstest.CreateFile("sub/foo", []byte("foo0"), 0600),
 		fstest.CreateFile("sub/bar", []byte("bar0"), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	st := llb.Scratch().File(
 		llb.Copy(
@@ -1417,9 +1390,7 @@ func testFileOpCopyIncludeExclude(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -1466,9 +1437,7 @@ func testFileOpCopyIncludeExclude(t *testing.T, sb integration.Sandbox) {
 	def, err = st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err = os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir = t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -1533,11 +1502,11 @@ func testLocalSourceWithDiffer(t *testing.T, sb integration.Sandbox, d llb.DiffT
 	require.NoError(t, err)
 	defer c.Close()
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("foo", []byte("foo"), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	tv := syscall.NsecToTimespec(time.Now().UnixNano())
 
@@ -1549,9 +1518,7 @@ func testLocalSourceWithDiffer(t *testing.T, sb integration.Sandbox, d llb.DiffT
 	def, err := st.Marshal(context.TODO())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -1606,9 +1573,7 @@ func testOCILayoutSource(t *testing.T, sb integration.Sandbox) {
 	defer c.Close()
 
 	// create a tempdir where we will store the OCI layout
-	dir, err := os.MkdirTemp("", "buildkit-oci-layout")
-	require.NoError(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	// make an image that is exported there
 	busybox := llb.Image("busybox:latest")
@@ -1673,9 +1638,7 @@ func testOCILayoutSource(t *testing.T, sb integration.Sandbox) {
 	def, err = st.Marshal(context.TODO())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -1706,9 +1669,7 @@ func testOCILayoutPlatformSource(t *testing.T, sb integration.Sandbox) {
 	defer c.Close()
 
 	// create a tempdir where we will store the OCI layout
-	dir, err := os.MkdirTemp("", "buildkit-oci-layout")
-	require.NoError(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	platformsToTest := []string{"linux/amd64", "linux/arm64"}
 
@@ -1806,9 +1767,7 @@ func testOCILayoutPlatformSource(t *testing.T, sb integration.Sandbox) {
 	// even something really imaginative, like "one"
 	csID := "one"
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	frontendOCILayout := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 		res := gateway.NewResult()
@@ -1880,7 +1839,8 @@ func testFileOpRmWildcard(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateDir("foo", 0700),
 		fstest.CreateDir("bar", 0700),
 		fstest.CreateFile("foo/target", []byte("foo0"), 0600),
@@ -1888,7 +1848,6 @@ func testFileOpRmWildcard(t *testing.T, sb integration.Sandbox) {
 		fstest.CreateFile("bar/remaining", []byte("bar1"), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	st := llb.Scratch().File(
 		llb.Copy(llb.Local("mylocal"), "foo", "foo").
@@ -1899,9 +1858,7 @@ func testFileOpRmWildcard(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -2000,9 +1957,7 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, server.Stats("/foo").AllRequests, 1)
 	require.Equal(t, server.Stats("/foo").CachedRequests, 0)
 
-	tmpdir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -2073,9 +2028,7 @@ func testResolveAndHosts(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -2127,9 +2080,7 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 	def, err := out.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -2194,9 +2145,7 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	for _, exp := range []string{ExporterOCI, ExporterDocker} {
-		destDir, err := os.MkdirTemp("", "buildkit")
-		require.NoError(t, err)
-		defer os.RemoveAll(destDir)
+		destDir := t.TempDir()
 
 		out := filepath.Join(destDir, "out.tar")
 		outW, err := os.Create(out)
@@ -2364,9 +2313,7 @@ func testFrontendUseSolveResults(t *testing.T, sb integration.Sandbox) {
 		})
 	}
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Build(sb.Context(), SolveOpt{
 		Exports: []ExportEntry{
@@ -2819,9 +2766,7 @@ func testBuildExportZstd(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	out := filepath.Join(destDir, "out.tar")
 	outW, err := os.Create(out)
@@ -2954,9 +2899,7 @@ func testPullZstdImage(t *testing.T, sb integration.Sandbox) {
 	def, err = st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -3020,9 +2963,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	def, err = firstBuild.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -3200,9 +3141,7 @@ func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbo
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	// Prepare stargz registry cache
 	orgImage := "docker.io/library/alpine:latest"
@@ -3444,9 +3383,7 @@ func testStargzLazyInlineCacheImportExport(t *testing.T, sb integration.Sandbox)
 	checkAllReleasable(t, c, sb, true)
 
 	// stargz layers should be exportable
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 	out := filepath.Join(destDir, "out.tar")
 	outW, err := os.Create(out)
 	require.NoError(t, err)
@@ -3578,9 +3515,7 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 	checkAllReleasable(t, c, sb, true)
 
 	// stargz layers should be exportable
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 	out := filepath.Join(destDir, "out.tar")
 	outW, err := os.Create(out)
 	require.NoError(t, err)
@@ -3758,13 +3693,8 @@ func testZstdLocalCacheExport(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
-
-	destOutDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destOutDir)
+	destDir := t.TempDir()
+	destOutDir := t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -3809,9 +3739,7 @@ func testZstdLocalCacheExport(t *testing.T, sb integration.Sandbox) {
 
 func testUncompressedLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	integration.SkipIfDockerd(t, sb, "remote cache export")
-	dir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 	im := CacheOptionsEntry{
 		Type: "local",
 		Attrs: map[string]string{
@@ -3860,9 +3788,7 @@ func testZstdLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 		// containerd 1.4 doesn't support zstd compression
 		return
 	}
-	dir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 	im := CacheOptionsEntry{
 		Type: "local",
 		Attrs: map[string]string{
@@ -3930,9 +3856,7 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -3954,9 +3878,7 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 
 	ensurePruneAll(t, c, sb)
 
-	destDir, err = os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir = t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -4019,9 +3941,7 @@ func testMultipleRegistryCacheImportExport(t *testing.T, sb integration.Sandbox)
 
 func testBasicLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	integration.SkipIfDockerd(t, sb, "remote cache export")
-	dir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 	im := CacheOptionsEntry{
 		Type: "local",
 		Attrs: map[string]string{
@@ -4086,7 +4006,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	dgst, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
 	require.Equal(t, ok, true)
 
-	unique, err := readFileInImage(sb.Context(), c, target+"@"+dgst, "/unique")
+	unique, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst, "/unique")
 	require.NoError(t, err)
 
 	ensurePruneAll(t, c, sb)
@@ -4161,7 +4081,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, ok, true)
 
 	// dgst2uncompress != dgst, because the compression type is different
-	unique2uncompress, err := readFileInImage(sb.Context(), c, target+"@"+dgst2uncompress, "/unique")
+	unique2uncompress, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst2uncompress, "/unique")
 	require.NoError(t, err)
 	require.EqualValues(t, unique, unique2uncompress)
 
@@ -4192,21 +4112,17 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, ok, true)
 
 	// dgst3 != dgst, because inline cache is not exported for dgst3
-	unique3, err := readFileInImage(sb.Context(), c, target+"@"+dgst3, "/unique")
+	unique3, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst3, "/unique")
 	require.NoError(t, err)
 	require.EqualValues(t, unique, unique3)
 }
 
-func readFileInImage(ctx context.Context, c *Client, ref, path string) ([]byte, error) {
+func readFileInImage(ctx context.Context, t *testing.T, c *Client, ref, path string) ([]byte, error) {
 	def, err := llb.Image(ref).Marshal(ctx)
 	if err != nil {
 		return nil, err
 	}
-	destDir, err := os.MkdirTemp("", "buildkit")
-	if err != nil {
-		return nil, err
-	}
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Solve(ctx, def, SolveOpt{
 		Exports: []ExportEntry{
@@ -4255,9 +4171,7 @@ func testCachedMounts(t *testing.T, sb integration.Sandbox) {
 	st.AddMount("/src0", llb.Scratch(), llb.AsPersistentCacheDir("mycache1", llb.CacheMountShared))
 	st.AddMount("/src1", base, llb.AsPersistentCacheDir("mycache2", llb.CacheMountShared))
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	def, err = out.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -4500,9 +4414,7 @@ func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	out := filepath.Join(destDir, "out.tar")
 	outW, err := os.Create(out)
@@ -4572,9 +4484,7 @@ func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	out := filepath.Join(destDir, "out.tar")
 	outW, err := os.Create(out)
@@ -4638,9 +4548,7 @@ func testMoveParentDir(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	out := filepath.Join(destDir, "out.tar")
 	outW, err := os.Create(out)
@@ -4898,9 +4806,7 @@ func testRmSymlink(t *testing.T, sb integration.Sandbox) {
 	def, err := mnt.File(llb.Rm("link")).Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -4934,9 +4840,7 @@ func testProxyEnv(t *testing.T, sb integration.Sandbox) {
 	def, err := out.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -4962,9 +4866,7 @@ func testProxyEnv(t *testing.T, sb integration.Sandbox) {
 	def, err = out.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err = os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir = t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -5251,9 +5153,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 	}
 
 	// get the random value at /bar/2
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -5361,9 +5261,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 	}
 
 	// check the random value at /bar/2 didn't change
-	destDir, err = os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir = t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -5412,9 +5310,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 	require.NoError(t, err)
 
 	// check the random value at /bar/2 didn't change
-	destDir, err = os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir = t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -5475,9 +5371,7 @@ func requireContents(ctx context.Context, t *testing.T, c *Client, sb integratio
 	def, err := state.Marshal(ctx)
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Solve(ctx, def, SolveOpt{
 		Exports: []ExportEntry{
@@ -5525,9 +5419,7 @@ func requireEqualContents(ctx context.Context, t *testing.T, c *Client, stateA, 
 	defA, err := stateA.Marshal(ctx)
 	require.NoError(t, err)
 
-	destDirA, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDirA)
+	destDirA := t.TempDir()
 
 	_, err = c.Solve(ctx, defA, SolveOpt{
 		Exports: []ExportEntry{
@@ -5542,9 +5434,7 @@ func requireEqualContents(ctx context.Context, t *testing.T, c *Client, stateA, 
 	defB, err := stateB.Marshal(ctx)
 	require.NoError(t, err)
 
-	destDirB, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDirB)
+	destDirB := t.TempDir()
 
 	_, err = c.Solve(ctx, defB, SolveOpt{
 		Exports: []ExportEntry{
@@ -5691,9 +5581,7 @@ func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
 	def, err := llb.Image("busybox:latest").Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	target := "example.com/buildkit/testoci:latest"
 	attrs := map[string]string{
@@ -5767,18 +5655,16 @@ func testParallelLocalBuilds(t *testing.T, sb integration.Sandbox) {
 		func(i int) {
 			eg.Go(func() error {
 				fn := fmt.Sprintf("test%d", i)
-				srcDir, err := tmpdir(
+				srcDir, err := integration.Tmpdir(
+					t,
 					fstest.CreateFile(fn, []byte("contents"), 0600),
 				)
 				require.NoError(t, err)
-				defer os.RemoveAll(srcDir)
 
 				def, err := llb.Local("source").Marshal(sb.Context())
 				require.NoError(t, err)
 
-				destDir, err := os.MkdirTemp("", "buildkit")
-				require.NoError(t, err)
-				defer os.RemoveAll(destDir)
+				destDir := t.TempDir()
 
 				_, err = c.Solve(ctx, def, SolveOpt{
 					Exports: []ExportEntry{
@@ -5825,9 +5711,7 @@ func testRelativeMountpoint(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -6075,9 +5959,7 @@ func testPullWithLayerLimit(t *testing.T, sb integration.Sandbox) {
 	def, err = st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{{
@@ -6112,9 +5994,7 @@ func testPullWithLayerLimit(t *testing.T, sb integration.Sandbox) {
 	def, err = st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err = os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir = t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{{
@@ -6301,9 +6181,7 @@ func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 
 	// testing for oci exporter
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	out := filepath.Join(destDir, "out.tar")
 	outW, err := os.Create(out)
@@ -6375,42 +6253,26 @@ func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 	}
 }
 
-func tmpdir(appliers ...fstest.Applier) (string, error) {
-	tmpdir, err := os.MkdirTemp("", "buildkit-client")
+func makeSSHAgentSock(t *testing.T, agent agent.Agent) (p string, err error) {
+	tmpDir, err := integration.Tmpdir(t)
 	if err != nil {
 		return "", err
 	}
-	if err := fstest.Apply(appliers...).Apply(tmpdir); err != nil {
-		return "", err
-	}
-	return tmpdir, nil
-}
-
-func makeSSHAgentSock(agent agent.Agent) (p string, cleanup func() error, err error) {
-	tmpDir, err := os.MkdirTemp("", "buildkit")
-	if err != nil {
-		return "", nil, err
-	}
-	defer func() {
-		if err != nil {
-			os.RemoveAll(tmpDir)
-		}
-	}()
 
 	sockPath := filepath.Join(tmpDir, "ssh_auth_sock")
 
 	l, err := net.Listen("unix", sockPath)
 	if err != nil {
-		return "", nil, err
+		return "", err
 	}
+	t.Cleanup(func() {
+		require.NoError(t, l.Close())
+	})
 
 	s := &server{l: l}
 	go s.run(agent)
 
-	return sockPath, func() error {
-		l.Close()
-		return os.RemoveAll(tmpDir)
-	}, nil
+	return sockPath, nil
 }
 
 type server struct {

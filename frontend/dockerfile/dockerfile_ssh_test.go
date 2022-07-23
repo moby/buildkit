@@ -34,11 +34,11 @@ FROM busybox
 RUN --mount=type=ssh,mode=741,uid=100,gid=102 [ "$(stat -c "%u %g %f" $SSH_AUTH_SOCK)" = "100 102 c1e1" ]
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -54,9 +54,7 @@ RUN --mount=type=ssh,mode=741,uid=100,gid=102 [ "$(stat -c "%u %g %f" $SSH_AUTH_
 		},
 	)
 
-	tmpDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	err = os.WriteFile(filepath.Join(tmpDir, "key"), dt, 0600)
 	require.NoError(t, err)
