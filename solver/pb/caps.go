@@ -79,7 +79,8 @@ const (
 	CapMergeOp apicaps.CapID = "mergeop"
 	CapDiffOp  apicaps.CapID = "diffop"
 
-	CapAnnotations apicaps.CapID = "exporter.image.annotations"
+	CapAnnotations  apicaps.CapID = "exporter.image.annotations"
+	CapAttestations apicaps.CapID = "exporter.image.attestations"
 )
 
 func init() {
@@ -440,4 +441,11 @@ func init() {
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})
+
+	// FIXME: enable once attestations gateway api is stable
+	// Caps.Init(apicaps.Cap{
+	// 	ID:      CapAttestations,
+	// 	Enabled: true,
+	// 	Status:  apicaps.CapStatusExperimental,
+	// })
 }
