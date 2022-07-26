@@ -11,9 +11,12 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"testing"
 	"time"
 
+	"github.com/containerd/continuity/fs/fstest"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -143,4 +146,24 @@ func (w *lockingWriter) Write(dt []byte) (int, error) {
 	n, err := w.Writer.Write(dt)
 	w.mu.Unlock()
 	return n, err
+}
+
+func Tmpdir(t *testing.T, appliers ...fstest.Applier) (string, error) {
+	// We cannot use t.TempDir() to create a temporary directory here because
+	// appliers might contain fstest.CreateSocket. If the test name is too long,
+	// t.TempDir() could return a path that is longer than 108 characters. This
+	// would result in "bind: invalid argument" when we listen on the socket.
+	tmpdir, err := os.MkdirTemp("", "buildkit")
+	if err != nil {
+		return "", err
+	}
+
+	t.Cleanup(func() {
+		require.NoError(t, os.RemoveAll(tmpdir))
+	})
+
+	if err := fstest.Apply(appliers...).Apply(tmpdir); err != nil {
+		return "", err
+	}
+	return tmpdir, nil
 }

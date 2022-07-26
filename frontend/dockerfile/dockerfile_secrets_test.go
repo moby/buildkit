@@ -1,7 +1,6 @@
 package dockerfile
 
 import (
-	"os"
 	"testing"
 
 	"github.com/containerd/continuity/fs/fstest"
@@ -31,11 +30,11 @@ RUN --mount=type=secret,required=false,mode=741,uid=100,gid=102,target=/mysecret
 RUN [ ! -f /mysecret ] # check no stub left behind
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -61,11 +60,11 @@ FROM busybox
 RUN --mount=type=secret,required,id=mysecret foo
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)

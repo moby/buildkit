@@ -51,17 +51,9 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	gs := setupGitSource(t, t.TempDir())
 
-	gs := setupGitSource(t, tmpdir)
-
-	repodir, err := os.MkdirTemp("", "buildkit-gitsource")
-	require.NoError(t, err)
-	defer os.RemoveAll(repodir)
-
-	repodir, err = setupGitRepo(repodir)
+	repodir, err := setupGitRepo(t.TempDir())
 	require.NoError(t, err)
 
 	id := &source.GitIdentifier{Remote: repodir, KeepGitDir: keepGitDir}
@@ -170,17 +162,9 @@ func testFetchBySHA(t *testing.T, keepGitDir bool) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	gs := setupGitSource(t, t.TempDir())
 
-	gs := setupGitSource(t, tmpdir)
-
-	repodir, err := os.MkdirTemp("", "buildkit-gitsource")
-	require.NoError(t, err)
-	defer os.RemoveAll(repodir)
-
-	repodir, err = setupGitRepo(repodir)
+	repodir, err := setupGitRepo(t.TempDir())
 	require.NoError(t, err)
 
 	cmd := exec.Command("git", "rev-parse", "feature")
@@ -256,17 +240,9 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	gs := setupGitSource(t, t.TempDir())
 
-	gs := setupGitSource(t, tmpdir)
-
-	repodir, err := os.MkdirTemp("", "buildkit-gitsource")
-	require.NoError(t, err)
-	defer os.RemoveAll(repodir)
-
-	repodir, err = setupGitRepo(repodir)
+	repodir, err := setupGitRepo(t.TempDir())
 	require.NoError(t, err)
 
 	id := &source.GitIdentifier{Remote: repodir, Ref: tag, KeepGitDir: keepGitDir}
@@ -350,22 +326,12 @@ func testMultipleRepos(t *testing.T, keepGitDir bool) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	gs := setupGitSource(t, t.TempDir())
 
-	gs := setupGitSource(t, tmpdir)
-
-	repodir, err := os.MkdirTemp("", "buildkit-gitsource")
-	require.NoError(t, err)
-	defer os.RemoveAll(repodir)
-
-	repodir, err = setupGitRepo(repodir)
+	repodir, err := setupGitRepo(t.TempDir())
 	require.NoError(t, err)
 
-	repodir2, err := os.MkdirTemp("", "buildkit-gitsource")
-	require.NoError(t, err)
-	defer os.RemoveAll(repodir2)
+	repodir2 := t.TempDir()
 
 	err = runShell(repodir2,
 		"git init",
@@ -447,11 +413,7 @@ func TestCredentialRedaction(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
-
-	gs := setupGitSource(t, tmpdir)
+	gs := setupGitSource(t, t.TempDir())
 
 	url := "https://user:keepthissecret@non-existant-host/user/private-repo.git"
 	id := &source.GitIdentifier{Remote: url}
@@ -479,17 +441,11 @@ func testSubdir(t *testing.T, keepGitDir bool) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	gs := setupGitSource(t, t.TempDir())
 
-	gs := setupGitSource(t, tmpdir)
+	repodir := t.TempDir()
 
-	repodir, err := os.MkdirTemp("", "buildkit-gitsource")
-	require.NoError(t, err)
-	defer os.RemoveAll(repodir)
-
-	err = runShell(repodir,
+	err := runShell(repodir,
 		"git init",
 		"git config --local user.email test",
 		"git config --local user.name test",

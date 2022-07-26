@@ -133,9 +133,7 @@ func testClientGatewaySolve(t *testing.T, sb integration.Sandbox) {
 		return r, nil
 	}
 
-	tmpdir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	testStr := "This is a test"
 
@@ -687,17 +685,14 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-buildctl")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	err = os.WriteFile(filepath.Join(tmpdir, "local-file"), []byte("local"), 0644)
 	require.NoError(t, err)
 
 	a := agent.NewKeyring()
-	sockPath, clean, err := makeSSHAgentSock(a)
+	sockPath, err := makeSSHAgentSock(t, a)
 	require.NoError(t, err)
-	defer clean()
 
 	ssh, err := sshprovider.NewSSHAgentProvider([]sshprovider.AgentConfig{{
 		ID:    t.Name(),

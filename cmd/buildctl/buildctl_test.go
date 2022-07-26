@@ -36,9 +36,7 @@ func testUsage(t *testing.T, sb integration.Sandbox) {
 }
 
 func TestWriteMetadataFile(t *testing.T) {
-	tmpdir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	cases := []struct {
 		name             string

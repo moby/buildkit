@@ -2,7 +2,6 @@ package content
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/containerd/containerd/content"
@@ -23,10 +22,7 @@ func TestContentAttachable(t *testing.T) {
 	attachableStores := make(map[string]content.Store)
 	testBlobs := make(map[string]map[digest.Digest][]byte)
 	for _, id := range ids {
-		tmpDir, err := os.MkdirTemp("", "contenttest")
-		require.NoError(t, err)
-		defer os.RemoveAll(tmpDir)
-		store, err := local.NewStore(tmpDir)
+		store, err := local.NewStore(t.TempDir())
 		require.NoError(t, err)
 		blob := []byte("test-content-attachable-" + id)
 		w, err := store.Writer(ctx, content.WithRef(string(blob)))

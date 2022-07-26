@@ -35,11 +35,7 @@ func TestHTTPSource(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
-
-	hs, err := newHTTPSource(tmpdir)
+	hs, err := newHTTPSource(t)
 	require.NoError(t, err)
 
 	resp := httpserver.Response{
@@ -158,11 +154,7 @@ func TestHTTPDefaultName(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
-
-	hs, err := newHTTPSource(tmpdir)
+	hs, err := newHTTPSource(t)
 	require.NoError(t, err)
 
 	resp := httpserver.Response{
@@ -208,11 +200,7 @@ func TestHTTPInvalidURL(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
-
-	hs, err := newHTTPSource(tmpdir)
+	hs, err := newHTTPSource(t)
 	require.NoError(t, err)
 
 	server := httpserver.NewTestServer(map[string]httpserver.Response{})
@@ -236,11 +224,7 @@ func TestHTTPChecksum(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
-
-	hs, err := newHTTPSource(tmpdir)
+	hs, err := newHTTPSource(t)
 	require.NoError(t, err)
 
 	resp := httpserver.Response{
@@ -335,11 +319,16 @@ func readFile(ctx context.Context, ref cache.ImmutableRef, fp string) ([]byte, e
 	return dt, nil
 }
 
-func newHTTPSource(tmpdir string) (source.Source, error) {
+func newHTTPSource(t *testing.T) (source.Source, error) {
+	tmpdir := t.TempDir()
+
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	if err != nil {
 		return nil, err
 	}
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
 
 	store, err := local.NewStore(tmpdir)
 	if err != nil {
@@ -350,6 +339,9 @@ func newHTTPSource(tmpdir string) (source.Source, error) {
 	if err != nil {
 		return nil, err
 	}
+	t.Cleanup(func() {
+		require.NoError(t, db.Close())
+	})
 
 	mdb := ctdmetadata.NewDB(db, store, map[string]snapshots.Snapshotter{
 		"native": snapshotter,
@@ -359,6 +351,10 @@ func newHTTPSource(tmpdir string) (source.Source, error) {
 	if err != nil {
 		return nil, err
 	}
+	t.Cleanup(func() {
+		require.NoError(t, md.Close())
+	})
+
 	lm := leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), "buildkit")
 	c := mdb.ContentStore()
 	applier := winlayers.NewFileSystemApplierWithWindows(c, apply.NewFileSystemApplier(c))
@@ -377,6 +373,9 @@ func newHTTPSource(tmpdir string) (source.Source, error) {
 	if err != nil {
 		return nil, err
 	}
+	t.Cleanup(func() {
+		require.NoError(t, cm.Close())
+	})
 
 	return NewSource(Opt{
 		CacheAccessor: cm,
