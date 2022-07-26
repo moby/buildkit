@@ -48,6 +48,7 @@ message Result {
 		RefMap refs = 4;
 	}
 	map<string, bytes> metadata = 10;
+	map<string, Attestations> attestations = 11;
 }
 
 message RefMapDeprecated {
@@ -62,6 +63,36 @@ message Ref {
 message RefMap {
 	map<string, Ref> refs = 1;
 }
+
+message Attestations {
+	message Attestation {
+		oneof Attestation {
+			InToto intoto = 1;
+		}
+	}
+	repeated Attestation attestation = 1;
+}
+
+message InToto {
+	string predicateType = 1;
+	Ref predicateRef = 2;
+	string predicatePath = 3;
+
+	message Subject {
+		message SelfSubject {
+		}
+		message RawSubject {
+			repeated string Digest = 1 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
+			string name = 2;
+		}
+		oneof Subject {
+			SelfSubject self = 1;
+			RawSubject raw = 2;
+		}
+	}
+	repeated Subject subjects = 4;
+}
+
 
 message ReturnRequest {
 	Result result = 1;
