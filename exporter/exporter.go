@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/util/attestation"
 	"github.com/moby/buildkit/util/compression"
 )
 
@@ -22,7 +23,21 @@ type Config struct {
 }
 
 type Source struct {
-	Ref      cache.ImmutableRef
-	Refs     map[string]cache.ImmutableRef
-	Metadata map[string][]byte
+	Ref          cache.ImmutableRef
+	Refs         map[string]cache.ImmutableRef
+	Metadata     map[string][]byte
+	Attestations map[string][]Attestation
 }
+
+type Attestation interface {
+	isExporterAttestation()
+}
+
+type InTotoAttestation struct {
+	PredicateType string
+	PredicateRef  cache.ImmutableRef
+	PredicatePath string
+	Subjects      []attestation.InTotoSubject
+}
+
+func (a *InTotoAttestation) isExporterAttestation() {}

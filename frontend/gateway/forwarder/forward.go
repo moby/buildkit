@@ -18,6 +18,7 @@ import (
 	llberrdefs "github.com/moby/buildkit/solver/llbsolver/errdefs"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
+	"github.com/moby/buildkit/util/attestation"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -82,6 +83,16 @@ func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*cli
 		}
 		c.refs = append(c.refs, rr)
 		cRes.SetRef(rr)
+	}
+	for k, as := range res.Attestations {
+		for _, a := range as {
+			att, rrs, err := c.newAttestation(a, session.NewGroup(c.sid))
+			if err != nil {
+				return nil, err
+			}
+			c.refs = append(c.refs, rrs...)
+			cRes.AddAttestation(k, att)
+		}
 	}
 	c.mu.Unlock()
 	cRes.Metadata = res.Metadata
@@ -203,6 +214,43 @@ func (c *bridgeClient) toFrontendResult(r *client.Result) (*frontend.Result, err
 		res.Ref = rr.acquireResultProxy()
 	}
 	res.Metadata = r.Metadata
+	if r.Attestations != nil {
+		res.Attestations = make(map[string][]frontend.Attestation)
+		for k, as := range r.Attestations {
+			for _, a := range as {
+				switch a := a.(type) {
+				case *client.InTotoAttestation:
+					rr, ok := a.PredicateRef.(*ref)
+					if !ok {
+						return nil, errors.Errorf("invalid reference type for forward %T", r)
+					}
+
+					subjects := make([]attestation.InTotoSubject, len(a.Subjects))
+					for i, s := range a.Subjects {
+						switch s := s.(type) {
+						case *attestation.InTotoSubjectSelf:
+							subjects[i] = &attestation.InTotoSubjectSelf{}
+						case *attestation.InTotoSubjectRaw:
+							subjects[i] = &attestation.InTotoSubjectRaw{
+								Name:   s.Name,
+								Digest: s.Digest,
+							}
+						default:
+							return nil, errors.Errorf("unknown attestation subject type %T", s)
+						}
+					}
+					res.Attestations[k] = append(res.Attestations[k], &frontend.InTotoAttestation{
+						PredicateRef:  rr.acquireResultProxy(),
+						PredicatePath: a.PredicatePath,
+						PredicateType: a.PredicateType,
+						Subjects:      subjects,
+					})
+				default:
+					return nil, errors.Errorf("unknown attestation type %T", a)
+				}
+			}
+		}
+	}
 
 	return res, nil
 }
@@ -302,16 +350,49 @@ func (c *bridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 	return ctr, nil
 }
 
+func (c *bridgeClient) newRef(r solver.ResultProxy, s session.Group) (*ref, error) {
+	return &ref{resultProxy: r, session: s, c: c}, nil
+}
+
+func (c *bridgeClient) newAttestation(a frontend.Attestation, s session.Group) (client.Attestation, []*ref, error) {
+	switch a := a.(type) {
+	case *frontend.InTotoAttestation:
+		rr, err := c.newRef(a.PredicateRef, session.NewGroup(c.sid))
+		if err != nil {
+			return nil, nil, err
+		}
+
+		subjects := make([]attestation.InTotoSubject, len(a.Subjects))
+		for i, subject := range a.Subjects {
+			switch subject := subject.(type) {
+			case *attestation.InTotoSubjectSelf:
+				subjects[i] = &attestation.InTotoSubjectSelf{}
+			case *attestation.InTotoSubjectRaw:
+				subjects[i] = &attestation.InTotoSubjectRaw{
+					Name:   subject.Name,
+					Digest: subject.Digest,
+				}
+			default:
+				return nil, nil, errors.Errorf("unknown attestation subject type %T", s)
+			}
+		}
+		return &client.InTotoAttestation{
+			PredicateType: a.PredicateType,
+			PredicateRef:  rr,
+			PredicatePath: a.PredicatePath,
+			Subjects:      subjects,
+		}, []*ref{rr}, nil
+	default:
+		return nil, nil, errors.Errorf("unknown attestation type %T", a)
+	}
+}
+
 type ref struct {
 	resultProxy       solver.ResultProxy
 	resultProxyClones []solver.ResultProxy
 
 	session session.Group
 	c       *bridgeClient
-}
-
-func (c *bridgeClient) newRef(r solver.ResultProxy, s session.Group) (*ref, error) {
-	return &ref{resultProxy: r, session: s, c: c}, nil
 }
 
 func (r *ref) acquireResultProxy() solver.ResultProxy {

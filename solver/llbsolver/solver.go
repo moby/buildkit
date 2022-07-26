@@ -19,6 +19,7 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/util/attestation"
 	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/entitlements"
@@ -240,6 +241,47 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 				}
 			}
 			inp.Refs = m
+		}
+		if res.Attestations != nil {
+			m := make(map[string][]exporter.Attestation, len(res.Attestations))
+			for k, as := range res.Attestations {
+				for _, a := range as {
+					switch a := a.(type) {
+					case *frontend.InTotoAttestation:
+						r, err := a.PredicateRef.Result(ctx)
+						if err != nil {
+							return nil, err
+						}
+						workerRef, ok := r.Sys().(*worker.WorkerRef)
+						if !ok {
+							return nil, errors.Errorf("invalid reference: %T", r.Sys())
+						}
+
+						subjects := make([]attestation.InTotoSubject, len(a.Subjects))
+						for i, s := range a.Subjects {
+							switch s := s.(type) {
+							case *attestation.InTotoSubjectSelf:
+								subjects[i] = &attestation.InTotoSubjectSelf{}
+							case *attestation.InTotoSubjectRaw:
+								subjects[i] = &attestation.InTotoSubjectRaw{
+									Name:   s.Name,
+									Digest: s.Digest,
+								}
+							default:
+								return nil, errors.Errorf("unknown attestation subject type %T", s)
+							}
+						}
+
+						m[k] = append(m[k], &exporter.InTotoAttestation{
+							PredicateType: a.PredicateType,
+							PredicateRef:  workerRef.ImmutableRef,
+							PredicatePath: a.PredicatePath,
+							Subjects:      subjects,
+						})
+					}
+				}
+			}
+			inp.Attestations = m
 		}
 		if _, ok := asInlineCache(exp.CacheExporter); ok {
 			if err := inBuilderContext(ctx, j, "preparing layers for inline cache", j.SessionID+"-cache-inline", func(ctx context.Context, _ session.Group) error {

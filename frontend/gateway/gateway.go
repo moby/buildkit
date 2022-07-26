@@ -634,6 +634,7 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 	var defaultID string
 
 	lbf.mu.Lock()
+
 	if res.Refs != nil {
 		ids := make(map[string]string, len(res.Refs))
 		defs := make(map[string]*opspb.Definition, len(res.Refs))
@@ -696,6 +697,33 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 			pbRes.Result = &pb.Result_RefDeprecated{RefDeprecated: id}
 		}
 	}
+
+	if res.Attestations != nil {
+		attestations := map[string]*pb.Attestations{}
+		for k, atts := range res.Attestations {
+			for _, att := range atts {
+				switch att := att.(type) {
+				case *frontend.InTotoAttestation:
+					ref := att.PredicateRef
+					id := identity.NewID()
+					def := ref.Definition()
+					lbf.refs[id] = ref
+
+					pbAtt, err := pb.ToInTotoPB(att.PredicateType, &pb.Ref{Id: id, Def: def}, att.PredicatePath, att.Subjects...)
+					if err != nil {
+						return nil, err
+					}
+					attestations[k].Attestation = append(attestations[k].Attestation, &pb.Attestations_Attestation{
+						Attestation: pbAtt,
+					})
+				default:
+					return nil, errors.Errorf("unknown attestation type %T", att)
+				}
+			}
+		}
+		pbRes.Attestations = attestations
+	}
+
 	lbf.mu.Unlock()
 
 	// compatibility mode for older clients
@@ -890,6 +918,20 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 		}
 		r.Refs = m
 	}
+
+	if in.Result.Attestations != nil {
+		r.Attestations = map[string][]frontend.Attestation{}
+		for k, pbAtts := range in.Result.Attestations {
+			for _, pbAtt := range pbAtts.Attestation {
+				att, err := lbf.convertAttestation(pbAtt)
+				if err != nil {
+					return nil, err
+				}
+				r.Attestations[k] = append(r.Attestations[k], att)
+			}
+		}
+	}
+
 	return lbf.setResult(r, nil)
 }
 
@@ -1396,6 +1438,29 @@ func (lbf *llbBridgeForwarder) cloneRef(id string) (solver.ResultProxy, error) {
 	s1, s2 := solver.SplitResultProxy(r)
 	lbf.refs[id] = s1
 	return s2, nil
+}
+
+func (lbf *llbBridgeForwarder) convertAttestation(att *pb.Attestations_Attestation) (frontend.Attestation, error) {
+	switch att := att.Attestation.(type) {
+	case *pb.Attestations_Attestation_Intoto:
+		predicateType, predicateRef, predicatePath, subjects, err := pb.FromInTotoPB(att)
+		if err != nil {
+			return nil, err
+		}
+
+		ref, err := lbf.cloneRef(predicateRef.Id)
+		if err != nil {
+			return nil, err
+		}
+		return &frontend.InTotoAttestation{
+			PredicateType: predicateType,
+			PredicateRef:  ref,
+			PredicatePath: predicatePath,
+			Subjects:      subjects,
+		}, nil
+	default:
+		return nil, errors.Errorf("unknown attestation type %T", att)
+	}
 }
 
 func serve(ctx context.Context, grpcServer *grpc.Server, conn net.Conn) {
