@@ -34,6 +34,7 @@ import (
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/continuity/fs/fstest"
+	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
@@ -43,6 +44,7 @@ import (
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/attestation"
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/entitlements"
@@ -50,6 +52,7 @@ import (
 	"github.com/moby/buildkit/util/testutil/echoserver"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
+	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -167,6 +170,7 @@ func TestIntegration(t *testing.T) {
 		testCallInfo,
 		testPullWithLayerLimit,
 		testExportAnnotations,
+		testExportAttestations,
 	)
 	tests = append(tests, diffOpTestCases()...)
 	integration.Run(t, tests, mirrors)
@@ -6251,6 +6255,195 @@ func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 			require.Fail(t, "unrecognized platform")
 		}
 	}
+}
+
+func testExportAttestations(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+
+	ps := []ocispecs.Platform{
+		platforms.MustParse("linux/amd64"),
+		platforms.MustParse("linux/arm64"),
+	}
+
+	success := []byte(`{"success": true}`)
+	successDigest := digest.SHA256.FromBytes(success)
+
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		res := gateway.NewResult()
+		expPlatforms := &exptypes.Platforms{}
+
+		for _, p := range ps {
+			pk := platforms.Format(p)
+			expPlatforms.Platforms = append(expPlatforms.Platforms, exptypes.Platform{ID: pk, Platform: p})
+
+			// build image
+			st := llb.Scratch().File(
+				llb.Mkfile("/greeting", 0600, []byte(fmt.Sprintf("hello %s!", pk))),
+			)
+			def, err := st.Marshal(ctx)
+			if err != nil {
+				return nil, err
+			}
+			r, err := c.Solve(ctx, gateway.SolveRequest{
+				Definition: def.ToPB(),
+			})
+			if err != nil {
+				return nil, err
+			}
+			ref, err := r.SingleRef()
+			if err != nil {
+				return nil, err
+			}
+			_, err = ref.ToState()
+			if err != nil {
+				return nil, err
+			}
+			res.AddRef(pk, ref)
+
+			// build attestations
+			st = llb.Scratch().
+				File(llb.Mkfile("/attestation.json", 0600, success)).
+				File(llb.Mkfile("/attestation2.json", 0600, []byte{}))
+			def, err = st.Marshal(ctx)
+			if err != nil {
+				return nil, err
+			}
+			r, err = c.Solve(ctx, gateway.SolveRequest{
+				Definition: def.ToPB(),
+			})
+			if err != nil {
+				return nil, err
+			}
+			refAttest, err := r.SingleRef()
+			if err != nil {
+				return nil, err
+			}
+			_, err = ref.ToState()
+			if err != nil {
+				return nil, err
+			}
+			res.AddAttestation(pk, &gateway.InTotoAttestation{
+				PredicateRef:  refAttest,
+				PredicatePath: "/attestation.json",
+				PredicateType: "https://example.com/attestations/v1.0",
+				Subjects: []attestation.InTotoSubject{
+					&attestation.InTotoSubjectSelf{},
+				},
+			})
+			res.AddAttestation(pk, &gateway.InTotoAttestation{
+				PredicateRef:  refAttest,
+				PredicatePath: "/attestation2.json",
+				PredicateType: "https://example.com/attestations2/v1.0",
+				Subjects: []attestation.InTotoSubject{
+					&attestation.InTotoSubjectRaw{
+						Name:   "/attestation.json",
+						Digest: []digest.Digest{successDigest},
+					},
+				},
+			})
+		}
+
+		dt, err := json.Marshal(expPlatforms)
+		if err != nil {
+			return nil, err
+		}
+		res.AddMeta(exptypes.ExporterPlatformsKey, dt)
+
+		return res, nil
+	}
+
+	target := registry + "/buildkit/testattestations:latest"
+	_, err = c.Build(sb.Context(), SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, "", frontend, nil)
+	require.NoError(t, err)
+
+	desc, provider, err := contentutil.ProviderFromRef(target)
+	require.NoError(t, err)
+
+	index, err := testutil.ReadIndex(sb.Context(), provider, desc)
+	require.NoError(t, err)
+	require.Equal(t, len(ps)*2, len(index))
+
+	var imgs []*testutil.ImageInfo
+	for _, p := range ps {
+		pk := platforms.Format(p)
+		img := index.Find(pk)
+		require.NotNil(t, img)
+		require.Equal(t, pk, platforms.Format(*img.Desc.Platform))
+		require.Equal(t, 1, len(img.Layers))
+		require.Equal(t, []byte(fmt.Sprintf("hello %s!", pk)), img.Layers[0]["greeting"].Data)
+		imgs = append(imgs, img)
+	}
+
+	atts := index.Filter("unknown/unknown")
+	require.Equal(t, len(ps), len(atts))
+	for i, att := range atts {
+		require.Equal(t, "unknown/unknown", platforms.Format(*att.Desc.Platform))
+		require.Equal(t, "unknown/unknown", att.Img.OS+"/"+att.Img.Architecture)
+		require.Equal(t, attestation.DockerAnnotationReferenceTypeDefault, att.Desc.Annotations[attestation.DockerAnnotationReferenceType])
+		require.Equal(t, imgs[i].Desc.Digest.String(), att.Desc.Annotations[attestation.DockerAnnotationReferenceDigest])
+		require.Equal(t, 2, len(att.Layers))
+		require.Equal(t, len(att.Layers), len(att.Img.RootFS.DiffIDs))
+		require.Equal(t, len(att.Img.History), 0)
+
+		var attest intoto.Statement
+		require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
+
+		require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+		require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
+		require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
+		subjects := []intoto.Subject{{
+			Name: "_",
+			Digest: map[string]string{
+				"sha256": imgs[i].Desc.Digest.Encoded(),
+			},
+		}}
+		require.Equal(t, subjects, attest.Subject)
+
+		var attest2 intoto.Statement
+		require.NoError(t, json.Unmarshal(att.LayersRaw[1], &attest2))
+
+		require.Equal(t, "https://in-toto.io/Statement/v0.1", attest2.Type)
+		require.Equal(t, "https://example.com/attestations2/v1.0", attest2.PredicateType)
+		require.Nil(t, attest2.Predicate)
+		subjects = []intoto.Subject{{
+			Name: "/attestation.json",
+			Digest: map[string]string{
+				"sha256": successDigest.Encoded(),
+			},
+		}}
+		require.Equal(t, subjects, attest2.Subject)
+	}
+
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
+		return
+	}
+	client, err := containerd.New(cdAddress)
+	require.NoError(t, err)
+	defer client.Close()
+	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
+
+	err = client.ImageService().Delete(ctx, target, images.SynchronousDelete())
+	require.NoError(t, err)
+
+	checkAllReleasable(t, c, sb, true)
 }
 
 func makeSSHAgentSock(t *testing.T, agent agent.Agent) (p string, err error) {
