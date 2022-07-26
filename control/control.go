@@ -292,7 +292,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		}
 		cacheExporter, err = cacheExporterFunc(ctx, session.NewGroup(req.Session), e.Attrs)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "failed to configure %v cache exporter", e.Type)
 		}
 		if exportMode, supported := parseCacheExportMode(e.Attrs["mode"]); !supported {
 			bklog.G(ctx).Debugf("skipping invalid cache export mode: %s", e.Attrs["mode"])
