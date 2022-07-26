@@ -436,6 +436,12 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 			indexJSONPath := filepath.Join(csDir, "index.json")
 			indicesToUpdate[indexJSONPath] = "latest"
 		}
+		if ex.Type == "registry" {
+			regRef := ex.Attrs["ref"]
+			if regRef == "" {
+				return nil, errors.New("registry cache exporter requires ref")
+			}
+		}
 		cacheExports = append(cacheExports, &controlapi.CacheOptionsEntry{
 			Type:  ex.Type,
 			Attrs: ex.Attrs,
@@ -471,6 +477,12 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 				}
 			}
 			contentStores["local:"+csDir] = cs
+		}
+		if im.Type == "registry" {
+			regRef := im.Attrs["ref"]
+			if regRef == "" {
+				return nil, errors.New("registry cache importer requires ref")
+			}
 		}
 		cacheImports = append(cacheImports, &controlapi.CacheOptionsEntry{
 			Type:  im.Type,
