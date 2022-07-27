@@ -299,35 +299,9 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 				}
 			}
 			if e.push {
-				annotations := map[digest.Digest]map[string]string{}
-				mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
-				if src.Ref != nil {
-					remotes, err := src.Ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
-					if err != nil {
-						return nil, err
-					}
-					remote := remotes[0]
-					for _, desc := range remote.Descriptors {
-						mprovider.Add(desc.Digest, remote.Provider)
-						addAnnotations(annotations, desc)
-					}
-				}
-				if len(src.Refs) > 0 {
-					for _, r := range src.Refs {
-						remotes, err := r.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
-						if err != nil {
-							return nil, err
-						}
-						remote := remotes[0]
-						for _, desc := range remote.Descriptors {
-							mprovider.Add(desc.Digest, remote.Provider)
-							addAnnotations(annotations, desc)
-						}
-					}
-				}
-
-				if err := push.Push(ctx, e.opt.SessionManager, sessionID, mprovider, e.opt.ImageWriter.ContentStore(), desc.Digest, targetName, e.insecure, e.opt.RegistryHosts, e.pushByDigest, annotations); err != nil {
-					return nil, err
+				err := e.pushImage(ctx, src, sessionID, targetName, desc.Digest)
+				if err != nil {
+					return nil, errors.Wrapf(err, "failed to push %v", targetName)
 				}
 			}
 		}
@@ -347,6 +321,37 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	resp[exptypes.ExporterImageDescriptorKey] = base64.StdEncoding.EncodeToString(dtdesc)
 
 	return resp, nil
+}
+
+func (e *imageExporterInstance) pushImage(ctx context.Context, src exporter.Source, sessionID string, targetName string, dgst digest.Digest) error {
+	annotations := map[digest.Digest]map[string]string{}
+	mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
+	if src.Ref != nil {
+		remotes, err := src.Ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
+		if err != nil {
+			return err
+		}
+		remote := remotes[0]
+		for _, desc := range remote.Descriptors {
+			mprovider.Add(desc.Digest, remote.Provider)
+			addAnnotations(annotations, desc)
+		}
+	}
+	if len(src.Refs) > 0 {
+		for _, r := range src.Refs {
+			remotes, err := r.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
+			if err != nil {
+				return err
+			}
+			remote := remotes[0]
+			for _, desc := range remote.Descriptors {
+				mprovider.Add(desc.Digest, remote.Provider)
+				addAnnotations(annotations, desc)
+			}
+		}
+	}
+
+	return push.Push(ctx, e.opt.SessionManager, sessionID, mprovider, e.opt.ImageWriter.ContentStore(), dgst, targetName, e.insecure, e.opt.RegistryHosts, e.pushByDigest, annotations)
 }
 
 func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Image, src exporter.Source, s session.Group) (err0 error) {
