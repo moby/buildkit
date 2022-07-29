@@ -116,6 +116,7 @@ var allTests = integration.TestFuncs(
 	testUlimit,
 	testCgroupParent,
 	testNamedImageContext,
+	testNamedImageContextPlatform,
 	testNamedImageContextTimestamps,
 	testNamedLocalContext,
 	testNamedInputContext,
@@ -5433,6 +5434,77 @@ COPY --from=base /env_foobar /
 	dt, err = os.ReadFile(filepath.Join(destDir, "env_path"))
 	require.NoError(t, err)
 	require.Contains(t, string(dt), "/foobar:")
+}
+
+func testNamedImageContextPlatform(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	// Build a base image and force buildkit to generate a manifest list.
+	dockerfile := []byte(`FROM --platform=$BUILDPLATFORM alpine:latest`)
+	target := registry + "/buildkit/testnamedimagecontextplatform:latest"
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	f := getFrontend(t, sb)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_MULTI_PLATFORM": "true",
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dockerfile = []byte(`
+FROM --platform=$BUILDPLATFORM busybox AS target
+RUN echo hello
+`)
+
+	dir, err = tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	f = getFrontend(t, sb)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"context:busybox": "docker-image://" + target,
+			// random platform that would never exist so it doesn't conflict with the build machine
+			// here we specifically want to make sure that the platform chosen for the image source is the one in the dockerfile not the target platform.
+			"platform": "darwin/ppc64le",
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
 }
 
 func testNamedImageContextTimestamps(t *testing.T, sb integration.Sandbox) {

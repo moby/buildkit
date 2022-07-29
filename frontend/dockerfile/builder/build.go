@@ -463,7 +463,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 						}
 						c.Warn(ctx, defVtx, msg, warnOpts(sourceMap, location, detail, url))
 					},
-					ContextByName: contextByNameFunc(c, tp),
+					ContextByName: contextByNameFunc(c),
 				})
 
 				if err != nil {
@@ -812,8 +812,8 @@ func warnOpts(sm *llb.SourceMap, r *parser.Range, detail [][]byte, url string) c
 	return opts
 }
 
-func contextByNameFunc(c client.Client, p *ocispecs.Platform) func(context.Context, string, string) (*llb.State, *dockerfile2llb.Image, *binfotypes.BuildInfo, error) {
-	return func(ctx context.Context, name, resolveMode string) (*llb.State, *dockerfile2llb.Image, *binfotypes.BuildInfo, error) {
+func contextByNameFunc(c client.Client) func(context.Context, string, string, *ocispecs.Platform) (*llb.State, *dockerfile2llb.Image, *binfotypes.BuildInfo, error) {
+	return func(ctx context.Context, name, resolveMode string, p *ocispecs.Platform) (*llb.State, *dockerfile2llb.Image, *binfotypes.BuildInfo, error) {
 		named, err := reference.ParseNormalizedNamed(name)
 		if err != nil {
 			return nil, nil, nil, errors.Wrapf(err, "invalid context name %s", name)
