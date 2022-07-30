@@ -349,22 +349,16 @@ func (lbf *llbBridgeForwarder) Discard() {
 		workerRef.ImmutableRef.Release(context.TODO())
 		delete(lbf.workerRefByID, id)
 	}
-	for id, r := range lbf.refs {
-		if lbf.err == nil && lbf.result != nil {
-			keep := false
-			lbf.result.EachRef(func(r2 solver.ResultProxy) error {
-				if r == r2 {
-					keep = true
-				}
-				return nil
-			})
-			if keep {
-				continue
-			}
-		}
-		r.Release(context.TODO())
-		delete(lbf.refs, id)
+	if lbf.err != nil && lbf.result != nil {
+		lbf.result.EachRef(func(r solver.ResultProxy) error {
+			r.Release(context.TODO())
+			return nil
+		})
 	}
+	for _, r := range lbf.refs {
+		r.Release(context.TODO())
+	}
+	lbf.refs = map[string]solver.ResultProxy{}
 }
 
 func (lbf *llbBridgeForwarder) Done() <-chan struct{} {
@@ -864,7 +858,7 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 
 	switch res := in.Result.Result.(type) {
 	case *pb.Result_RefDeprecated:
-		ref, err := lbf.convertRef(res.RefDeprecated)
+		ref, err := lbf.cloneRef(res.RefDeprecated)
 		if err != nil {
 			return nil, err
 		}
@@ -872,7 +866,7 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 	case *pb.Result_RefsDeprecated:
 		m := map[string]solver.ResultProxy{}
 		for k, id := range res.RefsDeprecated.Refs {
-			ref, err := lbf.convertRef(id)
+			ref, err := lbf.cloneRef(id)
 			if err != nil {
 				return nil, err
 			}
@@ -880,7 +874,7 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 		}
 		r.Refs = m
 	case *pb.Result_Ref:
-		ref, err := lbf.convertRef(res.Ref.Id)
+		ref, err := lbf.cloneRef(res.Ref.Id)
 		if err != nil {
 			return nil, err
 		}
@@ -888,7 +882,7 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 	case *pb.Result_Refs:
 		m := map[string]solver.ResultProxy{}
 		for k, ref := range res.Refs.Refs {
-			ref, err := lbf.convertRef(ref.Id)
+			ref, err := lbf.cloneRef(ref.Id)
 			if err != nil {
 				return nil, err
 			}
@@ -1383,8 +1377,25 @@ func (lbf *llbBridgeForwarder) convertRef(id string) (solver.ResultProxy, error)
 	if !ok {
 		return nil, errors.Errorf("return reference %s not found", id)
 	}
-
 	return r, nil
+}
+
+func (lbf *llbBridgeForwarder) cloneRef(id string) (solver.ResultProxy, error) {
+	if id == "" {
+		return nil, nil
+	}
+
+	lbf.mu.Lock()
+	defer lbf.mu.Unlock()
+
+	r, ok := lbf.refs[id]
+	if !ok {
+		return nil, errors.Errorf("return reference %s not found", id)
+	}
+
+	s1, s2 := solver.SplitResultProxy(r)
+	lbf.refs[id] = s1
+	return s2, nil
 }
 
 func serve(ctx context.Context, grpcServer *grpc.Server, conn net.Conn) {
