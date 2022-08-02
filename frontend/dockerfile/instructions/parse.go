@@ -281,6 +281,7 @@ func parseAdd(req parseRequest) (*AddCommand, error) {
 	flChown := req.flags.AddString("chown", "")
 	flChmod := req.flags.AddString("chmod", "")
 	flLink := req.flags.AddBool("link", false)
+	flKeepGitDir := req.flags.AddBool("keep-git-dir", false)
 	if err := req.flags.Parse(); err != nil {
 		return nil, err
 	}
@@ -296,6 +297,7 @@ func parseAdd(req parseRequest) (*AddCommand, error) {
 		Chown:           flChown.Value,
 		Chmod:           flChmod.Value,
 		Link:            flLink.Value == "true",
+		KeepGitDir:      flKeepGitDir.Value == "true",
 	}, nil
 }
 
