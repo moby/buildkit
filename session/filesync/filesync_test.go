@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/testutil"
@@ -31,7 +32,11 @@ func TestFileSyncIncludePatterns(t *testing.T) {
 	s, err := session.NewSession(ctx, "foo", "bar")
 	require.NoError(t, err)
 
-	m, err := session.NewManager()
+	m, err := session.NewManager(&session.ManagerOpt{
+		HealthFrequency:       1 * time.Second,
+		HealthTimeout:         10 * time.Second,
+		HealthAllowedFailures: 1,
+	})
 	require.NoError(t, err)
 
 	fs := NewFSSyncProvider([]SyncedDir{{Name: "test0", Dir: tmpDir}})
