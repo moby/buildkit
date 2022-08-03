@@ -423,6 +423,18 @@ func setDefaultConfig(cfg *config.Config) {
 		cfg.GRPC.Address = []string{appdefaults.Address}
 	}
 
+	if cfg.Health.Frequency == 0 {
+		cfg.Health.Frequency = appdefaults.HealthFrequency
+	}
+
+	if cfg.Health.Timeout == 0 {
+		cfg.Health.Timeout = appdefaults.HealthTimeout
+	}
+
+	if cfg.Health.AllowedFailures == 0 {
+		cfg.Health.AllowedFailures = appdefaults.HealthAllowedFailures
+	}
+
 	if cfg.Workers.OCI.Platforms == nil {
 		cfg.Workers.OCI.Platforms = formatPlatforms(archutil.SupportedPlatforms(false))
 	}
@@ -633,7 +645,11 @@ func serverCredentials(cfg config.TLSConfig) (*tls.Config, error) {
 }
 
 func newController(c *cli.Context, cfg *config.Config) (*control.Controller, error) {
-	sessionManager, err := session.NewManager()
+	sessionManager, err := session.NewManager(&session.ManagerOpt{
+		HealthFrequency:       cfg.Health.Frequency,
+		HealthAllowedFailures: cfg.Health.AllowedFailures,
+		HealthTimeout:         cfg.Health.Timeout,
+	})
 	if err != nil {
 		return nil, err
 	}

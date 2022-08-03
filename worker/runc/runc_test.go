@@ -68,7 +68,11 @@ func TestRuncWorker(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := tests.NewCtx("buildkit-test")
-	sm, err := session.NewManager()
+	sm, err := session.NewManager(&session.ManagerOpt{
+		HealthFrequency:       1 * time.Second,
+		HealthTimeout:         10 * time.Second,
+		HealthAllowedFailures: 1,
+	})
 	require.NoError(t, err)
 	snap := tests.NewBusyboxSourceSnapshot(ctx, t, w, sm)
 
@@ -190,7 +194,11 @@ func TestRuncWorkerNoProcessSandbox(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := tests.NewCtx("buildkit-test")
-	sm, err := session.NewManager()
+	sm, err := session.NewManager(&session.ManagerOpt{
+		HealthFrequency:       1 * time.Second,
+		HealthTimeout:         10 * time.Second,
+		HealthAllowedFailures: 1,
+	})
 	require.NoError(t, err)
 	snap := tests.NewBusyboxSourceSnapshot(ctx, t, w, sm)
 	root, err := w.CacheMgr.New(ctx, snap, nil)

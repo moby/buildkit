@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -31,12 +32,31 @@ type Manager struct {
 	sessions        map[string]*client
 	mu              sync.Mutex
 	updateCondition *sync.Cond
+	healthCfg       ManagerHealthCfg
+}
+
+// ManagerHealthCfg is the healthcheck configuration for gRPC healthchecks
+type ManagerHealthCfg struct {
+	frequency       time.Duration
+	timeout         time.Duration
+	allowedFailures int
+}
+
+type ManagerOpt struct {
+	HealthFrequency       time.Duration
+	HealthTimeout         time.Duration
+	HealthAllowedFailures int
 }
 
 // NewManager returns a new Manager
-func NewManager() (*Manager, error) {
+func NewManager(opt *ManagerOpt) (*Manager, error) {
 	sm := &Manager{
 		sessions: make(map[string]*client),
+		healthCfg: ManagerHealthCfg{
+			frequency:       opt.HealthFrequency,
+			timeout:         opt.HealthTimeout,
+			allowedFailures: opt.HealthAllowedFailures,
+		},
 	}
 	sm.updateCondition = sync.NewCond(&sm.mu)
 	return sm, nil
@@ -116,7 +136,7 @@ func (sm *Manager) handleConn(ctx context.Context, conn net.Conn, opts map[strin
 	name := h.Get(headerSessionName)
 	sharedKey := h.Get(headerSessionSharedKey)
 
-	ctx, cc, err := grpcClientConn(ctx, conn)
+	ctx, cc, err := grpcClientConn(ctx, conn, sm.healthCfg)
 	if err != nil {
 		sm.mu.Unlock()
 		return err

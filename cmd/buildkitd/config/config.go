@@ -1,6 +1,8 @@
 package config
 
 import (
+	"time"
+
 	resolverconfig "github.com/moby/buildkit/util/resolver/config"
 )
 
@@ -24,6 +26,8 @@ type Config struct {
 	Registries map[string]resolverconfig.RegistryConfig `toml:"registry"`
 
 	DNS *DNSConfig `toml:"dns"`
+
+	Health HealthConfig `toml:"health"`
 }
 
 type GRPCConfig struct {
@@ -35,6 +39,12 @@ type GRPCConfig struct {
 	TLS TLSConfig `toml:"tls"`
 	// MaxRecvMsgSize int    `toml:"max_recv_message_size"`
 	// MaxSendMsgSize int    `toml:"max_send_message_size"`
+}
+
+type HealthConfig struct {
+	Frequency       time.Duration `toml:"frequency"`
+	Timeout         time.Duration `toml:"timeout"`
+	AllowedFailures int           `toml:"allowedFailures"`
 }
 
 type TLSConfig struct {
