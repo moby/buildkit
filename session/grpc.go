@@ -11,7 +11,6 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/net/http2"
@@ -76,51 +75,27 @@ func grpcClientConn(ctx context.Context, conn net.Conn, healthCfg ManagerHealthC
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
-	go monitorHealth(ctx, cc, cancel, healthCfg)
+	go configurableMonitorHealth(ctx, cc, cancel, healthCfg)
 
 	return ctx, cc, nil
 }
 
-func monitorHealth(ctx context.Context, cc *grpc.ClientConn, cancelConn func(), healthCfg ManagerHealthCfg) {
+func monitorHealth(ctx context.Context, cc *grpc.ClientConn, cancelConn func()) {
 	defer cancelConn()
 	defer cc.Close()
-
-	ticker := time.NewTicker(healthCfg.frequency)
+	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 	healthClient := grpc_health_v1.NewHealthClient(cc)
-
-	consecutiveFailures := 0
-
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			timeoutStart := time.Now().UTC()
-
-			ctx, cancel := context.WithTimeout(ctx, healthCfg.timeout)
+			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			_, err := healthClient.Check(ctx, &grpc_health_v1.HealthCheckRequest{})
 			cancel()
-
-			logFields := logrus.Fields{
-				"timeout":        healthCfg.timeout,
-				"actualDuration": time.Since(timeoutStart),
-			}
-
 			if err != nil {
-				consecutiveFailures++
-
-				logFields["allowedFailures"] = healthCfg.allowedFailures
-				logFields["consecutiveFailures"] = consecutiveFailures
-				bklog.G(ctx).WithFields(logFields).Warn("healthcheck failed")
-
-				if consecutiveFailures >= healthCfg.allowedFailures {
-					bklog.G(ctx).Error("healthcheck failed too many times")
-					return
-				}
-			} else {
-				bklog.G(ctx).WithFields(logFields).Debug("healthcheck completed")
-				consecutiveFailures = 0
+				return
 			}
 		}
 	}
