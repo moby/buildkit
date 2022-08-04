@@ -831,7 +831,7 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 
 		named = reference.TagNameOnly(named)
 
-		_, data, err := c.ResolveImageConfig(ctx, named.String(), llb.ResolveImageConfigOpt{
+		res, err := c.ResolveImageConfig(ctx, named.String(), llb.ResolveImageConfigOpt{
 			Platform:     platform,
 			ResolveMode:  resolveMode,
 			LogName:      fmt.Sprintf("[context %s] load metadata for %s", name, ref),
@@ -843,13 +843,13 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 		}
 
 		var img dockerfile2llb.Image
-		if err := json.Unmarshal(data, &img); err != nil {
+		if err := json.Unmarshal(res.Config, &img); err != nil {
 			return nil, nil, nil, err
 		}
 		img.Created = nil
 
 		st := llb.Image(ref, imgOpt...)
-		st, err = st.WithImageConfig(data)
+		st, err = st.WithImageConfig(res.Config)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -891,7 +891,7 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 		// We do not support any image lookup for now, so any image will do; it is ignored.
 
 		usableRef := fmt.Sprintf("%s/%s@%s", storeID, "image", dig)
-		_, data, err := c.ResolveImageConfig(ctx, usableRef, llb.ResolveImageConfigOpt{
+		res, err := c.ResolveImageConfig(ctx, usableRef, llb.ResolveImageConfigOpt{
 			Platform:     platform,
 			ResolveMode:  resolveMode,
 			LogName:      fmt.Sprintf("[context %s] load metadata for %s", name, ref),
@@ -905,7 +905,7 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 			llb.WithCustomName("[context "+name+"] OCI load from client"),
 			llb.OCISessionID(c.BuildOpts().SessionID),
 		)
-		st, err = st.WithImageConfig(data)
+		st, err = st.WithImageConfig(res.Config)
 		if err != nil {
 			return nil, nil, nil, err
 		}

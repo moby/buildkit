@@ -132,7 +132,7 @@ func Image(ref string, opts ...ImageOption) State {
 				if p == nil {
 					p = c.Platform
 				}
-				_, dt, err := info.metaResolver.ResolveImageConfig(ctx, ref, ResolveImageConfigOpt{
+				res, err := info.metaResolver.ResolveImageConfig(ctx, ref, ResolveImageConfigOpt{
 					Platform:     p,
 					ResolveMode:  info.resolveMode.String(),
 					ResolverType: ResolverTypeRegistry,
@@ -140,7 +140,7 @@ func Image(ref string, opts ...ImageOption) State {
 				if err != nil {
 					return State{}, err
 				}
-				return st.WithImageConfig(dt)
+				return st.WithImageConfig(res.Config)
 			})
 		}
 		return Scratch().Async(func(ctx context.Context, _ State, c *Constraints) (State, error) {
@@ -148,7 +148,7 @@ func Image(ref string, opts ...ImageOption) State {
 			if p == nil {
 				p = c.Platform
 			}
-			dgst, dt, err := info.metaResolver.ResolveImageConfig(context.TODO(), ref, ResolveImageConfigOpt{
+			res, err := info.metaResolver.ResolveImageConfig(context.TODO(), ref, ResolveImageConfigOpt{
 				Platform:     p,
 				ResolveMode:  info.resolveMode.String(),
 				ResolverType: ResolverTypeRegistry,
@@ -156,13 +156,13 @@ func Image(ref string, opts ...ImageOption) State {
 			if err != nil {
 				return State{}, err
 			}
-			if dgst != "" {
-				r, err = reference.WithDigest(r, dgst)
+			if res.Digest != "" {
+				r, err = reference.WithDigest(r, res.Digest)
 				if err != nil {
 					return State{}, err
 				}
 			}
-			return NewState(NewSource("docker-image://"+r.String(), attrs, info.Constraints).Output()).WithImageConfig(dt)
+			return NewState(NewSource("docker-image://"+r.String(), attrs, info.Constraints).Output()).WithImageConfig(res.Config)
 		})
 	}
 	return NewState(src.Output())

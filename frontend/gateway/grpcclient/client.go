@@ -448,7 +448,7 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (res *
 	return res, nil
 }
 
-func (c *grpcClient) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt) (digest.Digest, []byte, error) {
+func (c *grpcClient) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt) (llb.ResolveImageConfigResult, error) {
 	var p *opspb.Platform
 	if platform := opt.Platform; platform != nil {
 		p = &opspb.Platform{
@@ -461,9 +461,12 @@ func (c *grpcClient) ResolveImageConfig(ctx context.Context, ref string, opt llb
 	}
 	resp, err := c.client.ResolveImageConfig(ctx, &pb.ResolveImageConfigRequest{Ref: ref, Platform: p, ResolveMode: opt.ResolveMode, LogName: opt.LogName, ResolverType: int32(opt.ResolverType), SessionID: opt.SessionID})
 	if err != nil {
-		return "", nil, err
+		return llb.ResolveImageConfigResult{}, err
 	}
-	return resp.Digest, resp.Config, nil
+	return llb.ResolveImageConfigResult{
+		Digest: resp.Digest,
+		Config: resp.Config,
+	}, nil
 }
 
 func (c *grpcClient) BuildOpts() client.BuildOpts {

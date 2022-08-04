@@ -143,18 +143,18 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 			return nil, err
 		}
 
-		dgst, config, err := llbBridge.ResolveImageConfig(ctx, reference.TagNameOnly(sourceRef).String(), llb.ResolveImageConfigOpt{})
+		cfg, err := llbBridge.ResolveImageConfig(ctx, reference.TagNameOnly(sourceRef).String(), llb.ResolveImageConfigOpt{})
 		if err != nil {
 			return nil, err
 		}
-		mfstDigest = dgst
+		mfstDigest = cfg.Digest
 
-		if err := json.Unmarshal(config, &img); err != nil {
+		if err := json.Unmarshal(cfg.Config, &img); err != nil {
 			return nil, err
 		}
 
-		if dgst != "" {
-			sourceRef, err = reference.WithDigest(sourceRef, dgst)
+		if cfg.Digest != "" {
+			sourceRef, err = reference.WithDigest(sourceRef, cfg.Digest)
 			if err != nil {
 				return nil, err
 			}
@@ -533,7 +533,7 @@ func (lbf *llbBridgeForwarder) ResolveImageConfig(ctx context.Context, req *pb.R
 			OSFeatures:   p.OSFeatures,
 		}
 	}
-	dgst, dt, err := lbf.llbBridge.ResolveImageConfig(ctx, req.Ref, llb.ResolveImageConfigOpt{
+	res, err := lbf.llbBridge.ResolveImageConfig(ctx, req.Ref, llb.ResolveImageConfigOpt{
 		Platform:     platform,
 		ResolveMode:  req.ResolveMode,
 		LogName:      req.LogName,
@@ -543,8 +543,8 @@ func (lbf *llbBridgeForwarder) ResolveImageConfig(ctx context.Context, req *pb.R
 		return nil, err
 	}
 	return &pb.ResolveImageConfigResponse{
-		Digest: dgst,
-		Config: dt,
+		Digest: res.Digest,
+		Config: res.Config,
 	}, nil
 }
 

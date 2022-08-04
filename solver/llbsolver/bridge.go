@@ -313,10 +313,10 @@ func (rp *resultProxy) Result(ctx context.Context) (res solver.CachedResult, err
 	return nil, err
 }
 
-func (b *llbBridge) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt) (dgst digest.Digest, config []byte, err error) {
+func (b *llbBridge) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt) (llb.ResolveImageConfigResult, error) {
 	w, err := b.resolveWorker()
 	if err != nil {
-		return "", nil, err
+		return llb.ResolveImageConfigResult{}, err
 	}
 	if opt.LogName == "" {
 		opt.LogName = fmt.Sprintf("resolve image config for %s", ref)
@@ -327,11 +327,13 @@ func (b *llbBridge) ResolveImageConfig(ctx context.Context, ref string, opt llb.
 	} else {
 		id += platforms.Format(*platform)
 	}
+
+	var res llb.ResolveImageConfigResult
 	err = inBuilderContext(ctx, b.builder, opt.LogName, id, func(ctx context.Context, g session.Group) error {
-		dgst, config, err = w.ResolveImageConfig(ctx, ref, opt, b.sm, g)
+		res, err = w.ResolveImageConfig(ctx, ref, opt, b.sm, g)
 		return err
 	})
-	return dgst, config, err
+	return res, err
 }
 
 type lazyCacheManager struct {

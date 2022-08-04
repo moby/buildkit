@@ -16,7 +16,7 @@ type Frontend interface {
 
 type FrontendLLBBridge interface {
 	Solve(ctx context.Context, req SolveRequest, sid string) (*Result, error)
-	ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt) (digest.Digest, []byte, error)
+	ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt) (llb.ResolveImageConfigResult, error)
 	Warn(ctx context.Context, dgst digest.Digest, msg string, opts WarnOpts) error
 }
 

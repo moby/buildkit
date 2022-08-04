@@ -31,7 +31,7 @@ func WithLayerLimit(l int) ImageOption {
 
 // ImageMetaResolver can resolve image config metadata from a reference
 type ImageMetaResolver interface {
-	ResolveImageConfig(ctx context.Context, ref string, opt ResolveImageConfigOpt) (digest.Digest, []byte, error)
+	ResolveImageConfig(ctx context.Context, ref string, opt ResolveImageConfigOpt) (ResolveImageConfigResult, error)
 }
 
 type ResolverType int
@@ -47,4 +47,9 @@ type ResolveImageConfigOpt struct {
 	LogName      string
 	ResolverType // default is ResolverTypeRegistry
 	SessionID    string
+}
+
+type ResolveImageConfigResult struct {
+	Digest digest.Digest
+	Config []byte
 }

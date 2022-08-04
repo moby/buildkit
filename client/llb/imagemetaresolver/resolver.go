@@ -13,7 +13,6 @@ import (
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/version"
 	"github.com/moby/locker"
-	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
@@ -50,7 +49,7 @@ func New(with ...ImageMetaResolverOpt) llb.ImageMetaResolver {
 		}),
 		platform: opts.platform,
 		buffer:   contentutil.NewBuffer(),
-		cache:    map[string]resolveResult{},
+		cache:    map[string]llb.ResolveImageConfigResult{},
 		locker:   locker.New(),
 	}
 }
@@ -67,15 +66,10 @@ type imageMetaResolver struct {
 	buffer   contentutil.Buffer
 	platform *ocispecs.Platform
 	locker   *locker.Locker
-	cache    map[string]resolveResult
+	cache    map[string]llb.ResolveImageConfigResult
 }
 
-type resolveResult struct {
-	config []byte
-	dgst   digest.Digest
-}
-
-func (imr *imageMetaResolver) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt) (digest.Digest, []byte, error) {
+func (imr *imageMetaResolver) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt) (llb.ResolveImageConfigResult, error) {
 	imr.locker.Lock(ref)
 	defer imr.locker.Unlock(ref)
 
@@ -87,16 +81,17 @@ func (imr *imageMetaResolver) ResolveImageConfig(ctx context.Context, ref string
 	k := imr.key(ref, platform)
 
 	if res, ok := imr.cache[k]; ok {
-		return res.dgst, res.config, nil
+		return res, nil
 	}
 
 	dgst, config, err := imageutil.Config(ctx, ref, imr.resolver, imr.buffer, nil, platform)
 	if err != nil {
-		return "", nil, err
+		return llb.ResolveImageConfigResult{}, err
 	}
 
-	imr.cache[k] = resolveResult{dgst: dgst, config: config}
-	return dgst, config, nil
+	res := llb.ResolveImageConfigResult{Digest: dgst, Config: config}
+	imr.cache[k] = res
+	return res, nil
 }
 
 func (imr *imageMetaResolver) key(ref string, platform *ocispecs.Platform) string {

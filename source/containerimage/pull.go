@@ -82,7 +82,7 @@ func (is *Source) ID() string {
 	return srctypes.DockerImageScheme
 }
 
-func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt, sm *session.Manager, g session.Group) (digest.Digest, []byte, error) {
+func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt, sm *session.Manager, g session.Group) (llb.ResolveImageConfigResult, error) {
 	type t struct {
 		dgst digest.Digest
 		dt   []byte
@@ -102,7 +102,7 @@ func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt llb.Re
 	case ResolverTypeRegistry:
 		rm, err = source.ParseImageResolveMode(opt.ResolveMode)
 		if err != nil {
-			return "", nil, err
+			return llb.ResolveImageConfigResult{}, err
 		}
 		rslvr = resolver.DefaultPool.GetResolver(is.RegistryHosts, ref, "pull", sm, g).WithImageStore(is.ImageStore, rm)
 	case ResolverTypeOCILayout:
@@ -111,10 +111,10 @@ func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt llb.Re
 		// get the content store ID from the ref
 		parsed, err := reference.Parse(ref)
 		if err != nil {
-			return "", nil, errors.Errorf("invalid oci-layout ref format '%s', must be content-store/image@sha256:digest", ref)
+			return llb.ResolveImageConfigResult{}, errors.Errorf("invalid oci-layout ref format '%s', must be content-store/image@sha256:digest", ref)
 		}
 		if parsed.Digest() == "" {
-			return "", nil, errors.Errorf("oci-layout ref format '%s' missing digest, must be content-store/image@sha256:digest", ref)
+			return llb.ResolveImageConfigResult{}, errors.Errorf("oci-layout ref format '%s' missing digest, must be content-store/image@sha256:digest", ref)
 		}
 		storeID := parsed.Hostname()
 
@@ -129,10 +129,13 @@ func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt llb.Re
 		return &t{dgst: dgst, dt: dt}, nil
 	})
 	if err != nil {
-		return "", nil, err
+		return llb.ResolveImageConfigResult{}, err
 	}
 	typed = res.(*t)
-	return typed.dgst, typed.dt, nil
+	return llb.ResolveImageConfigResult{
+		Digest: typed.dgst,
+		Config: typed.dt,
+	}, nil
 }
 
 func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager, vtx solver.Vertex) (source.SourceInstance, error) {
