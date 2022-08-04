@@ -8,6 +8,7 @@ run:
   build-tags:
     - dfrunsecurity
     - dfaddgit
+    - dfparents
 
 linters:
   enable:

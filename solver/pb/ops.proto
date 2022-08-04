@@ -328,6 +328,8 @@ message FileActionCopy {
 	repeated string include_patterns = 12;
 	// exclude files/dir matching any of these patterns (even if they match an include pattern)
 	repeated string exclude_patterns = 13;
+	// parents preserves directory structure
+	bool parents = 14;
 }
 
 message FileActionMkFile {

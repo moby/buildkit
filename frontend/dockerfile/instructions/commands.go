@@ -228,6 +228,7 @@ type AddCommand struct {
 	Chmod      string
 	Link       bool
 	KeepGitDir bool // whether to keep .git dir, only meaningful for git sources
+	Parents    bool // parents preserves directory structure
 }
 
 // Expand variables
@@ -248,10 +249,11 @@ func (c *AddCommand) Expand(expander SingleWordExpander) error {
 type CopyCommand struct {
 	withNameAndCode
 	SourcesAndDest
-	From  string
-	Chown string
-	Chmod string
-	Link  bool
+	From    string
+	Chown   string
+	Chmod   string
+	Link    bool
+	Parents bool // parents preserves directory structure
 }
 
 // Expand variables
