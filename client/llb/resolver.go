@@ -50,6 +50,8 @@ type ResolveImageConfigOpt struct {
 }
 
 type ResolveImageConfigResult struct {
-	Digest digest.Digest
-	Config []byte
+	Digest   digest.Digest
+	Config   []byte
+	Manifest []byte
+	Index    []byte
 }

@@ -464,8 +464,10 @@ func (c *grpcClient) ResolveImageConfig(ctx context.Context, ref string, opt llb
 		return llb.ResolveImageConfigResult{}, err
 	}
 	return llb.ResolveImageConfigResult{
-		Digest: resp.Digest,
-		Config: resp.Config,
+		Digest:   resp.Digest,
+		Config:   resp.Config,
+		Manifest: resp.Manifest,
+		Index:    resp.Index,
 	}, nil
 }
 

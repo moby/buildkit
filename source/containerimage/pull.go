@@ -83,11 +83,6 @@ func (is *Source) ID() string {
 }
 
 func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt, sm *session.Manager, g session.Group) (llb.ResolveImageConfigResult, error) {
-	type t struct {
-		dgst digest.Digest
-		dt   []byte
-	}
-	var typed *t
 	key := ref
 	if platform := opt.Platform; platform != nil {
 		key += platforms.Format(*platform)
@@ -121,20 +116,22 @@ func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt llb.Re
 		rslvr = getOCILayoutResolver(storeID, sm, opt.SessionID, g)
 	}
 	key += rm.String()
-	res, err := is.g.Do(ctx, key, func(ctx context.Context) (interface{}, error) {
-		dgst, dt, err := imageutil.Config(ctx, ref, rslvr, is.ContentStore, is.LeaseManager, opt.Platform)
+	cfg, err := is.g.Do(ctx, key, func(ctx context.Context) (interface{}, error) {
+		cfg, err := imageutil.Config(ctx, ref, rslvr, is.ContentStore, is.LeaseManager, opt.Platform)
 		if err != nil {
 			return nil, err
 		}
-		return &t{dgst: dgst, dt: dt}, nil
+		return cfg, nil
 	})
 	if err != nil {
 		return llb.ResolveImageConfigResult{}, err
 	}
-	typed = res.(*t)
+	typedCfg := cfg.(*imageutil.ConfigResult)
 	return llb.ResolveImageConfigResult{
-		Digest: typed.dgst,
-		Config: typed.dt,
+		Digest:   typedCfg.Digest,
+		Config:   typedCfg.Config,
+		Manifest: typedCfg.Manifest,
+		Index:    typedCfg.Index,
 	}, nil
 }
 

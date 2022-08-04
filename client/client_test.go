@@ -167,6 +167,7 @@ func TestIntegration(t *testing.T) {
 		testCallInfo,
 		testPullWithLayerLimit,
 		testExportAnnotations,
+		testResolveImageConfig,
 	)
 	tests = append(tests, diffOpTestCases()...)
 	integration.Run(t, tests, mirrors)
@@ -6251,6 +6252,143 @@ func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 			require.Fail(t, "unrecognized platform")
 		}
 	}
+}
+
+func testResolveImageConfig(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	integration.SkipIfDockerd(t, sb, "direct push")
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	p := platforms.DefaultSpec()
+	pk := platforms.Format(p)
+
+	makeFrontend := func(exportMap bool) func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		return func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+			res := gateway.NewResult()
+			st := llb.Scratch().File(llb.Mkfile("/test", 0777, []byte("test")))
+			def, err := st.Marshal(sb.Context())
+			if err != nil {
+				return nil, err
+			}
+
+			r, err := c.Solve(ctx, gateway.SolveRequest{
+				Definition: def.ToPB(),
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			ref, err := r.SingleRef()
+			if err != nil {
+				return nil, err
+			}
+			_, err = ref.ToState()
+			if err != nil {
+				return nil, err
+			}
+
+			if exportMap {
+				res.AddRef(pk, ref)
+				expPlatforms := &exptypes.Platforms{Platforms: []exptypes.Platform{{ID: pk, Platform: p}}}
+				dt, err := json.Marshal(expPlatforms)
+				if err != nil {
+					return nil, err
+				}
+				res.AddMeta(exptypes.ExporterPlatformsKey, dt)
+			} else {
+				res.SetRef(ref)
+			}
+
+			return res, nil
+		}
+	}
+
+	targetRef := registry + "/buildkit/testresolveref:latest"
+	_, err = c.Build(sb.Context(), SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": targetRef,
+					"push": "true",
+				},
+			},
+		},
+	}, "", makeFrontend(false), nil)
+	require.NoError(t, err)
+
+	targetRefs := registry + "/buildkit/testresolverefs:latest"
+	_, err = c.Build(sb.Context(), SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": targetRefs,
+					"push": "true",
+				},
+			},
+		},
+	}, "", makeFrontend(true), nil)
+	require.NoError(t, err)
+
+	b := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		cfgRef, err := c.ResolveImageConfig(ctx, targetRef, llb.ResolveImageConfigOpt{})
+		if err != nil {
+			return nil, err
+		}
+		require.NotNil(t, cfgRef.Config)
+		require.NotNil(t, cfgRef.Manifest)
+		require.Nil(t, cfgRef.Index)
+
+		var refManifest ocispecs.Manifest
+		var refConfig ocispecs.Image
+		require.NoError(t, json.Unmarshal(cfgRef.Manifest, &refManifest))
+		require.NoError(t, json.Unmarshal(cfgRef.Config, &refConfig))
+		require.True(t, images.IsManifestType(refManifest.MediaType))
+		require.Equal(t, "linux", refConfig.OS)
+
+		cfgRefs, err := c.ResolveImageConfig(ctx, targetRefs, llb.ResolveImageConfigOpt{})
+		if err != nil {
+			return nil, err
+		}
+		require.NotNil(t, cfgRefs.Config)
+		require.NotNil(t, cfgRefs.Manifest)
+		require.NotNil(t, cfgRefs.Index)
+
+		var refsIndex ocispecs.Index
+		var refsManifest ocispecs.Manifest
+		var refsConfig ocispecs.Image
+		require.NoError(t, json.Unmarshal(cfgRefs.Index, &refsIndex))
+		require.NoError(t, json.Unmarshal(cfgRefs.Manifest, &refsManifest))
+		require.NoError(t, json.Unmarshal(cfgRefs.Config, &refsConfig))
+		require.True(t, images.IsIndexType(refsIndex.MediaType))
+		require.True(t, images.IsManifestType(refsManifest.MediaType))
+		require.Equal(t, "linux", refConfig.OS)
+
+		_, err = c.ResolveImageConfig(ctx, registry+"/buildkit/testnonexistent:latest", llb.ResolveImageConfigOpt{})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), ctderrdefs.ErrNotFound.Error())
+
+		_, err = c.ResolveImageConfig(ctx, targetRef, llb.ResolveImageConfigOpt{Platform: &ocispecs.Platform{OS: "unknown", Architecture: "unknown"}})
+		require.NoError(t, err)
+
+		_, err = c.ResolveImageConfig(ctx, targetRefs, llb.ResolveImageConfigOpt{Platform: &ocispecs.Platform{OS: "unknown", Architecture: "unknown"}})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), ctderrdefs.ErrNotFound.Error())
+		require.Contains(t, err.Error(), "no match")
+
+		return nil, nil
+	}
+	_, err = c.Build(sb.Context(), SolveOpt{}, "", b, nil)
+	require.NoError(t, err)
 }
 
 func makeSSHAgentSock(t *testing.T, agent agent.Agent) (p string, err error) {

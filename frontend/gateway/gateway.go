@@ -542,9 +542,12 @@ func (lbf *llbBridgeForwarder) ResolveImageConfig(ctx context.Context, req *pb.R
 	if err != nil {
 		return nil, err
 	}
+
 	return &pb.ResolveImageConfigResponse{
-		Digest: res.Digest,
-		Config: res.Config,
+		Digest:   res.Digest,
+		Config:   res.Config,
+		Manifest: res.Manifest,
+		Index:    res.Index,
 	}, nil
 }
 

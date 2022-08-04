@@ -8,26 +8,28 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/remotes"
-	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
-func readSchema1Config(ctx context.Context, ref string, desc ocispecs.Descriptor, fetcher remotes.Fetcher, cache ContentCache) (digest.Digest, []byte, error) {
+func readSchema1Config(ctx context.Context, ref string, desc ocispecs.Descriptor, fetcher remotes.Fetcher, cache ContentCache) (*ConfigResult, error) {
 	rc, err := fetcher.Fetch(ctx, desc)
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 	defer rc.Close()
 	dt, err := io.ReadAll(rc)
 	if err != nil {
-		return "", nil, errors.Wrap(err, "failed to fetch schema1 manifest")
+		return nil, errors.Wrap(err, "failed to fetch schema1 manifest")
 	}
 	dt, err = convertSchema1ConfigMeta(dt)
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
-	return desc.Digest, dt, nil
+	return &ConfigResult{
+		Digest: desc.Digest,
+		Config: dt,
+	}, nil
 }
 
 func convertSchema1ConfigMeta(in []byte) ([]byte, error) {

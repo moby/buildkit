@@ -90,6 +90,8 @@ message ResolveImageConfigRequest {
 message ResolveImageConfigResponse {
 	string Digest = 1 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
 	bytes Config = 2;
+	bytes Manifest = 3;
+	bytes Index = 4;
 }
 
 message SolveRequest {

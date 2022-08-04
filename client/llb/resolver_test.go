@@ -75,6 +75,7 @@ type testResolver struct {
 }
 
 func (r *testResolver) ResolveImageConfig(ctx context.Context, ref string, opt ResolveImageConfigOpt) (ResolveImageConfigResult, error) {
+	// FIXME: we should have more tests here
 	var img struct {
 		Config struct {
 			Env        []string `json:"Env,omitempty"`

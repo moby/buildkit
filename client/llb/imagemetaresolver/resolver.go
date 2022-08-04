@@ -84,12 +84,17 @@ func (imr *imageMetaResolver) ResolveImageConfig(ctx context.Context, ref string
 		return res, nil
 	}
 
-	dgst, config, err := imageutil.Config(ctx, ref, imr.resolver, imr.buffer, nil, platform)
+	cfg, err := imageutil.Config(ctx, ref, imr.resolver, imr.buffer, nil, platform)
 	if err != nil {
 		return llb.ResolveImageConfigResult{}, err
 	}
 
-	res := llb.ResolveImageConfigResult{Digest: dgst, Config: config}
+	res := llb.ResolveImageConfigResult{
+		Digest:   cfg.Digest,
+		Config:   cfg.Config,
+		Manifest: cfg.Manifest,
+		Index:    cfg.Index,
+	}
 	imr.cache[k] = res
 	return res, nil
 }
