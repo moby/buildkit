@@ -654,6 +654,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 			chmod:        c.Chmod,
 			link:         c.Link,
 			keepGitDir:   c.KeepGitDir,
+			parents:      c.Parents,
 			location:     c.Location(),
 			opt:          opt,
 		})
@@ -699,6 +700,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 			chown:        c.Chown,
 			chmod:        c.Chmod,
 			link:         c.Link,
+			parents:      c.Parents,
 			location:     c.Location(),
 			opt:          opt,
 		})
@@ -1066,6 +1068,9 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 				a = a.Copy(st, f, dest, opts...)
 			}
 		} else {
+			if cfg.parents && !parentsEnabled {
+				return errors.New("flag --parents for ADD/COPY instructions requires the labs channel")
+			}
 			opts := append([]llb.CopyOption{&llb.CopyInfo{
 				Mode:                mode,
 				FollowSymlinks:      true,
@@ -1074,6 +1079,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 				CreateDestPath:      true,
 				AllowWildcard:       true,
 				AllowEmptyWildcard:  true,
+				Parents:             cfg.parents,
 			}}, copyOpt...)
 
 			if a == nil {
@@ -1159,6 +1165,7 @@ type copyConfig struct {
 	chmod        string
 	link         bool
 	keepGitDir   bool
+	parents      bool
 	location     []parser.Range
 	opt          dispatchOpt
 }

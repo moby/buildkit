@@ -282,6 +282,7 @@ func parseAdd(req parseRequest) (*AddCommand, error) {
 	flChmod := req.flags.AddString("chmod", "")
 	flLink := req.flags.AddBool("link", false)
 	flKeepGitDir := req.flags.AddBool("keep-git-dir", false)
+	flParents := req.flags.AddBool("parents", false)
 	if err := req.flags.Parse(); err != nil {
 		return nil, err
 	}
@@ -298,6 +299,7 @@ func parseAdd(req parseRequest) (*AddCommand, error) {
 		Chmod:           flChmod.Value,
 		Link:            flLink.Value == "true",
 		KeepGitDir:      flKeepGitDir.Value == "true",
+		Parents:         flParents.Value == "true",
 	}, nil
 }
 
@@ -309,6 +311,7 @@ func parseCopy(req parseRequest) (*CopyCommand, error) {
 	flFrom := req.flags.AddString("from", "")
 	flChmod := req.flags.AddString("chmod", "")
 	flLink := req.flags.AddBool("link", false)
+	flParents := req.flags.AddBool("parents", false)
 	if err := req.flags.Parse(); err != nil {
 		return nil, err
 	}
@@ -325,6 +328,7 @@ func parseCopy(req parseRequest) (*CopyCommand, error) {
 		Chown:           flChown.Value,
 		Chmod:           flChmod.Value,
 		Link:            flLink.Value == "true",
+		Parents:         flParents.Value == "true",
 	}, nil
 }
 

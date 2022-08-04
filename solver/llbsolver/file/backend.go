@@ -205,15 +205,31 @@ func docopy(ctx context.Context, src, dest string, action pb.FileActionCopy, u *
 		copy.WithXAttrErrorHandler(xattrErrorHandler),
 	}
 
-	if !action.AllowWildcard {
+	copy_one := func(s string) error {
+		d := destPath
+		if action.Parents {
+			d = filepath.Join("/", d, s)
+		}
 		if action.AttemptUnpackDockerCompatibility {
-			if ok, err := unpack(ctx, src, srcPath, dest, destPath, ch, timestampToTime(action.Timestamp)); err != nil {
+			if ok, err := unpack(ctx, src, s, dest, d, ch, timestampToTime(action.Timestamp)); err != nil {
 				return err
 			} else if ok {
 				return nil
 			}
 		}
-		return copy.Copy(ctx, src, srcPath, dest, destPath, opt...)
+		return copy.Copy(ctx, src, s, dest, d, opt...)
+	}
+
+	if !action.AllowWildcard {
+		// if action.AttemptUnpackDockerCompatibility {
+		// 	if ok, err := unpack(ctx, src, srcPath, dest, destPath, ch, timestampToTime(action.Timestamp)); err != nil {
+		// 		return err
+		// 	} else if ok {
+		// 		return nil
+		// 	}
+		// }
+		// return copy.Copy(ctx, src, srcPath, dest, destPath, opt...)
+		return copy_one(src)
 	}
 
 	m, err := copy.ResolveWildcards(src, srcPath, action.FollowSymlink)
@@ -229,14 +245,17 @@ func docopy(ctx context.Context, src, dest string, action pb.FileActionCopy, u *
 	}
 
 	for _, s := range m {
-		if action.AttemptUnpackDockerCompatibility {
-			if ok, err := unpack(ctx, src, s, dest, destPath, ch, timestampToTime(action.Timestamp)); err != nil {
-				return err
-			} else if ok {
-				continue
-			}
-		}
-		if err := copy.Copy(ctx, src, s, dest, destPath, opt...); err != nil {
+		// if action.AttemptUnpackDockerCompatibility {
+		// 	if ok, err := unpack(ctx, src, s, dest, destPath, ch, timestampToTime(action.Timestamp)); err != nil {
+		// 		return err
+		// 	} else if ok {
+		// 		continue
+		// 	}
+		// }
+		// if err := copy.Copy(ctx, src, s, dest, destPath, opt...); err != nil {
+		// 	return err
+		// }
+		if err := copy_one(s); err != nil {
 			return err
 		}
 	}
