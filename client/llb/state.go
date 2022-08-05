@@ -199,10 +199,10 @@ func marshal(ctx context.Context, v Vertex, def *Definition, s *sourceMapCollect
 	if opMeta != nil {
 		def.Metadata[dgst] = mergeMetadata(def.Metadata[dgst], *opMeta)
 	}
+	s.Add(dgst, sls)
 	if _, ok := cache[dgst]; ok {
 		return def, nil
 	}
-	s.Add(dgst, sls)
 	def.Def = append(def.Def, dt)
 	cache[dgst] = struct{}{}
 	return def, nil
