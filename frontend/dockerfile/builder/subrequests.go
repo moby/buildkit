@@ -1,6 +1,7 @@
 package builder
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 
@@ -37,9 +38,16 @@ func describe() (*client.Result, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	b := bytes.NewBuffer(nil)
+	if err := subrequests.PrintDescribe(dt, b); err != nil {
+		return nil, err
+	}
+
 	res := client.NewResult()
 	res.Metadata = map[string][]byte{
 		"result.json": dt,
+		"result.txt":  b.Bytes(),
 		"version":     []byte(subrequests.SubrequestsDescribeDefinition.Version),
 	}
 	return res, nil

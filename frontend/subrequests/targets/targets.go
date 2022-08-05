@@ -1,7 +1,11 @@
 package targets
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
+	"text/tabwriter"
 
 	"github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/frontend/subrequests"
@@ -17,9 +21,8 @@ var SubrequestsTargetsDefinition = subrequests.Request{
 	Description: "List all targets current build supports",
 	Opts:        []subrequests.Named{},
 	Metadata: []subrequests.Named{
-		{
-			Name: "result.json",
-		},
+		{Name: "result.json"},
+		{Name: "result.txt"},
 	},
 }
 
@@ -35,6 +38,13 @@ func (l List) ToResult() (*client.Result, error) {
 		return nil, err
 	}
 	res.AddMeta("result.json", dt)
+
+	b := bytes.NewBuffer(nil)
+	if err := PrintTargets(dt, b); err != nil {
+		return nil, err
+	}
+	res.AddMeta("result.txt", b.Bytes())
+
 	res.AddMeta("version", []byte(SubrequestsTargetsDefinition.Version))
 	return res, nil
 }
@@ -46,4 +56,29 @@ type Target struct {
 	Base        string `json:"base,omitempty"`
 	Platform    string `json:"platform,omitempty"`
 	Location    *pb.Location
+}
+
+func PrintTargets(dt []byte, w io.Writer) error {
+	var l List
+
+	if err := json.Unmarshal(dt, &l); err != nil {
+		return err
+	}
+
+	tw := tabwriter.NewWriter(w, 0, 0, 1, ' ', 0)
+	fmt.Fprintf(tw, "TARGET\tDESCRIPTION\n")
+
+	for _, t := range l.Targets {
+		name := t.Name
+		if name == "" && t.Default {
+			name = "(default)"
+		} else {
+			if t.Default {
+				name = fmt.Sprintf("%s (default)", name)
+			}
+		}
+		fmt.Fprintf(tw, "%s\t%s\n", name, t.Description)
+	}
+
+	return tw.Flush()
 }

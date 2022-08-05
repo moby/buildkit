@@ -325,9 +325,13 @@ func buildAction(clicontext *cli.Context) error {
 		return err
 	}
 
-	for k, v := range subMetadata {
-		if strings.HasPrefix(k, "result.") {
-			fmt.Printf("%s\n", v)
+	if txt, ok := subMetadata["result.txt"]; ok {
+		fmt.Print(string(txt))
+	} else {
+		for k, v := range subMetadata {
+			if strings.HasPrefix(k, "result.") {
+				fmt.Printf("%s\n%s\n", k, v)
+			}
 		}
 	}
 	return nil

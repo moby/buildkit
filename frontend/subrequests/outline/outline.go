@@ -1,7 +1,11 @@
 package outline
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
+	"text/tabwriter"
 
 	"github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/frontend/subrequests"
@@ -22,9 +26,8 @@ var SubrequestsOutlineDefinition = subrequests.Request{
 		},
 	},
 	Metadata: []subrequests.Named{
-		{
-			Name: "result.json",
-		},
+		{Name: "result.json"},
+		{Name: "result.txt"},
 	},
 }
 
@@ -45,6 +48,13 @@ func (o Outline) ToResult() (*client.Result, error) {
 		return nil, err
 	}
 	res.AddMeta("result.json", dt)
+
+	b := bytes.NewBuffer(nil)
+	if err := PrintOutline(dt, b); err != nil {
+		return nil, err
+	}
+	res.AddMeta("result.txt", b.Bytes())
+
 	res.AddMeta("version", []byte(SubrequestsOutlineDefinition.Version))
 	return res, nil
 }
@@ -71,4 +81,66 @@ type SSH struct {
 type CacheMount struct {
 	ID       string
 	Location *pb.Location
+}
+
+func PrintOutline(dt []byte, w io.Writer) error {
+	var o Outline
+
+	if err := json.Unmarshal(dt, &o); err != nil {
+		return err
+	}
+
+	if o.Name != "" || o.Description != "" {
+		tw := tabwriter.NewWriter(w, 0, 0, 1, ' ', 0)
+		name := o.Name
+		if o.Name == "" {
+			name = "(default)"
+		}
+		fmt.Fprintf(tw, "TARGET:\t%s\n", name)
+		if o.Description != "" {
+			fmt.Fprintf(tw, "DESCRIPTION:\t%s\n", o.Description)
+		}
+		tw.Flush()
+		fmt.Println()
+	}
+
+	if len(o.Args) > 0 {
+		tw := tabwriter.NewWriter(w, 0, 0, 3, ' ', 0)
+		fmt.Fprintf(tw, "BUILD ARG\tVALUE\tDESCRIPTION\n")
+		for _, a := range o.Args {
+			fmt.Fprintf(tw, "%s\t%s\t%s\n", a.Name, a.Value, a.Description)
+		}
+		tw.Flush()
+		fmt.Println()
+	}
+
+	if len(o.Secrets) > 0 {
+		tw := tabwriter.NewWriter(w, 0, 0, 3, ' ', 0)
+		fmt.Fprintf(tw, "SECRET\tREQUIRED\n")
+		for _, s := range o.Secrets {
+			b := ""
+			if s.Required {
+				b = "true"
+			}
+			fmt.Fprintf(tw, "%s\t%s\n", s.Name, b)
+		}
+		tw.Flush()
+		fmt.Println()
+	}
+
+	if len(o.SSH) > 0 {
+		tw := tabwriter.NewWriter(w, 0, 0, 3, ' ', 0)
+		fmt.Fprintf(tw, "SSH\tREQUIRED\n")
+		for _, s := range o.SSH {
+			b := ""
+			if s.Required {
+				b = "true"
+			}
+			fmt.Fprintf(tw, "%s\t%s\n", s.Name, b)
+		}
+		tw.Flush()
+		fmt.Println()
+	}
+
+	return nil
 }
