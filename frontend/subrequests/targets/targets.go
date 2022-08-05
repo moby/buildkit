@@ -35,6 +35,7 @@ func (l List) ToResult() (*client.Result, error) {
 		return nil, err
 	}
 	res.AddMeta("result.json", dt)
+	res.AddMeta("version", []byte(SubrequestsTargetsDefinition.Version))
 	return res, nil
 }
 

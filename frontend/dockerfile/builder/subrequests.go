@@ -40,6 +40,7 @@ func describe() (*client.Result, error) {
 	res := client.NewResult()
 	res.Metadata = map[string][]byte{
 		"result.json": dt,
+		"version":     []byte(subrequests.SubrequestsDescribeDefinition.Version),
 	}
 	return res, nil
 }

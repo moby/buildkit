@@ -45,6 +45,7 @@ func (o Outline) ToResult() (*client.Result, error) {
 		return nil, err
 	}
 	res.AddMeta("result.json", dt)
+	res.AddMeta("version", []byte(SubrequestsOutlineDefinition.Version))
 	return res, nil
 }
 
