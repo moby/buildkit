@@ -27,8 +27,8 @@ var SubrequestsTargetsDefinition = subrequests.Request{
 }
 
 type List struct {
-	Targets []Target
-	Sources [][]byte
+	Targets []Target `json:"targets"`
+	Sources [][]byte `json:"sources"`
 }
 
 func (l List) ToResult() (*client.Result, error) {
@@ -50,12 +50,12 @@ func (l List) ToResult() (*client.Result, error) {
 }
 
 type Target struct {
-	Name        string `json:"name,omitempty"`
-	Default     bool   `json:"default,omitempty"`
-	Description string `json:"description,omitempty"`
-	Base        string `json:"base,omitempty"`
-	Platform    string `json:"platform,omitempty"`
-	Location    *pb.Location
+	Name        string       `json:"name,omitempty"`
+	Default     bool         `json:"default,omitempty"`
+	Description string       `json:"description,omitempty"`
+	Base        string       `json:"base,omitempty"`
+	Platform    string       `json:"platform,omitempty"`
+	Location    *pb.Location `json:"location,omitempty"`
 }
 
 func PrintTargets(dt []byte, w io.Writer) error {

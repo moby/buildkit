@@ -60,27 +60,27 @@ func (o Outline) ToResult() (*client.Result, error) {
 }
 
 type Arg struct {
-	Name        string
-	Description string
-	Value       string
-	Location    *pb.Location
+	Name        string       `json:"name"`
+	Description string       `json:"description,omitempty"`
+	Value       string       `json:"value,omitempty"`
+	Location    *pb.Location `json:"location,omitempty"`
 }
 
 type Secret struct {
-	Name     string
-	Required bool
-	Location *pb.Location
+	Name     string       `json:"name"`
+	Required bool         `json:"required,omitempty"`
+	Location *pb.Location `json:"location,omitempty"`
 }
 
 type SSH struct {
-	Name     string
-	Required bool
-	Location *pb.Location
+	Name     string       `json:"name"`
+	Required bool         `json:"required,omitempty"`
+	Location *pb.Location `json:"location,omitempty"`
 }
 
 type CacheMount struct {
-	ID       string
-	Location *pb.Location
+	ID       string       `json:"ID"`
+	Location *pb.Location `json:"location,omitempty"`
 }
 
 func PrintOutline(dt []byte, w io.Writer) error {

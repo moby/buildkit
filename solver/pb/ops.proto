@@ -243,8 +243,8 @@ message Range {
 
 // Position is single location in a source file
 message Position {
-	int32 Line = 1;
-	int32 Character = 2;
+	int32 line = 1;
+	int32 character = 2;
 }
 
 message ExportCache {
