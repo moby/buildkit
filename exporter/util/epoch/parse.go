@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	keySourceDateEpoch = "source-date-epoch"
+	KeySourceDateEpoch = "source-date-epoch"
 )
 
 func ParseAttr(opt map[string]string) (*time.Time, map[string]string, error) {
@@ -20,7 +20,7 @@ func ParseAttr(opt map[string]string) (*time.Time, map[string]string, error) {
 
 	for k, v := range opt {
 		switch k {
-		case keySourceDateEpoch:
+		case KeySourceDateEpoch:
 			var err error
 			tm, err = parseTime(k, v)
 			if err != nil {
