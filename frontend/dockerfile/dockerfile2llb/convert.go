@@ -113,6 +113,8 @@ func ListTargets(ctx context.Context, dt []byte) (*targets.List, error) {
 			Name:        s.Name,
 			Description: s.Comment,
 			Default:     i == len(stages)-1,
+			Base:        s.BaseName,
+			Platform:    s.Platform,
 			Location:    toSourceLocation(s.Location),
 		}
 		l.Targets = append(l.Targets, t)

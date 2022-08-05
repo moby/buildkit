@@ -42,5 +42,7 @@ type Target struct {
 	Name        string `json:"name,omitempty"`
 	Default     bool   `json:"default,omitempty"`
 	Description string `json:"description,omitempty"`
+	Base        string `json:"base,omitempty"`
+	Platform    string `json:"platform,omitempty"`
 	Location    *pb.Location
 }

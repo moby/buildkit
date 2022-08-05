@@ -79,6 +79,7 @@ FROM second AS binary
 
 		target := list.Targets[0]
 		require.Equal(t, "build", target.Name)
+		require.Equal(t, "alpine", target.Base)
 		require.Equal(t, "defines stage for compiling the binary", target.Description)
 		require.Equal(t, false, target.Default)
 		require.Equal(t, int32(0), target.Location.SourceIndex)
@@ -87,6 +88,7 @@ FROM second AS binary
 		target = list.Targets[1]
 		require.Equal(t, "second", target.Name)
 		require.Equal(t, "", target.Description)
+		require.Equal(t, "busybox", target.Base)
 		require.Equal(t, false, target.Default)
 		require.Equal(t, int32(0), target.Location.SourceIndex)
 		require.Equal(t, int32(6), target.Location.Ranges[0].Start.Line)
