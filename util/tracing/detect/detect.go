@@ -73,21 +73,31 @@ func detectExporter() (sdktrace.SpanExporter, error) {
 	return nil, nil
 }
 
-func detect() error {
-	tp = trace.NewNoopTracerProvider()
-
+func getExporter() (sdktrace.SpanExporter, error) {
 	exp, err := detectExporter()
 	if err != nil {
-		return err
+		return nil, err
+	}
+
+	if exp != nil {
+		exp = &threadSafeExporterWrapper{
+			exporter: exp,
+		}
 	}
 
 	if Recorder != nil {
 		Recorder.SpanExporter = exp
 		exp = Recorder
 	}
+	return exp, nil
+}
 
-	if exp == nil {
-		return nil
+func detect() error {
+	tp = trace.NewNoopTracerProvider()
+
+	exp, err := getExporter()
+	if err != nil || exp == nil {
+		return err
 	}
 
 	// enable log with traceID when valid exporter
