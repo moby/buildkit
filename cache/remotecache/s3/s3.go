@@ -199,7 +199,7 @@ func (e *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 				}
 			}
 		} else {
-			layerDone := oneOffProgress(ctx, fmt.Sprintf("writing layer %s", l.Blob))
+			layerDone := progress.OneOff(ctx, fmt.Sprintf("writing layer %s", l.Blob))
 			bytes, err := content.ReadBlob(ctx, dgstPair.Provider, dgstPair.Descriptor)
 			if err != nil {
 				return nil, layerDone(err)
@@ -334,22 +334,6 @@ type readerAt struct {
 
 func (r *readerAt) Size() int64 {
 	return r.size
-}
-
-func oneOffProgress(ctx context.Context, id string) func(err error) error {
-	pw, _, _ := progress.NewFromContext(ctx)
-	now := time.Now()
-	st := progress.Status{
-		Started: &now,
-	}
-	pw.Write(id, st)
-	return func(err error) error {
-		now := time.Now()
-		st.Completed = &now
-		pw.Write(id, st)
-		pw.Close()
-		return err
-	}
 }
 
 type s3Client struct {

@@ -25,6 +25,7 @@ import (
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/leaseutil"
+	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/push"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
@@ -240,7 +241,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 		targetNames := strings.Split(e.opts.ImageName, ",")
 		for _, targetName := range targetNames {
 			if e.opt.Images != nil && e.store {
-				tagDone := oneOffProgress(ctx, "naming to "+targetName)
+				tagDone := progress.OneOff(ctx, "naming to "+targetName)
 				img := images.Image{
 					Target:    *desc,
 					CreatedAt: time.Now(),
@@ -355,7 +356,7 @@ func (e *imageExporterInstance) pushImage(ctx context.Context, src exporter.Sour
 }
 
 func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Image, src exporter.Source, s session.Group) (err0 error) {
-	unpackDone := oneOffProgress(ctx, "unpacking to "+img.Name)
+	unpackDone := progress.OneOff(ctx, "unpacking to "+img.Name)
 	defer func() {
 		unpackDone(err0)
 	}()
