@@ -33,9 +33,13 @@ import (
 const keyEntitlements = "llb.entitlements"
 
 type ExporterRequest struct {
-	Exporter        exporter.ExporterInstance
-	CacheExporter   remotecache.Exporter
-	CacheExportMode solver.CacheExportMode
+	Exporter       exporter.ExporterInstance
+	CacheExporters []RemoteCacheExporter
+}
+
+type RemoteCacheExporter struct {
+	remotecache.Exporter
+	solver.CacheExportMode
 }
 
 // ResolveWorkerFunc returns default worker for the temporary default non-distributed use cases
@@ -204,97 +208,35 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		}
 	}
 
+	cached, err := result.ConvertResult(res, func(res solver.ResultProxy) (solver.CachedResult, error) {
+		return res.Result(ctx)
+	})
+	if err != nil {
+		return nil, err
+	}
+	inp, err := result.ConvertResult(cached, func(res solver.CachedResult) (cache.ImmutableRef, error) {
+		workerRef, ok := res.Sys().(*worker.WorkerRef)
+		if !ok {
+			return nil, errors.Errorf("invalid reference: %T", res.Sys())
+		}
+		return workerRef.ImmutableRef, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	var exporterResponse map[string]string
+	cacheExporters, inlineCacheExporter := splitCacheExporters(exp.CacheExporters)
 	if e := exp.Exporter; e != nil {
-		cached, err := result.ConvertResult(res, func(res solver.ResultProxy) (solver.CachedResult, error) {
-			return res.Result(ctx)
-		})
+		exporterResponse, err = exportWithInlineCacheExporter(ctx, e, inlineCacheExporter, j, cached, inp)
 		if err != nil {
-			return nil, err
-		}
-
-		inp, err := result.ConvertResult(cached, func(res solver.CachedResult) (cache.ImmutableRef, error) {
-			workerRef, ok := res.Sys().(*worker.WorkerRef)
-			if !ok {
-				return nil, errors.Errorf("invalid reference: %T", res.Sys())
-			}
-			return workerRef.ImmutableRef, nil
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		if _, ok := asInlineCache(exp.CacheExporter); ok {
-			if err := inBuilderContext(ctx, j, "preparing layers for inline cache", j.SessionID+"-cache-inline", func(ctx context.Context, _ session.Group) error {
-				if cached.Ref != nil {
-					dtic, err := inlineCache(ctx, exp.CacheExporter, cached.Ref, e.Config().Compression(), session.NewGroup(sessionID))
-					if err != nil {
-						return err
-					}
-					if dtic != nil {
-						inp.AddMeta(exptypes.ExporterInlineCache, dtic)
-					}
-				}
-				for k, res := range cached.Refs {
-					dtic, err := inlineCache(ctx, exp.CacheExporter, res, e.Config().Compression(), session.NewGroup(sessionID))
-					if err != nil {
-						return err
-					}
-					if dtic != nil {
-						inp.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, k), dtic)
-					}
-				}
-				exp.CacheExporter = nil
-				return nil
-			}); err != nil {
-				return nil, err
-			}
-		}
-		if err := inBuilderContext(ctx, j, e.Name(), j.SessionID+"-export", func(ctx context.Context, _ session.Group) error {
-			exporterResponse, err = e.Export(ctx, inp, j.SessionID)
-			return err
-		}); err != nil {
 			return nil, err
 		}
 	}
 
-	g := session.NewGroup(j.SessionID)
-	var cacheExporterResponse map[string]string
-	if e := exp.CacheExporter; e != nil {
-		if err := inBuilderContext(ctx, j, "exporting cache", j.SessionID+"-cache", func(ctx context.Context, _ session.Group) error {
-			prepareDone := progress.OneOff(ctx, "preparing build cache for export")
-			if err := res.EachRef(func(res solver.ResultProxy) error {
-				r, err := res.Result(ctx)
-				if err != nil {
-					return err
-				}
-
-				workerRef, ok := r.Sys().(*worker.WorkerRef)
-				if !ok {
-					return errors.Errorf("invalid reference: %T", r.Sys())
-				}
-				ctx = withDescHandlerCacheOpts(ctx, workerRef.ImmutableRef)
-
-				// Configure compression
-				compressionConfig := e.Config().Compression
-
-				// all keys have same export chain so exporting others is not needed
-				_, err = r.CacheKeys()[0].Exporter.ExportTo(ctx, e, solver.CacheExportOpt{
-					ResolveRemotes: workerRefResolver(cacheconfig.RefConfig{Compression: compressionConfig}, false, g),
-					Mode:           exp.CacheExportMode,
-					Session:        g,
-					CompressionOpt: &compressionConfig,
-				})
-				return err
-			}); err != nil {
-				return prepareDone(err)
-			}
-			prepareDone(nil)
-			cacheExporterResponse, err = e.Finalize(ctx)
-			return err
-		}); err != nil {
-			return nil, err
-		}
+	cacheExporterResponse, err := runCacheExporters(ctx, cacheExporters, j, cached, inp)
+	if err != nil {
+		return nil, err
 	}
 
 	if exporterResponse == nil {
@@ -318,6 +260,105 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	return &client.SolveResponse{
 		ExporterResponse: exporterResponse,
 	}, nil
+}
+
+func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult], inp *result.Result[cache.ImmutableRef]) (map[string]string, error) {
+	eg, ctx := errgroup.WithContext(ctx)
+	g := session.NewGroup(j.SessionID)
+	var cacheExporterResponse map[string]string
+	resps := make([]map[string]string, len(exporters))
+	for i, exp := range exporters {
+		func(exp RemoteCacheExporter, i int) {
+			eg.Go(func() (err error) {
+				id := fmt.Sprint(j.SessionID, "-cache-", i)
+				return inBuilderContext(ctx, j, fmt.Sprint("exporting ", exp.Exporter.Name()), id, func(ctx context.Context, _ session.Group) error {
+					prepareDone := progress.OneOff(ctx, "preparing build cache for export")
+					if err := result.EachRef(cached, inp, func(res solver.CachedResult, ref cache.ImmutableRef) error {
+						ctx = withDescHandlerCacheOpts(ctx, ref)
+
+						// Configure compression
+						compressionConfig := exp.Config().Compression
+
+						// all keys have same export chain so exporting others is not needed
+						_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, exp, solver.CacheExportOpt{
+							ResolveRemotes: workerRefResolver(cacheconfig.RefConfig{Compression: compressionConfig}, false, g),
+							Mode:           exp.CacheExportMode,
+							Session:        g,
+							CompressionOpt: &compressionConfig,
+						})
+						return err
+					}); err != nil {
+						return prepareDone(err)
+					}
+					prepareDone(nil)
+					resps[i], err = exp.Finalize(ctx)
+					if err != nil {
+						return err
+					}
+					return nil
+				})
+			})
+		}(exp, i)
+	}
+	if err := eg.Wait(); err != nil {
+		return nil, err
+	}
+	for _, resp := range resps {
+		for k, v := range resp {
+			if cacheExporterResponse == nil {
+				cacheExporterResponse = make(map[string]string)
+			}
+			cacheExporterResponse[k] = v
+		}
+	}
+	return cacheExporterResponse, nil
+}
+
+func exportWithInlineCacheExporter(ctx context.Context, e exporter.ExporterInstance, inlineExporter *RemoteCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult], inp *result.Result[cache.ImmutableRef]) (exporterResponse map[string]string, err error) {
+	if inlineExporter != nil {
+		if err := inBuilderContext(ctx, j, "preparing layers for inline cache", j.SessionID+"-cache-inline", func(ctx context.Context, _ session.Group) error {
+			if cached.Ref != nil {
+				dtic, err := inlineCache(ctx, inlineExporter.Exporter, cached.Ref, e.Config().Compression(), session.NewGroup(j.SessionID))
+				if err != nil {
+					return err
+				}
+				if dtic != nil {
+					inp.AddMeta(exptypes.ExporterInlineCache, dtic)
+				}
+			}
+			for k, res := range cached.Refs {
+				dtic, err := inlineCache(ctx, inlineExporter.Exporter, res, e.Config().Compression(), session.NewGroup(j.SessionID))
+				if err != nil {
+					return err
+				}
+				if dtic != nil {
+					inp.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, k), dtic)
+				}
+			}
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+	}
+	if err := inBuilderContext(ctx, j, e.Name(), j.SessionID+"-export", func(ctx context.Context, _ session.Group) error {
+		exporterResponse, err = e.Export(ctx, inp, j.SessionID)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	return exporterResponse, nil
+}
+
+func splitCacheExporters(exporters []RemoteCacheExporter) (rest []RemoteCacheExporter, inline *RemoteCacheExporter) {
+	rest = make([]RemoteCacheExporter, 0, len(exporters))
+	for i, exp := range exporters {
+		if _, ok := asInlineCache(exp.Exporter); ok {
+			inline = &exporters[i]
+			continue
+		}
+		rest = append(rest, exp)
+	}
+	return rest, inline
 }
 
 type inlineCacheExporter interface {

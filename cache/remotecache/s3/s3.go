@@ -161,6 +161,10 @@ type exporter struct {
 	config   Config
 }
 
+func (*exporter) Name() string {
+	return "exporting cache to s3"
+}
+
 func (e *exporter) Config() remotecache.Config {
 	return remotecache.Config{
 		Compression: compression.New(compression.Default),
