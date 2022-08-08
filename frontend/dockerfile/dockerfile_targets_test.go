@@ -75,7 +75,7 @@ FROM second AS binary
 		require.Equal(t, 1, len(list.Sources))
 		require.Equal(t, dockerfile, list.Sources[0])
 
-		require.Equal(t, 3, len(list.Targets))
+		require.Equal(t, 4, len(list.Targets))
 
 		target := list.Targets[0]
 		require.Equal(t, "build", target.Name)
@@ -94,6 +94,14 @@ FROM second AS binary
 		require.Equal(t, int32(6), target.Location.Ranges[0].Start.Line)
 
 		target = list.Targets[2]
+		require.Equal(t, "", target.Name)
+		require.Equal(t, "", target.Description)
+		require.Equal(t, "alpine", target.Base)
+		require.Equal(t, false, target.Default)
+		require.Equal(t, int32(0), target.Location.SourceIndex)
+		require.Equal(t, int32(9), target.Location.Ranges[0].Start.Line)
+
+		target = list.Targets[3]
 		require.Equal(t, "binary", target.Name)
 		require.Equal(t, "returns the compiled binary", target.Description)
 		require.Equal(t, true, target.Default)

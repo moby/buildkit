@@ -106,9 +106,6 @@ func ListTargets(ctx context.Context, dt []byte) (*targets.List, error) {
 	}
 
 	for i, s := range stages {
-		if s.Name == "" && i != len(stages)-1 {
-			continue
-		}
 		t := targets.Target{
 			Name:        s.Name,
 			Description: s.Comment,
