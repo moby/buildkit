@@ -57,6 +57,13 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, sessionI
 		return nil, errors.Errorf("unable to export multiple refs, missing platforms mapping")
 	}
 
+	var p exptypes.Platforms
+	if ok && len(platformsBytes) > 0 {
+		if err := json.Unmarshal(platformsBytes, &p); err != nil {
+			return nil, errors.Wrapf(err, "failed to parse platforms passed to exporter")
+		}
+	}
+
 	if len(inp.Refs) == 0 {
 		remotes, err := ic.exportLayers(ctx, opts.RefCfg, session.NewGroup(sessionID), inp.Ref)
 		if err != nil {
@@ -79,14 +86,12 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, sessionI
 		if mfstDesc.Annotations == nil {
 			mfstDesc.Annotations = make(map[string]string)
 		}
+		if len(p.Platforms) == 1 {
+			mfstDesc.Platform = &p.Platforms[0].Platform
+		}
 		mfstDesc.Annotations[exptypes.ExporterConfigDigestKey] = configDesc.Digest.String()
 
 		return mfstDesc, nil
-	}
-
-	var p exptypes.Platforms
-	if err := json.Unmarshal(platformsBytes, &p); err != nil {
-		return nil, errors.Wrapf(err, "failed to parse platforms passed to exporter")
 	}
 
 	if len(p.Platforms) != len(inp.Refs) {

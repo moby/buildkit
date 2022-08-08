@@ -521,17 +521,23 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 					return errors.Wrapf(err, "failed to marshal build info")
 				}
 
+				p := platforms.DefaultSpec()
+				if tp != nil {
+					p = *tp
+				}
+				p = platforms.Normalize(p)
+				k := platforms.Format(p)
+
 				if !exportMap {
 					res.AddMeta(exptypes.ExporterImageConfigKey, config)
 					res.AddMeta(exptypes.ExporterBuildInfo, buildinfo)
 					res.SetRef(ref)
-				} else {
-					p := platforms.DefaultSpec()
-					if tp != nil {
-						p = *tp
-					}
 
-					k := platforms.Format(p)
+					expPlatforms.Platforms[i] = exptypes.Platform{
+						ID:       k,
+						Platform: p,
+					}
+				} else {
 					res.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterImageConfigKey, k), config)
 					res.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, k), buildinfo)
 					res.AddRef(k, ref)
@@ -549,13 +555,11 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		return nil, err
 	}
 
-	if exportMap {
-		dt, err := json.Marshal(expPlatforms)
-		if err != nil {
-			return nil, err
-		}
-		res.AddMeta(exptypes.ExporterPlatformsKey, dt)
+	dt, err := json.Marshal(expPlatforms)
+	if err != nil {
+		return nil, err
 	}
+	res.AddMeta(exptypes.ExporterPlatformsKey, dt)
 
 	return res, nil
 }
