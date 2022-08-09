@@ -73,8 +73,9 @@ const (
 	CapMetaDescription apicaps.CapID = "meta.description"
 	CapMetaExportCache apicaps.CapID = "meta.exportcache"
 
-	CapRemoteCacheGHA apicaps.CapID = "cache.gha"
-	CapRemoteCacheS3  apicaps.CapID = "cache.s3"
+	CapRemoteCacheGHA    apicaps.CapID = "cache.gha"
+	CapRemoteCacheS3     apicaps.CapID = "cache.s3"
+	CapRemoteCacheAzBlob apicaps.CapID = "cache.azblob"
 
 	CapMergeOp apicaps.CapID = "mergeop"
 	CapDiffOp  apicaps.CapID = "diffop"
@@ -420,6 +421,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapRemoteCacheS3,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapRemoteCacheAzBlob,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

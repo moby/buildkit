@@ -3,6 +3,8 @@ module github.com/moby/buildkit
 go 1.18
 
 require (
+	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.4.1
 	github.com/Microsoft/go-winio v0.5.2
 	github.com/Microsoft/hcsshim v0.9.3
 	github.com/agext/levenshtein v1.2.3
@@ -54,7 +56,7 @@ require (
 	github.com/pkg/profile v1.5.0
 	github.com/serialx/hashring v0.0.0-20190422032157-8b2912629002
 	github.com/sirupsen/logrus v1.8.1
-	github.com/stretchr/testify v1.7.0
+	github.com/stretchr/testify v1.7.1
 	github.com/tonistiigi/fsutil v0.0.0-20220510150904-0dbf3a8a7d58
 	github.com/tonistiigi/go-actions-cache v0.0.0-20220404170428-0bdeb6e1eac7
 	github.com/tonistiigi/go-archvariant v1.0.0
@@ -73,8 +75,8 @@ require (
 	go.opentelemetry.io/otel/sdk v1.4.1
 	go.opentelemetry.io/otel/trace v1.4.1
 	go.opentelemetry.io/proto/otlp v0.12.0
-	golang.org/x/crypto v0.0.0-20220315160706-3147a52a75dd
-	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd
+	golang.org/x/crypto v0.0.0-20220511200225-c6db032c6c88
+	golang.org/x/net v0.0.0-20220425223048-2871e0cb64e4
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a
 	golang.org/x/time v0.0.0-20220210224613-90d013bbcef8
@@ -83,6 +85,9 @@ require (
 )
 
 require (
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.1.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/internal v1.0.0 // indirect
+	github.com/AzureAD/microsoft-authentication-library-for-go v0.6.0 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.16.3 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.4.1 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.12.4 // indirect
@@ -112,7 +117,7 @@ require (
 	github.com/felixge/httpsnoop v1.0.2 // indirect
 	github.com/go-logr/logr v1.2.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/golang-jwt/jwt/v4 v4.1.0 // indirect
+	github.com/golang-jwt/jwt/v4 v4.4.2 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0 // indirect
@@ -121,9 +126,11 @@ require (
 	github.com/hashicorp/go-cleanhttp v0.5.1 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.1 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
+	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369 // indirect
 	github.com/moby/sys/mount v0.3.0 // indirect
 	github.com/moby/term v0.0.0-20210619224110-3f7ff695adc6 // indirect
+	github.com/pkg/browser v0.0.0-20210115035449-ce105d075bb4 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.12.2 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect

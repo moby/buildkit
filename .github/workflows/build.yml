@@ -154,6 +154,29 @@ jobs:
         run: |
           hack/s3_test/run_test.sh
 
+  test-azblob:
+    runs-on: ubuntu-20.04
+    needs:
+      - base
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v3
+      -
+        name: Expose GitHub Runtime
+        uses: crazy-max/ghaction-github-runtime@v2
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          version: ${{ env.BUILDX_VERSION }}
+          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
+          buildkitd-flags: --debug
+      -
+        name: Test
+        run: |
+          hack/azblob_test/run_test.sh
+
   test-os:
     runs-on: ${{ matrix.os }}
     strategy:
