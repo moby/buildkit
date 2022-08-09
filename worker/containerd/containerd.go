@@ -18,8 +18,8 @@ import (
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/network/netproviders"
 	"github.com/moby/buildkit/util/winlayers"
-	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
+	wlabel "github.com/moby/buildkit/worker/label"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/semaphore"
@@ -67,16 +67,16 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		hostname = "unknown"
 	}
 	xlabels := map[string]string{
-		worker.LabelExecutor:    "containerd",
-		worker.LabelSnapshotter: snapshotterName,
-		worker.LabelHostname:    hostname,
-		worker.LabelNetwork:     npResolvedMode,
+		wlabel.Executor:    "containerd",
+		wlabel.Snapshotter: snapshotterName,
+		wlabel.Hostname:    hostname,
+		wlabel.Network:     npResolvedMode,
 	}
 	if apparmorProfile != "" {
-		xlabels[worker.LabelApparmorProfile] = apparmorProfile
+		xlabels[wlabel.ApparmorProfile] = apparmorProfile
 	}
-	xlabels[worker.LabelContainerdNamespace] = ns
-	xlabels[worker.LabelContainerdUUID] = serverInfo.UUID
+	xlabels[wlabel.ContainerdNamespace] = ns
+	xlabels[wlabel.ContainerdUUID] = serverInfo.UUID
 	for k, v := range labels {
 		xlabels[k] = v
 	}
