@@ -79,7 +79,7 @@ func dispatchRunMounts(d *dispatchState, c *instructions.RunCommand, sources []*
 			))
 		}
 		if mount.Type == instructions.MountTypeSecret {
-			secret, err := dispatchSecret(mount)
+			secret, err := dispatchSecret(d, mount, c.Location())
 			if err != nil {
 				return nil, err
 			}
@@ -87,7 +87,7 @@ func dispatchRunMounts(d *dispatchState, c *instructions.RunCommand, sources []*
 			continue
 		}
 		if mount.Type == instructions.MountTypeSSH {
-			ssh, err := dispatchSSH(mount)
+			ssh, err := dispatchSSH(d, mount, c.Location())
 			if err != nil {
 				return nil, err
 			}
