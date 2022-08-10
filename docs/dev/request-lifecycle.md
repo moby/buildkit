@@ -23,57 +23,54 @@ A solve request goes through the following:
 5. The results are plumbed back to the client, and the temporary job and bridge
    are discarded.
 
-```plantuml
-@startuml
-ControlClient -> ControlServer : Solve
-ControlServer -> Solver : Solve
+<!-- Diagram from https://gist.github.com/hinshun/9618a3c4b64b3bb16864603ef332f3a5 --->
+```mermaid
+sequenceDiagram
+    ControlClient ->> ControlServer : Solve
+    ControlServer ->> Solver : Solve
 
-Solver -> Job : Create job
-activate Job
+    Solver ->> Job : Create job
+    activate Job
 
-Solver -> FrontendLLBBridge : Create bridge over Job
-activate FrontendLLBBridge
+    Solver ->> FrontendLLBBridge : Create bridge over Job
+    activate FrontendLLBBridge
 
+    Solver ->> FrontendLLBBridge : Solve
 
-Solver -> FrontendLLBBridge : Solve
-
-alt definition-based solve
-    FrontendLLBBridge -> Job : Build
-    activate Job #FFBBBB
-    Job --> FrontendLLBBridge : Result
-    deactivate Job
-else frontend-based solve
-    FrontendLLBBridge -> Frontend : Solve
-    activate Frontend #FFBBBB
-    note over FrontendLLBBridge, Frontend : Frontend must be either \ndockerfile.v0 or gateway.v0.
-
-    loop
-        Frontend -[#SeaGreen]> FrontendLLBBridge : Solve
-        FrontendLLBBridge -[#SeaGreen]> Job : Build
-        activate Job #SeaGreen
-        note right FrontendLLBBridge : Implementations may also call\nFrontendLLBBridge to solve graphs\nbefore returning the result.
-        Job -[#SeaGreen]-> FrontendLLBBridge : Result
+    alt definition-based solve
+        FrontendLLBBridge ->> Job : Build
+        activate Job
+        Job -->> FrontendLLBBridge : Result
         deactivate Job
-        FrontendLLBBridge -[#SeaGreen]-> Frontend : Result
+    else frontend-based solve
+        FrontendLLBBridge ->> Frontend : Solve
+        activate Frontend
+        note over FrontendLLBBridge, Frontend : Frontend must be either <br/>dockerfile.v0 or gateway.v0.
+
+        loop
+            Frontend ->> FrontendLLBBridge : Solve
+            FrontendLLBBridge ->> Job : Build
+            activate Job
+            note over FrontendLLBBridge, Frontend : Implementations may also<br/>call FrontendLLBBridge to<br/>solve graphs before<br/>returning the result.
+            Job -->> FrontendLLBBridge : Result
+            deactivate Job
+            FrontendLLBBridge -->> Frontend : Result
+        end
+
+        Frontend -->> FrontendLLBBridge : Result
+        deactivate Frontend
     end
 
-    Frontend --> FrontendLLBBridge : Result
-    deactivate Frontend
-end
+    FrontendLLBBridge -->> Solver : Result
+    Solver ->> FrontendLLBBridge : Discard
+    deactivate FrontendLLBBridge
 
-FrontendLLBBridge --> Solver : Result
-Solver -> FrontendLLBBridge : Discard
-deactivate FrontendLLBBridge
+    Solver ->> Job : Discard
+    deactivate Job
 
-Solver -> Job : Discard
-deactivate Job
-
-Solver --> ControlServer : Result
-ControlServer --> ControlClient : Result
-@enduml
+    Solver -->> ControlServer : Result
+    ControlServer -->> ControlClient : Result
 ```
-
-> Diagram from <https://gist.github.com/hinshun/9618a3c4b64b3bb16864603ef332f3a5>
 
 An important detail is that frontends may also issue solve requests, which are
 often definition-based solves, but can also be frontend-based solves, allowing
@@ -110,55 +107,55 @@ the following:
      instructions and builds an LLB. The LLB is marshaled into a definition and
      sent in a solve request.
 
-```plantuml
-@startuml
-participant Job
-participant FrontendLLBBridge
+<!-- Diagram from https://gist.github.com/hinshun/2c18e16b07b38049bac72a4b602985b5 -->
+```mermaid
+sequenceDiagram
+    participant Job
+    participant FrontendLLBBridge
 
-box "Dockerfile frontend"
-    participant "Gateway Forwarder" as Frontend
+    # FIXME: use boxes with https://github.com/mermaid-js/mermaid/issues/1505
+    # box "Dockerfile frontend"
+    participant Frontend as Gateway Forwarder
     participant BuildFunc
-end box
+    # end box
 
-[-> FrontendLLBBridge : Solve
-FrontendLLBBridge -> Frontend : Solve
+    # FIXME: use incoming messages with https://github.com/mermaid-js/mermaid/issues/1357
+    Job ->> FrontendLLBBridge : Solve
+    FrontendLLBBridge ->> Frontend : Solve
 
-Frontend -> BuildFunc : Call
-activate BuildFunc
+    Frontend ->> BuildFunc : Call
+    activate BuildFunc
 
-BuildFunc -[#SeaGreen]> FrontendLLBBridge : Solve
-FrontendLLBBridge -[#SeaGreen]> Job : Build
-activate Job #SeaGreen
-note over Frontend : Solve to read Dockerfile from\nlocal context, git, or HTTP.
-Job -[#SeaGreen]-> FrontendLLBBridge : Result
-deactivate Job
-FrontendLLBBridge -[#SeaGreen]-> BuildFunc : Result
-
-alt Dockerfile has syntax directive
-    BuildFunc -> FrontendLLBBridge : Solve
-    activate FrontendLLBBridge #FFBBBB
-    note over Frontend : Dockerfile delegates solve to\ngateway.v0 frontend.
-    FrontendLLBBridge --> BuildFunc : Result
-    deactivate FrontendLLBBridge
-else Dockerfile has no syntax directive
-    BuildFunc -> FrontendLLBBridge : Solve
-    FrontendLLBBridge -> Job : Build
-    activate Job #FFBBBB
-    note over Frontend : Solve graph generated by\nDockerfile2LLB.
-    Job --> FrontendLLBBridge : Result
+    BuildFunc ->> FrontendLLBBridge : Solve
+    FrontendLLBBridge ->> Job : Build
+    activate Job
+    note over Frontend : Solve to read<br/>Dockerfile
+    Job -->> FrontendLLBBridge : Result
     deactivate Job
-    FrontendLLBBridge --> BuildFunc : Result
-end
+    FrontendLLBBridge -->> BuildFunc : Result
 
-BuildFunc --> Frontend : Return
-deactivate BuildFunc
+    alt Dockerfile has syntax directive
+        BuildFunc ->> FrontendLLBBridge : Solve
+        activate FrontendLLBBridge #FFBBBB
+        note over Frontend : Dockerfile delegates<br/>to gateway.v0
+        FrontendLLBBridge -->> BuildFunc : Result
+        deactivate FrontendLLBBridge
+    else Dockerfile has no syntax directive
+        BuildFunc ->> FrontendLLBBridge : Solve
+        FrontendLLBBridge ->> Job : Build
+        activate Job
+        note over Frontend : Solved by<br/>Dockerfile2LLB
+        Job -->> FrontendLLBBridge : Result
+        deactivate Job
+        FrontendLLBBridge -->> BuildFunc : Result
+    end
 
-Frontend --> FrontendLLBBridge : Result
-FrontendLLBBridge -->[ : Result
-@enduml
+    BuildFunc -->> Frontend : Return
+    deactivate BuildFunc
+
+    Frontend -->> FrontendLLBBridge : Result
+    FrontendLLBBridge -->> Job : Result
 ```
-
-> Diagram from <https://gist.github.com/hinshun/2c18e16b07b38049bac72a4b602985b5>
 
 ## Gateway frontend (`gateway.v0`)
 
@@ -185,67 +182,65 @@ following:
 6. The container exits, and then the results are plumbed back to the LLB
    bridge, which plumbs them back to the client.
 
-```plantuml
-@startuml
-participant Job
-participant FrontendLLBBridge
-participant "Gateway frontend" as Frontend
-participant Worker
-participant LLBBridgeForwarder
-participant "Executor" as Executor
-participant "Frontend Container" as Container
-
-[-> FrontendLLBBridge : Solve
-FrontendLLBBridge -> Frontend : Solve
-Frontend -> Worker : ResolveImageConfig
-activate Worker #FFBBBB
-Worker --> Frontend : Digest
-deactivate Worker
-Frontend -[#SeaGreen]> FrontendLLBBridge : Solve
-
-FrontendLLBBridge -[#SeaGreen]> Job : Build
-activate Job #SeaGreen
-note right of FrontendLLBBridge : The frontend image specified\nby build option "source" is solved\nand the rootfs of that image\nis then used to run the container.
-Job -[#SeaGreen]-> FrontendLLBBridge : Result
-deactivate Job
-
-FrontendLLBBridge -[#SeaGreen]-> Frontend : Result
-
-note over LLBBridgeForwarder : A temporary gRPC server is created\n that listens on the stdio of the\nfrontend container. The requests are\nthen forwarded to LLB bridge.
-Frontend -> LLBBridgeForwarder : Create forwarder
-activate LLBBridgeForwarder
-
-Frontend -[#MediumSlateBlue]> FrontendLLBBridge : Exec
-FrontendLLBBridge -[#MediumSlateBlue]> Worker : Exec
-Worker -[#MediumSlateBlue]> Executor : Exec
-
-Executor -[#MediumSlateBlue]> Container : Create container task
-activate Container #MediumSlateBlue
-
-group container-based solve
-  note left of Container : Frontend images may request\ndefinition/frontend-based solves\nlike any other client.
-  loop
-    Container -> LLBBridgeForwarder : Solve
-    LLBBridgeForwarder -> FrontendLLBBridge : Solve
-    activate FrontendLLBBridge #FFBBBB
-    FrontendLLBBridge --> LLBBridgeForwarder : Result
-    deactivate FrontendLLBBridge
-    LLBBridgeForwarder --> Container : Result
-  end
-end
-
-Container -[#MediumSlateBlue]-> Executor : Exit
-deactivate Container
-
-Executor -[#MediumSlateBlue]-> Worker : Exit
-Worker -[#MediumSlateBlue]-> FrontendLLBBridge : Exit
-FrontendLLBBridge -[#MediumSlateBlue]-> Frontend : Exit
-Frontend -> LLBBridgeForwarder : Discard
-deactivate LLBBridgeForwarder
-
-Frontend --> FrontendLLBBridge : Result
-FrontendLLBBridge -->[ : Result
-@enduml
+<!-- Diagram from https://gist.github.com/hinshun/ecf554c32522fc94a33488b353230b27 -->
+```mermaid
+sequenceDiagram
+    participant Job
+    participant FrontendLLBBridge
+    participant Frontend as Gateway frontend
+    participant Worker
+    participant LLBBridgeForwarder
+    participant Executor
+    participant Container as Frontend Container
+    
+    Job ->> FrontendLLBBridge : Solve
+    FrontendLLBBridge ->> Frontend : Solve
+    Frontend ->> Worker : ResolveImageConfig
+    activate Worker
+    Worker -->> Frontend : Digest
+    deactivate Worker
+    Frontend ->> FrontendLLBBridge : Solve
+    
+    FrontendLLBBridge ->> Job : Build
+    activate Job
+    note over FrontendLLBBridge, Frontend : The frontend image specified<br/>by build option "source" is solved<br/>and the rootfs of that image<br/>is then used to run the container.
+    Job -->> FrontendLLBBridge : Result
+    deactivate Job
+    
+    FrontendLLBBridge -->> Frontend : Result
+    
+    note over LLBBridgeForwarder, Executor : A temporary gRPC server is created <br/>that listens on stdio of frontend<br/>container. Requests are then<br/>forwarded to LLB bridge.
+    Frontend ->> LLBBridgeForwarder : Create forwarder
+    activate LLBBridgeForwarder
+    
+    Frontend ->> FrontendLLBBridge : Exec
+    FrontendLLBBridge ->> Worker : Exec
+    Worker ->> Executor : Exec
+    
+    Executor ->> Container : Create container task
+    activate Container #MediumSlateBlue
+    
+    rect rgba(100, 100, 100, .1)
+      note over Executor, Container : Frontend images may request<br/>definition/frontend-based solves<br/>like any other client.
+      loop
+        Container ->> LLBBridgeForwarder : Solve
+        LLBBridgeForwarder ->> FrontendLLBBridge : Solve
+        activate FrontendLLBBridge #FFBBBB
+        FrontendLLBBridge -->> LLBBridgeForwarder : Result
+        deactivate FrontendLLBBridge
+        LLBBridgeForwarder -->> Container : Result
+      end
+    end
+    
+    Container -->> Executor : Exit
+    deactivate Container
+    
+    Executor -->> Worker : Exit
+    Worker -->> FrontendLLBBridge : Exit
+    FrontendLLBBridge -->> Frontend : Exit
+    Frontend ->> LLBBridgeForwarder : Discard
+    deactivate LLBBridgeForwarder
+    
+    Frontend -->> FrontendLLBBridge : Result
+    FrontendLLBBridge -->> Job : Result
 ```
-
-> Diagram from <https://gist.github.com/hinshun/ecf554c32522fc94a33488b353230b27>
