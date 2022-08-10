@@ -2846,7 +2846,7 @@ RUN FOO=abc ash /app/script.sh
 For examples of Dockerfiles, refer to:
 
 - The ["build images" section](https://docs.docker.com/develop/develop-images/dockerfile_best-practices/)
-- The ["get started](https://docs.docker.com/get-started/)
+- The ["get started" tutorial](https://docs.docker.com/get-started/)
 - The [language-specific getting started guides](https://docs.docker.com/language/)
 
 [^1]: Value required
