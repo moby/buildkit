@@ -283,7 +283,7 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 		p.releaseTmpLeases = done
 		defer imageutil.AddLease(done)
 
-		resolveProgressDone := oneOffProgress(ctx, "resolve "+p.Src.String())
+		resolveProgressDone := progress.OneOff(ctx, "resolve "+p.Src.String())
 		defer func() {
 			resolveProgressDone(err)
 		}()
@@ -470,21 +470,4 @@ func cacheKeyFromConfig(dt []byte, layerLimit *int) (digest.Digest, error) {
 	}
 
 	return identity.ChainID(img.RootFS.DiffIDs), nil
-}
-
-func oneOffProgress(ctx context.Context, id string) func(err error) error {
-	pw, _, _ := progress.NewFromContext(ctx)
-	now := time.Now()
-	st := progress.Status{
-		Started: &now,
-	}
-	pw.Write(id, st)
-	return func(err error) error {
-		// TODO: set error on status
-		now := time.Now()
-		st.Completed = &now
-		pw.Write(id, st)
-		pw.Close()
-		return err
-	}
 }

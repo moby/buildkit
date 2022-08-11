@@ -216,7 +216,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 		}
 	}
 
-	report := oneOffProgress(ctx, "sending tarball")
+	report := progress.OneOff(ctx, "sending tarball")
 	if err := archiveexporter.Export(ctx, mprovider, w, expOpts...); err != nil {
 		w.Close()
 		if grpcerrors.Code(err) == codes.AlreadyExists {
@@ -229,23 +229,6 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 		return resp, report(nil)
 	}
 	return resp, report(err)
-}
-
-func oneOffProgress(ctx context.Context, id string) func(err error) error {
-	pw, _, _ := progress.NewFromContext(ctx)
-	now := time.Now()
-	st := progress.Status{
-		Started: &now,
-	}
-	pw.Write(id, st)
-	return func(err error) error {
-		// TODO: set error on status
-		now := time.Now()
-		st.Completed = &now
-		pw.Write(id, st)
-		pw.Close()
-		return err
-	}
 }
 
 func normalizedNames(name string) ([]string, error) {

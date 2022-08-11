@@ -279,7 +279,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	var cacheExporterResponse map[string]string
 	if e := exp.CacheExporter; e != nil {
 		if err := inBuilderContext(ctx, j, "exporting cache", j.SessionID+"-cache", func(ctx context.Context, _ session.Group) error {
-			prepareDone := oneOffProgress(ctx, "preparing build cache for export")
+			prepareDone := progress.OneOff(ctx, "preparing build cache for export")
 			if err := res.EachRef(func(res solver.ResultProxy) error {
 				r, err := res.Result(ctx)
 				if err != nil {
@@ -420,23 +420,6 @@ func allWorkers(wc *worker.Controller) func(func(w worker.Worker) error) error {
 			}
 		}
 		return nil
-	}
-}
-
-func oneOffProgress(ctx context.Context, id string) func(err error) error {
-	pw, _, _ := progress.NewFromContext(ctx)
-	now := time.Now()
-	st := progress.Status{
-		Started: &now,
-	}
-	pw.Write(id, st)
-	return func(err error) error {
-		// TODO: set error on status
-		now := time.Now()
-		st.Completed = &now
-		pw.Write(id, st)
-		pw.Close()
-		return err
 	}
 }
 

@@ -172,7 +172,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, sessionI
 		MediaType:   idx.MediaType,
 		Annotations: opts.Annotations.Platform(nil).IndexDescriptor,
 	}
-	idxDone := oneOffProgress(ctx, "exporting manifest list "+idxDigest.String())
+	idxDone := progress.OneOff(ctx, "exporting manifest list "+idxDigest.String())
 
 	if err := content.WriteBlob(ctx, ic.opt.ContentStore, idxDigest.String(), bytes.NewReader(idxBytes), idxDesc, content.WithLabels(labels)); err != nil {
 		return nil, idxDone(errors.Wrapf(err, "error writing manifest list blob %s", idxDigest))
@@ -193,7 +193,7 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, refCfg cacheconfig.RefC
 	span, ctx := tracing.StartSpan(ctx, "export layers", trace.WithAttributes(attr...))
 
 	eg, ctx := errgroup.WithContext(ctx)
-	layersDone := oneOffProgress(ctx, "exporting layers")
+	layersDone := progress.OneOff(ctx, "exporting layers")
 
 	out := make([]solver.Remote, len(refs))
 
@@ -311,7 +311,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 		Digest: mfstDigest,
 		Size:   int64(len(mfstJSON)),
 	}
-	mfstDone := oneOffProgress(ctx, "exporting manifest "+mfstDigest.String())
+	mfstDone := progress.OneOff(ctx, "exporting manifest "+mfstDigest.String())
 
 	if err := content.WriteBlob(ctx, ic.opt.ContentStore, mfstDigest.String(), bytes.NewReader(mfstJSON), mfstDesc, content.WithLabels((labels))); err != nil {
 		return nil, nil, mfstDone(errors.Wrapf(err, "error writing manifest blob %s", mfstDigest))
@@ -323,7 +323,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 		Size:      int64(len(config)),
 		MediaType: configType,
 	}
-	configDone := oneOffProgress(ctx, "exporting config "+configDigest.String())
+	configDone := progress.OneOff(ctx, "exporting config "+configDigest.String())
 
 	if err := content.WriteBlob(ctx, ic.opt.ContentStore, configDigest.String(), bytes.NewReader(config), configDesc); err != nil {
 		return nil, nil, configDone(errors.Wrap(err, "error writing config blob"))
@@ -561,21 +561,4 @@ func getRefMetadata(ref cache.ImmutableRef, limit int) []refMetadata {
 		meta.createdAt = &createdAt
 	}
 	return metas
-}
-
-func oneOffProgress(ctx context.Context, id string) func(err error) error {
-	pw, _, _ := progress.NewFromContext(ctx)
-	now := time.Now()
-	st := progress.Status{
-		Started: &now,
-	}
-	pw.Write(id, st)
-	return func(err error) error {
-		// TODO: set error on status
-		now := time.Now()
-		st.Completed = &now
-		pw.Write(id, st)
-		pw.Close()
-		return err
-	}
 }
