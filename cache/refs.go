@@ -1590,9 +1590,10 @@ func (p sharableMountPool) setSharable(mounts snapshot.Mountable) snapshot.Mount
 // This is useful to share writable overlayfs mounts.
 //
 // NOTE: Mount() method doesn't return the underlying mount configuration (e.g. overlayfs mounts)
-//       instead it always return bind mounts of the temporary mount point. So if the caller
-//       needs to inspect the underlying mount configuration (e.g. for optimized differ for
-//       overlayfs), this wrapper shouldn't be used.
+//
+//	instead it always return bind mounts of the temporary mount point. So if the caller
+//	needs to inspect the underlying mount configuration (e.g. for optimized differ for
+//	overlayfs), this wrapper shouldn't be used.
 type sharableMountable struct {
 	snapshot.Mountable
 
