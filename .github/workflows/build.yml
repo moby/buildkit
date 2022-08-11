@@ -29,6 +29,7 @@ env:
   CACHE_GHA_SCOPE_CROSS: "cross"
   TESTFLAGS: "-v --parallel=6 --timeout=30m"
   BUILDX_VERSION: "v0.8.2"  # leave empty to use the one available on GitHub virtual environment
+  GO_VERSION: "1.19"
 
 jobs:
   base:
@@ -170,7 +171,7 @@ jobs:
         name: Set up Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.18
+          go-version: ${{ env.GO_VERSION }}
       -
         name: Cache Go modules
         uses: actions/cache@v2
