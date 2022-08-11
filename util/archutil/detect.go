@@ -87,9 +87,9 @@ func SupportedPlatforms(noCache bool) []ocispecs.Platform {
 	return arr
 }
 
-//WarnIfUnsupported validates the platforms and show warning message if there is,
-//the end user could fix the issue based on those warning, and thus no need to drop
-//the platform from the candidates.
+// WarnIfUnsupported validates the platforms and show warning message if there is,
+// the end user could fix the issue based on those warning, and thus no need to drop
+// the platform from the candidates.
 func WarnIfUnsupported(pfs []ocispecs.Platform) {
 	def := nativePlatform()
 	for _, p := range pfs {
