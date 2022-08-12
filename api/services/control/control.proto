@@ -19,6 +19,9 @@ service Control {
 	rpc Session(stream BytesMessage) returns (stream BytesMessage);
 	rpc ListWorkers(ListWorkersRequest) returns (ListWorkersResponse);
 	rpc Info(InfoRequest) returns (InfoResponse);
+
+	// Earthly-specific.
+	rpc ShutdownIfIdle(ShutdownIfIdleRequest) returns (ShutdownIfIdleResponse);
 }
 
 message PruneRequest {
@@ -165,4 +168,11 @@ message InfoResponse {
 
 	// Earthly-specific.
 	uint64 numSessions = 101;
+}
+
+message ShutdownIfIdleRequest {}
+
+message ShutdownIfIdleResponse {
+	bool willShutdown = 1;
+	uint64 numSessions = 2;
 }

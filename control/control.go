@@ -489,6 +489,14 @@ func (c *Controller) Info(ctx context.Context, r *controlapi.InfoRequest) (*cont
 	}, nil
 }
 
+func (c *Controller) ShutdownIfIdle(ctx context.Context, r *controlapi.ShutdownIfIdleRequest) (*controlapi.ShutdownIfIdleResponse, error) {
+	ok, numSessions := c.opt.SessionManager.StopIfIdle()
+	return &controlapi.ShutdownIfIdleResponse{
+		WillShutdown: ok,
+		NumSessions:  uint64(numSessions),
+	}, nil
+}
+
 func (c *Controller) gc() {
 	c.gcmu.Lock()
 	defer c.gcmu.Unlock()

@@ -268,7 +268,8 @@ func main() {
 			os.RemoveAll(lockPath)
 		}()
 
-		controller, err := newController(c, &cfg)
+		shutdownCh := make(chan struct{})
+		controller, err := newController(c, &cfg, shutdownCh)
 		if err != nil {
 			return err
 		}
@@ -276,14 +277,25 @@ func main() {
 		controller.Register(server)
 
 		// earthly specific
+		ctxReg, cancelReg := context.WithCancel(ctx)
+		defer cancelReg()
 		lrPort, ok := os.LookupEnv("BUILDKIT_LOCAL_REGISTRY_LISTEN_PORT")
 		if ok {
 			logrus.Infof("Starting local registry for outputs on port %s", lrPort)
-			serveErr := registry.Serve(ctx, fmt.Sprintf("0.0.0.0:%s", lrPort))
+			serveErr := registry.Serve(ctxReg, fmt.Sprintf("0.0.0.0:%s", lrPort))
 			go func() {
-				err := <-serveErr
-				if err != nil {
-					logrus.Errorf("Registry serve error: %s\n", err.Error())
+				for {
+					select {
+					case <-shutdownCh:
+						cancelReg()
+					case err := <-serveErr:
+						if err != nil {
+							logrus.Errorf("Registry serve error: %s\n", err.Error())
+						}
+						return
+					case <-ctxReg.Done():
+						return
+					}
 				}
 			}()
 		}
@@ -313,6 +325,9 @@ func main() {
 			cancel()
 		case <-ctx.Done():
 			err = ctx.Err()
+		case <-shutdownCh:
+			cancelReg()
+			err = nil
 		}
 
 		bklog.G(ctx).Infof("stopping server")
@@ -644,11 +659,12 @@ func serverCredentials(cfg config.TLSConfig) (*tls.Config, error) {
 	return tlsConf, nil
 }
 
-func newController(c *cli.Context, cfg *config.Config) (*control.Controller, error) {
+func newController(c *cli.Context, cfg *config.Config, shutdownCh chan struct{}) (*control.Controller, error) {
 	sessionManager, err := session.NewManager(&session.ManagerOpt{
 		HealthFrequency:       cfg.Health.Frequency,
 		HealthAllowedFailures: cfg.Health.AllowedFailures,
 		HealthTimeout:         cfg.Health.Timeout,
+		ShutdownCh:            shutdownCh,
 	})
 	if err != nil {
 		return nil, err
