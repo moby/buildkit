@@ -345,6 +345,13 @@ func (b *bindMount) IdentityMapping() *idtools.IdentityMapping {
 func (lbf *llbBridgeForwarder) Discard() {
 	lbf.mu.Lock()
 	defer lbf.mu.Unlock()
+
+	for ctr := range lbf.ctrs {
+		lbf.ReleaseContainer(context.TODO(), &pb.ReleaseContainerRequest{
+			ContainerID: ctr,
+		})
+	}
+
 	for id, workerRef := range lbf.workerRefByID {
 		workerRef.ImmutableRef.Release(context.TODO())
 		delete(lbf.workerRefByID, id)
