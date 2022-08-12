@@ -33,6 +33,9 @@ type Manager struct {
 	mu              sync.Mutex
 	updateCondition *sync.Cond
 	healthCfg       ManagerHealthCfg
+
+	stop       bool // Earthly-specific.
+	shutdownCh chan struct{}
 }
 
 // ManagerHealthCfg is the healthcheck configuration for gRPC healthchecks
@@ -46,6 +49,7 @@ type ManagerOpt struct {
 	HealthFrequency       time.Duration
 	HealthTimeout         time.Duration
 	HealthAllowedFailures int
+	ShutdownCh            chan struct{}
 }
 
 // NewManager returns a new Manager
@@ -57,6 +61,7 @@ func NewManager(opt *ManagerOpt) (*Manager, error) {
 			timeout:         opt.HealthTimeout,
 			allowedFailures: opt.HealthAllowedFailures,
 		},
+		shutdownCh: opt.ShutdownCh,
 	}
 	sm.updateCondition = sync.NewCond(&sm.mu)
 	return sm, nil
@@ -67,6 +72,18 @@ func (sm *Manager) NumSessions() int {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	return len(sm.sessions)
+}
+
+// StopIfIdle stops the manager if there are no active sessions.
+func (sm *Manager) StopIfIdle() (bool, int) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	if len(sm.sessions) == 0 {
+		close(sm.shutdownCh)
+		sm.stop = true
+		return true, 0
+	}
+	return false, len(sm.sessions)
 }
 
 // HandleHTTPRequest handles an incoming HTTP request
@@ -126,6 +143,11 @@ func (sm *Manager) HandleConn(ctx context.Context, conn net.Conn, opts map[strin
 
 // caller needs to take lock, this function will release it
 func (sm *Manager) handleConn(ctx context.Context, conn net.Conn, opts map[string][]string) error {
+	if sm.stop {
+		sm.mu.Unlock()
+		return errors.New("shutting down")
+	}
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
