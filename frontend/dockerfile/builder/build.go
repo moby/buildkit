@@ -932,6 +932,11 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 			return nil, nil, nil, err
 		}
 
+		var img dockerfile2llb.Image
+		if err := json.Unmarshal(data, &img); err != nil {
+			return nil, nil, nil, err
+		}
+
 		st := llb.OCILayout(storeID, dig,
 			llb.WithCustomName("[context "+name+"] OCI load from client"),
 			llb.OCISessionID(c.BuildOpts().SessionID),
@@ -940,7 +945,7 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		return &st, nil, nil, nil
+		return &st, &img, nil, nil
 	case "local":
 		st := llb.Local(vv[1],
 			llb.SessionID(c.BuildOpts().SessionID),
