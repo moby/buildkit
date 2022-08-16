@@ -85,8 +85,8 @@ RUN --mount=target=. --mount=target=/root/.cache,type=cache \
 
 FROM scratch AS binaries-linux-helper
 COPY --link --from=runc /usr/bin/runc /buildkit-runc
-# built from https://github.com/tonistiigi/binfmt/releases/tag/buildkit%2Fv6.2.0-24
-COPY --link --from=tonistiigi/binfmt:buildkit@sha256:ea7632b4e0b2406db438730c604339b38c23ac51a2f73c89ba50abe5e2146b4b / /
+# built from https://github.com/tonistiigi/binfmt/releases/tag/buildkit%2Fv7.0.0-29
+COPY --link --from=tonistiigi/binfmt:buildkit-v7.0.0-29@sha256:5168f6c2b692b04a7c0102751220e293e109b3dc312eb22ee1a5547b42b58de6 / /
 FROM binaries-linux-helper AS binaries-linux
 COPY --link --from=buildctl /usr/bin/buildctl /
 COPY --link --from=buildkitd /usr/bin/buildkitd /
@@ -282,5 +282,3 @@ ENTRYPOINT ["rootlesskit", "buildkitd"]
 
 # buildkit builds the buildkit container image
 FROM buildkit-${BUILDKIT_TARGET} AS buildkit
-
-
