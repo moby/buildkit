@@ -17,6 +17,7 @@ env:
   REPO_SLUG_ORIGIN: "moby/buildkit:latest"
   CACHE_GHA_SCOPE_IT: "integration-tests"
   CACHE_GHA_SCOPE_BINARIES: "binaries"
+  TESTFLAGS: "-v --parallel=1 --timeout=30m"
   BUILDX_VERSION: "v0.8.2"  # leave empty to use the one available on GitHub virtual environment
 
 jobs:
@@ -141,6 +142,6 @@ jobs:
           TEST_DOCKERD: "1"
           TEST_DOCKERD_BINARY: "./build/dockerd"
           TESTPKGS: "${{ matrix.pkg }}"
-          TESTFLAGS: "-v --parallel=1 --timeout=30m --run=//worker=dockerd$"
+          TESTFLAGS: "${{ env.TESTFLAGS }} --run=//worker=dockerd$"
           SKIP_INTEGRATION_TESTS: "${{ matrix.skip-integration-tests }}"
           CACHE_FROM: "type=gha,scope=${{ env.CACHE_GHA_SCOPE_IT }} type=gha,scope=${{ env.CACHE_GHA_SCOPE_BINARIES }}"
