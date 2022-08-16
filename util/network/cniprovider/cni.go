@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"runtime"
+	"strings"
 
 	cni "github.com/containerd/go-cni"
 	"github.com/gofrs/flock"
@@ -35,7 +36,11 @@ func New(opt Opt) (network.Provider, error) {
 		cniOptions = append(cniOptions, cni.WithLoNetwork)
 	}
 
-	cniOptions = append(cniOptions, cni.WithConfFile(opt.ConfigPath))
+	if strings.HasSuffix(opt.ConfigPath, ".conflist") {
+		cniOptions = append(cniOptions, cni.WithConfListFile(opt.ConfigPath))
+	} else {
+		cniOptions = append(cniOptions, cni.WithConfFile(opt.ConfigPath))
+	}
 
 	cniHandle, err := cni.New(cniOptions...)
 	if err != nil {
