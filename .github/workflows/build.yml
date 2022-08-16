@@ -23,6 +23,7 @@ env:
   CACHE_GHA_SCOPE_IT: "integration-tests"
   CACHE_GHA_SCOPE_BINARIES: "binaries"
   CACHE_GHA_SCOPE_CROSS: "cross"
+  TESTFLAGS: "-v --parallel=6 --timeout=30m"
   BUILDX_VERSION: "v0.8.2"  # leave empty to use the one available on GitHub virtual environment
 
 jobs:
@@ -108,7 +109,6 @@ jobs:
       -
         name: Test pkg=${{ matrix.pkg }} ; typ=${{ matrix.typ }} ; skipit=${{ matrix.skip-integration-tests }} ; worker=${{ matrix.worker }}
         run: |
-          export TESTFLAGS="-v --parallel=6 --timeout=20m"
           if [ -n "${{ matrix.worker }}" ]; then
             export TESTFLAGS="${TESTFLAGS} --run=//worker=${{ matrix.worker }}$"
           fi
@@ -163,7 +163,7 @@ jobs:
           SKIP_INTEGRATION_TESTS: 1
         run: |
           mkdir -p ./coverage
-          go test -coverprofile=./coverage/coverage-${{ github.job }}-${{ matrix.os }}.txt -covermode=atomic ./...
+          go test -coverprofile=./coverage/coverage-${{ github.job }}-${{ matrix.os }}.txt -covermode=atomic ${TESTFLAGS} ./...
         shell: bash
       -
         name: Upload coverage file
