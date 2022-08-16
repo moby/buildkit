@@ -101,7 +101,7 @@ func PrintOutline(dt []byte, w io.Writer) error {
 			fmt.Fprintf(tw, "DESCRIPTION:\t%s\n", o.Description)
 		}
 		tw.Flush()
-		fmt.Println()
+		fmt.Fprintln(tw)
 	}
 
 	if len(o.Args) > 0 {
@@ -111,7 +111,7 @@ func PrintOutline(dt []byte, w io.Writer) error {
 			fmt.Fprintf(tw, "%s\t%s\t%s\n", a.Name, a.Value, a.Description)
 		}
 		tw.Flush()
-		fmt.Println()
+		fmt.Fprintln(tw)
 	}
 
 	if len(o.Secrets) > 0 {
@@ -125,7 +125,7 @@ func PrintOutline(dt []byte, w io.Writer) error {
 			fmt.Fprintf(tw, "%s\t%s\n", s.Name, b)
 		}
 		tw.Flush()
-		fmt.Println()
+		fmt.Fprintln(tw)
 	}
 
 	if len(o.SSH) > 0 {
@@ -139,7 +139,7 @@ func PrintOutline(dt []byte, w io.Writer) error {
 			fmt.Fprintf(tw, "%s\t%s\n", s.Name, b)
 		}
 		tw.Flush()
-		fmt.Println()
+		fmt.Fprintln(tw)
 	}
 
 	return nil
