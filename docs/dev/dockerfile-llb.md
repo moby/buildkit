@@ -157,14 +157,18 @@ your local state, which is specified through the `llb.Local` state object:
     llb.FollowPaths([]string{"."}),
   )
 
-  st = st.Dir("/builder").Run(
+  execState = st.Dir("/builder").Run(
     llb.Shlex("pip install ."),
     llb.AddEnv(
       "PIP_INDEX_URL",
       "https://my-proxy.com/pypi",
     ),
-    llb.AddMount("/builder", localState)
-  ).Root()
+  )
+  _ := execState.AddMount("/builder", localState)
+  // the return value of AddMount captures the resulting state of the mount
+  // after the exec operation has completed
+
+  st := execState.Root()
   ```
 
 ## Cache mounts
