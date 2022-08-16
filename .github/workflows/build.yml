@@ -28,7 +28,7 @@ env:
 
 jobs:
   base:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       -
         name: Checkout
@@ -62,7 +62,7 @@ jobs:
           CACHE_TO: type=gha,scope=${{ env.CACHE_GHA_SCOPE_IT }}
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     needs: [base]
     strategy:
       fail-fast: false
@@ -132,9 +132,9 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          # - ubuntu-latest
-          # - macOS-latest
-          - windows-latest
+          # - ubuntu-20.04
+          # - macOS-11
+          - windows-2022
     steps:
       -
         name: Checkout
@@ -166,7 +166,7 @@ jobs:
           path: ./coverage
 
   upload-coverage:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     needs: [test, test-os]
     steps:
       -
@@ -196,7 +196,7 @@ jobs:
           files: ${{ steps.files.outputs.result }}
 
   cross:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       -
         name: Checkout
@@ -225,7 +225,7 @@ jobs:
           CACHE_TO: type=gha,scope=${{ env.CACHE_GHA_SCOPE_CROSS }}
 
   release-base:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     outputs:
       tag: ${{ steps.prep.outputs.tag }}
       push: ${{ steps.prep.outputs.push }}
@@ -249,7 +249,7 @@ jobs:
           echo ::set-output name=push::${PUSH}
 
   image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     needs: [release-base, test, cross]
     strategy:
       fail-fast: false
@@ -291,7 +291,7 @@ jobs:
           CACHE_TO: type=gha,scope=image${{ matrix.target-stage }}
 
   binaries:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     needs: [release-base, test, cross]
     steps:
       -
@@ -340,7 +340,7 @@ jobs:
           name: ${{ needs.release-base.outputs.tag }}
 
   frontend-base:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     if: github.event_name != 'schedule'
     outputs:
       typ: ${{ steps.prep.outputs.typ }}
@@ -366,7 +366,7 @@ jobs:
           echo ::set-output name=push::${PUSH}
 
   frontend-image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     if: github.event_name != 'schedule'
     needs: [frontend-base, test]
     steps:
