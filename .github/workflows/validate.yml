@@ -42,6 +42,7 @@ jobs:
         with:
           version: ${{ env.BUILDX_VERSION }}
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
+          buildkitd-flags: --debug
       -
         name: Run
         run: |
