@@ -1,4 +1,4 @@
-package attestation
+package result
 
 import (
 	digest "github.com/opencontainers/go-digest"

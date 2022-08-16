@@ -17,6 +17,7 @@ import (
 	"github.com/moby/buildkit/solver/errdefs"
 	llberrdefs "github.com/moby/buildkit/solver/llbsolver/errdefs"
 	opspb "github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/solver/result"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
@@ -66,27 +67,19 @@ func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*cli
 		return nil, c.wrapSolveError(err)
 	}
 
-	cRes := &client.Result{}
 	c.mu.Lock()
-	for k, r := range res.Refs {
+	cRes, err := result.ConvertResult(res, func(r solver.ResultProxy) (client.Reference, error) {
 		rr, err := c.newRef(r, session.NewGroup(c.sid))
 		if err != nil {
 			return nil, err
 		}
 		c.refs = append(c.refs, rr)
-		cRes.AddRef(k, rr)
-	}
-	if r := res.Ref; r != nil {
-		rr, err := c.newRef(r, session.NewGroup(c.sid))
-		if err != nil {
-			return nil, err
-		}
-		c.refs = append(c.refs, rr)
-		cRes.SetRef(rr)
-	}
+		return rr, nil
+	})
 	c.mu.Unlock()
-	cRes.Metadata = res.Metadata
-	cRes.Attestations = res.Attestations
+	if err != nil {
+		return nil, err
+	}
 
 	return cRes, nil
 }
@@ -185,28 +178,16 @@ func (c *bridgeClient) toFrontendResult(r *client.Result) (*frontend.Result, err
 		return nil, nil
 	}
 
-	res := &frontend.Result{}
-
-	if r.Refs != nil {
-		res.Refs = make(map[string]solver.ResultProxy, len(r.Refs))
-		for k, r := range r.Refs {
-			rr, ok := r.(*ref)
-			if !ok {
-				return nil, errors.Errorf("invalid reference type for forward %T", r)
-			}
-			res.Refs[k] = rr.acquireResultProxy()
-		}
-	}
-	if r := r.Ref; r != nil {
+	res, err := result.ConvertResult(r, func(r client.Reference) (solver.ResultProxy, error) {
 		rr, ok := r.(*ref)
 		if !ok {
 			return nil, errors.Errorf("invalid reference type for forward %T", r)
 		}
-		res.Ref = rr.acquireResultProxy()
+		return rr.acquireResultProxy(), nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	res.Metadata = r.Metadata
-	res.Attestations = r.Attestations
-
 	return res, nil
 }
 
