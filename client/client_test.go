@@ -6329,16 +6329,14 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 			if err != nil {
 				return nil, err
 			}
-			res.AddAttestation(pk, &gateway.InTotoAttestation{
-				PredicateRef:  refAttest,
+			res.AddInTotoAttestation(pk, &attestation.InTotoAttestation{
 				PredicatePath: "/attestation.json",
 				PredicateType: "https://example.com/attestations/v1.0",
 				Subjects: []attestation.InTotoSubject{
 					&attestation.InTotoSubjectSelf{},
 				},
-			})
-			res.AddAttestation(pk, &gateway.InTotoAttestation{
-				PredicateRef:  refAttest,
+			}, refAttest)
+			res.AddInTotoAttestation(pk, &attestation.InTotoAttestation{
 				PredicatePath: "/attestation2.json",
 				PredicateType: "https://example.com/attestations2/v1.0",
 				Subjects: []attestation.InTotoSubject{
@@ -6347,7 +6345,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 						Digest: []digest.Digest{successDigest},
 					},
 				},
-			})
+			}, refAttest)
 		}
 
 		dt, err := json.Marshal(expPlatforms)

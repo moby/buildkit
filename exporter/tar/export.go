@@ -2,6 +2,7 @@ package local
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"strconv"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/exporter"
+	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/snapshot"
@@ -131,12 +133,28 @@ func (e *localExporterInstance) Export(ctx context.Context, inp exporter.Source,
 		}, nil
 	}
 
+	platformsBytes, ok := inp.Metadata[exptypes.ExporterPlatformsKey]
+	if len(inp.Refs) > 0 && !ok {
+		return nil, errors.Errorf("unable to export multiple refs, missing platforms mapping")
+	}
+
+	var p exptypes.Platforms
+	if ok && len(platformsBytes) > 0 {
+		if err := json.Unmarshal(platformsBytes, &p); err != nil {
+			return nil, errors.Wrapf(err, "failed to parse platforms passed to exporter")
+		}
+	}
+
 	var fs fsutil.FS
 
 	if len(inp.Refs) > 0 {
-		dirs := make([]fsutil.Dir, 0, len(inp.Refs))
-		for k, ref := range inp.Refs {
-			d, err := getDir(ctx, k, ref)
+		dirs := make([]fsutil.Dir, 0, len(p.Platforms))
+		for _, p := range p.Platforms {
+			r, ok := inp.Refs[p.ID]
+			if !ok {
+				return nil, errors.Errorf("failed to find ref for ID %s", p.ID)
+			}
+			d, err := getDir(ctx, p.ID, r)
 			if err != nil {
 				return nil, err
 			}

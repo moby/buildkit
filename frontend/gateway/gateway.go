@@ -38,6 +38,7 @@ import (
 	llberrdefs "github.com/moby/buildkit/solver/llbsolver/errdefs"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
+	"github.com/moby/buildkit/util/attestation"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/grpcerrors"
@@ -709,23 +710,15 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 		attestations := map[string]*pb.Attestations{}
 		for k, atts := range res.Attestations {
 			for _, att := range atts {
-				switch att := att.(type) {
-				case *frontend.InTotoAttestation:
-					ref := att.PredicateRef
-					id := identity.NewID()
-					def := ref.Definition()
-					lbf.refs[id] = ref
-
-					pbAtt, err := pb.ToInTotoPB(att.PredicateType, &pb.Ref{Id: id, Def: def}, att.PredicatePath, att.Subjects...)
-					if err != nil {
-						return nil, err
-					}
-					attestations[k].Attestation = append(attestations[k].Attestation, &pb.Attestations_Attestation{
-						Attestation: pbAtt,
-					})
-				default:
-					return nil, errors.Errorf("unknown attestation type %T", att)
+				pbAtt, err := pb.ToAttestationPB(att)
+				if err != nil {
+					return nil, err
 				}
+
+				if attestations[k] == nil {
+					attestations[k] = &pb.Attestations{}
+				}
+				attestations[k].Attestation = append(attestations[k].Attestation, pbAtt)
 			}
 		}
 		pbRes.Attestations = attestations
@@ -927,10 +920,10 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 	}
 
 	if in.Result.Attestations != nil {
-		r.Attestations = map[string][]frontend.Attestation{}
+		r.Attestations = map[string][]attestation.Attestation{}
 		for k, pbAtts := range in.Result.Attestations {
 			for _, pbAtt := range pbAtts.Attestation {
-				att, err := lbf.convertAttestation(pbAtt)
+				att, err := pb.FromAttestationPB(pbAtt)
 				if err != nil {
 					return nil, err
 				}
@@ -1445,29 +1438,6 @@ func (lbf *llbBridgeForwarder) cloneRef(id string) (solver.ResultProxy, error) {
 	s1, s2 := solver.SplitResultProxy(r)
 	lbf.refs[id] = s1
 	return s2, nil
-}
-
-func (lbf *llbBridgeForwarder) convertAttestation(att *pb.Attestations_Attestation) (frontend.Attestation, error) {
-	switch att := att.Attestation.(type) {
-	case *pb.Attestations_Attestation_Intoto:
-		predicateType, predicateRef, predicatePath, subjects, err := pb.FromInTotoPB(att)
-		if err != nil {
-			return nil, err
-		}
-
-		ref, err := lbf.cloneRef(predicateRef.Id)
-		if err != nil {
-			return nil, err
-		}
-		return &frontend.InTotoAttestation{
-			PredicateType: predicateType,
-			PredicateRef:  ref,
-			PredicatePath: predicatePath,
-			Subjects:      subjects,
-		}, nil
-	default:
-		return nil, errors.Errorf("unknown attestation type %T", att)
-	}
 }
 
 func serve(ctx context.Context, grpcServer *grpc.Server, conn net.Conn) {

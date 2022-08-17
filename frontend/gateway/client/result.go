@@ -4,31 +4,19 @@ import (
 	"context"
 	"sync"
 
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/attestation"
 	"github.com/pkg/errors"
 )
 
 type BuildFunc func(context.Context, Client) (*Result, error)
 
-type Attestation interface {
-	isClientAttestation()
-}
-
-type InTotoAttestation struct {
-	PredicateType string
-	PredicateRef  Reference
-	PredicatePath string
-	Subjects      []attestation.InTotoSubject
-}
-
-func (a *InTotoAttestation) isClientAttestation() {}
-
 type Result struct {
 	mu           sync.Mutex
 	Ref          Reference
 	Refs         map[string]Reference
 	Metadata     map[string][]byte
-	Attestations map[string][]Attestation
+	Attestations map[string][]attestation.Attestation
 }
 
 func NewResult() *Result {
@@ -53,11 +41,13 @@ func (r *Result) AddRef(k string, ref Reference) {
 	r.mu.Unlock()
 }
 
-func (r *Result) AddAttestation(k string, v Attestation) {
+func (r *Result) AddInTotoAttestation(k string, v *attestation.InTotoAttestation, predicateRef Reference) {
 	r.mu.Lock()
 	if r.Attestations == nil {
-		r.Attestations = map[string][]Attestation{}
+		r.Attestations = map[string][]attestation.Attestation{}
 	}
+	v.PredicateRefKey = "attestation:" + identity.NewID()
+	r.Refs[v.PredicateRefKey] = predicateRef
 	r.Attestations[k] = append(r.Attestations[k], v)
 	r.mu.Unlock()
 }

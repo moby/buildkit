@@ -75,7 +75,7 @@ message Attestations {
 
 message InToto {
 	string predicateType = 1;
-	Ref predicateRef = 2;
+	string predicateRefKey = 2;
 	string predicatePath = 3;
 
 	message Subject {
