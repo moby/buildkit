@@ -106,6 +106,11 @@ func init() {
 			Usage: "name of specified oci worker binary",
 			Value: defaultConf.Workers.OCI.Binary,
 		},
+		cli.IntFlag{
+			Name:  "oci-netns-pool-size",
+			Usage: "size of network namespace pool",
+			Value: defaultConf.Workers.OCI.NetworkConfig.NetNSPoolSize,
+		},
 		cli.StringFlag{
 			Name:  "oci-worker-apparmor-profile",
 			Usage: "set the name of the apparmor profile applied to containers",
@@ -223,6 +228,9 @@ func applyOCIFlags(c *cli.Context, cfg *config.Config) error {
 	if c.GlobalIsSet("oci-cni-binary-dir") {
 		cfg.Workers.OCI.NetworkConfig.CNIBinaryPath = c.GlobalString("oci-cni-binary-dir")
 	}
+	if c.GlobalIsSet("oci-netns-pool-size") {
+		cfg.Workers.OCI.NetworkConfig.NetNSPoolSize = c.GlobalInt("oci-netns-pool-size")
+	}
 	if c.GlobalIsSet("oci-worker-binary") {
 		cfg.Workers.OCI.Binary = c.GlobalString("oci-worker-binary")
 	}
@@ -282,6 +290,7 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 			Root:       common.config.Root,
 			ConfigPath: common.config.Workers.OCI.CNIConfigPath,
 			BinaryDir:  common.config.Workers.OCI.CNIBinaryPath,
+			PoolSize:   common.config.Workers.OCI.NetNSPoolSize,
 		},
 	}
 

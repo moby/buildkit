@@ -23,3 +23,6 @@ func unmountNetNS(nativeID string) error {
 func deleteNetNS(nativeID string) error {
 	return errors.New("deleting netns for cni not supported")
 }
+
+func cleanOldNamespaces(_ *cniProvider) {
+}

@@ -10,10 +10,33 @@ import (
 	"unsafe"
 
 	"github.com/containerd/containerd/oci"
+	"github.com/moby/buildkit/util/bklog"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
+
+func cleanOldNamespaces(c *cniProvider) {
+	nsDir := filepath.Join(c.root, "net/cni")
+	dirEntries, err := os.ReadDir(nsDir)
+	if err != nil {
+		bklog.L.Debugf("could not read %q for cleanup: %s", nsDir, err)
+		return
+	}
+	go func() {
+		for _, d := range dirEntries {
+			id := d.Name()
+			ns := cniNS{
+				id:       id,
+				nativeID: filepath.Join(c.root, "net/cni", id),
+				handle:   c.CNI,
+			}
+			if err := ns.release(); err != nil {
+				bklog.L.Warningf("failed to release network namespace %q left over from previous run: %s", id, err)
+			}
+		}
+	}()
+}
 
 func createNetNS(c *cniProvider, id string) (string, error) {
 	nsPath := filepath.Join(c.root, "net/cni", id)
