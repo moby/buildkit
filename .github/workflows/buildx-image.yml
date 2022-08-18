@@ -48,6 +48,7 @@ jobs:
         uses: docker/setup-buildx-action@v1
         with:
           version: ${{ env.BUILDX_VERSION }}
+          buildkitd-flags: --debug
       -
         name: Login to DockerHub
         if: github.event.inputs.dry-run != 'true'
