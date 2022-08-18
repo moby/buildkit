@@ -168,6 +168,7 @@ message InfoResponse {
 
 	// Earthly-specific.
 	uint64 numSessions = 101;
+	uint64 secondsIdle = 102;
 }
 
 message ShutdownIfIdleRequest {}

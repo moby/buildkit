@@ -3,9 +3,10 @@ package client
 import (
 	"context"
 
+	"github.com/pkg/errors"
+
 	controlapi "github.com/moby/buildkit/api/services/control"
 	apitypes "github.com/moby/buildkit/api/types"
-	"github.com/pkg/errors"
 )
 
 type Info struct {
@@ -13,6 +14,7 @@ type Info struct {
 
 	// Earthly-specific.
 	NumSessions int
+	SecondsIdle int
 }
 
 type BuildkitVersion struct {
@@ -29,6 +31,7 @@ func (c *Client) Info(ctx context.Context) (*Info, error) {
 	return &Info{
 		BuildkitVersion: fromAPIBuildkitVersion(res.BuildkitVersion),
 		NumSessions:     int(res.NumSessions),
+		SecondsIdle:     int(res.SecondsIdle),
 	}, nil
 }
 
