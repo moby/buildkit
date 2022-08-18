@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -479,13 +480,16 @@ func (c *Controller) ListWorkers(ctx context.Context, r *controlapi.ListWorkersR
 }
 
 func (c *Controller) Info(ctx context.Context, r *controlapi.InfoRequest) (*controlapi.InfoResponse, error) {
+	numSessions, durationIdle := c.opt.SessionManager.NumSessions()
+	secondsIdle := math.Round(durationIdle.Seconds())
 	return &controlapi.InfoResponse{
 		BuildkitVersion: &apitypes.BuildkitVersion{
 			Package:  version.Package,
 			Version:  version.Version,
 			Revision: version.Revision,
 		},
-		NumSessions: uint64(c.opt.SessionManager.NumSessions()),
+		NumSessions: uint64(numSessions),
+		SecondsIdle: uint64(secondsIdle),
 	}, nil
 }
 

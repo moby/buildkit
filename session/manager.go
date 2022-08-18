@@ -36,6 +36,7 @@ type Manager struct {
 
 	stop       bool // Earthly-specific.
 	shutdownCh chan struct{}
+	idleAt     time.Time
 }
 
 // ManagerHealthCfg is the healthcheck configuration for gRPC healthchecks
@@ -62,16 +63,21 @@ func NewManager(opt *ManagerOpt) (*Manager, error) {
 			allowedFailures: opt.HealthAllowedFailures,
 		},
 		shutdownCh: opt.ShutdownCh,
+		idleAt:     time.Now(),
 	}
 	sm.updateCondition = sync.NewCond(&sm.mu)
 	return sm, nil
 }
 
 // NumSessions returns the number of active sessions.
-func (sm *Manager) NumSessions() int {
+func (sm *Manager) NumSessions() (sessions int, durationIdle time.Duration) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
-	return len(sm.sessions)
+	sessions = len(sm.sessions)
+	if sessions == 0 {
+		durationIdle = time.Now().Sub(sm.idleAt)
+	}
+	return sessions, durationIdle
 }
 
 // StopIfIdle stops the manager if there are no active sessions.
@@ -187,6 +193,9 @@ func (sm *Manager) handleConn(ctx context.Context, conn net.Conn, opts map[strin
 	defer func() {
 		sm.mu.Lock()
 		delete(sm.sessions, id)
+		if len(sm.sessions) == 0 {
+			sm.idleAt = time.Now()
+		}
 		sm.mu.Unlock()
 	}()
 
