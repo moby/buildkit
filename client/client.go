@@ -234,7 +234,6 @@ func loadCredentials(opts *withCredentials) (grpc.DialOption, error) {
 			return nil, errors.Wrap(err, "could not read certificate/key")
 		}
 		cfg.Certificates = []tls.Certificate{cert}
-		cfg.BuildNameToCertificate()
 	}
 
 	return grpc.WithTransportCredentials(credentials.NewTLS(cfg)), nil
