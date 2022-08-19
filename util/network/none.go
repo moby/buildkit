@@ -11,7 +11,7 @@ func NewNoneProvider() Provider {
 type none struct {
 }
 
-func (h *none) New() (Namespace, error) {
+func (h *none) New(hostname string) (Namespace, error) {
 	return &noneNS{}, nil
 }
 
