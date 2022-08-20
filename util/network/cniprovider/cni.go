@@ -67,7 +67,7 @@ func (c *cniProvider) initNetwork() error {
 		}
 		defer l.Unlock()
 	}
-	ns, err := c.New("test")
+	ns, err := c.New("")
 	if err != nil {
 		return err
 	}
@@ -81,13 +81,16 @@ func (c *cniProvider) New(hostname string) (network.Namespace, error) {
 		return nil, err
 	}
 
-	nsOpts := []cni.NamespaceOpts{
-		// NB: K8S_POD_NAME is a semi-well-known arg set by k8s and podman and
-		// leveraged by the dnsname CNI plugin. a more generic name would be nice.
-		cni.WithArgs("K8S_POD_NAME", hostname),
+	nsOpts := []cni.NamespaceOpts{}
 
-		// must be set for plugins that don't understand K8S_POD_NAME
-		cni.WithArgs("IgnoreUnknown", "1"),
+	if hostname != "" {
+		nsOpts = append(nsOpts,
+			// NB: K8S_POD_NAME is a semi-well-known arg set by k8s and podman and
+			// leveraged by the dnsname CNI plugin. a more generic name would be nice.
+			cni.WithArgs("K8S_POD_NAME", hostname),
+
+			// must be set for plugins that don't understand K8S_POD_NAME
+			cni.WithArgs("IgnoreUnknown", "1"))
 	}
 
 	if _, err := c.CNI.Setup(context.TODO(), id, nativeID, nsOpts...); err != nil {
