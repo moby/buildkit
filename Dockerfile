@@ -13,6 +13,7 @@ ARG ROOTLESSKIT_VERSION=v0.14.6
 ARG CNI_VERSION=v1.1.0
 ARG STARGZ_SNAPSHOTTER_VERSION=v0.12.0
 ARG NERDCTL_VERSION=v0.17.1
+ARG DNSNAME_VERSION=v1.3.1
 
 # ALPINE_VERSION sets version for the base layers
 ARG ALPINE_VERSION=3.15
@@ -49,6 +50,15 @@ RUN set -e; xx-apk add musl-dev gcc libseccomp-dev libseccomp-static; \
 RUN --mount=from=runc-src,src=/usr/src/runc,target=. --mount=target=/root/.cache,type=cache \
   CGO_ENABLED=1 xx-go build -mod=vendor -ldflags '-extldflags -static' -tags 'apparmor seccomp netgo cgo static_build osusergo' -o /usr/bin/runc ./ && \
   xx-verify --static /usr/bin/runc
+
+# dnsname CNI plugin for testing
+FROM gobuild-base AS dnsname
+ARG DNSNAME_VERSION
+WORKDIR /go/dnsname
+RUN git clone https://github.com/containers/dnsname.git . \
+  && git checkout -q "$DNSNAME_VERSION"
+RUN --mount=target=/root/.cache,type=cache \
+  set -e; make binaries; mv bin/dnsname /usr/bin/dnsname
 
 FROM gobuild-base AS buildkit-base
 WORKDIR /src
@@ -224,11 +234,12 @@ ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /opt/cni/bin
 RUN curl -Ls https://github.com/containernetworking/plugins/releases/download/$CNI_VERSION/cni-plugins-$TARGETOS-$TARGETARCH-$CNI_VERSION.tgz | tar xzv
+COPY --link --from=dnsname /usr/bin/dnsname /opt/cni/bin/
 
 FROM buildkit-base AS integration-tests-base
 ENV BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR="1000:1000"
 ARG NERDCTL_VERSION
-RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables fuse curl \
+RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables ip6tables dnsmasq fuse curl \
   && useradd --create-home --home-dir /home/user --uid 1000 -s /bin/sh user \
   && echo "XDG_RUNTIME_DIR=/run/user/1000; export XDG_RUNTIME_DIR" >> /home/user/.profile \
   && mkdir -m 0700 -p /run/user/1000 \
@@ -248,8 +259,9 @@ COPY --link --from=containerd-alt-15 /out/containerd* /opt/containerd-alt-15/bin
 COPY --link --from=registry /bin/registry /usr/bin/
 COPY --link --from=runc /usr/bin/runc /usr/bin/
 COPY --link --from=containerd /out/containerd* /usr/bin/
-COPY --link --from=cni-plugins /opt/cni/bin/bridge /opt/cni/bin/host-local /opt/cni/bin/loopback /opt/cni/bin/
+COPY --link --from=cni-plugins /opt/cni/bin/bridge /opt/cni/bin/host-local /opt/cni/bin/loopback /opt/cni/bin/firewall /opt/cni/bin/dnsname /opt/cni/bin/
 COPY --link hack/fixtures/cni.json /etc/buildkit/cni.json
+COPY --link hack/fixtures/dns-cni.conflist /etc/buildkit/dns-cni.conflist
 COPY --link --from=binaries / /usr/bin/
 
 # integration-tests prepares an image suitable for running all tests

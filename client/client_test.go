@@ -192,6 +192,15 @@ func TestIntegration(t *testing.T) {
 			"host":    hostNetwork,
 		}),
 	)
+
+	integration.Run(t, integration.TestFuncs(
+		testBridgeNetworkingDNSNoRootless,
+	),
+		mirrors,
+		integration.WithMatrix("netmode", map[string]interface{}{
+			"dns": bridgeDNSNetwork,
+		}),
+	)
 }
 
 func newContainerd(cdAddress string) (*containerd.Client, error) {
@@ -263,6 +272,45 @@ func testBridgeNetworking(t *testing.T, sb integration.Sandbox) {
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
 	require.Error(t, err)
 }
+
+func testBridgeNetworkingDNSNoRootless(t *testing.T, sb integration.Sandbox) {
+	if os.Getenv("BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS") == "" {
+		t.SkipNow()
+	}
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	name := identity.NewID()
+	server, err := llb.Image("busybox").
+		Run(
+			llb.Shlexf(`sh -c 'test "$(nc -l -p 1234)" = "foo"'`),
+			llb.Hostname(name),
+		).
+		Marshal(sb.Context())
+	require.NoError(t, err)
+
+	client, err := llb.Image("busybox").
+		Run(
+			llb.Shlexf("sh -c 'until echo foo | nc " + name + ".dns.buildkit 1234 -w0; do sleep 0.1; done'"),
+		).
+		Marshal(sb.Context())
+	require.NoError(t, err)
+
+	eg, ctx := errgroup.WithContext(context.Background())
+	eg.Go(func() error {
+		_, err := c.Solve(ctx, server, SolveOpt{}, nil)
+		return err
+	})
+	eg.Go(func() error {
+		_, err := c.Solve(ctx, client, SolveOpt{}, nil)
+		return err
+	})
+	err = eg.Wait()
+	require.NoError(t, err)
+}
+
 func testHostNetworking(t *testing.T, sb integration.Sandbox) {
 	if os.Getenv("BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS") == "" {
 		t.SkipNow()
@@ -6317,8 +6365,27 @@ func (*netModeDefault) UpdateConfigFile(in string) string {
 	return in
 }
 
+type netModeBridgeDNS struct{}
+
+func (*netModeBridgeDNS) UpdateConfigFile(in string) string {
+	return in + `
+# configure bridge networking
+[worker.oci]
+networkMode = "cni"
+cniConfigPath = "/etc/buildkit/dns-cni.conflist"
+
+[worker.containerd]
+networkMode = "cni"
+cniConfigPath = "/etc/buildkit/dns-cni.conflist"
+
+[dns]
+nameservers = ["10.11.0.1"]
+`
+}
+
 var hostNetwork integration.ConfigUpdater = &netModeHost{}
 var defaultNetwork integration.ConfigUpdater = &netModeDefault{}
+var bridgeDNSNetwork integration.ConfigUpdater = &netModeBridgeDNS{}
 
 func fixedWriteCloser(wc io.WriteCloser) func(map[string]string) (io.WriteCloser, error) {
 	return func(map[string]string) (io.WriteCloser, error) {
