@@ -293,7 +293,7 @@ func testBridgeNetworkingDNSNoRootless(t *testing.T, sb integration.Sandbox) {
 
 	client, err := llb.Image("busybox").
 		Run(
-			llb.Shlexf("sh -c 'until echo foo | nc " + name + ".dns.buildkit 1234 -w0; do sleep 0.1; done'"),
+			llb.Shlexf("sh -c 'until echo foo | nc " + name + " 1234 -w0; do sleep 0.1; done'"),
 		).
 		Marshal(sb.Context())
 	require.NoError(t, err)
