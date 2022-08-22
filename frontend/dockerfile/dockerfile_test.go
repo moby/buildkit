@@ -116,6 +116,8 @@ var allTests = integration.TestFuncs(
 	testUlimit,
 	testCgroupParent,
 	testNamedImageContext,
+	testNamedImageContextPlatform,
+	testNamedImageContextTimestamps,
 	testNamedLocalContext,
 	testNamedInputContext,
 	testNamedMultiplatformInputContext,
@@ -5434,6 +5436,163 @@ COPY --from=base /env_foobar /
 	require.Contains(t, string(dt), "/foobar:")
 }
 
+func testNamedImageContextPlatform(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	// Build a base image and force buildkit to generate a manifest list.
+	dockerfile := []byte(`FROM --platform=$BUILDPLATFORM alpine:latest`)
+	target := registry + "/buildkit/testnamedimagecontextplatform:latest"
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	f := getFrontend(t, sb)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_MULTI_PLATFORM": "true",
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dockerfile = []byte(`
+FROM --platform=$BUILDPLATFORM busybox AS target
+RUN echo hello
+`)
+
+	dir, err = tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	f = getFrontend(t, sb)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"context:busybox": "docker-image://" + target,
+			// random platform that would never exist so it doesn't conflict with the build machine
+			// here we specifically want to make sure that the platform chosen for the image source is the one in the dockerfile not the target platform.
+			"platform": "darwin/ppc64le",
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+}
+
+func testNamedImageContextTimestamps(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM alpine
+RUN echo foo >> /test
+`)
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	target := registry + "/buildkit/testnamedimagecontexttimestamps:latest"
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	desc, provider, err := contentutil.ProviderFromRef(target)
+	require.NoError(t, err)
+	img, err := readImage(sb.Context(), provider, desc)
+	require.NoError(t, err)
+
+	dirDerived, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dirDerived)
+
+	targetDerived := registry + "/buildkit/testnamedimagecontexttimestampsderived:latest"
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"context:alpine": "docker-image://" + target,
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dirDerived,
+			builder.DefaultLocalNameContext:    dirDerived,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": targetDerived,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	desc, provider, err = contentutil.ProviderFromRef(targetDerived)
+	require.NoError(t, err)
+	imgDerived, err := readImage(sb.Context(), provider, desc)
+	require.NoError(t, err)
+
+	require.NotEqual(t, img.img.Created, imgDerived.img.Created)
+	diff := imgDerived.img.Created.Sub(*img.img.Created)
+	require.Greater(t, diff, time.Duration(0))
+	require.Less(t, diff, 10*time.Minute)
+}
+
 func testNamedLocalContext(t *testing.T, sb integration.Sandbox) {
 	ctx := sb.Context()
 
@@ -6023,6 +6182,7 @@ func fixedWriteCloser(wc io.WriteCloser) func(map[string]string) (io.WriteCloser
 
 type imageInfo struct {
 	desc   ocispecs.Descriptor
+	img    ocispecs.Image
 	layers []map[string]*testutil.TarItem
 }
 
@@ -6054,9 +6214,16 @@ func readImage(ctx context.Context, p content.Provider, desc ocispecs.Descriptor
 	if err != nil {
 		return nil, err
 	}
-
 	var mfst ocispecs.Manifest
 	if err := json.Unmarshal(dt, &mfst); err != nil {
+		return nil, err
+	}
+
+	dt, err = content.ReadBlob(ctx, p, mfst.Config)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(dt, &ii.img); err != nil {
 		return nil, err
 	}
 

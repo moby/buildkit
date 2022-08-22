@@ -182,7 +182,7 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 			return nil, p.cacheKeyErr
 		}
 		defer func() {
-			if !errdefs.IsCanceled(err) {
+			if !errdefs.IsCanceled(ctx, err) {
 				p.cacheKeyErr = err
 			}
 		}()
