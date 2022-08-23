@@ -3953,14 +3953,14 @@ COPY --from=base arch /
 	desc, provider, err := contentutil.ProviderFromRef(target + "-img")
 	require.NoError(t, err)
 
-	imgMap, err := readIndex(sb.Context(), provider, desc)
+	imgMap, err := testutil.ReadIndex(sb.Context(), provider, desc)
 	require.NoError(t, err)
 
 	require.Equal(t, 2, len(imgMap))
 
-	require.Equal(t, "amd64", string(imgMap["linux/amd64"].layers[1]["arch"].Data))
-	dtamd := imgMap["linux/amd64"].layers[0]["unique"].Data
-	dtarm := imgMap["linux/arm/v7"].layers[0]["unique"].Data
+	require.Equal(t, "amd64", string(imgMap.Find("linux/amd64").Layers[1]["arch"].Data))
+	dtamd := imgMap.Find("linux/amd64").Layers[0]["unique"].Data
+	dtarm := imgMap.Find("linux/arm/v7").Layers[0]["unique"].Data
 	require.NotEqual(t, dtamd, dtarm)
 
 	for i := 0; i < 2; i++ {
@@ -3993,14 +3993,14 @@ COPY --from=base arch /
 
 		require.Equal(t, desc.Digest, desc2.Digest)
 
-		imgMap, err = readIndex(sb.Context(), provider, desc2)
+		imgMap, err = testutil.ReadIndex(sb.Context(), provider, desc2)
 		require.NoError(t, err)
 
 		require.Equal(t, 2, len(imgMap))
 
-		require.Equal(t, "arm", string(imgMap["linux/arm/v7"].layers[1]["arch"].Data))
-		dtamd2 := imgMap["linux/amd64"].layers[0]["unique"].Data
-		dtarm2 := imgMap["linux/arm/v7"].layers[0]["unique"].Data
+		require.Equal(t, "arm", string(imgMap.Find("linux/arm/v7").Layers[1]["arch"].Data))
+		dtamd2 := imgMap.Find("linux/amd64").Layers[0]["unique"].Data
+		dtarm2 := imgMap.Find("linux/arm/v7").Layers[0]["unique"].Data
 		require.Equal(t, string(dtamd), string(dtamd2))
 		require.Equal(t, string(dtarm), string(dtarm2))
 	}
@@ -5307,7 +5307,7 @@ RUN echo foo >> /test
 
 	desc, provider, err := contentutil.ProviderFromRef(target)
 	require.NoError(t, err)
-	img, err := readImage(sb.Context(), provider, desc)
+	img, err := testutil.ReadImage(sb.Context(), provider, desc)
 	require.NoError(t, err)
 
 	dirDerived, err := integration.Tmpdir(
@@ -5339,11 +5339,11 @@ RUN echo foo >> /test
 
 	desc, provider, err = contentutil.ProviderFromRef(targetDerived)
 	require.NoError(t, err)
-	imgDerived, err := readImage(sb.Context(), provider, desc)
+	imgDerived, err := testutil.ReadImage(sb.Context(), provider, desc)
 	require.NoError(t, err)
 
-	require.NotEqual(t, img.img.Created, imgDerived.img.Created)
-	diff := imgDerived.img.Created.Sub(*img.img.Created)
+	require.NotEqual(t, img.Img.Created, imgDerived.Img.Created)
+	diff := imgDerived.Img.Created.Sub(*img.Img.Created)
 	require.Greater(t, diff, time.Duration(0))
 	require.Less(t, diff, 10*time.Minute)
 }
@@ -6042,65 +6042,4 @@ func fixedWriteCloser(wc io.WriteCloser) func(map[string]string) (io.WriteCloser
 	return func(map[string]string) (io.WriteCloser, error) {
 		return wc, nil
 	}
-}
-
-type imageInfo struct {
-	desc   ocispecs.Descriptor
-	img    ocispecs.Image
-	layers []map[string]*testutil.TarItem
-}
-
-func readIndex(ctx context.Context, p content.Provider, desc ocispecs.Descriptor) (map[string]*imageInfo, error) {
-	dt, err := content.ReadBlob(ctx, p, desc)
-	if err != nil {
-		return nil, err
-	}
-	var idx ocispecs.Index
-	if err := json.Unmarshal(dt, &idx); err != nil {
-		return nil, err
-	}
-
-	mi := map[string]*imageInfo{}
-
-	for _, m := range idx.Manifests {
-		img, err := readImage(ctx, p, m)
-		if err != nil {
-			return nil, err
-		}
-		mi[platforms.Format(*m.Platform)] = img
-	}
-	return mi, nil
-}
-func readImage(ctx context.Context, p content.Provider, desc ocispecs.Descriptor) (*imageInfo, error) {
-	ii := &imageInfo{desc: desc}
-
-	dt, err := content.ReadBlob(ctx, p, desc)
-	if err != nil {
-		return nil, err
-	}
-	var mfst ocispecs.Manifest
-	if err := json.Unmarshal(dt, &mfst); err != nil {
-		return nil, err
-	}
-
-	dt, err = content.ReadBlob(ctx, p, mfst.Config)
-	if err != nil {
-		return nil, err
-	}
-	if err := json.Unmarshal(dt, &ii.img); err != nil {
-		return nil, err
-	}
-
-	for _, l := range mfst.Layers {
-		dt, err := content.ReadBlob(ctx, p, l)
-		if err != nil {
-			return nil, err
-		}
-		m, err := testutil.ReadTarToMap(dt, true)
-		if err != nil {
-			return nil, err
-		}
-		ii.layers = append(ii.layers, m)
-	}
-	return ii, nil
 }

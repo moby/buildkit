@@ -15,6 +15,7 @@ import (
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/util/attestation"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/progress"
@@ -248,7 +249,8 @@ func childrenHandler(provider content.Provider) images.HandlerFunc {
 			}
 		case images.MediaTypeDockerSchema2Layer, images.MediaTypeDockerSchema2LayerGzip,
 			images.MediaTypeDockerSchema2Config, ocispecs.MediaTypeImageConfig,
-			ocispecs.MediaTypeImageLayer, ocispecs.MediaTypeImageLayerGzip:
+			ocispecs.MediaTypeImageLayer, ocispecs.MediaTypeImageLayerGzip,
+			attestation.MediaTypeDockerSchema2AttestationType:
 			// childless data types.
 			return nil, nil
 		default:

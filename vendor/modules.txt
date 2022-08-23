@@ -461,6 +461,10 @@ github.com/hashicorp/go-retryablehttp
 # github.com/hashicorp/golang-lru v0.5.3
 ## explicit; go 1.12
 github.com/hashicorp/golang-lru/simplelru
+# github.com/in-toto/in-toto-golang v0.3.3
+## explicit; go 1.17
+github.com/in-toto/in-toto-golang/in_toto
+github.com/in-toto/in-toto-golang/pkg/ssl
 # github.com/jmespath/go-jmespath v0.4.0
 ## explicit; go 1.14
 github.com/jmespath/go-jmespath
@@ -552,6 +556,9 @@ github.com/russross/blackfriday/v2
 # github.com/serialx/hashring v0.0.0-20190422032157-8b2912629002
 ## explicit
 github.com/serialx/hashring
+# github.com/shibumi/go-pathspec v1.2.0
+## explicit; go 1.14
+github.com/shibumi/go-pathspec
 # github.com/shurcooL/sanitized_anchor_name v1.0.0
 ## explicit
 github.com/shurcooL/sanitized_anchor_name
