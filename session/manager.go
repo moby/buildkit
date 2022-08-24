@@ -36,7 +36,7 @@ type Manager struct {
 
 	stop       bool // Earthly-specific.
 	shutdownCh chan struct{}
-	idleAt     time.Time
+	idleAt     time.Time // Earthly-specific
 }
 
 // ManagerHealthCfg is the healthcheck configuration for gRPC healthchecks
@@ -84,12 +84,23 @@ func (sm *Manager) NumSessions() (sessions int, durationIdle time.Duration) {
 func (sm *Manager) StopIfIdle() (bool, int) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
-	if len(sm.sessions) == 0 {
+	isIdle := sm.idleAt.Add(time.Minute).Before(time.Now())
+	if isIdle && len(sm.sessions) == 0 {
 		close(sm.shutdownCh)
 		sm.stop = true
 		return true, 0
 	}
 	return false, len(sm.sessions)
+}
+
+func (sm *Manager) Reserve() error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	if sm.stop {
+		return errors.New("already shutting down")
+	}
+	sm.idleAt = time.Now()
+	return nil
 }
 
 // HandleHTTPRequest handles an incoming HTTP request
