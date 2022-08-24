@@ -119,6 +119,7 @@ var allTests = integration.TestFuncs(
 	testNamedImageContextTimestamps,
 	testNamedLocalContext,
 	testNamedOCILayoutContext,
+	testNamedOCILayoutContextExport,
 	testNamedInputContext,
 	testNamedMultiplatformInputContext,
 	testEmptyDestDir,
@@ -5426,6 +5427,7 @@ func testNamedOCILayoutContext(t *testing.T, sb integration.Sandbox) {
 
 	ociDockerfile := []byte(`
 	FROM busybox:latest
+	WORKDIR /test
 	RUN sh -c "echo -n first > out"
 	RUN sh -c "echo -n second > out2"
 	ENV foo=bar
@@ -5490,12 +5492,14 @@ func testNamedOCILayoutContext(t *testing.T, sb integration.Sandbox) {
 	//    when we `COPY --from=imported`, it should have the content of `/outfoo` as `"bar"`
 	dockerfile := []byte(`
 FROM busybox AS base
-RUN cat /etc/alpine-release > /out
+RUN cat /etc/alpine-release > out
+
 FROM foo AS imported
-RUN echo -n $foo > /outfoo
+RUN echo -n $foo > outfoo
+
 FROM scratch
-COPY --from=base /o* /
-COPY --from=imported /outfoo /
+COPY --from=base /test/o* /
+COPY --from=imported /test/outfoo /
 `)
 
 	dir, err := integration.Tmpdir(
@@ -5541,6 +5545,117 @@ COPY --from=imported /outfoo /
 	require.NoError(t, err)
 	require.True(t, len(dt) > 0)
 	require.Equal(t, []byte("bar"), dt)
+}
+
+func testNamedOCILayoutContextExport(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	ocidir := t.TempDir()
+
+	dockerfile := []byte(`
+FROM scratch
+WORKDIR /test
+ENV foo=bar
+	`)
+	dir, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	f := getFrontend(t, sb)
+
+	outW := bytes.NewBuffer(nil)
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{{
+			Type:   client.ExporterOCI,
+			Output: fixedWriteCloser(nopWriteCloser{outW}),
+		}},
+	}, nil)
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(outW.Bytes(), false)
+	require.NoError(t, err)
+
+	for filename, content := range m {
+		fullFilename := path.Join(ocidir, filename)
+		err = os.MkdirAll(path.Dir(fullFilename), 0755)
+		require.NoError(t, err)
+		if content.Header.FileInfo().IsDir() {
+			err = os.MkdirAll(fullFilename, 0755)
+			require.NoError(t, err)
+		} else {
+			err = os.WriteFile(fullFilename, content.Data, 0644)
+			require.NoError(t, err)
+		}
+	}
+
+	var index ocispecs.Index
+	err = json.Unmarshal(m["index.json"].Data, &index)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(index.Manifests))
+	digest := index.Manifests[0].Digest.Hex()
+
+	store, err := local.NewStore(ocidir)
+	ociID := "ocione"
+	require.NoError(t, err)
+
+	dockerfile = []byte(`
+FROM nonexistent AS base
+`)
+
+	dir, err = integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	outW = bytes.NewBuffer(nil)
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"context:nonexistent": fmt.Sprintf("oci-layout:%s@sha256:%s", ociID, digest),
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		OCIStores: map[string]content.Store{
+			ociID: store,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:   client.ExporterOCI,
+				Output: fixedWriteCloser(nopWriteCloser{outW}),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	m, err = testutil.ReadTarToMap(outW.Bytes(), false)
+	require.NoError(t, err)
+
+	err = json.Unmarshal(m["index.json"].Data, &index)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(index.Manifests))
+	digest = index.Manifests[0].Digest.Hex()
+
+	var mfst ocispecs.Manifest
+	require.NoError(t, json.Unmarshal(m["blobs/sha256/"+digest].Data, &mfst))
+	digest = mfst.Config.Digest.Hex()
+
+	var cfg ocispecs.Image
+	require.NoError(t, json.Unmarshal(m["blobs/sha256/"+digest].Data, &cfg))
+
+	require.Equal(t, "/test", cfg.Config.WorkingDir)
+	require.Contains(t, cfg.Config.Env, "foo=bar")
 }
 
 func testNamedInputContext(t *testing.T, sb integration.Sandbox) {
