@@ -18,6 +18,7 @@ type Meta struct {
 	Hostname       string
 	Tty            bool
 	ReadonlyRootFS bool
+	DNS            *pb.DNS
 	ExtraHosts     []HostIP
 	Ulimit         []*pb.Ulimit
 	CgroupParent   string

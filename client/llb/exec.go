@@ -212,6 +212,15 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		meta.ExtraHosts = hosts
 	}
 
+	dns, err := getDNS(e.base)(ctx, c)
+	if err != nil {
+		return "", nil, nil, nil, err
+	}
+
+	if dns != nil {
+		meta.Dns = dns
+	}
+
 	ulimits, err := getUlimit(e.base)(ctx, c)
 	if err != nil {
 		return "", nil, nil, nil, err
@@ -565,6 +574,12 @@ func Args(a []string) RunOption {
 func AddExtraHost(host string, ip net.IP) RunOption {
 	return runOptionFunc(func(ei *ExecInfo) {
 		ei.State = ei.State.AddExtraHost(host, ip)
+	})
+}
+
+func DNS(dns *pb.DNS) RunOption {
+	return runOptionFunc(func(ei *ExecInfo) {
+		ei.State = ei.State.SetDNS(dns)
 	})
 }
 

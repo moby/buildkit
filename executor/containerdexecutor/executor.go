@@ -88,7 +88,16 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 
 	meta := process.Meta
 
-	resolvConf, err := oci.GetResolvConf(ctx, w.root, nil, w.dnsConfig)
+	dns := w.dnsConfig
+	if meta.DNS != nil {
+		dns = &oci.DNSConfig{
+			Nameservers:   meta.DNS.Nameservers,
+			Options:       meta.DNS.Options,
+			SearchDomains: meta.DNS.Search,
+		}
+	}
+
+	resolvConf, err := oci.GetResolvConf(ctx, w.root, nil, dns)
 	if err != nil {
 		return err
 	}

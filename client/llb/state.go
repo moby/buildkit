@@ -404,6 +404,10 @@ func (s State) AddExtraHost(host string, ip net.IP) State {
 	return extraHost(host, ip)(s)
 }
 
+func (s State) SetDNS(cfg *pb.DNS) State {
+	return dns(cfg)(s)
+}
+
 func (s State) AddUlimit(name UlimitName, soft int64, hard int64) State {
 	return ulimit(name, soft, hard)(s)
 }

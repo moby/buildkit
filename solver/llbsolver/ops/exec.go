@@ -320,6 +320,7 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 		Hostname:       e.op.Meta.Hostname,
 		ReadonlyRootFS: p.ReadonlyRootFS,
 		ExtraHosts:     extraHosts,
+		DNS:            e.op.Meta.Dns,
 		Ulimit:         e.op.Meta.Ulimit,
 		CgroupParent:   e.op.Meta.CgroupParent,
 		NetMode:        e.op.Network,

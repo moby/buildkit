@@ -19,6 +19,7 @@ var (
 	keyDir          = contextKeyT("llb.exec.dir")
 	keyEnv          = contextKeyT("llb.exec.env")
 	keyExtraHost    = contextKeyT("llb.exec.extrahost")
+	keyDNS          = contextKeyT("llb.exec.dns")
 	keyHostname     = contextKeyT("llb.exec.hostname")
 	keyUlimit       = contextKeyT("llb.exec.ulimit")
 	keyCgroupParent = contextKeyT("llb.exec.cgroup.parent")
@@ -225,6 +226,27 @@ func getExtraHosts(s State) func(context.Context, *Constraints) ([]HostIP, error
 		}
 		if v != nil {
 			return v.([]HostIP), nil
+		}
+		return nil, nil
+	}
+}
+
+func dns(dns *pb.DNS) StateOption {
+	return func(s State) State {
+		return s.withValue(keyDNS, func(ctx context.Context, c *Constraints) (interface{}, error) {
+			return dns, nil
+		})
+	}
+}
+
+func getDNS(s State) func(context.Context, *Constraints) (*pb.DNS, error) {
+	return func(ctx context.Context, c *Constraints) (*pb.DNS, error) {
+		v, err := s.getValue(keyDNS)(ctx, c)
+		if err != nil {
+			return nil, err
+		}
+		if v != nil {
+			return v.(*pb.DNS), nil
 		}
 		return nil, nil
 	}

@@ -171,7 +171,16 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 		bklog.G(ctx).Info("enabling HostNetworking")
 	}
 
-	resolvConf, err := oci.GetResolvConf(ctx, w.root, w.idmap, w.dns)
+	dns := w.dns
+	if meta.DNS != nil {
+		dns = &oci.DNSConfig{
+			Nameservers:   meta.DNS.Nameservers,
+			Options:       meta.DNS.Options,
+			SearchDomains: meta.DNS.Search,
+		}
+	}
+
+	resolvConf, err := oci.GetResolvConf(ctx, w.root, w.idmap, dns)
 	if err != nil {
 		return err
 	}

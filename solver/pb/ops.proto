@@ -63,6 +63,7 @@ message Meta {
 	string hostname = 7;
 	repeated Ulimit ulimit = 9;
 	string cgroupParent = 10;
+	DNS dns = 11;
 }
 
 message HostIP {
@@ -74,6 +75,12 @@ message Ulimit {
 	string Name = 1;
 	int64 Soft = 2;
 	int64 Hard = 3;
+}
+
+message DNS {
+  repeated string nameservers = 1;
+  repeated string options = 2;
+  repeated string search = 3;
 }
 
 enum NetMode {

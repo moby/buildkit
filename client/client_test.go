@@ -34,6 +34,7 @@ import (
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/continuity/fs/fstest"
+	"github.com/docker/docker/libnetwork/resolvconf"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
@@ -93,7 +94,8 @@ func TestIntegration(t *testing.T) {
 		testBuildHTTPSource,
 		testBuildPushAndValidate,
 		testBuildExportWithUncompressed,
-		testResolveAndHosts,
+		testDefaultResolveAndHosts,
+		testDNSResolve,
 		testUser,
 		testOCIExporter,
 		testWhiteoutParentDir,
@@ -2061,7 +2063,7 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	// TODO: check that second request was marked as cached
 }
 
-func testResolveAndHosts(t *testing.T, sb integration.Sandbox) {
+func testDefaultResolveAndHosts(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2092,13 +2094,57 @@ func testResolveAndHosts(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
+	hostrc, err := resolvconf.Get()
+	require.NoError(t, err)
+
 	dt, err := os.ReadFile(filepath.Join(destDir, "resolv.conf"))
 	require.NoError(t, err)
-	require.Contains(t, string(dt), "nameserver")
+	require.Equal(t, string(dt), string(hostrc.Content))
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "hosts"))
 	require.NoError(t, err)
 	require.Contains(t, string(dt), "127.0.0.1	localhost")
+}
+
+func testDNSResolve(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+
+	st := busybox.Run(
+		llb.Shlex(`sh -c "cp /etc/resolv.conf ."`),
+		llb.Dir("/wd"),
+		llb.DNS(&pb.DNS{
+			Nameservers: []string{"1.2.3.4", "5.6.7.8"},
+			Options:     []string{"debug", "timeout:42"},
+			Search:      []string{"example.com", "example.org"},
+		}),
+	).AddMount("/wd", llb.Scratch())
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "resolv.conf"))
+	require.NoError(t, err)
+	require.Contains(t, string(dt), "nameserver 1.2.3.4")
+	require.Contains(t, string(dt), "nameserver 5.6.7.8")
+	require.Contains(t, string(dt), "options debug timeout:42")
+	require.Contains(t, string(dt), "search example.com example.org")
 }
 
 func testUser(t *testing.T, sb integration.Sandbox) {
