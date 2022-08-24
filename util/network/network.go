@@ -8,7 +8,7 @@ import (
 
 // Provider interface for Network
 type Provider interface {
-	New() (Namespace, error)
+	New(hostname string) (Namespace, error)
 }
 
 // Namespace of network for workers

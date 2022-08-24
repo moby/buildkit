@@ -67,32 +67,45 @@ func (c *cniProvider) initNetwork() error {
 		}
 		defer l.Unlock()
 	}
-	ns, err := c.New()
+	ns, err := c.New("")
 	if err != nil {
 		return err
 	}
 	return ns.Close()
 }
 
-func (c *cniProvider) New() (network.Namespace, error) {
+func (c *cniProvider) New(hostname string) (network.Namespace, error) {
 	id := identity.NewID()
 	nativeID, err := createNetNS(c, id)
 	if err != nil {
 		return nil, err
 	}
 
-	if _, err := c.CNI.Setup(context.TODO(), id, nativeID); err != nil {
+	nsOpts := []cni.NamespaceOpts{}
+
+	if hostname != "" {
+		nsOpts = append(nsOpts,
+			// NB: K8S_POD_NAME is a semi-well-known arg set by k8s and podman and
+			// leveraged by the dnsname CNI plugin. a more generic name would be nice.
+			cni.WithArgs("K8S_POD_NAME", hostname),
+
+			// must be set for plugins that don't understand K8S_POD_NAME
+			cni.WithArgs("IgnoreUnknown", "1"))
+	}
+
+	if _, err := c.CNI.Setup(context.TODO(), id, nativeID, nsOpts...); err != nil {
 		deleteNetNS(nativeID)
 		return nil, errors.Wrap(err, "CNI setup error")
 	}
 
-	return &cniNS{nativeID: nativeID, id: id, handle: c.CNI}, nil
+	return &cniNS{nativeID: nativeID, id: id, handle: c.CNI, opts: nsOpts}, nil
 }
 
 type cniNS struct {
 	handle   cni.CNI
 	id       string
 	nativeID string
+	opts     []cni.NamespaceOpts
 }
 
 func (ns *cniNS) Set(s *specs.Spec) error {
@@ -100,7 +113,7 @@ func (ns *cniNS) Set(s *specs.Spec) error {
 }
 
 func (ns *cniNS) Close() error {
-	err := ns.handle.Remove(context.TODO(), ns.id, ns.nativeID)
+	err := ns.handle.Remove(context.TODO(), ns.id, ns.nativeID, ns.opts...)
 	if err1 := unmountNetNS(ns.nativeID); err1 != nil && err == nil {
 		err = err1
 	}

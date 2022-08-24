@@ -46,6 +46,10 @@ func (s *oci) Name() string {
 	return "oci"
 }
 
+func (s *oci) Rootless() bool {
+	return s.uid != 0
+}
+
 func (s *oci) New(ctx context.Context, cfg *BackendConfig) (Backend, func() error, error) {
 	if err := lookupBinary("buildkitd"); err != nil {
 		return nil, nil, err

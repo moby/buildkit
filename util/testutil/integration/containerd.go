@@ -80,6 +80,10 @@ func (c *containerd) Name() string {
 	return c.name
 }
 
+func (c *containerd) Rootless() bool {
+	return c.uid != 0
+}
+
 func (c *containerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func() error, err error) {
 	if err := lookupBinary(c.containerd); err != nil {
 		return nil, nil, err

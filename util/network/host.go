@@ -15,7 +15,7 @@ func NewHostProvider() Provider {
 type host struct {
 }
 
-func (h *host) New() (Namespace, error) {
+func (h *host) New(hostname string) (Namespace, error) {
 	return &hostNS{}, nil
 }
 
