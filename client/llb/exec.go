@@ -218,6 +218,7 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 	}
 
 	if dns != nil {
+		addCap(&e.constraints, pb.CapExecMetaDNS)
 		meta.Dns = dns
 	}
 
