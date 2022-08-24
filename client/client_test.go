@@ -171,6 +171,7 @@ func TestIntegration(t *testing.T) {
 		testCallInfo,
 		testPullWithLayerLimit,
 		testExportAnnotations,
+		testExportAnnotationsMediaTypes,
 		testExportAttestations,
 	)
 	tests = append(tests, diffOpTestCases()...)
@@ -6306,6 +6307,125 @@ func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 	}
 }
 
+func testExportAnnotationsMediaTypes(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	p := platforms.DefaultSpec()
+	ps := []ocispecs.Platform{p}
+
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		res := gateway.NewResult()
+		expPlatforms := &exptypes.Platforms{
+			Platforms: make([]exptypes.Platform, len(ps)),
+		}
+		for i, p := range ps {
+			st := llb.Scratch().File(
+				llb.Mkfile("platform", 0600, []byte(platforms.Format(p))),
+			)
+
+			def, err := st.Marshal(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			r, err := c.Solve(ctx, gateway.SolveRequest{
+				Definition: def.ToPB(),
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			ref, err := r.SingleRef()
+			if err != nil {
+				return nil, err
+			}
+
+			_, err = ref.ToState()
+			if err != nil {
+				return nil, err
+			}
+
+			k := platforms.Format(p)
+			res.AddRef(k, ref)
+
+			expPlatforms.Platforms[i] = exptypes.Platform{
+				ID:       k,
+				Platform: p,
+			}
+		}
+		dt, err := json.Marshal(expPlatforms)
+		if err != nil {
+			return nil, err
+		}
+		res.AddMeta(exptypes.ExporterPlatformsKey, dt)
+
+		return res, nil
+	}
+
+	target := "testannotationsmedia:1"
+	_, err = c.Build(sb.Context(), SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":                  target,
+					"annotation-manifest.x": "y",
+				},
+			},
+		},
+	}, "", frontend, nil)
+	require.NoError(t, err)
+
+	target2 := "testannotationsmedia:2"
+	_, err = c.Build(sb.Context(), SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":               target2,
+					"annotation-index.x": "y",
+				},
+			},
+		},
+	}, "", frontend, nil)
+	require.NoError(t, err)
+
+	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress != "" {
+		client, err := newContainerd(cdAddress)
+		require.NoError(t, err)
+		defer client.Close()
+
+		// test annotation in manifest
+		img, err := client.GetImage(ctx, target)
+		require.NoError(t, err)
+
+		var index ocispecs.Index
+		indexBytes, err := content.ReadBlob(ctx, client.ContentStore(), img.Target())
+		require.NoError(t, err)
+		require.NoError(t, json.Unmarshal(indexBytes, &index))
+		require.Equal(t, images.MediaTypeDockerSchema2ManifestList, index.MediaType)
+
+		mfst, err := images.Manifest(ctx, client.ContentStore(), img.Target(), platforms.Only(p))
+		require.NoError(t, err)
+		require.Equal(t, "y", mfst.Annotations["x"])
+
+		// test annotation in index
+		img, err = client.GetImage(ctx, target2)
+		require.NoError(t, err)
+
+		indexBytes, err = content.ReadBlob(ctx, client.ContentStore(), img.Target())
+		require.NoError(t, err)
+		require.NoError(t, json.Unmarshal(indexBytes, &index))
+		require.Equal(t, ocispecs.MediaTypeImageIndex, index.MediaType)
+		require.Equal(t, "y", index.Annotations["x"])
+	}
+}
+
 func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
@@ -6443,6 +6563,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 	atts := imgs.Filter("unknown/unknown")
 	require.Equal(t, len(ps), len(atts.Images))
 	for i, att := range atts.Images {
+		require.Equal(t, ocispecs.MediaTypeImageManifest, att.Desc.MediaType)
 		require.Equal(t, "unknown/unknown", platforms.Format(*att.Desc.Platform))
 		require.Equal(t, "unknown/unknown", att.Img.OS+"/"+att.Img.Architecture)
 		require.Equal(t, attestation.DockerAnnotationReferenceTypeDefault, att.Desc.Annotations[attestation.DockerAnnotationReferenceType])

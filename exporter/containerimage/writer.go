@@ -99,12 +99,16 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		return mfstDesc, nil
 	}
 
-	refCount := len(p.Platforms)
+	attestCount := 0
 	for _, attests := range inp.Attestations {
-		refCount += len(attests)
+		attestCount += len(attests)
 	}
-	if refCount != len(inp.Refs) {
-		return nil, errors.Errorf("number of required refs does not match references %d %d", refCount, len(inp.Refs))
+	if count := attestCount + len(p.Platforms); count != len(inp.Refs) {
+		return nil, errors.Errorf("number of required refs does not match references %d %d", count, len(inp.Refs))
+	}
+
+	if attestCount > 0 {
+		opts.EnableOCITypes("attestations")
 	}
 
 	refs := make([]cache.ImmutableRef, 0, len(inp.Refs))
