@@ -4,6 +4,19 @@ import (
 	digest "github.com/opencontainers/go-digest"
 )
 
+type Attestation interface {
+	isAttestation()
+}
+
+type InTotoAttestation struct {
+	PredicateType   string
+	PredicateRefKey string
+	PredicatePath   string
+	Subjects        []InTotoSubject
+}
+
+func (a *InTotoAttestation) isAttestation() {}
+
 type InTotoSubject interface {
 	isInTotoSubject()
 }

@@ -98,8 +98,12 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, sessionI
 		return mfstDesc, nil
 	}
 
-	if len(p.Platforms) != len(inp.Refs) {
-		return nil, errors.Errorf("number of platforms does not match references %d %d", len(p.Platforms), len(inp.Refs))
+	refCount := len(p.Platforms)
+	for _, attests := range inp.Attestations {
+		refCount += len(attests)
+	}
+	if refCount != len(inp.Refs) {
+		return nil, errors.Errorf("number of required refs does not match references %d %d", refCount, len(inp.Refs))
 	}
 
 	refs := make([]cache.ImmutableRef, 0, len(inp.Refs))
@@ -166,7 +170,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, sessionI
 		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i)] = desc.Digest.String()
 
 		if attestations, ok := inp.Attestations[p.ID]; ok {
-			inTotos, err := ic.extractAttestations(ctx, session.NewGroup(sessionID), desc, attestations...)
+			inTotos, err := ic.extractAttestations(ctx, session.NewGroup(sessionID), desc, inp.Refs, attestations)
 			if err != nil {
 				return nil, err
 			}
@@ -244,16 +248,25 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, refCfg cacheconfig.RefC
 	return out, err
 }
 
-func (ic *ImageWriter) extractAttestations(ctx context.Context, s session.Group, desc *ocispecs.Descriptor, attestations ...exporter.Attestation) ([]intoto.Statement, error) {
+func (ic *ImageWriter) extractAttestations(ctx context.Context, s session.Group, desc *ocispecs.Descriptor, refs map[string]cache.ImmutableRef, attestations []attestation.Attestation) ([]intoto.Statement, error) {
 	eg, ctx := errgroup.WithContext(ctx)
 	statements := make([]intoto.Statement, len(attestations))
+
+	if len(attestations) > 0 && refs == nil {
+		return nil, errors.Errorf("no refs map provided to lookup attestation keys")
+	}
 
 	for i, att := range attestations {
 		i, att := i, att
 		eg.Go(func() error {
 			switch att := att.(type) {
-			case *exporter.InTotoAttestation:
-				mount, err := att.PredicateRef.Mount(ctx, true, s)
+			case *attestation.InTotoAttestation:
+				ref, ok := refs[att.PredicateRefKey]
+				if !ok {
+					return errors.Errorf("key %s not found in refs map", att.PredicateRefKey)
+				}
+
+				mount, err := ref.Mount(ctx, true, s)
 				if err != nil {
 					return err
 				}
@@ -264,7 +277,6 @@ func (ic *ImageWriter) extractAttestations(ctx context.Context, s session.Group,
 					return err
 				}
 				defer lm.Unmount()
-
 				predicate, err := os.ReadFile(path.Join(src, att.PredicatePath))
 				if err != nil {
 					return err

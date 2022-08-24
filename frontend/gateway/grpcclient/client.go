@@ -21,6 +21,7 @@ import (
 	"github.com/moby/buildkit/identity"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
+	"github.com/moby/buildkit/util/attestation"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/sys/signal"
@@ -95,26 +96,6 @@ func convertRef(ref client.Reference) (*pb.Ref, error) {
 	return &pb.Ref{Id: r.id, Def: r.def}, nil
 }
 
-func convertAttestation(att client.Attestation) (*pb.Attestations_Attestation, error) {
-	switch att := att.(type) {
-	case *client.InTotoAttestation:
-		pbRef, err := convertRef(att.PredicateRef)
-		if err != nil {
-			return nil, err
-		}
-
-		attestation, err := pb.ToInTotoPB(att.PredicateType, pbRef, att.PredicatePath, att.Subjects...)
-		if err != nil {
-			return nil, err
-		}
-		return &pb.Attestations_Attestation{
-			Attestation: attestation,
-		}, nil
-	default:
-		return nil, errors.Errorf("unknown attestation type %T", att)
-	}
-}
-
 func RunFromEnvironment(ctx context.Context, f client.BuildFunc) error {
 	client, err := current()
 	if err != nil {
@@ -181,11 +162,11 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 					}
 				}
 
-				if res.Attestations != nil {
+				if res.Attestations != nil && c.caps.Supports(pb.CapAttestations) == nil {
 					attestations := map[string]*pb.Attestations{}
 					for k, as := range res.Attestations {
 						for _, a := range as {
-							pbAtt, err := convertAttestation(a)
+							pbAtt, err := pb.ToAttestationPB(a)
 							if err != nil {
 								retError = err
 								continue
@@ -484,14 +465,14 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (res *
 		}
 
 		if resp.Result.Attestations != nil {
-			res.Attestations = map[string][]client.Attestation{}
+			res.Attestations = map[string][]attestation.Attestation{}
 			for p, as := range resp.Result.Attestations {
 				for _, a := range as.Attestation {
-					att, err := newAttestation(c, a)
-					res.AddAttestation(p, att)
+					att, err := pb.FromAttestationPB(a)
 					if err != nil {
 						return nil, err
 					}
+					res.Attestations[p] = append(res.Attestations[p], att)
 				}
 			}
 		}
@@ -1119,29 +1100,6 @@ func (r *reference) StatFile(ctx context.Context, req client.StatRequest) (*fsty
 		return nil, err
 	}
 	return resp.Stat, nil
-}
-
-func newAttestation(c *grpcClient, att *pb.Attestations_Attestation) (client.Attestation, error) {
-	switch att := att.Attestation.(type) {
-	case *pb.Attestations_Attestation_Intoto:
-		predicateType, predicateRef, predicatePath, subjects, err := pb.FromInTotoPB(att)
-		if err != nil {
-			return nil, err
-		}
-		ref, err := newReference(c, predicateRef)
-		if err != nil {
-			return nil, err
-		}
-
-		return &client.InTotoAttestation{
-			PredicateType: predicateType,
-			PredicateRef:  ref,
-			PredicatePath: predicatePath,
-			Subjects:      subjects,
-		}, nil
-	default:
-		return nil, errors.Errorf("unknown attestation type %T", att)
-	}
 }
 
 func grpcClientConn(ctx context.Context) (context.Context, *grpc.ClientConn, error) {
