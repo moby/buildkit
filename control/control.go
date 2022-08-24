@@ -501,6 +501,14 @@ func (c *Controller) ShutdownIfIdle(ctx context.Context, r *controlapi.ShutdownI
 	}, nil
 }
 
+func (c *Controller) Reserve(ctx context.Context, r *controlapi.ReserveRequest) (*controlapi.ReserveResponse, error) {
+	err := c.opt.SessionManager.Reserve()
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "buildkit is shutting down")
+	}
+	return &controlapi.ReserveResponse{}, nil
+}
+
 func (c *Controller) gc() {
 	c.gcmu.Lock()
 	defer c.gcmu.Unlock()

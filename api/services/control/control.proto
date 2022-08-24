@@ -22,6 +22,7 @@ service Control {
 
 	// Earthly-specific.
 	rpc ShutdownIfIdle(ShutdownIfIdleRequest) returns (ShutdownIfIdleResponse);
+	rpc Reserve(ReserveRequest) returns (ReserveResponse);
 }
 
 message PruneRequest {
@@ -177,3 +178,7 @@ message ShutdownIfIdleResponse {
 	bool willShutdown = 1;
 	uint64 numSessions = 2;
 }
+
+message ReserveRequest {}
+
+message ReserveResponse {}
