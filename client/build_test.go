@@ -56,6 +56,7 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewaySlowCacheExecError,
 		testClientGatewayExecFileActionError,
 		testClientGatewayContainerExtraHosts,
+		testClientGatewayContainerDNS,
 		testClientGatewayContainerSignal,
 		testWarnings,
 		testClientGatewayFrontendAttrs,
@@ -1787,6 +1788,84 @@ func testClientGatewayContainerExtraHosts(t *testing.T, sb integration.Sandbox) 
 
 		t.Logf("Stdout: %q", stdout.String())
 		t.Logf("Stderr: %q", stderr.String())
+
+		require.NoError(t, err)
+
+		return &client.Result{}, nil
+	}
+
+	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
+	require.NoError(t, err)
+
+	checkAllReleasable(t, c, sb, true)
+}
+
+func testClientGatewayContainerDNS(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+
+	ctx := sb.Context()
+	product := "buildkit_test"
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		st := llb.Image("busybox")
+
+		def, err := st.Marshal(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to marshal state")
+		}
+
+		r, err := c.Solve(ctx, client.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to solve")
+		}
+
+		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
+			Mounts: []client.Mount{{
+				Dest:      "/",
+				MountType: pb.MountType_BIND,
+				Ref:       r.Ref,
+			}},
+			DNS: &pb.DNS{
+				Nameservers: []string{"1.2.3.4", "5.6.7.8"},
+				Options:     []string{"debug", "timeout:42"},
+				Search:      []string{"example.com", "example.org"},
+			},
+		})
+
+		if err != nil {
+			return nil, err
+		}
+
+		stdout := bytes.NewBuffer(nil)
+		stderr := bytes.NewBuffer(nil)
+
+		pid, err := ctr.Start(ctx, client.StartRequest{
+			Args:   []string{"cat", "/etc/resolv.conf"},
+			Stdout: &nopCloser{stdout},
+			Stderr: &nopCloser{stderr},
+		})
+		if err != nil {
+			ctr.Release(ctx)
+			return nil, err
+		}
+		defer ctr.Release(ctx)
+
+		err = pid.Wait()
+
+		t.Logf("Stdout: %q", stdout.String())
+		t.Logf("Stderr: %q", stderr.String())
+
+		dt := stdout.String()
+		require.Contains(t, string(dt), "nameserver 1.2.3.4")
+		require.Contains(t, string(dt), "nameserver 5.6.7.8")
+		require.Contains(t, string(dt), "options debug timeout:42")
+		require.Contains(t, string(dt), "search example.com example.org")
 
 		require.NoError(t, err)
 

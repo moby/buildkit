@@ -948,6 +948,7 @@ func (lbf *llbBridgeForwarder) NewContainer(ctx context.Context, in *pb.NewConta
 		NetMode:     in.Network,
 		Platform:    in.Platform,
 		Constraints: in.Constraints,
+		DNS:         in.Dns,
 	}
 
 	for _, m := range in.Mounts {

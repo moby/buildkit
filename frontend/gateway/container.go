@@ -30,6 +30,7 @@ type NewContainerRequest struct {
 	ContainerID string
 	NetMode     opspb.NetMode
 	ExtraHosts  []executor.HostIP
+	DNS         *opspb.DNS
 	Mounts      []Mount
 	Platform    *opspb.Platform
 	Constraints *opspb.WorkerConstraints

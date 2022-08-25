@@ -222,6 +222,7 @@ message NewContainerRequest {
 	pb.Platform platform = 4;
 	pb.WorkerConstraints constraints = 5;
 	repeated pb.HostIP extraHosts = 6;
+	pb.DNS dns = 7;
 }
 
 message NewContainerResponse{}

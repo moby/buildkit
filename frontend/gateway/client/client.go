@@ -28,6 +28,7 @@ type NewContainerRequest struct {
 	Mounts      []Mount
 	NetMode     pb.NetMode
 	ExtraHosts  []*pb.HostIP
+	DNS         *pb.DNS
 	Platform    *pb.Platform
 	Constraints *pb.WorkerConstraints
 }

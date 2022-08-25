@@ -787,6 +787,7 @@ func (c *grpcClient) NewContainer(ctx context.Context, req client.NewContainerRe
 		Constraints: req.Constraints,
 		Network:     req.NetMode,
 		ExtraHosts:  req.ExtraHosts,
+		Dns:         req.DNS,
 	})
 	if err != nil {
 		return nil, err

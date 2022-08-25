@@ -240,6 +240,7 @@ func (c *bridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 		ContainerID: identity.NewID(),
 		NetMode:     req.NetMode,
 		Mounts:      make([]gateway.Mount, len(req.Mounts)),
+		DNS:         req.DNS,
 	}
 
 	eg, ctx := errgroup.WithContext(ctx)
