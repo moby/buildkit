@@ -40,6 +40,7 @@ const (
 	attrEndpointURL     = "endpoint_url"
 	attrAccessKeyID     = "access_key_id"
 	attrSecretAccessKey = "secret_access_key"
+	attrSessionToken    = "session_token"
 	attrUsePathStyle    = "use_path_style"
 )
 
@@ -54,6 +55,7 @@ type Config struct {
 	EndpointURL     string
 	AccessKeyID     string
 	SecretAccessKey string
+	SessionToken    string
 	UsePathStyle    bool
 }
 
@@ -108,6 +110,7 @@ func getConfig(attrs map[string]string) (Config, error) {
 	endpointURL := attrs[attrEndpointURL]
 	accessKeyID := attrs[attrAccessKeyID]
 	secretAccessKey := attrs[attrSecretAccessKey]
+	sessionToken := attrs[attrSessionToken]
 
 	usePathStyle := false
 	usePathStyleStr, ok := attrs[attrUsePathStyle]
@@ -129,6 +132,7 @@ func getConfig(attrs map[string]string) (Config, error) {
 		EndpointURL:     endpointURL,
 		AccessKeyID:     accessKeyID,
 		SecretAccessKey: secretAccessKey,
+		SessionToken:    sessionToken,
 		UsePathStyle:    usePathStyle,
 	}, nil
 }
@@ -200,14 +204,13 @@ func (e *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 			}
 		} else {
 			layerDone := progress.OneOff(ctx, fmt.Sprintf("writing layer %s", l.Blob))
-			bytes, err := content.ReadBlob(ctx, dgstPair.Provider, dgstPair.Descriptor)
+			dt, err := content.ReadBlob(ctx, dgstPair.Provider, dgstPair.Descriptor)
 			if err != nil {
 				return nil, layerDone(err)
 			}
-			if err := e.s3Client.saveMutable(ctx, key, bytes); err != nil {
+			if err := e.s3Client.saveMutable(ctx, key, dt); err != nil {
 				return nil, layerDone(errors.Wrap(err, "error writing layer blob"))
 			}
-
 			layerDone(nil)
 		}
 
@@ -352,7 +355,7 @@ func newS3Client(ctx context.Context, config Config) (*s3Client, error) {
 	}
 	client := s3.NewFromConfig(cfg, func(options *s3.Options) {
 		if config.AccessKeyID != "" && config.SecretAccessKey != "" {
-			options.Credentials = credentials.NewStaticCredentialsProvider(config.AccessKeyID, config.SecretAccessKey, "")
+			options.Credentials = credentials.NewStaticCredentialsProvider(config.AccessKeyID, config.SecretAccessKey, config.SessionToken)
 		}
 		if config.EndpointURL != "" {
 			options.UsePathStyle = config.UsePathStyle
@@ -435,7 +438,7 @@ func (s3Client *s3Client) exists(ctx context.Context, key string) (*time.Time, e
 
 func (s3Client *s3Client) touch(ctx context.Context, key string) error {
 	copySource := fmt.Sprintf("%s/%s", s3Client.bucket, key)
-	copy := &s3.CopyObjectInput{
+	cp := &s3.CopyObjectInput{
 		Bucket:            &s3Client.bucket,
 		CopySource:        &copySource,
 		Key:               &key,
@@ -443,7 +446,7 @@ func (s3Client *s3Client) touch(ctx context.Context, key string) error {
 		MetadataDirective: "REPLACE",
 	}
 
-	_, err := s3Client.CopyObject(ctx, copy)
+	_, err := s3Client.CopyObject(ctx, cp)
 
 	return err
 }
@@ -464,6 +467,6 @@ func (s3Client *s3Client) blobKey(dgst digest.Digest) string {
 }
 
 func isNotFound(err error) bool {
-	var error smithy.APIError
-	return errors.As(err, &error) && (error.ErrorCode() == "NoSuchKey" || error.ErrorCode() == "NotFound")
+	var errapi smithy.APIError
+	return errors.As(err, &errapi) && (errapi.ErrorCode() == "NoSuchKey" || errapi.ErrorCode() == "NotFound")
 }
