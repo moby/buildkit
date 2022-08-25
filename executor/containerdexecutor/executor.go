@@ -97,12 +97,9 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 		}
 	}
 
-	resolvConf, clean, err := oci.GetResolvConf(ctx, w.root, nil, dns)
+	resolvConf, err := oci.GetResolvConf(ctx, w.root, nil, dns)
 	if err != nil {
 		return err
-	}
-	if clean != nil {
-		defer clean()
 	}
 
 	hostsFile, clean, err := oci.GetHostsFile(ctx, w.root, meta.ExtraHosts, nil, meta.Hostname)

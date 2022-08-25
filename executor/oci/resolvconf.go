@@ -41,7 +41,7 @@ func (dns *DNSConfig) Hash() string {
 	return base64.RawURLEncoding.EncodeToString(hash.Sum(nil))
 }
 
-func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.IdentityMapping, dns *DNSConfig) (string, func(), error) {
+func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.IdentityMapping, dns *DNSConfig) (string, error) {
 	p := filepath.Join(stateDir, "resolv.conf")
 	if idmap != nil {
 		// each file is chmod'd to match the container's root
@@ -144,9 +144,7 @@ func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.Identity
 		return "", nil
 	})
 	if err != nil {
-		return "", nil, err
+		return "", err
 	}
-	return p, func() {
-		os.RemoveAll(p)
-	}, nil
+	return p, nil
 }
