@@ -2,6 +2,9 @@ package oci
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -24,8 +27,31 @@ type DNSConfig struct {
 	SearchDomains []string
 }
 
-func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.IdentityMapping, dns *DNSConfig) (string, error) {
+func (dns *DNSConfig) Hash() string {
+	hash := sha256.New()
+	for _, x := range dns.Nameservers {
+		fmt.Fprintf(hash, "nameserver %s\n", x)
+	}
+	for _, x := range dns.Options {
+		fmt.Fprintf(hash, "options %s\n", x)
+	}
+	for _, x := range dns.SearchDomains {
+		fmt.Fprintf(hash, "search %s\n", x)
+	}
+	return base64.RawURLEncoding.EncodeToString(hash.Sum(nil))
+}
+
+func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.IdentityMapping, dns *DNSConfig) (string, func(), error) {
 	p := filepath.Join(stateDir, "resolv.conf")
+	if idmap != nil {
+		// each file is chmod'd to match the container's root
+		root := idmap.RootPair()
+		p += "." + fmt.Sprintf("%d.%d", root.UID, root.GID)
+	}
+	if dns != nil {
+		p += "." + dns.Hash()
+	}
+
 	_, err := g.Do(ctx, stateDir, func(ctx context.Context) (interface{}, error) {
 		generate := !notFirstRun
 		notFirstRun = true
@@ -70,6 +96,14 @@ func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.Identity
 			dt = f.Content
 		}
 
+		f, err = resolvconf.FilterResolvDNS(dt, true)
+		if err != nil {
+			return "", err
+		}
+
+		dt = f.Content
+
+		tmpPath := p + ".tmp"
 		if dns != nil {
 			var (
 				dnsNameservers   = resolvconf.GetNameservers(dt, resolvconf.IP)
@@ -86,20 +120,14 @@ func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.Identity
 				dnsOptions = dns.Options
 			}
 
-			f, err = resolvconf.Build(p+".tmp", dnsNameservers, dnsSearchDomains, dnsOptions)
+			f, err = resolvconf.Build(tmpPath, dnsNameservers, dnsSearchDomains, dnsOptions)
 			if err != nil {
 				return "", err
 			}
 			dt = f.Content
 		}
 
-		f, err = resolvconf.FilterResolvDNS(dt, true)
-		if err != nil {
-			return "", err
-		}
-
-		tmpPath := p + ".tmp"
-		if err := os.WriteFile(tmpPath, f.Content, 0644); err != nil {
+		if err := os.WriteFile(tmpPath, dt, 0644); err != nil {
 			return "", err
 		}
 
@@ -116,7 +144,9 @@ func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.Identity
 		return "", nil
 	})
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	return p, nil
+	return p, func() {
+		os.RemoveAll(p)
+	}, nil
 }

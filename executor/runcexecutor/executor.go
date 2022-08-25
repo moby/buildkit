@@ -180,9 +180,12 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 		}
 	}
 
-	resolvConf, err := oci.GetResolvConf(ctx, w.root, w.idmap, dns)
+	resolvConf, clean, err := oci.GetResolvConf(ctx, w.root, w.idmap, dns)
 	if err != nil {
 		return err
+	}
+	if clean != nil {
+		defer clean()
 	}
 
 	hostsFile, clean, err := oci.GetHostsFile(ctx, w.root, meta.ExtraHosts, w.idmap, meta.Hostname)
