@@ -19,7 +19,7 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
-	"github.com/moby/buildkit/util/attestation"
+	"github.com/moby/buildkit/solver/result"
 	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/entitlements"
@@ -176,55 +176,40 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 			return nil, err
 		}
 		if len(dtbi) > 0 {
-			if res.Metadata == nil {
-				res.Metadata = make(map[string][]byte)
-			}
-			res.Metadata[exptypes.ExporterBuildInfo] = dtbi
+			res.AddMeta(exptypes.ExporterBuildInfo, dtbi)
 		}
 	}
-	if res.Refs != nil {
-		for k, r := range res.Refs {
-			if r == nil {
-				continue
-			}
-			dtbi, err := buildinfo.Encode(ctx, res.Metadata, fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, k), r.BuildSources())
-			if err != nil {
-				return nil, err
-			}
-			if len(dtbi) > 0 {
-				if res.Metadata == nil {
-					res.Metadata = make(map[string][]byte)
-				}
-				res.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, k)] = dtbi
-			}
+	for k, r := range res.Refs {
+		if r == nil {
+			continue
+		}
+		dtbi, err := buildinfo.Encode(ctx, res.Metadata, fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, k), r.BuildSources())
+		if err != nil {
+			return nil, err
+		}
+		if len(dtbi) > 0 {
+			res.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, k), dtbi)
 		}
 	}
 
 	var exporterResponse map[string]string
 	if e := exp.Exporter; e != nil {
-		inp := exporter.Source{
-			Metadata:     res.Metadata,
-			Attestations: res.Attestations,
+		cached, err := result.ConvertResult(res, func(res solver.ResultProxy) (solver.CachedResult, error) {
+			return res.Result(ctx)
+		})
+		if err != nil {
+			return nil, err
 		}
-		if inp.Metadata == nil {
-			inp.Metadata = make(map[string][]byte)
-		}
-		if inp.Attestations == nil {
-			inp.Attestations = make(map[string][]attestation.Attestation)
-		}
-		var cr solver.CachedResult
-		var crMap = map[string]solver.CachedResult{}
-		if res := res.Ref; res != nil {
-			r, err := res.Result(ctx)
-			if err != nil {
-				return nil, err
-			}
-			workerRef, ok := r.Sys().(*worker.WorkerRef)
+
+		inp, err := result.ConvertResult(cached, func(res solver.CachedResult) (cache.ImmutableRef, error) {
+			workerRef, ok := res.Sys().(*worker.WorkerRef)
 			if !ok {
-				return nil, errors.Errorf("invalid reference: %T", r.Sys())
+				return nil, errors.Errorf("invalid reference: %T", res.Sys())
 			}
-			inp.Ref = workerRef.ImmutableRef
-			cr = r
+			return workerRef.ImmutableRef, nil
+		})
+		if err != nil {
+			return nil, err
 		}
 		if res.Refs != nil {
 			m := make(map[string]cache.ImmutableRef, len(res.Refs))
@@ -241,29 +226,29 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 						return nil, errors.Errorf("invalid reference: %T", r.Sys())
 					}
 					m[k] = workerRef.ImmutableRef
-					crMap[k] = r
 				}
 			}
 			inp.Refs = m
 		}
+
 		if _, ok := asInlineCache(exp.CacheExporter); ok {
 			if err := inBuilderContext(ctx, j, "preparing layers for inline cache", j.SessionID+"-cache-inline", func(ctx context.Context, _ session.Group) error {
-				if cr != nil {
-					dtic, err := inlineCache(ctx, exp.CacheExporter, cr, e.Config().Compression, session.NewGroup(sessionID))
+				if cached.Ref != nil {
+					dtic, err := inlineCache(ctx, exp.CacheExporter, cached.Ref, e.Config().Compression, session.NewGroup(sessionID))
 					if err != nil {
 						return err
 					}
 					if dtic != nil {
-						inp.Metadata[exptypes.ExporterInlineCache] = dtic
+						inp.AddMeta(exptypes.ExporterInlineCache, dtic)
 					}
 				}
-				for k, res := range crMap {
+				for k, res := range cached.Refs {
 					dtic, err := inlineCache(ctx, exp.CacheExporter, res, e.Config().Compression, session.NewGroup(sessionID))
 					if err != nil {
 						return err
 					}
 					if dtic != nil {
-						inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, k)] = dtic
+						inp.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, k), dtic)
 					}
 				}
 				exp.CacheExporter = nil

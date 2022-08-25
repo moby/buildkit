@@ -165,10 +165,7 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest, sid st
 				return nil, err
 			}
 			if len(dtbi) > 0 {
-				if res.Metadata == nil {
-					res.Metadata = make(map[string][]byte)
-				}
-				res.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, p)] = dtbi
+				res.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, p), dtbi)
 			}
 		}
 	} else {
@@ -177,10 +174,7 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest, sid st
 			return nil, err
 		}
 		if len(dtbi) > 0 {
-			if res.Metadata == nil {
-				res.Metadata = make(map[string][]byte)
-			}
-			res.Metadata[exptypes.ExporterBuildInfo] = dtbi
+			res.AddMeta(exptypes.ExporterBuildInfo, dtbi)
 		}
 	}
 

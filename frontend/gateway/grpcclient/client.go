@@ -21,7 +21,6 @@ import (
 	"github.com/moby/buildkit/identity"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
-	"github.com/moby/buildkit/util/attestation"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/sys/signal"
@@ -116,7 +115,7 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 			req := &pb.ReturnRequest{}
 			if retError == nil {
 				if res == nil {
-					res = &client.Result{}
+					res = client.NewResult()
 				}
 				pbRes := &pb.Result{
 					Metadata: res.Metadata,
@@ -422,7 +421,7 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (res *
 		return nil, err
 	}
 
-	res = &client.Result{}
+	res = client.NewResult()
 	if resp.Result == nil {
 		if id := resp.Ref; id != "" {
 			c.requests[id] = req
@@ -465,14 +464,13 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (res *
 		}
 
 		if resp.Result.Attestations != nil {
-			res.Attestations = map[string][]attestation.Attestation{}
 			for p, as := range resp.Result.Attestations {
 				for _, a := range as.Attestation {
 					att, err := pb.FromAttestationPB(a)
 					if err != nil {
 						return nil, err
 					}
-					res.Attestations[p] = append(res.Attestations[p], att)
+					res.AddAttestation(p, att, nil)
 				}
 			}
 		}

@@ -7,11 +7,20 @@ import (
 
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/solver/result"
 	"github.com/moby/buildkit/util/apicaps"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	fstypes "github.com/tonistiigi/fsutil/types"
 )
+
+type Result = result.Result[Reference]
+
+type BuildFunc func(context.Context, Client) (*Result, error)
+
+func NewResult() *Result {
+	return &Result{}
+}
 
 type Client interface {
 	Solve(ctx context.Context, req SolveRequest) (*Result, error)

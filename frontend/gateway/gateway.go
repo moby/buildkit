@@ -38,7 +38,6 @@ import (
 	llberrdefs "github.com/moby/buildkit/solver/llbsolver/errdefs"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
-	"github.com/moby/buildkit/util/attestation"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/grpcerrors"
@@ -707,7 +706,7 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 	}
 
 	if res.Attestations != nil {
-		attestations := map[string]*pb.Attestations{}
+		pbRes.Attestations = map[string]*pb.Attestations{}
 		for k, atts := range res.Attestations {
 			for _, att := range atts {
 				pbAtt, err := pb.ToAttestationPB(att)
@@ -715,13 +714,12 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 					return nil, err
 				}
 
-				if attestations[k] == nil {
-					attestations[k] = &pb.Attestations{}
+				if pbRes.Attestations[k] == nil {
+					pbRes.Attestations[k] = &pb.Attestations{}
 				}
-				attestations[k].Attestation = append(attestations[k].Attestation, pbAtt)
+				pbRes.Attestations[k].Attestation = append(pbRes.Attestations[k].Attestation, pbAtt)
 			}
 		}
-		pbRes.Attestations = attestations
 	}
 
 	lbf.mu.Unlock()
@@ -890,44 +888,39 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 		if err != nil {
 			return nil, err
 		}
-		r.Ref = ref
+		r.SetRef(ref)
 	case *pb.Result_RefsDeprecated:
-		m := map[string]solver.ResultProxy{}
 		for k, id := range res.RefsDeprecated.Refs {
 			ref, err := lbf.cloneRef(id)
 			if err != nil {
 				return nil, err
 			}
-			m[k] = ref
+			r.AddRef(k, ref)
 		}
-		r.Refs = m
 	case *pb.Result_Ref:
 		ref, err := lbf.cloneRef(res.Ref.Id)
 		if err != nil {
 			return nil, err
 		}
-		r.Ref = ref
+		r.SetRef(ref)
 	case *pb.Result_Refs:
-		m := map[string]solver.ResultProxy{}
 		for k, ref := range res.Refs.Refs {
 			ref, err := lbf.cloneRef(ref.Id)
 			if err != nil {
 				return nil, err
 			}
-			m[k] = ref
+			r.AddRef(k, ref)
 		}
-		r.Refs = m
 	}
 
 	if in.Result.Attestations != nil {
-		r.Attestations = map[string][]attestation.Attestation{}
 		for k, pbAtts := range in.Result.Attestations {
 			for _, pbAtt := range pbAtts.Attestation {
 				att, err := pb.FromAttestationPB(pbAtt)
 				if err != nil {
 					return nil, err
 				}
-				r.Attestations[k] = append(r.Attestations[k], att)
+				r.AddAttestation(k, att, nil)
 			}
 		}
 	}

@@ -70,7 +70,7 @@ func (e *localExporterInstance) Config() exporter.Config {
 	return exporter.Config{}
 }
 
-func (e *localExporterInstance) Export(ctx context.Context, inp exporter.Source, sessionID string) (map[string]string, error) {
+func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source, sessionID string) (map[string]string, error) {
 	var defers []func()
 
 	defer func() {

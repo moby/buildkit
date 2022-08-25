@@ -22,6 +22,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/solver/result"
 	"github.com/moby/buildkit/util/attestation"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/buildinfo"
@@ -54,7 +55,7 @@ type ImageWriter struct {
 	opt WriterOpt
 }
 
-func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, sessionID string, opts *ImageCommitOpts) (*ocispecs.Descriptor, error) {
+func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, sessionID string, opts *ImageCommitOpts) (*ocispecs.Descriptor, error) {
 	platformsBytes, ok := inp.Metadata[exptypes.ExporterPlatformsKey]
 
 	if len(inp.Refs) > 0 && !ok {
@@ -248,7 +249,7 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, refCfg cacheconfig.RefC
 	return out, err
 }
 
-func (ic *ImageWriter) extractAttestations(ctx context.Context, s session.Group, desc *ocispecs.Descriptor, refs map[string]cache.ImmutableRef, attestations []attestation.Attestation) ([]intoto.Statement, error) {
+func (ic *ImageWriter) extractAttestations(ctx context.Context, s session.Group, desc *ocispecs.Descriptor, refs map[string]cache.ImmutableRef, attestations []result.Attestation) ([]intoto.Statement, error) {
 	eg, ctx := errgroup.WithContext(ctx)
 	statements := make([]intoto.Statement, len(attestations))
 
@@ -260,7 +261,7 @@ func (ic *ImageWriter) extractAttestations(ctx context.Context, s session.Group,
 		i, att := i, att
 		eg.Go(func() error {
 			switch att := att.(type) {
-			case *attestation.InTotoAttestation:
+			case *result.InTotoAttestation:
 				ref, ok := refs[att.PredicateRefKey]
 				if !ok {
 					return errors.Errorf("key %s not found in refs map", att.PredicateRefKey)
@@ -293,12 +294,12 @@ func (ic *ImageWriter) extractAttestations(ctx context.Context, s session.Group,
 				}
 				for _, subject := range att.Subjects {
 					switch subject2 := subject.(type) {
-					case *attestation.InTotoSubjectSelf:
+					case *result.InTotoSubjectSelf:
 						statements[i].Subject = append(statements[i].Subject, intoto.Subject{
 							Name:   "_",
-							Digest: attestation.DigestToDigestMap(desc.Digest),
+							Digest: result.DigestToDigestMap(desc.Digest),
 						})
-					case *attestation.InTotoSubjectRaw:
+					case *result.InTotoSubjectRaw:
 						statements[i].Subject = append(statements[i].Subject, intoto.Subject{
 							Name:   subject2.Name,
 							Digest: subject2.DigestMap(),

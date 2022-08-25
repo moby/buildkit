@@ -195,7 +195,7 @@ func (e *imageExporterInstance) Config() exporter.Config {
 	}
 }
 
-func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source, sessionID string) (map[string]string, error) {
+func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source, sessionID string) (map[string]string, error) {
 	if src.Metadata == nil {
 		src.Metadata = make(map[string][]byte)
 	}
@@ -324,7 +324,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	return resp, nil
 }
 
-func (e *imageExporterInstance) pushImage(ctx context.Context, src exporter.Source, sessionID string, targetName string, dgst digest.Digest) error {
+func (e *imageExporterInstance) pushImage(ctx context.Context, src *exporter.Source, sessionID string, targetName string, dgst digest.Digest) error {
 	annotations := map[digest.Digest]map[string]string{}
 	mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
 	if src.Ref != nil {
@@ -355,7 +355,7 @@ func (e *imageExporterInstance) pushImage(ctx context.Context, src exporter.Sour
 	return push.Push(ctx, e.opt.SessionManager, sessionID, mprovider, e.opt.ImageWriter.ContentStore(), dgst, targetName, e.insecure, e.opt.RegistryHosts, e.pushByDigest, annotations)
 }
 
-func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Image, src exporter.Source, s session.Group) (err0 error) {
+func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Image, src *exporter.Source, s session.Group) (err0 error) {
 	unpackDone := progress.OneOff(ctx, "unpacking to "+img.Name)
 	defer func() {
 		unpackDone(err0)

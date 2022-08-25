@@ -44,6 +44,7 @@ import (
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/solver/result"
 	"github.com/moby/buildkit/util/attestation"
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/contentutil"
@@ -6377,23 +6378,25 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 			if err != nil {
 				return nil, err
 			}
-			res.AddInTotoAttestation(pk, &attestation.InTotoAttestation{
-				PredicatePath: "/attestation.json",
-				PredicateType: "https://example.com/attestations/v1.0",
-				Subjects: []attestation.InTotoSubject{
-					&attestation.InTotoSubjectSelf{},
+			res.AddAttestation(pk, &result.InTotoAttestation{
+				PredicateRefKey: "foo",
+				PredicatePath:   "/attestation.json",
+				PredicateType:   "https://example.com/attestations/v1.0",
+				Subjects: []result.InTotoSubject{
+					&result.InTotoSubjectSelf{},
 				},
-			}, refAttest)
-			res.AddInTotoAttestation(pk, &attestation.InTotoAttestation{
-				PredicatePath: "/attestation2.json",
-				PredicateType: "https://example.com/attestations2/v1.0",
-				Subjects: []attestation.InTotoSubject{
-					&attestation.InTotoSubjectRaw{
+			}, map[string]gateway.Reference{"foo": refAttest})
+			res.AddAttestation(pk, &result.InTotoAttestation{
+				PredicateRefKey: "bar",
+				PredicatePath:   "/attestation2.json",
+				PredicateType:   "https://example.com/attestations2/v1.0",
+				Subjects: []result.InTotoSubject{
+					&result.InTotoSubjectRaw{
 						Name:   "/attestation.json",
 						Digest: []digest.Digest{successDigest},
 					},
 				},
-			}, refAttest)
+			}, map[string]gateway.Reference{"bar": refAttest})
 		}
 
 		dt, err := json.Marshal(expPlatforms)
