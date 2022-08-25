@@ -362,6 +362,7 @@ func (m *Attestations) GetAttestation() []*Attestations_Attestation {
 
 type Attestations_Attestation struct {
 	// Types that are valid to be assigned to Attestation:
+	//
 	//	*Attestations_Attestation_Intoto
 	Attestation          isAttestations_Attestation_Attestation `protobuf_oneof:"Attestation"`
 	XXX_NoUnkeyedLiteral struct{}                               `json:"-"`
@@ -508,6 +509,7 @@ func (m *InToto) GetSubjects() []*InToto_Subject {
 
 type InToto_Subject struct {
 	// Types that are valid to be assigned to Subject:
+	//
 	//	*InToto_Subject_Self
 	//	*InToto_Subject_Raw
 	Subject              isInToto_Subject_Subject `protobuf_oneof:"Subject"`
