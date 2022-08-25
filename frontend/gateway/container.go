@@ -58,6 +58,7 @@ func NewContainer(ctx context.Context, w worker.Worker, sm *session.Manager, g s
 		id:         req.ContainerID,
 		netMode:    req.NetMode,
 		extraHosts: req.ExtraHosts,
+		dns:        req.DNS,
 		platform:   platform,
 		executor:   w.Executor(),
 		errGroup:   eg,
@@ -282,6 +283,7 @@ type gatewayContainer struct {
 	id         string
 	netMode    opspb.NetMode
 	extraHosts []executor.HostIP
+	dns        *opspb.DNS
 	platform   opspb.Platform
 	rootFS     executor.Mount
 	mounts     []executor.Mount
@@ -306,6 +308,7 @@ func (gwCtr *gatewayContainer) Start(ctx context.Context, req client.StartReques
 			Tty:          req.Tty,
 			NetMode:      gwCtr.netMode,
 			ExtraHosts:   gwCtr.extraHosts,
+			DNS:          gwCtr.dns,
 			SecurityMode: req.SecurityMode,
 		},
 		Stdin:  req.Stdin,
