@@ -10,8 +10,8 @@ import (
 // GitRef represents a git ref.
 //
 // Examples:
-// - "https://github.com/foo/bar.git#baz/qux:quux/quuz" is parsed into:
-//   {Remote: "https://github.com/foo/bar.git", ShortName: "bar", Commit:"baz/qux", SubDir: "quux/quuz"}.
+//   - "https://github.com/foo/bar.git#baz/qux:quux/quuz" is parsed into:
+//     {Remote: "https://github.com/foo/bar.git", ShortName: "bar", Commit:"baz/qux", SubDir: "quux/quuz"}.
 type GitRef struct {
 	// Remote is the remote repository path.
 	Remote string

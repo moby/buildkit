@@ -317,10 +317,10 @@ func (e *edge) skipPhase2FastCache(dep *dep) bool {
 // previous calls.
 // To avoid deadlocks and resource leaks this function needs to follow
 // following rules:
-// 1) this function needs to return unclosed outgoing requests if some incoming
-//    requests were not completed
-// 2) this function may not return outgoing requests if it has completed all
-//    incoming requests
+//  1. this function needs to return unclosed outgoing requests if some incoming
+//     requests were not completed
+//  2. this function may not return outgoing requests if it has completed all
+//     incoming requests
 func (e *edge) unpark(incoming []pipe.Sender, updates, allPipes []pipe.Receiver, f *pipeFactory) {
 	// process all incoming changes
 	depChanged := false

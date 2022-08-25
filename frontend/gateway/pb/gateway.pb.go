@@ -35,6 +35,7 @@ const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type Result struct {
 	// Types that are valid to be assigned to Result:
+	//
 	//	*Result_RefDeprecated
 	//	*Result_RefsDeprecated
 	//	*Result_Ref
@@ -2054,6 +2055,7 @@ var xxx_messageInfo_ReleaseContainerResponse proto.InternalMessageInfo
 type ExecMessage struct {
 	ProcessID string `protobuf:"bytes,1,opt,name=ProcessID,proto3" json:"ProcessID,omitempty"`
 	// Types that are valid to be assigned to Input:
+	//
 	//	*ExecMessage_Init
 	//	*ExecMessage_File
 	//	*ExecMessage_Resize
