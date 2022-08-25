@@ -31,10 +31,10 @@ jobs:
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
         with:
           version: ${{ env.BUILDX_VERSION }}
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
@@ -42,7 +42,3 @@ jobs:
         name: Run
         run: |
           ${{ matrix.script }}
-      -
-        name: Dump context
-        if: always()
-        uses: crazy-max/ghaction-dump-context@v1
