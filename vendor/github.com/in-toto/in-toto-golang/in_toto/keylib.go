@@ -16,6 +16,8 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+
+	"github.com/secure-systems-lab/go-securesystemslib/cjson"
 )
 
 // ErrFailedPEMParsing gets returned when PKCS1, PKCS8 or PKIX key parsing fails
@@ -106,7 +108,7 @@ func (k *Key) generateKeyID() error {
 			"public": k.KeyVal.Public,
 		},
 	}
-	keyCanonical, err := EncodeCanonical(keyToBeHashed)
+	keyCanonical, err := cjson.EncodeCanonical(keyToBeHashed)
 	if err != nil {
 		return err
 	}
