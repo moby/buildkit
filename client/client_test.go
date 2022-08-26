@@ -6425,28 +6425,28 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 	desc, provider, err := contentutil.ProviderFromRef(target)
 	require.NoError(t, err)
 
-	index, err := testutil.ReadIndex(sb.Context(), provider, desc)
+	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, len(ps)*2, len(index))
+	require.Equal(t, len(ps)*2, len(imgs.Images))
 
-	var imgs []*testutil.ImageInfo
+	var bases []*testutil.ImageInfo
 	for _, p := range ps {
 		pk := platforms.Format(p)
-		img := index.Find(pk)
+		img := imgs.Find(pk)
 		require.NotNil(t, img)
 		require.Equal(t, pk, platforms.Format(*img.Desc.Platform))
 		require.Equal(t, 1, len(img.Layers))
 		require.Equal(t, []byte(fmt.Sprintf("hello %s!", pk)), img.Layers[0]["greeting"].Data)
-		imgs = append(imgs, img)
+		bases = append(bases, img)
 	}
 
-	atts := index.Filter("unknown/unknown")
-	require.Equal(t, len(ps), len(atts))
-	for i, att := range atts {
+	atts := imgs.Filter("unknown/unknown")
+	require.Equal(t, len(ps), len(atts.Images))
+	for i, att := range atts.Images {
 		require.Equal(t, "unknown/unknown", platforms.Format(*att.Desc.Platform))
 		require.Equal(t, "unknown/unknown", att.Img.OS+"/"+att.Img.Architecture)
 		require.Equal(t, attestation.DockerAnnotationReferenceTypeDefault, att.Desc.Annotations[attestation.DockerAnnotationReferenceType])
-		require.Equal(t, imgs[i].Desc.Digest.String(), att.Desc.Annotations[attestation.DockerAnnotationReferenceDigest])
+		require.Equal(t, bases[i].Desc.Digest.String(), att.Desc.Annotations[attestation.DockerAnnotationReferenceDigest])
 		require.Equal(t, 2, len(att.Layers))
 		require.Equal(t, len(att.Layers), len(att.Img.RootFS.DiffIDs))
 		require.Equal(t, len(att.Img.History), 0)
@@ -6460,7 +6460,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 		subjects := []intoto.Subject{{
 			Name: "_",
 			Digest: map[string]string{
-				"sha256": imgs[i].Desc.Digest.Encoded(),
+				"sha256": bases[i].Desc.Digest.Encoded(),
 			},
 		}}
 		require.Equal(t, subjects, attest.Subject)

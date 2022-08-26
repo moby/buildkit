@@ -3954,14 +3954,14 @@ COPY --from=base arch /
 	desc, provider, err := contentutil.ProviderFromRef(target + "-img")
 	require.NoError(t, err)
 
-	imgMap, err := testutil.ReadIndex(sb.Context(), provider, desc)
+	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
 
-	require.Equal(t, 2, len(imgMap))
+	require.Equal(t, 2, len(imgs.Images))
 
-	require.Equal(t, "amd64", string(imgMap.Find("linux/amd64").Layers[1]["arch"].Data))
-	dtamd := imgMap.Find("linux/amd64").Layers[0]["unique"].Data
-	dtarm := imgMap.Find("linux/arm/v7").Layers[0]["unique"].Data
+	require.Equal(t, "amd64", string(imgs.Find("linux/amd64").Layers[1]["arch"].Data))
+	dtamd := imgs.Find("linux/amd64").Layers[0]["unique"].Data
+	dtarm := imgs.Find("linux/arm/v7").Layers[0]["unique"].Data
 	require.NotEqual(t, dtamd, dtarm)
 
 	for i := 0; i < 2; i++ {
@@ -3994,14 +3994,14 @@ COPY --from=base arch /
 
 		require.Equal(t, desc.Digest, desc2.Digest)
 
-		imgMap, err = testutil.ReadIndex(sb.Context(), provider, desc2)
+		imgs, err = testutil.ReadImages(sb.Context(), provider, desc2)
 		require.NoError(t, err)
 
-		require.Equal(t, 2, len(imgMap))
+		require.Equal(t, 2, len(imgs.Images))
 
-		require.Equal(t, "arm", string(imgMap.Find("linux/arm/v7").Layers[1]["arch"].Data))
-		dtamd2 := imgMap.Find("linux/amd64").Layers[0]["unique"].Data
-		dtarm2 := imgMap.Find("linux/arm/v7").Layers[0]["unique"].Data
+		require.Equal(t, "arm", string(imgs.Find("linux/arm/v7").Layers[1]["arch"].Data))
+		dtamd2 := imgs.Find("linux/amd64").Layers[0]["unique"].Data
+		dtarm2 := imgs.Find("linux/arm/v7").Layers[0]["unique"].Data
 		require.Equal(t, string(dtamd), string(dtamd2))
 		require.Equal(t, string(dtarm), string(dtarm2))
 	}
