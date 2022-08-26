@@ -12,53 +12,57 @@ import (
 
 type ImageInfo struct {
 	Desc         ocispecs.Descriptor
+	Manifest     ocispecs.Manifest
 	Img          ocispecs.Image
 	Layers       []map[string]*TarItem
 	LayersRaw    [][]byte
 	descPlatform string
 }
 
-type ImageInfos []*ImageInfo
-
-func (infos ImageInfos) Find(platform string) *ImageInfo {
-	result := infos.Filter(platform)
-	if len(result) == 0 {
-		return nil
-	}
-	return result[0]
+type ImagesInfo struct {
+	Desc   ocispecs.Descriptor
+	Index  ocispecs.Index
+	Images []*ImageInfo
 }
 
-func (infos ImageInfos) Filter(platform string) ImageInfos {
-	result := ImageInfos{}
-	for _, info := range infos {
+func (idx ImagesInfo) Find(platform string) *ImageInfo {
+	result := idx.Filter(platform)
+	if len(result.Images) == 0 {
+		return nil
+	}
+	return result.Images[0]
+}
+
+func (idx ImagesInfo) Filter(platform string) *ImagesInfo {
+	result := &ImagesInfo{Desc: idx.Desc}
+	for _, info := range idx.Images {
 		if info.descPlatform == platform {
-			result = append(result, info)
+			result.Images = append(result.Images, info)
 		}
 	}
 	return result
 }
 
-func ReadIndex(ctx context.Context, p content.Provider, desc ocispecs.Descriptor) (ImageInfos, error) {
-	infos := ImageInfos{}
+func ReadImages(ctx context.Context, p content.Provider, desc ocispecs.Descriptor) (*ImagesInfo, error) {
+	idx := &ImagesInfo{Desc: desc}
 
 	dt, err := content.ReadBlob(ctx, p, desc)
 	if err != nil {
 		return nil, err
 	}
-	var idx ocispecs.Index
-	if err := json.Unmarshal(dt, &idx); err != nil {
+	if err := json.Unmarshal(dt, &idx.Index); err != nil {
 		return nil, err
 	}
 
-	for _, m := range idx.Manifests {
+	for _, m := range idx.Index.Manifests {
 		img, err := ReadImage(ctx, p, m)
 		if err != nil {
 			return nil, err
 		}
 		img.descPlatform = platforms.Format(*m.Platform)
-		infos = append(infos, img)
+		idx.Images = append(idx.Images, img)
 	}
-	return infos, nil
+	return idx, nil
 }
 
 func ReadImage(ctx context.Context, p content.Provider, desc ocispecs.Descriptor) (*ImageInfo, error) {
@@ -68,12 +72,11 @@ func ReadImage(ctx context.Context, p content.Provider, desc ocispecs.Descriptor
 	if err != nil {
 		return nil, err
 	}
-	var mfst ocispecs.Manifest
-	if err := json.Unmarshal(dt, &mfst); err != nil {
+	if err := json.Unmarshal(dt, &ii.Manifest); err != nil {
 		return nil, err
 	}
 
-	dt, err = content.ReadBlob(ctx, p, mfst.Config)
+	dt, err = content.ReadBlob(ctx, p, ii.Manifest.Config)
 	if err != nil {
 		return nil, err
 	}
@@ -81,9 +84,9 @@ func ReadImage(ctx context.Context, p content.Provider, desc ocispecs.Descriptor
 		return nil, err
 	}
 
-	ii.Layers = make([]map[string]*TarItem, len(mfst.Layers))
-	ii.LayersRaw = make([][]byte, len(mfst.Layers))
-	for i, l := range mfst.Layers {
+	ii.Layers = make([]map[string]*TarItem, len(ii.Manifest.Layers))
+	ii.LayersRaw = make([][]byte, len(ii.Manifest.Layers))
+	for i, l := range ii.Manifest.Layers {
 		dt, err := content.ReadBlob(ctx, p, l)
 		if err != nil {
 			return nil, err

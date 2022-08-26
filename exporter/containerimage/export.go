@@ -78,8 +78,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 			RefCfg: cacheconfig.RefConfig{
 				Compression: compression.New(compression.Default),
 			},
-			BuildInfo:   true,
-			Annotations: make(AnnotationsGroup),
+			BuildInfo: true,
 		},
 		store: true,
 	}
@@ -210,7 +209,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	if err != nil {
 		return nil, err
 	}
-	opts.Annotations = as.Merge(opts.Annotations)
+	opts.AddAnnotations(as)
 
 	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {

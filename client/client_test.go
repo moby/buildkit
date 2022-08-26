@@ -171,6 +171,7 @@ func TestIntegration(t *testing.T) {
 		testCallInfo,
 		testPullWithLayerLimit,
 		testExportAnnotations,
+		testExportAnnotationsMediaTypes,
 		testExportAttestations,
 	)
 	tests = append(tests, diffOpTestCases()...)
@@ -6098,6 +6099,12 @@ func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
 	amd64 := platforms.MustParse("linux/amd64")
 	arm64 := platforms.MustParse("linux/arm64")
 	ps := []ocispecs.Platform{amd64, arm64}
@@ -6163,18 +6170,19 @@ func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 
 	// testing for image exporter
 
-	target := "testannotations:latest"
+	target := registry + "/buildkit/testannotations:latest"
 
 	_, err = c.Build(sb.Context(), SolveOpt{
 		Exports: []ExportEntry{
 			{
 				Type: ExporterImage,
 				Attrs: map[string]string{
-					"name":                                            target,
-					"annotation-index.gio":                            "generic index opt",
-					"annotation-manifest.gmo":                         "generic manifest opt",
-					"annotation-manifest-descriptor.gmdo":             "generic manifest descriptor opt",
-					"annotation-manifest[linux/amd64].mo":             "amd64 manifest opt",
+					"name":                                target,
+					"push":                                "true",
+					"annotation-index.gio":                "generic index opt",
+					"annotation-manifest.gmo":             "generic manifest opt",
+					"annotation-manifest-descriptor.gmdo": "generic manifest descriptor opt",
+					"annotation-manifest[linux/amd64].mo": "amd64 manifest opt",
 					"annotation-manifest-descriptor[linux/amd64].mdo": "amd64 manifest descriptor opt",
 					"annotation-manifest[linux/arm64].mo":             "arm64 manifest opt",
 					"annotation-manifest-descriptor[linux/arm64].mdo": "arm64 manifest descriptor opt",
@@ -6184,53 +6192,42 @@ func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 	}, "", frontend, nil)
 	require.NoError(t, err)
 
-	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
-	cdAddress := sb.ContainerdAddress()
-	if cdAddress != "" {
-		client, err := newContainerd(cdAddress)
-		require.NoError(t, err)
-		defer client.Close()
+	desc, provider, err := contentutil.ProviderFromRef(target)
+	require.NoError(t, err)
+	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(imgs.Images))
 
-		img, err := client.GetImage(ctx, target)
-		require.NoError(t, err)
-
-		var index ocispecs.Index
-		indexBytes, err := content.ReadBlob(ctx, client.ContentStore(), img.Target())
-		require.NoError(t, err)
-		require.NoError(t, json.Unmarshal(indexBytes, &index))
-
-		require.Equal(t, "generic index", index.Annotations["gi"])
-		require.Equal(t, "generic index opt", index.Annotations["gio"])
-		for _, desc := range index.Manifests {
-			require.Equal(t, "generic manifest descriptor", desc.Annotations["gmd"])
-			require.Equal(t, "generic manifest descriptor opt", desc.Annotations["gmdo"])
-			switch {
-			case platforms.Only(amd64).Match(*desc.Platform):
-				require.Equal(t, "amd64 manifest descriptor", desc.Annotations["md"])
-				require.Equal(t, "amd64 manifest descriptor opt", desc.Annotations["mdo"])
-			case platforms.Only(arm64).Match(*desc.Platform):
-				require.Equal(t, "arm64 manifest descriptor", desc.Annotations["md"])
-				require.Equal(t, "arm64 manifest descriptor opt", desc.Annotations["mdo"])
-			default:
-				require.Fail(t, "unrecognized platform")
-			}
+	require.Equal(t, "generic index", imgs.Index.Annotations["gi"])
+	require.Equal(t, "generic index opt", imgs.Index.Annotations["gio"])
+	for _, desc := range imgs.Index.Manifests {
+		require.Equal(t, "generic manifest descriptor", desc.Annotations["gmd"])
+		require.Equal(t, "generic manifest descriptor opt", desc.Annotations["gmdo"])
+		switch {
+		case platforms.Only(amd64).Match(*desc.Platform):
+			require.Equal(t, "amd64 manifest descriptor", desc.Annotations["md"])
+			require.Equal(t, "amd64 manifest descriptor opt", desc.Annotations["mdo"])
+		case platforms.Only(arm64).Match(*desc.Platform):
+			require.Equal(t, "arm64 manifest descriptor", desc.Annotations["md"])
+			require.Equal(t, "arm64 manifest descriptor opt", desc.Annotations["mdo"])
+		default:
+			require.Fail(t, "unrecognized platform")
 		}
-
-		mfst, err := images.Manifest(ctx, client.ContentStore(), img.Target(), platforms.Only(amd64))
-		require.NoError(t, err)
-		require.Equal(t, "generic default", mfst.Annotations["gd"])
-		require.Equal(t, "generic manifest", mfst.Annotations["gm"])
-		require.Equal(t, "generic manifest opt", mfst.Annotations["gmo"])
-		require.Equal(t, "amd64 manifest", mfst.Annotations["m"])
-		require.Equal(t, "amd64 manifest opt", mfst.Annotations["mo"])
-
-		mfst, err = images.Manifest(ctx, client.ContentStore(), img.Target(), platforms.Only(arm64))
-		require.NoError(t, err)
-		require.Equal(t, "generic manifest", mfst.Annotations["gm"])
-		require.Equal(t, "generic manifest opt", mfst.Annotations["gmo"])
-		require.Equal(t, "arm64 manifest", mfst.Annotations["m"])
-		require.Equal(t, "arm64 manifest opt", mfst.Annotations["mo"])
 	}
+
+	amdImage := imgs.Find(platforms.Format(amd64))
+	require.Equal(t, "generic default", amdImage.Manifest.Annotations["gd"])
+	require.Equal(t, "generic manifest", amdImage.Manifest.Annotations["gm"])
+	require.Equal(t, "generic manifest opt", amdImage.Manifest.Annotations["gmo"])
+	require.Equal(t, "amd64 manifest", amdImage.Manifest.Annotations["m"])
+	require.Equal(t, "amd64 manifest opt", amdImage.Manifest.Annotations["mo"])
+
+	armImage := imgs.Find(platforms.Format(arm64))
+	require.Equal(t, "generic default", armImage.Manifest.Annotations["gd"])
+	require.Equal(t, "generic manifest", armImage.Manifest.Annotations["gm"])
+	require.Equal(t, "generic manifest opt", armImage.Manifest.Annotations["gmo"])
+	require.Equal(t, "arm64 manifest", armImage.Manifest.Annotations["m"])
+	require.Equal(t, "arm64 manifest opt", armImage.Manifest.Annotations["mo"])
 
 	// testing for oci exporter
 
@@ -6304,6 +6301,119 @@ func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 			require.Fail(t, "unrecognized platform")
 		}
 	}
+}
+
+func testExportAnnotationsMediaTypes(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	p := platforms.DefaultSpec()
+	ps := []ocispecs.Platform{p}
+
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		res := gateway.NewResult()
+		expPlatforms := &exptypes.Platforms{
+			Platforms: make([]exptypes.Platform, len(ps)),
+		}
+		for i, p := range ps {
+			st := llb.Scratch().File(
+				llb.Mkfile("platform", 0600, []byte(platforms.Format(p))),
+			)
+
+			def, err := st.Marshal(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			r, err := c.Solve(ctx, gateway.SolveRequest{
+				Definition: def.ToPB(),
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			ref, err := r.SingleRef()
+			if err != nil {
+				return nil, err
+			}
+
+			_, err = ref.ToState()
+			if err != nil {
+				return nil, err
+			}
+
+			k := platforms.Format(p)
+			res.AddRef(k, ref)
+
+			expPlatforms.Platforms[i] = exptypes.Platform{
+				ID:       k,
+				Platform: p,
+			}
+		}
+		dt, err := json.Marshal(expPlatforms)
+		if err != nil {
+			return nil, err
+		}
+		res.AddMeta(exptypes.ExporterPlatformsKey, dt)
+
+		return res, nil
+	}
+
+	target := registry + "/buildkit/testannotationsmedia:1"
+	_, err = c.Build(sb.Context(), SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":                  target,
+					"push":                  "true",
+					"annotation-manifest.a": "b",
+				},
+			},
+		},
+	}, "", frontend, nil)
+	require.NoError(t, err)
+
+	desc, provider, err := contentutil.ProviderFromRef(target)
+	require.NoError(t, err)
+	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(imgs.Images))
+
+	target2 := registry + "/buildkit/testannotationsmedia:2"
+	_, err = c.Build(sb.Context(), SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":               target2,
+					"push":               "true",
+					"annotation-index.c": "d",
+				},
+			},
+		},
+	}, "", frontend, nil)
+	require.NoError(t, err)
+
+	desc, provider, err = contentutil.ProviderFromRef(target2)
+	require.NoError(t, err)
+	imgs2, err := testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(imgs2.Images))
+
+	require.Equal(t, "b", imgs.Images[0].Manifest.Annotations["a"])
+	require.Equal(t, "d", imgs2.Index.Annotations["c"])
+
+	require.Equal(t, images.MediaTypeDockerSchema2ManifestList, imgs.Index.MediaType)
+	require.Equal(t, ocispecs.MediaTypeImageIndex, imgs2.Index.MediaType)
 }
 
 func testExportAttestations(t *testing.T, sb integration.Sandbox) {
@@ -6425,28 +6535,29 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 	desc, provider, err := contentutil.ProviderFromRef(target)
 	require.NoError(t, err)
 
-	index, err := testutil.ReadIndex(sb.Context(), provider, desc)
+	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, len(ps)*2, len(index))
+	require.Equal(t, len(ps)*2, len(imgs.Images))
 
-	var imgs []*testutil.ImageInfo
+	var bases []*testutil.ImageInfo
 	for _, p := range ps {
 		pk := platforms.Format(p)
-		img := index.Find(pk)
+		img := imgs.Find(pk)
 		require.NotNil(t, img)
 		require.Equal(t, pk, platforms.Format(*img.Desc.Platform))
 		require.Equal(t, 1, len(img.Layers))
 		require.Equal(t, []byte(fmt.Sprintf("hello %s!", pk)), img.Layers[0]["greeting"].Data)
-		imgs = append(imgs, img)
+		bases = append(bases, img)
 	}
 
-	atts := index.Filter("unknown/unknown")
-	require.Equal(t, len(ps), len(atts))
-	for i, att := range atts {
+	atts := imgs.Filter("unknown/unknown")
+	require.Equal(t, len(ps), len(atts.Images))
+	for i, att := range atts.Images {
+		require.Equal(t, ocispecs.MediaTypeImageManifest, att.Desc.MediaType)
 		require.Equal(t, "unknown/unknown", platforms.Format(*att.Desc.Platform))
 		require.Equal(t, "unknown/unknown", att.Img.OS+"/"+att.Img.Architecture)
 		require.Equal(t, attestation.DockerAnnotationReferenceTypeDefault, att.Desc.Annotations[attestation.DockerAnnotationReferenceType])
-		require.Equal(t, imgs[i].Desc.Digest.String(), att.Desc.Annotations[attestation.DockerAnnotationReferenceDigest])
+		require.Equal(t, bases[i].Desc.Digest.String(), att.Desc.Annotations[attestation.DockerAnnotationReferenceDigest])
 		require.Equal(t, 2, len(att.Layers))
 		require.Equal(t, len(att.Layers), len(att.Img.RootFS.DiffIDs))
 		require.Equal(t, len(att.Img.History), 0)
@@ -6460,7 +6571,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 		subjects := []intoto.Subject{{
 			Name: "_",
 			Digest: map[string]string{
-				"sha256": imgs[i].Desc.Digest.Encoded(),
+				"sha256": bases[i].Desc.Digest.Encoded(),
 			},
 		}}
 		require.Equal(t, subjects, attest.Subject)
