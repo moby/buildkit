@@ -91,7 +91,7 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 						}
 						ci, desc, err := resolveCI(ctx, g, im.Attrs)
 						if err != nil {
-							return err
+							return errors.Wrapf(err, "failed to configure %v cache importer", im.Type)
 						}
 						cmNew, err = ci.Resolve(ctx, desc, cmID, w)
 						return err

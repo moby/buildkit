@@ -416,14 +416,10 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 	var (
 		cacheExports []*controlapi.CacheOptionsEntry
 		cacheImports []*controlapi.CacheOptionsEntry
-		// legacy API is used for registry caches, because the daemon might not support the new API
-		legacyExportRef  string
-		legacyImportRefs []string
 	)
 	contentStores := make(map[string]content.Store)
 	indicesToUpdate := make(map[string]string) // key: index.JSON file name, value: tag
 	frontendAttrs := make(map[string]string)
-	legacyExportAttrs := make(map[string]string)
 	for _, ex := range opt.CacheExports {
 		if ex.Type == "local" {
 			csDir := ex.Attrs["dest"]
@@ -442,19 +438,16 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 			indexJSONPath := filepath.Join(csDir, "index.json")
 			indicesToUpdate[indexJSONPath] = "latest"
 		}
-		if ex.Type == "registry" && legacyExportRef == "" {
-			legacyExportRef = ex.Attrs["ref"]
-			for k, v := range ex.Attrs {
-				if k != "ref" {
-					legacyExportAttrs[k] = v
-				}
+		if ex.Type == "registry" {
+			regRef := ex.Attrs["ref"]
+			if regRef == "" {
+				return nil, errors.New("registry cache exporter requires ref")
 			}
-		} else {
-			cacheExports = append(cacheExports, &controlapi.CacheOptionsEntry{
-				Type:  ex.Type,
-				Attrs: ex.Attrs,
-			})
 		}
+		cacheExports = append(cacheExports, &controlapi.CacheOptionsEntry{
+			Type:  ex.Type,
+			Attrs: ex.Attrs,
+		})
 	}
 	for _, im := range opt.CacheImports {
 		attrs := im.Attrs
@@ -488,21 +481,17 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 			contentStores["local:"+csDir] = cs
 		}
 		if im.Type == "registry" {
-			legacyImportRef := attrs["ref"]
-			legacyImportRefs = append(legacyImportRefs, legacyImportRef)
-		} else {
-			cacheImports = append(cacheImports, &controlapi.CacheOptionsEntry{
-				Type:  im.Type,
-				Attrs: attrs,
-			})
+			regRef := im.Attrs["ref"]
+			if regRef == "" {
+				return nil, errors.New("registry cache importer requires ref")
+			}
 		}
+		cacheImports = append(cacheImports, &controlapi.CacheOptionsEntry{
+			Type:  im.Type,
+			Attrs: attrs,
+		})
 	}
 	if opt.Frontend != "" || isGateway {
-		// use legacy API for registry importers, because the frontend might not support the new API
-		if len(legacyImportRefs) > 0 {
-			frontendAttrs["cache-from"] = strings.Join(legacyImportRefs, ",")
-		}
-		// use new API for other importers
 		if len(cacheImports) > 0 {
 			s, err := json.Marshal(cacheImports)
 			if err != nil {
@@ -513,11 +502,6 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 	}
 	res := cacheOptions{
 		options: controlapi.CacheOptions{
-			// old API (for registry caches, planned to be removed in early 2019)
-			ExportRefDeprecated:   legacyExportRef,
-			ExportAttrsDeprecated: legacyExportAttrs,
-			ImportRefsDeprecated:  legacyImportRefs,
-			// new API
 			Exports: cacheExports,
 			Imports: cacheImports,
 		},
