@@ -47,7 +47,7 @@ func (r *Result[T]) AddAttestation(k string, v Attestation, ref T) {
 	if r.Attestations == nil {
 		r.Attestations = map[string][]Attestation{}
 	}
-	if !strings.HasPrefix(v.Ref, attestationRefPrefix) {
+	if v.ContentFunc == nil && !strings.HasPrefix(v.Ref, attestationRefPrefix) {
 		v.Ref = "attestation:" + identity.NewID()
 		r.Refs[v.Ref] = ref
 	}

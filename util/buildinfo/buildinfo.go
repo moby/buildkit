@@ -323,7 +323,7 @@ func filterAttrs(key string, attrs map[string]*string) map[string]*string {
 			continue
 		}
 		// always include
-		if strings.HasPrefix(k, "build-arg:") || strings.HasPrefix(k, "label:") {
+		if strings.HasPrefix(k, "build-arg:") || strings.HasPrefix(k, "label:") || strings.HasPrefix(k, "vcs:") {
 			filtered[k] = v
 			continue
 		}

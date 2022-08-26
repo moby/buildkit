@@ -343,6 +343,10 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		procs = append(procs, proc.ForceRefsProcessor, proc.SBOMProcessor(ref.String()))
 	}
 
+	if attrs, ok := attests["provenance"]; ok {
+		procs = append(procs, proc.ForceRefsProcessor, proc.ProvenanceProcessor(attrs))
+	}
+
 	resp, err := c.solver.Solve(ctx, req.Ref, req.Session, frontend.SolveRequest{
 		Frontend:       req.Frontend,
 		Definition:     req.Definition,

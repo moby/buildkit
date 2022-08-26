@@ -131,7 +131,11 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 
 	attestCount := 0
 	for _, attests := range inp.Attestations {
-		attestCount += len(attests)
+		for _, attest := range attests {
+			if attest.ContentFunc == nil {
+				attestCount++
+			}
+		}
 	}
 	if count := attestCount + len(p.Platforms); count != len(inp.Refs) {
 		return nil, errors.Errorf("number of required refs (%d) does not match number of references (%d)", count, len(inp.Refs))
@@ -306,35 +310,53 @@ func (ic *ImageWriter) extractAttestations(ctx context.Context, opts *ImageCommi
 	for i, att := range attestations {
 		i, att := i, att
 		eg.Go(func() error {
-			ref, ok := refs[att.Ref]
-			if !ok {
-				return errors.Errorf("key %s not found in refs map", att.Ref)
-			}
-			mount, err := ref.Mount(ctx, true, s)
-			if err != nil {
-				return err
-			}
-			lm := snapshot.LocalMounter(mount)
-			src, err := lm.Mount()
-			if err != nil {
-				return err
-			}
-			defer lm.Unmount()
-
-			switch att.Kind {
-			case gatewaypb.AttestationKindInToto:
-				p, err := fs.RootPath(src, att.Path)
+			var data []byte
+			var err error
+			var dir string
+			if att.ContentFunc != nil {
+				data, err = att.ContentFunc()
 				if err != nil {
 					return err
 				}
-				data, err := os.ReadFile(p)
+			} else {
+				ref, ok := refs[att.Ref]
+				if !ok {
+					return errors.Errorf("key %s not found in refs map", att.Ref)
+				}
+				mount, err := ref.Mount(ctx, true, s)
 				if err != nil {
-					return errors.Wrap(err, "cannot read in-toto attestation")
+					return err
 				}
-				if len(data) == 0 {
-					data = nil
+				lm := snapshot.LocalMounter(mount)
+				src, err := lm.Mount()
+				if err != nil {
+					return err
 				}
+				defer lm.Unmount()
 
+				switch att.Kind {
+				case gatewaypb.AttestationKindInToto:
+					p, err := fs.RootPath(src, att.Path)
+					if err != nil {
+						return err
+					}
+					data, err = os.ReadFile(p)
+					if err != nil {
+						return errors.Wrap(err, "cannot read in-toto attestation")
+					}
+					if len(data) == 0 {
+						data = nil
+					}
+				case gatewaypb.AttestationKindBundle:
+					dir, err = fs.RootPath(src, att.Path)
+					if err != nil {
+						return err
+					}
+				}
+			}
+
+			switch att.Kind {
+			case gatewaypb.AttestationKindInToto:
 				var subjects []intoto.Subject
 				if len(att.InToto.Subjects) == 0 {
 					att.InToto.Subjects = []result.InTotoSubject{{
@@ -380,10 +402,6 @@ func (ic *ImageWriter) extractAttestations(ctx context.Context, opts *ImageCommi
 				}
 				statements[i] = append(statements[i], stmt)
 			case gatewaypb.AttestationKindBundle:
-				dir, err := fs.RootPath(src, att.Path)
-				if err != nil {
-					return err
-				}
 				entries, err := os.ReadDir(dir)
 				if err != nil {
 					return err

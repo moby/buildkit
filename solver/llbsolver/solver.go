@@ -155,14 +155,6 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		}
 	}
 
-	for _, post := range post {
-		res2, err := post(ctx, res, s, j)
-		if err != nil {
-			return nil, err
-		}
-		res = res2
-	}
-
 	if res == nil {
 		res = &frontend.Result{}
 	}
@@ -206,6 +198,14 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		if len(dtbi) > 0 {
 			res.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, k), dtbi)
 		}
+	}
+
+	for _, post := range post {
+		res2, err := post(ctx, res, s, j)
+		if err != nil {
+			return nil, err
+		}
+		res = res2
 	}
 
 	cached, err := result.ConvertResult(res, func(res solver.ResultProxy) (solver.CachedResult, error) {
