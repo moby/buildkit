@@ -475,7 +475,10 @@ The simplest way is to use an IAM Instance profile.
 Others options are:
 
 * Any system using environment variables / config files supported by the [AWS Go SDK](https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html). The configuration must be available for the buildkit daemon, not for the client.
-* Access key ID and Secret Access Key, using the `access_key_id` and `secret_access_key` attributes.
+* Using the following attributes:
+  * `access_key_id`: Access Key ID
+  * `secret_access_key`: Secret Access Key
+  * `session_token`: Session Token
 
 `--export-cache` options:
 * `type=s3`
