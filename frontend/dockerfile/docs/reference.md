@@ -672,8 +672,11 @@ FROM [--platform=<platform>] <image>[@<digest>] [AS <name>]
 
 The `FROM` instruction initializes a new build stage and sets the
 [*Base Image*](https://docs.docker.com/glossary/#base-image) for subsequent instructions. As such, a
-valid `Dockerfile` must start with a `FROM` instruction. The image can be
-any valid image – it is especially easy to start by **pulling an image** from
+valid `Dockerfile` must start with a `FROM` instruction. 
+
+Docker has an auto resolver that will take the relative image name provided (those that aren't a fully qualified URL) and pull them from the docker registry by default.
+
+The image can be any valid image – it is especially easy to start by **pulling an image** from
 the [*Public Repositories*](https://docs.docker.com/docker-hub/repos/).
 
 - `ARG` is the only instruction that may precede `FROM` in the `Dockerfile`.
