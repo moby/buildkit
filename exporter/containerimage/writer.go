@@ -85,7 +85,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 			}
 		}
 
-		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], opts.Annotations.Platform(nil), opts.OCITypes, inp.Metadata[exptypes.ExporterInlineCache], dtbi)
+		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, opts, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], opts.Annotations.Platform(nil), inp.Metadata[exptypes.ExporterInlineCache], dtbi)
 		if err != nil {
 			return nil, err
 		}
@@ -165,7 +165,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 			}
 		}
 
-		desc, _, err := ic.commitDistributionManifest(ctx, r, config, &remotes[remotesMap[p.ID]], opts.Annotations.Platform(&p.Platform), opts.OCITypes, inlineCache, dtbi)
+		desc, _, err := ic.commitDistributionManifest(ctx, opts, r, config, &remotes[remotesMap[p.ID]], opts.Annotations.Platform(&p.Platform), inlineCache, dtbi)
 		if err != nil {
 			return nil, err
 		}
@@ -176,12 +176,12 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i)] = desc.Digest.String()
 
 		if attestations, ok := inp.Attestations[p.ID]; ok {
-			inTotos, err := ic.extractAttestations(ctx, session.NewGroup(sessionID), desc, inp.Refs, attestations)
+			inTotos, err := ic.extractAttestations(ctx, opts, session.NewGroup(sessionID), desc, inp.Refs, attestations)
 			if err != nil {
 				return nil, err
 			}
 
-			desc, err := ic.commitAttestationsManifest(ctx, p, desc.Digest.String(), opts.OCITypes, inTotos)
+			desc, err := ic.commitAttestationsManifest(ctx, opts, p, desc.Digest.String(), inTotos)
 			if err != nil {
 				return nil, err
 			}
@@ -254,7 +254,7 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, refCfg cacheconfig.RefC
 	return out, err
 }
 
-func (ic *ImageWriter) extractAttestations(ctx context.Context, s session.Group, desc *ocispecs.Descriptor, refs map[string]cache.ImmutableRef, attestations []result.Attestation) ([]intoto.Statement, error) {
+func (ic *ImageWriter) extractAttestations(ctx context.Context, opts *ImageCommitOpts, s session.Group, desc *ocispecs.Descriptor, refs map[string]cache.ImmutableRef, attestations []result.Attestation) ([]intoto.Statement, error) {
 	eg, ctx := errgroup.WithContext(ctx)
 	statements := make([]intoto.Statement, len(attestations))
 
@@ -330,7 +330,7 @@ func (ic *ImageWriter) extractAttestations(ctx context.Context, s session.Group,
 	return statements, nil
 }
 
-func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache.ImmutableRef, config []byte, remote *solver.Remote, annotations *Annotations, oci bool, inlineCache []byte, buildInfo []byte) (*ocispecs.Descriptor, *ocispecs.Descriptor, error) {
+func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *ImageCommitOpts, ref cache.ImmutableRef, config []byte, remote *solver.Remote, annotations *Annotations, inlineCache []byte, buildInfo []byte) (*ocispecs.Descriptor, *ocispecs.Descriptor, error) {
 	if len(config) == 0 {
 		var err error
 		config, err = defaultImageConfig()
@@ -350,7 +350,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 		return nil, nil, err
 	}
 
-	remote, history = normalizeLayersAndHistory(ctx, remote, history, ref, oci)
+	remote, history = normalizeLayersAndHistory(ctx, remote, history, ref, opts.OCITypes)
 
 	config, err = patchImageConfig(config, remote.Descriptors, history, inlineCache, buildInfo)
 	if err != nil {
@@ -364,7 +364,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 	)
 
 	// Use docker media types for older Docker versions and registries
-	if !oci {
+	if !opts.OCITypes {
 		manifestType = images.MediaTypeDockerSchema2Manifest
 		configType = images.MediaTypeDockerSchema2Config
 	}
@@ -395,7 +395,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 	}
 
 	for i, desc := range remote.Descriptors {
-		removeInternalLayerAnnotations(&desc, oci)
+		removeInternalLayerAnnotations(&desc, opts.OCITypes)
 		mfst.Layers = append(mfst.Layers, desc)
 		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i+1)] = desc.Digest.String()
 	}
@@ -437,12 +437,12 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 	}, &configDesc, nil
 }
 
-func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, p exptypes.Platform, target string, oci bool, statements []intoto.Statement) (*ocispecs.Descriptor, error) {
+func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *ImageCommitOpts, p exptypes.Platform, target string, statements []intoto.Statement) (*ocispecs.Descriptor, error) {
 	var (
 		manifestType = ocispecs.MediaTypeImageManifest
 		configType   = ocispecs.MediaTypeImageConfig
 	)
-	if !oci {
+	if !opts.OCITypes {
 		manifestType = images.MediaTypeDockerSchema2Manifest
 		configType = images.MediaTypeDockerSchema2Config
 	}
@@ -507,7 +507,7 @@ func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, p exptype
 		"containerd.io/gc.ref.content.0": configDigest.String(),
 	}
 	for i, desc := range layers {
-		removeInternalLayerAnnotations(&desc, oci)
+		removeInternalLayerAnnotations(&desc, opts.OCITypes)
 		mfst.Layers = append(mfst.Layers, desc)
 		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i+1)] = desc.Digest.String()
 	}
