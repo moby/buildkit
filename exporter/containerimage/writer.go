@@ -30,6 +30,7 @@ import (
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/progress"
+	"github.com/moby/buildkit/util/purl"
 	"github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/util/tracing"
 	digest "github.com/opencontainers/go-digest"
@@ -290,13 +291,6 @@ func (ic *ImageWriter) extractAttestations(ctx context.Context, opts *ImageCommi
 				if len(predicate) == 0 {
 					predicate = nil
 				}
-				statements[i] = intoto.Statement{
-					StatementHeader: intoto.StatementHeader{
-						Type:          intoto.StatementInTotoV01,
-						PredicateType: att.InToto.PredicateType,
-					},
-					Predicate: json.RawMessage(predicate),
-				}
 
 				if len(att.InToto.Subjects) == 0 {
 					att.InToto.Subjects = []result.InTotoSubject{{
@@ -304,20 +298,49 @@ func (ic *ImageWriter) extractAttestations(ctx context.Context, opts *ImageCommi
 					}}
 				}
 
-				statements[i].Subject = make([]intoto.Subject, len(att.InToto.Subjects))
-				for j, subject := range att.InToto.Subjects {
-					statements[i].Subject[j].Name = "_"
+				subjects := make([]intoto.Subject, 0, len(att.InToto.Subjects))
+				for _, subject := range att.InToto.Subjects {
+					name := "_"
 					if subject.Name != "" {
-						statements[i].Subject[j].Name = subject.Name
+						name = subject.Name
 					}
 					switch subject.Kind {
 					case gatewaypb.InTotoSubjectKindSelf:
-						statements[i].Subject[j].Digest = result.DigestMap(desc.Digest)
+						var names []string
+						if opts.ImageName != "" {
+							for _, name := range strings.Split(opts.ImageName, ",") {
+								name, err := purl.RefToPURL(name, desc.Platform)
+								if err != nil {
+									return err
+								}
+								names = append(names, name)
+							}
+						} else {
+							names = []string{name}
+						}
+						for _, name := range names {
+							subjects = append(subjects, intoto.Subject{
+								Name:   name,
+								Digest: result.DigestMap(desc.Digest),
+							})
+						}
 					case gatewaypb.InTotoSubjectKindRaw:
-						statements[i].Subject[j].Digest = result.DigestMap(subject.Digest...)
+						subjects = append(subjects, intoto.Subject{
+							Name:   name,
+							Digest: result.DigestMap(subject.Digest...),
+						})
+
 					default:
 						return errors.Errorf("unknown attestation subject kind %q", subject.Kind)
 					}
+				}
+				statements[i] = intoto.Statement{
+					StatementHeader: intoto.StatementHeader{
+						Type:          intoto.StatementInTotoV01,
+						PredicateType: att.InToto.PredicateType,
+						Subject:       subjects,
+					},
+					Predicate: json.RawMessage(predicate),
 				}
 			}
 			return nil
