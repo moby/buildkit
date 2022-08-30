@@ -203,7 +203,7 @@ The following parameters are the most frequently used.
 * filename: name of the Dockerfile (Default is 'Dockerfile'),set to use a differently-named Dockerfile.
   * Example: `filename=dockerfile.prod`,`filename=other.dockerfile`
 * dockerfilekey: dir path of the custom named context for Dockerfile. Useful when there is more than one build source.
-  * Example: 
+  * Full command example: 
     * `buildctl --frontend=dockerfile.v0 --local dockerfile=. --local dockerfile2=/tmp dockerfilekey=dockerfile2` buildctl will try to use the `/tmp/Dockerfile` as Dockerfile.
 * context: define additional build context with specified contents. In Dockerfile the context can be accessed when `FROM` name or `--from=name` is used. When Dockerfile defines a stage with the same name it is overwritten.
   * When using multiple contexts, use ":" to name the different contexts
@@ -211,7 +211,7 @@ The following parameters are the most frequently used.
   * Git: `context=git@github.com:moby/buildkit`,``
   * Local source directory: `context=.`,`context:mydir=/path/to/dir`
   * URL: `context=https://github.com/moby/moby.git` 
-  * Full command Example:
+  * Full command example:
     ```shell
     buildctl build \
         --frontend=dockerfile.v0 \
@@ -229,7 +229,8 @@ The following parameters are the most frequently used.
     FROM git-base
     FROM http-base
     ```
-* source: the build based image.Example `source="docker/dockerfile:master` Example:
+* source: the build based image.Example `source="docker/dockerfile:master` 
+  * Full command example:
   ```
   buildctl build --frontend=dockerfile.v0 \
     --opt context="https://github.com/crazy-max/buildkit-buildsources-test.git#master" \
