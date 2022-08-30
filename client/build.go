@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/moby/buildkit/client/buildid"
+	"github.com/moby/buildkit/frontend/attestations"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/frontend/gateway/grpcclient"
 	gatewayapi "github.com/moby/buildkit/frontend/gateway/pb"
@@ -20,16 +21,14 @@ func (c *Client) Build(ctx context.Context, opt SolveOpt, product string, buildF
 		}
 	}()
 
-	if opt.Frontend != "" {
-		return nil, errors.New("invalid SolveOpt, Build interface cannot use Frontend")
-	}
+	feOpts := opt.FrontendAttrs
+
+	opt.Frontend = ""
+	opt.FrontendAttrs = attestations.Filter(opt.FrontendAttrs)
 
 	if product == "" {
 		product = apicaps.ExportedProduct
 	}
-
-	feOpts := opt.FrontendAttrs
-	opt.FrontendAttrs = nil
 
 	workers, err := c.ListWorkers(ctx)
 	if err != nil {
