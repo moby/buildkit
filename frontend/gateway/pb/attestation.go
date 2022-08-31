@@ -5,71 +5,71 @@ import (
 	"github.com/pkg/errors"
 )
 
-func ToAttestationPB(a result.Attestation) (*Attestations_Attestation, error) {
-	switch a := a.(type) {
-	case *result.InTotoAttestation:
-		subjects := []*InToto_Subject{}
-		for _, subject := range a.Subjects {
-			switch s := subject.(type) {
-			case *result.InTotoSubjectRaw:
-				subjects = append(subjects, &InToto_Subject{
-					Subject: &InToto_Subject_Raw{
-						Raw: &InToto_Subject_RawSubject{
-							Name:   s.Name,
-							Digest: s.Digest,
-						},
-					},
-				})
-			case *result.InTotoSubjectSelf:
-				subjects = append(subjects, &InToto_Subject{
-					Subject: &InToto_Subject_Self{
-						Self: &InToto_Subject_SelfSubject{},
-					},
-				})
-			default:
-				return nil, errors.Errorf("unknown in toto subject type %T", s)
-			}
-		}
-
-		intoto := &InToto{
-			PredicateType:   a.PredicateType,
-			PredicatePath:   a.PredicatePath,
-			PredicateRefKey: a.PredicateRefKey,
-			Subjects:        subjects,
-		}
-		return &Attestations_Attestation{
-			Attestation: &Attestations_Attestation_Intoto{intoto},
-		}, nil
-	default:
-		return nil, errors.Errorf("unknown result type %T", a)
-	}
+var toAttestationKind = map[int]Attestation_Kind{
+	result.AttestationKindInToto: Attestation_InToto,
+}
+var toSubjectKind = map[int]InTotoSubject_Kind{
+	result.InTotoSubjectKindRaw:  InTotoSubject_Raw,
+	result.InTotoSubjectKindSelf: InTotoSubject_Self,
+}
+var fromAttestationKind = map[Attestation_Kind]int{
+	Attestation_InToto: result.AttestationKindInToto,
+}
+var fromSubjectKind = map[InTotoSubject_Kind]int{
+	InTotoSubject_Raw:  result.InTotoSubjectKindRaw,
+	InTotoSubject_Self: result.InTotoSubjectKindSelf,
 }
 
-func FromAttestationPB(a *Attestations_Attestation) (result.Attestation, error) {
-	switch a := a.Attestation.(type) {
-	case *Attestations_Attestation_Intoto:
-		subjects := []result.InTotoSubject{}
-		for _, pbSubject := range a.Intoto.Subjects {
-			switch pbSubject := pbSubject.Subject.(type) {
-			case *InToto_Subject_Raw:
-				subjects = append(subjects, &result.InTotoSubjectRaw{
-					Name:   pbSubject.Raw.Name,
-					Digest: pbSubject.Raw.Digest,
-				})
-			case *InToto_Subject_Self:
-				subjects = append(subjects, &result.InTotoSubjectSelf{})
-			default:
-				return nil, errors.Errorf("unknown in toto subject type %T", pbSubject)
-			}
+func ToAttestationPB(a *result.Attestation) (*Attestation, error) {
+	subjects := make([]*InTotoSubject, len(a.InTotoSubjects))
+	for i, subject := range a.InTotoSubjects {
+		k, ok := toSubjectKind[subject.Kind]
+		if !ok {
+			return nil, errors.New("unknown in toto subject kind")
 		}
-
-		return &result.InTotoAttestation{
-			PredicateType:   a.Intoto.PredicateType,
-			PredicatePath:   a.Intoto.PredicatePath,
-			PredicateRefKey: a.Intoto.PredicateRefKey,
-			Subjects:        subjects,
-		}, nil
-	default:
-		return nil, errors.Errorf("unknown attestation type %T", a)
+		subjects[i] = &InTotoSubject{
+			Kind:      k,
+			RawName:   subject.Name,
+			RawDigest: subject.Digest,
+		}
 	}
+
+	k, ok := toAttestationKind[a.Kind]
+	if !ok {
+		return nil, errors.New("unknown attestation kind")
+	}
+	return &Attestation{
+		Kind:                k,
+		Path:                a.Path,
+		Ref:                 a.Ref,
+		InTotoPredicateType: a.InTotoPredicateType,
+		InTotoSubjects:      subjects,
+	}, nil
+}
+
+func FromAttestationPB(a *Attestation) (*result.Attestation, error) {
+	subjects := make([]result.InTotoSubject, len(a.InTotoSubjects))
+	for i, subject := range a.InTotoSubjects {
+		k, ok := fromSubjectKind[subject.Kind]
+		if !ok {
+			return nil, errors.New("unknown in toto subject kind")
+		}
+		subjects[i] = result.InTotoSubject{
+			Kind:   k,
+			Name:   subject.RawName,
+			Digest: subject.RawDigest,
+		}
+	}
+
+	k, ok := fromAttestationKind[a.Kind]
+	if !ok {
+		return nil, errors.New("unknown attestation kind")
+	}
+	return &result.Attestation{
+		Kind:                k,
+		Path:                a.Path,
+		Ref:                 a.Ref,
+		InTotoPredicateType: a.InTotoPredicateType,
+		InTotoSubjects:      subjects,
+	}, nil
 }

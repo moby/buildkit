@@ -6488,22 +6488,22 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 			if err != nil {
 				return nil, err
 			}
-			res.AddAttestation(pk, &result.InTotoAttestation{
-				PredicatePath: "/attestation.json",
-				PredicateType: "https://example.com/attestations/v1.0",
-				Subjects: []result.InTotoSubject{
-					&result.InTotoSubjectSelf{},
-				},
+			res.AddAttestation(pk, result.Attestation{
+				Kind:                result.AttestationKindInToto,
+				Path:                "/attestation.json",
+				InTotoPredicateType: "https://example.com/attestations/v1.0",
+				InTotoSubjects: []result.InTotoSubject{{
+					Kind: result.InTotoSubjectKindSelf,
+				}},
 			}, refAttest)
-			res.AddAttestation(pk, &result.InTotoAttestation{
-				PredicatePath: "/attestation2.json",
-				PredicateType: "https://example.com/attestations2/v1.0",
-				Subjects: []result.InTotoSubject{
-					&result.InTotoSubjectRaw{
-						Name:   "/attestation.json",
-						Digest: []digest.Digest{successDigest},
-					},
-				},
+			res.AddAttestation(pk, result.Attestation{
+				Path:                "/attestation2.json",
+				InTotoPredicateType: "https://example.com/attestations2/v1.0",
+				InTotoSubjects: []result.InTotoSubject{{
+					Kind:   result.InTotoSubjectKindRaw,
+					Name:   "/attestation.json",
+					Digest: []digest.Digest{successDigest},
+				}},
 			}, refAttest)
 		}
 

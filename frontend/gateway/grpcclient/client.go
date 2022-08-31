@@ -165,7 +165,7 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 					attestations := map[string]*pb.Attestations{}
 					for k, as := range res.Attestations {
 						for _, a := range as {
-							pbAtt, err := pb.ToAttestationPB(a)
+							pbAtt, err := pb.ToAttestationPB(&a)
 							if err != nil {
 								retError = err
 								continue
@@ -470,7 +470,7 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (res *
 					if err != nil {
 						return nil, err
 					}
-					res.AddAttestation(p, att, nil)
+					res.AddAttestation(p, *att, nil)
 				}
 			}
 		}
