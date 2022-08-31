@@ -49,6 +49,7 @@ Join `#buildkit` channel on [Docker Community Slack](http://dockr.ly/slack)
   - [Exploring LLB](#exploring-llb)
   - [Exploring Dockerfiles](#exploring-dockerfiles)
     - [Building a Dockerfile with `buildctl`](#building-a-dockerfile-with-buildctl)
+      - [Hint: `dockerfile.v0` frontend with `buildctl build --opt` option](#hint-dockerfilev0-frontend-with-buildctl-build---opt-option)
     - [Building a Dockerfile using external frontend](#building-a-dockerfile-using-external-frontend)
   - [Output](#output)
     - [Image/Registry](#imageregistry)
@@ -202,9 +203,10 @@ The following parameters are the most frequently used.
   * Example: `target=Stage1`
 * filename: name of the Dockerfile (Default is 'Dockerfile'),set to use a differently-named Dockerfile.
   * Example: `filename=dockerfile.prod`,`filename=other.dockerfile`
-* dockerfilekey: dir path of the custom named context for Dockerfile. Useful when there is more than one build source.
+* dockerfilekey: name of the custom named context for a directory includes Dockerfile. Useful when there is more than one build source.
+  * Example: `dockerfilekey=dockerfile2`
   * Full command example: 
-    * `buildctl --frontend=dockerfile.v0 --local dockerfile=. --local dockerfile2=/tmp dockerfilekey=dockerfile2` buildctl will try to use the `/tmp/Dockerfile` as Dockerfile.
+    * `buildctl --frontend=dockerfile.v0 --local dockerfile=. --local dockerfile2=/tmp --opt dockerfilekey=dockerfile2` buildctl will try to use the `/tmp/Dockerfile` as Dockerfile.
 * context: define additional build context with specified contents. In Dockerfile the context can be accessed when `FROM` name or `--from=name` is used. When Dockerfile defines a stage with the same name it is overwritten.
   * When using multiple contexts, use ":" to name the different contexts
   * Container Image: `context:alpine=docker-image://alpine`
@@ -229,14 +231,16 @@ The following parameters are the most frequently used.
     FROM git-base
     FROM http-base
     ```
-* source: the build based image.Example `source="docker/dockerfile:master` 
-  * Full command example:
+* source: the location of the Dockerfile syntax that is used to build the Dockerfile
+  * Example `source=docker/dockerfile:1` ,it same as `# syntax=docker/dockerfile:1` in Dockerfile
+  * Another example:
   ```
   buildctl build --frontend=dockerfile.v0 \
     --opt context="https://github.com/crazy-max/buildkit-buildsources-test.git#master" \
     --opt filename="Dockerfile" \
     --opt source="crazymax/dockerfile:master"
   ```
+  * See also [Building a Dockerfile using external frontend](#building-a-dockerfile-using-external-frontend) and [dockerfile frontend reference](https://github.com/moby/buildkit/blob/master/frontend/dockerfile/docs/reference.md#syntax).
 * platform: use for building multi-platform image, this options is a comma-separated list.
   * Example: `platform=linux/amd64,linux/arm64`
   * See [Building multi-platform images](https://github.com/moby/buildkit/blob/master/docs/multi-platform.md) for more details.
