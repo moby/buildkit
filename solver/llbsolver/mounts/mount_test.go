@@ -304,7 +304,7 @@ func TestCacheMountLockedRefs(t *testing.T) {
 
 	select {
 	case <-gotRef4:
-	case <-time.After(500 * time.Millisecond):
+	case <-time.After(2 * time.Second):
 		require.FailNow(t, "mount did not unlock")
 	}
 }
