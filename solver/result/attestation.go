@@ -4,26 +4,29 @@ import (
 	digest "github.com/opencontainers/go-digest"
 )
 
+type AttestationKind string
+type InTotoSubjectKind string
+
 const (
-	AttestationKindInToto = iota
+	InToto AttestationKind = "in-toto"
 )
 
 const (
-	InTotoSubjectKindRaw = iota
-	InTotoSubjectKindSelf
+	Self InTotoSubjectKind = "self"
+	Raw  InTotoSubjectKind = "raw"
 )
 
 type Attestation struct {
-	Kind int
+	Kind AttestationKind
 
-	Ref                 string
-	Path                string
+	InTotoRef           string
+	InTotoPath          string
 	InTotoPredicateType string
 	InTotoSubjects      []InTotoSubject
 }
 
 type InTotoSubject struct {
-	Kind int
+	Kind InTotoSubjectKind
 
 	Name   string
 	Digest []digest.Digest

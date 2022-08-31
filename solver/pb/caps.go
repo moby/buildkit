@@ -451,8 +451,8 @@ func init() {
 
 	// FIXME: enable once attestations gateway api is stable
 	// Caps.Init(apicaps.Cap{
-	// 	ID:      CapAttestations,
-	// 	Enabled: true,
-	// 	Status:  apicaps.CapStatusExperimental,
+	//     ID:      CapAttestations,
+	//     Enabled: true,
+	//     Status:  apicaps.CapStatusExperimental,
 	// })
 }

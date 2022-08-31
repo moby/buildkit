@@ -44,9 +44,9 @@ func (r *Result[T]) AddAttestation(k string, v Attestation, ref T) {
 	if r.Attestations == nil {
 		r.Attestations = map[string][]Attestation{}
 	}
-	if !strings.HasPrefix(v.Ref, attestationRefPrefix) {
-		v.Ref = "attestation:" + identity.NewID()
-		r.Refs[v.Ref] = ref
+	if !strings.HasPrefix(v.InTotoRef, attestationRefPrefix) {
+		v.InTotoRef = "attestation:" + identity.NewID()
+		r.Refs[v.InTotoRef] = ref
 	}
 	r.Attestations[k] = append(r.Attestations[k], v)
 	r.mu.Unlock()
