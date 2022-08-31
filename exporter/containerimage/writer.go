@@ -129,8 +129,10 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		return mfstDesc, nil
 	}
 
+	hasAttestations := false
 	attestCount := 0
 	for _, attests := range inp.Attestations {
+		hasAttestations = true
 		for _, attest := range attests {
 			if attest.ContentFunc == nil {
 				attestCount++
@@ -141,7 +143,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		return nil, errors.Errorf("number of required refs (%d) does not match number of references (%d)", count, len(inp.Refs))
 	}
 
-	if attestCount > 0 {
+	if hasAttestations {
 		opts.EnableOCITypes("attestations")
 	}
 
