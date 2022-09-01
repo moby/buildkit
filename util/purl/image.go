@@ -4,8 +4,8 @@ import (
 	"strings"
 
 	"github.com/containerd/containerd/platforms"
-	distreference "github.com/docker/distribution/reference"
-	"github.com/opencontainers/go-digest"
+	"github.com/docker/distribution/reference"
+	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	packageurl "github.com/package-url/packageurl-go"
 	"github.com/pkg/errors"
@@ -15,27 +15,27 @@ import (
 // Image references are defined in https://github.com/distribution/distribution/blob/v2.8.1/reference/reference.go#L1
 // Package URLs are defined in https://github.com/package-url/purl-spec
 func RefToPURL(ref string, platform *ocispecs.Platform) (string, error) {
-	named, err := distreference.ParseNormalizedNamed(ref)
+	named, err := reference.ParseNormalizedNamed(ref)
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to parse ref %q", ref)
 	}
 	var qualifiers []packageurl.Qualifier
 
-	if canonical, ok := named.(distreference.Canonical); ok {
+	if canonical, ok := named.(reference.Canonical); ok {
 		qualifiers = append(qualifiers, packageurl.Qualifier{
 			Key:   "digest",
 			Value: canonical.Digest().String(),
 		})
 	} else {
-		named = distreference.TagNameOnly(named)
+		named = reference.TagNameOnly(named)
 	}
 
 	version := ""
-	if tagged, ok := named.(distreference.Tagged); ok {
+	if tagged, ok := named.(reference.Tagged); ok {
 		version = tagged.Tag()
 	}
 
-	name := distreference.FamiliarName(named)
+	name := reference.FamiliarName(named)
 
 	ns := ""
 	parts := strings.Split(name, "/")
@@ -92,9 +92,8 @@ func PURLToRef(purl string) (string, *ocispecs.Platform, error) {
 			if dgstVersion != "" {
 				if dgstVersion != q.Value {
 					return "", nil, errors.Errorf("digest %q does not match version %q", q.Value, dgstVersion)
-				} else {
-					continue
 				}
+				continue
 			}
 			dgst, err := digest.Parse(q.Value)
 			if err != nil {
@@ -109,7 +108,7 @@ func PURLToRef(purl string) (string, *ocispecs.Platform, error) {
 		ref += ":latest"
 	}
 
-	named, err := distreference.ParseNormalizedNamed(ref)
+	named, err := reference.ParseNormalizedNamed(ref)
 	if err != nil {
 		return "", nil, errors.Wrapf(err, "invalid image url %q", purl)
 	}
