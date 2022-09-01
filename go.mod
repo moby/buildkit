@@ -70,7 +70,7 @@ require (
 	golang.org/x/crypto v0.0.0-20220315160706-3147a52a75dd
 	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a
+	golang.org/x/sys v0.0.0-20220728004956-3c1f35247d10
 	golang.org/x/time v0.0.0-20220210224613-90d013bbcef8
 	google.golang.org/genproto v0.0.0-20220310185008-1973136f34c6
 	google.golang.org/grpc v1.47.0
