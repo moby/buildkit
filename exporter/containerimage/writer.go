@@ -297,6 +297,12 @@ func (ic *ImageWriter) extractAttestations(ctx context.Context, s session.Group,
 					Predicate: json.RawMessage(predicate),
 				}
 
+				if len(att.InTotoSubjects) == 0 {
+					att.InTotoSubjects = []result.InTotoSubject{{
+						Kind: result.InTotoSubjectKindSelf,
+					}}
+				}
+
 				statements[i].Subject = make([]intoto.Subject, len(att.InTotoSubjects))
 				for j, subject := range att.InTotoSubjects {
 					statements[i].Subject[j].Name = "_"
