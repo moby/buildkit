@@ -28,7 +28,7 @@ require (
 	github.com/docker/distribution v2.8.1+incompatible
 	github.com/docker/docker v20.10.7+incompatible // master (v22.xx-dev), see replace()
 	github.com/docker/go-connections v0.4.0
-	github.com/docker/go-units v0.4.0
+	github.com/docker/go-units v0.5.0
 	github.com/gofrs/flock v0.7.3
 	github.com/gogo/googleapis v1.4.1
 	github.com/gogo/protobuf v1.3.2
