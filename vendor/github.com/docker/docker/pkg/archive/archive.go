@@ -18,12 +18,15 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/containerd/containerd/pkg/userns"
 	"github.com/docker/docker/pkg/fileutils"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/docker/docker/pkg/ioutils"
 	"github.com/docker/docker/pkg/pools"
 	"github.com/docker/docker/pkg/system"
 	"github.com/klauspost/compress/zstd"
+	"github.com/moby/sys/sequential"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	exec "golang.org/x/sys/execabs"
 )
@@ -658,10 +661,9 @@ func (ta *tarAppender) addTarFile(path, name string) error {
 	}
 
 	if hdr.Typeflag == tar.TypeReg && hdr.Size > 0 {
-		// We use system.OpenSequential to ensure we use sequential file
-		// access on Windows to avoid depleting the standby list.
-		// On Linux, this equates to a regular os.Open.
-		file, err := system.OpenSequential(path)
+		// We use sequential file access to avoid depleting the standby list on
+		// Windows. On Linux, this equates to a regular os.Open.
+		file, err := sequential.Open(path)
 		if err != nil {
 			return err
 		}
@@ -699,10 +701,9 @@ func createTarFile(path, extractDir string, hdr *tar.Header, reader io.Reader, L
 		}
 
 	case tar.TypeReg, tar.TypeRegA:
-		// Source is regular file. We use system.OpenFileSequential to use sequential
-		// file access to avoid depleting the standby list on Windows.
-		// On Linux, this equates to a regular os.OpenFile
-		file, err := system.OpenFileSequential(path, os.O_CREATE|os.O_WRONLY, hdrInfo.Mode())
+		// Source is regular file. We use sequential file access to avoid depleting
+		// the standby list on Windows. On Linux, this equates to a regular os.OpenFile.
+		file, err := sequential.OpenFile(path, os.O_CREATE|os.O_WRONLY, hdrInfo.Mode())
 		if err != nil {
 			return err
 		}
@@ -728,7 +729,7 @@ func createTarFile(path, extractDir string, hdr *tar.Header, reader io.Reader, L
 		}
 
 	case tar.TypeLink:
-		//#nosec G305 -- The target path is checked for path traversal.
+		// #nosec G305 -- The target path is checked for path traversal.
 		targetPath := filepath.Join(extractDir, hdr.Linkname)
 		// check for hardlink breakout
 		if !strings.HasPrefix(targetPath, extractDir) {
@@ -741,7 +742,7 @@ func createTarFile(path, extractDir string, hdr *tar.Header, reader io.Reader, L
 	case tar.TypeSymlink:
 		// 	path 				-> hdr.Linkname = targetPath
 		// e.g. /extractDir/path/to/symlink 	-> ../2/file	= /extractDir/path/2/file
-		targetPath := filepath.Join(filepath.Dir(path), hdr.Linkname) //#nosec G305 -- The target path is checked for path traversal.
+		targetPath := filepath.Join(filepath.Dir(path), hdr.Linkname) // #nosec G305 -- The target path is checked for path traversal.
 
 		// the reason we don't need to check symlinks in the path (with FollowSymlinkInScope) is because
 		// that symlink would first have to be created, which would be caught earlier, at this very check:
@@ -766,7 +767,11 @@ func createTarFile(path, extractDir string, hdr *tar.Header, reader io.Reader, L
 			chownOpts = &idtools.Identity{UID: hdr.Uid, GID: hdr.Gid}
 		}
 		if err := os.Lchown(path, chownOpts.UID, chownOpts.GID); err != nil {
-			return err
+			msg := "failed to Lchown %q for UID %d, GID %d"
+			if errors.Is(err, syscall.EINVAL) && userns.RunningInUserNS() {
+				msg += " (try increasing the number of subordinate IDs in /etc/subuid and /etc/subgid)"
+			}
+			return errors.Wrapf(err, msg, path, hdr.Uid, hdr.Gid)
 		}
 	}
 
@@ -1093,7 +1098,7 @@ loop:
 			}
 		}
 
-		//#nosec G305 -- The joined path is checked for path traversal.
+		// #nosec G305 -- The joined path is checked for path traversal.
 		path := filepath.Join(dest, hdr.Name)
 		rel, err := filepath.Rel(dest, path)
 		if err != nil {
@@ -1158,7 +1163,7 @@ loop:
 	}
 
 	for _, hdr := range dirs {
-		//#nosec G305 -- The header was checked for path traversal before it was appended to the dirs slice.
+		// #nosec G305 -- The header was checked for path traversal before it was appended to the dirs slice.
 		path := filepath.Join(dest, hdr.Name)
 
 		if err := system.Chtimes(path, hdr.AccessTime, hdr.ModTime); err != nil {
@@ -1171,7 +1176,8 @@ loop:
 // Untar reads a stream of bytes from `archive`, parses it as a tar archive,
 // and unpacks it into the directory at `dest`.
 // The archive may be compressed with one of the following algorithms:
-//  identity (uncompressed), gzip, bzip2, xz.
+// identity (uncompressed), gzip, bzip2, xz.
+//
 // FIXME: specify behavior when target path exists vs. doesn't exist.
 func Untar(tarArchive io.Reader, dest string, options *TarOptions) error {
 	return untarHandler(tarArchive, dest, options, true)
