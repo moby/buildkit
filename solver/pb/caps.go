@@ -58,6 +58,7 @@ const (
 	CapExecMountTmpfsSize                apicaps.CapID = "exec.mount.tmpfs.size"
 	CapExecMountSecret                   apicaps.CapID = "exec.mount.secret"
 	CapExecMountSSH                      apicaps.CapID = "exec.mount.ssh"
+	CapExecMountSock                     apicaps.CapID = "exec.mount.sock"
 	CapExecCgroupsMounted                apicaps.CapID = "exec.cgroup"
 	CapExecSecretEnv                     apicaps.CapID = "exec.secretenv"
 
@@ -337,6 +338,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapExecMountSSH,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapExecMountSock,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

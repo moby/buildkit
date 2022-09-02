@@ -233,6 +233,15 @@ func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manage
 			if mountable == nil {
 				continue
 			}
+		case opspb.MountType_SOCKET: // earthly-specific
+			var err error
+			mountable, err = mm.MountableSocket(ctx, m, g)
+			if err != nil {
+				return p, err
+			}
+			if mountable == nil {
+				continue
+			}
 
 		default:
 			return p, errors.Errorf("mount type %s not implemented", m.MountType)
