@@ -44,8 +44,6 @@ contrib.go.opencensus.io/resource v0.1.1/go.mod h1:F361eGI91LCmW1I/Saf+rX0+OFcig
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
 git.apache.org/thrift.git v0.0.0-20180902110319-2566ecd5d999/go.mod h1:fPE2ZNJGynbRyZ4dJvy6G277gSllfV2HJqblrnkyeyg=
 git.apache.org/thrift.git v0.12.0/go.mod h1:fPE2ZNJGynbRyZ4dJvy6G277gSllfV2HJqblrnkyeyg=
-github.com/AkihiroSuda/containerd v1.1.1-0.20210312044057-48f85a131bb8 h1:YqSRKDiQLq/NKLrhiEoxQMvNMDJG49WYf4crjJ1i6Y8=
-github.com/AkihiroSuda/containerd v1.1.1-0.20210312044057-48f85a131bb8/go.mod h1:5IBP++IFtudvjLCXBrBPdXGu8s/AL9xiPCjz0K9psr4=
 github.com/AkihiroSuda/containerd-fuse-overlayfs v1.0.0 h1:LhS8BiMh7ULa6zkkF5XI6piLV5XVTR7mSm9j3hTUB/k=
 github.com/AkihiroSuda/containerd-fuse-overlayfs v1.0.0/go.mod h1:0mMDvQFeLbbn1Wy8P2j3hwFhqBq+FKn8OZPno8WLmp8=
 github.com/Azure/azure-amqp-common-go/v2 v2.1.0/go.mod h1:R8rea+gJRuJR6QxTir/XuEd+YuKoUiazDC/N96FiDEU=
@@ -622,6 +620,8 @@ github.com/mitchellh/mapstructure v0.0.0-20160808181253-ca63d7c062ee/go.mod h1:F
 github.com/mitchellh/mapstructure v1.1.2/go.mod h1:FVVH3fgwuzCH5S8UJGiWEs2h04kUh9fWfEaFds41c1Y=
 github.com/mitchellh/mapstructure v1.3.1/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RRV2QTWOzhPopBRo=
 github.com/mitchellh/osext v0.0.0-20151018003038-5e2d6d41470f/go.mod h1:OkQIRizQZAeMln+1tSwduZz7+Af5oFlKirV/MSYes2A=
+github.com/moby/containerd v0.0.0-20220901192706-96c5ae04b678 h1:eDq3voeTd6v6bmQi/gaA/gEMDHGqZ7//yisQlgfkkvM=
+github.com/moby/containerd v0.0.0-20220901192706-96c5ae04b678/go.mod h1:F+mq0u1LuleSUA1uQ74yceU7zJEg15FOIAovIkRiC08=
 github.com/moby/locker v1.0.1 h1:fOXqR41zeveg4fFODix+1Ch4mj/gT0NE1XJbp/epuBg=
 github.com/moby/locker v1.0.1/go.mod h1:S7SDdo5zpBK84bzzVlKr2V0hz+7x9hWbYC/kq7oQppc=
 github.com/moby/sys/mount v0.1.0/go.mod h1:FVQFLDRWwyBjDTBNQXDlWnSFREqOo3OKX9aqhmeoo74=
