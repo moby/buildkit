@@ -58,7 +58,7 @@ github.com/Microsoft/go-winio/backuptar
 github.com/Microsoft/go-winio/pkg/guid
 github.com/Microsoft/go-winio/pkg/security
 github.com/Microsoft/go-winio/vhd
-# github.com/Microsoft/hcsshim v0.9.3
+# github.com/Microsoft/hcsshim v0.9.4
 ## explicit; go 1.13
 github.com/Microsoft/hcsshim
 github.com/Microsoft/hcsshim/computestorage
@@ -215,7 +215,7 @@ github.com/containerd/cgroups/stats/v1
 # github.com/containerd/console v1.0.3
 ## explicit; go 1.13
 github.com/containerd/console
-# github.com/containerd/containerd v1.6.6
+# github.com/containerd/containerd v1.6.8
 ## explicit; go 1.17
 github.com/containerd/containerd
 github.com/containerd/containerd/api/services/containers/v1
@@ -376,7 +376,7 @@ github.com/docker/cli/cli/connhelper/commandconn
 ## explicit
 github.com/docker/distribution/digestset
 github.com/docker/distribution/reference
-# github.com/docker/docker v20.10.7+incompatible => github.com/docker/docker v20.10.3-0.20220414164044-61404de7df1a+incompatible
+# github.com/docker/docker v20.10.17+incompatible => github.com/docker/docker v20.10.3-0.20220831131523-b5a0d7a188ac+incompatible
 ## explicit
 github.com/docker/docker/api
 github.com/docker/docker/api/types
@@ -425,7 +425,7 @@ github.com/docker/go-events
 # github.com/docker/go-metrics v0.0.1
 ## explicit; go 1.11
 github.com/docker/go-metrics
-# github.com/docker/go-units v0.4.0
+# github.com/docker/go-units v0.5.0
 ## explicit
 github.com/docker/go-units
 # github.com/felixge/httpsnoop v1.0.2
@@ -511,7 +511,7 @@ github.com/hashicorp/go-multierror
 # github.com/hashicorp/go-retryablehttp v0.7.1
 ## explicit; go 1.13
 github.com/hashicorp/go-retryablehttp
-# github.com/hashicorp/golang-lru v0.5.3
+# github.com/hashicorp/golang-lru v0.5.4
 ## explicit; go 1.12
 github.com/hashicorp/golang-lru/simplelru
 # github.com/in-toto/in-toto-golang v0.3.3
@@ -549,7 +549,10 @@ github.com/moby/sys/mount
 # github.com/moby/sys/mountinfo v0.6.2
 ## explicit; go 1.16
 github.com/moby/sys/mountinfo
-# github.com/moby/sys/signal v0.6.0
+# github.com/moby/sys/sequential v0.5.0
+## explicit; go 1.17
+github.com/moby/sys/sequential
+# github.com/moby/sys/signal v0.7.0
 ## explicit; go 1.16
 github.com/moby/sys/signal
 # github.com/moby/term v0.0.0-20210619224110-3f7ff695adc6
@@ -560,8 +563,8 @@ github.com/morikuni/aec
 # github.com/opencontainers/go-digest v1.0.0
 ## explicit; go 1.13
 github.com/opencontainers/go-digest
-# github.com/opencontainers/image-spec v1.0.3-0.20211202183452-c5a74bcca799
-## explicit
+# github.com/opencontainers/image-spec v1.0.3-0.20220303224323-02efb9a75ee1
+## explicit; go 1.16
 github.com/opencontainers/image-spec/identity
 github.com/opencontainers/image-spec/specs-go
 github.com/opencontainers/image-spec/specs-go/v1
@@ -763,7 +766,7 @@ golang.org/x/net/trace
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
 golang.org/x/sync/singleflight
-# golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a
+# golang.org/x/sys v0.0.0-20220728004956-3c1f35247d10
 ## explicit; go 1.17
 golang.org/x/sys/cpu
 golang.org/x/sys/execabs
@@ -878,4 +881,4 @@ google.golang.org/protobuf/types/known/wrapperspb
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
-# github.com/docker/docker => github.com/docker/docker v20.10.3-0.20220414164044-61404de7df1a+incompatible
+# github.com/docker/docker => github.com/docker/docker v20.10.3-0.20220831131523-b5a0d7a188ac+incompatible

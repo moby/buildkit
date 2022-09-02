@@ -6,7 +6,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.4.1
 	github.com/Microsoft/go-winio v0.5.2
-	github.com/Microsoft/hcsshim v0.9.3
+	github.com/Microsoft/hcsshim v0.9.4
 	github.com/agext/levenshtein v1.2.3
 	github.com/armon/circbuf v0.0.0-20190214190532-5111143e8da2
 	github.com/aws/aws-sdk-go-v2/config v1.15.5
@@ -15,7 +15,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.26.9
 	github.com/aws/smithy-go v1.11.2
 	github.com/containerd/console v1.0.3
-	github.com/containerd/containerd v1.6.6
+	github.com/containerd/containerd v1.6.8
 	github.com/containerd/continuity v0.3.0
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
 	github.com/containerd/go-cni v1.1.6
@@ -26,9 +26,9 @@ require (
 	github.com/coreos/go-systemd/v22 v22.3.2
 	github.com/docker/cli v20.10.17+incompatible
 	github.com/docker/distribution v2.8.1+incompatible
-	github.com/docker/docker v20.10.7+incompatible // master (v22.xx-dev), see replace()
+	github.com/docker/docker v20.10.17+incompatible // v22.06.x - see "replace" for the actual version
 	github.com/docker/go-connections v0.4.0
-	github.com/docker/go-units v0.4.0
+	github.com/docker/go-units v0.5.0
 	github.com/gofrs/flock v0.7.3
 	github.com/gogo/googleapis v1.4.1
 	github.com/gogo/protobuf v1.3.2
@@ -38,16 +38,16 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0
 	github.com/hashicorp/go-immutable-radix v1.3.1
 	github.com/hashicorp/go-multierror v1.1.1
-	github.com/hashicorp/golang-lru v0.5.3
+	github.com/hashicorp/golang-lru v0.5.4
 	github.com/in-toto/in-toto-golang v0.3.3
 	github.com/klauspost/compress v1.15.7
 	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/moby/locker v1.0.1
 	github.com/moby/sys/mountinfo v0.6.2
-	github.com/moby/sys/signal v0.6.0
+	github.com/moby/sys/signal v0.7.0
 	github.com/morikuni/aec v1.0.0
 	github.com/opencontainers/go-digest v1.0.0
-	github.com/opencontainers/image-spec v1.0.3-0.20211202183452-c5a74bcca799
+	github.com/opencontainers/image-spec v1.0.3-0.20220303224323-02efb9a75ee1
 	github.com/opencontainers/runc v1.1.3
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417
 	github.com/opencontainers/selinux v1.10.1
@@ -78,7 +78,7 @@ require (
 	golang.org/x/crypto v0.0.0-20220511200225-c6db032c6c88
 	golang.org/x/net v0.0.0-20220425223048-2871e0cb64e4
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a
+	golang.org/x/sys v0.0.0-20220728004956-3c1f35247d10
 	golang.org/x/time v0.0.0-20220210224613-90d013bbcef8
 	google.golang.org/genproto v0.0.0-20220310185008-1973136f34c6
 	google.golang.org/grpc v1.47.0
@@ -129,6 +129,7 @@ require (
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369 // indirect
 	github.com/moby/sys/mount v0.3.0 // indirect
+	github.com/moby/sys/sequential v0.5.0 // indirect
 	github.com/moby/term v0.0.0-20210619224110-3f7ff695adc6 // indirect
 	github.com/pkg/browser v0.0.0-20210115035449-ce105d075bb4 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
@@ -149,4 +150,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/docker/docker => github.com/docker/docker v20.10.3-0.20220414164044-61404de7df1a+incompatible
+replace github.com/docker/docker => github.com/docker/docker v20.10.3-0.20220831131523-b5a0d7a188ac+incompatible // 22.06 branch (v22.06-dev)
