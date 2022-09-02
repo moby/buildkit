@@ -1,4 +1,4 @@
-FROM debian:buster-slim AS base
+FROM debian:bullseye-slim AS base
 RUN apt-get update && apt-get --no-install-recommends install -y \
   binutils-arm-linux-gnueabihf \
   binutils-aarch64-linux-gnu \
