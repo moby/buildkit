@@ -170,10 +170,10 @@ func (p *textMux) printVtx(t *trace, dgst digest.Digest) {
 		p.current = ""
 		v.count = 0
 
+		if v.logsPartial {
+			fmt.Fprintln(p.w, "")
+		}
 		if v.Error != "" {
-			if v.logsPartial {
-				fmt.Fprintln(p.w, "")
-			}
 			if strings.HasSuffix(v.Error, context.Canceled.Error()) {
 				fmt.Fprintf(p.w, "#%d CANCELED\n", v.index)
 			} else {
