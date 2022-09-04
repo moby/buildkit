@@ -1,3 +1,4 @@
+//go:build linux && !no_oci_worker
 // +build linux,!no_oci_worker
 
 package main
