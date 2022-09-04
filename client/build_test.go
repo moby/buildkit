@@ -1076,6 +1076,9 @@ func testClientGatewayContainerPlatformPATH(t *testing.T, sb integration.Sandbox
 // testClientGatewayExecError is testing gateway exec to recreate the container
 // process for a failed execop.
 func testClientGatewayExecError(t *testing.T, sb integration.Sandbox) {
+	if sb.Snapshotter() == "stargz" {
+		t.Skip("Failing on 0.8 branch with Go 1.18; see https://github.com/moby/buildkit/pull/3079")
+	}
 	requiresLinux(t)
 
 	ctx := context.TODO()
