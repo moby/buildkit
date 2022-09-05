@@ -1258,13 +1258,69 @@ func dispatchOnbuild(d *dispatchState, c *instructions.OnbuildCommand) error {
 }
 
 func dispatchCmd(d *dispatchState, c *instructions.CmdCommand) error {
+	withLayer := false
+
 	var args []string = c.CmdLine
+	if len(c.Files) > 0 {
+		if len(args) != 1 || !c.PrependShell {
+			return fmt.Errorf("parsing produced an invalid run command: %v", args)
+		}
+
+		if heredoc := parser.MustParseHeredoc(args[0]); heredoc != nil {
+			if d.image.OS != "windows" && strings.HasPrefix(c.Files[0].Data, "#!") {
+				sourcePath := "/"
+				destPath := "/mnt/pipes/"
+
+				f := c.Files[0].Name
+				data := c.Files[0].Data
+				if c.Files[0].Chomp {
+					data = parser.ChompHeredocContent(data)
+				}
+				st := llb.Scratch().Dir(sourcePath).File(
+					llb.Mkfile(f, 0755, []byte(data)),
+					WithInternalName("preparing inline document"),
+				)
+
+				fileOpt := []llb.ConstraintsOpt{
+					WithInternalName("copying CMD inline file"),
+				}
+				if d.ignoreCache {
+					fileOpt = append(fileOpt, llb.IgnoreCache)
+				}
+
+				opts := []llb.CopyOption{&llb.CopyInfo{
+					CreateDestPath: true,
+				}}
+				a := llb.Copy(st, f, path.Join(destPath, f), opts...)
+
+				d.state = d.state.File(a, fileOpt...)
+				withLayer = true
+
+				args = []string{path.Join(destPath, f)}
+			} else {
+				data := c.Files[0].Data
+				if c.Files[0].Chomp {
+					data = parser.ChompHeredocContent(data)
+				}
+				args = []string{data}
+			}
+		} else {
+			full := args[0]
+			for _, file := range c.Files {
+				full += "\n" + file.Data + file.Name
+			}
+			args = []string{full}
+		}
+	}
 	if c.PrependShell {
 		args = withShell(d.image, args)
 	}
 	d.image.Config.Cmd = args
 	d.image.Config.ArgsEscaped = true
 	d.cmdSet = true
+	if withLayer {
+		return commitToHistory(&d.image, fmt.Sprintf("CMD %q", args), true, &d.state)
+	}
 	return commitToHistory(&d.image, fmt.Sprintf("CMD %q", args), false, nil)
 }
 
