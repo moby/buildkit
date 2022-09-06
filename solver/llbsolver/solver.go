@@ -211,25 +211,6 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		if err != nil {
 			return nil, err
 		}
-		if res.Refs != nil {
-			m := make(map[string]cache.ImmutableRef, len(res.Refs))
-			for k, res := range res.Refs {
-				if res == nil {
-					m[k] = nil
-				} else {
-					r, err := res.Result(ctx)
-					if err != nil {
-						return nil, err
-					}
-					workerRef, ok := r.Sys().(*worker.WorkerRef)
-					if !ok {
-						return nil, errors.Errorf("invalid reference: %T", r.Sys())
-					}
-					m[k] = workerRef.ImmutableRef
-				}
-			}
-			inp.Refs = m
-		}
 
 		if _, ok := asInlineCache(exp.CacheExporter); ok {
 			if err := inBuilderContext(ctx, j, "preparing layers for inline cache", j.SessionID+"-cache-inline", func(ctx context.Context, _ session.Group) error {
