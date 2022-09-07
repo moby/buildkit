@@ -13,7 +13,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/containerd/containerd/platforms"
@@ -75,19 +74,19 @@ type ConvertOpt struct {
 	Hostname         string
 	SourceDateEpoch  *time.Time
 	Warn             func(short, url string, detail [][]byte, location *parser.Range)
-	ContextByName    func(ctx context.Context, name, resolveMode string, p *ocispecs.Platform) (*llb.State, *Image, *binfotypes.BuildInfo, error)
+	ContextByName    func(ctx context.Context, name, resolveMode string, p *ocispecs.Platform) (*llb.State, *Image, error)
 }
 
-func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, *binfotypes.BuildInfo, error) {
-	ds, bi, err := toDispatchState(ctx, dt, opt)
+func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, error) {
+	ds, err := toDispatchState(ctx, dt, opt)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
-	return &ds.state, &ds.image, bi, nil
+	return &ds.state, &ds.image, nil
 }
 
 func Dockefile2Outline(ctx context.Context, dt []byte, opt ConvertOpt) (*outline.Outline, error) {
-	ds, _, err := toDispatchState(ctx, dt, opt)
+	ds, err := toDispatchState(ctx, dt, opt)
 	if err != nil {
 		return nil, err
 	}
@@ -123,38 +122,26 @@ func ListTargets(ctx context.Context, dt []byte) (*targets.List, error) {
 	return l, nil
 }
 
-func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchState, *binfotypes.BuildInfo, error) {
-	buildInfo := &binfotypes.BuildInfo{}
-	buildInfoDepsMu := sync.Mutex{}
+func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchState, error) {
 	contextByName := opt.ContextByName
-	opt.ContextByName = func(ctx context.Context, name, resolveMode string, p *ocispecs.Platform) (*llb.State, *Image, *binfotypes.BuildInfo, error) {
+	opt.ContextByName = func(ctx context.Context, name, resolveMode string, p *ocispecs.Platform) (*llb.State, *Image, error) {
 		if !strings.EqualFold(name, "scratch") && !strings.EqualFold(name, "context") {
 			if contextByName != nil {
 				if p == nil {
 					p = opt.TargetPlatform
 				}
-				st, img, bi, err := contextByName(ctx, name, resolveMode, p)
+				st, img, err := contextByName(ctx, name, resolveMode, p)
 				if err != nil {
-					return nil, nil, nil, err
+					return nil, nil, err
 				}
-				if bi != nil && bi.Deps != nil {
-					buildInfoDepsMu.Lock()
-					if buildInfo.Deps == nil {
-						buildInfo.Deps = make(map[string]binfotypes.BuildInfo)
-					}
-					for k := range bi.Deps {
-						buildInfo.Deps[k] = bi.Deps[k]
-					}
-					buildInfoDepsMu.Unlock()
-				}
-				return st, img, bi, nil
+				return st, img, nil
 			}
 		}
-		return nil, nil, nil, nil
+		return nil, nil, nil
 	}
 
 	if len(dt) == 0 {
-		return nil, nil, errors.Errorf("the Dockerfile cannot be empty")
+		return nil, errors.Errorf("the Dockerfile cannot be empty")
 	}
 
 	if opt.ContextLocalName == "" {
@@ -170,7 +157,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 
 	dockerfile, err := parser.Parse(bytes.NewReader(dt))
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	for _, w := range dockerfile.Warnings {
@@ -181,7 +168,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 
 	stages, metaArgs, err := instructions.Parse(dockerfile.AST)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	shlex := shell.NewLex(dockerfile.EscapeToken)
@@ -216,10 +203,10 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	for i, st := range stages {
 		name, used, err := shlex.ProcessWordWithMatches(st.BaseName, metaArgsToMap(optMetaArgs))
 		if err != nil {
-			return nil, nil, parser.WithLocation(err, st.Location)
+			return nil, parser.WithLocation(err, st.Location)
 		}
 		if name == "" {
-			return nil, nil, parser.WithLocation(errors.Errorf("base name (%s) should not be blank", st.BaseName), st.Location)
+			return nil, parser.WithLocation(errors.Errorf("base name (%s) should not be blank", st.BaseName), st.Location)
 		}
 		st.BaseName = name
 
@@ -236,12 +223,12 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		if v := st.Platform; v != "" {
 			v, u, err := shlex.ProcessWordWithMatches(v, metaArgsToMap(optMetaArgs))
 			if err != nil {
-				return nil, nil, parser.WithLocation(errors.Wrapf(err, "failed to process arguments for platform %s", v), st.Location)
+				return nil, parser.WithLocation(errors.Wrapf(err, "failed to process arguments for platform %s", v), st.Location)
 			}
 
 			p, err := platforms.Parse(v)
 			if err != nil {
-				return nil, nil, parser.WithLocation(errors.Wrapf(err, "failed to parse platform %s", v), st.Location)
+				return nil, parser.WithLocation(errors.Wrapf(err, "failed to parse platform %s", v), st.Location)
 			}
 			for k := range u {
 				used[k] = struct{}{}
@@ -250,9 +237,9 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		}
 
 		if st.Name != "" {
-			s, img, bi, err := opt.ContextByName(ctx, st.Name, opt.ImageResolveMode.String(), ds.platform)
+			s, img, err := opt.ContextByName(ctx, st.Name, opt.ImageResolveMode.String(), ds.platform)
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			if s != nil {
 				ds.noinit = true
@@ -266,9 +253,6 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 							Variant:      img.Variant,
 						}
 					}
-				}
-				if bi != nil {
-					ds.buildInfo = *bi
 				}
 				allDispatchStates.addState(ds)
 				continue
@@ -319,7 +303,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		var ok bool
 		target, ok = allDispatchStates.findStateByName(opt.Target)
 		if !ok {
-			return nil, nil, errors.Errorf("target stage %s could not be found", opt.Target)
+			return nil, errors.Errorf("target stage %s could not be found", opt.Target)
 		}
 	}
 
@@ -329,7 +313,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		for i, cmd := range d.stage.Commands {
 			newCmd, err := toCommand(cmd, allDispatchStates)
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			d.commands[i] = newCmd
 			for _, src := range newCmd.sources {
@@ -344,7 +328,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	}
 
 	if has, state := hasCircularDependency(allDispatchStates.states); has {
-		return nil, nil, errors.Errorf("circular dependency detected on stage: %s", state.stageName)
+		return nil, errors.Errorf("circular dependency detected on stage: %s", state.stageName)
 	}
 
 	if len(allDispatchStates.states) == 1 {
@@ -387,7 +371,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 					d.stage.BaseName = reference.TagNameOnly(ref).String()
 
 					var isScratch bool
-					st, img, bi, err := opt.ContextByName(ctx, d.stage.BaseName, opt.ImageResolveMode.String(), platform)
+					st, img, err := opt.ContextByName(ctx, d.stage.BaseName, opt.ImageResolveMode.String(), platform)
 					if err != nil {
 						return err
 					}
@@ -396,9 +380,6 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 							d.image = *img
 						} else {
 							d.image = emptyImage(platformOpt.targetPlatform)
-						}
-						if bi != nil {
-							d.buildInfo = *bi
 						}
 						d.state = st.Platform(*platform)
 						d.platform = platform
@@ -477,7 +458,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	}
 
 	if err := eg.Wait(); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	buildContext := &mutableOutput{}
@@ -488,19 +469,6 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			continue
 		}
 
-		// collect build sources and dependencies
-		if len(d.buildInfo.Sources) > 0 {
-			buildInfo.Sources = append(buildInfo.Sources, d.buildInfo.Sources...)
-		}
-		if d.buildInfo.Deps != nil {
-			for name, bi := range d.buildInfo.Deps {
-				if buildInfo.Deps == nil {
-					buildInfo.Deps = make(map[string]binfotypes.BuildInfo)
-				}
-				buildInfo.Deps[name] = bi
-			}
-		}
-
 		if d.base != nil {
 			d.state = d.base.state
 			d.platform = d.base.platform
@@ -509,11 +477,11 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 
 		// make sure that PATH is always set
 		if _, ok := shell.BuildEnvs(d.image.Config.Env)["PATH"]; !ok {
-			var os string
+			var pathOS string
 			if d.platform != nil {
-				os = d.platform.OS
+				pathOS = d.platform.OS
 			}
-			d.image.Config.Env = append(d.image.Config.Env, "PATH="+system.DefaultPathEnv(os))
+			d.image.Config.Env = append(d.image.Config.Env, "PATH="+system.DefaultPathEnv(pathOS))
 		}
 
 		// initialize base metadata from image conf
@@ -526,12 +494,12 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		}
 		if d.image.Config.WorkingDir != "" {
 			if err = dispatchWorkdir(d, &instructions.WorkdirCommand{Path: d.image.Config.WorkingDir}, false, nil); err != nil {
-				return nil, nil, parser.WithLocation(err, d.stage.Location)
+				return nil, parser.WithLocation(err, d.stage.Location)
 			}
 		}
 		if d.image.Config.User != "" {
 			if err = dispatchUser(d, &instructions.UserCommand{User: d.image.Config.User}, false); err != nil {
-				return nil, nil, parser.WithLocation(err, d.stage.Location)
+				return nil, parser.WithLocation(err, d.stage.Location)
 			}
 		}
 		d.state = d.state.Network(opt.ForceNetMode)
@@ -556,26 +524,19 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		}
 
 		if err = dispatchOnBuildTriggers(d, d.image.Config.OnBuild, opt); err != nil {
-			return nil, nil, parser.WithLocation(err, d.stage.Location)
+			return nil, parser.WithLocation(err, d.stage.Location)
 		}
 		d.image.Config.OnBuild = nil
 
 		for _, cmd := range d.commands {
 			if err := dispatch(d, cmd, opt); err != nil {
-				return nil, nil, parser.WithLocation(err, cmd.Location())
+				return nil, parser.WithLocation(err, cmd.Location())
 			}
 		}
 
 		for p := range d.ctxPaths {
 			ctxPaths[p] = struct{}{}
 		}
-	}
-
-	// sort build sources
-	if len(buildInfo.Sources) > 0 {
-		sort.Slice(buildInfo.Sources, func(i, j int) bool {
-			return buildInfo.Sources[i].Ref < buildInfo.Sources[j].Ref
-		})
 	}
 
 	if len(opt.Labels) != 0 && target.image.Config.Labels == nil {
@@ -615,7 +576,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		target.image.Variant = platformOpt.targetPlatform.Variant
 	}
 
-	return target, buildInfo, nil
+	return target, nil
 }
 
 func metaArgsToMap(metaArgs []instructions.KeyValuePairOptional) map[string]string {

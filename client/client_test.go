@@ -6199,8 +6199,7 @@ func testBuildInfoExporter(t *testing.T, sb integration.Sandbox) {
 			return nil, err
 		}
 		return c.Solve(ctx, gateway.SolveRequest{
-			Definition:  def.ToPB(),
-			FrontendOpt: map[string]string{"build-arg:foo": "bar"},
+			Definition: def.ToPB(),
 		})
 	}
 
@@ -6233,8 +6232,6 @@ func testBuildInfoExporter(t *testing.T, sb integration.Sandbox) {
 	err = json.Unmarshal(decbi, &exbi)
 	require.NoError(t, err)
 
-	attrval := "bar"
-	require.Equal(t, exbi.Attrs, map[string]*string{"build-arg:foo": &attrval})
 	require.Equal(t, len(exbi.Sources), 1)
 	require.Equal(t, exbi.Sources[0].Type, binfotypes.SourceTypeDockerImage)
 	require.Equal(t, exbi.Sources[0].Ref, "docker.io/library/busybox:latest")
@@ -6271,66 +6268,42 @@ func testBuildInfoInline(t *testing.T, sb integration.Sandbox) {
 
 	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
 
-	for _, tt := range []struct {
-		name       string
-		buildAttrs bool
-	}{{
-		"attrsEnabled",
-		true,
-	}, {
-		"attrsDisabled",
-		false,
-	}} {
-		t.Run(tt.name, func(t *testing.T) {
-			target := registry + "/buildkit/test-buildinfo:latest"
+	target := registry + "/buildkit/test-buildinfo:latest"
 
-			_, err = c.Solve(sb.Context(), def, SolveOpt{
-				Exports: []ExportEntry{
-					{
-						Type: ExporterImage,
-						Attrs: map[string]string{
-							"name":            target,
-							"push":            "true",
-							"buildinfo-attrs": strconv.FormatBool(tt.buildAttrs),
-						},
-					},
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
 				},
-				FrontendAttrs: map[string]string{
-					"build-arg:foo": "bar",
-				},
-			}, nil)
-			require.NoError(t, err)
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
 
-			img, err := client.GetImage(ctx, target)
-			require.NoError(t, err)
+	img, err := client.GetImage(ctx, target)
+	require.NoError(t, err)
 
-			desc, err := img.Config(ctx)
-			require.NoError(t, err)
+	desc, err := img.Config(ctx)
+	require.NoError(t, err)
 
-			dt, err := content.ReadBlob(ctx, img.ContentStore(), desc)
-			require.NoError(t, err)
+	dt, err := content.ReadBlob(ctx, img.ContentStore(), desc)
+	require.NoError(t, err)
 
-			var config binfotypes.ImageConfig
-			require.NoError(t, json.Unmarshal(dt, &config))
+	var config binfotypes.ImageConfig
+	require.NoError(t, json.Unmarshal(dt, &config))
 
-			dec, err := base64.StdEncoding.DecodeString(config.BuildInfo)
-			require.NoError(t, err)
+	dec, err := base64.StdEncoding.DecodeString(config.BuildInfo)
+	require.NoError(t, err)
 
-			var bi binfotypes.BuildInfo
-			require.NoError(t, json.Unmarshal(dec, &bi))
+	var bi binfotypes.BuildInfo
+	require.NoError(t, json.Unmarshal(dec, &bi))
 
-			if tt.buildAttrs {
-				attrval := "bar"
-				require.Contains(t, bi.Attrs, "build-arg:foo")
-				require.Equal(t, bi.Attrs["build-arg:foo"], &attrval)
-			} else {
-				require.NotContains(t, bi.Attrs, "build-arg:foo")
-			}
-			require.Equal(t, len(bi.Sources), 1)
-			require.Equal(t, bi.Sources[0].Type, binfotypes.SourceTypeDockerImage)
-			require.Equal(t, bi.Sources[0].Ref, "docker.io/library/busybox:latest")
-		})
-	}
+	require.Equal(t, len(bi.Sources), 1)
+	require.Equal(t, bi.Sources[0].Type, binfotypes.SourceTypeDockerImage)
+	require.Equal(t, bi.Sources[0].Ref, "docker.io/library/busybox:latest")
 }
 
 func testBuildInfoNoExport(t *testing.T, sb integration.Sandbox) {
@@ -6348,8 +6321,7 @@ func testBuildInfoNoExport(t *testing.T, sb integration.Sandbox) {
 			return nil, err
 		}
 		return c.Solve(ctx, gateway.SolveRequest{
-			Definition:  def.ToPB(),
-			FrontendOpt: map[string]string{"build-arg:foo": "bar"},
+			Definition: def.ToPB(),
 		})
 	}
 
@@ -6364,8 +6336,6 @@ func testBuildInfoNoExport(t *testing.T, sb integration.Sandbox) {
 	err = json.Unmarshal(decbi, &exbi)
 	require.NoError(t, err)
 
-	attrval := "bar"
-	require.Equal(t, exbi.Attrs, map[string]*string{"build-arg:foo": &attrval})
 	require.Equal(t, len(exbi.Sources), 1)
 	require.Equal(t, exbi.Sources[0].Type, binfotypes.SourceTypeDockerImage)
 	require.Equal(t, exbi.Sources[0].Ref, "docker.io/library/busybox:latest")

@@ -32,7 +32,6 @@ import (
 	"github.com/moby/buildkit/frontend/subrequests/targets"
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
-	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/gitutil"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -524,7 +523,7 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 					opt.Warn = nil
 				}
 				opt.ContextByName = contextByNameFunc(c, c.BuildOpts().SessionID)
-				st, img, bi, err := dockerfile2llb.Dockerfile2LLB(ctx2, dtDockerfile, opt)
+				st, img, err := dockerfile2llb.Dockerfile2LLB(ctx2, dtDockerfile, opt)
 
 				if err != nil {
 					return err
@@ -579,11 +578,6 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 					return err
 				}
 
-				buildinfo, err := json.Marshal(bi)
-				if err != nil {
-					return errors.Wrapf(err, "failed to marshal build info")
-				}
-
 				p := platforms.DefaultSpec()
 				if tp != nil {
 					p = *tp
@@ -593,7 +587,6 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 
 				if !exportMap {
 					res.AddMeta(exptypes.ExporterImageConfigKey, config)
-					res.AddMeta(exptypes.ExporterBuildInfo, buildinfo)
 					res.SetRef(ref)
 
 					expPlatforms.Platforms[i] = exptypes.Platform{
@@ -602,7 +595,6 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 					}
 				} else {
 					res.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterImageConfigKey, k), config)
-					res.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, k), buildinfo)
 					res.AddRef(k, ref)
 					expPlatforms.Platforms[i] = exptypes.Platform{
 						ID:       k,
@@ -871,11 +863,11 @@ func warnOpts(sm *llb.SourceMap, r *parser.Range, detail [][]byte, url string) c
 	return opts
 }
 
-func contextByNameFunc(c client.Client, sessionID string) func(context.Context, string, string, *ocispecs.Platform) (*llb.State, *dockerfile2llb.Image, *binfotypes.BuildInfo, error) {
-	return func(ctx context.Context, name, resolveMode string, p *ocispecs.Platform) (*llb.State, *dockerfile2llb.Image, *binfotypes.BuildInfo, error) {
+func contextByNameFunc(c client.Client, sessionID string) func(context.Context, string, string, *ocispecs.Platform) (*llb.State, *dockerfile2llb.Image, error) {
+	return func(ctx context.Context, name, resolveMode string, p *ocispecs.Platform) (*llb.State, *dockerfile2llb.Image, error) {
 		named, err := reference.ParseNormalizedNamed(name)
 		if err != nil {
-			return nil, nil, nil, errors.Wrapf(err, "invalid context name %s", name)
+			return nil, nil, errors.Wrapf(err, "invalid context name %s", name)
 		}
 		name = strings.TrimSuffix(reference.FamiliarString(named), ":latest")
 
@@ -885,28 +877,28 @@ func contextByNameFunc(c client.Client, sessionID string) func(context.Context, 
 		}
 		if p != nil {
 			name := name + "::" + platforms.Format(platforms.Normalize(*p))
-			st, img, bi, err := contextByName(ctx, c, sessionID, name, p, resolveMode)
+			st, img, err := contextByName(ctx, c, sessionID, name, p, resolveMode)
 			if err != nil {
-				return nil, nil, nil, err
+				return nil, nil, err
 			}
 			if st != nil {
-				return st, img, bi, nil
+				return st, img, nil
 			}
 		}
 		return contextByName(ctx, c, sessionID, name, p, resolveMode)
 	}
 }
 
-func contextByName(ctx context.Context, c client.Client, sessionID, name string, platform *ocispecs.Platform, resolveMode string) (*llb.State, *dockerfile2llb.Image, *binfotypes.BuildInfo, error) {
+func contextByName(ctx context.Context, c client.Client, sessionID, name string, platform *ocispecs.Platform, resolveMode string) (*llb.State, *dockerfile2llb.Image, error) {
 	opts := c.BuildOpts().Opts
 	v, ok := opts[contextPrefix+name]
 	if !ok {
-		return nil, nil, nil, nil
+		return nil, nil, nil
 	}
 
 	vv := strings.SplitN(v, ":", 2)
 	if len(vv) != 2 {
-		return nil, nil, nil, errors.Errorf("invalid context specifier %s for %s", v, name)
+		return nil, nil, errors.Errorf("invalid context specifier %s for %s", v, name)
 	}
 	// allow git@ without protocol for SSH URLs for backwards compatibility
 	if strings.HasPrefix(vv[0], "git@") {
@@ -917,7 +909,7 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 		ref := strings.TrimPrefix(vv[1], "//")
 		if ref == "scratch" {
 			st := llb.Scratch()
-			return &st, nil, nil, nil
+			return &st, nil, nil
 		}
 
 		imgOpt := []llb.ImageOption{
@@ -929,7 +921,7 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 
 		named, err := reference.ParseNormalizedNamed(ref)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 
 		named = reference.TagNameOnly(named)
@@ -942,45 +934,45 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 			SessionID:    sessionID,
 		})
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 
 		var img dockerfile2llb.Image
 		if err := json.Unmarshal(data, &img); err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 		img.Created = nil
 
 		st := llb.Image(ref, imgOpt...)
 		st, err = st.WithImageConfig(data)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
-		return &st, &img, nil, nil
+		return &st, &img, nil
 	case "git":
 		st, ok := detectGitContext(v, true)
 		if !ok {
-			return nil, nil, nil, errors.Errorf("invalid git context %s", v)
+			return nil, nil, errors.Errorf("invalid git context %s", v)
 		}
-		return st, nil, nil, nil
+		return st, nil, nil
 	case "http", "https":
 		st, ok := detectGitContext(v, true)
 		if !ok {
 			httpst := llb.HTTP(v, llb.WithCustomName("[context "+name+"] "+v))
 			st = &httpst
 		}
-		return st, nil, nil, nil
+		return st, nil, nil
 	case "oci-layout":
 		ref := strings.TrimPrefix(vv[1], "//")
 		// expected format is storeID@hash
 		parts := strings.SplitN(ref, "@", 2)
 		if len(parts) != 2 {
-			return nil, nil, nil, errors.Errorf("invalid oci-layout format '%s', must be oci-layout:///content-store@sha256:digest", vv[1])
+			return nil, nil, errors.Errorf("invalid oci-layout format '%s', must be oci-layout:///content-store@sha256:digest", vv[1])
 		}
 		storeID := parts[0]
 		dig, err := digest.Parse(parts[1])
 		if err != nil {
-			return nil, nil, nil, errors.Errorf("invalid digest format '%s', must be oci-layout:///content-store@sha256:digest", vv[1])
+			return nil, nil, errors.Errorf("invalid digest format '%s', must be oci-layout:///content-store@sha256:digest", vv[1])
 		}
 
 		// the ref now is "content-store@sha256:digest"
@@ -1001,12 +993,12 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 			ResolverType: llb.ResolverTypeOCILayout,
 		})
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 
 		var img dockerfile2llb.Image
 		if err := json.Unmarshal(data, &img); err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 
 		st := llb.OCILayout(storeID, dig,
@@ -1015,9 +1007,9 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 		)
 		st, err = st.WithImageConfig(data)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
-		return &st, &img, nil, nil
+		return &st, &img, nil
 	case "local":
 		st := llb.Local(vv[1],
 			llb.SessionID(c.BuildOpts().SessionID),
@@ -1028,18 +1020,18 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 		)
 		def, err := st.Marshal(ctx)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 		res, err := c.Solve(ctx, client.SolveRequest{
 			Evaluate:   true,
 			Definition: def.ToPB(),
 		})
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 		ref, err := res.SingleRef()
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 		dt, _ := ref.ReadFile(ctx, client.ReadRequest{
 			Filename: dockerignoreFilename,
@@ -1048,7 +1040,7 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 		if len(dt) != 0 {
 			excludes, err = dockerignore.ReadAll(bytes.NewBuffer(dt))
 			if err != nil {
-				return nil, nil, nil, err
+				return nil, nil, err
 			}
 		}
 		st = llb.Local(vv[1],
@@ -1057,49 +1049,37 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 			llb.SharedKeyHint("context:"+name),
 			llb.ExcludePatterns(excludes),
 		)
-		return &st, nil, nil, nil
+		return &st, nil, nil
 	case "input":
 		inputs, err := c.Inputs(ctx)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 		st, ok := inputs[vv[1]]
 		if !ok {
-			return nil, nil, nil, errors.Errorf("invalid input %s for %s", vv[1], name)
+			return nil, nil, errors.Errorf("invalid input %s for %s", vv[1], name)
 		}
 		md, ok := opts[inputMetadataPrefix+vv[1]]
 		if ok {
 			m := make(map[string][]byte)
 			if err := json.Unmarshal([]byte(md), &m); err != nil {
-				return nil, nil, nil, errors.Wrapf(err, "failed to parse input metadata %s", md)
-			}
-			var bi *binfotypes.BuildInfo
-			if dtbi, ok := m[exptypes.ExporterBuildInfo]; ok {
-				var depbi binfotypes.BuildInfo
-				if err := json.Unmarshal(dtbi, &depbi); err != nil {
-					return nil, nil, nil, errors.Wrapf(err, "failed to parse buildinfo for %s", name)
-				}
-				bi = &binfotypes.BuildInfo{
-					Deps: map[string]binfotypes.BuildInfo{
-						strings.SplitN(vv[1], "::", 2)[0]: depbi,
-					},
-				}
+				return nil, nil, errors.Wrapf(err, "failed to parse input metadata %s", md)
 			}
 			var img *dockerfile2llb.Image
 			if dtic, ok := m[exptypes.ExporterImageConfigKey]; ok {
 				st, err = st.WithImageConfig(dtic)
 				if err != nil {
-					return nil, nil, nil, err
+					return nil, nil, err
 				}
 				if err := json.Unmarshal(dtic, &img); err != nil {
-					return nil, nil, nil, errors.Wrapf(err, "failed to parse image config for %s", name)
+					return nil, nil, errors.Wrapf(err, "failed to parse image config for %s", name)
 				}
 			}
-			return &st, img, bi, nil
+			return &st, img, nil
 		}
-		return &st, nil, nil, nil
+		return &st, nil, nil
 	default:
-		return nil, nil, nil, errors.Errorf("unsupported context source %s for %s", vv[0], name)
+		return nil, nil, errors.Errorf("unsupported context source %s for %s", vv[0], name)
 	}
 }
 

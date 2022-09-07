@@ -53,7 +53,7 @@ require (
 	github.com/opencontainers/runc v1.1.3
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417
 	github.com/opencontainers/selinux v1.10.2
-	github.com/package-url/packageurl-go v0.1.0
+	github.com/package-url/packageurl-go v0.1.1-0.20220428063043-89078438f170
 	github.com/pelletier/go-toml v1.9.4
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.5.0

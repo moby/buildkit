@@ -14,9 +14,9 @@ import (
 )
 
 func SBOMProcessor(scannerRef string) llbsolver.Processor {
-	return func(ctx context.Context, res *frontend.Result, s *llbsolver.Solver, j *solver.Job) (*frontend.Result, error) {
+	return func(ctx context.Context, res *llbsolver.Result, s *llbsolver.Solver, j *solver.Job) (*llbsolver.Result, error) {
 		// skip sbom generation if we already have an sbom
-		if attest.HasSBOM(res) {
+		if attest.HasSBOM(res.Result) {
 			return res, nil
 		}
 
@@ -61,7 +61,7 @@ func SBOMProcessor(scannerRef string) llbsolver.Processor {
 				return nil, err
 			}
 
-			r, err := s.Bridge(j).Solve(ctx, frontend.SolveRequest{
+			r, err := s.Bridge(j).Solve(ctx, frontend.SolveRequest{ // TODO: buildinfo
 				Definition: def.ToPB(),
 			}, j.SessionID)
 			if err != nil {

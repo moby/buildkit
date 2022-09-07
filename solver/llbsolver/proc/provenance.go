@@ -13,24 +13,20 @@ import (
 	"github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/exporter/containerimage"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
-	"github.com/moby/buildkit/frontend"
 	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver"
+	"github.com/moby/buildkit/solver/llbsolver/provenance"
 	"github.com/moby/buildkit/solver/result"
-	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
-	provenance "github.com/moby/buildkit/util/provenance"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
-var BuildKitBuildType = "https://mobyproject.org/buildkit@v1"
-
 func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
-	return func(ctx context.Context, res *frontend.Result, s *llbsolver.Solver, j *solver.Job) (*frontend.Result, error) {
+	return func(ctx context.Context, res *llbsolver.Result, s *llbsolver.Solver, j *solver.Job) (*llbsolver.Result, error) {
 		if len(res.Refs) == 0 {
 			return nil, errors.New("provided result has no refs")
 		}
@@ -43,7 +39,7 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 		var ps exptypes.Platforms
 		if len(platformsBytes) > 0 {
 			if err := json.Unmarshal(platformsBytes, &ps); err != nil {
-				return nil, errors.Wrapf(err, "failed to parse platforms passed to sbom processor")
+				return nil, errors.Wrapf(err, "failed to parse platforms passed to provenance processor")
 			}
 		}
 
@@ -73,17 +69,12 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 		}
 
 		for _, p := range ps.Platforms {
-			dt, ok := res.Metadata[exptypes.ExporterBuildInfo+"/"+p.ID]
+			cp, ok := res.Provenance.Refs[p.ID]
 			if !ok {
 				return nil, errors.New("no build info found for provenance")
 			}
 
-			var bi binfotypes.BuildInfo
-			if err := json.Unmarshal(dt, &bi); err != nil {
-				return nil, errors.Wrap(err, "failed to parse build info")
-			}
-
-			pr, err := provenance.FromBuildInfo(bi)
+			pr, err := provenance.NewPredicate(cp)
 			if err != nil {
 				return nil, err
 			}
@@ -97,15 +88,17 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 			var addLayers func() error
 
 			if mode != "max" {
-				param := make(map[string]*string)
-				for k, v := range pr.Invocation.Parameters.(map[string]*string) {
+				args := make(map[string]string)
+				for k, v := range pr.Invocation.Parameters.Args {
 					if strings.HasPrefix(k, "build-arg:") || strings.HasPrefix(k, "label:") {
 						pr.Metadata.Completeness.Parameters = false
 						continue
 					}
-					param[k] = v
+					args[k] = v
 				}
-				pr.Invocation.Parameters = param
+				pr.Invocation.Parameters.Args = args
+				pr.Invocation.Parameters.Secrets = nil
+				pr.Invocation.Parameters.SSH = nil
 			} else {
 				dgsts, err := provenance.AddBuildConfig(ctx, pr, res.Refs[p.ID])
 				if err != nil {
@@ -139,7 +132,11 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 					}
 
 					if len(m) != 0 {
-						pr.Layers = m
+						if pr.Metadata == nil {
+							pr.Metadata = &provenance.ProvenanceMetadata{}
+						}
+
+						pr.Metadata.BuildKitMetadata.Layers = m
 					}
 
 					return nil

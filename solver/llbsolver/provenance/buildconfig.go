@@ -15,7 +15,7 @@ type BuildConfig struct {
 }
 
 type BuildStep struct {
-	ID     string      `json:"ID,omitempty"`
+	ID     string      `json:"id,omitempty"`
 	Op     interface{} `json:"op,omitempty"`
 	Inputs []string    `json:"inputs,omitempty"`
 }
@@ -69,7 +69,10 @@ func AddBuildConfig(ctx context.Context, p *ProvenancePredicate, rp solver.Resul
 				locs[fmt.Sprintf("step%d", idx)] = l
 			}
 
-			p.Source = &Source{
+			if p.Metadata == nil {
+				p.Metadata = &ProvenanceMetadata{}
+			}
+			p.Metadata.BuildKitMetadata.Source = &Source{
 				Infos:     sis,
 				Locations: locs,
 			}

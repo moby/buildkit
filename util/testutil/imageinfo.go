@@ -43,6 +43,19 @@ func (idx ImagesInfo) Filter(platform string) *ImagesInfo {
 	return result
 }
 
+func (idx ImagesInfo) FindAttestation(platform string) *ImageInfo {
+	img := idx.Find(platform)
+	if img == nil {
+		return nil
+	}
+	for _, info := range idx.Images {
+		if info.Desc.Annotations["vnd.docker.reference.digest"] == string(img.Desc.Digest) {
+			return info
+		}
+	}
+	return nil
+}
+
 func ReadImages(ctx context.Context, p content.Provider, desc ocispecs.Descriptor) (*ImagesInfo, error) {
 	idx := &ImagesInfo{Desc: desc}
 

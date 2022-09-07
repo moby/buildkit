@@ -1,16 +1,12 @@
 package dockerfile2llb
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/moby/buildkit/util/appcontext"
-	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
-	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func toEnvMap(args []instructions.KeyValuePairOptional, env []string) map[string]string {
@@ -35,7 +31,7 @@ ENV FOO bar
 COPY f1 f2 /sub/
 RUN ls -l
 `
-	_, _, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	_, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.NoError(t, err)
 
 	df = `FROM scratch AS foo
@@ -44,7 +40,7 @@ FROM foo
 COPY --from=foo f1 /
 COPY --from=0 f2 /
 	`
-	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.NoError(t, err)
 
 	df = `FROM scratch AS foo
@@ -53,12 +49,12 @@ FROM foo
 COPY --from=foo f1 /
 COPY --from=0 f2 /
 	`
-	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
+	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
 		Target: "Foo",
 	})
 	assert.NoError(t, err)
 
-	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
+	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
 		Target: "nosuch",
 	})
 	assert.Error(t, err)
@@ -66,21 +62,21 @@ COPY --from=0 f2 /
 	df = `FROM scratch
 	ADD http://github.com/moby/buildkit/blob/master/README.md /
 		`
-	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.NoError(t, err)
 
 	df = `FROM scratch
 	COPY http://github.com/moby/buildkit/blob/master/README.md /
 		`
-	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.EqualError(t, err, "source can't be a URL for COPY")
 
 	df = `FROM "" AS foo`
-	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.Error(t, err)
 
 	df = `FROM ${BLANK} AS foo`
-	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.Error(t, err)
 }
 
@@ -178,7 +174,7 @@ func TestDockerfileCircularDependencies(t *testing.T) {
 	df := `FROM busybox AS stage0
 COPY --from=stage0 f1 /sub/
 `
-	_, _, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	_, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.EqualError(t, err, "circular dependency detected on stage: stage0")
 
 	// multiple stages with circular dependency
@@ -189,33 +185,6 @@ COPY --from=stage0 f2 /sub/
 FROM busybox AS stage2
 COPY --from=stage1 f2 /sub/
 `
-	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.EqualError(t, err, "circular dependency detected on stage: stage0")
-}
-
-// moby/buildkit#2311
-func TestTargetBuildInfo(t *testing.T) {
-	df := `
-FROM busybox
-ADD https://raw.githubusercontent.com/moby/buildkit/master/README.md /
-`
-	_, _, bi, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
-		TargetPlatform: &ocispecs.Platform{
-			Architecture: "amd64",
-			OS:           "linux",
-		},
-		BuildPlatforms: []ocispecs.Platform{
-			{
-				Architecture: "amd64",
-				OS:           "linux",
-			},
-		},
-	})
-	require.NoError(t, err)
-
-	require.Equal(t, 1, len(bi.Sources))
-	assert.Equal(t, binfotypes.SourceTypeDockerImage, bi.Sources[0].Type)
-	assert.Equal(t, "busybox", bi.Sources[0].Ref)
-	assert.True(t, strings.HasPrefix(bi.Sources[0].Alias, "docker.io/library/busybox@"))
-	assert.NotEmpty(t, bi.Sources[0].Pin)
 }

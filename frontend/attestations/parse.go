@@ -32,6 +32,15 @@ func Filter(v map[string]string) map[string]string {
 	return attests
 }
 
+func Validate(values map[string]map[string]string) (map[string]map[string]string, error) {
+	for k := range values {
+		if k != KeyTypeSbom && k != KeyTypeProvenance {
+			return nil, errors.Errorf("unknown attestation type %q", k)
+		}
+	}
+	return values, nil
+}
+
 func Parse(values map[string]string) (map[string]map[string]string, error) {
 	attests := make(map[string]string)
 	for k, v := range values {
@@ -68,5 +77,6 @@ func Parse(values map[string]string) (map[string]map[string]string, error) {
 			attrs[parts[0]] = parts[1]
 		}
 	}
-	return out, nil
+
+	return Validate(out)
 }
