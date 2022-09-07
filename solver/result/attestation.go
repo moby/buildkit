@@ -19,10 +19,15 @@ const (
 type Attestation struct {
 	Kind AttestationKind
 
-	InTotoRef           string
-	InTotoPath          string
-	InTotoPredicateType string
-	InTotoSubjects      []InTotoSubject
+	Ref  string
+	Path string
+
+	InToto InTotoAttestation
+}
+
+type InTotoAttestation struct {
+	PredicateType string
+	Subjects      []InTotoSubject
 }
 
 type InTotoSubject struct {

@@ -266,9 +266,9 @@ func (ic *ImageWriter) extractAttestations(ctx context.Context, s session.Group,
 		eg.Go(func() error {
 			switch att.Kind {
 			case result.InToto:
-				ref, ok := refs[att.InTotoRef]
+				ref, ok := refs[att.Ref]
 				if !ok {
-					return errors.Errorf("key %s not found in refs map", att.InTotoRef)
+					return errors.Errorf("key %s not found in refs map", att.Ref)
 				}
 
 				mount, err := ref.Mount(ctx, true, s)
@@ -282,7 +282,7 @@ func (ic *ImageWriter) extractAttestations(ctx context.Context, s session.Group,
 					return err
 				}
 				defer lm.Unmount()
-				predicate, err := os.ReadFile(path.Join(src, att.InTotoPath))
+				predicate, err := os.ReadFile(path.Join(src, att.Path))
 				if err != nil {
 					return err
 				}
@@ -292,19 +292,19 @@ func (ic *ImageWriter) extractAttestations(ctx context.Context, s session.Group,
 				statements[i] = intoto.Statement{
 					StatementHeader: intoto.StatementHeader{
 						Type:          intoto.StatementInTotoV01,
-						PredicateType: att.InTotoPredicateType,
+						PredicateType: att.InToto.PredicateType,
 					},
 					Predicate: json.RawMessage(predicate),
 				}
 
-				if len(att.InTotoSubjects) == 0 {
-					att.InTotoSubjects = []result.InTotoSubject{{
+				if len(att.InToto.Subjects) == 0 {
+					att.InToto.Subjects = []result.InTotoSubject{{
 						Kind: result.Self,
 					}}
 				}
 
-				statements[i].Subject = make([]intoto.Subject, len(att.InTotoSubjects))
-				for j, subject := range att.InTotoSubjects {
+				statements[i].Subject = make([]intoto.Subject, len(att.InToto.Subjects))
+				for j, subject := range att.InToto.Subjects {
 					statements[i].Subject[j].Name = "_"
 					if subject.Name != "" {
 						statements[i].Subject[j].Name = subject.Name

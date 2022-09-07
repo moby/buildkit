@@ -21,8 +21,8 @@ var fromSubjectKind = map[InTotoSubject_Kind]result.InTotoSubjectKind{
 }
 
 func ToAttestationPB(a *result.Attestation) (*Attestation, error) {
-	subjects := make([]*InTotoSubject, len(a.InTotoSubjects))
-	for i, subject := range a.InTotoSubjects {
+	subjects := make([]*InTotoSubject, len(a.InToto.Subjects))
+	for i, subject := range a.InToto.Subjects {
 		k, ok := toSubjectKind[subject.Kind]
 		if !ok {
 			return nil, errors.Errorf("unknown in toto subject kind %q", subject.Kind)
@@ -40,9 +40,9 @@ func ToAttestationPB(a *result.Attestation) (*Attestation, error) {
 	}
 	return &Attestation{
 		Kind:                k,
-		Path:                a.InTotoPath,
-		Ref:                 a.InTotoRef,
-		InTotoPredicateType: a.InTotoPredicateType,
+		Path:                a.Path,
+		Ref:                 a.Ref,
+		InTotoPredicateType: a.InToto.PredicateType,
 		InTotoSubjects:      subjects,
 	}, nil
 }
@@ -66,10 +66,12 @@ func FromAttestationPB(a *Attestation) (*result.Attestation, error) {
 		return nil, errors.Errorf("unknown attestation kind %q", a.Kind)
 	}
 	return &result.Attestation{
-		Kind:                k,
-		InTotoPath:          a.Path,
-		InTotoRef:           a.Ref,
-		InTotoPredicateType: a.InTotoPredicateType,
-		InTotoSubjects:      subjects,
+		Kind: k,
+		Path: a.Path,
+		Ref:  a.Ref,
+		InToto: result.InTotoAttestation{
+			PredicateType: a.InTotoPredicateType,
+			Subjects:      subjects,
+		},
 	}, nil
 }
