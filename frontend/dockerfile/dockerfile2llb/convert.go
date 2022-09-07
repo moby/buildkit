@@ -884,62 +884,9 @@ func dispatchEnv(d *dispatchState, c *instructions.EnvCommand) error {
 func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyEnv, sources []*dispatchState, dopt dispatchOpt) error {
 	var opt []llb.RunOption
 
-	customname := c.String()
-
-	var args []string = c.CmdLine
-	if len(c.Files) > 0 {
-		if len(args) != 1 || !c.PrependShell {
-			return fmt.Errorf("parsing produced an invalid run command: %v", args)
-		}
-
-		if heredoc := parser.MustParseHeredoc(args[0]); heredoc != nil {
-			if d.image.OS != "windows" && strings.HasPrefix(c.Files[0].Data, "#!") {
-				// This is a single heredoc with a shebang, so create a file
-				// and run it.
-				// NOTE: choosing to expand doesn't really make sense here, so
-				// we silently ignore that option if it was provided.
-				sourcePath := "/"
-				destPath := "/dev/pipes/"
-
-				f := c.Files[0].Name
-				data := c.Files[0].Data
-				if c.Files[0].Chomp {
-					data = parser.ChompHeredocContent(data)
-				}
-				st := llb.Scratch().Dir(sourcePath).File(
-					llb.Mkfile(f, 0755, []byte(data)),
-					WithInternalName("preparing inline document"),
-				)
-
-				mount := llb.AddMount(destPath, st, llb.SourcePath(sourcePath), llb.Readonly)
-				opt = append(opt, mount)
-
-				args = []string{path.Join(destPath, f)}
-			} else {
-				// Just a simple heredoc, so just run the contents in the
-				// shell: this creates the effect of a "fake"-heredoc, so that
-				// the syntax can still be used for shells that don't support
-				// heredocs directly.
-				// NOTE: like above, we ignore the expand option.
-				data := c.Files[0].Data
-				if c.Files[0].Chomp {
-					data = parser.ChompHeredocContent(data)
-				}
-				args = []string{data}
-			}
-			customname += fmt.Sprintf(" (%s)", summarizeHeredoc(c.Files[0].Data))
-		} else {
-			// More complex heredoc, so reconstitute it, and pass it to the
-			// shell to handle.
-			full := args[0]
-			for _, file := range c.Files {
-				full += "\n" + file.Data + file.Name
-			}
-			args = []string{full}
-		}
-	}
-	if c.PrependShell {
-		args = withShell(d.image, args)
+	args, opt, customname, _, err := processCmdLine(d, &c.ShellDependantCmdLine, c.String(), false)
+	if err != nil {
+		return err
 	}
 
 	env, err := d.state.Env(context.TODO())
@@ -1258,13 +1205,17 @@ func dispatchOnbuild(d *dispatchState, c *instructions.OnbuildCommand) error {
 }
 
 func dispatchCmd(d *dispatchState, c *instructions.CmdCommand) error {
-	var args []string = c.CmdLine
-	if c.PrependShell {
-		args = withShell(d.image, args)
+	args, _, _, createdLayer, err := processCmdLine(d, &c.ShellDependantCmdLine, c.String(), true)
+	if err != nil {
+		return err
 	}
+
 	d.image.Config.Cmd = args
 	d.image.Config.ArgsEscaped = true
 	d.cmdSet = true
+	if createdLayer {
+		return commitToHistory(&d.image, fmt.Sprintf("CMD %q", args), true, &d.state)
+	}
 	return commitToHistory(&d.image, fmt.Sprintf("CMD %q", args), false, nil)
 }
 
@@ -1710,6 +1661,85 @@ func location(sm *llb.SourceMap, locations []parser.Range) llb.ConstraintsOpt {
 		})
 	}
 	return sm.Location(loc)
+}
+
+func processCmdLine(d *dispatchState, c *instructions.ShellDependantCmdLine, name string, createLayer bool) (args []string, opt []llb.RunOption, customname string, createdLayer bool, err error) {
+	args = c.CmdLine
+	customname = name
+
+	// Attempt to process heredocs if present
+	if len(c.Files) > 0 {
+		if len(args) != 1 || !c.PrependShell {
+			err = fmt.Errorf("parsing produced an invalid run command: %v", args)
+			return
+		}
+
+		if heredoc := parser.MustParseHeredoc(args[0]); heredoc != nil {
+			if d.image.OS != "windows" && strings.HasPrefix(c.Files[0].Data, "#!") {
+				// This is a single heredoc with a shebang, so create a file
+				// and run it.
+				// NOTE: choosing to expand doesn't really make sense here, so
+				// we silently ignore that option if it was provided.
+				sourcePath := "/"
+				destPath := "/dev/pipes/"
+				if createLayer {
+					destPath = "/mnt/pipes/"
+				}
+
+				f := c.Files[0].Name
+				data := c.Files[0].Data
+				if c.Files[0].Chomp {
+					data = parser.ChompHeredocContent(data)
+				}
+				st := llb.Scratch().Dir(sourcePath).File(
+					llb.Mkfile(f, 0755, []byte(data)),
+					WithInternalName("preparing inline document"),
+				)
+
+				if createLayer {
+					opts := []llb.CopyOption{&llb.CopyInfo{
+						CreateDestPath: true,
+					}}
+					d.state = d.state.File(
+						llb.Copy(st, f, destPath, opts...),
+						WithInternalName("preparing inline document"),
+					)
+					createdLayer = true
+				} else {
+					mount := llb.AddMount(destPath, st, llb.SourcePath(sourcePath), llb.Readonly)
+					opt = append(opt, mount)
+				}
+
+				args = []string{path.Join(destPath, f)}
+			} else {
+				// Just a simple heredoc, so just run the contents in the
+				// shell: this creates the effect of a "fake"-heredoc, so that
+				// the syntax can still be used for shells that don't support
+				// heredocs directly.
+				// NOTE: like above, we ignore the expand option.
+				data := c.Files[0].Data
+				if c.Files[0].Chomp {
+					data = parser.ChompHeredocContent(data)
+				}
+				args = []string{data}
+			}
+			customname += fmt.Sprintf(" (%s)", summarizeHeredoc(c.Files[0].Data))
+		} else {
+			// More complex heredoc, so reconstitute it, and pass it to the
+			// shell to handle.
+			full := args[0]
+			for _, file := range c.Files {
+				full += "\n" + file.Data + file.Name
+			}
+			args = []string{full}
+		}
+	}
+
+	if c.PrependShell {
+		args = withShell(d.image, args)
+	}
+
+	return
 }
 
 func summarizeHeredoc(doc string) string {

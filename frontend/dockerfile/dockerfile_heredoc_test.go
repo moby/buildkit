@@ -1,15 +1,20 @@
 package dockerfile
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/frontend/dockerfile/builder"
 	"github.com/moby/buildkit/util/testutil/integration"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -24,6 +29,8 @@ var hdTests = integration.TestFuncs(
 	testHeredocIndent,
 	testHeredocVarSubstitution,
 	testOnBuildHeredoc,
+	testCmdHeredoc,
+	testCmdShebangHeredoc,
 )
 
 func init() {
@@ -675,4 +682,137 @@ EOF
 	dt, err := os.ReadFile(filepath.Join(destDir, "dest"))
 	require.NoError(t, err)
 	require.Equal(t, "hello world\n", string(dt))
+}
+
+func testCmdHeredoc(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
+		t.Skip("test is only for containerd worker")
+	}
+
+	dockerfile := []byte(`
+FROM scratch
+
+CMD <<EOF
+echo 'Hello World'
+EOF
+`)
+
+	dir, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	target := "docker.io/moby/cmdheredoctest:latest"
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+				},
+			},
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	ctr, err := newContainerd(cdAddress)
+	require.NoError(t, err)
+	defer ctr.Close()
+
+	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
+
+	img, err := ctr.ImageService().Get(ctx, target)
+	require.NoError(t, err)
+
+	desc, err := img.Config(ctx, ctr.ContentStore(), platforms.Default())
+	require.NoError(t, err)
+
+	dt, err := content.ReadBlob(ctx, ctr.ContentStore(), desc)
+	require.NoError(t, err)
+
+	var ociimg ocispecs.Image
+	err = json.Unmarshal(dt, &ociimg)
+	require.NoError(t, err)
+
+	require.Equal(t, []string{"/bin/sh", "-c", "echo 'Hello World'\n"}, ociimg.Config.Cmd)
+}
+
+func testCmdShebangHeredoc(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
+		t.Skip("test is only for containerd worker")
+	}
+
+	dockerfile := []byte(`
+FROM scratch
+
+CMD <<EOF
+#!/bin/bash
+echo "Hello World"
+EOF
+`)
+
+	dir, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	target := "docker.io/moby/cmdheredocshebangtest:latest"
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+				},
+			},
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	ctr, err := newContainerd(cdAddress)
+	require.NoError(t, err)
+	defer ctr.Close()
+
+	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
+
+	img, err := ctr.ImageService().Get(ctx, target)
+	require.NoError(t, err)
+
+	desc, err := img.Config(ctx, ctr.ContentStore(), platforms.Default())
+	require.NoError(t, err)
+
+	dt, err := content.ReadBlob(ctx, ctr.ContentStore(), desc)
+	require.NoError(t, err)
+
+	var ociimg ocispecs.Image
+	err = json.Unmarshal(dt, &ociimg)
+	require.NoError(t, err)
+
+	require.Equal(t, []string{"/bin/sh", "-c", "/mnt/pipes/EOF"}, ociimg.Config.Cmd)
 }

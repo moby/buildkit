@@ -132,6 +132,7 @@ var (
 	// Directives allowed to contain heredocs
 	heredocDirectives = map[string]bool{
 		command.Add:  true,
+		command.Cmd:  true,
 		command.Copy: true,
 		command.Run:  true,
 	}
