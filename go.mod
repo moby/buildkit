@@ -20,6 +20,7 @@ require (
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
 	github.com/containerd/go-cni v1.1.6
 	github.com/containerd/go-runc v1.0.0
+	github.com/containerd/nydus-snapshotter v0.3.1
 	github.com/containerd/stargz-snapshotter v0.12.0
 	github.com/containerd/stargz-snapshotter/estargz v0.12.0
 	github.com/containerd/typeurl v1.0.2
@@ -108,7 +109,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/containerd/cgroups v1.0.3 // indirect
 	github.com/containerd/fifo v1.0.0 // indirect
-	github.com/containerd/nydus-snapshotter v0.3.1 // indirect
 	github.com/containerd/ttrpc v1.1.0 // indirect
 	github.com/containernetworking/cni v1.1.1 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.0 // indirect
