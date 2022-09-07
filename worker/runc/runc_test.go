@@ -1,3 +1,4 @@
+//go:build linux && !no_runc_worker
 // +build linux,!no_runc_worker
 
 package runc

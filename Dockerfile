@@ -1,4 +1,4 @@
-# syntax = docker/dockerfile:1.2
+# syntax=docker/dockerfile:1
 
 ARG RUNC_VERSION=v1.0.0-rc93
 ARG CONTAINERD_VERSION=v1.4.2
@@ -23,7 +23,7 @@ RUN apk add --no-cache git
 FROM --platform=$BUILDPLATFORM tonistiigi/xx:golang@sha256:6f7d999551dd471b58f70716754290495690efa8421e0a1fcf18eb11d0c0a537 AS xgo
 
 # gobuild is base stage for compiling go/cgo
-FROM --platform=$BUILDPLATFORM golang:1.13-buster AS gobuild-minimal
+FROM --platform=$BUILDPLATFORM golang:1.18-bullseye AS gobuild-minimal
 COPY --from=xgo / /
 RUN apt-get update && apt-get install --no-install-recommends -y libseccomp-dev file
 
@@ -36,18 +36,18 @@ RUN dpkg --add-architecture s390x && \
     gcc-s390x-linux-gnu libc6-dev-s390x-cross libseccomp-dev:s390x \
     crossbuild-essential-ppc64el libseccomp-dev:ppc64el \
     --no-install-recommends
-  
+
 FROM gobuild-minimal AS gobuild-cross-amd64-arm
-RUN echo "deb http://deb.debian.org/debian buster-backports main" >> /etc/apt/sources.list
-RUN apt-get update && apt-get install --no-install-recommends -y libseccomp2=2.4.4-1~bpo10+1 libseccomp-dev=2.4.4-1~bpo10+1 
+RUN echo "deb http://deb.debian.org/debian bullseye-backports main" >> /etc/apt/sources.list
+RUN apt-get update && apt-get install --no-install-recommends -y libseccomp2=2.5.1-1+deb11u1 libseccomp-dev=2.5.1-1+deb11u1
 RUN dpkg --add-architecture armel && \
   dpkg --add-architecture armhf && \
   dpkg --add-architecture arm64 && \
   apt-get update && \
   apt-get --no-install-recommends install -y \
-    crossbuild-essential-armel libseccomp2:armel=2.4.4-1~bpo10+1 libseccomp-dev:armel=2.4.4-1~bpo10+1 \
-    crossbuild-essential-armhf libseccomp2:armhf=2.4.4-1~bpo10+1 libseccomp-dev:armhf=2.4.4-1~bpo10+1 \
-    crossbuild-essential-arm64 libseccomp2:arm64=2.4.4-1~bpo10+1 libseccomp-dev:arm64=2.4.4-1~bpo10+1 \
+    crossbuild-essential-armel libseccomp2:armel=2.5.1-1+deb11u1 libseccomp-dev:armel=2.5.1-1+deb11u1 \
+    crossbuild-essential-armhf libseccomp2:armhf=2.5.1-1+deb11u1 libseccomp-dev:armhf=2.5.1-1+deb11u1 \
+    crossbuild-essential-arm64 libseccomp2:arm64=2.5.1-1+deb11u1 libseccomp-dev:arm64=2.5.1-1+deb11u1 \
     --no-install-recommends
 
 # define all valid target configurations for compilation
@@ -158,6 +158,7 @@ WORKDIR /go/src/github.com/containerd/containerd
 
 FROM containerd-base AS containerd
 ARG CONTAINERD_VERSION
+ARG GO111MODULE=off
 RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target=/root/.cache,type=cache \
   git fetch origin \
   && git checkout -q "$CONTAINERD_VERSION" \
@@ -169,6 +170,7 @@ RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target
 # containerd v1.3 for integration tests
 FROM containerd-base as containerd-alt
 ARG CONTAINERD_ALT_VERSION
+ARG GO111MODULE=off
 RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target=/root/.cache,type=cache \
   git fetch origin \
   && git checkout -q "$CONTAINERD_ALT_VERSION" \

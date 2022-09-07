@@ -2111,6 +2111,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 }
 
 func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
+	t.Skip("Failing on 0.8 branch with Go 1.18; see https://github.com/moby/buildkit/pull/3079")
 	skipDockerd(t, sb)
 	requiresLinux(t)
 
@@ -3104,7 +3105,7 @@ func testSourceMapFromRef(t *testing.T, sb integration.Sandbox) {
 
 	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 		st := llb.Scratch().File(
-			llb.Mkdir("foo/bar", 0600), //fails because /foo doesn't exist
+			llb.Mkdir("foo/bar", 0600), // fails because /foo doesn't exist
 			sm.Location([]*pb.Range{{Start: pb.Position{Line: 3, Character: 1}}}),
 		)
 
