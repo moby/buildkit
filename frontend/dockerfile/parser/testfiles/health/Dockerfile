@@ -8,3 +8,4 @@ HEALTHCHECK CMD
 HEALTHCHECK   CMD   a b
 HEALTHCHECK --timeout=3s CMD ["foo"]
 HEALTHCHECK CONNECT TCP 7000
+HEALTHCHECK --start-period=0s --interval=5s --timeout=0s --retries=0 CMD ["foo"]

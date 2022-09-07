@@ -582,8 +582,8 @@ func parseHealthcheck(req parseRequest) (*HealthCheckCommand, error) {
 			if err != nil {
 				return nil, err
 			}
-			if retries < 1 {
-				return nil, fmt.Errorf("--retries must be at least 1 (not %d)", retries)
+			if retries < 0 {
+				return nil, fmt.Errorf("--retries cannot be negative (%d)", retries)
 			}
 			healthcheck.Retries = int(retries)
 		} else {
