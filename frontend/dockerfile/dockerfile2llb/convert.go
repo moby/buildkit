@@ -35,6 +35,7 @@ import (
 	"github.com/moby/buildkit/util/suggest"
 	"github.com/moby/buildkit/util/system"
 	"github.com/moby/sys/signal"
+	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -727,6 +728,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 			chmod:        c.Chmod,
 			link:         c.Link,
 			keepGitDir:   c.KeepGitDir,
+			checksum:     c.Checksum,
 			location:     c.Location(),
 			opt:          opt,
 		})
@@ -1073,6 +1075,21 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		}
 	}
 
+	if cfg.checksum != "" {
+		if !cfg.isAddCommand {
+			return errors.New("checksum can't be specified for COPY")
+		}
+		if !addChecksumEnabled {
+			return errors.New("instruction 'ADD --checksum=<CHECKSUM>' requires the labs channel")
+		}
+		if len(cfg.params.SourcePaths) != 1 {
+			return errors.New("checksum can't be specified for multiple sources")
+		}
+		if !isHTTPSource(cfg.params.SourcePaths[0]) {
+			return errors.New("checksum can't be specified for non-HTTP sources")
+		}
+	}
+
 	commitMessage := bytes.NewBufferString("")
 	if cfg.isAddCommand {
 		commitMessage.WriteString("ADD")
@@ -1111,7 +1128,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 			} else {
 				a = a.Copy(st, "/", dest, opts...)
 			}
-		} else if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
+		} else if isHTTPSource(src) {
 			if !cfg.isAddCommand {
 				return errors.New("source can't be a URL for COPY")
 			}
@@ -1129,7 +1146,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 				}
 			}
 
-			st := llb.HTTP(src, llb.Filename(f), dfCmd(cfg.params))
+			st := llb.HTTP(src, llb.Filename(f), llb.Checksum(cfg.checksum), dfCmd(cfg.params))
 
 			opts := append([]llb.CopyOption{&llb.CopyInfo{
 				Mode:           mode,
@@ -1235,6 +1252,7 @@ type copyConfig struct {
 	chmod        string
 	link         bool
 	keepGitDir   bool
+	checksum     digest.Digest
 	location     []parser.Range
 	opt          dispatchOpt
 }
@@ -1751,4 +1769,8 @@ func clampTimes(img Image, tm *time.Time) Image {
 		img.Created = tm
 	}
 	return img
+}
+
+func isHTTPSource(src string) bool {
+	return strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://")
 }
