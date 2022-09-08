@@ -63,11 +63,19 @@ spec:
             - name: certs
               readOnly: true
               mountPath: /certs
+            # Dockerfile has `VOLUME /home/user/.local/share/buildkit` by default too,
+            # but the default VOLUME does not work with rootless on Google's Container-Optimized OS
+            # as it is mounted with `nosuid,nodev`.
+            # https://github.com/moby/buildkit/issues/879#issuecomment-1240347038
+            - mountPath: /home/user/.local/share/buildkit
+              name: buildkitd
       volumes:
         # buildkit-daemon-certs must contain ca.pem, cert.pem, and key.pem
         - name: certs
           secret:
             secretName: buildkit-daemon-certs
+        - name: buildkitd
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
