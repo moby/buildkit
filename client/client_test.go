@@ -38,6 +38,7 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
+	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/secrets/secretsprovider"
@@ -6490,22 +6491,22 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 				return nil, err
 			}
 			res.AddAttestation(pk, result.Attestation{
-				Kind: result.InToto,
+				Kind: gatewaypb.AttestationKindInToto,
 				Path: "/attestation.json",
 				InToto: result.InTotoAttestation{
 					PredicateType: "https://example.com/attestations/v1.0",
 					Subjects: []result.InTotoSubject{{
-						Kind: result.Self,
+						Kind: gatewaypb.InTotoSubjectKindSelf,
 					}},
 				},
 			}, refAttest)
 			res.AddAttestation(pk, result.Attestation{
-				Kind: result.InToto,
+				Kind: gatewaypb.AttestationKindInToto,
 				Path: "/attestation2.json",
 				InToto: result.InTotoAttestation{
 					PredicateType: "https://example.com/attestations2/v1.0",
 					Subjects: []result.InTotoSubject{{
-						Kind:   result.Raw,
+						Kind:   gatewaypb.InTotoSubjectKindRaw,
 						Name:   "/attestation.json",
 						Digest: []digest.Digest{successDigest},
 					}},
@@ -6679,7 +6680,7 @@ func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
 				return nil, err
 			}
 			res.AddAttestation(pk, result.Attestation{
-				Kind: result.InToto,
+				Kind: gatewaypb.AttestationKindInToto,
 				Path: "/attestation.json",
 				InToto: result.InTotoAttestation{
 					PredicateType: "https://example.com/attestations/v1.0",

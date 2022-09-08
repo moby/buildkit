@@ -1,23 +1,12 @@
 package result
 
 import (
+	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	digest "github.com/opencontainers/go-digest"
 )
 
-type AttestationKind string
-type InTotoSubjectKind string
-
-const (
-	InToto AttestationKind = "in-toto"
-)
-
-const (
-	Self InTotoSubjectKind = "self"
-	Raw  InTotoSubjectKind = "raw"
-)
-
 type Attestation struct {
-	Kind AttestationKind
+	Kind pb.AttestationKind
 
 	Ref  string
 	Path string
@@ -31,7 +20,7 @@ type InTotoAttestation struct {
 }
 
 type InTotoSubject struct {
-	Kind InTotoSubjectKind
+	Kind pb.InTotoSubjectKind
 
 	Name   string
 	Digest []digest.Digest

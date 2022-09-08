@@ -19,6 +19,7 @@ import (
 	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
+	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
@@ -265,7 +266,7 @@ func (ic *ImageWriter) extractAttestations(ctx context.Context, s session.Group,
 		i, att := i, att
 		eg.Go(func() error {
 			switch att.Kind {
-			case result.InToto:
+			case gatewaypb.AttestationKindInToto:
 				ref, ok := refs[att.Ref]
 				if !ok {
 					return errors.Errorf("key %s not found in refs map", att.Ref)
@@ -299,7 +300,7 @@ func (ic *ImageWriter) extractAttestations(ctx context.Context, s session.Group,
 
 				if len(att.InToto.Subjects) == 0 {
 					att.InToto.Subjects = []result.InTotoSubject{{
-						Kind: result.Self,
+						Kind: gatewaypb.InTotoSubjectKindSelf,
 					}}
 				}
 
@@ -310,9 +311,9 @@ func (ic *ImageWriter) extractAttestations(ctx context.Context, s session.Group,
 						statements[i].Subject[j].Name = subject.Name
 					}
 					switch subject.Kind {
-					case result.Self:
+					case gatewaypb.InTotoSubjectKindSelf:
 						statements[i].Subject[j].Digest = result.DigestMap(desc.Digest)
-					case result.Raw:
+					case gatewaypb.InTotoSubjectKindRaw:
 						statements[i].Subject[j].Digest = result.DigestMap(subject.Digest...)
 					default:
 						return errors.Errorf("unknown attestation subject kind %q", subject.Kind)
