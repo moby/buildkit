@@ -358,7 +358,9 @@ func (p *ciProvider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (co
 	if err != nil {
 		return nil, err
 	}
-	rac := ce.Download(context.TODO())
+	timeoutCtx, cancel := context.WithTimeout(ctx, time.Hour)
+	_ = cancel
+	rac := ce.Download(timeoutCtx)
 	return &readerAt{ReaderAtCloser: rac, desc: desc}, nil
 }
 
