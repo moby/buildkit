@@ -1,15 +1,23 @@
 name: dockerd
 
+## can be trigerred manually or using chat-ops in pull request:
+# /test-dockerd
+# /test-dockerd 20.10.18
+# /test-dockerd https://github.com/moby/moby.git#master
+
 on:
-  # TODO: add event to build on command in PR (e.g., /test-dockerd)
+  issue_comment:
+    types:
+      - created
   workflow_dispatch:
     inputs:
       version:
         description: 'Docker version'
         required: true
-        default: '20.10.13'
+        default: '20.10.18'
 
 env:
+  CHATOPS_CMD: "/test-dockerd"
   REPO_SLUG_ORIGIN: "moby/buildkit:latest"
   CACHE_GHA_SCOPE_IT: "integration-tests"
   CACHE_GHA_SCOPE_BINARIES: "binaries"
@@ -17,15 +25,29 @@ env:
   BUILDX_VERSION: "v0.9.1"  # leave empty to use the one available on GitHub virtual environment
 
 jobs:
+  check:
+    if: (contains(github.event.comment.html_url, '/pull/') && startsWith(github.event.comment.body, env.CHATOPS_CMD)) || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Dump context
+        uses: crazy-max/ghaction-dump-context@v1
+
   prepare:
     runs-on: ubuntu-20.04
+    needs:
+      - check
     steps:
       -
         name: Check version
         run: |
           version=${{ github.event.inputs.version }}
+          if [ -n "${{ github.event.comment.body }}" ]; then
+            comment="${{ github.event.comment.body }}"
+            version=${comment#"$CHATOPS_CMD"}
+          fi
           if [ -z "$version" ]; then
-            version=20.10.13
+            version=20.10.18
           fi
           echo "DOCKER_VERSION=$version" >> $GITHUB_ENV
       -
