@@ -18,7 +18,7 @@ env:
   CACHE_GHA_SCOPE_IT: "integration-tests"
   CACHE_GHA_SCOPE_BINARIES: "binaries"
   TESTFLAGS: "-v --parallel=1 --timeout=30m"
-  BUILDX_VERSION: "v0.8.2"  # leave empty to use the one available on GitHub virtual environment
+  BUILDX_VERSION: "v0.9.1"  # leave empty to use the one available on GitHub virtual environment
 
 jobs:
   prepare:
