@@ -5729,6 +5729,7 @@ func testBuildInfoNoExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testCallInfo(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "not implemented")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
