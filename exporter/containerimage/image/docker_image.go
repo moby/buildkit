@@ -49,7 +49,4 @@ type Image struct {
 
 	// Config defines the execution parameters which should be used as a base when running a container using the image.
 	Config ImageConfig `json:"config,omitempty"`
-
-	// Variant defines platform variant. To be added to OCI.
-	Variant string `json:"variant,omitempty"`
 }
