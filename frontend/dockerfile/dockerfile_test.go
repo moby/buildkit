@@ -5264,6 +5264,7 @@ RUN echo hello
 }
 
 func testNamedImageContextTimestamps(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "direct push")
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -5411,6 +5412,7 @@ COPY --from=base /o* /
 }
 
 func testNamedOCILayoutContext(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "oci exporter")
 	// how this test works:
 	// 1- we use a regular builder with a dockerfile to create an image two files: "out" with content "first", "out2" with content "second"
 	// 2- we save the output to an OCI layout dir
