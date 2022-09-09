@@ -27,7 +27,7 @@ on:
 
 env:
   REPO_SLUG_TARGET: "moby/buildkit"
-  BUILDX_VERSION: "v0.8.2"  # leave empty to use the one available on GitHub virtual environment
+  BUILDX_VERSION: "v0.9.1"  # leave empty to use the one available on GitHub virtual environment
 
 jobs:
   create:
