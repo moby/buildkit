@@ -256,11 +256,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 				if img != nil {
 					ds.image = *img
 					if img.Architecture != "" && img.OS != "" {
-						ds.platform = &ocispecs.Platform{
-							OS:           img.OS,
-							Architecture: img.Architecture,
-							Variant:      img.Variant,
-						}
+						ds.platform = &img.Platform
 					}
 				}
 				if bi != nil {
@@ -606,9 +602,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	target.state = target.state.SetMarshalDefaults(defaults...)
 
 	if !platformOpt.implicitTarget {
-		target.image.OS = platformOpt.targetPlatform.OS
-		target.image.Architecture = platformOpt.targetPlatform.Architecture
-		target.image.Variant = platformOpt.targetPlatform.Variant
+		target.image.Platform = platformOpt.targetPlatform
 	}
 
 	return target, buildInfo, nil

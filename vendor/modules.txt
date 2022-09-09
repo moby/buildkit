@@ -563,7 +563,7 @@ github.com/morikuni/aec
 # github.com/opencontainers/go-digest v1.0.0
 ## explicit; go 1.13
 github.com/opencontainers/go-digest
-# github.com/opencontainers/image-spec v1.0.3-0.20220303224323-02efb9a75ee1
+# github.com/opencontainers/image-spec v1.0.3-0.20220303224323-02efb9a75ee1 => github.com/thaJeztah/image-spec v1.0.2-0.20220908165244-ca2e500b1693
 ## explicit; go 1.16
 github.com/opencontainers/image-spec/identity
 github.com/opencontainers/image-spec/specs-go
@@ -882,3 +882,4 @@ google.golang.org/protobuf/types/known/wrapperspb
 ## explicit
 gopkg.in/yaml.v3
 # github.com/docker/docker => github.com/docker/docker v20.10.3-0.20220831131523-b5a0d7a188ac+incompatible
+# github.com/opencontainers/image-spec => github.com/thaJeztah/image-spec v1.0.2-0.20220908165244-ca2e500b1693

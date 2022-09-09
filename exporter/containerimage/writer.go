@@ -552,9 +552,7 @@ func defaultImageConfig() ([]byte, error) {
 	pl := platforms.Normalize(platforms.DefaultSpec())
 
 	img := ocispecs.Image{
-		Architecture: pl.Architecture,
-		OS:           pl.OS,
-		Variant:      pl.Variant,
+		Platform: pl,
 	}
 	img.RootFS.Type = "layers"
 	img.Config.WorkingDir = "/"
@@ -565,11 +563,7 @@ func defaultImageConfig() ([]byte, error) {
 
 func attestationsConfig(layers []ocispecs.Descriptor) ([]byte, error) {
 	img := ocispecs.Image{
-		Architecture: intotoPlatform.Architecture,
-		OS:           intotoPlatform.OS,
-		OSVersion:    intotoPlatform.OSVersion,
-		OSFeatures:   intotoPlatform.OSFeatures,
-		Variant:      intotoPlatform.Variant,
+		Platform: intotoPlatform,
 	}
 	img.RootFS.Type = "layers"
 	for _, layer := range layers {

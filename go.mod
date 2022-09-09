@@ -47,7 +47,7 @@ require (
 	github.com/moby/sys/signal v0.7.0
 	github.com/morikuni/aec v1.0.0
 	github.com/opencontainers/go-digest v1.0.0
-	github.com/opencontainers/image-spec v1.0.3-0.20220303224323-02efb9a75ee1
+	github.com/opencontainers/image-spec v1.0.3-0.20220303224323-02efb9a75ee1 // FIXME: see replace
 	github.com/opencontainers/runc v1.1.3
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417
 	github.com/opencontainers/selinux v1.10.1
@@ -151,3 +151,6 @@ require (
 )
 
 replace github.com/docker/docker => github.com/docker/docker v20.10.3-0.20220831131523-b5a0d7a188ac+incompatible // 22.06 branch (v22.06-dev)
+
+// FIXME: testing "embed_platform" branch from https://github.com/opencontainers/image-spec/pull/949
+replace github.com/opencontainers/image-spec => github.com/thaJeztah/image-spec v1.0.2-0.20220908165244-ca2e500b1693
