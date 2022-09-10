@@ -215,7 +215,7 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, refCfg cacheconfig.RefC
 func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache.ImmutableRef, config []byte, remote *solver.Remote, oci bool, inlineCache []byte, buildInfo []byte) (*ocispecs.Descriptor, *ocispecs.Descriptor, error) {
 	if len(config) == 0 {
 		var err error
-		config, err = emptyImageConfig()
+		config, err = defaultImageConfig()
 		if err != nil {
 			return nil, nil, err
 		}
@@ -341,23 +341,13 @@ func (ic *ImageWriter) Applier() diff.Applier {
 	return ic.opt.Applier
 }
 
-func emptyImageConfig() ([]byte, error) {
+func defaultImageConfig() ([]byte, error) {
 	pl := platforms.Normalize(platforms.DefaultSpec())
 
-	type image struct {
-		ocispecs.Image
-
-		// Variant defines platform variant. To be added to OCI.
-		Variant string `json:"variant,omitempty"`
-	}
-
-	img := image{
-		Image: ocispecs.Image{
-			Architecture: pl.Architecture,
-			OS:           pl.OS,
-		},
-		Variant: pl.Variant,
-	}
+	img := ocispecs.Image{}
+	img.Architecture = pl.Architecture
+	img.OS = pl.OS
+	img.Variant = pl.Variant
 	img.RootFS.Type = "layers"
 	img.Config.WorkingDir = "/"
 	img.Config.Env = []string{"PATH=" + system.DefaultPathEnv(pl.OS)}
