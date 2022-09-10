@@ -16,13 +16,10 @@ func clone(src image.Image) image.Image {
 }
 
 func emptyImage(platform ocispecs.Platform) image.Image {
-	img := image.Image{
-		Image: ocispecs.Image{
-			Architecture: platform.Architecture,
-			OS:           platform.OS,
-			Variant:      platform.Variant,
-		},
-	}
+	img := image.Image{}
+	img.Architecture = platform.Architecture
+	img.OS = platform.OS
+	img.Variant = platform.Variant
 	img.RootFS.Type = "layers"
 	img.Config.WorkingDir = "/"
 	img.Config.Env = []string{"PATH=" + system.DefaultPathEnv(platform.OS)}
