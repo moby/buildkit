@@ -65,13 +65,10 @@ func clone(src Image) Image {
 }
 
 func emptyImage(platform specs.Platform) Image {
-	img := Image{
-		Image: specs.Image{
-			Architecture: platform.Architecture,
-			OS:           platform.OS,
-		},
-		Variant: platform.Variant,
-	}
+	img := Image{}
+	img.Architecture = platform.Architecture
+	img.OS = platform.OS
+	img.Variant = platform.Variant
 	img.RootFS.Type = "layers"
 	img.Config.WorkingDir = "/"
 	img.Config.Env = []string{"PATH=" + system.DefaultPathEnv(platform.OS)}

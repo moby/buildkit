@@ -315,13 +315,10 @@ func emptyImageConfig() ([]byte, error) {
 		Variant string `json:"variant,omitempty"`
 	}
 
-	img := image{
-		Image: ocispec.Image{
-			Architecture: pl.Architecture,
-			OS:           pl.OS,
-		},
-		Variant: pl.Variant,
-	}
+	img := image{}
+	img.Architecture = pl.Architecture
+	img.OS = pl.OS
+	img.Variant = pl.Variant
 	img.RootFS.Type = "layers"
 	img.Config.WorkingDir = "/"
 	img.Config.Env = []string{"PATH=" + system.DefaultPathEnv(pl.OS)}
