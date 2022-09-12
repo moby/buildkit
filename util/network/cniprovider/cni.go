@@ -91,7 +91,8 @@ type cniPool struct {
 	mu         sync.Mutex
 	targetSize int
 	actualSize int
-	available  []*cniNS
+	// LIFO: Ordered least recently used to most recently used
+	available []*cniNS
 }
 
 func (pool *cniPool) fillPool(ctx context.Context) {
@@ -102,18 +103,20 @@ func (pool *cniPool) fillPool(ctx context.Context) {
 		if actualSize >= pool.targetSize {
 			return
 		}
-		if _, err := pool.getNew(ctx); err != nil {
+		ns, err := pool.getNew(ctx)
+		if err != nil {
 			bklog.G(ctx).Errorf("failed to create new network namespace while prefilling pool: %s", err)
 			return
 		}
+		pool.put(ns)
 	}
 }
 
 func (pool *cniPool) get(ctx context.Context) (*cniNS, error) {
 	pool.mu.Lock()
 	if len(pool.available) > 0 {
-		ns := pool.available[0]
-		pool.available = pool.available[1:]
+		ns := pool.available[len(pool.available)-1]
+		pool.available = pool.available[:len(pool.available)-1]
 		pool.mu.Unlock()
 		trace.SpanFromContext(ctx).AddEvent("returning network namespace from pool")
 		bklog.G(ctx).Debugf("returning network namespace %s from pool", ns.id)
@@ -148,22 +151,27 @@ func (pool *cniPool) put(ns *cniNS) {
 
 	if actualSize > pool.targetSize {
 		// We have more network namespaces than our target number, so
-		// release this extra one after some time if it hasn't been
-		// reused by then.
-		time.AfterFunc(aboveTargetGracePeriod, func() {
-			pool.mu.Lock()
-			if pool.actualSize > pool.targetSize && ns.lastUsed.Equal(putTime) {
-				for i, poolNS := range pool.available {
-					if poolNS == ns {
-						pool.available = append(pool.available[:i], pool.available[i+1:]...)
-						pool.actualSize--
-						defer ns.release()
-						break
-					}
-				}
-			}
-			pool.mu.Unlock()
-		})
+		// schedule a shrinking pass.
+		time.AfterFunc(aboveTargetGracePeriod, pool.cleanupToDefaultSize)
+	}
+}
+
+func (pool *cniPool) cleanupToDefaultSize() {
+	var toRelease []*cniNS
+	defer func() {
+		for _, poolNS := range toRelease {
+			poolNS.release()
+		}
+	}()
+
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+	for pool.actualSize > pool.targetSize &&
+		len(pool.available) > 0 &&
+		time.Since(pool.available[0].lastUsed) >= aboveTargetGracePeriod {
+		toRelease = append(toRelease, pool.available[0])
+		pool.available = pool.available[1:]
+		pool.actualSize--
 	}
 }
 
