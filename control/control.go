@@ -181,9 +181,9 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 	defer func() {
 		if didPrune {
 			if c, ok := c.cache.(interface {
-				ReleaseUnreferenced() error
+				ReleaseUnreferenced(context.Context) error
 			}); ok {
-				if err := c.ReleaseUnreferenced(); err != nil {
+				if err := c.ReleaseUnreferenced(ctx); err != nil {
 					bklog.G(ctx).Errorf("failed to release cache metadata: %+v", err)
 				}
 			}
