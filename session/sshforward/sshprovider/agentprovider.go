@@ -124,7 +124,7 @@ func (sp *socketProvider) ForwardAgent(stream sshforward.SSH_ForwardAgentServer)
 
 	s1, s2 := sockPair()
 
-	eg, ctx := errgroup.WithContext(context.TODO())
+	eg, ctx := errgroup.WithContext(stream.Context())
 
 	eg.Go(func() error {
 		return agent.ServeAgent(a, s1)
