@@ -91,9 +91,9 @@ func init() {
 			Value: defaultConf.Workers.Containerd.NetworkConfig.CNIBinaryPath,
 		},
 		cli.IntFlag{
-			Name:  "containerd-netns-pool-size",
-			Usage: "size of network namespace pool",
-			Value: defaultConf.Workers.Containerd.NetworkConfig.NetNSPoolSize,
+			Name:  "containerd-cni-pool-size",
+			Usage: "size of cni network namespace pool",
+			Value: defaultConf.Workers.Containerd.NetworkConfig.CNIPoolSize,
 		},
 		cli.StringFlag{
 			Name:  "containerd-worker-snapshotter",
@@ -213,8 +213,8 @@ func applyContainerdFlags(c *cli.Context, cfg *config.Config) error {
 	if c.GlobalIsSet("containerd-cni-config-path") {
 		cfg.Workers.Containerd.NetworkConfig.CNIConfigPath = c.GlobalString("containerd-cni-config-path")
 	}
-	if c.GlobalIsSet("containerd-netns-pool-size") {
-		cfg.Workers.Containerd.NetworkConfig.NetNSPoolSize = c.GlobalInt("containerd-netns-pool-size")
+	if c.GlobalIsSet("containerd-cni-pool-size") {
+		cfg.Workers.Containerd.NetworkConfig.CNIPoolSize = c.GlobalInt("containerd-cni-pool-size")
 	}
 	if c.GlobalIsSet("containerd-cni-binary-dir") {
 		cfg.Workers.Containerd.NetworkConfig.CNIBinaryPath = c.GlobalString("containerd-cni-binary-dir")
@@ -255,7 +255,7 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 			Root:       common.config.Root,
 			ConfigPath: common.config.Workers.Containerd.CNIConfigPath,
 			BinaryDir:  common.config.Workers.Containerd.CNIBinaryPath,
-			PoolSize:   common.config.Workers.Containerd.NetNSPoolSize,
+			PoolSize:   common.config.Workers.Containerd.CNIPoolSize,
 		},
 	}
 

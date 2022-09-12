@@ -57,9 +57,9 @@ insecure-entitlements = [ "network.host", "security.insecure" ]
   apparmor-profile = ""
   # limit the number of parallel build steps that can run at the same time
   max-parallelism = 4
-  # maintain a pool of reusable network namespaces to amortize the overhead
+  # maintain a pool of reusable CNI network namespaces to amortize the overhead
   # of allocating and releasing the namespaces
-  netNSPoolSize = 16
+  cniPoolSize = 16
 
   [worker.oci.labels]
     "foo" = "bar"
@@ -80,9 +80,9 @@ insecure-entitlements = [ "network.host", "security.insecure" ]
   gc = true
   # gckeepstorage sets storage limit for default gc profile, in MB.
   gckeepstorage = 9000
-  # maintain a pool of reusable network namespaces to amortize the overhead
+  # maintain a pool of reusable CNI network namespaces to amortize the overhead
   # of allocating and releasing the namespaces
-  netNSPoolSize = 16
+  cniPoolSize = 16
 
   [worker.containerd.labels]
     "foo" = "bar"
