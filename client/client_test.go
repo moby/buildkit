@@ -3814,11 +3814,11 @@ func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbo
 
 	// stargz layers should be lazy even for executing something on them
 	def, err = baseDef.
-		Run(llb.Args([]string{"/bin/touch", "/bar"})).
+		Run(llb.Args([]string{"sh", "-c", "cat /dev/urandom | head -c 100 | sha256sum > unique"})).
 		Marshal(sb.Context())
 	require.NoError(t, err)
 	target := registry + "/buildkit/testlazyimage:" + identity.NewID()
-	_, err = c.Solve(sb.Context(), def, SolveOpt{
+	resp, err := c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
 			{
 				Type: ExporterImage,
@@ -3826,6 +3826,7 @@ func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbo
 					"name":                                   target,
 					"push":                                   "true",
 					"store":                                  "true",
+					"oci-mediatypes":                         "true",
 					"unsafe-internal-store-allow-incomplete": "true",
 				},
 			},
@@ -3838,7 +3839,23 @@ func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbo
 				},
 			},
 		},
+		CacheExports: []CacheOptionsEntry{
+			{
+				Type: "registry",
+				Attrs: map[string]string{
+					"ref":            sgzCache,
+					"compression":    "estargz",
+					"oci-mediatypes": "true",
+				},
+			},
+		},
 	}, nil)
+	require.NoError(t, err)
+
+	dgst, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
+	require.Equal(t, ok, true)
+
+	unique, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst, "/unique")
 	require.NoError(t, err)
 
 	img, err := imageService.Get(ctx, target)
@@ -3860,6 +3877,40 @@ func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbo
 	// The topmost(last) layer created by `Run` shouldn't be lazy
 	_, err = contentStore.Info(ctx, manifest.Layers[len(manifest.Layers)-1].Digest)
 	require.NoError(t, err)
+
+	// Run build again and check if cache is reused
+	resp, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":                                   target,
+					"push":                                   "true",
+					"store":                                  "true",
+					"oci-mediatypes":                         "true",
+					"unsafe-internal-store-allow-incomplete": "true",
+				},
+			},
+		},
+		CacheImports: []CacheOptionsEntry{
+			{
+				Type: "registry",
+				Attrs: map[string]string{
+					"ref": sgzCache,
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dgst2, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
+	require.Equal(t, ok, true)
+
+	unique2, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst2, "/unique")
+	require.NoError(t, err)
+
+	require.Equal(t, dgst, dgst2)
+	require.EqualValues(t, unique, unique2)
 
 	// clear all local state out
 	err = imageService.Delete(ctx, img.Name, images.SynchronousDelete())
@@ -4104,11 +4155,11 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 
 	// stargz layers should be lazy even for executing something on them
 	def, err = llb.Image(sgzImage).
-		Run(llb.Args([]string{"/bin/touch", "/foo"})).
+		Run(llb.Args([]string{"sh", "-c", "cat /dev/urandom | head -c 100 | sha256sum > unique"})).
 		Marshal(sb.Context())
 	require.NoError(t, err)
 	target := registry + "/buildkit/testlazyimage:" + identity.NewID()
-	_, err = c.Solve(sb.Context(), def, SolveOpt{
+	resp, err := c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
 			{
 				Type: ExporterImage,
@@ -4122,6 +4173,12 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 			},
 		},
 	}, nil)
+	require.NoError(t, err)
+
+	dgst, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
+	require.Equal(t, ok, true)
+
+	unique, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst, "/unique")
 	require.NoError(t, err)
 
 	img, err := imageService.Get(ctx, target)
@@ -4143,6 +4200,32 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 	// The topmost(last) layer created by `Run` shouldn't be lazy
 	_, err = contentStore.Info(ctx, manifest.Layers[len(manifest.Layers)-1].Digest)
 	require.NoError(t, err)
+
+	// Run build again and check if cache is reused
+	resp, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":                                   target,
+					"push":                                   "true",
+					"store":                                  "true",
+					"oci-mediatypes":                         "true",
+					"unsafe-internal-store-allow-incomplete": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dgst2, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
+	require.Equal(t, ok, true)
+
+	unique2, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst2, "/unique")
+	require.NoError(t, err)
+
+	require.Equal(t, dgst, dgst2)
+	require.EqualValues(t, unique, unique2)
 
 	// clear all local state out
 	err = imageService.Delete(ctx, img.Name, images.SynchronousDelete())
