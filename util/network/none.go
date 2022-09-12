@@ -17,6 +17,10 @@ func (h *none) New(_ context.Context, hostname string) (Namespace, error) {
 	return &noneNS{}, nil
 }
 
+func (h *none) Close() error {
+	return nil
+}
+
 type noneNS struct {
 }
 

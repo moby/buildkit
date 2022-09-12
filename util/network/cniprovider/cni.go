@@ -54,7 +54,10 @@ func New(opt Opt) (network.Provider, error) {
 		return nil, err
 	}
 
-	cp := &cniProvider{CNI: cniHandle, root: opt.Root}
+	cp := &cniProvider{
+		CNI:  cniHandle,
+		root: opt.Root,
+	}
 	cleanOldNamespaces(cp)
 
 	cp.nsPool = &cniPool{targetSize: opt.PoolSize, provider: cp}
@@ -86,6 +89,11 @@ func (c *cniProvider) initNetwork() error {
 	return ns.Close()
 }
 
+func (c *cniProvider) Close() error {
+	c.nsPool.close()
+	return nil
+}
+
 type cniPool struct {
 	provider   *cniProvider
 	mu         sync.Mutex
@@ -93,11 +101,29 @@ type cniPool struct {
 	actualSize int
 	// LIFO: Ordered least recently used to most recently used
 	available []*cniNS
+	closed    bool
+}
+
+func (pool *cniPool) close() {
+	bklog.L.Debugf("cleaning up cni pool")
+
+	pool.mu.Lock()
+	pool.closed = true
+	defer pool.mu.Unlock()
+	for len(pool.available) > 0 {
+		_ = pool.available[0].release()
+		pool.available = pool.available[1:]
+		pool.actualSize--
+	}
 }
 
 func (pool *cniPool) fillPool(ctx context.Context) {
 	for {
 		pool.mu.Lock()
+		if pool.closed {
+			pool.mu.Unlock()
+			return
+		}
 		actualSize := pool.actualSize
 		pool.mu.Unlock()
 		if actualSize >= pool.targetSize {
@@ -135,8 +161,11 @@ func (pool *cniPool) getNew(ctx context.Context) (*cniNS, error) {
 	ns.pool = pool
 
 	pool.mu.Lock()
+	defer pool.mu.Unlock()
+	if pool.closed {
+		return nil, errors.New("cni pool is closed")
+	}
 	pool.actualSize++
-	pool.mu.Unlock()
 	return ns, nil
 }
 
@@ -145,22 +174,26 @@ func (pool *cniPool) put(ns *cniNS) {
 	ns.lastUsed = putTime
 
 	pool.mu.Lock()
+	defer pool.mu.Unlock()
+	if pool.closed {
+		_ = ns.release()
+		return
+	}
 	pool.available = append(pool.available, ns)
 	actualSize := pool.actualSize
-	pool.mu.Unlock()
 
 	if actualSize > pool.targetSize {
 		// We have more network namespaces than our target number, so
 		// schedule a shrinking pass.
-		time.AfterFunc(aboveTargetGracePeriod, pool.cleanupToDefaultSize)
+		time.AfterFunc(aboveTargetGracePeriod, pool.cleanupToTargetSize)
 	}
 }
 
-func (pool *cniPool) cleanupToDefaultSize() {
+func (pool *cniPool) cleanupToTargetSize() {
 	var toRelease []*cniNS
 	defer func() {
 		for _, poolNS := range toRelease {
-			poolNS.release()
+			_ = poolNS.release()
 		}
 	}()
 
@@ -169,6 +202,7 @@ func (pool *cniPool) cleanupToDefaultSize() {
 	for pool.actualSize > pool.targetSize &&
 		len(pool.available) > 0 &&
 		time.Since(pool.available[0].lastUsed) >= aboveTargetGracePeriod {
+		bklog.L.Debugf("releasing network namespace %s since it was last used at %s", pool.available[0].id, pool.available[0].lastUsed)
 		toRelease = append(toRelease, pool.available[0])
 		pool.available = pool.available[1:]
 		pool.actualSize--
@@ -245,6 +279,7 @@ func (ns *cniNS) Close() error {
 }
 
 func (ns *cniNS) release() error {
+	bklog.L.Debugf("releasing cni network namespace %s", ns.id)
 	err := ns.handle.Remove(context.TODO(), ns.id, ns.nativeID, ns.opts...)
 	if err1 := unmountNetNS(ns.nativeID); err1 != nil && err == nil {
 		err = err1

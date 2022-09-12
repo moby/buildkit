@@ -21,6 +21,10 @@ func (h *host) New(_ context.Context, hostname string) (Namespace, error) {
 	return &hostNS{}, nil
 }
 
+func (h *host) Close() error {
+	return nil
+}
+
 type hostNS struct {
 }
 

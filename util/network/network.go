@@ -9,6 +9,7 @@ import (
 
 // Provider interface for Network
 type Provider interface {
+	io.Closer
 	New(ctx context.Context, hostname string) (Namespace, error)
 }
 
