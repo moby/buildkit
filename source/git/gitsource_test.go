@@ -1,12 +1,17 @@
 package git
 
 import (
+	"bytes"
 	"context"
 	"io/ioutil"
+	"net/http"
+	"net/http/cgi"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -20,12 +25,13 @@ import (
 	"github.com/docker/docker/pkg/reexec"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
+	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/snapshot"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/leaseutil"
+	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/winlayers"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
@@ -50,22 +56,13 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	}
 
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := logProgressStreams(context.Background(), t)
 
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	repo := setupGitRepo(t)
 
-	gs := setupGitSource(t, tmpdir)
+	id := &source.GitIdentifier{Remote: repo.mainURL, KeepGitDir: keepGitDir}
 
-	repodir, err := ioutil.TempDir("", "buildkit-gitsource")
-	require.NoError(t, err)
-	defer os.RemoveAll(repodir)
-
-	repodir, err = setupGitRepo(repodir)
-	require.NoError(t, err)
-
-	id := &source.GitIdentifier{Remote: repodir, KeepGitDir: keepGitDir}
+	gs := setupGitSource(t, t.TempDir())
 
 	g, err := gs.Resolve(ctx, id, nil, nil)
 	require.NoError(t, err)
@@ -106,7 +103,7 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	require.ErrorAs(t, err, &os.ErrNotExist)
 
 	// second fetch returns same dir
-	id = &source.GitIdentifier{Remote: repodir, Ref: "master", KeepGitDir: keepGitDir}
+	id = &source.GitIdentifier{Remote: repo.mainURL, Ref: "master", KeepGitDir: keepGitDir}
 
 	g, err = gs.Resolve(ctx, id, nil, nil)
 	require.NoError(t, err)
@@ -123,7 +120,7 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 
 	require.Equal(t, ref1.ID(), ref2.ID())
 
-	id = &source.GitIdentifier{Remote: repodir, Ref: "feature", KeepGitDir: keepGitDir}
+	id = &source.GitIdentifier{Remote: repo.mainURL, Ref: "feature", KeepGitDir: keepGitDir}
 
 	g, err = gs.Resolve(ctx, id, nil, nil)
 	require.NoError(t, err)
@@ -170,22 +167,12 @@ func testFetchBySHA(t *testing.T, keepGitDir bool) {
 
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx = logProgressStreams(ctx, t)
 
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
-
-	gs := setupGitSource(t, tmpdir)
-
-	repodir, err := ioutil.TempDir("", "buildkit-gitsource")
-	require.NoError(t, err)
-	defer os.RemoveAll(repodir)
-
-	repodir, err = setupGitRepo(repodir)
-	require.NoError(t, err)
+	repo := setupGitRepo(t)
 
 	cmd := exec.Command("git", "rev-parse", "feature")
-	cmd.Dir = repodir
+	cmd.Dir = repo.mainPath
 
 	out, err := cmd.Output()
 	require.NoError(t, err)
@@ -193,7 +180,9 @@ func testFetchBySHA(t *testing.T, keepGitDir bool) {
 	sha := strings.TrimSpace(string(out))
 	require.Equal(t, 40, len(sha))
 
-	id := &source.GitIdentifier{Remote: repodir, Ref: sha, KeepGitDir: keepGitDir}
+	id := &source.GitIdentifier{Remote: repo.mainURL, Ref: sha, KeepGitDir: keepGitDir}
+
+	gs := setupGitSource(t, t.TempDir())
 
 	g, err := gs.Resolve(ctx, id, nil, nil)
 	require.NoError(t, err)
@@ -256,21 +245,13 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx = logProgressStreams(ctx, t)
 
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	repo := setupGitRepo(t)
 
-	gs := setupGitSource(t, tmpdir)
+	id := &source.GitIdentifier{Remote: repo.mainURL, Ref: tag, KeepGitDir: keepGitDir}
 
-	repodir, err := ioutil.TempDir("", "buildkit-gitsource")
-	require.NoError(t, err)
-	defer os.RemoveAll(repodir)
-
-	repodir, err = setupGitRepo(repodir)
-	require.NoError(t, err)
-
-	id := &source.GitIdentifier{Remote: repodir, Ref: tag, KeepGitDir: keepGitDir}
+	gs := setupGitSource(t, t.TempDir())
 
 	g, err := gs.Resolve(ctx, id, nil, nil)
 	require.NoError(t, err)
@@ -350,36 +331,32 @@ func testMultipleRepos(t *testing.T, keepGitDir bool) {
 
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx = logProgressStreams(ctx, t)
 
 	tmpdir, err := ioutil.TempDir("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
-	gs := setupGitSource(t, tmpdir)
-
-	repodir, err := ioutil.TempDir("", "buildkit-gitsource")
-	require.NoError(t, err)
-	defer os.RemoveAll(repodir)
-
-	repodir, err = setupGitRepo(repodir)
-	require.NoError(t, err)
+	repo := setupGitRepo(t)
 
 	repodir2, err := ioutil.TempDir("", "buildkit-gitsource")
 	require.NoError(t, err)
 	defer os.RemoveAll(repodir2)
 
-	err = runShell(repodir2,
-		"git init",
+	runShell(t, repodir2,
+		"git -c init.defaultBranch=master init",
 		"git config --local user.email test",
 		"git config --local user.name test",
 		"echo xyz > xyz",
 		"git add xyz",
 		"git commit -m initial",
 	)
-	require.NoError(t, err)
+	repoURL2 := serveGitRepo(t, repodir2)
 
-	id := &source.GitIdentifier{Remote: repodir, KeepGitDir: keepGitDir}
-	id2 := &source.GitIdentifier{Remote: repodir2, KeepGitDir: keepGitDir}
+	id := &source.GitIdentifier{Remote: repo.mainURL, KeepGitDir: keepGitDir}
+	id2 := &source.GitIdentifier{Remote: repoURL2, KeepGitDir: keepGitDir}
+
+	gs := setupGitSource(t, t.TempDir())
 
 	g, err := gs.Resolve(ctx, id, nil, nil)
 	require.NoError(t, err)
@@ -447,6 +424,7 @@ func TestCredentialRedaction(t *testing.T) {
 
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx = logProgressStreams(ctx, t)
 
 	tmpdir, err := ioutil.TempDir("", "buildkit-state")
 	require.NoError(t, err)
@@ -478,20 +456,15 @@ func testSubdir(t *testing.T, keepGitDir bool) {
 	}
 
 	t.Parallel()
-	ctx := context.TODO()
 
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	ctx := logProgressStreams(context.Background(), t)
 
-	gs := setupGitSource(t, tmpdir)
+	gs := setupGitSource(t, t.TempDir())
 
-	repodir, err := ioutil.TempDir("", "buildkit-gitsource")
-	require.NoError(t, err)
-	defer os.RemoveAll(repodir)
+	repodir := t.TempDir()
 
-	err = runShell(repodir,
-		"git init",
+	runShell(t, repodir,
+		"git -c init.defaultBranch=master init",
 		"git config --local user.email test",
 		"git config --local user.name test",
 		"echo foo > abc",
@@ -500,9 +473,9 @@ func testSubdir(t *testing.T, keepGitDir bool) {
 		"git add abc sub",
 		"git commit -m initial",
 	)
-	require.NoError(t, err)
 
-	id := &source.GitIdentifier{Remote: repodir, KeepGitDir: keepGitDir, Subdir: "sub"}
+	repoURL := serveGitRepo(t, repodir)
+	id := &source.GitIdentifier{Remote: repoURL, KeepGitDir: keepGitDir, Subdir: "sub"}
 
 	g, err := gs.Resolve(ctx, id, nil, nil)
 	require.NoError(t, err)
@@ -583,30 +556,34 @@ func setupGitSource(t *testing.T, tmpdir string) source.Source {
 	return gs
 }
 
-func setupGitRepo(dir string) (string, error) {
-	subPath := filepath.Join(dir, "sub")
-	mainPath := filepath.Join(dir, "main")
+type gitRepoFixture struct {
+	mainPath, subPath string // Filesystem paths to the respective repos
+	mainURL, subURL   string // HTTP URLs for the respective repos
+}
 
-	if err := os.MkdirAll(subPath, 0700); err != nil {
-		return "", err
+func setupGitRepo(t *testing.T) gitRepoFixture {
+	t.Helper()
+	dir := t.TempDir()
+	srv := serveGitRepo(t, dir)
+	fixture := gitRepoFixture{
+		subPath:  filepath.Join(dir, "sub"),
+		subURL:   srv + "/sub",
+		mainPath: filepath.Join(dir, "main"),
+		mainURL:  srv + "/main",
 	}
+	require.NoError(t, os.MkdirAll(fixture.subPath, 0700))
+	require.NoError(t, os.MkdirAll(fixture.mainPath, 0700))
 
-	if err := os.MkdirAll(mainPath, 0700); err != nil {
-		return "", err
-	}
-
-	if err := runShell(filepath.Join(dir, "sub"),
-		"git init",
+	runShell(t, fixture.subPath,
+		"git -c init.defaultBranch=master init",
 		"git config --local user.email test",
 		"git config --local user.name test",
 		"echo subcontents > subfile",
 		"git add subfile",
 		"git commit -m initial",
-	); err != nil {
-		return "", err
-	}
-	if err := runShell(filepath.Join(dir, "main"),
-		"git init",
+	)
+	runShell(t, fixture.mainPath,
+		"git -c init.defaultBranch=master init",
 		"git config --local user.email test",
 		"git config --local user.name test",
 		"echo foo > abc",
@@ -624,17 +601,58 @@ func setupGitRepo(dir string) (string, error) {
 		"echo baz > ghi",
 		"git add ghi",
 		"git commit -m feature",
-		"git submodule add "+subPath+" sub",
+		"git submodule add "+fixture.subURL+" sub",
 		"git add -A",
 		"git commit -m withsub",
 		"git checkout master",
-	); err != nil {
-		return "", err
-	}
-	return mainPath, nil
+	)
+	return fixture
 }
 
-func runShell(dir string, cmds ...string) error {
+func serveGitRepo(t *testing.T, root string) string {
+	t.Helper()
+	gitpath, err := exec.LookPath("git")
+	require.NoError(t, err)
+	gitversion, _ := exec.Command(gitpath, "version").CombinedOutput()
+	t.Logf("%s", gitversion) // E.g. "git version 2.30.2"
+
+	// Serve all repositories under root using the Smart HTTP protocol so
+	// they can be cloned as we explicitly disable the file protocol.
+	// (Another option would be to use `git daemon` and the Git protocol,
+	// but that listens on a fixed port number which is a recipe for
+	// disaster in CI. Funnily enough, `git daemon --port=0` works but there
+	// is no easy way to discover which port got picked!)
+
+	githttp := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var logs bytes.Buffer
+		(&cgi.Handler{
+			Path: gitpath,
+			Args: []string{"http-backend"},
+			Dir:  root,
+			Env: []string{
+				"GIT_PROJECT_ROOT=" + root,
+				"GIT_HTTP_EXPORT_ALL=1",
+			},
+			Stderr: &logs,
+		}).ServeHTTP(w, r)
+		if logs.Len() == 0 {
+			return
+		}
+		for {
+			line, err := logs.ReadString('\n')
+			t.Log("git-http-backend: " + line)
+			if err != nil {
+				break
+			}
+		}
+	})
+	server := httptest.NewServer(&githttp)
+	t.Cleanup(server.Close)
+	return server.URL
+}
+
+func runShell(t *testing.T, dir string, cmds ...string) {
+	t.Helper()
 	for _, args := range cmds {
 		var cmd *exec.Cmd
 		if runtime.GOOS == "windows" {
@@ -644,9 +662,42 @@ func runShell(dir string, cmds ...string) error {
 		}
 		cmd.Dir = dir
 		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			return errors.Wrapf(err, "error running %v", args)
-		}
+		require.NoErrorf(t, cmd.Run(), "error running %v", args)
 	}
-	return nil
+}
+
+func logProgressStreams(ctx context.Context, t *testing.T) context.Context {
+	pr, ctx, cancel := progress.NewContext(ctx)
+	done := make(chan struct{})
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+	go func() {
+		defer close(done)
+		for {
+			prog, err := pr.Read(context.Background())
+			if err != nil {
+				return
+			}
+			for _, log := range prog {
+				switch lsys := log.Sys.(type) {
+				case client.VertexLog:
+					var stream string
+					switch lsys.Stream {
+					case 1:
+						stream = "stdout"
+					case 2:
+						stream = "stderr"
+					default:
+						stream = strconv.FormatInt(int64(lsys.Stream), 10)
+					}
+					t.Logf("(%v) %s", stream, lsys.Data)
+				default:
+					t.Logf("(%T) %+v", log.Sys, log)
+				}
+			}
+		}
+	}()
+	return ctx
 }
