@@ -59,6 +59,7 @@ type ExecOp struct {
 	isValidated bool
 	secrets     []SecretInfo
 	ssh         []SSHInfo
+	socket      []SocketInfo // earthly
 }
 
 func (e *ExecOp) AddMount(target string, source Output, opt ...MountOption) Output {
@@ -296,6 +297,9 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 	if len(e.ssh) > 0 {
 		addCap(&e.constraints, pb.CapExecMountSSH)
 	}
+	if len(e.socket) > 0 {
+		addCap(&e.constraints, pb.CapExecMountSock)
+	}
 
 	if e.constraints.Platform == nil {
 		p, err := getPlatform(e.base)(ctx, c)
@@ -414,6 +418,19 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 			},
 		}
 		peo.Mounts = append(peo.Mounts, pm)
+	}
+
+	for _, s := range e.socket {
+		peo.Mounts = append(peo.Mounts, &pb.Mount{
+			Dest:      s.Target,
+			MountType: pb.MountType_SOCKET,
+			SockOpt: &pb.SockOpt{
+				ID:   s.ID,
+				Uid:  uint32(s.UID),
+				Gid:  uint32(s.GID),
+				Mode: uint32(s.Mode),
+			},
+		})
 	}
 
 	dt, err := pop.Marshal()
@@ -658,6 +675,27 @@ type SSHInfo struct {
 	Optional bool
 }
 
+// SocketTarget mounts a unix socket which is forwarded back to a socketpriver session attachable; earthly-specific
+func SocketTarget(id, target string, mode, uid, gid int) RunOption {
+	return runOptionFunc(func(ei *ExecInfo) {
+		ei.Socket = append(ei.Socket, SocketInfo{
+			ID:     id,
+			Target: target,
+			Mode:   mode,
+			UID:    uid,
+			GID:    gid,
+		})
+	})
+}
+
+type SocketInfo struct {
+	ID     string
+	Target string
+	Mode   int
+	UID    int
+	GID    int
+}
+
 func AddSecret(dest string, opts ...SecretOption) RunOption {
 	return runOptionFunc(func(ei *ExecInfo) {
 		s := &SecretInfo{ID: dest, Target: dest, Mode: 0400}
@@ -733,6 +771,7 @@ type ExecInfo struct {
 	ProxyEnv       *ProxyEnv
 	Secrets        []SecretInfo
 	SSH            []SSHInfo
+	Socket         []SocketInfo // earthly
 }
 
 type MountInfo struct {

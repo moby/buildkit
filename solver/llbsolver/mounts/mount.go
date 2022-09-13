@@ -18,6 +18,7 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/secrets"
+	"github.com/moby/buildkit/session/socketforward"
 	"github.com/moby/buildkit/session/sshforward"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/pb"
@@ -232,6 +233,89 @@ func (sm *sshMountInstance) Mount() ([]mount.Mount, func() error, error) {
 	}}, release, nil
 }
 
+// getMountableSocket is earthly-specific
+func (mm *MountManager) getMountableSocket(ctx context.Context, m *pb.Mount, g session.Group) (cache.Mountable, error) {
+	var caller session.Caller
+	err := mm.sm.Any(ctx, g, func(ctx context.Context, _ string, c session.Caller) error {
+		caller = c
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if caller == nil {
+		return nil, nil
+	}
+	// because forwarded socket remains active, to actually handle session disconnecting error
+	// should restart the whole exec with new session
+	return &sockMount{mount: m, caller: caller, idmap: mm.cm.IdentityMapping()}, nil
+}
+
+type sockMount struct {
+	mount  *pb.Mount
+	caller session.Caller
+	idmap  *idtools.IdentityMapping
+}
+
+func (sm *sockMount) Mount(ctx context.Context, readonly bool, g session.Group) (snapshot.Mountable, error) {
+	return &sockMountInstance{sm: sm, idmap: sm.idmap}, nil
+}
+
+// sockMountInstance is earthly-specific
+type sockMountInstance struct {
+	sm    *sockMount
+	idmap *idtools.IdentityMapping
+}
+
+func (sm *sockMountInstance) Mount() ([]mount.Mount, func() error, error) {
+	ctx, cancel := context.WithCancel(context.TODO())
+
+	uid := int(sm.sm.mount.SockOpt.Uid)
+	gid := int(sm.sm.mount.SockOpt.Gid)
+
+	if sm.idmap != nil {
+		identity, err := sm.idmap.ToHost(idtools.Identity{
+			UID: uid,
+			GID: gid,
+		})
+		if err != nil {
+			cancel()
+			return nil, nil, err
+		}
+		uid = identity.UID
+		gid = identity.GID
+	}
+
+	sock, cleanup, err := socketforward.MountSocket(ctx, sm.sm.caller, socketforward.SocketOpt{
+		ID:   sm.sm.mount.SockOpt.ID,
+		UID:  uid,
+		GID:  gid,
+		Mode: int(sm.sm.mount.SockOpt.Mode & 0777),
+	})
+	if err != nil {
+		cancel()
+		return nil, nil, err
+	}
+	release := func() error {
+		var err error
+		if cleanup != nil {
+			err = cleanup()
+		}
+		cancel()
+		return err
+	}
+
+	return []mount.Mount{{
+		Type:    "bind",
+		Source:  sock,
+		Options: []string{"rbind"},
+	}}, release, nil
+}
+
+func (sm *sockMountInstance) IdentityMapping() *idtools.IdentityMapping {
+	return sm.idmap
+}
+
 func (sm *sshMountInstance) IdentityMapping() *idtools.IdentityMapping {
 	return sm.idmap
 }
@@ -382,6 +466,11 @@ func (mm *MountManager) MountableSecret(ctx context.Context, m *pb.Mount, g sess
 
 func (mm *MountManager) MountableSSH(ctx context.Context, m *pb.Mount, g session.Group) (cache.Mountable, error) {
 	return mm.getSSHMountable(ctx, m, g)
+}
+
+// earthly-specific
+func (mm *MountManager) MountableSocket(ctx context.Context, m *pb.Mount, g session.Group) (cache.Mountable, error) {
+	return mm.getMountableSocket(ctx, m, g)
 }
 
 func newTmpfs(idmap *idtools.IdentityMapping, opt *pb.TmpfsOpt) cache.Mountable {

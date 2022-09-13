@@ -266,6 +266,7 @@ func (s State) Run(ro ...RunOption) ExecState {
 	}
 	exec.secrets = ei.Secrets
 	exec.ssh = ei.SSH
+	exec.socket = ei.Socket
 
 	return ExecState{
 		State: s.WithOutput(exec.Output()),

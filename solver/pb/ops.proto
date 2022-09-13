@@ -107,6 +107,8 @@ message Mount {
 	SecretOpt secretOpt = 21;
 	SSHOpt SSHOpt = 22;
 	string resultID = 23;
+
+	SockOpt SockOpt = 100; // earthly
 }
 
 // MountType defines a type of a mount from a supported set
@@ -117,6 +119,7 @@ enum MountType {
 	CACHE = 3;
 	TMPFS = 4;
 	HOST_BIND = 100;  // Earthly specific.
+	SOCKET = 101;  // Earthly specific.
 }
 
 // TmpfsOpt defines options describing tpmfs mounts
@@ -171,6 +174,18 @@ message SSHOpt {
 	// Optional defines if ssh socket is required. Error is produced
 	// if client does not expose ssh.
 	bool optional = 5;
+}
+
+// SockOpt defines options describing sock mounts; earthly-specific
+message SockOpt {
+	// ID of proxied socket. Used for mapping socket to user-supplied callback
+	string ID = 1;
+	// UID of agent socket
+	uint32 uid = 2;
+	// GID of agent socket
+	uint32 gid = 3;
+	// Mode is the filesystem mode of agent socket
+	uint32 mode = 4;
 }
 
 // SourceOp specifies a source such as build contexts and images.
