@@ -55,6 +55,10 @@ var buildCommand = cli.Command{
 			Name:  "local",
 			Usage: "Allow build access to the local directory",
 		},
+		cli.StringSliceFlag{
+			Name:  "oci-layout",
+			Usage: "Allow build access to the local OCI layout",
+		},
 		cli.StringFlag{
 			Name:  "frontend",
 			Usage: "Define frontend used for build",
