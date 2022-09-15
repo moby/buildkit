@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"io"
 
 	"github.com/containerd/containerd/content"
 	"github.com/moby/buildkit/cache"
@@ -17,6 +18,7 @@ import (
 )
 
 type Worker interface {
+	io.Closer
 	// ID needs to be unique in the cluster
 	ID() string
 	Labels() map[string]string

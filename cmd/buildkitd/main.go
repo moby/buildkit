@@ -265,6 +265,7 @@ func main() {
 		if err != nil {
 			return err
 		}
+		defer controller.Close()
 
 		controller.Register(server)
 
