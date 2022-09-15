@@ -455,7 +455,7 @@ func Differ(t DiffType, required bool) LocalOption {
 	})
 }
 
-func OCILayout(contentStoreID string, dig digest.Digest, opts ...OCILayoutOption) State {
+func OCILayout(store string, digest digest.Digest, opts ...OCILayoutOption) State {
 	gi := &OCILayoutInfo{}
 
 	for _, o := range opts {
@@ -474,7 +474,7 @@ func OCILayout(contentStoreID string, dig digest.Digest, opts ...OCILayoutOption
 
 	addCap(&gi.Constraints, pb.CapSourceOCILayout)
 
-	source := NewSource(fmt.Sprintf("oci-layout://%s@%s", contentStoreID, dig), attrs, gi.Constraints)
+	source := NewSource(fmt.Sprintf("oci-layout://%s@%s", store, digest), attrs, gi.Constraints)
 	return NewState(source.Output())
 }
 
