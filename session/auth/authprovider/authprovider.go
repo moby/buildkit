@@ -116,6 +116,13 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 					return toTokenResponse(resp.Token, resp.IssuedAt, resp.ExpiresIn), nil
 				}
 			}
+			if err == authutil.ErrNoToken {
+				resp, err := authutil.FetchToken(ctx, http.DefaultClient, nil, to)
+				if err != nil {
+					return nil, err
+				}
+				return toTokenResponse(resp.Token, resp.IssuedAt, resp.ExpiresIn), nil
+			}
 			return nil, err
 		}
 		return toTokenResponse(resp.AccessToken, resp.IssuedAt, resp.ExpiresIn), nil
