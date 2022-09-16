@@ -404,6 +404,7 @@ The directory layout conforms to OCI Image Spec v1.0.
   * `min`: only export layers for the resulting image
   * `max`: export all the layers of all intermediate steps
 * `dest=<path>`: destination directory for cache exporter
+* `tag=<tag>`: specify custom tag of image to write to local index (default: `latest`)
 * `oci-mediatypes=<true|false>`: whether to use OCI mediatypes in exported manifests (default `true`, since BuildKit `v0.8`)
 * `compression=<uncompressed|gzip|estargz|zstd>`: choose compression type for layers newly created and cached, gzip is default value. estargz and zstd should be used with `oci-mediatypes=true`.
 * `compression-level=<value>`: compression level for gzip, estargz (0-9) and zstd (0-22)
@@ -412,8 +413,8 @@ The directory layout conforms to OCI Image Spec v1.0.
 `--import-cache` options:
 * `type=local`
 * `src=<path>`: source directory for cache importer
+* `tag=<tag>`: specify custom tag of image to read from local index (default: `latest`)
 * `digest=sha256:<sha256digest>`: specify explicit digest of the manifest list to import
-* `tag=<tag>`: determine custom tag of image. Defaults "latest" tag digest in `index.json` is for digest, not for tag
 
 #### GitHub Actions cache (experimental)
 
