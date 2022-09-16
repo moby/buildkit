@@ -3,9 +3,11 @@ package containerimage
 import (
 	"context"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/reference"
 	"github.com/containerd/containerd/remotes"
 	"github.com/moby/buildkit/session"
@@ -59,20 +61,15 @@ func (r *ociLayoutResolver) Fetch(ctx context.Context, desc ocispecs.Descriptor)
 }
 
 // Resolve attempts to resolve the reference into a name and descriptor.
-// OCI Layout does not (yet) support tag name references, but does support hash references.
 func (r *ociLayoutResolver) Resolve(ctx context.Context, refString string) (string, ocispecs.Descriptor, error) {
 	ref, err := reference.Parse(refString)
 	if err != nil {
 		return "", ocispecs.Descriptor{}, errors.Wrapf(err, "invalid reference %q", refString)
 	}
-	dgst := ref.Digest()
-	if dgst == "" {
-		return "", ocispecs.Descriptor{}, errors.Errorf("reference %q must have digest", refString)
-	}
 
 	info, err := r.info(ctx, ref)
 	if err != nil {
-		return "", ocispecs.Descriptor{}, errors.Wrap(err, "unable to get info about digest")
+		return "", ocispecs.Descriptor{}, errors.Wrap(err, "unable to get info about reference")
 	}
 
 	// Create the descriptor, then use that to read the actual root manifest/
@@ -105,13 +102,18 @@ func (r *ociLayoutResolver) info(ctx context.Context, ref reference.Spec) (conte
 	err := r.withCaller(ctx, func(ctx context.Context, caller session.Caller) error {
 		store := sessioncontent.NewCallerStore(caller, r.storeID)
 
-		_, dgst := reference.SplitObject(ref.Object)
-		if dgst == "" {
-			return errors.Errorf("reference %q does not contain a digest", ref.String())
+		if dgst := ref.Digest(); dgst != "" {
+			in, err := store.Info(ctx, dgst)
+			info = &in
+			return err
 		}
-		in, err := store.Info(ctx, dgst)
-		info = &in
-		return err
+
+		return store.Walk(ctx, func(in content.Info) error {
+			if matchLabels(ref, in.Labels) {
+				info = &in
+			}
+			return nil
+		}, "index==true")
 	})
 	if err != nil {
 		return content.Info{}, err
@@ -151,4 +153,31 @@ func (r *readerAtWrapper) Read(p []byte) (n int, err error) {
 }
 func (r *readerAtWrapper) Close() error {
 	return r.readerAt.Close()
+}
+
+func matchLabels(ref reference.Spec, labels map[string]string) bool {
+	ref.Locator = strings.TrimPrefix(ref.Locator, ref.Hostname()+"/")
+
+	if ref.Locator == "*" {
+		if strings.HasSuffix(labels[images.AnnotationImageName], ":"+ref.Object) {
+			return true
+		}
+		if strings.HasSuffix(labels[ocispecs.AnnotationRefName], ":"+ref.Object) {
+			return true
+		}
+		if labels[ocispecs.AnnotationRefName] == ref.Object {
+			return true
+		}
+		return false
+	}
+
+	refString := ref.String()
+	if labels[images.AnnotationImageName] == refString {
+		return true
+	}
+	if labels[ocispecs.AnnotationRefName] == refString {
+		return true
+	}
+
+	return false
 }

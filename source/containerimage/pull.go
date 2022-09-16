@@ -166,8 +166,8 @@ func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session
 		}
 		mode = source.ResolveModeForcePull // with OCI layout, we always just "pull"
 		sessionID = ociIdentifier.SessionID
-		ref = reference.Spec{Locator: ociIdentifier.Name, Object: ociIdentifier.Object}
-		storeID = ociIdentifier.Hostname()
+		ref = ociIdentifier.Ref
+		storeID = ociIdentifier.Store()
 		layerLimit = ociIdentifier.LayerLimit
 	default:
 		return nil, errors.Errorf("unknown resolver type: %v", is.ResolverType)

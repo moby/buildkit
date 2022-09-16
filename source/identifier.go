@@ -207,10 +207,6 @@ func FromLLB(op *pb.Op_Source, platform *pb.Platform) (Identifier, error) {
 			switch k {
 			case pb.AttrOCILayoutSessionID:
 				id.SessionID = v
-				if p := strings.SplitN(v, ":", 2); len(p) == 2 {
-					id.Name = p[0] + "-" + id.Name
-					id.SessionID = p[1]
-				}
 			case pb.AttrOCILayoutLayerLimit:
 				l, err := strconv.Atoi(v)
 				if err != nil {
@@ -291,8 +287,7 @@ func (*HTTPIdentifier) ID() string {
 }
 
 type OCIIdentifier struct {
-	Name       string
-	Object     string
+	Ref        reference.Spec
 	Platform   *ocispecs.Platform
 	SessionID  string
 	LayerLimit *int
@@ -304,21 +299,20 @@ func NewOCIIdentifier(str string) (*OCIIdentifier, error) {
 		return nil, err
 	}
 	return &OCIIdentifier{
-		Name:   ref.Locator,
-		Object: ref.Object,
+		Ref: ref,
 	}, nil
+}
+
+func (id *OCIIdentifier) Store() string {
+	parts := strings.SplitN(id.Ref.Locator, "/", 2)
+	if len(parts) == 2 {
+		return parts[0]
+	}
+	return ""
 }
 
 func (*OCIIdentifier) ID() string {
 	return srctypes.OCIScheme
-}
-
-func (id *OCIIdentifier) Hostname() string {
-	i := strings.Index(id.Name, "/")
-	if i < 0 {
-		return id.Name
-	}
-	return id.Name[:i]
 }
 
 func (r ResolveMode) String() string {

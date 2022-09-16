@@ -899,31 +899,40 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 		return st, nil, nil, nil
 	case "oci-layout":
 		refSpec := strings.TrimPrefix(vv[1], "//")
-		ref, err := reference.Parse(refSpec)
-		if err != nil {
-			return nil, nil, nil, errors.Wrapf(err, "could not parse oci-layout reference %q", refSpec)
-		}
-		named, ok := ref.(reference.Named)
-		if !ok {
-			return nil, nil, nil, fmt.Errorf("reference %q has no name", ref.String())
-		}
-		if reference.Domain(named) != "" {
-			return nil, nil, nil, fmt.Errorf("oci-layout reference %q has domain", ref.String())
-		}
-		if strings.Contains(reference.Path(named), "/") {
-			return nil, nil, nil, errors.Errorf("oci-layout reference %q name is multi-part", ref.String())
-		}
 
-		if _, ok := ref.(reference.Digested); !ok {
-			return nil, nil, nil, errors.Errorf("oci-layout reference %q does not have digest %s", ref.String())
+		var result string
+
+		if parts := strings.SplitN(refSpec, "/", 2); len(parts) == 2 {
+			// oci-layout://<store>/<image>[:tag][@digest]
+			store := parts[0]
+			named, err := reference.ParseNormalizedNamed(parts[1])
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			result = store + "/" + named.String()
+		} else {
+			// oci-layout://<store>[:tag][@digest]
+			ref, err := reference.Parse(refSpec)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			named := ref.(reference.Named)
+
+			result = reference.Path(named) + "/*"
+			if tagged, ok := named.(reference.Tagged); ok {
+				result += ":" + tagged.Tag()
+			}
+			if digested, ok := named.(reference.Digested); ok {
+				result += "@" + digested.Digest().String()
+			}
 		}
 
 		// We use store id as the host here, the image name will be ignored
 		// (since image lookup is not currently supported)
-		_, data, err := c.ResolveImageConfig(ctx, reference.Path(named)+"/"+named.String(), llb.ResolveImageConfigOpt{
+		_, data, err := c.ResolveImageConfig(ctx, result, llb.ResolveImageConfigOpt{
 			Platform:     platform,
 			ResolveMode:  resolveMode,
-			LogName:      fmt.Sprintf("[context %s] load metadata for %s", name, ref),
+			LogName:      fmt.Sprintf("[context %s] load metadata for %s", name, result),
 			ResolverType: llb.ResolverTypeOCILayout,
 		})
 		if err != nil {
@@ -936,7 +945,7 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 		}
 
 		st := llb.OCILayout(
-			reference.Path(named)+"/"+named.String(),
+			result,
 			llb.WithCustomName("[context "+name+"] OCI load from client"),
 			llb.OCISessionID(c.BuildOpts().SessionID),
 		)
