@@ -292,27 +292,33 @@ func (*HTTPIdentifier) ID() string {
 
 type OCIIdentifier struct {
 	Name       string
-	Manifest   digest.Digest
+	Object     string
 	Platform   *ocispecs.Platform
 	SessionID  string
 	LayerLimit *int
 }
 
 func NewOCIIdentifier(str string) (*OCIIdentifier, error) {
-	// OCI identifier arg is of the format: path@hash
-	parts := strings.SplitN(str, "@", 2)
-	if len(parts) != 2 {
-		return nil, errors.New("OCI must be in format of storeID@manifest-hash")
-	}
-	dig, err := digest.Parse(parts[1])
+	ref, err := reference.Parse(str)
 	if err != nil {
-		return nil, errors.Wrap(err, "OCI must be in format of storeID@manifest-hash, invalid digest")
+		return nil, err
 	}
-	return &OCIIdentifier{Name: parts[0], Manifest: dig}, nil
+	return &OCIIdentifier{
+		Name:   ref.Locator,
+		Object: ref.Object,
+	}, nil
 }
 
 func (*OCIIdentifier) ID() string {
 	return srctypes.OCIScheme
+}
+
+func (id *OCIIdentifier) Hostname() string {
+	i := strings.Index(id.Name, "/")
+	if i < 0 {
+		return id.Name
+	}
+	return id.Name[:i]
 }
 
 func (r ResolveMode) String() string {

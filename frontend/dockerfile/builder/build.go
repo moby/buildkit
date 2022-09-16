@@ -935,7 +935,8 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 			return nil, nil, nil, errors.Wrap(err, "could not parse oci-layout image config")
 		}
 
-		st := llb.OCILayout(named.String(),
+		st := llb.OCILayout(
+			reference.Path(named)+"/"+named.String(),
 			llb.WithCustomName("[context "+name+"] OCI load from client"),
 			llb.OCISessionID(c.BuildOpts().SessionID),
 		)

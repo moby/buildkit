@@ -1690,7 +1690,7 @@ func testOCILayoutSource(t *testing.T, sb integration.Sandbox) {
 	// since we are doing just one build with one remote here, we can give it any old ID,
 	// even something really imaginative, like "one"
 	csID := "one"
-	st = llb.OCILayout(csID + "@" + digest.String())
+	st = llb.OCILayout(csID + "/image@" + digest.String())
 
 	def, err = st.Marshal(context.TODO())
 	require.NoError(t, err)
@@ -1833,7 +1833,7 @@ func testOCILayoutPlatformSource(t *testing.T, sb integration.Sandbox) {
 			Platforms: make([]exptypes.Platform, len(platformsToTest)),
 		}
 		for i, platform := range platformsToTest {
-			st := llb.OCILayout(csID + "@" + digest.String())
+			st := llb.OCILayout(csID + "/image@" + digest.String())
 
 			def, err := st.Marshal(ctx, llb.Platform(platforms.MustParse(platform)))
 			if err != nil {
