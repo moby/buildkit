@@ -37,7 +37,7 @@ func nodeArgs(node *parser.Node) []string {
 		if len(arg.Children) == 0 {
 			result = append(result, arg.Value)
 		} else if len(arg.Children) == 1 {
-			//sub command
+			// sub command
 			result = append(result, arg.Children[0].Value)
 			result = append(result, nodeArgs(arg.Children[0])...)
 		}
@@ -505,6 +505,9 @@ func parseOptInterval(f *Flag) (time.Duration, error) {
 	if err != nil {
 		return 0, err
 	}
+	if d == 0 {
+		return 0, nil
+	}
 	if d < container.MinimumDuration {
 		return 0, fmt.Errorf("Interval %#v cannot be less than %s", f.name, container.MinimumDuration)
 	}
@@ -579,8 +582,8 @@ func parseHealthcheck(req parseRequest) (*HealthCheckCommand, error) {
 			if err != nil {
 				return nil, err
 			}
-			if retries < 1 {
-				return nil, fmt.Errorf("--retries must be at least 1 (not %d)", retries)
+			if retries < 0 {
+				return nil, fmt.Errorf("--retries cannot be negative (%d)", retries)
 			}
 			healthcheck.Retries = int(retries)
 		} else {

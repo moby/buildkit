@@ -137,21 +137,22 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 	}
 
 	opt = base.WorkerOpt{
-		ID:              id,
-		Labels:          xlabels,
-		MetadataStore:   md,
-		Executor:        exe,
-		Snapshotter:     snap,
-		ContentStore:    c,
-		Applier:         winlayers.NewFileSystemApplierWithWindows(c, apply.NewFileSystemApplier(c)),
-		Differ:          winlayers.NewWalkingDiffWithWindows(c, walking.NewWalkingDiff(c)),
-		ImageStore:      nil, // explicitly
-		Platforms:       []ocispecs.Platform{platforms.Normalize(platforms.DefaultSpec())},
-		IdentityMapping: idmap,
-		LeaseManager:    lm,
-		GarbageCollect:  mdb.GarbageCollect,
-		ParallelismSem:  parallelismSem,
-		MountPoolRoot:   filepath.Join(root, "cachemounts"),
+		ID:               id,
+		Labels:           xlabels,
+		MetadataStore:    md,
+		NetworkProviders: np,
+		Executor:         exe,
+		Snapshotter:      snap,
+		ContentStore:     c,
+		Applier:          winlayers.NewFileSystemApplierWithWindows(c, apply.NewFileSystemApplier(c)),
+		Differ:           winlayers.NewWalkingDiffWithWindows(c, walking.NewWalkingDiff(c)),
+		ImageStore:       nil, // explicitly
+		Platforms:        []ocispecs.Platform{platforms.Normalize(platforms.DefaultSpec())},
+		IdentityMapping:  idmap,
+		LeaseManager:     lm,
+		GarbageCollect:   mdb.GarbageCollect,
+		ParallelismSem:   parallelismSem,
+		MountPoolRoot:    filepath.Join(root, "cachemounts"),
 	}
 	return opt, nil
 }

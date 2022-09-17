@@ -28,7 +28,7 @@ env:
   CACHE_GHA_SCOPE_BINARIES: "binaries"
   CACHE_GHA_SCOPE_CROSS: "cross"
   TESTFLAGS: "-v --parallel=6 --timeout=30m"
-  BUILDX_VERSION: "v0.8.2"  # leave empty to use the one available on GitHub virtual environment
+  BUILDX_VERSION: "v0.9.1"  # leave empty to use the one available on GitHub virtual environment
   GO_VERSION: "1.19"
 
 jobs:
@@ -153,6 +153,29 @@ jobs:
         name: Test
         run: |
           hack/s3_test/run_test.sh
+
+  test-azblob:
+    runs-on: ubuntu-20.04
+    needs:
+      - base
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v3
+      -
+        name: Expose GitHub Runtime
+        uses: crazy-max/ghaction-github-runtime@v2
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          version: ${{ env.BUILDX_VERSION }}
+          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
+          buildkitd-flags: --debug
+      -
+        name: Test
+        run: |
+          hack/azblob_test/run_test.sh
 
   test-os:
     runs-on: ${{ matrix.os }}

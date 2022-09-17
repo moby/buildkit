@@ -131,20 +131,21 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 	}
 
 	opt := base.WorkerOpt{
-		ID:             id,
-		Labels:         xlabels,
-		MetadataStore:  md,
-		Executor:       containerdexecutor.New(client, root, "", np, dns, apparmorProfile, traceSocket, rootless),
-		Snapshotter:    snap,
-		ContentStore:   cs,
-		Applier:        winlayers.NewFileSystemApplierWithWindows(cs, df),
-		Differ:         winlayers.NewWalkingDiffWithWindows(cs, df),
-		ImageStore:     client.ImageService(),
-		Platforms:      platforms,
-		LeaseManager:   lm,
-		GarbageCollect: gc,
-		ParallelismSem: parallelismSem,
-		MountPoolRoot:  filepath.Join(root, "cachemounts"),
+		ID:               id,
+		Labels:           xlabels,
+		MetadataStore:    md,
+		NetworkProviders: np,
+		Executor:         containerdexecutor.New(client, root, "", np, dns, apparmorProfile, traceSocket, rootless),
+		Snapshotter:      snap,
+		ContentStore:     cs,
+		Applier:          winlayers.NewFileSystemApplierWithWindows(cs, df),
+		Differ:           winlayers.NewWalkingDiffWithWindows(cs, df),
+		ImageStore:       client.ImageService(),
+		Platforms:        platforms,
+		LeaseManager:     lm,
+		GarbageCollect:   gc,
+		ParallelismSem:   parallelismSem,
+		MountPoolRoot:    filepath.Join(root, "cachemounts"),
 	}
 	return opt, nil
 }

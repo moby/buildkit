@@ -434,9 +434,14 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 				return nil, err
 			}
 			contentStores["local:"+csDir] = cs
+
+			tag := "latest"
+			if t, ok := ex.Attrs["tag"]; ok {
+				tag = t
+			}
 			// TODO(AkihiroSuda): support custom index JSON path and tag
 			indexJSONPath := filepath.Join(csDir, "index.json")
-			indicesToUpdate[indexJSONPath] = "latest"
+			indicesToUpdate[indexJSONPath] = tag
 		}
 		if ex.Type == "registry" {
 			regRef := ex.Attrs["ref"]
@@ -450,7 +455,6 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 		})
 	}
 	for _, im := range opt.CacheImports {
-		attrs := im.Attrs
 		if im.Type == "local" {
 			csDir := im.Attrs["src"]
 			if csDir == "" {
@@ -462,19 +466,23 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 				continue
 			}
 			// if digest is not specified, load from "latest" tag
-			if attrs["digest"] == "" {
+			if im.Attrs["digest"] == "" {
 				idx, err := ociindex.ReadIndexJSONFileLocked(filepath.Join(csDir, "index.json"))
 				if err != nil {
 					bklog.G(ctx).Warning("local cache import at " + csDir + " not found due to err: " + err.Error())
 					continue
 				}
 				for _, m := range idx.Manifests {
-					if (m.Annotations[ocispecs.AnnotationRefName] == "latest" && attrs["tag"] == "") || (attrs["tag"] != "" && m.Annotations[ocispecs.AnnotationRefName] == attrs["tag"]) {
-						attrs["digest"] = string(m.Digest)
+					tag := "latest"
+					if t, ok := im.Attrs["tag"]; ok {
+						tag = t
+					}
+					if m.Annotations[ocispecs.AnnotationRefName] == tag {
+						im.Attrs["digest"] = string(m.Digest)
 						break
 					}
 				}
-				if attrs["digest"] == "" {
+				if im.Attrs["digest"] == "" {
 					return nil, errors.New("local cache importer requires either explicit digest, \"latest\" tag or custom tag on index.json")
 				}
 			}
@@ -488,7 +496,7 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 		}
 		cacheImports = append(cacheImports, &controlapi.CacheOptionsEntry{
 			Type:  im.Type,
-			Attrs: attrs,
+			Attrs: im.Attrs,
 		})
 	}
 	if opt.Frontend != "" || isGateway {

@@ -90,6 +90,10 @@ func NewController(opt Opt) (*Controller, error) {
 	return c, nil
 }
 
+func (c *Controller) Close() error {
+	return c.opt.WorkerController.Close()
+}
+
 func (c *Controller) Register(server *grpc.Server) {
 	controlapi.RegisterControlServer(server, c)
 	c.gatewayForwarder.Register(server)

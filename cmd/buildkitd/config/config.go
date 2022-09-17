@@ -53,6 +53,7 @@ type NetworkConfig struct {
 	Mode          string `toml:"networkMode"`
 	CNIConfigPath string `toml:"cniConfigPath"`
 	CNIBinaryPath string `toml:"cniBinaryPath"`
+	CNIPoolSize   int    `toml:"cniPoolSize"`
 }
 
 type OCIConfig struct {

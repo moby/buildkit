@@ -24,8 +24,8 @@ func emptyImage(platform ocispecs.Platform) Image {
 		Image: ocispecs.Image{
 			Architecture: platform.Architecture,
 			OS:           platform.OS,
+			Variant:      platform.Variant,
 		},
-		Variant: platform.Variant,
 	}
 	img.RootFS.Type = "layers"
 	img.Config.WorkingDir = "/"

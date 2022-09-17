@@ -1621,6 +1621,7 @@ func testLocalSourceWithDiffer(t *testing.T, sb integration.Sandbox, d llb.DiffT
 }
 
 func testOCILayoutSource(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "oci exporter")
 	requiresLinux(t)
 	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
@@ -1717,6 +1718,7 @@ func testOCILayoutSource(t *testing.T, sb integration.Sandbox) {
 }
 
 func testOCILayoutPlatformSource(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "oci exporter")
 	requiresLinux(t)
 	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
@@ -6086,6 +6088,7 @@ func testPullWithLayerLimit(t *testing.T, sb integration.Sandbox) {
 }
 
 func testCallInfo(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "not implemented")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -6094,6 +6097,7 @@ func testCallInfo(t *testing.T, sb integration.Sandbox) {
 }
 
 func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "oci exporter")
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
