@@ -630,7 +630,7 @@ buildctl \
 
 `buildctl build` can be called against randomly load balanced the `buildkitd` daemon.
 
-See also [Consistent hashing](#consistenthashing) for client-side load balancing.
+See also [Consistent hashing](#consistent-hashing) for client-side load balancing.
 
 ## Containerizing BuildKit
 
