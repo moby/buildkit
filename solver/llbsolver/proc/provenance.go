@@ -53,7 +53,7 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 
 		var mode string
 		if v, ok := attrs["mode"]; ok {
-			switch mode {
+			switch v {
 			case "disabled", "none":
 				return res, nil
 			case "full":
@@ -97,6 +97,10 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 					param[k] = v
 				}
 				pr.Invocation.Parameters = param
+			} else {
+				if err := provenance.AddBuildConfig(ctx, pr, res.Refs[p.ID]); err != nil {
+					return nil, err
+				}
 			}
 
 			res.AddAttestation(p.ID, result.Attestation{

@@ -1,4 +1,4 @@
-package proc
+package provenance
 
 import (
 	"encoding/hex"
@@ -7,7 +7,7 @@ import (
 	distreference "github.com/docker/distribution/reference"
 	slsa "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
-	"github.com/opencontainers/go-digest"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
 
@@ -16,6 +16,7 @@ var BuildKitBuildType = "https://mobyproject.org/buildkit@v1"
 type ProvenancePredicate struct {
 	slsa.ProvenancePredicate
 	Metadata *ProvenanceMetadata `json:"metadata,omitempty"`
+	Source   *Source             `json:"buildSource,omitempty"`
 }
 
 type ProvenanceMetadata struct {
