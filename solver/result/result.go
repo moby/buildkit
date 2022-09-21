@@ -39,23 +39,16 @@ func (r *Result[T]) AddRef(k string, ref T) {
 	r.mu.Unlock()
 }
 
-func (r *Result[T]) AddAttestation(k string, v Attestation, refs map[string]T) {
+func (r *Result[T]) AddAttestation(k string, v Attestation, ref T) {
 	r.mu.Lock()
 	if r.Attestations == nil {
 		r.Attestations = map[string][]Attestation{}
 	}
-
-	// if the attestation refs aren't already internal, then insert them
-	switch v := v.(type) {
-	case *InTotoAttestation:
-		if !strings.HasPrefix(v.PredicateRefKey, attestationRefPrefix) {
-			internalKey := attestationRefPrefix + identity.NewID()
-			r.Refs[internalKey] = refs[v.PredicateRefKey]
-			v.PredicateRefKey = internalKey
-		}
+	if !strings.HasPrefix(v.Ref, attestationRefPrefix) {
+		v.Ref = "attestation:" + identity.NewID()
+		r.Refs[v.Ref] = ref
 	}
 	r.Attestations[k] = append(r.Attestations[k], v)
-
 	r.mu.Unlock()
 }
 

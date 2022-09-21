@@ -19,6 +19,7 @@ import (
 	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
+	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
@@ -104,7 +105,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		attestCount += len(attests)
 	}
 	if count := attestCount + len(p.Platforms); count != len(inp.Refs) {
-		return nil, errors.Errorf("number of required refs does not match references %d %d", count, len(inp.Refs))
+		return nil, errors.Errorf("number of required refs (%d) does not match number of references (%d)", count, len(inp.Refs))
 	}
 
 	if attestCount > 0 {
@@ -264,11 +265,11 @@ func (ic *ImageWriter) extractAttestations(ctx context.Context, s session.Group,
 	for i, att := range attestations {
 		i, att := i, att
 		eg.Go(func() error {
-			switch att := att.(type) {
-			case *result.InTotoAttestation:
-				ref, ok := refs[att.PredicateRefKey]
+			switch att.Kind {
+			case gatewaypb.AttestationKindInToto:
+				ref, ok := refs[att.Ref]
 				if !ok {
-					return errors.Errorf("key %s not found in refs map", att.PredicateRefKey)
+					return errors.Errorf("key %s not found in refs map", att.Ref)
 				}
 
 				mount, err := ref.Mount(ctx, true, s)
@@ -282,7 +283,7 @@ func (ic *ImageWriter) extractAttestations(ctx context.Context, s session.Group,
 					return err
 				}
 				defer lm.Unmount()
-				predicate, err := os.ReadFile(path.Join(src, att.PredicatePath))
+				predicate, err := os.ReadFile(path.Join(src, att.Path))
 				if err != nil {
 					return err
 				}
@@ -292,24 +293,30 @@ func (ic *ImageWriter) extractAttestations(ctx context.Context, s session.Group,
 				statements[i] = intoto.Statement{
 					StatementHeader: intoto.StatementHeader{
 						Type:          intoto.StatementInTotoV01,
-						PredicateType: att.PredicateType,
+						PredicateType: att.InToto.PredicateType,
 					},
 					Predicate: json.RawMessage(predicate),
 				}
-				for _, subject := range att.Subjects {
-					switch subject2 := subject.(type) {
-					case *result.InTotoSubjectSelf:
-						statements[i].Subject = append(statements[i].Subject, intoto.Subject{
-							Name:   "_",
-							Digest: result.DigestToDigestMap(desc.Digest),
-						})
-					case *result.InTotoSubjectRaw:
-						statements[i].Subject = append(statements[i].Subject, intoto.Subject{
-							Name:   subject2.Name,
-							Digest: subject2.DigestMap(),
-						})
+
+				if len(att.InToto.Subjects) == 0 {
+					att.InToto.Subjects = []result.InTotoSubject{{
+						Kind: gatewaypb.InTotoSubjectKindSelf,
+					}}
+				}
+
+				statements[i].Subject = make([]intoto.Subject, len(att.InToto.Subjects))
+				for j, subject := range att.InToto.Subjects {
+					statements[i].Subject[j].Name = "_"
+					if subject.Name != "" {
+						statements[i].Subject[j].Name = subject.Name
+					}
+					switch subject.Kind {
+					case gatewaypb.InTotoSubjectKindSelf:
+						statements[i].Subject[j].Digest = result.DigestMap(desc.Digest)
+					case gatewaypb.InTotoSubjectKindRaw:
+						statements[i].Subject[j].Digest = result.DigestMap(subject.Digest...)
 					default:
-						return errors.Errorf("unknown attestation subject type %T", subject)
+						return errors.Errorf("unknown attestation subject kind %q", subject.Kind)
 					}
 				}
 			}

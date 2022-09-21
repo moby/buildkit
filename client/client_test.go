@@ -38,6 +38,7 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
+	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/secrets/secretsprovider"
@@ -173,6 +174,7 @@ func TestIntegration(t *testing.T) {
 		testExportAnnotations,
 		testExportAnnotationsMediaTypes,
 		testExportAttestations,
+		testAttestationDefaultSubject,
 	)
 	tests = append(tests, diffOpTestCases()...)
 	integration.Run(t, tests, mirrors)
@@ -6492,25 +6494,28 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 			if err != nil {
 				return nil, err
 			}
-			res.AddAttestation(pk, &result.InTotoAttestation{
-				PredicateRefKey: "foo",
-				PredicatePath:   "/attestation.json",
-				PredicateType:   "https://example.com/attestations/v1.0",
-				Subjects: []result.InTotoSubject{
-					&result.InTotoSubjectSelf{},
+			res.AddAttestation(pk, result.Attestation{
+				Kind: gatewaypb.AttestationKindInToto,
+				Path: "/attestation.json",
+				InToto: result.InTotoAttestation{
+					PredicateType: "https://example.com/attestations/v1.0",
+					Subjects: []result.InTotoSubject{{
+						Kind: gatewaypb.InTotoSubjectKindSelf,
+					}},
 				},
-			}, map[string]gateway.Reference{"foo": refAttest})
-			res.AddAttestation(pk, &result.InTotoAttestation{
-				PredicateRefKey: "bar",
-				PredicatePath:   "/attestation2.json",
-				PredicateType:   "https://example.com/attestations2/v1.0",
-				Subjects: []result.InTotoSubject{
-					&result.InTotoSubjectRaw{
+			}, refAttest)
+			res.AddAttestation(pk, result.Attestation{
+				Kind: gatewaypb.AttestationKindInToto,
+				Path: "/attestation2.json",
+				InToto: result.InTotoAttestation{
+					PredicateType: "https://example.com/attestations2/v1.0",
+					Subjects: []result.InTotoSubject{{
+						Kind:   gatewaypb.InTotoSubjectKindRaw,
 						Name:   "/attestation.json",
 						Digest: []digest.Digest{successDigest},
-					},
+					}},
 				},
-			}, map[string]gateway.Reference{"bar": refAttest})
+			}, refAttest)
 		}
 
 		dt, err := json.Marshal(expPlatforms)
@@ -6608,6 +6613,138 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	checkAllReleasable(t, c, sb, true)
+}
+
+func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+
+	ps := []ocispecs.Platform{
+		platforms.MustParse("linux/amd64"),
+	}
+
+	success := []byte(`{"success": true}`)
+
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		res := gateway.NewResult()
+		expPlatforms := &exptypes.Platforms{}
+
+		for _, p := range ps {
+			pk := platforms.Format(p)
+			expPlatforms.Platforms = append(expPlatforms.Platforms, exptypes.Platform{ID: pk, Platform: p})
+
+			// build image
+			st := llb.Scratch().File(
+				llb.Mkfile("/greeting", 0600, []byte(fmt.Sprintf("hello %s!", pk))),
+			)
+			def, err := st.Marshal(ctx)
+			if err != nil {
+				return nil, err
+			}
+			r, err := c.Solve(ctx, gateway.SolveRequest{
+				Definition: def.ToPB(),
+			})
+			if err != nil {
+				return nil, err
+			}
+			ref, err := r.SingleRef()
+			if err != nil {
+				return nil, err
+			}
+			_, err = ref.ToState()
+			if err != nil {
+				return nil, err
+			}
+			res.AddRef(pk, ref)
+
+			// build attestations
+			st = llb.Scratch().File(llb.Mkfile("/attestation.json", 0600, success))
+			def, err = st.Marshal(ctx)
+			if err != nil {
+				return nil, err
+			}
+			r, err = c.Solve(ctx, gateway.SolveRequest{
+				Definition: def.ToPB(),
+			})
+			if err != nil {
+				return nil, err
+			}
+			refAttest, err := r.SingleRef()
+			if err != nil {
+				return nil, err
+			}
+			_, err = ref.ToState()
+			if err != nil {
+				return nil, err
+			}
+			res.AddAttestation(pk, result.Attestation{
+				Kind: gatewaypb.AttestationKindInToto,
+				Path: "/attestation.json",
+				InToto: result.InTotoAttestation{
+					PredicateType: "https://example.com/attestations/v1.0",
+				},
+			}, refAttest)
+		}
+
+		dt, err := json.Marshal(expPlatforms)
+		if err != nil {
+			return nil, err
+		}
+		res.AddMeta(exptypes.ExporterPlatformsKey, dt)
+
+		return res, nil
+	}
+
+	target := registry + "/buildkit/testattestationsemptysubject:latest"
+	_, err = c.Build(sb.Context(), SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, "", frontend, nil)
+	require.NoError(t, err)
+
+	desc, provider, err := contentutil.ProviderFromRef(target)
+	require.NoError(t, err)
+
+	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+	require.Equal(t, len(ps)*2, len(imgs.Images))
+
+	var bases []*testutil.ImageInfo
+	for _, p := range ps {
+		pk := platforms.Format(p)
+		bases = append(bases, imgs.Find(pk))
+	}
+
+	atts := imgs.Filter("unknown/unknown")
+	require.Equal(t, len(ps), len(atts.Images))
+	for i, att := range atts.Images {
+		var attest intoto.Statement
+		require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
+
+		require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+		require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
+		require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
+		subjects := []intoto.Subject{{
+			Name: "_",
+			Digest: map[string]string{
+				"sha256": bases[i].Desc.Digest.Encoded(),
+			},
+		}}
+		require.Equal(t, subjects, attest.Subject)
+	}
 }
 
 func makeSSHAgentSock(t *testing.T, agent agent.Agent) (p string, err error) {

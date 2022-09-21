@@ -709,7 +709,7 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 		pbRes.Attestations = map[string]*pb.Attestations{}
 		for k, atts := range res.Attestations {
 			for _, att := range atts {
-				pbAtt, err := pb.ToAttestationPB(att)
+				pbAtt, err := gwclient.AttestationToPB(&att)
 				if err != nil {
 					return nil, err
 				}
@@ -916,11 +916,11 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 	if in.Result.Attestations != nil {
 		for k, pbAtts := range in.Result.Attestations {
 			for _, pbAtt := range pbAtts.Attestation {
-				att, err := pb.FromAttestationPB(pbAtt)
+				att, err := gwclient.AttestationFromPB(pbAtt)
 				if err != nil {
 					return nil, err
 				}
-				r.AddAttestation(k, att, nil)
+				r.AddAttestation(k, *att, nil)
 			}
 		}
 	}
