@@ -118,7 +118,7 @@ func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt llb.Re
 		}
 		storeID := parsed.Hostname()
 
-		rslvr = getOCILayoutResolver(storeID, sm, opt.SessionID, g)
+		rslvr = getOCILayoutResolver(storeID, sm, "", g)
 	}
 	key += rm.String()
 	res, err := is.g.Do(ctx, key, func(ctx context.Context) (interface{}, error) {

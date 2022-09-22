@@ -170,6 +170,7 @@ Currently, the following high-level languages has been implemented for LLB:
 -   [Nix](https://github.com/AkihiroSuda/buildkit-nix)
 -   [mopy (Python)](https://github.com/cmdjulian/mopy)
 -   [envd (starlark)](https://github.com/tensorchord/envd/)
+-   [Blubber](https://gitlab.wikimedia.org/repos/releng/blubber)
 -   (open a PR to add your own language)
 
 ### Exploring Dockerfiles
@@ -197,6 +198,7 @@ buildctl build \
 `--local` exposes local source files from client to the builder. `context` and `dockerfile` are the names Dockerfile frontend looks for build context and Dockerfile location.
 
 More detail uses of the `--opt` parameter can be found in this [doc](docs/dockerfile-frontend-options.md).
+If the Dockerfile has a different filename it can be specified with `--opt filename=./Dockerfile-alternative`.
 
 #### Building a Dockerfile using external frontend
 
@@ -632,7 +634,7 @@ buildctl \
 
 `buildctl build` can be called against randomly load balanced the `buildkitd` daemon.
 
-See also [Consistent hashing](#consistenthashing) for client-side load balancing.
+See also [Consistent hashing](#consistent-hashing) for client-side load balancing.
 
 ## Containerizing BuildKit
 
