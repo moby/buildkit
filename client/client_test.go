@@ -50,6 +50,7 @@ import (
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/entitlements"
+	"github.com/moby/buildkit/util/store"
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/echoserver"
 	"github.com/moby/buildkit/util/testutil/httpserver"
@@ -1647,7 +1648,9 @@ func testOCILayoutSource(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	outW := bytes.NewBuffer(nil)
-	attrs := map[string]string{}
+	attrs := map[string]string{
+		"name": "testing:v123",
+	}
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
 			{
@@ -1682,7 +1685,7 @@ func testOCILayoutSource(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, 1, len(index.Manifests))
 	digest := index.Manifests[0].Digest
 
-	store, err := local.NewStore(dir)
+	store, err := store.NewIndexedStore(dir)
 	require.NoError(t, err)
 
 	// reference the OCI Layout in a build
@@ -1690,33 +1693,43 @@ func testOCILayoutSource(t *testing.T, sb integration.Sandbox) {
 	// since we are doing just one build with one remote here, we can give it any old ID,
 	// even something really imaginative, like "one"
 	csID := "one"
-	st = llb.OCILayout(csID + "/image@" + digest.String())
+	suffixes := []string{
+		"/*@" + digest.String(),
+		"/*:v123",
+		"/*:v123@" + digest.String(),
+		"/docker.io/library/testing:v123",
+		"/docker.io/library/testing:v123@" + digest.String(),
+	}
 
-	def, err = st.Marshal(context.TODO())
-	require.NoError(t, err)
+	for _, suffix := range suffixes {
+		st = llb.OCILayout(csID + suffix)
 
-	destDir := t.TempDir()
+		def, err = st.Marshal(context.TODO())
+		require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
-			{
-				Type:      ExporterLocal,
-				OutputDir: destDir,
+		destDir := t.TempDir()
+
+		_, err = c.Solve(context.TODO(), def, SolveOpt{
+			Exports: []ExportEntry{
+				{
+					Type:      ExporterLocal,
+					OutputDir: destDir,
+				},
 			},
-		},
-		OCIStores: map[string]content.Store{
-			csID: store,
-		},
-	}, nil)
-	require.NoError(t, err)
+			OCIStores: map[string]content.Store{
+				csID: store,
+			},
+		}, nil)
+		require.NoError(t, err)
 
-	dt, err := os.ReadFile(filepath.Join(destDir, "foo"))
-	require.NoError(t, err)
-	require.Equal(t, []byte("first"), dt)
+		dt, err := os.ReadFile(filepath.Join(destDir, "foo"))
+		require.NoError(t, err)
+		require.Equal(t, []byte("first"), dt)
 
-	dt, err = os.ReadFile(filepath.Join(destDir, "bar"))
-	require.NoError(t, err)
-	require.Equal(t, []byte("second"), dt)
+		dt, err = os.ReadFile(filepath.Join(destDir, "bar"))
+		require.NoError(t, err)
+		require.Equal(t, []byte("second"), dt)
+	}
 }
 
 func testOCILayoutPlatformSource(t *testing.T, sb integration.Sandbox) {
@@ -1804,9 +1817,6 @@ func testOCILayoutPlatformSource(t *testing.T, sb integration.Sandbox) {
 		} else {
 			err = os.WriteFile(fullFilename, tarItem.Data, 0644)
 			require.NoError(t, err)
-			if json.Valid(tarItem.Data) {
-				fmt.Println(fullFilename, string(tarItem.Data))
-			}
 		}
 	}
 
@@ -1833,7 +1843,7 @@ func testOCILayoutPlatformSource(t *testing.T, sb integration.Sandbox) {
 			Platforms: make([]exptypes.Platform, len(platformsToTest)),
 		}
 		for i, platform := range platformsToTest {
-			st := llb.OCILayout(csID + "/image@" + digest.String())
+			st := llb.OCILayout(csID + "/*@" + digest.String())
 
 			def, err := st.Marshal(ctx, llb.Platform(platforms.MustParse(platform)))
 			if err != nil {

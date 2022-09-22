@@ -38,6 +38,7 @@ import (
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/contentutil"
+	"github.com/moby/buildkit/util/store"
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
@@ -5451,7 +5452,10 @@ func testNamedOCILayoutContext(t *testing.T, sb integration.Sandbox) {
 		},
 		Exports: []client.ExportEntry{
 			{
-				Type:   client.ExporterOCI,
+				Type: client.ExporterOCI,
+				Attrs: map[string]string{
+					"name": "testing:v123",
+				},
 				Output: fixedWriteCloser(nopWriteCloser{outW}),
 			},
 		},
@@ -5481,7 +5485,7 @@ func testNamedOCILayoutContext(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, 1, len(index.Manifests))
 	digest := index.Manifests[0].Digest.Hex()
 
-	store, err := local.NewStore(ocidir)
+	store, err := store.NewIndexedStore(ocidir)
 	ociID := "ocione"
 	require.NoError(t, err)
 
@@ -5496,12 +5500,16 @@ func testNamedOCILayoutContext(t *testing.T, sb integration.Sandbox) {
 FROM busybox AS base
 RUN cat /etc/alpine-release > out
 
-FROM foo AS imported
+FROM foo AS imported1
 RUN echo -n $foo > outfoo
+
+FROM bar AS imported2
+RUN echo -n $foo > outbar
 
 FROM scratch
 COPY --from=base /test/o* /
-COPY --from=imported /test/outfoo /
+COPY --from=imported1 /test/outfoo /
+COPY --from=imported2 /test/outbar /
 `)
 
 	dir, err := integration.Tmpdir(
@@ -5514,8 +5522,9 @@ COPY --from=imported /test/outfoo /
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
-			"context:base": fmt.Sprintf("oci-layout:%s@sha256:%s", ociID, digest),
-			"context:foo":  fmt.Sprintf("oci-layout:%s@sha256:%s", ociID, digest),
+			"context:base": fmt.Sprintf("oci-layout://%s@sha256:%s", ociID, digest),
+			"context:foo":  fmt.Sprintf("oci-layout://%s@sha256:%s", ociID, digest),
+			"context:bar":  fmt.Sprintf("oci-layout://%s/testing:v123", ociID),
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -5544,6 +5553,11 @@ COPY --from=imported /test/outfoo /
 	require.Equal(t, []byte("second"), dt)
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "outfoo"))
+	require.NoError(t, err)
+	require.True(t, len(dt) > 0)
+	require.Equal(t, []byte("bar"), dt)
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "outbar"))
 	require.NoError(t, err)
 	require.True(t, len(dt) > 0)
 	require.Equal(t, []byte("bar"), dt)
