@@ -170,6 +170,7 @@ Currently, the following high-level languages has been implemented for LLB:
 -   [Nix](https://github.com/AkihiroSuda/buildkit-nix)
 -   [mopy (Python)](https://github.com/cmdjulian/mopy)
 -   [envd (starlark)](https://github.com/tensorchord/envd/)
+-   [Blubber](https://gitlab.wikimedia.org/repos/releng/blubber)
 -   (open a PR to add your own language)
 
 ### Exploring Dockerfiles
