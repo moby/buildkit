@@ -197,9 +197,9 @@ buildctl build \
 
 `--local` exposes local source files from client to the builder. `context` and `dockerfile` are the names Dockerfile frontend looks for build context and Dockerfile location.
 
-More detail uses of the `--opt` parameter can be found in this [doc](docs/dockerfile-frontend-options.md).
 If the Dockerfile has a different filename it can be specified with `--opt filename=./Dockerfile-alternative`.
 
+More detail uses of the `--opt` parameter can be found in this [doc](docs/dockerfile-frontend-options.md).
 #### Building a Dockerfile using external frontend
 
 External versions of the Dockerfile frontend are pushed to https://hub.docker.com/r/docker/dockerfile-upstream and https://hub.docker.com/r/docker/dockerfile and can be used with the gateway frontend. The source for the external frontend is currently located in `./frontend/dockerfile/cmd/dockerfile-frontend` but will move out of this repository in the future ([#163](https://github.com/moby/buildkit/issues/163)). For automatic build from master branch of this repository `docker/dockerfile-upstream:master` or `docker/dockerfile-upstream:master-labs` image can be used.
