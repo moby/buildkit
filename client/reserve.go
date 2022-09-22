@@ -10,7 +10,7 @@ import (
 func (c *Client) Reserve(ctx context.Context) error {
 	_, err := c.controlClient().Reserve(ctx, &controlapi.ReserveRequest{})
 	if err != nil {
-		return errors.Wrap(err, "failed to call reserve")
+		return errors.WithStack(err)
 	}
 	return nil
 }
