@@ -6,7 +6,7 @@ including, but not limited to: [SBOMs](https://en.wikipedia.org/wiki/Software_su
 [SLSA Provenance](https://slsa.dev/provenance), build logs, etc.
 
 This document describes the current custom format used to store attestations,
-which designed to be compatible with current registry implementations today.
+which is designed to be compatible with current registry implementations today.
 In the future, we may support exporting attestations in additional formats.
 
 Attestations are stored as manifest objects in the image index, similar in
@@ -115,7 +115,9 @@ manifest descriptor descriptor:
 
 *Example showing an SBOM attestation attached to a `linux/amd64` image*
 
-Image index (`sha256:94acc2ca70c40f3f6291681f37ce9c767e3d251ce01c7e4e9b98ccf148c26260`):
+#### Image index (`sha256:94acc2ca70c40f3f6291681f37ce9c767e3d251ce01c7e4e9b98ccf148c26260`):
+
+This image index defines two descriptors: an AMD64 image `sha256:23678f31..` and an attestation manifest `sha256:02cb9aa7..` for that image.
 
 ```json
 {
@@ -148,7 +150,9 @@ Image index (`sha256:94acc2ca70c40f3f6291681f37ce9c767e3d251ce01c7e4e9b98ccf148c
 }
 ```
 
-Attestation manifest (`sha256:02cb9aa7600e73fcf41ee9f0f19cc03122b2d8be43d41ce4b21335118f5dd943`):
+#### Attestation manifest (`sha256:02cb9aa7600e73fcf41ee9f0f19cc03122b2d8be43d41ce4b21335118f5dd943`):
+
+This attestation manifest contains one attestation that is an in-toto attestation that contains a "https://spdx.dev/Document" predicate, signifying that it is defining a SBOM for the image.
 
 ```json
 {
@@ -172,7 +176,7 @@ Attestation manifest (`sha256:02cb9aa7600e73fcf41ee9f0f19cc03122b2d8be43d41ce4b2
 }
 ```
 
-Image config (`sha256:1ea07d5e55eb47ad0e6bbfa2ec180fb580974411e623814e519064c88f022f5c`):
+#### Image config (`sha256:a781560066f20ec9c28f2115a95a886e5e71c7c7aa9d8fd680678498b82f3ea3`):
 
 ```json
 {
@@ -188,7 +192,9 @@ Image config (`sha256:1ea07d5e55eb47ad0e6bbfa2ec180fb580974411e623814e519064c88f
 }
 ```
 
-Layer content (`sha256:1ea07d5e55eb47ad0e6bbfa2ec180fb580974411e623814e519064c88f022f5c`):
+#### Layer content (`sha256:1ea07d5e55eb47ad0e6bbfa2ec180fb580974411e623814e519064c88f022f5c`):
+
+Attestation body containing the SBOM data listing the packages used during the build in SPDX format.
 
 ```json
 {
