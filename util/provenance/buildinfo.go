@@ -8,6 +8,7 @@ import (
 	slsa "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	digest "github.com/opencontainers/go-digest"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
@@ -15,8 +16,9 @@ var BuildKitBuildType = "https://mobyproject.org/buildkit@v1"
 
 type ProvenancePredicate struct {
 	slsa.ProvenancePredicate
-	Metadata *ProvenanceMetadata `json:"metadata,omitempty"`
-	Source   *Source             `json:"buildSource,omitempty"`
+	Metadata *ProvenanceMetadata                `json:"metadata,omitempty"`
+	Source   *Source                            `json:"buildSource,omitempty"`
+	Layers   map[string][][]ocispecs.Descriptor `json:"buildLayers,omitempty"`
 }
 
 type ProvenanceMetadata struct {

@@ -31,11 +31,11 @@ type SourceInfo struct {
 	Definition []BuildStep `json:"llbDefinition,omitempty"`
 }
 
-func AddBuildConfig(ctx context.Context, p *ProvenancePredicate, rp solver.ResultProxy) error {
+func AddBuildConfig(ctx context.Context, p *ProvenancePredicate, rp solver.ResultProxy) (map[digest.Digest]int, error) {
 	def := rp.Definition()
 	steps, indexes, err := toBuildSteps(def)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	bc := &BuildConfig{
@@ -49,7 +49,7 @@ func AddBuildConfig(ctx context.Context, p *ProvenancePredicate, rp solver.Resul
 		for i, si := range def.Source.Infos {
 			steps, _, err := toBuildSteps(si.Definition)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			s := SourceInfo{
 				Filename:   si.Filename,
@@ -70,12 +70,13 @@ func AddBuildConfig(ctx context.Context, p *ProvenancePredicate, rp solver.Resul
 			}
 
 			p.Source = &Source{
-				Infos: sis,
+				Infos:     sis,
+				Locations: locs,
 			}
 		}
 	}
 
-	return nil
+	return indexes, nil
 }
 
 func toBuildSteps(def *pb.Definition) ([]BuildStep, map[digest.Digest]int, error) {

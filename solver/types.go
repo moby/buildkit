@@ -104,6 +104,8 @@ type CacheExportOpt struct {
 	// CompressionOpt is an option to specify the compression of the object to load.
 	// If specified, all objects that meet the option will be cached.
 	CompressionOpt *compression.Config
+	// ExportRoots defines if records for root vertexes should be exported.
+	ExportRoots bool
 }
 
 // CacheExporter can export the artifacts of the build chain
@@ -120,7 +122,7 @@ type CacheExporterTarget interface {
 
 // CacheExporterRecord is a single object being exported
 type CacheExporterRecord interface {
-	AddResult(createdAt time.Time, result *Remote)
+	AddResult(vtx digest.Digest, index int, createdAt time.Time, result *Remote)
 	LinkFrom(src CacheExporterRecord, index int, selector string)
 }
 

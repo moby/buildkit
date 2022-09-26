@@ -519,7 +519,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *Ima
 	}
 
 	for i, desc := range remote.Descriptors {
-		removeInternalLayerAnnotations(&desc, opts.OCITypes)
+		RemoveInternalLayerAnnotations(&desc, opts.OCITypes)
 		mfst.Layers = append(mfst.Layers, desc)
 		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i+1)] = desc.Digest.String()
 	}
@@ -631,7 +631,7 @@ func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *Ima
 		"containerd.io/gc.ref.content.0": configDigest.String(),
 	}
 	for i, desc := range layers {
-		removeInternalLayerAnnotations(&desc, opts.OCITypes)
+		RemoveInternalLayerAnnotations(&desc, opts.OCITypes)
 		mfst.Layers = append(mfst.Layers, desc)
 		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i+1)] = desc.Digest.String()
 	}
@@ -889,7 +889,7 @@ func normalizeLayersAndHistory(ctx context.Context, remote *solver.Remote, histo
 	return remote, history
 }
 
-func removeInternalLayerAnnotations(desc *ocispecs.Descriptor, oci bool) {
+func RemoveInternalLayerAnnotations(desc *ocispecs.Descriptor, oci bool) {
 	if oci {
 		// oci supports annotations but don't export internal annotations
 		delete(desc.Annotations, "containerd.io/uncompressed")

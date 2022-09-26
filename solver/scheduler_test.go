@@ -3844,7 +3844,7 @@ type testExporterRecord struct {
 	linkMap map[digest.Digest]struct{}
 }
 
-func (r *testExporterRecord) AddResult(createdAt time.Time, result *Remote) {
+func (r *testExporterRecord) AddResult(_ digest.Digest, _ int, createdAt time.Time, result *Remote) {
 	r.results++
 }
 
