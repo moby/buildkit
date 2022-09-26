@@ -117,6 +117,7 @@ var allTests = integration.TestFuncs(
 	testNamedImageContext,
 	testNamedImageContextPlatform,
 	testNamedImageContextTimestamps,
+	testNamedImageContextScratch,
 	testNamedLocalContext,
 	testNamedOCILayoutContext,
 	testNamedOCILayoutContextExport,
@@ -5348,6 +5349,57 @@ RUN echo foo >> /test
 	diff := imgDerived.Img.Created.Sub(*img.Img.Created)
 	require.Greater(t, diff, time.Duration(0))
 	require.Less(t, diff, 10*time.Minute)
+}
+
+func testNamedImageContextScratch(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dockerfile := []byte(`
+FROM busybox
+COPY <<EOF /out
+hello world!
+EOF
+`)
+
+	dir, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	f := getFrontend(t, sb)
+
+	destDir := t.TempDir()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"context:busybox": "docker-image://scratch",
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	items, err := os.ReadDir(destDir)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(items))
+	require.Equal(t, "out", items[0].Name())
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
+	require.NoError(t, err)
+	require.Equal(t, "hello world!\n", string(dt))
 }
 
 func testNamedLocalContext(t *testing.T, sb integration.Sandbox) {
