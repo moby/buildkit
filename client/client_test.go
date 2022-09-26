@@ -50,6 +50,7 @@ import (
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/entitlements"
+	"github.com/moby/buildkit/util/purl"
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/echoserver"
 	"github.com/moby/buildkit/util/testutil/httpserver"
@@ -6527,13 +6528,16 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 		return res, nil
 	}
 
-	target := registry + "/buildkit/testattestations:latest"
+	targets := []string{
+		registry + "/buildkit/testattestationsfoo:latest",
+		registry + "/buildkit/testattestationsbar:latest",
+	}
 	_, err = c.Build(sb.Context(), SolveOpt{
 		Exports: []ExportEntry{
 			{
 				Type: ExporterImage,
 				Attrs: map[string]string{
-					"name": target,
+					"name": strings.Join(targets, ","),
 					"push": "true",
 				},
 			},
@@ -6541,7 +6545,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 	}, "", frontend, nil)
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(targets[0])
 	require.NoError(t, err)
 
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
@@ -6574,15 +6578,29 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 		var attest intoto.Statement
 		require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 
+		purls := map[string]string{}
+		for _, k := range targets {
+			p, _ := purl.RefToPURL(k, &ps[i])
+			purls[k] = p
+		}
+
 		require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 		require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
 		require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
-		subjects := []intoto.Subject{{
-			Name: "_",
-			Digest: map[string]string{
-				"sha256": bases[i].Desc.Digest.Encoded(),
+		subjects := []intoto.Subject{
+			{
+				Name: purls[targets[0]],
+				Digest: map[string]string{
+					"sha256": bases[i].Desc.Digest.Encoded(),
+				},
 			},
-		}}
+			{
+				Name: purls[targets[1]],
+				Digest: map[string]string{
+					"sha256": bases[i].Desc.Digest.Encoded(),
+				},
+			},
+		}
 		require.Equal(t, subjects, attest.Subject)
 
 		var attest2 intoto.Statement
@@ -6609,9 +6627,10 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 	defer client.Close()
 	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
 
-	err = client.ImageService().Delete(ctx, target, images.SynchronousDelete())
-	require.NoError(t, err)
-
+	for _, target := range targets {
+		err = client.ImageService().Delete(ctx, target, images.SynchronousDelete())
+		require.NoError(t, err)
+	}
 	checkAllReleasable(t, c, sb, true)
 }
 
@@ -6737,8 +6756,11 @@ func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
 		require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 		require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
 		require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
+
+		name, _ := purl.RefToPURL(target, &ps[0])
+
 		subjects := []intoto.Subject{{
-			Name: "_",
+			Name: name,
 			Digest: map[string]string{
 				"sha256": bases[i].Desc.Digest.Encoded(),
 			},
