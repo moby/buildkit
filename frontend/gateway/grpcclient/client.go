@@ -1054,6 +1054,15 @@ func (r *reference) ToState() (st llb.State, err error) {
 	return llb.NewState(defop), nil
 }
 
+func (r *reference) Evaluate(ctx context.Context) error {
+	req := &pb.EvaluateRequest{Ref: r.id}
+	_, err := r.c.client.Evaluate(ctx, req)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r *reference) ReadFile(ctx context.Context, req client.ReadRequest) ([]byte, error) {
 	rfr := &pb.ReadFileRequest{FilePath: req.Filename, Ref: r.id}
 	if r := req.Range; r != nil {

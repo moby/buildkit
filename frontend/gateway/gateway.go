@@ -852,6 +852,16 @@ func (lbf *llbBridgeForwarder) StatFile(ctx context.Context, req *pb.StatFileReq
 	return &pb.StatFileResponse{Stat: st}, nil
 }
 
+func (lbf *llbBridgeForwarder) Evaluate(ctx context.Context, req *pb.EvaluateRequest) (*pb.EvaluateResponse, error) {
+	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
+
+	_, err := lbf.getImmutableRef(ctx, req.Ref, "/")
+	if err != nil {
+		return nil, err
+	}
+	return &pb.EvaluateResponse{}, nil
+}
+
 func (lbf *llbBridgeForwarder) Ping(context.Context, *pb.PingRequest) (*pb.PongResponse, error) {
 	workers := lbf.workers.WorkerInfos()
 	pbWorkers := make([]*apitypes.WorkerRecord, 0, len(workers))

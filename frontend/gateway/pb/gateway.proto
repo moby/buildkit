@@ -25,6 +25,8 @@ service LLBBridge {
 	rpc ReadDir(ReadDirRequest) returns (ReadDirResponse);
 	// apicaps:CapStatFile
 	rpc StatFile(StatFileRequest) returns (StatFileResponse);
+	// apicaps:CapGatewayEvaluate
+	rpc Evaluate(EvaluateRequest) returns (EvaluateResponse);
 	rpc Ping(PingRequest) returns (PongResponse);
 	rpc Return(ReturnRequest) returns (ReturnResponse);
 	// apicaps:CapFrontendInputs
@@ -193,6 +195,13 @@ message StatFileRequest {
 
 message StatFileResponse {
 	fsutil.types.Stat stat = 1;
+}
+
+message EvaluateRequest {
+	string Ref = 1;
+}
+
+message EvaluateResponse {
 }
 
 message PingRequest{

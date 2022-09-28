@@ -318,6 +318,14 @@ func (r *ref) ToState() (st llb.State, err error) {
 	return llb.NewState(defop), nil
 }
 
+func (r *ref) Evaluate(ctx context.Context) error {
+	_, err := r.resultProxy.Result(ctx)
+	if err != nil {
+		return r.c.wrapSolveError(err)
+	}
+	return nil
+}
+
 func (r *ref) ReadFile(ctx context.Context, req client.ReadRequest) ([]byte, error) {
 	m, err := r.getMountable(ctx)
 	if err != nil {

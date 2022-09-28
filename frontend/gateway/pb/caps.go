@@ -56,6 +56,8 @@ const (
 	// errors.
 	CapGatewayEvaluateSolve apicaps.CapID = "gateway.solve.evaluate"
 
+	CapGatewayEvaluate apicaps.CapID = "gateway.evaluate"
+
 	// CapGatewayWarnings is the capability to log warnings from frontend
 	CapGatewayWarnings apicaps.CapID = "gateway.warnings"
 
@@ -194,6 +196,13 @@ func init() {
 	Caps.Init(apicaps.Cap{
 		ID:      CapGatewayEvaluateSolve,
 		Name:    "gateway evaluate solve",
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapGatewayEvaluate,
+		Name:    "gateway evaluate",
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})
