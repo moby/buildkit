@@ -12,6 +12,7 @@ import (
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/mount"
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/overlay"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -24,7 +25,7 @@ var emptyDesc = ocispecs.Descriptor{}
 // diff between lower and upper snapshot. If the passed mounts cannot
 // be computed (e.g. because the mounts aren't overlayfs), it returns
 // an error.
-func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper []mount.Mount, mediaType string, ref string, compressorFunc compressor) (_ ocispecs.Descriptor, ok bool, err error) {
+func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper []mount.Mount, mediaType string, ref string, compressorFunc compression.Compressor) (_ ocispecs.Descriptor, ok bool, err error) {
 	// Get upperdir location if mounts are overlayfs that can be processed by this differ.
 	upperdir, err := overlay.GetUpperdir(lower, upper)
 	if err != nil {

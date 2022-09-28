@@ -3,8 +3,11 @@ package compression
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
+	"sync"
 
+	cdcompression "github.com/containerd/containerd/archive/compression"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/stargz-snapshotter/estargz"
@@ -14,24 +17,41 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// Type represents compression type for blob data.
-type Type int
+type Compressor func(dest io.Writer, mediaType string) (io.WriteCloser, error)
+type Decompressor func(ctx context.Context, cs content.Store, desc ocispecs.Descriptor) (io.ReadCloser, error)
+type Finalizer func(context.Context, content.Store) (map[string]string, error)
 
-const (
+// Type represents compression type for blob data, which needs
+// to be implemented for each compression type.
+type Type interface {
+	Compress(comp Config) (compressorFunc Compressor, finalize Finalizer)
+	Decompress(ctx context.Context, cs content.Store, desc ocispecs.Descriptor) (io.ReadCloser, error)
+	NeedsConversion(ctx context.Context, cs content.Store, desc ocispecs.Descriptor) (bool, error)
+	NeedsComputeDiffBySelf() bool
+	OnlySupportOCITypes() bool
+	MediaType() string
+	String() string
+}
+
+type (
+	uncompressedType struct{}
+	gzipType         struct{}
+	estargzType      struct{}
+	zstdType         struct{}
+)
+
+var (
 	// Uncompressed indicates no compression.
-	Uncompressed Type = iota
+	Uncompressed = uncompressedType{}
 
 	// Gzip is used for blob data.
-	Gzip
+	Gzip = gzipType{}
 
 	// EStargz is used for estargz data.
-	EStargz
+	EStargz = estargzType{}
 
 	// Zstd is used for Zstandard data.
-	Zstd
-
-	// UnknownCompression means not supported yet.
-	UnknownCompression Type = -1
+	Zstd = zstdType{}
 )
 
 type Config struct {
@@ -61,69 +81,41 @@ const (
 	mediaTypeImageLayerZstd         = ocispecs.MediaTypeImageLayer + "+zstd" // unreleased image-spec#790
 )
 
-var Default = Gzip
+var Default gzipType = Gzip
 
-func Parse(t string) Type {
+func Parse(t string) (Type, error) {
 	switch t {
-	case "uncompressed":
-		return Uncompressed
-	case "gzip":
-		return Gzip
-	case "estargz":
-		return EStargz
-	case "zstd":
-		return Zstd
+	case Uncompressed.String():
+		return Uncompressed, nil
+	case Gzip.String():
+		return Gzip, nil
+	case EStargz.String():
+		return EStargz, nil
+	case Zstd.String():
+		return Zstd, nil
 	default:
-		return UnknownCompression
+		return nil, fmt.Errorf("unsupported compression type %s", t)
 	}
 }
 
-func (ct Type) String() string {
-	switch ct {
-	case Uncompressed:
-		return "uncompressed"
-	case Gzip:
-		return "gzip"
-	case EStargz:
-		return "estargz"
-	case Zstd:
-		return "zstd"
-	default:
-		return "unknown"
-	}
-}
-
-func (ct Type) DefaultMediaType() string {
-	switch ct {
-	case Uncompressed:
-		return ocispecs.MediaTypeImageLayer
-	case Gzip, EStargz:
-		return ocispecs.MediaTypeImageLayerGzip
-	case Zstd:
-		return mediaTypeImageLayerZstd
-	default:
-		return ocispecs.MediaTypeImageLayer + "+unknown"
-	}
-}
-
-func (ct Type) IsMediaType(mt string) bool {
+func IsMediaType(ct Type, mt string) bool {
 	mt, ok := toOCILayerType[mt]
 	if !ok {
 		return false
 	}
-	return mt == ct.DefaultMediaType()
+	return mt == ct.MediaType()
 }
 
-func FromMediaType(mediaType string) Type {
+func FromMediaType(mediaType string) (Type, error) {
 	switch toOCILayerType[mediaType] {
 	case ocispecs.MediaTypeImageLayer, ocispecs.MediaTypeImageLayerNonDistributable:
-		return Uncompressed
+		return Uncompressed, nil
 	case ocispecs.MediaTypeImageLayerGzip, ocispecs.MediaTypeImageLayerNonDistributableGzip:
-		return Gzip
+		return Gzip, nil
 	case mediaTypeImageLayerZstd, ocispecs.MediaTypeImageLayerNonDistributableZstd:
-		return Zstd
+		return Zstd, nil
 	default:
-		return UnknownCompression
+		return nil, fmt.Errorf("unsupported media type %s", mediaType)
 	}
 }
 
@@ -170,7 +162,7 @@ func detectCompressionType(cr *io.SectionReader) (Type, error) {
 		// means just create an empty layer.
 		//
 		// See issue docker/docker#18170
-		return UnknownCompression, err
+		return nil, err
 	}
 
 	if _, _, err := estargz.OpenFooter(cr); err == nil {
@@ -240,4 +232,73 @@ func ConvertAllLayerMediaTypes(oci bool, descs ...ocispecs.Descriptor) []ocispec
 		converted = append(converted, desc)
 	}
 	return converted
+}
+
+func decompress(ctx context.Context, cs content.Store, desc ocispecs.Descriptor) (r io.ReadCloser, err error) {
+	ra, err := cs.ReaderAt(ctx, desc)
+	if err != nil {
+		return nil, err
+	}
+	esgz, err := EStargz.Is(ctx, cs, desc.Digest)
+	if err != nil {
+		return nil, err
+	} else if esgz {
+		r, err = decompressEStargz(io.NewSectionReader(ra, 0, ra.Size()))
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		r, err = cdcompression.DecompressStream(io.NewSectionReader(ra, 0, ra.Size()))
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &readCloser{r, ra.Close}, nil
+}
+
+type readCloser struct {
+	io.ReadCloser
+	closeFunc func() error
+}
+
+func (rc *readCloser) Close() error {
+	err1 := rc.ReadCloser.Close()
+	err2 := rc.closeFunc()
+	if err1 != nil {
+		return errors.Wrapf(err1, "failed to close: %v", err2)
+	}
+	return err2
+}
+
+type WriteCloser struct {
+	io.WriteCloser
+	CloseFunc func() error
+}
+
+func (wc *WriteCloser) Close() error {
+	err1 := wc.WriteCloser.Close()
+	err2 := wc.CloseFunc()
+	if err1 != nil {
+		return errors.Wrapf(err1, "failed to close: %v", err2)
+	}
+	return err2
+}
+
+type Counter struct {
+	n  int64
+	mu sync.Mutex
+}
+
+func (c *Counter) Write(p []byte) (n int, err error) {
+	c.mu.Lock()
+	c.n += int64(len(p))
+	c.mu.Unlock()
+	return len(p), nil
+}
+
+func (c *Counter) Size() (n int64) {
+	c.mu.Lock()
+	n = c.n
+	c.mu.Unlock()
+	return
 }
