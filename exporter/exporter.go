@@ -16,10 +16,29 @@ type Exporter interface {
 
 type ExporterInstance interface {
 	Name() string
-	Config() Config
+	Config() *Config
 	Export(ctx context.Context, src *Source, sessionID string) (map[string]string, error)
 }
 
 type Config struct {
-	Compression compression.Config
+	// Make the field private in case it is initialized with nil compression.Type
+	compression compression.Config
+}
+
+func NewConfig() *Config {
+	return &Config{
+		compression: compression.Config{
+			Type: compression.Default,
+		},
+	}
+}
+
+func NewConfigWithCompression(comp compression.Config) *Config {
+	return &Config{
+		compression: comp,
+	}
+}
+
+func (c *Config) Compression() compression.Config {
+	return c.compression
 }

@@ -227,7 +227,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		if _, ok := asInlineCache(exp.CacheExporter); ok {
 			if err := inBuilderContext(ctx, j, "preparing layers for inline cache", j.SessionID+"-cache-inline", func(ctx context.Context, _ session.Group) error {
 				if cached.Ref != nil {
-					dtic, err := inlineCache(ctx, exp.CacheExporter, cached.Ref, e.Config().Compression, session.NewGroup(sessionID))
+					dtic, err := inlineCache(ctx, exp.CacheExporter, cached.Ref, e.Config().Compression(), session.NewGroup(sessionID))
 					if err != nil {
 						return err
 					}
@@ -236,7 +236,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 					}
 				}
 				for k, res := range cached.Refs {
-					dtic, err := inlineCache(ctx, exp.CacheExporter, res, e.Config().Compression, session.NewGroup(sessionID))
+					dtic, err := inlineCache(ctx, exp.CacheExporter, res, e.Config().Compression(), session.NewGroup(sessionID))
 					if err != nil {
 						return err
 					}

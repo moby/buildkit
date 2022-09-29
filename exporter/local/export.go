@@ -55,8 +55,8 @@ func (e *localExporterInstance) Name() string {
 	return "exporting to client"
 }
 
-func (e *localExporter) Config() exporter.Config {
-	return exporter.Config{}
+func (e *localExporter) Config() *exporter.Config {
+	return exporter.NewConfig()
 }
 
 func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source, sessionID string) (map[string]string, error) {
