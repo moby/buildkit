@@ -848,6 +848,11 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 	switch vv[0] {
 	case "docker-image":
 		ref := strings.TrimPrefix(vv[1], "//")
+		if ref == "scratch" {
+			st := llb.Scratch()
+			return &st, nil, nil, nil
+		}
+
 		imgOpt := []llb.ImageOption{
 			llb.WithCustomName("[context " + name + "] " + ref),
 		}
