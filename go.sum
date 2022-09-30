@@ -1321,8 +1321,8 @@ github.com/tmc/grpc-websocket-proxy v0.0.0-20201229170055-e5319fda7802/go.mod h1
 github.com/tommy-muehle/go-mnd v1.1.1/go.mod h1:dSUh0FtTP8VhvkL1S+gUR1OKd9ZnSaozuI6r3m6wOig=
 github.com/tommy-muehle/go-mnd v1.3.1-0.20200224220436-e6f9a994e8fa/go.mod h1:dSUh0FtTP8VhvkL1S+gUR1OKd9ZnSaozuI6r3m6wOig=
 github.com/tonistiigi/fsutil v0.0.0-20201103201449-0834f99b7b85/go.mod h1:a7cilN64dG941IOXfhJhlH0qB92hxJ9A1ewrdUmJ6xo=
-github.com/tonistiigi/fsutil v0.0.0-20220510150904-0dbf3a8a7d58 h1:rNya5ozLqz0lK46XhmsmqJuxmQLM8dAWabiT+5gZqLY=
-github.com/tonistiigi/fsutil v0.0.0-20220510150904-0dbf3a8a7d58/go.mod h1:oPAfvw32vlUJSjyDcQ3Bu0nb2ON2B+G0dtVN/SZNJiA=
+github.com/tonistiigi/fsutil v0.0.0-20220930225714-4638ad635be5 h1:NJ1nZs4j4XcBJKIY5sAwTGp9w5b78Zxr3+r0zXRuKnA=
+github.com/tonistiigi/fsutil v0.0.0-20220930225714-4638ad635be5/go.mod h1:F83XRhNblQsKQH9hcKEE45GAOkL9590mtw9KsD0Q4fE=
 github.com/tonistiigi/go-actions-cache v0.0.0-20220404170428-0bdeb6e1eac7 h1:8eY6m1mjgyB8XySUR7WvebTM8D/Vs86jLJzD/Tw7zkc=
 github.com/tonistiigi/go-actions-cache v0.0.0-20220404170428-0bdeb6e1eac7/go.mod h1:qqvyZqkfwkoJuPU/bw61bItaoO0SJ8YSW0vSVRRvsRg=
 github.com/tonistiigi/go-archvariant v1.0.0 h1:5LC1eDWiBNflnTF1prCiX09yfNHIxDC/aukdhCdTyb0=
@@ -1730,7 +1730,6 @@ golang.org/x/sys v0.0.0-20210119212857-b64e53b001e4/go.mod h1:h1NjWce9XRLGQEsW7w
 golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20210220050731-9a76102bfb43/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20210305230114-8fe3ee5dd75b/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
-golang.org/x/sys v0.0.0-20210313202042-bd2e13477e9c/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20210315160823-c6e025ad8005/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20210320140829-1e4c9ba3b0c4/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20210324051608-47abb6519492/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=

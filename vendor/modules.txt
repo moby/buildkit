@@ -636,8 +636,8 @@ github.com/sirupsen/logrus
 ## explicit; go 1.13
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
-# github.com/tonistiigi/fsutil v0.0.0-20220510150904-0dbf3a8a7d58
-## explicit; go 1.13
+# github.com/tonistiigi/fsutil v0.0.0-20220930225714-4638ad635be5
+## explicit; go 1.18
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy
 github.com/tonistiigi/fsutil/types
