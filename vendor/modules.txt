@@ -352,7 +352,7 @@ github.com/containernetworking/cni/pkg/types/create
 github.com/containernetworking/cni/pkg/types/internal
 github.com/containernetworking/cni/pkg/utils
 github.com/containernetworking/cni/pkg/version
-# github.com/coreos/go-systemd/v22 v22.3.2
+# github.com/coreos/go-systemd/v22 v22.4.0
 ## explicit; go 1.12
 github.com/coreos/go-systemd/v22/activation
 github.com/coreos/go-systemd/v22/daemon
@@ -376,7 +376,7 @@ github.com/docker/cli/cli/connhelper/commandconn
 ## explicit
 github.com/docker/distribution/digestset
 github.com/docker/distribution/reference
-# github.com/docker/docker v20.10.17+incompatible => github.com/docker/docker v20.10.3-0.20220831131523-b5a0d7a188ac+incompatible
+# github.com/docker/docker v20.10.18+incompatible => github.com/docker/docker v20.10.3-0.20221006005007-99aa9bb766b5+incompatible
 ## explicit
 github.com/docker/docker/api
 github.com/docker/docker/api/types
@@ -399,7 +399,6 @@ github.com/docker/docker/errdefs
 github.com/docker/docker/libnetwork/resolvconf
 github.com/docker/docker/pkg/archive
 github.com/docker/docker/pkg/chrootarchive
-github.com/docker/docker/pkg/fileutils
 github.com/docker/docker/pkg/homedir
 github.com/docker/docker/pkg/idtools
 github.com/docker/docker/pkg/ioutils
@@ -519,7 +518,7 @@ github.com/in-toto/in-toto-golang/pkg/ssl
 # github.com/jmespath/go-jmespath v0.4.0
 ## explicit; go 1.14
 github.com/jmespath/go-jmespath
-# github.com/klauspost/compress v1.15.7
+# github.com/klauspost/compress v1.15.9
 ## explicit; go 1.16
 github.com/klauspost/compress
 github.com/klauspost/compress/fse
@@ -575,7 +574,7 @@ github.com/opencontainers/runc/libcontainer/user
 # github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417
 ## explicit
 github.com/opencontainers/runtime-spec/specs-go
-# github.com/opencontainers/selinux v1.10.1
+# github.com/opencontainers/selinux v1.10.2
 ## explicit; go 1.13
 github.com/opencontainers/selinux/go-selinux
 github.com/opencontainers/selinux/go-selinux/label
@@ -753,7 +752,7 @@ golang.org/x/crypto/pkcs12/internal/rc2
 golang.org/x/crypto/ssh
 golang.org/x/crypto/ssh/agent
 golang.org/x/crypto/ssh/internal/bcrypt_pbkdf
-# golang.org/x/net v0.0.0-20220425223048-2871e0cb64e4
+# golang.org/x/net v0.0.0-20220906165146-f3363e06e74c
 ## explicit; go 1.17
 golang.org/x/net/context
 golang.org/x/net/context/ctxhttp
@@ -885,4 +884,4 @@ google.golang.org/protobuf/types/known/wrapperspb
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
-# github.com/docker/docker => github.com/docker/docker v20.10.3-0.20220831131523-b5a0d7a188ac+incompatible
+# github.com/docker/docker => github.com/docker/docker v20.10.3-0.20221006005007-99aa9bb766b5+incompatible

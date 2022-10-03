@@ -24,7 +24,7 @@ info:
   title: "Docker Engine API"
   version: "1.42"
   x-logo:
-    url: "https://docs.docker.com/images/logo-docker-main.png"
+    url: "https://docs.docker.com/assets/images/logo-docker-main.png"
   description: |
     The Engine API is an HTTP API served by Docker Engine. It is the API the
     Docker client uses to communicate with the Engine, so everything the Docker
@@ -9699,6 +9699,7 @@ paths:
 
             Available filters:
             - `label` (`label=<key>`, `label=<key>=<value>`, `label!=<key>`, or `label!=<key>=<value>`) Prune volumes with (or without, in case `label!=...` is used) the specified labels.
+            - `all` (`all=true`) - Consider all (local) volumes for pruning and not just anonymous volumes.
           type: "string"
       responses:
         200:

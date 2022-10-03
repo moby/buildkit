@@ -23,10 +23,10 @@ require (
 	github.com/containerd/stargz-snapshotter v0.12.0
 	github.com/containerd/stargz-snapshotter/estargz v0.12.0
 	github.com/containerd/typeurl v1.0.2
-	github.com/coreos/go-systemd/v22 v22.3.2
+	github.com/coreos/go-systemd/v22 v22.4.0
 	github.com/docker/cli v20.10.17+incompatible
 	github.com/docker/distribution v2.8.1+incompatible
-	github.com/docker/docker v20.10.17+incompatible // v22.06.x - see "replace" for the actual version
+	github.com/docker/docker v20.10.18+incompatible // v22.06.x - see "replace" for the actual version
 	github.com/docker/go-connections v0.4.0
 	github.com/docker/go-units v0.5.0
 	github.com/gofrs/flock v0.7.3
@@ -40,7 +40,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hashicorp/golang-lru v0.5.4
 	github.com/in-toto/in-toto-golang v0.3.3
-	github.com/klauspost/compress v1.15.7
+	github.com/klauspost/compress v1.15.9
 	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/moby/locker v1.0.1
 	github.com/moby/patternmatcher v0.5.0
@@ -51,7 +51,7 @@ require (
 	github.com/opencontainers/image-spec v1.0.3-0.20220303224323-02efb9a75ee1
 	github.com/opencontainers/runc v1.1.3
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417
-	github.com/opencontainers/selinux v1.10.1
+	github.com/opencontainers/selinux v1.10.2
 	github.com/package-url/packageurl-go v0.1.0
 	github.com/pelletier/go-toml v1.9.4
 	github.com/pkg/errors v0.9.1
@@ -78,7 +78,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.4.1
 	go.opentelemetry.io/proto/otlp v0.12.0
 	golang.org/x/crypto v0.0.0-20220511200225-c6db032c6c88
-	golang.org/x/net v0.0.0-20220425223048-2871e0cb64e4
+	golang.org/x/net v0.0.0-20220906165146-f3363e06e74c
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/sys v0.0.0-20220728004956-3c1f35247d10
 	golang.org/x/time v0.0.0-20220210224613-90d013bbcef8
@@ -152,4 +152,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/docker/docker => github.com/docker/docker v20.10.3-0.20220831131523-b5a0d7a188ac+incompatible // 22.06 branch (v22.06-dev)
+replace github.com/docker/docker => github.com/docker/docker v20.10.3-0.20221006005007-99aa9bb766b5+incompatible // 22.06 branch (v22.06-dev)
