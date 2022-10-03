@@ -17,6 +17,25 @@ This package provides various compression algorithms.
 
 # changelog
 
+* July 13, 2022 (v1.15.8)
+
+	* gzip: fix stack exhaustion bug in Reader.Read https://github.com/klauspost/compress/pull/641
+	* s2: Add Index header trim/restore https://github.com/klauspost/compress/pull/638
+	* zstd: Optimize seqdeq amd64 asm by @greatroar in https://github.com/klauspost/compress/pull/636
+	* zstd: Improve decoder memcopy https://github.com/klauspost/compress/pull/637
+	* huff0: Pass a single bitReader pointer to asm by @greatroar in https://github.com/klauspost/compress/pull/634
+	* zstd: Branchless getBits for amd64 w/o BMI2 by @greatroar in https://github.com/klauspost/compress/pull/640
+	* gzhttp: Remove header before writing https://github.com/klauspost/compress/pull/639
+
+* June 29, 2022 (v1.15.7)
+
+	* s2: Fix absolute forward seeks  https://github.com/klauspost/compress/pull/633
+	* zip: Merge upstream  https://github.com/klauspost/compress/pull/631
+	* zip: Re-add zip64 fix https://github.com/klauspost/compress/pull/624
+	* zstd: translate fseDecoder.buildDtable into asm by @WojciechMula in https://github.com/klauspost/compress/pull/598
+	* flate: Faster histograms  https://github.com/klauspost/compress/pull/620
+	* deflate: Use compound hcode  https://github.com/klauspost/compress/pull/622
+
 * June 3, 2022 (v1.15.6)
 	* s2: Improve coding for long, close matches https://github.com/klauspost/compress/pull/613
 	* s2c: Add Snappy/S2 stream recompression https://github.com/klauspost/compress/pull/611
