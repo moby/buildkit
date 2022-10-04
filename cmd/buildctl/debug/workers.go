@@ -79,7 +79,6 @@ func printWorkersVerbose(tw *tabwriter.Writer, winfo []*client.WorkerInfo) {
 	for _, wi := range winfo {
 		fmt.Fprintf(tw, "ID:\t%s\n", wi.ID)
 		fmt.Fprintf(tw, "Platforms:\t%s\n", joinPlatforms(wi.Platforms))
-		fmt.Fprintf(tw, "BuildKit:\t%s %s %s\n", wi.BuildkitVersion.Package, wi.BuildkitVersion.Version, wi.BuildkitVersion.Revision)
 		fmt.Fprintf(tw, "Labels:\n")
 		for _, k := range sortedKeys(wi.Labels) {
 			v := wi.Labels[k]

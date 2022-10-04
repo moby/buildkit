@@ -158,8 +158,14 @@ message ListWorkersResponse {
 	repeated moby.buildkit.v1.types.WorkerRecord record = 1;
 }
 
+message Version {
+	string package = 1;
+	string version = 2;
+	string revision = 3;
+}
+
 message InfoRequest {}
 
 message InfoResponse {
-	moby.buildkit.v1.types.BuildkitVersion buildkitVersion = 1;
+	Version buildkitVersion = 1;
 }

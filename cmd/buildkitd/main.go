@@ -759,14 +759,6 @@ func getGCPolicy(cfg config.GCConfig, root string) []client.PruneInfo {
 	return out
 }
 
-func getBuildkitVersion() client.BuildkitVersion {
-	return client.BuildkitVersion{
-		Package:  version.Package,
-		Version:  version.Version,
-		Revision: version.Revision,
-	}
-}
-
 func getDNSConfig(cfg *config.DNSConfig) *oci.DNSConfig {
 	var dns *oci.DNSConfig
 	if cfg != nil {

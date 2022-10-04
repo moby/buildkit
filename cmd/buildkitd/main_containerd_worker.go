@@ -264,7 +264,6 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 		return nil, err
 	}
 	opt.GCPolicy = getGCPolicy(cfg.GCConfig, common.config.Root)
-	opt.BuildkitVersion = getBuildkitVersion()
 	opt.RegistryHosts = resolverFunc(common.config)
 
 	if platformsStr := cfg.Platforms; len(platformsStr) != 0 {
