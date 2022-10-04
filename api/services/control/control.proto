@@ -18,7 +18,7 @@ service Control {
 	rpc Status(StatusRequest) returns (stream StatusResponse);
 	rpc Session(stream BytesMessage) returns (stream BytesMessage);
 	rpc ListWorkers(ListWorkersRequest) returns (ListWorkersResponse);
-	rpc Info(InfoRequest) returns (InfoResponse);
+	// rpc Info(InfoRequest) returns (InfoResponse);
 }
 
 message PruneRequest {
@@ -156,16 +156,4 @@ message ListWorkersRequest {
 
 message ListWorkersResponse {
 	repeated moby.buildkit.v1.types.WorkerRecord record = 1;
-}
-
-message Version {
-	string package = 1;
-	string version = 2;
-	string revision = 3;
-}
-
-message InfoRequest {}
-
-message InfoResponse {
-	Version buildkitVersion = 1;
 }
