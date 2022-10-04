@@ -162,6 +162,7 @@ func TestIntegration(t *testing.T) {
 		testUncompressedRegistryCacheImportExport,
 		testStargzLazyRegistryCacheImportExport,
 		testValidateDigestOrigin,
+		testMountStubsTimestamp,
 	)
 	tests = append(tests, diffOpTestCases()...)
 	integration.Run(t, tests, mirrors)
@@ -5886,5 +5887,74 @@ var defaultNetwork integration.ConfigUpdater = &netModeDefault{}
 func fixedWriteCloser(wc io.WriteCloser) func(map[string]string) (io.WriteCloser, error) {
 	return func(map[string]string) (io.WriteCloser, error) {
 		return wc, nil
+	}
+}
+
+// https://github.com/moby/buildkit/issues/3148
+func testMountStubsTimestamp(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	const sourceDateEpoch = int64(1234567890) // Fri Feb 13 11:31:30 PM UTC 2009
+	st := llb.Image("busybox:latest").Run(
+		llb.Args([]string{"/bin/touch", fmt.Sprintf("--date=@%d", sourceDateEpoch),
+			"/bin",
+			"/etc",
+			"/var",
+			"/var/foo",
+			"/tmp",
+			"/tmp/foo2",
+			"/tmp/foo2/bar",
+		}),
+		llb.AddMount("/var/foo", llb.Scratch(), llb.Tmpfs()),
+		llb.AddMount("/tmp/foo2/bar", llb.Scratch(), llb.Tmpfs()),
+	)
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	tarFile := filepath.Join(tmpDir, "out.tar")
+	tarFileW, err := os.Create(tarFile)
+	require.NoError(t, err)
+	defer tarFileW.Close()
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterTar,
+				Output: fixedWriteCloser(tarFileW),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+	tarFileW.Close()
+
+	tarFileR, err := os.Open(tarFile)
+	require.NoError(t, err)
+	defer tarFileR.Close()
+	tarR := tar.NewReader(tarFileR)
+	touched := map[string]*tar.Header{
+		"bin/": nil, // Regular dir
+		"etc/": nil, // Parent of file mounts (etc/{resolv.conf, hosts})
+		"var/": nil, // Parent of dir mount (var/foo/)
+		"tmp/": nil, // Grandparent of dir mount (tmp/foo2/bar/)
+		// No support for reproducing the timestamps of mount point directories such as var/foo/ and tmp/foo2/bar/,
+		// because the touched timestamp value is lost when the mount is unmounted.
+	}
+	for {
+		hd, err := tarR.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+		if x, ok := touched[hd.Name]; ok && x == nil {
+			touched[hd.Name] = hd
+		}
+	}
+	for name, hd := range touched {
+		t.Logf("Verifying %q (%+v)", name, hd)
+		require.NotNil(t, hd, name)
+		require.Equal(t, sourceDateEpoch, hd.ModTime.Unix(), name)
 	}
 }
