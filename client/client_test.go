@@ -6179,17 +6179,20 @@ func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 
 	target := registry + "/buildkit/testannotations:latest"
 
+	const created = "2022-01-23T12:34:56Z"
+
 	_, err = c.Build(sb.Context(), SolveOpt{
 		Exports: []ExportEntry{
 			{
 				Type: ExporterImage,
 				Attrs: map[string]string{
-					"name":                                target,
-					"push":                                "true",
-					"annotation-index.gio":                "generic index opt",
-					"annotation-manifest.gmo":             "generic manifest opt",
-					"annotation-manifest-descriptor.gmdo": "generic manifest descriptor opt",
-					"annotation-manifest[linux/amd64].mo": "amd64 manifest opt",
+					"name":                 target,
+					"push":                 "true",
+					"annotation-index.gio": "generic index opt",
+					"annotation-index." + ocispecs.AnnotationCreated:  created,
+					"annotation-manifest.gmo":                         "generic manifest opt",
+					"annotation-manifest-descriptor.gmdo":             "generic manifest descriptor opt",
+					"annotation-manifest[linux/amd64].mo":             "amd64 manifest opt",
 					"annotation-manifest-descriptor[linux/amd64].mdo": "amd64 manifest descriptor opt",
 					"annotation-manifest[linux/arm64].mo":             "arm64 manifest opt",
 					"annotation-manifest-descriptor[linux/arm64].mdo": "arm64 manifest descriptor opt",
@@ -6207,6 +6210,7 @@ func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 
 	require.Equal(t, "generic index", imgs.Index.Annotations["gi"])
 	require.Equal(t, "generic index opt", imgs.Index.Annotations["gio"])
+	require.Equal(t, created, imgs.Index.Annotations[ocispecs.AnnotationCreated])
 	for _, desc := range imgs.Index.Manifests {
 		require.Equal(t, "generic manifest descriptor", desc.Annotations["gmd"])
 		require.Equal(t, "generic manifest descriptor opt", desc.Annotations["gmdo"])
@@ -6250,14 +6254,15 @@ func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 				Type:   ExporterOCI,
 				Output: fixedWriteCloser(outW),
 				Attrs: map[string]string{
-					"annotation-index.gio":                            "generic index opt",
-					"annotation-index-descriptor.gido":                "generic index descriptor opt",
-					"annotation-manifest.gmo":                         "generic manifest opt",
-					"annotation-manifest-descriptor.gmdo":             "generic manifest descriptor opt",
-					"annotation-manifest[linux/amd64].mo":             "amd64 manifest opt",
-					"annotation-manifest-descriptor[linux/amd64].mdo": "amd64 manifest descriptor opt",
-					"annotation-manifest[linux/arm64].mo":             "arm64 manifest opt",
-					"annotation-manifest-descriptor[linux/arm64].mdo": "arm64 manifest descriptor opt",
+					"annotation-index.gio":                                      "generic index opt",
+					"annotation-index-descriptor.gido":                          "generic index descriptor opt",
+					"annotation-index-descriptor." + ocispecs.AnnotationCreated: created,
+					"annotation-manifest.gmo":                                   "generic manifest opt",
+					"annotation-manifest-descriptor.gmdo":                       "generic manifest descriptor opt",
+					"annotation-manifest[linux/amd64].mo":                       "amd64 manifest opt",
+					"annotation-manifest-descriptor[linux/amd64].mdo":           "amd64 manifest descriptor opt",
+					"annotation-manifest[linux/arm64].mo":                       "arm64 manifest opt",
+					"annotation-manifest-descriptor[linux/arm64].mdo":           "arm64 manifest descriptor opt",
 				},
 			},
 		},
@@ -6274,6 +6279,7 @@ func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 	err = json.Unmarshal(m["index.json"].Data, &layout)
 	require.Equal(t, "generic index descriptor", layout.Manifests[0].Annotations["gid"])
 	require.Equal(t, "generic index descriptor opt", layout.Manifests[0].Annotations["gido"])
+	require.Equal(t, created, layout.Manifests[0].Annotations[ocispecs.AnnotationCreated])
 	require.NoError(t, err)
 
 	var index ocispecs.Index

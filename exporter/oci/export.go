@@ -128,7 +128,9 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	if desc.Annotations == nil {
 		desc.Annotations = map[string]string{}
 	}
-	desc.Annotations[ocispecs.AnnotationCreated] = time.Now().UTC().Format(time.RFC3339)
+	if _, ok := desc.Annotations[ocispecs.AnnotationCreated]; !ok {
+		desc.Annotations[ocispecs.AnnotationCreated] = time.Now().UTC().Format(time.RFC3339)
+	}
 
 	resp := make(map[string]string)
 
