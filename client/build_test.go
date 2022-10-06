@@ -1615,6 +1615,7 @@ func testClientGatewayExecFileActionError(t *testing.T, sb integration.Sandbox) 
 // testClientGatewayContainerSecurityMode ensures that the correct security mode
 // is propagated to the gateway container
 func testClientGatewayContainerSecurityMode(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerdSnapshotter(t, sb, "security mode")
 	requiresLinux(t)
 
 	ctx := sb.Context()

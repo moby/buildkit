@@ -819,6 +819,7 @@ func testPushByDigest(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSecurityMode(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerdSnapshotter(t, sb, "security mode")
 	command := `sh -c 'cat /proc/self/status | grep CapEff | cut -f 2 > /out'`
 	mode := llb.SecurityModeSandbox
 	var allowedEntitlements []entitlements.Entitlement
@@ -890,6 +891,7 @@ func testSecurityMode(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerdSnapshotter(t, sb, "security mode")
 	if sb.Rootless() {
 		t.SkipNow()
 	}
@@ -2849,6 +2851,7 @@ func testSourceDateEpochTarExporter(t *testing.T, sb integration.Sandbox) {
 	checkAllReleasable(t, c, sb, true)
 }
 func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerdSnapshotter(t, sb, "oci exporter")
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2863,7 +2866,7 @@ func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
 	}
 
 	var exports []ExportEntry
-	if integration.IsTestDockerd() {
+	if integration.IsTestDockerdMoby(sb) {
 		exports = []ExportEntry{{
 			Type: "moby",
 			Attrs: map[string]string{
@@ -5507,7 +5510,7 @@ func testMergeOp(t *testing.T, sb integration.Sandbox) {
 	}
 
 	var imageTarget string
-	if integration.IsTestDockerd() {
+	if integration.IsTestDockerdMoby(sb) {
 		// do image export but use a fake url as the image should just end up in moby's
 		// local store
 		imageTarget = "fake.invalid:33333/buildkit/testmergeop:latest"
@@ -5999,7 +6002,7 @@ func requireContents(ctx context.Context, t *testing.T, c *Client, sb integratio
 
 	if imageTarget != "" {
 		var exports []ExportEntry
-		if integration.IsTestDockerd() {
+		if integration.IsTestDockerdMoby(sb) {
 			exports = []ExportEntry{{
 				Type: "moby",
 				Attrs: map[string]string{

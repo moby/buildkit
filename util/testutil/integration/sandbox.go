@@ -219,6 +219,18 @@ func runBuildkitd(ctx context.Context, conf *BackendConfig, args []string, logs 
 	return address, cl, err
 }
 
+func getBackend(sb Sandbox) (*backend, error) {
+	sbx, ok := sb.(*sandbox)
+	if !ok {
+		return nil, errors.Errorf("invalid sandbox type %T", sb)
+	}
+	b, ok := sbx.Backend.(backend)
+	if !ok {
+		return nil, errors.Errorf("invalid backend type %T", b)
+	}
+	return &b, nil
+}
+
 func rootlessSupported(uid int) bool {
 	cmd := exec.Command("sudo", "-u", fmt.Sprintf("#%d", uid), "-i", "--", "exec", "unshare", "-U", "true") //nolint:gosec // test utility
 	b, err := cmd.CombinedOutput()

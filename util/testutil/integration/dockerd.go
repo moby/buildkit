@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -26,17 +27,29 @@ const (
 
 // InitDockerdWorker registers a dockerd worker with the global registry.
 func InitDockerdWorker() {
-	Register(&dockerd{})
+	Register(&dockerd{
+		name:     "dockerd",
+		rootless: false,
+	})
+	Register(&dockerd{
+		name:        "dockerd-containerd",
+		rootless:    false,
+		snapshotter: "containerd",
+	})
 }
 
-type dockerd struct{}
+type dockerd struct {
+	name        string
+	rootless    bool
+	snapshotter string
+}
 
 func (c dockerd) Name() string {
-	return dockerdBinary
+	return c.name
 }
 
 func (c dockerd) Rootless() bool {
-	return false
+	return c.rootless
 }
 
 func (c dockerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func() error, err error) {
@@ -62,6 +75,17 @@ func (c dockerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl fun
 		return nil, nil, err
 	}
 
+	dockerdConfig := fmt.Sprintf(`{
+  "features": {
+    "containerd-snapshotter": %v
+  }
+}`, c.snapshotter == "containerd")
+
+	dockerdConfigFile := filepath.Join(workDir, "daemon.json")
+	if err := os.WriteFile(dockerdConfigFile, []byte(dockerdConfig), 0644); err != nil {
+		return nil, nil, err
+	}
+
 	dockerdBinaryPath, err := exec.LookPath(dockerdBinary)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "could not find docker binary in $PATH")
@@ -81,6 +105,7 @@ func (c dockerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl fun
 	daemonSocket := "unix://" + filepath.Join(daemonFolder, "docker.sock")
 
 	cmd := exec.Command(dockerdBinaryPath, []string{
+		"--config-file", dockerdConfigFile,
 		"--data-root", daemonRoot,
 		"--exec-root", execRoot,
 		"--pidfile", filepath.Join(daemonFolder, "docker.pid"),
@@ -175,9 +200,10 @@ func (c dockerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl fun
 	})
 
 	return backend{
-		address:   "unix://" + listener.Addr().String(),
-		rootless:  false,
-		isDockerd: true,
+		address:     "unix://" + listener.Addr().String(),
+		rootless:    c.rootless,
+		snapshotter: c.snapshotter,
+		isDockerd:   true,
 	}, cl, nil
 }
 
@@ -199,19 +225,53 @@ func waitForAPI(ctx context.Context, apiClient *client.Client, d time.Duration) 
 
 func SkipIfDockerd(t *testing.T, sb Sandbox, reason ...string) {
 	t.Helper()
-	sbx, ok := sb.(*sandbox)
-	if !ok {
-		t.Fatalf("invalid sandbox type %T", sb)
-	}
-	b, ok := sbx.Backend.(backend)
-	if !ok {
-		t.Fatalf("invalid backend type %T", b)
+	b, err := getBackend(sb)
+	if err != nil {
+		t.Fatal(err)
 	}
 	if b.isDockerd {
 		t.Skipf("dockerd worker can not currently run this test due to missing features (%s)", strings.Join(reason, ", "))
 	}
 }
 
+func SkipIfDockerdMoby(t *testing.T, sb Sandbox, reason ...string) {
+	t.Helper()
+	b, err := getBackend(sb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.isDockerd && b.snapshotter == "" {
+		t.Skipf("dockerd worker (moby) can not currently run this test due to missing features (%s)", strings.Join(reason, ", "))
+	}
+}
+
+func SkipIfDockerdSnapshotter(t *testing.T, sb Sandbox, reason ...string) {
+	t.Helper()
+	b, err := getBackend(sb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.isDockerd && b.snapshotter != "" {
+		t.Skipf("dockerd worker (%s) can not currently run this test due to missing features (%s)", b.snapshotter, strings.Join(reason, ", "))
+	}
+}
+
 func IsTestDockerd() bool {
 	return os.Getenv("TEST_DOCKERD") == "1"
+}
+
+func IsTestDockerdMoby(sb Sandbox) bool {
+	b, err := getBackend(sb)
+	if err != nil {
+		return false
+	}
+	return b.isDockerd && b.snapshotter == ""
+}
+
+func IsTestDockerdSnapshotter(sb Sandbox) bool {
+	b, err := getBackend(sb)
+	if err != nil {
+		return false
+	}
+	return b.isDockerd && b.snapshotter != ""
 }
