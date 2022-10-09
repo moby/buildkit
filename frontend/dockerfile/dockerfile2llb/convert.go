@@ -496,7 +496,9 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 
 		// make sure that PATH is always set
 		if _, ok := shell.BuildEnvs(d.image.Config.Env)["PATH"]; !ok {
-			d.image.Config.Env = append(d.image.Config.Env, "PATH="+system.DefaultPathEnv(d.platform.OS))
+			if env, ok := system.DefaultPathEnv(d.platform.OS); ok {
+				d.image.Config.Env = append(d.image.Config.Env, "PATH="+env)
+			}
 		}
 
 		// initialize base metadata from image conf
