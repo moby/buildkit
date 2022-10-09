@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -1363,21 +1364,22 @@ func testClientGatewayContainerPlatformPATH(t *testing.T, sb integration.Sandbox
 			Platform *pb.Platform
 			Expected string
 		}{{
-			"default path",
-			nil,
-			utilsystem.DefaultPathEnvUnix,
+			Name:     "default path",
+			Expected: utilsystem.DefaultPathEnvUnix,
 		}, {
-			"linux path",
-			&pb.Platform{OS: "linux"},
-			utilsystem.DefaultPathEnvUnix,
+			Name:     "linux path",
+			Platform: &pb.Platform{OS: "linux"},
+			Expected: utilsystem.DefaultPathEnvUnix,
 		}, {
-			"windows path",
-			&pb.Platform{OS: "windows"},
-			utilsystem.DefaultPathEnvWindows,
+			Name:     "windows path",
+			Platform: &pb.Platform{OS: "windows"},
 		}}
 
 		for _, tt := range tests {
 			t.Run(tt.Name, func(t *testing.T) {
+				if tt.Platform != nil && tt.Platform.OS != runtime.GOOS {
+					t.Skipf("skip %s test on %s", tt.Platform.OS, runtime.GOOS)
+				}
 				ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
 					Mounts: []client.Mount{{
 						Dest:      "/",

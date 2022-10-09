@@ -161,7 +161,9 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 			} else if e.constraints.Platform != nil {
 				os = e.constraints.Platform.OS
 			}
-			env = env.SetDefault("PATH", system.DefaultPathEnv(os))
+			if v, ok := system.DefaultPathEnv(os); ok {
+				env = env.SetDefault("PATH", v)
+			}
 		} else {
 			addCap(&e.constraints, pb.CapExecMetaSetsDefaultPath)
 		}

@@ -1655,7 +1655,7 @@ COPY Dockerfile .
 		entrypoint []string
 		env        []string
 	}{
-		{p: "windows/amd64", entrypoint: []string{"cmd", "/S", "/C", "foo bar"}, env: []string{"PATH=c:\\Windows\\System32;c:\\Windows"}},
+		{p: "windows/amd64", entrypoint: []string{"cmd", "/S", "/C", "foo bar"}},
 		{p: "linux/amd64", entrypoint: []string{"/bin/sh", "-c", "foo bar"}, env: []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}},
 	} {
 		t.Run(exp.p, func(t *testing.T) {

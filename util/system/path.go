@@ -13,16 +13,36 @@ import (
 // ':' character .
 const DefaultPathEnvUnix = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
-// DefaultPathEnvWindows is windows style list of directories to search for
-// executables. Each directory is separated from the next by a colon
-// ';' character .
-const DefaultPathEnvWindows = "c:\\Windows\\System32;c:\\Windows"
+// DefaultPathEnvWindows is deliberately empty on Windows and the default path
+// must be set by the image. BuildKit has no context of what the default
+// path should be.
+//
+// Deprecated: Windows images must not have a default PATH set.
+const DefaultPathEnvWindows = ""
 
-func DefaultPathEnv(os string) string {
+// DefaultPathEnv returns the default value for the PATH environment-variable
+// if available for the given operating-system. The second return variable
+// indicates whether a default exists.
+//
+// On Linux/Unix, this returns [DefaultPathEnvUnix]. On Windows, no default
+// exists, and PATH must not be set as its image-dependent, and must be
+// configured through other means.
+//
+// More details about default PATH values for Windows images can be found
+// in the following GitHub discussions:
+//
+// - [moby/moby#13833]
+// - [moby/buildkit#3158]
+// - [containerd/containerd#9118]
+//
+// [moby/moby#13833]: https://github.com/moby/moby/pull/13833
+// [moby/buildkit#3158]: https://github.com/moby/buildkit/pull/3158
+// [containerd/containerd#9118]: https://github.com/containerd/containerd/pull/9118
+func DefaultPathEnv(os string) (string, bool) {
 	if os == "windows" {
-		return DefaultPathEnvWindows
+		return "", false
 	}
-	return DefaultPathEnvUnix
+	return DefaultPathEnvUnix, true
 }
 
 // NormalizePath cleans the path based on the operating system the path is meant for.

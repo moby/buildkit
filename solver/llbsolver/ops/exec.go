@@ -464,7 +464,9 @@ func (e *ExecOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 	if e.platform != nil {
 		currentOS = e.platform.OS
 	}
-	meta.Env = addDefaultEnvvar(meta.Env, "PATH", utilsystem.DefaultPathEnv(currentOS))
+	if env, ok := utilsystem.DefaultPathEnv(currentOS); ok {
+		meta.Env = addDefaultEnvvar(meta.Env, "PATH", env)
+	}
 
 	secretEnv, err := e.loadSecretEnv(ctx, g)
 	if err != nil {
