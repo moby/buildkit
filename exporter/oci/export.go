@@ -5,18 +5,22 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	archiveexporter "github.com/containerd/containerd/images/archive"
 	"github.com/containerd/containerd/leases"
+	"github.com/containerd/containerd/remotes"
 	"github.com/docker/distribution/reference"
+	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/moby/buildkit/cache"
 	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/session"
+	sessioncontent "github.com/moby/buildkit/session/content"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
@@ -33,6 +37,10 @@ type ExporterVariant string
 const (
 	VariantOCI    = "oci"
 	VariantDocker = "docker"
+)
+
+const (
+	keyUnpack = "unpack"
 )
 
 type Opt struct {
@@ -69,18 +77,32 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 	}
 
 	for k, v := range opt {
-		if i.meta == nil {
-			i.meta = make(map[string][]byte)
+		switch k {
+		case keyUnpack:
+			if v == "" {
+				i.unpack = true
+				continue
+			}
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+			}
+			i.unpack = b
+		default:
+			if i.meta == nil {
+				i.meta = make(map[string][]byte)
+			}
+			i.meta[k] = []byte(v)
 		}
-		i.meta[k] = []byte(v)
 	}
 	return i, nil
 }
 
 type imageExporterInstance struct {
 	*imageExporter
-	opts containerimage.ImageCommitOpts
-	meta map[string][]byte
+	opts   containerimage.ImageCommitOpts
+	unpack bool
+	meta   map[string][]byte
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -179,11 +201,6 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 		return nil, err
 	}
 
-	w, err := filesync.CopyFileWriter(ctx, resp, caller)
-	if err != nil {
-		return nil, err
-	}
-
 	mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
 	if src.Ref != nil {
 		remotes, err := src.Ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
@@ -220,19 +237,41 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 		}
 	}
 
-	report := progress.OneOff(ctx, "sending tarball")
-	if err := archiveexporter.Export(ctx, mprovider, w, expOpts...); err != nil {
-		w.Close()
+	if e.unpack {
+		ctx = remotes.WithMediaTypeKeyPrefix(ctx, intoto.PayloadType, "intoto")
+		store := sessioncontent.NewCallerStore(caller, "export")
+		if err != nil {
+			return nil, err
+		}
+		err := contentutil.CopyChain(ctx, store, mprovider, *desc)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		w, err := filesync.CopyFileWriter(ctx, resp, caller)
+		if err != nil {
+			return nil, err
+		}
+
+		report := progress.OneOff(ctx, "sending tarball")
+		if err := archiveexporter.Export(ctx, mprovider, w, expOpts...); err != nil {
+			w.Close()
+			if grpcerrors.Code(err) == codes.AlreadyExists {
+				return resp, report(nil)
+			}
+			return nil, report(err)
+		}
+		err = w.Close()
 		if grpcerrors.Code(err) == codes.AlreadyExists {
 			return resp, report(nil)
 		}
-		return nil, report(err)
+		if err != nil {
+			return nil, report(err)
+		}
+		report(nil)
 	}
-	err = w.Close()
-	if grpcerrors.Code(err) == codes.AlreadyExists {
-		return resp, report(nil)
-	}
-	return resp, report(err)
+
+	return resp, nil
 }
 
 func normalizedNames(name string) ([]string, error) {

@@ -165,7 +165,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 				}
 			}
 
-			progress := newProgressHandler(ctx, lbl)
+			progress := NewProgressHandler(ctx, lbl)
 			if err := filesync.CopyToCaller(ctx, fs, caller, progress); err != nil {
 				return err
 			}
@@ -193,7 +193,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 	return nil, nil
 }
 
-func newProgressHandler(ctx context.Context, id string) func(int, bool) {
+func NewProgressHandler(ctx context.Context, id string) func(int, bool) {
 	limiter := rate.NewLimiter(rate.Every(100*time.Millisecond), 1)
 	pw, _, _ := progress.NewFromContext(ctx)
 	now := time.Now()
