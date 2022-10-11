@@ -167,7 +167,7 @@ Currently, the following high-level languages has been implemented for LLB:
 -   [HLB](https://github.com/openllb/hlb)
 -   [Earthfile (Earthly)](https://github.com/earthly/earthly)
 -   [Cargo Wharf (Rust)](https://github.com/denzp/cargo-wharf)
--   [Nix](https://github.com/AkihiroSuda/buildkit-nix)
+-   [Nix](https://github.com/reproducible-containers/buildkit-nix)
 -   [mopy (Python)](https://github.com/cmdjulian/mopy)
 -   [envd (starlark)](https://github.com/tensorchord/envd/)
 -   [Blubber](https://gitlab.wikimedia.org/repos/releng/blubber)
