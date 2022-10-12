@@ -24,6 +24,7 @@ var outlineTests = integration.TestFuncs(
 )
 
 func testOutlineArgs(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "unsupported request frontend.outline")
 	f := getFrontend(t, sb)
 	if _, ok := f.(*clientFrontend); !ok {
 		t.Skip("only test with client frontend")
@@ -138,6 +139,7 @@ FROM second
 }
 
 func testOutlineSecrets(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "unsupported request frontend.outline")
 	f := getFrontend(t, sb)
 	if _, ok := f.(*clientFrontend); !ok {
 		t.Skip("only test with client frontend")
@@ -238,6 +240,7 @@ FROM second
 }
 
 func testOutlineDescribeDefinition(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "unsupported request frontend.outline")
 	f := getFrontend(t, sb)
 	if _, ok := f.(*clientFrontend); !ok {
 		t.Skip("only test with client frontend")

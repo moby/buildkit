@@ -5362,6 +5362,7 @@ RUN echo foo >> /test
 }
 
 func testNamedImageContextScratch(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "docker-image://scratch named context")
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
