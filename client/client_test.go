@@ -1814,9 +1814,6 @@ func testOCILayoutPlatformSource(t *testing.T, sb integration.Sandbox) {
 		} else {
 			err = os.WriteFile(fullFilename, tarItem.Data, 0644)
 			require.NoError(t, err)
-			if json.Valid(tarItem.Data) {
-				fmt.Println(fullFilename, string(tarItem.Data))
-			}
 		}
 	}
 
