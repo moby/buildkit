@@ -296,8 +296,8 @@ jobs:
             TAG=$(echo ${GITHUB_REF#refs/heads/} | sed -r 's#/+#-#g')
             PUSH=push
           fi
-          echo ::set-output name=tag::${TAG}
-          echo ::set-output name=push::${PUSH}
+          echo "tag=${TAG}" >>${GITHUB_OUTPUT}
+          echo "push=${PUSH}" >>${GITHUB_OUTPUT}
 
   image:
     runs-on: ubuntu-20.04
@@ -412,9 +412,9 @@ jobs:
           elif [[ $GITHUB_REF == refs/heads/* ]]; then
             PUSH=push
           fi
-          echo ::set-output name=typ::${TYP}
-          echo ::set-output name=tag::${TAG}
-          echo ::set-output name=push::${PUSH}
+          echo "typ=${TYP}" >>${GITHUB_OUTPUT}
+          echo "tag=${TAG}" >>${GITHUB_OUTPUT}
+          echo "push=${PUSH}" >>${GITHUB_OUTPUT}
 
   frontend-image:
     runs-on: ubuntu-20.04
