@@ -387,30 +387,15 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (res *
 		if c.caps.Supports(pb.CapGatewayEvaluateSolve) == nil {
 			req.Evaluate = creq.Evaluate
 		} else {
-			// If evaluate is not supported, fallback to running Stat(".") in order to
-			// trigger an evaluation of the result.
+			// If evaluate is not supported, fallback to running Stat(".") in
+			// order to trigger an evaluation of the result.
 			defer func() {
 				if res == nil {
 					return
 				}
-
-				var (
-					id  string
-					ref client.Reference
-				)
-				ref, err = res.SingleRef()
-				if err != nil {
-					for refID := range res.Refs {
-						id = refID
-						break
-					}
-				} else {
-					id = ref.(*reference).id
-				}
-
-				_, err = c.client.StatFile(ctx, &pb.StatFileRequest{
-					Ref:  id,
-					Path: ".",
+				err = res.EachRef(func(ref client.Reference) error {
+					_, err := ref.StatFile(ctx, client.StatRequest{Path: "."})
+					return err
 				})
 			}()
 		}
@@ -1052,6 +1037,15 @@ func (r *reference) ToState() (st llb.State, err error) {
 	}
 
 	return llb.NewState(defop), nil
+}
+
+func (r *reference) Evaluate(ctx context.Context) error {
+	req := &pb.EvaluateRequest{Ref: r.id}
+	_, err := r.c.client.Evaluate(ctx, req)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *reference) ReadFile(ctx context.Context, req client.ReadRequest) ([]byte, error) {

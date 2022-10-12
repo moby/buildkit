@@ -91,6 +91,7 @@ type ContainerProcess interface {
 
 type Reference interface {
 	ToState() (llb.State, error)
+	Evaluate(ctx context.Context) error
 	ReadFile(ctx context.Context, req ReadRequest) ([]byte, error)
 	StatFile(ctx context.Context, req StatRequest) (*fstypes.Stat, error)
 	ReadDir(ctx context.Context, req ReadDirRequest) ([]*fstypes.Stat, error)

@@ -113,6 +113,19 @@ func (g *gatewayClientForBuild) StatFile(ctx context.Context, in *gatewayapi.Sta
 	return g.gateway.StatFile(ctx, in, opts...)
 }
 
+func (g *gatewayClientForBuild) Evaluate(ctx context.Context, in *gatewayapi.EvaluateRequest, opts ...grpc.CallOption) (*gatewayapi.EvaluateResponse, error) {
+	if err := g.caps.Supports(gatewayapi.CapGatewayEvaluate); err != nil {
+		if err2 := g.caps.Supports(gatewayapi.CapStatFile); err2 != nil {
+			return nil, err
+		}
+		ctx = buildid.AppendToOutgoingContext(ctx, g.buildID)
+		_, err := g.gateway.StatFile(ctx, &gatewayapi.StatFileRequest{Ref: in.Ref, Path: "."}, opts...)
+		return &gatewayapi.EvaluateResponse{}, err
+	}
+	ctx = buildid.AppendToOutgoingContext(ctx, g.buildID)
+	return g.gateway.Evaluate(ctx, in, opts...)
+}
+
 func (g *gatewayClientForBuild) Ping(ctx context.Context, in *gatewayapi.PingRequest, opts ...grpc.CallOption) (*gatewayapi.PongResponse, error) {
 	ctx = buildid.AppendToOutgoingContext(ctx, g.buildID)
 	return g.gateway.Ping(ctx, in, opts...)

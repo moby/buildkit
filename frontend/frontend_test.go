@@ -31,6 +31,7 @@ func TestFrontendIntegration(t *testing.T) {
 		testRefReadFile,
 		testRefReadDir,
 		testRefStatFile,
+		testRefEvaluate,
 		testReturnNil,
 	))
 }
@@ -288,6 +289,55 @@ func testRefStatFile(t *testing.T, sb integration.Sandbox) {
 			"mylocal": dir,
 		},
 	}, "", frontend, nil)
+	require.NoError(t, err)
+}
+
+func testRefEvaluate(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		st := llb.Scratch().File(llb.Mkfile("/test", 0666, []byte{}))
+		def, err := st.Marshal(ctx)
+		if err != nil {
+			return nil, err
+		}
+		res, err := c.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		if err != nil {
+			return nil, err
+		}
+		ref, err := res.SingleRef()
+		if err != nil {
+			return nil, err
+		}
+
+		st = llb.Scratch().File(llb.Mkfile("/test/dir-does-not-exist", 0666, []byte{}))
+		def, err = st.Marshal(ctx)
+		if err != nil {
+			return nil, err
+		}
+		res, err = c.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		if err != nil {
+			return nil, err
+		}
+		ref2, err := res.SingleRef()
+		if err != nil {
+			return nil, err
+		}
+
+		require.NoError(t, ref.Evaluate(ctx))
+		require.Error(t, ref2.Evaluate(ctx))
+		return gateway.NewResult(), nil
+	}
+
+	_, err = c.Build(ctx, client.SolveOpt{}, "", frontend, nil)
 	require.NoError(t, err)
 }
 
