@@ -82,6 +82,7 @@ message Attestation {
 enum AttestationKind {
 	option (gogoproto.goproto_enum_prefix) = false;
 	InToto = 0 [(gogoproto.enumvalue_customname) = "AttestationKindInToto"];
+	Bundle = 1 [(gogoproto.enumvalue_customname) = "AttestationKindBundle"];
 }
 
 message InTotoSubject {
