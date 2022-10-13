@@ -16,6 +16,14 @@ const (
 	ExporterEpochKey             = "source.date.epoch"
 )
 
+// KnownRefMetadataKeys are the subset of exporter keys that can be suffixed by
+// a platform to become platform specific
+var KnownRefMetadataKeys = []string{
+	ExporterImageConfigKey,
+	ExporterInlineCache,
+	ExporterBuildInfo,
+}
+
 type Platforms struct {
 	Platforms []Platform
 }

@@ -284,8 +284,6 @@ func buildAction(clicontext *cli.Context) error {
 		if def != nil {
 			sreq.Definition = def.ToPB()
 		}
-		solveOpt.Frontend = ""
-		solveOpt.FrontendAttrs = nil
 
 		resp, err := c.Build(ctx, solveOpt, "buildctl", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 			_, isSubRequest := sreq.FrontendOpt["requestid"]
