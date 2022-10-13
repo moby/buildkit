@@ -1,5 +1,4 @@
-FROM public.ecr.aws/debian/debian:bullseye-slim AS build
-
+FROM debian:bullseye-slim AS build
 RUN cat /dev/urandom | head -c 100 | sha256sum > unique_first
 RUN cat /dev/urandom | head -c 100 | sha256sum > unique_second
 
