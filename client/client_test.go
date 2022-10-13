@@ -292,6 +292,7 @@ func testBridgeNetworking(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBridgeNetworkingDNSNoRootless(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "https://github.com/moby/buildkit/issues/3171")
 	if os.Getenv("BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS") == "" {
 		t.SkipNow()
 	}
