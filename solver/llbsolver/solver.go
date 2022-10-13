@@ -64,6 +64,10 @@ type Solver struct {
 	entitlements              []string
 }
 
+// Processor defines a processing function to be applied after solving, but
+// before exporting
+type Processor func(ctx context.Context, result *frontend.Result, s *Solver, j *solver.Job) (*frontend.Result, error)
+
 func New(opt Opt) (*Solver, error) {
 	s := &Solver{
 		workerController:          opt.WorkerController,
@@ -105,7 +109,7 @@ func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 	}
 }
 
-func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement) (*client.SolveResponse, error) {
+func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement, post []Processor) (*client.SolveResponse, error) {
 	j, err := s.solver.NewJob(id)
 	if err != nil {
 		return nil, err
@@ -145,6 +149,14 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	for _, post := range post {
+		res2, err := post(ctx, res, s, j)
+		if err != nil {
+			return nil, err
+		}
+		res = res2
 	}
 
 	if res == nil {
