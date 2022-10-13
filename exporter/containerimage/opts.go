@@ -1,11 +1,10 @@
 package containerimage
 
 import (
-	"strconv"
+	"sync"
 
 	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/util/compression"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -25,136 +24,65 @@ const (
 )
 
 type ImageCommitOpts struct {
-	ImageName      string
-	RefCfg         cacheconfig.RefConfig
-	OCITypes       bool
-	BuildInfo      bool
-	BuildInfoAttrs bool
-	Annotations    AnnotationsGroup
+	ImageName string `opt:"name" name:"Image name" help:"Location reference for the image result to be pushed to."`
+
+	Compression struct {
+		Type  string `opt:"compression,gzip/estargz/zstd/uncompressed" name:"Compression type"`
+		Level *int   `opt:"compression-level" name:"Compression level"`
+		Force bool   `opt:"compression-force" name:"Force compression"`
+	} `opt:",squash" name:"Compression"`
+
+	OCITypes bool `opt:"oci-mediatypes" name:"OCI Media Types" help:"Use OCI media types for image output"`
+
+	BuildInfo struct {
+		Enable bool `opt:"buildinfo" name:"Build Info" help:"Attach inline buildinfo"`
+		Attrs  bool `opt:"buildinfo-attrs" name:"Build Info Attributes" help:"Attach inline buildinfo attributes"`
+	} `opt:",squash" name:"Build Info"`
+
+	PreferNonDistributable bool `opt:"prefer-nondist-layers"`
+
+	Annotations AnnotationsGroup `opt:"annotation*" name:"Annotations"`
+
+	Meta map[string]string `opt:"-,remain"`
+
+	logOnce sync.Once
 }
 
-func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error) {
-	rest := make(map[string]string)
-
-	esgz := false
-
-	as, optb, err := ParseAnnotations(toBytesMap(opt))
-	if err != nil {
-		return nil, err
+func (opts *ImageCommitOpts) UnmarshalAnnotations(key string, value string) error {
+	if opts.Annotations == nil {
+		opts.Annotations = AnnotationsGroup{}
 	}
-	opt = toStringMap(optb)
-
-	for k, v := range opt {
-		var err error
-		switch k {
-		case keyImageName:
-			c.ImageName = v
-		case keyLayerCompression:
-			switch v {
-			case "gzip":
-				c.RefCfg.Compression.Type = compression.Gzip
-			case "estargz":
-				c.RefCfg.Compression.Type = compression.EStargz
-				esgz = true
-			case "zstd":
-				c.RefCfg.Compression.Type = compression.Zstd
-			case "uncompressed":
-				c.RefCfg.Compression.Type = compression.Uncompressed
-			default:
-				err = errors.Errorf("unsupported layer compression type: %v", v)
-			}
-		case keyCompressionLevel:
-			ii, err2 := strconv.ParseInt(v, 10, 64)
-			if err != nil {
-				err = errors.Wrapf(err2, "non-int value %s specified for %s", v, k)
-				break
-			}
-			v := int(ii)
-			c.RefCfg.Compression.Level = &v
-		case keyForceCompression:
-			err = parseBoolWithDefault(&c.RefCfg.Compression.Force, k, v, true)
-		case keyOCITypes:
-			err = parseBoolWithDefault(&c.OCITypes, k, v, true)
-		case keyBuildInfo:
-			err = parseBoolWithDefault(&c.BuildInfo, k, v, true)
-		case keyBuildInfoAttrs:
-			err = parseBoolWithDefault(&c.BuildInfoAttrs, k, v, false)
-		case keyPreferNondistLayers:
-			err = parseBool(&c.RefCfg.PreferNonDistributable, k, v)
-		default:
-			rest[k] = v
-		}
-
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if esgz {
-		c.EnableOCITypes("estargz")
-	}
-
-	c.AddAnnotations(as)
-
-	return rest, nil
+	return opts.Annotations.Load(key, value)
 }
 
-func (c *ImageCommitOpts) AddAnnotations(annotations AnnotationsGroup) {
-	if annotations == nil {
-		return
+func (c *ImageCommitOpts) OCI() bool {
+	if c.OCITypes {
+		return true
 	}
-	if c.Annotations == nil {
-		c.Annotations = AnnotationsGroup{}
+	if c.Compression.Type == "estargz" {
+		c.logOnce.Do(func() {
+			logrus.Warn("forcibly turning on oci-mediatype mode for estargz")
+		})
+		return true
 	}
-	c.Annotations = c.Annotations.Merge(annotations)
-	for _, a := range annotations {
+	for _, a := range c.Annotations {
+		c.logOnce.Do(func() {
+			logrus.Warn("forcibly turning on oci-mediatype mode for annotations")
+		})
 		if len(a.Index)+len(a.IndexDescriptor)+len(a.ManifestDescriptor) > 0 {
-			c.EnableOCITypes("annotations")
+			return true
 		}
 	}
+	return false
 }
 
-func (c *ImageCommitOpts) EnableOCITypes(reason string) {
-	if !c.OCITypes {
-		message := "forcibly turning on oci-mediatype mode"
-		if reason != "" {
-			message += " for " + reason
-		}
-		logrus.Warn(message)
-
-		c.OCITypes = true
+func (c *ImageCommitOpts) RefCfg() cacheconfig.RefConfig {
+	return cacheconfig.RefConfig{
+		Compression: compression.Config{
+			Type:  compression.Parse(c.Compression.Type),
+			Level: c.Compression.Level,
+			Force: c.Compression.Force,
+		},
+		PreferNonDistributable: c.PreferNonDistributable,
 	}
-}
-
-func parseBool(dest *bool, key string, value string) error {
-	b, err := strconv.ParseBool(value)
-	if err != nil {
-		return errors.Wrapf(err, "non-bool value specified for %s", key)
-	}
-	*dest = b
-	return nil
-}
-
-func parseBoolWithDefault(dest *bool, key string, value string, defaultValue bool) error {
-	if value == "" {
-		*dest = defaultValue
-		return nil
-	}
-	return parseBool(dest, key, value)
-}
-
-func toBytesMap(m map[string]string) map[string][]byte {
-	result := make(map[string][]byte)
-	for k, v := range m {
-		result[k] = []byte(v)
-	}
-	return result
-}
-
-func toStringMap(m map[string][]byte) map[string]string {
-	result := make(map[string]string)
-	for k, v := range m {
-		result[k] = string(v)
-	}
-	return result
 }

@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -19,7 +18,6 @@ import (
 	"github.com/containerd/containerd/rootfs"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/moby/buildkit/cache"
-	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/session"
@@ -27,6 +25,7 @@ import (
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/leaseutil"
+	"github.com/moby/buildkit/util/opts"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/push"
 	digest "github.com/opencontainers/go-digest"
@@ -71,119 +70,45 @@ func New(opt Opt) (exporter.Exporter, error) {
 	return im, nil
 }
 
-func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
-	i := &imageExporterInstance{
-		imageExporter: e,
-		opts: ImageCommitOpts{
-			RefCfg: cacheconfig.RefConfig{
-				Compression: compression.New(compression.Default),
-			},
-			BuildInfo: true,
-		},
-		store: true,
-	}
+type ContainerImageCommitOpts struct {
+	ImageCommitOpts `opt:",squash"`
 
-	opt, err := i.opts.Load(opt)
+	Push struct {
+		Enable   bool `opt:"push" help:"Automatically push the image."`
+		ByDigest bool `opt:"push-by-digest" help:"Push image by digest without tags."`
+	} `opt:",squash" name:"Push"`
+
+	DanglingPrefix string `opt:"dangling-name-prefix" help:"Name image with prefix@<digest>, used for anonymous images."`
+	Insecure       bool   `opt:"registry.insecure" help:"Push to insecure HTTP registry."`
+	Unpack         bool   `opt:"unpack" help:"Unpack image after creation (for use with containerd)."`
+
+	Store                bool `opt:"store"`
+	StoreAllowIncomplete bool `opt:"unsafe-internal-store-allow-incomplete,hidden"`
+
+	NameCanonical bool `opt:"name-canonical"`
+}
+
+func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
+	os := ContainerImageCommitOpts{}
+	os.Compression.Type = compression.Default.String()
+	os.BuildInfo.Enable = true
+	os.Store = true
+
+	err := opts.Unmarshal(opt, &os)
 	if err != nil {
 		return nil, err
 	}
 
-	for k, v := range opt {
-		switch k {
-		case keyPush:
-			if v == "" {
-				i.push = true
-				continue
-			}
-			b, err := strconv.ParseBool(v)
-			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
-			}
-			i.push = b
-		case keyPushByDigest:
-			if v == "" {
-				i.pushByDigest = true
-				continue
-			}
-			b, err := strconv.ParseBool(v)
-			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
-			}
-			i.pushByDigest = b
-		case keyInsecure:
-			if v == "" {
-				i.insecure = true
-				continue
-			}
-			b, err := strconv.ParseBool(v)
-			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
-			}
-			i.insecure = b
-		case keyUnpack:
-			if v == "" {
-				i.unpack = true
-				continue
-			}
-			b, err := strconv.ParseBool(v)
-			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
-			}
-			i.unpack = b
-		case keyStore:
-			if v == "" {
-				i.store = true
-				continue
-			}
-			b, err := strconv.ParseBool(v)
-			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
-			}
-			i.store = b
-		case keyUnsafeInternalStoreAllowIncomplete:
-			if v == "" {
-				i.storeAllowIncomplete = true
-				continue
-			}
-			b, err := strconv.ParseBool(v)
-			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
-			}
-			i.storeAllowIncomplete = b
-		case keyDanglingPrefix:
-			i.danglingPrefix = v
-		case keyNameCanonical:
-			if v == "" {
-				i.nameCanonical = true
-				continue
-			}
-			b, err := strconv.ParseBool(v)
-			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
-			}
-			i.nameCanonical = b
-		default:
-			if i.meta == nil {
-				i.meta = make(map[string][]byte)
-			}
-			i.meta[k] = []byte(v)
-		}
+	i := &imageExporterInstance{
+		imageExporter: e,
+		opts:          os,
 	}
 	return i, nil
 }
 
 type imageExporterInstance struct {
 	*imageExporter
-	opts                 ImageCommitOpts
-	push                 bool
-	pushByDigest         bool
-	unpack               bool
-	store                bool
-	storeAllowIncomplete bool
-	insecure             bool
-	nameCanonical        bool
-	danglingPrefix       string
-	meta                 map[string][]byte
+	opts ContainerImageCommitOpts
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -192,24 +117,23 @@ func (e *imageExporterInstance) Name() string {
 
 func (e *imageExporterInstance) Config() exporter.Config {
 	return exporter.Config{
-		Compression: e.opts.RefCfg.Compression,
+		Compression: e.opts.RefCfg().Compression,
 	}
 }
 
 func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source, sessionID string) (map[string]string, error) {
-	if src.Metadata == nil {
-		src.Metadata = make(map[string][]byte)
-	}
-	for k, v := range e.meta {
-		src.Metadata[k] = v
-	}
-
-	opts := e.opts
-	as, _, err := ParseAnnotations(src.Metadata)
+	as, err := ParseAnnotations(src.Metadata)
 	if err != nil {
 		return nil, err
 	}
-	opts.AddAnnotations(as)
+	e.opts.Annotations.Merge(as)
+
+	if src.Metadata == nil {
+		src.Metadata = make(map[string][]byte)
+	}
+	for k, v := range e.opts.Meta {
+		src.Metadata[k] = []byte(v)
+	}
 
 	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
@@ -217,7 +141,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	}
 	defer done(context.TODO())
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, sessionID, &opts)
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, sessionID, &e.opts.ImageCommitOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -232,16 +156,16 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 		e.opts.ImageName = string(n)
 	}
 
-	nameCanonical := e.nameCanonical
-	if e.opts.ImageName == "" && e.danglingPrefix != "" {
-		e.opts.ImageName = e.danglingPrefix + "@" + desc.Digest.String()
+	nameCanonical := e.opts.NameCanonical
+	if e.opts.ImageName == "" && e.opts.DanglingPrefix != "" {
+		e.opts.ImageName = e.opts.DanglingPrefix + "@" + desc.Digest.String()
 		nameCanonical = false
 	}
 
 	if e.opts.ImageName != "" {
 		targetNames := strings.Split(e.opts.ImageName, ",")
 		for _, targetName := range targetNames {
-			if e.opt.Images != nil && e.store {
+			if e.opt.Images != nil && e.opts.Store {
 				tagDone := progress.OneOff(ctx, "naming to "+targetName)
 				img := images.Image{
 					Target:    *desc,
@@ -265,15 +189,15 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 				}
 				tagDone(nil)
 
-				if e.unpack {
+				if e.opts.Unpack {
 					if err := e.unpackImage(ctx, img, src, session.NewGroup(sessionID)); err != nil {
 						return nil, err
 					}
 				}
 
-				if !e.storeAllowIncomplete {
+				if !e.opts.StoreAllowIncomplete {
 					if src.Ref != nil {
-						remotes, err := src.Ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
+						remotes, err := src.Ref.GetRemotes(ctx, false, e.opts.RefCfg(), false, session.NewGroup(sessionID))
 						if err != nil {
 							return nil, err
 						}
@@ -286,7 +210,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 					}
 					if len(src.Refs) > 0 {
 						for _, r := range src.Refs {
-							remotes, err := r.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
+							remotes, err := r.GetRemotes(ctx, false, e.opts.RefCfg(), false, session.NewGroup(sessionID))
 							if err != nil {
 								return nil, err
 							}
@@ -300,7 +224,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 					}
 				}
 			}
-			if e.push {
+			if e.opts.Push.Enable {
 				err := e.pushImage(ctx, src, sessionID, targetName, desc.Digest)
 				if err != nil {
 					return nil, errors.Wrapf(err, "failed to push %v", targetName)
@@ -329,7 +253,7 @@ func (e *imageExporterInstance) pushImage(ctx context.Context, src *exporter.Sou
 	annotations := map[digest.Digest]map[string]string{}
 	mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
 	if src.Ref != nil {
-		remotes, err := src.Ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
+		remotes, err := src.Ref.GetRemotes(ctx, false, e.opts.RefCfg(), false, session.NewGroup(sessionID))
 		if err != nil {
 			return err
 		}
@@ -341,7 +265,7 @@ func (e *imageExporterInstance) pushImage(ctx context.Context, src *exporter.Sou
 	}
 	if len(src.Refs) > 0 {
 		for _, r := range src.Refs {
-			remotes, err := r.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
+			remotes, err := r.GetRemotes(ctx, false, e.opts.RefCfg(), false, session.NewGroup(sessionID))
 			if err != nil {
 				return err
 			}
@@ -354,7 +278,7 @@ func (e *imageExporterInstance) pushImage(ctx context.Context, src *exporter.Sou
 	}
 
 	ctx = remotes.WithMediaTypeKeyPrefix(ctx, intoto.PayloadType, "intoto")
-	return push.Push(ctx, e.opt.SessionManager, sessionID, mprovider, e.opt.ImageWriter.ContentStore(), dgst, targetName, e.insecure, e.opt.RegistryHosts, e.pushByDigest, annotations)
+	return push.Push(ctx, e.opt.SessionManager, sessionID, mprovider, e.opt.ImageWriter.ContentStore(), dgst, targetName, e.opts.Insecure, e.opt.RegistryHosts, e.opts.Push.ByDigest, annotations)
 }
 
 func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Image, src *exporter.Source, s session.Group) (err0 error) {
@@ -384,7 +308,7 @@ func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Imag
 		}
 	}
 
-	remotes, err := topLayerRef.GetRemotes(ctx, true, e.opts.RefCfg, false, s)
+	remotes, err := topLayerRef.GetRemotes(ctx, true, e.opts.RefCfg(), false, s)
 	if err != nil {
 		return err
 	}

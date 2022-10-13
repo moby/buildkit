@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -19,13 +18,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
-)
-
-const (
-	// preferNondistLayersKey is an exporter option which can be used to mark a layer as non-distributable if the layer reference was
-	// already found to use a non-distributable media type.
-	// When this option is not set, the exporter will change the media type of the layer to a distributable one.
-	preferNondistLayersKey = "prefer-nondist-layers"
 )
 
 type Opt struct {
@@ -44,22 +36,11 @@ func New(opt Opt) (exporter.Exporter, error) {
 
 func (e *localExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
 	li := &localExporterInstance{localExporter: e}
-
-	v, ok := opt[preferNondistLayersKey]
-	if ok {
-		b, err := strconv.ParseBool(v)
-		if err != nil {
-			return nil, errors.Wrapf(err, "non-bool value for %s: %s", preferNondistLayersKey, v)
-		}
-		li.preferNonDist = b
-	}
-
 	return li, nil
 }
 
 type localExporterInstance struct {
 	*localExporter
-	preferNonDist bool
 }
 
 func (e *localExporterInstance) Name() string {

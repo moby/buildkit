@@ -11,7 +11,6 @@ import (
 	"github.com/containerd/containerd/leases"
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/cache"
-	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
@@ -21,6 +20,7 @@ import (
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/leaseutil"
+	"github.com/moby/buildkit/util/opts"
 	"github.com/moby/buildkit/util/progress"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -51,27 +51,19 @@ func New(opt Opt) (exporter.Exporter, error) {
 }
 
 func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
-	i := &imageExporterInstance{
-		imageExporter: e,
-		opts: containerimage.ImageCommitOpts{
-			RefCfg: cacheconfig.RefConfig{
-				Compression: compression.New(compression.Default),
-			},
-			BuildInfo: true,
-			OCITypes:  e.opt.Variant == VariantOCI,
-		},
-	}
+	os := containerimage.ImageCommitOpts{}
+	os.Compression.Type = compression.Default.String()
+	os.BuildInfo.Enable = true
+	os.OCITypes = e.opt.Variant == VariantOCI
 
-	opt, err := i.opts.Load(opt)
+	err := opts.Unmarshal(opt, &os)
 	if err != nil {
 		return nil, err
 	}
 
-	for k, v := range opt {
-		if i.meta == nil {
-			i.meta = make(map[string][]byte)
-		}
-		i.meta[k] = []byte(v)
+	i := &imageExporterInstance{
+		imageExporter: e,
+		opts:          os,
 	}
 	return i, nil
 }
@@ -88,13 +80,26 @@ func (e *imageExporterInstance) Name() string {
 
 func (e *imageExporterInstance) Config() exporter.Config {
 	return exporter.Config{
-		Compression: e.opts.RefCfg.Compression,
+		Compression: e.opts.RefCfg().Compression,
 	}
 }
 
 func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source, sessionID string) (map[string]string, error) {
 	if e.opt.Variant == VariantDocker && len(src.Refs) > 0 {
 		return nil, errors.Errorf("docker exporter does not currently support exporting manifest lists")
+	}
+
+	as, err := containerimage.ParseAnnotations(src.Metadata)
+	if err != nil {
+		return nil, err
+	}
+	e.opts.Annotations.Merge(as)
+
+	if src.Metadata == nil {
+		src.Metadata = make(map[string][]byte)
+	}
+	for k, v := range e.opts.Meta {
+		src.Metadata[k] = []byte(v)
 	}
 
 	if src.Metadata == nil {
@@ -104,20 +109,13 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 		src.Metadata[k] = v
 	}
 
-	opts := e.opts
-	as, _, err := containerimage.ParseAnnotations(src.Metadata)
-	if err != nil {
-		return nil, err
-	}
-	opts.AddAnnotations(as)
-
 	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
 		return nil, err
 	}
 	defer done(context.TODO())
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, sessionID, &opts)
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, sessionID, &e.opts)
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +179,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 
 	mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
 	if src.Ref != nil {
-		remotes, err := src.Ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
+		remotes, err := src.Ref.GetRemotes(ctx, false, e.opts.RefCfg(), false, session.NewGroup(sessionID))
 		if err != nil {
 			return nil, err
 		}
@@ -199,7 +197,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	}
 	if len(src.Refs) > 0 {
 		for _, r := range src.Refs {
-			remotes, err := r.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
+			remotes, err := r.GetRemotes(ctx, false, e.opts.RefCfg(), false, session.NewGroup(sessionID))
 			if err != nil {
 				return nil, err
 			}
