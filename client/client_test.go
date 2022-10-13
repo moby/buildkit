@@ -5588,7 +5588,7 @@ func testMergeOp(t *testing.T, sb integration.Sandbox) {
 		File(llb.Mkfile("bar/D", 0644, []byte("D"))).
 		File(llb.Mkfile("bar/E", 0755, nil)).
 		File(llb.Mkfile("qaz", 0644, nil)),
-	// /foo from stateE is not here because it is deleted in stateB, which is part of a submerge of mergeD
+		// /foo from stateE is not here because it is deleted in stateB, which is part of a submerge of mergeD
 	)
 }
 
