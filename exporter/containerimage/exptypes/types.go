@@ -13,6 +13,7 @@ const (
 	ExporterInlineCache          = "containerimage.inlinecache"
 	ExporterBuildInfo            = "containerimage.buildinfo"
 	ExporterPlatformsKey         = "refs.platforms"
+	ExporterEpochKey             = "source.date.epoch"
 )
 
 type Platforms struct {

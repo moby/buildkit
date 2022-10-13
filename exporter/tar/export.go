@@ -12,6 +12,7 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
+	"github.com/moby/buildkit/exporter/util/epoch"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/snapshot"
@@ -45,6 +46,12 @@ func New(opt Opt) (exporter.Exporter, error) {
 func (e *localExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
 	li := &localExporterInstance{localExporter: e}
 
+	tm, _, err := epoch.ParseAttr(opt)
+	if err != nil {
+		return nil, err
+	}
+	li.epoch = tm
+
 	v, ok := opt[preferNondistLayersKey]
 	if ok {
 		b, err := strconv.ParseBool(v)
@@ -60,6 +67,7 @@ func (e *localExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 type localExporterInstance struct {
 	*localExporter
 	preferNonDist bool
+	epoch         *time.Time
 }
 
 func (e *localExporterInstance) Name() string {
@@ -78,6 +86,14 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 			defers[i]()
 		}
 	}()
+
+	if e.epoch == nil {
+		if tm, ok, err := epoch.ParseSource(inp); err != nil {
+			return nil, err
+		} else if ok {
+			e.epoch = tm
+		}
+	}
 
 	getDir := func(ctx context.Context, k string, ref cache.ImmutableRef) (*fsutil.Dir, error) {
 		var src string
@@ -108,9 +124,10 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 		}
 
 		walkOpt := &fsutil.WalkOpt{}
+		var idMapFunc func(p string, st *fstypes.Stat) fsutil.MapResult
 
 		if idmap != nil {
-			walkOpt.Map = func(p string, st *fstypes.Stat) fsutil.MapResult {
+			idMapFunc = func(p string, st *fstypes.Stat) fsutil.MapResult {
 				uid, gid, err := idmap.ToContainer(idtools.Identity{
 					UID: int(st.Uid),
 					GID: int(st.Gid),
@@ -124,12 +141,28 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 			}
 		}
 
+		walkOpt.Map = func(p string, st *fstypes.Stat) fsutil.MapResult {
+			res := fsutil.MapResultKeep
+			if idMapFunc != nil {
+				res = idMapFunc(p, st)
+			}
+			if e.epoch != nil {
+				st.ModTime = e.epoch.UnixNano()
+			}
+			return res
+		}
+
+		st := fstypes.Stat{
+			Mode: uint32(os.ModeDir | 0755),
+			Path: strings.Replace(k, "/", "_", -1),
+		}
+		if e.epoch != nil {
+			st.ModTime = e.epoch.UnixNano()
+		}
+
 		return &fsutil.Dir{
-			FS: fsutil.NewFS(src, walkOpt),
-			Stat: fstypes.Stat{
-				Mode: uint32(os.ModeDir | 0755),
-				Path: strings.Replace(k, "/", "_", -1),
-			},
+			FS:   fsutil.NewFS(src, walkOpt),
+			Stat: st,
 		}, nil
 	}
 

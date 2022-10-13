@@ -145,6 +145,7 @@ var allTests = integration.TestFuncs(
 	testWorkdirCopyIgnoreRelative,
 	testCopyFollowAllSymlinks,
 	testDockerfileAddChownExpand,
+	testSourceDateEpochWithoutExporter,
 )
 
 // Tests that depend on the `security.*` entitlements
@@ -5967,6 +5968,82 @@ COPY --from=build /foo /out /
 	dt, err = os.ReadFile(filepath.Join(destDir, "linux_arm64/foo"))
 	require.NoError(t, err)
 	require.Equal(t, "foo is bar-arm64\n", string(dt))
+}
+
+func testSourceDateEpochWithoutExporter(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "oci exporter")
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM scratch
+ENTRYPOINT foo bar
+COPY Dockerfile .
+`)
+
+	dir, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := os.MkdirTemp("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+
+	tm := time.Date(2015, time.October, 21, 7, 28, 0, 0, time.UTC)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:SOURCE_DATE_EPOCH": fmt.Sprintf("%d", tm.Unix()),
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterOCI,
+				// disable exporter epoch to make sure we test dockerfile
+				Attrs:  map[string]string{"source-date-epoch": ""},
+				Output: fixedWriteCloser(outW),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "out.tar"))
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(dt, false)
+	require.NoError(t, err)
+
+	var idx ocispecs.Index
+	err = json.Unmarshal(m["index.json"].Data, &idx)
+	require.NoError(t, err)
+
+	mlistHex := idx.Manifests[0].Digest.Hex()
+
+	var mfst ocispecs.Manifest
+	err = json.Unmarshal(m["blobs/sha256/"+mlistHex].Data, &mfst)
+	require.NoError(t, err)
+
+	var img ocispecs.Image
+	err = json.Unmarshal(m["blobs/sha256/"+mfst.Config.Digest.Hex()].Data, &img)
+	require.NoError(t, err)
+
+	require.Equal(t, tm.Unix(), img.Created.Unix())
+	for _, h := range img.History {
+		require.Equal(t, tm.Unix(), h.Created.Unix())
+	}
 }
 
 func runShell(dir string, cmds ...string) error {

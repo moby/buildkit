@@ -176,6 +176,11 @@ func TestIntegration(t *testing.T) {
 		testExportAnnotationsMediaTypes,
 		testExportAttestations,
 		testAttestationDefaultSubject,
+		testSourceDateEpochLayerTimestamps,
+		testSourceDateEpochClamp,
+		testSourceDateEpochReset,
+		testSourceDateEpochLocalExporter,
+		testSourceDateEpochTarExporter,
 	)
 	tests = append(tests, diffOpTestCases()...)
 	integration.Run(t, tests, mirrors)
@@ -2280,6 +2285,339 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 			require.True(t, ok)
 		}
 	}
+
+	checkAllReleasable(t, c, sb, true)
+}
+
+func testSourceDateEpochLayerTimestamps(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "oci exporter")
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+
+	run := func(cmd string) {
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+
+	run(`sh -c "echo -n first > foo"`)
+	run(`sh -c "echo -n second > bar"`)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir, err := os.MkdirTemp("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+
+	tm := time.Date(2015, time.October, 21, 7, 28, 0, 0, time.UTC)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:SOURCE_DATE_EPOCH": fmt.Sprintf("%d", tm.Unix()),
+		},
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterOCI,
+				Output: fixedWriteCloser(outW),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(out)
+	require.NoError(t, err)
+
+	tms, err := readImageTimestamps(dt)
+	require.NoError(t, err)
+
+	require.Equal(t, len(tms), 3)
+
+	expected := tm.UTC().Format(time.RFC3339Nano)
+	require.Equal(t, expected, tms[0])
+	require.Equal(t, expected, tms[1])
+	require.Equal(t, expected, tms[2])
+
+	checkAllReleasable(t, c, sb, true)
+}
+
+func testSourceDateEpochClamp(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "oci exporter")
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	var bboxConfig []byte
+	_, err = c.Build(sb.Context(), SolveOpt{}, "", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		_, bboxConfig, err = c.ResolveImageConfig(ctx, "docker.io/library/busybox:latest", llb.ResolveImageConfigOpt{})
+		if err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}, nil)
+	require.NoError(t, err)
+
+	m := map[string]json.RawMessage{}
+	require.NoError(t, json.Unmarshal(bboxConfig, &m))
+	delete(m, "created")
+	bboxConfig, err = json.Marshal(m)
+	require.NoError(t, err)
+
+	busybox, err := llb.Image("busybox:latest").WithImageConfig(bboxConfig)
+	require.NoError(t, err)
+
+	def, err := busybox.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir, err := os.MkdirTemp("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterOCI,
+				Attrs: map[string]string{
+					exptypes.ExporterImageConfigKey: string(bboxConfig),
+				},
+				Output: fixedWriteCloser(outW),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(out)
+	require.NoError(t, err)
+
+	busyboxTms, err := readImageTimestamps(dt)
+	require.NoError(t, err)
+
+	require.True(t, len(busyboxTms) > 1)
+	bboxLayerLen := len(busyboxTms) - 1
+
+	tm, err := time.Parse(time.RFC3339Nano, busyboxTms[1])
+	require.NoError(t, err)
+
+	next := tm.Add(time.Hour).Truncate(time.Second)
+
+	st := busybox.Run(llb.Shlex("touch /foo"))
+
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	out = filepath.Join(destDir, "out.tar")
+	outW, err = os.Create(out)
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:SOURCE_DATE_EPOCH": fmt.Sprintf("%d", next.Unix()),
+		},
+		Exports: []ExportEntry{
+			{
+				Type: ExporterOCI,
+				Attrs: map[string]string{
+					exptypes.ExporterImageConfigKey: string(bboxConfig),
+				},
+				Output: fixedWriteCloser(outW),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err = os.ReadFile(out)
+	require.NoError(t, err)
+
+	tms, err := readImageTimestamps(dt)
+	require.NoError(t, err)
+
+	require.Equal(t, len(tms), bboxLayerLen+2)
+
+	expected := next.UTC().Format(time.RFC3339Nano)
+	require.Equal(t, expected, tms[0])
+	require.Equal(t, busyboxTms[1], tms[1])
+	require.Equal(t, expected, tms[bboxLayerLen+1])
+
+	checkAllReleasable(t, c, sb, true)
+}
+
+// testSourceDateEpochReset tests that the SOURCE_DATE_EPOCH is reset if exporter option is set
+func testSourceDateEpochReset(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "oci exporter")
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+
+	run := func(cmd string) {
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+
+	run(`sh -c "echo -n first > foo"`)
+	run(`sh -c "echo -n second > bar"`)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir, err := os.MkdirTemp("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+
+	tm := time.Date(2015, time.October, 21, 7, 28, 0, 0, time.UTC)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:SOURCE_DATE_EPOCH": fmt.Sprintf("%d", tm.Unix()),
+		},
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterOCI,
+				Attrs:  map[string]string{"source-date-epoch": ""},
+				Output: fixedWriteCloser(outW),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(out)
+	require.NoError(t, err)
+
+	tms, err := readImageTimestamps(dt)
+	require.NoError(t, err)
+
+	require.Equal(t, len(tms), 3)
+
+	expected := tm.UTC().Format(time.RFC3339Nano)
+	require.NotEqual(t, expected, tms[0])
+	require.NotEqual(t, expected, tms[1])
+	require.NotEqual(t, expected, tms[2])
+
+	require.Equal(t, tms[0], tms[2])
+	require.NotEqual(t, tms[2], tms[1])
+
+	checkAllReleasable(t, c, sb, true)
+}
+
+func testSourceDateEpochLocalExporter(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+
+	run := func(cmd string) {
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+
+	run(`sh -c "echo -n first > foo"`)
+	run(`sh -c "echo -n second > bar"`)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir, err := os.MkdirTemp("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	tm := time.Date(2015, time.October, 21, 7, 28, 0, 0, time.UTC)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:SOURCE_DATE_EPOCH": fmt.Sprintf("%d", tm.Unix()),
+		},
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	fi, err := os.Stat(filepath.Join(destDir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, fi.ModTime().Format(time.RFC3339), tm.UTC().Format(time.RFC3339))
+
+	fi, err = os.Stat(filepath.Join(destDir, "bar"))
+	require.NoError(t, err)
+	require.Equal(t, fi.ModTime().Format(time.RFC3339), tm.UTC().Format(time.RFC3339))
+
+	checkAllReleasable(t, c, sb, true)
+}
+
+func testSourceDateEpochTarExporter(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+
+	run := func(cmd string) {
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+
+	run(`sh -c "echo -n first > foo"`)
+	run(`sh -c "echo -n second > bar"`)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir, err := os.MkdirTemp("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+
+	tm := time.Date(2015, time.October, 21, 7, 28, 0, 0, time.UTC)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:SOURCE_DATE_EPOCH": fmt.Sprintf("%d", tm.Unix()),
+		},
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterTar,
+				Output: fixedWriteCloser(outW),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(out)
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(dt, false)
+	require.NoError(t, err)
+
+	require.Equal(t, len(m), 2)
+
+	require.Equal(t, tm.Format(time.RFC3339), m["foo"].Header.ModTime.Format(time.RFC3339))
+	require.Equal(t, tm.Format(time.RFC3339), m["bar"].Header.ModTime.Format(time.RFC3339))
 
 	checkAllReleasable(t, c, sb, true)
 }
@@ -6795,6 +7133,51 @@ func makeSSHAgentSock(t *testing.T, agent agent.Agent) (p string, err error) {
 	go s.run(agent)
 
 	return sockPath, nil
+}
+
+func readImageTimestamps(dt []byte) ([]string, error) {
+	m, err := testutil.ReadTarToMap(dt, false)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, ok := m["oci-layout"]; !ok {
+		return nil, errors.Errorf("no oci-layout")
+	}
+
+	var index ocispecs.Index
+	if err := json.Unmarshal(m["index.json"].Data, &index); err != nil {
+		return nil, err
+	}
+	if len(index.Manifests) != 1 {
+		return nil, errors.Errorf("invalid manifest count %d", len(index.Manifests))
+	}
+
+	var mfst ocispecs.Manifest
+	if err := json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].Data, &mfst); err != nil {
+		return nil, err
+	}
+	// don't unmarshal to image type so we get the original string value
+	type history struct {
+		Created string `json:"created"`
+	}
+
+	img := struct {
+		History []history `json:"history"`
+		Created string    `json:"created"`
+	}{}
+
+	if err := json.Unmarshal(m["blobs/sha256/"+mfst.Config.Digest.Hex()].Data, &img); err != nil {
+		return nil, err
+	}
+
+	out := []string{
+		img.Created,
+	}
+	for _, h := range img.History {
+		out = append(out, h.Created)
+	}
+	return out, nil
 }
 
 type server struct {

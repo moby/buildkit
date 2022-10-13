@@ -2,8 +2,10 @@ package containerimage
 
 import (
 	"strconv"
+	"time"
 
 	cacheconfig "github.com/moby/buildkit/cache/config"
+	"github.com/moby/buildkit/exporter/util/epoch"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -31,6 +33,7 @@ type ImageCommitOpts struct {
 	BuildInfo      bool
 	BuildInfoAttrs bool
 	Annotations    AnnotationsGroup
+	Epoch          *time.Time
 }
 
 func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error) {
@@ -43,6 +46,11 @@ func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error)
 		return nil, err
 	}
 	opt = toStringMap(optb)
+
+	c.Epoch, opt, err = epoch.ParseAttr(opt)
+	if err != nil {
+		return nil, err
+	}
 
 	for k, v := range opt {
 		var err error

@@ -11,6 +11,7 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
+	"github.com/moby/buildkit/exporter/util/epoch"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/snapshot"
@@ -37,11 +38,17 @@ func New(opt Opt) (exporter.Exporter, error) {
 }
 
 func (e *localExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
-	return &localExporterInstance{localExporter: e}, nil
+	tm, _, err := epoch.ParseAttr(opt)
+	if err != nil {
+		return nil, err
+	}
+
+	return &localExporterInstance{localExporter: e, epoch: tm}, nil
 }
 
 type localExporterInstance struct {
 	*localExporter
+	epoch *time.Time
 }
 
 func (e *localExporterInstance) Name() string {
@@ -55,6 +62,14 @@ func (e *localExporter) Config() exporter.Config {
 func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source, sessionID string) (map[string]string, error) {
 	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
+
+	if e.epoch == nil {
+		if tm, ok, err := epoch.ParseSource(inp); err != nil {
+			return nil, err
+		} else if ok {
+			e.epoch = tm
+		}
+	}
 
 	caller, err := e.opt.SessionManager.Get(timeoutCtx, sessionID, false)
 	if err != nil {
@@ -105,9 +120,10 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 			}
 
 			walkOpt := &fsutil.WalkOpt{}
+			var idMapFunc func(p string, st *fstypes.Stat) fsutil.MapResult
 
 			if idmap != nil {
-				walkOpt.Map = func(p string, st *fstypes.Stat) fsutil.MapResult {
+				idMapFunc = func(p string, st *fstypes.Stat) fsutil.MapResult {
 					uid, gid, err := idmap.ToContainer(idtools.Identity{
 						UID: int(st.Uid),
 						GID: int(st.Gid),
@@ -121,14 +137,29 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 				}
 			}
 
+			walkOpt.Map = func(p string, st *fstypes.Stat) fsutil.MapResult {
+				res := fsutil.MapResultKeep
+				if idMapFunc != nil {
+					res = idMapFunc(p, st)
+				}
+				if e.epoch != nil {
+					st.ModTime = e.epoch.UnixNano()
+				}
+				return res
+			}
+
 			fs := fsutil.NewFS(src, walkOpt)
 			lbl := "copying files"
 			if isMap {
 				lbl += " " + k
-				fs, err = fsutil.SubDirFS([]fsutil.Dir{{FS: fs, Stat: fstypes.Stat{
+				st := fstypes.Stat{
 					Mode: uint32(os.ModeDir | 0755),
 					Path: strings.Replace(k, "/", "_", -1),
-				}}})
+				}
+				if e.epoch != nil {
+					st.ModTime = e.epoch.UnixNano()
+				}
+				fs, err = fsutil.SubDirFS([]fsutil.Dir{{FS: fs, Stat: st}})
 				if err != nil {
 					return err
 				}
