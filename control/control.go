@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/docker/distribution/reference"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	apitypes "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/cache/remotecache"
@@ -14,10 +15,12 @@ import (
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/util/epoch"
 	"github.com/moby/buildkit/frontend"
+	"github.com/moby/buildkit/frontend/attestations"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/grpchijack"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver"
+	"github.com/moby/buildkit/solver/llbsolver/proc"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/imageutil"
@@ -323,6 +326,25 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		})
 	}
 
+	attests, err := attestations.Parse(req.FrontendAttrs)
+	if err != nil {
+		return nil, err
+	}
+
+	var procs []llbsolver.Processor
+	if attrs, ok := attests["sbom"]; ok {
+		src := attrs["generator"]
+		if src == "" {
+			return nil, errors.Errorf("sbom generator cannot be empty")
+		}
+		ref, err := reference.ParseNormalizedNamed(src)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to parse sbom generator %s", src)
+		}
+		ref = reference.TagNameOnly(ref)
+		procs = append(procs, proc.ForceRefsProcessor, proc.SBOMProcessor(ref.String()))
+	}
+
 	resp, err := c.solver.Solve(ctx, req.Ref, req.Session, frontend.SolveRequest{
 		Frontend:       req.Frontend,
 		Definition:     req.Definition,
@@ -333,7 +355,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		Exporter:        expi,
 		CacheExporter:   cacheExporter,
 		CacheExportMode: cacheExportMode,
-	}, req.Entitlements)
+	}, req.Entitlements, procs)
 	if err != nil {
 		return nil, err
 	}
