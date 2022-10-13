@@ -59,6 +59,7 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewayContainerSignal,
 		testWarnings,
 		testClientGatewayFrontendAttrs,
+		testClientGatewayNilResult,
 	), integration.WithMirroredImages(integration.OfficialImages("busybox:latest")))
 
 	integration.Run(t, integration.TestFuncs(
@@ -2049,6 +2050,40 @@ func testClientGatewayFrontendAttrs(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, &bazattrval, bi.Attrs["build-arg:baz"])
 
 	checkAllReleasable(t, c, sb, true)
+}
+
+func testClientGatewayNilResult(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		st := llb.Image("busybox:latest")
+		diff := llb.Diff(st, st)
+		def, err := diff.Marshal(sb.Context())
+		if err != nil {
+			return nil, err
+		}
+		res, err := c.Solve(ctx, client.SolveRequest{
+			Definition: def.ToPB(),
+			Evaluate:   true,
+		})
+		require.NoError(t, err)
+
+		ref, err := res.SingleRef()
+		require.NoError(t, err)
+
+		dirEnts, err := ref.ReadDir(ctx, client.ReadDirRequest{
+			Path: "/",
+		})
+		require.NoError(t, err)
+		require.Len(t, dirEnts, 0)
+		return nil, nil
+	}
+
+	_, err = c.Build(sb.Context(), SolveOpt{}, "", b, nil)
+	require.NoError(t, err)
 }
 
 type nopCloser struct {
