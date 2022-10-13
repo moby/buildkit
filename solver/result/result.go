@@ -41,6 +41,9 @@ func (r *Result[T]) AddRef(k string, ref T) {
 
 func (r *Result[T]) AddAttestation(k string, v Attestation, ref T) {
 	r.mu.Lock()
+	if r.Refs == nil {
+		r.Refs = map[string]T{}
+	}
 	if r.Attestations == nil {
 		r.Attestations = map[string][]Attestation{}
 	}
