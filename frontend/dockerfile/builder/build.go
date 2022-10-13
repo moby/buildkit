@@ -20,6 +20,9 @@ import (
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
+	"github.com/moby/buildkit/frontend"
+	"github.com/moby/buildkit/frontend/attest"
+	"github.com/moby/buildkit/frontend/attestations"
 	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
 	"github.com/moby/buildkit/frontend/dockerfile/dockerignore"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
@@ -485,7 +488,30 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 		}
 	}
 
-	eg, ctx = errgroup.WithContext(ctx)
+	var scanner attest.Scanner
+	attests, err := attestations.Parse(opts)
+	if err != nil {
+		return nil, err
+	}
+	if attrs, ok := attests[attestations.KeyTypeSbom]; ok {
+		src, ok := attrs["generator"]
+		if !ok {
+			return nil, errors.Errorf("sbom scanner cannot be empty")
+		}
+		ref, err := reference.ParseNormalizedNamed(src)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to parse sbom scanner %s", src)
+		}
+		ref = reference.TagNameOnly(ref)
+		exportMap = true
+
+		scanner, err = attest.CreateSBOMScanner(ctx, c, ref.String())
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	eg, ctx2 = errgroup.WithContext(ctx)
 
 	for i, tp := range targetPlatforms {
 		func(i int, tp *ocispecs.Platform) {
@@ -496,13 +522,13 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 					opt.Warn = nil
 				}
 				opt.ContextByName = contextByNameFunc(c, c.BuildOpts().SessionID)
-				st, img, bi, err := dockerfile2llb.Dockerfile2LLB(ctx, dtDockerfile, opt)
+				st, img, bi, err := dockerfile2llb.Dockerfile2LLB(ctx2, dtDockerfile, opt)
 
 				if err != nil {
 					return err
 				}
 
-				def, err := st.Marshal(ctx)
+				def, err := st.Marshal(ctx2)
 				if err != nil {
 					return errors.Wrapf(err, "failed to marshal LLB definition")
 				}
@@ -538,7 +564,7 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 					}
 				}
 
-				r, err := c.Solve(ctx, client.SolveRequest{
+				r, err := c.Solve(ctx2, client.SolveRequest{
 					Definition:   def.ToPB(),
 					CacheImports: cacheImports,
 				})
@@ -588,6 +614,37 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 
 	if err := eg.Wait(); err != nil {
 		return nil, err
+	}
+
+	if scanner != nil {
+		for _, p := range expPlatforms.Platforms {
+			ref, ok := res.Refs[p.ID]
+			if !ok {
+				return nil, errors.Errorf("could not find ref %s", p.ID)
+			}
+			st, err := ref.ToState()
+			if err != nil {
+				return nil, err
+			}
+
+			att, st, err := scanner(ctx, p.ID, st, nil)
+			if err != nil {
+				return nil, err
+			}
+
+			def, err := st.Marshal(ctx)
+			if err != nil {
+				return nil, err
+			}
+			r, err := c.Solve(ctx, frontend.SolveRequest{
+				Definition: def.ToPB(),
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			res.AddAttestation(p.ID, att, r.Ref)
+		}
 	}
 
 	dt, err := json.Marshal(expPlatforms)
