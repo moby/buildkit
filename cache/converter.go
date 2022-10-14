@@ -14,6 +14,7 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
+	"github.com/moby/buildkit/util/iohelper"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -76,7 +77,7 @@ func (c *conversion) convert(ctx context.Context, cs content.Store, desc ocispec
 		bufW = bufio.NewWriterSize(w, 128*1024)
 	}
 	defer bufioPool.Put(bufW)
-	zw, err := c.compress(&nopWriteCloser{bufW}, c.target.Type.MediaType())
+	zw, err := c.compress(&iohelper.NopWriteCloser{Writer: bufW}, c.target.Type.MediaType())
 	if err != nil {
 		return nil, err
 	}
@@ -126,14 +127,6 @@ func (c *conversion) convert(ctx context.Context, cs content.Store, desc ocispec
 		}
 	}
 	return &newDesc, nil
-}
-
-type nopWriteCloser struct {
-	io.Writer
-}
-
-func (w *nopWriteCloser) Close() error {
-	return nil
 }
 
 type onceWriteCloser struct {

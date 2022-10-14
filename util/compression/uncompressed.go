@@ -7,20 +7,13 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/images"
 	"github.com/docker/docker/pkg/ioutils"
+	"github.com/moby/buildkit/util/iohelper"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
-type nopWriteCloser struct {
-	io.Writer
-}
-
-func (w *nopWriteCloser) Close() error {
-	return nil
-}
-
 func (c uncompressedType) Compress(comp Config) (compressorFunc Compressor, finalize Finalizer) {
 	return func(dest io.Writer, mediaType string) (io.WriteCloser, error) {
-		return &nopWriteCloser{dest}, nil
+		return &iohelper.NopWriteCloser{Writer: dest}, nil
 	}, nil
 }
 

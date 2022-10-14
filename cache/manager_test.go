@@ -42,6 +42,7 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
+	"github.com/moby/buildkit/util/iohelper"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/winlayers"
 	digest "github.com/opencontainers/go-digest"
@@ -1481,7 +1482,7 @@ func getCompressor(w io.Writer, compressionType compression.Type, customized boo
 			}
 			pr.Close()
 		}()
-		return &compression.WriteCloser{WriteCloser: pw, CloseFunc: func() error { <-done; return nil }}, nil
+		return &iohelper.WriteCloser{WriteCloser: pw, CloseFunc: func() error { <-done; return nil }}, nil
 	case compression.Zstd:
 		if customized {
 			skippableFrameMagic := []byte{0x50, 0x2a, 0x4d, 0x18}
@@ -1998,7 +1999,7 @@ func checkDescriptor(ctx context.Context, t *testing.T, cs content.Store, desc o
 	}
 
 	// Check annotation values are valid
-	c := new(compression.Counter)
+	c := new(iohelper.Counter)
 	ra, err := cs.ReaderAt(ctx, desc)
 	if err != nil && errdefs.IsNotFound(err) {
 		return // lazy layer

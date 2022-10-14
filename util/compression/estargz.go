@@ -13,6 +13,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/stargz-snapshotter/estargz"
+	"github.com/moby/buildkit/util/iohelper"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -81,7 +82,7 @@ func (c estargzType) Compress(comp Config) (compressorFunc Compressor, finalize 
 				pr.Close()
 				return nil
 			}()
-			return &WriteCloser{pw, func() error {
+			return &iohelper.WriteCloser{WriteCloser: pw, CloseFunc: func() error {
 				<-done // wait until the write completes
 				return nil
 			}}, nil
@@ -228,7 +229,7 @@ func calculateBlobInfo() (io.WriteCloser, chan blobInfo) {
 	pr, pw := io.Pipe()
 	go func() {
 		defer pr.Close()
-		c := new(Counter)
+		c := new(iohelper.Counter)
 		dgstr := digest.Canonical.Digester()
 		diffID := digest.Canonical.Digester()
 		decompressR, err := cdcompression.DecompressStream(io.TeeReader(pr, dgstr.Hash()))
