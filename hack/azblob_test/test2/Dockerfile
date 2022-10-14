@@ -1,5 +1,4 @@
-FROM mcr.microsoft.com/mirror/docker/library/busybox:1.34 AS build
-
+FROM busybox AS build
 RUN cat /dev/urandom | head -c 100 | sha256sum > unique_first
 RUN cat /dev/urandom | head -c 100 | sha256sum > unique_second
 RUN cat /dev/urandom | head -c 100 | sha256sum > unique_third
