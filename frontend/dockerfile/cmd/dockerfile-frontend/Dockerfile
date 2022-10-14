@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile-upstream:master
 
 # xx is a helper for cross-compilation
-FROM --platform=$BUILDPLATFORM tonistiigi/xx:golang@sha256:810dc54d5144f133a218e88e319184bf8b9ce01d37d46ddb37573e90decd9eef AS xx
+FROM --platform=$BUILDPLATFORM tonistiigi/xx:master@sha256:d4254d9739ce2de9fb88e09bdc716aa0c65f0446a2a2143399f991d71136a3d4 AS xx
 
 FROM --platform=$BUILDPLATFORM golang:1.19-alpine AS base
 RUN apk add git bash
