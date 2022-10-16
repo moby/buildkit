@@ -9,13 +9,7 @@ on:
   push:
     branches:
       - 'master'
-    tags:
-      - 'v*'
-      - 'dockerfile/*'
   pull_request:
-    branches:
-      - 'master'
-      - 'v*'
 
 env:
   REPO_SLUG_ORIGIN: "moby/buildkit:latest"
@@ -27,11 +21,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - script: ./hack/lint
-          - script: ./hack/validate-vendor
-          - script: ./hack/validate-generated-files
-          - script: ./hack/validate-shfmt
+        target:
+          - lint
+          - validate-vendor
+          - validate-generated-files
+          - validate-shfmt
     steps:
       -
         name: Checkout
@@ -46,4 +40,4 @@ jobs:
       -
         name: Run
         run: |
-          ${{ matrix.script }}
+          make ${{ matrix.target }}
