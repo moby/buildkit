@@ -92,7 +92,7 @@ func (c dockerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl fun
 		"--default-address-pool", "base=10.66.66.0/16,size=24",
 		"--debug",
 	}...)
-	cmd.Env = append(os.Environ(), "DOCKER_SERVICE_PREFER_OFFLINE_IMAGE=1", "BUILDKIT_DEBUG_EXEC_OUTPUT=1", "BUILDKIT_DEBUG_PANIC_ON_ERROR=1")
+	cmd.Env = append(os.Environ(), "BUILDKIT_DEBUG_EXEC_OUTPUT=1", "BUILDKIT_DEBUG_PANIC_ON_ERROR=1")
 	cmd.SysProcAttr = getSysProcAttr()
 
 	dockerdStop, err := startCmd(cmd, cfg.Logs)
