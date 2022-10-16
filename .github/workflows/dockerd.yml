@@ -12,7 +12,6 @@ on:
 env:
   REPO_SLUG_ORIGIN: "moby/buildkit:latest"
   CACHE_GHA_SCOPE_IT: "integration-tests"
-  CACHE_GHA_SCOPE_BINARIES: "binaries"
   TESTFLAGS: "-v --parallel=1 --timeout=30m"
   BUILDX_VERSION: "v0.9.1"  # leave empty to use the one available on GitHub virtual environment
 
@@ -140,4 +139,4 @@ jobs:
           TESTPKGS: "${{ matrix.pkg }}"
           TESTFLAGS: "${{ env.TESTFLAGS }} --run=//worker=dockerd$"
           SKIP_INTEGRATION_TESTS: "${{ matrix.skip-integration-tests }}"
-          CACHE_FROM: "type=gha,scope=${{ env.CACHE_GHA_SCOPE_IT }} type=gha,scope=${{ env.CACHE_GHA_SCOPE_BINARIES }}"
+          CACHE_FROM: "type=gha,scope=${{ env.CACHE_GHA_SCOPE_IT }}"

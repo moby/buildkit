@@ -123,3 +123,9 @@ target "release" {
   target = "release"
   output = [bindir("release")]
 }
+
+target "integration-tests-base" {
+  inherits = ["_common"]
+  target = "integration-tests-base"
+  output = ["type=cacheonly"]
+}
