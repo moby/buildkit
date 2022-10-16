@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile-upstream:master
 
-FROM golang:1.19-alpine
+ARG GO_VERSION=1.19
+
+FROM golang:${GO_VERSION}-alpine
 ENV GOFLAGS="-buildvcs=false"
 RUN apk add --no-cache gcc musl-dev yamllint
 RUN wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.48.0

@@ -10,7 +10,13 @@ target "_common" {
 }
 
 group "validate" {
-  targets = ["validate-vendor"]
+  targets = ["lint", "validate-vendor"]
+}
+
+target "lint" {
+  inherits = ["_common"]
+  dockerfile = "./hack/dockerfiles/lint.Dockerfile"
+  output = ["type=cacheonly"]
 }
 
 target "validate-vendor" {
