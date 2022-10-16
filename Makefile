@@ -52,14 +52,6 @@ lint:
 validate-vendor:
 	$(BUILDX_CMD) bake validate-vendor
 
-.PHONY: validate-shfmt
-validate-shfmt:
-	hack/validate-shfmt
-
-.PHONY: shfmt
-shfmt:
-	hack/shfmt
-
 .PHONY: validate-authors
 validate-authors:
 	$(BUILDX_CMD) bake validate-authors
@@ -68,8 +60,12 @@ validate-authors:
 validate-generated-files:
 	$(BUILDX_CMD) bake validate-generated-files
 
+.PHONY: validate-shfmt
+validate-shfmt:
+	$(BUILDX_CMD) bake validate-shfmt
+
 .PHONY: validate-all
-validate-all: test lint validate-vendor validate-generated-files
+validate-all: test lint validate-vendor validate-generated-files validate-shfmt
 
 .PHONY: vendor
 vendor:
@@ -82,3 +78,7 @@ authors:
 .PHONY: generated-files
 generated-files:
 	$(BUILDX_CMD) bake generated-files
+
+.PHONY: shfmt
+shfmt:
+	$(BUILDX_CMD) bake shfmt
