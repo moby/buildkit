@@ -1,3 +1,13 @@
+ifneq (, $(BUILDX_BIN))
+	export BUILDX_CMD = $(BUILDX_BIN)
+else ifneq (, $(shell docker buildx version))
+	export BUILDX_CMD = docker buildx
+else ifneq (, $(shell which buildx))
+	export BUILDX_CMD = $(which buildx)
+else
+	export BUILDX_CMD = docker buildx
+endif
+
 prefix=/usr/local
 bindir=$(prefix)/bin
 
@@ -23,7 +33,7 @@ lint:
 	./hack/lint
 
 validate-vendor:
-	./hack/validate-vendor
+	$(BUILDX_CMD) bake validate-vendor
 
 validate-shfmt:
 	./hack/validate-shfmt

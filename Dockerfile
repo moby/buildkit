@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile-upstream:1.4
 
+ARG GO_VERSION=1.19
 ARG RUNC_VERSION=v1.1.4
 ARG CONTAINERD_VERSION=v1.6.10
 # containerd v1.5 for integration tests
@@ -22,7 +23,7 @@ RUN apk add --no-cache git
 # xx is a helper for cross-compilation
 FROM --platform=$BUILDPLATFORM tonistiigi/xx@sha256:1e96844fadaa2f9aea021b2b05299bc02fe4c39a92d8e735b93e8e2b15610128 AS xx
 
-FROM --platform=$BUILDPLATFORM golang:1.19-alpine AS golatest
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS golatest
 
 # gobuild is base stage for compiling go/cgo
 FROM golatest AS gobuild-base
