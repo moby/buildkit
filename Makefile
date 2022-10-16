@@ -11,46 +11,64 @@ endif
 prefix=/usr/local
 bindir=$(prefix)/bin
 
-binaries: FORCE
+.PHONY: binaries
+binaries:
 	hack/binaries
 
-images: FORCE
+.PHONY: images
+images:
 # moby/buildkit:local and moby/buildkit:local-rootless are created on Docker
 	hack/images local moby/buildkit
 	TARGET=rootless hack/images local moby/buildkit
 
-install: FORCE
+.PHONY: install
+install:
 	mkdir -p $(DESTDIR)$(bindir)
 	install bin/* $(DESTDIR)$(bindir)
 
-clean: FORCE
+.PHONY: clean
+clean:
 	rm -rf ./bin
 
+.PHONY: test
 test:
-	./hack/test integration gateway dockerfile
+	hack/test integration gateway dockerfile
 
+.PHONY: lint
 lint:
-	./hack/lint
+	hack/lint
 
+.PHONY: validate-vendor
 validate-vendor:
 	$(BUILDX_CMD) bake validate-vendor
 
+.PHONY: validate-shfmt
 validate-shfmt:
-	./hack/validate-shfmt
+	hack/validate-shfmt
 
+.PHONY: shfmt
 shfmt:
-	./hack/shfmt
+	hack/shfmt
 
+.PHONY: validate-authors
+validate-authors:
+	$(BUILDX_CMD) bake validate-authors
+
+.PHONY: validate-generated-files
 validate-generated-files:
-	./hack/validate-generated-files
+	hack/validate-generated-files
 
+.PHONY: validate-all
 validate-all: test lint validate-vendor validate-generated-files
 
+.PHONY: vendor
 vendor:
-	./hack/update-vendor
+	hack/update-vendor
 
+.PHONY: authors
+authors:
+	$(BUILDX_CMD) bake authors
+
+.PHONY: generated-files
 generated-files:
 	./hack/update-generated-files
-
-.PHONY: vendor generated-files test binaries images install clean lint validate-all validate-vendor validate-generated-files
-FORCE:
