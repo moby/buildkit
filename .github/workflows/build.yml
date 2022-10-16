@@ -322,37 +322,45 @@ jobs:
 
   image:
     runs-on: ubuntu-20.04
-    needs: [test, cross]
+    needs:
+      - cross
+      - test
     strategy:
       fail-fast: false
       matrix:
-        target-stage:
+        target:
           - ''
           - rootless
     steps:
       -
-        name: Prepare
-        run: |
-          TAG=pr
-          PUSH=false
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            TAG=nightly
-            PUSH=push
-          elif [[ $GITHUB_REF == refs/tags/v* ]]; then
-            TAG=${GITHUB_REF#refs/tags/}
-            PUSH=push
-          elif [[ $GITHUB_REF == refs/heads/* ]]; then
-            TAG=$(echo ${GITHUB_REF#refs/heads/} | sed -r 's#/+#-#g')
-            PUSH=push
-          fi
-          echo "TAG=${TAG}" >> $GITHUB_ENV
-          echo "PUSH=${PUSH}" >> $GITHUB_ENV
-      -
         name: Checkout
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
       -
-        name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v2
+        name: Prepare
+        run: |
+          TAGS=pr
+          TAG_SUFFIX=
+          PUSH=false
+          if [ -n "${{ matrix.target }}" ]; then
+            TAG_SUFFIX=-${{ matrix.target }}
+          fi
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            TAGS=nightly${TAG_SUFFIX}
+            PUSH=true
+          elif [[ $GITHUB_REF == refs/tags/v* ]]; then
+            TAGS="$(./hack/tags ${{ matrix.target }})"
+            PUSH=true
+          elif [[ $GITHUB_REF == refs/heads/* ]]; then
+            TAGS=${GITHUB_REF#refs/heads/}${TAG_SUFFIX}
+            PUSH=true
+          fi
+          echo "TAGS<<EOF" >> $GITHUB_ENV
+          echo "$TAGS" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+          echo "TAG_SUFFIX=${TAG_SUFFIX}" >> $GITHUB_ENV
+          echo "PUSH=${PUSH}" >> $GITHUB_ENV
       -
         name: Set up QEMU
         uses: docker/setup-qemu-action@v2
@@ -364,20 +372,37 @@ jobs:
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
           buildkitd-flags: --debug
       -
-        name: Login to DockerHub
-        if: env.PUSH == 'push'
+        name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: |
+            ${{ env.REPO_SLUG_TARGET }}
+          tags: |
+            ${{ env.TAGS }}
+          bake-target: meta-helper
+      -
+        name: Login to Docker Hub
+        if: env.PUSH == 'true'
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       -
-        name: Build ${{ env.TAG }}
-        run: |
-          ./hack/images "${{ env.TAG }}" "$REPO_SLUG_TARGET" "${{ env.PUSH }}"
+        name: Build
+        uses: docker/bake-action@v2
+        with:
+          files: |
+            ./docker-bake.hcl
+            ${{ steps.meta.outputs.bake-file }}
+          targets: image-all
+          set: |
+            *.cache-from=type=gha,scope=${{ env.CACHE_GHA_SCOPE_CROSS }}
+            *.cache-from=type=gha,scope=image${{ env.TAG_SUFFIX }}
+            *.cache-to=type=gha,scope=image${{ env.TAG_SUFFIX }}
+            *.output=type=image,buildinfo-attrs=true,push=${{ env.PUSH }}
         env:
-          TARGET: ${{ matrix.target-stage }}
-          CACHE_FROM: type=gha,scope=${{ env.CACHE_GHA_SCOPE_CROSS }} type=gha,scope=image${{ matrix.target-stage }}
-          CACHE_TO: type=gha,scope=image${{ matrix.target-stage }}
+          IMAGE_TARGET: ${{ matrix.target }}
 
   prepare-binaries:
     runs-on: ubuntu-latest

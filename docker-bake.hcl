@@ -6,6 +6,10 @@ variable "BUILDKITD_TAGS" {
   default = ""
 }
 
+variable "IMAGE_TARGET" {
+  default = ""
+}
+
 # Defines the output folder
 variable "DESTDIR" {
   default = ""
@@ -13,6 +17,11 @@ variable "DESTDIR" {
 function "bindir" {
   params = [defaultdir]
   result = DESTDIR != "" ? DESTDIR : "./bin/${defaultdir}"
+}
+
+# Special target: https://github.com/docker/metadata-action#bake-definition
+target "meta-helper" {
+  tags = [IMAGE_TARGET != "" ? "moby/buildkit:local-${IMAGE_TARGET}" : "moby/buildkit:local"]
 }
 
 target "_common" {
@@ -122,6 +131,24 @@ target "release" {
   inherits = ["binaries-cross"]
   target = "release"
   output = [bindir("release")]
+}
+
+target "image" {
+  inherits = ["_common", "meta-helper"]
+  target = IMAGE_TARGET
+  output = ["type=docker,buildinfo-attrs=true"]
+}
+
+target "image-all" {
+  inherits = ["image"]
+  platforms = [
+    "linux/amd64",
+    "linux/arm/v7",
+    "linux/arm64",
+    "linux/s390x",
+    "linux/ppc64le",
+    "linux/riscv64"
+  ]
 }
 
 target "integration-tests-base" {
