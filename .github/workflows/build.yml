@@ -34,6 +34,7 @@ env:
   TESTFLAGS: "-v --parallel=6 --timeout=30m"
   BUILDX_VERSION: "v0.9.1"  # leave empty to use the one available on GitHub virtual environment
   GO_VERSION: "1.19"
+  DESTDIR: "./bin"
 
 jobs:
   base:
@@ -327,14 +328,18 @@ jobs:
             *.cache-to=type=gha,scope=${{ env.CACHE_GHA_SCOPE_CROSS }}
             *.output=type=cacheonly
 
-  release-base:
+  image:
     runs-on: ubuntu-20.04
-    outputs:
-      tag: ${{ steps.prep.outputs.tag }}
-      push: ${{ steps.prep.outputs.push }}
+    needs: [test, cross]
+    strategy:
+      fail-fast: false
+      matrix:
+        target-stage:
+          - ''
+          - rootless
     steps:
-      - name: Prepare
-        id: prep
+      -
+        name: Prepare
         run: |
           TAG=pr
           PUSH=false
@@ -348,19 +353,8 @@ jobs:
             TAG=$(echo ${GITHUB_REF#refs/heads/} | sed -r 's#/+#-#g')
             PUSH=push
           fi
-          echo "tag=${TAG}" >>${GITHUB_OUTPUT}
-          echo "push=${PUSH}" >>${GITHUB_OUTPUT}
-
-  image:
-    runs-on: ubuntu-20.04
-    needs: [release-base, test, cross]
-    strategy:
-      fail-fast: false
-      matrix:
-        target-stage:
-          - ''
-          - rootless
-    steps:
+          echo "TAG=${TAG}" >> $GITHUB_ENV
+          echo "PUSH=${PUSH}" >> $GITHUB_ENV
       -
         name: Checkout
         uses: actions/checkout@v3
@@ -379,32 +373,57 @@ jobs:
           buildkitd-flags: --debug
       -
         name: Login to DockerHub
-        if: needs.release-base.outputs.push == 'push'
+        if: env.PUSH == 'push'
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       -
-        name: Build ${{ needs.release-base.outputs.tag }}
+        name: Build ${{ env.TAG }}
         run: |
-          ./hack/images "${{ needs.release-base.outputs.tag }}" "$REPO_SLUG_TARGET" "${{ needs.release-base.outputs.push }}"
+          ./hack/images "${{ env.TAG }}" "$REPO_SLUG_TARGET" "${{ env.PUSH }}"
         env:
           TARGET: ${{ matrix.target-stage }}
           CACHE_FROM: type=gha,scope=${{ env.CACHE_GHA_SCOPE_CROSS }} type=gha,scope=image${{ matrix.target-stage }}
           CACHE_TO: type=gha,scope=image${{ matrix.target-stage }}
 
-  binaries:
-    runs-on: ubuntu-20.04
-    needs:
-      - release-base
-      - test
+  prepare-binaries:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.platforms.outputs.matrix }}
     steps:
       -
         name: Checkout
         uses: actions/checkout@v3
       -
-        name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v2
+        name: Create matrix
+        id: platforms
+        run: |
+          echo "matrix=$(docker buildx bake binaries-cross --print | jq -cr '.target."binaries-cross".platforms')" >> $GITHUB_OUTPUT
+      -
+        name: Show matrix
+        run: |
+          echo ${{ steps.platforms.outputs.matrix }}
+
+  binaries:
+    runs-on: ubuntu-20.04
+    needs:
+      - prepare-binaries
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJson(needs.prepare-binaries.outputs.matrix) }}
+    steps:
+      -
+        name: Prepare
+        run: |
+          platform=${{ matrix.platform }}
+          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
+      -
+        name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
       -
         name: Set up QEMU
         uses: docker/setup-qemu-action@v2
@@ -416,23 +435,41 @@ jobs:
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
           buildkitd-flags: --debug
       -
-        name: Build ${{ needs.release-base.outputs.tag }}
-        run: |
-          ./hack/release-tar "${{ needs.release-base.outputs.tag }}" release-out
-        env:
-          PLATFORMS: ${{ env.PLATFORMS }},darwin/amd64,darwin/arm64,windows/amd64,windows/arm64
-          CACHE_FROM: type=gha,scope=${{ env.CACHE_GHA_SCOPE_BINARIES }}
-      -
-        name: Move artifacts
-        run: |
-          mv ./release-out/**/* ./release-out/
+        name: Build
+        uses: docker/bake-action@v2
+        with:
+          targets: release
+          set: |
+            *.platform=${{ matrix.platform }}
+            *.cache-from=type=gha,scope=binaries-${{ env.PLATFORM_PAIR }}
+            *.cache-to=type=gha,scope=binaries-${{ env.PLATFORM_PAIR }}
       -
         name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
           name: buildkit
-          path: ./release-out/*
+          path: ${{ env.DESTDIR }}/*
           if-no-files-found: error
+
+  release:
+    runs-on: ubuntu-latest
+    needs:
+      - binaries
+      - test
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v3
+      -
+        name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: buildkit
+          path: ${{ env.DESTDIR }}
+      -
+        name: List artifacts
+        run: |
+          tree -nh ${{ env.DESTDIR }}
       -
         name: GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -441,8 +478,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           draft: true
-          files: ./release-out/*
-          name: ${{ needs.release-base.outputs.tag }}
+          files: ${{ env.DESTDIR }}/*
 
   frontend-base:
     runs-on: ubuntu-20.04

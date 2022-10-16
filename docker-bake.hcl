@@ -89,3 +89,9 @@ target "binaries-cross" {
     "windows/arm64"
   ]
 }
+
+target "release" {
+  inherits = ["binaries-cross"]
+  target = "release"
+  output = [bindir("release")]
+}

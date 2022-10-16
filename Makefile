@@ -19,6 +19,12 @@ binaries:
 cross:
 	$(BUILDX_CMD) bake binaries-cross
 
+.PHONY: release
+release:
+	$(BUILDX_CMD) bake release
+	mv -f $(CURDIR)/bin/release/**/* $(CURDIR)/bin/release/
+	find $(CURDIR)/bin/release -type d -empty -delete
+
 .PHONY: images
 images:
 # moby/buildkit:local and moby/buildkit:local-rootless are created on Docker
