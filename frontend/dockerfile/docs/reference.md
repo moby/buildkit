@@ -1336,7 +1336,7 @@ RUN apt-get update && apt-get install -y ...
 ADD has two forms:
 
 ```dockerfile
-ADD [--chown=<user>:<group>] <src>... <dest>
+ADD [--chown=<user>:<group>] [--checksum=<checksum>] <src>... <dest>
 ADD [--chown=<user>:<group>] ["<src>",... "<dest>"]
 ```
 
@@ -1506,6 +1506,20 @@ guide – Leverage build cache](https://docs.docker.com/develop/develop-images/d
 
 - If `<dest>` doesn't exist, it is created along with all missing directories
   in its path.
+
+### Verifying a remote file checksum `ADD --checksum=<checksum> <http src> <dest>`
+> **Note**
+>
+> Available in [`docker/dockerfile-upstream:master-labs`](#syntax).
+> Will be included in `docker/dockerfile:1.5-labs`.
+
+The checksum of a remote file can be verified with the `--checksum` flag:
+
+```dockerfile
+ADD --checksum=sha256:24454f830cdb571e2c4ad15481119c43b3cafd48dd869a9b2945d1036d1dc68d https://mirrors.edge.kernel.org/pub/linux/kernel/Historic/linux-0.01.tar.gz /
+```
+
+The `--checksum` flag only supports HTTP sources currently.
 
 ### Adding a git repository `ADD <git ref> <dir>`
 
