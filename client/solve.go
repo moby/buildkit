@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"os"
@@ -14,6 +15,7 @@ import (
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/ociindex"
+	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	sessioncontent "github.com/moby/buildkit/session/content"
@@ -124,6 +126,8 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		ex = opt.Exports[0]
 	}
 
+	indicesToUpdate := []string{}
+
 	if !opt.SessionPreInitialized {
 		if len(syncedDirs) > 0 {
 			s.Allow(filesync.NewFSSyncProvider(syncedDirs))
@@ -186,6 +190,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 					return nil, err
 				}
 				contentStores["export"] = cs
+				indicesToUpdate = append(indicesToUpdate, filepath.Join(ex.OutputDir, "index.json"))
 			default:
 				s.Allow(filesync.NewFSSyncTargetDir(ex.OutputDir))
 			}
@@ -360,6 +365,25 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			return nil, err
 		}
 		for indexJSONPath, tag := range cacheOpt.indicesToUpdate {
+			if err = ociindex.PutDescToIndexJSONFileLocked(indexJSONPath, manifestDesc, tag); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if manifestDescDt := res.ExporterResponse[exptypes.ExporterImageDescriptorKey]; manifestDescDt != "" {
+		manifestDescDt, err := base64.StdEncoding.DecodeString(manifestDescDt)
+		if err != nil {
+			return nil, err
+		}
+		var manifestDesc ocispecs.Descriptor
+		if err = json.Unmarshal([]byte(manifestDescDt), &manifestDesc); err != nil {
+			return nil, err
+		}
+		for _, indexJSONPath := range indicesToUpdate {
+			tag := "latest"
+			if t, ok := res.ExporterResponse["image.name"]; ok {
+				tag = t
+			}
 			if err = ociindex.PutDescToIndexJSONFileLocked(indexJSONPath, manifestDesc, tag); err != nil {
 				return nil, err
 			}

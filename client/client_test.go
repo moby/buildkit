@@ -2432,7 +2432,7 @@ func testOCIExporterUnpack(t *testing.T, sb integration.Sandbox) {
 				require.Contains(t, m, filename+"/")
 			} else {
 				require.Contains(t, m, filename)
-				if filename == "oci-layout" {
+				if filename == "index.json" {
 					// this file has a timestamp in it, so we can't compare
 					return nil
 				}
