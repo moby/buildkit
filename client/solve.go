@@ -142,10 +142,11 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			contentStores[key] = store
 		}
 		for key, store := range opt.OCIStores {
-			if _, ok := contentStores[key]; ok {
-				return nil, errors.Errorf("content store key %q already exists", key)
+			key2 := "oci:" + key
+			if _, ok := contentStores[key2]; ok {
+				return nil, errors.Errorf("oci store key %q already exists", key)
 			}
-			contentStores[key] = store
+			contentStores[key2] = store
 		}
 
 		var supportFile bool

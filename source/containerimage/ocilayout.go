@@ -47,7 +47,7 @@ func (r *ociLayoutResolver) Fetcher(ctx context.Context, ref string) (remotes.Fe
 func (r *ociLayoutResolver) Fetch(ctx context.Context, desc ocispecs.Descriptor) (io.ReadCloser, error) {
 	var rc io.ReadCloser
 	err := r.withCaller(ctx, func(ctx context.Context, caller session.Caller) error {
-		store := sessioncontent.NewCallerStore(caller, r.storeID)
+		store := sessioncontent.NewCallerStore(caller, "oci:"+r.storeID)
 		readerAt, err := store.ReaderAt(ctx, desc)
 		if err != nil {
 			return err
@@ -103,7 +103,7 @@ func (r *ociLayoutResolver) Resolve(ctx context.Context, refString string) (stri
 func (r *ociLayoutResolver) info(ctx context.Context, ref reference.Spec) (content.Info, error) {
 	var info *content.Info
 	err := r.withCaller(ctx, func(ctx context.Context, caller session.Caller) error {
-		store := sessioncontent.NewCallerStore(caller, r.storeID)
+		store := sessioncontent.NewCallerStore(caller, "oci:"+r.storeID)
 
 		_, dgst := reference.SplitObject(ref.Object)
 		if dgst == "" {
