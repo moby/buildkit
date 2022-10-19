@@ -23,7 +23,6 @@ linters:
     - ineffassign
     - misspell
     - staticcheck
-    - structcheck
     - typecheck
     - unused
     - varcheck
@@ -31,6 +30,7 @@ linters:
     - errname
     - makezero
     - whitespace
+    - nolintlint
   disable-all: true
 
 linters-settings:
