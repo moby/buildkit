@@ -538,16 +538,12 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 			}
 		}
 		pullPingChan = pullping.PullPingChannel(ctx, pullImgs, resp, caller)
-		ctxTimeout, cancel := context.WithTimeout(ctx, 1*time.Hour)
-		defer cancel()
 		// wait for the client to finish pulling
 		select {
 		case err := <-pullPingChan:
 			if err != nil {
 				return nil, errors.Wrap(err, "pull ping error")
 			}
-		case <-ctxTimeout.Done():
-			return nil, errors.Wrap(ctxTimeout.Err(), "pull ping ctx done")
 		case <-caller.Context().Done():
 			return nil, errors.Wrap(caller.Context().Err(), "caller context done")
 		}
