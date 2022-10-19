@@ -44,31 +44,10 @@ func init() {
 	parseRunPostHooks = append(parseRunPostHooks, runMountPostHook)
 }
 
-func isValidMountType(s string) bool {
-	if s == "secret" {
-		if !isSecretMountsSupported() {
-			return false
-		}
-	}
-	if s == "ssh" {
-		if !isSSHMountsSupported() {
-			return false
-		}
-	}
-	_, ok := allowedMountTypes[s]
-	return ok
-}
-
 func allMountTypes() []string {
-	types := make([]string, 0, len(allowedMountTypes)+2)
+	types := make([]string, 0, len(allowedMountTypes))
 	for k := range allowedMountTypes {
 		types = append(types, k)
-	}
-	if isSecretMountsSupported() {
-		types = append(types, "secret")
-	}
-	if isSSHMountsSupported() {
-		types = append(types, "ssh")
 	}
 	return types
 }
@@ -196,10 +175,11 @@ func parseMount(value string, expander SingleWordExpander) (*Mount, error) {
 
 		switch key {
 		case "type":
-			if !isValidMountType(strings.ToLower(value)) {
+			v := strings.ToLower(value)
+			if _, ok := allowedMountTypes[v]; !ok {
 				return nil, suggest.WrapError(errors.Errorf("unsupported mount type %q", value), value, allMountTypes(), true)
 			}
-			m.Type = strings.ToLower(value)
+			m.Type = v
 		case "from":
 			m.From = value
 		case "source", "src":
