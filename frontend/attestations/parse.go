@@ -32,9 +32,9 @@ func Filter(v map[string]string) map[string]string {
 	return attests
 }
 
-func Parse(v map[string]string) (map[string]map[string]string, error) {
+func Parse(values map[string]string) (map[string]map[string]string, error) {
 	attests := make(map[string]string)
-	for k, v := range v {
+	for k, v := range values {
 		if strings.HasPrefix(k, "attest:") {
 			attests[strings.ToLower(strings.TrimPrefix(k, "attest:"))] = v
 			continue
