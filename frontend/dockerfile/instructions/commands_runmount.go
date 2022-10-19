@@ -11,13 +11,17 @@ import (
 	"github.com/pkg/errors"
 )
 
-const MountTypeBind = "bind"
-const MountTypeCache = "cache"
-const MountTypeTmpfs = "tmpfs"
-const MountTypeSecret = "secret"
-const MountTypeSSH = "ssh"
+type MountType string
 
-var allowedMountTypes = map[string]struct{}{
+const (
+	MountTypeBind   MountType = "bind"
+	MountTypeCache  MountType = "cache"
+	MountTypeTmpfs  MountType = "tmpfs"
+	MountTypeSecret MountType = "secret"
+	MountTypeSSH    MountType = "ssh"
+)
+
+var allowedMountTypes = map[MountType]struct{}{
 	MountTypeBind:   {},
 	MountTypeCache:  {},
 	MountTypeTmpfs:  {},
@@ -25,11 +29,15 @@ var allowedMountTypes = map[string]struct{}{
 	MountTypeSSH:    {},
 }
 
-const MountSharingShared = "shared"
-const MountSharingPrivate = "private"
-const MountSharingLocked = "locked"
+type ShareMode string
 
-var allowedSharingTypes = map[string]struct{}{
+const (
+	MountSharingShared  ShareMode = "shared"
+	MountSharingPrivate ShareMode = "private"
+	MountSharingLocked  ShareMode = "locked"
+)
+
+var allowedSharingModes = map[ShareMode]struct{}{
 	MountSharingShared:  {},
 	MountSharingPrivate: {},
 	MountSharingLocked:  {},
@@ -47,7 +55,7 @@ func init() {
 func allMountTypes() []string {
 	types := make([]string, 0, len(allowedMountTypes))
 	for k := range allowedMountTypes {
-		types = append(types, k)
+		types = append(types, string(k))
 	}
 	return types
 }
@@ -98,14 +106,14 @@ type mountState struct {
 }
 
 type Mount struct {
-	Type         string
+	Type         MountType
 	From         string
 	Source       string
 	Target       string
 	ReadOnly     bool
 	SizeLimit    int64
 	CacheID      string
-	CacheSharing string
+	CacheSharing ShareMode
 	Required     bool
 	Mode         *uint64
 	UID          *uint64
@@ -141,7 +149,7 @@ func parseMount(value string, expander SingleWordExpander) (*Mount, error) {
 				roAuto = false
 				continue
 			case "required":
-				if m.Type == "secret" || m.Type == "ssh" {
+				if m.Type == MountTypeSecret || m.Type == MountTypeSSH {
 					m.Required = true
 					continue
 				} else {
@@ -175,7 +183,7 @@ func parseMount(value string, expander SingleWordExpander) (*Mount, error) {
 
 		switch key {
 		case "type":
-			v := strings.ToLower(value)
+			v := MountType(strings.ToLower(value))
 			if _, ok := allowedMountTypes[v]; !ok {
 				return nil, suggest.WrapError(errors.Errorf("unsupported mount type %q", value), value, allMountTypes(), true)
 			}
@@ -200,7 +208,7 @@ func parseMount(value string, expander SingleWordExpander) (*Mount, error) {
 			m.ReadOnly = !rw
 			roAuto = false
 		case "required":
-			if m.Type == "secret" || m.Type == "ssh" {
+			if m.Type == MountTypeSecret || m.Type == MountTypeSSH {
 				v, err := strconv.ParseBool(value)
 				if err != nil {
 					return nil, errors.Errorf("invalid value for %s: %s", key, value)
@@ -210,7 +218,7 @@ func parseMount(value string, expander SingleWordExpander) (*Mount, error) {
 				return nil, errors.Errorf("unexpected key '%s' for mount type '%s'", key, m.Type)
 			}
 		case "size":
-			if m.Type == "tmpfs" {
+			if m.Type == MountTypeTmpfs {
 				m.SizeLimit, err = units.RAMInBytes(value)
 				if err != nil {
 					return nil, errors.Errorf("invalid value for %s: %s", key, value)
@@ -221,10 +229,11 @@ func parseMount(value string, expander SingleWordExpander) (*Mount, error) {
 		case "id":
 			m.CacheID = value
 		case "sharing":
-			if _, ok := allowedSharingTypes[strings.ToLower(value)]; !ok {
+			v := ShareMode(strings.ToLower(value))
+			if _, ok := allowedSharingModes[v]; !ok {
 				return nil, errors.Errorf("unsupported sharing value %q", value)
 			}
-			m.CacheSharing = strings.ToLower(value)
+			m.CacheSharing = v
 		case "mode":
 			mode, err := strconv.ParseUint(value, 8, 32)
 			if err != nil {
