@@ -8,11 +8,11 @@ import (
 type Attestation struct {
 	Kind pb.AttestationKind
 
-	Ref  string
-	Path string
-
-	InToto      InTotoAttestation
+	Ref         string
+	Path        string
 	ContentFunc func() ([]byte, error)
+
+	InToto InTotoAttestation
 }
 
 type InTotoAttestation struct {
@@ -27,10 +27,18 @@ type InTotoSubject struct {
 	Digest []digest.Digest
 }
 
-func DigestMap(ds ...digest.Digest) map[string]string {
+func ToDigestMap(ds ...digest.Digest) map[string]string {
 	m := map[string]string{}
 	for _, d := range ds {
 		m[d.Algorithm().String()] = d.Encoded()
 	}
 	return m
+}
+
+func FromDigestMap(m map[string]string) []digest.Digest {
+	var ds []digest.Digest
+	for k, v := range m {
+		ds = append(ds, digest.NewDigestFromEncoded(digest.Algorithm(k), v))
+	}
+	return ds
 }
