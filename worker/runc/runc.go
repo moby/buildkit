@@ -21,8 +21,8 @@ import (
 	"github.com/moby/buildkit/util/network/netproviders"
 	"github.com/moby/buildkit/util/semutil"
 	"github.com/moby/buildkit/util/winlayers"
-	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
+	wlabel "github.com/moby/buildkit/worker/label"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	bolt "go.etcd.io/bbolt"
 )
@@ -104,14 +104,14 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		hostname = "unknown"
 	}
 	xlabels := map[string]string{
-		worker.LabelExecutor:       "oci",
-		worker.LabelSnapshotter:    snFactory.Name,
-		worker.LabelHostname:       hostname,
-		worker.LabelNetwork:        npResolvedMode,
-		worker.LabelOCIProcessMode: processMode.String(),
+		wlabel.Executor:       "oci",
+		wlabel.Snapshotter:    snFactory.Name,
+		wlabel.Hostname:       hostname,
+		wlabel.Network:        npResolvedMode,
+		wlabel.OCIProcessMode: processMode.String(),
 	}
 	if apparmorProfile != "" {
-		xlabels[worker.LabelApparmorProfile] = apparmorProfile
+		xlabels[wlabel.ApparmorProfile] = apparmorProfile
 	}
 
 	for k, v := range labels {
@@ -137,21 +137,22 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 	}
 
 	opt = base.WorkerOpt{
-		ID:              id,
-		Labels:          xlabels,
-		MetadataStore:   md,
-		Executor:        exe,
-		Snapshotter:     snap,
-		ContentStore:    c,
-		Applier:         winlayers.NewFileSystemApplierWithWindows(c, apply.NewFileSystemApplier(c)),
-		Differ:          winlayers.NewWalkingDiffWithWindows(c, walking.NewWalkingDiff(c)),
-		ImageStore:      nil, // explicitly
-		Platforms:       []ocispecs.Platform{platforms.Normalize(platforms.DefaultSpec())},
-		IdentityMapping: idmap,
-		LeaseManager:    lm,
-		GarbageCollect:  mdb.GarbageCollect,
-		ParallelismSem:  parallelismSem,
-		MountPoolRoot:   filepath.Join(root, "cachemounts"),
+		ID:               id,
+		Labels:           xlabels,
+		MetadataStore:    md,
+		NetworkProviders: np,
+		Executor:         exe,
+		Snapshotter:      snap,
+		ContentStore:     c,
+		Applier:          winlayers.NewFileSystemApplierWithWindows(c, apply.NewFileSystemApplier(c)),
+		Differ:           winlayers.NewWalkingDiffWithWindows(c, walking.NewWalkingDiff(c)),
+		ImageStore:       nil, // explicitly
+		Platforms:        []ocispecs.Platform{platforms.Normalize(platforms.DefaultSpec())},
+		IdentityMapping:  idmap,
+		LeaseManager:     lm,
+		GarbageCollect:   mdb.GarbageCollect,
+		ParallelismSem:   parallelismSem,
+		MountPoolRoot:    filepath.Join(root, "cachemounts"),
 	}
 	return opt, nil
 }

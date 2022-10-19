@@ -47,9 +47,7 @@ func testBuildInfoSources(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
-	gitDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(gitDir)
+	gitDir := t.TempDir()
 
 	dockerfile := `
 FROM alpine:latest@sha256:21a3deaa0d32a8057914f36584b5288d2e5ecc984380bc0118285c70fa8c9300 AS alpine
@@ -58,7 +56,7 @@ ADD https://raw.githubusercontent.com/moby/moby/master/README.md /
 COPY --from=alpine /bin/busybox /alpine-busybox
 `
 
-	err = os.WriteFile(filepath.Join(gitDir, "Dockerfile"), []byte(dockerfile), 0600)
+	err := os.WriteFile(filepath.Join(gitDir, "Dockerfile"), []byte(dockerfile), 0600)
 	require.NoError(t, err)
 
 	err = runShell(gitDir,
@@ -138,11 +136,11 @@ func testBuildInfoSourcesNoop(t *testing.T, sb integration.Sandbox) {
 FROM busybox:latest
 `
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -200,11 +198,11 @@ ARG foo
 RUN echo $foo
 `
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -263,11 +261,11 @@ RUN echo $foo
 ADD https://raw.githubusercontent.com/moby/moby/master/README.md /
 `
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -329,11 +327,11 @@ FROM scratch
 COPY --from=base /out /
 `
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -399,11 +397,11 @@ FROM scratch
 COPY --from=base /o* /
 `
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -411,13 +409,13 @@ COPY --from=base /o* /
 
 	outf := []byte(`dummy-result`)
 
-	dir2, err := tmpdir(
+	dir2, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("out", outf, 0600),
 		fstest.CreateFile("out2", outf, 0600),
 		fstest.CreateFile(".dockerignore", []byte("out2\n"), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir2)
 
 	var exports []client.ExportEntry
 	if integration.IsTestDockerd() {
@@ -481,11 +479,11 @@ ADD https://raw.githubusercontent.com/moby/moby/master/README.md /
 RUN echo first > /out
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	dockerfile2 := []byte(`
 FROM base AS build
@@ -494,11 +492,11 @@ FROM busybox
 COPY --from=build /foo /out /
 `)
 
-	dir2, err := tmpdir(
+	dir2, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile2, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	b := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 		res, err := f.SolveGateway(ctx, c, gateway.SolveRequest{})
@@ -553,9 +551,7 @@ COPY --from=build /foo /out /
 		return res, nil
 	}
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	res, err := c.Build(ctx, client.SolveOpt{
 		LocalDirs: map[string]string{
@@ -619,11 +615,11 @@ ENV FOO=bar-$TARGETARCH
 RUN echo "foo $TARGETARCH" > /out
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	dockerfile2 := []byte(`
 FROM base AS build
@@ -632,11 +628,11 @@ FROM busybox
 COPY --from=build /foo /out /
 `)
 
-	dir2, err := tmpdir(
+	dir2, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile2, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	b := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 		res, err := f.SolveGateway(ctx, c, gateway.SolveRequest{
@@ -699,9 +695,7 @@ COPY --from=build /foo /out /
 		return res, nil
 	}
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	res, err := c.Build(ctx, client.SolveOpt{
 		LocalDirs: map[string]string{
@@ -760,22 +754,22 @@ ADD https://raw.githubusercontent.com/moby/moby/master/README.md /
 RUN echo first > /out
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	dockerfile2 := []byte(`
 FROM base AS build
 RUN echo "foo is $FOO" > /foo
 `)
 
-	dir2, err := tmpdir(
+	dir2, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile2, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	b := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 		res, err := f.SolveGateway(ctx, c, gateway.SolveRequest{})
@@ -830,9 +824,7 @@ RUN echo "foo is $FOO" > /foo
 		return res, nil
 	}
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	res, err := c.Build(ctx, client.SolveOpt{
 		LocalDirs: map[string]string{

@@ -28,10 +28,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newWorkerOpt(t *testing.T, processMode oci.ProcessMode) (base.WorkerOpt, func()) {
-	tmpdir, err := os.MkdirTemp("", "workertest")
-	require.NoError(t, err)
-	cleanup := func() { os.RemoveAll(tmpdir) }
+func newWorkerOpt(t *testing.T, processMode oci.ProcessMode) base.WorkerOpt {
+	tmpdir := t.TempDir()
 
 	snFactory := SnapshotterFactory{
 		Name: "overlayfs",
@@ -43,7 +41,7 @@ func newWorkerOpt(t *testing.T, processMode oci.ProcessMode) (base.WorkerOpt, fu
 	workerOpt, err := NewWorkerOpt(tmpdir, snFactory, rootless, processMode, nil, nil, netproviders.Opt{Mode: "host"}, nil, "", "", nil, "", "")
 	require.NoError(t, err)
 
-	return workerOpt, cleanup
+	return workerOpt
 }
 
 func checkRequirement(t *testing.T) {
@@ -62,8 +60,7 @@ func TestRuncWorker(t *testing.T) {
 	t.Parallel()
 	checkRequirement(t)
 
-	workerOpt, cleanupWorkerOpt := newWorkerOpt(t, oci.ProcessSandbox)
-	defer cleanupWorkerOpt()
+	workerOpt := newWorkerOpt(t, oci.ProcessSandbox)
 	w, err := base.NewWorker(context.TODO(), workerOpt)
 	require.NoError(t, err)
 
@@ -188,8 +185,7 @@ func TestRuncWorkerNoProcessSandbox(t *testing.T) {
 	t.Parallel()
 	checkRequirement(t)
 
-	workerOpt, cleanupWorkerOpt := newWorkerOpt(t, oci.NoProcessSandbox)
-	defer cleanupWorkerOpt()
+	workerOpt := newWorkerOpt(t, oci.NoProcessSandbox)
 	w, err := base.NewWorker(context.TODO(), workerOpt)
 	require.NoError(t, err)
 
@@ -223,8 +219,7 @@ func TestRuncWorkerExec(t *testing.T) {
 	t.Parallel()
 	checkRequirement(t)
 
-	workerOpt, cleanupWorkerOpt := newWorkerOpt(t, oci.ProcessSandbox)
-	defer cleanupWorkerOpt()
+	workerOpt := newWorkerOpt(t, oci.ProcessSandbox)
 	w, err := base.NewWorker(context.TODO(), workerOpt)
 	require.NoError(t, err)
 
@@ -235,8 +230,7 @@ func TestRuncWorkerExecFailures(t *testing.T) {
 	t.Parallel()
 	checkRequirement(t)
 
-	workerOpt, cleanupWorkerOpt := newWorkerOpt(t, oci.ProcessSandbox)
-	defer cleanupWorkerOpt()
+	workerOpt := newWorkerOpt(t, oci.ProcessSandbox)
 	w, err := base.NewWorker(context.TODO(), workerOpt)
 	require.NoError(t, err)
 

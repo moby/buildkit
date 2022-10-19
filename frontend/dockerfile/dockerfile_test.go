@@ -27,6 +27,7 @@ import (
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/continuity/fs/fstest"
+	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/dockerfile/builder"
@@ -115,9 +116,12 @@ var allTests = integration.TestFuncs(
 	testUlimit,
 	testCgroupParent,
 	testNamedImageContext,
+	testNamedImageContextPlatform,
 	testNamedImageContextTimestamps,
+	testNamedImageContextScratch,
 	testNamedLocalContext,
 	testNamedOCILayoutContext,
+	testNamedOCILayoutContextExport,
 	testNamedInputContext,
 	testNamedMultiplatformInputContext,
 	testEmptyDestDir,
@@ -142,6 +146,8 @@ var allTests = integration.TestFuncs(
 	testWorkdirCopyIgnoreRelative,
 	testCopyFollowAllSymlinks,
 	testDockerfileAddChownExpand,
+	testSourceDateEpochWithoutExporter,
+	testSBOMScannerImage,
 )
 
 // Tests that depend on the `security.*` entitlements
@@ -200,6 +206,8 @@ func TestIntegration(t *testing.T) {
 			"denied":  networkHostDenied,
 		}))...)
 	integration.Run(t, heredocTests, opts...)
+	integration.Run(t, outlineTests, opts...)
+	integration.Run(t, targetsTests, opts...)
 }
 
 func testDefaultEnvWithArgs(t *testing.T, sb integration.Sandbox) {
@@ -220,20 +228,18 @@ COPY --from=build /out /out
 echo -n $my_arg $1 > /out
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("myscript.sh", script, 0700),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	for _, x := range []struct {
 		name          string
@@ -276,19 +282,17 @@ ENV myenv foo%sbar
 RUN [ "$myenv" = 'foo%sbar' ]
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -327,7 +331,8 @@ RUN [ ! -f foo ] && [ -f bar ]
 foo
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("Dockerfile.dockerignore", ignore, 0600),
 		fstest.CreateFile("Dockerfile2", dockerfile2, 0600),
@@ -336,7 +341,6 @@ foo
 		fstest.CreateFile("bar", []byte("contents0"), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -372,12 +376,12 @@ COPY testfile $empty
 RUN [ "$(cat testfile)" == "contents0" ]
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("testfile", []byte("contents0"), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -412,16 +416,14 @@ FROM scratch
 COPY --from=base2 /foo /f
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("hello.txt", []byte("hello"), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
-	cacheDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(cacheDir)
+	cacheDir := t.TempDir()
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -485,13 +487,13 @@ COPY bar fordarwin
 FROM stage-$TARGETOS
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("foo", []byte("data"), 0600),
 		fstest.CreateFile("bar", []byte("data2"), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -559,19 +561,17 @@ WORKDIR /foo
 WORKDIR /
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -599,11 +599,11 @@ func testCacheReleased(t *testing.T, sb integration.Sandbox) {
 FROM busybox
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -636,12 +636,12 @@ FROM scratch
 ENV foo bar
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile.web", dockerfile, 0600),
 		fstest.Symlink("Dockerfile.web", "Dockerfile"),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -719,12 +719,12 @@ RUN e="300:400"; p="/file"                         ; a=` + "`" + `stat -c "%u:%g
  && e="300:400"; p="/existingdir/subdir/nestedfile"; a=` + "`" + `stat -c "%u:%g" "$p"` + "`" + `; if [ "$a" != "$e" ]; then echo "incorrect ownership on $p. expected $e, got $a"; exit 1; fi
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile.web", dockerfile, 0600),
 		fstest.Symlink("Dockerfile.web", "Dockerfile"),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -762,22 +762,20 @@ FROM scratch
 COPY --from=base unique /
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("foo1", []byte("foo1-data"), 0600),
 		fstest.CreateFile("foo2", []byte("foo2-data"), 0600),
 		fstest.CreateFile("bar", []byte("bar-data"), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -799,9 +797,7 @@ COPY --from=base unique /
 	err = os.WriteFile(filepath.Join(dir, "bar"), []byte("bar-data-mod"), 0600)
 	require.NoError(t, err)
 
-	destDir, err = os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir = t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -824,9 +820,7 @@ COPY --from=base unique /
 	err = os.WriteFile(filepath.Join(dir, "foo2"), []byte("foo2-data-mod"), 0600)
 	require.NoError(t, err)
 
-	destDir, err = os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir = t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -855,20 +849,18 @@ FROM scratch
 COPY foo nomatch* /
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("foo", []byte("contents0"), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -900,11 +892,11 @@ WORKDIR /mydir
 RUN [ "$(stat -c "%U %G" /mydir)" == "user user" ]
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -931,11 +923,11 @@ FROM scratch
 COPY --from=base Dockerfile .
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -961,11 +953,11 @@ WORKDIR /mydir
 RUN [ "$(stat -c "%U %G" /mydir)" == "user user" ]
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -995,11 +987,11 @@ RUN [ "$(stat -c "%U %G" /dest)" == "user user" ]
 RUN [ "$(stat -c "%U %G" /dest01)" == "user01 user" ]
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -1025,22 +1017,20 @@ FROM scratch
 COPY link/foo .
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.Symlink("sub", "link"),
 		fstest.CreateDir("sub", 0700),
 		fstest.CreateFile("sub/foo", []byte(`contents`), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -1072,19 +1062,17 @@ COPY --from=build /sub/foo .
 COPY --from=build /sub2/foo bar
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -1113,20 +1101,18 @@ FROM scratch
 COPY . /
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateSocket("socket.sock", 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -1157,11 +1143,11 @@ ENTRYPOINT ["/nosuchcmd"]
 RUN ["ls"]
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -1190,19 +1176,17 @@ FROM scratch
 COPY --from=build /out .
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
@@ -1236,19 +1220,17 @@ FROM scratch
 COPY --from=build /out .
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
@@ -1279,19 +1261,17 @@ ENTRYPOINT foo bar
 COPY Dockerfile .
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	out := filepath.Join(destDir, "out.tar")
 	outW, err := os.Create(out)
@@ -1371,7 +1351,8 @@ LABEL target=$TARGETPLATFORM
 COPY arch-$TARGETARCH whoami
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("arch-arm", []byte(`i am arm`), 0600),
 		fstest.CreateFile("arch-amd64", []byte(`i am amd64`), 0600),
@@ -1379,15 +1360,12 @@ COPY arch-$TARGETARCH whoami
 		fstest.CreateFile("arch-ppc64le", []byte(`i am ppc64le`), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
@@ -1420,9 +1398,7 @@ COPY arch-$TARGETARCH whoami
 
 	// repeat with oci exporter
 
-	destDir, err = os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir = t.TempDir()
 
 	out := filepath.Join(destDir, "out.tar")
 	outW, err := os.Create(out)
@@ -1508,13 +1484,13 @@ FROM scratch
 COPY foo /
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateDir("foo", 0700),
 		fstest.CreateFile("foo/bar", []byte(`contents`), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -1528,16 +1504,14 @@ COPY foo /
 	}, nil)
 	require.NoError(t, err)
 
-	dir, err = tmpdir(
+	dir, err = integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("foo", []byte(`contents2`), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -1566,12 +1540,12 @@ FROM scratch
 COPY foo /
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("foo", []byte(`contents`), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -1612,22 +1586,18 @@ COPY foo /
 COPY foo/sub bar
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("bar", []byte(`bar-contents`), 0600),
 		fstest.CreateDir("foo", 0700),
 		fstest.Symlink("../bar", "foo/sub"),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
-
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
@@ -1647,7 +1617,8 @@ COPY foo /
 COPY sub/l* alllinks/
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("bar", []byte(`bar-contents`), 0600),
 		fstest.Symlink("bar", "foo"),
@@ -1660,15 +1631,12 @@ COPY sub/l* alllinks/
 		fstest.CreateFile("sub/baz", []byte(`baz-contents`), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -1711,11 +1679,9 @@ FROM scratch
 COPY --from=0 /foo /foo
 `)
 
-	srcDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(srcDir)
+	srcDir := t.TempDir()
 
-	err = os.WriteFile(filepath.Join(srcDir, "Dockerfile"), dockerfile, 0600)
+	err := os.WriteFile(filepath.Join(srcDir, "Dockerfile"), dockerfile, 0600)
 	require.NoError(t, err)
 
 	resp := httpserver.Response{
@@ -1728,9 +1694,7 @@ COPY --from=0 /foo /foo
 	})
 	defer server.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -1768,11 +1732,11 @@ FROM scratch
 CMD ["test"]
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -1801,11 +1765,11 @@ SHELL ["ls"]
 ENTRYPOINT my entrypoint
 `)
 
-	dir, err = tmpdir(
+	dir, err = integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	target = "docker.io/moby/cmdoverridetest2:latest"
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
@@ -1860,11 +1824,11 @@ FROM scratch
 LABEL foo=bar
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -1893,12 +1857,12 @@ LABEL bar=baz
 COPY foo .
 `)
 
-	dir, err = tmpdir(
+	dir, err = integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("foo", []byte("foo-contents"), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	target = "docker.io/moby/testpullscratch2:latest"
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
@@ -1952,9 +1916,7 @@ COPY foo .
 	def, err := echo.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -1983,11 +1945,11 @@ ARG tag=nosuchtag
 FROM busybox:${tag}
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2019,12 +1981,12 @@ func testDockerfileDirs(t *testing.T, sb integration.Sandbox) {
 	RUN cmp -s foo foo3
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("foo", []byte("bar"), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	args, trace := f.DFCmdArgs(dir, dir)
 	defer os.RemoveAll(trace)
@@ -2047,17 +2009,17 @@ func testDockerfileDirs(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	// different context and dockerfile directories
-	dir1, err := tmpdir(
+	dir1, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir1)
 
-	dir2, err := tmpdir(
+	dir2, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("foo", []byte("bar"), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir2)
 
 	args, trace = f.DFCmdArgs(dir2, dir1)
 	defer os.RemoveAll(trace)
@@ -2081,11 +2043,11 @@ func testDockerfileInvalidCommand(t *testing.T, sb integration.Sandbox) {
 	RUN invalidcmd
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	args, trace := f.DFCmdArgs(dir, dir)
 	defer os.RemoveAll(trace)
@@ -2107,11 +2069,11 @@ func testDockerfileInvalidInstruction(t *testing.T, sb integration.Sandbox) {
 	FNTRYPOINT ["/bin/sh", "-c", "echo invalidinstruction"]
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2157,18 +2119,16 @@ FROM scratch
 ADD %s /dest/
 `, server.URL+"/foo"))
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	args, trace := f.DFCmdArgs(dir, dir)
 	defer os.RemoveAll(trace)
 
-	destDir, err := tmpdir()
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	cmd := sb.Cmd(args + fmt.Sprintf(" --output type=local,dest=%s", destDir))
 	err = cmd.Run()
@@ -2184,18 +2144,16 @@ FROM scratch
 ADD %s /dest/
 `, server.URL+"/"))
 
-	dir, err = tmpdir(
+	dir, err = integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	args, trace = f.DFCmdArgs(dir, dir)
 	defer os.RemoveAll(trace)
 
-	destDir, err = tmpdir()
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir = t.TempDir()
 
 	cmd = sb.Cmd(args + fmt.Sprintf(" --output type=local,dest=%s", destDir))
 	err = cmd.Run()
@@ -2231,19 +2189,17 @@ FROM scratch
 ADD t.tar /
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("t.tar", buf.Bytes(), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	args, trace := f.DFCmdArgs(dir, dir)
 	defer os.RemoveAll(trace)
 
-	destDir, err := tmpdir()
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	cmd := sb.Cmd(args + fmt.Sprintf(" --output type=local,dest=%s", destDir))
 	require.NoError(t, cmd.Run())
@@ -2265,19 +2221,17 @@ FROM scratch
 ADD t.tar.gz /
 `)
 
-	dir, err = tmpdir(
+	dir, err = integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("t.tar.gz", buf2.Bytes(), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	args, trace = f.DFCmdArgs(dir, dir)
 	defer os.RemoveAll(trace)
 
-	destDir, err = tmpdir()
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir = t.TempDir()
 
 	cmd = sb.Cmd(args + fmt.Sprintf(" --output type=local,dest=%s", destDir))
 	require.NoError(t, cmd.Run())
@@ -2292,19 +2246,17 @@ FROM scratch
 COPY t.tar.gz /
 `)
 
-	dir, err = tmpdir(
+	dir, err = integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("t.tar.gz", buf2.Bytes(), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	args, trace = f.DFCmdArgs(dir, dir)
 	defer os.RemoveAll(trace)
 
-	destDir, err = tmpdir()
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir = t.TempDir()
 
 	cmd = sb.Cmd(args + fmt.Sprintf(" --output type=local,dest=%s", destDir))
 	require.NoError(t, cmd.Run())
@@ -2329,18 +2281,16 @@ FROM scratch
 ADD %s /
 `, server.URL+"/t.tar.gz"))
 
-	dir, err = tmpdir(
+	dir, err = integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	args, trace = f.DFCmdArgs(dir, dir)
 	defer os.RemoveAll(trace)
 
-	destDir, err = tmpdir()
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir = t.TempDir()
 
 	cmd = sb.Cmd(args + fmt.Sprintf(" --output type=local,dest=%s", destDir))
 	require.NoError(t, cmd.Run())
@@ -2355,18 +2305,16 @@ FROM scratch
 ADD %s /newname.tar.gz
 `, server.URL+"/t.tar.gz"))
 
-	dir, err = tmpdir(
+	dir, err = integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	args, trace = f.DFCmdArgs(dir, dir)
 	defer os.RemoveAll(trace)
 
-	destDir, err = tmpdir()
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir = t.TempDir()
 
 	cmd = sb.Cmd(args + fmt.Sprintf(" --output type=local,dest=%s", destDir))
 	require.NoError(t, cmd.Run())
@@ -2414,17 +2362,15 @@ FROM scratch
 ADD *.tar /dest
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("t.tar", buf.Bytes(), 0600),
 		fstest.CreateFile("b.tar", buf2.Bytes(), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2464,12 +2410,12 @@ ADD --chown=${owner}:${group} foo /
 RUN [ "$(stat -c "%u %G" /foo)" == "1000 nobody" ]
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("foo", []byte(`foo-contents`), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2510,20 +2456,18 @@ ADD t.tar /
 COPY foo /symlink/
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("foo", expectedContent, 0600),
 		fstest.CreateFile("t.tar", buf.Bytes(), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	args, trace := f.DFCmdArgs(dir, dir)
 	defer os.RemoveAll(trace)
 
-	destDir, err := tmpdir()
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	cmd := sb.Cmd(args + fmt.Sprintf(" --output type=local,dest=%s", destDir))
 	require.NoError(t, cmd.Run())
@@ -2546,11 +2490,11 @@ FROM scratch
 ENV foo=bar
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	args, trace := f.DFCmdArgs(dir, dir)
 	defer os.RemoveAll(trace)
@@ -2611,11 +2555,11 @@ EXPOSE $PORTS
 EXPOSE 5000
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2691,7 +2635,8 @@ Dockerfile
 .dockerignore
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("foo", []byte(`foo-contents`), 0600),
 		fstest.CreateFile("bar", []byte(`bar-contents`), 0600),
@@ -2700,15 +2645,12 @@ Dockerfile
 		fstest.CreateFile(".dockerignore", dockerignore, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -2757,12 +2699,12 @@ FROM scratch
 COPY . .
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile(".dockerignore", []byte("!\n"), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	ctx, cancel := context.WithTimeout(sb.Context(), 15*time.Second)
 	defer cancel()
@@ -2793,11 +2735,11 @@ func testDockerfileLowercase(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`FROM scratch
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	ctx := sb.Context()
 
@@ -2831,12 +2773,12 @@ RUN echo bar > foo4
 RUN ["ls"]
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("foo", []byte("contents0"), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	args, trace := f.DFCmdArgs(dir, dir)
 	defer os.RemoveAll(trace)
@@ -2958,19 +2900,17 @@ COPY --from=base /out /
 USER nobody
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -3057,22 +2997,20 @@ FROM scratch
 COPY --from=base /out /
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("foo", []byte(`foo-contents`), 0600),
 		fstest.CreateDir("bar", 0700),
 		fstest.CreateFile("bar/sub", nil, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -3122,22 +3060,19 @@ FROM scratch
 COPY --from=base /out /
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("foo", []byte(`foo-contents`), 0600),
 		fstest.CreateFile("bar", []byte(`bar-contents`), 0700),
 	)
-
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -3179,7 +3114,8 @@ COPY files/foo.go dest/foo.go
 COPY files dest
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateDir("sub", 0700),
 		fstest.CreateDir("sub/dir1", 0700),
@@ -3189,15 +3125,12 @@ COPY files dest
 		fstest.CreateFile("files/foo.go", []byte(`foo.go-contents`), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -3231,21 +3164,19 @@ ENV FOO bar
 COPY $FOO baz
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("bar", []byte(`bar-contents`), 0600),
 	)
 
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -3282,7 +3213,8 @@ COPY sub/dir1/. subdest5
 COPY sub/dir1 subdest6
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("foo.go", []byte(`foo-contents`), 0600),
 		fstest.CreateFile("bar.go", []byte(`bar-contents`), 0600),
@@ -3292,15 +3224,12 @@ COPY sub/dir1 subdest6
 		fstest.CreateFile("sub/dir1/dir2/foo", []byte(`foo-contents`), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -3384,12 +3313,12 @@ COPY foo ../
 RUN sh -c "[ $(cat /test5/foo) = 'hello' ]"
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("foo", []byte(`hello`), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -3430,19 +3359,17 @@ FROM scratch
 COPY --from=build /dest /dest
 `, server.URL+"/foo"))
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := tmpdir()
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -3466,9 +3393,7 @@ COPY --from=build /dest /dest
 func testDockerfileFromGit(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
-	gitDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(gitDir)
+	gitDir := t.TempDir()
 
 	dockerfile := `
 FROM busybox AS build
@@ -3477,7 +3402,7 @@ FROM scratch
 COPY --from=build foo bar
 `
 
-	err = os.WriteFile(filepath.Join(gitDir, "Dockerfile"), []byte(dockerfile), 0600)
+	err := os.WriteFile(filepath.Join(gitDir, "Dockerfile"), []byte(dockerfile), 0600)
 	require.NoError(t, err)
 
 	err = runShell(gitDir,
@@ -3507,9 +3432,7 @@ COPY --from=build foo bar2
 	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Join(gitDir))))
 	defer server.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -3537,9 +3460,7 @@ COPY --from=build foo bar2
 	require.True(t, errors.Is(err, os.ErrNotExist))
 
 	// second request from master branch contains both files
-	destDir, err = os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir = t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
@@ -3599,9 +3520,7 @@ COPY foo bar
 	})
 	defer server.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -3634,19 +3553,17 @@ FROM scratch
 COPY --from=busybox /etc/passwd test
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -3676,15 +3593,13 @@ FROM scratch
 COPY --from=golang /usr/bin/go go
 `)
 
-	dir, err = tmpdir(
+	dir, err = integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
-	destDir, err = os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir = t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -3716,20 +3631,18 @@ COPY --from=staGE0 bar baz
 FROM scratch
 COPY --from=stage1 baz bax
 `)
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("foo", []byte("foo-contents"), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -3761,19 +3674,15 @@ func testLabels(t *testing.T, sb integration.Sandbox) {
 FROM scratch
 LABEL foo=bar
 `)
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
-
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
 
 	target := "example.com/moby/dockerfilelabels:test"
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
@@ -3837,20 +3746,16 @@ FROM alpine
 COPY file* /files/
 RUN ls /files/file1
 `)
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("file1", []byte("foo"), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
-
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
@@ -3888,11 +3793,11 @@ FROM busybox
 ONBUILD RUN mkdir -p /out && echo -n 11 >> /out/foo
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -3921,11 +3826,11 @@ ONBUILD RUN mkdir -p /out && echo -n 11 >> /out/foo
 	FROM %s 
 	`, target))
 
-	dir, err = tmpdir(
+	dir, err = integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	target2 := registry + "/buildkit/testonbuild:child"
 
@@ -3952,15 +3857,13 @@ ONBUILD RUN mkdir -p /out && echo -n 11 >> /out/foo
 	COPY --from=base /out /
 	`, target2))
 
-	dir, err = tmpdir(
+	dir, err = integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -4000,11 +3903,11 @@ COPY --from=base unique /
 COPY --from=base arch /
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -4051,14 +3954,14 @@ COPY --from=base arch /
 	desc, provider, err := contentutil.ProviderFromRef(target + "-img")
 	require.NoError(t, err)
 
-	imgMap, err := readIndex(sb.Context(), provider, desc)
+	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
 
-	require.Equal(t, 2, len(imgMap))
+	require.Equal(t, 2, len(imgs.Images))
 
-	require.Equal(t, "amd64", string(imgMap["linux/amd64"].layers[1]["arch"].Data))
-	dtamd := imgMap["linux/amd64"].layers[0]["unique"].Data
-	dtarm := imgMap["linux/arm/v7"].layers[0]["unique"].Data
+	require.Equal(t, "amd64", string(imgs.Find("linux/amd64").Layers[1]["arch"].Data))
+	dtamd := imgs.Find("linux/amd64").Layers[0]["unique"].Data
+	dtarm := imgs.Find("linux/arm/v7").Layers[0]["unique"].Data
 	require.NotEqual(t, dtamd, dtarm)
 
 	for i := 0; i < 2; i++ {
@@ -4091,14 +3994,14 @@ COPY --from=base arch /
 
 		require.Equal(t, desc.Digest, desc2.Digest)
 
-		imgMap, err = readIndex(sb.Context(), provider, desc2)
+		imgs, err = testutil.ReadImages(sb.Context(), provider, desc2)
 		require.NoError(t, err)
 
-		require.Equal(t, 2, len(imgMap))
+		require.Equal(t, 2, len(imgs.Images))
 
-		require.Equal(t, "arm", string(imgMap["linux/arm/v7"].layers[1]["arch"].Data))
-		dtamd2 := imgMap["linux/amd64"].layers[0]["unique"].Data
-		dtarm2 := imgMap["linux/arm/v7"].layers[0]["unique"].Data
+		require.Equal(t, "arm", string(imgs.Find("linux/arm/v7").Layers[1]["arch"].Data))
+		dtamd2 := imgs.Find("linux/amd64").Layers[0]["unique"].Data
+		dtarm2 := imgs.Find("linux/arm/v7").Layers[0]["unique"].Data
 		require.Equal(t, string(dtamd), string(dtamd2))
 		require.Equal(t, string(dtarm), string(dtarm2))
 	}
@@ -4124,20 +4027,18 @@ COPY --from=base const /
 COPY --from=base unique /
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("foo", []byte("foobar"), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	target := registry + "/buildkit/testexportdf:latest"
 
@@ -4170,9 +4071,7 @@ COPY --from=base unique /
 
 	ensurePruneAll(t, c, sb)
 
-	destDir, err = os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir = t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
@@ -4198,10 +4097,6 @@ COPY --from=base unique /
 	dt2, err = os.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
 	require.Equal(t, string(dt), string(dt2))
-
-	destDir, err = os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
 }
 
 func testReproducibleIDs(t *testing.T, sb integration.Sandbox) {
@@ -4214,20 +4109,16 @@ ENV foo=bar
 COPY foo /
 RUN echo bar > bar
 `)
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("foo", []byte("foo-contents"), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
-
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
 
 	target := "example.com/moby/dockerfileids:test"
 	opt := client.SolveOpt{
@@ -4295,20 +4186,16 @@ COPY foo /
 RUN echo bar > bar
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("foo", []byte("foobar"), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
-
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
 
 	target := "example.com/moby/dockerfileexpids:test"
 	cacheTarget := registry + "/test/dockerfileexpids:cache"
@@ -4377,19 +4264,17 @@ FROM scratch
 COPY --from=s0 unique /
 COPY --from=s1 unique2 /
 `)
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	opt := client.SolveOpt{
 		FrontendAttrs: map[string]string{},
@@ -4408,9 +4293,7 @@ COPY --from=s1 unique2 /
 	_, err = f.Solve(sb.Context(), c, opt, nil)
 	require.NoError(t, err)
 
-	destDir2, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir2 := t.TempDir()
 
 	opt.FrontendAttrs["no-cache"] = ""
 	opt.Exports[0].OutputDir = destDir2
@@ -4433,9 +4316,7 @@ COPY --from=s1 unique2 /
 	require.NotEqual(t, string(unique1Dir1), string(unique1Dir2))
 	require.NotEqual(t, string(unique2Dir1), string(unique2Dir2))
 
-	destDir3, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir3 := t.TempDir()
 
 	opt.FrontendAttrs["no-cache"] = "s1"
 	opt.Exports[0].OutputDir = destDir3
@@ -4463,21 +4344,19 @@ FROM build-${TARGETOS}
 COPY foo2 bar2
 `, runtime.GOOS))
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("foo", []byte("d0"), 0600),
 		fstest.CreateFile("foo2", []byte("d1"), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	opt := client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -4516,19 +4395,17 @@ FROM scratch
 COPY --from=build out .
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	opt := client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -4572,19 +4449,17 @@ FROM scratch
 COPY --from=build /out /
 
 `)
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	opt := client.SolveOpt{
 		FrontendAttrs: map[string]string{
@@ -4612,9 +4487,7 @@ COPY --from=build /out /
 	require.Equal(t, "hpvalue::npvalue::foocontents::::bazcontent", string(dt))
 
 	// repeat with changed default args should match the old cache
-	destDir, err = os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir = t.TempDir()
 
 	opt = client.SolveOpt{
 		FrontendAttrs: map[string]string{
@@ -4641,9 +4514,7 @@ COPY --from=build /out /
 	require.Equal(t, "hpvalue::npvalue::foocontents::::bazcontent", string(dt))
 
 	// changing actual value invalidates cache
-	destDir, err = os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir = t.TempDir()
 
 	opt = client.SolveOpt{
 		FrontendAttrs: map[string]string{
@@ -4742,11 +4613,11 @@ func testTarContextExternalDockerfile(t *testing.T, sb integration.Sandbox) {
 FROM scratch
 COPY foo bar
 `)
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -4756,9 +4627,7 @@ COPY foo bar
 	url := up.Add(buf)
 
 	// repeat with changed default args should match the old cache
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
@@ -4793,12 +4662,12 @@ func testFrontendUseForwardedSolveResults(t *testing.T, sb integration.Sandbox) 
 FROM scratch
 COPY foo foo2
 `)
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("foo", []byte("data"), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 		res, err := c.Solve(ctx, gateway.SolveRequest{
@@ -4832,9 +4701,7 @@ COPY foo foo2
 		})
 	}
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Build(sb.Context(), client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -4862,9 +4729,7 @@ func testFrontendInputs(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	outMount := llb.Image("busybox").Run(
 		llb.Shlex(`sh -c "cat /dev/urandom | head -c 100 | sha256sum > /out/foo"`),
@@ -4891,11 +4756,11 @@ FROM scratch
 COPY foo foo2
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
@@ -4920,6 +4785,9 @@ COPY foo foo2
 
 func testFrontendSubrequests(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
+	if _, ok := f.(*clientFrontend); !ok {
+		t.Skip("only test with client frontend")
+	}
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -4930,15 +4798,11 @@ FROM scratch
 COPY Dockerfile Dockerfile
 `)
 
-	if gf, ok := f.(*gatewayFrontend); ok {
-		dockerfile = []byte(fmt.Sprintf("#syntax=%s\n\n%s", gf.gw, dockerfile))
-	}
-
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	called := false
 
@@ -4956,6 +4820,7 @@ COPY Dockerfile Dockerfile
 				require.Equal(t, subrequests.RequestType("rpc"), req.Type)
 				require.NotEqual(t, req.Version, "")
 				require.True(t, len(req.Metadata) > 0)
+				require.Equal(t, "result.json", req.Metadata[0].Name)
 			}
 		}
 		require.True(t, hasDescribe)
@@ -5007,11 +4872,11 @@ RUN echo $HOSTNAME | grep foo
 RUN echo $(hostname) | grep foo
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -5065,19 +4930,17 @@ FROM scratch
 COPY --from=base /shmsize /
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
@@ -5110,19 +4973,17 @@ FROM scratch
 COPY --from=base /ulimit /
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
@@ -5159,19 +5020,17 @@ FROM scratch
 COPY --from=base /out /
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
@@ -5209,17 +5068,15 @@ FROM scratch
 COPY --from=base /out /
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	f := getFrontend(t, sb)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
@@ -5252,11 +5109,11 @@ ENV PATH=/foobar:$PATH
 ENV FOOBAR=foobar
 `)
 
-	dir, err = tmpdir(
+	dir, err = integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
@@ -5293,17 +5150,15 @@ COPY --from=base /env_path /
 COPY --from=base /env_foobar /
 	`)
 
-	dir, err = tmpdir(
+	dir, err = integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	f = getFrontend(t, sb)
 
-	destDir, err = os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir = t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
@@ -5335,7 +5190,81 @@ COPY --from=base /env_foobar /
 	require.Contains(t, string(dt), "/foobar:")
 }
 
+func testNamedImageContextPlatform(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	// Build a base image and force buildkit to generate a manifest list.
+	dockerfile := []byte(`FROM --platform=$BUILDPLATFORM alpine:latest`)
+	target := registry + "/buildkit/testnamedimagecontextplatform:latest"
+
+	dir, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	f := getFrontend(t, sb)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_MULTI_PLATFORM": "true",
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dockerfile = []byte(`
+FROM --platform=$BUILDPLATFORM busybox AS target
+RUN echo hello
+`)
+
+	dir, err = integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	f = getFrontend(t, sb)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"context:busybox": "docker-image://" + target,
+			// random platform that would never exist so it doesn't conflict with the build machine
+			// here we specifically want to make sure that the platform chosen for the image source is the one in the dockerfile not the target platform.
+			"platform": "darwin/ppc64le",
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+}
+
 func testNamedImageContextTimestamps(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "direct push")
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -5354,11 +5283,11 @@ func testNamedImageContextTimestamps(t *testing.T, sb integration.Sandbox) {
 FROM alpine
 RUN echo foo >> /test
 `)
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	target := registry + "/buildkit/testnamedimagecontexttimestamps:latest"
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
@@ -5380,14 +5309,14 @@ RUN echo foo >> /test
 
 	desc, provider, err := contentutil.ProviderFromRef(target)
 	require.NoError(t, err)
-	img, err := readImage(sb.Context(), provider, desc)
+	img, err := testutil.ReadImage(sb.Context(), provider, desc)
 	require.NoError(t, err)
 
-	dirDerived, err := tmpdir(
+	dirDerived, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dirDerived)
 
 	targetDerived := registry + "/buildkit/testnamedimagecontexttimestampsderived:latest"
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
@@ -5412,13 +5341,64 @@ RUN echo foo >> /test
 
 	desc, provider, err = contentutil.ProviderFromRef(targetDerived)
 	require.NoError(t, err)
-	imgDerived, err := readImage(sb.Context(), provider, desc)
+	imgDerived, err := testutil.ReadImage(sb.Context(), provider, desc)
 	require.NoError(t, err)
 
-	require.NotEqual(t, img.img.Created, imgDerived.img.Created)
-	diff := imgDerived.img.Created.Sub(*img.img.Created)
+	require.NotEqual(t, img.Img.Created, imgDerived.Img.Created)
+	diff := imgDerived.Img.Created.Sub(*img.Img.Created)
 	require.Greater(t, diff, time.Duration(0))
 	require.Less(t, diff, 10*time.Minute)
+}
+
+func testNamedImageContextScratch(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dockerfile := []byte(`
+FROM busybox
+COPY <<EOF /out
+hello world!
+EOF
+`)
+
+	dir, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	f := getFrontend(t, sb)
+
+	destDir := t.TempDir()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"context:busybox": "docker-image://scratch",
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	items, err := os.ReadDir(destDir)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(items))
+	require.Equal(t, "out", items[0].Name())
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
+	require.NoError(t, err)
+	require.Equal(t, "hello world!\n", string(dt))
 }
 
 func testNamedLocalContext(t *testing.T, sb integration.Sandbox) {
@@ -5435,27 +5415,25 @@ FROM scratch
 COPY --from=base /o* /
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	outf := []byte(`dummy-result`)
 
-	dir2, err := tmpdir(
+	dir2, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("out", outf, 0600),
 		fstest.CreateFile("out2", outf, 0600),
 		fstest.CreateFile(".dockerignore", []byte("out2\n"), 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir2)
 
 	f := getFrontend(t, sb)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
@@ -5485,6 +5463,7 @@ COPY --from=base /o* /
 }
 
 func testNamedOCILayoutContext(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "oci exporter")
 	// how this test works:
 	// 1- we use a regular builder with a dockerfile to create an image two files: "out" with content "first", "out2" with content "second"
 	// 2- we save the output to an OCI layout dir
@@ -5497,21 +5476,20 @@ func testNamedOCILayoutContext(t *testing.T, sb integration.Sandbox) {
 	defer c.Close()
 
 	// create a tempdir where we will store the OCI layout
-	ocidir, err := os.MkdirTemp("", "buildkit-oci-layout")
-	require.NoError(t, err)
-	defer os.RemoveAll(ocidir)
+	ocidir := t.TempDir()
 
 	ociDockerfile := []byte(`
 	FROM busybox:latest
+	WORKDIR /test
 	RUN sh -c "echo -n first > out"
 	RUN sh -c "echo -n second > out2"
 	ENV foo=bar
 	`)
-	inDir, err := tmpdir(
+	inDir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", ociDockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(inDir)
 
 	f := getFrontend(t, sb)
 
@@ -5567,23 +5545,23 @@ func testNamedOCILayoutContext(t *testing.T, sb integration.Sandbox) {
 	//    when we `COPY --from=imported`, it should have the content of `/outfoo` as `"bar"`
 	dockerfile := []byte(`
 FROM busybox AS base
-RUN cat /etc/alpine-release > /out
+RUN cat /etc/alpine-release > out
+
 FROM foo AS imported
-RUN echo -n $foo > /outfoo
+RUN echo -n $foo > outfoo
+
 FROM scratch
-COPY --from=base /o* /
-COPY --from=imported /outfoo /
+COPY --from=base /test/o* /
+COPY --from=imported /test/outfoo /
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
@@ -5622,6 +5600,117 @@ COPY --from=imported /outfoo /
 	require.Equal(t, []byte("bar"), dt)
 }
 
+func testNamedOCILayoutContextExport(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	ocidir := t.TempDir()
+
+	dockerfile := []byte(`
+FROM scratch
+WORKDIR /test
+ENV foo=bar
+	`)
+	dir, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	f := getFrontend(t, sb)
+
+	outW := bytes.NewBuffer(nil)
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{{
+			Type:   client.ExporterOCI,
+			Output: fixedWriteCloser(nopWriteCloser{outW}),
+		}},
+	}, nil)
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(outW.Bytes(), false)
+	require.NoError(t, err)
+
+	for filename, content := range m {
+		fullFilename := path.Join(ocidir, filename)
+		err = os.MkdirAll(path.Dir(fullFilename), 0755)
+		require.NoError(t, err)
+		if content.Header.FileInfo().IsDir() {
+			err = os.MkdirAll(fullFilename, 0755)
+			require.NoError(t, err)
+		} else {
+			err = os.WriteFile(fullFilename, content.Data, 0644)
+			require.NoError(t, err)
+		}
+	}
+
+	var index ocispecs.Index
+	err = json.Unmarshal(m["index.json"].Data, &index)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(index.Manifests))
+	digest := index.Manifests[0].Digest.Hex()
+
+	store, err := local.NewStore(ocidir)
+	ociID := "ocione"
+	require.NoError(t, err)
+
+	dockerfile = []byte(`
+FROM nonexistent AS base
+`)
+
+	dir, err = integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	outW = bytes.NewBuffer(nil)
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"context:nonexistent": fmt.Sprintf("oci-layout:%s@sha256:%s", ociID, digest),
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		OCIStores: map[string]content.Store{
+			ociID: store,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:   client.ExporterOCI,
+				Output: fixedWriteCloser(nopWriteCloser{outW}),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	m, err = testutil.ReadTarToMap(outW.Bytes(), false)
+	require.NoError(t, err)
+
+	err = json.Unmarshal(m["index.json"].Data, &index)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(index.Manifests))
+	digest = index.Manifests[0].Digest.Hex()
+
+	var mfst ocispecs.Manifest
+	require.NoError(t, json.Unmarshal(m["blobs/sha256/"+digest].Data, &mfst))
+	digest = mfst.Config.Digest.Hex()
+
+	var cfg ocispecs.Image
+	require.NoError(t, json.Unmarshal(m["blobs/sha256/"+digest].Data, &cfg))
+
+	require.Equal(t, "/test", cfg.Config.WorkingDir)
+	require.Contains(t, cfg.Config.Env, "foo=bar")
+}
+
 func testNamedInputContext(t *testing.T, sb integration.Sandbox) {
 	ctx := sb.Context()
 
@@ -5635,11 +5724,11 @@ ENV FOO=bar
 RUN echo first > /out
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	dockerfile2 := []byte(`
 FROM base AS build
@@ -5648,11 +5737,11 @@ FROM scratch
 COPY --from=build /foo /out /
 `)
 
-	dir2, err := tmpdir(
+	dir2, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile2, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	f := getFrontend(t, sb)
 
@@ -5705,9 +5794,7 @@ COPY --from=build /foo /out /
 
 	product := "buildkit_test"
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Build(ctx, client.SolveOpt{
 		LocalDirs: map[string]string{
@@ -5748,11 +5835,11 @@ ENV FOO=bar-$TARGETARCH
 RUN echo "foo $TARGETARCH" > /out
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	dockerfile2 := []byte(`
 FROM base AS build
@@ -5761,11 +5848,11 @@ FROM scratch
 COPY --from=build /foo /out /
 `)
 
-	dir2, err := tmpdir(
+	dir2, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile2, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	f := getFrontend(t, sb)
 
@@ -5847,9 +5934,7 @@ COPY --from=build /foo /out /
 
 	product := "buildkit_test"
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	_, err = c.Build(ctx, client.SolveOpt{
 		LocalDirs: map[string]string{
@@ -5883,15 +5968,184 @@ COPY --from=build /foo /out /
 	require.Equal(t, "foo is bar-arm64\n", string(dt))
 }
 
-func tmpdir(appliers ...fstest.Applier) (string, error) {
-	tmpdir, err := os.MkdirTemp("", "buildkit-dockerfile")
-	if err != nil {
-		return "", err
+func testSourceDateEpochWithoutExporter(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "oci exporter")
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM scratch
+ENTRYPOINT foo bar
+COPY Dockerfile .
+`)
+
+	dir, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := os.MkdirTemp("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+
+	tm := time.Date(2015, time.October, 21, 7, 28, 0, 0, time.UTC)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:SOURCE_DATE_EPOCH": fmt.Sprintf("%d", tm.Unix()),
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterOCI,
+				// disable exporter epoch to make sure we test dockerfile
+				Attrs:  map[string]string{"source-date-epoch": ""},
+				Output: fixedWriteCloser(outW),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "out.tar"))
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(dt, false)
+	require.NoError(t, err)
+
+	var idx ocispecs.Index
+	err = json.Unmarshal(m["index.json"].Data, &idx)
+	require.NoError(t, err)
+
+	mlistHex := idx.Manifests[0].Digest.Hex()
+
+	var mfst ocispecs.Manifest
+	err = json.Unmarshal(m["blobs/sha256/"+mlistHex].Data, &mfst)
+	require.NoError(t, err)
+
+	var img ocispecs.Image
+	err = json.Unmarshal(m["blobs/sha256/"+mfst.Config.Digest.Hex()].Data, &img)
+	require.NoError(t, err)
+
+	require.Equal(t, tm.Unix(), img.Created.Unix())
+	for _, h := range img.History {
+		require.Equal(t, tm.Unix(), h.Created.Unix())
 	}
-	if err := fstest.Apply(appliers...).Apply(tmpdir); err != nil {
-		return "", err
+}
+
+func testSBOMScannerImage(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
 	}
-	return tmpdir, nil
+	require.NoError(t, err)
+
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox:latest
+COPY <<-"EOF" /scan.sh
+	set -e
+	cat <<BUNDLE > $BUILDKIT_SCAN_DESTINATION/spdx.json
+	{
+	  "_type": "https://in-toto.io/Statement/v0.1",
+	  "predicateType": "https://spdx.dev/Document",
+	  "predicate": {"success": true}
+	}
+	BUNDLE
+EOF
+CMD sh /scan.sh
+`)
+	scannerDir, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	scannerTarget := registry + "/buildkit/testsbomscanner:latest"
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: scannerDir,
+			builder.DefaultLocalNameContext:    scannerDir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": scannerTarget,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dockerfile = []byte(`
+FROM scratch
+COPY <<EOF /foo
+data
+EOF
+`)
+	dir, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	target := registry + "/buildkit/testsbomscannertarget:latest"
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"attest:sbom": "generator=" + scannerTarget,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	desc, provider, err := contentutil.ProviderFromRef(target)
+	require.NoError(t, err)
+	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(imgs.Images))
+
+	img := imgs.Find(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
+	require.NotNil(t, img)
+	require.Equal(t, []byte("data\n"), img.Layers[0]["foo"].Data)
+
+	att := imgs.Find("unknown/unknown")
+	var attest intoto.Statement
+	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
+	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
+	require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
 }
 
 func runShell(dir string, cmds ...string) error {
@@ -6136,65 +6390,4 @@ func fixedWriteCloser(wc io.WriteCloser) func(map[string]string) (io.WriteCloser
 	return func(map[string]string) (io.WriteCloser, error) {
 		return wc, nil
 	}
-}
-
-type imageInfo struct {
-	desc   ocispecs.Descriptor
-	img    ocispecs.Image
-	layers []map[string]*testutil.TarItem
-}
-
-func readIndex(ctx context.Context, p content.Provider, desc ocispecs.Descriptor) (map[string]*imageInfo, error) {
-	dt, err := content.ReadBlob(ctx, p, desc)
-	if err != nil {
-		return nil, err
-	}
-	var idx ocispecs.Index
-	if err := json.Unmarshal(dt, &idx); err != nil {
-		return nil, err
-	}
-
-	mi := map[string]*imageInfo{}
-
-	for _, m := range idx.Manifests {
-		img, err := readImage(ctx, p, m)
-		if err != nil {
-			return nil, err
-		}
-		mi[platforms.Format(*m.Platform)] = img
-	}
-	return mi, nil
-}
-func readImage(ctx context.Context, p content.Provider, desc ocispecs.Descriptor) (*imageInfo, error) {
-	ii := &imageInfo{desc: desc}
-
-	dt, err := content.ReadBlob(ctx, p, desc)
-	if err != nil {
-		return nil, err
-	}
-	var mfst ocispecs.Manifest
-	if err := json.Unmarshal(dt, &mfst); err != nil {
-		return nil, err
-	}
-
-	dt, err = content.ReadBlob(ctx, p, mfst.Config)
-	if err != nil {
-		return nil, err
-	}
-	if err := json.Unmarshal(dt, &ii.img); err != nil {
-		return nil, err
-	}
-
-	for _, l := range mfst.Layers {
-		dt, err := content.ReadBlob(ctx, p, l)
-		if err != nil {
-			return nil, err
-		}
-		m, err := testutil.ReadTarToMap(dt, true)
-		if err != nil {
-			return nil, err
-		}
-		ii.layers = append(ii.layers, m)
-	}
-	return ii, nil
 }

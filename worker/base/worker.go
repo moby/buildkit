@@ -15,6 +15,7 @@ import (
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/docker/docker/pkg/idtools"
+	"github.com/hashicorp/go-multierror"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
@@ -42,6 +43,7 @@ import (
 	"github.com/moby/buildkit/source/local"
 	"github.com/moby/buildkit/util/archutil"
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/progress/controller"
 	"github.com/moby/buildkit/util/semutil"
@@ -58,24 +60,25 @@ const labelCreatedAt = "buildkit/createdat"
 // WorkerOpt is specific to a worker.
 // See also CommonOpt.
 type WorkerOpt struct {
-	ID              string
-	Labels          map[string]string
-	Platforms       []ocispecs.Platform
-	GCPolicy        []client.PruneInfo
-	BuildkitVersion client.BuildkitVersion
-	Executor        executor.Executor
-	Snapshotter     snapshot.Snapshotter
-	ContentStore    content.Store
-	Applier         diff.Applier
-	Differ          diff.Comparer
-	ImageStore      images.Store // optional
-	RegistryHosts   docker.RegistryHosts
-	IdentityMapping *idtools.IdentityMapping
-	LeaseManager    leases.Manager
-	GarbageCollect  func(context.Context) (gc.Stats, error)
-	ParallelismSem  *semutil.Weighted
-	MetadataStore   *metadata.Store
-	MountPoolRoot   string
+	ID               string
+	Labels           map[string]string
+	Platforms        []ocispecs.Platform
+	GCPolicy         []client.PruneInfo
+	BuildkitVersion  client.BuildkitVersion
+	NetworkProviders map[pb.NetMode]network.Provider
+	Executor         executor.Executor
+	Snapshotter      snapshot.Snapshotter
+	ContentStore     content.Store
+	Applier          diff.Applier
+	Differ           diff.Comparer
+	ImageStore       images.Store // optional
+	RegistryHosts    docker.RegistryHosts
+	IdentityMapping  *idtools.IdentityMapping
+	LeaseManager     leases.Manager
+	GarbageCollect   func(context.Context) (gc.Stats, error)
+	ParallelismSem   *semutil.Weighted
+	MetadataStore    *metadata.Store
+	MountPoolRoot    string
 }
 
 // Worker is a local worker instance with dedicated snapshotter, cache, and so on.
@@ -204,6 +207,17 @@ func NewWorker(ctx context.Context, opt WorkerOpt) (*Worker, error) {
 	}, nil
 }
 
+func (w *Worker) Close() error {
+	var rerr error
+	for _, provider := range w.NetworkProviders {
+		if err := provider.Close(); err != nil {
+			rerr = multierror.Append(rerr, err)
+		}
+	}
+	return rerr
+}
+
+// ParallelismStatus is Earthly-specific
 func (w *Worker) ParallelismStatus() (int64, int64, int64) {
 	if w.ParallelismSem == nil {
 		return 0, 0, 0

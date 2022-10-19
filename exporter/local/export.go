@@ -2,6 +2,7 @@ package local
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"strings"
 	"time"
@@ -9,10 +10,13 @@ import (
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/exporter"
+	"github.com/moby/buildkit/exporter/containerimage/exptypes"
+	"github.com/moby/buildkit/exporter/util/epoch"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/progress"
+	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
 	"golang.org/x/sync/errgroup"
@@ -34,11 +38,17 @@ func New(opt Opt) (exporter.Exporter, error) {
 }
 
 func (e *localExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
-	return &localExporterInstance{localExporter: e}, nil
+	tm, _, err := epoch.ParseAttr(opt)
+	if err != nil {
+		return nil, err
+	}
+
+	return &localExporterInstance{localExporter: e, epoch: tm}, nil
 }
 
 type localExporterInstance struct {
 	*localExporter
+	epoch *time.Time
 }
 
 func (e *localExporterInstance) Name() string {
@@ -49,9 +59,17 @@ func (e *localExporter) Config() exporter.Config {
 	return exporter.Config{}
 }
 
-func (e *localExporterInstance) Export(ctx context.Context, inp exporter.Source, sessionID string) (map[string]string, error) {
+func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source, sessionID string) (map[string]string, error) {
 	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
+
+	if e.epoch == nil {
+		if tm, ok, err := epoch.ParseSource(inp); err != nil {
+			return nil, err
+		} else if ok {
+			e.epoch = tm
+		}
+	}
 
 	caller, err := e.opt.SessionManager.Get(timeoutCtx, sessionID, false)
 	if err != nil {
@@ -59,6 +77,18 @@ func (e *localExporterInstance) Export(ctx context.Context, inp exporter.Source,
 	}
 
 	isMap := len(inp.Refs) > 0
+
+	platformsBytes, ok := inp.Metadata[exptypes.ExporterPlatformsKey]
+	if isMap && !ok {
+		return nil, errors.Errorf("unable to export multiple refs, missing platforms mapping")
+	}
+
+	var p exptypes.Platforms
+	if ok && len(platformsBytes) > 0 {
+		if err := json.Unmarshal(platformsBytes, &p); err != nil {
+			return nil, errors.Wrapf(err, "failed to parse platforms passed to exporter")
+		}
+	}
 
 	export := func(ctx context.Context, k string, ref cache.ImmutableRef) func() error {
 		return func() error {
@@ -90,9 +120,10 @@ func (e *localExporterInstance) Export(ctx context.Context, inp exporter.Source,
 			}
 
 			walkOpt := &fsutil.WalkOpt{}
+			var idMapFunc func(p string, st *fstypes.Stat) fsutil.MapResult
 
 			if idmap != nil {
-				walkOpt.Map = func(p string, st *fstypes.Stat) fsutil.MapResult {
+				idMapFunc = func(p string, st *fstypes.Stat) fsutil.MapResult {
 					uid, gid, err := idmap.ToContainer(idtools.Identity{
 						UID: int(st.Uid),
 						GID: int(st.Gid),
@@ -106,14 +137,29 @@ func (e *localExporterInstance) Export(ctx context.Context, inp exporter.Source,
 				}
 			}
 
+			walkOpt.Map = func(p string, st *fstypes.Stat) fsutil.MapResult {
+				res := fsutil.MapResultKeep
+				if idMapFunc != nil {
+					res = idMapFunc(p, st)
+				}
+				if e.epoch != nil {
+					st.ModTime = e.epoch.UnixNano()
+				}
+				return res
+			}
+
 			fs := fsutil.NewFS(src, walkOpt)
 			lbl := "copying files"
 			if isMap {
 				lbl += " " + k
-				fs, err = fsutil.SubDirFS([]fsutil.Dir{{FS: fs, Stat: fstypes.Stat{
+				st := fstypes.Stat{
 					Mode: uint32(os.ModeDir | 0755),
 					Path: strings.Replace(k, "/", "_", -1),
-				}}})
+				}
+				if e.epoch != nil {
+					st.ModTime = e.epoch.UnixNano()
+				}
+				fs, err = fsutil.SubDirFS([]fsutil.Dir{{FS: fs, Stat: st}})
 				if err != nil {
 					return err
 				}
@@ -130,8 +176,12 @@ func (e *localExporterInstance) Export(ctx context.Context, inp exporter.Source,
 	eg, ctx := errgroup.WithContext(ctx)
 
 	if isMap {
-		for k, ref := range inp.Refs {
-			eg.Go(export(ctx, k, ref))
+		for _, p := range p.Platforms {
+			r, ok := inp.Refs[p.ID]
+			if !ok {
+				return nil, errors.Errorf("failed to find ref for ID %s", p.ID)
+			}
+			eg.Go(export(ctx, p.ID, r))
 		}
 	} else {
 		eg.Go(export(ctx, "", inp.Ref))

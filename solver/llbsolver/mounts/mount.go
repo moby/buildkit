@@ -342,7 +342,7 @@ func (mm *MountManager) getSecretMountable(ctx context.Context, m *pb.Mount, g s
 		}
 		return nil
 	})
-	if err != nil || dt == nil {
+	if err != nil {
 		return nil, err
 	}
 	return &secretMount{mount: m, data: dt, idmap: mm.cm.IdentityMapping()}, nil

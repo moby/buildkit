@@ -3,7 +3,6 @@ package llbsolver
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -101,7 +100,7 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 						}
 						ci, desc, err := resolveCI(ctx, g, im.Attrs)
 						if err != nil {
-							return err
+							return errors.Wrapf(err, "failed to configure %v cache importer", im.Type)
 						}
 						cmNew, err = ci.Resolve(ctx, desc, cmID, w)
 						return err
@@ -164,9 +163,6 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest, sid st
 
 	if req.Definition != nil && req.Definition.Def != nil {
 		res = &frontend.Result{Ref: newResultProxy(b, req)}
-		if req.Evaluate {
-			_, err = res.Ref.Result(ctx)
-		}
 	} else if req.Frontend != "" {
 		f, ok := b.frontends[req.Frontend]
 		if !ok {
@@ -179,6 +175,12 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest, sid st
 	} else {
 		return &frontend.Result{}, nil
 	}
+	if req.Evaluate {
+		err = res.EachRef(func(ref solver.ResultProxy) error {
+			_, err := res.Ref.Result(ctx)
+			return err
+		})
+	}
 
 	if len(res.Refs) > 0 {
 		for p := range res.Refs {
@@ -187,10 +189,7 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest, sid st
 				return nil, err
 			}
 			if len(dtbi) > 0 {
-				if res.Metadata == nil {
-					res.Metadata = make(map[string][]byte)
-				}
-				res.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, p)] = dtbi
+				res.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, p), dtbi)
 			}
 		}
 	} else {
@@ -199,10 +198,7 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest, sid st
 			return nil, err
 		}
 		if len(dtbi) > 0 {
-			if res.Metadata == nil {
-				res.Metadata = make(map[string][]byte)
-			}
-			res.Metadata[exptypes.ExporterBuildInfo] = dtbi
+			res.AddMeta(exptypes.ExporterBuildInfo, dtbi)
 		}
 	}
 
@@ -259,8 +255,8 @@ func (b *llbBridge) Export(ctx context.Context, refs map[string]cache.ImmutableR
 }
 
 type resultProxy struct {
-	cb         func(context.Context) (solver.CachedResult, solver.BuildSources, error)
-	def        *pb.Definition
+	b          *llbBridge
+	req        frontend.SolveRequest
 	g          flightcontrol.Group
 	mu         sync.Mutex
 	released   bool
@@ -271,27 +267,11 @@ type resultProxy struct {
 }
 
 func newResultProxy(b *llbBridge, req frontend.SolveRequest) *resultProxy {
-	rp := &resultProxy{
-		def: req.Definition,
-	}
-	rp.cb = func(ctx context.Context) (solver.CachedResult, solver.BuildSources, error) {
-		res, bsrc, err := b.loadResult(ctx, req.Definition, req.CacheImports)
-		var ee *llberrdefs.ExecError
-		if errors.As(err, &ee) {
-			ee.EachRef(func(res solver.Result) error {
-				rp.errResults = append(rp.errResults, res)
-				return nil
-			})
-			// acquire ownership so ExecError finalizer doesn't attempt to release as well
-			ee.OwnerBorrowed = true
-		}
-		return res, bsrc, err
-	}
-	return rp
+	return &resultProxy{req: req, b: b}
 }
 
 func (rp *resultProxy) Definition() *pb.Definition {
-	return rp.def
+	return rp.req.Definition
 }
 
 func (rp *resultProxy) BuildSources() solver.BuildSources {
@@ -326,12 +306,12 @@ func (rp *resultProxy) wrapError(err error) error {
 	}
 	var ve *errdefs.VertexError
 	if errors.As(err, &ve) {
-		if rp.def.Source != nil {
-			locs, ok := rp.def.Source.Locations[string(ve.Digest)]
+		if rp.req.Definition.Source != nil {
+			locs, ok := rp.req.Definition.Source.Locations[string(ve.Digest)]
 			if ok {
 				for _, loc := range locs.Locations {
 					err = errdefs.WithSource(err, errdefs.Source{
-						Info:   rp.def.Source.Infos[loc.SourceIndex],
+						Info:   rp.req.Definition.Source.Infos[loc.SourceIndex],
 						Ranges: loc.Ranges,
 					})
 				}
@@ -339,6 +319,20 @@ func (rp *resultProxy) wrapError(err error) error {
 		}
 	}
 	return err
+}
+
+func (rp *resultProxy) loadResult(ctx context.Context) (solver.CachedResult, solver.BuildSources, error) {
+	res, bsrc, err := rp.b.loadResult(ctx, rp.req.Definition, rp.req.CacheImports)
+	var ee *llberrdefs.ExecError
+	if errors.As(err, &ee) {
+		ee.EachRef(func(res solver.Result) error {
+			rp.errResults = append(rp.errResults, res)
+			return nil
+		})
+		// acquire ownership so ExecError finalizer doesn't attempt to release as well
+		ee.OwnerBorrowed = true
+	}
+	return res, bsrc, err
 }
 
 func (rp *resultProxy) Result(ctx context.Context) (res solver.CachedResult, err error) {
@@ -356,11 +350,11 @@ func (rp *resultProxy) Result(ctx context.Context) (res solver.CachedResult, err
 			return rp.v, rp.err
 		}
 		rp.mu.Unlock()
-		v, bsrc, err := rp.cb(ctx)
+		v, bsrc, err := rp.loadResult(ctx)
 		if err != nil {
 			select {
 			case <-ctx.Done():
-				if strings.Contains(err.Error(), context.Canceled.Error()) {
+				if errdefs.IsCanceled(ctx, err) {
 					return v, err
 				}
 			default:

@@ -199,10 +199,10 @@ func marshal(ctx context.Context, v Vertex, def *Definition, s *sourceMapCollect
 	if opMeta != nil {
 		def.Metadata[dgst] = mergeMetadata(def.Metadata[dgst], *opMeta)
 	}
+	s.Add(dgst, sls)
 	if _, ok := cache[dgst]; ok {
 		return def, nil
 	}
-	s.Add(dgst, sls)
 	def.Def = append(def.Def, dt)
 	cache[dgst] = struct{}{}
 	return def, nil
@@ -618,6 +618,7 @@ var (
 	LinuxArmel   = Platform(ocispecs.Platform{OS: "linux", Architecture: "arm", Variant: "v6"})
 	LinuxArm64   = Platform(ocispecs.Platform{OS: "linux", Architecture: "arm64"})
 	LinuxS390x   = Platform(ocispecs.Platform{OS: "linux", Architecture: "s390x"})
+	LinuxPpc64   = Platform(ocispecs.Platform{OS: "linux", Architecture: "ppc64"})
 	LinuxPpc64le = Platform(ocispecs.Platform{OS: "linux", Architecture: "ppc64le"})
 	Darwin       = Platform(ocispecs.Platform{OS: "darwin", Architecture: "amd64"})
 	Windows      = Platform(ocispecs.Platform{OS: "windows", Architecture: "amd64"})

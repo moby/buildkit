@@ -3,7 +3,6 @@ package solver
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -620,8 +619,9 @@ type sharedOp struct {
 	subBuilder *subBuilder
 	err        error
 
-	execRes *execRes
-	execErr error
+	execRes  *execRes
+	execDone bool
+	execErr  error
 
 	cacheRes  []*CacheMap
 	cacheDone bool
@@ -704,7 +704,7 @@ func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, p PreprocessF
 		if err != nil {
 			select {
 			case <-ctx.Done():
-				if strings.Contains(err.Error(), context.Canceled.Error()) {
+				if errdefs.IsCanceled(ctx, err) {
 					complete = false
 					releaseError(err)
 					err = errors.Wrap(ctx.Err(), err.Error())
@@ -770,7 +770,7 @@ func (s *sharedOp) CacheMap(ctx context.Context, index int) (resp *cacheMapResp,
 		if err != nil {
 			select {
 			case <-ctx.Done():
-				if strings.Contains(err.Error(), context.Canceled.Error()) {
+				if errdefs.IsCanceled(ctx, err) {
 					complete = false
 					releaseError(err)
 					err = errors.Wrap(ctx.Err(), err.Error())
@@ -818,8 +818,11 @@ func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result,
 	}
 	flightControlKey := "exec"
 	res, err := s.g.Do(ctx, flightControlKey, func(ctx context.Context) (ret interface{}, retErr error) {
-		if s.execRes != nil || s.execErr != nil {
-			return s.execRes, s.execErr
+		if s.execDone {
+			if s.execErr != nil {
+				return nil, s.execErr
+			}
+			return s.execRes, nil
 		}
 		release, err := op.Acquire(ctx)
 		if err != nil {
@@ -846,7 +849,7 @@ func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result,
 		if err != nil {
 			select {
 			case <-ctx.Done():
-				if strings.Contains(err.Error(), context.Canceled.Error()) {
+				if errdefs.IsCanceled(ctx, err) {
 					complete = false
 					releaseError(err)
 					err = errors.Wrap(ctx.Err(), err.Error())
@@ -855,6 +858,7 @@ func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result,
 			}
 		}
 		if complete {
+			s.execDone = true
 			if res != nil {
 				var subExporters []ExportableCacheKey
 				s.subBuilder.mu.Lock()
@@ -867,9 +871,12 @@ func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result,
 			}
 			s.execErr = err
 		}
-		return s.execRes, err
+		if s.execRes == nil || err != nil {
+			return nil, err
+		}
+		return s.execRes, nil
 	})
-	if err != nil {
+	if res == nil || err != nil {
 		return nil, nil, err
 	}
 	r := res.(*execRes)

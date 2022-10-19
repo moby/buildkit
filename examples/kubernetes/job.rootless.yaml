@@ -52,8 +52,16 @@ spec:
             - name: workspace
               readOnly: true
               mountPath: /workspace
+            # Dockerfile has `VOLUME /home/user/.local/share/buildkit` by default too,
+            # but the default VOLUME does not work with rootless on Google's Container-Optimized OS
+            # as it is mounted with `nosuid,nodev`.
+            # https://github.com/moby/buildkit/issues/879#issuecomment-1240347038
+            - mountPath: /home/user/.local/share/buildkit
+              name: buildkitd
       # To push the image, you also need to create `~/.docker/config.json` secret
       # and set $DOCKER_CONFIG to `/path/to/.docker` directory.
       volumes:
         - name: workspace
+          emptyDir: {}
+        - name: buildkitd
           emptyDir: {}

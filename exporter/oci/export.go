@@ -57,9 +57,8 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 			RefCfg: cacheconfig.RefConfig{
 				Compression: compression.New(compression.Default),
 			},
-			BuildInfo:   true,
-			OCITypes:    e.opt.Variant == VariantOCI,
-			Annotations: make(containerimage.AnnotationsGroup),
+			BuildInfo: true,
+			OCITypes:  e.opt.Variant == VariantOCI,
 		},
 	}
 
@@ -93,7 +92,7 @@ func (e *imageExporterInstance) Config() exporter.Config {
 	}
 }
 
-func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source, sessionID string) (map[string]string, error) {
+func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source, sessionID string) (map[string]string, error) {
 	if e.opt.Variant == VariantDocker && len(src.Refs) > 0 {
 		return nil, errors.Errorf("docker exporter does not currently support exporting manifest lists")
 	}
@@ -110,7 +109,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	if err != nil {
 		return nil, err
 	}
-	opts.Annotations = as.Merge(opts.Annotations)
+	opts.AddAnnotations(as)
 
 	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
@@ -129,7 +128,9 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	if desc.Annotations == nil {
 		desc.Annotations = map[string]string{}
 	}
-	desc.Annotations[ocispecs.AnnotationCreated] = time.Now().UTC().Format(time.RFC3339)
+	if _, ok := desc.Annotations[ocispecs.AnnotationCreated]; !ok {
+		desc.Annotations[ocispecs.AnnotationCreated] = time.Now().UTC().Format(time.RFC3339)
+	}
 
 	resp := make(map[string]string)
 
@@ -216,7 +217,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 		}
 	}
 
-	report := oneOffProgress(ctx, "sending tarball")
+	report := progress.OneOff(ctx, "sending tarball")
 	if err := archiveexporter.Export(ctx, mprovider, w, expOpts...); err != nil {
 		w.Close()
 		if grpcerrors.Code(err) == codes.AlreadyExists {
@@ -229,23 +230,6 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 		return resp, report(nil)
 	}
 	return resp, report(err)
-}
-
-func oneOffProgress(ctx context.Context, id string) func(err error) error {
-	pw, _, _ := progress.NewFromContext(ctx)
-	now := time.Now()
-	st := progress.Status{
-		Started: &now,
-	}
-	pw.Write(id, st)
-	return func(err error) error {
-		// TODO: set error on status
-		now := time.Now()
-		st.Completed = &now
-		pw.Write(id, st)
-		pw.Close()
-		return err
-	}
 }
 
 func normalizedNames(name string) ([]string, error) {

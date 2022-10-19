@@ -144,7 +144,7 @@ func (ce *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 			return nil, err
 		}
 		if b == nil {
-			layerDone := oneOffProgress(ctx, fmt.Sprintf("writing layer %s", l.Blob))
+			layerDone := progress.OneOff(ctx, fmt.Sprintf("writing layer %s", l.Blob))
 			ra, err := dgstPair.Provider.ReaderAt(ctx, dgstPair.Descriptor)
 			if err != nil {
 				return nil, layerDone(err)
@@ -369,20 +369,4 @@ type readerAt struct {
 
 func (r *readerAt) Size() int64 {
 	return r.desc.Size
-}
-
-func oneOffProgress(ctx context.Context, id string) func(err error) error {
-	pw, _, _ := progress.NewFromContext(ctx)
-	now := time.Now()
-	st := progress.Status{
-		Started: &now,
-	}
-	pw.Write(id, st)
-	return func(err error) error {
-		now := time.Now()
-		st.Completed = &now
-		pw.Write(id, st)
-		pw.Close()
-		return err
-	}
 }

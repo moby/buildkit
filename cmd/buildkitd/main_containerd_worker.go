@@ -90,6 +90,11 @@ func init() {
 			Usage: "path of cni binary files",
 			Value: defaultConf.Workers.Containerd.NetworkConfig.CNIBinaryPath,
 		},
+		cli.IntFlag{
+			Name:  "containerd-cni-pool-size",
+			Usage: "size of cni network namespace pool",
+			Value: defaultConf.Workers.Containerd.NetworkConfig.CNIPoolSize,
+		},
 		cli.StringFlag{
 			Name:  "containerd-worker-snapshotter",
 			Usage: "snapshotter name to use",
@@ -208,6 +213,9 @@ func applyContainerdFlags(c *cli.Context, cfg *config.Config) error {
 	if c.GlobalIsSet("containerd-cni-config-path") {
 		cfg.Workers.Containerd.NetworkConfig.CNIConfigPath = c.GlobalString("containerd-cni-config-path")
 	}
+	if c.GlobalIsSet("containerd-cni-pool-size") {
+		cfg.Workers.Containerd.NetworkConfig.CNIPoolSize = c.GlobalInt("containerd-cni-pool-size")
+	}
 	if c.GlobalIsSet("containerd-cni-binary-dir") {
 		cfg.Workers.Containerd.NetworkConfig.CNIBinaryPath = c.GlobalString("containerd-cni-binary-dir")
 	}
@@ -228,7 +236,7 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 
 	cfg := common.config.Workers.Containerd
 
-	if (cfg.Enabled == nil && !validContainerdSocket(cfg.Address)) || (cfg.Enabled != nil && !*cfg.Enabled) {
+	if (cfg.Enabled == nil && !validContainerdSocket(cfg)) || (cfg.Enabled != nil && !*cfg.Enabled) {
 		return nil, nil
 	}
 
@@ -247,6 +255,7 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 			Root:       common.config.Root,
 			ConfigPath: common.config.Workers.Containerd.CNIConfigPath,
 			BinaryDir:  common.config.Workers.Containerd.CNIBinaryPath,
+			PoolSize:   common.config.Workers.Containerd.CNIPoolSize,
 		},
 	}
 
@@ -281,7 +290,8 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 	return []worker.Worker{w}, nil
 }
 
-func validContainerdSocket(socket string) bool {
+func validContainerdSocket(cfg config.ContainerdConfig) bool {
+	socket := cfg.Address
 	if strings.HasPrefix(socket, "tcp://") {
 		// FIXME(AkihiroSuda): prohibit tcp?
 		return true
@@ -292,6 +302,14 @@ func validContainerdSocket(socket string) bool {
 		logrus.Warnf("skipping containerd worker, as %q does not exist", socketPath)
 		return false
 	}
-	// TODO: actually dial and call introspection API
+	c, err := ctd.New(socketPath, ctd.WithDefaultNamespace(cfg.Namespace))
+	if err != nil {
+		logrus.Warnf("skipping containerd worker, as failed to connect client to %q: %v", socketPath, err)
+		return false
+	}
+	if _, err := c.Server(context.Background()); err != nil {
+		logrus.Warnf("skipping containerd worker, as failed to call introspection API on %q: %v", socketPath, err)
+		return false
+	}
 	return true
 }

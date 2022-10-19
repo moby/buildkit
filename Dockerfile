@@ -11,8 +11,9 @@ ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=2.8.0
 ARG ROOTLESSKIT_VERSION=v0.14.6
 ARG CNI_VERSION=v1.1.0
-ARG STARGZ_SNAPSHOTTER_VERSION=v0.11.4
+ARG STARGZ_SNAPSHOTTER_VERSION=v0.12.0
 ARG NERDCTL_VERSION=v0.17.1
+ARG DNSNAME_VERSION=v1.3.1
 
 # ALPINE_VERSION sets version for the base layers
 ARG ALPINE_VERSION=3.15
@@ -24,12 +25,12 @@ RUN apk add --no-cache git
 # xx is a helper for cross-compilation
 FROM --platform=$BUILDPLATFORM tonistiigi/xx@sha256:1e96844fadaa2f9aea021b2b05299bc02fe4c39a92d8e735b93e8e2b15610128 AS xx
 
-FROM --platform=$BUILDPLATFORM golang:1.18-alpine AS golatest
+FROM --platform=$BUILDPLATFORM golang:1.19-alpine AS golatest
 
 # gobuild is base stage for compiling go/cgo
 FROM golatest AS gobuild-base
 RUN apk add --no-cache file bash clang lld pkgconfig git make
-COPY --from=xx / /
+COPY --link --from=xx / /
 
 # runc source
 FROM git AS runc-src
@@ -50,6 +51,15 @@ RUN --mount=from=runc-src,src=/usr/src/runc,target=. --mount=target=/root/.cache
   CGO_ENABLED=1 xx-go build -mod=vendor -ldflags '-extldflags -static' -tags 'apparmor seccomp netgo cgo static_build osusergo' -o /usr/bin/runc ./ && \
   xx-verify --static /usr/bin/runc
 
+# dnsname CNI plugin for testing
+FROM gobuild-base AS dnsname
+ARG DNSNAME_VERSION
+WORKDIR /go/dnsname
+RUN git clone https://github.com/containers/dnsname.git . \
+  && git checkout -q "$DNSNAME_VERSION"
+RUN --mount=target=/root/.cache,type=cache \
+  set -e; make binaries; mv bin/dnsname /usr/bin/dnsname
+
 FROM gobuild-base AS buildkit-base
 WORKDIR /src
 ENV GOFLAGS=-mod=vendor
@@ -57,11 +67,10 @@ ENV GOFLAGS=-mod=vendor
 # scan the version/revision info
 FROM buildkit-base AS buildkit-version
 # TODO: PKG should be inferred from go modules
-ARG RELEASE_VERSION=v0.0.0+earthlyunknown
 RUN --mount=target=. \
-  PKG=github.com/moby/buildkit EARTHLY_PKG=github.com/earthly/buildkit REVISION=$(git rev-parse HEAD)$(if ! git diff --no-ext-diff --quiet --exit-code; then echo .m; fi); \
-  echo "-X ${PKG}/version.Version=${RELEASE_VERSION} -X ${PKG}/version.Revision=${REVISION} -X ${PKG}/version.Package=${EARTHLY_PKG}" | tee /tmp/.ldflags; \
-  echo -n "${RELEASE_VERSION}" | tee /tmp/.version;
+  PKG=github.com/moby/buildkit VERSION=$(git describe --match 'v[0-9]*' --dirty='.m' --always --tags) REVISION=$(git rev-parse HEAD)$(if ! git diff --no-ext-diff --quiet --exit-code; then echo .m; fi); \
+  echo "-X ${PKG}/version.Version=${VERSION} -X ${PKG}/version.Revision=${REVISION} -X ${PKG}/version.Package=${PKG}" | tee /tmp/.ldflags; \
+  echo -n "${VERSION}" | tee /tmp/.version;
 
 # build buildctl binary
 FROM buildkit-base AS buildctl
@@ -85,18 +94,18 @@ RUN --mount=target=. --mount=target=/root/.cache,type=cache \
   xx-verify --static /usr/bin/buildkitd
 
 FROM scratch AS binaries-linux-helper
-COPY --from=runc /usr/bin/runc /buildkit-runc
-# built from https://github.com/tonistiigi/binfmt/releases/tag/buildkit%2Fv6.2.0-24
-COPY --from=tonistiigi/binfmt:buildkit@sha256:ea7632b4e0b2406db438730c604339b38c23ac51a2f73c89ba50abe5e2146b4b / /
+COPY --link --from=runc /usr/bin/runc /buildkit-runc
+# built from https://github.com/tonistiigi/binfmt/releases/tag/buildkit%2Fv7.0.0-29
+COPY --link --from=tonistiigi/binfmt:buildkit-v7.0.0-29@sha256:5168f6c2b692b04a7c0102751220e293e109b3dc312eb22ee1a5547b42b58de6 / /
 FROM binaries-linux-helper AS binaries-linux
-COPY --from=buildctl /usr/bin/buildctl /
-COPY --from=buildkitd /usr/bin/buildkitd /
+COPY --link --from=buildctl /usr/bin/buildctl /
+COPY --link --from=buildkitd /usr/bin/buildkitd /
 
 FROM scratch AS binaries-darwin
-COPY --from=buildctl /usr/bin/buildctl /
+COPY --link --from=buildctl /usr/bin/buildctl /
 
 FROM scratch AS binaries-windows
-COPY --from=buildctl /usr/bin/buildctl /buildctl.exe
+COPY --link --from=buildctl /usr/bin/buildctl /buildctl.exe
 
 FROM binaries-$TARGETOS AS binaries
 
@@ -109,13 +118,13 @@ RUN --mount=from=binaries \
   mkdir -p /out && tar czvf "/out/buildkit-$(cat /tmp/.version).$(echo $TARGETPLATFORM | sed 's/\//-/g').tar.gz" --mtime='2015-10-21 00:00Z' --sort=name --transform 's/^./bin/' .
 
 FROM scratch AS release
-COPY --from=releaser /out/ /
+COPY --link --from=releaser /out/ /
 
 # tonistiigi/alpine supports riscv64
 FROM tonistiigi/alpine:${ALPINE_VERSION} AS buildkit-export
 RUN apk add --no-cache fuse3 git openssh pigz xz \
   && ln -s fusermount3 /usr/bin/fusermount
-COPY examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
+COPY --link examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 VOLUME /var/lib/buildkit
 
 FROM git AS containerd-src
@@ -187,33 +196,33 @@ RUN --mount=target=/root/.cache,type=cache \
 
 # Copy together all binaries needed for oci worker mode
 FROM buildkit-export AS buildkit-buildkitd.oci_only
-COPY --from=buildkitd.oci_only /usr/bin/buildkitd.oci_only /usr/bin/
-COPY --from=buildctl /usr/bin/buildctl /usr/bin/
+COPY --link --from=buildkitd.oci_only /usr/bin/buildkitd.oci_only /usr/bin/
+COPY --link --from=buildctl /usr/bin/buildctl /usr/bin/
 ENTRYPOINT ["buildkitd.oci_only"]
 
 # Copy together all binaries for containerd worker mode
 FROM buildkit-export AS buildkit-buildkitd.containerd_only
-COPY --from=buildkitd.containerd_only /usr/bin/buildkitd.containerd_only /usr/bin/
-COPY --from=buildctl /usr/bin/buildctl /usr/bin/
+COPY --link --from=buildkitd.containerd_only /usr/bin/buildkitd.containerd_only /usr/bin/
+COPY --link --from=buildctl /usr/bin/buildctl /usr/bin/
 ENTRYPOINT ["buildkitd.containerd_only"]
 
 # Copy together all binaries for oci+containerd mode
 FROM buildkit-export AS buildkit-buildkitd-linux
-COPY --from=binaries / /usr/bin/
+COPY --link --from=binaries / /usr/bin/
 ENTRYPOINT ["buildkitd"]
 
 FROM binaries AS buildkit-buildkitd-darwin
 
 FROM binaries AS buildkit-buildkitd-windows
 # this is not in binaries-windows because it is not intended for release yet, just CI
-COPY --from=buildkitd /usr/bin/buildkitd /buildkitd.exe
+COPY --link --from=buildkitd /usr/bin/buildkitd /buildkitd.exe
 
 FROM buildkit-buildkitd-$TARGETOS AS buildkit-buildkitd
 
 FROM alpine:${ALPINE_VERSION} AS containerd-runtime
-COPY --from=runc /usr/bin/runc /usr/bin/
-COPY --from=containerd /out/containerd* /usr/bin/
-COPY --from=containerd /out/ctr /usr/bin/
+COPY --link --from=runc /usr/bin/runc /usr/bin/
+COPY --link --from=containerd /out/containerd* /usr/bin/
+COPY --link --from=containerd /out/ctr /usr/bin/
 VOLUME /var/lib/containerd
 VOLUME /run/containerd
 ENTRYPOINT ["containerd"]
@@ -225,11 +234,12 @@ ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /opt/cni/bin
 RUN curl -Ls https://github.com/containernetworking/plugins/releases/download/$CNI_VERSION/cni-plugins-$TARGETOS-$TARGETARCH-$CNI_VERSION.tgz | tar xzv
+COPY --link --from=dnsname /usr/bin/dnsname /opt/cni/bin/
 
 FROM buildkit-base AS integration-tests-base
 ENV BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR="1000:1000"
 ARG NERDCTL_VERSION
-RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables fuse curl \
+RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables ip6tables dnsmasq fuse curl \
   && useradd --create-home --home-dir /home/user --uid 1000 -s /bin/sh user \
   && echo "XDG_RUNTIME_DIR=/run/user/1000; export XDG_RUNTIME_DIR" >> /home/user/.profile \
   && mkdir -m 0700 -p /run/user/1000 \
@@ -242,16 +252,17 @@ RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables fuse curl \
 ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.4=/opt/containerd-alt-14/bin,containerd-1.5=/opt/containerd-alt-15/bin"
 ENV BUILDKIT_INTEGRATION_SNAPSHOTTER=stargz
 ENV CGO_ENABLED=0
-COPY --from=stargz-snapshotter /out/* /usr/bin/
-COPY --from=rootlesskit /rootlesskit /usr/bin/
-COPY --from=containerd-alt-14 /out/containerd* /opt/containerd-alt-14/bin/
-COPY --from=containerd-alt-15 /out/containerd* /opt/containerd-alt-15/bin/
-COPY --from=registry /bin/registry /usr/bin/
-COPY --from=runc /usr/bin/runc /usr/bin/
-COPY --from=containerd /out/containerd* /usr/bin/
-COPY --from=cni-plugins /opt/cni/bin/bridge /opt/cni/bin/host-local /opt/cni/bin/loopback /opt/cni/bin/
-COPY hack/fixtures/cni.json /etc/buildkit/cni.json
-COPY --from=binaries / /usr/bin/
+COPY --link --from=stargz-snapshotter /out/* /usr/bin/
+COPY --link --from=rootlesskit /rootlesskit /usr/bin/
+COPY --link --from=containerd-alt-14 /out/containerd* /opt/containerd-alt-14/bin/
+COPY --link --from=containerd-alt-15 /out/containerd* /opt/containerd-alt-15/bin/
+COPY --link --from=registry /bin/registry /usr/bin/
+COPY --link --from=runc /usr/bin/runc /usr/bin/
+COPY --link --from=containerd /out/containerd* /usr/bin/
+COPY --link --from=cni-plugins /opt/cni/bin/bridge /opt/cni/bin/host-local /opt/cni/bin/loopback /opt/cni/bin/firewall /opt/cni/bin/dnsname /opt/cni/bin/
+COPY --link hack/fixtures/cni.json /etc/buildkit/cni.json
+COPY --link hack/fixtures/dns-cni.conflist /etc/buildkit/dns-cni.conflist
+COPY --link --from=binaries / /usr/bin/
 
 # integration-tests prepares an image suitable for running all tests
 FROM integration-tests-base AS integration-tests
@@ -268,9 +279,9 @@ RUN adduser -D -u 1000 user \
   && mkdir -p /run/user/1000 /home/user/.local/tmp /home/user/.local/share/buildkit \
   && chown -R user /run/user/1000 /home/user \
   && echo user:100000:65536 | tee /etc/subuid | tee /etc/subgid
-COPY --from=rootlesskit /rootlesskit /usr/bin/
-COPY --from=binaries / /usr/bin/
-COPY examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
+COPY --link --from=rootlesskit /rootlesskit /usr/bin/
+COPY --link --from=binaries / /usr/bin/
+COPY --link examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 # Kubernetes runAsNonRoot requires USER to be numeric
 USER 1000:1000
 ENV HOME /home/user
@@ -283,5 +294,3 @@ ENTRYPOINT ["rootlesskit", "buildkitd"]
 
 # buildkit builds the buildkit container image
 FROM buildkit-${BUILDKIT_TARGET} AS buildkit
-
-

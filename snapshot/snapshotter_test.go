@@ -22,39 +22,19 @@ import (
 	"github.com/containerd/containerd/snapshots/native"
 	"github.com/containerd/containerd/snapshots/overlay"
 	"github.com/containerd/continuity/fs/fstest"
-	"github.com/hashicorp/go-multierror"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
 )
 
-func newSnapshotter(ctx context.Context, snapshotterName string) (_ context.Context, _ *mergeSnapshotter, _ func() error, rerr error) {
+func newSnapshotter(ctx context.Context, t *testing.T, snapshotterName string) (_ context.Context, _ *mergeSnapshotter, rerr error) {
 	ns := "buildkit-test"
 	ctx = namespaces.WithNamespace(ctx, ns)
 
-	defers := make([]func() error, 0)
-	cleanup := func() error {
-		var err error
-		for i := range defers {
-			err = multierror.Append(err, defers[len(defers)-1-i]()).ErrorOrNil()
-		}
-		return err
-	}
-	defer func() {
-		if rerr != nil && cleanup != nil {
-			cleanup()
-		}
-	}()
+	tmpdir := t.TempDir()
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-test")
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	defers = append(defers, func() error {
-		return os.RemoveAll(tmpdir)
-	})
-
+	var err error
 	var ctdSnapshotter snapshots.Snapshotter
 	var noHardlink bool
 	switch snapshotterName {
@@ -64,35 +44,38 @@ func newSnapshotter(ctx context.Context, snapshotterName string) (_ context.Cont
 	case "native":
 		ctdSnapshotter, err = native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 	case "overlayfs":
 		ctdSnapshotter, err = overlay.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 	default:
-		return nil, nil, nil, fmt.Errorf("unhandled snapshotter: %s", snapshotterName)
+		return nil, nil, fmt.Errorf("unhandled snapshotter: %s", snapshotterName)
 	}
+	t.Cleanup(func() {
+		require.NoError(t, ctdSnapshotter.Close())
+	})
 
 	store, err := local.NewStore(tmpdir)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	db, err := bolt.Open(filepath.Join(tmpdir, "containerdmeta.db"), 0644, nil)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
-	defers = append(defers, func() error {
-		return db.Close()
+	t.Cleanup(func() {
+		require.NoError(t, db.Close())
 	})
 
 	mdb := ctdmetadata.NewDB(db, store, map[string]snapshots.Snapshotter{
 		snapshotterName: ctdSnapshotter,
 	})
 	if err := mdb.Init(context.TODO()); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	lm := leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), ns)
@@ -100,6 +83,9 @@ func newSnapshotter(ctx context.Context, snapshotterName string) (_ context.Cont
 	if noHardlink {
 		snapshotter.tryCrossSnapshotLink = false
 	}
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
 
 	leaseID := identity.NewID()
 	_, err = lm.Create(ctx, func(l *leases.Lease) error {
@@ -110,11 +96,11 @@ func newSnapshotter(ctx context.Context, snapshotterName string) (_ context.Cont
 		return nil
 	}, leaseutil.MakeTemporary)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	ctx = leases.WithLease(ctx, leaseID)
 
-	return ctx, snapshotter, cleanup, nil
+	return ctx, snapshotter, nil
 }
 
 func TestMerge(t *testing.T) {
@@ -126,9 +112,8 @@ func TestMerge(t *testing.T) {
 				requireRoot(t)
 			}
 
-			ctx, sn, cleanup, err := newSnapshotter(context.Background(), snName)
+			ctx, sn, err := newSnapshotter(context.Background(), t, snName)
 			require.NoError(t, err)
-			defer cleanup()
 
 			ts := time.Unix(0, 0)
 			snapA := committedKey(ctx, t, sn, identity.NewID(), "",
@@ -331,9 +316,8 @@ func TestHardlinks(t *testing.T) {
 				requireRoot(t)
 			}
 
-			ctx, sn, cleanup, err := newSnapshotter(context.Background(), snName)
+			ctx, sn, err := newSnapshotter(context.Background(), t, snName)
 			require.NoError(t, err)
-			defer cleanup()
 
 			base1Snap := committedKey(ctx, t, sn, identity.NewID(), "",
 				fstest.CreateFile("1", []byte("1"), 0600),
@@ -397,9 +381,8 @@ func TestUsage(t *testing.T) {
 				requireRoot(t)
 			}
 
-			ctx, sn, cleanup, err := newSnapshotter(context.Background(), snName)
+			ctx, sn, err := newSnapshotter(context.Background(), t, snName)
 			require.NoError(t, err)
-			defer cleanup()
 
 			const direntByteSize = 4096
 

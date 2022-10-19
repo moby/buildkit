@@ -34,7 +34,7 @@ Different versions of the example scripts show different ways of describing the 
 -  `./buildkit1` - cloning git repositories has been separated for extra concurrency.
 -  `./buildkit2` - uses git sources directly instead of running `git clone`, allowing better performance and much safer caching.
 -  `./buildkit3` - allows using local source files for separate components eg. `./buildkit3 --runc=local | buildctl build --local runc-src=some/local/path`
--  `./buildkit4` - uses MergeOp to optimize copy chains for better caching behavior (see `docs/merge+diff.md` for more details)
+-  `./buildkit4` - uses MergeOp to optimize copy chains for better caching behavior (see `docs/dev/merge-diff.md` for more details)
 -  `./dockerfile2llb` - can be used to convert a Dockerfile to LLB for debugging purposes
 -  `./nested-llb` - shows how to use nested invocation to generate LLB
 -  `./gobuild` - shows how to use nested invocation to generate LLB for Go package internal dependencies

@@ -4,6 +4,30 @@ Rootless mode allows running BuildKit daemon as a non-root user.
 
 ## Distribution-specific hint
 Using Ubuntu kernel is recommended.
+### Container-Optimized OS from Google
+Make sure to have an `emptyDir` volume below:
+```yaml
+spec:
+  containers:
+    - name: buildkitd
+      volumeMounts:
+        # Dockerfile has `VOLUME /home/user/.local/share/buildkit` by default too,
+        # but the default VOLUME does not work with rootless on Google's Container-Optimized OS
+        # as it is mounted with `nosuid,nodev`.
+        # https://github.com/moby/buildkit/issues/879#issuecomment-1240347038
+        - mountPath: /home/user/.local/share/buildkit
+          name: buildkitd
+  volumes:
+    - name: buildkitd
+      emptyDir: {}
+```
+
+See also the [example manifests](#Kubernetes).
+
+<details>
+<summary>Old distributions</summary>
+
+<p>
 
 ### Debian GNU/Linux 10
 Add `kernel.unprivileged_userns_clone=1` to `/etc/sysctl.conf` (or `/etc/sysctl.d`) and run `sudo sysctl -p`.
@@ -16,8 +40,8 @@ This step is not needed for RHEL/CentOS 8 and later.
 ### Fedora, before kernel 5.13
 You may have to disable SELinux, or run BuildKit with `--oci-worker-snapshotter=fuse-overlayfs`.
 
-### Container-Optimized OS from Google
-:warning: Currently unsupported. See [#879](https://github.com/moby/buildkit/issues/879).
+</p>
+</details>
 
 ## Known limitations
 * Using the `overlayfs` snapshotter requires kernel >= 5.11 or Ubuntu kernel.
@@ -76,6 +100,9 @@ $ rootlesskit buildkitd --oci-worker-snapshotter=native
 
 ### Error related to `newuidmap` or `/etc/subuid`
 See https://rootlesscontaine.rs/getting-started/common/subuid/
+
+### Error `Options:[rbind ro]}]: operation not permitted`
+Make sure to mount an `emptyDir` volume on `/home/user/.local/share/buildkit` .
 
 ## Containerized deployment
 

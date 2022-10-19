@@ -136,6 +136,10 @@ func TestParseOptInterval(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "cannot be less than 1ms")
 
+	flInterval.Value = "0ms"
+	_, err = parseOptInterval(flInterval)
+	require.NoError(t, err)
+
 	flInterval.Value = "1ms"
 	_, err = parseOptInterval(flInterval)
 	require.NoError(t, err)

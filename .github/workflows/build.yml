@@ -20,24 +20,26 @@ env:
   CACHE_GHA_SCOPE_IT: "integration-tests"
   CACHE_GHA_SCOPE_BINARIES: "binaries"
   CACHE_GHA_SCOPE_CROSS: "cross"
-  BUILDX_VERSION: "v0.8.2"  # leave empty to use the one available on GitHub virtual environment
+  TESTFLAGS: "-v --parallel=6 --timeout=30m"
+  BUILDX_VERSION: "v0.9.1"  # leave empty to use the one available on GitHub virtual environment
+  GO_VERSION: "1.19"
 
 jobs:
   base:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       -
         name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v1
+        uses: crazy-max/ghaction-github-runtime@v2
       -
         name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v2
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
         with:
           version: ${{ env.BUILDX_VERSION }}
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
@@ -58,7 +60,7 @@ jobs:
           CACHE_TO: type=gha,scope=${{ env.CACHE_GHA_SCOPE_IT }}
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     needs: [base]
     strategy:
       fail-fast: false
@@ -88,16 +90,16 @@ jobs:
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       -
         name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v1
+        uses: crazy-max/ghaction-github-runtime@v2
       -
         name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v2
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
         with:
           version: ${{ env.BUILDX_VERSION }}
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
@@ -105,7 +107,6 @@ jobs:
       -
         name: Test pkg=${{ matrix.pkg }} ; typ=${{ matrix.typ }} ; skipit=${{ matrix.skip-integration-tests }} ; worker=${{ matrix.worker }}
         run: |
-          export TESTFLAGS="-v --parallel=6 --timeout=20m"
           if [ -n "${{ matrix.worker }}" ]; then
             export TESTFLAGS="${TESTFLAGS} --run=//worker=${{ matrix.worker }}$"
           fi
@@ -118,25 +119,25 @@ jobs:
           CACHE_FROM: type=gha,scope=${{ env.CACHE_GHA_SCOPE_IT }} type=gha,scope=${{ env.CACHE_GHA_SCOPE_BINARIES }}
       -
         name: Upload coverage file
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: coverage
           path: ./coverage
 
   test-s3:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     needs:
       - base
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       -
         name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v1
+        uses: crazy-max/ghaction-github-runtime@v2
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
         with:
           version: ${{ env.BUILDX_VERSION }}
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
@@ -146,32 +147,48 @@ jobs:
         run: |
           hack/s3_test/run_test.sh
 
+  test-azblob:
+    runs-on: ubuntu-20.04
+    needs:
+      - base
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v3
+      -
+        name: Expose GitHub Runtime
+        uses: crazy-max/ghaction-github-runtime@v2
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          version: ${{ env.BUILDX_VERSION }}
+          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
+          buildkitd-flags: --debug
+      -
+        name: Test
+        run: |
+          hack/azblob_test/run_test.sh
+
   test-os:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os:
-          # - ubuntu-latest
-          # - macOS-latest
-          - windows-latest
+          # - ubuntu-20.04
+          # - macOS-11
+          - windows-2022
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       -
         name: Set up Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
-          go-version: 1.18
-      -
-        name: Cache Go modules
-        uses: actions/cache@v2
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
       -
         name: Go mod
         run: |
@@ -183,31 +200,31 @@ jobs:
           SKIP_INTEGRATION_TESTS: 1
         run: |
           mkdir -p ./coverage
-          go test -coverprofile=./coverage/coverage-${{ github.job }}-${{ matrix.os }}.txt -covermode=atomic ./...
+          go test -coverprofile=./coverage/coverage-${{ github.job }}-${{ matrix.os }}.txt -covermode=atomic ${TESTFLAGS} ./...
         shell: bash
       -
         name: Upload coverage file
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: coverage
           path: ./coverage
 
   upload-coverage:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     needs: [test, test-os]
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       -
         name: Download coverage files
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: coverage
           path: ./coverage
       -
         name: List coverage files
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         id: files
         with:
           result-encoding: string
@@ -223,20 +240,20 @@ jobs:
           files: ${{ steps.files.outputs.result }}
 
   cross:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       -
         name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v1
+        uses: crazy-max/ghaction-github-runtime@v2
       -
         name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v2
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
         with:
           version: ${{ env.BUILDX_VERSION }}
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
@@ -252,7 +269,7 @@ jobs:
           CACHE_TO: type=gha,scope=${{ env.CACHE_GHA_SCOPE_CROSS }}
 
   release-base:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     outputs:
       tag: ${{ steps.prep.outputs.tag }}
       push: ${{ steps.prep.outputs.push }}
@@ -272,11 +289,11 @@ jobs:
             TAG=$(echo ${GITHUB_REF#refs/heads/} | sed -r 's#/+#-#g')
             PUSH=push
           fi
-          echo ::set-output name=tag::${TAG}
-          echo ::set-output name=push::${PUSH}
+          echo "tag=${TAG}" >>${GITHUB_OUTPUT}
+          echo "push=${PUSH}" >>${GITHUB_OUTPUT}
 
   image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     needs: [release-base, test, cross]
     strategy:
       fail-fast: false
@@ -287,16 +304,16 @@ jobs:
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       -
         name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v1
+        uses: crazy-max/ghaction-github-runtime@v2
       -
         name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v2
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
         with:
           version: ${{ env.BUILDX_VERSION }}
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
@@ -304,7 +321,7 @@ jobs:
       -
         name: Login to DockerHub
         if: needs.release-base.outputs.push == 'push'
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -318,21 +335,21 @@ jobs:
           CACHE_TO: type=gha,scope=image${{ matrix.target-stage }}
 
   binaries:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     needs: [release-base, test, cross]
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       -
         name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v1
+        uses: crazy-max/ghaction-github-runtime@v2
       -
         name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v2
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
         with:
           version: ${{ env.BUILDX_VERSION }}
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
@@ -350,7 +367,7 @@ jobs:
           mv ./release-out/**/* ./release-out/
       -
         name: Upload artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: buildkit
           path: ./release-out/*
@@ -358,7 +375,7 @@ jobs:
       -
         name: GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@1e07f4398721186383de40550babbdf2b84acfc5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -367,7 +384,7 @@ jobs:
           name: ${{ needs.release-base.outputs.tag }}
 
   frontend-base:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     if: github.event_name != 'schedule'
     outputs:
       typ: ${{ steps.prep.outputs.typ }}
@@ -388,34 +405,34 @@ jobs:
           elif [[ $GITHUB_REF == refs/heads/* ]]; then
             PUSH=push
           fi
-          echo ::set-output name=typ::${TYP}
-          echo ::set-output name=tag::${TAG}
-          echo ::set-output name=push::${PUSH}
+          echo "typ=${TYP}" >>${GITHUB_OUTPUT}
+          echo "tag=${TAG}" >>${GITHUB_OUTPUT}
+          echo "push=${PUSH}" >>${GITHUB_OUTPUT}
 
   frontend-image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     if: github.event_name != 'schedule'
     needs: [frontend-base, test]
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       -
         name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v1
+        uses: crazy-max/ghaction-github-runtime@v2
       -
         name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v2
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
         with:
           version: ${{ env.BUILDX_VERSION }}
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
           buildkitd-flags: --debug
       -
         name: Login to DockerHub
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         if: needs.frontend-base.outputs.push == 'push'
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -425,6 +442,7 @@ jobs:
         run: |
           ./frontend/dockerfile/cmd/dockerfile-frontend/hack/release "${{ needs.frontend-base.outputs.typ }}" "${{ needs.frontend-base.outputs.tag }}" "$DF_REPO_SLUG_TARGET" "${{ needs.frontend-base.outputs.push }}"
         env:
+          PLATFORMS: ${{ env.PLATFORMS }},linux/mips,linux/mipsle,linux/mips64,linux/mips64le
           CACHE_FROM: type=gha,scope=frontend-${{ needs.frontend-base.outputs.typ }}
           CACHE_TO: type=gha,scope=frontend-${{ needs.frontend-base.outputs.typ }}
       -
@@ -433,4 +451,5 @@ jobs:
         run: |
           ./frontend/dockerfile/cmd/dockerfile-frontend/hack/release "${{ needs.frontend-base.outputs.typ }}" labs "$DF_REPO_SLUG_TARGET" "${{ needs.frontend-base.outputs.push }}"
         env:
+          PLATFORMS: ${{ env.PLATFORMS }},linux/mips,linux/mipsle,linux/mips64,linux/mips64le
           CACHE_FROM: type=gha,scope=frontend-${{ needs.frontend-base.outputs.typ }}

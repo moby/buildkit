@@ -47,3 +47,7 @@ func deleteNetNS(nativeID string) error {
 
 	return ns.Delete()
 }
+
+func cleanOldNamespaces(_ *cniProvider) {
+	// not implemented on Windows
+}

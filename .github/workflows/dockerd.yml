@@ -1,9 +1,5 @@
 name: dockerd
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 on:
   # TODO: add event to build on command in PR (e.g., /test-dockerd)
   workflow_dispatch:
@@ -17,11 +13,12 @@ env:
   REPO_SLUG_ORIGIN: "moby/buildkit:latest"
   CACHE_GHA_SCOPE_IT: "integration-tests"
   CACHE_GHA_SCOPE_BINARIES: "binaries"
-  BUILDX_VERSION: "v0.8.2"  # leave empty to use the one available on GitHub virtual environment
+  TESTFLAGS: "-v --parallel=1 --timeout=30m"
+  BUILDX_VERSION: "v0.9.1"  # leave empty to use the one available on GitHub virtual environment
 
 jobs:
   prepare:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       -
         name: Check version
@@ -46,7 +43,7 @@ jobs:
             return true;
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
         with:
           version: ${{ env.BUILDX_VERSION }}
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
@@ -54,18 +51,18 @@ jobs:
       -
         name: Build
         if: steps.build.outputs.result == 'true'
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v3
         with:
           context: ${{ env.DOCKER_VERSION }}
           target: binary
           outputs: /tmp/moby
       -
-        # FIXME: remove symlink and rename bin. should be fixed upstream on moby.
         name: Rename binary
         if: steps.build.outputs.result == 'true'
         run: |
-          rm /tmp/moby/binary-daemon/dockerd
-          mv /tmp/moby/binary-daemon/dockerd-dev /tmp/moby/binary-daemon/dockerd
+          if [ -L "/tmp/moby/binary-daemon/dockerd" ]; then
+            mv -f $(readlink /tmp/moby/binary-daemon/dockerd) /tmp/moby/binary-daemon/dockerd
+          fi
       -
         name: Download
         if: steps.build.outputs.result != 'true'
@@ -75,14 +72,14 @@ jobs:
           wget -qO- "https://download.docker.com/linux/static/stable/x86_64/docker-${{ env.DOCKER_VERSION }}.tgz" | tar xvz --strip 1
       -
         name: Upload dockerd
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: dockerd
           path: /tmp/moby/binary-daemon/dockerd
           if-no-files-found: error
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     needs:
       - prepare
     strategy:
@@ -102,23 +99,23 @@ jobs:
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       -
         name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v1
+        uses: crazy-max/ghaction-github-runtime@v2
       -
         name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v2
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
         with:
           version: ${{ env.BUILDX_VERSION }}
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
           buildkitd-flags: --debug
       -
         name: Download dockerd
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: dockerd
           path: ./build/
@@ -141,6 +138,6 @@ jobs:
           TEST_DOCKERD: "1"
           TEST_DOCKERD_BINARY: "./build/dockerd"
           TESTPKGS: "${{ matrix.pkg }}"
-          TESTFLAGS: "-v --parallel=1 --timeout=30m --run=//worker=dockerd$"
+          TESTFLAGS: "${{ env.TESTFLAGS }} --run=//worker=dockerd$"
           SKIP_INTEGRATION_TESTS: "${{ matrix.skip-integration-tests }}"
           CACHE_FROM: "type=gha,scope=${{ env.CACHE_GHA_SCOPE_IT }} type=gha,scope=${{ env.CACHE_GHA_SCOPE_BINARIES }}"

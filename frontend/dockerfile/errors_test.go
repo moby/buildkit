@@ -2,7 +2,6 @@ package dockerfile
 
 import (
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/containerd/continuity/fs/fstest"
@@ -76,11 +75,11 @@ env bar=baz`,
 
 	for _, tc := range tcases {
 		t.Run(tc.name, func(t *testing.T) {
-			dir, err := tmpdir(
+			dir, err := integration.Tmpdir(
+				t,
 				fstest.CreateFile("Dockerfile", []byte(tc.dockerfile), 0600),
 			)
 			require.NoError(t, err)
-			defer os.RemoveAll(dir)
 
 			c, err := client.New(sb.Context(), sb.Address())
 			require.NoError(t, err)

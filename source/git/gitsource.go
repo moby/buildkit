@@ -587,7 +587,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 
 	if idmap := mount.IdentityMapping(); idmap != nil {
 		u := idmap.RootPair()
-		err := filepath.Walk(gitDir, func(p string, f os.FileInfo, err error) error {
+		err := filepath.WalkDir(gitDir, func(p string, _ os.DirEntry, _ error) error {
 			return os.Lchown(p, u.UID, u.GID)
 		})
 		if err != nil {
