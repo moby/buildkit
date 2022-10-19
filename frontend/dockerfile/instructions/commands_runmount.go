@@ -128,8 +128,8 @@ type Mount struct {
 	GID          *uint64
 }
 
-func parseMount(value string, expander SingleWordExpander) (*Mount, error) {
-	csvReader := csv.NewReader(strings.NewReader(value))
+func parseMount(val string, expander SingleWordExpander) (*Mount, error) {
+	csvReader := csv.NewReader(strings.NewReader(val))
 	fields, err := csvReader.Read()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to parse csv mounts")
@@ -140,10 +140,10 @@ func parseMount(value string, expander SingleWordExpander) (*Mount, error) {
 	roAuto := true
 
 	for _, field := range fields {
-		parts := strings.SplitN(field, "=", 2)
-		key := strings.ToLower(parts[0])
+		key, value, ok := strings.Cut(field, "=")
+		key = strings.ToLower(key)
 
-		if len(parts) == 1 {
+		if !ok {
 			if expander == nil {
 				continue // evaluate later
 			}
@@ -163,21 +163,18 @@ func parseMount(value string, expander SingleWordExpander) (*Mount, error) {
 				} else {
 					return nil, errors.Errorf("unexpected key '%s' for mount type '%s'", key, m.Type)
 				}
+			default:
+				// any other option requires a value.
+				return nil, errors.Errorf("invalid field '%s' must be a key=value pair", field)
 			}
 		}
 
-		if len(parts) != 2 {
-			return nil, errors.Errorf("invalid field '%s' must be a key=value pair", field)
-		}
-
-		value := parts[1]
 		// check for potential variable
 		if expander != nil {
-			processed, err := expander(value)
+			value, err = expander(value)
 			if err != nil {
 				return nil, err
 			}
-			value = processed
 		} else if key == "from" {
 			if matched, err := regexp.MatchString(`\$.`, value); err != nil { //nolint
 				return nil, err
@@ -217,11 +214,10 @@ func parseMount(value string, expander SingleWordExpander) (*Mount, error) {
 			roAuto = false
 		case "required":
 			if m.Type == MountTypeSecret || m.Type == MountTypeSSH {
-				v, err := strconv.ParseBool(value)
+				m.Required, err = strconv.ParseBool(value)
 				if err != nil {
 					return nil, errors.Errorf("invalid value for %s: %s", key, value)
 				}
-				m.Required = v
 			} else {
 				return nil, errors.Errorf("unexpected key '%s' for mount type '%s'", key, m.Type)
 			}
@@ -270,16 +266,16 @@ func parseMount(value string, expander SingleWordExpander) (*Mount, error) {
 
 	fileInfoAllowed := m.Type == MountTypeSecret || m.Type == MountTypeSSH || m.Type == MountTypeCache
 
-	if m.Mode != nil && !fileInfoAllowed {
-		return nil, errors.Errorf("mode not allowed for %q type mounts", m.Type)
-	}
-
-	if m.UID != nil && !fileInfoAllowed {
-		return nil, errors.Errorf("uid not allowed for %q type mounts", m.Type)
-	}
-
-	if m.GID != nil && !fileInfoAllowed {
-		return nil, errors.Errorf("gid not allowed for %q type mounts", m.Type)
+	if !fileInfoAllowed {
+		if m.Mode != nil {
+			return nil, errors.Errorf("mode not allowed for %q type mounts", m.Type)
+		}
+		if m.UID != nil {
+			return nil, errors.Errorf("uid not allowed for %q type mounts", m.Type)
+		}
+		if m.GID != nil {
+			return nil, errors.Errorf("gid not allowed for %q type mounts", m.Type)
+		}
 	}
 
 	if roAuto {
