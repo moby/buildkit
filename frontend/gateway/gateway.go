@@ -796,9 +796,12 @@ func (lbf *llbBridgeForwarder) ReadFile(ctx context.Context, req *pb.ReadFileReq
 		}
 	}
 
-	m, err := ref.Mount(ctx, true, session.NewGroup(lbf.sid))
-	if err != nil {
-		return nil, err
+	var m snapshot.Mountable
+	if ref != nil {
+		m, err = ref.Mount(ctx, true, session.NewGroup(lbf.sid))
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	dt, err := cacheutil.ReadFile(ctx, m, newReq)
@@ -821,9 +824,12 @@ func (lbf *llbBridgeForwarder) ReadDir(ctx context.Context, req *pb.ReadDirReque
 		Path:           req.DirPath,
 		IncludePattern: req.IncludePattern,
 	}
-	m, err := ref.Mount(ctx, true, session.NewGroup(lbf.sid))
-	if err != nil {
-		return nil, err
+	var m snapshot.Mountable
+	if ref != nil {
+		m, err = ref.Mount(ctx, true, session.NewGroup(lbf.sid))
+		if err != nil {
+			return nil, err
+		}
 	}
 	entries, err := cacheutil.ReadDir(ctx, m, newReq)
 	if err != nil {
@@ -840,9 +846,12 @@ func (lbf *llbBridgeForwarder) StatFile(ctx context.Context, req *pb.StatFileReq
 	if err != nil {
 		return nil, err
 	}
-	m, err := ref.Mount(ctx, true, session.NewGroup(lbf.sid))
-	if err != nil {
-		return nil, err
+	var m snapshot.Mountable
+	if ref != nil {
+		m, err = ref.Mount(ctx, true, session.NewGroup(lbf.sid))
+		if err != nil {
+			return nil, err
+		}
 	}
 	st, err := cacheutil.StatFile(ctx, m, req.Path)
 	if err != nil {
