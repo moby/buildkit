@@ -1,0 +1,236 @@
+name: frontend
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  schedule:
+    - cron: '0 10 * * *'
+  workflow_dispatch:
+  push:
+    branches:
+      - 'master'
+    tags:
+      - 'dockerfile/*'
+  pull_request:
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+      - 'frontend/dockerfile/docs/**'
+
+env:
+  REPO_SLUG_ORIGIN: "moby/buildkit:latest"
+  REPO_SLUG_TARGET: "docker/dockerfile-upstream"
+  CACHE_GHA_SCOPE_IT: "frontend-integration-tests"
+  TESTFLAGS: "-v --parallel=6 --timeout=30m"
+  BUILDX_VERSION: "v0.9.1"  # leave empty to use the one available on GitHub virtual environment
+  GO_VERSION: "1.19"
+  DESTDIR: "./bin"
+
+jobs:
+  prepare-test:
+    runs-on: ubuntu-20.04
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v3
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          version: ${{ env.BUILDX_VERSION }}
+          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
+          buildkitd-flags: --debug
+      -
+        name: Build
+        uses: docker/bake-action@v2
+        with:
+          targets: integration-tests-base
+          set: |
+            *.cache-from=type=gha,scope=${{ github.workflow }}-${{ env.CACHE_GHA_SCOPE_IT }}
+            *.cache-to=type=gha,scope=${{ github.workflow }}-${{ env.CACHE_GHA_SCOPE_IT }}
+
+  test:
+    runs-on: ubuntu-20.04
+    needs:
+      - prepare-test
+    strategy:
+      fail-fast: false
+      matrix:
+        pkg:
+          - ./frontend/dockerfile
+        worker:
+          - containerd
+          - containerd-rootless
+          - containerd-1.5
+          - containerd-1.4
+          - containerd-snapshotter-stargz
+          - oci
+          - oci-rootless
+          - oci-snapshotter-stargz
+        typ:
+          - integration
+          - dockerfile
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v3
+      -
+        name: Expose GitHub Runtime
+        uses: crazy-max/ghaction-github-runtime@v2
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          version: ${{ env.BUILDX_VERSION }}
+          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
+          buildkitd-flags: --debug
+      -
+        name: Test pkg=${{ matrix.pkg }} ; typ=${{ matrix.typ }} ; worker=${{ matrix.worker }}
+        run: |
+          if [ -n "${{ matrix.worker }}" ]; then
+            export TESTFLAGS="${TESTFLAGS} --run=//worker=${{ matrix.worker }}$"
+          fi
+          ./hack/test ${{ matrix.typ }}
+          mv ./coverage/coverage.txt ./coverage/coverage-${{ github.job }}-$(echo "${{ matrix.pkg }}-${{ matrix.typ }}-${{ matrix.worker }}" | tr -dc '[:alnum:]-\n\r' | tr '[:upper:]' '[:lower:]').txt
+        env:
+          TEST_COVERAGE: 1
+          TESTPKGS: ${{ matrix.pkg }}
+          CACHE_FROM: type=gha,scope=${{ env.CACHE_GHA_SCOPE_IT }}
+      -
+        name: Upload coverage file
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage
+          path: ./coverage
+
+  upload-coverage:
+    runs-on: ubuntu-20.04
+    needs:
+      - test
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v3
+      -
+        name: Download coverage files
+        uses: actions/download-artifact@v3
+        with:
+          name: coverage
+          path: ./coverage
+      -
+        name: List coverage files
+        uses: actions/github-script@v6
+        id: files
+        with:
+          result-encoding: string
+          script: |
+            return require('fs').readdirSync('./coverage', {withFileTypes: true})
+              .filter(item => !item.isDirectory())
+              .map(item => `./coverage/${item.name}`)
+              .join(',');
+      -
+        name: Send to Codecov
+        uses: codecov/codecov-action@v2
+        with:
+          files: ${{ steps.files.outputs.result }}
+
+  image:
+    runs-on: ubuntu-20.04
+    needs:
+      - test
+    strategy:
+      fail-fast: false
+      matrix:
+        channel:
+          - mainline
+          - labs
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      -
+        name: Prepare
+        run: |
+          TAGS=pr
+          TAG_SUFFIX=
+          BUILD=true
+          PUSH=false
+          if [ "${{ matrix.channel }}" != "mainline" ]; then
+            TAG_SUFFIX=-${{ matrix.channel }}
+          fi
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            TAGS=nightly${TAG_SUFFIX}
+            PUSH=true
+          elif [[ $GITHUB_REF == refs/tags/dockerfile/* ]]; then
+            TAGS="$(./frontend/dockerfile/cmd/dockerfile-frontend/hack/tags ${GITHUB_REF#refs/tags/})"
+            PUSH=true
+            if [[ "${{ matrix.channel }}" != "mainline" ]] && [[ $GITHUB_REF != refs/tags/dockerfile/*-${{ matrix.channel }} ]]; then
+              BUILD=false
+            elif [[ "${{ matrix.channel }}" == "mainline" ]] && [[ $GITHUB_REF == refs/tags/dockerfile/*-${{ matrix.channel }} ]]; then
+              BUILD=false
+            fi
+          elif [[ $GITHUB_REF == refs/heads/* ]]; then
+            TAGS=${GITHUB_REF#refs/heads/}${TAG_SUFFIX}
+            PUSH=true
+          fi
+          echo "TAGS<<EOF" >> $GITHUB_ENV
+          echo "$TAGS" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+          echo "TAG_SUFFIX=${TAG_SUFFIX}" >> $GITHUB_ENV
+          echo "BUILD=${BUILD}" >> $GITHUB_ENV
+          echo "PUSH=${PUSH}" >> $GITHUB_ENV
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+        if: env.BUILD == 'true'
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        if: env.BUILD == 'true'
+        with:
+          version: ${{ env.BUILDX_VERSION }}
+          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
+          buildkitd-flags: --debug
+      -
+        name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        if: env.BUILD == 'true'
+        with:
+          images: |
+            ${{ env.REPO_SLUG_TARGET }}
+          tags: |
+            ${{ env.TAGS }}
+          bake-target: frontend-meta-helper
+      -
+        name: Login to Docker Hub
+        uses: docker/login-action@v2
+        if: env.BUILD == 'true' && env.PUSH == 'true'
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      -
+        name: Build
+        uses: docker/bake-action@v2
+        if: env.BUILD == 'true'
+        with:
+          files: |
+            ./docker-bake.hcl
+            ${{ steps.meta.outputs.bake-file }}
+          targets: frontend-image-all
+          set: |
+            *.cache-from=type=gha,scope=frontend${{ env.TAG_SUFFIX }}
+            *.cache-to=type=gha,scope=frontend${{ env.TAG_SUFFIX }}
+            *.output=type=image,buildinfo-attrs=true,push=${{ env.PUSH }}
+        env:
+          FRONTEND_CHANNEL: ${{ matrix.channel }}

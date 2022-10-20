@@ -6,18 +6,14 @@ concurrency:
 
 on:
   schedule:
-    - cron: '0 10 * * *'  # everyday at 10am
+    - cron: '0 10 * * *'
   workflow_dispatch:
   push:
     branches:
       - 'master'
     tags:
       - 'v*'
-      - 'dockerfile/*'
   pull_request:
-    branches:
-      - 'master'
-      - 'v*'
     paths-ignore:
       - 'README.md'
       - 'docs/**'
@@ -26,9 +22,7 @@ on:
 env:
   REPO_SLUG_ORIGIN: "moby/buildkit:latest"
   REPO_SLUG_TARGET: "moby/buildkit"
-  DF_REPO_SLUG_TARGET: "docker/dockerfile-upstream"
-  PLATFORMS: "linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le,linux/riscv64"
-  CACHE_GHA_SCOPE_IT: "integration-tests"
+  CACHE_GHA_SCOPE_IT: "build-integration-tests"
   CACHE_GHA_SCOPE_CROSS: "cross"
   TESTFLAGS: "-v --parallel=6 --timeout=30m"
   BUILDX_VERSION: "v0.9.1"  # leave empty to use the one available on GitHub virtual environment
@@ -53,7 +47,7 @@ jobs:
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
           buildkitd-flags: --debug
       -
-        name: Build ${{ env.CACHE_GHA_SCOPE_IT }}
+        name: Build
         uses: docker/bake-action@v2
         with:
           targets: integration-tests-base
@@ -70,7 +64,6 @@ jobs:
       matrix:
         pkg:
           - ./client ./cmd/buildctl ./worker/containerd ./solver ./frontend
-          - ./frontend/dockerfile
         worker:
           - containerd
           - containerd-rootless
@@ -81,10 +74,6 @@ jobs:
           - oci-snapshotter-stargz
         typ:
           - integration
-          - dockerfile
-        exclude:
-          - pkg: ./client ./cmd/buildctl ./worker/containerd ./solver ./frontend
-            typ: dockerfile
         include:
           - pkg: ./...
             skip-integration-tests: 1
@@ -496,93 +485,3 @@ jobs:
         with:
           draft: true
           files: ${{ env.DESTDIR }}/*
-
-  frontend-image:
-    runs-on: ubuntu-20.04
-    if: github.event_name != 'schedule'
-    needs:
-      - test
-    strategy:
-      fail-fast: false
-      matrix:
-        channel:
-          - mainline
-          - labs
-    steps:
-      -
-        name: Checkout
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-      -
-        name: Prepare
-        run: |
-          TAGS=pr
-          TAG_SUFFIX=
-          BUILD=true
-          PUSH=false
-          if [ "${{ matrix.channel }}" != "mainline" ]; then
-            TAG_SUFFIX=-${{ matrix.channel }}
-          fi
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            TAGS=nightly${TAG_SUFFIX}
-            PUSH=true
-          elif [[ $GITHUB_REF == refs/tags/dockerfile/* ]]; then
-            TAGS="$(./frontend/dockerfile/cmd/dockerfile-frontend/hack/tags ${GITHUB_REF#refs/tags/})"
-            PUSH=true
-            if [[ "${{ matrix.channel }}" != "mainline" ]] && [[ $GITHUB_REF != refs/tags/dockerfile/*-${{ matrix.channel }}* ]]; then
-              BUILD=false
-            elif [[ "${{ matrix.channel }}" == "mainline" ]] && [[ $GITHUB_REF == refs/tags/dockerfile/*-${{ matrix.channel }}* ]]; then
-              BUILD=false
-            fi
-          elif [[ $GITHUB_REF == refs/heads/* ]]; then
-            TAGS=${GITHUB_REF#refs/heads/}${TAG_SUFFIX}
-            PUSH=true
-          fi
-          echo "TAGS<<EOF" >> $GITHUB_ENV
-          echo "$TAGS" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
-          echo "TAG_SUFFIX=${TAG_SUFFIX}" >> $GITHUB_ENV
-          echo "BUILD=${BUILD}" >> $GITHUB_ENV
-          echo "PUSH=${PUSH}" >> $GITHUB_ENV
-      -
-        name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-      -
-        name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-        with:
-          version: ${{ env.BUILDX_VERSION }}
-          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
-          buildkitd-flags: --debug
-      -
-        name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v4
-        with:
-          images: |
-            ${{ env.DF_REPO_SLUG_TARGET }}
-          tags: |
-            ${{ env.TAGS }}
-          bake-target: frontend-meta-helper
-      -
-        name: Login to Docker Hub
-        uses: docker/login-action@v2
-        if: env.PUSH == 'true'
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      -
-        name: Build
-        uses: docker/bake-action@v2
-        with:
-          files: |
-            ./docker-bake.hcl
-            ${{ steps.meta.outputs.bake-file }}
-          targets: frontend-image-all
-          set: |
-            *.cache-from=type=gha,scope=frontend${{ env.TAG_SUFFIX }}
-            *.cache-to=type=gha,scope=frontend${{ env.TAG_SUFFIX }}
-            *.output=type=image,buildinfo-attrs=true,push=${{ env.PUSH }}
-        env:
-          FRONTEND_CHANNEL: ${{ matrix.channel }}
