@@ -99,6 +99,10 @@ func init() {
 			Name:  "containerd-worker-apparmor-profile",
 			Usage: "set the name of the apparmor profile applied to containers",
 		},
+		cli.BoolFlag{
+			Name:  "containerd-worker-selinux",
+			Usage: "apply SELinux labels",
+		},
 	}
 	n := "containerd-worker-rootless"
 	u := "enable rootless mode"
@@ -217,6 +221,9 @@ func applyContainerdFlags(c *cli.Context, cfg *config.Config) error {
 	if c.GlobalIsSet("containerd-worker-apparmor-profile") {
 		cfg.Workers.Containerd.ApparmorProfile = c.GlobalString("containerd-worker-apparmor-profile")
 	}
+	if c.GlobalIsSet("containerd-worker-selinux") {
+		cfg.Workers.Containerd.SELinux = c.GlobalBool("containerd-worker-selinux")
+	}
 
 	return nil
 }
@@ -259,7 +266,7 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 	if cfg.Snapshotter != "" {
 		snapshotter = cfg.Snapshotter
 	}
-	opt, err := containerd.NewWorkerOpt(common.config.Root, cfg.Address, snapshotter, cfg.Namespace, cfg.Rootless, cfg.Labels, dns, nc, common.config.Workers.Containerd.ApparmorProfile, parallelismSem, common.traceSocket, ctd.WithTimeout(60*time.Second))
+	opt, err := containerd.NewWorkerOpt(common.config.Root, cfg.Address, snapshotter, cfg.Namespace, cfg.Rootless, cfg.Labels, dns, nc, common.config.Workers.Containerd.ApparmorProfile, common.config.Workers.Containerd.SELinux, parallelismSem, common.traceSocket, ctd.WithTimeout(60*time.Second))
 	if err != nil {
 		return nil, err
 	}
