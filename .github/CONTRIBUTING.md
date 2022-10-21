@@ -52,16 +52,15 @@ Dependencies:
 - [runc](https://github.com/opencontainers/runc)
 - [containerd](https://github.com/containerd/containerd) (if you want to use containerd worker)
 
-
-The following command installs `buildkitd` and `buildctl` to `/usr/local/bin`:
-
 ```bash
-make && sudo make install
-```
+# installs buildkitd and buildctl to /usr/local/bin
+$ make && sudo make install
 
-To build containerized `moby/buildkit:local` and `moby/buildkit:local-rootless` images:
-```bash
-make images
+# build moby/buildkit:local and moby/buildkit:local-rootless images
+$ make images
+
+# build docker/dockerfile:local and docker/dockerfile:local-labs images
+$ make frontends
 ```
 
 ### Run the unit- and integration-tests
@@ -94,13 +93,15 @@ TESTPKGS=./client TESTFLAGS="--run //worker=containerd -v" ./hack/test integrati
 DOCKERFILE_RELEASES=labs TESTFLAGS="--run /TestRunGlobalNetwork/worker=oci$/ -v" ./hack/test dockerfile
 ```
 
-Set `TEST_KEEP_CACHE=1` for the test framework to keep external dependant images in a docker volume
-if you are repeatedly calling `./hack/test` script. This helps to avoid rate limiting on the remote registry side.
+> **Note**
+>
+> Set `TEST_KEEP_CACHE=1` for the test framework to keep external dependant
+> images in a docker volume if you are repeatedly calling `./hack/test` script.
+> This helps to avoid rate limiting on the remote registry side.
 
 Updating vendored dependencies:
 
 ```bash
-# update vendor.conf
 make vendor
 ```
 
@@ -109,8 +110,6 @@ Validating your updates before submission:
 ```bash
 make validate-all
 ```
-
-
 
 ### Pull requests are always welcome
 
