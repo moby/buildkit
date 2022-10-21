@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile-upstream:1.4
+# syntax=docker/dockerfile-upstream:master
 
 ARG GO_VERSION=1.19
 ARG RUNC_VERSION=v1.1.4
@@ -91,11 +91,10 @@ RUN --mount=target=. --mount=target=/root/.cache,type=cache \
   CGO_ENABLED=0 xx-go build -ldflags "$(cat /tmp/.ldflags) -extldflags '-static'" -tags "osusergo netgo static_build seccomp ${BUILDKITD_TAGS}" -o /usr/bin/buildkitd ./cmd/buildkitd && \
   xx-verify --static /usr/bin/buildkitd
 
-FROM scratch AS binaries-linux-helper
+FROM scratch AS binaries-linux
 COPY --link --from=runc /usr/bin/runc /buildkit-runc
 # built from https://github.com/tonistiigi/binfmt/releases/tag/buildkit%2Fv7.0.0-29
 COPY --link --from=tonistiigi/binfmt:buildkit-v7.0.0-29@sha256:5168f6c2b692b04a7c0102751220e293e109b3dc312eb22ee1a5547b42b58de6 / /
-FROM binaries-linux-helper AS binaries-linux
 COPY --link --from=buildctl /usr/bin/buildctl /
 COPY --link --from=buildkitd /usr/bin/buildkitd /
 

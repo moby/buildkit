@@ -305,9 +305,8 @@ jobs:
       -
         name: Checkout
         uses: actions/checkout@v3
-      -
-        name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v2
+        with:
+          fetch-depth: 0
       -
         name: Set up QEMU
         uses: docker/setup-qemu-action@v2
@@ -319,14 +318,14 @@ jobs:
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
           buildkitd-flags: --debug
       -
-        name: Cross
-        run: |
-          ./hack/cross
-        env:
-          PLATFORMS: ${{ env.PLATFORMS }},darwin/amd64,darwin/arm64,windows/amd64,windows/arm64
-          RUNC_PLATFORMS: ${{ env.PLATFORMS }}
-          CACHE_FROM: type=gha,scope=${{ env.CACHE_GHA_SCOPE_CROSS }}
-          CACHE_TO: type=gha,scope=${{ env.CACHE_GHA_SCOPE_CROSS }}
+        name: Build
+        uses: docker/bake-action@v2
+        with:
+          targets: binaries-cross
+          set: |
+            *.cache-from=type=gha,scope=${{ env.CACHE_GHA_SCOPE_CROSS }}
+            *.cache-to=type=gha,scope=${{ env.CACHE_GHA_SCOPE_CROSS }}
+            *.output=type=cacheonly
 
   release-base:
     runs-on: ubuntu-20.04
@@ -396,7 +395,9 @@ jobs:
 
   binaries:
     runs-on: ubuntu-20.04
-    needs: [release-base, test, cross]
+    needs:
+      - release-base
+      - test
     steps:
       -
         name: Checkout
@@ -420,7 +421,7 @@ jobs:
           ./hack/release-tar "${{ needs.release-base.outputs.tag }}" release-out
         env:
           PLATFORMS: ${{ env.PLATFORMS }},darwin/amd64,darwin/arm64,windows/amd64,windows/arm64
-          CACHE_FROM: type=gha,scope=${{ env.CACHE_GHA_SCOPE_BINARIES }} type=gha,scope=${{ env.CACHE_GHA_SCOPE_CROSS }}
+          CACHE_FROM: type=gha,scope=${{ env.CACHE_GHA_SCOPE_BINARIES }}
       -
         name: Move artifacts
         run: |

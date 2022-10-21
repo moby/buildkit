@@ -13,7 +13,11 @@ bindir=$(prefix)/bin
 
 .PHONY: binaries
 binaries:
-	hack/binaries
+	$(BUILDX_CMD) bake binaries
+
+.PHONY: cross
+cross:
+	$(BUILDX_CMD) bake binaries-cross
 
 .PHONY: images
 images:
@@ -24,7 +28,7 @@ images:
 .PHONY: install
 install:
 	mkdir -p $(DESTDIR)$(bindir)
-	install bin/* $(DESTDIR)$(bindir)
+	install bin/build/* $(DESTDIR)$(bindir)
 
 .PHONY: clean
 clean:
