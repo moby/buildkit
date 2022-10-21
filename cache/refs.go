@@ -57,6 +57,7 @@ type ImmutableRef interface {
 	Extract(ctx context.Context, s session.Group) error // +progress
 	GetRemotes(ctx context.Context, createIfNeeded bool, cfg config.RefConfig, all bool, s session.Group) ([]*solver.Remote, error)
 	LayerChain() RefList
+	FileList(ctx context.Context, s session.Group) ([]string, error)
 }
 
 type MutableRef interface {
