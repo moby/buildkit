@@ -46,8 +46,10 @@ const (
 	defaultDockerfileName      = "Dockerfile"
 	dockerignoreFilename       = ".dockerignore"
 
-	buildArgPrefix = "build-arg:"
-	labelPrefix    = "label:"
+	buildArgPrefix      = "build-arg:"
+	labelPrefix         = "label:"
+	contextPrefix       = "context:"
+	inputMetadataPrefix = "input-metadata:"
 
 	keyTarget           = "target"
 	keyFilename         = "filename"
@@ -897,7 +899,7 @@ func contextByNameFunc(c client.Client, sessionID string) func(context.Context, 
 
 func contextByName(ctx context.Context, c client.Client, sessionID, name string, platform *ocispecs.Platform, resolveMode string) (*llb.State, *dockerfile2llb.Image, *binfotypes.BuildInfo, error) {
 	opts := c.BuildOpts().Opts
-	v, ok := opts["context:"+name]
+	v, ok := opts[contextPrefix+name]
 	if !ok {
 		return nil, nil, nil, nil
 	}
@@ -1065,7 +1067,7 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 		if !ok {
 			return nil, nil, nil, errors.Errorf("invalid input %s for %s", vv[1], name)
 		}
-		md, ok := opts["input-metadata:"+vv[1]]
+		md, ok := opts[inputMetadataPrefix+vv[1]]
 		if ok {
 			m := make(map[string][]byte)
 			if err := json.Unmarshal([]byte(md), &m); err != nil {
