@@ -23,12 +23,11 @@ func parseOutputCSV(s string) (client.ExportEntry, error) {
 		return ex, err
 	}
 	for _, field := range fields {
-		parts := strings.SplitN(field, "=", 2)
-		if len(parts) != 2 {
+		key, value, ok := strings.Cut(field, "=")
+		if !ok {
 			return ex, errors.Errorf("invalid value %s", field)
 		}
-		key := strings.ToLower(parts[0])
-		value := parts[1]
+		key = strings.ToLower(key)
 		switch key {
 		case "type":
 			ex.Type = value

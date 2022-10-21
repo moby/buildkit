@@ -38,14 +38,13 @@ func setUserDefinedTermColors(colorsEnv string) {
 		return
 	}
 	for _, field := range fields {
-		parts := strings.SplitN(field, "=", 2)
-		if len(parts) != 2 || strings.Contains(parts[1], "=") {
+		k, v, ok := strings.Cut(field, "=")
+		if !ok || strings.Contains(v, "=") {
 			err := errors.New("A valid entry must have exactly two fields")
 			logrus.WithError(err).Warnf("Could not parse BUILDKIT_COLORS component: %s", field)
 			continue
 		}
-		k := strings.ToLower(parts[0])
-		v := parts[1]
+		k = strings.ToLower(k)
 		if c, ok := termColorMap[strings.ToLower(v)]; ok {
 			parseKeys(k, c)
 		} else if strings.Contains(v, ",") {
@@ -94,8 +93,7 @@ func readRGB(v string) aec.ANSI {
 }
 
 func parseKeys(k string, c aec.ANSI) {
-	key := strings.ToLower(k)
-	switch key {
+	switch strings.ToLower(k) {
 	case "run":
 		colorRun = c
 	case "cancel":
