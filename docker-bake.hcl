@@ -10,6 +10,13 @@ variable "IMAGE_TARGET" {
   default = ""
 }
 
+variable "FRONTEND_CHANNEL" {
+  default = "mainline"
+}
+variable "FRONTEND_BUILDTAGS" {
+  default = ""
+}
+
 # Defines the output folder
 variable "DESTDIR" {
   default = ""
@@ -22,6 +29,9 @@ function "bindir" {
 # Special target: https://github.com/docker/metadata-action#bake-definition
 target "meta-helper" {
   tags = [IMAGE_TARGET != "" ? "moby/buildkit:local-${IMAGE_TARGET}" : "moby/buildkit:local"]
+}
+target "frontend-meta-helper" {
+  tags = [FRONTEND_CHANNEL != "mainline" ? "docker/dockerfile:local-${FRONTEND_CHANNEL}" : "docker/dockerfile:local"]
 }
 
 target "_common" {
@@ -145,6 +155,32 @@ target "image-all" {
     "linux/amd64",
     "linux/arm/v7",
     "linux/arm64",
+    "linux/s390x",
+    "linux/ppc64le",
+    "linux/riscv64"
+  ]
+}
+
+target "frontend-image" {
+  inherits = ["_common", "frontend-meta-helper"]
+  dockerfile = "./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile"
+  args = {
+    CHANNEL = FRONTEND_CHANNEL
+    BUILDTAGS = FRONTEND_BUILDTAGS
+  }
+  output = ["type=docker,buildinfo-attrs=true"]
+}
+
+target "frontend-image-all" {
+  inherits = ["frontend-image"]
+  platforms = [
+    "linux/amd64",
+    "linux/arm/v7",
+    "linux/arm64",
+    "linux/mips",
+    "linux/mipsle",
+    "linux/mips64",
+    "linux/mips64le",
     "linux/s390x",
     "linux/ppc64le",
     "linux/riscv64"

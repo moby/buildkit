@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+usage() {
+  echo "./version channel"
+  exit 1
+}
+
+if [ "$#" == 0 ]; then
+  usage
+fi
+
+CHANNEL=$1
+
+suffix=
+if [ -n "$CHANNEL" ] && [ "$CHANNEL" != "mainline" ]; then
+  suffix=-$CHANNEL
+fi
+
+version=$(git describe --always --tags --match "dockerfile/[0-9]*$suffix")
+if [[ ! "$version" =~ "dockerfile" ]]; then
+  version=${version}$suffix
+fi
+
+echo -n "$version"

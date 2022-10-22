@@ -26,10 +26,14 @@ release:
 	find $(CURDIR)/bin/release -type d -empty -delete
 
 .PHONY: images
-images:
-# moby/buildkit:local and moby/buildkit:local-rootless are created on Docker
+images: # moby/buildkit:local and moby/buildkit:local-rootless are created on Docker
 	$(BUILDX_CMD) bake image
 	IMAGE_TARGET=rootless $(BUILDX_CMD) bake image
+
+.PHONY: frontends
+frontends: # docker/dockerfile:local and docker/dockerfile:local-labs are created on Docker
+	$(BUILDX_CMD) bake frontend-image
+	FRONTEND_CHANNEL=labs $(BUILDX_CMD) bake frontend-image
 
 .PHONY: install
 install:
