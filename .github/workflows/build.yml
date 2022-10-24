@@ -18,6 +18,9 @@ on:
     branches:
       - 'master'
       - 'v*'
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
 
 env:
   REPO_SLUG_ORIGIN: "moby/buildkit:latest"
