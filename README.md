@@ -140,7 +140,7 @@ By default, the OCI (runc) worker is used. You can set `--oci-worker=false --con
 
 We are open to adding more backends.
 
-To start the buildkitd daemon using systemd socket activiation, you can install the buildkit systemd unit files.
+To start the buildkitd daemon using systemd socket activation, you can install the buildkit systemd unit files.
 See [Systemd socket activation](#systemd-socket-activation)
 
 The buildkitd daemon listens gRPC API on `/run/buildkit/buildkitd.sock` by default, but you can also use TCP sockets.
@@ -232,7 +232,7 @@ To export the image to multiple registries:
 buildctl build ... --output type=image,\"name=docker.io/username/image,docker.io/username2/image2\",push=true
 ```
 
-To export the cache embed with the image and pushing them to registry together, type `registry` is required to import the cache, you should specify `--export-cache type=inline` and `--import-cache type=registry,ref=...`. To export the cache to a local directy, you should specify `--export-cache type=local`.
+To export the cache embed with the image and pushing them to registry together, type `registry` is required to import the cache, you should specify `--export-cache type=inline` and `--import-cache type=registry,ref=...`. To export the cache to a local directly, you should specify `--export-cache type=local`.
 Details in [Export cache](#export-cache).
 
 ```bash
@@ -428,16 +428,16 @@ buildctl build ... \
   --import-cache type=gha
 ```
 
-Github Actions cache saves both cache metadata and layers to GitHub's Cache service. This cache currently has a [size limit of 10GB](https://docs.github.com/en/actions/advanced-guides/caching-dependencies-to-speed-up-workflows#usage-limits-and-eviction-policy) that is shared accross different caches in the repo. If you exceed this limit, GitHub will save your cache but will begin evicting caches until the total size is less than 10 GB. Recycling caches too often can result in slower runtimes overall.
+GitHub Actions cache saves both cache metadata and layers to GitHub's Cache service. This cache currently has a [size limit of 10GB](https://docs.github.com/en/actions/advanced-guides/caching-dependencies-to-speed-up-workflows#usage-limits-and-eviction-policy) that is shared accross different caches in the repo. If you exceed this limit, GitHub will save your cache but will begin evicting caches until the total size is less than 10 GB. Recycling caches too often can result in slower runtimes overall.
 
 Similarly to using [actions/cache](https://github.com/actions/cache), caches are [scoped by branch](https://docs.github.com/en/actions/advanced-guides/caching-dependencies-to-speed-up-workflows#restrictions-for-accessing-a-cache), with the default and target branches being available to every branch.
 
-Following attributes are required to authenticate against the [Github Actions Cache service API](https://github.com/tonistiigi/go-actions-cache/blob/master/api.md#authentication):
+Following attributes are required to authenticate against the [GitHub Actions Cache service API](https://github.com/tonistiigi/go-actions-cache/blob/master/api.md#authentication):
 * `url`: Cache server URL (default `$ACTIONS_CACHE_URL`)
 * `token`: Access token (default `$ACTIONS_RUNTIME_TOKEN`)
 
 :information_source: This type of cache can be used with [Docker Build Push Action](https://github.com/docker/build-push-action)
-where `url` and `token` will be automatically set. To use this backend in a inline `run` step, you have to include [crazy-max/ghaction-github-runtime](https://github.com/crazy-max/ghaction-github-runtime)
+where `url` and `token` will be automatically set. To use this backend in an inline `run` step, you have to include [crazy-max/ghaction-github-runtime](https://github.com/crazy-max/ghaction-github-runtime)
 in your workflow to expose the runtime.
 
 `--export-cache` options:
@@ -547,7 +547,7 @@ There are 2 options supported for Azure Blob Storage authentication:
 
 ### Consistent hashing
 
-If you have multiple BuildKit daemon instances but you don't want to use registry for sharing cache across the cluster,
+If you have multiple BuildKit daemon instances, but you don't want to use registry for sharing cache across the cluster,
 consider client-side load balancing using consistent hashing.
 
 See [`./examples/kubernetes/consistenthash`](./examples/kubernetes/consistenthash).
