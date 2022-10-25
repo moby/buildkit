@@ -5,6 +5,8 @@ Docker can build images automatically by reading the instructions from a
 user could call on the command line to assemble an image. This page describes
 the commands you can use in a `Dockerfile`.
 
+<a name="buildkit"><!-- included for deep-links to old section --></a>
+
 ## Format
 
 Here is the format of the `Dockerfile`:
