@@ -36,6 +36,7 @@ import (
 	"github.com/containerd/continuity/fs/fstest"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/client/ociindex"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
@@ -108,6 +109,7 @@ func TestIntegration(t *testing.T) {
 		testReadonlyRootFS,
 		testBasicRegistryCacheImportExport,
 		testBasicLocalCacheImportExport,
+		testLocalCacheImportExportWithSessions,
 		testCachedMounts,
 		testCopyFromEmptyImage,
 		testProxyEnv,
@@ -4537,6 +4539,118 @@ func readFileInImage(ctx context.Context, t *testing.T, c *Client, ref, path str
 		return nil, err
 	}
 	return os.ReadFile(filepath.Join(destDir, filepath.Clean(path)))
+}
+
+// docker/buildx#1325
+func testLocalCacheImportExportWithSessions(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	tmpdir := t.TempDir()
+	err = os.WriteFile(filepath.Join(tmpdir, "file"), []byte("foodata"), 0600)
+	require.NoError(t, err)
+	baseCache := t.TempDir()
+	doFunc := func(importLocal bool) {
+		busybox := llb.Image("busybox")
+		base := busybox.Run(llb.Shlex(`sh -c "sleep 2"`)).File(llb.Copy(llb.Local("context"), "file", "file"))
+		basedef, err := base.Marshal(sb.Context())
+		require.NoError(t, err)
+
+		var cacheImportsControl []CacheOptionsEntry
+		var cacheImportsGateway []gateway.CacheOptionsEntry
+		if importLocal {
+			baseCI := CacheOptionsEntry{
+				Type: "local",
+				Attrs: map[string]string{
+					"src": baseCache,
+				},
+			}
+			idx, err := ociindex.ReadIndexJSONFileLocked(filepath.Join(baseCache, "index.json"))
+			require.NoError(t, err)
+			for _, m := range idx.Manifests {
+				if m.Annotations[ocispecs.AnnotationRefName] == "latest" {
+					baseCI.Attrs["digest"] = string(m.Digest)
+					break
+				}
+			}
+			require.NotEqual(t, baseCI.Attrs["digest"], "")
+			cacheImportsControl = []CacheOptionsEntry{baseCI}
+			cacheImportsGateway = []gateway.CacheOptionsEntry{
+				{
+					Type:  baseCI.Type,
+					Attrs: baseCI.Attrs,
+				},
+			}
+		}
+		baseResCh := make(chan *gateway.Result)
+		baseResErrCh := make(chan error)
+		eg, ctx := errgroup.WithContext(sb.Context())
+		eg.Go(func() error {
+			_, err := c.Build(ctx, SolveOpt{
+				CacheExports: []CacheOptionsEntry{
+					{
+						Type: "local",
+						Attrs: map[string]string{
+							"dest": baseCache,
+							"mode": "max",
+						},
+					},
+				},
+				CacheImports: cacheImportsControl, // Let client prepare the session content store
+				LocalDirs: map[string]string{
+					"context": tmpdir,
+				},
+			}, "", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+				res, err := c.Solve(ctx, gateway.SolveRequest{
+					Definition:   basedef.ToPB(),
+					CacheImports: cacheImportsGateway, // Enable local cache importer
+				})
+				if res != nil {
+					baseResCh <- res
+				} else if err != nil {
+					baseResErrCh <- err
+				}
+				return res, err
+			}, nil)
+			return err
+		})
+
+		// The next build is based on the previous result. Even when the previous build
+		// performed using (lazy) local cache importer provided through its session,
+		// the following build should handle this laziness correctly and avoid session-related errors.
+		var baseRes *gateway.Result
+		select {
+		case baseRes = <-baseResCh:
+		case err := <-baseResErrCh:
+			require.NoError(t, err)
+		}
+		baseSt, err := baseRes.Ref.ToState()
+		require.NoError(t, err)
+		layerdef, err := baseSt.Run(llb.Shlex(`sh -c "echo hi > /hi"`)).Marshal(sb.Context())
+		require.NoError(t, err)
+		_, err = c.Build(sb.Context(), SolveOpt{
+			LocalDirs: map[string]string{
+				"context": tmpdir,
+			},
+		}, "", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+			return c.Solve(ctx, gateway.SolveRequest{
+				Definition: layerdef.ToPB(),
+			})
+		}, nil)
+		require.NoError(t, err)
+		err = eg.Wait()
+		require.NoError(t, err)
+	}
+
+	doFunc(false)
+
+	ensurePruneAll(t, c, sb)
+	doFunc(true)
+
+	ensurePruneAll(t, c, sb)
+	doFunc(true)
 }
 
 func testCachedMounts(t *testing.T, sb integration.Sandbox) {

@@ -37,8 +37,13 @@ func NewImporter(provider content.Provider) Importer {
 	return &contentCacheImporter{provider: provider}
 }
 
+func NewImporterForSession(provider content.Provider, sessionID string) Importer {
+	return &contentCacheImporter{provider: provider, sessionID: sessionID}
+}
+
 type contentCacheImporter struct {
-	provider content.Provider
+	provider  content.Provider
+	sessionID string
 }
 
 func (ci *contentCacheImporter) Resolve(ctx context.Context, desc ocispecs.Descriptor, id string, w worker.Worker) (solver.CacheManager, error) {
@@ -94,7 +99,19 @@ func (ci *contentCacheImporter) Resolve(ctx context.Context, desc ocispecs.Descr
 	if err != nil {
 		return nil, err
 	}
+	if ci.sessionID != "" {
+		return &cacheManagerForSession{CacheManager: solver.NewCacheManager(ctx, id, keysStorage, resultStorage), sessionID: ci.sessionID}, nil
+	}
 	return solver.NewCacheManager(ctx, id, keysStorage, resultStorage), nil
+}
+
+type cacheManagerForSession struct {
+	solver.CacheManager
+	sessionID string
+}
+
+func (s *cacheManagerForSession) RequiredSession() string {
+	return s.sessionID
 }
 
 func readBlob(ctx context.Context, provider content.Provider, desc ocispecs.Descriptor) ([]byte, error) {

@@ -295,6 +295,16 @@ func (s *scheduler) mergeTo(target, src *edge) bool {
 	if !target.edge.Vertex.Options().IgnoreCache && src.edge.Vertex.Options().IgnoreCache {
 		return false
 	}
+
+	for _, cache := range target.edge.Vertex.Options().CacheSources {
+		if sc, ok := cache.(CacheManagerForSession); ok && sc.RequiredSession() != "" {
+			// This vertex contains a cache specific to a session so we shouldn't merge
+			// into this edge otherwise unlazy will fail if that session finishes.
+			// See also: https://github.com/docker/buildx/issues/1325
+			return false
+		}
+	}
+
 	for _, inc := range s.incoming[src] {
 		inc.mu.Lock()
 		inc.Target = target

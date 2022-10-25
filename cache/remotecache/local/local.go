@@ -46,7 +46,7 @@ func ResolveCacheExporterFunc(sm *session.Manager) remotecache.ResolveCacheExpor
 			ociMediatypes = b
 		}
 		csID := contentStoreIDPrefix + store
-		cs, err := getContentStore(ctx, sm, g, csID)
+		cs, _, err := getContentStore(ctx, sm, g, csID)
 		if err != nil {
 			return nil, err
 		}
@@ -67,7 +67,7 @@ func ResolveCacheImporterFunc(sm *session.Manager) remotecache.ResolveCacheImpor
 			return nil, ocispecs.Descriptor{}, errors.New("local cache importer requires src")
 		}
 		csID := contentStoreIDPrefix + store
-		cs, err := getContentStore(ctx, sm, g, csID)
+		cs, usingSession, err := getContentStore(ctx, sm, g, csID)
 		if err != nil {
 			return nil, ocispecs.Descriptor{}, err
 		}
@@ -81,24 +81,24 @@ func ResolveCacheImporterFunc(sm *session.Manager) remotecache.ResolveCacheImpor
 			Digest: dgst,
 			Size:   info.Size,
 		}
-		return remotecache.NewImporter(cs), desc, nil
+		return remotecache.NewImporterForSession(cs, usingSession), desc, nil
 	}
 }
 
-func getContentStore(ctx context.Context, sm *session.Manager, g session.Group, storeID string) (content.Store, error) {
+func getContentStore(ctx context.Context, sm *session.Manager, g session.Group, storeID string) (content.Store, string, error) {
 	// TODO: to ensure correct session is detected, new api for finding if storeID is supported is needed
 	sessionID := g.SessionIterator().NextSession()
 	if sessionID == "" {
-		return nil, errors.New("local cache exporter/importer requires session")
+		return nil, "", errors.New("local cache exporter/importer requires session")
 	}
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	caller, err := sm.Get(timeoutCtx, sessionID, false)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return sessioncontent.NewCallerStore(caller, storeID), nil
+	return sessioncontent.NewCallerStore(caller, storeID), sessionID, nil
 }
 
 func attrsToCompression(attrs map[string]string) (*compression.Config, error) {

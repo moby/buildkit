@@ -340,6 +340,17 @@ func (jl *Solver) loadUnlocked(v, parent Vertex, j *Job, cache map[Vertex]Vertex
 	st, ok := jl.actives[dgstWithoutCache]
 
 	if !ok {
+		for _, cache := range v.Options().CacheSources {
+			if sc, ok := cache.(CacheManagerForSession); ok {
+				if s := sc.RequiredSession(); s != "" {
+					// This vertex contains a cache specific to a session.
+					// Create an unique state to avoid used by other vertices.
+					// See also: https://github.com/docker/buildx/issues/1325
+					dgst = digest.FromBytes([]byte(fmt.Sprintf("%s-session-%s", dgst, s)))
+				}
+			}
+		}
+
 		st, ok = jl.actives[dgst]
 
 		// !ignorecache merges with ignorecache but ignorecache doesn't merge with !ignorecache

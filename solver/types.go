@@ -244,3 +244,11 @@ type CacheManager interface {
 	// Save saves a result based on a cache key
 	Save(key *CacheKey, s Result, createdAt time.Time) (*ExportableCacheKey, error)
 }
+
+// CacheManagerForSession is a CacheManager backed by a session.
+type CacheManagerForSession interface {
+	CacheManager
+
+	// RequiredSession returns the session that this cache manager depends on.
+	RequiredSession() string
+}

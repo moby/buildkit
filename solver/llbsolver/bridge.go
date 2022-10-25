@@ -369,6 +369,16 @@ func (lcm *lazyCacheManager) Save(key *solver.CacheKey, s solver.Result, created
 	return lcm.main.Save(key, s, createdAt)
 }
 
+func (lcm *lazyCacheManager) RequiredSession() string {
+	if err := lcm.wait(); err != nil {
+		return ""
+	}
+	if sc, ok := lcm.main.(solver.CacheManagerForSession); ok {
+		return sc.RequiredSession()
+	}
+	return ""
+}
+
 func (lcm *lazyCacheManager) wait() error {
 	<-lcm.waitCh
 	return lcm.err
