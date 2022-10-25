@@ -186,7 +186,7 @@ func runBuildkitd(ctx context.Context, conf *BackendConfig, args []string, logs 
 	address = getBuildkitdAddr(tmpdir)
 
 	args = append(args, "--root", tmpdir, "--addr", address, "--debug")
-	cmd := exec.Command(args[0], args[1:]...)
+	cmd := exec.Command(args[0], args[1:]...) //nolint:gosec // test utility
 	cmd.Env = append(os.Environ(), "BUILDKIT_DEBUG_EXEC_OUTPUT=1", "BUILDKIT_DEBUG_PANIC_ON_ERROR=1", "TMPDIR="+filepath.Join(tmpdir, "tmp"))
 	cmd.Env = append(cmd.Env, extraEnv...)
 	cmd.SysProcAttr = getSysProcAttr()
@@ -220,7 +220,7 @@ func runBuildkitd(ctx context.Context, conf *BackendConfig, args []string, logs 
 }
 
 func rootlessSupported(uid int) bool {
-	cmd := exec.Command("sudo", "-u", fmt.Sprintf("#%d", uid), "-i", "--", "exec", "unshare", "-U", "true")
+	cmd := exec.Command("sudo", "-u", fmt.Sprintf("#%d", uid), "-i", "--", "exec", "unshare", "-U", "true") //nolint:gosec // test utility
 	b, err := cmd.CombinedOutput()
 	if err != nil {
 		logrus.Warnf("rootless mode is not supported on this host: %v (%s)", err, string(b))
