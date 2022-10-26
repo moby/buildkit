@@ -1,4 +1,4 @@
-package cache
+package compression
 
 import (
 	"archive/tar"
@@ -11,23 +11,29 @@ import (
 
 	cdcompression "github.com/containerd/containerd/archive/compression"
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/images"
 	"github.com/containerd/stargz-snapshotter/estargz"
-	"github.com/moby/buildkit/util/compression"
+	"github.com/moby/buildkit/util/iohelper"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
-var eStargzAnnotations = []string{estargz.TOCJSONDigestAnnotation, estargz.StoreUncompressedSizeAnnotation}
+var EStargzAnnotations = []string{estargz.TOCJSONDigestAnnotation, estargz.StoreUncompressedSizeAnnotation}
 
-// compressEStargz writes the passed blobs stream as an eStargz-compressed blob.
-// finalize function finalizes the written blob metadata and returns all eStargz annotations.
-func compressEStargz(comp compression.Config) (compressorFunc compressor, finalize func(context.Context, content.Store) (map[string]string, error)) {
+const containerdUncompressed = "containerd.io/uncompressed"
+const estargzLabel = "buildkit.io/compression/estargz"
+
+func (c estargzType) Compress(comp Config) (compressorFunc Compressor, finalize Finalizer) {
 	var cInfo *compressionInfo
 	var writeErr error
 	var mu sync.Mutex
 	return func(dest io.Writer, requiredMediaType string) (io.WriteCloser, error) {
-			if compression.FromMediaType(requiredMediaType) != compression.Gzip {
+			ct, err := FromMediaType(requiredMediaType)
+			if err != nil {
+				return nil, err
+			}
+			if ct != Gzip {
 				return nil, fmt.Errorf("unsupported media type for estargz compressor %q", requiredMediaType)
 			}
 			done := make(chan struct{})
@@ -76,7 +82,7 @@ func compressEStargz(comp compression.Config) (compressorFunc compressor, finali
 				pr.Close()
 				return nil
 			}()
-			return &writeCloser{pw, func() error {
+			return &iohelper.WriteCloser{WriteCloser: pw, CloseFunc: func() error {
 				<-done // wait until the write completes
 				return nil
 			}}, nil
@@ -113,11 +119,40 @@ func compressEStargz(comp compression.Config) (compressorFunc compressor, finali
 		}
 }
 
-const estargzLabel = "buildkit.io/compression/estargz"
+func (c estargzType) Decompress(ctx context.Context, cs content.Store, desc ocispecs.Descriptor) (io.ReadCloser, error) {
+	return decompress(ctx, cs, desc)
+}
+
+func (c estargzType) NeedsConversion(ctx context.Context, cs content.Store, desc ocispecs.Descriptor) (bool, error) {
+	esgz, err := c.Is(ctx, cs, desc.Digest)
+	if err != nil {
+		return false, err
+	}
+	if !images.IsLayerType(desc.MediaType) || esgz {
+		return false, nil
+	}
+	return true, nil
+}
+
+func (c estargzType) NeedsComputeDiffBySelf() bool {
+	return true
+}
+
+func (c estargzType) OnlySupportOCITypes() bool {
+	return true
+}
+
+func (c estargzType) MediaType() string {
+	return ocispecs.MediaTypeImageLayerGzip
+}
+
+func (c estargzType) String() string {
+	return "estargz"
+}
 
 // isEStargz returns true when the specified digest of content exists in
 // the content store and it's eStargz.
-func isEStargz(ctx context.Context, cs content.Store, dgst digest.Digest) (bool, error) {
+func (c estargzType) Is(ctx context.Context, cs content.Store, dgst digest.Digest) (bool, error) {
 	info, err := cs.Info(ctx, dgst)
 	if err != nil {
 		return false, nil
@@ -178,39 +213,6 @@ func decompressEStargz(r *io.SectionReader) (io.ReadCloser, error) {
 	return estargz.Unpack(r, new(estargz.GzipDecompressor))
 }
 
-type writeCloser struct {
-	io.WriteCloser
-	closeFunc func() error
-}
-
-func (wc *writeCloser) Close() error {
-	err1 := wc.WriteCloser.Close()
-	err2 := wc.closeFunc()
-	if err1 != nil {
-		return errors.Wrapf(err1, "failed to close: %v", err2)
-	}
-	return err2
-}
-
-type counter struct {
-	n  int64
-	mu sync.Mutex
-}
-
-func (c *counter) Write(p []byte) (n int, err error) {
-	c.mu.Lock()
-	c.n += int64(len(p))
-	c.mu.Unlock()
-	return len(p), nil
-}
-
-func (c *counter) size() (n int64) {
-	c.mu.Lock()
-	n = c.n
-	c.mu.Unlock()
-	return
-}
-
 type compressionInfo struct {
 	blobInfo
 	tocDigest digest.Digest
@@ -227,7 +229,7 @@ func calculateBlobInfo() (io.WriteCloser, chan blobInfo) {
 	pr, pw := io.Pipe()
 	go func() {
 		defer pr.Close()
-		c := new(counter)
+		c := new(iohelper.Counter)
 		dgstr := digest.Canonical.Digester()
 		diffID := digest.Canonical.Digester()
 		decompressR, err := cdcompression.DecompressStream(io.TeeReader(pr, dgstr.Hash()))
@@ -244,7 +246,7 @@ func calculateBlobInfo() (io.WriteCloser, chan blobInfo) {
 			pr.CloseWithError(err)
 			return
 		}
-		res <- blobInfo{dgstr.Digest(), diffID.Digest(), c.size()}
+		res <- blobInfo{dgstr.Digest(), diffID.Digest(), c.Size()}
 	}()
 	return pw, res
 }
