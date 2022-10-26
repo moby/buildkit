@@ -11,7 +11,7 @@ import (
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
-func (c uncompressedType) Compress(comp Config) (compressorFunc Compressor, finalize Finalizer) {
+func (c uncompressedType) Compress(ctx context.Context, comp Config) (compressorFunc Compressor, finalize Finalizer) {
 	return func(dest io.Writer, mediaType string) (io.WriteCloser, error) {
 		return &iohelper.NopWriteCloser{Writer: dest}, nil
 	}, nil
@@ -45,6 +45,10 @@ func (c uncompressedType) NeedsComputeDiffBySelf() bool {
 }
 
 func (c uncompressedType) OnlySupportOCITypes() bool {
+	return false
+}
+
+func (c uncompressedType) NeedsForceCompression() bool {
 	return false
 }
 

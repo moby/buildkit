@@ -400,6 +400,8 @@ github.com/containerd/imgcrypt v1.1.4/go.mod h1:LorQnPtzL/T0IyCeftcsMEO7AqxUDbdO
 github.com/containerd/nri v0.0.0-20201007170849-eb1350a75164/go.mod h1:+2wGSDGFYfE5+So4M5syatU0N0f0LbWpuqyMi4/BE8c=
 github.com/containerd/nri v0.0.0-20210316161719-dbaa18c31c14/go.mod h1:lmxnXF6oMkbqs39FiCt1s0R2HSMhcLel9vNL3m4AaeY=
 github.com/containerd/nri v0.1.0/go.mod h1:lmxnXF6oMkbqs39FiCt1s0R2HSMhcLel9vNL3m4AaeY=
+github.com/containerd/nydus-snapshotter v0.3.1 h1:b8WahTrPkt3XsabjG2o/leN4fw3HWZYr+qxo/Z8Mfzk=
+github.com/containerd/nydus-snapshotter v0.3.1/go.mod h1:+8R7NX7vrjlxAgtidnsstwIhpzyTlriYPssTxH++uiM=
 github.com/containerd/stargz-snapshotter v0.0.0-20201027054423-3a04e4c2c116/go.mod h1:o59b3PCKVAf9jjiKtCc/9hLAd+5p/rfhBfm6aBcTEr4=
 github.com/containerd/stargz-snapshotter v0.12.0 h1:SRKo+YxmypnlyC7eKc9KNW0Ciy1Auo102s8E/aRGWKg=
 github.com/containerd/stargz-snapshotter v0.12.0/go.mod h1:LYKrfzJBNUs0hP9GA4YXTIudE6pjZ96W0X1Ls7yI7Gs=

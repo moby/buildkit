@@ -108,6 +108,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/containerd/cgroups v1.0.3 // indirect
 	github.com/containerd/fifo v1.0.0 // indirect
+	github.com/containerd/nydus-snapshotter v0.3.1 // indirect
 	github.com/containerd/ttrpc v1.1.0 // indirect
 	github.com/containernetworking/cni v1.1.1 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.0 // indirect

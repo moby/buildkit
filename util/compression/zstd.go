@@ -10,7 +10,7 @@ import (
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
-func (c zstdType) Compress(comp Config) (compressorFunc Compressor, finalize Finalizer) {
+func (c zstdType) Compress(ctx context.Context, comp Config) (compressorFunc Compressor, finalize Finalizer) {
 	return func(dest io.Writer, _ string) (io.WriteCloser, error) {
 		return zstdWriter(comp)(dest)
 	}, nil
@@ -39,6 +39,10 @@ func (c zstdType) NeedsComputeDiffBySelf() bool {
 }
 
 func (c zstdType) OnlySupportOCITypes() bool {
+	return false
+}
+
+func (c zstdType) NeedsForceCompression() bool {
 	return false
 }
 

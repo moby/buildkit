@@ -88,6 +88,10 @@ func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error)
 		c.EnableOCITypes(c.RefCfg.Compression.Type.String())
 	}
 
+	if c.RefCfg.Compression.Type.NeedsForceCompression() {
+		c.EnableForceCompression(c.RefCfg.Compression.Type.String())
+	}
+
 	c.AddAnnotations(as)
 
 	return rest, nil
@@ -117,6 +121,18 @@ func (c *ImageCommitOpts) EnableOCITypes(reason string) {
 		logrus.Warn(message)
 
 		c.OCITypes = true
+	}
+}
+
+func (c *ImageCommitOpts) EnableForceCompression(reason string) {
+	if !c.RefCfg.Compression.Force {
+		message := "forcibly turning on force-compression mode"
+		if reason != "" {
+			message += " for " + reason
+		}
+		logrus.Warn(message)
+
+		c.RefCfg.Compression.Force = true
 	}
 }
 

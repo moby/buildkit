@@ -58,10 +58,13 @@ func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper 
 		if err != nil {
 			return emptyDesc, false, errors.Wrap(err, "failed to get compressed stream")
 		}
-		err = overlay.WriteUpperdir(ctx, io.MultiWriter(compressed, dgstr.Hash()), upperdir, lower)
-		compressed.Close()
-		if err != nil {
+		// Close ensure compressorFunc does some finalization works.
+		defer compressed.Close()
+		if err := overlay.WriteUpperdir(ctx, io.MultiWriter(compressed, dgstr.Hash()), upperdir, lower); err != nil {
 			return emptyDesc, false, errors.Wrap(err, "failed to write compressed diff")
+		}
+		if err := compressed.Close(); err != nil {
+			return emptyDesc, false, errors.Wrap(err, "failed to close compressed diff writer")
 		}
 		if labels == nil {
 			labels = map[string]string{}
