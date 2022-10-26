@@ -7,8 +7,7 @@ This directory contains Kubernetes manifests for `Pod`, `Deployment` (with `Serv
 * `Job`: good if you don't want to have daemon pods
 
 Using Rootless mode (`*.rootless.yaml`) is recommended because Rootless mode image is executed as non-root user (UID 1000) and doesn't need `securityContext.privileged`.
-
-:warning: Rootless mode may not work on some host kernels. See [`../../docs/rootless.md`](../../docs/rootless.md).
+See [`../../docs/rootless.md`](../../docs/rootless.md).
 
 See also ["Building Images Efficiently And Securely On Kubernetes With BuildKit" (KubeCon EU 2019)](https://kccnceu19.sched.com/event/MPX5).
 

@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/docker/distribution/reference"
@@ -19,14 +20,20 @@ import (
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
+	"github.com/moby/buildkit/frontend"
+	"github.com/moby/buildkit/frontend/attest"
+	"github.com/moby/buildkit/frontend/attestations"
 	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
 	"github.com/moby/buildkit/frontend/dockerfile/dockerignore"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	gwpb "github.com/moby/buildkit/frontend/gateway/pb"
+	"github.com/moby/buildkit/frontend/subrequests/outline"
+	"github.com/moby/buildkit/frontend/subrequests/targets"
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
+	"github.com/moby/buildkit/util/gitutil"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -59,20 +66,21 @@ const (
 	keyShmSize          = "shm-size"
 	keyTargetPlatform   = "platform"
 	keyUlimit           = "ulimit"
+	keyRequestID        = "requestid"
 
 	// Don't forget to update frontend documentation if you add
-	// a new build-arg: frontend/dockerfile/docs/syntax.md
+	// a new build-arg: frontend/dockerfile/docs/reference.md
 	keyCacheNSArg           = "build-arg:BUILDKIT_CACHE_MOUNT_NS"
 	keyContextKeepGitDirArg = "build-arg:BUILDKIT_CONTEXT_KEEP_GIT_DIR"
 	keyHostnameArg          = "build-arg:BUILDKIT_SANDBOX_HOSTNAME"
 	keyMultiPlatformArg     = "build-arg:BUILDKIT_MULTI_PLATFORM"
 	keySyntaxArg            = "build-arg:BUILDKIT_SYNTAX"
+	keySourceDateEpoch      = "build-arg:SOURCE_DATE_EPOCH"
 )
 
 var httpPrefix = regexp.MustCompile(`^https?://`)
-var gitURLPathWithFragmentSuffix = regexp.MustCompile(`\.git(?:#.+)?$`)
 
-func Build(ctx context.Context, c client.Client) (*client.Result, error) {
+func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 	opts := c.BuildOpts().Opts
 	caps := c.BuildOpts().LLBCaps
 	gwcaps := c.BuildOpts().Caps
@@ -181,7 +189,11 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 
 	var buildContext *llb.State
 	isNotLocalContext := false
-	if st, ok := detectGitContext(opts[localNameContext], opts[keyContextKeepGitDirArg]); ok {
+	keepGit := false
+	if v, err := strconv.ParseBool(opts[keyContextKeepGitDirArg]); err == nil {
+		keepGit = v
+	}
+	if st, ok := detectGitContext(opts[localNameContext], keepGit); ok {
 		if !forceLocalDockerfile {
 			src = *st
 		}
@@ -416,54 +428,107 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		opts[keyHostname] = v
 	}
 
-	eg, ctx = errgroup.WithContext(ctx)
+	epoch, err := parseSourceDateEpoch(opts[keySourceDateEpoch])
+	if err != nil {
+		return nil, err
+	}
+
+	convertOpt := dockerfile2llb.ConvertOpt{
+		Target:           opts[keyTarget],
+		MetaResolver:     c,
+		BuildArgs:        filter(opts, buildArgPrefix),
+		Labels:           filter(opts, labelPrefix),
+		CacheIDNamespace: opts[keyCacheNSArg],
+		SessionID:        c.BuildOpts().SessionID,
+		BuildContext:     buildContext,
+		Excludes:         excludes,
+		IgnoreCache:      ignoreCache,
+		TargetPlatform:   targetPlatforms[0],
+		BuildPlatforms:   buildPlatforms,
+		ImageResolveMode: resolveMode,
+		PrefixPlatform:   exportMap,
+		ExtraHosts:       extraHosts,
+		ShmSize:          shmSize,
+		Ulimit:           ulimit,
+		CgroupParent:     opts[keyCgroupParent],
+		ForceNetMode:     defaultNetMode,
+		LLBCaps:          &caps,
+		SourceMap:        sourceMap,
+		Hostname:         opts[keyHostname],
+		SourceDateEpoch:  epoch,
+		Warn: func(msg, url string, detail [][]byte, location *parser.Range) {
+			c.Warn(ctx, defVtx, msg, warnOpts(sourceMap, location, detail, url))
+		},
+		ContextByName: contextByNameFunc(c, c.BuildOpts().SessionID),
+	}
+
+	defer func() {
+		var el *parser.ErrorLocation
+		if errors.As(err, &el) {
+			err = wrapSource(err, sourceMap, el.Location)
+		}
+	}()
+
+	if req, ok := opts[keyRequestID]; ok {
+		switch req {
+		case outline.SubrequestsOutlineDefinition.Name:
+			o, err := dockerfile2llb.Dockefile2Outline(ctx, dtDockerfile, convertOpt)
+			if err != nil {
+				return nil, err
+			}
+			return o.ToResult()
+		case targets.SubrequestsTargetsDefinition.Name:
+			targets, err := dockerfile2llb.ListTargets(ctx, dtDockerfile)
+			if err != nil {
+				return nil, err
+			}
+			return targets.ToResult()
+		default:
+			return nil, errdefs.NewUnsupportedSubrequestError(req)
+		}
+	}
+
+	var scanner attest.Scanner
+	attests, err := attestations.Parse(opts)
+	if err != nil {
+		return nil, err
+	}
+	if attrs, ok := attests[attestations.KeyTypeSbom]; ok {
+		src, ok := attrs["generator"]
+		if !ok {
+			return nil, errors.Errorf("sbom scanner cannot be empty")
+		}
+		ref, err := reference.ParseNormalizedNamed(src)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to parse sbom scanner %s", src)
+		}
+		ref = reference.TagNameOnly(ref)
+		exportMap = true
+
+		scanner, err = attest.CreateSBOMScanner(ctx, c, ref.String())
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	eg, ctx2 = errgroup.WithContext(ctx)
 
 	for i, tp := range targetPlatforms {
 		func(i int, tp *ocispecs.Platform) {
 			eg.Go(func() (err error) {
-				defer func() {
-					var el *parser.ErrorLocation
-					if errors.As(err, &el) {
-						err = wrapSource(err, sourceMap, el.Location)
-					}
-				}()
-
-				st, img, bi, err := dockerfile2llb.Dockerfile2LLB(ctx, dtDockerfile, dockerfile2llb.ConvertOpt{
-					Target:           opts[keyTarget],
-					MetaResolver:     c,
-					BuildArgs:        filter(opts, buildArgPrefix),
-					Labels:           filter(opts, labelPrefix),
-					CacheIDNamespace: opts[keyCacheNSArg],
-					SessionID:        c.BuildOpts().SessionID,
-					BuildContext:     buildContext,
-					Excludes:         excludes,
-					IgnoreCache:      ignoreCache,
-					TargetPlatform:   tp,
-					BuildPlatforms:   buildPlatforms,
-					ImageResolveMode: resolveMode,
-					PrefixPlatform:   exportMap,
-					ExtraHosts:       extraHosts,
-					ShmSize:          shmSize,
-					Ulimit:           ulimit,
-					CgroupParent:     opts[keyCgroupParent],
-					ForceNetMode:     defaultNetMode,
-					LLBCaps:          &caps,
-					SourceMap:        sourceMap,
-					Hostname:         opts[keyHostname],
-					Warn: func(msg, url string, detail [][]byte, location *parser.Range) {
-						if i != 0 {
-							return
-						}
-						c.Warn(ctx, defVtx, msg, warnOpts(sourceMap, location, detail, url))
-					},
-					ContextByName: contextByNameFunc(c, c.BuildOpts().SessionID, tp),
-				})
+				opt := convertOpt
+				opt.TargetPlatform = tp
+				if i != 0 {
+					opt.Warn = nil
+				}
+				opt.ContextByName = contextByNameFunc(c, c.BuildOpts().SessionID)
+				st, img, bi, err := dockerfile2llb.Dockerfile2LLB(ctx2, dtDockerfile, opt)
 
 				if err != nil {
 					return err
 				}
 
-				def, err := st.Marshal(ctx)
+				def, err := st.Marshal(ctx2)
 				if err != nil {
 					return errors.Wrapf(err, "failed to marshal LLB definition")
 				}
@@ -499,7 +564,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 					}
 				}
 
-				r, err := c.Solve(ctx, client.SolveRequest{
+				r, err := c.Solve(ctx2, client.SolveRequest{
 					Definition:   def.ToPB(),
 					CacheImports: cacheImports,
 				})
@@ -517,17 +582,23 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 					return errors.Wrapf(err, "failed to marshal build info")
 				}
 
+				p := platforms.DefaultSpec()
+				if tp != nil {
+					p = *tp
+				}
+				p = platforms.Normalize(p)
+				k := platforms.Format(p)
+
 				if !exportMap {
 					res.AddMeta(exptypes.ExporterImageConfigKey, config)
 					res.AddMeta(exptypes.ExporterBuildInfo, buildinfo)
 					res.SetRef(ref)
-				} else {
-					p := platforms.DefaultSpec()
-					if tp != nil {
-						p = *tp
-					}
 
-					k := platforms.Format(p)
+					expPlatforms.Platforms[i] = exptypes.Platform{
+						ID:       k,
+						Platform: p,
+					}
+				} else {
 					res.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterImageConfigKey, k), config)
 					res.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, k), buildinfo)
 					res.AddRef(k, ref)
@@ -545,13 +616,42 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		return nil, err
 	}
 
-	if exportMap {
-		dt, err := json.Marshal(expPlatforms)
-		if err != nil {
-			return nil, err
+	if scanner != nil {
+		for _, p := range expPlatforms.Platforms {
+			ref, ok := res.Refs[p.ID]
+			if !ok {
+				return nil, errors.Errorf("could not find ref %s", p.ID)
+			}
+			st, err := ref.ToState()
+			if err != nil {
+				return nil, err
+			}
+
+			att, st, err := scanner(ctx, p.ID, st, nil)
+			if err != nil {
+				return nil, err
+			}
+
+			def, err := st.Marshal(ctx)
+			if err != nil {
+				return nil, err
+			}
+			r, err := c.Solve(ctx, frontend.SolveRequest{
+				Definition: def.ToPB(),
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			res.AddAttestation(p.ID, att, r.Ref)
 		}
-		res.AddMeta(exptypes.ExporterPlatformsKey, dt)
 	}
+
+	dt, err := json.Marshal(expPlatforms)
+	if err != nil {
+		return nil, err
+	}
+	res.AddMeta(exptypes.ExporterPlatformsKey, dt)
 
 	return res, nil
 }
@@ -599,40 +699,21 @@ func filter(opt map[string]string, key string) map[string]string {
 	return m
 }
 
-func detectGitContext(ref, gitContext string) (*llb.State, bool) {
-	found := false
-	if httpPrefix.MatchString(ref) && gitURLPathWithFragmentSuffix.MatchString(ref) {
-		found = true
-	}
-
-	keepGit := false
-	if gitContext != "" {
-		if v, err := strconv.ParseBool(gitContext); err == nil {
-			keepGit = v
-		}
-	}
-
-	for _, prefix := range []string{"git://", "github.com/", "git@"} {
-		if strings.HasPrefix(ref, prefix) {
-			found = true
-			break
-		}
-	}
-	if !found {
+func detectGitContext(ref string, keepGit bool) (*llb.State, bool) {
+	g, err := gitutil.ParseGitRef(ref)
+	if err != nil {
 		return nil, false
 	}
-
-	parts := strings.SplitN(ref, "#", 2)
-	branch := ""
-	if len(parts) > 1 {
-		branch = parts[1]
+	commit := g.Commit
+	if g.SubDir != "" {
+		commit += ":" + g.SubDir
 	}
 	gitOpts := []llb.GitOption{dockerfile2llb.WithInternalName("load git source " + ref)}
 	if keepGit {
 		gitOpts = append(gitOpts, llb.KeepGitDir())
 	}
 
-	st := llb.Git(parts[0], branch, gitOpts...)
+	st := llb.Git(g.Remote, commit, gitOpts...)
 	return &st, true
 }
 
@@ -788,8 +869,8 @@ func warnOpts(sm *llb.SourceMap, r *parser.Range, detail [][]byte, url string) c
 	return opts
 }
 
-func contextByNameFunc(c client.Client, sessionID string, p *ocispecs.Platform) func(context.Context, string, string) (*llb.State, *dockerfile2llb.Image, *binfotypes.BuildInfo, error) {
-	return func(ctx context.Context, name, resolveMode string) (*llb.State, *dockerfile2llb.Image, *binfotypes.BuildInfo, error) {
+func contextByNameFunc(c client.Client, sessionID string) func(context.Context, string, string, *ocispecs.Platform) (*llb.State, *dockerfile2llb.Image, *binfotypes.BuildInfo, error) {
+	return func(ctx context.Context, name, resolveMode string, p *ocispecs.Platform) (*llb.State, *dockerfile2llb.Image, *binfotypes.BuildInfo, error) {
 		named, err := reference.ParseNormalizedNamed(name)
 		if err != nil {
 			return nil, nil, nil, errors.Wrapf(err, "invalid context name %s", name)
@@ -832,6 +913,11 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 	switch vv[0] {
 	case "docker-image":
 		ref := strings.TrimPrefix(vv[1], "//")
+		if ref == "scratch" {
+			st := llb.Scratch()
+			return &st, nil, nil, nil
+		}
+
 		imgOpt := []llb.ImageOption{
 			llb.WithCustomName("[context " + name + "] " + ref),
 		}
@@ -870,13 +956,13 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 		}
 		return &st, &img, nil, nil
 	case "git":
-		st, ok := detectGitContext(v, "1")
+		st, ok := detectGitContext(v, true)
 		if !ok {
 			return nil, nil, nil, errors.Errorf("invalid git context %s", v)
 		}
 		return st, nil, nil, nil
 	case "http", "https":
-		st, ok := detectGitContext(v, "1")
+		st, ok := detectGitContext(v, true)
 		if !ok {
 			httpst := llb.HTTP(v, llb.WithCustomName("[context "+name+"] "+v))
 			st = &httpst
@@ -916,6 +1002,11 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 			return nil, nil, nil, err
 		}
 
+		var img dockerfile2llb.Image
+		if err := json.Unmarshal(data, &img); err != nil {
+			return nil, nil, nil, err
+		}
+
 		st := llb.OCILayout(storeID, dig,
 			llb.WithCustomName("[context "+name+"] OCI load from client"),
 			llb.OCISessionID(c.BuildOpts().SessionID),
@@ -924,7 +1015,7 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		return &st, nil, nil, nil
+		return &st, &img, nil, nil
 	case "local":
 		st := llb.Local(vv[1],
 			llb.SessionID(c.BuildOpts().SessionID),
@@ -1035,4 +1126,16 @@ func wrapSource(err error, sm *llb.SourceMap, ranges []parser.Range) error {
 		})
 	}
 	return errdefs.WithSource(err, s)
+}
+
+func parseSourceDateEpoch(v string) (*time.Time, error) {
+	if v == "" {
+		return nil, nil
+	}
+	sde, err := strconv.ParseInt(v, 10, 64)
+	if err != nil {
+		return nil, errors.Wrapf(err, "invalid SOURCE_DATE_EPOCH: %s", v)
+	}
+	tm := time.Unix(sde, 0)
+	return &tm, nil
 }

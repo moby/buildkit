@@ -11,13 +11,13 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/docker/docker/pkg/fileutils"
 	iradix "github.com/hashicorp/go-immutable-radix"
 	"github.com/hashicorp/golang-lru/simplelru"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/locker"
+	"github.com/moby/patternmatcher"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
@@ -79,8 +79,8 @@ type includedPath struct {
 	path             string
 	record           *CacheRecord
 	included         bool
-	includeMatchInfo fileutils.MatchInfo
-	excludeMatchInfo fileutils.MatchInfo
+	includeMatchInfo patternmatcher.MatchInfo
+	excludeMatchInfo patternmatcher.MatchInfo
 }
 
 type cacheManager struct {
@@ -496,17 +496,17 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 	endsInSep := len(p) != 0 && p[len(p)-1] == filepath.Separator
 	p = keyPath(p)
 
-	var includePatternMatcher *fileutils.PatternMatcher
+	var includePatternMatcher *patternmatcher.PatternMatcher
 	if len(opts.IncludePatterns) != 0 {
-		includePatternMatcher, err = fileutils.NewPatternMatcher(opts.IncludePatterns)
+		includePatternMatcher, err = patternmatcher.New(opts.IncludePatterns)
 		if err != nil {
 			return nil, errors.Wrapf(err, "invalid includepatterns: %s", opts.IncludePatterns)
 		}
 	}
 
-	var excludePatternMatcher *fileutils.PatternMatcher
+	var excludePatternMatcher *patternmatcher.PatternMatcher
 	if len(opts.ExcludePatterns) != 0 {
-		excludePatternMatcher, err = fileutils.NewPatternMatcher(opts.ExcludePatterns)
+		excludePatternMatcher, err = patternmatcher.New(opts.ExcludePatterns)
 		if err != nil {
 			return nil, errors.Wrapf(err, "invalid excludepatterns: %s", opts.ExcludePatterns)
 		}
@@ -695,21 +695,21 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 
 func shouldIncludePath(
 	candidate string,
-	includePatternMatcher *fileutils.PatternMatcher,
-	excludePatternMatcher *fileutils.PatternMatcher,
+	includePatternMatcher *patternmatcher.PatternMatcher,
+	excludePatternMatcher *patternmatcher.PatternMatcher,
 	maybeIncludedPath *includedPath,
 	parentDir *includedPath,
 ) (bool, error) {
 	var (
 		m         bool
-		matchInfo fileutils.MatchInfo
+		matchInfo patternmatcher.MatchInfo
 		err       error
 	)
 	if includePatternMatcher != nil {
 		if parentDir != nil {
 			m, matchInfo, err = includePatternMatcher.MatchesUsingParentResults(candidate, parentDir.includeMatchInfo)
 		} else {
-			m, matchInfo, err = includePatternMatcher.MatchesUsingParentResults(candidate, fileutils.MatchInfo{})
+			m, matchInfo, err = includePatternMatcher.MatchesUsingParentResults(candidate, patternmatcher.MatchInfo{})
 		}
 		if err != nil {
 			return false, errors.Wrap(err, "failed to match includepatterns")
@@ -724,7 +724,7 @@ func shouldIncludePath(
 		if parentDir != nil {
 			m, matchInfo, err = excludePatternMatcher.MatchesUsingParentResults(candidate, parentDir.excludeMatchInfo)
 		} else {
-			m, matchInfo, err = excludePatternMatcher.MatchesUsingParentResults(candidate, fileutils.MatchInfo{})
+			m, matchInfo, err = excludePatternMatcher.MatchesUsingParentResults(candidate, patternmatcher.MatchInfo{})
 		}
 		if err != nil {
 			return false, errors.Wrap(err, "failed to match excludepatterns")

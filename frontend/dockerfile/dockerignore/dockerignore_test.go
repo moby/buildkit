@@ -7,12 +7,6 @@ import (
 )
 
 func TestReadAll(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "dockerignore-test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tmpDir)
-
 	di, err := ReadAll(nil)
 	if err != nil {
 		t.Fatalf("Expected not to have error, got %v", err)
@@ -22,7 +16,7 @@ func TestReadAll(t *testing.T) {
 		t.Fatalf("Expected to have zero dockerignore entry, got %d", diLen)
 	}
 
-	diName := filepath.Join(tmpDir, ".dockerignore")
+	diName := filepath.Join(t.TempDir(), ".dockerignore")
 	content := "test1\n/test2\n/a/file/here\n\nlastfile\n# this is a comment\n! /inverted/abs/path\n!\n! \n"
 	err = os.WriteFile(diName, []byte(content), 0777)
 	if err != nil {

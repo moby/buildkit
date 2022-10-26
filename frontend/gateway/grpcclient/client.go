@@ -116,7 +116,7 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 			req := &pb.ReturnRequest{}
 			if retError == nil {
 				if res == nil {
-					res = &client.Result{}
+					res = client.NewResult()
 				}
 				pbRes := &pb.Result{
 					Metadata: res.Metadata,
@@ -161,6 +161,25 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 						}
 					}
 				}
+
+				if res.Attestations != nil && c.caps.Supports(pb.CapAttestations) == nil {
+					attestations := map[string]*pb.Attestations{}
+					for k, as := range res.Attestations {
+						for _, a := range as {
+							pbAtt, err := client.AttestationToPB(&a)
+							if err != nil {
+								retError = err
+								continue
+							}
+							if attestations[k] == nil {
+								attestations[k] = &pb.Attestations{}
+							}
+							attestations[k].Attestation = append(attestations[k].Attestation, pbAtt)
+						}
+					}
+					pbRes.Attestations = attestations
+				}
+
 				if retError == nil {
 					req.Result = pbRes
 				}
@@ -369,30 +388,15 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (res *
 		if c.caps.Supports(pb.CapGatewayEvaluateSolve) == nil {
 			req.Evaluate = creq.Evaluate
 		} else {
-			// If evaluate is not supported, fallback to running Stat(".") in order to
-			// trigger an evaluation of the result.
+			// If evaluate is not supported, fallback to running Stat(".") in
+			// order to trigger an evaluation of the result.
 			defer func() {
 				if res == nil {
 					return
 				}
-
-				var (
-					id  string
-					ref client.Reference
-				)
-				ref, err = res.SingleRef()
-				if err != nil {
-					for refID := range res.Refs {
-						id = refID
-						break
-					}
-				} else {
-					id = ref.(*reference).id
-				}
-
-				_, err = c.client.StatFile(ctx, &pb.StatFileRequest{
-					Ref:  id,
-					Path: ".",
+				err = res.EachRef(func(ref client.Reference) error {
+					_, err := ref.StatFile(ctx, client.StatRequest{Path: "."})
+					return err
 				})
 			}()
 		}
@@ -403,7 +407,7 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (res *
 		return nil, err
 	}
 
-	res = &client.Result{}
+	res = client.NewResult()
 	if resp.Result == nil {
 		if id := resp.Ref; id != "" {
 			c.requests[id] = req
@@ -442,6 +446,18 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (res *
 					}
 				}
 				res.AddRef(k, ref)
+			}
+		}
+
+		if resp.Result.Attestations != nil {
+			for p, as := range resp.Result.Attestations {
+				for _, a := range as.Attestation {
+					att, err := client.AttestationFromPB(a)
+					if err != nil {
+						return nil, err
+					}
+					res.AddAttestation(p, *att, nil)
+				}
 			}
 		}
 	}
@@ -1041,6 +1057,15 @@ func (r *reference) ToState() (st llb.State, err error) {
 	}
 
 	return llb.NewState(defop), nil
+}
+
+func (r *reference) Evaluate(ctx context.Context) error {
+	req := &pb.EvaluateRequest{Ref: r.id}
+	_, err := r.c.client.Evaluate(ctx, req)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *reference) ReadFile(ctx context.Context, req client.ReadRequest) ([]byte, error) {

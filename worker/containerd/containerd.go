@@ -19,8 +19,8 @@ import (
 	"github.com/moby/buildkit/util/network/netproviders"
 	"github.com/moby/buildkit/util/semutil"
 	"github.com/moby/buildkit/util/winlayers"
-	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
+	wlabel "github.com/moby/buildkit/worker/label"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
@@ -67,16 +67,16 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		hostname = "unknown"
 	}
 	xlabels := map[string]string{
-		worker.LabelExecutor:    "containerd",
-		worker.LabelSnapshotter: snapshotterName,
-		worker.LabelHostname:    hostname,
-		worker.LabelNetwork:     npResolvedMode,
+		wlabel.Executor:    "containerd",
+		wlabel.Snapshotter: snapshotterName,
+		wlabel.Hostname:    hostname,
+		wlabel.Network:     npResolvedMode,
 	}
 	if apparmorProfile != "" {
-		xlabels[worker.LabelApparmorProfile] = apparmorProfile
+		xlabels[wlabel.ApparmorProfile] = apparmorProfile
 	}
-	xlabels[worker.LabelContainerdNamespace] = ns
-	xlabels[worker.LabelContainerdUUID] = serverInfo.UUID
+	xlabels[wlabel.ContainerdNamespace] = ns
+	xlabels[wlabel.ContainerdUUID] = serverInfo.UUID
 	for k, v := range labels {
 		xlabels[k] = v
 	}
@@ -131,20 +131,21 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 	}
 
 	opt := base.WorkerOpt{
-		ID:             id,
-		Labels:         xlabels,
-		MetadataStore:  md,
-		Executor:       containerdexecutor.New(client, root, "", np, dns, apparmorProfile, traceSocket, rootless),
-		Snapshotter:    snap,
-		ContentStore:   cs,
-		Applier:        winlayers.NewFileSystemApplierWithWindows(cs, df),
-		Differ:         winlayers.NewWalkingDiffWithWindows(cs, df),
-		ImageStore:     client.ImageService(),
-		Platforms:      platforms,
-		LeaseManager:   lm,
-		GarbageCollect: gc,
-		ParallelismSem: parallelismSem,
-		MountPoolRoot:  filepath.Join(root, "cachemounts"),
+		ID:               id,
+		Labels:           xlabels,
+		MetadataStore:    md,
+		NetworkProviders: np,
+		Executor:         containerdexecutor.New(client, root, "", np, dns, apparmorProfile, traceSocket, rootless),
+		Snapshotter:      snap,
+		ContentStore:     cs,
+		Applier:          winlayers.NewFileSystemApplierWithWindows(cs, df),
+		Differ:           winlayers.NewWalkingDiffWithWindows(cs, df),
+		ImageStore:       client.ImageService(),
+		Platforms:        platforms,
+		LeaseManager:     lm,
+		GarbageCollect:   gc,
+		ParallelismSem:   parallelismSem,
+		MountPoolRoot:    filepath.Join(root, "cachemounts"),
 	}
 	return opt, nil
 }

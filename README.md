@@ -1,6 +1,6 @@
 [![asciicinema example](https://asciinema.org/a/gPEIEo1NzmDTUu2bEPsUboqmU.png)](https://asciinema.org/a/gPEIEo1NzmDTUu2bEPsUboqmU)
 
-# BuildKit
+# BuildKit <!-- omit in toc -->
 
 [![GoDoc](https://godoc.org/github.com/moby/buildkit?status.svg)](https://godoc.org/github.com/moby/buildkit/client/llb)
 [![Build Status](https://github.com/moby/buildkit/workflows/build/badge.svg)](https://github.com/moby/buildkit/actions?query=workflow%3Abuild)
@@ -28,10 +28,16 @@ Introductory blog post https://blog.mobyproject.org/introducing-buildkit-17e056c
 
 Join `#buildkit` channel on [Docker Community Slack](http://dockr.ly/slack)
 
-:information_source: If you are visiting this repo for the usage of BuildKit-only Dockerfile features like `RUN --mount=type=(bind|cache|tmpfs|secret|ssh)`, please refer to [`frontend/dockerfile/docs/syntax.md`](frontend/dockerfile/docs/syntax.md).
+> **Note**
+>
+> If you are visiting this repo for the usage of BuildKit-only Dockerfile features
+> like `RUN --mount=type=(bind|cache|tmpfs|secret|ssh)`, please refer to [`frontend/dockerfile/docs/reference.md`](frontend/dockerfile/docs/reference.md)
 
-:information_source: [BuildKit has been integrated to `docker build` since Docker 18.06 .](https://docs.docker.com/develop/develop-images/build_enhancements/)
-You don't need to read this document unless you want to use the full-featured standalone version of BuildKit.
+> **Note**
+>
+> [BuildKit has been integrated to `docker build` since Docker 18.09](https://docs.docker.com/develop/develop-images/build_enhancements/).
+> You don't need to read this document unless you want to use the full-featured
+> standalone version of BuildKit.
 
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
@@ -39,12 +45,11 @@ You don't need to read this document unless you want to use the full-featured st
 
 - [Used by](#used-by)
 - [Quick start](#quick-start)
-  - [Starting the `buildkitd` daemon:](#starting-the-buildkitd-daemon)
+  - [Starting the `buildkitd` daemon](#starting-the-buildkitd-daemon)
   - [Exploring LLB](#exploring-llb)
   - [Exploring Dockerfiles](#exploring-dockerfiles)
     - [Building a Dockerfile with `buildctl`](#building-a-dockerfile-with-buildctl)
-    - [Building a Dockerfile using external frontend:](#building-a-dockerfile-using-external-frontend)
-    - [Building a Dockerfile with experimental features like `RUN --mount=type=(bind|cache|tmpfs|secret|ssh)`](#building-a-dockerfile-with-experimental-features-like-run---mounttypebindcachetmpfssecretssh)
+    - [Building a Dockerfile using external frontend](#building-a-dockerfile-using-external-frontend)
   - [Output](#output)
     - [Image/Registry](#imageregistry)
     - [Local directory](#local-directory)
@@ -59,6 +64,7 @@ You don't need to read this document unless you want to use the full-featured st
     - [Local directory](#local-directory-1)
     - [GitHub Actions cache (experimental)](#github-actions-cache-experimental)
     - [S3 cache (experimental)](#s3-cache-experimental)
+    - [Azure Blob Storage cache (experimental)](#azure-blob-storage-cache-experimental)
   - [Consistent hashing](#consistent-hashing)
 - [Metadata](#metadata)
 - [Systemd socket activation](#systemd-socket-activation)
@@ -71,6 +77,8 @@ You don't need to read this document unless you want to use the full-featured st
 - [Opentracing support](#opentracing-support)
 - [Running BuildKit without root privileges](#running-buildkit-without-root-privileges)
 - [Building multi-platform images](#building-multi-platform-images)
+  - [Configuring `buildctl`](#configuring-buildctl)
+    - [Color Output Controls](#color-output-controls)
 - [Contributing](#contributing)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
@@ -116,7 +124,7 @@ $ brew install buildkit
 
 To build BuildKit from source, see [`.github/CONTRIBUTING.md`](./.github/CONTRIBUTING.md).
 
-### Starting the `buildkitd` daemon:
+### Starting the `buildkitd` daemon
 
 You need to run `buildkitd` as the root user on the host.
 
@@ -159,9 +167,10 @@ Currently, the following high-level languages has been implemented for LLB:
 -   [HLB](https://github.com/openllb/hlb)
 -   [Earthfile (Earthly)](https://github.com/earthly/earthly)
 -   [Cargo Wharf (Rust)](https://github.com/denzp/cargo-wharf)
--   [Nix](https://github.com/AkihiroSuda/buildkit-nix)
+-   [Nix](https://github.com/reproducible-containers/buildkit-nix)
 -   [mopy (Python)](https://github.com/cmdjulian/mopy)
 -   [envd (starlark)](https://github.com/tensorchord/envd/)
+-   [Blubber](https://gitlab.wikimedia.org/repos/releng/blubber)
 -   (open a PR to add your own language)
 
 ### Exploring Dockerfiles
@@ -188,7 +197,9 @@ buildctl build \
 
 `--local` exposes local source files from client to the builder. `context` and `dockerfile` are the names Dockerfile frontend looks for build context and Dockerfile location.
 
-#### Building a Dockerfile using external frontend:
+If the Dockerfile has a different filename it can be specified with `--opt filename=./Dockerfile-alternative`.
+
+#### Building a Dockerfile using external frontend
 
 External versions of the Dockerfile frontend are pushed to https://hub.docker.com/r/docker/dockerfile-upstream and https://hub.docker.com/r/docker/dockerfile and can be used with the gateway frontend. The source for the external frontend is currently located in `./frontend/dockerfile/cmd/dockerfile-frontend` but will move out of this repository in the future ([#163](https://github.com/moby/buildkit/issues/163)). For automatic build from master branch of this repository `docker/dockerfile-upstream:master` or `docker/dockerfile-upstream:master-labs` image can be used.
 
@@ -204,10 +215,6 @@ buildctl build \
     --opt context=https://github.com/moby/moby.git \
     --opt build-arg:APT_MIRROR=cdn-fastly.deb.debian.org
 ```
-
-#### Building a Dockerfile with experimental features like `RUN --mount=type=(bind|cache|tmpfs|secret|ssh)`
-
-See [`frontend/dockerfile/docs/experimental.md`](frontend/dockerfile/docs/experimental.md).
 
 ### Output
 
@@ -254,6 +261,7 @@ Keys supported by image output:
   * Using the extended syntaxes, `annotation-<type>.<key>=<value>`, `annotation[<platform>].<key>=<value>` and both combined with `annotation-<type>[<platform>].<key>=<value>`, allows configuring exactly where to attach the annotation.
   * `<type>` specifies what object to attach to, and can be any of `manifest` (the default), `manifest-descriptor`, `index` and `index-descriptor`
   * `<platform>` specifies which objects to attach to (by default, all), and is the same key passed into the `platform` opt, see [`docs/multi-platform.md`](docs/multi-platform.md).
+  * See [`docs/annotations.md`](docs/annotations.md) for more details.
 
 If credentials are required, `buildctl` will attempt to read Docker configuration file `$DOCKER_CONFIG/config.json`.
 `$DOCKER_CONFIG` defaults to `~/.docker`.
@@ -399,6 +407,7 @@ The directory layout conforms to OCI Image Spec v1.0.
   * `min`: only export layers for the resulting image
   * `max`: export all the layers of all intermediate steps
 * `dest=<path>`: destination directory for cache exporter
+* `tag=<tag>`: specify custom tag of image to write to local index (default: `latest`)
 * `oci-mediatypes=<true|false>`: whether to use OCI mediatypes in exported manifests (default `true`, since BuildKit `v0.8`)
 * `compression=<uncompressed|gzip|estargz|zstd>`: choose compression type for layers newly created and cached, gzip is default value. estargz and zstd should be used with `oci-mediatypes=true`.
 * `compression-level=<value>`: compression level for gzip, estargz (0-9) and zstd (0-22)
@@ -407,8 +416,8 @@ The directory layout conforms to OCI Image Spec v1.0.
 `--import-cache` options:
 * `type=local`
 * `src=<path>`: source directory for cache importer
+* `tag=<tag>`: specify custom tag of image to read from local index (default: `latest`)
 * `digest=sha256:<sha256digest>`: specify explicit digest of the manifest list to import
-* `tag=<tag>`: determine custom tag of image. Defaults "latest" tag digest in `index.json` is for digest, not for tag
 
 #### GitHub Actions cache (experimental)
 
@@ -471,7 +480,10 @@ The simplest way is to use an IAM Instance profile.
 Others options are:
 
 * Any system using environment variables / config files supported by the [AWS Go SDK](https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html). The configuration must be available for the buildkit daemon, not for the client.
-* Access key ID and Secret Access Key, using the `access_key_id` and `secret_access_key` attributes.
+* Using the following attributes:
+  * `access_key_id`: Access Key ID
+  * `secret_access_key`: Secret Access Key
+  * `session_token`: Session Token
 
 `--export-cache` options:
 * `type=s3`
@@ -488,6 +500,50 @@ Others options are:
 * `blobs_prefix=<prefix>`: set global prefix to store / read blobs on s3 (default: `blobs/`)
 * `manifests_prefix=<prefix>`: set global prefix to store / read manifests on s3 (default: `manifests/`)
 * `name=<manifest>`: name of the manifest to use (default `buildkit`)
+
+#### Azure Blob Storage cache (experimental)
+
+```bash
+buildctl build ... \
+  --output type=image,name=docker.io/username/image,push=true \
+  --export-cache type=azblob,account_url=https://myaccount.blob.core.windows.net,name=my_image \
+  --import-cache type=azblob,account_url=https://myaccount.blob.core.windows.net,name=my_image
+```
+
+The following attributes are required:
+* `account_url`: The Azure Blob Storage account URL (default: `$BUILDKIT_AZURE_STORAGE_ACCOUNT_URL`)
+
+Storage locations:
+* blobs: `<account_url>/<container>/<prefix><blobs_prefix>/<sha256>`, default: `<account_url>/<container>/blobs/<sha256>`
+* manifests: `<account_url>/<container>/<prefix><manifests_prefix>/<name>`, default: `<account_url>/<container>/manifests/<name>`
+
+Azure Blob Storage configuration:
+* `container`: The Azure Blob Storage container name (default: `buildkit-cache` or `$BUILDKIT_AZURE_STORAGE_CONTAINER` if set)
+* `blobs_prefix`: Global prefix to store / read blobs on the Azure Blob Storage container (`<container>`) (default: `blobs/`)
+* `manifests_prefix`: Global prefix to store / read blobs on the Azure Blob Storage container (`<container>`) (default: `manifests/`)
+
+Azure Blob Storage authentication:
+
+There are 2 options supported for Azure Blob Storage authentication:
+
+* Any system using environment variables supported by the [Azure SDK for Go](https://docs.microsoft.com/en-us/azure/developer/go/azure-sdk-authentication). The configuration must be available for the buildkit daemon, not for the client.
+* Secret Access Key, using the `secret_access_key` attribute to specify the primary or secondary account key for your Azure Blob Storage account. [Azure Blob Storage account keys](https://docs.microsoft.com/en-us/azure/storage/common/storage-account-keys-manage)
+
+`--export-cache` options:
+* `type=azblob`
+* `mode=<min|max>`: specify cache layers to export (default: `min`)
+  * `min`: only export layers for the resulting image
+  * `max`: export all the layers of all intermediate steps
+* `prefix=<prefix>`: set global prefix to store / read files on the Azure Blob Storage container (`<container>`) (default: empty)
+* `name=<manifest>`: specify name of the manifest to use (default: `buildkit`)
+  * Multiple manifest names can be specified at the same time, separated by `;`. The standard use case is to use the git sha1 as name, and the branch name as duplicate, and load both with 2 `import-cache` commands.
+
+`--import-cache` options:
+* `type=azblob`
+* `prefix=<prefix>`: set global prefix to store / read files on the Azure Blob Storage container (`<container>`) (default: empty)
+* `blobs_prefix=<prefix>`: set global prefix to store / read blobs on the Azure Blob Storage container (`<container>`) (default: `blobs/`)
+* `manifests_prefix=<prefix>`: set global prefix to store / read manifests on the Azure Blob Storage container (`<container>`) (default: `manifests/`)
+* `name=<manifest>`: name of the manifest to use (default: `buildkit`)
 
 ### Consistent hashing
 
@@ -577,7 +633,7 @@ buildctl \
 
 `buildctl build` can be called against randomly load balanced the `buildkitd` daemon.
 
-See also [Consistent hashing](#consistenthashing) for client-side load balancing.
+See also [Consistent hashing](#consistent-hashing) for client-side load balancing.
 
 ## Containerizing BuildKit
 
@@ -667,6 +723,16 @@ Please refer to [`docs/rootless.md`](docs/rootless.md).
 ## Building multi-platform images
 
 Please refer to [`docs/multi-platform.md`](docs/multi-platform.md).
+
+### Configuring `buildctl`
+
+#### Color Output Controls
+
+`buildctl` has support for modifying the colors that are used to output information to the terminal. You can set the environment variable `BUILDKIT_COLORS` to something like `run=green:warning=yellow:error=red:cancel=255,165,0` to set the colors that you would like to use. Setting `NO_COLOR` to anything will disable any colorized output as recommended by [no-color.org](https://no-color.org/).
+
+Parsing errors will be reported but ignored. This will result in default color values being used where needed.
+
+- [The list of pre-defined colors](https://github.com/moby/buildkit/blob/master/util/progress/progressui/colors.go).
 
 ## Contributing
 

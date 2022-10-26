@@ -9,8 +9,7 @@ import (
 
 func TestID(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := os.MkdirTemp("", "worker-base-test-id")
-	require.NoError(t, err)
+	tmpdir := t.TempDir()
 
 	id0, err := ID(tmpdir)
 	require.NoError(t, err)
@@ -28,6 +27,4 @@ func TestID(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NotEqual(t, id0, id2)
-
-	require.NoError(t, os.RemoveAll(tmpdir))
 }

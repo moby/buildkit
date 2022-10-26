@@ -14,22 +14,28 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/docker/distribution/reference"
 	"github.com/docker/go-connections/nat"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/imagemetaresolver"
+	"github.com/moby/buildkit/exporter/containerimage/image"
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
+	"github.com/moby/buildkit/frontend/subrequests/outline"
+	"github.com/moby/buildkit/frontend/subrequests/targets"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
+	"github.com/moby/buildkit/util/gitutil"
 	"github.com/moby/buildkit/util/suggest"
 	"github.com/moby/buildkit/util/system"
 	"github.com/moby/sys/signal"
+	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -67,18 +73,67 @@ type ConvertOpt struct {
 	ContextLocalName string
 	SourceMap        *llb.SourceMap
 	Hostname         string
+	SourceDateEpoch  *time.Time
 	Warn             func(short, url string, detail [][]byte, location *parser.Range)
-	ContextByName    func(ctx context.Context, name, resolveMode string) (*llb.State, *Image, *binfotypes.BuildInfo, error)
+	ContextByName    func(ctx context.Context, name, resolveMode string, p *ocispecs.Platform) (*llb.State, *Image, *binfotypes.BuildInfo, error)
 }
 
 func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, *binfotypes.BuildInfo, error) {
+	ds, bi, err := toDispatchState(ctx, dt, opt)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return &ds.state, &ds.image, bi, nil
+}
+
+func Dockefile2Outline(ctx context.Context, dt []byte, opt ConvertOpt) (*outline.Outline, error) {
+	ds, _, err := toDispatchState(ctx, dt, opt)
+	if err != nil {
+		return nil, err
+	}
+	o := ds.Outline(dt)
+	return &o, nil
+}
+
+func ListTargets(ctx context.Context, dt []byte) (*targets.List, error) {
+	dockerfile, err := parser.Parse(bytes.NewReader(dt))
+	if err != nil {
+		return nil, err
+	}
+	stages, _, err := instructions.Parse(dockerfile.AST)
+	if err != nil {
+		return nil, err
+	}
+
+	l := &targets.List{
+		Sources: [][]byte{dt},
+	}
+
+	for i, s := range stages {
+		t := targets.Target{
+			Name:        s.Name,
+			Description: s.Comment,
+			Default:     i == len(stages)-1,
+			Base:        s.BaseName,
+			Platform:    s.Platform,
+			Location:    toSourceLocation(s.Location),
+		}
+		l.Targets = append(l.Targets, t)
+	}
+	return l, nil
+}
+
+func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchState, *binfotypes.BuildInfo, error) {
 	buildInfo := &binfotypes.BuildInfo{}
 	buildInfoDepsMu := sync.Mutex{}
 	contextByName := opt.ContextByName
-	opt.ContextByName = func(ctx context.Context, name, resolveMode string) (*llb.State, *Image, *binfotypes.BuildInfo, error) {
+	opt.ContextByName = func(ctx context.Context, name, resolveMode string, p *ocispecs.Platform) (*llb.State, *Image, *binfotypes.BuildInfo, error) {
 		if !strings.EqualFold(name, "scratch") && !strings.EqualFold(name, "context") {
 			if contextByName != nil {
-				st, img, bi, err := contextByName(ctx, name, resolveMode)
+				if p == nil {
+					p = opt.TargetPlatform
+				}
+				st, img, bi, err := contextByName(ctx, name, resolveMode, p)
 				if err != nil {
 					return nil, nil, nil, err
 				}
@@ -99,7 +154,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	}
 
 	if len(dt) == 0 {
-		return nil, nil, nil, errors.Errorf("the Dockerfile cannot be empty")
+		return nil, nil, errors.Errorf("the Dockerfile cannot be empty")
 	}
 
 	if opt.ContextLocalName == "" {
@@ -115,7 +170,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 
 	dockerfile, err := parser.Parse(bytes.NewReader(dt))
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	for _, w := range dockerfile.Warnings {
@@ -126,17 +181,27 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 
 	stages, metaArgs, err := instructions.Parse(dockerfile.AST)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	shlex := shell.NewLex(dockerfile.EscapeToken)
+	outline := newOutlineCapture()
 
 	for _, cmd := range metaArgs {
 		for _, metaArg := range cmd.Args {
-			if metaArg.Value != nil {
-				*metaArg.Value, _ = shlex.ProcessWordWithMap(*metaArg.Value, metaArgsToMap(optMetaArgs))
+			info := argInfo{definition: metaArg, location: cmd.Location()}
+			if v, ok := opt.BuildArgs[metaArg.Key]; !ok {
+				if metaArg.Value != nil {
+					*metaArg.Value, info.deps, _ = shlex.ProcessWordWithMatches(*metaArg.Value, metaArgsToMap(optMetaArgs))
+				}
+			} else {
+				metaArg.Value = &v
 			}
-			optMetaArgs = append(optMetaArgs, setKVValue(metaArg, opt.BuildArgs))
+			optMetaArgs = append(optMetaArgs, metaArg)
+			if metaArg.Value != nil {
+				info.value = *metaArg.Value
+			}
+			outline.allArgs[metaArg.Key] = info
 		}
 	}
 
@@ -149,12 +214,12 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 
 	// set base state for every image
 	for i, st := range stages {
-		name, err := shlex.ProcessWordWithMap(st.BaseName, metaArgsToMap(optMetaArgs))
+		name, used, err := shlex.ProcessWordWithMatches(st.BaseName, metaArgsToMap(optMetaArgs))
 		if err != nil {
-			return nil, nil, nil, parser.WithLocation(err, st.Location)
+			return nil, nil, parser.WithLocation(err, st.Location)
 		}
 		if name == "" {
-			return nil, nil, nil, parser.WithLocation(errors.Errorf("base name (%s) should not be blank", st.BaseName), st.Location)
+			return nil, nil, parser.WithLocation(errors.Errorf("base name (%s) should not be blank", st.BaseName), st.Location)
 		}
 		st.BaseName = name
 
@@ -164,18 +229,36 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			ctxPaths:       make(map[string]struct{}),
 			stageName:      st.Name,
 			prefixPlatform: opt.PrefixPlatform,
+			outline:        outline.clone(),
+			epoch:          opt.SourceDateEpoch,
+		}
+
+		if v := st.Platform; v != "" {
+			v, u, err := shlex.ProcessWordWithMatches(v, metaArgsToMap(optMetaArgs))
+			if err != nil {
+				return nil, nil, parser.WithLocation(errors.Wrapf(err, "failed to process arguments for platform %s", v), st.Location)
+			}
+
+			p, err := platforms.Parse(v)
+			if err != nil {
+				return nil, nil, parser.WithLocation(errors.Wrapf(err, "failed to parse platform %s", v), st.Location)
+			}
+			for k := range u {
+				used[k] = struct{}{}
+			}
+			ds.platform = &p
 		}
 
 		if st.Name != "" {
-			s, img, bi, err := opt.ContextByName(ctx, st.Name, opt.ImageResolveMode.String())
+			s, img, bi, err := opt.ContextByName(ctx, st.Name, opt.ImageResolveMode.String(), ds.platform)
 			if err != nil {
-				return nil, nil, nil, err
+				return nil, nil, err
 			}
 			if s != nil {
 				ds.noinit = true
 				ds.state = *s
 				if img != nil {
-					ds.image = *img
+					ds.image = clampTimes(*img, opt.SourceDateEpoch)
 					if img.Architecture != "" && img.OS != "" {
 						ds.platform = &ocispecs.Platform{
 							OS:           img.OS,
@@ -196,19 +279,11 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			ds.stageName = fmt.Sprintf("stage-%d", i)
 		}
 
-		if v := st.Platform; v != "" {
-			v, err := shlex.ProcessWordWithMap(v, metaArgsToMap(optMetaArgs))
-			if err != nil {
-				return nil, nil, nil, parser.WithLocation(errors.Wrapf(err, "failed to process arguments for platform %s", v), st.Location)
-			}
-
-			p, err := platforms.Parse(v)
-			if err != nil {
-				return nil, nil, nil, parser.WithLocation(errors.Wrapf(err, "failed to parse platform %s", v), st.Location)
-			}
-			ds.platform = &p
-		}
 		allDispatchStates.addState(ds)
+
+		for k := range used {
+			ds.outline.usedArgs[k] = struct{}{}
+		}
 
 		total := 0
 		if ds.stage.BaseName != emptyImageName && ds.base == nil {
@@ -244,7 +319,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		var ok bool
 		target, ok = allDispatchStates.findStateByName(opt.Target)
 		if !ok {
-			return nil, nil, nil, errors.Errorf("target stage %s could not be found", opt.Target)
+			return nil, nil, errors.Errorf("target stage %s could not be found", opt.Target)
 		}
 	}
 
@@ -254,7 +329,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		for i, cmd := range d.stage.Commands {
 			newCmd, err := toCommand(cmd, allDispatchStates)
 			if err != nil {
-				return nil, nil, nil, err
+				return nil, nil, err
 			}
 			d.commands[i] = newCmd
 			for _, src := range newCmd.sources {
@@ -269,7 +344,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	}
 
 	if has, state := hasCircularDependency(allDispatchStates.states); has {
-		return nil, nil, nil, errors.Errorf("circular dependency detected on stage: %s", state.stageName)
+		return nil, nil, errors.Errorf("circular dependency detected on stage: %s", state.stageName)
 	}
 
 	if len(allDispatchStates.states) == 1 {
@@ -312,7 +387,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 					d.stage.BaseName = reference.TagNameOnly(ref).String()
 
 					var isScratch bool
-					st, img, bi, err := opt.ContextByName(ctx, d.stage.BaseName, opt.ImageResolveMode.String())
+					st, img, bi, err := opt.ContextByName(ctx, d.stage.BaseName, opt.ImageResolveMode.String(), platform)
 					if err != nil {
 						return err
 					}
@@ -402,7 +477,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	}
 
 	if err := eg.Wait(); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	buildContext := &mutableOutput{}
@@ -451,12 +526,12 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		}
 		if d.image.Config.WorkingDir != "" {
 			if err = dispatchWorkdir(d, &instructions.WorkdirCommand{Path: d.image.Config.WorkingDir}, false, nil); err != nil {
-				return nil, nil, nil, parser.WithLocation(err, d.stage.Location)
+				return nil, nil, parser.WithLocation(err, d.stage.Location)
 			}
 		}
 		if d.image.Config.User != "" {
 			if err = dispatchUser(d, &instructions.UserCommand{User: d.image.Config.User}, false); err != nil {
-				return nil, nil, nil, parser.WithLocation(err, d.stage.Location)
+				return nil, nil, parser.WithLocation(err, d.stage.Location)
 			}
 		}
 		d.state = d.state.Network(opt.ForceNetMode)
@@ -481,13 +556,13 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		}
 
 		if err = dispatchOnBuildTriggers(d, d.image.Config.OnBuild, opt); err != nil {
-			return nil, nil, nil, parser.WithLocation(err, d.stage.Location)
+			return nil, nil, parser.WithLocation(err, d.stage.Location)
 		}
 		d.image.Config.OnBuild = nil
 
 		for _, cmd := range d.commands {
 			if err := dispatch(d, cmd, opt); err != nil {
-				return nil, nil, nil, parser.WithLocation(err, cmd.Location())
+				return nil, nil, parser.WithLocation(err, cmd.Location())
 			}
 		}
 
@@ -532,7 +607,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	if opt.LLBCaps != nil {
 		defaults = append(defaults, llb.WithCaps(*opt.LLBCaps))
 	}
-	st := target.state.SetMarshalDefaults(defaults...)
+	target.state = target.state.SetMarshalDefaults(defaults...)
 
 	if !platformOpt.implicitTarget {
 		target.image.OS = platformOpt.targetPlatform.OS
@@ -540,7 +615,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		target.image.Variant = platformOpt.targetPlatform.Variant
 	}
 
-	return &st, &target.image, buildInfo, nil
+	return target, buildInfo, nil
 }
 
 func metaArgsToMap(metaArgs []instructions.KeyValuePairOptional) map[string]string {
@@ -652,6 +727,8 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 			chown:        c.Chown,
 			chmod:        c.Chmod,
 			link:         c.Link,
+			keepGitDir:   c.KeepGitDir,
+			checksum:     c.Checksum,
 			location:     c.Location(),
 			opt:          opt,
 		})
@@ -729,6 +806,8 @@ type dispatchState struct {
 	cmdTotal       int
 	prefixPlatform bool
 	buildInfo      binfotypes.BuildInfo
+	outline        outlineCapture
+	epoch          *time.Time
 }
 
 type dispatchStates struct {
@@ -745,6 +824,7 @@ func (dss *dispatchStates) addState(ds *dispatchState) {
 
 	if d, ok := dss.statesByName[ds.stage.BaseName]; ok {
 		ds.base = d
+		ds.outline = d.outline.clone()
 	}
 	if ds.stage.Name != "" {
 		dss.statesByName[strings.ToLower(ds.stage.Name)] = ds
@@ -804,7 +884,7 @@ func dispatchEnv(d *dispatchState, c *instructions.EnvCommand) error {
 		d.state = d.state.AddEnv(e.Key, e.Value)
 		d.image.Config.Env = addEnv(d.image.Config.Env, e.Key, e.Value)
 	}
-	return commitToHistory(&d.image, commitMessage.String(), false, nil)
+	return commitToHistory(&d.image, commitMessage.String(), false, nil, d.epoch)
 }
 
 func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyEnv, sources []*dispatchState, dopt dispatchOpt) error {
@@ -934,7 +1014,7 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 	}
 
 	d.state = d.state.Run(opt...).Root()
-	return commitToHistory(&d.image, "RUN "+runCommandString(args, d.buildArgs, shell.BuildEnvs(env)), true, &d.state)
+	return commitToHistory(&d.image, "RUN "+runCommandString(args, d.buildArgs, shell.BuildEnvs(env)), true, &d.state, d.epoch)
 }
 
 func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bool, opt *dispatchOpt) error {
@@ -965,7 +1045,7 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bo
 			)
 			withLayer = true
 		}
-		return commitToHistory(&d.image, "WORKDIR "+wd, withLayer, nil)
+		return commitToHistory(&d.image, "WORKDIR "+wd, withLayer, nil, d.epoch)
 	}
 	return nil
 }
@@ -995,6 +1075,21 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		}
 	}
 
+	if cfg.checksum != "" {
+		if !cfg.isAddCommand {
+			return errors.New("checksum can't be specified for COPY")
+		}
+		if !addChecksumEnabled {
+			return errors.New("instruction 'ADD --checksum=<CHECKSUM>' requires the labs channel")
+		}
+		if len(cfg.params.SourcePaths) != 1 {
+			return errors.New("checksum can't be specified for multiple sources")
+		}
+		if !isHTTPSource(cfg.params.SourcePaths[0]) {
+			return errors.New("checksum can't be specified for non-HTTP sources")
+		}
+	}
+
 	commitMessage := bytes.NewBufferString("")
 	if cfg.isAddCommand {
 		commitMessage.WriteString("ADD")
@@ -1006,7 +1101,34 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 
 	for _, src := range cfg.params.SourcePaths {
 		commitMessage.WriteString(" " + src)
-		if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
+		gitRef, gitRefErr := gitutil.ParseGitRef(src)
+		if gitRefErr == nil && !gitRef.IndistinguishableFromLocal {
+			if !cfg.isAddCommand {
+				return errors.New("source can't be a git ref for COPY")
+			}
+			if !addGitEnabled {
+				return errors.New("instruction ADD <git ref> requires the labs channel")
+			}
+			// TODO: print a warning (not an error) if gitRef.UnencryptedTCP is true
+			commit := gitRef.Commit
+			if gitRef.SubDir != "" {
+				commit += ":" + gitRef.SubDir
+			}
+			var gitOptions []llb.GitOption
+			if cfg.keepGitDir {
+				gitOptions = append(gitOptions, llb.KeepGitDir())
+			}
+			st := llb.Git(gitRef.Remote, commit, gitOptions...)
+			opts := append([]llb.CopyOption{&llb.CopyInfo{
+				Mode:           mode,
+				CreateDestPath: true,
+			}}, copyOpt...)
+			if a == nil {
+				a = llb.Copy(st, "/", dest, opts...)
+			} else {
+				a = a.Copy(st, "/", dest, opts...)
+			}
+		} else if isHTTPSource(src) {
 			if !cfg.isAddCommand {
 				return errors.New("source can't be a URL for COPY")
 			}
@@ -1024,7 +1146,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 				}
 			}
 
-			st := llb.HTTP(src, llb.Filename(f), dfCmd(cfg.params))
+			st := llb.HTTP(src, llb.Filename(f), llb.Checksum(cfg.checksum), dfCmd(cfg.params))
 
 			opts := append([]llb.CopyOption{&llb.CopyInfo{
 				Mode:           mode,
@@ -1118,7 +1240,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		d.state = d.state.File(a, fileOpt...)
 	}
 
-	return commitToHistory(&d.image, commitMessage.String(), true, &d.state)
+	return commitToHistory(&d.image, commitMessage.String(), true, &d.state, d.epoch)
 }
 
 type copyConfig struct {
@@ -1129,13 +1251,15 @@ type copyConfig struct {
 	chown        string
 	chmod        string
 	link         bool
+	keepGitDir   bool
+	checksum     digest.Digest
 	location     []parser.Range
 	opt          dispatchOpt
 }
 
 func dispatchMaintainer(d *dispatchState, c *instructions.MaintainerCommand) error {
 	d.image.Author = c.Maintainer
-	return commitToHistory(&d.image, fmt.Sprintf("MAINTAINER %v", c.Maintainer), false, nil)
+	return commitToHistory(&d.image, fmt.Sprintf("MAINTAINER %v", c.Maintainer), false, nil, d.epoch)
 }
 
 func dispatchLabel(d *dispatchState, c *instructions.LabelCommand) error {
@@ -1147,7 +1271,7 @@ func dispatchLabel(d *dispatchState, c *instructions.LabelCommand) error {
 		d.image.Config.Labels[v.Key] = v.Value
 		commitMessage.WriteString(" " + v.String())
 	}
-	return commitToHistory(&d.image, commitMessage.String(), false, nil)
+	return commitToHistory(&d.image, commitMessage.String(), false, nil, d.epoch)
 }
 
 func dispatchOnbuild(d *dispatchState, c *instructions.OnbuildCommand) error {
@@ -1163,7 +1287,7 @@ func dispatchCmd(d *dispatchState, c *instructions.CmdCommand) error {
 	d.image.Config.Cmd = args
 	d.image.Config.ArgsEscaped = true
 	d.cmdSet = true
-	return commitToHistory(&d.image, fmt.Sprintf("CMD %q", args), false, nil)
+	return commitToHistory(&d.image, fmt.Sprintf("CMD %q", args), false, nil, d.epoch)
 }
 
 func dispatchEntrypoint(d *dispatchState, c *instructions.EntrypointCommand) error {
@@ -1175,18 +1299,18 @@ func dispatchEntrypoint(d *dispatchState, c *instructions.EntrypointCommand) err
 	if !d.cmdSet {
 		d.image.Config.Cmd = nil
 	}
-	return commitToHistory(&d.image, fmt.Sprintf("ENTRYPOINT %q", args), false, nil)
+	return commitToHistory(&d.image, fmt.Sprintf("ENTRYPOINT %q", args), false, nil, d.epoch)
 }
 
 func dispatchHealthcheck(d *dispatchState, c *instructions.HealthCheckCommand) error {
-	d.image.Config.Healthcheck = &HealthConfig{
+	d.image.Config.Healthcheck = &image.HealthConfig{
 		Test:        c.Health.Test,
 		Interval:    c.Health.Interval,
 		Timeout:     c.Health.Timeout,
 		StartPeriod: c.Health.StartPeriod,
 		Retries:     c.Health.Retries,
 	}
-	return commitToHistory(&d.image, fmt.Sprintf("HEALTHCHECK %q", d.image.Config.Healthcheck), false, nil)
+	return commitToHistory(&d.image, fmt.Sprintf("HEALTHCHECK %q", d.image.Config.Healthcheck), false, nil, d.epoch)
 }
 
 func dispatchExpose(d *dispatchState, c *instructions.ExposeCommand, shlex *shell.Lex) error {
@@ -1216,14 +1340,14 @@ func dispatchExpose(d *dispatchState, c *instructions.ExposeCommand, shlex *shel
 		d.image.Config.ExposedPorts[string(p)] = struct{}{}
 	}
 
-	return commitToHistory(&d.image, fmt.Sprintf("EXPOSE %v", ps), false, nil)
+	return commitToHistory(&d.image, fmt.Sprintf("EXPOSE %v", ps), false, nil, d.epoch)
 }
 
 func dispatchUser(d *dispatchState, c *instructions.UserCommand, commit bool) error {
 	d.state = d.state.User(c.User)
 	d.image.Config.User = c.User
 	if commit {
-		return commitToHistory(&d.image, fmt.Sprintf("USER %v", c.User), false, nil)
+		return commitToHistory(&d.image, fmt.Sprintf("USER %v", c.User), false, nil, d.epoch)
 	}
 	return nil
 }
@@ -1238,7 +1362,7 @@ func dispatchVolume(d *dispatchState, c *instructions.VolumeCommand) error {
 		}
 		d.image.Config.Volumes[v] = struct{}{}
 	}
-	return commitToHistory(&d.image, fmt.Sprintf("VOLUME %v", c.Volumes), false, nil)
+	return commitToHistory(&d.image, fmt.Sprintf("VOLUME %v", c.Volumes), false, nil, d.epoch)
 }
 
 func dispatchStopSignal(d *dispatchState, c *instructions.StopSignalCommand) error {
@@ -1246,12 +1370,12 @@ func dispatchStopSignal(d *dispatchState, c *instructions.StopSignalCommand) err
 		return err
 	}
 	d.image.Config.StopSignal = c.Signal
-	return commitToHistory(&d.image, fmt.Sprintf("STOPSIGNAL %v", c.Signal), false, nil)
+	return commitToHistory(&d.image, fmt.Sprintf("STOPSIGNAL %v", c.Signal), false, nil, d.epoch)
 }
 
 func dispatchShell(d *dispatchState, c *instructions.ShellCommand) error {
 	d.image.Config.Shell = c.Shell
-	return commitToHistory(&d.image, fmt.Sprintf("SHELL %v", c.Shell), false, nil)
+	return commitToHistory(&d.image, fmt.Sprintf("SHELL %v", c.Shell), false, nil, d.epoch)
 }
 
 func dispatchArg(d *dispatchState, c *instructions.ArgCommand, metaArgs []instructions.KeyValuePairOptional, buildArgValues map[string]string) error {
@@ -1264,21 +1388,32 @@ func dispatchArg(d *dispatchState, c *instructions.ArgCommand, metaArgs []instru
 			commitStr += "=" + *arg.Value
 		}
 		commitStrs = append(commitStrs, commitStr)
+
+		skipArgInfo := false // skip the arg info if the arg is inherited from global scope
 		if buildArg.Value == nil {
 			for _, ma := range metaArgs {
 				if ma.Key == buildArg.Key {
 					buildArg.Value = ma.Value
+					skipArgInfo = true
 				}
 			}
 		}
 
+		ai := argInfo{definition: arg, location: c.Location()}
+
 		if buildArg.Value != nil {
 			d.state = d.state.AddEnv(buildArg.Key, *buildArg.Value)
+			ai.value = *buildArg.Value
 		}
+
+		if !skipArgInfo {
+			d.outline.allArgs[arg.Key] = ai
+		}
+		d.outline.usedArgs[arg.Key] = struct{}{}
 
 		d.buildArgs = append(d.buildArgs, buildArg)
 	}
-	return commitToHistory(&d.image, "ARG "+strings.Join(commitStrs, " "), false, nil)
+	return commitToHistory(&d.image, "ARG "+strings.Join(commitStrs, " "), false, nil, d.epoch)
 }
 
 func pathRelativeToWorkingDir(s llb.State, p string) (string, error) {
@@ -1355,7 +1490,7 @@ func runCommandString(args []string, buildArgs []instructions.KeyValuePairOption
 	return strings.Join(append(tmpBuildEnv, args...), " ")
 }
 
-func commitToHistory(img *Image, msg string, withLayer bool, st *llb.State) error {
+func commitToHistory(img *Image, msg string, withLayer bool, st *llb.State, tm *time.Time) error {
 	if st != nil {
 		msg += " # buildkit"
 	}
@@ -1364,6 +1499,7 @@ func commitToHistory(img *Image, msg string, withLayer bool, st *llb.State) erro
 		CreatedBy:  msg,
 		Comment:    historyComment,
 		EmptyLayer: !withLayer,
+		Created:    tm,
 	})
 	return nil
 }
@@ -1618,4 +1754,23 @@ func commonImageNames() []string {
 		out = append(out, name, "docker.io/library"+name, name+":latest", "docker.io/library"+name+":latest")
 	}
 	return out
+}
+
+func clampTimes(img Image, tm *time.Time) Image {
+	if tm == nil {
+		return img
+	}
+	for i, h := range img.History {
+		if h.Created == nil || h.Created.After(*tm) {
+			img.History[i].Created = tm
+		}
+	}
+	if img.Created != nil && img.Created.After(*tm) {
+		img.Created = tm
+	}
+	return img
+}
+
+func isHTTPSource(src string) bool {
+	return strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://")
 }

@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func RunCacheStorageTests(t *testing.T, st func() (solver.CacheKeyStorage, func())) {
+func RunCacheStorageTests(t *testing.T, st func() solver.CacheKeyStorage) {
 	for _, tc := range []func(*testing.T, solver.CacheKeyStorage){
 		testResults,
 		testLinks,
@@ -27,11 +27,9 @@ func RunCacheStorageTests(t *testing.T, st func() (solver.CacheKeyStorage, func(
 	}
 }
 
-func runStorageTest(t *testing.T, fn func(t *testing.T, st solver.CacheKeyStorage), st func() (solver.CacheKeyStorage, func())) {
+func runStorageTest(t *testing.T, fn func(t *testing.T, st solver.CacheKeyStorage), st func() solver.CacheKeyStorage) {
 	require.True(t, t.Run(getFunctionName(fn), func(t *testing.T) {
-		s, cleanup := st()
-		defer cleanup()
-		fn(t, s)
+		fn(t, st())
 	}))
 }
 

@@ -1,15 +1,12 @@
 package debug
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
 	"strings"
 	"text/tabwriter"
-	"text/template"
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/client"
@@ -54,7 +51,7 @@ func listWorkers(clicontext *cli.Context) error {
 		if clicontext.Bool("verbose") {
 			logrus.Debug("Ignoring --verbose")
 		}
-		tmpl, err := parseTemplate(format)
+		tmpl, err := bccommon.ParseTemplate(format)
 		if err != nil {
 			return err
 		}
@@ -136,26 +133,4 @@ func joinPlatforms(p []ocispecs.Platform) string {
 		str = append(str, platforms.Format(platforms.Normalize(pp)))
 	}
 	return strings.Join(str, ",")
-}
-
-func parseTemplate(format string) (*template.Template, error) {
-	// aliases is from https://github.com/containerd/nerdctl/blob/v0.17.1/cmd/nerdctl/fmtutil.go#L116-L126 (Apache License 2.0)
-	aliases := map[string]string{
-		"json": "{{json .}}",
-	}
-	if alias, ok := aliases[format]; ok {
-		format = alias
-	}
-	// funcs is from https://github.com/docker/cli/blob/v20.10.12/templates/templates.go#L12-L20 (Apache License 2.0)
-	funcs := template.FuncMap{
-		"json": func(v interface{}) string {
-			buf := &bytes.Buffer{}
-			enc := json.NewEncoder(buf)
-			enc.SetEscapeHTML(false)
-			enc.Encode(v)
-			// Remove the trailing new line added by the encoder
-			return strings.TrimSpace(buf.String())
-		},
-	}
-	return template.New("").Funcs(funcs).Parse(format)
 }

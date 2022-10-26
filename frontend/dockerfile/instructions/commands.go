@@ -6,6 +6,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/strslice"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
 
@@ -157,7 +158,6 @@ func NewLabelCommand(k string, v string, NoExp bool) *LabelCommand {
 // LabelCommand : LABEL some json data describing the image
 //
 // Sets the Label variable foo to bar,
-//
 type LabelCommand struct {
 	withNameAndCode
 	Labels   KeyValuePairs // kvp slice instead of map to preserve ordering
@@ -220,13 +220,14 @@ func (s *SourcesAndDest) ExpandRaw(expander SingleWordExpander) error {
 //
 // Add the file 'foo' to '/path'. Tarball and Remote URL (http, https) handling
 // exist here. If you do not wish to have this automatic handling, use COPY.
-//
 type AddCommand struct {
 	withNameAndCode
 	SourcesAndDest
-	Chown string
-	Chmod string
-	Link  bool
+	Chown      string
+	Chmod      string
+	Link       bool
+	KeepGitDir bool // whether to keep .git dir, only meaningful for git sources
+	Checksum   digest.Digest
 }
 
 // Expand variables
@@ -243,7 +244,6 @@ func (c *AddCommand) Expand(expander SingleWordExpander) error {
 // CopyCommand : COPY foo /path
 //
 // Same as 'ADD' but without the tar and remote url handling.
-//
 type CopyCommand struct {
 	withNameAndCode
 	SourcesAndDest
@@ -273,7 +273,6 @@ type OnbuildCommand struct {
 // WorkdirCommand : WORKDIR /tmp
 //
 // Set the working directory for future RUN/CMD/etc statements.
-//
 type WorkdirCommand struct {
 	withNameAndCode
 	Path string
@@ -312,7 +311,6 @@ type ShellDependantCmdLine struct {
 // RUN echo hi          # sh -c echo hi       (Linux)
 // RUN echo hi          # cmd /S /C echo hi   (Windows)
 // RUN [ "echo", "hi" ] # echo hi
-//
 type RunCommand struct {
 	withNameAndCode
 	withExternalData
@@ -331,7 +329,6 @@ func (c *RunCommand) Expand(expander SingleWordExpander) error {
 //
 // Set the default command to run in the container (which may be empty).
 // Argument handling is the same as RUN.
-//
 type CmdCommand struct {
 	withNameAndCode
 	ShellDependantCmdLine
@@ -341,7 +338,6 @@ type CmdCommand struct {
 //
 // Set the default healthcheck command to run in the container (which may be empty).
 // Argument handling is the same as RUN.
-//
 type HealthCheckCommand struct {
 	withNameAndCode
 	Health *container.HealthConfig
@@ -354,7 +350,6 @@ type HealthCheckCommand struct {
 //
 // Handles command processing similar to CMD and RUN, only req.runConfig.Entrypoint
 // is initialized at newBuilder time instead of through argument parsing.
-//
 type EntrypointCommand struct {
 	withNameAndCode
 	ShellDependantCmdLine
@@ -364,7 +359,6 @@ type EntrypointCommand struct {
 //
 // Expose ports for links and port mappings. This all ends up in
 // req.runConfig.ExposedPorts for runconfig.
-//
 type ExposeCommand struct {
 	withNameAndCode
 	Ports []string
@@ -374,7 +368,6 @@ type ExposeCommand struct {
 //
 // Set the user to 'foo' for future commands and when running the
 // ENTRYPOINT/CMD at container run time.
-//
 type UserCommand struct {
 	withNameAndCode
 	User string
@@ -393,7 +386,6 @@ func (c *UserCommand) Expand(expander SingleWordExpander) error {
 // VolumeCommand : VOLUME /foo
 //
 // Expose the volume /foo for use. Will also accept the JSON array form.
-//
 type VolumeCommand struct {
 	withNameAndCode
 	Volumes []string

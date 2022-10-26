@@ -17,13 +17,11 @@ import (
 func TestFileSyncIncludePatterns(t *testing.T) {
 	ctx := context.TODO()
 	t.Parallel()
-	tmpDir, err := os.MkdirTemp("", "fsynctest")
-	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "fsynctest")
-	require.NoError(t, err)
+	tmpDir := t.TempDir()
+	destDir := t.TempDir()
 
-	err = os.WriteFile(filepath.Join(tmpDir, "foo"), []byte("content1"), 0600)
+	err := os.WriteFile(filepath.Join(tmpDir, "foo"), []byte("content1"), 0600)
 	require.NoError(t, err)
 
 	err = os.WriteFile(filepath.Join(tmpDir, "bar"), []byte("content2"), 0600)

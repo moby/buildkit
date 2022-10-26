@@ -24,6 +24,7 @@ import (
 	"github.com/gofrs/flock"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/moby/buildkit/cache/remotecache"
+	"github.com/moby/buildkit/cache/remotecache/azblob"
 	"github.com/moby/buildkit/cache/remotecache/gha"
 	inlineremotecache "github.com/moby/buildkit/cache/remotecache/inline"
 	localremotecache "github.com/moby/buildkit/cache/remotecache/local"
@@ -273,6 +274,7 @@ func main() {
 		if err != nil {
 			return err
 		}
+		defer controller.Close()
 
 		controller.Register(server)
 
@@ -713,12 +715,14 @@ func newController(c *cli.Context, cfg *config.Config, shutdownCh chan struct{})
 		"inline":   inlineremotecache.ResolveCacheExporterFunc(),
 		"gha":      gha.ResolveCacheExporterFunc(),
 		"s3":       s3remotecache.ResolveCacheExporterFunc(),
+		"azblob":   azblob.ResolveCacheExporterFunc(),
 	}
 	remoteCacheImporterFuncs := map[string]remotecache.ResolveCacheImporterFunc{
 		"registry": registryremotecache.ResolveCacheImporterFunc(sessionManager, w.ContentStore(), resolverFn),
 		"local":    localremotecache.ResolveCacheImporterFunc(sessionManager),
 		"gha":      gha.ResolveCacheImporterFunc(),
 		"s3":       s3remotecache.ResolveCacheImporterFunc(),
+		"azblob":   azblob.ResolveCacheImporterFunc(),
 	}
 	return control.NewController(control.Opt{
 		SessionManager:            sessionManager,

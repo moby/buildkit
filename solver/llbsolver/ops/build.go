@@ -130,9 +130,12 @@ func (b *buildOp) Exec(ctx context.Context, g session.Group, inputs []solver.Res
 		return nil, err
 	}
 
-	for _, r := range newRes.Refs {
-		r.Release(context.TODO())
-	}
+	newRes.EachRef(func(ref solver.ResultProxy) error {
+		if ref == newRes.Ref {
+			return nil
+		}
+		return ref.Release(context.TODO())
+	})
 
 	r, err := newRes.Ref.Result(ctx)
 	if err != nil {

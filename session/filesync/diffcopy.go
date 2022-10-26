@@ -111,7 +111,9 @@ func syncTargetDiffCopy(ds grpc.ServerStream, dest string, verboseProgressCB fsu
 			return func(p string, st *fstypes.Stat) bool {
 				st.Uid = uint32(uid)
 				st.Gid = uint32(gid)
-				st.ModTime = modTime
+				if st.ModTime == 0 {
+					st.ModTime = modTime
+				}
 				return true
 			}
 		}(),

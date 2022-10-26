@@ -7,17 +7,21 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/docker/distribution/reference"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	apitypes "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/client"
 	controlgateway "github.com/moby/buildkit/control/gateway"
 	"github.com/moby/buildkit/exporter"
+	"github.com/moby/buildkit/exporter/util/epoch"
 	"github.com/moby/buildkit/frontend"
+	"github.com/moby/buildkit/frontend/attestations"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/grpchijack"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver"
+	"github.com/moby/buildkit/solver/llbsolver/proc"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/imageutil"
@@ -89,6 +93,10 @@ func NewController(opt Opt) (*Controller, error) {
 	}()
 
 	return c, nil
+}
+
+func (c *Controller) Close() error {
+	return c.opt.WorkerController.Close()
 }
 
 func (c *Controller) Register(server *grpc.Server) {
@@ -264,6 +272,17 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	if err != nil {
 		return nil, err
 	}
+
+	// if SOURCE_DATE_EPOCH is set, enable it for the exporter
+	if epochVal, ok := req.FrontendAttrs["build-arg:SOURCE_DATE_EPOCH"]; ok {
+		if _, ok := req.ExporterAttrs[epoch.KeySourceDateEpoch]; !ok {
+			if req.ExporterAttrs == nil {
+				req.ExporterAttrs = make(map[string]string)
+			}
+			req.ExporterAttrs[epoch.KeySourceDateEpoch] = epochVal
+		}
+	}
+
 	if req.Exporter != "" {
 		exp, err := w.Exporter(req.Exporter, c.opt.SessionManager)
 		if err != nil {
@@ -293,7 +312,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		}
 		cacheExporter, err = cacheExporterFunc(ctx, session.NewGroup(req.Session), e.Attrs)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "failed to configure %v cache exporter", e.Type)
 		}
 		if exportMode, supported := parseCacheExportMode(e.Attrs["mode"]); !supported {
 			bklog.G(ctx).Debugf("skipping invalid cache export mode: %s", e.Attrs["mode"])
@@ -308,6 +327,25 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		})
 	}
 
+	attests, err := attestations.Parse(req.FrontendAttrs)
+	if err != nil {
+		return nil, err
+	}
+
+	var procs []llbsolver.Processor
+	if attrs, ok := attests["sbom"]; ok {
+		src := attrs["generator"]
+		if src == "" {
+			return nil, errors.Errorf("sbom generator cannot be empty")
+		}
+		ref, err := reference.ParseNormalizedNamed(src)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to parse sbom generator %s", src)
+		}
+		ref = reference.TagNameOnly(ref)
+		procs = append(procs, proc.ForceRefsProcessor, proc.SBOMProcessor(ref.String()))
+	}
+
 	resp, err := c.solver.Solve(ctx, req.Ref, req.Session, frontend.SolveRequest{
 		Frontend:       req.Frontend,
 		Definition:     req.Definition,
@@ -318,7 +356,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		Exporter:        expi,
 		CacheExporter:   cacheExporter,
 		CacheExportMode: cacheExportMode,
-	}, req.Entitlements)
+	}, req.Entitlements, procs)
 	if err != nil {
 		return nil, err
 	}

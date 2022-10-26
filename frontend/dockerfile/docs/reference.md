@@ -1,10 +1,4 @@
----
-title: Dockerfile reference
-description: "Dockerfiles use a simple DSL which allows you to automate the steps you would normally manually take to create an image."
-keywords: "build, dockerfile, reference"
-redirect_from:
-- /reference/builder/
----
+# Dockerfile reference
 
 Docker can build images automatically by reading the instructions from a
 `Dockerfile`. A `Dockerfile` is a text document that contains all the commands a
@@ -130,7 +124,6 @@ section in the `docker build` command reference.
 When you're done with your build, you're ready to look into [scanning your image with `docker scan`](https://docs.docker.com/engine/scan/),
 and [pushing your image to Docker Hub](https://docs.docker.com/docker-hub/repos/).
 
-
 ## BuildKit
 
 Starting with version 18.09, Docker supports a new backend for executing your
@@ -147,10 +140,21 @@ implementation. For example, BuildKit can:
 - Prioritize your build cache for automatic pruning
 
 To use the BuildKit backend, you need to set an environment variable
-`DOCKER_BUILDKIT=1` on the CLI before invoking `docker build`.
+`DOCKER_BUILDKIT=1` on the CLI before invoking `docker build`. [Docker Buildx](https://github.com/docker/buildx)
+always enables BuildKit.
 
-To learn about the Dockerfile syntax available to BuildKit-based
-builds [refer to the documentation in the BuildKit repository](https://github.com/moby/buildkit/blob/master/frontend/dockerfile/docs/syntax.md).
+### External Dockerfile frontend
+
+BuildKit supports loading frontends dynamically from container images. To use
+an external Dockerfile frontend, the first line of your Dockerfile needs to be
+`# syntax=docker/dockerfile:1` pointing to the specific image you want to use.
+
+BuildKit also ships with Dockerfile frontend builtin but it is recommended to
+use an external image to make sure that all users use the same version on the
+builder and to pick up bugfixes automatically without waiting for a new version
+of BuildKit or Docker engine.
+
+See the [`syntax` directive section](#syntax) for more information.
 
 ## Format
 
@@ -818,6 +822,253 @@ The cache for `RUN` instructions can be invalidated by [`ADD`](#add) and [`COPY`
 
   If your system doesn't have support for `dirperm1`, the issue describes a workaround.
 
+## RUN --mount
+
+> **Note**
+>
+> Added in [`docker/dockerfile:1.2`](#syntax)
+
+`RUN --mount` allows you to create mounts that process running as part of the
+build can access. This can be used to bind files from other part of the build
+without copying, accessing build secrets or ssh-agent sockets, or creating cache
+locations to speed up your build.
+
+Syntax: `--mount=[type=<TYPE>][,option=<value>[,option=<value>]...]`
+
+### Mount types
+
+| Type                                     | Description                                                                                               |
+|------------------------------------------|-----------------------------------------------------------------------------------------------------------|
+| [`bind`](#run---mounttypebind) (default) | Bind-mount context directories (read-only).                                                               |
+| [`cache`](#run---mounttypecache)         | Mount a temporary directory to cache directories for compilers and package managers.                  |
+| [`secret`](#run---mounttypesecret)       | Allow the build container to access secure files such as private keys without baking them into the image. |
+| [`ssh`](#run---mounttypessh)             | Allow the build container to access SSH keys via SSH agents, with support for passphrases.                |
+
+### RUN --mount=type=bind
+
+This mount type allows binding directories (read-only) in the context or in an
+image to the build container.
+
+| Option               | Description                                                                          |
+|----------------------|--------------------------------------------------------------------------------------|
+| `target`[^1]         | Mount path.                                                                          |
+| `source`             | Source path in the `from`. Defaults to the root of the `from`.                       |
+| `from`               | Build stage or image name for the root of the source. Defaults to the build context. |
+| `rw`,`readwrite`     | Allow writes on the mount. Written data will be discarded.                           |
+
+### RUN --mount=type=cache
+
+This mount type allows the build container to cache directories for compilers
+and package managers.
+
+| Option              | Description                                                                                                                                                                                                                                                                |
+|---------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `id`                | Optional ID to identify separate/different caches. Defaults to value of `target`.                                                                                                                                                                                          |
+| `target`[^1]        | Mount path.                                                                                                                                                                                                                                                                |
+| `ro`,`readonly`     | Read-only if set.                                                                                                                                                                                                                                                          |
+| `sharing`           | One of `shared`, `private`, or `locked`. Defaults to `shared`. A `shared` cache mount can be used concurrently by multiple writers. `private` creates a new mount if there are multiple writers. `locked` pauses the second writer until the first one releases the mount. |
+| `from`              | Build stage to use as a base of the cache mount. Defaults to empty directory.                                                                                                                                                                                              |
+| `source`            | Subpath in the `from` to mount. Defaults to the root of the `from`.                                                                                                                                                                                                        |
+| `mode`              | File mode for new cache directory in octal. Default `0755`.                                                                                                                                                                                                                |
+| `uid`               | User ID for new cache directory. Default `0`.                                                                                                                                                                                                                              |
+| `gid`               | Group ID for new cache directory. Default `0`.                                                                                                                                                                                                                             |
+
+Contents of the cache directories persists between builder invocations without
+invalidating the instruction cache. Cache mounts should only be used for better
+performance. Your build should work with any contents of the cache directory as
+another build may overwrite the files or GC may clean it if more storage space
+is needed.
+
+#### Example: cache Go packages
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM golang
+RUN --mount=type=cache,target=/root/.cache/go-build \
+  go build ...
+```
+
+#### Example: cache apt packages
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM ubuntu
+RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+  --mount=type=cache,target=/var/lib/apt,sharing=locked \
+  apt update && apt-get --no-install-recommends install -y gcc
+```
+
+Apt needs exclusive access to its data, so the caches use the option
+`sharing=locked`, which will make sure multiple parallel builds using
+the same cache mount will wait for each other and not access the same
+cache files at the same time. You could also use `sharing=private` if
+you prefer to have each build create another cache directory in this
+case.
+
+### RUN --mount=type=tmpfs
+
+This mount type allows mounting tmpfs in the build container.
+
+| Option              | Description                                           |
+|---------------------|-------------------------------------------------------|
+| `target`[^1]        | Mount path.                                           |
+| `size`              | Specify an upper limit on the size of the filesystem. |
+
+### RUN --mount=type=secret
+
+This mount type allows the build container to access secure files such as
+private keys without baking them into the image.
+
+| Option              | Description                                                                                       |
+|---------------------|---------------------------------------------------------------------------------------------------|
+| `id`                | ID of the secret. Defaults to basename of the target path.                                        |
+| `target`            | Mount path. Defaults to `/run/secrets/` + `id`.                                                   |
+| `required`          | If set to `true`, the instruction errors out when the secret is unavailable. Defaults to `false`. |
+| `mode`              | File mode for secret file in octal. Default `0400`.                                               |
+| `uid`               | User ID for secret file. Default `0`.                                                             |
+| `gid`               | Group ID for secret file. Default `0`.                                                            |
+
+#### Example: access to S3
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM python:3
+RUN pip install awscli
+RUN --mount=type=secret,id=aws,target=/root/.aws/credentials \
+  aws s3 cp s3://... ...
+```
+
+```console
+$ docker buildx build --secret id=aws,src=$HOME/.aws/credentials .
+```
+
+### RUN --mount=type=ssh
+
+This mount type allows the build container to access SSH keys via SSH agents,
+with support for passphrases.
+
+| Option              | Description                                                                                    |
+|---------------------|------------------------------------------------------------------------------------------------|
+| `id`                | ID of SSH agent socket or key. Defaults to "default".                                          |
+| `target`            | SSH agent socket path. Defaults to `/run/buildkit/ssh_agent.${N}`.                             |
+| `required`          | If set to `true`, the instruction errors out when the key is unavailable. Defaults to `false`. |
+| `mode`              | File mode for socket in octal. Default `0600`.                                                 |
+| `uid`               | User ID for socket. Default `0`.                                                               |
+| `gid`               | Group ID for socket. Default `0`.                                                              |
+
+#### Example: access to Gitlab
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM alpine
+RUN apk add --no-cache openssh-client
+RUN mkdir -p -m 0700 ~/.ssh && ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
+RUN --mount=type=ssh \
+  ssh -q -T git@gitlab.com 2>&1 | tee /hello
+# "Welcome to GitLab, @GITLAB_USERNAME_ASSOCIATED_WITH_SSHKEY" should be printed here
+# with the type of build progress is defined as `plain`.
+```
+
+```console
+$ eval $(ssh-agent)
+$ ssh-add ~/.ssh/id_rsa
+(Input your passphrase here)
+$ docker buildx build --ssh default=$SSH_AUTH_SOCK .
+```
+
+You can also specify a path to `*.pem` file on the host directly instead of `$SSH_AUTH_SOCK`.
+However, pem files with passphrases are not supported.
+
+## RUN --network
+
+> **Note**
+>
+> Added in [`docker/dockerfile:1.1`](#syntax)
+
+`RUN --network` allows control over which networking environment the command
+is run in.
+
+Syntax: `--network=<TYPE>`
+
+### Network types
+
+| Type                                         | Description                            |
+|----------------------------------------------|----------------------------------------|
+| [`default`](#run---networkdefault) (default) | Run in the default network.            |
+| [`none`](#run---networknone)                 | Run with no network access.            |
+| [`host`](#run---networkhost)                 | Run in the host's network environment. |
+
+### RUN --network=default
+
+Equivalent to not supplying a flag at all, the command is run in the default
+network for the build.
+
+### RUN --network=none
+
+The command is run with no network access (`lo` is still available, but is
+isolated to this process)
+
+#### Example: isolating external effects
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM python:3.6
+ADD mypackage.tgz wheels/
+RUN --network=none pip install --find-links wheels mypackage
+```
+
+`pip` will only be able to install the packages provided in the tarfile, which
+can be controlled by an earlier build stage.
+
+### RUN --network=host
+
+The command is run in the host's network environment (similar to
+`docker build --network=host`, but on a per-instruction basis)
+
+> **Warning**
+>
+> The use of `--network=host` is protected by the `network.host` entitlement, 
+> which needs to be enabled when starting the buildkitd daemon with
+> `--allow-insecure-entitlement network.host` flag or in [buildkitd config](https://github.com/moby/buildkit/blob/master/docs/buildkitd.toml.md),
+> and for a build request with [`--allow network.host` flag](https://docs.docker.com/engine/reference/commandline/buildx_build/#allow).
+{:.warning}
+
+## RUN --security
+
+> **Note**
+>
+> Not yet available in stable syntax, use [`docker/dockerfile:1-labs`](#syntax) version.
+
+### RUN --security=insecure
+
+With `--security=insecure`, builder runs the command without sandbox in insecure
+mode, which allows to run flows requiring elevated privileges (e.g. containerd).
+This is equivalent to running `docker run --privileged`.
+
+> **Warning**
+>
+> In order to access this feature, entitlement `security.insecure` should be
+> enabled when starting the buildkitd daemon with
+> `--allow-insecure-entitlement security.insecure` flag or in [buildkitd config](https://github.com/moby/buildkit/blob/master/docs/buildkitd.toml.md),
+> and for a build request with [`--allow security.insecure` flag](https://docs.docker.com/engine/reference/commandline/buildx_build/#allow).
+{:.warning}
+
+#### Example: check entitlements
+
+```dockerfile
+# syntax=docker/dockerfile:1-labs
+FROM ubuntu
+RUN --security=insecure cat /proc/self/status | grep CapEff
+```
+```text
+#84 0.093 CapEff:	0000003fffffffff
+```
+
+### RUN --security=sandbox
+
+Default sandbox mode can be activated via `--security=sandbox`, but that is no-op.
+
 ## CMD
 
 The `CMD` instruction has three forms:
@@ -1085,7 +1336,7 @@ RUN apt-get update && apt-get install -y ...
 ADD has two forms:
 
 ```dockerfile
-ADD [--chown=<user>:<group>] <src>... <dest>
+ADD [--chown=<user>:<group>] [--checksum=<checksum>] <src>... <dest>
 ADD [--chown=<user>:<group>] ["<src>",... "<dest>"]
 ```
 
@@ -1195,7 +1446,7 @@ does not support authentication.
 > following instructions from the Dockerfile if the contents of `<src>` have
 > changed. This includes invalidating the cache for `RUN` instructions.
 > See the [`Dockerfile` Best Practices
-guide – Leverage build cache](https://docs.docker.com/develop/develop-images/dockerfile_best-practices/#leverage-build-cache)
+guide – Leverage build cache](https://docs.docker.com/develop/develop-images/dockerfile_best-practices/#leverage-build-cache)
 > for more information.
 
 
@@ -1255,6 +1506,62 @@ guide – Leverage build cache](https://docs.docker.com/develop/develop-images/
 
 - If `<dest>` doesn't exist, it is created along with all missing directories
   in its path.
+
+### Verifying a remote file checksum `ADD --checksum=<checksum> <http src> <dest>`
+> **Note**
+>
+> Available in [`docker/dockerfile-upstream:master-labs`](#syntax).
+> Will be included in `docker/dockerfile:1.5-labs`.
+
+The checksum of a remote file can be verified with the `--checksum` flag:
+
+```dockerfile
+ADD --checksum=sha256:24454f830cdb571e2c4ad15481119c43b3cafd48dd869a9b2945d1036d1dc68d https://mirrors.edge.kernel.org/pub/linux/kernel/Historic/linux-0.01.tar.gz /
+```
+
+The `--checksum` flag only supports HTTP sources currently.
+
+### Adding a git repository `ADD <git ref> <dir>`
+
+> **Note**
+>
+> Available in [`docker/dockerfile-upstream:master-labs`](#syntax).
+> Will be included in `docker/dockerfile:1.5-labs`.
+
+This form allows adding a git repository to an image directly, without using the `git` command inside the image:
+```
+ADD [--keep-git-dir=<boolean>] <git ref> <dir>
+```
+
+```dockerfile
+# syntax=docker/dockerfile-upstream:master-labs
+FROM alpine
+ADD --keep-git-dir=true https://github.com/moby/buildkit.git#v0.10.1 /buildkit
+```
+
+The `--keep-git-dir=true` flag adds the `.git` directory. This flag defaults to false.
+
+### Adding a private git repository
+To add a private repo via SSH, create a Dockerfile with the following form:
+```dockerfile
+# syntax = docker/dockerfile-upstream:master-labs
+FROM alpine
+ADD git@git.example.com:foo/bar.git /bar
+```
+
+This Dockerfile can be built with `docker build --ssh` or `buildctl build --ssh`, e.g.,
+
+```console
+$ docker build --ssh default
+```
+
+```console
+$ buildctl build --frontend=dockerfile.v0 --local context=. --local dockerfile=. --ssh default
+```
+
+## ADD --link
+
+See [`COPY --link`](#copy---link).
 
 ## COPY
 
@@ -1390,8 +1697,77 @@ attempted to be used instead.
 > following instructions from the Dockerfile if the contents of `<src>` have
 > changed. This includes invalidating the cache for `RUN` instructions.
 > See the [`Dockerfile` Best Practices
-guide – Leverage build cache](https://docs.docker.com/develop/develop-images/dockerfile_best-practices/#leverage-build-cache)
+guide – Leverage build cache](https://docs.docker.com/develop/develop-images/dockerfile_best-practices/#leverage-build-cache)
 > for more information.
+
+## COPY --link
+
+> **Note**
+>
+> Added in [`docker/dockerfile:1.4`](#syntax)
+
+Enabling this flag in `COPY` or `ADD` commands allows you to copy files with
+enhanced semantics where your files remain independent on their own layer and
+don't get invalidated when commands on previous layers are changed.
+
+When `--link` is used your source files are copied into an empty destination
+directory. That directory is turned into a layer that is linked on top of your
+previous state.
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM alpine
+COPY --link /foo /bar
+```
+
+Is equivalent of doing two builds:
+
+```dockerfile
+FROM alpine
+```
+
+and
+
+```dockerfile
+FROM scratch
+COPY /foo /bar
+```
+
+and merging all the layers of both images together.
+
+### Benefits of using `--link`
+
+Use `--link` to reuse already built layers in subsequent builds with
+`--cache-from` even if the previous layers have changed. This is especially
+important for multi-stage builds where a `COPY --from` statement would
+previously get invalidated if any previous commands in the same stage changed,
+causing the need to rebuild the intermediate stages again. With `--link` the
+layer the previous build generated is reused and merged on top of the new
+layers. This also means you can easily rebase your images when the base images
+receive updates, without having to execute the whole build again. In backends
+that support it, BuildKit can do this rebase action without the need to push or
+pull any layers between the client and the registry. BuildKit will detect this
+case and only create new image manifest that contains the new layers and old
+layers in correct order.
+
+The same behavior where BuildKit can avoid pulling down the base image can also
+happen when using `--link` and no other commands that would require access to
+the files in the base image. In that case BuildKit will only build the layers
+for the `COPY` commands and push them to the registry directly on top of the
+layers of the base image.
+
+### Incompatibilities with `--link=false`
+
+When using `--link` the `COPY/ADD` commands are not allowed to read any files
+from the previous state. This means that if in previous state the destination
+directory was a path that contained a symlink, `COPY/ADD` can not follow it.
+In the final image the destination path created with `--link` will always be a
+path containing only directories.
+
+If you don't rely on the behavior of following symlinks in the destination
+path, using `--link` is always recommended. The performance of `--link` is
+equivalent or better than the default behavior and, it creates much better
+conditions for cache reuse.
 
 ## ENTRYPOINT
 
@@ -1682,7 +2058,6 @@ The table below shows what command is executed for different `ENTRYPOINT` / `CMD
 |:-------------------------------|:---------------------------|:-------------------------------|:-----------------------------------------------|
 | **No CMD**                     | *error, not allowed*       | /bin/sh -c exec_entry p1_entry | exec_entry p1_entry                            |
 | **CMD ["exec_cmd", "p1_cmd"]** | exec_cmd p1_cmd            | /bin/sh -c exec_entry p1_entry | exec_entry p1_entry exec_cmd p1_cmd            |
-| **CMD ["p1_cmd", "p2_cmd"]**   | p1_cmd p2_cmd              | /bin/sh -c exec_entry p1_entry | exec_entry p1_entry p1_cmd p2_cmd              |
 | **CMD exec_cmd p1_cmd**        | /bin/sh -c exec_cmd p1_cmd | /bin/sh -c exec_entry p1_entry | exec_entry p1_entry /bin/sh -c exec_cmd p1_cmd |
 
 > **Note**
@@ -1757,8 +2132,9 @@ USER <UID>[:<GID>]
 ```
 
 The `USER` instruction sets the user name (or UID) and optionally the user
-group (or GID) to use when running the image and for any `RUN`, `CMD` and
-`ENTRYPOINT` instructions that follow it in the `Dockerfile`.
+group (or GID) to use as the default user and group for the remainder of the
+current stage. The specified user is used for `RUN` instructions and at
+runtime, runs the relevant `ENTRYPOINT` and `CMD` commands.
 
 > Note that when specifying a group for the user, the user will have _only_ the
 > specified group membership. Any other configured group memberships will be ignored.
@@ -1778,7 +2154,6 @@ RUN net user /add patrick
 # Set it for subsequent commands
 USER patrick
 ```
-
 
 ## WORKDIR
 
@@ -2042,6 +2417,37 @@ For example:
 FROM alpine
 ARG TARGETPLATFORM
 RUN echo "I'm building for $TARGETPLATFORM"
+```
+
+### BuildKit built-in build args
+
+| Arg                                   | Type    | Description                                                              |
+|---------------------------------------|---------|--------------------------------------------------------------------------|
+| `BUILDKIT_CACHE_MOUNT_NS`             | String  | Set optional cache ID namespace.                                         |
+| `BUILDKIT_CONTEXT_KEEP_GIT_DIR`       | Bool    | Trigger git context to keep the `.git` directory.                        |
+| `BUILDKIT_INLINE_BUILDINFO_ATTRS`[^2] | Bool    | Inline build info attributes in image config or not.                     |
+| `BUILDKIT_INLINE_CACHE`[^2]           | Bool    | Inline cache metadata to image config or not.                            |
+| `BUILDKIT_MULTI_PLATFORM`             | Bool    | Opt into determnistic output regardless of multi-platform output or not. |
+| `BUILDKIT_SANDBOX_HOSTNAME`           | String  | Set the hostname (default `buildkitsandbox`)                             |
+| `BUILDKIT_SYNTAX`                     | String  | Set frontend image                                                       |
+| `SOURCE_DATE_EPOCH`                   | Int     | Set the UNIX timestamp for created image and layers. More info from [reproducible builds](https://reproducible-builds.org/docs/source-date-epoch/). Supported since Dockerfile 1.5, BuildKit 0.11 (unreleased) |
+
+#### Example: keep `.git` dir
+
+When using a Git context, `.git` dir is not kept on git checkouts. It can be
+useful to keep it around if you want to retrieve git information during
+your build:
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM alpine
+WORKDIR /src
+RUN --mount=target=. \
+  make REVISION=$(git rev-parse HEAD) build
+```
+
+```console
+$ docker build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 https://github.com/user/repo.git#main
 ```
 
 ### Impact on build caching
@@ -2375,10 +2781,94 @@ environment variable expansion semantics could be modified.
 The `SHELL` instruction can also be used on Linux should an alternate shell be
 required such as `zsh`, `csh`, `tcsh` and others.
 
+## Here-Documents
+
+> **Note**
+>
+> Added in [`docker/dockerfile:1.4`](#syntax)
+
+Here-documents allow redirection of subsequent Dockerfile lines to the input of
+`RUN` or `COPY` commands. If such command contains a [here-document](https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_07_04)
+the Dockerfile considers the next lines until the line only containing a
+here-doc delimiter as part of the same command.
+
+### Example: Running a multi-line script
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM debian
+RUN <<EOT bash
+  apt-get update
+  apt-get install -y vim
+EOT
+```
+
+If the command only contains a here-document, its contents is evaluated with
+the default shell.
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM debian
+RUN <<EOT
+  mkdir -p foo/bar
+EOT
+```
+
+Alternatively, shebang header can be used to define an interpreter.
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM python:3.6
+RUN <<EOT
+#!/usr/bin/env python
+print("hello world")
+EOT
+```
+
+More complex examples may use multiple here-documents.
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM alpine
+RUN <<FILE1 cat > file1 && <<FILE2 cat > file2
+I am
+first
+FILE1
+I am
+second
+FILE2
+```
+
+### Example: Creating inline files
+
+In `COPY` commands source parameters can be replaced with here-doc indicators.
+Regular here-doc [variable expansion and tab stripping rules](https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_07_04) apply.
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM alpine
+ARG FOO=bar
+COPY <<-EOT /app/foo
+	hello ${FOO}
+EOT
+```
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM alpine
+COPY <<-"EOT" /app/script.sh
+	echo hello ${FOO}
+EOT
+RUN FOO=abc ash /app/script.sh
+```
+
 ## Dockerfile examples
 
 For examples of Dockerfiles, refer to:
 
 - The ["build images" section](https://docs.docker.com/develop/develop-images/dockerfile_best-practices/)
-- The ["get started](https://docs.docker.com/get-started/)
+- The ["get started" tutorial](https://docs.docker.com/get-started/)
 - The [language-specific getting started guides](https://docs.docker.com/language/)
+
+[^1]: Value required
+[^2]: For Docker-integrated BuildKit (`DOCKER_BUILDKIT=1 docker build`) and `docker buildx build`

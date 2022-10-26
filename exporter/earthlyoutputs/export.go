@@ -234,7 +234,7 @@ type imgData struct {
 	opts containerimage.ImageCommitOpts
 }
 
-func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source, sessionID string) (map[string]string, error) {
+func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source, sessionID string) (map[string]string, error) {
 	if src.Ref != nil {
 		return nil, errors.Errorf("export with src.Ref not supported")
 	}
@@ -391,7 +391,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 
 	resp := make(map[string]string)
 	for imgName, img := range images {
-		desc, err := e.opt.ImageWriter.Commit(ctx, *img.expSrc, sessionID, &img.opts)
+		desc, err := e.opt.ImageWriter.Commit(ctx, img.expSrc, sessionID, &img.opts)
 		if err != nil {
 			return nil, err
 		}

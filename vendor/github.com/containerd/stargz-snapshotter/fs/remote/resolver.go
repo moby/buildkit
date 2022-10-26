@@ -31,7 +31,6 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
-	"net/url"
 	"path"
 	"strconv"
 	"strings"
@@ -199,7 +198,7 @@ func newHTTPFetcher(ctx context.Context, fc *fetcherConfig) (*httpFetcher, int64
 		return nil, 0, fmt.Errorf("Digest is mandatory in layer descriptor")
 	}
 	digest := desc.Digest
-	pullScope, err := repositoryScope(fc.refspec, false)
+	pullScope, err := docker.RepositoryScope(fc.refspec, false)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -658,24 +657,6 @@ func WithCacheOpts(cacheOpts ...cache.Option) Option {
 	return func(opts *options) {
 		opts.cacheOpts = cacheOpts
 	}
-}
-
-// NOTE: ported from https://github.com/containerd/containerd/blob/v1.5.2/remotes/docker/scope.go#L29-L42
-// TODO: import this from containerd package once we drop support to continerd v1.4.x
-//
-// repositoryScope returns a repository scope string such as "repository:foo/bar:pull"
-// for "host/foo/bar:baz".
-// When push is true, both pull and push are added to the scope.
-func repositoryScope(refspec reference.Spec, push bool) (string, error) {
-	u, err := url.Parse("dummy://" + refspec.Locator)
-	if err != nil {
-		return "", err
-	}
-	s := "repository:" + strings.TrimPrefix(u.Path, "/") + ":pull"
-	if push {
-		s += ",push"
-	}
-	return s, nil
 }
 
 type remoteFetcher struct {

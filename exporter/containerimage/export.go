@@ -14,8 +14,10 @@ import (
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/platforms"
+	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/rootfs"
+	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/moby/buildkit/cache"
 	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/exporter"
@@ -25,6 +27,7 @@ import (
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/leaseutil"
+	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/push"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
@@ -75,8 +78,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 			RefCfg: cacheconfig.RefConfig{
 				Compression: compression.New(compression.Default),
 			},
-			BuildInfo:   true,
-			Annotations: make(AnnotationsGroup),
+			BuildInfo: true,
 		},
 		store: true,
 	}
@@ -194,7 +196,7 @@ func (e *imageExporterInstance) Config() exporter.Config {
 	}
 }
 
-func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source, sessionID string) (map[string]string, error) {
+func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source, sessionID string) (map[string]string, error) {
 	if src.Metadata == nil {
 		src.Metadata = make(map[string][]byte)
 	}
@@ -207,7 +209,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	if err != nil {
 		return nil, err
 	}
-	opts.Annotations = as.Merge(opts.Annotations)
+	opts.AddAnnotations(as)
 
 	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
@@ -240,7 +242,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 		targetNames := strings.Split(e.opts.ImageName, ",")
 		for _, targetName := range targetNames {
 			if e.opt.Images != nil && e.store {
-				tagDone := oneOffProgress(ctx, "naming to "+targetName)
+				tagDone := progress.OneOff(ctx, "naming to "+targetName)
 				img := images.Image{
 					Target:    *desc,
 					CreatedAt: time.Now(),
@@ -299,35 +301,9 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 				}
 			}
 			if e.push {
-				annotations := map[digest.Digest]map[string]string{}
-				mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
-				if src.Ref != nil {
-					remotes, err := src.Ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
-					if err != nil {
-						return nil, err
-					}
-					remote := remotes[0]
-					for _, desc := range remote.Descriptors {
-						mprovider.Add(desc.Digest, remote.Provider)
-						addAnnotations(annotations, desc)
-					}
-				}
-				if len(src.Refs) > 0 {
-					for _, r := range src.Refs {
-						remotes, err := r.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
-						if err != nil {
-							return nil, err
-						}
-						remote := remotes[0]
-						for _, desc := range remote.Descriptors {
-							mprovider.Add(desc.Digest, remote.Provider)
-							addAnnotations(annotations, desc)
-						}
-					}
-				}
-
-				if err := push.Push(ctx, e.opt.SessionManager, sessionID, mprovider, e.opt.ImageWriter.ContentStore(), desc.Digest, targetName, e.insecure, e.opt.RegistryHosts, e.pushByDigest, annotations); err != nil {
-					return nil, err
+				err := e.pushImage(ctx, src, sessionID, targetName, desc.Digest)
+				if err != nil {
+					return nil, errors.Wrapf(err, "failed to push %v", targetName)
 				}
 			}
 		}
@@ -349,8 +325,40 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	return resp, nil
 }
 
-func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Image, src exporter.Source, s session.Group) (err0 error) {
-	unpackDone := oneOffProgress(ctx, "unpacking to "+img.Name)
+func (e *imageExporterInstance) pushImage(ctx context.Context, src *exporter.Source, sessionID string, targetName string, dgst digest.Digest) error {
+	annotations := map[digest.Digest]map[string]string{}
+	mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
+	if src.Ref != nil {
+		remotes, err := src.Ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
+		if err != nil {
+			return err
+		}
+		remote := remotes[0]
+		for _, desc := range remote.Descriptors {
+			mprovider.Add(desc.Digest, remote.Provider)
+			addAnnotations(annotations, desc)
+		}
+	}
+	if len(src.Refs) > 0 {
+		for _, r := range src.Refs {
+			remotes, err := r.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
+			if err != nil {
+				return err
+			}
+			remote := remotes[0]
+			for _, desc := range remote.Descriptors {
+				mprovider.Add(desc.Digest, remote.Provider)
+				addAnnotations(annotations, desc)
+			}
+		}
+	}
+
+	ctx = remotes.WithMediaTypeKeyPrefix(ctx, intoto.PayloadType, "intoto")
+	return push.Push(ctx, e.opt.SessionManager, sessionID, mprovider, e.opt.ImageWriter.ContentStore(), dgst, targetName, e.insecure, e.opt.RegistryHosts, e.pushByDigest, annotations)
+}
+
+func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Image, src *exporter.Source, s session.Group) (err0 error) {
+	unpackDone := progress.OneOff(ctx, "unpacking to "+img.Name)
 	defer func() {
 		unpackDone(err0)
 	}()

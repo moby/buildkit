@@ -155,6 +155,7 @@ made through a pull request.
 			"crazy-max",
 			"hinshun",
 			"ijc",
+			"jedevc",
 			"ktock",
 			"sipsma",
 			"tiborvass",
@@ -207,6 +208,11 @@ made through a pull request.
 	Name = "Ian Campbell"
 	Email = "ian.campbell@docker.com"
 	GitHub = "ijc"
+
+	[people.jedevc]
+	Name = "Justin Chadwell"
+	Email = "me@jedevc.com"
+	GitHub = "jedevc"
 
 	[people.ktock]
 	Name = "Kohei Tokunaga"

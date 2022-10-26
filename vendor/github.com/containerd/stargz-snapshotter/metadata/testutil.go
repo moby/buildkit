@@ -23,6 +23,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -256,10 +257,87 @@ func TestReader(t *testing.T, factory ReaderFactory) {
 					if err := checkCalled(); err != nil {
 						t.Errorf("telemetry failure: %v", err)
 					}
+
+					// Test the cloned reader works correctly as well
+					esgz2, _, err := testutil.BuildEStargz(tt.in, opts...)
+					if err != nil {
+						t.Fatalf("failed to build sample eStargz: %v", err)
+					}
+					clonedR, err := r.Clone(esgz2)
+					if err != nil {
+						t.Fatalf("failed to clone reader: %v", err)
+					}
+					defer clonedR.Close()
+					t.Logf("vvvvv Node tree (cloned) vvvvv")
+					t.Logf("[%d] ROOT", clonedR.RootID())
+					dumpNodes(t, clonedR.(TestableReader), clonedR.RootID(), 1)
+					t.Logf("^^^^^^^^^^^^^^^^^^^^^")
+					for _, want := range tt.want {
+						want(t, clonedR.(TestableReader))
+					}
 				})
 			}
 		}
 	}
+
+	t.Run("clone-id-stability", func(t *testing.T) {
+		var mapEntries func(r TestableReader, id uint32, m map[string]uint32) (map[string]uint32, error)
+		mapEntries = func(r TestableReader, id uint32, m map[string]uint32) (map[string]uint32, error) {
+			if m == nil {
+				m = make(map[string]uint32)
+			}
+			return m, r.ForeachChild(id, func(name string, id uint32, mode os.FileMode) bool {
+				m[name] = id
+				if _, err := mapEntries(r, id, m); err != nil {
+					t.Fatalf("could not map files: %s", err)
+					return false
+				}
+				return true
+			})
+		}
+
+		in := []testutil.TarEntry{
+			testutil.File("foo", "foofoo"),
+			testutil.Dir("bar/"),
+			testutil.File("bar/zzz.txt", "bazbazbaz"),
+			testutil.File("bar/aaa.txt", "bazbazbaz"),
+			testutil.File("bar/fff.txt", "bazbazbaz"),
+			testutil.File("xxx.txt", "xxxxx"),
+			testutil.File("y.txt", ""),
+		}
+
+		esgz, _, err := testutil.BuildEStargz(in)
+		if err != nil {
+			t.Fatalf("failed to build sample eStargz: %v", err)
+		}
+
+		r, err := factory(esgz)
+		if err != nil {
+			t.Fatalf("failed to create new reader: %v", err)
+		}
+
+		fileMap, err := mapEntries(r, r.RootID(), nil)
+		if err != nil {
+			t.Fatalf("could not map files: %s", err)
+		}
+		cr, err := r.Clone(esgz)
+		if err != nil {
+			t.Fatalf("could not clone reader: %s", err)
+		}
+		cloneFileMap, err := mapEntries(cr.(TestableReader), cr.RootID(), nil)
+		if err != nil {
+			t.Fatalf("could not map files in cloned reader: %s", err)
+		}
+		if !reflect.DeepEqual(fileMap, cloneFileMap) {
+			for f, id := range fileMap {
+				t.Logf("original mapping %s -> %d", f, id)
+			}
+			for f, id := range cloneFileMap {
+				t.Logf("clone mapping %s -> %d", f, id)
+			}
+			t.Fatal("file -> ID mappings did not match between original and cloned reader")
+		}
+	})
 }
 
 func newCalledTelemetry() (telemetry *Telemetry, check func() error) {
