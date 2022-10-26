@@ -292,6 +292,7 @@ func testBridgeNetworking(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBridgeNetworkingDNSNoRootless(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "https://github.com/moby/buildkit/issues/3171")
 	if os.Getenv("BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS") == "" {
 		t.SkipNow()
 	}
@@ -1814,9 +1815,6 @@ func testOCILayoutPlatformSource(t *testing.T, sb integration.Sandbox) {
 		} else {
 			err = os.WriteFile(fullFilename, tarItem.Data, 0644)
 			require.NoError(t, err)
-			if json.Valid(tarItem.Data) {
-				fmt.Println(fullFilename, string(tarItem.Data))
-			}
 		}
 	}
 
@@ -6725,6 +6723,7 @@ func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 }
 
 func testExportAnnotationsMediaTypes(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "direct push")
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -6838,6 +6837,7 @@ func testExportAnnotationsMediaTypes(t *testing.T, sb integration.Sandbox) {
 }
 
 func testExportAttestations(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "direct push")
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -7049,6 +7049,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 }
 
 func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "direct push")
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
