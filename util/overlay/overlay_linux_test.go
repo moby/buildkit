@@ -49,7 +49,7 @@ func TestSimpleDiff(t *testing.T) {
 		Add("/root/.bashrc"),
 	}
 
-	if err := testDiffWithBase(l1, l2, diff); err != nil {
+	if err := testDiffWithBase(t, l1, l2, diff); err != nil {
 		t.Fatalf("Failed diff with base: %+v", err)
 	}
 }
@@ -74,7 +74,7 @@ func TestRenameDiff(t *testing.T) {
 		Add("/dir2/f1"),
 	}
 
-	if err := testDiffWithBase(l1, l2, diff, "redirect_dir=off"); err != nil {
+	if err := testDiffWithBase(t, l1, l2, diff, "redirect_dir=off"); err != nil {
 		t.Fatalf("Failed diff with base: %+v", err)
 	}
 }
@@ -109,7 +109,7 @@ func TestEmptyFileDiff(t *testing.T) {
 	l2 := fstest.Apply()
 	diff := []TestChange{}
 
-	if err := testDiffWithBase(l1, l2, diff); err != nil {
+	if err := testDiffWithBase(t, l1, l2, diff); err != nil {
 		t.Fatalf("Failed diff with base: %+v", err)
 	}
 }
@@ -133,7 +133,7 @@ func TestNestedDeletion(t *testing.T) {
 		Delete("/d1"),
 	}
 
-	if err := testDiffWithBase(l1, l2, diff); err != nil {
+	if err := testDiffWithBase(t, l1, l2, diff); err != nil {
 		t.Fatalf("Failed diff with base: %+v", err)
 	}
 }
@@ -158,7 +158,7 @@ func TestDirectoryReplace(t *testing.T) {
 		Modify("/dir1/f2"),
 	}
 
-	if err := testDiffWithBase(l1, l2, diff); err != nil {
+	if err := testDiffWithBase(t, l1, l2, diff); err != nil {
 		t.Fatalf("Failed diff with base: %+v", err)
 	}
 }
@@ -179,7 +179,7 @@ func TestRemoveDirectoryTree(t *testing.T) {
 		Delete("/dir1"),
 	}
 
-	if err := testDiffWithBase(l1, l2, diff); err != nil {
+	if err := testDiffWithBase(t, l1, l2, diff); err != nil {
 		t.Fatalf("Failed diff with base: %+v", err)
 	}
 }
@@ -202,7 +202,7 @@ func TestRemoveDirectoryTreeWithDash(t *testing.T) {
 		Delete("/dir1"),
 	}
 
-	if err := testDiffWithBase(l1, l2, diff); err != nil {
+	if err := testDiffWithBase(t, l1, l2, diff); err != nil {
 		t.Fatalf("Failed diff with base: %+v", err)
 	}
 }
@@ -225,7 +225,7 @@ func TestFileReplace(t *testing.T) {
 		Add("/dir1/dir2/f1"),
 	}
 
-	if err := testDiffWithBase(l1, l2, diff); err != nil {
+	if err := testDiffWithBase(t, l1, l2, diff); err != nil {
 		t.Fatalf("Failed diff with base: %+v", err)
 	}
 }
@@ -254,7 +254,7 @@ func TestParentDirectoryPermission(t *testing.T) {
 		Add("/dir3/f"),
 	}
 
-	if err := testDiffWithBase(l1, l2, diff); err != nil {
+	if err := testDiffWithBase(t, l1, l2, diff); err != nil {
 		t.Fatalf("Failed diff with base: %+v", err)
 	}
 }
@@ -306,7 +306,7 @@ func TestUpdateWithSameTime(t *testing.T) {
 		Modify("/file-truncated-time-3"),
 	}
 
-	if err := testDiffWithBase(l1, l2, diff); err != nil {
+	if err := testDiffWithBase(t, l1, l2, diff); err != nil {
 		t.Fatalf("Failed diff with base: %+v", err)
 	}
 }
@@ -329,34 +329,21 @@ func TestLchtimes(t *testing.T) {
 		)
 		l2 := fstest.Apply() // empty
 		diff := []TestChange{}
-		if err := testDiffWithBase(l1, l2, diff); err != nil {
+		if err := testDiffWithBase(t, l1, l2, diff); err != nil {
 			t.Fatalf("Failed diff with base: %+v", err)
 		}
 	}
 }
 
-func testDiffWithBase(base, diff fstest.Applier, expected []TestChange, opts ...string) error {
-	t1, err := os.MkdirTemp("", "diff-with-base-lower-")
-	if err != nil {
-		return errors.Wrap(err, "failed to create temp dir")
-	}
-	defer os.RemoveAll(t1)
+func testDiffWithBase(t *testing.T, base, diff fstest.Applier, expected []TestChange, opts ...string) error {
+	t1 := t.TempDir()
 
 	if err := base.Apply(t1); err != nil {
 		return errors.Wrap(err, "failed to apply base filesystem")
 	}
 
-	tupper, err := os.MkdirTemp("", "diff-with-base-upperdir-")
-	if err != nil {
-		return errors.Wrap(err, "failed to create temp dir")
-	}
-	defer os.RemoveAll(tupper)
-
-	workdir, err := os.MkdirTemp("", "diff-with-base-workdir-")
-	if err != nil {
-		return errors.Wrap(err, "failed to create temp dir")
-	}
-	defer os.RemoveAll(workdir)
+	tupper := t.TempDir()
+	workdir := t.TempDir()
 
 	return mount.WithTempMount(context.Background(), []mount.Mount{
 		{
@@ -368,7 +355,7 @@ func testDiffWithBase(base, diff fstest.Applier, expected []TestChange, opts ...
 		if err := diff.Apply(overlayRoot); err != nil {
 			return errors.Wrapf(err, "failed to apply diff to overlayRoot")
 		}
-		if err := collectAndCheckChanges(t1, tupper, expected); err != nil {
+		if err := collectAndCheckChanges(t, t1, tupper, expected); err != nil {
 			return errors.Wrap(err, "failed to collect changes")
 		}
 		return nil
@@ -415,15 +402,11 @@ type TestChange struct {
 	Source   string
 }
 
-func collectAndCheckChanges(base, upperdir string, expected []TestChange) error {
+func collectAndCheckChanges(t *testing.T, base, upperdir string, expected []TestChange) error {
 	ctx := context.Background()
 	changes := []TestChange{}
 
-	emptyLower, err := os.MkdirTemp("", "buildkit-test-emptylower") // empty directory used for the lower of diff view
-	if err != nil {
-		return errors.Wrapf(err, "failed to create temp dir")
-	}
-	defer os.Remove(emptyLower)
+	emptyLower := t.TempDir() // empty directory used for the lower of diff view
 	upperView := []mount.Mount{
 		{
 			Type:    "overlay",

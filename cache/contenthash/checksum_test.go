@@ -42,14 +42,12 @@ const (
 
 func TestChecksumSymlinkNoParentScan(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
-	defer cm.Close()
+	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
+	t.Cleanup(cleanup)
 
 	ch := []string{
 		"ADD aa dir",
@@ -71,14 +69,12 @@ func TestChecksumSymlinkNoParentScan(t *testing.T) {
 
 func TestChecksumHardlinks(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
-	defer cm.Close()
+	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
+	t.Cleanup(cleanup)
 
 	ch := []string{
 		"ADD abc dir",
@@ -154,14 +150,12 @@ func TestChecksumHardlinks(t *testing.T) {
 
 func TestChecksumWildcardOrFilter(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
-	defer cm.Close()
+	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
+	t.Cleanup(cleanup)
 
 	ch := []string{
 		"ADD bar file data1",
@@ -211,14 +205,16 @@ func TestChecksumWildcardOrFilter(t *testing.T) {
 
 func TestChecksumWildcardWithBadMountable(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
-	defer cm.Close()
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+
+	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
+	t.Cleanup(cleanup)
 
 	ref := createRef(t, cm, nil)
 
@@ -231,14 +227,12 @@ func TestChecksumWildcardWithBadMountable(t *testing.T) {
 
 func TestSymlinksNoFollow(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
-	defer cm.Close()
+	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
+	t.Cleanup(cleanup)
 
 	ch := []string{
 		"ADD target file data0",
@@ -290,14 +284,12 @@ func TestSymlinksNoFollow(t *testing.T) {
 
 func TestChecksumBasicFile(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
-	defer cm.Close()
+	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
+	t.Cleanup(cleanup)
 
 	ch := []string{
 		"ADD foo file data0",
@@ -448,14 +440,12 @@ func TestChecksumIncludeExclude(t *testing.T) {
 func testChecksumIncludeExclude(t *testing.T, wildcard bool) {
 	t.Parallel()
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
-	defer cm.Close()
+	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
+	t.Cleanup(cleanup)
 
 	ch := []string{
 		"ADD foo file data0",
@@ -583,14 +573,12 @@ func testChecksumIncludeExclude(t *testing.T, wildcard bool) {
 
 func TestChecksumIncludeDoubleStar(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
-	defer cm.Close()
+	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
+	t.Cleanup(cleanup)
 
 	ch := []string{
 		"ADD prefix dir",
@@ -651,14 +639,12 @@ func TestChecksumIncludeDoubleStar(t *testing.T) {
 
 func TestChecksumIncludeSymlink(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
-	defer cm.Close()
+	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
+	t.Cleanup(cleanup)
 
 	ch := []string{
 		"ADD data dir",
@@ -724,14 +710,16 @@ func TestChecksumIncludeSymlink(t *testing.T) {
 
 func TestHandleChange(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
-	defer cm.Close()
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+
+	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
+	t.Cleanup(cleanup)
 
 	ch := []string{
 		"ADD foo file data0",
@@ -802,14 +790,16 @@ func TestHandleChange(t *testing.T) {
 
 func TestHandleRecursiveDir(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
-	defer cm.Close()
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+
+	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
+	t.Cleanup(cleanup)
 
 	ch := []string{
 		"ADD d0 dir",
@@ -851,14 +841,16 @@ func TestHandleRecursiveDir(t *testing.T) {
 
 func TestChecksumUnorderedFiles(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
-	defer cm.Close()
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+
+	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
+	t.Cleanup(cleanup)
 
 	ch := []string{
 		"ADD d0 dir",
@@ -904,14 +896,12 @@ func TestChecksumUnorderedFiles(t *testing.T) {
 
 func TestSymlinkInPathScan(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
-	defer cm.Close()
+	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
+	t.Cleanup(cleanup)
 
 	ch := []string{
 		"ADD d0 dir",
@@ -935,14 +925,12 @@ func TestSymlinkInPathScan(t *testing.T) {
 
 func TestSymlinkNeedsScan(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
-	defer cm.Close()
+	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
+	t.Cleanup(cleanup)
 
 	ch := []string{
 		"ADD c0 dir",
@@ -968,14 +956,12 @@ func TestSymlinkNeedsScan(t *testing.T) {
 
 func TestSymlinkAbsDirSuffix(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
-	defer cm.Close()
+	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
+	t.Cleanup(cleanup)
 
 	ch := []string{
 		"ADD c0 dir",
@@ -995,14 +981,12 @@ func TestSymlinkAbsDirSuffix(t *testing.T) {
 
 func TestSymlinkThroughParent(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
-	defer cm.Close()
+	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
+	t.Cleanup(cleanup)
 
 	ch := []string{
 		"ADD lib dir",
@@ -1050,14 +1034,16 @@ func TestSymlinkThroughParent(t *testing.T) {
 
 func TestSymlinkInPathHandleChange(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
-	defer cm.Close()
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+
+	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
+	t.Cleanup(cleanup)
 
 	ch := []string{
 		"ADD d1 dir",
@@ -1113,14 +1099,12 @@ func TestSymlinkInPathHandleChange(t *testing.T) {
 
 func TestPersistence(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	tmpdir := t.TempDir()
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm, closeBolt := setupCacheManager(t, tmpdir, "native", snapshotter)
-	defer cm.Close()
+	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
+	t.Cleanup(cleanup)
 
 	ch := []string{
 		"ADD foo file data0",
@@ -1154,12 +1138,10 @@ func TestPersistence(t *testing.T) {
 	time.Sleep(100 * time.Millisecond) // saving happens on the background
 
 	// we can't close snapshotter and open it twice (especially, its internal bbolt store)
-	cm.Close()
-	closeBolt()
+	cleanup()
 	getDefaultManager().lru.Purge()
-	cm, closeBolt = setupCacheManager(t, tmpdir, "native", snapshotter)
-	defer closeBolt()
-	defer cm.Close()
+	cm, cleanup = setupCacheManager(t, tmpdir, "native", snapshotter)
+	t.Cleanup(cleanup)
 
 	ref, err = cm.Get(context.TODO(), id, nil)
 	require.NoError(t, err)
@@ -1228,6 +1210,8 @@ func setupCacheManager(t *testing.T, tmpdir string, snapshotterName string, snap
 
 	return cm, func() {
 		db.Close()
+		md.Close()
+		cm.Close()
 	}
 }
 

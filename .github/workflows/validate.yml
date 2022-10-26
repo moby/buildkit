@@ -19,11 +19,11 @@ on:
 
 env:
   REPO_SLUG_ORIGIN: "moby/buildkit:latest"
-  BUILDX_VERSION: "v0.8.2"  # leave empty to use the one available on GitHub virtual environment
+  BUILDX_VERSION: "v0.9.1"  # leave empty to use the one available on GitHub virtual environment
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
@@ -35,18 +35,15 @@ jobs:
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
         with:
           version: ${{ env.BUILDX_VERSION }}
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
+          buildkitd-flags: --debug
       -
         name: Run
         run: |
           ${{ matrix.script }}
-      -
-        name: Dump context
-        if: always()
-        uses: crazy-max/ghaction-dump-context@v1

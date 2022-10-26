@@ -14,6 +14,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+// MaxRetryBackoff is the maximum backoff time before giving up. This is a
+// variable so that code which embeds BuildKit can override the default value.
+var MaxRetryBackoff = 8 * time.Second
+
 func New(f images.HandlerFunc, logger func([]byte)) images.HandlerFunc {
 	return func(ctx context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
 		backoff := time.Second
@@ -35,7 +39,7 @@ func New(f images.HandlerFunc, logger func([]byte)) images.HandlerFunc {
 				return descs, nil
 			}
 			// backoff logic
-			if backoff >= 8*time.Second {
+			if backoff >= MaxRetryBackoff {
 				return nil, err
 			}
 			if logger != nil {

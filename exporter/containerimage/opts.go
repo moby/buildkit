@@ -2,8 +2,10 @@ package containerimage
 
 import (
 	"strconv"
+	"time"
 
 	cacheconfig "github.com/moby/buildkit/cache/config"
+	"github.com/moby/buildkit/exporter/util/epoch"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -31,6 +33,7 @@ type ImageCommitOpts struct {
 	BuildInfo      bool
 	BuildInfoAttrs bool
 	Annotations    AnnotationsGroup
+	Epoch          *time.Time
 }
 
 func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error) {
@@ -42,8 +45,12 @@ func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error)
 	if err != nil {
 		return nil, err
 	}
-	c.Annotations = as
 	opt = toStringMap(optb)
+
+	c.Epoch, opt, err = epoch.ParseAttr(opt)
+	if err != nil {
+		return nil, err
+	}
 
 	for k, v := range opt {
 		var err error
@@ -91,12 +98,40 @@ func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error)
 		}
 	}
 
-	if esgz && !c.OCITypes {
-		logrus.Warn("forcibly turning on oci-mediatype mode for estargz")
-		c.OCITypes = true
+	if esgz {
+		c.EnableOCITypes("estargz")
 	}
 
+	c.AddAnnotations(as)
+
 	return rest, nil
+}
+
+func (c *ImageCommitOpts) AddAnnotations(annotations AnnotationsGroup) {
+	if annotations == nil {
+		return
+	}
+	if c.Annotations == nil {
+		c.Annotations = AnnotationsGroup{}
+	}
+	c.Annotations = c.Annotations.Merge(annotations)
+	for _, a := range annotations {
+		if len(a.Index)+len(a.IndexDescriptor)+len(a.ManifestDescriptor) > 0 {
+			c.EnableOCITypes("annotations")
+		}
+	}
+}
+
+func (c *ImageCommitOpts) EnableOCITypes(reason string) {
+	if !c.OCITypes {
+		message := "forcibly turning on oci-mediatype mode"
+		if reason != "" {
+			message += " for " + reason
+		}
+		logrus.Warn(message)
+
+		c.OCITypes = true
+	}
 }
 
 func parseBool(dest *bool, key string, value string) error {

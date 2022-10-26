@@ -10,17 +10,17 @@ import (
 )
 
 type Info struct {
-	BuildkitVersion BuildkitVersion
+	BuildkitVersion BuildkitVersion `json:"buildkitVersion"`
 
 	// Earthly-specific.
-	NumSessions int
-	SecondsIdle int
+	NumSessions int	`json:"numSessions"`
+	SecondsIdle int	`json:"secondsIdle"`
 }
 
 type BuildkitVersion struct {
-	Package  string
-	Version  string
-	Revision string
+	Package  string `json:"package"`
+	Version  string `json:"version"`
+	Revision string `json:"revision"`
 }
 
 func (c *Client) Info(ctx context.Context) (*Info, error) {

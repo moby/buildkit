@@ -26,11 +26,8 @@ nameserver 8.8.4.4
 nameserver 2001:4860:4860::8888
 nameserver 2001:4860:4860::8844`
 
-	dir, err := os.MkdirTemp("", "buildkit-test")
-	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 	ctx := context.Background()
-	p, err := GetResolvConf(ctx, dir, nil, nil)
+	p, err := GetResolvConf(ctx, t.TempDir(), nil, nil)
 	require.NoError(t, err)
 	b, err := os.ReadFile(p)
 	require.NoError(t, err)

@@ -18,6 +18,7 @@ import (
 	"github.com/moby/buildkit/solver/errdefs"
 	llberrdefs "github.com/moby/buildkit/solver/llbsolver/errdefs"
 	opspb "github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/solver/result"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
@@ -34,7 +35,6 @@ func llbBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLL
 		sid:               sid,
 		sm:                sm,
 		workers:           w,
-		final:             map[*ref]struct{}{},
 		workerRefByID:     make(map[string]*worker.WorkerRef),
 	}
 	bc.buildOpts = bc.loadBuildOpts()
@@ -46,13 +46,13 @@ type bridgeClient struct {
 	mu            sync.Mutex
 	opts          map[string]string
 	inputs        map[string]*opspb.Definition
-	final         map[*ref]struct{}
 	sid           string
 	sm            *session.Manager
 	refs          []*ref
 	workers       worker.Infos
 	workerRefByID map[string]*worker.WorkerRef
 	buildOpts     client.BuildOpts
+	ctrs          []client.Container
 }
 
 func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*client.Result, error) {
@@ -68,26 +68,19 @@ func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*cli
 		return nil, c.wrapSolveError(err)
 	}
 
-	cRes := &client.Result{}
 	c.mu.Lock()
-	for k, r := range res.Refs {
+	cRes, err := result.ConvertResult(res, func(r solver.ResultProxy) (client.Reference, error) {
 		rr, err := c.newRef(r, session.NewGroup(c.sid))
 		if err != nil {
 			return nil, err
 		}
 		c.refs = append(c.refs, rr)
-		cRes.AddRef(k, rr)
-	}
-	if r := res.Ref; r != nil {
-		rr, err := c.newRef(r, session.NewGroup(c.sid))
-		if err != nil {
-			return nil, err
-		}
-		c.refs = append(c.refs, rr)
-		cRes.SetRef(rr)
-	}
+		return rr, nil
+	})
 	c.mu.Unlock()
-	cRes.Metadata = res.Metadata
+	if err != nil {
+		return nil, err
+	}
 
 	return cRes, nil
 }
@@ -192,41 +185,35 @@ func (c *bridgeClient) toFrontendResult(r *client.Result) (*frontend.Result, err
 		return nil, nil
 	}
 
-	res := &frontend.Result{}
-
-	if r.Refs != nil {
-		res.Refs = make(map[string]solver.ResultProxy, len(r.Refs))
-		for k, r := range r.Refs {
-			rr, ok := r.(*ref)
-			if !ok {
-				return nil, errors.Errorf("invalid reference type for forward %T", r)
-			}
-			c.final[rr] = struct{}{}
-			res.Refs[k] = rr.ResultProxy
-		}
-	}
-	if r := r.Ref; r != nil {
+	res, err := result.ConvertResult(r, func(r client.Reference) (solver.ResultProxy, error) {
 		rr, ok := r.(*ref)
 		if !ok {
 			return nil, errors.Errorf("invalid reference type for forward %T", r)
 		}
-		c.final[rr] = struct{}{}
-		res.Ref = rr.ResultProxy
+		return rr.acquireResultProxy(), nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	res.Metadata = r.Metadata
-
 	return res, nil
 }
 
 func (c *bridgeClient) discard(err error) {
+	for _, ctr := range c.ctrs {
+		ctr.Release(context.TODO())
+	}
+
 	for id, workerRef := range c.workerRefByID {
 		workerRef.ImmutableRef.Release(context.TODO())
 		delete(c.workerRefByID, id)
 	}
 	for _, r := range c.refs {
 		if r != nil {
-			if _, ok := c.final[r]; !ok || err != nil {
-				r.Release(context.TODO())
+			r.resultProxy.Release(context.TODO())
+			if err != nil {
+				for _, clone := range r.resultProxyClones {
+					clone.Release(context.TODO())
+				}
 			}
 		}
 	}
@@ -255,7 +242,7 @@ func (c *bridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 					return errors.Errorf("unexpected Ref type: %T", m.Ref)
 				}
 
-				res, err := refProxy.Result(ctx)
+				res, err := refProxy.resultProxy.Result(ctx)
 				if err != nil {
 					return err
 				}
@@ -307,25 +294,43 @@ func (c *bridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 	if err != nil {
 		return nil, err
 	}
+	c.ctrs = append(c.ctrs, ctr)
 	return ctr, nil
 }
 
+func (c *bridgeClient) newRef(r solver.ResultProxy, s session.Group) (*ref, error) {
+	return &ref{resultProxy: r, session: s, c: c}, nil
+}
+
 type ref struct {
-	solver.ResultProxy
+	resultProxy       solver.ResultProxy
+	resultProxyClones []solver.ResultProxy
+
 	session session.Group
 	c       *bridgeClient
 }
 
-func (c *bridgeClient) newRef(r solver.ResultProxy, s session.Group) (*ref, error) {
-	return &ref{ResultProxy: r, session: s, c: c}, nil
+func (r *ref) acquireResultProxy() solver.ResultProxy {
+	s1, s2 := solver.SplitResultProxy(r.resultProxy)
+	r.resultProxy = s1
+	r.resultProxyClones = append(r.resultProxyClones, s2)
+	return s2
 }
 
 func (r *ref) ToState() (st llb.State, err error) {
-	defop, err := llb.NewDefinitionOp(r.Definition())
+	defop, err := llb.NewDefinitionOp(r.resultProxy.Definition())
 	if err != nil {
 		return st, err
 	}
 	return llb.NewState(defop), nil
+}
+
+func (r *ref) Evaluate(ctx context.Context) error {
+	_, err := r.resultProxy.Result(ctx)
+	if err != nil {
+		return r.c.wrapSolveError(err)
+	}
+	return nil
 }
 
 func (r *ref) ReadFile(ctx context.Context, req client.ReadRequest) ([]byte, error) {
@@ -366,7 +371,7 @@ func (r *ref) StatFile(ctx context.Context, req client.StatRequest) (*fstypes.St
 }
 
 func (r *ref) getMountable(ctx context.Context) (snapshot.Mountable, error) {
-	rr, err := r.ResultProxy.Result(ctx)
+	rr, err := r.resultProxy.Result(ctx)
 	if err != nil {
 		return nil, r.c.wrapSolveError(err)
 	}

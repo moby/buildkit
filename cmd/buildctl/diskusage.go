@@ -9,6 +9,7 @@ import (
 
 	"github.com/moby/buildkit/client"
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
+	"github.com/sirupsen/logrus"
 	"github.com/tonistiigi/units"
 	"github.com/urfave/cli"
 )
@@ -26,6 +27,10 @@ var diskUsageCommand = cli.Command{
 			Name:  "verbose, v",
 			Usage: "Verbose output",
 		},
+		cli.StringFlag{
+			Name:  "format",
+			Usage: "Format the output using the given Go template, e.g, '{{json .}}'",
+		},
 	},
 }
 
@@ -37,6 +42,21 @@ func diskUsage(clicontext *cli.Context) error {
 
 	du, err := c.DiskUsage(bccommon.CommandContext(clicontext), client.WithFilter(clicontext.StringSlice("filter")))
 	if err != nil {
+		return err
+	}
+
+	if format := clicontext.String("format"); format != "" {
+		if clicontext.Bool("verbose") {
+			logrus.Debug("Ignoring --verbose")
+		}
+		tmpl, err := bccommon.ParseTemplate(format)
+		if err != nil {
+			return err
+		}
+		if err := tmpl.Execute(clicontext.App.Writer, du); err != nil {
+			return err
+		}
+		_, err = fmt.Fprintf(clicontext.App.Writer, "\n")
 		return err
 	}
 

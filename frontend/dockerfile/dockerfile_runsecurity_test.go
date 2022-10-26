@@ -4,7 +4,6 @@
 package dockerfile
 
 import (
-	"os"
 	"testing"
 
 	"github.com/containerd/continuity/fs/fstest"
@@ -58,11 +57,11 @@ RUN --security=insecure ls -l /dev && dd if=/dev/zero of=disk.img bs=20M count=1
 	rm disk.img
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -97,11 +96,11 @@ RUN --security=insecure [ "$(printf '%x' $(( $(cat /proc/self/status | grep CapB
 RUN [ "$(cat /proc/self/status | grep CapBnd)" == "CapBnd:	00000000a80425fb" ]
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -135,11 +134,11 @@ FROM busybox
 RUN --security=sandbox [ "$(cat /proc/self/status | grep CapBnd)" == "CapBnd:	00000000a80425fb" ]
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -163,11 +162,11 @@ FROM busybox
 RUN [ "$(cat /proc/self/status | grep CapBnd)" == "CapBnd:	00000000a80425fb" ]
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)

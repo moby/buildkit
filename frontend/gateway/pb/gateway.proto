@@ -25,6 +25,8 @@ service LLBBridge {
 	rpc ReadDir(ReadDirRequest) returns (ReadDirResponse);
 	// apicaps:CapStatFile
 	rpc StatFile(StatFileRequest) returns (StatFileResponse);
+	// apicaps:CapGatewayEvaluate
+	rpc Evaluate(EvaluateRequest) returns (EvaluateResponse);
 	rpc Ping(PingRequest) returns (PongResponse);
 	rpc Return(ReturnRequest) returns (ReturnResponse);
 	// apicaps:CapFrontendInputs
@@ -50,6 +52,7 @@ message Result {
 		RefMap refs = 4;
 	}
 	map<string, bytes> metadata = 10;
+	map<string, Attestations> attestations = 11;
 }
 
 message RefMapDeprecated {
@@ -63,6 +66,38 @@ message Ref {
 
 message RefMap {
 	map<string, Ref> refs = 1;
+}
+
+message Attestations {
+    repeated Attestation attestation = 1;
+}
+
+message Attestation {
+	AttestationKind kind = 1;
+
+	string ref = 2;
+	string path = 3;
+	string inTotoPredicateType = 4;
+	repeated InTotoSubject inTotoSubjects = 5;
+}
+
+enum AttestationKind {
+	option (gogoproto.goproto_enum_prefix) = false;
+	InToto = 0 [(gogoproto.enumvalue_customname) = "AttestationKindInToto"];
+	Bundle = 1 [(gogoproto.enumvalue_customname) = "AttestationKindBundle"];
+}
+
+message InTotoSubject {
+	InTotoSubjectKind kind = 1;
+
+	repeated string digest = 2 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
+	string name = 3;
+}
+
+enum InTotoSubjectKind {
+	option (gogoproto.goproto_enum_prefix) = false;
+	Self = 0 [(gogoproto.enumvalue_customname) = "InTotoSubjectKindSelf"];
+	Raw = 1 [(gogoproto.enumvalue_customname) = "InTotoSubjectKindRaw"];
 }
 
 message ReturnRequest {
@@ -172,6 +207,13 @@ message StatFileRequest {
 
 message StatFileResponse {
 	fsutil.types.Stat stat = 1;
+}
+
+message EvaluateRequest {
+	string Ref = 1;
+}
+
+message EvaluateResponse {
 }
 
 message PingRequest{

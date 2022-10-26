@@ -248,3 +248,40 @@ func TestProcessWithMatches(t *testing.T) {
 
 	require.Equal(t, 0, len(matches))
 }
+
+func TestProcessWithMatchesPlatform(t *testing.T) {
+	shlex := NewLex('\\')
+
+	const (
+		// corresponds to the filename convention used in https://github.com/moby/buildkit/releases
+		release = "something-${VERSION}.${TARGETOS}-${TARGETARCH}${TARGETVARIANT:+-${TARGETVARIANT}}.tar.gz"
+		version = "v1.2.3"
+	)
+
+	w, _, err := shlex.ProcessWordWithMatches(release, map[string]string{
+		"VERSION":       version,
+		"TARGETOS":      "linux",
+		"TARGETARCH":    "arm",
+		"TARGETVARIANT": "v7",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "something-v1.2.3.linux-arm-v7.tar.gz", w)
+
+	w, _, err = shlex.ProcessWordWithMatches(release, map[string]string{
+		"VERSION":       version,
+		"TARGETOS":      "linux",
+		"TARGETARCH":    "arm64",
+		"TARGETVARIANT": "",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "something-v1.2.3.linux-arm64.tar.gz", w)
+
+	w, _, err = shlex.ProcessWordWithMatches(release, map[string]string{
+		"VERSION":    version,
+		"TARGETOS":   "linux",
+		"TARGETARCH": "arm64",
+		// No "TARGETVARIANT": "",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "something-v1.2.3.linux-arm64.tar.gz", w)
+}
