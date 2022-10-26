@@ -12,6 +12,7 @@ ARG CNI_VERSION=v1.1.0
 ARG STARGZ_SNAPSHOTTER_VERSION=v0.12.0
 ARG NERDCTL_VERSION=v0.17.1
 ARG DNSNAME_VERSION=v1.3.1
+ARG NYDUS_VERSION=v2.1.0
 
 # ALPINE_VERSION sets version for the base layers
 ARG ALPINE_VERSION=3.15
@@ -192,6 +193,14 @@ RUN --mount=target=/root/.cache,type=cache \
   xx-verify --static /out/containerd-stargz-grpc && \
   xx-verify --static /out/ctr-remote
 
+FROM gobuild-base AS nydus
+ARG NYDUS_VERSION
+ARG TARGETOS
+ARG TARGETARCH
+SHELL ["/bin/bash", "-c"]
+RUN wget https://github.com/dragonflyoss/image-service/releases/download/$NYDUS_VERSION/nydus-static-$NYDUS_VERSION-$TARGETOS-$TARGETARCH.tgz
+RUN mkdir -p /out/nydus-static && tar xzvf nydus-static-$NYDUS_VERSION-$TARGETOS-$TARGETARCH.tgz -C /out
+
 FROM buildkit-export AS buildkit-linux
 COPY --link --from=binaries / /usr/bin/
 ENTRYPOINT ["buildkitd"]
@@ -235,6 +244,7 @@ RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables ip6tables dnsmasq 
 ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.4=/opt/containerd-alt-14/bin,containerd-1.5=/opt/containerd-alt-15/bin"
 ENV BUILDKIT_INTEGRATION_SNAPSHOTTER=stargz
 ENV CGO_ENABLED=0
+COPY --link --from=nydus /out/nydus-static/* /usr/bin/
 COPY --link --from=stargz-snapshotter /out/* /usr/bin/
 COPY --link --from=rootlesskit /rootlesskit /usr/bin/
 COPY --link --from=containerd-alt-14 /out/containerd* /opt/containerd-alt-14/bin/
