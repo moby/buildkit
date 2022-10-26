@@ -158,7 +158,7 @@ The following parser directives are supported:
 - `syntax`
 - `escape`
 
-## syntax
+### syntax
 
 <a name="external-implementation-features"><!-- included for deep-links to old section --></a>
 
@@ -168,7 +168,7 @@ backend, and is ignored when using the classic builder backend.
 See [Custom Dockerfile syntax](https://docs.docker.com/build/buildkit/dockerfile-frontend/)
 page for more information.
 
-## escape
+### escape
 
 ```dockerfile
 # escape=\ (backslash)
