@@ -95,7 +95,7 @@ type OCIConfig struct {
 	// MaxParallelism is the maximum number of parallel build steps that can be run at the same time.
 	MaxParallelism int `toml:"max-parallelism"`
 
-	// Hooks are things you can run during any phase of the OCI container runtime lifecycle.
+	// earthly-specific: Hooks are things you can run during any phase of the OCI container runtime lifecycle.
 	Hooks []Hook `toml:"hook"`
 }
 
