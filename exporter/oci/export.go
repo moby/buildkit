@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -83,7 +84,7 @@ type imageExporterInstance struct {
 }
 
 func (e *imageExporterInstance) Name() string {
-	return "exporting to oci image format"
+	return fmt.Sprintf("exporting to %s image format", e.opt.Variant)
 }
 
 func (e *imageExporterInstance) Config() *exporter.Config {

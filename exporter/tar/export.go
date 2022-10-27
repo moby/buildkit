@@ -71,7 +71,7 @@ type localExporterInstance struct {
 }
 
 func (e *localExporterInstance) Name() string {
-	return "exporting to client"
+	return "exporting to client tarball"
 }
 
 func (e *localExporterInstance) Config() *exporter.Config {

@@ -52,7 +52,7 @@ type localExporterInstance struct {
 }
 
 func (e *localExporterInstance) Name() string {
-	return "exporting to client"
+	return "exporting to client directory"
 }
 
 func (e *localExporter) Config() *exporter.Config {
