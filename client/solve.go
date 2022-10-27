@@ -355,7 +355,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	return res, nil
 }
 
-func prepareSyncedDirs(def *llb.Definition, localDirs map[string]string) ([]filesync.SyncedDir, error) {
+func prepareSyncedDirs(def *llb.Definition, localDirs map[string]string) (filesync.StaticDirSource, error) {
 	for _, d := range localDirs {
 		fi, err := os.Stat(d)
 		if err != nil {
@@ -371,10 +371,10 @@ func prepareSyncedDirs(def *llb.Definition, localDirs map[string]string) ([]file
 		return fsutil.MapResultKeep
 	}
 
-	dirs := make([]filesync.SyncedDir, 0, len(localDirs))
+	dirs := make(filesync.StaticDirSource, len(localDirs))
 	if def == nil {
 		for name, d := range localDirs {
-			dirs = append(dirs, filesync.SyncedDir{Name: name, Dir: d, Map: resetUIDAndGID})
+			dirs[name] = filesync.SyncedDir{Dir: d, Map: resetUIDAndGID}
 		}
 	} else {
 		for _, dt := range def.Def {
@@ -389,7 +389,7 @@ func prepareSyncedDirs(def *llb.Definition, localDirs map[string]string) ([]file
 					if !ok {
 						return nil, errors.Errorf("local directory %s not enabled", name)
 					}
-					dirs = append(dirs, filesync.SyncedDir{Name: name, Dir: d, Map: resetUIDAndGID})
+					dirs[name] = filesync.SyncedDir{Dir: d, Map: resetUIDAndGID}
 				}
 			}
 		}
