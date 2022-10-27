@@ -67,7 +67,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		ApparmorProfile:     apparmorProfile,
 		TracingSocket:       traceSocket,
 		DefaultCgroupParent: defaultCgroupParent,
-		Hooks:               hooks,
+		Hooks:               hooks, //earthly-specific
 	}, np)
 	if err != nil {
 		return opt, err
