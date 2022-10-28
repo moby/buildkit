@@ -178,7 +178,7 @@ disabled_plugins = ["cri"]
 		}, c.extraEnv...), "containerd-rootless.sh", "-c", configFile)
 	}
 
-	cmd := exec.Command(containerdArgs[0], containerdArgs[1:]...)
+	cmd := exec.Command(containerdArgs[0], containerdArgs[1:]...) //nolint:gosec // test utility
 	cmd.Env = append(os.Environ(), c.extraEnv...)
 
 	ctdStop, err := startCmd(cmd, cfg.Logs)

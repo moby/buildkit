@@ -11,7 +11,7 @@ type TestServer interface {
 }
 
 func NewTestServer(response string) (TestServer, error) {
-	ln, err := net.Listen("tcp", ":")
+	ln, err := net.Listen("tcp", ":") //nolint:gosec // server only used in tests
 	if err != nil {
 		return nil, err
 	}

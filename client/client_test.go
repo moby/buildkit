@@ -567,7 +567,7 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 	def, err = out.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	k, err = rsa.GenerateKey(rand.Reader, 1024)
+	k, err = rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
 	dt = pem.EncodeToMemory(
@@ -602,7 +602,7 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
-	require.Contains(t, string(dt), "1024")
+	require.Contains(t, string(dt), "2048")
 	require.Contains(t, string(dt), "(RSA)")
 }
 
