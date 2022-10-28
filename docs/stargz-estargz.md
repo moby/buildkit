@@ -1,6 +1,6 @@
 # Lazy pulling stargz/eStargz base images (Experimental)
 
-This document describes the configuration that allows buildkit to lazily pull [stargz](https://github.com/google/crfs/blob/master/README.md#introducing-stargz)/[eStargz](https://github.com/containerd/stargz-snapshotter/blob/master/docs/stargz-estargz.md)-formatted images from registries and how to obtain stargz/eStargz images.
+This document describes the configuration that allows buildkit to lazily pull [stargz](https://github.com/google/crfs/blob/master/README.md#introducing-stargz)/[eStargz](https://github.com/containerd/stargz-snapshotter/blob/main/docs/estargz.md)-formatted images from registries and how to obtain stargz/eStargz images.
 
 By default, buildkit doesn't pull images until they are strictly needed.
 For example, during a build, buildkit doesn't pull the base image until it runs commands on it (e.g. `RUN` Dockerfile instruction) or until it exports stages as tarballs, etc.
@@ -12,16 +12,14 @@ This document describes the configuration and usage of this feature.
 
 For more details about stargz/eStargz image format, please see also [Stargz and eStargz image formats](#stargz-and-estargz-image-formats) section.
 
-## Known limitations
-
-- If you are using containerd worker, stargz snapshotter (`containerd-stargz-grpc`) needs to be run and configured separately.
-- Rootless execution is currently unsupported.
-
 ## Enabling lazy pulling of stargz/eStargz images
 
 Buildkit supports two ways to enable lazy pulling of stargz/eStargz images.
 
 ### Using builtin support (recommended)
+
+- Requirements
+  - Rootless execution requires kernel >= 5.11 or Ubuntu kernel. BuildKit >= v0.11 is recommended.
 
 OCI worker has builtin support for stargz/eStargz.
 You can enable this feature by running `buildkitd` with an option `--oci-worker-snapshotter=stargz`.
@@ -30,10 +28,25 @@ You can enable this feature by running `buildkitd` with an option `--oci-worker-
 buildkitd --oci-worker-snapshotter=stargz
 ```
 
-This is the easiest way to use this lazy pull feature on buildkit.
-Currently, this configuration is unsupported for containerd worker.
+This is the easiest way to use this lazy pulling feature on buildkit.
 
-#### Example of building an image with lazy pull
+#### Builtin stargz snapshotter with rootless
+
+To run it by non-root user, you can use [RootlessKit](https://github.com/rootless-containers/rootlesskit/).
+
+```
+rootlesskit buildkitd --oci-worker-snapshotter=stargz
+```
+
+```
+buildctl --addr unix:///run/user/$UID/buildkit/buildkitd.sock build ...
+```
+
+> NOTE1: For details about rootless configuration, see [`/docs/rootless.md`](./rootless.md).
+
+> NOTE2: If buildkitd can't create directory or socket under `/run`, check if `$XDG_RUNTIME_DIR` is set correctly (e.g. typically `/run/user/$UID`)
+
+#### Example of building an image with lazy pulling
 
 Once `buildkitd` starts with the above configuration, stargz/eStargz images can be lazily pulled.
 For example, we build the following golang binary with buildkit.
@@ -83,24 +96,16 @@ However if the destination is a registry and the target repository already conta
 
 ### Using proxy (standalone) snapshotter
 
-This is another way to enable stargz-based lazy pull.
-[Stargz Snapshotter (`containerd-stargz-grpc`)](https://github.com/containerd/stargz-snapshotter) needs to be installed.
-Note that buildkit's registry configuration doesn't propagate to stargz snapshotter so it needs to be configured separately when you use private/mirror repositories.
+This is another way to enable stargz-based lazy pulling.
+This configuration is for users of containerd worker.
 
-This configuration is for users of containerd worker and ones trying other versions of stargz snapshotter than built into OCI worker.
+- Requirements
+  - [Stargz Snapshotter (`containerd-stargz-grpc`)](https://github.com/containerd/stargz-snapshotter) needs to be installed. stargz-snapshotter >= v0.13 is recommended.
+  - Rootless execution requires kernel >= 5.11 or Ubuntu kernel. BuildKit >= v0.11 is recommended.
 
-#### With OCI worker
+> NOTE: BuildKit's registry configuration isn't propagated to the proxy stargz snapshotter so it needs to be configured separately when you use private/mirror registries. If you use OCI worker + builtin stargz snapshotter, the separated configurations isn't needed.
 
-Spawn `containerd-stargz-grpc` as a separated process.
-Then run `buildkitd` with an option `--oci-worker-proxy-snapshotter-path=/run/containerd-stargz-grpc/containerd-stargz-grpc.sock` which makes it recognize this snapshotter via the socket.
-
-```
-containerd-stargz-grpc
-buildkitd --oci-worker-snapshotter=stargz \
-          --oci-worker-proxy-snapshotter-path=/run/containerd-stargz-grpc/containerd-stargz-grpc.sock
-```
-
-#### With containerd worker
+#### Proxy snapshotter with containerd worker
 
 Configure containerd's config.toml (default = `/etc/containerd/config.toml`) to make it recognize stargz snapshotter as a [proxy snapshotter](https://github.com/containerd/containerd/blob/master/PLUGINS.md#proxy-plugins).
 
@@ -119,11 +124,90 @@ containerd
 buildkitd --containerd-worker-snapshotter=stargz --oci-worker=false --containerd-worker=true
 ```
 
-#### Registry-related configurations for standalone stargz snapshotter
+#### Proxy snapshotter with rootless containerd worker
+
+To run it by non-root user, you can use `containerd-rootless-setuptool.sh` included in [containerd/nerdctl](https://github.com/containerd/nerdctl).
+
+`install` subcommand installs rootless containerd.
+
+```
+containerd-rootless-setuptool.sh install
+```
+
+`install-stargz` subcommand installs rootless stargz-snapshotter.
+
+```
+$ containerd-rootless-setuptool.sh install-stargz
+$ cat <<'EOF' >> ~/.config/containerd/config.toml
+[proxy_plugins]
+  [proxy_plugins."stargz"]
+      type = "snapshot"
+      address = "/run/user/1000/containerd-stargz-grpc/containerd-stargz-grpc.sock"
+EOF
+$ systemctl --user restart containerd.service
+```
+
+> NOTE: replace "1000" with your actual UID
+
+[`install-buildkit-containerd` subcommand](https://github.com/containerd/nerdctl/blob/v1.0.0/docs/build.md#setting-up-buildkit-with-containerd-worker) installs rootless buildkitd with containerd worker.
+`CONTAINERD_SNAPSHOTTER=stargz` enables stargz-snapshotter.
+`CONTAINERD_NAMESPACE` specifies containerd namespace used by BuildKit.
+
+```
+$ CONTAINERD_NAMESPACE=default CONTAINERD_SNAPSHOTTER=stargz containerd-rootless-setuptool.sh install-buildkit-containerd
+```
+
+> NOTE: `CONTAINERD_SNAPSHOTTER=stargz` doesn't work with nerdctl <= v1.0.0.
+
+```
+buildctl --addr unix:///run/user/1000/buildkit-default/buildkitd.sock build ...
+```
+
+#### Proxy snapshotter with OCI worker
+
+Spawn `containerd-stargz-grpc` as a separated process.
+Then specify stargz-snapshotter's socket path to `--oci-worker-proxy-snapshotter-path`.
+
+```
+containerd-stargz-grpc
+buildkitd --oci-worker-snapshotter=stargz \
+          --oci-worker-proxy-snapshotter-path=/run/containerd-stargz-grpc/containerd-stargz-grpc.sock
+```
+
+#### Proxy snapshotter with rootless OCI worker
+
+Run stargz-snapshotter with rootlesskit.
+
+```
+rootlesskit --state-dir=/run/user/$UID/rootlesskit-buildkit \
+            containerd-stargz-grpc --root=$HOME/.local/share/containerd-stargz-grpc \
+                                   --address=/run/user/$UID/containerd-stargz-grpc/containerd-stargz-grpc.sock &
+```
+
+RootlessKit writes the PID to a file named `child_pid` under `--state-dir` directory.
+
+Join buildkitd to the same rootlesskit namespace.
+Specify stargz-snapshotter's socket path to `--oci-worker-proxy-snapshotter-path`.
+
+```
+nsenter -U --preserve-credentials -m -t $(cat /run/user/$UID/rootlesskit-buildkit/child_pid) \
+        buildkitd --oci-worker-snapshotter=stargz \
+                  --oci-worker-proxy-snapshotter-path=/run/user/$UID/containerd-stargz-grpc/containerd-stargz-grpc.sock &
+```
+
+> NOTE: If buildkitd can't create directory or socket under `/run`, check if `$XDG_RUNTIME_DIR` is set correctly (e.g. typically `/run/user/$UID`)
+
+```
+buildctl --addr unix:///run/user/$UID/buildkit/buildkitd.sock build ...
+```
+
+#### Registry-related configurations for proxy (standalone) stargz snapshotter
+
+> NOTE: You don't need this configuration if you use OCI worker + builtin stargz snapshotter
 
 When you use standalone stargz snapshotter, registry configuration needs to be done for the stargz snapshotter process, separately.
 Create a configuration toml file which contains the registry configuration for stargz snapshotter (e.g. `/etc/containerd-stargz-grpc/config.toml`).
-The configuration format [**differs** from buildkit](https://github.com/containerd/stargz-snapshotter/blob/master/cmd/containerd-stargz-grpc/config.go).
+The configuration format [differs from buildkit](https://github.com/containerd/stargz-snapshotter/blob/master/cmd/containerd-stargz-grpc/config.go).
 For more information about this format, please see also [docs in the repository](https://github.com/containerd/stargz-snapshotter/blob/master/docs/overview.md#registry-related-configuration).
 
 ```toml
@@ -139,20 +223,23 @@ containerd-stargz-grpc --config=/etc/containerd-stargz-grpc/config.toml
 
 ## Stargz and eStargz image formats
 
-[Stargz](https://github.com/google/crfs/blob/master/README.md#introducing-stargz) and [eStargz](https://github.com/containerd/stargz-snapshotter/blob/master/docs/stargz-estargz.md) are OCI/Docker-compatible image formats that can be lazily pulled from standard registries (e.g. Docker Hub, GitHub Container Registry, etc).
+[Stargz](https://github.com/google/crfs/blob/master/README.md#introducing-stargz) and [eStargz](https://github.com/containerd/stargz-snapshotter/blob/main/docs/estargz.md) are OCI/Docker-compatible image formats that can be lazily pulled from standard registries (e.g. Docker Hub, GitHub Container Registry, etc).
 Because they are backwards-compatible to OCI/Docker images, they can run on standard runtimes (e.g. Docker, containerd, etc.).
 Stargz is proposed by [Google CRFS project](https://github.com/google/crfs).
 eStargz is an extended format of stargz by [Stargz Snapshotter](https://github.com/containerd/stargz-snapshotter).
-It comes with [additional features](https://github.com/containerd/stargz-snapshotter/blob/master/docs/stargz-estargz.md#estargz-archive-format) including chunk verification and prefetch for avoiding the overhead of on-demand fetching.
-For more details about lazy pull with stargz/eStargz images, please refer to the docs on these repositories.
+It comes with [additional features](https://github.com/containerd/stargz-snapshotter/blob/main/docs/estargz.md) including chunk verification and prefetch for avoiding the overhead of on-demand fetching.
+For more details about lazy pulling with stargz/eStargz images, please refer to the docs on these repositories.
 
 ## Creating stargz/eStargz images
 
 ### Building eStargz image with BuildKit
 
 BuildKit supports creating eStargz as one of the compression types.
+
+:information_source: Creating eStargz image does NOT require [stargz-snapshotter setup](#enabling-lazy-pulling-of-stargzeStargz-images).
+
 As shown in the following, `compression=estargz` creates an eStargz-formatted image.
-Specifying `oci-mediatypes=true` option is highly recommended for enabling [layer verification](https://github.com/containerd/stargz-snapshotter/blob/v0.6.4/docs/verification.md) of eStargz.
+Specifying `oci-mediatypes=true` option is highly recommended for enabling [layer verification](https://github.com/containerd/stargz-snapshotter/blob/v0.13.0/docs/estargz.md#content-verification-in-estargz) of eStargz.
 
 ```
 buildctl build ... \
@@ -167,12 +254,14 @@ buildctl build ... \
 
 ### Other methods to obtain stargz/eStargz images
 
-Pre-converted stargz/eStargz images are available at [`ghcr.io/stargz-containers` repository](https://github.com/containerd/stargz-snapshotter/blob/master/docs/pre-converted-images.md) (mainly for testing purpose).
+Pre-converted stargz/eStargz images are available at [`ghcr.io/stargz-containers` repository](https://github.com/containerd/stargz-snapshotter/blob/main/docs/pre-converted-images.md) (mainly for testing purpose).
 
 You can also create any stargz/eStargz image using the variety of tools including the following.
 
-- [`nerdctl`](https://github.com/containerd/nerdctl/blob/v0.10.0/docs/stargz.md#building-stargz-images-using-nerdctl-build): Docker-compatible CLI for containerd and BuildKit. This supports `convert` subcommand to convert an OCI/Docker image into eStargz.
-- [`ctr-remote`](https://github.com/containerd/stargz-snapshotter/blob/v0.6.4/docs/ctr-remote.md): containerd CLI developed in stargz snapshotter project. This supports converting an OCI/Docker image into eStargz and [optimizing](https://github.com/containerd/stargz-snapshotter/blob/v0.6.4/docs/stargz-estargz.md#example-use-case-of-prioritized-files-workload-based-image-optimization-in-stargz-snapshotter) it.
+- [Docker Buildx](https://github.com/containerd/stargz-snapshotter/tree/v0.13.0#building-estargz-images-using-buildkit): Docker CLI plugin for BuildKit.
+- [Kaniko](https://github.com/containerd/stargz-snapshotter/tree/v0.13.0#building-estargz-images-using-kaniko): An image builder runnable in containers and Kubernetes.
+- [nerdctl](https://github.com/containerd/nerdctl/blob/v1.0.0/docs/stargz.md#building-stargz-images-using-nerdctl-build): Docker-compatible CLI for containerd and BuildKit. This supports `convert` subcommand to convert an OCI/Docker image into eStargz.
+- [`ctr-remote`](https://github.com/containerd/stargz-snapshotter/blob/v0.13.0/docs/ctr-remote.md): containerd CLI developed in stargz snapshotter project. This supports converting an OCI/Docker image into eStargz and [optimizing](https://github.com/containerd/stargz-snapshotter/blob/v0.13.0/docs/estargz.md#example-use-case-of-prioritized-files-workload-based-image-optimization-in-stargz-snapshotter) it.
 - [`stargzify`](https://github.com/google/crfs/tree/master/stargz/stargzify): CLI tool to convert an OCI/Docker image to stargz. This is developed in CRFS project. Creating eStargz is unsupported.
 
 There also other tools including Kaniko, ko, builpacks.io that support eStargz creation.
