@@ -2163,6 +2163,10 @@ ADD %s /dest/
 	dt, err = os.ReadFile(destFile)
 	require.NoError(t, err)
 	require.Equal(t, []byte("content2"), dt)
+
+	fi, err := os.Stat(destFile)
+	require.NoError(t, err)
+	require.Equal(t, modTime.Format(http.TimeFormat), fi.ModTime().Format(http.TimeFormat))
 }
 
 func testDockerfileAddArchive(t *testing.T, sb integration.Sandbox) {
