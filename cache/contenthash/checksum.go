@@ -799,7 +799,7 @@ func splitWildcards(p string) (d1, d2 string) {
 			p2 = append(p2, p)
 		}
 	}
-	return filepath.Join(p1...), filepath.Join(p2...)
+	return path.Join(p1...), path.Join(p2...)
 }
 
 func containsWildcards(name string) bool {
@@ -1015,7 +1015,7 @@ func (cc *cacheContext) scanPath(ctx context.Context, m *mount, p string) (retEr
 			Type:     CacheRecordTypeSymlink,
 			Linkname: filepath.ToSlash(link),
 		}
-		k := []byte(filepath.Join("/", filepath.ToSlash(p)))
+		k := []byte(path.Join("/", filepath.ToSlash(p)))
 		k = convertPathToKey(k)
 		txn.Insert(k, cr)
 		return nil
@@ -1024,15 +1024,15 @@ func (cc *cacheContext) scanPath(ctx context.Context, m *mount, p string) (retEr
 		return err
 	}
 
-	err = filepath.Walk(parentPath, func(path string, fi os.FileInfo, err error) error {
+	err = filepath.Walk(parentPath, func(itemPath string, fi os.FileInfo, err error) error {
 		if err != nil {
-			return errors.Wrapf(err, "failed to walk %s", path)
+			return errors.Wrapf(err, "failed to walk %s", itemPath)
 		}
-		rel, err := filepath.Rel(mp, path)
+		rel, err := filepath.Rel(mp, itemPath)
 		if err != nil {
 			return err
 		}
-		k := []byte(filepath.Join("/", filepath.ToSlash(rel)))
+		k := []byte(path.Join("/", filepath.ToSlash(rel)))
 		if string(k) == "/" {
 			k = []byte{}
 		}
@@ -1043,7 +1043,7 @@ func (cc *cacheContext) scanPath(ctx context.Context, m *mount, p string) (retEr
 			}
 			if fi.Mode()&os.ModeSymlink != 0 {
 				cr.Type = CacheRecordTypeSymlink
-				link, err := os.Readlink(path)
+				link, err := os.Readlink(itemPath)
 				if err != nil {
 					return err
 				}
