@@ -299,7 +299,18 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 		parallelismSem = semutil.NewWeighted(int64(cfg.MaxParallelism))
 	}
 
-	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping, nc, dns, cfg.Binary, cfg.ApparmorProfile, parallelismSem, common.traceSocket, cfg.DefaultCgroupParent)
+	ociHooks := []oci.OciHook{}
+	for _, h := range cfg.Hooks {
+		ociHooks = append(ociHooks, oci.OciHook{
+			Phase:   h.Phase,
+			Path:    h.Path,
+			Args:    h.Args,
+			Env:     h.Env,
+			Timeout: h.Timeout,
+		})
+	}
+
+	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping, nc, dns, cfg.Binary, cfg.ApparmorProfile, parallelismSem, common.traceSocket, cfg.DefaultCgroupParent, ociHooks)
 	if err != nil {
 		return nil, err
 	}

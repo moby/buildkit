@@ -49,6 +49,7 @@ type Opt struct {
 	OOMScoreAdj     *int
 	ApparmorProfile string
 	TracingSocket   string
+	Hooks           []oci.OciHook
 }
 
 var defaultCommandCandidates = []string{"buildkit-runc", "runc"}
@@ -68,6 +69,7 @@ type runcExecutor struct {
 	mu               sync.Mutex
 	apparmorProfile  string
 	tracingSocket    string
+	hooks            []oci.OciHook
 }
 
 func New(opt Opt, networkProviders map[pb.NetMode]network.Provider) (executor.Executor, error) {
@@ -132,6 +134,7 @@ func New(opt Opt, networkProviders map[pb.NetMode]network.Provider) (executor.Ex
 		running:          make(map[string]chan error),
 		apparmorProfile:  opt.ApparmorProfile,
 		tracingSocket:    opt.TracingSocket,
+		hooks:            opt.Hooks,
 	}
 	return w, nil
 }
@@ -248,6 +251,12 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 		identity, err = w.idmap.ToHost(identity)
 		if err != nil {
 			return err
+		}
+	}
+
+	if len(w.hooks) > 0 {
+		for _, h := range w.hooks {
+			opts = append(opts, oci.WithHook(h))
 		}
 	}
 
