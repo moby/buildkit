@@ -4,11 +4,15 @@
 set -eu
 
 : ${PLATFORMS=}
+: ${BUILDKIT_TARGET=}
 : ${BUILDKITD_TAGS=}
 
-buildkitdTagsFlags=""
+buildArgs=""
+if [ -n "$BUILDKIT_TARGET" ]; then
+  buildArgs="--build-arg=BUILDKIT_TARGET=$BUILDKIT_TARGET "
+fi
 if [ -n "$BUILDKITD_TAGS" ]; then
-  buildkitdTagsFlags="--build-arg=BUILDKITD_TAGS=\"$BUILDKITD_TAGS\""
+  buildArgs="--build-arg=BUILDKITD_TAGS=\"$BUILDKITD_TAGS\" "
 fi
 
 platformFlag=""
@@ -16,7 +20,7 @@ if [ -n "$PLATFORMS" ]; then
   platformFlag="--platform=$PLATFORMS"
 fi
 
-buildxCmd build $platformFlag $buildkitdTagsFlags \
+buildxCmd build $platformFlag $buildArgs \
   --target "binaries" \
   --output "type=local,dest=./bin/" \
   .

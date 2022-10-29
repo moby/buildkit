@@ -4,6 +4,10 @@ bindir=$(prefix)/bin
 binaries: FORCE
 	hack/binaries
 
+binaries-all: binaries FORCE
+	BUILDKIT_TARGET=buildkitd.oci_only hack/binaries
+	BUILDKIT_TARGET=buildkitd.containerd_only hack/binaries
+
 images: FORCE
 # moby/buildkit:local and moby/buildkit:local-rootless are created on Docker
 	hack/images local moby/buildkit

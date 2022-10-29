@@ -86,12 +86,25 @@ RUN --mount=target=. --mount=target=/root/.cache,type=cache \
 FROM buildkit-base AS buildkitd
 # BUILDKITD_TAGS defines additional Go build tags for compiling buildkitd
 ARG BUILDKITD_TAGS
+ARG BUILDKIT_TARGET
 ARG TARGETPLATFORM
-RUN --mount=target=. --mount=target=/root/.cache,type=cache \
-  --mount=target=/go/pkg/mod,type=cache \
-  --mount=source=/tmp/.ldflags,target=/tmp/.ldflags,from=buildkit-version \
-  CGO_ENABLED=0 xx-go build -ldflags "$(cat /tmp/.ldflags) -extldflags '-static'" -tags "osusergo netgo static_build seccomp ${BUILDKITD_TAGS}" -o /usr/bin/buildkitd ./cmd/buildkitd && \
-  xx-verify --static /usr/bin/buildkitd
+RUN --mount=target=. \
+    --mount=target=/root/.cache,type=cache \
+    --mount=target=/go/pkg/mod,type=cache \
+    --mount=source=/tmp/.ldflags,target=/tmp/.ldflags,from=buildkit-version <<EOT
+  set -e
+  BINNAME=buildkitd
+  if [ "$BUILDKIT_TARGET" = "buildkitd.oci_only" ]; then
+    BINNAME=buildkitd.oci_only
+    BUILDKITD_TAGS="$BUILDKITD_TAGS no_containerd_worker"
+  elif [ "$BUILDKIT_TARGET" = "buildkitd.containerd_only" ]; then
+    BINNAME=buildkitd.containerd_only
+    BUILDKITD_TAGS="$BUILDKITD_TAGS no_oci_worker"
+  fi
+  set -x
+  CGO_ENABLED=0 xx-go build -ldflags "$(cat /tmp/.ldflags) -extldflags '-static'" -tags "osusergo netgo static_build seccomp ${BUILDKITD_TAGS}" -o /usr/bin/${BINNAME} ./cmd/buildkitd && \
+  xx-verify --static /usr/bin/${BINNAME}
+EOT
 
 FROM scratch AS binaries-linux-helper
 COPY --link --from=runc /usr/bin/runc /buildkit-runc
@@ -99,7 +112,7 @@ COPY --link --from=runc /usr/bin/runc /buildkit-runc
 COPY --link --from=tonistiigi/binfmt:buildkit-v7.0.0-29@sha256:5168f6c2b692b04a7c0102751220e293e109b3dc312eb22ee1a5547b42b58de6 / /
 FROM binaries-linux-helper AS binaries-linux
 COPY --link --from=buildctl /usr/bin/buildctl /
-COPY --link --from=buildkitd /usr/bin/buildkitd /
+COPY --link --from=buildkitd /usr/bin/buildkitd* /
 
 FROM scratch AS binaries-darwin
 COPY --link --from=buildctl /usr/bin/buildctl /
