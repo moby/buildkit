@@ -60,6 +60,7 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testWarnings,
 		testClientGatewayFrontendAttrs,
 		testClientGatewayNilResult,
+		testClientGatewayEmptyImageExec,
 	), integration.WithMirroredImages(integration.OfficialImages("busybox:latest")))
 
 	integration.Run(t, integration.TestFuncs(
@@ -2083,6 +2084,53 @@ func testClientGatewayNilResult(t *testing.T, sb integration.Sandbox) {
 	}
 
 	_, err = c.Build(sb.Context(), SolveOpt{}, "", b, nil)
+	require.NoError(t, err)
+}
+
+func testClientGatewayEmptyImageExec(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+	target := registry + "/buildkit/testemptyimage:latest"
+
+	// push an empty image
+	_, err = c.Build(sb.Context(), SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, "", func(ctx context.Context, c client.Client) (*client.Result, error) {
+		return client.NewResult(), nil
+	}, nil)
+	require.NoError(t, err)
+
+	_, err = c.Build(sb.Context(), SolveOpt{}, "", func(ctx context.Context, gw client.Client) (*client.Result, error) {
+		// create an exec on that empty image (expected to fail, but not to panic)
+		st := llb.Image(target).Run(
+			llb.Args([]string{"echo", "hello"}),
+		).Root()
+		def, err := st.Marshal(sb.Context())
+		if err != nil {
+			return nil, err
+		}
+		_, err = gw.Solve(ctx, client.SolveRequest{
+			Definition: def.ToPB(),
+			Evaluate:   true,
+		})
+		require.ErrorContains(t, err, `process "echo hello" did not complete successfully`)
+		return nil, nil
+	}, nil)
 	require.NoError(t, err)
 }
 
