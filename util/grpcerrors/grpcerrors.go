@@ -181,7 +181,7 @@ func FromGRPC(err error) error {
 
 	for _, s := range stacks {
 		if s != nil {
-			err = stack.Wrap(err, *s)
+			err = stack.Wrap(err, s)
 		}
 	}
 

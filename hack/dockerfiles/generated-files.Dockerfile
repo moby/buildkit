@@ -24,10 +24,8 @@ RUN --mount=type=bind,target=.,rw \
     go install \
       github.com/gogo/protobuf/protoc-gen-gogo \
       github.com/gogo/protobuf/protoc-gen-gogofaster \
-      github.com/gogo/protobuf/protoc-gen-gogoslick && \
-    # FIXME: Should be inferred from go.mod (1.5.2 atm)
-    go install \
-      github.com/golang/protobuf/protoc-gen-go@v1.3.5
+      github.com/gogo/protobuf/protoc-gen-gogoslick \
+      github.com/golang/protobuf/protoc-gen-go
 
 FROM tools AS generated
 RUN --mount=type=bind,target=.,rw <<EOT
