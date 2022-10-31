@@ -158,7 +158,7 @@ The following parser directives are supported:
 - `syntax`
 - `escape`
 
-## syntax
+### syntax
 
 <a name="external-implementation-features"><!-- included for deep-links to old section --></a>
 
@@ -168,7 +168,7 @@ backend, and is ignored when using the classic builder backend.
 See [Custom Dockerfile syntax](https://docs.docker.com/build/buildkit/dockerfile-frontend/)
 page for more information.
 
-## escape
+### escape
 
 ```dockerfile
 # escape=\ (backslash)
@@ -948,6 +948,12 @@ LABEL multi.label1="value1" \
       multi.label2="value2" \
       other="value3"
 ```
+
+> **Note**
+> 
+> Be sure to use double quotes and not single quotes. Particularly when you are
+> using string interpolation (e.g. `LABEL example="foo-$ENV_VAR"`), single
+> quotes will take the string as is without unpacking the variable's value.
 
 Labels included in base or parent images (images in the `FROM` line) are
 inherited by your image. If a label already exists but with a different value,
