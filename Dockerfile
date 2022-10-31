@@ -6,8 +6,6 @@ ARG CONTAINERD_VERSION=v1.6.6
 ARG CONTAINERD_ALT_VERSION_15=v1.5.11
 # containerd v1.4 for integration tests
 ARG CONTAINERD_ALT_VERSION_14=v1.4.13
-# BUILDKIT_TARGET defines buildkitd worker mode (buildkitd, buildkitd.oci_only, buildkitd.containerd_only)
-ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=2.8.0
 ARG ROOTLESSKIT_VERSION=v0.14.6
 ARG CNI_VERSION=v1.1.0
@@ -194,30 +192,15 @@ RUN --mount=target=/root/.cache,type=cache \
   xx-verify --static /out/containerd-stargz-grpc && \
   xx-verify --static /out/ctr-remote
 
-# Copy together all binaries needed for oci worker mode
-FROM buildkit-export AS buildkit-buildkitd.oci_only
-COPY --link --from=buildkitd.oci_only /usr/bin/buildkitd.oci_only /usr/bin/
-COPY --link --from=buildctl /usr/bin/buildctl /usr/bin/
-ENTRYPOINT ["buildkitd.oci_only"]
-
-# Copy together all binaries for containerd worker mode
-FROM buildkit-export AS buildkit-buildkitd.containerd_only
-COPY --link --from=buildkitd.containerd_only /usr/bin/buildkitd.containerd_only /usr/bin/
-COPY --link --from=buildctl /usr/bin/buildctl /usr/bin/
-ENTRYPOINT ["buildkitd.containerd_only"]
-
-# Copy together all binaries for oci+containerd mode
-FROM buildkit-export AS buildkit-buildkitd-linux
+FROM buildkit-export AS buildkit-linux
 COPY --link --from=binaries / /usr/bin/
 ENTRYPOINT ["buildkitd"]
 
-FROM binaries AS buildkit-buildkitd-darwin
+FROM binaries AS buildkit-darwin
 
-FROM binaries AS buildkit-buildkitd-windows
+FROM binaries AS buildkit-windows
 # this is not in binaries-windows because it is not intended for release yet, just CI
 COPY --link --from=buildkitd /usr/bin/buildkitd /buildkitd.exe
-
-FROM buildkit-buildkitd-$TARGETOS AS buildkit-buildkitd
 
 FROM alpine:${ALPINE_VERSION} AS containerd-runtime
 COPY --link --from=runc /usr/bin/runc /usr/bin/
@@ -293,4 +276,4 @@ VOLUME /home/user/.local/share/buildkit
 ENTRYPOINT ["rootlesskit", "buildkitd"]
 
 # buildkit builds the buildkit container image
-FROM buildkit-${BUILDKIT_TARGET} AS buildkit
+FROM buildkit-$TARGETOS AS buildkit

@@ -59,8 +59,6 @@ The following command installs `buildkitd` and `buildctl` to `/usr/local/bin`:
 make && sudo make install
 ```
 
-You can also use `make binaries-all` to prepare `buildkitd.containerd_only` and `buildkitd.oci_only`.
-
 To build containerized `moby/buildkit:local` and `moby/buildkit:local-rootless` images:
 ```bash
 make images
