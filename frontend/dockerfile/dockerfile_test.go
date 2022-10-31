@@ -150,6 +150,7 @@ var allTests = integration.TestFuncs(
 	testSourceDateEpochWithoutExporter,
 	testSBOMScannerImage,
 	testProvenanceAttestation,
+	testGitProvenanceAttestation,
 )
 
 // Tests that depend on the `security.*` entitlements
@@ -6301,6 +6302,113 @@ RUN echo "ok" > /foo
 			}
 		})
 	}
+}
+
+func testGitProvenanceAttestation(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox:latest
+RUN echo "git" > /foo
+COPY myapp.Dockerfile /
+`)
+	dir, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("myapp.Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	err = runShell(dir,
+		"git init",
+		"git config --local user.email test",
+		"git config --local user.name test",
+		"git add myapp.Dockerfile",
+		"git commit -m initial",
+		"git branch v1",
+		"git update-server-info",
+	)
+	require.NoError(t, err)
+
+	cmd := exec.Command("git", "rev-parse", "v1")
+	cmd.Dir = dir
+	expectedGitSHA, err := cmd.Output()
+	require.NoError(t, err)
+
+	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Join(dir))))
+	defer server.Close()
+
+	target := registry + "/buildkit/testwithprovenance:git"
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"context":           server.URL + "/.git#v1",
+			"attest:provenance": "",
+			"filename":          "myapp.Dockerfile",
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	desc, provider, err := contentutil.ProviderFromRef(target)
+	require.NoError(t, err)
+	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(imgs.Images))
+
+	img := imgs.Find(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
+	require.NotNil(t, img)
+	require.Equal(t, []byte("git\n"), img.Layers[1]["foo"].Data)
+
+	att := imgs.Find("unknown/unknown")
+	require.NotNil(t, att)
+	require.Equal(t, att.Desc.Annotations["vnd.docker.reference.digest"], string(img.Desc.Digest))
+	require.Equal(t, att.Desc.Annotations["vnd.docker.reference.type"], "attestation-manifest")
+	var attest intoto.Statement
+	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
+	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+	require.Equal(t, "https://slsa.dev/provenance/v0.2", attest.PredicateType) // intentionally not const
+
+	type stmtT struct {
+		Predicate provenance.ProvenancePredicate `json:"predicate"`
+	}
+	var stmt stmtT
+	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
+	pred := stmt.Predicate
+
+	switch f.(type) {
+	case *clientFrontend:
+		// TODO: buildinfo broken
+	default:
+		require.Equal(t, server.URL+"/.git#v1", pred.Invocation.ConfigSource.URI)
+		require.Equal(t, "myapp.Dockerfile", pred.Invocation.ConfigSource.EntryPoint)
+	}
+
+	require.Equal(t, 2, len(pred.Materials))
+	require.Equal(t, "pkg:docker/busybox@latest", pred.Materials[0].URI)
+	require.NotEmpty(t, pred.Materials[0].Digest["sha256"])
+
+	require.Equal(t, strings.Replace(server.URL+"/.git#v1", "http://", "https://", 1), pred.Materials[1].URI) // TODO: buildinfo broken
+	require.Equal(t, strings.TrimSpace(string(expectedGitSHA)), pred.Materials[1].Digest["sha1"])
 }
 
 func runShell(dir string, cmds ...string) error {
