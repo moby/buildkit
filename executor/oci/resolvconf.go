@@ -24,7 +24,7 @@ type DNSConfig struct {
 	SearchDomains []string
 }
 
-func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.IdentityMapping, dns *DNSConfig) (string, error) {
+func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.IdentityMapping, dns *DNSConfig, hostNetMode bool) (string, error) {
 	p := filepath.Join(stateDir, "resolv.conf")
 	_, err := g.Do(ctx, stateDir, func(ctx context.Context) (interface{}, error) {
 		generate := !notFirstRun
@@ -51,6 +51,22 @@ func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.Identity
 				} else {
 					if fi.ModTime().Before(fiMain.ModTime()) {
 						generate = true
+					} else {
+						var oriFileHasLocalDNS bool
+						if ori, err := resolvconfGet(); err == nil {
+							oriFileHasLocalDNS = resolvconf.HasLocal(ori.Content[:])
+						}
+
+						var genFileHasLocalDNS bool
+						if gen, err := resolvconf.GetSpecific(p); err == nil {
+							genFileHasLocalDNS = resolvconf.HasLocal(gen.Content[:])
+						}
+
+						if hostNetMode && oriFileHasLocalDNS && !genFileHasLocalDNS {
+							generate = true
+						} else if !hostNetMode && oriFileHasLocalDNS && genFileHasLocalDNS {
+							generate = true
+						}
 					}
 				}
 			}
@@ -93,7 +109,8 @@ func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.Identity
 			dt = f.Content
 		}
 
-		f, err = resolvconf.FilterResolvDNS(dt, true)
+		removeLocalDNS := !hostNetMode
+		f, err = resolvconf.FilterResolvDNS(dt, true, removeLocalDNS)
 		if err != nil {
 			return "", err
 		}

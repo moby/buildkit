@@ -167,11 +167,13 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 	}
 	defer namespace.Close()
 
+	hostNetMode := false
 	if meta.NetMode == pb.NetMode_HOST {
 		bklog.G(ctx).Info("enabling HostNetworking")
+		hostNetMode = true
 	}
 
-	resolvConf, err := oci.GetResolvConf(ctx, w.root, w.idmap, w.dns)
+	resolvConf, err := oci.GetResolvConf(ctx, w.root, w.idmap, w.dns, hostNetMode)
 	if err != nil {
 		return err
 	}

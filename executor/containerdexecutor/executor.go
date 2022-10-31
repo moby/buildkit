@@ -86,21 +86,6 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 		}
 	}()
 
-	meta := process.Meta
-
-	resolvConf, err := oci.GetResolvConf(ctx, w.root, nil, w.dnsConfig)
-	if err != nil {
-		return err
-	}
-
-	hostsFile, clean, err := oci.GetHostsFile(ctx, w.root, meta.ExtraHosts, nil, meta.Hostname)
-	if err != nil {
-		return err
-	}
-	if clean != nil {
-		defer clean()
-	}
-
 	mountable, err := root.Src.Mount(ctx, false)
 	if err != nil {
 		return err
@@ -121,6 +106,8 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 	}
 	defer lm.Unmount()
 	defer executor.MountStubsCleaner(rootfsPath, mounts)()
+
+	meta := process.Meta
 
 	uid, gid, sgids, err := oci.GetUser(rootfsPath, meta.User)
 	if err != nil {
@@ -152,8 +139,23 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 	}
 	defer namespace.Close()
 
+	hostNetMode := false
 	if meta.NetMode == pb.NetMode_HOST {
 		bklog.G(ctx).Info("enabling HostNetworking")
+		hostNetMode = true
+	}
+
+	resolvConf, err := oci.GetResolvConf(ctx, w.root, nil, w.dnsConfig, hostNetMode)
+	if err != nil {
+		return err
+	}
+
+	hostsFile, clean, err := oci.GetHostsFile(ctx, w.root, meta.ExtraHosts, nil, meta.Hostname)
+	if err != nil {
+		return err
+	}
+	if clean != nil {
+		defer clean()
 	}
 
 	opts := []containerdoci.SpecOpts{oci.WithUIDGID(uid, gid, sgids)}

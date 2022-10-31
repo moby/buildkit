@@ -115,8 +115,12 @@ func GetSpecific(path string) (*File, error) {
 //     cleaned config has no defined nameservers left, adds default DNS entries
 //  2. Given the caller provides the enable/disable state of IPv6, the filter
 //     code will remove all IPv6 nameservers if it is not enabled for containers
-func FilterResolvDNS(resolvConf []byte, ipv6Enabled bool) (*File, error) {
-	cleanedResolvConf := localhostNSRegexp.ReplaceAll(resolvConf, []byte{})
+func FilterResolvDNS(resolvConf []byte, ipv6Enabled bool, removeLocalDNS bool) (*File, error) {
+	cleanedResolvConf := resolvConf
+	if removeLocalDNS {
+		cleanedResolvConf = localhostNSRegexp.ReplaceAll(cleanedResolvConf, []byte{})
+	}
+
 	// if IPv6 is not enabled, also clean out any IPv6 address nameserver
 	if !ipv6Enabled {
 		cleanedResolvConf = nsIPv6Regexp.ReplaceAll(cleanedResolvConf, []byte{})
@@ -137,6 +141,11 @@ func FilterResolvDNS(resolvConf []byte, ipv6Enabled bool) (*File, error) {
 		return nil, err
 	}
 	return &File{Content: cleanedResolvConf, Hash: hash}, nil
+}
+
+// HasLocal returns true if localhost nameserver entries are found
+func HasLocal(resolvConf []byte) bool {
+	return localhostNSRegexp.Match(resolvConf)
 }
 
 // getLines parses input into lines and strips away comments.
