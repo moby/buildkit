@@ -28,6 +28,7 @@ import (
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/continuity/fs/fstest"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
+	slsa "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/dockerfile/builder"
@@ -39,6 +40,7 @@ import (
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/contentutil"
+	"github.com/moby/buildkit/util/provenance"
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
@@ -147,6 +149,7 @@ var allTests = integration.TestFuncs(
 	testDockerfileAddChownExpand,
 	testSourceDateEpochWithoutExporter,
 	testSBOMScannerImage,
+	testProvenanceAttestation,
 )
 
 // Tests that depend on the `security.*` entitlements
@@ -6151,6 +6154,153 @@ EOF
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
 	require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
+}
+
+func testProvenanceAttestation(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox:latest
+RUN echo "ok" > /foo
+`)
+	dir, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	for _, mode := range []string{"min", "max"} {
+		t.Run(mode, func(t *testing.T) {
+			target := registry + "/buildkit/testwithprovenance:" + mode
+			provReq := ""
+			if mode == "max" {
+				provReq = "mode=max"
+			}
+			_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+				LocalDirs: map[string]string{
+					builder.DefaultLocalNameDockerfile: dir,
+					builder.DefaultLocalNameContext:    dir,
+				},
+				FrontendAttrs: map[string]string{
+					"attest:provenance": provReq,
+					"build-arg:FOO":     "bar",
+					"label:lbl":         "abc",
+					"vcs:source":        "https://example.invalid/repo.git",
+					"vcs:revision":      "123456",
+				},
+				Exports: []client.ExportEntry{
+					{
+						Type: client.ExporterImage,
+						Attrs: map[string]string{
+							"name": target,
+							"push": "true",
+						},
+					},
+				},
+			}, nil)
+			require.NoError(t, err)
+
+			desc, provider, err := contentutil.ProviderFromRef(target)
+			require.NoError(t, err)
+			imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
+			require.NoError(t, err)
+			require.Equal(t, 2, len(imgs.Images))
+
+			img := imgs.Find(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
+			require.NotNil(t, img)
+			require.Equal(t, []byte("ok\n"), img.Layers[1]["foo"].Data)
+
+			att := imgs.Find("unknown/unknown")
+			require.NotNil(t, att)
+			require.Equal(t, att.Desc.Annotations["vnd.docker.reference.digest"], string(img.Desc.Digest))
+			require.Equal(t, att.Desc.Annotations["vnd.docker.reference.type"], "attestation-manifest")
+			var attest intoto.Statement
+			require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
+			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+			require.Equal(t, "https://slsa.dev/provenance/v0.2", attest.PredicateType) // intentionally not const
+
+			type stmtT struct {
+				Predicate provenance.ProvenancePredicate `json:"predicate"`
+			}
+			var stmt stmtT
+			require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
+			pred := stmt.Predicate
+
+			require.Equal(t, "https://mobyproject.org/buildkit@v1", pred.BuildType)
+			require.Equal(t, "", pred.Builder.ID)
+
+			require.Equal(t, slsa.ConfigSource{}, pred.Invocation.ConfigSource)
+
+			switch f.(type) {
+			case *clientFrontend, *gatewayFrontend:
+				// TODO: buildinfo broken
+			default:
+				params, ok := pred.Invocation.Parameters.(map[string]interface{})
+				require.True(t, ok, "%T", pred.Invocation.Parameters)
+				if mode == "max" {
+					require.Equal(t, 2, len(params))
+					require.True(t, pred.Metadata.Completeness.Parameters)
+
+					require.Equal(t, "bar", params["build-arg:FOO"])
+					require.Equal(t, "abc", params["label:lbl"])
+				} else {
+					require.False(t, pred.Metadata.Completeness.Parameters)
+					require.Equal(t, 0, len(params), "%v", params)
+				}
+
+				require.Equal(t, "https://example.invalid/repo.git", pred.Metadata.VCS["source"])
+				require.Equal(t, "123456", pred.Metadata.VCS["revision"])
+			}
+
+			require.Equal(t, 1, len(pred.Materials))
+			require.Equal(t, "pkg:docker/busybox@latest", pred.Materials[0].URI)
+			require.NotEmpty(t, pred.Materials[0].Digest["sha256"])
+
+			require.NotEmpty(t, pred.Metadata.BuildInvocationID)
+
+			require.NotNil(t, pred.Metadata.BuildFinishedOn)
+			require.True(t, time.Since(*pred.Metadata.BuildFinishedOn) < 5*time.Minute)
+			require.NotNil(t, pred.Metadata.BuildStartedOn)
+			require.True(t, time.Since(*pred.Metadata.BuildStartedOn) < 5*time.Minute)
+			require.True(t, pred.Metadata.BuildStartedOn.Before(*pred.Metadata.BuildFinishedOn))
+
+			require.True(t, pred.Metadata.Completeness.Environment)
+			require.True(t, pred.Metadata.Completeness.Materials)
+			require.False(t, pred.Metadata.Reproducible)
+
+			if mode == "max" {
+				require.Equal(t, 2, len(pred.Layers))
+				require.NotNil(t, pred.Source)
+				require.Equal(t, "Dockerfile", pred.Source.Infos[0].Filename)
+				require.Equal(t, dockerfile, pred.Source.Infos[0].Data)
+				require.NotNil(t, pred.BuildConfig)
+
+				bc, ok := pred.BuildConfig.(map[string]interface{})
+				require.True(t, ok, "wrong type %T", pred.BuildConfig)
+
+				llb, ok := bc["llbDefinition"].([]interface{})
+				require.True(t, ok, "wrong buildconfig %+v", bc)
+
+				require.Equal(t, 3, len(llb))
+			} else {
+				require.Equal(t, 0, len(pred.Layers))
+				require.Nil(t, pred.Source)
+				require.Nil(t, pred.BuildConfig)
+			}
+		})
+	}
 }
 
 func runShell(dir string, cmds ...string) error {
