@@ -14,7 +14,6 @@ import (
 	"github.com/containerd/containerd/errdefs"
 	"github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/session"
-	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/compression"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -23,16 +22,32 @@ import (
 	nydusify "github.com/containerd/nydus-snapshotter/pkg/converter"
 )
 
-var validAnnotations = append(
-	compression.EStargzAnnotations, containerdUncompressed,
-	nydusify.LayerAnnotationNydusBlob, nydusify.LayerAnnotationNydusBootstrap, nydusify.LayerAnnotationNydusBlobIDs,
-)
+func init() {
+	additionalAnnotations = append(
+		additionalAnnotations,
+		nydusify.LayerAnnotationNydusBlob, nydusify.LayerAnnotationNydusBootstrap, nydusify.LayerAnnotationNydusBlobIDs,
+	)
+}
 
-// mergeNydus does two steps:
+// Nydus compression type can't be mixed with other compression types in the same image,
+// so if `source` is this kind of layer, but the target is other compression type, we
+// should do the forced compression.
+func needsForceCompression(ctx context.Context, cs content.Store, source ocispecs.Descriptor, refCfg config.RefConfig) bool {
+	if refCfg.Compression.Force {
+		return true
+	}
+	isNydusBlob, _ := compression.Nydus.Is(ctx, cs, source)
+	if refCfg.Compression.Type == compression.Nydus {
+		return !isNydusBlob
+	}
+	return isNydusBlob
+}
+
+// MergeNydus does two steps:
 // 1. Extracts nydus bootstrap from nydus format (nydus blob + nydus bootstrap) for each layer.
 // 2. Merge all nydus bootstraps into a final bootstrap (will as an extra layer).
 // The nydus bootstrap size is very small, so the merge operation is fast.
-func mergeNydus(ctx context.Context, ref ImmutableRef, comp compression.Config, s session.Group) (*ocispecs.Descriptor, error) {
+func MergeNydus(ctx context.Context, ref ImmutableRef, comp compression.Config, s session.Group) (*ocispecs.Descriptor, error) {
 	iref, ok := ref.(*immutableRef)
 	if !ok {
 		return nil, fmt.Errorf("unsupported ref")
@@ -130,35 +145,4 @@ func mergeNydus(ctx context.Context, ref ImmutableRef, comp compression.Config, 
 	}
 
 	return &desc, nil
-}
-
-// Nydus compression type can't be mixed with other compression types in the same image,
-// so if `source` is this kind of layer, but the target is other compression type, we
-// should do the forced compression.
-func needsForceCompression(ctx context.Context, cs content.Store, source ocispecs.Descriptor, refCfg config.RefConfig) bool {
-	if refCfg.Compression.Force {
-		return true
-	}
-	isNydusBlob, _ := compression.Nydus.Is(ctx, cs, source)
-	if refCfg.Compression.Type == compression.Nydus {
-		return !isNydusBlob
-	}
-	return isNydusBlob
-}
-
-// PatchLayers appends an extra nydus bootstrap layer
-// to the manifest of nydus image, this layer represents the
-// whole metadata of filesystem view for the entire image.
-func PatchLayers(ctx context.Context, ref ImmutableRef, refCfg config.RefConfig, remote *solver.Remote, sg session.Group) (*solver.Remote, error) {
-	if refCfg.Compression.Type != compression.Nydus {
-		return remote, nil
-	}
-
-	desc, err := mergeNydus(ctx, ref, refCfg.Compression, sg)
-	if err != nil {
-		return nil, errors.Wrap(err, "merge nydus layer")
-	}
-	remote.Descriptors = append(remote.Descriptors, *desc)
-
-	return remote, nil
 }

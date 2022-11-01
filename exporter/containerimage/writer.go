@@ -432,12 +432,10 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *Ima
 		return nil, nil, err
 	}
 
-	remote, err = cache.PatchLayers(ctx, ref, opts.RefCfg, remote, sg)
+	remote, history, err = patchImageLayers(ctx, remote, history, ref, opts, sg)
 	if err != nil {
 		return nil, nil, err
 	}
-
-	remote, history = normalizeLayersAndHistory(ctx, remote, history, ref, opts.OCITypes)
 
 	config, err = patchImageConfig(config, remote.Descriptors, history, inlineCache, buildInfo, epoch)
 	if err != nil {
