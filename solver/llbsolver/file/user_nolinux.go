@@ -1,5 +1,5 @@
-//go:build !linux
-// +build !linux
+//go:build !windows && !linux
+// +build !windows,!linux
 
 package file
 

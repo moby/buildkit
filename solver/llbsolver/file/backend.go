@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -25,48 +26,13 @@ func timestampToTime(ts int64) *time.Time {
 	return &tm
 }
 
-func mapUserToChowner(user *copy.User, idmap *idtools.IdentityMapping) (copy.Chowner, error) {
-	if user == nil {
-		return func(old *copy.User) (*copy.User, error) {
-			if old == nil {
-				if idmap == nil {
-					return nil, nil
-				}
-				old = &copy.User{} // root
-				// non-nil old is already mapped
-				if idmap != nil {
-					identity, err := idmap.ToHost(idtools.Identity{
-						UID: old.UID,
-						GID: old.GID,
-					})
-					if err != nil {
-						return nil, err
-					}
-					return &copy.User{UID: identity.UID, GID: identity.GID}, nil
-				}
-			}
-			return old, nil
-		}, nil
-	}
-	u := *user
-	if idmap != nil {
-		identity, err := idmap.ToHost(idtools.Identity{
-			UID: user.UID,
-			GID: user.GID,
-		})
-		if err != nil {
-			return nil, err
-		}
-		u.UID = identity.UID
-		u.GID = identity.GID
-	}
-	return func(*copy.User) (*copy.User, error) {
-		return &u, nil
-	}, nil
-}
-
 func mkdir(ctx context.Context, d string, action pb.FileActionMkDir, user *copy.User, idmap *idtools.IdentityMapping) error {
-	p, err := fs.RootPath(d, filepath.Join("/", action.Path))
+	actionPath := action.Path
+	if runtime.GOOS == "windows" {
+		actionPath = strings.Split(actionPath, ":")[1]
+	}
+
+	p, err := fs.RootPath(d, filepath.Join("/", actionPath))
 	if err != nil {
 		return err
 	}
