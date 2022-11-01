@@ -103,6 +103,7 @@ BuildKit is used by the following projects:
 -   [Gitpod](https://github.com/gitpod-io/gitpod)
 -   [Dagger](https://dagger.io)
 -   [envd](https://github.com/tensorchord/envd/)
+-   [Depot](https://depot.dev)
 
 ## Quick start
 
