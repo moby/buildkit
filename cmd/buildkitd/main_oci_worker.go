@@ -115,6 +115,10 @@ func init() {
 			Name:  "oci-worker-apparmor-profile",
 			Usage: "set the name of the apparmor profile applied to containers",
 		},
+		cli.BoolFlag{
+			Name:  "oci-worker-selinux",
+			Usage: "apply SELinux labels",
+		},
 	}
 	n := "oci-worker-rootless"
 	u := "enable rootless mode"
@@ -240,6 +244,10 @@ func applyOCIFlags(c *cli.Context, cfg *config.Config) error {
 	if c.GlobalIsSet("oci-worker-apparmor-profile") {
 		cfg.Workers.OCI.ApparmorProfile = c.GlobalString("oci-worker-apparmor-profile")
 	}
+	if c.GlobalIsSet("oci-worker-selinux") {
+		cfg.Workers.OCI.SELinux = c.GlobalBool("oci-worker-selinux")
+	}
+
 	return nil
 }
 
@@ -299,7 +307,7 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 		parallelismSem = semaphore.NewWeighted(int64(cfg.MaxParallelism))
 	}
 
-	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping, nc, dns, cfg.Binary, cfg.ApparmorProfile, parallelismSem, common.traceSocket, cfg.DefaultCgroupParent)
+	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping, nc, dns, cfg.Binary, cfg.ApparmorProfile, cfg.SELinux, parallelismSem, common.traceSocket, cfg.DefaultCgroupParent)
 	if err != nil {
 		return nil, err
 	}
