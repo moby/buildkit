@@ -45,6 +45,19 @@ type containerdExecutor struct {
 	rootless         bool
 }
 
+// OnCreateRuntimer provides an alternative to OCI hooks for applying network
+// configuration to a container. If the [network.Provider] returns a
+// [network.Namespace] which also implements this interface, the containerd
+// executor will run the callback at the appropriate point in the container
+// lifecycle.
+type OnCreateRuntimer interface {
+	// OnCreateRuntime is analogous to the createRuntime OCI hook. The
+	// function is called after the container is created, before the user
+	// process has been executed. The argument is the container PID in the
+	// runtime namespace.
+	OnCreateRuntime(pid uint32) error
+}
+
 // New creates a new executor backed by connection to containerd API
 func New(client *containerd.Client, root, cgroup string, networkProviders map[pb.NetMode]network.Provider, dnsConfig *oci.DNSConfig, apparmorProfile string, selinux bool, traceSocket string, rootless bool) executor.Executor {
 	// clean up old hosts/resolv.conf file. ignore errors
@@ -209,6 +222,12 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 			err = errors.Wrapf(err1, "failed to delete task %s", id)
 		}
 	}()
+
+	if nn, ok := namespace.(OnCreateRuntimer); ok {
+		if err := nn.OnCreateRuntime(task.Pid()); err != nil {
+			return err
+		}
+	}
 
 	trace.SpanFromContext(ctx).AddEvent("Container created")
 	err = w.runProcess(ctx, task, process.Resize, process.Signal, func() {
