@@ -53,6 +53,10 @@ type exporter struct {
 	config          *Config
 }
 
+func (ce *exporter) Name() string {
+	return "exporting cache to azure blob store"
+}
+
 func (ce *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 	config, descs, err := ce.chains.Marshal(ctx)
 	if err != nil {

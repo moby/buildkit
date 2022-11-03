@@ -25,6 +25,8 @@ type ResolveCacheExporterFunc func(ctx context.Context, g session.Group, attrs m
 
 type Exporter interface {
 	solver.CacheExporterTarget
+	// Name uniquely identifies the exporter
+	Name() string
 	// Finalize finalizes and return metadata that are returned to the client
 	// e.g. ExporterResponseManifestDesc
 	Finalize(ctx context.Context) (map[string]string, error)
@@ -53,6 +55,10 @@ type contentCacheExporter struct {
 func NewExporter(ingester content.Ingester, ref string, oci bool, compressionConfig compression.Config) Exporter {
 	cc := v1.NewCacheChains()
 	return &contentCacheExporter{CacheExporterTarget: cc, chains: cc, ingester: ingester, oci: oci, ref: ref, comp: compressionConfig}
+}
+
+func (ce *contentCacheExporter) Name() string {
+	return "exporting content cache"
 }
 
 func (ce *contentCacheExporter) Config() Config {

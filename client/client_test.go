@@ -186,6 +186,7 @@ func TestIntegration(t *testing.T) {
 		testAttestationBundle,
 		testSBOMScan,
 		testSBOMScanSingleRef,
+		testMultipleCacheExports,
 	)
 	tests = append(tests, diffOpTestCases()...)
 	integration.Run(t, tests, mirrors)
@@ -7810,6 +7811,135 @@ EOF
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
 	require.Equal(t, map[string]interface{}{"success": false}, attest.Predicate)
+}
+
+func testMultipleCacheExports(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "multiple cache exports")
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+	run := func(cmd string) {
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+	run(`sh -c "echo -n foobar > const"`)
+	run(`sh -c "cat /dev/urandom | head -c 100 | sha256sum > unique"`)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	target := path.Join(registry, "image:test")
+	target2 := path.Join(registry, "image-copy:test")
+	cacheRef := path.Join(registry, "cache:test")
+	cacheOutDir, cacheOutDir2 := t.TempDir(), t.TempDir()
+
+	res, err := c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+		CacheExports: []CacheOptionsEntry{
+			{
+				Type: "local",
+				Attrs: map[string]string{
+					"dest": cacheOutDir,
+				},
+			},
+			{
+				Type: "local",
+				Attrs: map[string]string{
+					"dest": cacheOutDir2,
+				},
+			},
+			{
+				Type: "registry",
+				Attrs: map[string]string{
+					"ref": cacheRef,
+				},
+			},
+			{
+				Type: "inline",
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	ensureFile(t, filepath.Join(cacheOutDir, "index.json"))
+	ensureFile(t, filepath.Join(cacheOutDir2, "index.json"))
+
+	dgst := res.ExporterResponse[exptypes.ExporterImageDigestKey]
+
+	uniqueFile, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst, "/unique")
+	require.NoError(t, err)
+
+	res, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target2,
+					"push": "true",
+				},
+			},
+		},
+		CacheExports: []CacheOptionsEntry{
+			{
+				Type: "inline",
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dgst2 := res.ExporterResponse[exptypes.ExporterImageDigestKey]
+	require.Equal(t, dgst, dgst2)
+
+	destDir := t.TempDir()
+	ensurePruneAll(t, c, sb)
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		CacheImports: []CacheOptionsEntry{
+			{
+				Type: "registry",
+				Attrs: map[string]string{
+					"ref": cacheRef,
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	ensureFileContents(t, filepath.Join(destDir, "const"), "foobar")
+	ensureFileContents(t, filepath.Join(destDir, "unique"), string(uniqueFile))
+}
+
+func ensureFile(t *testing.T, path string) {
+	st, err := os.Stat(path)
+	require.NoError(t, err, "expected file at %s", path)
+	require.True(t, st.Mode().IsRegular())
+}
+
+func ensureFileContents(t *testing.T, path, expectedContents string) {
+	contents, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, expectedContents, string(contents))
 }
 
 func makeSSHAgentSock(t *testing.T, agent agent.Agent) (p string, err error) {
