@@ -263,7 +263,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 				}
 				tagDone(nil)
 
-				if e.unpack {
+				if src.Ref != nil && e.unpack {
 					if err := e.unpackImage(ctx, img, src, session.NewGroup(sessionID)); err != nil {
 						return nil, err
 					}

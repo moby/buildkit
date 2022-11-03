@@ -96,6 +96,7 @@ func TestIntegration(t *testing.T) {
 		testBuildHTTPSource,
 		testBuildPushAndValidate,
 		testBuildExportWithUncompressed,
+		testBuildExportScratch,
 		testResolveAndHosts,
 		testUser,
 		testOCIExporter,
@@ -1981,6 +1982,58 @@ func testBuildMultiMount(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	checkAllReleasable(t, c, sb, true)
+}
+
+func testBuildExportScratch(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "image exporter")
+
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Scratch()
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	target := registry + "/buildkit/build/exporter:withnocompressed"
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":        target,
+					"push":        "true",
+					"compression": "uncompressed",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
+	cdAddress := sb.ContainerdAddress()
+	var client *containerd.Client
+	if cdAddress != "" {
+		client, err = newContainerd(cdAddress)
+		require.NoError(t, err)
+		defer client.Close()
+
+		img, err := client.GetImage(ctx, target)
+		require.NoError(t, err)
+		mfst, err := images.Manifest(ctx, client.ContentStore(), img.Target(), nil)
+		require.NoError(t, err)
+		require.Equal(t, 0, len(mfst.Layers))
+		err = client.ImageService().Delete(ctx, target, images.SynchronousDelete())
+		require.NoError(t, err)
+	}
 }
 
 func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
