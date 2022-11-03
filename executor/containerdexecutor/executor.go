@@ -205,7 +205,7 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 	}
 
 	defer func() {
-		if _, err1 := task.Delete(context.TODO()); err == nil && err1 != nil {
+		if _, err1 := task.Delete(context.TODO(), containerd.WithProcessKill); err == nil && err1 != nil {
 			err = errors.Wrapf(err1, "failed to delete task %s", id)
 		}
 	}()
