@@ -2022,8 +2022,8 @@ func checkDescriptor(ctx context.Context, t *testing.T, cs content.Store, desc o
 }
 
 func TestMergeOp(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Depends on unimplemented merge-op support on Windows")
+	if runtime.GOOS == "windows" || runtime.GOOS == "freebsd" {
+		t.Skipf("Depends on unimplemented merge-op support on %s", runtime.GOOS)
 	}
 
 	// This just tests the basic Merge method and some of the logic with releasing merge refs.
@@ -2140,8 +2140,8 @@ func TestMergeOp(t *testing.T) {
 }
 
 func TestDiffOp(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Depends on unimplemented diff-op support on Windows")
+	if runtime.GOOS == "windows" || runtime.GOOS == "freebsd" {
+		t.Skipf("Depends on unimplemented diff-op support on %s", runtime.GOOS)
 	}
 
 	// This just tests the basic Diff method and some of the logic with releasing diff refs.

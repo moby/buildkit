@@ -1,6 +1,3 @@
-//go:build !windows
-// +build !windows
-
 package oci
 
 import (
@@ -134,8 +131,8 @@ func withDefaultProfile() oci.SpecOpts {
 	}
 }
 
-func getTracingSocketMount(socket string) specs.Mount {
-	return specs.Mount{
+func getTracingSocketMount(socket string) *specs.Mount {
+	return &specs.Mount{
 		Destination: tracingSocketPath,
 		Type:        "bind",
 		Source:      socket,
