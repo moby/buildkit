@@ -38,6 +38,10 @@ var buildCommand = cli.Command{
 	`,
 	Action: buildAction,
 	Flags: []cli.Flag{
+		cli.BoolFlag{
+			Name:  "skip-token-tls-verify",
+			Usage: "Skip TLS verify when fetching token.",
+		},
 		cli.StringSliceFlag{
 			Name:  "output,o",
 			Usage: "Define exports for build result, e.g. --output type=image,name=docker.io/username/image,push=true",
@@ -148,7 +152,7 @@ func buildAction(clicontext *cli.Context) error {
 	}
 
 	dockerConfig := config.LoadDefaultConfigFile(os.Stderr)
-	attachable := []session.Attachable{authprovider.NewDockerAuthProvider(dockerConfig)}
+	attachable := []session.Attachable{authprovider.NewDockerAuthProvider(dockerConfig, clicontext.Bool("skip-token-tls-verify"))}
 
 	if ssh := clicontext.StringSlice("ssh"); len(ssh) > 0 {
 		configs, err := build.ParseSSH(ssh)
