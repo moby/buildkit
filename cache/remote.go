@@ -212,7 +212,7 @@ func (sr *immutableRef) getRemote(ctx context.Context, createIfNeeded bool, refC
 			}
 		}
 
-		if refCfg.Compression.Force {
+		if needsForceCompression(ctx, sr.cm.ContentStore, desc, refCfg) {
 			if needs, err := refCfg.Compression.Type.NeedsConversion(ctx, sr.cm.ContentStore, desc); err != nil {
 				return nil, err
 			} else if needs {

@@ -86,7 +86,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 					return nil, errors.WithStack(ErrNoBlobs)
 				}
 
-				compressorFunc, finalize := comp.Type.Compress(comp)
+				compressorFunc, finalize := comp.Type.Compress(ctx, comp)
 				mediaType := comp.Type.MediaType()
 
 				var lowerRef *immutableRef

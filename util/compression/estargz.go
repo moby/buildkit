@@ -24,7 +24,7 @@ var EStargzAnnotations = []string{estargz.TOCJSONDigestAnnotation, estargz.Store
 const containerdUncompressed = "containerd.io/uncompressed"
 const estargzLabel = "buildkit.io/compression/estargz"
 
-func (c estargzType) Compress(comp Config) (compressorFunc Compressor, finalize Finalizer) {
+func (c estargzType) Compress(ctx context.Context, comp Config) (compressorFunc Compressor, finalize Finalizer) {
 	var cInfo *compressionInfo
 	var writeErr error
 	var mu sync.Mutex
@@ -140,6 +140,10 @@ func (c estargzType) NeedsComputeDiffBySelf() bool {
 
 func (c estargzType) OnlySupportOCITypes() bool {
 	return true
+}
+
+func (c estargzType) NeedsForceCompression() bool {
+	return false
 }
 
 func (c estargzType) MediaType() string {

@@ -79,12 +79,8 @@ type nopWriteCloser struct {
 func (nopWriteCloser) Close() error { return nil }
 
 func TestIntegration(t *testing.T) {
-	mirroredImages := integration.OfficialImages("busybox:latest", "alpine:latest")
-	mirroredImages["tonistiigi/test:nolayers"] = "docker.io/tonistiigi/test:nolayers"
-	mirroredImages["cpuguy83/buildkit-foreign:latest"] = "docker.io/cpuguy83/buildkit-foreign:latest"
-	mirrors := integration.WithMirroredImages(mirroredImages)
-
-	tests := integration.TestFuncs(
+	testIntegration(
+		t,
 		testCacheExportCacheKeyLoop,
 		testRelativeWorkDir,
 		testFileOpMkdirMkfile,
@@ -188,6 +184,15 @@ func TestIntegration(t *testing.T) {
 		testSBOMScanSingleRef,
 		testMultipleCacheExports,
 	)
+}
+
+func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sandbox)) {
+	mirroredImages := integration.OfficialImages("busybox:latest", "alpine:latest")
+	mirroredImages["tonistiigi/test:nolayers"] = "docker.io/tonistiigi/test:nolayers"
+	mirroredImages["cpuguy83/buildkit-foreign:latest"] = "docker.io/cpuguy83/buildkit-foreign:latest"
+	mirrors := integration.WithMirroredImages(mirroredImages)
+
+	tests := integration.TestFuncs(funcs...)
 	tests = append(tests, diffOpTestCases()...)
 	integration.Run(t, tests, mirrors)
 

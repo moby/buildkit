@@ -36,7 +36,7 @@ func getConverter(ctx context.Context, cs content.Store, desc ocispecs.Descripto
 	}
 
 	c := conversion{target: comp}
-	c.compress, c.finalize = comp.Type.Compress(comp)
+	c.compress, c.finalize = comp.Type.Compress(ctx, comp)
 	c.decompress = from.Decompress
 
 	return (&c).convert, nil

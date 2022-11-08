@@ -24,11 +24,12 @@ type Finalizer func(context.Context, content.Store) (map[string]string, error)
 // Type represents compression type for blob data, which needs
 // to be implemented for each compression type.
 type Type interface {
-	Compress(comp Config) (compressorFunc Compressor, finalize Finalizer)
+	Compress(ctx context.Context, comp Config) (compressorFunc Compressor, finalize Finalizer)
 	Decompress(ctx context.Context, cs content.Store, desc ocispecs.Descriptor) (io.ReadCloser, error)
 	NeedsConversion(ctx context.Context, cs content.Store, desc ocispecs.Descriptor) (bool, error)
 	NeedsComputeDiffBySelf() bool
 	OnlySupportOCITypes() bool
+	NeedsForceCompression() bool
 	MediaType() string
 	String() string
 }
@@ -83,7 +84,7 @@ const (
 
 var Default gzipType = Gzip
 
-func Parse(t string) (Type, error) {
+func parse(t string) (Type, error) {
 	switch t {
 	case Uncompressed.String():
 		return Uncompressed, nil
@@ -98,15 +99,7 @@ func Parse(t string) (Type, error) {
 	}
 }
 
-func IsMediaType(ct Type, mt string) bool {
-	mt, ok := toOCILayerType[mt]
-	if !ok {
-		return false
-	}
-	return mt == ct.MediaType()
-}
-
-func FromMediaType(mediaType string) (Type, error) {
+func fromMediaType(mediaType string) (Type, error) {
 	switch toOCILayerType[mediaType] {
 	case ocispecs.MediaTypeImageLayer, ocispecs.MediaTypeImageLayerNonDistributable:
 		return Uncompressed, nil
@@ -117,6 +110,14 @@ func FromMediaType(mediaType string) (Type, error) {
 	default:
 		return nil, fmt.Errorf("unsupported media type %s", mediaType)
 	}
+}
+
+func IsMediaType(ct Type, mt string) bool {
+	mt, ok := toOCILayerType[mt]
+	if !ok {
+		return false
+	}
+	return mt == ct.MediaType()
 }
 
 // DetectLayerMediaType returns media type from existing blob data.
