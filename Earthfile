@@ -6,7 +6,7 @@ WORKDIR /buildkit
 
 build:
     ARG RELEASE_VERSION=v0.0.0+earthlyunknown
-    FROM DOCKERFILE --build-arg RELEASE_VERSION=$RELEASE_VERSION --target buildkit-buildkitd-linux .
+    FROM DOCKERFILE --build-arg RELEASE_VERSION=$RELEASE_VERSION --target buildkit-linux .
 
 code:
     COPY . .

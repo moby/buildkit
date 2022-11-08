@@ -2,159 +2,8 @@
 
 Docker can build images automatically by reading the instructions from a
 `Dockerfile`. A `Dockerfile` is a text document that contains all the commands a
-user could call on the command line to assemble an image. Using `docker build`
-users can create an automated build that executes several command-line
-instructions in succession.
-
-This page describes the commands you can use in a `Dockerfile`. When you are
-done reading this page, refer to the [`Dockerfile` Best
-Practices](https://docs.docker.com/engine/userguide/eng-image/dockerfile_best-practices/) for a tip-oriented guide.
-
-## Usage
-
-The [docker build](https://docs.docker.com/engine/reference/commandline/build/)
-command builds an image from a `Dockerfile` and a *context*. The build's context
-is the set of files at a specified location `PATH` or `URL`. The `PATH` is a
-directory on your local filesystem. The `URL` is a Git repository location.
-
-The build context is processed recursively. So, a `PATH` includes any subdirectories
-and the `URL` includes the repository and its submodules. This example shows a
-build command that uses the current directory (`.`) as build context:
-
-```console
-$ docker build .
-
-Sending build context to Docker daemon  6.51 MB
-...
-```
-
-The build is run by the Docker daemon, not by the CLI. The first thing a build
-process does is send the entire context (recursively) to the daemon.  In most
-cases, it's best to start with an empty directory as context and keep your
-Dockerfile in that directory. Add only the files needed for building the
-Dockerfile.
-
-> **Warning**
->
-> Do not use your root directory, `/`, as the `PATH` for  your build context, as
-> it causes the build to transfer the entire contents of your hard drive to the
-> Docker daemon.
-{:.warning}
-
-To use a file in the build context, the `Dockerfile` refers to the file specified
-in an instruction, for example,  a `COPY` instruction. To increase the build's
-performance, exclude files and directories by adding a `.dockerignore` file to
-the context directory.  For information about how to [create a `.dockerignore`
-file](#dockerignore-file) see the documentation on this page.
-
-Traditionally, the `Dockerfile` is called `Dockerfile` and located in the root
-of the context. You use the `-f` flag with `docker build` to point to a Dockerfile
-anywhere in your file system.
-
-```console
-$ docker build -f /path/to/a/Dockerfile .
-```
-
-You can specify a repository and tag at which to save the new image if
-the build succeeds:
-
-```console
-$ docker build -t shykes/myapp .
-```
-
-To tag the image into multiple repositories after the build,
-add multiple `-t` parameters when you run the `build` command:
-
-```console
-$ docker build -t shykes/myapp:1.0.2 -t shykes/myapp:latest .
-```
-
-Before the Docker daemon runs the instructions in the `Dockerfile`, it performs
-a preliminary validation of the `Dockerfile` and returns an error if the syntax is incorrect:
-
-```console
-$ docker build -t test/myapp .
-
-[+] Building 0.3s (2/2) FINISHED
- => [internal] load build definition from Dockerfile                       0.1s
- => => transferring dockerfile: 60B                                        0.0s
- => [internal] load .dockerignore                                          0.1s
- => => transferring context: 2B                                            0.0s
-error: failed to solve: rpc error: code = Unknown desc = failed to solve with frontend dockerfile.v0: failed to create LLB definition:
-dockerfile parse error line 2: unknown instruction: RUNCMD
-```
-
-The Docker daemon runs the instructions in the `Dockerfile` one-by-one,
-committing the result of each instruction
-to a new image if necessary, before finally outputting the ID of your
-new image. The Docker daemon will automatically clean up the context you
-sent.
-
-Note that each instruction is run independently, and causes a new image
-to be created - so `RUN cd /tmp` will not have any effect on the next
-instructions.
-
-Whenever possible, Docker uses a build-cache to accelerate the `docker build`
-process significantly. This is indicated by the `CACHED` message in the console
-output. (For more information, see the [`Dockerfile` best practices guide](https://docs.docker.com/engine/userguide/eng-image/dockerfile_best-practices/)):
-
-```console
-$ docker build -t svendowideit/ambassador .
-
-[+] Building 0.7s (6/6) FINISHED
- => [internal] load build definition from Dockerfile                       0.1s
- => => transferring dockerfile: 286B                                       0.0s
- => [internal] load .dockerignore                                          0.1s
- => => transferring context: 2B                                            0.0s
- => [internal] load metadata for docker.io/library/alpine:3.2              0.4s
- => CACHED [1/2] FROM docker.io/library/alpine:3.2@sha256:e9a2035f9d0d7ce  0.0s
- => CACHED [2/2] RUN apk add --no-cache socat                              0.0s
- => exporting to image                                                     0.0s
- => => exporting layers                                                    0.0s
- => => writing image sha256:1affb80ca37018ac12067fa2af38cc5bcc2a8f09963de  0.0s
- => => naming to docker.io/svendowideit/ambassador                         0.0s
-```
-
-By default, the build cache is based on results from previous builds on the machine
-on which you are building. The `--cache-from` option also allows you to use a
-build-cache that's distributed through an image registry refer to the
-[specifying external cache sources](https://docs.docker.com/engine/reference/commandline/build/#specifying-external-cache-sources)
-section in the `docker build` command reference.
-
-When you're done with your build, you're ready to look into [scanning your image with `docker scan`](https://docs.docker.com/engine/scan/),
-and [pushing your image to Docker Hub](https://docs.docker.com/docker-hub/repos/).
-
-## BuildKit
-
-Starting with version 18.09, Docker supports a new backend for executing your
-builds that is provided by the [moby/buildkit](https://github.com/moby/buildkit)
-project. The BuildKit backend provides many benefits compared to the old
-implementation. For example, BuildKit can:
-
-- Detect and skip executing unused build stages
-- Parallelize building independent build stages
-- Incrementally transfer only the changed files in your build context between builds
-- Detect and skip transferring unused files in your build context
-- Use external Dockerfile implementations with many new features
-- Avoid side-effects with rest of the API (intermediate images and containers)
-- Prioritize your build cache for automatic pruning
-
-To use the BuildKit backend, you need to set an environment variable
-`DOCKER_BUILDKIT=1` on the CLI before invoking `docker build`. [Docker Buildx](https://github.com/docker/buildx)
-always enables BuildKit.
-
-### External Dockerfile frontend
-
-BuildKit supports loading frontends dynamically from container images. To use
-an external Dockerfile frontend, the first line of your Dockerfile needs to be
-`# syntax=docker/dockerfile:1` pointing to the specific image you want to use.
-
-BuildKit also ships with Dockerfile frontend builtin but it is recommended to
-use an external image to make sure that all users use the same version on the
-builder and to pick up bugfixes automatically without waiting for a new version
-of BuildKit or Docker engine.
-
-See the [`syntax` directive section](#syntax) for more information.
+user could call on the command line to assemble an image. This page describes
+the commands you can use in a `Dockerfile`.
 
 ## Format
 
@@ -167,7 +16,6 @@ INSTRUCTION arguments
 
 The instruction is not case-sensitive. However, convention is for them to
 be UPPERCASE to distinguish them from arguments more easily.
-
 
 Docker runs instructions in a `Dockerfile` in order. A `Dockerfile` **must
 begin with a `FROM` instruction**. This may be after [parser
@@ -310,86 +158,17 @@ The following parser directives are supported:
 - `syntax`
 - `escape`
 
-## syntax
+### syntax
 
 <a name="external-implementation-features"><!-- included for deep-links to old section --></a>
 
-```dockerfile
-# syntax=[remote image reference]
-```
+This feature is only available when using the [BuildKit](https://docs.docker.com/build/buildkit/)
+backend, and is ignored when using the classic builder backend.
 
-For example:
+See [Custom Dockerfile syntax](https://docs.docker.com/build/buildkit/dockerfile-frontend/)
+page for more information.
 
-```dockerfile
-# syntax=docker/dockerfile:1
-# syntax=docker.io/docker/dockerfile:1
-# syntax=example.com/user/repo:tag@sha256:abcdef...
-```
-
-This feature is only available when using the [BuildKit](#buildkit) backend, and
-is ignored when using the classic builder backend.
-
-The syntax directive defines the location of the Dockerfile syntax that is used
-to build the Dockerfile. The BuildKit backend allows to seamlessly use external
-implementations that are distributed as Docker images and execute inside a
-container sandbox environment.
-
-Custom Dockerfile implementations allows you to:
-
-  - Automatically get bugfixes without updating the Docker daemon
-  - Make sure all users are using the same implementation to build your Dockerfile
-  - Use the latest features without updating the Docker daemon
-  - Try out new features or third-party features before they are integrated in the Docker daemon
-  - Use [alternative build definitions, or create your own](https://github.com/moby/buildkit#exploring-llb)
-
-### Official releases
-
-Docker distributes official versions of the images that can be used for building
-Dockerfiles under `docker/dockerfile` repository on Docker Hub. There are two
-channels where new images are released: `stable` and `labs`.
-
-Stable channel follows [semantic versioning](https://semver.org). For example:
-
-  - `docker/dockerfile:1` - kept updated with the latest `1.x.x` minor _and_ patch release
-  - `docker/dockerfile:1.2` -  kept updated with the latest `1.2.x` patch release,
-    and stops receiving updates once version `1.3.0` is released.
-  - `docker/dockerfile:1.2.1` - immutable: never updated
-
-We recommend using `docker/dockerfile:1`, which always points to the latest stable
-release of the version 1 syntax, and receives both "minor" and "patch" updates
-for the version 1 release cycle. BuildKit automatically checks for updates of the
-syntax when performing a build, making sure you are using the most current version.
-
-If a specific version is used, such as `1.2` or `1.2.1`, the Dockerfile needs to
-be updated manually to continue receiving bugfixes and new features. Old versions
-of the Dockerfile remain compatible with the new versions of the builder.
-
-**labs channel**
-
-The "labs" channel provides early access to Dockerfile features that are not yet
-available in the stable channel. Labs channel images are released in conjunction
-with the stable releases, and follow the same versioning with the `-labs` suffix,
-for example:
-
-  - `docker/dockerfile:labs` - latest release on labs channel
-  - `docker/dockerfile:1-labs` - same as `dockerfile:1` in the stable channel, with labs features enabled
-  - `docker/dockerfile:1.2-labs` -  same as `dockerfile:1.2` in the stable channel, with labs features enabled
-  - `docker/dockerfile:1.2.1-labs` - immutable: never updated. Same as `dockerfile:1.2.1` in the stable channel, with labs features enabled
-
-Choose a channel that best fits your needs; if you want to benefit from
-new features, use the labs channel. Images in the labs channel provide a superset
-of the features in the stable channel; note that `stable` features in the labs
-channel images follow [semantic versioning](https://semver.org), but "labs"
-features do not, and newer releases may not be backwards compatible, so it
-is recommended to use an immutable full version variant.
-
-For documentation on "labs" features, master builds, and nightly feature releases,
-refer to the description in [the BuildKit source repository on GitHub](https://github.com/moby/buildkit/blob/master/README.md).
-For a full list of available images, visit the [image repository on Docker Hub](https://hub.docker.com/r/docker/dockerfile),
-and the [docker/dockerfile-upstream image repository](https://hub.docker.com/r/docker/dockerfile-upstream)
-for development builds.
-
-## escape
+### escape
 
 ```dockerfile
 # escape=\ (backslash)
@@ -1169,6 +948,12 @@ LABEL multi.label1="value1" \
       multi.label2="value2" \
       other="value3"
 ```
+
+> **Note**
+> 
+> Be sure to use double quotes and not single quotes. Particularly when you are
+> using string interpolation (e.g. `LABEL example="foo-$ENV_VAR"`), single
+> quotes will take the string as is without unpacking the variable's value.
 
 Labels included in base or parent images (images in the `FROM` line) are
 inherited by your image. If a label already exists but with a different value,
@@ -2225,11 +2010,11 @@ ARG buildno
 > **Warning:**
 >
 > It is not recommended to use build-time variables for passing secrets like
-> github keys, user credentials etc. Build-time variable values are visible to
+> GitHub keys, user credentials etc. Build-time variable values are visible to
 > any user of the image with the `docker history` command.
 > 
-> Refer to the ["build images with BuildKit"](https://docs.docker.com/develop/develop-images/build_enhancements/#new-docker-build-secret-information)
-> section to learn about secure ways to use secrets when building images.
+> Refer to the [`RUN --mount=type=secret`](#run---mounttypesecret) section to
+> learn about secure ways to use secrets when building images.
 {:.warning}
 
 ### Default values
@@ -2389,7 +2174,8 @@ When building this Dockerfile, the `HTTP_PROXY` is preserved in the
 
 ### Automatic platform ARGs in the global scope
 
-This feature is only available when using the [BuildKit](#buildkit) backend.
+This feature is only available when using the [BuildKit](https://docs.docker.com/build/buildkit/)
+backend.
 
 Docker predefines a set of `ARG` variables with information on the platform of
 the node performing the build (build platform) and on the platform of the
@@ -2421,16 +2207,16 @@ RUN echo "I'm building for $TARGETPLATFORM"
 
 ### BuildKit built-in build args
 
-| Arg                                   | Type    | Description                                                              |
-|---------------------------------------|---------|--------------------------------------------------------------------------|
-| `BUILDKIT_CACHE_MOUNT_NS`             | String  | Set optional cache ID namespace.                                         |
-| `BUILDKIT_CONTEXT_KEEP_GIT_DIR`       | Bool    | Trigger git context to keep the `.git` directory.                        |
-| `BUILDKIT_INLINE_BUILDINFO_ATTRS`[^2] | Bool    | Inline build info attributes in image config or not.                     |
-| `BUILDKIT_INLINE_CACHE`[^2]           | Bool    | Inline cache metadata to image config or not.                            |
-| `BUILDKIT_MULTI_PLATFORM`             | Bool    | Opt into determnistic output regardless of multi-platform output or not. |
-| `BUILDKIT_SANDBOX_HOSTNAME`           | String  | Set the hostname (default `buildkitsandbox`)                             |
-| `BUILDKIT_SYNTAX`                     | String  | Set frontend image                                                       |
-| `SOURCE_DATE_EPOCH`                   | Int     | Set the UNIX timestamp for created image and layers. More info from [reproducible builds](https://reproducible-builds.org/docs/source-date-epoch/). Supported since Dockerfile 1.5, BuildKit 0.11 (unreleased) |
+| Arg                                   | Type   | Description                                                                                                                                                                                                    |
+|---------------------------------------|--------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `BUILDKIT_CACHE_MOUNT_NS`             | String | Set optional cache ID namespace.                                                                                                                                                                               |
+| `BUILDKIT_CONTEXT_KEEP_GIT_DIR`       | Bool   | Trigger git context to keep the `.git` directory.                                                                                                                                                              |
+| `BUILDKIT_INLINE_BUILDINFO_ATTRS`[^2] | Bool   | Inline build info attributes in image config or not.                                                                                                                                                           |
+| `BUILDKIT_INLINE_CACHE`[^2]           | Bool   | Inline cache metadata to image config or not.                                                                                                                                                                  |
+| `BUILDKIT_MULTI_PLATFORM`             | Bool   | Opt into determnistic output regardless of multi-platform output or not.                                                                                                                                       |
+| `BUILDKIT_SANDBOX_HOSTNAME`           | String | Set the hostname (default `buildkitsandbox`)                                                                                                                                                                   |
+| `BUILDKIT_SYNTAX`                     | String | Set frontend image                                                                                                                                                                                             |
+| `SOURCE_DATE_EPOCH`                   | Int    | Set the UNIX timestamp for created image and layers. More info from [reproducible builds](https://reproducible-builds.org/docs/source-date-epoch/). Supported since Dockerfile 1.5, BuildKit 0.11 (unreleased) |
 
 #### Example: keep `.git` dir
 
@@ -2871,4 +2657,4 @@ For examples of Dockerfiles, refer to:
 - The [language-specific getting started guides](https://docs.docker.com/language/)
 
 [^1]: Value required
-[^2]: For Docker-integrated BuildKit (`DOCKER_BUILDKIT=1 docker build`) and `docker buildx build`
+[^2]: For Docker-integrated [BuildKit](https://docs.docker.com/build/buildkit/#getting-started) and `docker buildx build`

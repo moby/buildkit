@@ -40,6 +40,7 @@ func check(arch, bin string) (string, error) {
 		return "", err
 	}
 
+	//nolint:gosec // inputs should be static strings
 	if _, err := io.Copy(f, r); err != nil {
 		f.Close()
 		return "", err

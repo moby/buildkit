@@ -6,14 +6,13 @@ ARG CONTAINERD_VERSION=v1.6.6
 ARG CONTAINERD_ALT_VERSION_15=v1.5.11
 # containerd v1.4 for integration tests
 ARG CONTAINERD_ALT_VERSION_14=v1.4.13
-# BUILDKIT_TARGET defines buildkitd worker mode (buildkitd, buildkitd.oci_only, buildkitd.containerd_only)
-ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=2.8.0
 ARG ROOTLESSKIT_VERSION=v0.14.6
 ARG CNI_VERSION=v1.1.0
 ARG STARGZ_SNAPSHOTTER_VERSION=v0.12.0
 ARG NERDCTL_VERSION=v0.17.1
 ARG DNSNAME_VERSION=v1.3.1
+ARG NYDUS_VERSION=v2.1.0
 
 # ALPINE_VERSION sets version for the base layers
 ARG ALPINE_VERSION=3.15
@@ -195,30 +194,23 @@ RUN --mount=target=/root/.cache,type=cache \
   xx-verify --static /out/containerd-stargz-grpc && \
   xx-verify --static /out/ctr-remote
 
-# Copy together all binaries needed for oci worker mode
-FROM buildkit-export AS buildkit-buildkitd.oci_only
-COPY --link --from=buildkitd.oci_only /usr/bin/buildkitd.oci_only /usr/bin/
-COPY --link --from=buildctl /usr/bin/buildctl /usr/bin/
-ENTRYPOINT ["buildkitd.oci_only"]
+FROM gobuild-base AS nydus
+ARG NYDUS_VERSION
+ARG TARGETOS
+ARG TARGETARCH
+SHELL ["/bin/bash", "-c"]
+RUN wget https://github.com/dragonflyoss/image-service/releases/download/$NYDUS_VERSION/nydus-static-$NYDUS_VERSION-$TARGETOS-$TARGETARCH.tgz
+RUN mkdir -p /out/nydus-static && tar xzvf nydus-static-$NYDUS_VERSION-$TARGETOS-$TARGETARCH.tgz -C /out
 
-# Copy together all binaries for containerd worker mode
-FROM buildkit-export AS buildkit-buildkitd.containerd_only
-COPY --link --from=buildkitd.containerd_only /usr/bin/buildkitd.containerd_only /usr/bin/
-COPY --link --from=buildctl /usr/bin/buildctl /usr/bin/
-ENTRYPOINT ["buildkitd.containerd_only"]
-
-# Copy together all binaries for oci+containerd mode
-FROM buildkit-export AS buildkit-buildkitd-linux
+FROM buildkit-export AS buildkit-linux
 COPY --link --from=binaries / /usr/bin/
 ENTRYPOINT ["buildkitd"]
 
-FROM binaries AS buildkit-buildkitd-darwin
+FROM binaries AS buildkit-darwin
 
-FROM binaries AS buildkit-buildkitd-windows
+FROM binaries AS buildkit-windows
 # this is not in binaries-windows because it is not intended for release yet, just CI
 COPY --link --from=buildkitd /usr/bin/buildkitd /buildkitd.exe
-
-FROM buildkit-buildkitd-$TARGETOS AS buildkit-buildkitd
 
 FROM alpine:${ALPINE_VERSION} AS containerd-runtime
 COPY --link --from=runc /usr/bin/runc /usr/bin/
@@ -253,6 +245,7 @@ RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables ip6tables dnsmasq 
 ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.4=/opt/containerd-alt-14/bin,containerd-1.5=/opt/containerd-alt-15/bin"
 ENV BUILDKIT_INTEGRATION_SNAPSHOTTER=stargz
 ENV CGO_ENABLED=0
+COPY --link --from=nydus /out/nydus-static/* /usr/bin/
 COPY --link --from=stargz-snapshotter /out/* /usr/bin/
 COPY --link --from=rootlesskit /rootlesskit /usr/bin/
 COPY --link --from=containerd-alt-14 /out/containerd* /opt/containerd-alt-14/bin/
@@ -294,4 +287,4 @@ VOLUME /home/user/.local/share/buildkit
 ENTRYPOINT ["rootlesskit", "buildkitd"]
 
 # buildkit builds the buildkit container image
-FROM buildkit-${BUILDKIT_TARGET} AS buildkit
+FROM buildkit-$TARGETOS AS buildkit

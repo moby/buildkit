@@ -4,7 +4,7 @@ BuildKit is a concurrent, cache-efficient, and Dockerfile-agnostic builder toolk
 
 Report issues at https://github.com/moby/buildkit
 
-Join `#buildkit` channel on [Docker Community Slack](http://dockr.ly/slack)
+Join `#buildkit` channel on [Docker Community Slack](https://dockr.ly/comm-slack)
 
 # Tags
 

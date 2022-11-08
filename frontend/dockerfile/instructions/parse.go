@@ -1,3 +1,7 @@
+// The instructions package contains the definitions of the high-level
+// Dockerfile commands, as well as low-level primitives for extracting these
+// commands from a pre-parsed Abstract Syntax Tree.
+
 package instructions
 
 import (

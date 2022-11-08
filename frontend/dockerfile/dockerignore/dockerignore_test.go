@@ -18,7 +18,7 @@ func TestReadAll(t *testing.T) {
 
 	diName := filepath.Join(t.TempDir(), ".dockerignore")
 	content := "test1\n/test2\n/a/file/here\n\nlastfile\n# this is a comment\n! /inverted/abs/path\n!\n! \n"
-	err = os.WriteFile(diName, []byte(content), 0777)
+	err = os.WriteFile(diName, []byte(content), 0600)
 	if err != nil {
 		t.Fatal(err)
 	}

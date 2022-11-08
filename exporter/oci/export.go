@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -83,13 +84,11 @@ type imageExporterInstance struct {
 }
 
 func (e *imageExporterInstance) Name() string {
-	return "exporting to oci image format"
+	return fmt.Sprintf("exporting to %s image format", e.opt.Variant)
 }
 
-func (e *imageExporterInstance) Config() exporter.Config {
-	return exporter.Config{
-		Compression: e.opts.RefCfg.Compression,
-	}
+func (e *imageExporterInstance) Config() *exporter.Config {
+	return exporter.NewConfigWithCompression(e.opts.RefCfg.Compression)
 }
 
 func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source, sessionID string) (map[string]string, error) {

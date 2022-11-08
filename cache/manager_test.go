@@ -42,6 +42,7 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
+	"github.com/moby/buildkit/util/iohelper"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/winlayers"
 	digest "github.com/opencontainers/go-digest"
@@ -1345,7 +1346,7 @@ func testSharingCompressionVariant(ctx context.Context, t *testing.T, co *cmOut,
 			if err != nil {
 				return nil, "", err
 			}
-			return cw, testCase.a.DefaultMediaType(), nil
+			return cw, testCase.a.MediaType(), nil
 		})
 		require.NoError(t, err)
 		contentBuffer := contentutil.NewBuffer()
@@ -1386,9 +1387,9 @@ func testSharingCompressionVariant(ctx context.Context, t *testing.T, co *cmOut,
 
 		// check if all compression variables are available on the both refs
 		checkCompression := func(desc ocispecs.Descriptor, compressionType compression.Type) {
-			require.Equal(t, compressionType.DefaultMediaType(), desc.MediaType, "compression: %v", compressionType)
+			require.Equal(t, compressionType.MediaType(), desc.MediaType, "compression: %v", compressionType)
 			if compressionType == compression.EStargz {
-				ok, err := isEStargz(ctx, co.cs, desc.Digest)
+				ok, err := compression.EStargz.Is(ctx, co.cs, desc.Digest)
 				require.NoError(t, err, "compression: %v", compressionType)
 				require.True(t, ok, "compression: %v", compressionType)
 			}
@@ -1481,7 +1482,7 @@ func getCompressor(w io.Writer, compressionType compression.Type, customized boo
 			}
 			pr.Close()
 		}()
-		return &writeCloser{pw, func() error { <-done; return nil }}, nil
+		return &iohelper.WriteCloser{WriteCloser: pw, CloseFunc: func() error { <-done; return nil }}, nil
 	case compression.Zstd:
 		if customized {
 			skippableFrameMagic := []byte{0x50, 0x2a, 0x4d, 0x18}
@@ -1767,7 +1768,7 @@ func TestGetRemotes(t *testing.T) {
 					r := refChain[i]
 					isLazy, err := r.isLazy(egctx)
 					require.NoError(t, err)
-					needs, err := needsConversion(ctx, co.cs, desc, compressionType)
+					needs, err := compressionType.NeedsConversion(ctx, co.cs, desc)
 					require.NoError(t, err)
 					if needs {
 						require.False(t, isLazy, "layer %q requires conversion so it must be unlazied", desc.Digest)
@@ -1998,7 +1999,7 @@ func checkDescriptor(ctx context.Context, t *testing.T, cs content.Store, desc o
 	}
 
 	// Check annotation values are valid
-	c := new(counter)
+	c := new(iohelper.Counter)
 	ra, err := cs.ReaderAt(ctx, desc)
 	if err != nil && errdefs.IsNotFound(err) {
 		return // lazy layer
@@ -2013,7 +2014,7 @@ func checkDescriptor(ctx context.Context, t *testing.T, cs content.Store, desc o
 	require.NoError(t, err)
 	require.Equal(t, diffID.Digest().String(), uncompressedDgst)
 	if compressionType == compression.EStargz {
-		require.Equal(t, c.size(), uncompressedSize)
+		require.Equal(t, c.Size(), uncompressedSize)
 	}
 }
 

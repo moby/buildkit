@@ -37,7 +37,7 @@ func TestFileSyncIncludePatterns(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	fs := NewFSSyncProvider([]SyncedDir{{Name: "test0", Dir: tmpDir}})
+	fs := NewFSSyncProvider(StaticDirSource{"test0": {Dir: tmpDir}})
 	s.Allow(fs)
 
 	dialer := session.Dialer(testutil.TestStream(testutil.Handler(m.HandleConn)))

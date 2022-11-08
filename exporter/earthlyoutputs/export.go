@@ -603,10 +603,8 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	return resp, nil
 }
 
-func (e *imageExporterInstance) Config() exporter.Config {
-	return exporter.Config{
-		Compression: e.opts.RefCfg.Compression,
-	}
+func (e *imageExporterInstance) Config() *exporter.Config {
+	return exporter.NewConfigWithCompression(e.opts.RefCfg.Compression)
 }
 
 func oneOffProgress(ctx context.Context, id string) func() {

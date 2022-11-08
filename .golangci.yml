@@ -23,7 +23,6 @@ linters:
     - ineffassign
     - misspell
     - staticcheck
-    - structcheck
     - typecheck
     - unused
     - varcheck
@@ -31,6 +30,8 @@ linters:
     - errname
     - makezero
     - whitespace
+    - nolintlint
+    - gosec
   disable-all: true
 
 linters-settings:
@@ -48,6 +49,14 @@ linters-settings:
       - pkg: "github.com/opencontainers/go-digest"
         alias: "digest"
     no-unaliased: true
+  gosec:
+    excludes:
+      - G101  # Potential hardcoded credentials (false positives)
+      - G402  # TLS MinVersion too low
+      - G601  # Implicit memory aliasing in for loop (false positives)
+      - G504  # Import blocklist: net/http/cgi
+    config:
+      G306: "0644"
 
 issues:
   exclude-rules:

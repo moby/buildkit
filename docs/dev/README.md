@@ -10,6 +10,11 @@ interested in contributing to or integrating with BuildKit.
 > fixed, and features are added. Remember, the ultimate source of truth is
 > always the code base.
 
+
+## Video
+
+You can find recording for "BuildKit architecture and internals" session in [here](https://drive.google.com/file/d/1zGMQipL5WJ3sLySu7gHZ_o6tFpxRXRHs/view) ([slides](https://docs.google.com/presentation/d/1tEnuMOENuoVQ3l6viBmguYUn7XpjIHIC-3RHzfyIgjc/edit?usp=sharing)). This session gives an overview how BuildKit works under the hood and how it was designed. If you’re thinking about contributing to BuildKit, this session should give you an overview of the most important components that make up BuildKit and how they work together.
+
 ## Jargon
 
 The following terms are often used throughout the codebase and the developer

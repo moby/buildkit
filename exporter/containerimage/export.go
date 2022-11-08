@@ -190,10 +190,8 @@ func (e *imageExporterInstance) Name() string {
 	return "exporting to image"
 }
 
-func (e *imageExporterInstance) Config() exporter.Config {
-	return exporter.Config{
-		Compression: e.opts.RefCfg.Compression,
-	}
+func (e *imageExporterInstance) Config() *exporter.Config {
+	return exporter.NewConfigWithCompression(e.opts.RefCfg.Compression)
 }
 
 func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source, sessionID string) (map[string]string, error) {
@@ -265,7 +263,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 				}
 				tagDone(nil)
 
-				if e.unpack {
+				if src.Ref != nil && e.unpack {
 					if err := e.unpackImage(ctx, img, src, session.NewGroup(sessionID)); err != nil {
 						return nil, err
 					}

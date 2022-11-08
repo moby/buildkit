@@ -3389,10 +3389,10 @@ func TestInputRequestDeadlock(t *testing.T) {
 
 func generateSubGraph(nodes int) (Edge, int) {
 	if nodes == 1 {
-		value := rand.Int() % 500
+		value := rand.Int() % 500 //nolint:gosec
 		return Edge{Vertex: vtxConst(value, vtxOpt{})}, value
 	}
-	spread := rand.Int()%5 + 2
+	spread := rand.Int()%5 + 2 //nolint:gosec
 	inc := int(math.Ceil(float64(nodes) / float64(spread)))
 	if inc > nodes {
 		inc = nodes
@@ -3414,7 +3414,7 @@ func generateSubGraph(nodes int) (Edge, int) {
 		value += v
 		added += inc
 	}
-	extra := rand.Int() % 500
+	extra := rand.Int() % 500 //nolint:gosec
 	value += extra
 	return Edge{Vertex: vtxSum(extra, vtxOpt{inputs: inputs})}, value
 }

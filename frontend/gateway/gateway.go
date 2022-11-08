@@ -353,7 +353,7 @@ func (lbf *llbBridgeForwarder) Discard() {
 	}
 
 	for id, workerRef := range lbf.workerRefByID {
-		workerRef.ImmutableRef.Release(context.TODO())
+		workerRef.Release(context.TODO())
 		delete(lbf.workerRefByID, id)
 	}
 	if lbf.err != nil && lbf.result != nil {

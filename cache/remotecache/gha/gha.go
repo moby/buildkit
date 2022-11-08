@@ -90,6 +90,10 @@ func NewExporter(c *Config) (remotecache.Exporter, error) {
 	return &exporter{CacheExporterTarget: cc, chains: cc, cache: cache, config: c}, nil
 }
 
+func (*exporter) Name() string {
+	return "exporting to GitHub cache"
+}
+
 func (ce *exporter) Config() remotecache.Config {
 	return remotecache.Config{
 		Compression: compression.New(compression.Default),

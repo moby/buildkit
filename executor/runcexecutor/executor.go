@@ -48,6 +48,7 @@ type Opt struct {
 	DNS             *oci.DNSConfig
 	OOMScoreAdj     *int
 	ApparmorProfile string
+	SELinux         bool
 	TracingSocket   string
 	Hooks           []oci.OciHook
 }
@@ -68,6 +69,7 @@ type runcExecutor struct {
 	running          map[string]chan error
 	mu               sync.Mutex
 	apparmorProfile  string
+	selinux          bool
 	tracingSocket    string
 	hooks            []oci.OciHook
 }
@@ -133,6 +135,7 @@ func New(opt Opt, networkProviders map[pb.NetMode]network.Provider) (executor.Ex
 		oomScoreAdj:      opt.OOMScoreAdj,
 		running:          make(map[string]chan error),
 		apparmorProfile:  opt.ApparmorProfile,
+		selinux:          opt.SELinux,
 		tracingSocket:    opt.TracingSocket,
 		hooks:            opt.Hooks,
 	}
@@ -254,13 +257,14 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 		}
 	}
 
+	// earthly-specific
 	if len(w.hooks) > 0 {
 		for _, h := range w.hooks {
 			opts = append(opts, oci.WithHook(h))
 		}
 	}
 
-	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, namespace, w.cgroupParent, w.processMode, w.idmap, w.apparmorProfile, w.tracingSocket, opts...)
+	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, namespace, w.cgroupParent, w.processMode, w.idmap, w.apparmorProfile, w.selinux, w.tracingSocket, opts...)
 	if err != nil {
 		return err
 	}

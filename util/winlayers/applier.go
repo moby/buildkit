@@ -38,7 +38,7 @@ type winApplier struct {
 
 func (s *winApplier) Apply(ctx context.Context, desc ocispecs.Descriptor, mounts []mount.Mount, opts ...diff.ApplyOpt) (d ocispecs.Descriptor, err error) {
 	if !hasWindowsLayerMode(ctx) {
-		return s.a.Apply(ctx, desc, mounts, opts...)
+		return s.apply(ctx, desc, mounts, opts...)
 	}
 
 	compressed, err := images.DiffCompression(ctx, desc.MediaType)
@@ -137,12 +137,14 @@ func filter(in io.Reader, f func(*tar.Header) bool) (io.Reader, func(error)) {
 						return err
 					}
 					if h.Size > 0 {
+						//nolint:gosec // never read into memory
 						if _, err := io.Copy(tarWriter, tarReader); err != nil {
 							return err
 						}
 					}
 				} else {
 					if h.Size > 0 {
+						//nolint:gosec // never read into memory
 						if _, err := io.Copy(io.Discard, tarReader); err != nil {
 							return err
 						}
