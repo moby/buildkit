@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/tonistiigi/fsutil"
 	"github.com/tonistiigi/fsutil/types"
@@ -44,10 +45,11 @@ func (fs *FS) Add(p string, stat types.Stat, data []byte) {
 func (fs *FS) Walk(ctx context.Context, fn filepath.WalkFunc) error {
 	keys := make([]string, 0, len(fs.files))
 	for k := range fs.files {
-		keys = append(keys, k)
+		keys = append(keys, convertPathToKey(k))
 	}
 	sort.Strings(keys)
-	for _, p := range keys {
+	for _, k := range keys {
+		p := convertKeyToPath(k)
 		st := fs.files[p].Stat
 		if err := fn(p, &fsutil.StatInfo{Stat: &st}, nil); err != nil {
 			return err
@@ -61,4 +63,12 @@ func (fs *FS) Open(p string) (io.ReadCloser, error) {
 		return io.NopCloser(bytes.NewReader(f.Data)), nil
 	}
 	return nil, os.ErrNotExist
+}
+
+func convertPathToKey(p string) string {
+	return strings.Replace(p, "/", "\x00", -1)
+}
+
+func convertKeyToPath(p string) string {
+	return strings.Replace(p, "\x00", "/", -1)
 }

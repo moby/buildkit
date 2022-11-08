@@ -31,6 +31,13 @@ type record struct {
 	err  error
 }
 
+func (r *record) key() string {
+	if r == nil {
+		return ""
+	}
+	return convertPathToKey(r.path)
+}
+
 func (mfs *MergeFS) Walk(ctx context.Context, fn filepath.WalkFunc) error {
 	ch1 := make(chan *record, 10)
 	ch2 := make(chan *record, 10)
@@ -53,25 +60,30 @@ func (mfs *MergeFS) Walk(ctx context.Context, fn filepath.WalkFunc) error {
 
 	eg.Go(func() error {
 		next1, ok1 := <-ch1
+		key1 := next1.key()
 		next2, ok2 := <-ch2
+		key2 := next2.key()
 
 		for {
 			if !ok1 && !ok2 {
 				break
 			}
-			if !ok2 || ok1 && next1.path < next2.path {
+			if !ok2 || ok1 && key1 < key2 {
 				if err := fn(next1.path, next1.fi, next1.err); err != nil {
 					return err
 				}
 				next1, ok1 = <-ch1
-			} else if !ok1 || ok2 && next1.path >= next2.path {
+				key1 = next1.key()
+			} else if !ok1 || ok2 && key1 >= key2 {
 				if err := fn(next2.path, next2.fi, next2.err); err != nil {
 					return err
 				}
-				if ok1 && next2.path == next1.path {
+				if ok1 && key1 == key2 {
 					next1, ok1 = <-ch1
+					key1 = next1.key()
 				}
 				next2, ok2 = <-ch2
+				key2 = next2.key()
 			}
 		}
 		return nil
