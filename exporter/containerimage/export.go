@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/leases"
+	"github.com/containerd/containerd/pkg/epoch"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/rootfs"
@@ -236,22 +236,34 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 		for _, targetName := range targetNames {
 			if e.opt.Images != nil && e.store {
 				tagDone := progress.OneOff(ctx, "naming to "+targetName)
-				img := images.Image{
-					Target:    *desc,
-					CreatedAt: time.Now(),
+
+				// imageClientCtx is used for propagating the epoch to e.opt.Images.Update() and e.opt.Images.Create().
+				//
+				// Ideally, we should be able to propagate the epoch via images.Image.CreatedAt.
+				// However, due to a bug of containerd, we are temporarily stuck with this workaround.
+				// https://github.com/containerd/containerd/issues/8322
+				imageClientCtx := ctx
+				if e.opts.Epoch != nil {
+					imageClientCtx = epoch.WithSourceDateEpoch(imageClientCtx, e.opts.Epoch)
 				}
+				img := images.Image{
+					Target: *desc,
+					// CreatedAt in images.Images is ignored due to a bug of containerd.
+					// See the comment lines for imageClientCtx.
+				}
+
 				sfx := []string{""}
 				if nameCanonical {
 					sfx = append(sfx, "@"+desc.Digest.String())
 				}
 				for _, sfx := range sfx {
 					img.Name = targetName + sfx
-					if _, err := e.opt.Images.Update(ctx, img); err != nil {
+					if _, err := e.opt.Images.Update(imageClientCtx, img); err != nil {
 						if !errors.Is(err, errdefs.ErrNotFound) {
 							return nil, nil, tagDone(err)
 						}
 
-						if _, err := e.opt.Images.Create(ctx, img); err != nil {
+						if _, err := e.opt.Images.Create(imageClientCtx, img); err != nil {
 							return nil, nil, tagDone(err)
 						}
 					}
