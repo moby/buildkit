@@ -2396,8 +2396,9 @@ func testSourceDateEpochLayerTimestamps(t *testing.T, sb integration.Sandbox) {
 	dt, err := os.ReadFile(out)
 	require.NoError(t, err)
 
-	tms, err := readImageTimestamps(dt)
+	tmsX, err := readImageTimestamps(dt)
 	require.NoError(t, err)
+	tms := tmsX.FromImage
 
 	require.Equal(t, len(tms), 3)
 
@@ -2462,8 +2463,9 @@ func testSourceDateEpochClamp(t *testing.T, sb integration.Sandbox) {
 	dt, err := os.ReadFile(out)
 	require.NoError(t, err)
 
-	busyboxTms, err := readImageTimestamps(dt)
+	busyboxTmsX, err := readImageTimestamps(dt)
 	require.NoError(t, err)
+	busyboxTms := busyboxTmsX.FromImage
 
 	require.True(t, len(busyboxTms) > 1)
 	bboxLayerLen := len(busyboxTms) - 1
@@ -2501,8 +2503,9 @@ func testSourceDateEpochClamp(t *testing.T, sb integration.Sandbox) {
 	dt, err = os.ReadFile(out)
 	require.NoError(t, err)
 
-	tms, err := readImageTimestamps(dt)
+	tmsX, err := readImageTimestamps(dt)
 	require.NoError(t, err)
+	tms := tmsX.FromImage
 
 	require.Equal(t, len(tms), bboxLayerLen+2)
 
@@ -2510,6 +2513,7 @@ func testSourceDateEpochClamp(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, expected, tms[0])
 	require.Equal(t, busyboxTms[1], tms[1])
 	require.Equal(t, expected, tms[bboxLayerLen+1])
+	require.Equal(t, expected, tmsX.FromAnnotation)
 
 	checkAllReleasable(t, c, sb, true)
 }
@@ -2562,8 +2566,9 @@ func testSourceDateEpochReset(t *testing.T, sb integration.Sandbox) {
 	dt, err := os.ReadFile(out)
 	require.NoError(t, err)
 
-	tms, err := readImageTimestamps(dt)
+	tmsX, err := readImageTimestamps(dt)
 	require.NoError(t, err)
+	tms := tmsX.FromImage
 
 	require.Equal(t, len(tms), 3)
 
@@ -7969,7 +7974,12 @@ func makeSSHAgentSock(t *testing.T, agent agent.Agent) (p string, err error) {
 	return sockPath, nil
 }
 
-func readImageTimestamps(dt []byte) ([]string, error) {
+type imageTimestamps struct {
+	FromImage      []string // from img.Created and img.[]History.Created
+	FromAnnotation string   // from index.Manifests[0].Annotations["org.opencontainers.image.created"]
+}
+
+func readImageTimestamps(dt []byte) (*imageTimestamps, error) {
 	m, err := testutil.ReadTarToMap(dt, false)
 	if err != nil {
 		return nil, err
@@ -7986,6 +7996,9 @@ func readImageTimestamps(dt []byte) ([]string, error) {
 	if len(index.Manifests) != 1 {
 		return nil, errors.Errorf("invalid manifest count %d", len(index.Manifests))
 	}
+
+	var res imageTimestamps
+	res.FromAnnotation = index.Manifests[0].Annotations[ocispecs.AnnotationCreated]
 
 	var mfst ocispecs.Manifest
 	if err := json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].Data, &mfst); err != nil {
@@ -8005,13 +8018,13 @@ func readImageTimestamps(dt []byte) ([]string, error) {
 		return nil, err
 	}
 
-	out := []string{
+	res.FromImage = []string{
 		img.Created,
 	}
 	for _, h := range img.History {
-		out = append(out, h.Created)
+		res.FromImage = append(res.FromImage, h.Created)
 	}
-	return out, nil
+	return &res, nil
 }
 
 type server struct {
