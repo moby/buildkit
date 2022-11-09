@@ -39,8 +39,6 @@ type ImageCommitOpts struct {
 func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error) {
 	rest := make(map[string]string)
 
-	esgz := false
-
 	as, optb, err := ParseAnnotations(toBytesMap(opt))
 	if err != nil {
 		return nil, err
@@ -58,19 +56,7 @@ func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error)
 		case keyImageName:
 			c.ImageName = v
 		case keyLayerCompression:
-			switch v {
-			case "gzip":
-				c.RefCfg.Compression.Type = compression.Gzip
-			case "estargz":
-				c.RefCfg.Compression.Type = compression.EStargz
-				esgz = true
-			case "zstd":
-				c.RefCfg.Compression.Type = compression.Zstd
-			case "uncompressed":
-				c.RefCfg.Compression.Type = compression.Uncompressed
-			default:
-				err = errors.Errorf("unsupported layer compression type: %v", v)
-			}
+			c.RefCfg.Compression.Type, err = compression.Parse(v)
 		case keyCompressionLevel:
 			ii, err2 := strconv.ParseInt(v, 10, 64)
 			if err != nil {
@@ -98,8 +84,12 @@ func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error)
 		}
 	}
 
-	if esgz {
-		c.EnableOCITypes("estargz")
+	if c.RefCfg.Compression.Type.OnlySupportOCITypes() {
+		c.EnableOCITypes(c.RefCfg.Compression.Type.String())
+	}
+
+	if c.RefCfg.Compression.Type.NeedsForceCompression() {
+		c.EnableForceCompression(c.RefCfg.Compression.Type.String())
 	}
 
 	c.AddAnnotations(as)
@@ -131,6 +121,18 @@ func (c *ImageCommitOpts) EnableOCITypes(reason string) {
 		logrus.Warn(message)
 
 		c.OCITypes = true
+	}
+}
+
+func (c *ImageCommitOpts) EnableForceCompression(reason string) {
+	if !c.RefCfg.Compression.Force {
+		message := "forcibly turning on force-compression mode"
+		if reason != "" {
+			message += " for " + reason
+		}
+		logrus.Warn(message)
+
+		c.RefCfg.Compression.Force = true
 	}
 }
 

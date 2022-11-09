@@ -59,6 +59,8 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewayContainerSignal,
 		testWarnings,
 		testClientGatewayFrontendAttrs,
+		testClientGatewayNilResult,
+		testClientGatewayEmptyImageExec,
 	), integration.WithMirroredImages(integration.OfficialImages("busybox:latest")))
 
 	integration.Run(t, integration.TestFuncs(
@@ -2049,6 +2051,88 @@ func testClientGatewayFrontendAttrs(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, &bazattrval, bi.Attrs["build-arg:baz"])
 
 	checkAllReleasable(t, c, sb, true)
+}
+
+func testClientGatewayNilResult(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		st := llb.Image("busybox:latest")
+		diff := llb.Diff(st, st)
+		def, err := diff.Marshal(sb.Context())
+		if err != nil {
+			return nil, err
+		}
+		res, err := c.Solve(ctx, client.SolveRequest{
+			Definition: def.ToPB(),
+			Evaluate:   true,
+		})
+		require.NoError(t, err)
+
+		ref, err := res.SingleRef()
+		require.NoError(t, err)
+
+		dirEnts, err := ref.ReadDir(ctx, client.ReadDirRequest{
+			Path: "/",
+		})
+		require.NoError(t, err)
+		require.Len(t, dirEnts, 0)
+		return nil, nil
+	}
+
+	_, err = c.Build(sb.Context(), SolveOpt{}, "", b, nil)
+	require.NoError(t, err)
+}
+
+func testClientGatewayEmptyImageExec(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "direct push")
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+	target := registry + "/buildkit/testemptyimage:latest"
+
+	// push an empty image
+	_, err = c.Build(sb.Context(), SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, "", func(ctx context.Context, c client.Client) (*client.Result, error) {
+		return client.NewResult(), nil
+	}, nil)
+	require.NoError(t, err)
+
+	_, err = c.Build(sb.Context(), SolveOpt{}, "", func(ctx context.Context, gw client.Client) (*client.Result, error) {
+		// create an exec on that empty image (expected to fail, but not to panic)
+		st := llb.Image(target).Run(
+			llb.Args([]string{"echo", "hello"}),
+		).Root()
+		def, err := st.Marshal(sb.Context())
+		if err != nil {
+			return nil, err
+		}
+		_, err = gw.Solve(ctx, client.SolveRequest{
+			Definition: def.ToPB(),
+			Evaluate:   true,
+		})
+		require.ErrorContains(t, err, `process "echo hello" did not complete successfully`)
+		return nil, nil
+	}, nil)
+	require.NoError(t, err)
 }
 
 type nopCloser struct {

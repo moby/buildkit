@@ -79,12 +79,8 @@ type nopWriteCloser struct {
 func (nopWriteCloser) Close() error { return nil }
 
 func TestIntegration(t *testing.T) {
-	mirroredImages := integration.OfficialImages("busybox:latest", "alpine:latest")
-	mirroredImages["tonistiigi/test:nolayers"] = "docker.io/tonistiigi/test:nolayers"
-	mirroredImages["cpuguy83/buildkit-foreign:latest"] = "docker.io/cpuguy83/buildkit-foreign:latest"
-	mirrors := integration.WithMirroredImages(mirroredImages)
-
-	tests := integration.TestFuncs(
+	testIntegration(
+		t,
 		testCacheExportCacheKeyLoop,
 		testRelativeWorkDir,
 		testFileOpMkdirMkfile,
@@ -96,6 +92,7 @@ func TestIntegration(t *testing.T) {
 		testBuildHTTPSource,
 		testBuildPushAndValidate,
 		testBuildExportWithUncompressed,
+		testBuildExportScratch,
 		testResolveAndHosts,
 		testUser,
 		testOCIExporter,
@@ -170,6 +167,7 @@ func TestIntegration(t *testing.T) {
 		testUncompressedLocalCacheImportExport,
 		testUncompressedRegistryCacheImportExport,
 		testStargzLazyRegistryCacheImportExport,
+		testValidateDigestOrigin,
 		testCallInfo,
 		testPullWithLayerLimit,
 		testExportAnnotations,
@@ -184,7 +182,17 @@ func TestIntegration(t *testing.T) {
 		testAttestationBundle,
 		testSBOMScan,
 		testSBOMScanSingleRef,
+		testMultipleCacheExports,
 	)
+}
+
+func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sandbox)) {
+	mirroredImages := integration.OfficialImages("busybox:latest", "alpine:latest")
+	mirroredImages["tonistiigi/test:nolayers"] = "docker.io/tonistiigi/test:nolayers"
+	mirroredImages["cpuguy83/buildkit-foreign:latest"] = "docker.io/cpuguy83/buildkit-foreign:latest"
+	mirrors := integration.WithMirroredImages(mirroredImages)
+
+	tests := integration.TestFuncs(funcs...)
 	tests = append(tests, diffOpTestCases()...)
 	integration.Run(t, tests, mirrors)
 
@@ -291,6 +299,7 @@ func testBridgeNetworking(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBridgeNetworkingDNSNoRootless(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "https://github.com/moby/buildkit/issues/3171")
 	if os.Getenv("BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS") == "" {
 		t.SkipNow()
 	}
@@ -565,7 +574,7 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 	def, err = out.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	k, err = rsa.GenerateKey(rand.Reader, 1024)
+	k, err = rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
 	dt = pem.EncodeToMemory(
@@ -600,7 +609,7 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
-	require.Contains(t, string(dt), "1024")
+	require.Contains(t, string(dt), "2048")
 	require.Contains(t, string(dt), "(RSA)")
 }
 
@@ -1813,9 +1822,6 @@ func testOCILayoutPlatformSource(t *testing.T, sb integration.Sandbox) {
 		} else {
 			err = os.WriteFile(fullFilename, tarItem.Data, 0644)
 			require.NoError(t, err)
-			if json.Valid(tarItem.Data) {
-				fmt.Println(fullFilename, string(tarItem.Data))
-			}
 		}
 	}
 
@@ -1982,6 +1988,58 @@ func testBuildMultiMount(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	checkAllReleasable(t, c, sb, true)
+}
+
+func testBuildExportScratch(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "image exporter")
+
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Scratch()
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	target := registry + "/buildkit/build/exporter:withnocompressed"
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":        target,
+					"push":        "true",
+					"compression": "uncompressed",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
+	cdAddress := sb.ContainerdAddress()
+	var client *containerd.Client
+	if cdAddress != "" {
+		client, err = newContainerd(cdAddress)
+		require.NoError(t, err)
+		defer client.Close()
+
+		img, err := client.GetImage(ctx, target)
+		require.NoError(t, err)
+		mfst, err := images.Manifest(ctx, client.ContentStore(), img.Target(), nil)
+		require.NoError(t, err)
+		require.Equal(t, 0, len(mfst.Layers))
+		err = client.ImageService().Delete(ctx, target, images.SynchronousDelete())
+		require.NoError(t, err)
+	}
 }
 
 func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
@@ -6440,6 +6498,72 @@ func testCallInfo(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 }
 
+func testValidateDigestOrigin(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "direct push")
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("busybox:latest").Run(llb.Shlex("touch foo"), llb.Dir("/wd")).AddMount("/wd", llb.Scratch())
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	target := registry + "/buildkit/testdigest:latest"
+
+	resp, err := c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dgst, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
+	require.True(t, ok)
+
+	err = c.Prune(sb.Context(), nil, PruneAll)
+	require.NoError(t, err)
+
+	st = llb.Image(target + "@" + dgst)
+
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+
+	// accessing the digest from invalid names should fail
+	st = llb.Image("example.invalid/nosuchrepo@" + dgst)
+
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.Error(t, err)
+
+	// also check repo that does exists but not digest
+	st = llb.Image("docker.io/library/ubuntu@" + dgst)
+
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.Error(t, err)
+}
+
 func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 	integration.SkipIfDockerd(t, sb, "oci exporter")
 	requiresLinux(t)
@@ -6658,6 +6782,7 @@ func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 }
 
 func testExportAnnotationsMediaTypes(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "direct push")
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -6771,6 +6896,7 @@ func testExportAnnotationsMediaTypes(t *testing.T, sb integration.Sandbox) {
 }
 
 func testExportAttestations(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "direct push")
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -6982,6 +7108,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 }
 
 func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "direct push")
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -7689,6 +7816,135 @@ EOF
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
 	require.Equal(t, map[string]interface{}{"success": false}, attest.Predicate)
+}
+
+func testMultipleCacheExports(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "multiple cache exports")
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+	run := func(cmd string) {
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+	run(`sh -c "echo -n foobar > const"`)
+	run(`sh -c "cat /dev/urandom | head -c 100 | sha256sum > unique"`)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	target := path.Join(registry, "image:test")
+	target2 := path.Join(registry, "image-copy:test")
+	cacheRef := path.Join(registry, "cache:test")
+	cacheOutDir, cacheOutDir2 := t.TempDir(), t.TempDir()
+
+	res, err := c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+		CacheExports: []CacheOptionsEntry{
+			{
+				Type: "local",
+				Attrs: map[string]string{
+					"dest": cacheOutDir,
+				},
+			},
+			{
+				Type: "local",
+				Attrs: map[string]string{
+					"dest": cacheOutDir2,
+				},
+			},
+			{
+				Type: "registry",
+				Attrs: map[string]string{
+					"ref": cacheRef,
+				},
+			},
+			{
+				Type: "inline",
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	ensureFile(t, filepath.Join(cacheOutDir, "index.json"))
+	ensureFile(t, filepath.Join(cacheOutDir2, "index.json"))
+
+	dgst := res.ExporterResponse[exptypes.ExporterImageDigestKey]
+
+	uniqueFile, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst, "/unique")
+	require.NoError(t, err)
+
+	res, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target2,
+					"push": "true",
+				},
+			},
+		},
+		CacheExports: []CacheOptionsEntry{
+			{
+				Type: "inline",
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dgst2 := res.ExporterResponse[exptypes.ExporterImageDigestKey]
+	require.Equal(t, dgst, dgst2)
+
+	destDir := t.TempDir()
+	ensurePruneAll(t, c, sb)
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		CacheImports: []CacheOptionsEntry{
+			{
+				Type: "registry",
+				Attrs: map[string]string{
+					"ref": cacheRef,
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	ensureFileContents(t, filepath.Join(destDir, "const"), "foobar")
+	ensureFileContents(t, filepath.Join(destDir, "unique"), string(uniqueFile))
+}
+
+func ensureFile(t *testing.T, path string) {
+	st, err := os.Stat(path)
+	require.NoError(t, err, "expected file at %s", path)
+	require.True(t, st.Mode().IsRegular())
+}
+
+func ensureFileContents(t *testing.T, path, expectedContents string) {
+	contents, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, expectedContents, string(contents))
 }
 
 func makeSSHAgentSock(t *testing.T, agent agent.Agent) (p string, err error) {

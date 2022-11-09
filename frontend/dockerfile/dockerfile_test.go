@@ -5195,6 +5195,7 @@ COPY --from=base /env_foobar /
 }
 
 func testNamedImageContextPlatform(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "direct push")
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -5605,6 +5606,7 @@ COPY --from=imported /test/outfoo /
 }
 
 func testNamedOCILayoutContextExport(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "oci exporter")
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())

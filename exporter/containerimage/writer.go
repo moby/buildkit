@@ -95,7 +95,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 			}
 		}
 
-		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, opts, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], opts.Annotations.Platform(nil), inp.Metadata[exptypes.ExporterInlineCache], dtbi, opts.Epoch)
+		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, opts, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], opts.Annotations.Platform(nil), inp.Metadata[exptypes.ExporterInlineCache], dtbi, opts.Epoch, session.NewGroup(sessionID))
 		if err != nil {
 			return nil, err
 		}
@@ -175,7 +175,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 			}
 		}
 
-		desc, _, err := ic.commitDistributionManifest(ctx, opts, r, config, &remotes[remotesMap[p.ID]], opts.Annotations.Platform(&p.Platform), inlineCache, dtbi, opts.Epoch)
+		desc, _, err := ic.commitDistributionManifest(ctx, opts, r, config, &remotes[remotesMap[p.ID]], opts.Annotations.Platform(&p.Platform), inlineCache, dtbi, opts.Epoch, session.NewGroup(sessionID))
 		if err != nil {
 			return nil, err
 		}
@@ -412,7 +412,7 @@ func (ic *ImageWriter) extractAttestations(ctx context.Context, opts *ImageCommi
 	return allStatements, nil
 }
 
-func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *ImageCommitOpts, ref cache.ImmutableRef, config []byte, remote *solver.Remote, annotations *Annotations, inlineCache []byte, buildInfo []byte, epoch *time.Time) (*ocispecs.Descriptor, *ocispecs.Descriptor, error) {
+func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *ImageCommitOpts, ref cache.ImmutableRef, config []byte, remote *solver.Remote, annotations *Annotations, inlineCache []byte, buildInfo []byte, epoch *time.Time, sg session.Group) (*ocispecs.Descriptor, *ocispecs.Descriptor, error) {
 	if len(config) == 0 {
 		var err error
 		config, err = defaultImageConfig()
@@ -432,7 +432,10 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *Ima
 		return nil, nil, err
 	}
 
-	remote, history = normalizeLayersAndHistory(ctx, remote, history, ref, opts.OCITypes)
+	remote, history, err = patchImageLayers(ctx, remote, history, ref, opts, sg)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	config, err = patchImageConfig(config, remote.Descriptors, history, inlineCache, buildInfo, epoch)
 	if err != nil {

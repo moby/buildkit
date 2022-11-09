@@ -20,12 +20,11 @@ func parseImportCacheCSV(s string) (client.CacheOptionsEntry, error) {
 		return im, err
 	}
 	for _, field := range fields {
-		parts := strings.SplitN(field, "=", 2)
-		if len(parts) != 2 {
+		key, value, ok := strings.Cut(field, "=")
+		if !ok {
 			return im, errors.Errorf("invalid value %s", field)
 		}
-		key := strings.ToLower(parts[0])
-		value := parts[1]
+		key = strings.ToLower(key)
 		switch key {
 		case "type":
 			im.Type = value

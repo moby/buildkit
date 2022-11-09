@@ -36,6 +36,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+var additionalAnnotations = append(compression.EStargzAnnotations, containerdUncompressed)
+
 // Ref is a reference to cacheable objects.
 type Ref interface {
 	Mountable
@@ -767,12 +769,9 @@ func (sr *immutableRef) getBlobWithCompression(ctx context.Context, compressionT
 }
 
 func getBlobWithCompression(ctx context.Context, cs content.Store, desc ocispecs.Descriptor, compressionType compression.Type) (ocispecs.Descriptor, error) {
-	if compressionType == compression.UnknownCompression {
-		return ocispecs.Descriptor{}, fmt.Errorf("cannot get unknown compression type")
-	}
 	var target *ocispecs.Descriptor
 	if err := walkBlob(ctx, cs, desc, func(desc ocispecs.Descriptor) bool {
-		if needs, err := needsConversion(ctx, cs, desc, compressionType); err == nil && !needs {
+		if needs, err := compressionType.NeedsConversion(ctx, cs, desc); err == nil && !needs {
 			target = &desc
 			return false
 		}
@@ -881,7 +880,7 @@ func filterAnnotationsForSave(a map[string]string) (b map[string]string) {
 	if a == nil {
 		return nil
 	}
-	for _, k := range append(eStargzAnnotations, containerdUncompressed) {
+	for _, k := range additionalAnnotations {
 		v, ok := a[k]
 		if !ok {
 			continue

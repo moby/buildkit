@@ -44,7 +44,7 @@ RUN --mount=type=ssh,mode=741,uid=100,gid=102 [ "$(stat -c "%u %g %f" $SSH_AUTH_
 	require.NoError(t, err)
 	defer c.Close()
 
-	k, err := rsa.GenerateKey(rand.Reader, 1024)
+	k, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
 	dt := pem.EncodeToMemory(

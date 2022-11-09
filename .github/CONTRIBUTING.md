@@ -59,8 +59,6 @@ The following command installs `buildkitd` and `buildctl` to `/usr/local/bin`:
 make && sudo make install
 ```
 
-You can also use `make binaries-all` to prepare `buildkitd.containerd_only` and `buildkitd.oci_only`.
-
 To build containerized `moby/buildkit:local` and `moby/buildkit:local-rootless` images:
 ```bash
 make images
@@ -152,7 +150,7 @@ otherwise cleanup our project.
     <td>
       <p>
         Register for the Docker Community Slack (dockercommunity.slack.com)
-        <a href="https://dockr.ly/slack" target="_blank">Click here for an invite to docker community slack</a>.
+        <a href="https://dockr.ly/comm-slack" target="_blank">Click here for an invite to docker community slack</a>.
         You'll find us in <code>#buildkit</code> channel, and the <code>#moby-project</code> channel for general discussions.
       </p>
     </td>

@@ -12,6 +12,7 @@ set -eu -o pipefail
 : ${TEST_KEEP_CACHE=}
 : ${DOCKERFILE_RELEASES=}
 : ${BUILDKIT_WORKER_RANDOM=}
+: ${BUILDKITD_TAGS=}
 
 if [ "$TEST_DOCKERD" == "1" ]; then
   if [ ! -f "$TEST_DOCKERD_BINARY" ]; then
@@ -60,6 +61,7 @@ if [ "$TEST_COVERAGE" = "1" ]; then
 fi
 
 buildxCmd build $cacheFromFlags \
+  --build-arg "BUILDKITD_TAGS=$BUILDKITD_TAGS" \
   --target "integration-tests" \
   --output "type=docker,name=$iid" \
   $currentcontext

@@ -84,6 +84,23 @@ func (r *Result[T]) EachRef(fn func(T) error) (err error) {
 	return err
 }
 
+// EachRef iterates over references in both a and b.
+// a and b are assumed to be of the same size and map their references
+// to the same set of keys
+func EachRef[U any, V any](a *Result[U], b *Result[V], fn func(U, V) error) (err error) {
+	if reflect.ValueOf(a.Ref).IsValid() && reflect.ValueOf(b.Ref).IsValid() {
+		err = fn(a.Ref, b.Ref)
+	}
+	for k, r := range a.Refs {
+		if reflect.ValueOf(r).IsValid() && reflect.ValueOf(b.Refs[k]).IsValid() {
+			if err1 := fn(r, b.Refs[k]); err1 != nil && err == nil {
+				err = err1
+			}
+		}
+	}
+	return err
+}
+
 func ConvertResult[U any, V any](r *Result[U], fn func(U) (V, error)) (*Result[V], error) {
 	r2 := &Result[V]{}
 	var err error

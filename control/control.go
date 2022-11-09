@@ -22,6 +22,7 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver"
 	"github.com/moby/buildkit/solver/llbsolver/proc"
+	solverutil "github.com/moby/buildkit/solver/llbsolver/util"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/imageutil"
@@ -75,7 +76,6 @@ func NewController(opt Opt) (*Controller, error) {
 		SessionManager:   opt.SessionManager,
 		Entitlements:     opt.Entitlements,
 	})
-
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create solver")
 	}
@@ -294,31 +294,29 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		}
 	}
 
-	var (
-		cacheExporter   remotecache.Exporter
-		cacheExportMode solver.CacheExportMode
-		cacheImports    []frontend.CacheOptionsEntry
-	)
-	if len(req.Cache.Exports) > 1 {
-		// TODO(AkihiroSuda): this should be fairly easy
-		return nil, errors.New("specifying multiple cache exports is not supported currently")
-	}
+	var cacheImports []frontend.CacheOptionsEntry
 
-	if len(req.Cache.Exports) == 1 {
-		e := req.Cache.Exports[0]
+	var cacheExporters []llbsolver.RemoteCacheExporter
+	exportCacheOptEntries, err := solverutil.DedupCacheOptions(req.Cache.Exports)
+	if err != nil {
+		return nil, err
+	}
+	for _, e := range exportCacheOptEntries {
 		cacheExporterFunc, ok := c.opt.ResolveCacheExporterFuncs[e.Type]
 		if !ok {
 			return nil, errors.Errorf("unknown cache exporter: %q", e.Type)
 		}
-		cacheExporter, err = cacheExporterFunc(ctx, session.NewGroup(req.Session), e.Attrs)
+		var exp llbsolver.RemoteCacheExporter
+		exp.Exporter, err = cacheExporterFunc(ctx, session.NewGroup(req.Session), e.Attrs)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to configure %v cache exporter", e.Type)
 		}
 		if exportMode, supported := parseCacheExportMode(e.Attrs["mode"]); !supported {
 			bklog.G(ctx).Debugf("skipping invalid cache export mode: %s", e.Attrs["mode"])
 		} else {
-			cacheExportMode = exportMode
+			exp.CacheExportMode = exportMode
 		}
+		cacheExporters = append(cacheExporters, exp)
 	}
 	for _, im := range req.Cache.Imports {
 		cacheImports = append(cacheImports, frontend.CacheOptionsEntry{
@@ -353,9 +351,8 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		FrontendInputs: req.FrontendInputs,
 		CacheImports:   cacheImports,
 	}, llbsolver.ExporterRequest{
-		Exporter:        expi,
-		CacheExporter:   cacheExporter,
-		CacheExportMode: cacheExportMode,
+		Exporter:       expi,
+		CacheExporters: cacheExporters,
 	}, req.Entitlements, procs)
 	if err != nil {
 		return nil, err
