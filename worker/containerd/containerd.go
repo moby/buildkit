@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/containerd/containerd"
@@ -18,24 +19,24 @@ import (
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/network/netproviders"
 	"github.com/moby/buildkit/util/winlayers"
-	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
+	wlabel "github.com/moby/buildkit/worker/label"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/semaphore"
 )
 
 // NewWorkerOpt creates a WorkerOpt.
-func NewWorkerOpt(root string, address, snapshotterName, ns string, rootless bool, labels map[string]string, dns *oci.DNSConfig, nopt netproviders.Opt, apparmorProfile string, parallelismSem *semaphore.Weighted, traceSocket string, opts ...containerd.ClientOpt) (base.WorkerOpt, error) {
+func NewWorkerOpt(root string, address, snapshotterName, ns string, rootless bool, labels map[string]string, dns *oci.DNSConfig, nopt netproviders.Opt, apparmorProfile string, selinux bool, parallelismSem *semaphore.Weighted, traceSocket string, opts ...containerd.ClientOpt) (base.WorkerOpt, error) {
 	opts = append(opts, containerd.WithDefaultNamespace(ns))
 	client, err := containerd.New(address, opts...)
 	if err != nil {
 		return base.WorkerOpt{}, errors.Wrapf(err, "failed to connect client to %q . make sure containerd is running", address)
 	}
-	return newContainerd(root, client, snapshotterName, ns, rootless, labels, dns, nopt, apparmorProfile, parallelismSem, traceSocket)
+	return newContainerd(root, client, snapshotterName, ns, rootless, labels, dns, nopt, apparmorProfile, selinux, parallelismSem, traceSocket)
 }
 
-func newContainerd(root string, client *containerd.Client, snapshotterName, ns string, rootless bool, labels map[string]string, dns *oci.DNSConfig, nopt netproviders.Opt, apparmorProfile string, parallelismSem *semaphore.Weighted, traceSocket string) (base.WorkerOpt, error) {
+func newContainerd(root string, client *containerd.Client, snapshotterName, ns string, rootless bool, labels map[string]string, dns *oci.DNSConfig, nopt netproviders.Opt, apparmorProfile string, selinux bool, parallelismSem *semaphore.Weighted, traceSocket string) (base.WorkerOpt, error) {
 	if strings.Contains(snapshotterName, "/") {
 		return base.WorkerOpt{}, errors.Errorf("bad snapshotter name: %q", snapshotterName)
 	}
@@ -67,16 +68,17 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		hostname = "unknown"
 	}
 	xlabels := map[string]string{
-		worker.LabelExecutor:    "containerd",
-		worker.LabelSnapshotter: snapshotterName,
-		worker.LabelHostname:    hostname,
-		worker.LabelNetwork:     npResolvedMode,
+		wlabel.Executor:       "containerd",
+		wlabel.Snapshotter:    snapshotterName,
+		wlabel.Hostname:       hostname,
+		wlabel.Network:        npResolvedMode,
+		wlabel.SELinuxEnabled: strconv.FormatBool(selinux),
 	}
 	if apparmorProfile != "" {
-		xlabels[worker.LabelApparmorProfile] = apparmorProfile
+		xlabels[wlabel.ApparmorProfile] = apparmorProfile
 	}
-	xlabels[worker.LabelContainerdNamespace] = ns
-	xlabels[worker.LabelContainerdUUID] = serverInfo.UUID
+	xlabels[wlabel.ContainerdNamespace] = ns
+	xlabels[wlabel.ContainerdUUID] = serverInfo.UUID
 	for k, v := range labels {
 		xlabels[k] = v
 	}
@@ -134,7 +136,7 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		ID:             id,
 		Labels:         xlabels,
 		MetadataStore:  md,
-		Executor:       containerdexecutor.New(client, root, "", np, dns, apparmorProfile, traceSocket, rootless),
+		Executor:       containerdexecutor.New(client, root, "", np, dns, apparmorProfile, selinux, traceSocket, rootless),
 		Snapshotter:    snap,
 		ContentStore:   cs,
 		Applier:        winlayers.NewFileSystemApplierWithWindows(cs, df),

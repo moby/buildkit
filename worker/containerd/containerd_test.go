@@ -33,7 +33,7 @@ func newWorkerOpt(t *testing.T, addr string) (base.WorkerOpt, func()) {
 	require.NoError(t, err)
 	cleanup := func() { os.RemoveAll(tmpdir) }
 	rootless := false
-	workerOpt, err := NewWorkerOpt(tmpdir, addr, "overlayfs", "buildkit-test", rootless, nil, nil, netproviders.Opt{Mode: "host"}, "", nil, "")
+	workerOpt, err := NewWorkerOpt(tmpdir, addr, "overlayfs", "buildkit-test", rootless, nil, nil, netproviders.Opt{Mode: "host"}, "", false, nil, "")
 	require.NoError(t, err)
 	return workerOpt, cleanup
 }

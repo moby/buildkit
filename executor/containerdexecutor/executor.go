@@ -41,12 +41,13 @@ type containerdExecutor struct {
 	running          map[string]chan error
 	mu               sync.Mutex
 	apparmorProfile  string
+	selinux          bool
 	traceSocket      string
 	rootless         bool
 }
 
 // New creates a new executor backed by connection to containerd API
-func New(client *containerd.Client, root, cgroup string, networkProviders map[pb.NetMode]network.Provider, dnsConfig *oci.DNSConfig, apparmorProfile string, traceSocket string, rootless bool) executor.Executor {
+func New(client *containerd.Client, root, cgroup string, networkProviders map[pb.NetMode]network.Provider, dnsConfig *oci.DNSConfig, apparmorProfile string, selinux bool, traceSocket string, rootless bool) executor.Executor {
 	// clean up old hosts/resolv.conf file. ignore errors
 	os.RemoveAll(filepath.Join(root, "hosts"))
 	os.RemoveAll(filepath.Join(root, "resolv.conf"))
@@ -59,6 +60,7 @@ func New(client *containerd.Client, root, cgroup string, networkProviders map[pb
 		dnsConfig:        dnsConfig,
 		running:          make(map[string]chan error),
 		apparmorProfile:  apparmorProfile,
+		selinux:          selinux,
 		traceSocket:      traceSocket,
 		rootless:         rootless,
 	}
@@ -163,7 +165,7 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 	}
 
 	processMode := oci.ProcessSandbox // FIXME(AkihiroSuda)
-	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, namespace, w.cgroupParent, processMode, nil, w.apparmorProfile, w.traceSocket, opts...)
+	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, namespace, w.cgroupParent, processMode, nil, w.apparmorProfile, w.selinux, w.traceSocket, opts...)
 	if err != nil {
 		return err
 	}
