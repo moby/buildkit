@@ -4,8 +4,6 @@ ARG RUNC_VERSION=v1.1.3
 ARG CONTAINERD_VERSION=v1.6.6
 # containerd v1.5 for integration tests
 ARG CONTAINERD_ALT_VERSION_15=v1.5.11
-# containerd v1.4 for integration tests
-ARG CONTAINERD_ALT_VERSION_14=v1.4.13
 ARG REGISTRY_VERSION=2.8.0
 ARG ROOTLESSKIT_VERSION=v0.14.6
 ARG CNI_VERSION=v1.1.0
@@ -158,16 +156,6 @@ RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target
   && make bin/containerd-shim-runc-v2 \
   && mv bin /out
 
-# containerd v1.4 for integration tests
-FROM containerd-base as containerd-alt-14
-ARG CONTAINERD_ALT_VERSION_14
-RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target=/root/.cache,type=cache \
-  git fetch origin \
-  && git checkout -q "$CONTAINERD_ALT_VERSION_14" \
-  && make bin/containerd \
-  && make bin/containerd-shim-runc-v2 \
-  && mv bin /out
-
 ARG REGISTRY_VERSION
 FROM registry:$REGISTRY_VERSION AS registry
 
@@ -241,13 +229,12 @@ RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables ip6tables dnsmasq 
   && curl -Ls https://raw.githubusercontent.com/containerd/nerdctl/$NERDCTL_VERSION/extras/rootless/containerd-rootless.sh > /usr/bin/containerd-rootless.sh \
   && chmod 0755 /usr/bin/containerd-rootless.sh
 # musl is needed to directly use the registry binary that is built on alpine
-ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.4=/opt/containerd-alt-14/bin,containerd-1.5=/opt/containerd-alt-15/bin"
+ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.5=/opt/containerd-alt-15/bin"
 ENV BUILDKIT_INTEGRATION_SNAPSHOTTER=stargz
 ENV CGO_ENABLED=0
 COPY --link --from=nydus /out/nydus-static/* /usr/bin/
 COPY --link --from=stargz-snapshotter /out/* /usr/bin/
 COPY --link --from=rootlesskit /rootlesskit /usr/bin/
-COPY --link --from=containerd-alt-14 /out/containerd* /opt/containerd-alt-14/bin/
 COPY --link --from=containerd-alt-15 /out/containerd* /opt/containerd-alt-15/bin/
 COPY --link --from=registry /bin/registry /usr/bin/
 COPY --link --from=runc /usr/bin/runc /usr/bin/

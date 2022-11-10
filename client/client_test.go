@@ -3350,11 +3350,6 @@ func testPullZstdImage(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	if sb.Name() == "containerd-1.4" {
-		// containerd 1.4 doesn't support zstd compression
-		return
-	}
-
 	ensurePruneAll(t, c, sb)
 
 	st = llb.Scratch().File(llb.Copy(llb.Image(target), "/data", "/zdata"))
@@ -4247,10 +4242,6 @@ func testUncompressedRegistryCacheImportExport(t *testing.T, sb integration.Sand
 
 func testZstdLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	integration.SkipIfDockerd(t, sb, "remote cache export")
-	if sb.Name() == "containerd-1.4" {
-		// containerd 1.4 doesn't support zstd compression
-		return
-	}
 	dir := t.TempDir()
 	im := CacheOptionsEntry{
 		Type: "local",
@@ -4272,10 +4263,6 @@ func testZstdLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 
 func testZstdRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	integration.SkipIfDockerd(t, sb, "remote cache export")
-	if sb.Name() == "containerd-1.4" {
-		// containerd 1.4 doesn't support zstd compression
-		return
-	}
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
