@@ -905,7 +905,12 @@ func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	command := `mkdir /sys/fs/cgroup/cpuset/securitytest`
+	cg := "/sys/fs/cgroup/cpuset/securitytest" // cgroup v1
+	if _, err := os.Stat("/sys/fs/cgroup/cpuset"); errors.Is(err, os.ErrNotExist) {
+		cg = "/sys/fs/cgroup/securitytest" // cgroup v2
+	}
+
+	command := "mkdir " + cg
 	st := llb.Image("busybox:latest").
 		Run(llb.Shlex(command),
 			llb.Security(mode))
@@ -920,7 +925,7 @@ func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
 	if secMode == securitySandbox {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "did not complete successfully")
-		require.Contains(t, err.Error(), "mkdir /sys/fs/cgroup/cpuset/securitytest")
+		require.Contains(t, err.Error(), "mkdir "+cg)
 	} else {
 		require.NoError(t, err)
 	}
