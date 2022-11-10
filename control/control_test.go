@@ -1,4 +1,4 @@
-package util
+package control
 
 import (
 	"testing"
@@ -7,14 +7,32 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestDedupCacheOptions(t *testing.T) {
+func TestDuplicateCacheOptions(t *testing.T) {
 	var testCases = []struct {
 		name     string
 		opts     []*controlapi.CacheOptionsEntry
-		expected []*controlapi.CacheOptionsEntry
+		expected []uint
 	}{
 		{
-			name: "deduplicates opts",
+			name: "avoids unique opts",
+			opts: []*controlapi.CacheOptionsEntry{
+				{
+					Type: "registry",
+					Attrs: map[string]string{
+						"ref": "example.com/ref:v1.0.0",
+					},
+				},
+				{
+					Type: "local",
+					Attrs: map[string]string{
+						"dest": "/path/for/export",
+					},
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "finds duplicate opts",
 			opts: []*controlapi.CacheOptionsEntry{
 				{
 					Type: "registry",
@@ -40,53 +58,18 @@ func TestDedupCacheOptions(t *testing.T) {
 						"dest": "/path/for/export",
 					},
 				},
-				{
-					Type: "azblob",
-					Attrs: map[string]string{
-						"account-url":  "url",
-						"blobs_prefix": "prefix",
-						"name":         "name",
-					},
-				},
-				{
-					Type: "azblob",
-					Attrs: map[string]string{
-						"account-url":  "url",
-						"blobs_prefix": "prefix",
-						"name":         "name",
-					},
-				},
 			},
-			expected: []*controlapi.CacheOptionsEntry{
-				{
-					Type: "registry",
-					Attrs: map[string]string{
-						"ref": "example.com/ref:v1.0.0",
-					},
-				},
-				{
-					Type: "local",
-					Attrs: map[string]string{
-						"dest": "/path/for/export",
-					},
-				},
-				{
-					Type: "azblob",
-					Attrs: map[string]string{
-						"account-url":  "url",
-						"blobs_prefix": "prefix",
-						"name":         "name",
-					},
-				},
-			},
+			expected: []uint{0, 2},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			opts, err := DedupCacheOptions(tc.opts)
+			p, err := findDuplicateCacheOptions(tc.opts)
 			require.NoError(t, err)
-			require.ElementsMatch(t, opts, tc.expected)
+			for i, j := range tc.expected {
+				require.Equal(t, p[i], tc.opts[j])
+			}
 		})
 	}
 }
