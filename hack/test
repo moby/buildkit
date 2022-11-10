@@ -78,7 +78,7 @@ fi
 if [ "$TEST_GATEWAY" == 1 ]; then
   # Build-test "github.com/moby/buildkit/frontend/gateway/client", which isn't otherwise built by CI
   # It really only needs buildkit-base. We have integration-tests in $iid, which is a direct child of buildkit-base.
-  cid=$(docker create --rm --volumes-from=$cacheVolume $iid go build -v ./frontend/gateway/client)
+  cid=$(docker create --rm --volumes-from=$cacheVolume --entrypoint="" $iid go build -v ./frontend/gateway/client)
   docker start -a $cid
 fi
 

@@ -259,6 +259,10 @@ RUN apt-get --no-install-recommends install -y uidmap sudo vim iptables fuse \
   && mkdir -m 0700 -p /run/user/1000 \
   && chown -R user /run/user/1000 /home/user \
   && update-alternatives --set iptables /usr/sbin/iptables-legacy
+# The entrypoint script is needed for enabling nested cgroup v2 (https://github.com/moby/buildkit/issues/3265#issuecomment-1309631736)
+RUN curl -Ls https://raw.githubusercontent.com/moby/moby/v20.10.21/hack/dind > /docker-entrypoint.sh \
+  && chmod 0755 /docker-entrypoint.sh
+ENTRYPOINT ["/docker-entrypoint.sh"]
 # musl is needed to directly use the registry binary that is built on alpine
 ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.3=/opt/containerd-alt/bin"
 ENV BUILDKIT_INTEGRATION_SNAPSHOTTER=stargz
