@@ -89,7 +89,6 @@ var allTests = integration.TestFuncs(
 	testQuotedMetaArgs,
 	testIgnoreEntrypoint,
 	testSymlinkedDockerfile,
-	testDockerfileAddArchiveWildcard,
 	testEmptyWildcard,
 	testWorkdirCreatesDir,
 	testDockerfileAddArchiveWildcard,
