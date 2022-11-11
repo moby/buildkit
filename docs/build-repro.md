@@ -36,7 +36,7 @@ The structure is base64 encoded and has the following format when decoded:
     },
     {
       "type": "http",
-      "ref": "https://raw.githubusercontent.com/moby/moby/master/README.md",
+      "ref": "https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md",
       "pin": "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c"
     }
   ]
