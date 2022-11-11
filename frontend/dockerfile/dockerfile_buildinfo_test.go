@@ -52,7 +52,7 @@ func testBuildInfoSources(t *testing.T, sb integration.Sandbox) {
 	dockerfile := `
 FROM alpine:latest@sha256:21a3deaa0d32a8057914f36584b5288d2e5ecc984380bc0118285c70fa8c9300 AS alpine
 FROM busybox:latest
-ADD https://raw.githubusercontent.com/moby/moby/master/README.md /
+ADD https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md /
 COPY --from=alpine /bin/busybox /alpine-busybox
 `
 
@@ -124,7 +124,7 @@ COPY --from=alpine /bin/busybox /alpine-busybox
 	assert.NotEmpty(t, sources[1].Pin)
 
 	assert.Equal(t, binfotypes.SourceTypeHTTP, sources[2].Type)
-	assert.Equal(t, "https://raw.githubusercontent.com/moby/moby/master/README.md", sources[2].Ref)
+	assert.Equal(t, "https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md", sources[2].Ref)
 	assert.Equal(t, "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c", sources[2].Pin)
 }
 
@@ -258,7 +258,7 @@ func testBuildInfoMultiPlatform(t *testing.T, sb integration.Sandbox) {
 FROM busybox:latest
 ARG foo
 RUN echo $foo
-ADD https://raw.githubusercontent.com/moby/moby/master/README.md /
+ADD https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md /
 `
 
 	dir, err := integration.Tmpdir(
@@ -311,7 +311,7 @@ ADD https://raw.githubusercontent.com/moby/moby/master/README.md /
 		assert.NotEmpty(t, sources[0].Pin)
 
 		assert.Equal(t, binfotypes.SourceTypeHTTP, sources[1].Type)
-		assert.Equal(t, "https://raw.githubusercontent.com/moby/moby/master/README.md", sources[1].Ref)
+		assert.Equal(t, "https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md", sources[1].Ref)
 		assert.Equal(t, "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c", sources[1].Pin)
 	}
 }
@@ -475,7 +475,7 @@ func testBuildInfoDeps(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
 FROM alpine
 ENV FOO=bar
-ADD https://raw.githubusercontent.com/moby/moby/master/README.md /
+ADD https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md /
 RUN echo first > /out
 `)
 
@@ -586,7 +586,7 @@ COPY --from=build /foo /out /
 	assert.NotEmpty(t, bi.Sources[0].Pin)
 
 	assert.Equal(t, binfotypes.SourceTypeHTTP, bi.Sources[1].Type)
-	assert.Equal(t, "https://raw.githubusercontent.com/moby/moby/master/README.md", bi.Sources[1].Ref)
+	assert.Equal(t, "https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md", bi.Sources[1].Ref)
 	assert.Equal(t, "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c", bi.Sources[1].Pin)
 
 	require.Contains(t, bi.Deps, "base")
@@ -750,7 +750,7 @@ func testBuildInfoDepsMainNoSource(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
 FROM alpine
 ENV FOO=bar
-ADD https://raw.githubusercontent.com/moby/moby/master/README.md /
+ADD https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md /
 RUN echo first > /out
 `)
 
@@ -855,7 +855,7 @@ RUN echo "foo is $FOO" > /foo
 	require.Equal(t, 1, len(bi.Sources))
 
 	assert.Equal(t, binfotypes.SourceTypeHTTP, bi.Sources[0].Type)
-	assert.Equal(t, "https://raw.githubusercontent.com/moby/moby/master/README.md", bi.Sources[0].Ref)
+	assert.Equal(t, "https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md", bi.Sources[0].Ref)
 	assert.Equal(t, "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c", bi.Sources[0].Pin)
 
 	require.Contains(t, bi.Deps, "base")
