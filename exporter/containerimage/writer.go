@@ -80,10 +80,17 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		}
 	}
 
-	for _, a := range opts.Annotations {
+	for pk, a := range opts.Annotations {
+		if pk != "" {
+			if inp.Refs == nil {
+				return nil, errors.Errorf("invalid annotation: no platforms defined")
+			}
+			if _, ok := inp.Refs[pk]; !ok {
+				return nil, errors.Errorf("invalid annotation: no platform %s found in source", pk)
+			}
+		}
 		if len(a.Index)+len(a.IndexDescriptor)+len(a.ManifestDescriptor) > 0 {
 			opts.EnableOCITypes("annotations")
-			break
 		}
 	}
 
