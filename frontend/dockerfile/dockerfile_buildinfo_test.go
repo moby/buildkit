@@ -497,6 +497,8 @@ COPY --from=base /o* /
 }
 
 func testBuildInfoDeps(t *testing.T, sb integration.Sandbox) {
+	t.Skip("deps temporarily disabled with SLSA provenance support")
+
 	ctx := sb.Context()
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
@@ -631,6 +633,8 @@ COPY --from=build /foo /out /
 }
 
 func testBuildInfoDepsMultiPlatform(t *testing.T, sb integration.Sandbox) {
+	t.Skip("deps temporarily disabled with SLSA provenance support")
+
 	ctx := sb.Context()
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
@@ -772,6 +776,8 @@ COPY --from=build /foo /out /
 }
 
 func testBuildInfoDepsMainNoSource(t *testing.T, sb integration.Sandbox) {
+	t.Skip("deps temporarily disabled with SLSA provenance support")
+
 	ctx := sb.Context()
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
