@@ -92,24 +92,9 @@ func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error)
 		c.EnableForceCompression(c.RefCfg.Compression.Type.String())
 	}
 
-	c.AddAnnotations(as)
+	c.Annotations = c.Annotations.Merge(as)
 
 	return rest, nil
-}
-
-func (c *ImageCommitOpts) AddAnnotations(annotations AnnotationsGroup) {
-	if annotations == nil {
-		return
-	}
-	if c.Annotations == nil {
-		c.Annotations = AnnotationsGroup{}
-	}
-	c.Annotations = c.Annotations.Merge(annotations)
-	for _, a := range annotations {
-		if len(a.Index)+len(a.IndexDescriptor)+len(a.ManifestDescriptor) > 0 {
-			c.EnableOCITypes("annotations")
-		}
-	}
 }
 
 func (c *ImageCommitOpts) EnableOCITypes(reason string) {

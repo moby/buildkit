@@ -80,6 +80,13 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		}
 	}
 
+	for _, a := range opts.Annotations {
+		if len(a.Index)+len(a.IndexDescriptor)+len(a.ManifestDescriptor) > 0 {
+			opts.EnableOCITypes("annotations")
+			break
+		}
+	}
+
 	if len(inp.Refs) == 0 {
 		remotes, err := ic.exportLayers(ctx, opts.RefCfg, session.NewGroup(sessionID), inp.Ref)
 		if err != nil {
