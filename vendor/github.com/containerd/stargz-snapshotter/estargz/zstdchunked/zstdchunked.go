@@ -121,7 +121,7 @@ type Compressor struct {
 	pool sync.Pool
 }
 
-func (zc *Compressor) Writer(w io.Writer) (io.WriteCloser, error) {
+func (zc *Compressor) Writer(w io.Writer) (estargz.WriteFlushCloser, error) {
 	if wc := zc.pool.Get(); wc != nil {
 		ec := wc.(*zstd.Encoder)
 		ec.Reset(w)

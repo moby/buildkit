@@ -42,7 +42,6 @@ import (
 	"os/exec"
 	"strconv"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/containerd/containerd/log"
@@ -65,22 +64,25 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 )
 
 const (
 	defaultFuseTimeout    = time.Second
 	defaultMaxConcurrency = 2
-	fusermountBin         = "fusermount"
 )
+
+var fusermountBin = []string{"fusermount", "fusermount3"}
 
 type Option func(*options)
 
 type options struct {
-	getSources        source.GetSources
-	resolveHandlers   map[string]remote.Handler
-	metadataStore     metadata.Store
-	metricsLogLevel   *logrus.Level
-	overlayOpaqueType layer.OverlayOpaqueType
+	getSources              source.GetSources
+	resolveHandlers         map[string]remote.Handler
+	metadataStore           metadata.Store
+	metricsLogLevel         *logrus.Level
+	overlayOpaqueType       layer.OverlayOpaqueType
+	additionalDecompressors func(context.Context, source.RegistryHosts, reference.Spec, ocispec.Descriptor) []metadata.Decompressor
 }
 
 func WithGetSources(s source.GetSources) Option {
@@ -116,6 +118,12 @@ func WithOverlayOpaqueType(overlayOpaqueType layer.OverlayOpaqueType) Option {
 	}
 }
 
+func WithAdditionalDecompressors(d func(context.Context, source.RegistryHosts, reference.Spec, ocispec.Descriptor) []metadata.Decompressor) Option {
+	return func(opts *options) {
+		opts.additionalDecompressors = d
+	}
+}
+
 func NewFilesystem(root string, cfg config.Config, opts ...Option) (_ snapshot.FileSystem, err error) {
 	var fsOpts options
 	for _, o := range opts {
@@ -148,7 +156,7 @@ func NewFilesystem(root string, cfg config.Config, opts ...Option) (_ snapshot.F
 		})
 	}
 	tm := task.NewBackgroundTaskManager(maxConcurrency, 5*time.Second)
-	r, err := layer.NewResolver(root, tm, cfg, fsOpts.resolveHandlers, metadataStore, fsOpts.overlayOpaqueType)
+	r, err := layer.NewResolver(root, tm, cfg, fsOpts.resolveHandlers, metadataStore, fsOpts.overlayOpaqueType, fsOpts.additionalDecompressors)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup resolver: %w", err)
 	}
@@ -338,7 +346,8 @@ func (fs *filesystem) Mount(ctx context.Context, mountpoint string, labels map[s
 		FsName:     "stargz", // name this filesystem as "stargz"
 		Debug:      fs.debug,
 	}
-	if _, err := exec.LookPath(fusermountBin); err == nil {
+	if isFusermountBinExist() {
+		log.G(ctx).Infof("fusermount detected")
 		mountOpts.Options = []string{"suid"} // option for fusermount; allow setuid inside container
 	} else {
 		log.G(ctx).WithError(err).Infof("%s not installed; trying direct mount", fusermountBin)
@@ -422,6 +431,9 @@ func (fs *filesystem) check(ctx context.Context, l layer.Layer, labels map[strin
 }
 
 func (fs *filesystem) Unmount(ctx context.Context, mountpoint string) error {
+	if mountpoint == "" {
+		return fmt.Errorf("mount point must be specified")
+	}
 	fs.layerMu.Lock()
 	l, ok := fs.layer[mountpoint]
 	if !ok {
@@ -432,12 +444,27 @@ func (fs *filesystem) Unmount(ctx context.Context, mountpoint string) error {
 	l.Done()
 	fs.layerMu.Unlock()
 	fs.metricsController.Remove(mountpoint)
-	// The goroutine which serving the mountpoint possibly becomes not responding.
-	// In case of such situations, we use MNT_FORCE here and abort the connection.
-	// In the future, we might be able to consider to kill that specific hanging
-	// goroutine using channel, etc.
-	// See also: https://www.kernel.org/doc/html/latest/filesystems/fuse.html#aborting-a-filesystem-connection
-	return syscall.Unmount(mountpoint, syscall.MNT_FORCE)
+
+	if err := unmount(mountpoint, 0); err != nil {
+		if err != unix.EBUSY {
+			return err
+		}
+		// Try force unmount
+		log.G(ctx).WithError(err).Debugf("trying force unmount %q", mountpoint)
+		if err := unmount(mountpoint, unix.MNT_FORCE); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func unmount(target string, flags int) error {
+	for {
+		if err := unix.Unmount(target, flags); err != unix.EINTR {
+			return err
+		}
+	}
 }
 
 func (fs *filesystem) prefetch(ctx context.Context, l layer.Layer, defaultPrefetchSize int64, start time.Time) {
@@ -465,4 +492,13 @@ func neighboringLayers(manifest ocispec.Manifest, target ocispec.Descriptor) (de
 		}
 	}
 	return
+}
+
+func isFusermountBinExist() bool {
+	for _, b := range fusermountBin {
+		if _, err := exec.LookPath(b); err == nil {
+			return true
+		}
+	}
+	return false
 }

@@ -71,6 +71,7 @@ type Reader interface {
 	GetChild(pid uint32, base string) (id uint32, attr Attr, err error)
 	ForeachChild(id uint32, f func(name string, id uint32, mode os.FileMode) bool) error
 	OpenFile(id uint32) (File, error)
+	OpenFileWithPreReader(id uint32, preRead func(id uint32, chunkOffset, chunkSize int64, chunkDigest string, r io.Reader) error) (File, error)
 
 	Clone(sr *io.SectionReader) (Reader, error)
 	Close() error
@@ -85,6 +86,10 @@ type Decompressor interface {
 	estargz.Decompressor
 
 	// DecompressTOC decompresses the passed blob and returns a reader of TOC JSON.
+	//
+	// If tocOffset returned by ParseFooter is < 0, we assume that TOC isn't contained in the blob.
+	// Pass nil reader to DecompressTOC then we expect that DecompressTOC acquire TOC from the external
+	// location and return it.
 	DecompressTOC(io.Reader) (tocJSON io.ReadCloser, err error)
 }
 
