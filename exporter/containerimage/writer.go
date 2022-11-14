@@ -102,7 +102,12 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 			}
 		}
 
-		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, opts, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], opts.Annotations.Platform(nil), inp.Metadata[exptypes.ExporterInlineCache], dtbi, opts.Epoch, session.NewGroup(sessionID))
+		annotations := opts.Annotations.Platform(nil)
+		if len(annotations.Index) > 0 || len(annotations.IndexDescriptor) > 0 {
+			return nil, errors.Errorf("index annotations not supported for single platform export")
+		}
+
+		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, opts, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], annotations, inp.Metadata[exptypes.ExporterInlineCache], dtbi, opts.Epoch, session.NewGroup(sessionID))
 		if err != nil {
 			return nil, err
 		}
