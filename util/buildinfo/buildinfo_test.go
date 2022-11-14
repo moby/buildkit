@@ -24,7 +24,7 @@ func TestMergeSources(t *testing.T) {
 		"docker-image://docker.io/moby/buildkit:v0.9.0@sha256:8dc668e7f66db1c044aadbed306020743516a94848793e0f81f94a087ee78cab":    "sha256:8dc668e7f66db1c044aadbed306020743516a94848793e0f81f94a087ee78cab",
 		"docker-image://docker.io/tonistiigi/xx@sha256:21a61be4744f6531cb5f33b0e6f40ede41fa3a1b8c82d5946178f80cc84bfc04":           "sha256:21a61be4744f6531cb5f33b0e6f40ede41fa3a1b8c82d5946178f80cc84bfc04",
 		"git://https://github.com/crazy-max/buildkit-buildsources-test.git#master":                                                 "259a5aa5aa5bb3562d12cc631fe399f4788642c1",
-		"https://raw.githubusercontent.com/moby/moby/master/README.md":                                                             "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c",
+		"https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md":                                                          "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c",
 	}
 
 	frontendSources := []binfotypes.Source{
@@ -85,7 +85,7 @@ func TestMergeSources(t *testing.T) {
 		},
 		{
 			Type: binfotypes.SourceTypeHTTP,
-			Ref:  "https://raw.githubusercontent.com/moby/moby/master/README.md",
+			Ref:  "https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md",
 			Pin:  "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c",
 		},
 	}, srcs)
@@ -184,7 +184,7 @@ func TestDedupSources(t *testing.T) {
 				},
 				{
 					Type: "http",
-					Ref:  "https://raw.githubusercontent.com/moby/moby/master/README.md",
+					Ref:  "https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md",
 					Pin:  "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c",
 				},
 			},
@@ -208,7 +208,7 @@ func TestDedupSources(t *testing.T) {
 				},
 				{
 					Type: "http",
-					Ref:  "https://raw.githubusercontent.com/moby/moby/master/README.md",
+					Ref:  "https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md",
 					Pin:  "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c",
 				},
 			},
@@ -233,7 +233,7 @@ func TestDedupSources(t *testing.T) {
 				},
 				{
 					Type: "http",
-					Ref:  "https://raw.githubusercontent.com/moby/moby/master/README.md",
+					Ref:  "https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md",
 					Pin:  "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c",
 				},
 			},
@@ -262,7 +262,7 @@ func TestDedupSources(t *testing.T) {
 				},
 				{
 					Type: "http",
-					Ref:  "https://raw.githubusercontent.com/moby/moby/master/README.md",
+					Ref:  "https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md",
 					Pin:  "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c",
 				},
 			},
@@ -384,7 +384,7 @@ func TestFormat(t *testing.T) {
 			},
 			{
 				Type: "http",
-				Ref:  "https://raw.githubusercontent.com/moby/moby/master/README.md",
+				Ref:  "https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md",
 				Pin:  "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c",
 			},
 		},
@@ -445,7 +445,7 @@ func TestFormat(t *testing.T) {
 					},
 					{
 						Type: "http",
-						Ref:  "https://raw.githubusercontent.com/moby/moby/master/README.md",
+						Ref:  "https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md",
 						Pin:  "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c",
 					},
 				},
