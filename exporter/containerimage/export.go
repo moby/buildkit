@@ -207,7 +207,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	if err != nil {
 		return nil, err
 	}
-	opts.AddAnnotations(as)
+	opts.Annotations = opts.Annotations.Merge(as)
 
 	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {

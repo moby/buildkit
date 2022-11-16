@@ -80,6 +80,20 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		}
 	}
 
+	for pk, a := range opts.Annotations {
+		if pk != "" {
+			if inp.Refs == nil {
+				return nil, errors.Errorf("invalid annotation: no platforms defined")
+			}
+			if _, ok := inp.Refs[pk]; !ok {
+				return nil, errors.Errorf("invalid annotation: no platform %s found in source", pk)
+			}
+		}
+		if len(a.Index)+len(a.IndexDescriptor)+len(a.ManifestDescriptor) > 0 {
+			opts.EnableOCITypes("annotations")
+		}
+	}
+
 	if len(inp.Refs) == 0 {
 		remotes, err := ic.exportLayers(ctx, opts.RefCfg, session.NewGroup(sessionID), inp.Ref)
 		if err != nil {
@@ -95,7 +109,12 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 			}
 		}
 
-		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, opts, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], opts.Annotations.Platform(nil), inp.Metadata[exptypes.ExporterInlineCache], dtbi, opts.Epoch, session.NewGroup(sessionID))
+		annotations := opts.Annotations.Platform(nil)
+		if len(annotations.Index) > 0 || len(annotations.IndexDescriptor) > 0 {
+			return nil, errors.Errorf("index annotations not supported for single platform export")
+		}
+
+		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, opts, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], annotations, inp.Metadata[exptypes.ExporterInlineCache], dtbi, opts.Epoch, session.NewGroup(sessionID))
 		if err != nil {
 			return nil, err
 		}
