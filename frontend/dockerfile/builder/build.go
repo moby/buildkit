@@ -434,8 +434,9 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 		return nil, err
 	}
 
+	target := opts[keyTarget]
 	convertOpt := dockerfile2llb.ConvertOpt{
-		Target:           opts[keyTarget],
+		Target:           target,
 		MetaResolver:     c,
 		BuildArgs:        filter(opts, buildArgPrefix),
 		Labels:           filter(opts, labelPrefix),
@@ -511,6 +512,7 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 			return nil, err
 		}
 	}
+	scanTargets := make([]*dockerfile2llb.SBOMTargets, len(targetPlatforms))
 
 	eg, ctx2 = errgroup.WithContext(ctx)
 
@@ -523,8 +525,7 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 					opt.Warn = nil
 				}
 				opt.ContextByName = contextByNameFunc(c, c.BuildOpts().SessionID)
-				st, img, err := dockerfile2llb.Dockerfile2LLB(ctx2, dtDockerfile, opt)
-
+				st, img, scanTarget, err := dockerfile2llb.Dockerfile2LLB(ctx2, dtDockerfile, opt)
 				if err != nil {
 					return err
 				}
@@ -601,6 +602,7 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 						Platform: p,
 					}
 				}
+				scanTargets[i] = scanTarget
 				return nil
 			})
 		}(i, tp)
@@ -611,17 +613,8 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 	}
 
 	if scanner != nil {
-		for _, p := range expPlatforms.Platforms {
-			ref, ok := res.Refs[p.ID]
-			if !ok {
-				return nil, errors.Errorf("could not find ref %s", p.ID)
-			}
-			st, err := ref.ToState()
-			if err != nil {
-				return nil, err
-			}
-
-			att, st, err := scanner(ctx, p.ID, st, nil)
+		for i, p := range expPlatforms.Platforms {
+			att, st, err := scanner(ctx, p.ID, scanTargets[i].Core, scanTargets[i].Extras)
 			if err != nil {
 				return nil, err
 			}
