@@ -21,8 +21,8 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend"
-	"github.com/moby/buildkit/frontend/attest"
 	"github.com/moby/buildkit/frontend/attestations"
+	"github.com/moby/buildkit/frontend/attestations/sbom"
 	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
 	"github.com/moby/buildkit/frontend/dockerfile/dockerignore"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
@@ -489,7 +489,7 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 		}
 	}
 
-	var scanner attest.Scanner
+	var scanner sbom.Scanner
 	attests, err := attestations.Parse(opts)
 	if err != nil {
 		return nil, err
@@ -506,7 +506,7 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 		ref = reference.TagNameOnly(ref)
 		exportMap = true
 
-		scanner, err = attest.CreateSBOMScanner(ctx, c, ref.String())
+		scanner, err = sbom.CreateSBOMScanner(ctx, c, ref.String())
 		if err != nil {
 			return nil, err
 		}
