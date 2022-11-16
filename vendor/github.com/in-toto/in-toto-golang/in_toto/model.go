@@ -15,7 +15,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/in-toto/in-toto-golang/pkg/ssl"
+	slsa "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
+
+	"github.com/secure-systems-lab/go-securesystemslib/cjson"
+	"github.com/secure-systems-lab/go-securesystemslib/dsse"
 )
 
 /*
@@ -76,10 +79,10 @@ const (
 	// The SPDX mandates 'spdxVersion' field, so predicate type can omit
 	// version.
 	PredicateSPDX = "https://spdx.dev/Document"
+	// PredicateCycloneDX represents a CycloneDX SBOM
+	PredicateCycloneDX = "https://cyclonedx.org/schema"
 	// PredicateLinkV1 represents an in-toto 0.9 link.
 	PredicateLinkV1 = "https://in-toto.io/Link/v1"
-	// PredicateSLSAProvenanceV01 represents a build provenance for an artifact.
-	PredicateSLSAProvenanceV01 = "https://slsa.dev/provenance/v0.1"
 )
 
 // ErrInvalidPayloadType indicates that the envelope used an unkown payload type
@@ -873,7 +876,7 @@ Signed field of the Metablock on which it was called.  If canonicalization
 fails the first return value is nil and the second return value is the error.
 */
 func (mb *Metablock) GetSignableRepresentation() ([]byte, error) {
-	return EncodeCanonical(mb.Signed)
+	return cjson.EncodeCanonical(mb.Signed)
 }
 
 /*
@@ -959,16 +962,10 @@ func (mb *Metablock) Sign(key Key) error {
 	return nil
 }
 
-/*
-DigestSet contains a set of digests. It is represented as a map from
-algorithm name to lowercase hex-encoded value.
-*/
-type DigestSet map[string]string
-
 // Subject describes the set of software artifacts the statement applies to.
 type Subject struct {
-	Name   string    `json:"name"`
-	Digest DigestSet `json:"digest"`
+	Name   string         `json:"name"`
+	Digest slsa.DigestSet `json:"digest"`
 }
 
 // StatementHeader defines the common fields for all statements
@@ -988,59 +985,10 @@ type Statement struct {
 	Predicate interface{} `json:"predicate"`
 }
 
-// ProvenanceBuilder idenfifies the entity that executed the build steps.
-type ProvenanceBuilder struct {
-	ID string `json:"id"`
-}
-
-// ProvenanceRecipe describes the actions performed by the builder.
-type ProvenanceRecipe struct {
-	Type string `json:"type"`
-	// DefinedInMaterial can be sent as the null pointer to indicate that
-	// the value is not present.
-	DefinedInMaterial *int        `json:"definedInMaterial,omitempty"`
-	EntryPoint        string      `json:"entryPoint"`
-	Arguments         interface{} `json:"arguments,omitempty"`
-	Environment       interface{} `json:"environment,omitempty"`
-}
-
-// ProvenanceComplete indicates wheter the claims in build/recipe are complete.
-// For in depth information refer to the specifictaion:
-// https://github.com/in-toto/attestation/blob/v0.1.0/spec/predicates/provenance.md
-type ProvenanceComplete struct {
-	Arguments   bool `json:"arguments"`
-	Environment bool `json:"environment"`
-	Materials   bool `json:"materials"`
-}
-
-// ProvenanceMetadata contains metadata for the built artifact.
-type ProvenanceMetadata struct {
-	// Use pointer to make sure that the abscense of a time is not
-	// encoded as the Epoch time.
-	BuildStartedOn  *time.Time         `json:"buildStartedOn,omitempty"`
-	BuildFinishedOn *time.Time         `json:"buildFinishedOn,omitempty"`
-	Completeness    ProvenanceComplete `json:"completeness"`
-	Reproducible    bool               `json:"reproducible"`
-}
-
-// ProvenanceMaterial defines the materials used to build an artifact.
-type ProvenanceMaterial struct {
-	URI    string    `json:"uri"`
-	Digest DigestSet `json:"digest,omitempty"`
-}
-
-// ProvenancePredicate is the provenance predicate definition.
-type ProvenancePredicate struct {
-	Builder   ProvenanceBuilder    `json:"builder"`
-	Recipe    ProvenanceRecipe     `json:"recipe"`
-	Metadata  *ProvenanceMetadata  `json:"metadata,omitempty"`
-	Materials []ProvenanceMaterial `json:"materials,omitempty"`
-}
-
 // ProvenanceStatement is the definition for an entire provenance statement.
 type ProvenanceStatement struct {
 	StatementHeader
-	Predicate ProvenancePredicate `json:"predicate"`
+	Predicate slsa.ProvenancePredicate `json:"predicate"`
 }
 
 // LinkStatement is the definition for an entire link statement.
@@ -1051,7 +999,7 @@ type LinkStatement struct {
 
 /*
 SPDXStatement is the definition for an entire SPDX statement.
-Currently not implemented. Some tooling exists here:
+This is currently not implemented. Some tooling exists here:
 https://github.com/spdx/tools-golang, but this software is still in
 early state.
 This struct is the same as the generic Statement struct but is added for
@@ -1063,35 +1011,46 @@ type SPDXStatement struct {
 }
 
 /*
-SSLSigner provides signature generation and validation based on the SSL
+CycloneDXStatement defines a cyclonedx sbom in the predicate. It is not
+currently serialized just as its SPDX counterpart. It is an empty
+interface, like the generic Statement.
+*/
+type CycloneDXStatement struct {
+	StatementHeader
+	Predicate interface{} `json:"predicate"`
+}
+
+/*
+DSSESigner provides signature generation and validation based on the SSL
 Signing Spec: https://github.com/secure-systems-lab/signing-spec
 as describe by: https://github.com/MarkLodato/ITE/tree/media-type/ITE/5
 It wraps the generic SSL envelope signer and enforces the correct payload
 type both during signature generation and validation.
 */
-type SSLSigner struct {
-	signer *ssl.EnvelopeSigner
+type DSSESigner struct {
+	signer *dsse.EnvelopeSigner
 }
 
-func NewSSLSigner(p ...ssl.SignVerifier) (*SSLSigner, error) {
-	es, err := ssl.NewEnvelopeSigner(p...)
+func NewDSSESigner(p ...dsse.SignVerifier) (*DSSESigner, error) {
+	es, err := dsse.NewEnvelopeSigner(p...)
 	if err != nil {
 		return nil, err
 	}
 
-	return &SSLSigner{
+	return &DSSESigner{
 		signer: es,
 	}, nil
 }
 
-func (s *SSLSigner) SignPayload(body []byte) (*ssl.Envelope, error) {
+func (s *DSSESigner) SignPayload(body []byte) (*dsse.Envelope, error) {
 	return s.signer.SignPayload(PayloadType, body)
 }
 
-func (s *SSLSigner) Verify(e *ssl.Envelope) error {
+func (s *DSSESigner) Verify(e *dsse.Envelope) error {
 	if e.PayloadType != PayloadType {
 		return ErrInvalidPayloadType
 	}
 
-	return s.signer.Verify(e)
+	_, err := s.signer.Verify(e)
+	return err
 }

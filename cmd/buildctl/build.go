@@ -277,13 +277,26 @@ func buildAction(clicontext *cli.Context) error {
 				close(w.Status())
 			}
 		}()
+
+		solveAttr := map[string]string{}
+		frontendAttr := map[string]string{}
+		for k, v := range solveOpt.FrontendAttrs {
+			if strings.HasPrefix(k, "attest:") || strings.HasPrefix(k, "build-arg:BUILDKIT_ATTEST_") {
+				frontendAttr[k] = v
+			} else {
+				solveAttr[k] = v
+			}
+		}
+
 		sreq := gateway.SolveRequest{
 			Frontend:    solveOpt.Frontend,
-			FrontendOpt: solveOpt.FrontendAttrs,
+			FrontendOpt: solveAttr,
 		}
 		if def != nil {
 			sreq.Definition = def.ToPB()
 		}
+		solveOpt.Frontend = ""
+		solveOpt.FrontendAttrs = frontendAttr
 
 		resp, err := c.Build(ctx, solveOpt, "buildctl", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 			_, isSubRequest := sreq.FrontendOpt["requestid"]

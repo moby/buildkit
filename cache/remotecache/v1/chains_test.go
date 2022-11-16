@@ -29,7 +29,7 @@ func TestSimpleMarshal(t *testing.T) {
 				Digest: dgst("d1"),
 			}},
 		}
-		baz.AddResult(time.Now(), r0)
+		baz.AddResult("", 0, time.Now(), r0)
 	}
 
 	addRecords()

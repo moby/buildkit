@@ -1,4 +1,4 @@
-package in_toto
+package cjson
 
 import (
 	"bytes"

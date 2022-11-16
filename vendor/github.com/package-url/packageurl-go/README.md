@@ -1,8 +1,8 @@
 # packageurl-go
 
-Go implementation of the package url spec
+[![build](https://github.com/package-url/packageurl-go/workflows/test/badge.svg)](https://github.com/package-url/packageurl-go/actions?query=workflow%3Atest) [![Coverage Status](https://coveralls.io/repos/github/package-url/packageurl-go/badge.svg)](https://coveralls.io/github/package-url/packageurl-go) [![PkgGoDev](https://pkg.go.dev/badge/github.com/package-url/packageurl-go)](https://pkg.go.dev/github.com/package-url/packageurl-go) [![Go Report Card](https://goreportcard.com/badge/github.com/package-url/packageurl-go)](https://goreportcard.com/report/github.com/package-url/packageurl-go)
 
-[![Build Status](https://travis-ci.com/package-url/packageurl-go.svg)](https://travis-ci.com/package-url/packageurl-go)
+Go implementation of the package url spec.
 
 
 ## Install
@@ -55,7 +55,7 @@ func main() {
 
 
 ## Test
-Testing using the normal ``go test`` command. Using ``make test`` will pull down the test fixtures shared between all package-url projects and then execute the tests.
+Testing using the normal ``go test`` command. Using ``make test`` will pull the test fixtures shared between all package-url projects and then execute the tests.
 
 ```
 $ make test

@@ -19,7 +19,7 @@ func depKeys(cks ...ExportableCacheKey) []CacheKeyWithSelector {
 }
 
 func testCacheKey(dgst digest.Digest, output Index, deps ...ExportableCacheKey) *CacheKey {
-	k := NewCacheKey(dgst, output)
+	k := NewCacheKey(dgst, "", output)
 	k.deps = make([][]CacheKeyWithSelector, len(deps))
 	for i, dep := range deps {
 		k.deps[i] = depKeys(dep)
@@ -28,7 +28,7 @@ func testCacheKey(dgst digest.Digest, output Index, deps ...ExportableCacheKey) 
 }
 
 func testCacheKeyWithDeps(dgst digest.Digest, output Index, deps [][]CacheKeyWithSelector) *CacheKey {
-	k := NewCacheKey(dgst, output)
+	k := NewCacheKey(dgst, "", output)
 	k.deps = deps
 	return k
 }
@@ -42,7 +42,7 @@ func TestInMemoryCache(t *testing.T) {
 
 	m := NewInMemoryCacheManager()
 
-	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), 0), testResult("result0"), time.Now())
+	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), "", 0), testResult("result0"), time.Now())
 	require.NoError(t, err)
 
 	keys, err := m.Query(nil, 0, dgst("foo"), 0)
@@ -58,7 +58,7 @@ func TestInMemoryCache(t *testing.T) {
 	require.Equal(t, "result0", unwrap(res))
 
 	// another record
-	cacheBar, err := m.Save(NewCacheKey(dgst("bar"), 0), testResult("result1"), time.Now())
+	cacheBar, err := m.Save(NewCacheKey(dgst("bar"), "", 0), testResult("result1"), time.Now())
 	require.NoError(t, err)
 
 	keys, err = m.Query(nil, 0, dgst("bar"), 0)
@@ -155,7 +155,7 @@ func TestInMemoryCacheSelector(t *testing.T) {
 
 	m := NewInMemoryCacheManager()
 
-	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), 0), testResult("result0"), time.Now())
+	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), "", 0), testResult("result0"), time.Now())
 	require.NoError(t, err)
 
 	_, err = m.Save(testCacheKeyWithDeps(dgst("bar"), 0, [][]CacheKeyWithSelector{
@@ -189,11 +189,11 @@ func TestInMemoryCacheSelectorNested(t *testing.T) {
 
 	m := NewInMemoryCacheManager()
 
-	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), 0), testResult("result0"), time.Now())
+	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), "", 0), testResult("result0"), time.Now())
 	require.NoError(t, err)
 
 	_, err = m.Save(testCacheKeyWithDeps(dgst("bar"), 0, [][]CacheKeyWithSelector{
-		{{CacheKey: *cacheFoo, Selector: dgst("sel0")}, {CacheKey: expKey(NewCacheKey(dgst("second"), 0))}},
+		{{CacheKey: *cacheFoo, Selector: dgst("sel0")}, {CacheKey: expKey(NewCacheKey(dgst("second"), "", 0))}},
 	}), testResult("result1"), time.Now())
 	require.NoError(t, err)
 
@@ -219,7 +219,7 @@ func TestInMemoryCacheSelectorNested(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, len(keys), 0)
 
-	keys, err = m.Query(depKeys(expKey(NewCacheKey(dgst("second"), 0))), 0, dgst("bar"), 0)
+	keys, err = m.Query(depKeys(expKey(NewCacheKey(dgst("second"), "", 0))), 0, dgst("bar"), 0)
 	require.NoError(t, err)
 	require.Equal(t, len(keys), 1)
 
@@ -231,7 +231,7 @@ func TestInMemoryCacheSelectorNested(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "result1", unwrap(res))
 
-	keys, err = m.Query(depKeys(expKey(NewCacheKey(dgst("second"), 0))), 0, dgst("bar"), 0)
+	keys, err = m.Query(depKeys(expKey(NewCacheKey(dgst("second"), "", 0))), 0, dgst("bar"), 0)
 	require.NoError(t, err)
 	require.Equal(t, len(keys), 1)
 }
@@ -242,7 +242,7 @@ func TestInMemoryCacheReleaseParent(t *testing.T) {
 	m := NewCacheManager(context.TODO(), identity.NewID(), storage, results)
 
 	res0 := testResult("result0")
-	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), 0), res0, time.Now())
+	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), "", 0), res0, time.Now())
 	require.NoError(t, err)
 
 	res1 := testResult("result1")
@@ -294,7 +294,7 @@ func TestInMemoryCacheRestoreOfflineDeletion(t *testing.T) {
 	m := NewCacheManager(context.TODO(), identity.NewID(), storage, results)
 
 	res0 := testResult("result0")
-	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), 0), res0, time.Now())
+	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), "", 0), res0, time.Now())
 	require.NoError(t, err)
 
 	res1 := testResult("result1")
@@ -329,20 +329,20 @@ func TestCarryOverFromSublink(t *testing.T) {
 	results := NewInMemoryResultStorage()
 	m := NewCacheManager(context.TODO(), identity.NewID(), storage, results)
 
-	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), 0), testResult("resultFoo"), time.Now())
+	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), "", 0), testResult("resultFoo"), time.Now())
 	require.NoError(t, err)
 
 	_, err = m.Save(testCacheKeyWithDeps(dgst("res"), 0, [][]CacheKeyWithSelector{
-		{{CacheKey: *cacheFoo, Selector: dgst("sel0")}, {CacheKey: expKey(NewCacheKey(dgst("content0"), 0))}},
+		{{CacheKey: *cacheFoo, Selector: dgst("sel0")}, {CacheKey: expKey(NewCacheKey(dgst("content0"), "", 0))}},
 	}), testResult("result0"), time.Now())
 	require.NoError(t, err)
 
-	cacheBar, err := m.Save(NewCacheKey(dgst("bar"), 0), testResult("resultBar"), time.Now())
+	cacheBar, err := m.Save(NewCacheKey(dgst("bar"), "", 0), testResult("resultBar"), time.Now())
 	require.NoError(t, err)
 
 	keys, err := m.Query([]CacheKeyWithSelector{
 		{CacheKey: *cacheBar, Selector: dgst("sel0")},
-		{CacheKey: expKey(NewCacheKey(dgst("content0"), 0))},
+		{CacheKey: expKey(NewCacheKey(dgst("content0"), "", 0))},
 	}, 0, dgst("res"), 0)
 	require.NoError(t, err)
 	require.Equal(t, len(keys), 1)

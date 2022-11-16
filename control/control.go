@@ -330,6 +330,11 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	}
 
 	var procs []llbsolver.Processor
+
+	if len(attests) > 0 {
+		procs = append(procs, proc.ForceRefsProcessor)
+	}
+
 	if attrs, ok := attests["sbom"]; ok {
 		src := attrs["generator"]
 		if src == "" {
@@ -340,7 +345,11 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 			return nil, errors.Wrapf(err, "failed to parse sbom generator %s", src)
 		}
 		ref = reference.TagNameOnly(ref)
-		procs = append(procs, proc.ForceRefsProcessor, proc.SBOMProcessor(ref.String()))
+		procs = append(procs, proc.SBOMProcessor(ref.String()))
+	}
+
+	if attrs, ok := attests["provenance"]; ok {
+		procs = append(procs, proc.ProvenanceProcessor(attrs))
 	}
 
 	resp, err := c.solver.Solve(ctx, req.Ref, req.Session, frontend.SolveRequest{

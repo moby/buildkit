@@ -129,15 +129,21 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		return mfstDesc, nil
 	}
 
+	hasAttestations := false
 	attestCount := 0
 	for _, attests := range inp.Attestations {
-		attestCount += len(attests)
+		hasAttestations = true
+		for _, attest := range attests {
+			if attest.ContentFunc == nil {
+				attestCount++
+			}
+		}
 	}
 	if count := attestCount + len(p.Platforms); count != len(inp.Refs) {
 		return nil, errors.Errorf("number of required refs (%d) does not match number of references (%d)", count, len(inp.Refs))
 	}
 
-	if attestCount > 0 {
+	if hasAttestations {
 		opts.EnableOCITypes("attestations")
 	}
 
@@ -306,35 +312,53 @@ func (ic *ImageWriter) extractAttestations(ctx context.Context, opts *ImageCommi
 	for i, att := range attestations {
 		i, att := i, att
 		eg.Go(func() error {
-			ref, ok := refs[att.Ref]
-			if !ok {
-				return errors.Errorf("key %s not found in refs map", att.Ref)
-			}
-			mount, err := ref.Mount(ctx, true, s)
-			if err != nil {
-				return err
-			}
-			lm := snapshot.LocalMounter(mount)
-			src, err := lm.Mount()
-			if err != nil {
-				return err
-			}
-			defer lm.Unmount()
-
-			switch att.Kind {
-			case gatewaypb.AttestationKindInToto:
-				p, err := fs.RootPath(src, att.Path)
+			var data []byte
+			var err error
+			var dir string
+			if att.ContentFunc != nil {
+				data, err = att.ContentFunc()
 				if err != nil {
 					return err
 				}
-				data, err := os.ReadFile(p)
+			} else {
+				ref, ok := refs[att.Ref]
+				if !ok {
+					return errors.Errorf("key %s not found in refs map", att.Ref)
+				}
+				mount, err := ref.Mount(ctx, true, s)
 				if err != nil {
-					return errors.Wrap(err, "cannot read in-toto attestation")
+					return err
 				}
-				if len(data) == 0 {
-					data = nil
+				lm := snapshot.LocalMounter(mount)
+				src, err := lm.Mount()
+				if err != nil {
+					return err
 				}
+				defer lm.Unmount()
 
+				switch att.Kind {
+				case gatewaypb.AttestationKindInToto:
+					p, err := fs.RootPath(src, att.Path)
+					if err != nil {
+						return err
+					}
+					data, err = os.ReadFile(p)
+					if err != nil {
+						return errors.Wrap(err, "cannot read in-toto attestation")
+					}
+					if len(data) == 0 {
+						data = nil
+					}
+				case gatewaypb.AttestationKindBundle:
+					dir, err = fs.RootPath(src, att.Path)
+					if err != nil {
+						return err
+					}
+				}
+			}
+
+			switch att.Kind {
+			case gatewaypb.AttestationKindInToto:
 				var subjects []intoto.Subject
 				if len(att.InToto.Subjects) == 0 {
 					att.InToto.Subjects = []result.InTotoSubject{{
@@ -380,10 +404,6 @@ func (ic *ImageWriter) extractAttestations(ctx context.Context, opts *ImageCommi
 				}
 				statements[i] = append(statements[i], stmt)
 			case gatewaypb.AttestationKindBundle:
-				dir, err := fs.RootPath(src, att.Path)
-				if err != nil {
-					return err
-				}
 				entries, err := os.ReadDir(dir)
 				if err != nil {
 					return err
@@ -499,7 +519,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *Ima
 	}
 
 	for i, desc := range remote.Descriptors {
-		removeInternalLayerAnnotations(&desc, opts.OCITypes)
+		RemoveInternalLayerAnnotations(&desc, opts.OCITypes)
 		mfst.Layers = append(mfst.Layers, desc)
 		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i+1)] = desc.Digest.String()
 	}
@@ -611,7 +631,7 @@ func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *Ima
 		"containerd.io/gc.ref.content.0": configDigest.String(),
 	}
 	for i, desc := range layers {
-		removeInternalLayerAnnotations(&desc, opts.OCITypes)
+		RemoveInternalLayerAnnotations(&desc, opts.OCITypes)
 		mfst.Layers = append(mfst.Layers, desc)
 		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i+1)] = desc.Digest.String()
 	}
@@ -869,7 +889,7 @@ func normalizeLayersAndHistory(ctx context.Context, remote *solver.Remote, histo
 	return remote, history
 }
 
-func removeInternalLayerAnnotations(desc *ocispecs.Descriptor, oci bool) {
+func RemoveInternalLayerAnnotations(desc *ocispecs.Descriptor, oci bool) {
 	if oci {
 		// oci supports annotations but don't export internal annotations
 		delete(desc.Annotations, "containerd.io/uncompressed")

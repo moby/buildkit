@@ -147,6 +147,12 @@ var allTests = integration.TestFuncs(
 	testDockerfileAddChownExpand,
 	testSourceDateEpochWithoutExporter,
 	testSBOMScannerImage,
+	testProvenanceAttestation,
+	testGitProvenanceAttestation,
+	testMultiPlatformProvenance,
+	testClientFrontendProvenance,
+	testClientLLBProvenance,
+	testSecretSSHProvenance,
 )
 
 // Tests that depend on the `security.*` entitlements

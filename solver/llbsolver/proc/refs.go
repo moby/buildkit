@@ -8,9 +8,9 @@ import (
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
-	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver"
+	"github.com/moby/buildkit/solver/llbsolver/provenance"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
@@ -19,7 +19,7 @@ import (
 //
 // This is useful for cases where a frontend produces a single-platform image,
 // but we need to add additional Refs to it (e.g. attestations).
-func ForceRefsProcessor(ctx context.Context, result *frontend.Result, s *llbsolver.Solver, j *solver.Job) (*frontend.Result, error) {
+func ForceRefsProcessor(ctx context.Context, result *llbsolver.Result, s *llbsolver.Solver, j *solver.Job) (*llbsolver.Result, error) {
 	if len(result.Refs) > 0 {
 		return result, nil
 	}
@@ -71,6 +71,11 @@ func ForceRefsProcessor(ctx context.Context, result *frontend.Result, s *llbsolv
 		return nil, err
 	}
 	result.AddMeta(exptypes.ExporterPlatformsKey, dt)
+
+	result.Provenance.Refs = map[string]*provenance.Capture{
+		pk: result.Provenance.Ref,
+	}
+	result.Provenance.Ref = nil
 
 	return result, nil
 }
