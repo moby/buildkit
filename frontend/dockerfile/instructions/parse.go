@@ -17,7 +17,6 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/command"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/util/suggest"
-	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
 
@@ -297,14 +296,6 @@ func parseAdd(req parseRequest) (*AddCommand, error) {
 		return nil, err
 	}
 
-	var checksum digest.Digest
-	if flChecksum.Value != "" {
-		checksum, err = digest.Parse(flChecksum.Value)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	return &AddCommand{
 		withNameAndCode: newWithNameAndCode(req),
 		SourcesAndDest:  *sourcesAndDest,
@@ -312,7 +303,7 @@ func parseAdd(req parseRequest) (*AddCommand, error) {
 		Chmod:           flChmod.Value,
 		Link:            flLink.Value == "true",
 		KeepGitDir:      flKeepGitDir.Value == "true",
-		Checksum:        checksum,
+		Checksum:        flChecksum.Value,
 	}, nil
 }
 

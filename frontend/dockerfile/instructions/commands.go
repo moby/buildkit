@@ -6,7 +6,6 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/strslice"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
-	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
 
@@ -244,7 +243,7 @@ type AddCommand struct {
 	Chmod      string
 	Link       bool
 	KeepGitDir bool // whether to keep .git dir, only meaningful for git sources
-	Checksum   digest.Digest
+	Checksum   string
 }
 
 func (c *AddCommand) Expand(expander SingleWordExpander) error {
@@ -253,6 +252,12 @@ func (c *AddCommand) Expand(expander SingleWordExpander) error {
 		return err
 	}
 	c.Chown = expandedChown
+
+	expandedChecksum, err := expander(c.Checksum)
+	if err != nil {
+		return err
+	}
+	c.Checksum = expandedChecksum
 
 	return c.SourcesAndDest.Expand(expander)
 }
