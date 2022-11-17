@@ -96,7 +96,7 @@ func TestIntegration(t *testing.T) {
 		testResolveAndHosts,
 		testUser,
 		testOCIExporter,
-		testOCIExporterUnpack,
+		testOCIExporterContentStore,
 		testWhiteoutParentDir,
 		testFrontendImageNaming,
 		testDuplicateWhiteouts,
@@ -2356,7 +2356,7 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 	checkAllReleasable(t, c, sb, true)
 }
 
-func testOCIExporterUnpack(t *testing.T, sb integration.Sandbox) {
+func testOCIExporterContentStore(t *testing.T, sb integration.Sandbox) {
 	integration.SkipIfDockerd(t, sb, "oci exporter")
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
@@ -2400,7 +2400,7 @@ func testOCIExporterUnpack(t *testing.T, sb integration.Sandbox) {
 
 		outDir := filepath.Join(destDir, "out.d")
 		attrs = map[string]string{
-			"unpack": "true",
+			"tar": "false",
 		}
 		if exp == ExporterDocker {
 			attrs["name"] = target

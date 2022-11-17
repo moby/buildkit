@@ -40,7 +40,7 @@ const (
 )
 
 const (
-	keyUnpack = "unpack"
+	keyTar = "tar"
 )
 
 type Opt struct {
@@ -62,6 +62,7 @@ func New(opt Opt) (exporter.Exporter, error) {
 func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
 	i := &imageExporterInstance{
 		imageExporter: e,
+		tar:           true,
 		opts: containerimage.ImageCommitOpts{
 			RefCfg: cacheconfig.RefConfig{
 				Compression: compression.New(compression.Default),
@@ -78,16 +79,16 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 
 	for k, v := range opt {
 		switch k {
-		case keyUnpack:
+		case keyTar:
 			if v == "" {
-				i.unpack = true
+				i.tar = true
 				continue
 			}
 			b, err := strconv.ParseBool(v)
 			if err != nil {
 				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
-			i.unpack = b
+			i.tar = b
 		default:
 			if i.meta == nil {
 				i.meta = make(map[string][]byte)
@@ -100,9 +101,9 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 
 type imageExporterInstance struct {
 	*imageExporter
-	opts   containerimage.ImageCommitOpts
-	unpack bool
-	meta   map[string][]byte
+	opts containerimage.ImageCommitOpts
+	tar  bool
+	meta map[string][]byte
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -237,17 +238,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 		}
 	}
 
-	if e.unpack {
-		ctx = remotes.WithMediaTypeKeyPrefix(ctx, intoto.PayloadType, "intoto")
-		store := sessioncontent.NewCallerStore(caller, "export")
-		if err != nil {
-			return nil, err
-		}
-		err := contentutil.CopyChain(ctx, store, mprovider, *desc)
-		if err != nil {
-			return nil, err
-		}
-	} else {
+	if e.tar {
 		w, err := filesync.CopyFileWriter(ctx, resp, caller)
 		if err != nil {
 			return nil, err
@@ -269,6 +260,16 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 			return nil, report(err)
 		}
 		report(nil)
+	} else {
+		ctx = remotes.WithMediaTypeKeyPrefix(ctx, intoto.PayloadType, "intoto")
+		store := sessioncontent.NewCallerStore(caller, "export")
+		if err != nil {
+			return nil, err
+		}
+		err := contentutil.CopyChain(ctx, store, mprovider, *desc)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return resp, nil

@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/containerd/console"
@@ -80,9 +81,12 @@ func resolveExporterDest(exporter, dest string, attrs map[string]string) (func(m
 	case client.ExporterTar:
 		supportFile = true
 	case client.ExporterOCI, client.ExporterDocker:
-		unpack, ok := attrs["unpack"]
-		supportDir = ok && (unpack == "" || unpack == "true")
-		supportFile = !supportDir
+		tar, err := strconv.ParseBool(attrs["tar"])
+		if err != nil {
+			tar = true
+		}
+		supportFile = tar
+		supportDir = !tar
 	}
 
 	if supportDir {
