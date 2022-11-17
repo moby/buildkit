@@ -115,7 +115,6 @@ type Heredoc struct {
 var (
 	dispatch      map[string]func(string, *directives) (*Node, map[string]bool, error)
 	reWhitespace  = regexp.MustCompile(`[\t\v\f\r ]+`)
-	reDirectives  = regexp.MustCompile(`^#\s*([a-zA-Z][a-zA-Z0-9]*)\s*=\s*(.+?)\s*$`)
 	reComment     = regexp.MustCompile(`^#.*$`)
 	reHeredoc     = regexp.MustCompile(`^(\d*)<<(-?)([^<]*)$`)
 	reLeadingTabs = regexp.MustCompile(`(?m)^\t+`)
@@ -123,11 +122,6 @@ var (
 
 // DefaultEscapeToken is the default escape token
 const DefaultEscapeToken = '\\'
-
-var validDirectives = map[string]struct{}{
-	"escape": {},
-	"syntax": {},
-}
 
 var (
 	// Directives allowed to contain heredocs
@@ -143,13 +137,12 @@ var (
 	}
 )
 
-// directive is the structure used during a build run to hold the state of
+// directives is the structure used during a build run to hold the state of
 // parsing directives.
 type directives struct {
-	escapeToken           rune                // Current escape token
-	lineContinuationRegex *regexp.Regexp      // Current line continuation regex
-	done                  bool                // Whether we are done looking for directives
-	seen                  map[string]struct{} // Whether the escape directive has been seen
+	parser                DirectiveParser
+	escapeToken           rune           // Current escape token
+	lineContinuationRegex *regexp.Regexp // Current line continuation regex
 }
 
 // setEscapeToken sets the default token for escaping characters and as line-
@@ -178,40 +171,19 @@ func (d *directives) setEscapeToken(s string) error {
 // Parser directives must precede any builder instruction or other comments,
 // and cannot be repeated.
 func (d *directives) possibleParserDirective(line string) error {
-	if d.done {
-		return nil
+	directive, err := d.parser.ParseLine([]byte(line))
+	if err != nil {
+		return err
 	}
-
-	match := reDirectives.FindStringSubmatch(line)
-	if len(match) == 0 {
-		d.done = true
-		return nil
+	if directive != nil && directive.Name == keyEscape {
+		return d.setEscapeToken(directive.Value)
 	}
-
-	k := strings.ToLower(match[1])
-	_, ok := validDirectives[k]
-	if !ok {
-		d.done = true
-		return nil
-	}
-
-	if _, ok := d.seen[k]; ok {
-		return errors.Errorf("only one %s parser directive can be used", k)
-	}
-	d.seen[k] = struct{}{}
-
-	if k == "escape" {
-		return d.setEscapeToken(match[2])
-	}
-
 	return nil
 }
 
 // newDefaultDirectives returns a new directives structure with the default escapeToken token
 func newDefaultDirectives() *directives {
-	d := &directives{
-		seen: map[string]struct{}{},
-	}
+	d := &directives{}
 	d.setEscapeToken(string(DefaultEscapeToken))
 	return d
 }

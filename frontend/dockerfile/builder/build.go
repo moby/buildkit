@@ -387,7 +387,7 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 				return nil, errors.Wrapf(err, "failed with %s = %s", keySyntaxArg, cmdline)
 			}
 			return res, err
-		} else if ref, cmdline, loc, ok := dockerfile2llb.DetectSyntax(bytes.NewBuffer(dtDockerfile)); ok {
+		} else if ref, cmdline, loc, ok := parser.DetectSyntax(dtDockerfile); ok {
 			res, err := forwardGateway(ctx, c, ref, cmdline)
 			if err != nil && len(errdefs.Sources(err)) == 0 {
 				return nil, wrapSource(err, sourceMap, loc)
