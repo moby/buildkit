@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/containerd/containerd/leases"
 	"github.com/docker/distribution/reference"
 	"github.com/mitchellh/hashstructure/v2"
 	controlapi "github.com/moby/buildkit/api/services/control"
@@ -31,6 +32,7 @@ import (
 	"github.com/moby/buildkit/version"
 	"github.com/moby/buildkit/worker"
 	"github.com/pkg/errors"
+	"go.etcd.io/bbolt"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"golang.org/x/sync/errgroup"
@@ -48,6 +50,8 @@ type Opt struct {
 	ResolveCacheImporterFuncs map[string]remotecache.ResolveCacheImporterFunc
 	Entitlements              []string
 	TraceCollector            sdktrace.SpanExporter
+	HistoryDB                 *bbolt.DB
+	LeaseManager              leases.Manager
 }
 
 type Controller struct { // TODO: ControlService
@@ -55,6 +59,7 @@ type Controller struct { // TODO: ControlService
 	buildCount       int64
 	opt              Opt
 	solver           *llbsolver.Solver
+	history          *llbsolver.HistoryQueue
 	cache            solver.CacheManager
 	gatewayForwarder *controlgateway.GatewayForwarder
 	throttledGC      func()
@@ -67,6 +72,11 @@ func NewController(opt Opt) (*Controller, error) {
 
 	gatewayForwarder := controlgateway.NewGatewayForwarder()
 
+	hq := llbsolver.NewHistoryQueue(llbsolver.HistoryQueueOpt{
+		DB:           opt.HistoryDB,
+		LeaseManager: opt.LeaseManager,
+	})
+
 	s, err := llbsolver.New(llbsolver.Opt{
 		WorkerController: opt.WorkerController,
 		Frontends:        opt.Frontends,
@@ -75,6 +85,7 @@ func NewController(opt Opt) (*Controller, error) {
 		GatewayForwarder: gatewayForwarder,
 		SessionManager:   opt.SessionManager,
 		Entitlements:     opt.Entitlements,
+		HistoryQueue:     hq,
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create solver")
@@ -83,6 +94,7 @@ func NewController(opt Opt) (*Controller, error) {
 	c := &Controller{
 		opt:              opt,
 		solver:           s,
+		history:          hq,
 		cache:            cache,
 		gatewayForwarder: gatewayForwarder,
 	}
@@ -220,6 +232,15 @@ func (c *Controller) Export(ctx context.Context, req *tracev1.ExportTraceService
 		return nil, err
 	}
 	return &tracev1.ExportTraceServiceResponse{}, nil
+}
+
+func (c *Controller) ListenBuildHistory(req *controlapi.BuildHistoryRequest, srv controlapi.Control_ListenBuildHistoryServer) error {
+	return c.history.Listen(srv.Context(), req.Ref, req.ActiveOnly, func(h *controlapi.BuildHistoryEvent) error {
+		if err := srv.Send(h); err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 func translateLegacySolveRequest(req *controlapi.SolveRequest) error {

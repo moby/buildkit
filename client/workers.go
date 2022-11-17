@@ -28,7 +28,7 @@ func (c *Client) ListWorkers(ctx context.Context, opts ...ListWorkersOption) ([]
 	}
 
 	req := &controlapi.ListWorkersRequest{Filter: info.Filter}
-	resp, err := c.controlClient().ListWorkers(ctx, req)
+	resp, err := c.ControlClient().ListWorkers(ctx, req)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list workers")
 	}

@@ -59,6 +59,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
+	"go.etcd.io/bbolt"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -649,6 +650,11 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 		return nil, err
 	}
 
+	historyDB, err := bbolt.Open(filepath.Join(cfg.Root, "history.db"), 0600, nil)
+	if err != nil {
+		return nil, err
+	}
+
 	resolverFn := resolverFunc(cfg)
 
 	w, err := wc.GetDefault()
@@ -680,6 +686,8 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 		CacheKeyStorage:           cacheStorage,
 		Entitlements:              cfg.Entitlements,
 		TraceCollector:            tc,
+		HistoryDB:                 historyDB,
+		LeaseManager:              w.LeaseManager(),
 	})
 }
 

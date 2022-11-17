@@ -204,7 +204,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		eg.Go(func() error {
 			sd := c.sessionDialer
 			if sd == nil {
-				sd = grpchijack.Dialer(c.controlClient())
+				sd = grpchijack.Dialer(c.ControlClient())
 			}
 			return s.Run(statusContext, sd)
 		})
@@ -247,7 +247,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			frontendInputs[key] = def.ToPB()
 		}
 
-		resp, err := c.controlClient().Solve(ctx, &controlapi.SolveRequest{
+		resp, err := c.ControlClient().Solve(ctx, &controlapi.SolveRequest{
 			Ref:            ref,
 			Definition:     pbd,
 			Exporter:       ex.Type,
@@ -291,7 +291,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	}
 
 	eg.Go(func() error {
-		stream, err := c.controlClient().Status(statusContext, &controlapi.StatusRequest{
+		stream, err := c.ControlClient().Status(statusContext, &controlapi.StatusRequest{
 			Ref: ref,
 		})
 		if err != nil {
@@ -305,52 +305,8 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 				}
 				return errors.Wrap(err, "failed to receive status")
 			}
-			s := SolveStatus{}
-			for _, v := range resp.Vertexes {
-				s.Vertexes = append(s.Vertexes, &Vertex{
-					Digest:        v.Digest,
-					Inputs:        v.Inputs,
-					Name:          v.Name,
-					Started:       v.Started,
-					Completed:     v.Completed,
-					Error:         v.Error,
-					Cached:        v.Cached,
-					ProgressGroup: v.ProgressGroup,
-				})
-			}
-			for _, v := range resp.Statuses {
-				s.Statuses = append(s.Statuses, &VertexStatus{
-					ID:        v.ID,
-					Vertex:    v.Vertex,
-					Name:      v.Name,
-					Total:     v.Total,
-					Current:   v.Current,
-					Timestamp: v.Timestamp,
-					Started:   v.Started,
-					Completed: v.Completed,
-				})
-			}
-			for _, v := range resp.Logs {
-				s.Logs = append(s.Logs, &VertexLog{
-					Vertex:    v.Vertex,
-					Stream:    int(v.Stream),
-					Data:      v.Msg,
-					Timestamp: v.Timestamp,
-				})
-			}
-			for _, v := range resp.Warnings {
-				s.Warnings = append(s.Warnings, &VertexWarning{
-					Vertex:     v.Vertex,
-					Level:      int(v.Level),
-					Short:      v.Short,
-					Detail:     v.Detail,
-					URL:        v.Url,
-					SourceInfo: v.Info,
-					Range:      v.Ranges,
-				})
-			}
 			if statusChan != nil {
-				statusChan <- &s
+				statusChan <- NewSolveStatus(resp)
 			}
 		}
 	})
@@ -391,6 +347,54 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		}
 	}
 	return res, nil
+}
+
+func NewSolveStatus(resp *controlapi.StatusResponse) *SolveStatus {
+	s := &SolveStatus{}
+	for _, v := range resp.Vertexes {
+		s.Vertexes = append(s.Vertexes, &Vertex{
+			Digest:        v.Digest,
+			Inputs:        v.Inputs,
+			Name:          v.Name,
+			Started:       v.Started,
+			Completed:     v.Completed,
+			Error:         v.Error,
+			Cached:        v.Cached,
+			ProgressGroup: v.ProgressGroup,
+		})
+	}
+	for _, v := range resp.Statuses {
+		s.Statuses = append(s.Statuses, &VertexStatus{
+			ID:        v.ID,
+			Vertex:    v.Vertex,
+			Name:      v.Name,
+			Total:     v.Total,
+			Current:   v.Current,
+			Timestamp: v.Timestamp,
+			Started:   v.Started,
+			Completed: v.Completed,
+		})
+	}
+	for _, v := range resp.Logs {
+		s.Logs = append(s.Logs, &VertexLog{
+			Vertex:    v.Vertex,
+			Stream:    int(v.Stream),
+			Data:      v.Msg,
+			Timestamp: v.Timestamp,
+		})
+	}
+	for _, v := range resp.Warnings {
+		s.Warnings = append(s.Warnings, &VertexWarning{
+			Vertex:     v.Vertex,
+			Level:      int(v.Level),
+			Short:      v.Short,
+			Detail:     v.Detail,
+			URL:        v.Url,
+			SourceInfo: v.Info,
+			Range:      v.Ranges,
+		})
+	}
+	return s
 }
 
 func prepareSyncedDirs(def *llb.Definition, localDirs map[string]string) (filesync.StaticDirSource, error) {

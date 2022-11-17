@@ -220,6 +220,10 @@ func (w *Worker) ContentStore() content.Store {
 	return w.WorkerOpt.ContentStore
 }
 
+func (w *Worker) LeaseManager() leases.Manager {
+	return w.WorkerOpt.LeaseManager
+}
+
 func (w *Worker) ID() string {
 	return w.WorkerOpt.ID
 }
@@ -378,7 +382,7 @@ func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, 
 			SessionManager: sm,
 			ImageWriter:    w.imageWriter,
 			RegistryHosts:  w.RegistryHosts,
-			LeaseManager:   w.LeaseManager,
+			LeaseManager:   w.LeaseManager(),
 		})
 	case client.ExporterLocal:
 		return localexporter.New(localexporter.Opt{
@@ -393,14 +397,14 @@ func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, 
 			SessionManager: sm,
 			ImageWriter:    w.imageWriter,
 			Variant:        ociexporter.VariantOCI,
-			LeaseManager:   w.LeaseManager,
+			LeaseManager:   w.LeaseManager(),
 		})
 	case client.ExporterDocker:
 		return ociexporter.New(ociexporter.Opt{
 			SessionManager: sm,
 			ImageWriter:    w.imageWriter,
 			Variant:        ociexporter.VariantDocker,
-			LeaseManager:   w.LeaseManager,
+			LeaseManager:   w.LeaseManager(),
 		})
 	default:
 		return nil, errors.Errorf("exporter %q could not be found", name)
