@@ -6187,7 +6187,7 @@ COPY <<-"EOF" /scan.sh
 	  "predicate": {"core": true}
 	}
 	BUNDLE
-	if [ -d "${BUILDKIT_SCAN_SOURCE_EXTRAS:?}" ]; then
+	if [ "${BUILDKIT_SCAN_SOURCE_EXTRAS}" ]; then
 		for src in "${BUILDKIT_SCAN_SOURCE_EXTRAS}"/*; do
 			cat <<BUNDLE > $BUILDKIT_SCAN_DESTINATION/$(basename $src).spdx.json
 			{

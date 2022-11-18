@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
+	"strings"
 
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/moby/buildkit/client/llb"
@@ -12,6 +13,11 @@ import (
 	"github.com/moby/buildkit/solver/result"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+)
+
+const (
+	srcDir = "/run/src/"
+	outDir = "/run/out/"
 )
 
 // Scanner is a function type for scanning the contents of a state and
@@ -38,25 +44,34 @@ func CreateSBOMScanner(ctx context.Context, resolver llb.ImageMetaResolver, scan
 	if err := json.Unmarshal(dt, &cfg); err != nil {
 		return nil, err
 	}
-	if len(cfg.Config.Cmd) == 0 {
+
+	var args []string
+	args = append(args, cfg.Config.Entrypoint...)
+	args = append(args, cfg.Config.Cmd...)
+	if len(args) == 0 {
 		return nil, errors.Errorf("scanner %s does not have cmd", scanner)
 	}
 
 	return func(ctx context.Context, name string, ref llb.State, extras map[string]llb.State) (result.Attestation, llb.State, error) {
-		srcDir := "/run/src/"
-		outDir := "/run/out/"
+		var env []string
+		env = append(env, cfg.Config.Env...)
+		env = append(env, "BUILDKIT_SCAN_DESTINATION="+outDir)
+		env = append(env, "BUILDKIT_SCAN_SOURCE="+path.Join(srcDir, "core"))
+		if len(extras) > 0 {
+			env = append(env, "BUILDKIT_SCAN_SOURCE_EXTRAS="+path.Join(srcDir, "extras/"))
+		}
 
-		args := []string{}
-		args = append(args, cfg.Config.Entrypoint...)
-		args = append(args, cfg.Config.Cmd...)
-		runscan := llb.Image(scanner).Run(
+		opts := []llb.RunOption{
 			llb.Dir(cfg.Config.WorkingDir),
-			llb.AddEnv("BUILDKIT_SCAN_SOURCE", path.Join(srcDir, "core")),
-			llb.AddEnv("BUILDKIT_SCAN_SOURCE_EXTRAS", path.Join(srcDir, "extras/")),
-			llb.AddEnv("BUILDKIT_SCAN_DESTINATION", outDir),
 			llb.Args(args),
-			llb.WithCustomName(fmt.Sprintf("[%s] generating sbom using %s", name, scanner)))
+			llb.WithCustomName(fmt.Sprintf("[%s] generating sbom using %s", name, scanner)),
+		}
+		for _, e := range env {
+			k, v, _ := strings.Cut(e, "=")
+			opts = append(opts, llb.AddEnv(k, v))
+		}
 
+		runscan := llb.Image(scanner).Run(opts...)
 		runscan.AddMount(path.Join(srcDir, "core"), ref, llb.Readonly)
 		for k, extra := range extras {
 			runscan.AddMount(path.Join(srcDir, "extras", k), extra, llb.Readonly)
