@@ -41,7 +41,7 @@ func xmain() error {
 
 	caps := pb.Caps.CapSet(pb.Caps.All())
 
-	state, img, err := dockerfile2llb.Dockerfile2LLB(appcontext.Context(), df, dockerfile2llb.ConvertOpt{
+	state, img, _, err := dockerfile2llb.Dockerfile2LLB(appcontext.Context(), df, dockerfile2llb.ConvertOpt{
 		MetaResolver: imagemetaresolver.Default(),
 		Target:       opt.target,
 		LLBCaps:      &caps,

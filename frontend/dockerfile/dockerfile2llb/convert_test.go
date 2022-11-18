@@ -31,7 +31,7 @@ ENV FOO bar
 COPY f1 f2 /sub/
 RUN ls -l
 `
-	_, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	_, _, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.NoError(t, err)
 
 	df = `FROM scratch AS foo
@@ -40,7 +40,7 @@ FROM foo
 COPY --from=foo f1 /
 COPY --from=0 f2 /
 	`
-	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.NoError(t, err)
 
 	df = `FROM scratch AS foo
@@ -49,12 +49,12 @@ FROM foo
 COPY --from=foo f1 /
 COPY --from=0 f2 /
 	`
-	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
+	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
 		Target: "Foo",
 	})
 	assert.NoError(t, err)
 
-	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
+	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
 		Target: "nosuch",
 	})
 	assert.Error(t, err)
@@ -62,21 +62,21 @@ COPY --from=0 f2 /
 	df = `FROM scratch
 	ADD http://github.com/moby/buildkit/blob/master/README.md /
 		`
-	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.NoError(t, err)
 
 	df = `FROM scratch
 	COPY http://github.com/moby/buildkit/blob/master/README.md /
 		`
-	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.EqualError(t, err, "source can't be a URL for COPY")
 
 	df = `FROM "" AS foo`
-	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.Error(t, err)
 
 	df = `FROM ${BLANK} AS foo`
-	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.Error(t, err)
 }
 
@@ -174,7 +174,7 @@ func TestDockerfileCircularDependencies(t *testing.T) {
 	df := `FROM busybox AS stage0
 COPY --from=stage0 f1 /sub/
 `
-	_, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	_, _, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.EqualError(t, err, "circular dependency detected on stage: stage0")
 
 	// multiple stages with circular dependency
@@ -185,6 +185,6 @@ COPY --from=stage0 f2 /sub/
 FROM busybox AS stage2
 COPY --from=stage1 f2 /sub/
 `
-	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.EqualError(t, err, "circular dependency detected on stage: stage0")
 }

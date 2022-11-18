@@ -7,7 +7,7 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend"
-	"github.com/moby/buildkit/frontend/attest"
+	"github.com/moby/buildkit/frontend/attestations/sbom"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver"
 	"github.com/pkg/errors"
@@ -16,7 +16,7 @@ import (
 func SBOMProcessor(scannerRef string) llbsolver.Processor {
 	return func(ctx context.Context, res *llbsolver.Result, s *llbsolver.Solver, j *solver.Job) (*llbsolver.Result, error) {
 		// skip sbom generation if we already have an sbom
-		if attest.HasSBOM(res.Result) {
+		if sbom.HasSBOM(res.Result) {
 			return res, nil
 		}
 
@@ -32,7 +32,7 @@ func SBOMProcessor(scannerRef string) llbsolver.Processor {
 			}
 		}
 
-		scanner, err := attest.CreateSBOMScanner(ctx, s.Bridge(j), scannerRef)
+		scanner, err := sbom.CreateSBOMScanner(ctx, s.Bridge(j), scannerRef)
 		if err != nil {
 			return nil, err
 		}

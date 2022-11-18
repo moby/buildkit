@@ -44,7 +44,15 @@ const (
 	emptyImageName          = "scratch"
 	defaultContextLocalName = "context"
 	historyComment          = "buildkit.dockerfile.v0"
+
+	sbomScanContext = "BUILDKIT_SBOM_SCAN_CONTEXT"
+	sbomScanStage   = "BUILDKIT_SBOM_SCAN_STAGE"
 )
+
+var nonEnvArgs = map[string]struct{}{
+	sbomScanContext: {},
+	sbomScanStage:   {},
+}
 
 type ConvertOpt struct {
 	Target       string
@@ -77,12 +85,36 @@ type ConvertOpt struct {
 	ContextByName    func(ctx context.Context, name, resolveMode string, p *ocispecs.Platform) (*llb.State, *Image, error)
 }
 
-func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, error) {
+type SBOMTargets struct {
+	Core   llb.State
+	Extras map[string]llb.State
+}
+
+func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, *SBOMTargets, error) {
 	ds, err := toDispatchState(ctx, dt, opt)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return &ds.state, &ds.image, nil
+
+	sbom := SBOMTargets{
+		Core:   ds.state,
+		Extras: map[string]llb.State{},
+	}
+	if ds.scanContext {
+		sbom.Extras["context"] = ds.opt.buildContext
+	}
+	for dsi := ds; dsi != nil; dsi = dsi.base {
+		if ds != dsi && dsi.scanStage {
+			sbom.Extras["stage:"+dsi.stageName] = dsi.state
+		}
+		for dsi2 := range dsi.deps {
+			if dsi2.scanStage {
+				sbom.Extras["stage:"+dsi2.stageName] = dsi2.state
+			}
+		}
+	}
+
+	return &ds.state, &ds.image, &sbom, nil
 }
 
 func Dockefile2Outline(ctx context.Context, dt []byte, opt ConvertOpt) (*outline.Outline, error) {
@@ -533,9 +565,22 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 				return nil, parser.WithLocation(err, cmd.Location())
 			}
 		}
+		d.opt = opt
 
 		for p := range d.ctxPaths {
 			ctxPaths[p] = struct{}{}
+		}
+
+		locals := []instructions.KeyValuePairOptional{}
+		locals = append(locals, d.opt.metaArgs...)
+		locals = append(locals, d.buildArgs...)
+		for _, a := range locals {
+			switch a.Key {
+			case sbomScanStage:
+				d.scanStage = isEnabledForStage(d.stageName, a.ValueString())
+			case sbomScanContext:
+				d.scanContext = isEnabledForStage(d.stageName, a.ValueString())
+			}
 		}
 	}
 
@@ -749,6 +794,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 }
 
 type dispatchState struct {
+	opt            dispatchOpt
 	state          llb.State
 	image          Image
 	platform       *ocispecs.Platform
@@ -769,6 +815,8 @@ type dispatchState struct {
 	buildInfo      binfotypes.BuildInfo
 	outline        outlineCapture
 	epoch          *time.Time
+	scanStage      bool
+	scanContext    bool
 }
 
 type dispatchStates struct {
@@ -1363,7 +1411,9 @@ func dispatchArg(d *dispatchState, c *instructions.ArgCommand, metaArgs []instru
 		ai := argInfo{definition: arg, location: c.Location()}
 
 		if buildArg.Value != nil {
-			d.state = d.state.AddEnv(buildArg.Key, *buildArg.Value)
+			if _, ok := nonEnvArgs[buildArg.Key]; !ok {
+				d.state = d.state.AddEnv(buildArg.Key, *buildArg.Value)
+			}
 			ai.value = *buildArg.Value
 		}
 
@@ -1734,4 +1784,18 @@ func clampTimes(img Image, tm *time.Time) Image {
 
 func isHTTPSource(src string) bool {
 	return strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://")
+}
+
+func isEnabledForStage(stage string, value string) bool {
+	if enabled, err := strconv.ParseBool(value); err == nil {
+		return enabled
+	}
+
+	vv := strings.Split(value, ",")
+	for _, v := range vv {
+		if v == stage {
+			return true
+		}
+	}
+	return false
 }

@@ -153,6 +153,7 @@ var allTests = integration.TestFuncs(
 	testClientFrontendProvenance,
 	testClientLLBProvenance,
 	testSecretSSHProvenance,
+	testSBOMScannerArgs,
 )
 
 // Tests that depend on the `security.*` entitlements
@@ -6152,11 +6153,242 @@ EOF
 	require.Equal(t, []byte("data\n"), img.Layers[0]["foo"].Data)
 
 	att := imgs.Find("unknown/unknown")
+	require.Equal(t, 1, len(att.LayersRaw))
 	var attest intoto.Statement
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
 	require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
+}
+
+func testSBOMScannerArgs(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox:latest
+COPY <<-"EOF" /scan.sh
+	set -e
+	cat <<BUNDLE > $BUILDKIT_SCAN_DESTINATION/spdx.json
+	{
+	  "_type": "https://in-toto.io/Statement/v0.1",
+	  "predicateType": "https://spdx.dev/Document",
+	  "predicate": {"core": true}
+	}
+	BUNDLE
+	if [ -d "${BUILDKIT_SCAN_SOURCE_EXTRAS:?}" ]; then
+		for src in "${BUILDKIT_SCAN_SOURCE_EXTRAS}"/*; do
+			cat <<BUNDLE > $BUILDKIT_SCAN_DESTINATION/$(basename $src).spdx.json
+			{
+			  "_type": "https://in-toto.io/Statement/v0.1",
+			  "predicateType": "https://spdx.dev/Document",
+			  "predicate": {"extra": true}
+			}
+			BUNDLE
+		done
+	fi
+EOF
+CMD sh /scan.sh
+`)
+
+	scannerDir, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	scannerTarget := registry + "/buildkit/testsbomscannerargs:latest"
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: scannerDir,
+			builder.DefaultLocalNameContext:    scannerDir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": scannerTarget,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// scan an image with no additional sboms
+	dockerfile = []byte(`
+FROM scratch as base
+COPY <<EOF /foo
+data
+EOF
+FROM base
+`)
+	dir, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	target := registry + "/buildkit/testsbomscannerargstarget1:latest"
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"attest:sbom":                          "generator=" + scannerTarget,
+			"build-arg:BUILDKIT_SBOM_SCAN_CONTEXT": "true",
+			"build-arg:BUILDKIT_SBOM_SCAN_STAGE":   "true",
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	desc, provider, err := contentutil.ProviderFromRef(target)
+	require.NoError(t, err)
+	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(imgs.Images))
+
+	img := imgs.Find(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
+	require.NotNil(t, img)
+
+	att := imgs.Find("unknown/unknown")
+	extraCount := 0
+	require.Equal(t, 1, len(att.LayersRaw))
+	var attest intoto.Statement
+	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
+	require.Equal(t, map[string]interface{}{"core": true}, attest.Predicate)
+
+	dockerfile = []byte(`
+ARG BUILDKIT_SBOM_SCAN_CONTEXT=true
+
+FROM scratch as file
+ARG BUILDKIT_SBOM_SCAN_STAGE=true
+COPY <<EOF /file
+data
+EOF
+
+FROM scratch as base
+ARG BUILDKIT_SBOM_SCAN_STAGE=true
+COPY --from=file /file /foo
+
+FROM scratch as base2
+ARG BUILDKIT_SBOM_SCAN_STAGE=true
+COPY --from=file /file /bar
+RUN non-existent-command-would-fail
+
+FROM base
+ARG BUILDKIT_SBOM_SCAN_STAGE=true
+`)
+	dir, err = integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	// scan an image with additional sboms
+	target = registry + "/buildkit/testsbomscannertarget2:latest"
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"attest:sbom": "generator=" + scannerTarget,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	desc, provider, err = contentutil.ProviderFromRef(target)
+	require.NoError(t, err)
+	imgs, err = testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(imgs.Images))
+
+	img = imgs.Find(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
+	require.NotNil(t, img)
+
+	att = imgs.Find("unknown/unknown")
+	require.Equal(t, 4, len(att.LayersRaw))
+	extraCount = 0
+	for _, l := range att.LayersRaw {
+		var attest intoto.Statement
+		require.NoError(t, json.Unmarshal(l, &attest))
+		att := attest.Predicate.(map[string]interface{})
+		switch {
+		case att["extra"] == true:
+			extraCount++
+		case att["core"] == true:
+		default:
+			require.Fail(t, "unexpected attestation", "%v", att)
+		}
+	}
+	require.Equal(t, extraCount, len(att.LayersRaw)-1)
+
+	// scan an image with additional sboms, but disable them
+	target = registry + "/buildkit/testsbomscannertarget3:latest"
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"attest:sbom":                          "generator=" + scannerTarget,
+			"build-arg:BUILDKIT_SBOM_SCAN_STAGE":   "false",
+			"build-arg:BUILDKIT_SBOM_SCAN_CONTEXT": "false",
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	desc, provider, err = contentutil.ProviderFromRef(target)
+	require.NoError(t, err)
+	imgs, err = testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(imgs.Images))
+
+	img = imgs.Find(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
+	require.NotNil(t, img)
+
+	att = imgs.Find("unknown/unknown")
+	require.Equal(t, 1, len(att.LayersRaw))
 }
 
 func runShell(dir string, cmds ...string) error {
