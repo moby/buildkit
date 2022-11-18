@@ -96,6 +96,7 @@ func TestIntegration(t *testing.T) {
 		testResolveAndHosts,
 		testUser,
 		testOCIExporter,
+		testOCIExporterContentStore,
 		testWhiteoutParentDir,
 		testFrontendImageNaming,
 		testDuplicateWhiteouts,
@@ -2355,6 +2356,99 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 	checkAllReleasable(t, c, sb, true)
 }
 
+func testOCIExporterContentStore(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "oci exporter")
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+
+	run := func(cmd string) {
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+
+	run(`sh -c "echo -n first > foo"`)
+	run(`sh -c "echo -n second > bar"`)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	for _, exp := range []string{ExporterOCI, ExporterDocker} {
+		destDir := t.TempDir()
+		target := "example.com/buildkit/testoci:latest"
+
+		outTar := filepath.Join(destDir, "out.tar")
+		outW, err := os.Create(outTar)
+		require.NoError(t, err)
+		attrs := map[string]string{}
+		if exp == ExporterDocker {
+			attrs["name"] = target
+		}
+		_, err = c.Solve(sb.Context(), def, SolveOpt{
+			Exports: []ExportEntry{
+				{
+					Type:   exp,
+					Attrs:  attrs,
+					Output: fixedWriteCloser(outW),
+				},
+			},
+		}, nil)
+		require.NoError(t, err)
+
+		outDir := filepath.Join(destDir, "out.d")
+		attrs = map[string]string{
+			"tar": "false",
+		}
+		if exp == ExporterDocker {
+			attrs["name"] = target
+		}
+		_, err = c.Solve(sb.Context(), def, SolveOpt{
+			Exports: []ExportEntry{
+				{
+					Type:      exp,
+					Attrs:     attrs,
+					OutputDir: outDir,
+				},
+			},
+		}, nil)
+		require.NoError(t, err)
+
+		dt, err := os.ReadFile(outTar)
+		require.NoError(t, err)
+		m, err := testutil.ReadTarToMap(dt, false)
+		require.NoError(t, err)
+
+		filepath.Walk(outDir, func(filename string, fi os.FileInfo, err error) error {
+			filename = strings.TrimPrefix(filename, outDir)
+			filename = strings.Trim(filename, "/")
+			if filename == "" || filename == "ingest" {
+				return nil
+			}
+
+			if fi.IsDir() {
+				require.Contains(t, m, filename+"/")
+			} else {
+				require.Contains(t, m, filename)
+				if filename == "index.json" {
+					// this file has a timestamp in it, so we can't compare
+					return nil
+				}
+				f, err := os.Open(path.Join(outDir, filename))
+				require.NoError(t, err)
+				data, err := io.ReadAll(f)
+				require.NoError(t, err)
+				require.Equal(t, m[filename].Data, data)
+			}
+			return nil
+		})
+	}
+
+	checkAllReleasable(t, c, sb, true)
+}
+
 func testSourceDateEpochLayerTimestamps(t *testing.T, sb integration.Sandbox) {
 	integration.SkipIfDockerd(t, sb, "oci exporter")
 	requiresLinux(t)
@@ -2692,7 +2786,6 @@ func testSourceDateEpochTarExporter(t *testing.T, sb integration.Sandbox) {
 
 	checkAllReleasable(t, c, sb, true)
 }
-
 func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
