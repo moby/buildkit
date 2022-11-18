@@ -3,28 +3,18 @@ package local
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"io/fs"
 	"os"
-	"path"
 	"strings"
 	"time"
 
-	"github.com/docker/docker/pkg/idtools"
-	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/exporter"
-	"github.com/moby/buildkit/exporter/attestation"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/exporter/util/epoch"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
-	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/result"
 	"github.com/moby/buildkit/util/progress"
-	"github.com/moby/buildkit/util/staticfs"
-	digest "github.com/opencontainers/go-digest"
-	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
@@ -56,12 +46,17 @@ func (e *localExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 		return nil, err
 	}
 
-	i := &localExporterInstance{localExporter: e, epoch: tm}
+	i := &localExporterInstance{
+		localExporter: e,
+		opts: CreateFSOpts{
+			Epoch: tm,
+		},
+	}
 
 	for k, v := range opt {
 		switch k {
 		case keyAttestationPrefix:
-			i.attestationPrefix = v
+			i.opts.AttestationPrefix = v
 		}
 	}
 
@@ -70,8 +65,7 @@ func (e *localExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 
 type localExporterInstance struct {
 	*localExporter
-	epoch             *time.Time
-	attestationPrefix string
+	opts CreateFSOpts
 }
 
 func (e *localExporterInstance) Name() string {
@@ -86,11 +80,11 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	if e.epoch == nil {
+	if e.opts.Epoch == nil {
 		if tm, ok, err := epoch.ParseSource(inp); err != nil {
 			return nil, err
 		} else if ok {
-			e.epoch = tm
+			e.opts.Epoch = tm
 		}
 	}
 
@@ -114,127 +108,14 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 
 	now := time.Now().Truncate(time.Second)
 
-	export := func(ctx context.Context, k string, p *ocispecs.Platform, ref cache.ImmutableRef, attestations []result.Attestation) func() error {
+	export := func(ctx context.Context, k string, ref cache.ImmutableRef, attestations []result.Attestation) func() error {
 		return func() error {
-			var src string
-			var err error
-			var idmap *idtools.IdentityMapping
-			if ref == nil {
-				src, err = os.MkdirTemp("", "buildkit")
-				if err != nil {
-					return err
-				}
-				defer os.RemoveAll(src)
-			} else {
-				mount, err := ref.Mount(ctx, true, session.NewGroup(sessionID))
-				if err != nil {
-					return err
-				}
-
-				lm := snapshot.LocalMounter(mount)
-
-				src, err = lm.Mount()
-				if err != nil {
-					return err
-				}
-
-				idmap = mount.IdentityMapping()
-
-				defer lm.Unmount()
-			}
-
-			walkOpt := &fsutil.WalkOpt{}
-			var idMapFunc func(p string, st *fstypes.Stat) fsutil.MapResult
-			if idmap != nil {
-				idMapFunc = func(p string, st *fstypes.Stat) fsutil.MapResult {
-					uid, gid, err := idmap.ToContainer(idtools.Identity{
-						UID: int(st.Uid),
-						GID: int(st.Gid),
-					})
-					if err != nil {
-						return fsutil.MapResultExclude
-					}
-					st.Uid = uint32(uid)
-					st.Gid = uint32(gid)
-					return fsutil.MapResultKeep
-				}
-			}
-			walkOpt.Map = func(p string, st *fstypes.Stat) fsutil.MapResult {
-				res := fsutil.MapResultKeep
-				if idMapFunc != nil {
-					res = idMapFunc(p, st)
-				}
-				if e.epoch != nil {
-					st.ModTime = e.epoch.UnixNano()
-				}
-				return res
-			}
-
-			outputFS := fsutil.NewFS(src, walkOpt)
-
-			attestations, err = attestation.Unbundle(ctx, session.NewGroup(sessionID), inp.Refs, attestations)
+			outputFS, cleanup, err := CreateFS(ctx, sessionID, k, ref, inp.Refs, attestations, now, e.opts)
 			if err != nil {
 				return err
 			}
-			if len(attestations) > 0 {
-				subjects := []intoto.Subject{}
-				err = outputFS.Walk(ctx, func(path string, info fs.FileInfo, err error) error {
-					if err != nil {
-						return err
-					}
-					if !info.Mode().IsRegular() {
-						return nil
-					}
-					f, err := outputFS.Open(path)
-					if err != nil {
-						return err
-					}
-					defer f.Close()
-					d := digest.Canonical.Digester()
-					if _, err := io.Copy(d.Hash(), f); err != nil {
-						return err
-					}
-					subjects = append(subjects, intoto.Subject{
-						Name:   path,
-						Digest: result.ToDigestMap(d.Digest()),
-					})
-					return nil
-				})
-				if err != nil {
-					return err
-				}
-
-				stmts, err := attestation.MakeInTotoStatements(ctx, session.NewGroup(sessionID), inp.Refs, attestations, subjects)
-				if err != nil {
-					return err
-				}
-				stmtFS := staticfs.NewFS()
-
-				names := map[string]struct{}{}
-				for i, stmt := range stmts {
-					dt, err := json.Marshal(stmt)
-					if err != nil {
-						return errors.Wrap(err, "failed to marshal attestation")
-					}
-
-					if attestations[i].Path == "" {
-						return errors.New("attestation does not have set path")
-					}
-					name := e.attestationPrefix + path.Base(attestations[i].Path)
-					if _, ok := names[name]; ok {
-						return errors.Errorf("duplicate attestation path name %s", name)
-					}
-					names[name] = struct{}{}
-
-					st := fstypes.Stat{
-						Mode:    0600,
-						Path:    name,
-						ModTime: now.UnixNano(),
-					}
-					stmtFS.Add(name, st, dt)
-				}
-
-				outputFS = staticfs.NewMergeFS(outputFS, stmtFS)
+			if cleanup != nil {
+				defer cleanup()
 			}
 
 			lbl := "copying files"
@@ -244,8 +125,8 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 					Mode: uint32(os.ModeDir | 0755),
 					Path: strings.Replace(k, "/", "_", -1),
 				}
-				if e.epoch != nil {
-					st.ModTime = e.epoch.UnixNano()
+				if e.opts.Epoch != nil {
+					st.ModTime = e.opts.Epoch.UnixNano()
 				}
 
 				outputFS, err = fsutil.SubDirFS([]fsutil.Dir{{FS: outputFS, Stat: st}})
@@ -270,13 +151,13 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 			if !ok {
 				return nil, errors.Errorf("failed to find ref for ID %s", p.ID)
 			}
-			eg.Go(export(ctx, p.ID, &p.Platform, r, inp.Attestations[p.ID]))
+			eg.Go(export(ctx, p.ID, r, inp.Attestations[p.ID]))
 			if !isMap {
 				break
 			}
 		}
 	} else {
-		eg.Go(export(ctx, "", nil, inp.Ref, nil))
+		eg.Go(export(ctx, "", inp.Ref, nil))
 	}
 
 	if err := eg.Wait(); err != nil {
