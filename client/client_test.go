@@ -7277,6 +7277,62 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 			require.Equal(t, subjects, attest2.Subject)
 		}
 	})
+
+	t.Run("tar", func(t *testing.T) {
+		dir := t.TempDir()
+		out := filepath.Join(dir, "out.tar")
+		outW, err := os.Create(out)
+		require.NoError(t, err)
+
+		_, err = c.Build(sb.Context(), SolveOpt{
+			Exports: []ExportEntry{
+				{
+					Type:   ExporterTar,
+					Output: fixedWriteCloser(outW),
+					Attrs: map[string]string{
+						"attestation-prefix": "test.",
+					},
+				},
+			},
+		}, "", frontend, nil)
+		require.NoError(t, err)
+
+		dt, err := os.ReadFile(out)
+		require.NoError(t, err)
+
+		m, err := testutil.ReadTarToMap(dt, false)
+		require.NoError(t, err)
+
+		for _, p := range ps {
+			var attest intoto.Statement
+			dt := m[path.Join(strings.ReplaceAll(platforms.Format(p), "/", "_"), "test.attestation.json")].Data
+			require.NoError(t, json.Unmarshal(dt, &attest))
+
+			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+			require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
+			require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
+
+			require.Equal(t, []intoto.Subject{{
+				Name:   "greeting",
+				Digest: result.ToDigestMap(digest.Canonical.FromString("hello " + platforms.Format(p) + "!")),
+			}}, attest.Subject)
+
+			var attest2 intoto.Statement
+			dt = m[path.Join(strings.ReplaceAll(platforms.Format(p), "/", "_"), "test.attestation2.json")].Data
+			require.NoError(t, json.Unmarshal(dt, &attest2))
+
+			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest2.Type)
+			require.Equal(t, "https://example.com/attestations2/v1.0", attest2.PredicateType)
+			require.Nil(t, attest2.Predicate)
+			subjects := []intoto.Subject{{
+				Name: "/attestation.json",
+				Digest: map[string]string{
+					"sha256": successDigest.Encoded(),
+				},
+			}}
+			require.Equal(t, subjects, attest2.Subject)
+		}
+	})
 }
 
 func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
