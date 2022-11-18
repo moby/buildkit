@@ -8,14 +8,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
+	"github.com/moby/buildkit/exporter/local"
 	"github.com/moby/buildkit/exporter/util/epoch"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
-	"github.com/moby/buildkit/snapshot"
+	"github.com/moby/buildkit/solver/result"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
@@ -23,6 +23,8 @@ import (
 )
 
 const (
+	attestationPrefixKey = "attestation-prefix"
+
 	// preferNondistLayersKey is an exporter option which can be used to mark a layer as non-distributable if the layer reference was
 	// already found to use a non-distributable media type.
 	// When this option is not set, the exporter will change the media type of the layer to a distributable one.
@@ -50,15 +52,19 @@ func (e *localExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 	if err != nil {
 		return nil, err
 	}
-	li.epoch = tm
+	li.opts.Epoch = tm
 
-	v, ok := opt[preferNondistLayersKey]
-	if ok {
-		b, err := strconv.ParseBool(v)
-		if err != nil {
-			return nil, errors.Wrapf(err, "non-bool value for %s: %s", preferNondistLayersKey, v)
+	for k, v := range opt {
+		switch k {
+		case preferNondistLayersKey:
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-bool value for %s: %s", preferNondistLayersKey, v)
+			}
+			li.preferNonDist = b
+		case attestationPrefixKey:
+			li.opts.AttestationPrefix = v
 		}
-		li.preferNonDist = b
 	}
 
 	return li, nil
@@ -66,8 +72,8 @@ func (e *localExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 
 type localExporterInstance struct {
 	*localExporter
+	opts          local.CreateFSOpts
 	preferNonDist bool
-	epoch         *time.Time
 }
 
 func (e *localExporterInstance) Name() string {
@@ -79,7 +85,7 @@ func (e *localExporterInstance) Config() *exporter.Config {
 }
 
 func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source, sessionID string) (map[string]string, error) {
-	var defers []func()
+	var defers []func() error
 
 	defer func() {
 		for i := len(defers) - 1; i >= 0; i-- {
@@ -87,81 +93,35 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 		}
 	}()
 
-	if e.epoch == nil {
+	if e.opts.Epoch == nil {
 		if tm, ok, err := epoch.ParseSource(inp); err != nil {
 			return nil, err
 		} else if ok {
-			e.epoch = tm
+			e.opts.Epoch = tm
 		}
 	}
 
-	getDir := func(ctx context.Context, k string, ref cache.ImmutableRef) (*fsutil.Dir, error) {
-		var src string
-		var err error
-		var idmap *idtools.IdentityMapping
-		if ref == nil {
-			src, err = os.MkdirTemp("", "buildkit")
-			if err != nil {
-				return nil, err
-			}
-			defers = append(defers, func() { os.RemoveAll(src) })
-		} else {
-			mount, err := ref.Mount(ctx, true, session.NewGroup(sessionID))
-			if err != nil {
-				return nil, err
-			}
+	now := time.Now().Truncate(time.Second)
 
-			lm := snapshot.LocalMounter(mount)
-
-			src, err = lm.Mount()
-			if err != nil {
-				return nil, err
-			}
-
-			idmap = mount.IdentityMapping()
-
-			defers = append(defers, func() { lm.Unmount() })
+	getDir := func(ctx context.Context, k string, ref cache.ImmutableRef, attestations []result.Attestation) (*fsutil.Dir, error) {
+		outputFS, cleanup, err := local.CreateFS(ctx, sessionID, k, ref, inp.Refs, attestations, now, e.opts)
+		if err != nil {
+			return nil, err
 		}
-
-		walkOpt := &fsutil.WalkOpt{}
-		var idMapFunc func(p string, st *fstypes.Stat) fsutil.MapResult
-
-		if idmap != nil {
-			idMapFunc = func(p string, st *fstypes.Stat) fsutil.MapResult {
-				uid, gid, err := idmap.ToContainer(idtools.Identity{
-					UID: int(st.Uid),
-					GID: int(st.Gid),
-				})
-				if err != nil {
-					return fsutil.MapResultExclude
-				}
-				st.Uid = uint32(uid)
-				st.Gid = uint32(gid)
-				return fsutil.MapResultKeep
-			}
-		}
-
-		walkOpt.Map = func(p string, st *fstypes.Stat) fsutil.MapResult {
-			res := fsutil.MapResultKeep
-			if idMapFunc != nil {
-				res = idMapFunc(p, st)
-			}
-			if e.epoch != nil {
-				st.ModTime = e.epoch.UnixNano()
-			}
-			return res
+		if cleanup != nil {
+			defers = append(defers, cleanup)
 		}
 
 		st := fstypes.Stat{
 			Mode: uint32(os.ModeDir | 0755),
 			Path: strings.Replace(k, "/", "_", -1),
 		}
-		if e.epoch != nil {
-			st.ModTime = e.epoch.UnixNano()
+		if e.opts.Epoch != nil {
+			st.ModTime = e.opts.Epoch.UnixNano()
 		}
 
 		return &fsutil.Dir{
-			FS:   fsutil.NewFS(src, walkOpt),
+			FS:   outputFS,
 			Stat: st,
 		}, nil
 	}
@@ -188,7 +148,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 			if !ok {
 				return nil, errors.Errorf("failed to find ref for ID %s", p.ID)
 			}
-			d, err := getDir(ctx, p.ID, r)
+			d, err := getDir(ctx, p.ID, r, inp.Attestations[p.ID])
 			if err != nil {
 				return nil, err
 			}
@@ -206,7 +166,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 			}
 		}
 	} else {
-		d, err := getDir(ctx, "", inp.Ref)
+		d, err := getDir(ctx, "", inp.Ref, nil)
 		if err != nil {
 			return nil, err
 		}
