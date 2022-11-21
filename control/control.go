@@ -2,11 +2,13 @@ package control
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/docker/distribution/reference"
+	"github.com/mitchellh/hashstructure/v2"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	apitypes "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/cache/remotecache"
@@ -21,7 +23,6 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver"
 	"github.com/moby/buildkit/solver/llbsolver/proc"
-	solverutil "github.com/moby/buildkit/solver/llbsolver/util"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/imageutil"
@@ -293,14 +294,17 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		}
 	}
 
-	var cacheImports []frontend.CacheOptionsEntry
-
-	var cacheExporters []llbsolver.RemoteCacheExporter
-	exportCacheOptEntries, err := solverutil.DedupCacheOptions(req.Cache.Exports)
-	if err != nil {
+	if c, err := findDuplicateCacheOptions(req.Cache.Exports); err != nil {
 		return nil, err
+	} else if c != nil {
+		types := []string{}
+		for _, c := range c {
+			types = append(types, c.Type)
+		}
+		return nil, errors.Errorf("duplicate cache exports %s", types)
 	}
-	for _, e := range exportCacheOptEntries {
+	var cacheExporters []llbsolver.RemoteCacheExporter
+	for _, e := range req.Cache.Exports {
 		cacheExporterFunc, ok := c.opt.ResolveCacheExporterFuncs[e.Type]
 		if !ok {
 			return nil, errors.Errorf("unknown cache exporter: %q", e.Type)
@@ -317,6 +321,8 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		}
 		cacheExporters = append(cacheExporters, exp)
 	}
+
+	var cacheImports []frontend.CacheOptionsEntry
 	for _, im := range req.Cache.Imports {
 		cacheImports = append(cacheImports, frontend.CacheOptionsEntry{
 			Type:  im.Type,
@@ -570,4 +576,43 @@ func toPBBuildkitVersion(in client.BuildkitVersion) *apitypes.BuildkitVersion {
 		Version:  in.Version,
 		Revision: in.Revision,
 	}
+}
+
+func findDuplicateCacheOptions(cacheOpts []*controlapi.CacheOptionsEntry) ([]*controlapi.CacheOptionsEntry, error) {
+	seen := map[string]*controlapi.CacheOptionsEntry{}
+	duplicate := map[string]struct{}{}
+	for _, opt := range cacheOpts {
+		k, err := cacheOptKey(*opt)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := seen[k]; ok {
+			duplicate[k] = struct{}{}
+		}
+		seen[k] = opt
+	}
+
+	var duplicates []*controlapi.CacheOptionsEntry
+	for k := range duplicate {
+		duplicates = append(duplicates, seen[k])
+	}
+	return duplicates, nil
+}
+
+func cacheOptKey(opt controlapi.CacheOptionsEntry) (string, error) {
+	if opt.Type == "registry" && opt.Attrs["ref"] != "" {
+		return opt.Attrs["ref"], nil
+	}
+	var rawOpt = struct {
+		Type  string
+		Attrs map[string]string
+	}{
+		Type:  opt.Type,
+		Attrs: opt.Attrs,
+	}
+	hash, err := hashstructure.Hash(rawOpt, hashstructure.FormatV2, nil)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprint(opt.Type, ":", hash), nil
 }

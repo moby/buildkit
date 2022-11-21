@@ -215,11 +215,22 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		return nil, err
 	}
 
-	var exporterResponse map[string]string
 	cacheExporters, inlineCacheExporter := splitCacheExporters(exp.CacheExporters)
+
+	var exporterResponse map[string]string
 	if e := exp.Exporter; e != nil {
-		exporterResponse, err = exportWithInlineCacheExporter(ctx, e, inlineCacheExporter, j, cached, inp)
+		meta, err := runInlineCacheExporter(ctx, e, inlineCacheExporter, j, cached)
 		if err != nil {
+			return nil, err
+		}
+		for k, v := range meta {
+			inp.AddMeta(k, v)
+		}
+
+		if err := inBuilderContext(ctx, j, e.Name(), j.SessionID+"-export", func(ctx context.Context, _ session.Group) error {
+			exporterResponse, err = e.Export(ctx, inp, j.SessionID)
+			return err
+		}); err != nil {
 			return nil, err
 		}
 	}
@@ -304,39 +315,35 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 	return cacheExporterResponse, nil
 }
 
-func exportWithInlineCacheExporter(ctx context.Context, e exporter.ExporterInstance, inlineExporter *RemoteCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult], inp *result.Result[cache.ImmutableRef]) (exporterResponse map[string]string, err error) {
-	if inlineExporter != nil {
-		if err := inBuilderContext(ctx, j, "preparing layers for inline cache", j.SessionID+"-cache-inline", func(ctx context.Context, _ session.Group) error {
-			if cached.Ref != nil {
-				dtic, err := inlineCache(ctx, inlineExporter.Exporter, cached.Ref, e.Config().Compression(), session.NewGroup(j.SessionID))
-				if err != nil {
-					return err
-				}
-				if dtic != nil {
-					inp.AddMeta(exptypes.ExporterInlineCache, dtic)
-				}
-			}
-			for k, res := range cached.Refs {
-				dtic, err := inlineCache(ctx, inlineExporter.Exporter, res, e.Config().Compression(), session.NewGroup(j.SessionID))
-				if err != nil {
-					return err
-				}
-				if dtic != nil {
-					inp.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, k), dtic)
-				}
-			}
-			return nil
-		}); err != nil {
-			return nil, err
-		}
+func runInlineCacheExporter(ctx context.Context, e exporter.ExporterInstance, inlineExporter *RemoteCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult]) (map[string][]byte, error) {
+	meta := map[string][]byte{}
+	if inlineExporter == nil {
+		return nil, nil
 	}
-	if err := inBuilderContext(ctx, j, e.Name(), j.SessionID+"-export", func(ctx context.Context, _ session.Group) error {
-		exporterResponse, err = e.Export(ctx, inp, j.SessionID)
-		return err
+	if err := inBuilderContext(ctx, j, "preparing layers for inline cache", j.SessionID+"-cache-inline", func(ctx context.Context, _ session.Group) error {
+		if res := cached.Ref; res != nil {
+			dtic, err := inlineCache(ctx, inlineExporter.Exporter, res, e.Config().Compression(), session.NewGroup(j.SessionID))
+			if err != nil {
+				return err
+			}
+			if dtic != nil {
+				meta[exptypes.ExporterInlineCache] = dtic
+			}
+		}
+		for k, res := range cached.Refs {
+			dtic, err := inlineCache(ctx, inlineExporter.Exporter, res, e.Config().Compression(), session.NewGroup(j.SessionID))
+			if err != nil {
+				return err
+			}
+			if dtic != nil {
+				meta[fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, k)] = dtic
+			}
+		}
+		return nil
 	}); err != nil {
 		return nil, err
 	}
-	return exporterResponse, nil
+	return meta, nil
 }
 
 func splitCacheExporters(exporters []RemoteCacheExporter) (rest []RemoteCacheExporter, inline *RemoteCacheExporter) {
