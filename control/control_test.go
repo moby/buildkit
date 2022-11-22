@@ -11,7 +11,7 @@ func TestDuplicateCacheOptions(t *testing.T) {
 	var testCases = []struct {
 		name     string
 		opts     []*controlapi.CacheOptionsEntry
-		expected []uint
+		expected []*controlapi.CacheOptionsEntry
 	}{
 		{
 			name: "avoids unique opts",
@@ -59,17 +59,28 @@ func TestDuplicateCacheOptions(t *testing.T) {
 					},
 				},
 			},
-			expected: []uint{0, 2},
+			expected: []*controlapi.CacheOptionsEntry{
+				{
+					Type: "registry",
+					Attrs: map[string]string{
+						"ref": "example.com/ref:v1.0.0",
+					},
+				},
+				{
+					Type: "local",
+					Attrs: map[string]string{
+						"dest": "/path/for/export",
+					},
+				},
+			},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			p, err := findDuplicateCacheOptions(tc.opts)
+			result, err := findDuplicateCacheOptions(tc.opts)
 			require.NoError(t, err)
-			for i, j := range tc.expected {
-				require.Equal(t, p[i], tc.opts[j])
-			}
+			require.ElementsMatch(t, tc.expected, result)
 		})
 	}
 }
