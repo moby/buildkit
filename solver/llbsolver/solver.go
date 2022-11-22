@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
@@ -150,6 +152,38 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	defer func() {
 		en := time.Now()
 		rec.CompletedAt = &en
+
+		j.CloseProgress()
+
+		ch := make(chan *client.SolveStatus)
+		eg, ctx2 := errgroup.WithContext(ctx)
+		var releaseStatus func()
+		eg.Go(func() error {
+			var err error
+			var desc *ocispecs.Descriptor
+			desc, releaseStatus, err = s.history.ImportStatus(ctx2, ch)
+			if err != nil {
+				return err
+			}
+			rec.Logs = &controlapi.Descriptor{
+				Digest:    desc.Digest,
+				Size_:     desc.Size,
+				MediaType: desc.MediaType,
+			}
+			return nil
+		})
+		eg.Go(func() error {
+			return j.Status(ctx2, ch)
+		})
+		if err1 := eg.Wait(); err == nil {
+			err = err1
+		}
+
+		defer func() {
+			if releaseStatus != nil {
+				releaseStatus()
+			}
+		}()
 
 		if err != nil {
 			st, ok := grpcerrors.AsGRPCStatus(grpcerrors.ToGRPC(err))
@@ -592,6 +626,15 @@ func withDescHandlerCacheOpts(ctx context.Context, ref cache.ImmutableRef) conte
 }
 
 func (s *Solver) Status(ctx context.Context, id string, statusChan chan *client.SolveStatus) error {
+	if err := s.history.Status(ctx, id, statusChan); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			close(statusChan)
+			return err
+		}
+	} else {
+		close(statusChan)
+		return nil
+	}
 	j, err := s.solver.Get(id)
 	if err != nil {
 		close(statusChan)

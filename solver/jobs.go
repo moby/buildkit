@@ -557,9 +557,12 @@ func (j *Job) walkProvenance(ctx context.Context, e Edge, f func(ProvenanceProvi
 	return nil
 }
 
-func (j *Job) Discard() error {
-	defer j.progressCloser()
+func (j *Job) CloseProgress() {
+	j.progressCloser()
+	j.pw.Close()
+}
 
+func (j *Job) Discard() error {
 	j.list.mu.Lock()
 	defer j.list.mu.Unlock()
 

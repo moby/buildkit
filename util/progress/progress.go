@@ -118,12 +118,22 @@ func (pr *progressReader) Read(ctx context.Context) ([]*Progress, error) {
 	done := make(chan struct{})
 	defer close(done)
 	go func() {
-		select {
-		case <-done:
-		case <-ctx.Done():
-			pr.mu.Lock()
-			pr.cond.Broadcast()
-			pr.mu.Unlock()
+		prdone := pr.ctx.Done()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ctx.Done():
+				pr.mu.Lock()
+				pr.cond.Broadcast()
+				pr.mu.Unlock()
+				return
+			case <-prdone:
+				pr.mu.Lock()
+				pr.cond.Broadcast()
+				pr.mu.Unlock()
+				prdone = nil
+			}
 		}
 	}()
 	pr.mu.Lock()

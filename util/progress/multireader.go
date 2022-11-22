@@ -35,8 +35,13 @@ func (mr *MultiReader) Reader(ctx context.Context) Reader {
 
 	isBehind := len(mr.sent) > 0
 
-	if !isBehind {
-		mr.writers[w] = closeWriter
+	select {
+	case <-mr.done:
+		isBehind = true
+	default:
+		if !isBehind {
+			mr.writers[w] = closeWriter
+		}
 	}
 
 	go func() {
@@ -72,9 +77,6 @@ func (mr *MultiReader) Reader(ctx context.Context) Reader {
 					if i%100 == 0 {
 						select {
 						case <-ctx.Done():
-							close()
-							return
-						case <-mr.done:
 							close()
 							return
 						default:
