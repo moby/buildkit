@@ -1,9 +1,8 @@
 package containerimage
 
 import (
-	"fmt"
-
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/pkg/errors"
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
@@ -54,7 +53,7 @@ func ParseAnnotations(data map[string][]byte) (AnnotationsGroup, map[string][]by
 		case exptypes.AnnotationManifestDescriptor:
 			ag[p].ManifestDescriptor[a.Key] = string(v)
 		default:
-			return nil, nil, fmt.Errorf("unrecognized annotation type %s", a.Type)
+			return nil, nil, errors.Errorf("unrecognized annotation type %s", a.Type)
 		}
 	}
 	return ag, rest, nil
