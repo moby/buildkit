@@ -30,6 +30,7 @@ import (
 )
 
 func testProvenanceAttestation(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush, integration.FeatureProvenance)
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -211,6 +212,7 @@ RUN echo "ok" > /foo
 }
 
 func testGitProvenanceAttestation(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush, integration.FeatureProvenance)
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -353,6 +355,7 @@ COPY myapp.Dockerfile /
 }
 
 func testMultiPlatformProvenance(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush, integration.FeatureMultiPlatform, integration.FeatureProvenance)
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -468,6 +471,7 @@ RUN echo "ok-$TARGETARCH" > /foo
 }
 
 func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush, integration.FeatureProvenance)
 	// Building with client frontend does not capture frontend provenance
 	// because frontend runs in client, not in BuildKit.
 	// This test builds Dockerfile inside a client frontend ensuring that
@@ -662,6 +666,7 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 }
 
 func testClientLLBProvenance(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush, integration.FeatureProvenance)
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -775,6 +780,7 @@ func testClientLLBProvenance(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSecretSSHProvenance(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush, integration.FeatureProvenance)
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())

@@ -46,6 +46,7 @@ type Sandbox interface {
 	Context() context.Context
 	Cmd(...string) *exec.Cmd
 	PrintLogs(*testing.T)
+	ClearLogs()
 	NewRegistry() (string, error)
 	Value(string) interface{} // chosen matrix value
 	Name() string

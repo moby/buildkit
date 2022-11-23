@@ -1192,10 +1192,10 @@ func (tc verifyContents) Run(t *testing.T, sb integration.Sandbox) {
 	}
 
 	switch tc.name {
-	case "TestDiffSelf", "TestDiffScratch":
-		integration.SkipIfDockerdSnapshotter(t, sb, "https://github.com/moby/buildkit/pull/3176")
 	case "TestDiffUpperScratch":
-		integration.SkipIfDockerdMoby(t, sb, "https://github.com/moby/buildkit/pull/2726#issuecomment-1070978499")
+		if integration.IsTestDockerdMoby(sb) {
+			t.Skip("failed to handle changes: lstat ... no such file or directory: https://github.com/moby/buildkit/pull/2726#issuecomment-1070978499")
+		}
 	}
 
 	requiresLinux(t)

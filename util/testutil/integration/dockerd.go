@@ -8,9 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"syscall"
-	"testing"
 	"time"
 
 	"github.com/docker/docker/client"
@@ -30,18 +28,33 @@ func InitDockerdWorker() {
 	Register(&dockerd{
 		name:     "dockerd",
 		rootless: false,
+		unsupported: []string{
+			FeatureCacheExport,
+			FeatureCacheImport,
+			FeatureDirectPush,
+			FeatureImageExporter,
+			FeatureMultiCacheExport,
+			FeatureMultiPlatform,
+			FeatureOCIExporter,
+			FeatureOCILayout,
+			FeatureProvenance,
+			FeatureSBOM,
+			FeatureSecurityMode,
+		},
 	})
 	Register(&dockerd{
-		name:        "dockerd-containerd",
-		rootless:    false,
-		snapshotter: "containerd",
+		name:     "dockerd-containerd",
+		rootless: false,
+		unsupported: []string{
+			FeatureSecurityMode,
+		},
 	})
 }
 
-type dockerd struct {
+type moby struct {
 	name        string
 	rootless    bool
-	snapshotter string
+	unsupported []string
 }
 
 func (c dockerd) Name() string {
@@ -79,7 +92,7 @@ func (c dockerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl fun
   "features": {
     "containerd-snapshotter": %v
   }
-}`, c.snapshotter == "containerd")
+}`, c.name == "dockerd-containerd")
 
 	dockerdConfigFile := filepath.Join(workDir, "daemon.json")
 	if err := os.WriteFile(dockerdConfigFile, []byte(dockerdConfig), 0644); err != nil {
@@ -200,10 +213,10 @@ func (c dockerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl fun
 	})
 
 	return backend{
-		address:     "unix://" + listener.Addr().String(),
-		rootless:    c.rootless,
-		snapshotter: c.snapshotter,
-		isDockerd:   true,
+		address:             "unix://" + listener.Addr().String(),
+		rootless:            c.rootless,
+		isDockerd:           true,
+		unsupportedFeatures: c.unsupported,
 	}, cl, nil
 }
 
@@ -223,39 +236,6 @@ func waitForAPI(ctx context.Context, apiClient *client.Client, d time.Duration) 
 	return nil
 }
 
-func SkipIfDockerd(t *testing.T, sb Sandbox, reason ...string) {
-	t.Helper()
-	b, err := getBackend(sb)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if b.isDockerd {
-		t.Skipf("dockerd worker can not currently run this test due to missing features (%s)", strings.Join(reason, ", "))
-	}
-}
-
-func SkipIfDockerdMoby(t *testing.T, sb Sandbox, reason ...string) {
-	t.Helper()
-	b, err := getBackend(sb)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if b.isDockerd && b.snapshotter == "" {
-		t.Skipf("dockerd worker (moby) can not currently run this test due to missing features (%s)", strings.Join(reason, ", "))
-	}
-}
-
-func SkipIfDockerdSnapshotter(t *testing.T, sb Sandbox, reason ...string) {
-	t.Helper()
-	b, err := getBackend(sb)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if b.isDockerd && b.snapshotter != "" {
-		t.Skipf("dockerd worker (%s) can not currently run this test due to missing features (%s)", b.snapshotter, strings.Join(reason, ", "))
-	}
-}
-
 func IsTestDockerd() bool {
 	return os.Getenv("TEST_DOCKERD") == "1"
 }
@@ -265,13 +245,5 @@ func IsTestDockerdMoby(sb Sandbox) bool {
 	if err != nil {
 		return false
 	}
-	return b.isDockerd && b.snapshotter == ""
-}
-
-func IsTestDockerdSnapshotter(sb Sandbox) bool {
-	b, err := getBackend(sb)
-	if err != nil {
-		return false
-	}
-	return b.isDockerd && b.snapshotter != ""
+	return b.isDockerd && sb.Name() == "dockerd"
 }
