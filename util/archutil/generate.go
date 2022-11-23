@@ -7,18 +7,19 @@ import (
 	"bytes"
 	"compress/gzip"
 	"flag"
-	"fmt"
 	"html/template"
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/pkg/errors"
 )
 
 // saves baseimage binaries statically into go code
 func main() {
 	flag.Parse()
 	if len(flag.Args()) == 0 {
-		panic(fmt.Errorf("arch is required"))
+		panic(errors.New("arch is required"))
 	}
 
 	for _, arch := range flag.Args() {
