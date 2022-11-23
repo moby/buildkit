@@ -6,6 +6,8 @@ import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 import "github.com/moby/buildkit/solver/pb/ops.proto";
 import "github.com/moby/buildkit/api/types/worker.proto";
+// import "github.com/containerd/containerd/api/types/descriptor.proto";
+import "github.com/gogo/googleapis/google/rpc/status.proto";
 
 option (gogoproto.sizer_all) = true;
 option (gogoproto.marshaler_all) = true;
@@ -19,6 +21,8 @@ service Control {
 	rpc Session(stream BytesMessage) returns (stream BytesMessage);
 	rpc ListWorkers(ListWorkersRequest) returns (ListWorkersResponse);
 	rpc Info(InfoRequest) returns (InfoResponse);
+
+	rpc ListenBuildHistory(BuildHistoryRequest) returns (stream BuildHistoryEvent);
 }
 
 message PruneRequest {
@@ -162,4 +166,57 @@ message InfoRequest {}
 
 message InfoResponse {
 	moby.buildkit.v1.types.BuildkitVersion buildkitVersion = 1;
+}
+
+message BuildHistoryRequest {
+	bool ActiveOnly = 1;
+	string Ref = 2;
+}
+
+enum BuildHistoryEventType {
+	STARTED = 0;
+	COMPLETE = 1;
+	DELETED = 2;
+}
+
+
+message BuildHistoryEvent {
+	BuildHistoryEventType type = 1;
+	BuildHistoryRecord record = 2;
+}
+
+message BuildHistoryRecord {
+	string Ref = 1;
+	string Frontend = 2;
+	map<string, string> FrontendAttrs = 3;
+	repeated Exporter Exporters = 4;
+	google.rpc.Status error = 5;
+	google.protobuf.Timestamp CreatedAt = 6 [(gogoproto.stdtime) = true];
+	google.protobuf.Timestamp CompletedAt = 7 [(gogoproto.stdtime) = true];
+	Descriptor logs = 8;
+	map<string, string> ExporterResponse = 9;
+	BuildResultInfo Result = 10;
+	map<string, BuildResultInfo> Results = 11;
+	int32 Generation = 12;
+	// TODO: tags
+	// TODO: steps/cache summary
+	// TODO: unclipped logs
+	// TODO: pinning
+}
+
+message Descriptor {
+	string media_type = 1;
+	string digest = 2 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
+	int64 size = 3;
+	map<string, string> annotations = 5;
+}
+
+message BuildResultInfo {
+	Descriptor Result = 1;
+	repeated Descriptor Attestations = 2;
+}
+
+message Exporter {
+	string Type = 1;
+	map<string, string> Attrs = 2;
 }

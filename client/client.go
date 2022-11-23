@@ -168,12 +168,12 @@ func (c *Client) setupDelegatedTracing(ctx context.Context, td TracerDelegate) e
 	return td.SetSpanExporter(ctx, e)
 }
 
-func (c *Client) controlClient() controlapi.ControlClient {
+func (c *Client) ControlClient() controlapi.ControlClient {
 	return controlapi.NewControlClient(c.conn)
 }
 
 func (c *Client) Dialer() session.Dialer {
-	return grpchijack.Dialer(c.controlClient())
+	return grpchijack.Dialer(c.ControlClient())
 }
 
 func (c *Client) Close() error {

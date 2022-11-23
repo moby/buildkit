@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/cache"
 	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/cache/remotecache"
@@ -24,11 +25,14 @@ import (
 	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/entitlements"
+	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const keyEntitlements = "llb.entitlements"
@@ -55,6 +59,7 @@ type Opt struct {
 	GatewayForwarder *controlgateway.GatewayForwarder
 	SessionManager   *session.Manager
 	WorkerController *worker.Controller
+	HistoryQueue     *HistoryQueue
 }
 
 type Solver struct {
@@ -67,6 +72,7 @@ type Solver struct {
 	gatewayForwarder          *controlgateway.GatewayForwarder
 	sm                        *session.Manager
 	entitlements              []string
+	history                   *HistoryQueue
 }
 
 // Processor defines a processing function to be applied after solving, but
@@ -83,6 +89,7 @@ func New(opt Opt) (*Solver, error) {
 		gatewayForwarder:          opt.GatewayForwarder,
 		sm:                        opt.SessionManager,
 		entitlements:              opt.Entitlements,
+		history:                   opt.HistoryQueue,
 	}
 
 	s.solver = solver.NewSolver(solver.SolverOpt{
@@ -118,13 +125,48 @@ func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 	return s.bridge(b)
 }
 
-func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement, post []Processor) (*client.SolveResponse, error) {
+func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement, post []Processor) (_ *client.SolveResponse, err error) {
 	j, err := s.solver.NewJob(id)
 	if err != nil {
 		return nil, err
 	}
 
 	defer j.Discard()
+
+	st := time.Now()
+	rec := &controlapi.BuildHistoryRecord{
+		Ref:           id,
+		Frontend:      req.Frontend,
+		FrontendAttrs: req.FrontendOpt,
+		CreatedAt:     &st,
+	}
+	if err := s.history.Update(ctx, &controlapi.BuildHistoryEvent{
+		Type:   controlapi.BuildHistoryEventType_STARTED,
+		Record: rec,
+	}); err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		en := time.Now()
+		rec.CompletedAt = &en
+
+		if err != nil {
+			st, ok := grpcerrors.AsGRPCStatus(grpcerrors.ToGRPC(err))
+			if !ok {
+				st = status.New(codes.Unknown, err.Error())
+			}
+			rec.Error = grpcerrors.ToRPCStatus(st.Proto())
+		}
+		if err1 := s.history.Update(ctx, &controlapi.BuildHistoryEvent{
+			Type:   controlapi.BuildHistoryEventType_COMPLETE,
+			Record: rec,
+		}); err1 != nil {
+			if err == nil {
+				err = err1
+			}
+		}
+	}()
 
 	set, err := entitlements.WhiteList(ent, supportedEntitlements(s.entitlements))
 	if err != nil {
