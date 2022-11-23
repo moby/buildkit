@@ -1454,7 +1454,7 @@ func ensurePrune(ctx context.Context, t *testing.T, cm Manager, pruneNum, maxRet
 func getCompressor(w io.Writer, compressionType compression.Type, customized bool) (io.WriteCloser, error) {
 	switch compressionType {
 	case compression.Uncompressed:
-		return nil, fmt.Errorf("compression is not requested: %v", compressionType)
+		return nil, errors.Errorf("compression is not requested: %v", compressionType)
 	case compression.Gzip:
 		if customized {
 			gz, _ := gzip.NewWriterLevel(w, gzip.NoCompression)
@@ -1495,7 +1495,7 @@ func getCompressor(w io.Writer, compressionType compression.Type, customized boo
 		}
 		return zstd.NewWriter(w)
 	default:
-		return nil, fmt.Errorf("unknown compression type: %q", compressionType)
+		return nil, errors.Errorf("unknown compression type: %q", compressionType)
 	}
 }
 
