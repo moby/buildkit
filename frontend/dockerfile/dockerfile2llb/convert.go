@@ -910,7 +910,7 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 	var args []string = c.CmdLine
 	if len(c.Files) > 0 {
 		if len(args) != 1 || !c.PrependShell {
-			return fmt.Errorf("parsing produced an invalid run command: %v", args)
+			return errors.Errorf("parsing produced an invalid run command: %v", args)
 		}
 
 		if heredoc := parser.MustParseHeredoc(args[0]); heredoc != nil {

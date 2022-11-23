@@ -182,7 +182,7 @@ func Changes(ctx context.Context, changeFn fs.ChangeFunc, upperdir, upperdirView
 		} else if redirect {
 			// Return error when redirect_dir is enabled which can result to a wrong diff.
 			// TODO: support redirect_dir
-			return fmt.Errorf("redirect_dir is used but it's not supported in overlayfs differ")
+			return errors.New("redirect_dir is used but it's not supported in overlayfs differ")
 		}
 
 		// Check if this is a deleted entry

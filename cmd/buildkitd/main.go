@@ -279,7 +279,7 @@ func main() {
 				case "network.host":
 					cfg.Entitlements = append(cfg.Entitlements, e)
 				default:
-					return fmt.Errorf("invalid entitlement : %v", e)
+					return errors.Errorf("invalid entitlement : %s", e)
 				}
 			}
 		}

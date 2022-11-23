@@ -2,7 +2,6 @@ package azblob
 
 import (
 	"context"
-	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -42,13 +41,13 @@ func getConfig(attrs map[string]string) (*Config, error) {
 	if !ok {
 		accountURLString, ok = os.LookupEnv("BUILDKIT_AZURE_STORAGE_ACCOUNT_URL")
 		if !ok {
-			return &Config{}, fmt.Errorf("either ${BUILDKIT_AZURE_STORAGE_ACCOUNT_URL} or account_url attribute is required for azblob cache")
+			return &Config{}, errors.New("either ${BUILDKIT_AZURE_STORAGE_ACCOUNT_URL} or account_url attribute is required for azblob cache")
 		}
 	}
 
 	accountURL, err := url.Parse(accountURLString)
 	if err != nil {
-		return &Config{}, fmt.Errorf("azure storage account url provided is not a valid url: %v", err)
+		return &Config{}, errors.Wrap(err, "azure storage account url provided is not a valid url")
 	}
 
 	accountName := strings.Split(accountURL.Hostname(), ".")[0]
@@ -106,21 +105,21 @@ func createContainerClient(ctx context.Context, config *Config) (*azblob.Contain
 	if config.secretAccessKey != "" {
 		sharedKey, err := azblob.NewSharedKeyCredential(config.AccountName, config.secretAccessKey)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create shared key: %v", err)
+			return nil, errors.Wrap(err, "failed to create shared key")
 		}
 		serviceClient, err = azblob.NewServiceClientWithSharedKey(config.AccountURL, sharedKey, &azblob.ClientOptions{})
 		if err != nil {
-			return nil, fmt.Errorf("failed to created service client from shared key: %v", err)
+			return nil, errors.Wrap(err, "failed to created service client from shared key")
 		}
 	} else {
 		cred, err := azidentity.NewDefaultAzureCredential(nil)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create default azure credentials: %v", err)
+			return nil, errors.Wrap(err, "failed to create default azure credentials")
 		}
 
 		serviceClient, err = azblob.NewServiceClient(config.AccountURL, cred, &azblob.ClientOptions{})
 		if err != nil {
-			return nil, fmt.Errorf("failed to create service client: %v", err)
+			return nil, errors.Wrap(err, "failed to create service client")
 		}
 	}
 
@@ -143,13 +142,13 @@ func createContainerClient(ctx context.Context, config *Config) (*azblob.Contain
 		defer cnclFn()
 		_, err := containerClient.Create(ctx, &azblob.ContainerCreateOptions{})
 		if err != nil {
-			return nil, fmt.Errorf("failed to create cache container %s: %v", config.Container, err)
+			return nil, errors.Wrapf(err, "failed to create cache container %s", config.Container)
 		}
 
 		return containerClient, nil
 	}
 
-	return nil, fmt.Errorf("failed to get properties of cache container %s: %v", config.Container, err)
+	return nil, errors.Wrapf(err, "failed to get properties of cache container %s", config.Container)
 }
 
 func manifestKey(config *Config, name string) string {
@@ -180,5 +179,5 @@ func blobExists(ctx context.Context, containerClient *azblob.ContainerClient, bl
 		return false, nil
 	}
 
-	return false, fmt.Errorf("failed to check blob %s existence: %v", blobKey, err)
+	return false, errors.Wrapf(err, "failed to check blob %s existence", blobKey)
 }

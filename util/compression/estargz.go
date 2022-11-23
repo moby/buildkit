@@ -34,7 +34,7 @@ func (c estargzType) Compress(ctx context.Context, comp Config) (compressorFunc 
 				return nil, err
 			}
 			if ct != Gzip {
-				return nil, fmt.Errorf("unsupported media type for estargz compressor %q", requiredMediaType)
+				return nil, errors.Errorf("unsupported media type for estargz compressor %q", requiredMediaType)
 			}
 			done := make(chan struct{})
 			pr, pw := io.Pipe()
