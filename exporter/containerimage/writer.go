@@ -228,7 +228,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 					Digest: result.ToDigestMap(desc.Digest),
 				})
 			}
-			stmts, err := attestation.Generate(ctx, session.NewGroup(sessionID), inp.Refs, attestations, defaultSubjects)
+			stmts, err := attestation.MakeInTotoStatements(ctx, session.NewGroup(sessionID), inp.Refs, attestations, defaultSubjects)
 			if err != nil {
 				return nil, err
 			}

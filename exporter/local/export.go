@@ -204,7 +204,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 					return err
 				}
 
-				stmts, err := attestation.Generate(ctx, session.NewGroup(sessionID), inp.Refs, attestations, subjects)
+				stmts, err := attestation.MakeInTotoStatements(ctx, session.NewGroup(sessionID), inp.Refs, attestations, subjects)
 				if err != nil {
 					return err
 				}
