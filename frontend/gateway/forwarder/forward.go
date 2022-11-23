@@ -185,6 +185,13 @@ func (c *bridgeClient) toFrontendResult(r *client.Result) (*frontend.Result, err
 		}
 		return rr.acquireResultProxy(), nil
 	})
+	for _, atts := range res.Attestations {
+		for _, att := range atts {
+			if att.ContentFunc != nil {
+				return nil, errors.Errorf("attestation callback cannot be sent through gateway")
+			}
+		}
+	}
 	if err != nil {
 		return nil, err
 	}

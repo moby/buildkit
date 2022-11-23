@@ -41,15 +41,17 @@ func (r *Result[T]) AddRef(k string, ref T) {
 
 func (r *Result[T]) AddAttestation(k string, v Attestation, ref T) {
 	r.mu.Lock()
-	if r.Refs == nil {
-		r.Refs = map[string]T{}
+	if reflect.ValueOf(ref).IsValid() {
+		if r.Refs == nil {
+			r.Refs = map[string]T{}
+		}
+		if !strings.HasPrefix(v.Ref, attestationRefPrefix) {
+			v.Ref = attestationRefPrefix + identity.NewID()
+			r.Refs[v.Ref] = ref
+		}
 	}
 	if r.Attestations == nil {
 		r.Attestations = map[string][]Attestation{}
-	}
-	if v.ContentFunc == nil && !strings.HasPrefix(v.Ref, attestationRefPrefix) {
-		v.Ref = "attestation:" + identity.NewID()
-		r.Refs[v.Ref] = ref
 	}
 	r.Attestations[k] = append(r.Attestations[k], v)
 	r.mu.Unlock()

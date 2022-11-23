@@ -148,6 +148,7 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 				InToto: result.InTotoAttestation{
 					PredicateType: slsa.PredicateSLSAProvenance,
 				},
+				Path: "provenance.json",
 				ContentFunc: func() ([]byte, error) {
 					end := time.Now()
 					pr.Metadata.BuildFinishedOn = &end

@@ -7061,110 +7061,160 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 		return res, nil
 	}
 
-	targets := []string{
-		registry + "/buildkit/testattestationsfoo:latest",
-		registry + "/buildkit/testattestationsbar:latest",
-	}
-	_, err = c.Build(sb.Context(), SolveOpt{
-		Exports: []ExportEntry{
-			{
-				Type: ExporterImage,
-				Attrs: map[string]string{
-					"name": strings.Join(targets, ","),
-					"push": "true",
-				},
-			},
-		},
-	}, "", frontend, nil)
-	require.NoError(t, err)
-
-	desc, provider, err := contentutil.ProviderFromRef(targets[0])
-	require.NoError(t, err)
-
-	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
-	require.NoError(t, err)
-	require.Equal(t, len(ps)*2, len(imgs.Images))
-
-	var bases []*testutil.ImageInfo
-	for _, p := range ps {
-		pk := platforms.Format(p)
-		img := imgs.Find(pk)
-		require.NotNil(t, img)
-		require.Equal(t, pk, platforms.Format(*img.Desc.Platform))
-		require.Equal(t, 1, len(img.Layers))
-		require.Equal(t, []byte(fmt.Sprintf("hello %s!", pk)), img.Layers[0]["greeting"].Data)
-		bases = append(bases, img)
-	}
-
-	atts := imgs.Filter("unknown/unknown")
-	require.Equal(t, len(ps), len(atts.Images))
-	for i, att := range atts.Images {
-		require.Equal(t, ocispecs.MediaTypeImageManifest, att.Desc.MediaType)
-		require.Equal(t, "unknown/unknown", platforms.Format(*att.Desc.Platform))
-		require.Equal(t, "unknown/unknown", att.Img.OS+"/"+att.Img.Architecture)
-		require.Equal(t, attestation.DockerAnnotationReferenceTypeDefault, att.Desc.Annotations[attestation.DockerAnnotationReferenceType])
-		require.Equal(t, bases[i].Desc.Digest.String(), att.Desc.Annotations[attestation.DockerAnnotationReferenceDigest])
-		require.Equal(t, 2, len(att.Layers))
-		require.Equal(t, len(att.Layers), len(att.Img.RootFS.DiffIDs))
-		require.Equal(t, len(att.Img.History), 0)
-
-		var attest intoto.Statement
-		require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
-
-		purls := map[string]string{}
-		for _, k := range targets {
-			p, _ := purl.RefToPURL(k, &ps[i])
-			purls[k] = p
+	t.Run("image", func(t *testing.T) {
+		targets := []string{
+			registry + "/buildkit/testattestationsfoo:latest",
+			registry + "/buildkit/testattestationsbar:latest",
 		}
-
-		require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
-		require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
-		require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
-		subjects := []intoto.Subject{
-			{
-				Name: purls[targets[0]],
-				Digest: map[string]string{
-					"sha256": bases[i].Desc.Digest.Encoded(),
+		_, err = c.Build(sb.Context(), SolveOpt{
+			Exports: []ExportEntry{
+				{
+					Type: ExporterImage,
+					Attrs: map[string]string{
+						"name": strings.Join(targets, ","),
+						"push": "true",
+					},
 				},
 			},
-			{
-				Name: purls[targets[1]],
-				Digest: map[string]string{
-					"sha256": bases[i].Desc.Digest.Encoded(),
-				},
-			},
-		}
-		require.Equal(t, subjects, attest.Subject)
-
-		var attest2 intoto.Statement
-		require.NoError(t, json.Unmarshal(att.LayersRaw[1], &attest2))
-
-		require.Equal(t, "https://in-toto.io/Statement/v0.1", attest2.Type)
-		require.Equal(t, "https://example.com/attestations2/v1.0", attest2.PredicateType)
-		require.Nil(t, attest2.Predicate)
-		subjects = []intoto.Subject{{
-			Name: "/attestation.json",
-			Digest: map[string]string{
-				"sha256": successDigest.Encoded(),
-			},
-		}}
-		require.Equal(t, subjects, attest2.Subject)
-	}
-
-	cdAddress := sb.ContainerdAddress()
-	if cdAddress == "" {
-		return
-	}
-	client, err := containerd.New(cdAddress)
-	require.NoError(t, err)
-	defer client.Close()
-	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
-
-	for _, target := range targets {
-		err = client.ImageService().Delete(ctx, target, images.SynchronousDelete())
+		}, "", frontend, nil)
 		require.NoError(t, err)
-	}
-	checkAllReleasable(t, c, sb, true)
+
+		desc, provider, err := contentutil.ProviderFromRef(targets[0])
+		require.NoError(t, err)
+
+		imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
+		require.NoError(t, err)
+		require.Equal(t, len(ps)*2, len(imgs.Images))
+
+		var bases []*testutil.ImageInfo
+		for _, p := range ps {
+			pk := platforms.Format(p)
+			img := imgs.Find(pk)
+			require.NotNil(t, img)
+			require.Equal(t, pk, platforms.Format(*img.Desc.Platform))
+			require.Equal(t, 1, len(img.Layers))
+			require.Equal(t, []byte(fmt.Sprintf("hello %s!", pk)), img.Layers[0]["greeting"].Data)
+			bases = append(bases, img)
+		}
+
+		atts := imgs.Filter("unknown/unknown")
+		require.Equal(t, len(ps), len(atts.Images))
+		for i, att := range atts.Images {
+			require.Equal(t, ocispecs.MediaTypeImageManifest, att.Desc.MediaType)
+			require.Equal(t, "unknown/unknown", platforms.Format(*att.Desc.Platform))
+			require.Equal(t, "unknown/unknown", att.Img.OS+"/"+att.Img.Architecture)
+			require.Equal(t, attestation.DockerAnnotationReferenceTypeDefault, att.Desc.Annotations[attestation.DockerAnnotationReferenceType])
+			require.Equal(t, bases[i].Desc.Digest.String(), att.Desc.Annotations[attestation.DockerAnnotationReferenceDigest])
+			require.Equal(t, 2, len(att.Layers))
+			require.Equal(t, len(att.Layers), len(att.Img.RootFS.DiffIDs))
+			require.Equal(t, len(att.Img.History), 0)
+
+			var attest intoto.Statement
+			require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
+
+			purls := map[string]string{}
+			for _, k := range targets {
+				p, _ := purl.RefToPURL(k, &ps[i])
+				purls[k] = p
+			}
+
+			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+			require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
+			require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
+			subjects := []intoto.Subject{
+				{
+					Name: purls[targets[0]],
+					Digest: map[string]string{
+						"sha256": bases[i].Desc.Digest.Encoded(),
+					},
+				},
+				{
+					Name: purls[targets[1]],
+					Digest: map[string]string{
+						"sha256": bases[i].Desc.Digest.Encoded(),
+					},
+				},
+			}
+			require.Equal(t, subjects, attest.Subject)
+
+			var attest2 intoto.Statement
+			require.NoError(t, json.Unmarshal(att.LayersRaw[1], &attest2))
+
+			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest2.Type)
+			require.Equal(t, "https://example.com/attestations2/v1.0", attest2.PredicateType)
+			require.Nil(t, attest2.Predicate)
+			subjects = []intoto.Subject{{
+				Name: "/attestation.json",
+				Digest: map[string]string{
+					"sha256": successDigest.Encoded(),
+				},
+			}}
+			require.Equal(t, subjects, attest2.Subject)
+		}
+
+		cdAddress := sb.ContainerdAddress()
+		if cdAddress == "" {
+			return
+		}
+		client, err := containerd.New(cdAddress)
+		require.NoError(t, err)
+		defer client.Close()
+		ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
+
+		for _, target := range targets {
+			err = client.ImageService().Delete(ctx, target, images.SynchronousDelete())
+			require.NoError(t, err)
+		}
+		checkAllReleasable(t, c, sb, true)
+	})
+
+	t.Run("local", func(t *testing.T) {
+		dir := t.TempDir()
+		_, err = c.Build(sb.Context(), SolveOpt{
+			Exports: []ExportEntry{
+				{
+					Type:      ExporterLocal,
+					OutputDir: dir,
+					Attrs: map[string]string{
+						"attestation-prefix": "test.",
+					},
+				},
+			},
+		}, "", frontend, nil)
+		require.NoError(t, err)
+
+		for _, p := range ps {
+			var attest intoto.Statement
+			dt, err := os.ReadFile(path.Join(dir, strings.ReplaceAll(platforms.Format(p), "/", "_"), "test.attestation.json"))
+			require.NoError(t, err)
+			require.NoError(t, json.Unmarshal(dt, &attest))
+
+			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+			require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
+			require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
+
+			require.Equal(t, []intoto.Subject{{
+				Name:   "greeting",
+				Digest: result.ToDigestMap(digest.Canonical.FromString("hello " + platforms.Format(p) + "!")),
+			}}, attest.Subject)
+
+			var attest2 intoto.Statement
+			dt, err = os.ReadFile(path.Join(dir, strings.ReplaceAll(platforms.Format(p), "/", "_"), "test.attestation2.json"))
+			require.NoError(t, err)
+			require.NoError(t, json.Unmarshal(dt, &attest2))
+
+			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest2.Type)
+			require.Equal(t, "https://example.com/attestations2/v1.0", attest2.PredicateType)
+			require.Nil(t, attest2.Predicate)
+			subjects := []intoto.Subject{{
+				Name: "/attestation.json",
+				Digest: map[string]string{
+					"sha256": successDigest.Encoded(),
+				},
+			}}
+			require.Equal(t, subjects, attest2.Subject)
+		}
+	})
 }
 
 func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {

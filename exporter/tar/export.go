@@ -177,6 +177,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 			return nil, errors.Wrapf(err, "failed to parse platforms passed to exporter")
 		}
 	}
+	isMap := len(p.Platforms) > 1
 
 	var fs fsutil.FS
 
@@ -191,12 +192,18 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 			if err != nil {
 				return nil, err
 			}
+			if !isMap {
+				fs = d.FS
+				break
+			}
 			dirs = append(dirs, *d)
 		}
-		var err error
-		fs, err = fsutil.SubDirFS(dirs)
-		if err != nil {
-			return nil, err
+		if isMap {
+			var err error
+			fs, err = fsutil.SubDirFS(dirs)
+			if err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		d, err := getDir(ctx, "", inp.Ref)
