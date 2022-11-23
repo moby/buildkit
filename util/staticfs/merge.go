@@ -46,15 +46,21 @@ func (mfs *MergeFS) Walk(ctx context.Context, fn filepath.WalkFunc) error {
 	eg.Go(func() error {
 		defer close(ch1)
 		return mfs.Lower.Walk(ctx, func(path string, info fs.FileInfo, err error) error {
-			ch1 <- &record{path: path, fi: info, err: err}
-			return nil
+			select {
+			case ch1 <- &record{path: path, fi: info, err: err}:
+			case <-ctx.Done():
+			}
+			return ctx.Err()
 		})
 	})
 	eg.Go(func() error {
 		defer close(ch2)
 		return mfs.Upper.Walk(ctx, func(path string, info fs.FileInfo, err error) error {
-			ch2 <- &record{path: path, fi: info, err: err}
-			return nil
+			select {
+			case ch2 <- &record{path: path, fi: info, err: err}:
+			case <-ctx.Done():
+			}
+			return ctx.Err()
 		})
 	})
 
