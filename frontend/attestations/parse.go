@@ -13,8 +13,7 @@ const (
 )
 
 const (
-	// TODO: update this before next buildkit release
-	defaultSBOMGenerator = "jedevc/buildkit-syft-scanner:master@sha256:de630f621eb0ab1bb1245cea76d01c5bddfe78af4f5b9adecde424cb7ec5605e"
+	defaultSBOMGenerator = "docker/buildkit-syft-scanner:stable-1"
 )
 
 func Filter(v map[string]string) map[string]string {
