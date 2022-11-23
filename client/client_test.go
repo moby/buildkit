@@ -163,6 +163,7 @@ func TestIntegration(t *testing.T) {
 		testStargzLazyRegistryCacheImportExport,
 		testValidateDigestOrigin,
 		testMountStubsTimestamp,
+		testMountStubsDirectory,
 	)
 	tests = append(tests, diffOpTestCases()...)
 	integration.Run(t, tests, mirrors)
@@ -5887,6 +5888,52 @@ var defaultNetwork integration.ConfigUpdater = &netModeDefault{}
 func fixedWriteCloser(wc io.WriteCloser) func(map[string]string) (io.WriteCloser, error) {
 	return func(map[string]string) (io.WriteCloser, error) {
 		return wc, nil
+	}
+}
+
+func testMountStubsDirectory(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("busybox:latest").Run(
+		llb.Args([]string{"/bin/echo", "dummy"}),
+		llb.AddMount("/foo/bar", llb.Scratch(), llb.Tmpfs()),
+	)
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	tarFile := filepath.Join(tmpDir, "out.tar")
+	tarFileW, err := os.Create(tarFile)
+	require.NoError(t, err)
+	defer tarFileW.Close()
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterTar,
+				Output: fixedWriteCloser(tarFileW),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+	tarFileW.Close()
+
+	tarFileR, err := os.Open(tarFile)
+	require.NoError(t, err)
+	defer tarFileR.Close()
+	tarR := tar.NewReader(tarFileR)
+
+	for {
+		hd, err := tarR.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+		if hd.Name == "foo/bar/" {
+			require.Fail(t, "foo/bar/ should not be in the tar")
+		}
 	}
 }
 

@@ -42,9 +42,18 @@ func MountStubsCleaner(dir string, mounts []Mount) func() {
 			if err != nil {
 				continue
 			}
-			if st.Size() != 0 {
+			if st.IsDir() {
+				entries, err := os.ReadDir(p)
+				if err != nil {
+					continue
+				}
+				if len(entries) != 0 {
+					continue
+				}
+			} else if st.Size() != 0 {
 				continue
 			}
+
 			// Back up the timestamps of the dir for reproducible builds
 			// https://github.com/moby/buildkit/issues/3148
 			dir := filepath.Dir(p)
