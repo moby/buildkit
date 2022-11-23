@@ -198,7 +198,14 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 			}
 		}
 
-		desc, _, err := ic.commitDistributionManifest(ctx, opts, r, config, &remotes[remotesMap[p.ID]], opts.Annotations.Platform(&p.Platform), inlineCache, dtbi, opts.Epoch, session.NewGroup(sessionID))
+		remote := &remotes[remotesMap[p.ID]]
+		if remote == nil {
+			remote = &solver.Remote{
+				Provider: ic.opt.ContentStore,
+			}
+		}
+
+		desc, _, err := ic.commitDistributionManifest(ctx, opts, r, config, remote, opts.Annotations.Platform(&p.Platform), inlineCache, dtbi, opts.Epoch, session.NewGroup(sessionID))
 		if err != nil {
 			return nil, err
 		}
@@ -211,6 +218,22 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		if attestations, ok := inp.Attestations[p.ID]; ok {
 			attestations, err := attestation.Unbundle(ctx, session.NewGroup(sessionID), inp.Refs, attestations)
 			if err != nil {
+				return nil, err
+			}
+
+			eg, ctx2 := errgroup.WithContext(ctx)
+			for i, att := range attestations {
+				i, att := i, att
+				eg.Go(func() error {
+					att, err := supplementSBOM(ctx2, session.NewGroup(sessionID), r, remote, inp.Refs, att)
+					if err != nil {
+						return err
+					}
+					attestations[i] = att
+					return nil
+				})
+			}
+			if err := eg.Wait(); err != nil {
 				return nil, err
 			}
 
@@ -228,7 +251,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 					Digest: result.ToDigestMap(desc.Digest),
 				})
 			}
-			stmts, err := attestation.Generate(ctx, session.NewGroup(sessionID), inp.Refs, attestations, defaultSubjects)
+			stmts, err := attestation.MakeInTotoStatements(ctx, session.NewGroup(sessionID), inp.Refs, attestations, defaultSubjects)
 			if err != nil {
 				return nil, err
 			}
@@ -312,12 +335,6 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *Ima
 		config, err = defaultImageConfig()
 		if err != nil {
 			return nil, nil, err
-		}
-	}
-
-	if remote == nil {
-		remote = &solver.Remote{
-			Provider: ic.opt.ContentStore,
 		}
 	}
 

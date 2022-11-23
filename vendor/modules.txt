@@ -639,6 +639,14 @@ github.com/shibumi/go-pathspec
 # github.com/sirupsen/logrus v1.9.0
 ## explicit; go 1.13
 github.com/sirupsen/logrus
+# github.com/spdx/tools-golang v0.3.0
+## explicit; go 1.13
+github.com/spdx/tools-golang/jsonloader
+github.com/spdx/tools-golang/jsonloader/parser2v2
+github.com/spdx/tools-golang/jsonsaver
+github.com/spdx/tools-golang/jsonsaver/saver2v2
+github.com/spdx/tools-golang/spdx
+github.com/spdx/tools-golang/spdxlib
 # github.com/stretchr/testify v1.8.0
 ## explicit; go 1.13
 github.com/stretchr/testify/assert
