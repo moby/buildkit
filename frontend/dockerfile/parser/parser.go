@@ -431,7 +431,7 @@ func heredocFromMatch(match []string) (*Heredoc, error) {
 		return nil, err
 	}
 	if len(wordsRaw) != len(words) {
-		return nil, fmt.Errorf("internal lexing of heredoc produced inconsistent results: %s", rest)
+		return nil, errors.Errorf("internal lexing of heredoc produced inconsistent results: %s", rest)
 	}
 
 	word := words[0]
