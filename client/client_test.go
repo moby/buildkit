@@ -87,6 +87,7 @@ func TestIntegration(t *testing.T) {
 		testFileOpCopyRm,
 		testFileOpCopyIncludeExclude,
 		testFileOpRmWildcard,
+		testFileOpCopyUIDCache,
 		testCallDiskUsage,
 		testBuildMultiMount,
 		testBuildHTTPSource,
@@ -1435,6 +1436,65 @@ func testFileOpCopyRm(t *testing.T, sb integration.Sandbox) {
 	dt, err = os.ReadFile(filepath.Join(destDir, "file2"))
 	require.NoError(t, err)
 	require.Equal(t, []byte("file2"), dt)
+}
+
+// moby/buildkit#3291
+func testFileOpCopyUIDCache(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Scratch().File(
+		llb.Copy(llb.Image("alpine").Run(llb.Shlex(`sh -c 'echo 123 > /foo && chown 1000:1000 /foo'`)).Root(), "foo", "foo"))
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterTar,
+				Output: fixedWriteCloser(&nopWriteCloser{&buf}),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(buf.Bytes(), false)
+	require.NoError(t, err)
+
+	fi, ok := m["foo"]
+	require.True(t, ok)
+	require.Equal(t, 1000, fi.Header.Uid)
+	require.Equal(t, 1000, fi.Header.Gid)
+
+	// repeat to check cache does not apply for different uid
+	st = llb.Scratch().File(
+		llb.Copy(llb.Image("alpine").Run(llb.Shlex(`sh -c 'echo 123 > /foo'`)).Root(), "foo", "foo"))
+
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	buf = bytes.Buffer{}
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterTar,
+				Output: fixedWriteCloser(&nopWriteCloser{&buf}),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	m, err = testutil.ReadTarToMap(buf.Bytes(), false)
+	require.NoError(t, err)
+
+	fi, ok = m["foo"]
+	require.True(t, ok)
+	require.Equal(t, 0, fi.Header.Uid)
+	require.Equal(t, 0, fi.Header.Gid)
 }
 
 func testFileOpCopyIncludeExclude(t *testing.T, sb integration.Sandbox) {
