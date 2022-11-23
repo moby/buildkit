@@ -99,10 +99,8 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 		return nil, err
 	}
 
-	isMap := len(inp.Refs) > 0
-
 	platformsBytes, ok := inp.Metadata[exptypes.ExporterPlatformsKey]
-	if isMap && !ok {
+	if len(inp.Refs) > 0 && !ok {
 		return nil, errors.Errorf("unable to export multiple refs, missing platforms mapping")
 	}
 
@@ -112,6 +110,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 			return nil, errors.Wrapf(err, "failed to parse platforms passed to exporter")
 		}
 	}
+	isMap := len(p.Platforms) > 1
 
 	now := time.Now().Truncate(time.Second)
 
@@ -265,13 +264,16 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 
 	eg, ctx := errgroup.WithContext(ctx)
 
-	if isMap {
+	if len(inp.Refs) > 0 {
 		for _, p := range p.Platforms {
 			r, ok := inp.Refs[p.ID]
 			if !ok {
 				return nil, errors.Errorf("failed to find ref for ID %s", p.ID)
 			}
 			eg.Go(export(ctx, p.ID, &p.Platform, r, inp.Attestations[p.ID]))
+			if !isMap {
+				break
+			}
 		}
 	} else {
 		eg.Go(export(ctx, "", nil, inp.Ref, nil))
