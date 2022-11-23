@@ -106,19 +106,13 @@ func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt llb.Re
 		}
 		rslvr = resolver.DefaultPool.GetResolver(is.RegistryHosts, ref, "pull", sm, g).WithImageStore(is.ImageStore, rm)
 	case ResolverTypeOCILayout:
-		// with OCI layout, we always just "pull"
 		rm = source.ResolveModeForcePull
-		// get the content store ID from the ref
+
 		parsed, err := reference.Parse(ref)
 		if err != nil {
-			return "", nil, errors.Errorf("invalid oci-layout ref format '%s', must be content-store/image@sha256:digest", ref)
+			return "", nil, err
 		}
-		if parsed.Digest() == "" {
-			return "", nil, errors.Errorf("oci-layout ref format '%s' missing digest, must be content-store/image@sha256:digest", ref)
-		}
-		storeID := parsed.Hostname()
-
-		rslvr = getOCILayoutResolver(storeID, sm, "", g)
+		rslvr = getOCILayoutResolver(parsed.Hostname(), sm, "", g)
 	}
 	key += rm.String()
 	res, err := is.g.Do(ctx, key, func(ctx context.Context) (interface{}, error) {
@@ -172,7 +166,7 @@ func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session
 		}
 		mode = source.ResolveModeForcePull // with OCI layout, we always just "pull"
 		sessionID = ociIdentifier.SessionID
-		ref = reference.Spec{Locator: "oci-layout/dummy", Object: "@" + ociIdentifier.Manifest.String()}
+		ref = reference.Spec{Locator: "oci-layout/dummy", Object: "@" + ociIdentifier.Digest.String()}
 		storeID = ociIdentifier.Name
 		layerLimit = ociIdentifier.LayerLimit
 	default:

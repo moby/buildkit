@@ -33,7 +33,6 @@ import (
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/gitutil"
-	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -956,30 +955,30 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 		}
 		return st, nil, nil
 	case "oci-layout":
-		ref := strings.TrimPrefix(vv[1], "//")
-		// expected format is storeID@hash
-		parts := strings.SplitN(ref, "@", 2)
-		if len(parts) != 2 {
-			return nil, nil, errors.Errorf("invalid oci-layout format '%s', must be oci-layout:///content-store@sha256:digest", vv[1])
-		}
-		storeID := parts[0]
-		dig, err := digest.Parse(parts[1])
+		refSpec := strings.TrimPrefix(vv[1], "//")
+		ref, err := reference.Parse(refSpec)
 		if err != nil {
-			return nil, nil, errors.Errorf("invalid digest format '%s', must be oci-layout:///content-store@sha256:digest", vv[1])
+			return nil, nil, errors.Wrapf(err, "could not parse oci-layout reference %q", refSpec)
+		}
+		named, ok := ref.(reference.Named)
+		if !ok {
+			return nil, nil, errors.Errorf("oci-layout reference %q has no name", ref.String())
+		}
+		if reference.Domain(named) != "" {
+			return nil, nil, errors.Errorf("oci-layout reference %q has domain", ref.String())
+		}
+		if strings.Contains(reference.Path(named), "/") {
+			return nil, nil, errors.Errorf("oci-layout reference %q name is multi-part", ref.String())
+		}
+		digested, ok := ref.(reference.Digested)
+		if !ok {
+			return nil, nil, errors.Errorf("oci-layout reference %q does not have digest", ref.String())
 		}
 
-		// the ref now is "content-store@sha256:digest"
-		// ResolveImageConfig will try to treat that as a valid reference,
-		// to be parsed with https://pkg.go.dev/github.com/containerd/containerd@v1.6.6/reference#Parse
-		// That will fail, because it will think that "content-store@sha256" is a host and "digest" is a port.
-		// To get it to pass, we need to jury-rig it with a host, so that it is a legitimate ref and can
-		// be processed.
-		// A reasonable format is storeID as host, so
-		//    storeID/image@digest
-		// We do not support any image lookup for now, so any image will do; it is ignored.
-
-		usableRef := fmt.Sprintf("%s/%s@%s", storeID, "image", dig)
-		_, data, err := c.ResolveImageConfig(ctx, usableRef, llb.ResolveImageConfigOpt{
+		// We use store id as the host here, the image name will be ignored
+		// (since image lookup is not currently supported)
+		id := fmt.Sprintf("%s/image@%s", named.Name(), digested.Digest())
+		_, data, err := c.ResolveImageConfig(ctx, id, llb.ResolveImageConfigOpt{
 			Platform:     platform,
 			ResolveMode:  resolveMode,
 			LogName:      fmt.Sprintf("[context %s] load metadata for %s", name, ref),
@@ -991,10 +990,12 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 
 		var img dockerfile2llb.Image
 		if err := json.Unmarshal(data, &img); err != nil {
-			return nil, nil, err
+			return nil, nil, errors.Wrap(err, "could not parse oci-layout image config")
 		}
 
-		st := llb.OCILayout(storeID, dig,
+		st := llb.OCILayout(
+			named.Name(),
+			digested.Digest(),
 			llb.WithCustomName("[context "+name+"] OCI load from client"),
 			llb.OCISessionID(c.BuildOpts().SessionID),
 		)
