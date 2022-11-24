@@ -30,9 +30,18 @@ func MountStubsCleaner(dir string, mounts []Mount) func() {
 			continue
 		}
 
-		_, err = os.Lstat(realPath)
-		if errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
-			paths = append(paths, realPath)
+		for {
+			_, err = os.Lstat(realPath)
+			if errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
+				paths = append(paths, realPath)
+				realPathNext := filepath.Dir(realPath)
+				if realPath == realPathNext {
+					break
+				}
+				realPath = realPathNext
+			} else {
+				break
+			}
 		}
 	}
 
