@@ -1,7 +1,6 @@
 package debug
 
 import (
-	"fmt"
 	"io"
 	"os"
 
@@ -30,7 +29,7 @@ var LogsCommand = cli.Command{
 func logs(clicontext *cli.Context) error {
 	args := clicontext.Args()
 	if len(args) == 0 {
-		return fmt.Errorf("build ref must be specified")
+		return errors.Errorf("build ref must be specified")
 	}
 	ref := args[0]
 
