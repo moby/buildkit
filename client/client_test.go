@@ -7613,7 +7613,7 @@ cat <<EOF > $BUILDKIT_SCAN_DESTINATION/spdx.json
 {
   "_type": "https://in-toto.io/Statement/v0.1",
   "predicateType": "https://spdx.dev/Document",
-  "predicate": {"success": false}
+  "predicate": {"name": "fallback"}
 }
 EOF
 `
@@ -7681,7 +7681,7 @@ EOF
 			// build attestations
 			if attest {
 				st = llb.Scratch().
-					File(llb.Mkfile("/result.spdx", 0600, []byte(`{"success": true}`)))
+					File(llb.Mkfile("/result.spdx", 0600, []byte(`{"name": "frontend"}`)))
 				def, err = st.Marshal(ctx)
 				if err != nil {
 					return nil, err
@@ -7769,7 +7769,7 @@ EOF
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
-	require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
+	require.Subset(t, attest.Predicate, map[string]interface{}{"name": "frontend"})
 
 	// test the specified fallback scanner
 	target = registry + "/buildkit/testsbom3:latest"
@@ -7801,7 +7801,7 @@ EOF
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
-	require.Equal(t, map[string]interface{}{"success": false}, attest.Predicate)
+	require.Subset(t, attest.Predicate, map[string]interface{}{"name": "fallback"})
 
 	// test the builtin frontend scanner and the specified fallback scanner together
 	target = registry + "/buildkit/testsbom3:latest"
@@ -7833,7 +7833,7 @@ EOF
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
-	require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
+	require.Subset(t, attest.Predicate, map[string]interface{}{"name": "frontend"})
 }
 
 func testSBOMScanSingleRef(t *testing.T, sb integration.Sandbox) {
@@ -7887,7 +7887,7 @@ cat <<EOF > $BUILDKIT_SCAN_DESTINATION/spdx.json
 {
   "_type": "https://in-toto.io/Statement/v0.1",
   "predicateType": "https://spdx.dev/Document",
-  "predicate": {"success": false}
+  "predicate": {"name": "fallback"}
 }
 EOF
 `
@@ -7987,7 +7987,7 @@ EOF
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
-	require.Equal(t, map[string]interface{}{"success": false}, attest.Predicate)
+	require.Subset(t, attest.Predicate, map[string]interface{}{"name": "fallback"})
 }
 
 func testMultipleCacheExports(t *testing.T, sb integration.Sandbox) {

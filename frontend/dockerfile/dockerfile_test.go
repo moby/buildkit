@@ -6079,7 +6079,7 @@ COPY <<-"EOF" /scan.sh
 	{
 	  "_type": "https://in-toto.io/Statement/v0.1",
 	  "predicateType": "https://spdx.dev/Document",
-	  "predicate": {"success": true}
+	  "predicate": {"name": "sbom-scan"}
 	}
 	BUNDLE
 EOF
@@ -6158,7 +6158,7 @@ EOF
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
-	require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
+	require.Subset(t, attest.Predicate, map[string]interface{}{"name": "sbom-scan"})
 }
 
 func testSBOMScannerArgs(t *testing.T, sb integration.Sandbox) {
@@ -6184,7 +6184,7 @@ COPY <<-"EOF" /scan.sh
 	{
 	  "_type": "https://in-toto.io/Statement/v0.1",
 	  "predicateType": "https://spdx.dev/Document",
-	  "predicate": {"core": true}
+	  "predicate": {"name": "core"}
 	}
 	BUNDLE
 	if [ "${BUILDKIT_SCAN_SOURCE_EXTRAS}" ]; then
@@ -6193,7 +6193,7 @@ COPY <<-"EOF" /scan.sh
 			{
 			  "_type": "https://in-toto.io/Statement/v0.1",
 			  "predicateType": "https://spdx.dev/Document",
-			  "predicate": {"extra": true}
+			  "predicate": {"name": "extra"}
 			}
 			BUNDLE
 		done
@@ -6273,11 +6273,10 @@ FROM base
 	require.NotNil(t, img)
 
 	att := imgs.Find("unknown/unknown")
-	extraCount := 0
 	require.Equal(t, 1, len(att.LayersRaw))
 	var attest intoto.Statement
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
-	require.Equal(t, map[string]interface{}{"core": true}, attest.Predicate)
+	require.Subset(t, attest.Predicate, map[string]interface{}{"name": "core"})
 
 	dockerfile = []byte(`
 ARG BUILDKIT_SBOM_SCAN_CONTEXT=true
@@ -6339,15 +6338,15 @@ ARG BUILDKIT_SBOM_SCAN_STAGE=true
 
 	att = imgs.Find("unknown/unknown")
 	require.Equal(t, 4, len(att.LayersRaw))
-	extraCount = 0
+	extraCount := 0
 	for _, l := range att.LayersRaw {
 		var attest intoto.Statement
 		require.NoError(t, json.Unmarshal(l, &attest))
 		att := attest.Predicate.(map[string]interface{})
-		switch {
-		case att["extra"] == true:
+		switch att["name"] {
+		case "core":
+		case "extra":
 			extraCount++
-		case att["core"] == true:
 		default:
 			require.Fail(t, "unexpected attestation", "%v", att)
 		}

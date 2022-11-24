@@ -41,48 +41,50 @@ func supplementSBOM(ctx context.Context, s session.Group, target cache.Immutable
 	}
 
 	doc, err := decodeSPDX(content)
-	if err == nil {
-		layers, err := newFileLayerFinder(target, targetRemote)
-		if err != nil {
-			return att, err
-		}
-		modifyFile := func(f *spdx.File2_2) error {
-			if f.FileComment != "" {
-				// Skip over files that already have a comment - since the data is
-				// unstructured, we can't correctly overwrite this field without
-				// possibly breaking some scanner functionality.
-				return nil
-			}
+	if err != nil {
+		return att, err
+	}
 
-			_, desc, err := layers.find(ctx, s, f.FileName)
-			if err != nil {
-				if !errors.Is(err, fs.ErrNotExist) {
-					return err
-				}
-				return nil
-			}
-			f.FileComment = fmt.Sprintf("layerID: %s", desc.Digest.String())
+	layers, err := newFileLayerFinder(target, targetRemote)
+	if err != nil {
+		return att, err
+	}
+	modifyFile := func(f *spdx.File2_2) error {
+		if f.FileComment != "" {
+			// Skip over files that already have a comment - since the data is
+			// unstructured, we can't correctly overwrite this field without
+			// possibly breaking some scanner functionality.
 			return nil
 		}
-		for _, f := range doc.UnpackagedFiles {
+
+		_, desc, err := layers.find(ctx, s, f.FileName)
+		if err != nil {
+			if !errors.Is(err, fs.ErrNotExist) {
+				return err
+			}
+			return nil
+		}
+		f.FileComment = fmt.Sprintf("layerID: %s", desc.Digest.String())
+		return nil
+	}
+	for _, f := range doc.UnpackagedFiles {
+		if err := modifyFile(f); err != nil {
+			return att, err
+		}
+	}
+	for _, p := range doc.Packages {
+		for _, f := range p.Files {
 			if err := modifyFile(f); err != nil {
 				return att, err
 			}
 		}
-		for _, p := range doc.Packages {
-			for _, f := range p.Files {
-				if err := modifyFile(f); err != nil {
-					return att, err
-				}
-			}
-		}
+	}
 
-		doc.CreationInfo.CreatorTools = append(doc.CreationInfo.CreatorTools, "buildkit-"+version.Version)
+	doc.CreationInfo.CreatorTools = append(doc.CreationInfo.CreatorTools, "buildkit-"+version.Version)
 
-		content, err = encodeSPDX(doc)
-		if err != nil {
-			return att, err
-		}
+	content, err = encodeSPDX(doc)
+	if err != nil {
+		return att, err
 	}
 
 	return result.Attestation{
