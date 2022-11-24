@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"strings"
 
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/moby/buildkit/cache"
@@ -154,7 +155,8 @@ func newFileLayerFinder(target cache.ImmutableRef, remote *solver.Remote) (fileL
 }
 
 // find finds the layer that contains the file, returning the ImmutableRef and
-// descriptor for the layer.
+// descriptor for the layer. If the file searched for was deleted, find returns
+// the layer that created the file, not the one that deleted it.
 //
 // find is not concurrency-safe.
 func (c *fileLayerFinder) find(ctx context.Context, s session.Group, filename string) (cache.ImmutableRef, *ocispecs.Descriptor, error) {
@@ -174,6 +176,11 @@ func (c *fileLayerFinder) find(ctx context.Context, s session.Group, filename st
 
 		found := false
 		for _, f := range files {
+			if strings.HasPrefix(f, ".wh.") {
+				// skip whiteout files, we only care about file creations
+				continue
+			}
+
 			// add all files in this layer to the cache
 			if _, ok := c.cache[f]; ok {
 				continue
