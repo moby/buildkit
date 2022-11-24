@@ -994,11 +994,17 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 }
 
 func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bool, opt *dispatchOpt) error {
-	d.state = d.state.Dir(c.Path)
-	wd := c.Path
-	if !path.IsAbs(c.Path) {
-		wd = path.Join("/", d.image.Config.WorkingDir, wd)
+	withoutDriveLetter, err := system.CheckSystemDriveAndRemoveDriveLetter(c.Path)
+	if err != nil {
+		return errors.Wrap(err, "removing drive letter")
 	}
+
+	d.state = d.state.Dir(withoutDriveLetter)
+	wd, err := system.NormalizeWorkdir(d.image.Config.WorkingDir, withoutDriveLetter)
+	if err != nil {
+		return errors.Wrap(err, "normalizing workdir")
+	}
+
 	d.image.Config.WorkingDir = wd
 	if commit {
 		withLayer := false
@@ -1031,7 +1037,8 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 	if err != nil {
 		return err
 	}
-	dest := path.Join("/", pp)
+	dest := filepath.Join("/", pp)
+
 	if cfg.params.DestPath == "." || cfg.params.DestPath == "" || cfg.params.DestPath[len(cfg.params.DestPath)-1] == filepath.Separator {
 		dest += string(filepath.Separator)
 	}
@@ -1135,6 +1142,11 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 				a = a.Copy(st, f, dest, opts...)
 			}
 		} else {
+			src, err = system.CheckSystemDriveAndRemoveDriveLetter(src)
+			if err != nil {
+				return errors.Wrap(err, "removing drive letter")
+			}
+
 			opts := append([]llb.CopyOption{&llb.CopyInfo{
 				Mode:                mode,
 				FollowSymlinks:      true,
@@ -1157,7 +1169,10 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		commitMessage.WriteString(" <<" + src.Path)
 
 		data := src.Data
-		f := src.Path
+		f, err := system.CheckSystemDriveAndRemoveDriveLetter(src.Path)
+		if err != nil {
+			return errors.Wrap(err, "removing drive letter")
+		}
 		st := llb.Scratch().File(
 			llb.Mkfile(f, 0664, []byte(data)),
 			dockerui.WithInternalName("preparing inline document"),
@@ -1167,6 +1182,11 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 			Mode:           mode,
 			CreateDestPath: true,
 		}}, copyOpt...)
+
+		dest, err = system.CheckSystemDriveAndRemoveDriveLetter(dest)
+		if err != nil {
+			return errors.Wrap(err, "removing drive letter")
+		}
 
 		if a == nil {
 			a = llb.Copy(st, f, dest, opts...)
@@ -1395,14 +1415,24 @@ func dispatchArg(d *dispatchState, c *instructions.ArgCommand, metaArgs []instru
 }
 
 func pathRelativeToWorkingDir(s llb.State, p string) (string, error) {
-	if path.IsAbs(p) {
-		return p, nil
-	}
 	dir, err := s.GetDir(context.TODO())
 	if err != nil {
 		return "", err
 	}
-	return path.Join(dir, p), nil
+
+	if len(p) == 0 {
+		return dir, nil
+	}
+
+	p, err = system.CheckSystemDriveAndRemoveDriveLetter(p)
+	if err != nil {
+		return "", errors.Wrap(err, "remving drive letter")
+	}
+
+	if system.IsAbs(p) {
+		return p, nil
+	}
+	return filepath.Join(dir, p), nil
 }
 
 func addEnv(env []string, k, v string) []string {

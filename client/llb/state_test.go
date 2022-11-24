@@ -2,6 +2,7 @@ package llb
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/moby/buildkit/solver/pb"
@@ -20,7 +21,7 @@ func TestStateMeta(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "abc", v)
 
-	assert.Equal(t, "/foo/bar", getDirHelper(t, s))
+	assert.Equal(t, filepath.FromSlash("/foo/bar"), getDirHelper(t, s))
 
 	s2 := Image("foo2")
 	s2 = s2.AddEnv("BAZ", "def").Reset(s)
@@ -43,7 +44,7 @@ func TestFormattingPatterns(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "ab%sc", v)
 
-	assert.Equal(t, "/foo/bar%d", getDirHelper(t, s))
+	assert.Equal(t, filepath.FromSlash("/foo/bar%d"), getDirHelper(t, s))
 
 	s2 := Image("foo")
 	s2 = s2.AddEnvf("FOO", "ab%sc", "__").Dirf("/foo/bar%d", 1)
@@ -52,7 +53,7 @@ func TestFormattingPatterns(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "ab__c", v)
 
-	assert.Equal(t, "/foo/bar1", getDirHelper(t, s2))
+	assert.Equal(t, filepath.FromSlash("/foo/bar1"), getDirHelper(t, s2))
 }
 
 func TestStateSourceMapMarshal(t *testing.T) {

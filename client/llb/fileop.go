@@ -3,13 +3,15 @@ package llb
 import (
 	"context"
 	_ "crypto/sha256" // for opencontainers/go-digest
+	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/system"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
@@ -157,9 +159,13 @@ type fileActionMkdir struct {
 }
 
 func (a *fileActionMkdir) toProtoAction(ctx context.Context, parent string, base pb.InputIndex) (pb.IsFileAction, error) {
+	normalizedPath, err := normalizePath(parent, a.file, false)
+	if err != nil {
+		return nil, errors.Wrap(err, "normalizing path")
+	}
 	return &pb.FileAction_Mkdir{
 		Mkdir: &pb.FileActionMkDir{
-			Path:        normalizePath(parent, a.file, false),
+			Path:        normalizedPath,
 			Mode:        int32(a.mode & 0777),
 			MakeParents: a.info.MakeParents,
 			Owner:       a.info.ChownOpt.marshal(base),
@@ -331,9 +337,13 @@ type fileActionMkfile struct {
 }
 
 func (a *fileActionMkfile) toProtoAction(ctx context.Context, parent string, base pb.InputIndex) (pb.IsFileAction, error) {
+	normalizedPath, err := normalizePath(parent, a.file, false)
+	if err != nil {
+		return nil, errors.Wrap(err, "normalizing path")
+	}
 	return &pb.FileAction_Mkfile{
 		Mkfile: &pb.FileActionMkFile{
-			Path:      normalizePath(parent, a.file, false),
+			Path:      normalizedPath,
 			Mode:      int32(a.mode & 0777),
 			Data:      a.dt,
 			Owner:     a.info.ChownOpt.marshal(base),
@@ -399,9 +409,13 @@ type fileActionRm struct {
 }
 
 func (a *fileActionRm) toProtoAction(ctx context.Context, parent string, base pb.InputIndex) (pb.IsFileAction, error) {
+	normalizedPath, err := normalizePath(parent, a.file, false)
+	if err != nil {
+		return nil, errors.Wrap(err, "normalizing path")
+	}
 	return &pb.FileAction_Rm{
 		Rm: &pb.FileActionRm{
-			Path:          normalizePath(parent, a.file, false),
+			Path:          normalizedPath,
 			AllowNotFound: a.info.AllowNotFound,
 			AllowWildcard: a.info.AllowWildcard,
 		},
@@ -493,9 +507,13 @@ func (a *fileActionCopy) toProtoAction(ctx context.Context, parent string, base 
 	if err != nil {
 		return nil, err
 	}
+	normalizedPath, err := normalizePath(parent, a.dest, true)
+	if err != nil {
+		return nil, errors.Wrap(err, "normalizing path")
+	}
 	c := &pb.FileActionCopy{
 		Src:                              src,
-		Dest:                             normalizePath(parent, a.dest, true),
+		Dest:                             normalizedPath,
 		Owner:                            a.info.ChownOpt.marshal(base),
 		IncludePatterns:                  a.info.IncludePatterns,
 		ExcludePatterns:                  a.info.ExcludePatterns,
@@ -518,20 +536,20 @@ func (a *fileActionCopy) toProtoAction(ctx context.Context, parent string, base 
 }
 
 func (a *fileActionCopy) sourcePath(ctx context.Context) (string, error) {
-	p := path.Clean(a.src)
-	if !path.IsAbs(p) {
+	p := filepath.Clean(a.src)
+	if !system.IsAbs(p) {
 		if a.state != nil {
 			dir, err := a.state.GetDir(ctx)
 			if err != nil {
 				return "", err
 			}
-			p = path.Join("/", dir, p)
+			p = filepath.Join("/", dir, p)
 		} else if a.fas != nil {
 			dir, err := a.fas.state.GetDir(ctx)
 			if err != nil {
 				return "", err
 			}
-			p = path.Join("/", dir, p)
+			p = filepath.Join("/", dir, p)
 		}
 	}
 	return p, nil
@@ -769,23 +787,31 @@ func (f *FileOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 	return f.Load()
 }
 
-func normalizePath(parent, p string, keepSlash bool) string {
-	origPath := p
-	p = path.Clean(p)
-	if !path.IsAbs(p) {
-		p = path.Join("/", parent, p)
+func normalizePath(parent, p string, keepSlash bool) (string, error) {
+	var err error
+	parent, err = system.CheckSystemDriveAndRemoveDriveLetter(parent)
+	if err != nil {
+		return "", errors.Wrap(err, "cleaning parent")
+	}
+	p, err = system.CheckSystemDriveAndRemoveDriveLetter(p)
+	if err != nil {
+		return "", errors.Wrap(err, "cleaning path")
+	}
+	origPath := filepath.FromSlash(p)
+	if !system.IsAbs(p) {
+		p = filepath.Join("/", parent, p)
 	}
 	if keepSlash {
-		if strings.HasSuffix(origPath, "/") && !strings.HasSuffix(p, "/") {
-			p += "/"
-		} else if strings.HasSuffix(origPath, "/.") {
-			if p != "/" {
-				p += "/"
+		if strings.HasSuffix(origPath, string(filepath.Separator)) && !strings.HasSuffix(p, string(filepath.Separator)) {
+			p += string(filepath.Separator)
+		} else if strings.HasSuffix(origPath, fmt.Sprintf("%c.", filepath.Separator)) {
+			if p != string(filepath.Separator) {
+				p += string(filepath.Separator)
 			}
 			p += "."
 		}
 	}
-	return p
+	return p, nil
 }
 
 func (f *FileOp) Output() Output {

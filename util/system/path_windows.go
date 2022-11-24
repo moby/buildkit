@@ -26,10 +26,22 @@ func CheckSystemDriveAndRemoveDriveLetter(path string) (string, error) {
 		return "", errors.Errorf("No relative path specified in %q", path)
 	}
 	if !filepath.IsAbs(path) || len(path) < 2 {
-		return filepath.FromSlash(path), nil
+		return filepath.FromSlash(filepath.Clean(path)), nil
 	}
 	if string(path[1]) == ":" && !strings.EqualFold(string(path[0]), "c") {
 		return "", errors.New("The specified path is not on the system drive (C:)")
 	}
-	return filepath.FromSlash(path[2:]), nil
+	return filepath.FromSlash(filepath.Clean(path[2:])), nil
+}
+
+func IsAbs(pth string) bool {
+	cleanedPath, err := CheckSystemDriveAndRemoveDriveLetter(pth)
+	if err != nil {
+		return false
+	}
+	cleanedPath = filepath.FromSlash(cleanedPath)
+	if cleanedPath != "" && cleanedPath[0] == filepath.Separator {
+		return true
+	}
+	return false
 }

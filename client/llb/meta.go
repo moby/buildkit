@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"path"
+	"path/filepath"
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/google/shlex"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/system"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/pkg/errors"
 )
 
 type contextKeyT string
@@ -66,17 +68,22 @@ func dirf(value string, replace bool, v ...interface{}) StateOption {
 	}
 	return func(s State) State {
 		return s.withValue(keyDir, func(ctx context.Context, c *Constraints) (interface{}, error) {
-			if !path.IsAbs(value) {
+			if !system.IsAbs(value) {
 				prev, err := getDir(s)(ctx, c)
 				if err != nil {
 					return nil, err
 				}
+
 				if prev == "" {
 					prev = "/"
 				}
-				value = path.Join(prev, value)
+				value = filepath.Join(prev, value)
 			}
-			return value, nil
+			cleaned, err := system.CheckSystemDriveAndRemoveDriveLetter(value)
+			if err != nil {
+				return nil, errors.Wrap(err, "removing drive letter")
+			}
+			return cleaned, nil
 		})
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/system"
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/executor"
@@ -261,7 +262,7 @@ func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manage
 		} else {
 			mws := mountWithSession(mountable, g)
 			dest := m.Dest
-			if !filepath.IsAbs(filepath.Clean(dest)) {
+			if !system.IsAbs(filepath.Clean(dest)) {
 				dest = filepath.Join("/", cwd, dest)
 			}
 			mws.Dest = dest

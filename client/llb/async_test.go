@@ -2,6 +2,7 @@ package llb
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -39,8 +40,8 @@ func TestAsyncNonBlocking(t *testing.T) {
 	require.Equal(t, m[dgst], arr[2])
 
 	require.Equal(t, []string{"cmd1"}, arr[1].Op.(*pb.Op_Exec).Exec.Meta.Args)
-	require.Equal(t, "/foo", arr[1].Op.(*pb.Op_Exec).Exec.Meta.Cwd)
+	require.Equal(t, filepath.FromSlash("/foo"), arr[1].Op.(*pb.Op_Exec).Exec.Meta.Cwd)
 
 	require.Equal(t, []string{"cmd2"}, arr[2].Op.(*pb.Op_Exec).Exec.Meta.Args)
-	require.Equal(t, "/foo/sub", arr[2].Op.(*pb.Op_Exec).Exec.Meta.Cwd)
+	require.Equal(t, filepath.FromSlash("/foo/sub"), arr[2].Op.(*pb.Op_Exec).Exec.Meta.Cwd)
 }
