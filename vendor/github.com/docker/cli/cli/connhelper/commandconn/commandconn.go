@@ -4,13 +4,13 @@
 // For example, to provide an http.Client that can connect to a Docker daemon
 // running in a Docker container ("DIND"):
 //
-//  httpClient := &http.Client{
-//  	Transport: &http.Transport{
-//  		DialContext: func(ctx context.Context, _network, _addr string) (net.Conn, error) {
-//  			return commandconn.New(ctx, "docker", "exec", "-it", containerID, "docker", "system", "dial-stdio")
-//  		},
-//  	},
-//  }
+//	httpClient := &http.Client{
+//		Transport: &http.Transport{
+//			DialContext: func(ctx context.Context, _network, _addr string) (net.Conn, error) {
+//				return commandconn.New(ctx, "docker", "exec", "-it", containerID, "docker", "system", "dial-stdio")
+//			},
+//		},
+//	}
 package commandconn
 
 import (
@@ -236,17 +236,21 @@ func (c *commandConn) Close() error {
 func (c *commandConn) LocalAddr() net.Addr {
 	return c.localAddr
 }
+
 func (c *commandConn) RemoteAddr() net.Addr {
 	return c.remoteAddr
 }
+
 func (c *commandConn) SetDeadline(t time.Time) error {
 	logrus.Debugf("unimplemented call: SetDeadline(%v)", t)
 	return nil
 }
+
 func (c *commandConn) SetReadDeadline(t time.Time) error {
 	logrus.Debugf("unimplemented call: SetReadDeadline(%v)", t)
 	return nil
 }
+
 func (c *commandConn) SetWriteDeadline(t time.Time) error {
 	logrus.Debugf("unimplemented call: SetWriteDeadline(%v)", t)
 	return nil
