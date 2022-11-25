@@ -66,7 +66,7 @@ validate-authors:
 
 .PHONY: validate-generated-files
 validate-generated-files:
-	hack/validate-generated-files
+	$(BUILDX_CMD) bake validate-generated-files
 
 .PHONY: validate-all
 validate-all: test lint validate-vendor validate-generated-files
@@ -81,4 +81,4 @@ authors:
 
 .PHONY: generated-files
 generated-files:
-	./hack/update-generated-files
+	$(BUILDX_CMD) bake generated-files
