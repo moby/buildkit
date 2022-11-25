@@ -3,18 +3,13 @@
 . $(dirname $0)/util
 set -eu
 
-gogo_version=$(awk '$1 == "github.com/gogo/protobuf" { print $2 }' go.mod)
-# protobuf_version=$(awk '$3 == "github.com/golang/protobuf" { print $4 }' go.mod)
 output=$(mktemp -d -t buildctl-output.XXXXXXXXXX)
 
 buildxCmd build \
   --target "update" \
-  --build-arg "GOGO_VERSION=$gogo_version" \
   --output "type=local,dest=$output" \
   --file "./hack/dockerfiles/generated-files.Dockerfile" \
   .
 
-# --build-arg "PROTOBUF_VERSION=$protobuf_version" \
-
-cp -R "$output/generated-files/." .
+cp -R "$output/." .
 rm -rf $output
