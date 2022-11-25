@@ -45,7 +45,7 @@ func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error)
 	}
 	opt = toStringMap(optb)
 
-	c.Epoch, opt, err = epoch.ParseAttr(opt)
+	c.Epoch, opt, err = epoch.ParseExporterAttrs(opt)
 	if err != nil {
 		return nil, err
 	}

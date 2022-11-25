@@ -48,7 +48,7 @@ func New(opt Opt) (exporter.Exporter, error) {
 func (e *localExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
 	li := &localExporterInstance{localExporter: e}
 
-	tm, _, err := epoch.ParseAttr(opt)
+	tm, _, err := epoch.ParseExporterAttrs(opt)
 	if err != nil {
 		return nil, err
 	}
