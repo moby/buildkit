@@ -414,7 +414,7 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 			return nil, errors.Errorf("invalid boolean value %s", v)
 		}
 		if !b && exportMap {
-			return nil, errors.Errorf("returning multiple target plaforms is not allowed")
+			return nil, errors.Errorf("returning multiple target platforms is not allowed")
 		}
 		exportMap = b
 	}
