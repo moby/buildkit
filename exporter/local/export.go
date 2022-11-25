@@ -11,6 +11,7 @@ import (
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/exporter/util/epoch"
+	"github.com/moby/buildkit/exporter/util/multiplatform"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/solver/result"
@@ -46,10 +47,16 @@ func (e *localExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 		return nil, err
 	}
 
+	multiPlatform, _, err := multiplatform.ParseExporterAttrs(opt)
+	if err != nil {
+		return nil, err
+	}
+
 	i := &localExporterInstance{
 		localExporter: e,
 		opts: CreateFSOpts{
-			Epoch: tm,
+			Epoch:         tm,
+			MultiPlatform: multiPlatform,
 		},
 	}
 
@@ -93,6 +100,8 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 		return nil, err
 	}
 
+	isMap := len(inp.Refs) > 0
+
 	platformsBytes, ok := inp.Metadata[exptypes.ExporterPlatformsKey]
 	if len(inp.Refs) > 0 && !ok {
 		return nil, errors.Errorf("unable to export multiple refs, missing platforms mapping")
@@ -103,8 +112,17 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 		if err := json.Unmarshal(platformsBytes, &p); err != nil {
 			return nil, errors.Wrapf(err, "failed to parse platforms passed to exporter")
 		}
+		if len(p.Platforms) > 1 {
+			isMap = true
+		}
 	}
-	isMap := len(p.Platforms) > 1
+
+	if e.opts.MultiPlatform != nil {
+		isMap = *e.opts.MultiPlatform
+	}
+	if !isMap && len(p.Platforms) > 1 {
+		return nil, errors.Errorf("unable to export multiple platforms without map")
+	}
 
 	now := time.Now().Truncate(time.Second)
 

@@ -63,11 +63,20 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		return nil, errors.Errorf("unable to export multiple refs, missing platforms mapping")
 	}
 
+	multiPlatform := len(inp.Refs) > 0
+
 	var p exptypes.Platforms
 	if ok && len(platformsBytes) > 0 {
 		if err := json.Unmarshal(platformsBytes, &p); err != nil {
 			return nil, errors.Wrapf(err, "failed to parse platforms passed to exporter")
 		}
+		if len(p.Platforms) > 1 {
+			multiPlatform = true
+		}
+	}
+
+	if opts.MultiPlatform != nil {
+		multiPlatform = *opts.MultiPlatform
 	}
 
 	if opts.Epoch == nil {
@@ -92,8 +101,26 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		}
 	}
 
-	if len(inp.Refs) == 0 {
-		remotes, err := ic.exportLayers(ctx, opts.RefCfg, session.NewGroup(sessionID), inp.Ref)
+	if !multiPlatform {
+		if len(p.Platforms) > 1 {
+			return nil, errors.Errorf("cannot export multiple platforms without multi-platform enabled")
+		}
+
+		var ref cache.ImmutableRef
+		if inp.Ref != nil {
+			ref = inp.Ref
+		} else if len(p.Platforms) > 0 {
+			p := p.Platforms[0]
+			if _, ok := inp.Attestations[p.ID]; ok {
+				return nil, errors.Errorf("cannot export attestations without multi-platform enabled")
+			}
+			ref = inp.Refs[p.ID]
+		} else if len(inp.Refs) == 1 {
+			for _, ref = range inp.Refs {
+			}
+		}
+
+		remotes, err := ic.exportLayers(ctx, opts.RefCfg, session.NewGroup(sessionID), ref)
 		if err != nil {
 			return nil, err
 		}
@@ -112,7 +139,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 			return nil, errors.Errorf("index annotations not supported for single platform export")
 		}
 
-		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, opts, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], annotations, inp.Metadata[exptypes.ExporterInlineCache], dtbi, opts.Epoch, session.NewGroup(sessionID))
+		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, opts, ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], annotations, inp.Metadata[exptypes.ExporterInlineCache], dtbi, opts.Epoch, session.NewGroup(sessionID))
 		if err != nil {
 			return nil, err
 		}
