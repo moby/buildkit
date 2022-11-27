@@ -3,7 +3,12 @@
 
 package system
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
+)
 
 // TestCheckSystemDriveAndRemoveDriveLetter tests CheckSystemDriveAndRemoveDriveLetter
 func TestCheckSystemDriveAndRemoveDriveLetter(t *testing.T) {
@@ -77,5 +82,204 @@ func TestCheckSystemDriveAndRemoveDriveLetter(t *testing.T) {
 	}
 	if err.Error() != `No relative path specified in "d:"` {
 		t.Fatalf(path, err)
+	}
+}
+
+// TestNormalizeWorkdir tests NormalizeWorkdir
+func TestNormalizeWorkdir(t *testing.T) {
+	testCases := []struct {
+		name           string
+		currentWorkdir string
+		newWorkDir     string
+		desiredResult  string
+		err            string
+	}{
+		{
+			name:           "no current wd with relative wd",
+			currentWorkdir: "",
+			newWorkDir:     "test",
+			desiredResult:  `\test`,
+			err:            "",
+		},
+		{
+			name:           "no current wd with stripped absolute wd",
+			currentWorkdir: "",
+			newWorkDir:     `\strippedWd`,
+			desiredResult:  `\strippedWd`,
+			err:            "",
+		},
+		{
+			name:           "no current wd with absolute wd",
+			currentWorkdir: "",
+			newWorkDir:     `C:\withDriveLetter`,
+			desiredResult:  `\withDriveLetter`,
+			err:            "",
+		},
+		{
+			name:           "no current wd with absolute wd with forward slash",
+			currentWorkdir: "",
+			newWorkDir:     `C:/withDriveLetterAndForwardSlash`,
+			desiredResult:  `\withDriveLetterAndForwardSlash`,
+			err:            "",
+		},
+		{
+			name:           "no current wd with absolute wd with mixed slashes",
+			currentWorkdir: "",
+			newWorkDir:     `C:/first\second/third`,
+			desiredResult:  `\first\second\third`,
+			err:            "",
+		},
+		{
+			name:           "current wd is relative no wd",
+			currentWorkdir: "testing",
+			newWorkDir:     "",
+			desiredResult:  `\testing`,
+			err:            "",
+		},
+		{
+			name:           "current wd is relative with relative wd",
+			currentWorkdir: "testing",
+			newWorkDir:     "newTesting",
+			desiredResult:  `\testing\newTesting`,
+			err:            "",
+		},
+		{
+			name:           "current wd is relative withMixedSlashes and relative new wd",
+			currentWorkdir: `testing/with\mixed/slashes`,
+			newWorkDir:     "newTesting",
+			desiredResult:  `\testing\with\mixed\slashes\newTesting`,
+			err:            "",
+		},
+		{
+			name:           "current wd is absolute withMixedSlashes and relative new wd",
+			currentWorkdir: `C:\testing/with\mixed/slashes`,
+			newWorkDir:     "newTesting",
+			desiredResult:  `\testing\with\mixed\slashes\newTesting`,
+			err:            "",
+		},
+		{
+			name:           "current wd is absolute withMixedSlashes and no new wd",
+			currentWorkdir: `C:\testing/with\mixed/slashes`,
+			newWorkDir:     "",
+			desiredResult:  `\testing\with\mixed\slashes`,
+			err:            "",
+		},
+		{
+			name:           "current wd is absolute path to non C drive",
+			currentWorkdir: `D:\IWillErrorOut`,
+			newWorkDir:     "doesNotMatter",
+			desiredResult:  "",
+			err:            "The specified path is not on the system drive (C:)",
+		},
+		{
+			name:           "new WD is an absolute path to illegal drive",
+			currentWorkdir: `C:\testing`,
+			newWorkDir:     `D:\testing`,
+			desiredResult:  "",
+			err:            "The specified path is not on the system drive (C:)",
+		},
+		{
+			name:           "current WD has no relative path to drive",
+			currentWorkdir: `C:`,
+			newWorkDir:     `testing`,
+			desiredResult:  "",
+			err:            `No relative path specified in "C:"`,
+		},
+		{
+			name:           "new WD has no relative path to drive",
+			currentWorkdir: `/test`,
+			newWorkDir:     `C:`,
+			desiredResult:  "",
+			err:            `No relative path specified in "C:"`,
+		},
+		{
+			name:           "new WD has no slash after drive letter",
+			currentWorkdir: `/test`,
+			newWorkDir:     `C:testing`,
+			desiredResult:  `\testing`,
+			err:            "",
+		},
+		{
+			name:           "current WD is an unlikely absolute path",
+			currentWorkdir: `C:\..\test\..\`,
+			newWorkDir:     ``,
+			desiredResult:  `\`,
+			err:            "",
+		},
+		{
+			name:           "linux style paths should work",
+			currentWorkdir: "/test",
+			newWorkDir:     "relative/path",
+			desiredResult:  `\test\relative\path`,
+			err:            "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := NormalizeWorkdir(tc.currentWorkdir, tc.newWorkDir)
+			if tc.err != "" {
+				require.EqualError(t, errors.Cause(err), tc.err)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, tc.desiredResult, result)
+		})
+	}
+}
+
+func TestIsAbs(t *testing.T) {
+	testCases := []struct {
+		name          string
+		path          string
+		desiredResult bool
+	}{
+		{
+			name:          "path with drive letter is absolute",
+			path:          `C:\test`,
+			desiredResult: true,
+		},
+		{
+			name:          "path with drive letter but no slash is absolute",
+			path:          `C:test`,
+			desiredResult: true,
+		},
+		{
+			name:          "path with drive letter and linux style slashes is absolute",
+			path:          `C:/test`,
+			desiredResult: true,
+		},
+		{
+			name:          "path without drive letter but with leading slash is absolute",
+			path:          `\test`,
+			desiredResult: true,
+		},
+		{
+			name:          "path without drive letter but with leading forward slash is absolute",
+			path:          `/test`,
+			desiredResult: true,
+		},
+		{
+			name:          "simple relative path",
+			path:          `test`,
+			desiredResult: false,
+		},
+		{
+			name:          "deeper relative path",
+			path:          `test/nested`,
+			desiredResult: false,
+		},
+		{
+			name:          "one level up relative path",
+			path:          `../test`,
+			desiredResult: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := IsAbs(tc.path)
+			require.Equal(t, tc.desiredResult, result)
+		})
 	}
 }

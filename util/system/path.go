@@ -82,3 +82,20 @@ func NormalizeWorkdir(current, wd string) (string, error) {
 	// slashes in CWD.
 	return filepath.FromSlash(wd), nil
 }
+
+// IsAbs returns a boolean value indicating whether or not the path
+// is absolute. On Linux, this is just a wrapper for filepath.IsAbs().
+// On Windows, we strip away the drive letter (if any), clean the path,
+// and check whether or not the path starts with a filepath.Separator.
+// This function is meant to check if a path is absolute, in the context
+// of a COPY, ADD or WORKDIR, which have their root set in the mount point
+// of the writable layer we are mutating. The filepath.IsAbs() function on
+// Windows will not work in these scenatios, as it will return true for paths
+// that:
+//   - Begin with drive letter (DOS style paths)
+//   - Are volume paths \\?\Volume{UUID}
+//   - Are UNC paths
+//   - Are a reserved name (COM, AUX, NUL, etc)
+func IsAbs(pth string) bool {
+	return isAbs(pth)
+}

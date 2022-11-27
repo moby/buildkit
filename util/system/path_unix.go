@@ -13,6 +13,6 @@ func CheckSystemDriveAndRemoveDriveLetter(path string) (string, error) {
 	return path, nil
 }
 
-func IsAbs(pth string) bool {
+func isAbs(pth string) bool {
 	return filepath.IsAbs(pth)
 }
