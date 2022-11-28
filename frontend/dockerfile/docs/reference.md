@@ -1078,6 +1078,10 @@ The environment variables set using `ENV` will persist when a container is run
 from the resulting image. You can view the values using `docker inspect`, and
 change them using `docker run --env <key>=<value>`.
 
+A stage inherits any environment variables that were set using `ENV` by its
+parent stage or any ancestor. Refer [here](https://docs.docker.com/build/building/multi-stage/)
+for more on multi-staged builds.
+
 Environment variable persistence can cause unexpected side effects. For example,
 setting `ENV DEBIAN_FRONTEND=noninteractive` changes the behavior of `apt-get`,
 and may confuse users of your image.
