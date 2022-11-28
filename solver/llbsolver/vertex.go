@@ -7,7 +7,6 @@ import (
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/solver"
-	"github.com/moby/buildkit/solver/llbsolver/llbmutator"
 	"github.com/moby/buildkit/solver/llbsolver/ops/opsutils"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
@@ -146,8 +145,8 @@ func (dpc *detectPrunedCacheID) Load(op *pb.Op, md *pb.OpMetadata, opt *solver.V
 	return nil
 }
 
-func Load(ctx context.Context, def *pb.Definition, mutator llbmutator.LLBMutator, opts ...LoadOpt) (solver.Edge, error) {
-	return loadLLB(ctx, def, mutator, func(dgst digest.Digest, pbOp *pb.Op, load func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error) {
+func Load(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluator, opts ...LoadOpt) (solver.Edge, error) {
+	return loadLLB(ctx, def, polEngine, func(dgst digest.Digest, pbOp *pb.Op, load func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error) {
 		opMetadata := def.Metadata[dgst]
 		vtx, err := newVertex(dgst, pbOp, &opMetadata, load, opts...)
 		if err != nil {
@@ -190,7 +189,7 @@ func newVertex(dgst digest.Digest, op *pb.Op, opMeta *pb.OpMetadata, load func(d
 
 // loadLLB loads LLB.
 // fn is executed sequentially.
-func loadLLB(ctx context.Context, def *pb.Definition, mutator llbmutator.LLBMutator, fn func(digest.Digest, *pb.Op, func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error)) (solver.Edge, error) {
+func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluator, fn func(digest.Digest, *pb.Op, func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error)) (solver.Edge, error) {
 	if len(def.Def) == 0 {
 		return solver.Edge{}, errors.New("invalid empty definition")
 	}
@@ -206,10 +205,10 @@ func loadLLB(ctx context.Context, def *pb.Definition, mutator llbmutator.LLBMuta
 			return solver.Edge{}, errors.Wrap(err, "failed to parse llb proto op")
 		}
 		dgst = digest.FromBytes(dt)
-		if mutator != nil {
-			mutated, err := mutator.Mutate(ctx, &op)
+		if polEngine != nil {
+			mutated, err := polEngine.Evaluate(ctx, &op)
 			if err != nil {
-				return solver.Edge{}, errors.Wrap(err, "failed to call the LLB Mutator")
+				return solver.Edge{}, errors.Wrap(err, "error evaluating the source policy")
 			}
 			if mutated {
 				dtMutated, err := op.Marshal()

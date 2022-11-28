@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package moby.buildkit.v1.sourcepolicy;
+
+// Rule defines the action(s) to take whe.n a source is matched
+message Rule {
+	PolicyAction action = 1; 
+	Source source = 2;
+	// Destination is an optional value that can be set for certain actions (e.g. `CONVERT`)
+	Destination destination = 3;
+}
+
+// DestinationIdentifier is used for action types that involves mutating the source
+message Destination {
+	string identifier = 1;
+	map<string, string> attrs = 2;
+}
+
+// SourceIdentifier identifies a source to match a policy to
+message Source {
+	string type = 1;
+	string identifier = 2;
+	// MatchType is the type of match to perform on the source identifier
+	MatchType match_type = 3;
+	repeated AttrConstraint constraints = 4;
+}
+
+// PolicyAction defines the action to take when a source is matched
+enum PolicyAction {
+	ALLOW = 0;
+	DENY = 1;
+	CONVERT = 2;
+}
+
+// AttrConstraint defines a constraint on a source attribute
+message AttrConstraint {
+	string key = 1;
+	string value = 2;
+	AttrMatch condition = 3;
+}
+
+// AttrMatch defines the condition to match a source attribute
+enum AttrMatch {
+	EQUAL = 0;
+	NOTEQUAL = 1;
+	MATCHES = 2;
+}
+
+// Policy is the list of rules the policy engine will perform
+message Policy {
+	int64 version = 1; // Currently 1
+	repeated Rule rules = 2;
+}
+
+// Match type is used to determine how a rule source is matched
+enum MatchType {
+	// EXACT treats the soruce identifier as a litteral string match
+	EXACT = 0;
+	// REGEX treats the source identifier as a regular expression
+	// With regex matching you can also use match groups to replace values in the destination identifier
+	REGEX = 1;
+}

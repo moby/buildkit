@@ -135,28 +135,37 @@ Reproducing the pinned dependencies is supported in the master branch of BuildKi
 
 e.g.,
 ```bash
-buildctl build --frontend dockerfile.v0 --local dockerfile=. --local context=. --source-policy-file Dockerfile.pol
+buildctl build --frontend dockerfile.v0 --local dockerfile=. --local context=. --source-policy-file policy.json
 ```
 
-An example `Dockerfile.pol`:
+An example `policy.json`:
 ```json
 {
-    "sources": [
-      {
+  "rules": [
+    {
+      "action": "CONVERT",
+      "source": {
         "type": "docker-image",
-        "ref": "docker.io/library/alpine:latest",
-        "pin": "sha256:4edbd2beb5f78b1014028f4fbb99f3237d9561100b6881aabbf5acce2c4f9454"
+        "identifier": "docker.io/library/alpine:latest"
       },
-      {
-        "type": "http",
-        "ref": "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md",
-        "pin": "sha256:6e4b94fc270e708e1068be28bd3551dc6917a4fc5a61293d51bb36e6b75c4b53"
+      "destination": {
+        "identifier": "docker-image://docker.io/library/alpine:latest@sha256:4edbd2beb5f78b1014028f4fbb99f3237d9561100b6881aabbf5acce2c4f9454"
       }
-    ]
+    },
+    {
+      "action": "CONVERT",
+      "soruce": {
+        "type": "http",
+        "identifier": "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md"
+      },
+      "destination": {
+        "attrs": {"http.checksum": "sha256:6e4b94fc270e708e1068be28bd3551dc6917a4fc5a61293d51bb36e6b75c4b53"}
+      }
+    }
+  ]
 }
 ```
 
-* `sources`: a subset of the `."containerimage.buildinfo".sources` property of the `metadata.json`
 
 Reproduction is currently supported for the following source types:
 * `docker-image`

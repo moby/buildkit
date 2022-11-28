@@ -20,7 +20,7 @@ import (
 	"github.com/moby/buildkit/session/auth/authprovider"
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/moby/buildkit/sourcepolicy"
+	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/progress/progresswriter"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -194,13 +194,13 @@ func buildAction(clicontext *cli.Context) error {
 		return err
 	}
 
-	var srcPol *sourcepolicy.SourcePolicy
+	var srcPol *spb.Policy
 	if srcPolFile := clicontext.String("source-policy-file"); srcPolFile != "" {
 		b, err := os.ReadFile(srcPolFile)
 		if err != nil {
 			return err
 		}
-		var srcPolStruct sourcepolicy.SourcePolicy
+		var srcPolStruct spb.Policy
 		if err := json.Unmarshal(b, &srcPolStruct); err != nil {
 			return errors.Wrapf(err, "failed to unmarshal source-policy-file %q", srcPolFile)
 		}

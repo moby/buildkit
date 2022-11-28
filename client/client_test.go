@@ -47,7 +47,7 @@ import (
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/solver/result"
-	"github.com/moby/buildkit/sourcepolicy"
+	sourcepolicypb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/attestation"
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/contentutil"
@@ -8496,23 +8496,34 @@ func testSourcePolicy(t *testing.T, sb integration.Sandbox) {
 	}
 
 	type testCase struct {
-		srcPol      *sourcepolicy.SourcePolicy
+		srcPol      *sourcepolicypb.Policy
 		expectedErr string
 	}
 	testCases := []testCase{
 		{
 			// Valid
-			srcPol: &sourcepolicy.SourcePolicy{
-				Sources: []sourcepolicy.Source{
+			srcPol: &sourcepolicypb.Policy{
+				Rules: []*sourcepolicypb.Rule{
 					{
-						Type: "docker-image",
-						Ref:  "docker.io/library/busybox:1.34.1-uclibc",
-						Pin:  "sha256:3614ca5eacf0a3a1bcc361c939202a974b4902b9334ff36eb29ffe9011aaad83",
+						Action: sourcepolicypb.PolicyAction_CONVERT,
+						Source: &sourcepolicypb.Source{
+							Type:       "docker-image",
+							Identifier: "docker.io/library/busybox:1.34.1-uclibc",
+						},
+						Destination: &sourcepolicypb.Destination{
+							Identifier: "docker-image://docker.io/library/busybox:1.34.1-uclibc@sha256:3614ca5eacf0a3a1bcc361c939202a974b4902b9334ff36eb29ffe9011aaad83",
+						},
 					},
 					{
-						Type: "http",
-						Ref:  "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md",
-						Pin:  "sha256:6e4b94fc270e708e1068be28bd3551dc6917a4fc5a61293d51bb36e6b75c4b53",
+						Action: sourcepolicypb.PolicyAction_CONVERT,
+						Source: &sourcepolicypb.Source{
+							Type:       "http",
+							Identifier: "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md",
+						},
+						Destination: &sourcepolicypb.Destination{
+							Identifier: "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md",
+							Attrs:      map[string]string{"http.checksum": "sha256:6e4b94fc270e708e1068be28bd3551dc6917a4fc5a61293d51bb36e6b75c4b53"},
+						},
 					},
 				},
 			},
@@ -8520,12 +8531,17 @@ func testSourcePolicy(t *testing.T, sb integration.Sandbox) {
 		},
 		{
 			// Invalid docker-image source
-			srcPol: &sourcepolicy.SourcePolicy{
-				Sources: []sourcepolicy.Source{
+			srcPol: &sourcepolicypb.Policy{
+				Rules: []*sourcepolicypb.Rule{
 					{
-						Type: "docker-image",
-						Ref:  "docker.io/library/busybox:1.34.1-uclibc",
-						Pin:  "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", // invalid
+						Action: sourcepolicypb.PolicyAction_CONVERT,
+						Source: &sourcepolicypb.Source{
+							Type:       "docker-image",
+							Identifier: "docker.io/library/busybox:1.34.1-uclibc",
+						},
+						Destination: &sourcepolicypb.Destination{
+							Identifier: "docker-image://docker.io/library/busybox:1.34.1-uclibc@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", // invalid
+						},
 					},
 				},
 			},
@@ -8533,25 +8549,33 @@ func testSourcePolicy(t *testing.T, sb integration.Sandbox) {
 		},
 		{
 			// Invalid http source
-			srcPol: &sourcepolicy.SourcePolicy{
-				Sources: []sourcepolicy.Source{
+			srcPol: &sourcepolicypb.Policy{
+				Rules: []*sourcepolicypb.Rule{
 					{
-						Type: "http",
-						Ref:  "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md",
-						Pin:  "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", // invalid
+						Action: sourcepolicypb.PolicyAction_CONVERT,
+						Source: &sourcepolicypb.Source{
+							Type:       "http",
+							Identifier: "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md",
+						},
+						Destination: &sourcepolicypb.Destination{
+							Attrs: map[string]string{pb.AttrHTTPChecksum: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}, // invalid
+						},
 					},
 				},
 			},
 			expectedErr: "digest mismatch sha256:6e4b94fc270e708e1068be28bd3551dc6917a4fc5a61293d51bb36e6b75c4b53: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		},
 	}
-	for _, tc := range testCases {
-		_, err = c.Build(sb.Context(), SolveOpt{SourcePolicy: tc.srcPol}, "", frontend, nil)
-		if tc.expectedErr == "" {
-			require.NoError(t, err)
-		} else {
-			require.Error(t, err)
-			require.Contains(t, err.Error(), tc.expectedErr)
-		}
+	for i, tc := range testCases {
+		tc := tc
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			_, err = c.Build(sb.Context(), SolveOpt{SourcePolicy: tc.srcPol}, "", frontend, nil)
+			if tc.expectedErr == "" {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.expectedErr)
+			}
+		})
 	}
 }

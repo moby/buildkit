@@ -26,7 +26,7 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver/provenance"
 	"github.com/moby/buildkit/solver/result"
-	"github.com/moby/buildkit/sourcepolicy"
+	sourcepolicypb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/attestation"
 	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/compression"
@@ -385,7 +385,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 	}, nil
 }
 
-func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement, post []Processor, internal bool, srcPol *sourcepolicy.SourcePolicy) (_ *client.SolveResponse, err error) {
+func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement, post []Processor, internal bool, srcPol *sourcepolicypb.Policy) (_ *client.SolveResponse, err error) {
 	j, err := s.solver.NewJob(id)
 	if err != nil {
 		return nil, err
@@ -953,26 +953,27 @@ func loadEntitlements(b solver.Builder) (entitlements.Set, error) {
 	return ent, nil
 }
 
-func loadSourcePolicy(b solver.Builder) (*sourcepolicy.SourcePolicy, error) {
-	set := make(map[sourcepolicy.Source]struct{}, 0)
+func loadSourcePolicy(b solver.Builder) (*sourcepolicypb.Policy, error) {
+	set := make(map[sourcepolicypb.Rule]struct{}, 0)
 	err := b.EachValue(context.TODO(), keySourcePolicy, func(v interface{}) error {
-		x, ok := v.(sourcepolicy.SourcePolicy)
+		x, ok := v.(sourcepolicypb.Policy)
 		if !ok {
 			return errors.Errorf("invalid source policy %T", v)
 		}
-		for _, f := range x.Sources {
-			set[f] = struct{}{}
+		for _, f := range x.Rules {
+			set[*f] = struct{}{}
 		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	var srcPol *sourcepolicy.SourcePolicy
+	var srcPol *sourcepolicypb.Policy
 	if len(set) > 0 {
-		srcPol = &sourcepolicy.SourcePolicy{}
+		srcPol = &sourcepolicypb.Policy{}
 		for k := range set {
-			srcPol.Sources = append(srcPol.Sources, k)
+			k := k
+			srcPol.Rules = append(srcPol.Rules, &k)
 		}
 	}
 	return srcPol, nil

@@ -18,10 +18,9 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/errdefs"
 	llberrdefs "github.com/moby/buildkit/solver/llbsolver/errdefs"
-	"github.com/moby/buildkit/solver/llbsolver/llbmutator"
 	"github.com/moby/buildkit/solver/llbsolver/provenance"
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/moby/buildkit/sourcepolicy/sourcepolicyllbmutator"
+	"github.com/moby/buildkit/sourcepolicy"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/progress"
@@ -77,9 +76,9 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 	if err != nil {
 		return nil, err
 	}
-	var llbMutator llbmutator.LLBMutator
+	var polEngine SourcePolicyEvaluator
 	if srcPol != nil {
-		llbMutator, err = sourcepolicyllbmutator.New(srcPol)
+		polEngine = sourcepolicy.NewEngine(srcPol, sourcepolicy.MatcherFn(sourcepolicy.Match), sourcepolicy.MutateFn(sourcepolicy.Mutate))
 		if err != nil {
 			return nil, err
 		}
@@ -123,7 +122,7 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 	}
 	dpc := &detectPrunedCacheID{}
 
-	edge, err := Load(ctx, def, llbMutator, dpc.Load, ValidateEntitlements(ent), WithCacheSources(cms), NormalizeRuntimePlatforms(), WithValidateCaps())
+	edge, err := Load(ctx, def, polEngine, dpc.Load, ValidateEntitlements(ent), WithCacheSources(cms), NormalizeRuntimePlatforms(), WithValidateCaps())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to load LLB")
 	}
