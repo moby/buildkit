@@ -6,15 +6,15 @@ import (
 	"text/tabwriter"
 
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 )
 
-var InfoCommand = cli.Command{
+var InfoCommand = &cli.Command{
 	Name:   "info",
 	Usage:  "display internal information",
 	Action: info,
 	Flags: []cli.Flag{
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "format",
 			Usage: "Format the output using the given Go template, e.g, '{{json .}}'",
 		},

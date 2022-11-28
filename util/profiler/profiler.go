@@ -2,41 +2,41 @@ package profiler
 
 import (
 	"github.com/pkg/profile"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 )
 
 func Attach(app *cli.App) {
 	app.Flags = append(app.Flags,
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:   "profile-cpu",
 			Hidden: true,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:   "profile-memory",
 			Hidden: true,
 		},
-		cli.IntFlag{
+		&cli.IntFlag{
 			Name:   "profile-memoryrate",
 			Value:  512 * 1024,
 			Hidden: true,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:   "profile-block",
 			Hidden: true,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:   "profile-mutex",
 			Hidden: true,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:   "profile-trace",
 			Hidden: true,
 		},
 	)
 
-	var stoppers = []interface {
+	var stoppers []interface {
 		Stop()
-	}{}
+	}
 
 	before := app.Before
 	app.Before = func(clicontext *cli.Context) error {

@@ -58,7 +58,7 @@ import (
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 	"go.etcd.io/bbolt"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel/propagation"
@@ -124,12 +124,12 @@ func main() {
 
 	rootlessUsage := "set all the default options to be compatible with rootless containers"
 	if userns.RunningInUserNS() {
-		app.Flags = append(app.Flags, cli.BoolTFlag{
+		app.Flags = append(app.Flags, &cli.BoolFlag{
 			Name:  "rootless",
 			Usage: rootlessUsage + " (default: true)",
 		})
 	} else {
-		app.Flags = append(app.Flags, cli.BoolFlag{
+		app.Flags = append(app.Flags, &cli.BoolFlag{
 			Name:  "rootless",
 			Usage: rootlessUsage,
 		})
@@ -143,51 +143,51 @@ func main() {
 	}
 
 	app.Flags = append(app.Flags,
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "config",
 			Usage: "path to config file",
 			Value: defaultConfigPath(),
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  "debug",
 			Usage: "enable debug output in logs",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "root",
 			Usage: "path to state directory",
 			Value: defaultConf.Root,
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "addr",
 			Usage: "listening address (socket or tcp)",
-			Value: &cli.StringSlice{defaultConf.GRPC.Address[0]},
+			Value: cli.NewStringSlice(defaultConf.GRPC.Address[0]),
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "group",
 			Usage: "group (name or gid) which will own all Unix socket listening addresses",
 			Value: groupValue(defaultConf.GRPC.GID),
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "debugaddr",
 			Usage: "debugging address (eg. 0.0.0.0:6060)",
 			Value: defaultConf.GRPC.DebugAddress,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "tlscert",
 			Usage: "certificate file to use",
 			Value: defaultConf.GRPC.TLS.Cert,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "tlskey",
 			Usage: "key file to use",
 			Value: defaultConf.GRPC.TLS.Key,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "tlscacert",
 			Usage: "ca certificate to verify clients",
 			Value: defaultConf.GRPC.TLS.CA,
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "allow-insecure-entitlement",
 			Usage: "allows insecure entitlements e.g. network.host, security.insecure",
 		},
@@ -203,7 +203,7 @@ func main() {
 		ctx, cancel := context.WithCancel(appcontext.Context())
 		defer cancel()
 
-		cfg, err := config.LoadFile(c.GlobalString("config"))
+		cfg, err := config.LoadFile(c.String("config"))
 		if err != nil {
 			return err
 		}
@@ -270,7 +270,7 @@ func main() {
 
 		controller.Register(server)
 
-		ents := c.GlobalStringSlice("allow-insecure-entitlement")
+		ents := c.StringSlice("allow-insecure-entitlement")
 		if len(ents) > 0 {
 			cfg.Entitlements = []string{}
 			for _, e := range ents {

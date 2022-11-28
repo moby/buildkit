@@ -10,15 +10,15 @@ import (
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/progress/progresswriter"
 	"github.com/pkg/errors"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 )
 
-var LogsCommand = cli.Command{
+var LogsCommand = &cli.Command{
 	Name:   "logs",
 	Usage:  "display build logs",
 	Action: logs,
 	Flags: []cli.Flag{
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "progress",
 			Usage: "progress output type",
 			Value: "auto",
@@ -28,10 +28,10 @@ var LogsCommand = cli.Command{
 
 func logs(clicontext *cli.Context) error {
 	args := clicontext.Args()
-	if len(args) == 0 {
+	if args.Len() == 0 {
 		return errors.Errorf("build ref must be specified")
 	}
-	ref := args[0]
+	ref := args.Get(0)
 
 	c, err := bccommon.ResolveClient(clicontext)
 	if err != nil {

@@ -6,19 +6,19 @@ import (
 	controlapi "github.com/moby/buildkit/api/services/control"
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
 	"github.com/moby/buildkit/util/appcontext"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 )
 
-var MonitorCommand = cli.Command{
+var MonitorCommand = &cli.Command{
 	Name:   "monitor",
 	Usage:  "display build events",
 	Action: monitor,
 	Flags: []cli.Flag{
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  "completed",
 			Usage: "show completed builds",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "ref",
 			Usage: "show events for a specific build",
 		},

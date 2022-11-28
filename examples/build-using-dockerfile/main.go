@@ -17,7 +17,7 @@ import (
 	"github.com/moby/buildkit/util/progress/progressui"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -34,36 +34,36 @@ This command is NOT the replacement of "docker build", and should NOT be used fo
 By default, the built image is loaded to Docker.
 `
 	dockerIncompatibleFlags := []cli.Flag{
-		cli.StringFlag{
-			Name:   "buildkit-addr",
-			Usage:  "buildkit daemon address",
-			EnvVar: "BUILDKIT_HOST",
-			Value:  appdefaults.Address,
+		&cli.StringFlag{
+			Name:    "buildkit-addr",
+			Usage:   "buildkit daemon address",
+			EnvVars: []string{"BUILDKIT_HOST"},
+			Value:   appdefaults.Address,
 		},
-		cli.BoolFlag{
-			Name:   "clientside-frontend",
-			Usage:  "run dockerfile frontend client side, rather than builtin to buildkitd",
-			EnvVar: "BUILDKIT_CLIENTSIDE_FRONTEND",
+		&cli.BoolFlag{
+			Name:    "clientside-frontend",
+			Usage:   "run dockerfile frontend client side, rather than builtin to buildkitd",
+			EnvVars: []string{"BUILDKIT_CLIENTSIDE_FRONTEND"},
 		},
 	}
 	app.Flags = append([]cli.Flag{
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "build-arg",
 			Usage: "Set build-time variables",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "file, f",
 			Usage: "Name of the Dockerfile (Default is 'PATH/Dockerfile')",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "tag, t",
 			Usage: "Name and optionally a tag in the 'name:tag' format",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "target",
 			Usage: "Set the target build stage to build.",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  "no-cache",
 			Usage: "Do not use cache when building the image",
 		},

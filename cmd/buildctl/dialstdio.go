@@ -9,10 +9,10 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 )
 
-var dialStdioCommand = cli.Command{
+var dialStdioCommand = &cli.Command{
 	Name:   "dial-stdio",
 	Usage:  "Proxy the stdio stream to the daemon connection. Should not be invoked manually.",
 	Hidden: true,
@@ -20,8 +20,8 @@ var dialStdioCommand = cli.Command{
 }
 
 func dialStdioAction(clicontext *cli.Context) error {
-	addr := clicontext.GlobalString("addr")
-	timeout := time.Duration(clicontext.GlobalInt("timeout")) * time.Second
+	addr := clicontext.String("addr")
+	timeout := time.Duration(clicontext.Int("timeout")) * time.Second
 	conn, err := dialer(addr, timeout)
 	if err != nil {
 		return err

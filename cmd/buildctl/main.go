@@ -19,7 +19,7 @@ import (
 	_ "github.com/moby/buildkit/util/tracing/env"
 	"github.com/moby/buildkit/version"
 	"github.com/sirupsen/logrus"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel"
 )
 
@@ -47,48 +47,48 @@ func main() {
 	}
 
 	app.Flags = []cli.Flag{
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  "debug",
 			Usage: "enable debug output in logs",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "addr",
 			Usage: "buildkitd address",
 			Value: defaultAddress,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "tlsservername",
 			Usage: "buildkitd server name for certificate validation",
 			Value: "",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "tlscacert",
 			Usage: "CA certificate for validation",
 			Value: "",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "tlscert",
 			Usage: "client certificate",
 			Value: "",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "tlskey",
 			Usage: "client key",
 			Value: "",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "tlsdir",
 			Usage: "directory containing CA certificate, client certificate, and client key",
 			Value: "",
 		},
-		cli.IntFlag{
+		&cli.IntFlag{
 			Name:  "timeout",
 			Usage: "timeout backend connection after value seconds",
 			Value: 5,
 		},
 	}
 
-	app.Commands = []cli.Command{
+	app.Commands = []*cli.Command{
 		diskUsageCommand,
 		pruneCommand,
 		buildCommand,
@@ -98,8 +98,8 @@ func main() {
 
 	var debugEnabled bool
 
-	app.Before = func(context *cli.Context) error {
-		debugEnabled = context.GlobalBool("debug")
+	app.Before = func(clicontext *cli.Context) error {
+		debugEnabled = clicontext.Bool("debug")
 
 		logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
 		if debugEnabled {

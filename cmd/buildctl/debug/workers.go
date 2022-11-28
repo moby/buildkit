@@ -14,23 +14,23 @@ import (
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sirupsen/logrus"
 	"github.com/tonistiigi/units"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 )
 
-var WorkersCommand = cli.Command{
+var WorkersCommand = &cli.Command{
 	Name:   "workers",
 	Usage:  "list workers",
 	Action: listWorkers,
 	Flags: []cli.Flag{
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "filter, f",
 			Usage: "containerd-style filter string slice",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  "verbose, v",
 			Usage: "Verbose output",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "format",
 			Usage: "Format the output using the given Go template, e.g, '{{json .}}'",
 		},

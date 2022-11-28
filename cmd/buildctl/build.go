@@ -24,11 +24,11 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 	"golang.org/x/sync/errgroup"
 )
 
-var buildCommand = cli.Command{
+var buildCommand = &cli.Command{
 	Name:    "build",
 	Aliases: []string{"b"},
 	Usage:   "build",
@@ -38,60 +38,60 @@ var buildCommand = cli.Command{
 	`,
 	Action: buildAction,
 	Flags: []cli.Flag{
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "output,o",
 			Usage: "Define exports for build result, e.g. --output type=image,name=docker.io/username/image,push=true",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "progress",
 			Usage: "Set type of progress (auto, plain, tty). Use plain to show container output",
 			Value: "auto",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "trace",
 			Usage: "Path to trace file. Defaults to no tracing.",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "local",
 			Usage: "Allow build access to the local directory",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "oci-layout",
 			Usage: "Allow build access to the local OCI layout",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "frontend",
 			Usage: "Define frontend used for build",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "opt",
 			Usage: "Define custom options for frontend, e.g. --opt target=foo --opt build-arg:foo=bar",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  "no-cache",
 			Usage: "Disable cache for all the vertices",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "export-cache",
 			Usage: "Export build cache, e.g. --export-cache type=registry,ref=example.com/foo/bar, or --export-cache type=local,dest=path/to/dir",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "import-cache",
 			Usage: "Import build cache, e.g. --import-cache type=registry,ref=example.com/foo/bar, or --import-cache type=local,src=path/to/dir",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "secret",
 			Usage: "Secret value exposed to the build. Format id=secretname,src=filepath",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "allow",
 			Usage: "Allow extra privileged entitlement, e.g. network.host, security.insecure",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "ssh",
 			Usage: "Allow forwarding SSH agent to the builder. Format default|<id>[=<socket>|<key>[,<key>]]",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "metadata-file",
 			Usage: "Output build metadata (e.g., image digest) to a file as JSON",
 		},

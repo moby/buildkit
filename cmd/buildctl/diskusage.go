@@ -11,23 +11,23 @@ import (
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
 	"github.com/sirupsen/logrus"
 	"github.com/tonistiigi/units"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 )
 
-var diskUsageCommand = cli.Command{
+var diskUsageCommand = &cli.Command{
 	Name:   "du",
 	Usage:  "disk usage",
 	Action: diskUsage,
 	Flags: []cli.Flag{
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "filter, f",
 			Usage: "Filter records",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  "verbose, v",
 			Usage: "Verbose output",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "format",
 			Usage: "Format the output using the given Go template, e.g, '{{json .}}'",
 		},

@@ -6,7 +6,7 @@ import (
 
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/tracing/detect"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"

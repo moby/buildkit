@@ -2,13 +2,13 @@ package main
 
 import (
 	"github.com/moby/buildkit/cmd/buildctl/debug"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 )
 
-var debugCommand = cli.Command{
+var debugCommand = &cli.Command{
 	Name:  "debug",
 	Usage: "debug utilities",
-	Subcommands: []cli.Command{
+	Subcommands: []*cli.Command{
 		debug.DumpLLBCommand,
 		debug.DumpMetadataCommand,
 		debug.WorkersCommand,

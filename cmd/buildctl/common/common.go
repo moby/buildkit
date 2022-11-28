@@ -14,16 +14,16 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/util/tracing/detect"
 	"github.com/pkg/errors"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel/trace"
 )
 
 // ResolveClient resolves a client from CLI args
-func ResolveClient(c *cli.Context) (*client.Client, error) {
-	serverName := c.GlobalString("tlsservername")
+func ResolveClient(clicontext *cli.Context) (*client.Client, error) {
+	serverName := clicontext.String("tlsservername")
 	if serverName == "" {
 		// guess servername as hostname of target address
-		uri, err := url.Parse(c.GlobalString("addr"))
+		uri, err := url.Parse(clicontext.String("addr"))
 		if err != nil {
 			return nil, err
 		}
@@ -34,7 +34,7 @@ func ResolveClient(c *cli.Context) (*client.Client, error) {
 	var cert string
 	var key string
 
-	tlsDir := c.GlobalString("tlsdir")
+	tlsDir := clicontext.String("tlsdir")
 
 	if tlsDir != "" {
 		// Look for ca.pem and, if it exists, set caCert to that
@@ -56,18 +56,18 @@ func ResolveClient(c *cli.Context) (*client.Client, error) {
 			}
 		}
 
-		if c.GlobalString("tlscacert") != "" || c.GlobalString("tlscert") != "" || c.GlobalString("tlskey") != "" {
+		if clicontext.String("tlscacert") != "" || clicontext.String("tlscert") != "" || clicontext.String("tlskey") != "" {
 			return nil, errors.New("cannot specify tlsdir and tlscacert/tlscert/tlskey at the same time")
 		}
 	} else {
-		caCert = c.GlobalString("tlscacert")
-		cert = c.GlobalString("tlscert")
-		key = c.GlobalString("tlskey")
+		caCert = clicontext.String("tlscacert")
+		cert = clicontext.String("tlscert")
+		key = clicontext.String("tlskey")
 	}
 
 	opts := []client.ClientOpt{client.WithFailFast()}
 
-	ctx := CommandContext(c)
+	ctx := CommandContext(clicontext)
 
 	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
 		opts = append(opts, client.WithTracerProvider(span.TracerProvider()))
@@ -86,11 +86,11 @@ func ResolveClient(c *cli.Context) (*client.Client, error) {
 		opts = append(opts, client.WithCredentials(serverName, caCert, cert, key))
 	}
 
-	timeout := time.Duration(c.GlobalInt("timeout"))
+	timeout := time.Duration(clicontext.Int("timeout"))
 	ctx, cancel := context.WithTimeout(ctx, timeout*time.Second)
 	defer cancel()
 
-	return client.New(ctx, c.GlobalString("addr"), opts...)
+	return client.New(ctx, clicontext.String("addr"), opts...)
 }
 
 func ParseTemplate(format string) (*template.Template, error) {
