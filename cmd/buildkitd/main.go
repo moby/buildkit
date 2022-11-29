@@ -386,10 +386,10 @@ func setDefaultNetworkConfig(nc config.NetworkConfig) config.NetworkConfig {
 		nc.Mode = "auto"
 	}
 	if nc.CNIConfigPath == "" {
-		nc.CNIConfigPath = "/etc/buildkit/cni.json"
+		nc.CNIConfigPath = defaultCNIConfigPath
 	}
 	if nc.CNIBinaryPath == "" {
-		nc.CNIBinaryPath = "/opt/cni/bin"
+		nc.CNIBinaryPath = defaultCNIBinDir
 	}
 	return nc
 }

@@ -25,7 +25,6 @@ import (
 )
 
 const (
-	defaultContainerdAddress   = "/run/containerd/containerd.sock"
 	defaultContainerdNamespace = "buildkit"
 )
 
