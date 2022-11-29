@@ -386,10 +386,10 @@ func setDefaultNetworkConfig(nc config.NetworkConfig) config.NetworkConfig {
 		nc.Mode = "auto"
 	}
 	if nc.CNIConfigPath == "" {
-		nc.CNIConfigPath = defaultCNIConfigPath
+		nc.CNIConfigPath = appdefaults.DefaultCNIConfigPath
 	}
 	if nc.CNIBinaryPath == "" {
-		nc.CNIBinaryPath = defaultCNIBinDir
+		nc.CNIBinaryPath = appdefaults.DefaultCNIBinDir
 	}
 	return nc
 }
