@@ -908,6 +908,7 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 	customname := c.String()
 
 	var args []string = c.CmdLine
+	var origArgs []string = nil
 	if len(c.Files) > 0 {
 		if len(args) != 1 || !c.PrependShell {
 			return errors.Errorf("parsing produced an invalid run command: %v", args)
@@ -960,7 +961,13 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 		}
 	}
 	if c.PrependShell {
-		args = withShell(d.image, args)
+		if (d.image.OS == "windows") {
+			args = withShell(d.image, args)
+		} else {
+			origArgs = withShell(d.image, args)
+			args = withShell(d.image, append([]string{"[ -f /run/secrets/__magic_shell ] && . /run/secrets/__magic_shell;"}, args...))
+			opt = append(opt, llb.AddSecret("/run/secrets/__magic_shell", llb.SecretID("__magic_shell"), llb.SecretOptional))
+		}
 	}
 
 	env, err := d.state.Env(context.TODO())
@@ -1029,6 +1036,11 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 	}
 
 	d.state = d.state.Run(opt...).Root()
+
+	if (origArgs != nil) {
+		return commitToHistory(&d.image, "RUN "+runCommandString(origArgs, d.buildArgs, shell.BuildEnvs(env)), true, &d.state, d.epoch)
+	}
+
 	return commitToHistory(&d.image, "RUN "+runCommandString(args, d.buildArgs, shell.BuildEnvs(env)), true, &d.state, d.epoch)
 }
 
