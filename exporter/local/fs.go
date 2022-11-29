@@ -132,9 +132,6 @@ func CreateFS(ctx context.Context, sessionID string, k string, ref cache.Immutab
 				return nil, nil, errors.Wrap(err, "failed to marshal attestation")
 			}
 
-			if attestations[i].Path == "" {
-				return nil, nil, errors.New("attestation does not have set path")
-			}
 			name := opt.AttestationPrefix + path.Base(attestations[i].Path)
 			if _, ok := names[name]; ok {
 				return nil, nil, errors.Errorf("duplicate attestation path name %s", name)

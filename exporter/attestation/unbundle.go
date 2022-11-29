@@ -69,6 +69,11 @@ func Unbundle(ctx context.Context, s session.Group, refs map[string]cache.Immuta
 	for _, atts := range unbundled {
 		joined = append(joined, atts...)
 	}
+	for _, att := range joined {
+		if err := validate(att); err != nil {
+			return nil, err
+		}
+	}
 	return joined, nil
 }
 
@@ -125,4 +130,14 @@ func unbundle(ctx context.Context, root string, bundle result.Attestation) ([]re
 		})
 	}
 	return unbundled, nil
+}
+
+func validate(att result.Attestation) error {
+	if att.Path == "" {
+		return errors.New("attestation does not have set path")
+	}
+	if att.Ref == "" && att.ContentFunc == nil {
+		return errors.New("attestation does not have available content")
+	}
+	return nil
 }
