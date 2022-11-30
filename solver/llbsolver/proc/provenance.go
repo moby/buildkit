@@ -57,8 +57,6 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 		var mode string
 		if v, ok := attrs["mode"]; ok {
 			switch v {
-			case "disabled", "none":
-				return res, nil
 			case "full":
 				mode = "max"
 			case "max", "min":
