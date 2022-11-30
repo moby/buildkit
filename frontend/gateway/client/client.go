@@ -73,6 +73,8 @@ type StartRequest struct {
 	Stdin          io.ReadCloser
 	Stdout, Stderr io.WriteCloser
 	SecurityMode   pb.SecurityMode
+
+	RemoveMountStubsRecursive bool
 }
 
 // WinSize is same as executor.WinSize, copied here to prevent circular package
