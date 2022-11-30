@@ -145,6 +145,9 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 
 			res.AddAttestation(p.ID, result.Attestation{
 				Kind: gatewaypb.AttestationKindInToto,
+				Metadata: map[string][]byte{
+					result.AttestationReasonKey:     result.AttestationReasonProvenance,
+				},
 				InToto: result.InTotoAttestation{
 					PredicateType: slsa.PredicateSLSAProvenance,
 				},

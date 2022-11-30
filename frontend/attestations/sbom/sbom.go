@@ -80,6 +80,9 @@ func CreateSBOMScanner(ctx context.Context, resolver llb.ImageMetaResolver, scan
 		stsbom := runscan.AddMount(outDir, llb.Scratch())
 		return result.Attestation{
 			Kind: gatewaypb.AttestationKindBundle,
+			Metadata: map[string][]byte{
+				result.AttestationReasonKey: result.AttestationReasonSBOM,
+			},
 			InToto: result.InTotoAttestation{
 				PredicateType: intoto.PredicateSPDX,
 			},
