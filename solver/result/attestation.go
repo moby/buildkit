@@ -7,6 +7,7 @@ import (
 
 const (
 	AttestationReasonKey     = "reason"
+	AttestationInlineOnlyKey = "inline-only"
 )
 
 var (

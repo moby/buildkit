@@ -66,6 +66,11 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 			}
 		}
 
+		var inlineOnly bool
+		if v, err := strconv.ParseBool(attrs["inline-only"]); v && err == nil {
+			inlineOnly = true
+		}
+
 		for _, p := range ps.Platforms {
 			cp, ok := res.Provenance.Refs[p.ID]
 			if !ok {
@@ -145,6 +150,7 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 				Kind: gatewaypb.AttestationKindInToto,
 				Metadata: map[string][]byte{
 					result.AttestationReasonKey:     result.AttestationReasonProvenance,
+					result.AttestationInlineOnlyKey: []byte(strconv.FormatBool(inlineOnly)),
 				},
 				InToto: result.InTotoAttestation{
 					PredicateType: slsa.PredicateSLSAProvenance,

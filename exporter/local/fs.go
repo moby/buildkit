@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"strconv"
 	"time"
 
 	"github.com/docker/docker/pkg/idtools"
@@ -87,6 +88,9 @@ func CreateFS(ctx context.Context, sessionID string, k string, ref cache.Immutab
 	}
 
 	outputFS := fsutil.NewFS(src, walkOpt)
+	attestations = attestation.Filter(attestations, nil, map[string][]byte{
+		result.AttestationInlineOnlyKey: []byte(strconv.FormatBool(true)),
+	})
 	attestations, err = attestation.Unbundle(ctx, session.NewGroup(sessionID), refs, attestations)
 	if err != nil {
 		return nil, nil, err
