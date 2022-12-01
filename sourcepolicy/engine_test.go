@@ -7,6 +7,8 @@ import (
 
 	"github.com/moby/buildkit/solver/pb"
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
+	"github.com/moby/buildkit/util/bklog"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,6 +21,94 @@ func TestEngineEvaluate(t *testing.T) {
 	t.Run("Test convert loop", testConvertLoop)
 	t.Run("Test convert http", testConvertHTTP)
 	t.Run("Test convert regex", testConvertRegex)
+	t.Run("Test convert wildcard", testConvertWildcard)
+	t.Run("Test convert multiple", testConvertMultiple)
+}
+
+func testConvertMultiple(t *testing.T) {
+	pol := &spb.Policy{
+		Rules: []*spb.Rule{
+			{
+				Action: spb.PolicyAction_CONVERT,
+				Source: &spb.Source{
+					Type:       "docker-image",
+					Identifier: "docker.io/library/busybox:latest",
+				},
+				Destination: &spb.Destination{
+					Identifier: "docker-image://docker.io/library/alpine:latest",
+				},
+			},
+			{
+				Action: spb.PolicyAction_CONVERT,
+				Source: &spb.Source{
+					Type:       "docker-image",
+					Identifier: "docker.io/library/alpine:latest",
+				},
+				Destination: &spb.Destination{
+					Identifier: "docker-image://docker.io/library/debian:buster",
+				},
+			},
+			{
+				Action: spb.PolicyAction_CONVERT,
+				Source: &spb.Source{
+					Type:       "docker-image",
+					Identifier: "docker.io/library/debian:buster",
+				},
+				Destination: &spb.Destination{
+					Identifier: "docker-image://docker.io/library/debian:bullseye",
+				},
+			},
+		},
+	}
+
+	op := &pb.Op{
+		Op: &pb.Op_Source{
+			Source: &pb.SourceOp{
+				Identifier: "docker-image://docker.io/library/busybox:latest",
+			},
+		},
+	}
+
+	ctx := context.Background()
+	e := NewEngine(pol, nil, nil)
+
+	mutated, err := e.Evaluate(ctx, op)
+	require.True(t, mutated)
+	require.NoError(t, err)
+}
+
+func testConvertWildcard(t *testing.T) {
+	pol := &spb.Policy{
+		Rules: []*spb.Rule{
+			{
+				Action: spb.PolicyAction_CONVERT,
+				Source: &spb.Source{
+					Type:       "docker-image",
+					Identifier: `docker.io/library/golang:*`,
+					MatchType:  spb.MatchType_WILDCARD,
+				},
+				Destination: &spb.Destination{
+					Identifier: "docker-image://fakereg.io/library/golang:${1}",
+				},
+			},
+		},
+	}
+
+	op := &pb.Op{
+		Op: &pb.Op_Source{
+			Source: &pb.SourceOp{
+				Identifier: "docker-image://docker.io/library/golang:1.19",
+			},
+		},
+	}
+
+	ctx := context.Background()
+	e := NewEngine(pol, nil, nil)
+
+	mutated, err := e.Evaluate(ctx, op)
+	require.True(t, mutated)
+	require.NoError(t, err)
+	require.Equal(t, "docker-image://fakereg.io/library/golang:1.19", op.GetSource().Identifier)
 }
 
 func testConvertRegex(t *testing.T) {
@@ -229,6 +319,7 @@ func testConvert(t *testing.T) {
 		"docker-image://docker.io/library/busybox:latest": "docker-image://docker.io/library/alpine:latest",
 		"docker-image://docker.io/library/alpine:latest":  "docker-image://docker.io/library/alpine:latest@sha256:c0d488a800e4127c334ad20d61d7bc21b4097540327217dfab52262adc02380c",
 	}
+	bklog.L.Logger.SetLevel(logrus.DebugLevel)
 
 	for src, dst := range cases {
 		t.Run(src+"=>"+dst, func(t *testing.T) {

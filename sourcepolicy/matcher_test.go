@@ -388,7 +388,7 @@ func TestMatch(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			matches, err := Match(context.Background(), &tc.src, tc.scheme, tc.ref, tc.attrs, nil)
+			matches, err := Match(context.Background(), &Source{Source: &tc.src}, tc.scheme, tc.ref, tc.attrs)
 			if !tc.xErr {
 				require.NoError(t, err)
 			} else {

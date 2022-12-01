@@ -2,7 +2,6 @@ package sourcepolicy
 
 import (
 	"context"
-	"regexp"
 	"strings"
 
 	"github.com/moby/buildkit/solver/pb"
@@ -29,7 +28,7 @@ type Engine struct {
 	pol     *spb.Policy
 	matcher Matcher
 	mutater Mutater
-	regexes map[string]*regexp.Regexp
+	sources map[string]*Source
 }
 
 // NewEngine creates a new source policy engine.
@@ -45,6 +44,23 @@ func NewEngine(pol *spb.Policy, matcher Matcher, mutater Mutater) *Engine {
 		matcher: matcher,
 		mutater: mutater,
 	}
+}
+
+// TODO: The key here can't be used to cache attr constraint regexes.
+func (e *Engine) source(src *spb.Source) *Source {
+	if e.sources == nil {
+		e.sources = map[string]*Source{}
+	}
+
+	key := src.MatchType.String() + " " + src.Type + "://" + src.Identifier
+
+	if s, ok := e.sources[key]; ok {
+		return s
+	}
+	s := &Source{Source: src}
+
+	e.sources[key] = s
+	return s
 }
 
 // Evaluate evaluates a source operation against the policy.
@@ -117,23 +133,6 @@ func (e *Engine) evaluateRules(ctx context.Context, srcOp *pb.SourceOp, st *eval
 	return false, nil
 }
 
-// temporary state while evaluating a policy
-
-func (e *Engine) regex(key, pattern string) (*regexp.Regexp, error) {
-	if e.regexes == nil {
-		e.regexes = map[string]*regexp.Regexp{}
-	}
-	if r, ok := e.regexes[key]; ok {
-		return r, nil
-	}
-	r, err := regexp.Compile(pattern)
-	if err != nil {
-		return nil, err
-	}
-	e.regexes[key] = r
-	return r, nil
-}
-
 func (e *Engine) evaluateRule(ctx context.Context, rule *spb.Rule, scheme, ref string, op *pb.SourceOp, st *evalState) (bool, error) {
 	switch scheme {
 	case "http", "https":
@@ -148,18 +147,8 @@ func (e *Engine) evaluateRule(ctx context.Context, rule *spb.Rule, scheme, ref s
 		}
 	}
 
-	var regex *regexp.Regexp
-	switch rule.Source.MatchType {
-	case spb.MatchType_EXACT:
-	case spb.MatchType_REGEX:
-		var err error
-		regex, err = e.regex(rule.Source.Type+"://"+rule.Source.Identifier, rule.Source.Identifier)
-		if err != nil {
-			return false, err
-		}
-	}
-
-	match, err := e.matcher.Match(ctx, rule.Source, scheme, ref, op.Attrs, regex)
+	src := e.source(rule.Source)
+	match, err := e.matcher.Match(ctx, src, scheme, ref, op.Attrs)
 	if err != nil {
 		return false, errors.Wrap(err, "error evaluating rule")
 	}
@@ -184,10 +173,20 @@ func (e *Engine) evaluateRule(ctx context.Context, rule *spb.Rule, scheme, ref s
 		}
 		return false, nil
 	case spb.PolicyAction_CONVERT:
-		dest := rule.Destination.Identifier
-		if regex != nil {
-			dest = regex.ReplaceAllString(ref, dest)
+		if rule.Destination == nil {
+			return false, errors.Errorf("missing destination for convert rule")
 		}
+
+		dest, err := src.Format(ref, rule.Destination.Identifier)
+		if err != nil {
+			return false, errors.Wrap(err, "error formatting destination")
+		}
+		if dest == ref {
+			return false, nil
+		}
+
+		bklog.G(ctx).Debugf("sourcepolicy: converting %s to %s, pattern: %s", ref, dest, rule.Destination.Identifier)
+
 		return e.mutater.Mutate(ctx, op, dest, rule.Destination.Attrs)
 	default:
 		return false, errors.Errorf("source policy: rule %s %s: unknown type %q", rule.Action, rule.Source.Identifier, ref)

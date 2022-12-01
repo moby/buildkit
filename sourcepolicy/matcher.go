@@ -7,7 +7,6 @@ import (
 
 	sourcetypes "github.com/moby/buildkit/source/types"
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
-	"github.com/moby/patternmatcher"
 	"github.com/pkg/errors"
 )
 
@@ -15,20 +14,24 @@ var DefaultMatcher = MatcherFn(Match)
 
 // Match returns true if the given ref matches the given pattern.
 type Matcher interface {
-	Match(ctx context.Context, src *spb.Source, scheme, ref string, attrs map[string]string, regex *regexp.Regexp) (bool, error)
+	Match(ctx context.Context, src *Source, scheme, ref string, attrs map[string]string) (bool, error)
 }
 
 // MatcherFn can be used to wrap a function as a Matcher.
-type MatcherFn func(ctx context.Context, src *spb.Source, scheme, ref string, attrs map[string]string, regex *regexp.Regexp) (bool, error)
+type MatcherFn func(ctx context.Context, src *Source, scheme, ref string, attrs map[string]string) (bool, error)
 
 // Match runs the matcher function.
 // Match implements the Matcher interface for MatcherFn
-func (f MatcherFn) Match(ctx context.Context, src *spb.Source, scheme, ref string, attrs map[string]string, regex *regexp.Regexp) (bool, error) {
-	return f(ctx, src, scheme, ref, attrs, regex)
+func (f MatcherFn) Match(ctx context.Context, src *Source, scheme, ref string, attrs map[string]string) (bool, error) {
+	return f(ctx, src, scheme, ref, attrs)
+}
+
+type PatternMatcher interface {
+	MatchString(string) (bool, error)
 }
 
 // Match is a MatcherFn which matches vthe source operation to the identifier and attributes provided by the policy.
-func Match(ctx context.Context, src *spb.Source, scheme, ref string, attrs map[string]string, regex *regexp.Regexp) (bool, error) {
+func Match(ctx context.Context, src *Source, scheme, ref string, attrs map[string]string) (bool, error) {
 	if src.Type != scheme {
 		return false, nil
 	}
@@ -68,10 +71,22 @@ func Match(ctx context.Context, src *spb.Source, scheme, ref string, attrs map[s
 		}
 	}
 
-	if regex != nil {
-		return regex.MatchString(ref), nil
+	switch src.MatchType {
+	case spb.MatchType_EXACT:
+		return false, nil
+	case spb.MatchType_REGEX:
+		re, err := src.regex()
+		if err != nil {
+			return false, err
+		}
+		return re.MatchString(ref), nil
+	case spb.MatchType_WILDCARD:
+		w, err := src.wildcard()
+		if err != nil {
+			return false, err
+		}
+		return w.Match(ref) != nil, nil
+	default:
+		return false, errors.Errorf("unknown match type: %s", src.MatchType)
 	}
-
-	// Support basic glob matching
-	return patternmatcher.Matches(ref, []string{src.Identifier})
 }
