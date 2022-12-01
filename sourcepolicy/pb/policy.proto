@@ -12,8 +12,9 @@ message Rule {
 
 // DestinationIdentifier is used for action types that involves mutating the source
 message Destination {
-	string identifier = 1;
-	map<string, string> attrs = 2;
+	string Type = 1;
+	string identifier = 2;
+	map<string, string> attrs = 3;
 }
 
 // SourceIdentifier identifies a source to match a policy to

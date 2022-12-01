@@ -134,8 +134,11 @@ func (e *Engine) evaluateRules(ctx context.Context, srcOp *pb.SourceOp, st *eval
 }
 
 func (e *Engine) evaluateRule(ctx context.Context, rule *spb.Rule, scheme, ref string, op *pb.SourceOp, st *evalState) (bool, error) {
+	origScheme := scheme
+	var isHTTP bool
 	switch scheme {
 	case "http", "https":
+		isHTTP = true
 		// The scheme ref is important for http/https sources
 		ref = scheme + "://" + ref
 
@@ -177,12 +180,23 @@ func (e *Engine) evaluateRule(ctx context.Context, rule *spb.Rule, scheme, ref s
 			return false, errors.Errorf("missing destination for convert rule")
 		}
 
-		dest, err := src.Format(ref, rule.Destination.Identifier)
+		// TODO: This should really go in the mutator, but there's a lot of deatail we'd need to pass through.
+		dest := rule.Destination.Identifier
+		if dest == "" {
+			dest = rule.Source.Identifier
+		}
+		dest, err = src.Format(ref, dest)
 		if err != nil {
 			return false, errors.Wrap(err, "error formatting destination")
 		}
-		if dest == ref {
-			return false, nil
+
+		typ := rule.Destination.Type
+		if typ == "" {
+			typ = origScheme
+		}
+
+		if !isHTTP {
+			dest = typ + "://" + dest
 		}
 
 		bklog.G(ctx).Debugf("sourcepolicy: converting %s to %s, pattern: %s", ref, dest, rule.Destination.Identifier)

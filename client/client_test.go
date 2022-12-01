@@ -8511,7 +8511,8 @@ func testSourcePolicy(t *testing.T, sb integration.Sandbox) {
 							Identifier: "docker.io/library/busybox:1.34.1-uclibc",
 						},
 						Destination: &sourcepolicypb.Destination{
-							Identifier: "docker-image://docker.io/library/busybox:1.34.1-uclibc@sha256:3614ca5eacf0a3a1bcc361c939202a974b4902b9334ff36eb29ffe9011aaad83",
+							Type:       "docker-image",
+							Identifier: "docker.io/library/busybox:1.34.1-uclibc@sha256:3614ca5eacf0a3a1bcc361c939202a974b4902b9334ff36eb29ffe9011aaad83",
 						},
 					},
 					{
@@ -8521,6 +8522,7 @@ func testSourcePolicy(t *testing.T, sb integration.Sandbox) {
 							Identifier: "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md",
 						},
 						Destination: &sourcepolicypb.Destination{
+							Type:       "http",
 							Identifier: "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md",
 							Attrs:      map[string]string{"http.checksum": "sha256:6e4b94fc270e708e1068be28bd3551dc6917a4fc5a61293d51bb36e6b75c4b53"},
 						},
@@ -8540,7 +8542,8 @@ func testSourcePolicy(t *testing.T, sb integration.Sandbox) {
 							Identifier: "docker.io/library/busybox:1.34.1-uclibc",
 						},
 						Destination: &sourcepolicypb.Destination{
-							Identifier: "docker-image://docker.io/library/busybox:1.34.1-uclibc@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", // invalid
+							Type:       "docker-image",
+							Identifier: "docker.io/library/busybox:1.34.1-uclibc@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", // invalid
 						},
 					},
 				},

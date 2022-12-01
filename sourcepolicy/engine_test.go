@@ -35,7 +35,8 @@ func testConvertMultiple(t *testing.T) {
 					Identifier: "docker.io/library/busybox:latest",
 				},
 				Destination: &spb.Destination{
-					Identifier: "docker-image://docker.io/library/alpine:latest",
+					Type:       "docker-image",
+					Identifier: "docker.io/library/alpine:latest",
 				},
 			},
 			{
@@ -45,7 +46,8 @@ func testConvertMultiple(t *testing.T) {
 					Identifier: "docker.io/library/alpine:latest",
 				},
 				Destination: &spb.Destination{
-					Identifier: "docker-image://docker.io/library/debian:buster",
+					Type:       "docker-image",
+					Identifier: "docker.io/library/debian:buster",
 				},
 			},
 			{
@@ -55,7 +57,8 @@ func testConvertMultiple(t *testing.T) {
 					Identifier: "docker.io/library/debian:buster",
 				},
 				Destination: &spb.Destination{
-					Identifier: "docker-image://docker.io/library/debian:bullseye",
+					Type:       "docker-image",
+					Identifier: "docker.io/library/debian:bullseye",
 				},
 			},
 		},
@@ -88,7 +91,8 @@ func testConvertWildcard(t *testing.T) {
 					MatchType:  spb.MatchType_WILDCARD,
 				},
 				Destination: &spb.Destination{
-					Identifier: "docker-image://fakereg.io/library/golang:${1}",
+					Type:       "docker-image",
+					Identifier: "fakereg.io/library/golang:${1}",
 				},
 			},
 		},
@@ -122,7 +126,8 @@ func testConvertRegex(t *testing.T) {
 					MatchType:  spb.MatchType_REGEX,
 				},
 				Destination: &spb.Destination{
-					Identifier: "docker-image://fakereg.io/library/golang:${1}",
+					Type:       "docker-image",
+					Identifier: "fakereg.io/library/golang:${1}",
 				},
 			},
 		},
@@ -175,7 +180,7 @@ func testConvertHTTP(t *testing.T) {
 	mutated, err := e.Evaluate(ctx, op)
 	require.True(t, mutated)
 	require.NoError(t, err)
-	require.Equal(t, op.GetSource().Identifier, "https://example.com/foo")
+	require.Equal(t, "https://example.com/foo", op.GetSource().Identifier)
 }
 
 func testConvertLoop(t *testing.T) {
@@ -188,7 +193,8 @@ func testConvertLoop(t *testing.T) {
 					Identifier: "docker.io/library/busybox:latest",
 				},
 				Destination: &spb.Destination{
-					Identifier: "docker-image://docker.io/library/alpine:latest",
+					Type:       "docker-image",
+					Identifier: "docker.io/library/alpine:latest",
 				},
 			},
 			{
@@ -198,7 +204,8 @@ func testConvertLoop(t *testing.T) {
 					Identifier: "docker.io/library/alpine:latest",
 				},
 				Destination: &spb.Destination{
-					Identifier: "docker-image://docker.io/library/busybox:latest",
+					Type:       "docker-image",
+					Identifier: "docker.io/library/busybox:latest",
 				},
 			},
 		},
@@ -230,7 +237,8 @@ func testAllowConvertDeny(t *testing.T) {
 					Identifier: "docker.io/library/busybox:latest",
 				},
 				Destination: &spb.Destination{
-					Identifier: "docker-image://docker.io/library/alpine:latest",
+					Type:       "docker-image",
+					Identifier: "docker.io/library/alpine:latest",
 				},
 			},
 			{
@@ -291,7 +299,8 @@ func testConvertDeny(t *testing.T) {
 					Identifier: "docker.io/library/busybox:latest",
 				},
 				Destination: &spb.Destination{
-					Identifier: "docker-image://docker.io/library/alpine:latest",
+					Type:       "docker-image",
+					Identifier: "docker.io/library/alpine:latest",
 				},
 			},
 		},
@@ -331,17 +340,19 @@ func testConvert(t *testing.T) {
 				},
 			}
 
-			kind, ref, _ := strings.Cut(src, "://")
+			sKind, sRef, _ := strings.Cut(src, "://")
+			dKind, dRef, _ := strings.Cut(dst, "://")
 			pol := &spb.Policy{
 				Rules: []*spb.Rule{
 					{
 						Action: spb.PolicyAction_CONVERT,
 						Source: &spb.Source{
-							Type:       kind,
-							Identifier: ref,
+							Type:       sKind,
+							Identifier: sRef,
 						},
 						Destination: &spb.Destination{
-							Identifier: dst,
+							Type:       dKind,
+							Identifier: dRef,
 						},
 					},
 				},
