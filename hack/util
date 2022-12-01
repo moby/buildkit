@@ -23,23 +23,34 @@ if [ "$CI" = "true" ]; then
   progressFlag="--progress=plain"
 fi
 
+buildxBin=""
+builderName=""
+if docker buildx version >/dev/null 2>&1; then
+  buildxBin="docker buildx"
+elif buildx version >/dev/null 2>&1; then
+  buildxBin="buildx"
+else
+  topdir="$(realpath $(dirname "$0")/..)"
+  if [ ! -x "${topdir}/bin/buildx" ]; then
+    set -x
+    "${topdir}/hack/install-buildx"
+  fi
+  buildxBin="${topdir}/bin/buildx"
+  builderName="moby-buildkit"
+  "${topdir}/hack/bootstrap-buildx" "${builderName}"
+fi
+
 buildxCmd() {
-  if docker buildx version >/dev/null 2>&1; then
-    set -x
-    docker buildx "$@" $progressFlag
-  elif buildx version >/dev/null 2>&1; then
-    set -x
-    buildx "$@" $progressFlag
-  else
-    topdir="$(realpath $(dirname "$0")/..)"
-    if [ ! -x "${topdir}/bin/buildx" ]; then
-      set -x
-      "${topdir}/hack/install-buildx"
-    fi
-    set -x
-    bootstrapName="moby-buildkit"
-    "${topdir}/hack/bootstrap-buildx" "${bootstrapName}"
-    BUILDX_BUILDER="${bootstrapName}" "${topdir}/bin/buildx" "$@" $progressFlag
+  if [ -n "$builderName" ]; then
+    export BUILDX_BUILDER="${builderName}"
+  fi
+  set -x
+  $buildxBin "$@" $progressFlag
+}
+
+buildAttestFlags() {
+  if $buildxBin build --help 2>&1 | grep -- '--attest' >/dev/null; then
+    echo "--attest=type=sbom --attest=type=provenance,mode=max"
   fi
 }
 
