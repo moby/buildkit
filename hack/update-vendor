@@ -1,16 +1,14 @@
 #!/usr/bin/env bash
 
-. $(dirname $0)/util
 set -eu
+
+: "${BUILDX_CMD=docker buildx}"
 
 output=$(mktemp -d -t buildx-output.XXXXXXXXXX)
 
-buildxCmd build \
-  --target "update" \
-  --output "type=local,dest=$output" \
-  --file "./hack/dockerfiles/vendor.Dockerfile" \
-  .
+set -x
+${BUILDX_CMD} bake --set "*.output=$output" vendor
 
 rm -rf ./vendor
 cp -R "$output"/out/* .
-rm -rf $output
+rm -rf "$output"

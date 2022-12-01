@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+
+set -e
+
+usage() {
+  echo "$0 version"
+  exit 1
+}
+
+VERSION=$1
+if [ -z "$VERSION" ]; then
+  usage
+fi
+
+prefix=$(echo "$VERSION" | cut -d/ -f 1)
+if [ "$prefix" != "dockerfile" ]; then
+  echo "invalid version $VERSION"
+  exit 1
+fi
+
+suffix=$(echo "$VERSION" | awk -F- '{print $NF}')
+tagf=./frontend/dockerfile/release/$suffix/tags
+if [ "$suffix" = "$VERSION" ] || [ ! -f "$tagf" ]; then
+  suffix="mainline"
+fi
+
+mainTag=$(echo "$VERSION" | cut -d/ -f 2)
+tags=${mainTag}
+versioned=""
+
+# \d.\d.\d becomes latest
+if [[ "$mainTag" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  tags="${tags}\nlatest"
+  versioned=1
+fi
+
+# \d.\d.\d-channel becomes <channel>
+if [[ "$mainTag" =~ ^[0-9]+\.[0-9]+\.[0-9]+-$suffix$ ]] && [ -f "$tagf" ]; then
+  tags="${tags}\n$suffix"
+  versioned=1
+fi
+
+# \d.\d.\d* -> \d.\d* -> \d* (except "0")
+if [ "$versioned" == "1" ]; then
+  tags="${tags}\n$(echo "$mainTag" | sed -E 's#^([0-9]+\.[0-9]+)\.[0-9]+#\1#')"
+  if [ "$(echo "$mainTag" | sed -E 's#^([0-9]+)\.[0-9]+\.[0-9]+.*$#\1#')" != "0" ]; then
+    tags="${tags}\n$(echo "$mainTag" | sed -E 's#^([0-9]+)\.[0-9]+\.[0-9]+#\1#')"
+  fi
+fi
+
+echo -e "$tags"

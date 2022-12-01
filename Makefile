@@ -1,46 +1,88 @@
+ifneq (, $(BUILDX_BIN))
+	export BUILDX_CMD = $(BUILDX_BIN)
+else ifneq (, $(shell docker buildx version))
+	export BUILDX_CMD = docker buildx
+else ifneq (, $(shell which buildx))
+	export BUILDX_CMD = $(which buildx)
+else
+	export BUILDX_CMD = docker buildx
+endif
+
 prefix=/usr/local
 bindir=$(prefix)/bin
 
-binaries: FORCE
-	hack/binaries
+.PHONY: binaries
+binaries:
+	$(BUILDX_CMD) bake binaries
 
-images: FORCE
-# moby/buildkit:local and moby/buildkit:local-rootless are created on Docker
-	hack/images local moby/buildkit
-	TARGET=rootless hack/images local moby/buildkit
+.PHONY: cross
+cross:
+	$(BUILDX_CMD) bake binaries-cross
 
-install: FORCE
+.PHONY: release
+release:
+	$(BUILDX_CMD) bake release
+	mv -f $(CURDIR)/bin/release/**/* $(CURDIR)/bin/release/
+	find $(CURDIR)/bin/release -type d -empty -delete
+
+.PHONY: images
+images: # moby/buildkit:local and moby/buildkit:local-rootless are created on Docker
+	$(BUILDX_CMD) bake image
+	IMAGE_TARGET=rootless $(BUILDX_CMD) bake image
+
+.PHONY: frontends
+frontends: # docker/dockerfile:local and docker/dockerfile:local-labs are created on Docker
+	$(BUILDX_CMD) bake frontend-image
+	FRONTEND_CHANNEL=labs $(BUILDX_CMD) bake frontend-image
+
+.PHONY: install
+install:
 	mkdir -p $(DESTDIR)$(bindir)
-	install bin/* $(DESTDIR)$(bindir)
+	install bin/build/* $(DESTDIR)$(bindir)
 
-clean: FORCE
+.PHONY: clean
+clean:
 	rm -rf ./bin
 
+.PHONY: test
 test:
-	./hack/test integration gateway dockerfile
+	hack/test integration gateway dockerfile
 
+.PHONY: lint
 lint:
-	./hack/lint
+	$(BUILDX_CMD) bake lint
 
+.PHONY: validate-vendor
 validate-vendor:
-	./hack/validate-vendor
+	$(BUILDX_CMD) bake validate-vendor
 
-validate-shfmt:
-	./hack/validate-shfmt
+.PHONY: validate-authors
+validate-authors:
+	$(BUILDX_CMD) bake validate-authors
 
-shfmt:
-	./hack/shfmt
-
+.PHONY: validate-generated-files
 validate-generated-files:
-	./hack/validate-generated-files
+	$(BUILDX_CMD) bake validate-generated-files
 
-validate-all: test lint validate-vendor validate-generated-files
+.PHONY: validate-shfmt
+validate-shfmt:
+	$(BUILDX_CMD) bake validate-shfmt
 
+.PHONY: validate-all
+validate-all: test lint validate-vendor validate-generated-files validate-shfmt
+
+.PHONY: vendor
 vendor:
-	./hack/update-vendor
+	hack/update-vendor
 
+.PHONY: authors
+authors:
+	$(BUILDX_CMD) bake authors
+
+.PHONY: generated-files
 generated-files:
-	./hack/update-generated-files
+	$(BUILDX_CMD) bake generated-files
 
-.PHONY: vendor generated-files test binaries images install clean lint validate-all validate-vendor validate-generated-files
-FORCE:
+.PHONY: shfmt
+shfmt:
+	$(BUILDX_CMD) bake shfmt

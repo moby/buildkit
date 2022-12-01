@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+
+set -e
+
+TARGET=$1
+
+tag=$(git describe --always --tags --match "v[0-9]*")
+
+suffix=
+if [ -n "$TARGET" ]; then
+  suffix=-${TARGET}
+fi
+
+tags=${tag}${suffix}
+if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  if [[ -z "$TARGET" ]]; then
+    tags="${tags}\nlatest"
+  else
+    tags="${tags}\n${TARGET}"
+  fi
+fi
+
+echo -e "$tags"
