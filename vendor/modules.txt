@@ -383,7 +383,7 @@ github.com/docker/cli/cli/connhelper/commandconn
 ## explicit
 github.com/docker/distribution/digestset
 github.com/docker/distribution/reference
-# github.com/docker/docker v20.10.21+incompatible => github.com/docker/docker v20.10.3-0.20221124164242-a913b5ad7ef1+incompatible
+# github.com/docker/docker v23.0.0-beta.1+incompatible
 ## explicit
 github.com/docker/docker/api
 github.com/docker/docker/api/types
@@ -931,4 +931,3 @@ google.golang.org/protobuf/types/pluginpb
 ## explicit
 gopkg.in/yaml.v3
 # github.com/docker/cli => github.com/docker/cli v20.10.3-0.20221124184145-c0fa00e6142d+incompatible
-# github.com/docker/docker => github.com/docker/docker v20.10.3-0.20221124164242-a913b5ad7ef1+incompatible
