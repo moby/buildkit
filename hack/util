@@ -1,22 +1,12 @@
 #!/usr/bin/env sh
-export BUILDX_NO_DEFAULT_LOAD=true
 
-: ${PREFER_BUILDCTL=}
-: ${PREFER_LEGACY=}
-: ${CI=}
-: ${GITHUB_ACTIONS=}
+: "${CI=}"
+: "${GITHUB_ACTIONS=}"
+: "${BUILDX_BUILDER=}"
 
-: ${CONTEXT=}
-: ${CACHE_FROM=}
-: ${CACHE_TO=}
-
-if [ "$PREFER_BUILDCTL" = "1" ]; then
-  echo >&2 "WARNING: PREFER_BUILDCTL is no longer supported. Ignoring."
-fi
-
-if [ "$PREFER_LEGACY" = "1" ]; then
-  echo >&2 "WARNING: PREFER_LEGACY is no longer supported. Ignoring."
-fi
+: "${CONTEXT=}"
+: "${CACHE_FROM=}"
+: "${CACHE_TO=}"
 
 progressFlag=""
 if [ "$CI" = "true" ]; then
@@ -41,11 +31,8 @@ else
 fi
 
 buildxCmd() {
-  if [ -n "$builderName" ]; then
-    export BUILDX_BUILDER="${builderName}"
-  fi
   set -x
-  $buildxBin "$@" $progressFlag
+  BUILDX_NO_DEFAULT_LOAD=true BUILDX_BUILDER="${builderName:-${BUILDX_BUILDER}}" $buildxBin "$@" $progressFlag
 }
 
 buildAttestFlags() {
