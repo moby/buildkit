@@ -198,6 +198,7 @@ message BuildHistoryRecord {
 	BuildResultInfo Result = 10;
 	map<string, BuildResultInfo> Results = 11;
 	int32 Generation = 12;
+	Descriptor trace = 13;
 	// TODO: tags
 	// TODO: steps/cache summary
 	// TODO: unclipped logs

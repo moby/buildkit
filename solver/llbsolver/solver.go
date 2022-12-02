@@ -3,6 +3,7 @@ package llbsolver
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -28,10 +29,14 @@ import (
 	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/progress"
+	"github.com/moby/buildkit/util/tracing/detect"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -134,6 +139,69 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	}
 
 	defer j.Discard()
+
+	var stopTrace func() []tracetest.SpanStub
+
+	if s := trace.SpanFromContext(ctx); s.SpanContext().IsValid() {
+		if exp, err := detect.Exporter(); err == nil {
+			if rec, ok := exp.(*detect.TraceRecorder); ok {
+				stopTrace = rec.Record(s.SpanContext().TraceID())
+			}
+		}
+	}
+
+	defer func() {
+		stopTrace := stopTrace
+		if stopTrace == nil {
+			logrus.Warn("no trace recorder found, skipping")
+			return
+		}
+		go func() {
+			time.Sleep(3 * time.Second)
+			spans := stopTrace()
+
+			if len(spans) == 0 {
+				return
+			}
+
+			if err := func() error {
+				w, err := s.history.OpenBlobWriter(context.TODO(), "application/vnd.buildkit.otlp.json.v0")
+				if err != nil {
+					return err
+				}
+				enc := json.NewEncoder(w)
+				for _, sp := range spans {
+					if err := enc.Encode(sp); err != nil {
+						return err
+					}
+				}
+
+				desc, release, err := w.Commit(context.TODO())
+				if err != nil {
+					return err
+				}
+				defer func() {
+					if err != nil && release != nil {
+						release()
+					}
+				}()
+
+				if err := s.history.UpdateRef(context.TODO(), id, func(rec *controlapi.BuildHistoryRecord) error {
+					rec.Trace = &controlapi.Descriptor{
+						Digest:    desc.Digest,
+						MediaType: desc.MediaType,
+						Size_:     desc.Size,
+					}
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				logrus.Errorf("failed to save trace for %s", id)
+			}
+		}()
+	}()
 
 	st := time.Now()
 	rec := &controlapi.BuildHistoryRecord{

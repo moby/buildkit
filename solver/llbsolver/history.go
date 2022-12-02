@@ -74,6 +74,44 @@ func (h *HistoryQueue) addResource(ctx context.Context, l leases.Lease, desc *co
 	})
 }
 
+func (h *HistoryQueue) UpdateRef(ctx context.Context, ref string, upt func(r *controlapi.BuildHistoryRecord) error) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	var br controlapi.BuildHistoryRecord
+	if err := h.DB.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(recordsBucket))
+		if b == nil {
+			return os.ErrNotExist
+		}
+		dt := b.Get([]byte(ref))
+		if dt == nil {
+			return os.ErrNotExist
+		}
+
+		if err := br.Unmarshal(dt); err != nil {
+			return errors.Wrapf(err, "failed to unmarshal build record %s", ref)
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	if err := upt(&br); err != nil {
+		return err
+	}
+	br.Generation++
+
+	if br.Ref != ref {
+		return errors.Errorf("invalid ref change")
+	}
+
+	if err := h.update(ctx, br); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (h *HistoryQueue) Status(ctx context.Context, ref string, st chan<- *client.SolveStatus) error {
 	var br controlapi.BuildHistoryRecord
 	if err := h.DB.View(func(tx *bolt.Tx) error {
@@ -138,6 +176,41 @@ func (h *HistoryQueue) Status(ctx context.Context, ref string, st chan<- *client
 	return nil
 }
 
+func (h *HistoryQueue) update(ctx context.Context, rec controlapi.BuildHistoryRecord) error {
+	return h.DB.Update(func(tx *bolt.Tx) (err error) {
+		b := tx.Bucket([]byte(recordsBucket))
+		if b == nil {
+			return nil
+		}
+		dt, err := rec.Marshal()
+		if err != nil {
+			return err
+		}
+
+		l, err := h.LeaseManager.Create(ctx, leases.WithID(h.leaseID(rec.Ref)))
+		created := true
+		if err != nil {
+			if !errors.Is(err, errdefs.ErrAlreadyExists) {
+				return err
+			}
+			l = leases.Lease{ID: h.leaseID(rec.Ref)}
+			created = false
+		}
+
+		defer func() {
+			if err != nil && created {
+				h.LeaseManager.Delete(ctx, l)
+			}
+		}()
+
+		if err := h.addResource(ctx, l, rec.Logs); err != nil {
+			return err
+		}
+
+		return b.Put([]byte(rec.Ref), dt)
+	})
+}
+
 func (h *HistoryQueue) Update(ctx context.Context, e *controlapi.BuildHistoryEvent) error {
 	h.init()
 	h.mu.Lock()
@@ -150,38 +223,82 @@ func (h *HistoryQueue) Update(ctx context.Context, e *controlapi.BuildHistoryEve
 
 	if e.Type == controlapi.BuildHistoryEventType_COMPLETE {
 		delete(h.active, e.Record.Ref)
-		if err := h.DB.Update(func(tx *bolt.Tx) (err error) {
-			b := tx.Bucket([]byte(recordsBucket))
-			if b == nil {
-				return nil
-			}
-			dt, err := e.Record.Marshal()
-			if err != nil {
-				return err
-			}
-
-			l, err := h.LeaseManager.Create(ctx, leases.WithID(h.leaseID(e.Record.Ref)))
-			if err != nil {
-				return err
-			}
-
-			defer func() {
-				if err != nil {
-					h.LeaseManager.Delete(ctx, l)
-				}
-			}()
-
-			if err := h.addResource(ctx, l, e.Record.Logs); err != nil {
-				return err
-			}
-
-			return b.Put([]byte(e.Record.Ref), dt)
-		}); err != nil {
+		if err := h.update(ctx, *e.Record); err != nil {
 			return err
 		}
 		h.ps.Send(e)
 	}
 	return nil
+}
+
+func (h *HistoryQueue) OpenBlobWriter(ctx context.Context, mt string) (_ *Writer, err error) {
+	l, err := h.LeaseManager.Create(ctx, leases.WithRandomID(), leases.WithExpiration(5*time.Minute), leaseutil.MakeTemporary)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		if err != nil {
+			h.LeaseManager.Delete(ctx, l)
+		}
+	}()
+
+	ctx = leases.WithLease(ctx, l.ID)
+
+	w, err := content.OpenWriter(ctx, h.ContentStore, content.WithRef("history-"+h.leaseID(l.ID)))
+	if err != nil {
+		return nil, err
+	}
+
+	return &Writer{
+		mt:    mt,
+		lm:    h.LeaseManager,
+		l:     l,
+		w:     w,
+		dgstr: digest.Canonical.Digester(),
+	}, nil
+}
+
+type Writer struct {
+	mt string
+	w  content.Writer
+	lm leases.Manager
+	l  leases.Lease
+
+	dgstr digest.Digester
+	sz    int
+}
+
+func (w *Writer) Write(p []byte) (int, error) {
+	if _, err := w.dgstr.Hash().Write(p); err != nil {
+		return 0, err
+	}
+	w.sz += len(p)
+	return w.w.Write(p)
+}
+
+func (w *Writer) Discard() {
+	w.w.Close()
+	w.lm.Delete(context.TODO(), w.l)
+}
+
+func (w *Writer) Commit(ctx context.Context) (*ocispecs.Descriptor, func(), error) {
+	dgst := w.dgstr.Digest()
+	sz := int64(w.sz)
+	if err := w.w.Commit(ctx, int64(w.sz), dgst); err != nil {
+		if !errdefs.IsAlreadyExists(err) {
+			w.Discard()
+			return nil, nil, err
+		}
+	}
+	return &ocispecs.Descriptor{
+			MediaType: w.mt,
+			Digest:    dgst,
+			Size:      sz,
+		},
+		func() {
+			w.lm.Delete(context.TODO(), w.l)
+		}, nil
 }
 
 func (h *HistoryQueue) ImportStatus(ctx context.Context, ch chan *client.SolveStatus) (_ *ocispecs.Descriptor, _ func(), err error) {
@@ -193,31 +310,18 @@ func (h *HistoryQueue) ImportStatus(ctx context.Context, ch chan *client.SolveSt
 		}
 	}()
 
-	l, err := h.LeaseManager.Create(ctx, leases.WithRandomID(), leases.WithExpiration(5*time.Minute), leaseutil.MakeTemporary)
+	w, err := h.OpenBlobWriter(ctx, "application/vnd.buildkit.status.v0")
 	if err != nil {
 		return nil, nil, err
 	}
-	defer func() {
-		if err != nil {
-			h.LeaseManager.Delete(ctx, l)
-		}
-	}()
-	ctx = leases.WithLease(ctx, l.ID)
 
-	w, err := content.OpenWriter(ctx, h.ContentStore, content.WithRef("status-"+h.leaseID(l.ID)))
-	if err != nil {
-		return nil, nil, err
-	}
 	bufW := bufio.NewWriter(w)
 
 	defer func() {
-		if err != nil && w != nil {
-			w.Close()
+		if err != nil {
+			w.Discard()
 		}
 	}()
-
-	dgst := digest.Canonical.Digester()
-	total := 0
 
 	buf := make([]byte, 32*1024)
 	for st := range ch {
@@ -238,33 +342,15 @@ func (h *HistoryQueue) ImportStatus(ctx context.Context, ch chan *client.SolveSt
 			if _, err := bufW.Write(buf[:n]); err != nil {
 				return nil, nil, err
 			}
-			dgst.Hash().Write(hdr)
-			dgst.Hash().Write(buf[:n])
-			total += 4 + n
 		}
 	}
 	if err := bufW.Flush(); err != nil {
 		return nil, nil, err
 	}
-
-	if err := w.Commit(ctx, int64(total), dgst.Digest()); err != nil {
-		if !errdefs.IsAlreadyExists(err) {
-			return nil, nil, err
-		}
-	}
-	w = nil
-
-	return &ocispecs.Descriptor{
-			MediaType: "application/vnd.buildkit.status.v0",
-			Digest:    dgst.Digest(),
-			Size:      int64(total),
-		},
-		func() {
-			h.LeaseManager.Delete(context.TODO(), l)
-		}, nil
+	return w.Commit(ctx)
 }
 
-func (h *HistoryQueue) Listen(ctx context.Context, ref string, active bool, f func(*controlapi.BuildHistoryEvent) error) error {
+func (h *HistoryQueue) Listen(ctx context.Context, req *controlapi.BuildHistoryRequest, f func(*controlapi.BuildHistoryEvent) error) error {
 	h.init()
 
 	h.mu.Lock()
@@ -279,13 +365,16 @@ func (h *HistoryQueue) Listen(ctx context.Context, ref string, active bool, f fu
 	}
 	h.mu.Unlock()
 
-	if !active {
+	if !req.ActiveOnly {
 		if err := h.DB.View(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte(recordsBucket))
 			if b == nil {
 				return nil
 			}
 			return b.ForEach(func(key, dt []byte) error {
+				if req.Ref != "" && req.Ref != string(key) {
+					return nil
+				}
 				var br controlapi.BuildHistoryRecord
 				if err := br.Unmarshal(dt); err != nil {
 					return errors.Wrapf(err, "failed to unmarshal build record %s", key)
@@ -308,6 +397,9 @@ func (h *HistoryQueue) Listen(ctx context.Context, ref string, active bool, f fu
 		case <-ctx.Done():
 			return ctx.Err()
 		case e := <-sub.ch:
+			if req.Ref != "" && req.Ref != e.Record.Ref {
+				continue
+			}
 			if err := f(e); err != nil {
 				return err
 			}

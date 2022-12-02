@@ -244,7 +244,7 @@ func (c *Controller) Export(ctx context.Context, req *tracev1.ExportTraceService
 }
 
 func (c *Controller) ListenBuildHistory(req *controlapi.BuildHistoryRequest, srv controlapi.Control_ListenBuildHistoryServer) error {
-	return c.history.Listen(srv.Context(), req.Ref, req.ActiveOnly, func(h *controlapi.BuildHistoryEvent) error {
+	return c.history.Listen(srv.Context(), req, func(h *controlapi.BuildHistoryEvent) error {
 		if err := srv.Send(h); err != nil {
 			return err
 		}

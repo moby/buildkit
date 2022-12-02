@@ -77,6 +77,9 @@ func init() {
 	if reexec.Init() {
 		os.Exit(0)
 	}
+
+	// enable in memory recording for buildkitd traces
+	detect.Recorder = detect.NewTraceRecorder()
 }
 
 var propagators = propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
