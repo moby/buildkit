@@ -12,17 +12,27 @@ ARG NERDCTL_VERSION=v1.0.0
 ARG DNSNAME_VERSION=v1.3.1
 ARG NYDUS_VERSION=v2.1.0
 
-# ALPINE_VERSION sets version for the base layers
-ARG ALPINE_VERSION=3.15
+ARG ALPINE_VERSION=3.17
 
-# git stage is used for checking out remote repository sources
-FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS git
-RUN apk add --no-cache git
+# alpine base for buildkit image
+# TODO: remove this when alpine image supports riscv64
+FROM alpine:${ALPINE_VERSION} AS alpine-amd64
+FROM alpine:${ALPINE_VERSION} AS alpine-arm
+FROM alpine:${ALPINE_VERSION} AS alpine-arm64
+FROM alpine:${ALPINE_VERSION} AS alpine-s390x
+FROM alpine:${ALPINE_VERSION} AS alpine-ppc64le
+FROM alpine:edge@sha256:c223f84e05c23c0571ce8decefef818864869187e1a3ea47719412e205c8c64e AS alpine-riscv64
+FROM alpine-$TARGETARCH AS alpinebase
 
 # xx is a helper for cross-compilation
 FROM --platform=$BUILDPLATFORM tonistiigi/xx:1.1.2 AS xx
 
-FROM --platform=$BUILDPLATFORM golang:1.19-alpine AS golatest
+# go base image
+FROM --platform=$BUILDPLATFORM golang:1.19-alpine${ALPINE_VERSION} AS golatest
+
+# git stage is used for checking out remote repository sources
+FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS git
+RUN apk add --no-cache git
 
 # gobuild is base stage for compiling go/cgo
 FROM golatest AS gobuild-base
@@ -117,8 +127,7 @@ RUN --mount=from=binaries \
 FROM scratch AS release
 COPY --link --from=releaser /out/ /
 
-# tonistiigi/alpine supports riscv64
-FROM tonistiigi/alpine:${ALPINE_VERSION} AS buildkit-export
+FROM alpinebase AS buildkit-export
 RUN apk add --no-cache fuse3 git openssh pigz xz \
   && ln -s fusermount3 /usr/bin/fusermount
 COPY --link examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
@@ -257,7 +266,7 @@ FROM integration-tests AS dev-env
 VOLUME /var/lib/buildkit
 
 # Rootless mode.
-FROM tonistiigi/alpine:${ALPINE_VERSION} AS rootless
+FROM alpinebase AS rootless
 RUN apk add --no-cache fuse3 fuse-overlayfs git openssh pigz shadow-uidmap xz
 RUN adduser -D -u 1000 user \
   && mkdir -p /run/user/1000 /home/user/.local/tmp /home/user/.local/share/buildkit \
