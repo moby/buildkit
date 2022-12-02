@@ -199,14 +199,6 @@ FROM binaries AS buildkit-windows
 # this is not in binaries-windows because it is not intended for release yet, just CI
 COPY --link --from=buildkitd /usr/bin/buildkitd /buildkitd.exe
 
-FROM alpine:${ALPINE_VERSION} AS containerd-runtime
-COPY --link --from=runc /usr/bin/runc /usr/bin/
-COPY --link --from=containerd /out/containerd* /usr/bin/
-COPY --link --from=containerd /out/ctr /usr/bin/
-VOLUME /var/lib/containerd
-VOLUME /run/containerd
-ENTRYPOINT ["containerd"]
-
 FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS cni-plugins
 RUN apk add --no-cache curl
 ARG CNI_VERSION
