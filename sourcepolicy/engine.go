@@ -25,14 +25,14 @@ var (
 // Rule matching is delegated to the `Matcher` interface.
 // Mutations are delegated to the `Mutater` interface.
 type Engine struct {
-	pol     *spb.Policy
+	pol     []*spb.Policy
 	matcher Matcher
 	mutater Mutater
 	sources map[string]*Source
 }
 
 // NewEngine creates a new source policy engine.
-func NewEngine(pol *spb.Policy, matcher Matcher, mutater Mutater) *Engine {
+func NewEngine(pol []*spb.Policy, matcher Matcher, mutater Mutater) *Engine {
 	if matcher == nil {
 		matcher = DefaultMatcher
 	}
@@ -71,7 +71,7 @@ func (e *Engine) source(src *spb.Source) *Source {
 //
 // An error is returned when the source is denied by the policy.
 func (e *Engine) Evaluate(ctx context.Context, op *pb.Op) (bool, error) {
-	if len(e.pol.Rules) == 0 {
+	if len(e.pol) == 0 {
 		return false, nil
 	}
 
@@ -94,7 +94,7 @@ func (e *Engine) Evaluate(ctx context.Context, op *pb.Op) (bool, error) {
 			ctx = bklog.WithLogger(ctx, bklog.G(ctx).WithField("orig", *srcOp).WithField("updated", op.GetSource()))
 		}
 
-		mut, err := e.evaluateRules(ctx, srcOp, &st)
+		mut, err := e.evaluatePolicies(ctx, srcOp, &st)
 		if mut {
 			mutated = true
 		}
@@ -109,7 +109,7 @@ func (e *Engine) Evaluate(ctx context.Context, op *pb.Op) (bool, error) {
 	return mutated, nil
 }
 
-func (e *Engine) evaluateRules(ctx context.Context, srcOp *pb.SourceOp, st *evalState) (bool, error) {
+func (e *Engine) evaluatePolicies(ctx context.Context, srcOp *pb.SourceOp, st *evalState) (bool, error) {
 	ident := srcOp.GetIdentifier()
 	scheme, ref, found := strings.Cut(ident, "://")
 	if !found || ref == "" {
@@ -121,13 +121,20 @@ func (e *Engine) evaluateRules(ctx context.Context, srcOp *pb.SourceOp, st *eval
 		"ref":    ref,
 	}))
 
-	for _, rule := range e.pol.Rules {
-		mut, err := e.evaluateRule(ctx, rule, scheme, ref, srcOp, st)
-		if err != nil {
-			return false, err
+	for _, pol := range e.pol {
+		mut, err := e.evaluatePolicy(ctx, pol, srcOp, st, scheme, ref)
+		if mut || err != nil {
+			return mut, err
 		}
-		if mut {
-			return true, nil
+	}
+	return false, nil
+}
+
+func (e *Engine) evaluatePolicy(ctx context.Context, pol *spb.Policy, srcOp *pb.SourceOp, st *evalState, scheme, ref string) (bool, error) {
+	for _, rule := range pol.Rules {
+		mut, err := e.evaluateRule(ctx, rule, scheme, ref, srcOp, st)
+		if mut || err != nil {
+			return mut, err
 		}
 	}
 	return false, nil

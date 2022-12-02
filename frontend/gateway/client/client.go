@@ -8,6 +8,7 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/solver/result"
+	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/apicaps"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -128,6 +129,7 @@ type SolveRequest struct {
 	FrontendOpt    map[string]string
 	FrontendInputs map[string]*pb.Definition
 	CacheImports   []CacheOptionsEntry
+	SourcePolicies []*spb.Policy
 }
 
 type CacheOptionsEntry struct {

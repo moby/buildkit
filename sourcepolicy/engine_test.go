@@ -26,39 +26,41 @@ func TestEngineEvaluate(t *testing.T) {
 }
 
 func testConvertMultiple(t *testing.T) {
-	pol := &spb.Policy{
-		Rules: []*spb.Rule{
-			{
-				Action: spb.PolicyAction_CONVERT,
-				Source: &spb.Source{
-					Type:       "docker-image",
-					Identifier: "docker.io/library/busybox:latest",
+	pol := []*spb.Policy{
+		{
+			Rules: []*spb.Rule{
+				{
+					Action: spb.PolicyAction_CONVERT,
+					Source: &spb.Source{
+						Type:       "docker-image",
+						Identifier: "docker.io/library/busybox:latest",
+					},
+					Destination: &spb.Destination{
+						Type:       "docker-image",
+						Identifier: "docker.io/library/alpine:latest",
+					},
 				},
-				Destination: &spb.Destination{
-					Type:       "docker-image",
-					Identifier: "docker.io/library/alpine:latest",
+				{
+					Action: spb.PolicyAction_CONVERT,
+					Source: &spb.Source{
+						Type:       "docker-image",
+						Identifier: "docker.io/library/alpine:latest",
+					},
+					Destination: &spb.Destination{
+						Type:       "docker-image",
+						Identifier: "docker.io/library/debian:buster",
+					},
 				},
-			},
-			{
-				Action: spb.PolicyAction_CONVERT,
-				Source: &spb.Source{
-					Type:       "docker-image",
-					Identifier: "docker.io/library/alpine:latest",
-				},
-				Destination: &spb.Destination{
-					Type:       "docker-image",
-					Identifier: "docker.io/library/debian:buster",
-				},
-			},
-			{
-				Action: spb.PolicyAction_CONVERT,
-				Source: &spb.Source{
-					Type:       "docker-image",
-					Identifier: "docker.io/library/debian:buster",
-				},
-				Destination: &spb.Destination{
-					Type:       "docker-image",
-					Identifier: "docker.io/library/debian:bullseye",
+				{
+					Action: spb.PolicyAction_CONVERT,
+					Source: &spb.Source{
+						Type:       "docker-image",
+						Identifier: "docker.io/library/debian:buster",
+					},
+					Destination: &spb.Destination{
+						Type:       "docker-image",
+						Identifier: "docker.io/library/debian:bullseye",
+					},
 				},
 			},
 		},
@@ -81,18 +83,20 @@ func testConvertMultiple(t *testing.T) {
 }
 
 func testConvertWildcard(t *testing.T) {
-	pol := &spb.Policy{
-		Rules: []*spb.Rule{
-			{
-				Action: spb.PolicyAction_CONVERT,
-				Source: &spb.Source{
-					Type:       "docker-image",
-					Identifier: `docker.io/library/golang:*`,
-					MatchType:  spb.MatchType_WILDCARD,
-				},
-				Destination: &spb.Destination{
-					Type:       "docker-image",
-					Identifier: "fakereg.io/library/golang:${1}",
+	pol := []*spb.Policy{
+		{
+			Rules: []*spb.Rule{
+				{
+					Action: spb.PolicyAction_CONVERT,
+					Source: &spb.Source{
+						Type:       "docker-image",
+						Identifier: `docker.io/library/golang:*`,
+						MatchType:  spb.MatchType_WILDCARD,
+					},
+					Destination: &spb.Destination{
+						Type:       "docker-image",
+						Identifier: "fakereg.io/library/golang:${1}",
+					},
 				},
 			},
 		},
@@ -142,7 +146,7 @@ func testConvertRegex(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	e := NewEngine(pol, nil, nil)
+	e := NewEngine([]*spb.Policy{pol}, nil, nil)
 
 	mutated, err := e.Evaluate(ctx, op)
 	require.True(t, mutated)
@@ -175,7 +179,7 @@ func testConvertHTTP(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	e := NewEngine(pol, nil, nil)
+	e := NewEngine([]*spb.Policy{pol}, nil, nil)
 
 	mutated, err := e.Evaluate(ctx, op)
 	require.True(t, mutated)
@@ -220,7 +224,7 @@ func testConvertLoop(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	e := NewEngine(pol, nil, nil)
+	e := NewEngine([]*spb.Policy{pol}, nil, nil)
 
 	mutated, err := e.Evaluate(ctx, op)
 	require.True(t, mutated)
@@ -274,7 +278,7 @@ func testAllowConvertDeny(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	e := NewEngine(pol, nil, nil)
+	e := NewEngine([]*spb.Policy{pol}, nil, nil)
 
 	mutated, err := e.Evaluate(ctx, op)
 	require.True(t, mutated)
@@ -315,7 +319,7 @@ func testConvertDeny(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	e := NewEngine(pol, nil, nil)
+	e := NewEngine([]*spb.Policy{pol}, nil, nil)
 
 	mutated, err := e.Evaluate(ctx, op)
 	require.True(t, mutated)
@@ -359,7 +363,7 @@ func testConvert(t *testing.T) {
 			}
 
 			ctx := context.Background()
-			e := NewEngine(pol, nil, nil)
+			e := NewEngine([]*spb.Policy{pol}, nil, nil)
 
 			mutated, err := e.Evaluate(ctx, op)
 			require.True(t, mutated)
@@ -397,7 +401,7 @@ func testAllowDeny(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	e := NewEngine(pol, nil, nil)
+	e := NewEngine([]*spb.Policy{pol}, nil, nil)
 
 	mutated, err := e.Evaluate(ctx, op)
 	require.False(t, mutated)
@@ -437,7 +441,7 @@ func testDenyAll(t *testing.T) {
 				},
 			}
 
-			e := NewEngine(pol, nil, nil)
+			e := NewEngine([]*spb.Policy{pol}, nil, nil)
 			ctx := context.Background()
 
 			op := &pb.Op{

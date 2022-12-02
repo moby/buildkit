@@ -629,6 +629,7 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 		FrontendOpt:    req.FrontendOpt,
 		FrontendInputs: req.FrontendInputs,
 		CacheImports:   cacheImports,
+		SourcePolicies: req.SourcePolicies,
 	}, lbf.sid)
 	if err != nil {
 		return nil, lbf.wrapSolveError(err)

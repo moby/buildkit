@@ -62,6 +62,7 @@ func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*cli
 		FrontendOpt:    req.FrontendOpt,
 		FrontendInputs: req.FrontendInputs,
 		CacheImports:   req.CacheImports,
+		SourcePolicies: req.SourcePolicies,
 	}, c.sid)
 	if err != nil {
 		return nil, c.wrapSolveError(err)

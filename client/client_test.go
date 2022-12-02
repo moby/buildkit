@@ -47,7 +47,9 @@ import (
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/solver/result"
+	"github.com/moby/buildkit/sourcepolicy"
 	sourcepolicypb "github.com/moby/buildkit/sourcepolicy/pb"
+	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/attestation"
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/contentutil"
@@ -8581,4 +8583,50 @@ func testSourcePolicy(t *testing.T, sb integration.Sandbox) {
 			}
 		})
 	}
+
+	t.Run("Frontend policies", func(t *testing.T) {
+		denied := "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md"
+		frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+			st := llb.Image("busybox:1.34.1-uclibc").File(
+				llb.Copy(llb.HTTP(denied),
+					"README.md", "README.md"))
+			def, err := st.Marshal(sb.Context())
+			if err != nil {
+				return nil, err
+			}
+			return c.Solve(ctx, gateway.SolveRequest{
+				Definition: def.ToPB(),
+				SourcePolicies: []*spb.Policy{{
+					Rules: []*spb.Rule{
+						{
+							Action: spb.PolicyAction_DENY,
+							Source: &spb.Source{
+								Type:       "http",
+								Identifier: denied,
+							},
+						},
+					},
+				}},
+			})
+		}
+
+		_, err = c.Build(sb.Context(), SolveOpt{}, "", frontend, nil)
+		require.ErrorContains(t, err, sourcepolicy.ErrSourceDenied.Error())
+
+		// Override frontend policy
+		_, err = c.Build(sb.Context(), SolveOpt{
+			SourcePolicy: &sourcepolicypb.Policy{
+				Rules: []*sourcepolicypb.Rule{
+					{
+						Action: sourcepolicypb.PolicyAction_ALLOW,
+						Source: &sourcepolicypb.Source{
+							Type:       "http",
+							Identifier: denied,
+						},
+					},
+				},
+			},
+		}, "", frontend, nil)
+		require.NoError(t, err)
+	})
 }
