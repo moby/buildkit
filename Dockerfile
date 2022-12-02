@@ -22,7 +22,7 @@ RUN apk add --no-cache git
 # xx is a helper for cross-compilation
 FROM --platform=$BUILDPLATFORM tonistiigi/xx@sha256:1e96844fadaa2f9aea021b2b05299bc02fe4c39a92d8e735b93e8e2b15610128 AS xx
 
-FROM --platform=$BUILDPLATFORM golang:1.18-alpine AS golatest
+FROM --platform=$BUILDPLATFORM golang:1.18-alpine${ALPINE_VERSION} AS golatest
 
 # gobuild is base stage for compiling go/cgo
 FROM golatest AS gobuild-base
