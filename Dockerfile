@@ -13,16 +13,27 @@ ARG ROOTLESSKIT_VERSION=v0.14.6
 ARG CNI_VERSION=v1.1.0
 ARG STARGZ_SNAPSHOTTER_VERSION=v0.11.3
 
-ARG ALPINE_VERSION=3.15
+ARG ALPINE_VERSION=3.16
 
-# git stage is used for checking out remote repository sources
-FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS git
-RUN apk add --no-cache git
+# alpine base for buildkit image
+# TODO: remove this when alpine image supports riscv64
+FROM alpine:${ALPINE_VERSION} AS alpine-amd64
+FROM alpine:${ALPINE_VERSION} AS alpine-arm
+FROM alpine:${ALPINE_VERSION} AS alpine-arm64
+FROM alpine:${ALPINE_VERSION} AS alpine-s390x
+FROM alpine:${ALPINE_VERSION} AS alpine-ppc64le
+FROM alpine:edge@sha256:c223f84e05c23c0571ce8decefef818864869187e1a3ea47719412e205c8c64e AS alpine-riscv64
+FROM alpine-$TARGETARCH AS alpinebase
 
 # xx is a helper for cross-compilation
 FROM --platform=$BUILDPLATFORM tonistiigi/xx@sha256:1e96844fadaa2f9aea021b2b05299bc02fe4c39a92d8e735b93e8e2b15610128 AS xx
 
-FROM --platform=$BUILDPLATFORM golang:1.18-alpine AS golatest
+# go base image
+FROM --platform=$BUILDPLATFORM golang:1.18-alpine${ALPINE_VERSION} AS golatest
+
+# git stage is used for checking out remote repository sources
+FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS git
+RUN apk add --no-cache git
 
 # gobuild is base stage for compiling go/cgo
 FROM golatest AS gobuild-base
@@ -107,8 +118,7 @@ RUN --mount=from=binaries \
 FROM scratch AS release
 COPY --link --from=releaser /out/ /
 
-# tonistiigi/alpine supports riscv64
-FROM tonistiigi/alpine:${ALPINE_VERSION} AS buildkit-export
+FROM alpinebase AS buildkit-export
 RUN apk add --no-cache fuse3 git openssh pigz xz \
   && ln -s fusermount3 /usr/bin/fusermount
 COPY --link examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
@@ -208,7 +218,7 @@ COPY --link --from=buildkitd /usr/bin/buildkitd /buildkitd.exe
 
 FROM buildkit-buildkitd-$TARGETOS AS buildkit-buildkitd
 
-FROM alpine:${ALPINE_VERSION} AS containerd-runtime
+FROM alpinebase AS containerd-runtime
 COPY --link --from=runc /usr/bin/runc /usr/bin/
 COPY --link --from=containerd /out/containerd* /usr/bin/
 COPY --link --from=containerd /out/ctr /usr/bin/
@@ -256,7 +266,7 @@ FROM integration-tests AS dev-env
 VOLUME /var/lib/buildkit
 
 # Rootless mode.
-FROM tonistiigi/alpine:${ALPINE_VERSION} AS rootless
+FROM alpinebase AS rootless
 RUN apk add --no-cache fuse3 fuse-overlayfs git openssh pigz shadow-uidmap xz
 RUN adduser -D -u 1000 user \
   && mkdir -p /run/user/1000 /home/user/.local/tmp /home/user/.local/share/buildkit \
@@ -275,7 +285,4 @@ ENV BUILDKIT_HOST=unix:///run/user/1000/buildkit/buildkitd.sock
 VOLUME /home/user/.local/share/buildkit
 ENTRYPOINT ["rootlesskit", "buildkitd"]
 
-
 FROM buildkit-${BUILDKIT_TARGET}
-
-
