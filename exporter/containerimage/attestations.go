@@ -16,9 +16,9 @@ import (
 	"github.com/moby/buildkit/version"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"github.com/spdx/tools-golang/jsonloader"
-	"github.com/spdx/tools-golang/jsonsaver"
-	"github.com/spdx/tools-golang/spdx"
+	spdx_json "github.com/spdx/tools-golang/json"
+	"github.com/spdx/tools-golang/spdx/common"
+	spdx "github.com/spdx/tools-golang/spdx/v2_2"
 )
 
 var intotoPlatform ocispecs.Platform = ocispecs.Platform{
@@ -49,7 +49,7 @@ func supplementSBOM(ctx context.Context, s session.Group, target cache.Immutable
 	if err != nil {
 		return att, err
 	}
-	modifyFile := func(f *spdx.File2_2) error {
+	modifyFile := func(f *spdx.File) error {
 		if f == nil {
 			// Skip over nil entries - this is likely a bug in the SPDX parser,
 			// but we shouldn't accidentally panic if we encounter it.
@@ -73,7 +73,7 @@ func supplementSBOM(ctx context.Context, s session.Group, target cache.Immutable
 		f.FileComment = fmt.Sprintf("layerID: %s", desc.Digest.String())
 		return nil
 	}
-	for _, f := range doc.UnpackagedFiles {
+	for _, f := range doc.Files {
 		if err := modifyFile(f); err != nil {
 			return att, err
 		}
@@ -87,9 +87,12 @@ func supplementSBOM(ctx context.Context, s session.Group, target cache.Immutable
 	}
 
 	if doc.CreationInfo == nil {
-		doc.CreationInfo = &spdx.CreationInfo2_2{}
+		doc.CreationInfo = &spdx.CreationInfo{}
 	}
-	doc.CreationInfo.CreatorTools = append(doc.CreationInfo.CreatorTools, "buildkit-"+version.Version)
+	doc.CreationInfo.Creators = append(doc.CreationInfo.Creators, common.Creator{
+		CreatorType: "Tool",
+		Creator:     "buildkit-" + version.Version,
+	})
 
 	content, err = encodeSPDX(doc)
 	if err != nil {
@@ -104,15 +107,8 @@ func supplementSBOM(ctx context.Context, s session.Group, target cache.Immutable
 	}, nil
 }
 
-func decodeSPDX(dt []byte) (s *spdx.Document2_2, err error) {
-	defer func() {
-		// The spdx tools JSON loader is reported to be panicing sometimes
-		if v := recover(); v != nil {
-			s = nil
-			err = errors.Errorf("an error occurred during SPDX JSON document parsing: %+v", v)
-		}
-	}()
-	doc, err := jsonloader.Load2_2(bytes.NewReader(dt))
+func decodeSPDX(dt []byte) (s *spdx.Document, err error) {
+	doc, err := spdx_json.Load2_2(bytes.NewReader(dt))
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to decode spdx")
 	}
@@ -122,16 +118,9 @@ func decodeSPDX(dt []byte) (s *spdx.Document2_2, err error) {
 	return doc, nil
 }
 
-func encodeSPDX(s *spdx.Document2_2) (dt []byte, err error) {
-	defer func() {
-		// The spdx tools JSON saver is reported to be panicing sometimes
-		if v := recover(); v != nil {
-			dt = nil
-			err = errors.Errorf("an error occurred during SPDX JSON document parsing: %+v", v)
-		}
-	}()
+func encodeSPDX(s *spdx.Document) (dt []byte, err error) {
 	w := bytes.NewBuffer(nil)
-	err = jsonsaver.Save2_2(s, w)
+	err = spdx_json.Save2_2(s, w)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to encode spdx")
 	}
