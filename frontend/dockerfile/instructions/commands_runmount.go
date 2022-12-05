@@ -52,6 +52,14 @@ func init() {
 	parseRunPostHooks = append(parseRunPostHooks, runMountPostHook)
 }
 
+func allShareModes() []string {
+	types := make([]string, 0, len(allowedSharingModes))
+	for k := range allowedSharingModes {
+		types = append(types, string(k))
+	}
+	return types
+}
+
 func allMountTypes() []string {
 	types := make([]string, 0, len(allowedMountTypes))
 	for k := range allowedMountTypes {
@@ -231,7 +239,7 @@ func parseMount(value string, expander SingleWordExpander) (*Mount, error) {
 		case "sharing":
 			v := ShareMode(strings.ToLower(value))
 			if _, ok := allowedSharingModes[v]; !ok {
-				return nil, errors.Errorf("unsupported sharing value %q", value)
+				return nil, suggest.WrapError(errors.Errorf("unsupported sharing value %q", value), value, allShareModes(), true)
 			}
 			m.CacheSharing = v
 		case "mode":
