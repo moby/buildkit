@@ -50,6 +50,12 @@ func supplementSBOM(ctx context.Context, s session.Group, target cache.Immutable
 		return att, err
 	}
 	modifyFile := func(f *spdx.File2_2) error {
+		if f == nil {
+			// Skip over nil entries - this is likely a bug in the SPDX parser,
+			// but we shouldn't accidentally panic if we encounter it.
+			return nil
+		}
+
 		if f.FileComment != "" {
 			// Skip over files that already have a comment - since the data is
 			// unstructured, we can't correctly overwrite this field without
@@ -80,6 +86,9 @@ func supplementSBOM(ctx context.Context, s session.Group, target cache.Immutable
 		}
 	}
 
+	if doc.CreationInfo == nil {
+		doc.CreationInfo = &spdx.CreationInfo2_2{}
+	}
 	doc.CreationInfo.CreatorTools = append(doc.CreationInfo.CreatorTools, "buildkit-"+version.Version)
 
 	content, err = encodeSPDX(doc)
@@ -106,6 +115,9 @@ func decodeSPDX(dt []byte) (s *spdx.Document2_2, err error) {
 	doc, err := jsonloader.Load2_2(bytes.NewReader(dt))
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to decode spdx")
+	}
+	if doc == nil {
+		return nil, errors.New("decoding produced empty spdx document")
 	}
 	return doc, nil
 }
