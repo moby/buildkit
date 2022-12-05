@@ -18,7 +18,7 @@ import (
 	"github.com/pkg/errors"
 	spdx_json "github.com/spdx/tools-golang/json"
 	"github.com/spdx/tools-golang/spdx/common"
-	spdx "github.com/spdx/tools-golang/spdx/v2_2"
+	spdx "github.com/spdx/tools-golang/spdx/v2_3"
 )
 
 var intotoPlatform ocispecs.Platform = ocispecs.Platform{
@@ -108,7 +108,7 @@ func supplementSBOM(ctx context.Context, s session.Group, target cache.Immutable
 }
 
 func decodeSPDX(dt []byte) (s *spdx.Document, err error) {
-	doc, err := spdx_json.Load2_2(bytes.NewReader(dt))
+	doc, err := spdx_json.Load2_3(bytes.NewReader(dt))
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to decode spdx")
 	}
@@ -120,7 +120,7 @@ func decodeSPDX(dt []byte) (s *spdx.Document, err error) {
 
 func encodeSPDX(s *spdx.Document) (dt []byte, err error) {
 	w := bytes.NewBuffer(nil)
-	err = spdx_json.Save2_2(s, w)
+	err = spdx_json.Save2_3(s, w)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to encode spdx")
 	}
