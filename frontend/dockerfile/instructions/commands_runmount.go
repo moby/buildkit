@@ -290,10 +290,6 @@ func parseMount(value string, expander SingleWordExpander) (*Mount, error) {
 		}
 	}
 
-	if m.CacheSharing != "" && m.Type != MountTypeCache {
-		return nil, errors.Errorf("invalid cache sharing set for %v mount", m.Type)
-	}
-
 	if m.Type == MountTypeSecret {
 		if m.From != "" {
 			return nil, errors.Errorf("secret mount should not have a from")
@@ -307,6 +303,10 @@ func parseMount(value string, expander SingleWordExpander) (*Mount, error) {
 		if m.Source != "" && m.CacheID != "" {
 			return nil, errors.Errorf("both source and id can't be set")
 		}
+	}
+
+	if m.CacheSharing != "" && m.Type != MountTypeCache {
+		return nil, errors.Errorf("invalid cache sharing set for %v mount", m.Type)
 	}
 
 	return m, nil
