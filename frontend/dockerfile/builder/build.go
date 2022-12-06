@@ -873,8 +873,8 @@ func contextByNameFunc(c client.Client, sessionID string) func(context.Context, 
 			p = &pp
 		}
 		if p != nil {
-			name := name + "::" + platforms.Format(platforms.Normalize(*p))
-			st, img, err := contextByName(ctx, c, sessionID, name, p, resolveMode)
+			pname := name + "::" + platforms.Format(platforms.Normalize(*p))
+			st, img, err := contextByName(ctx, c, sessionID, name, pname, p, resolveMode)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -882,20 +882,20 @@ func contextByNameFunc(c client.Client, sessionID string) func(context.Context, 
 				return st, img, nil
 			}
 		}
-		return contextByName(ctx, c, sessionID, name, p, resolveMode)
+		return contextByName(ctx, c, sessionID, name, name, p, resolveMode)
 	}
 }
 
-func contextByName(ctx context.Context, c client.Client, sessionID, name string, platform *ocispecs.Platform, resolveMode string) (*llb.State, *dockerfile2llb.Image, error) {
+func contextByName(ctx context.Context, c client.Client, sessionID, name string, pname string, platform *ocispecs.Platform, resolveMode string) (*llb.State, *dockerfile2llb.Image, error) {
 	opts := c.BuildOpts().Opts
-	v, ok := opts[contextPrefix+name]
+	v, ok := opts[contextPrefix+pname]
 	if !ok {
 		return nil, nil, nil
 	}
 
 	vv := strings.SplitN(v, ":", 2)
 	if len(vv) != 2 {
-		return nil, nil, errors.Errorf("invalid context specifier %s for %s", v, name)
+		return nil, nil, errors.Errorf("invalid context specifier %s for %s", v, pname)
 	}
 	// allow git@ without protocol for SSH URLs for backwards compatibility
 	if strings.HasPrefix(vv[0], "git@") {
@@ -910,7 +910,7 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 		}
 
 		imgOpt := []llb.ImageOption{
-			llb.WithCustomName("[context " + name + "] " + ref),
+			llb.WithCustomName("[context " + pname + "] " + ref),
 		}
 		if platform != nil {
 			imgOpt = append(imgOpt, llb.Platform(*platform))
@@ -926,7 +926,7 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 		_, data, err := c.ResolveImageConfig(ctx, named.String(), llb.ResolveImageConfigOpt{
 			Platform:     platform,
 			ResolveMode:  resolveMode,
-			LogName:      fmt.Sprintf("[context %s] load metadata for %s", name, ref),
+			LogName:      fmt.Sprintf("[context %s] load metadata for %s", pname, ref),
 			ResolverType: llb.ResolverTypeRegistry,
 		})
 		if err != nil {
@@ -954,7 +954,7 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 	case "http", "https":
 		st, ok := detectGitContext(v, true)
 		if !ok {
-			httpst := llb.HTTP(v, llb.WithCustomName("[context "+name+"] "+v))
+			httpst := llb.HTTP(v, llb.WithCustomName("[context "+pname+"] "+v))
 			st = &httpst
 		}
 		return st, nil, nil
@@ -968,22 +968,26 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 		if !ok {
 			return nil, nil, errors.Errorf("oci-layout reference %q has no name", ref.String())
 		}
-		if reference.Domain(named) != "" {
-			return nil, nil, errors.Errorf("oci-layout reference %q has domain", ref.String())
-		}
-		if strings.Contains(reference.Path(named), "/") {
-			return nil, nil, errors.Errorf("oci-layout reference %q name is multi-part", ref.String())
-		}
-		digested, ok := ref.(reference.Digested)
+		dgstd, ok := named.(reference.Digested)
 		if !ok {
-			return nil, nil, errors.Errorf("oci-layout reference %q does not have digest", ref.String())
+			return nil, nil, errors.Errorf("oci-layout reference %q has no digest", named.String())
 		}
 
-		id := fmt.Sprintf("foo/bar@%s", digested.Digest())
-		_, data, err := c.ResolveImageConfig(ctx, id, llb.ResolveImageConfigOpt{
+		// for the dummy ref primarily used in log messages, we can use the
+		// original name, since the store key may not be significant
+		dummyRef, err := reference.ParseNormalizedNamed(name)
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "could not parse oci-layout reference %q", name)
+		}
+		dummyRef, err = reference.WithDigest(dummyRef, dgstd.Digest())
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "could not wrap %q with digest", name)
+		}
+
+		_, data, err := c.ResolveImageConfig(ctx, dummyRef.String(), llb.ResolveImageConfigOpt{
 			Platform:     platform,
 			ResolveMode:  resolveMode,
-			LogName:      fmt.Sprintf("[context %s] load metadata for %s", name, ref),
+			LogName:      fmt.Sprintf("[context %s] load metadata for %s", pname, dummyRef.String()),
 			ResolverType: llb.ResolverTypeOCILayout,
 			Store: llb.ResolveImageConfigOptStore{
 				SessionID: sessionID,
@@ -1000,14 +1004,14 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 		}
 
 		ociOpt := []llb.OCILayoutOption{
-			llb.WithCustomName("[context " + name + "] OCI load from client"),
+			llb.WithCustomName("[context " + pname + "] OCI load from client"),
 			llb.OCIStore(c.BuildOpts().SessionID, named.Name()),
 		}
 		if platform != nil {
 			ociOpt = append(ociOpt, llb.Platform(*platform))
 		}
 		st := llb.OCILayout(
-			id,
+			dummyRef.String(),
 			ociOpt...,
 		)
 		st, err = st.WithImageConfig(data)
@@ -1019,8 +1023,8 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 		st := llb.Local(vv[1],
 			llb.SessionID(c.BuildOpts().SessionID),
 			llb.FollowPaths([]string{dockerignoreFilename}),
-			llb.SharedKeyHint("context:"+name+"-"+dockerignoreFilename),
-			llb.WithCustomName("[context "+name+"] load "+dockerignoreFilename),
+			llb.SharedKeyHint("context:"+pname+"-"+dockerignoreFilename),
+			llb.WithCustomName("[context "+pname+"] load "+dockerignoreFilename),
 			llb.Differ(llb.DiffNone, false),
 		)
 		def, err := st.Marshal(ctx)
@@ -1049,9 +1053,9 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 			}
 		}
 		st = llb.Local(vv[1],
-			llb.WithCustomName("[context "+name+"] load from client"),
+			llb.WithCustomName("[context "+pname+"] load from client"),
 			llb.SessionID(c.BuildOpts().SessionID),
-			llb.SharedKeyHint("context:"+name),
+			llb.SharedKeyHint("context:"+pname),
 			llb.ExcludePatterns(excludes),
 		)
 		return &st, nil, nil
@@ -1062,7 +1066,7 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 		}
 		st, ok := inputs[vv[1]]
 		if !ok {
-			return nil, nil, errors.Errorf("invalid input %s for %s", vv[1], name)
+			return nil, nil, errors.Errorf("invalid input %s for %s", vv[1], pname)
 		}
 		md, ok := opts[inputMetadataPrefix+vv[1]]
 		if ok {
@@ -1077,14 +1081,14 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 					return nil, nil, err
 				}
 				if err := json.Unmarshal(dtic, &img); err != nil {
-					return nil, nil, errors.Wrapf(err, "failed to parse image config for %s", name)
+					return nil, nil, errors.Wrapf(err, "failed to parse image config for %s", pname)
 				}
 			}
 			return &st, img, nil
 		}
 		return &st, nil, nil
 	default:
-		return nil, nil, errors.Errorf("unsupported context source %s for %s", vv[0], name)
+		return nil, nil, errors.Errorf("unsupported context source %s for %s", vv[0], pname)
 	}
 }
 
