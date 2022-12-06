@@ -1,31 +1,24 @@
 package integration
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/docker/docker/client"
-	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/util/testutil/dockerd"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
-)
-
-const (
-	shortLen      = 12
-	dockerdBinary = "dockerd"
 )
 
 // InitDockerdWorker registers a dockerd worker with the global registry.
 func InitDockerdWorker() {
-	Register(&dockerd{
+	Register(&moby{
 		name:     "dockerd",
 		rootless: false,
 		unsupported: []string{
@@ -42,7 +35,7 @@ func InitDockerdWorker() {
 			FeatureSecurityMode,
 		},
 	})
-	Register(&dockerd{
+	Register(&moby{
 		name:     "dockerd-containerd",
 		rootless: false,
 		unsupported: []string{
@@ -57,15 +50,15 @@ type moby struct {
 	unsupported []string
 }
 
-func (c dockerd) Name() string {
+func (c moby) Name() string {
 	return c.name
 }
 
-func (c dockerd) Rootless() bool {
+func (c moby) Rootless() bool {
 	return c.rootless
 }
 
-func (c dockerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func() error, err error) {
+func (c moby) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func() error, err error) {
 	if err := requireRoot(); err != nil {
 		return nil, nil, err
 	}
@@ -88,6 +81,11 @@ func (c dockerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl fun
 		return nil, nil, err
 	}
 
+	d, err := dockerd.NewDaemon(workDir)
+	if err != nil {
+		return nil, nil, errors.Errorf("new daemon error: %q, %s", err, formatLogs(cfg.Logs))
+	}
+
 	dockerdConfig := fmt.Sprintf(`{
   "features": {
     "containerd-snapshotter": %v
@@ -99,59 +97,26 @@ func (c dockerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl fun
 		return nil, nil, err
 	}
 
-	dockerdBinaryPath, err := exec.LookPath(dockerdBinary)
-	if err != nil {
-		return nil, nil, errors.Wrapf(err, "could not find docker binary in $PATH")
-	}
-
-	id := "d" + identity.NewID()[:shortLen]
-	dir := filepath.Join(workDir, id)
-	daemonFolder, err := filepath.Abs(dir)
-	if err != nil {
-		return nil, nil, err
-	}
-	daemonRoot := filepath.Join(daemonFolder, "root")
-	if err := os.MkdirAll(daemonRoot, 0755); err != nil {
-		return nil, nil, errors.Wrapf(err, "failed to create daemon root %q", daemonRoot)
-	}
-	execRoot := filepath.Join(os.TempDir(), "dxr", id)
-	daemonSocket := "unix://" + filepath.Join(daemonFolder, "docker.sock")
-
-	cmd := exec.Command(dockerdBinaryPath, []string{
+	err = d.StartWithError(cfg.Logs,
 		"--config-file", dockerdConfigFile,
-		"--data-root", daemonRoot,
-		"--exec-root", execRoot,
-		"--pidfile", filepath.Join(daemonFolder, "docker.pid"),
-		"--host", daemonSocket,
 		"--userland-proxy=false",
-		"--containerd-namespace", id,
-		"--containerd-plugins-namespace", id + "p",
 		"--bip", "10.66.66.1/24",
 		"--default-address-pool", "base=10.66.66.0/16,size=24",
 		"--debug",
-	}...)
-	cmd.Env = append(os.Environ(), "BUILDKIT_DEBUG_EXEC_OUTPUT=1", "BUILDKIT_DEBUG_PANIC_ON_ERROR=1")
-	cmd.SysProcAttr = getSysProcAttr()
-
-	dockerdStop, err := startCmd(cmd, cfg.Logs)
-	if err != nil {
-		return nil, nil, errors.Wrapf(err, "dockerd startcmd error: %s", formatLogs(cfg.Logs))
-	}
-	if err := waitUnix(daemonSocket, 15*time.Second); err != nil {
-		dockerdStop()
-		return nil, nil, errors.Wrapf(err, "dockerd did not start up: %s", formatLogs(cfg.Logs))
-	}
-	deferF.append(dockerdStop)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	deferF.append(func() error { cancel(); return nil })
-
-	dockerAPI, err := client.NewClientWithOpts(
-		client.FromEnv,
-		client.WithHost(daemonSocket),
 	)
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "dockerd client api error: %s", formatLogs(cfg.Logs))
+		return nil, nil, err
+	}
+	deferF.append(d.StopWithError)
+
+	logs := map[string]*bytes.Buffer{}
+	if err := waitUnix(d.Sock(), 5*time.Second); err != nil {
+		return nil, nil, errors.Errorf("dockerd did not start up: %q, %s", err, formatLogs(logs))
+	}
+
+	dockerAPI, err := client.NewClientWithOpts(client.WithHost(d.Sock()))
+	if err != nil {
+		return nil, nil, err
 	}
 	deferF.append(dockerAPI.Close)
 
@@ -186,26 +151,20 @@ func (c dockerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl fun
 			}
 			conn, err := dockerAPI.DialHijack(ctx, "/grpc", "h2c", nil)
 			if err != nil {
-				if errors.Is(err, syscall.ECONNRESET) || errors.Is(err, net.ErrClosed) {
-					logrus.Warn("dockerd conn already closed: ", err)
-					return nil
-				}
-				return errors.Wrap(err, "dockerd grpc conn error")
+				return err
 			}
 
 			proxyGroup.Go(func() error {
 				_, err := io.Copy(conn, tmpConn)
 				if err != nil {
-					logrus.Warn("dockerd proxy error: ", err)
-					return nil
+					return err
 				}
 				return tmpConn.Close()
 			})
 			proxyGroup.Go(func() error {
 				_, err := io.Copy(tmpConn, conn)
 				if err != nil {
-					logrus.Warn("dockerd proxy error: ", err)
-					return nil
+					return err
 				}
 				return conn.Close()
 			})
