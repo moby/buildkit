@@ -54,12 +54,18 @@ RUN echo "ok" > /foo
 	)
 	require.NoError(t, err)
 
-	for _, mode := range []string{"min", "max"} {
+	for _, mode := range []string{"", "min", "max"} {
 		t.Run(mode, func(t *testing.T) {
-			target := registry + "/buildkit/testwithprovenance:" + mode
+			var target string
+			if target == "" {
+				target = registry + "/buildkit/testwithprovenance:none"
+			} else {
+				target = registry + "/buildkit/testwithprovenance:" + mode
+			}
+
 			provReq := ""
-			if mode == "max" {
-				provReq = "mode=max"
+			if mode != "" {
+				provReq = "mode=" + mode
 			}
 			_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 				LocalDirs: map[string]string{
@@ -129,7 +135,7 @@ RUN echo "ok" > /foo
 			} else if isGateway {
 				require.Equal(t, "gateway.v0", pred.Invocation.Parameters.Frontend)
 
-				if mode == "max" {
+				if mode == "max" || mode == "" {
 					require.Equal(t, 3, len(args), "%v", args)
 					require.True(t, pred.Metadata.Completeness.Parameters)
 
@@ -144,7 +150,7 @@ RUN echo "ok" > /foo
 			} else {
 				require.Equal(t, "dockerfile.v0", pred.Invocation.Parameters.Frontend)
 
-				if mode == "max" {
+				if mode == "max" || mode == "" {
 					require.Equal(t, 2, len(args))
 					require.True(t, pred.Metadata.Completeness.Parameters)
 
@@ -193,7 +199,7 @@ RUN echo "ok" > /foo
 			require.False(t, pred.Metadata.Reproducible)
 			require.False(t, pred.Metadata.Completeness.Hermetic)
 
-			if mode == "max" {
+			if mode == "max" || mode == "" {
 				require.Equal(t, 2, len(pred.Metadata.BuildKitMetadata.Layers))
 				require.NotNil(t, pred.Metadata.BuildKitMetadata.Source)
 				require.Equal(t, "Dockerfile", pred.Metadata.BuildKitMetadata.Source.Infos[0].Filename)

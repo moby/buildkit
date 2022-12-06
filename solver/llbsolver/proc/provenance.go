@@ -54,7 +54,7 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 			reproducible = b
 		}
 
-		var mode string
+		mode := "max"
 		if v, ok := attrs["mode"]; ok {
 			switch v {
 			case "full":
@@ -90,7 +90,8 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 
 			var addLayers func() error
 
-			if mode != "max" {
+			switch mode {
+			case "min":
 				args := make(map[string]string)
 				for k, v := range pr.Invocation.Parameters.Args {
 					if strings.HasPrefix(k, "build-arg:") || strings.HasPrefix(k, "label:") {
@@ -102,7 +103,7 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 				pr.Invocation.Parameters.Args = args
 				pr.Invocation.Parameters.Secrets = nil
 				pr.Invocation.Parameters.SSH = nil
-			} else {
+			case "max":
 				dgsts, err := provenance.AddBuildConfig(ctx, pr, res.Refs[p.ID])
 				if err != nil {
 					return nil, err
@@ -144,6 +145,8 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 
 					return nil
 				}
+			default:
+				return nil, errors.Errorf("invalid mode %q", mode)
 			}
 
 			res.AddAttestation(p.ID, result.Attestation{
