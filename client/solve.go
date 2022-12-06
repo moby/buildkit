@@ -210,11 +210,12 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		})
 	}
 
+	frontendAttrs := map[string]string{}
+	for k, v := range opt.FrontendAttrs {
+		frontendAttrs[k] = v
+	}
 	for k, v := range cacheOpt.frontendAttrs {
-		if opt.FrontendAttrs == nil {
-			opt.FrontendAttrs = map[string]string{}
-		}
-		opt.FrontendAttrs[k] = v
+		frontendAttrs[k] = v
 	}
 
 	solveCtx, cancelSolve := context.WithCancel(ctx)
@@ -254,7 +255,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			ExporterAttrs:  ex.Attrs,
 			Session:        s.ID(),
 			Frontend:       opt.Frontend,
-			FrontendAttrs:  opt.FrontendAttrs,
+			FrontendAttrs:  frontendAttrs,
 			FrontendInputs: frontendInputs,
 			Cache:          cacheOpt.options,
 			Entitlements:   opt.AllowedEntitlements,
@@ -270,7 +271,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 
 	if runGateway != nil {
 		eg.Go(func() error {
-			err := runGateway(ref, s, opt.FrontendAttrs)
+			err := runGateway(ref, s, frontendAttrs)
 			if err == nil {
 				return nil
 			}
