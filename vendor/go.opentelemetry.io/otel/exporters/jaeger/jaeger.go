@@ -26,7 +26,7 @@ import (
 	gen "go.opentelemetry.io/otel/exporters/jaeger/internal/gen-go/jaeger"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -123,6 +123,15 @@ func (e *Exporter) Shutdown(ctx context.Context) error {
 	return e.uploader.shutdown(ctx)
 }
 
+// MarshalLog is the marshaling function used by the logging system to represent this exporter.
+func (e *Exporter) MarshalLog() interface{} {
+	return struct {
+		Type string
+	}{
+		Type: "jaeger",
+	}
+}
+
 func spanToThrift(ss sdktrace.ReadOnlySpan) *gen.Span {
 	attr := ss.Attributes()
 	tags := make([]*gen.Tag, 0, len(attr))
@@ -133,10 +142,10 @@ func spanToThrift(ss sdktrace.ReadOnlySpan) *gen.Span {
 		}
 	}
 
-	if il := ss.InstrumentationLibrary(); il.Name != "" {
-		tags = append(tags, getStringTag(keyInstrumentationLibraryName, il.Name))
-		if il.Version != "" {
-			tags = append(tags, getStringTag(keyInstrumentationLibraryVersion, il.Version))
+	if is := ss.InstrumentationScope(); is.Name != "" {
+		tags = append(tags, getStringTag(keyInstrumentationLibraryName, is.Name))
+		if is.Version != "" {
+			tags = append(tags, getStringTag(keyInstrumentationLibraryVersion, is.Version))
 		}
 	}
 
@@ -254,8 +263,8 @@ func keyValueToTag(keyValue attribute.KeyValue) *gen.Tag {
 		attribute.INT64SLICE,
 		attribute.FLOAT64SLICE,
 		attribute.STRINGSLICE:
-		json, _ := json.Marshal(keyValue.Value.AsInterface())
-		a := (string)(json)
+		data, _ := json.Marshal(keyValue.Value.AsInterface())
+		a := (string)(data)
 		tag = &gen.Tag{
 			Key:   string(keyValue.Key),
 			VStr:  &a,

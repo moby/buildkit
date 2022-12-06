@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	// udpPacketMaxLength is the max size of UDP packet we want to send, synced with jaeger-agent
+	// udpPacketMaxLength is the max size of UDP packet we want to send, synced with jaeger-agent.
 	udpPacketMaxLength = 65000
 	// emitBatchOverhead is the additional overhead bytes used for enveloping the datagram,
 	// synced with jaeger-agent https://github.com/jaegertracing/jaeger-client-go/blob/master/transport_udp.go#L37

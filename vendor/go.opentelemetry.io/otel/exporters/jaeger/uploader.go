@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"time"
@@ -28,12 +27,13 @@ import (
 	"go.opentelemetry.io/otel/exporters/jaeger/internal/third_party/thrift/lib/go/thrift"
 )
 
-// batchUploader send a batch of spans to Jaeger
+// batchUploader send a batch of spans to Jaeger.
 type batchUploader interface {
 	upload(context.Context, *gen.Batch) error
 	shutdown(context.Context) error
 }
 
+// EndpointOption configures a Jaeger endpoint.
 type EndpointOption interface {
 	newBatchUploader() (batchUploader, error)
 }
@@ -75,6 +75,7 @@ func WithAgentEndpoint(options ...AgentEndpointOption) EndpointOption {
 	})
 }
 
+// AgentEndpointOption configures a Jaeger agent endpoint.
 type AgentEndpointOption interface {
 	apply(agentEndpointConfig) agentEndpointConfig
 }
@@ -175,6 +176,7 @@ func WithCollectorEndpoint(options ...CollectorEndpointOption) EndpointOption {
 	})
 }
 
+// CollectorEndpointOption configures a Jaeger collector endpoint.
 type CollectorEndpointOption interface {
 	apply(collectorEndpointConfig) collectorEndpointConfig
 }
@@ -305,8 +307,10 @@ func (c *collectorUploader) upload(ctx context.Context, batch *gen.Batch) error 
 		return err
 	}
 
-	_, _ = io.Copy(ioutil.Discard, resp.Body)
-	resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	if err = resp.Body.Close(); err != nil {
+		return err
+	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("failed to upload traces; HTTP status code: %d", resp.StatusCode)
