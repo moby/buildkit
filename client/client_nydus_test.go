@@ -28,7 +28,7 @@ func TestNydusIntegration(t *testing.T) {
 }
 
 func testBuildExportNydusWithHybrid(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "nydus build export")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
 	requiresLinux(t)
 
 	cdAddress := sb.ContainerdAddress()

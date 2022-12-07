@@ -1191,11 +1191,11 @@ func (tc verifyContents) Run(t *testing.T, sb integration.Sandbox) {
 		t.Skip("rootless")
 	}
 
-	// FIXME: TestDiffUpperScratch broken on dockerd and seems flaky with containerd.
-	// 	see https://github.com/moby/buildkit/pull/2726#issuecomment-1070978499
-	// 	and https://github.com/moby/buildkit/pull/2725#issuecomment-1066521712
-	if integration.IsTestDockerd() && tc.name == "TestDiffUpperScratch" {
-		t.Skip("TestDiffUpperScratch is temporarily broken on dockerd")
+	switch tc.name {
+	case "TestDiffUpperScratch":
+		if integration.IsTestDockerdMoby(sb) {
+			t.Skip("failed to handle changes: lstat ... no such file or directory: https://github.com/moby/buildkit/pull/2726#issuecomment-1070978499")
+		}
 	}
 
 	requiresLinux(t)

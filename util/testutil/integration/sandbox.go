@@ -21,11 +21,12 @@ import (
 const buildkitdConfigFile = "buildkitd.toml"
 
 type backend struct {
-	address           string
-	containerdAddress string
-	rootless          bool
-	snapshotter       string
-	isDockerd         bool
+	address             string
+	containerdAddress   string
+	rootless            bool
+	snapshotter         string
+	unsupportedFeatures []string
+	isDockerd           bool
 }
 
 func (b backend) Address() string {
@@ -42,6 +43,15 @@ func (b backend) Rootless() bool {
 
 func (b backend) Snapshotter() string {
 	return b.snapshotter
+}
+
+func (b backend) isUnsupportedFeature(feature string) bool {
+	for _, unsupportedFeature := range b.unsupportedFeatures {
+		if feature == unsupportedFeature {
+			return true
+		}
+	}
+	return false
 }
 
 type sandbox struct {
@@ -64,6 +74,10 @@ func (sb *sandbox) Context() context.Context {
 
 func (sb *sandbox) PrintLogs(t *testing.T) {
 	printLogs(sb.logs, t.Log)
+}
+
+func (sb *sandbox) ClearLogs() {
+	sb.logs = make(map[string]*bytes.Buffer)
 }
 
 func (sb *sandbox) NewRegistry() (string, error) {
@@ -219,6 +233,18 @@ func runBuildkitd(ctx context.Context, conf *BackendConfig, args []string, logs 
 	return address, cl, err
 }
 
+func getBackend(sb Sandbox) (*backend, error) {
+	sbx, ok := sb.(*sandbox)
+	if !ok {
+		return nil, errors.Errorf("invalid sandbox type %T", sb)
+	}
+	b, ok := sbx.Backend.(backend)
+	if !ok {
+		return nil, errors.Errorf("invalid backend type %T", b)
+	}
+	return &b, nil
+}
+
 func rootlessSupported(uid int) bool {
 	cmd := exec.Command("sudo", "-u", fmt.Sprintf("#%d", uid), "-i", "--", "exec", "unshare", "-U", "true") //nolint:gosec // test utility
 	b, err := cmd.CombinedOutput()
@@ -236,5 +262,69 @@ func printLogs(logs map[string]*bytes.Buffer, f func(args ...interface{})) {
 		for s.Scan() {
 			f(s.Text())
 		}
+	}
+}
+
+const (
+	FeatureCacheExport      = "cache export"
+	FeatureCacheImport      = "cache import"
+	FeatureDirectPush       = "direct push"
+	FeatureFrontendOutline  = "frontend outline"
+	FeatureFrontendTargets  = "frontend targets"
+	FeatureImageExporter    = "image exporter"
+	FeatureInfo             = "info"
+	FeatureMultiCacheExport = "multi cache export"
+	FeatureMultiPlatform    = "multi-platform"
+	FeatureOCIExporter      = "oci exporter"
+	FeatureOCILayout        = "oci layout"
+	FeatureProvenance       = "provenance"
+	FeatureSBOM             = "sbom"
+	FeatureSecurityMode     = "security mode"
+	FeatureSourceDateEpoch  = "source date epoch"
+)
+
+var features = map[string]struct{}{
+	FeatureCacheExport:      {},
+	FeatureCacheImport:      {},
+	FeatureDirectPush:       {},
+	FeatureFrontendOutline:  {},
+	FeatureFrontendTargets:  {},
+	FeatureImageExporter:    {},
+	FeatureInfo:             {},
+	FeatureMultiCacheExport: {},
+	FeatureMultiPlatform:    {},
+	FeatureOCIExporter:      {},
+	FeatureOCILayout:        {},
+	FeatureProvenance:       {},
+	FeatureSBOM:             {},
+	FeatureSecurityMode:     {},
+	FeatureSourceDateEpoch:  {},
+}
+
+func CheckFeatureCompat(t *testing.T, sb Sandbox, reason ...string) {
+	t.Helper()
+	if len(reason) == 0 {
+		t.Fatal("no reason provided")
+	}
+	b, err := getBackend(sb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(b.unsupportedFeatures) == 0 {
+		return
+	}
+	var ereasons []string
+	for _, r := range reason {
+		if _, ok := features[r]; ok {
+			if b.isUnsupportedFeature(r) {
+				ereasons = append(ereasons, r)
+			}
+		} else {
+			sb.ClearLogs()
+			t.Fatalf("unknown reason %q to skip test", r)
+		}
+	}
+	if len(ereasons) > 0 {
+		t.Skipf("%s worker can not currently run this test due to missing features (%s)", sb.Name(), strings.Join(ereasons, ", "))
 	}
 }

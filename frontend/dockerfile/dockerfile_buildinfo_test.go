@@ -78,7 +78,7 @@ COPY --from=alpine /bin/busybox /alpine-busybox
 	defer c.Close()
 
 	var exports []client.ExportEntry
-	if integration.IsTestDockerd() {
+	if integration.IsTestDockerdMoby(sb) {
 		exports = []client.ExportEntry{{
 			Type: "moby",
 			Attrs: map[string]string{
@@ -158,7 +158,7 @@ FROM busybox:latest
 	defer c.Close()
 
 	var exports []client.ExportEntry
-	if integration.IsTestDockerd() {
+	if integration.IsTestDockerdMoby(sb) {
 		exports = []client.ExportEntry{{
 			Type: "moby",
 			Attrs: map[string]string{
@@ -224,7 +224,7 @@ RUN echo $foo
 	defer c.Close()
 
 	var exports []client.ExportEntry
-	if integration.IsTestDockerd() {
+	if integration.IsTestDockerdMoby(sb) {
 		exports = []client.ExportEntry{{
 			Type: "moby",
 			Attrs: map[string]string{
@@ -265,7 +265,7 @@ RUN echo $foo
 
 // moby/buildkit#2476
 func testBuildInfoMultiPlatform(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "multi-platform")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter, integration.FeatureMultiPlatform)
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
@@ -359,7 +359,7 @@ COPY --from=base /out /
 	defer c.Close()
 
 	var exports []client.ExportEntry
-	if integration.IsTestDockerd() {
+	if integration.IsTestDockerdMoby(sb) {
 		exports = []client.ExportEntry{{
 			Type: "moby",
 			Attrs: map[string]string{
@@ -446,7 +446,7 @@ COPY --from=base /o* /
 	require.NoError(t, err)
 
 	var exports []client.ExportEntry
-	if integration.IsTestDockerd() {
+	if integration.IsTestDockerdMoby(sb) {
 		exports = []client.ExportEntry{{
 			Type: "moby",
 			Attrs: map[string]string{
