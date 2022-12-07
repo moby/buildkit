@@ -372,7 +372,7 @@ github.com/davecgh/go-spew/spew
 # github.com/dimchansky/utfbom v1.1.1
 ## explicit
 github.com/dimchansky/utfbom
-# github.com/docker/cli v20.10.21+incompatible => github.com/docker/cli v20.10.3-0.20221124184145-c0fa00e6142d+incompatible
+# github.com/docker/cli v23.0.0-beta.1+incompatible
 ## explicit
 github.com/docker/cli/cli/config
 github.com/docker/cli/cli/config/configfile
@@ -383,7 +383,7 @@ github.com/docker/cli/cli/connhelper/commandconn
 ## explicit
 github.com/docker/distribution/digestset
 github.com/docker/distribution/reference
-# github.com/docker/docker v20.10.21+incompatible => github.com/docker/docker v20.10.3-0.20221124164242-a913b5ad7ef1+incompatible
+# github.com/docker/docker v23.0.0-beta.1+incompatible
 ## explicit
 github.com/docker/docker/api
 github.com/docker/docker/api/types
@@ -926,5 +926,3 @@ google.golang.org/protobuf/types/pluginpb
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
-# github.com/docker/cli => github.com/docker/cli v20.10.3-0.20221124184145-c0fa00e6142d+incompatible
-# github.com/docker/docker => github.com/docker/docker v20.10.3-0.20221124164242-a913b5ad7ef1+incompatible
