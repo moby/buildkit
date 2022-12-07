@@ -464,12 +464,9 @@ func OCILayout(store string, digest digest.Digest, opts ...OCILayoutOption) Stat
 	attrs := map[string]string{}
 	if gi.sessionID != "" {
 		attrs[pb.AttrOCILayoutSessionID] = gi.sessionID
-		addCap(&gi.Constraints, pb.CapSourceOCILayoutSessionID)
 	}
-
-	if ll := gi.layerLimit; ll != nil {
-		attrs[pb.AttrOCILayoutLayerLimit] = strconv.FormatInt(int64(*ll), 10)
-		addCap(&gi.Constraints, pb.CapSourceOCILayoutLayerLimit)
+	if gi.layerLimit != nil {
+		attrs[pb.AttrOCILayoutLayerLimit] = strconv.FormatInt(int64(*gi.layerLimit), 10)
 	}
 
 	addCap(&gi.Constraints, pb.CapSourceOCILayout)
