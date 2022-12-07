@@ -122,6 +122,7 @@ message ResolveImageConfigRequest {
 	string LogName = 4;
 	int32 ResolverType = 5;
 	string SessionID = 6;
+	string StoreID = 7;
 }
 
 message ResolveImageConfigResponse {

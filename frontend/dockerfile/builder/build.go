@@ -979,14 +979,16 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 			return nil, nil, errors.Errorf("oci-layout reference %q does not have digest", ref.String())
 		}
 
-		// We use store id as the host here, the image name will be ignored
-		// (since image lookup is not currently supported)
-		id := fmt.Sprintf("%s/image@%s", named.Name(), digested.Digest())
+		id := fmt.Sprintf("foo/bar@%s", digested.Digest())
 		_, data, err := c.ResolveImageConfig(ctx, id, llb.ResolveImageConfigOpt{
 			Platform:     platform,
 			ResolveMode:  resolveMode,
 			LogName:      fmt.Sprintf("[context %s] load metadata for %s", name, ref),
 			ResolverType: llb.ResolverTypeOCILayout,
+			Store: llb.ResolveImageConfigOptStore{
+				SessionID: sessionID,
+				StoreID:   named.Name(),
+			},
 		})
 		if err != nil {
 			return nil, nil, err
@@ -999,14 +1001,13 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 
 		ociOpt := []llb.OCILayoutOption{
 			llb.WithCustomName("[context " + name + "] OCI load from client"),
-			llb.OCISessionID(c.BuildOpts().SessionID),
+			llb.OCIStore(c.BuildOpts().SessionID, named.Name()),
 		}
 		if platform != nil {
 			ociOpt = append(ociOpt, llb.Platform(*platform))
 		}
 		st := llb.OCILayout(
-			named.Name(),
-			digested.Digest(),
+			id,
 			ociOpt...,
 		)
 		st, err = st.WithImageConfig(data)

@@ -324,7 +324,7 @@ func captureProvenance(ctx context.Context, res solver.CachedResultWithProvenanc
 					return errors.Wrapf(err, "failed to parse OCI digest %s", pin)
 				}
 				c.AddLocalImage(provenance.ImageSource{
-					Ref:      s.Name,
+					Ref:      s.Reference.String(),
 					Platform: s.Platform,
 					Digest:   dgst,
 				})

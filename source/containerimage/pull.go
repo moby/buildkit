@@ -107,12 +107,7 @@ func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt llb.Re
 		rslvr = resolver.DefaultPool.GetResolver(is.RegistryHosts, ref, "pull", sm, g).WithImageStore(is.ImageStore, rm)
 	case ResolverTypeOCILayout:
 		rm = source.ResolveModeForcePull
-
-		parsed, err := reference.Parse(ref)
-		if err != nil {
-			return "", nil, err
-		}
-		rslvr = getOCILayoutResolver(parsed.Hostname(), sm, "", g)
+		rslvr = getOCILayoutResolver(opt.Store, sm, g)
 	}
 	key += rm.String()
 	res, err := is.g.Do(ctx, key, func(ctx context.Context) (interface{}, error) {
@@ -137,8 +132,7 @@ func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session
 		mode       source.ResolveMode
 		recordType client.UsageRecordType
 		ref        reference.Spec
-		sessionID  string
-		storeID    string
+		store      llb.ResolveImageConfigOptStore
 		layerLimit *int
 	)
 	switch is.ResolverType {
@@ -165,9 +159,11 @@ func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session
 			platform = *ociIdentifier.Platform
 		}
 		mode = source.ResolveModeForcePull // with OCI layout, we always just "pull"
-		sessionID = ociIdentifier.SessionID
-		ref = reference.Spec{Locator: "oci-layout/dummy", Object: "@" + ociIdentifier.Digest.String()}
-		storeID = ociIdentifier.Name
+		store = llb.ResolveImageConfigOptStore{
+			SessionID: ociIdentifier.SessionID,
+			StoreID:   ociIdentifier.StoreID,
+		}
+		ref = ociIdentifier.Reference
 		layerLimit = ociIdentifier.LayerLimit
 	default:
 		return nil, errors.Errorf("unknown resolver type: %v", is.ResolverType)
@@ -188,9 +184,8 @@ func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session
 		RecordType:     recordType,
 		Ref:            ref.String(),
 		SessionManager: sm,
-		SessionID:      sessionID,
 		vtx:            vtx,
-		storeID:        storeID,
+		store:          store,
 		layerLimit:     layerLimit,
 	}
 	return p, nil
@@ -205,11 +200,10 @@ type puller struct {
 	RecordType     client.UsageRecordType
 	Ref            string
 	SessionManager *session.Manager
-	SessionID      string
 	layerLimit     *int
 	vtx            solver.Vertex
 	ResolverType
-	storeID string
+	store llb.ResolveImageConfigOptStore
 
 	g                flightcontrol.Group
 	cacheKeyErr      error
@@ -250,7 +244,7 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 		p.Puller.Resolver = resolver
 		getResolver = func(g session.Group) remotes.Resolver { return resolver.WithSession(g) }
 	case ResolverTypeOCILayout:
-		resolver := getOCILayoutResolver(p.storeID, p.SessionManager, p.SessionID, g)
+		resolver := getOCILayoutResolver(p.store, p.SessionManager, g)
 		p.Puller.Resolver = resolver
 		// OCILayout has no need for session
 		getResolver = func(g session.Group) remotes.Resolver { return resolver }
@@ -366,7 +360,7 @@ func (p *puller) Snapshot(ctx context.Context, g session.Group) (ir cache.Immuta
 		p.Puller.Resolver = resolver
 		getResolver = func(g session.Group) remotes.Resolver { return resolver.WithSession(g) }
 	case ResolverTypeOCILayout:
-		resolver := getOCILayoutResolver(p.storeID, p.SessionManager, p.SessionID, g)
+		resolver := getOCILayoutResolver(p.store, p.SessionManager, g)
 		p.Puller.Resolver = resolver
 		// OCILayout has no need for session
 		getResolver = func(g session.Group) remotes.Resolver { return resolver }

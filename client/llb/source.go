@@ -4,7 +4,6 @@ import (
 	"context"
 	_ "crypto/sha256" // for opencontainers/go-digest
 	"encoding/json"
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -455,7 +454,7 @@ func Differ(t DiffType, required bool) LocalOption {
 	})
 }
 
-func OCILayout(store string, digest digest.Digest, opts ...OCILayoutOption) State {
+func OCILayout(ref string, opts ...OCILayoutOption) State {
 	gi := &OCILayoutInfo{}
 
 	for _, o := range opts {
@@ -465,13 +464,16 @@ func OCILayout(store string, digest digest.Digest, opts ...OCILayoutOption) Stat
 	if gi.sessionID != "" {
 		attrs[pb.AttrOCILayoutSessionID] = gi.sessionID
 	}
+	if gi.storeID != "" {
+		attrs[pb.AttrOCILayoutStoreID] = gi.storeID
+	}
 	if gi.layerLimit != nil {
 		attrs[pb.AttrOCILayoutLayerLimit] = strconv.FormatInt(int64(*gi.layerLimit), 10)
 	}
 
 	addCap(&gi.Constraints, pb.CapSourceOCILayout)
 
-	source := NewSource(fmt.Sprintf("oci-layout://%s@%s", store, digest), attrs, gi.Constraints)
+	source := NewSource("oci-layout://"+ref, attrs, gi.Constraints)
 	return NewState(source.Output())
 }
 
@@ -485,9 +487,10 @@ func (fn ociLayoutOptionFunc) SetOCILayoutOption(li *OCILayoutInfo) {
 	fn(li)
 }
 
-func OCISessionID(id string) OCILayoutOption {
+func OCIStore(sessionID string, storeID string) OCILayoutOption {
 	return ociLayoutOptionFunc(func(oi *OCILayoutInfo) {
-		oi.sessionID = id
+		oi.sessionID = sessionID
+		oi.storeID = storeID
 	})
 }
 
@@ -500,6 +503,7 @@ func OCILayerLimit(limit int) OCILayoutOption {
 type OCILayoutInfo struct {
 	constraintsWrapper
 	sessionID  string
+	storeID    string
 	layerLimit *int
 }
 

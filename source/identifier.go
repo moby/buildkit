@@ -207,10 +207,8 @@ func FromLLB(op *pb.Op_Source, platform *pb.Platform) (Identifier, error) {
 			switch k {
 			case pb.AttrOCILayoutSessionID:
 				id.SessionID = v
-				if p := strings.SplitN(v, ":", 2); len(p) == 2 {
-					id.Name = p[0] + "-" + id.Name
-					id.SessionID = p[1]
-				}
+			case pb.AttrOCILayoutStoreID:
+				id.StoreID = v
 			case pb.AttrOCILayoutLayerLimit:
 				l, err := strconv.Atoi(v)
 				if err != nil {
@@ -291,23 +289,23 @@ func (*HTTPIdentifier) ID() string {
 }
 
 type OCIIdentifier struct {
-	Name       string
-	Digest     digest.Digest
+	Reference  reference.Spec
 	Platform   *ocispecs.Platform
 	SessionID  string
+	StoreID    string
 	LayerLimit *int
 }
 
 func NewOCIIdentifier(str string) (*OCIIdentifier, error) {
-	store, digSrc, found := strings.Cut(str, "@")
-	if !found {
-		return nil, errors.Errorf("invalid OCI identifier %s", str)
-	}
-	dig, err := digest.Parse(digSrc)
+	ref, err := reference.Parse(str)
 	if err != nil {
-		return nil, errors.Wrapf(err, "invalid digest in OCI identifier %s", str)
+		return nil, errors.WithStack(err)
 	}
-	return &OCIIdentifier{Name: store, Digest: dig}, nil
+
+	if ref.Object == "" {
+		return nil, errors.WithStack(reference.ErrObjectRequired)
+	}
+	return &OCIIdentifier{Reference: ref}, nil
 }
 
 func (*OCIIdentifier) ID() string {
