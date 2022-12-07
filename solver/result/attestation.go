@@ -5,8 +5,20 @@ import (
 	digest "github.com/opencontainers/go-digest"
 )
 
+const (
+	AttestationReasonKey     = "reason"
+	AttestationInlineOnlyKey = "inline-only"
+)
+
+var (
+	AttestationReasonSBOM       = []byte("sbom")
+	AttestationReasonProvenance = []byte("provenance")
+)
+
 type Attestation struct {
 	Kind pb.AttestationKind
+
+	Metadata map[string][]byte
 
 	Ref         string
 	Path        string

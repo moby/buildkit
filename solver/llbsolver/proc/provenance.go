@@ -54,11 +54,9 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 			reproducible = b
 		}
 
-		var mode string
+		mode := "max"
 		if v, ok := attrs["mode"]; ok {
 			switch v {
-			case "disabled", "none":
-				return res, nil
 			case "full":
 				mode = "max"
 			case "max", "min":
@@ -66,6 +64,11 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 			default:
 				return nil, errors.Errorf("invalid mode %q", v)
 			}
+		}
+
+		var inlineOnly bool
+		if v, err := strconv.ParseBool(attrs["inline-only"]); v && err == nil {
+			inlineOnly = true
 		}
 
 		for _, p := range ps.Platforms {
@@ -87,7 +90,8 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 
 			var addLayers func() error
 
-			if mode != "max" {
+			switch mode {
+			case "min":
 				args := make(map[string]string)
 				for k, v := range pr.Invocation.Parameters.Args {
 					if strings.HasPrefix(k, "build-arg:") || strings.HasPrefix(k, "label:") {
@@ -99,7 +103,7 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 				pr.Invocation.Parameters.Args = args
 				pr.Invocation.Parameters.Secrets = nil
 				pr.Invocation.Parameters.SSH = nil
-			} else {
+			case "max":
 				dgsts, err := provenance.AddBuildConfig(ctx, pr, res.Refs[p.ID])
 				if err != nil {
 					return nil, err
@@ -141,10 +145,16 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 
 					return nil
 				}
+			default:
+				return nil, errors.Errorf("invalid mode %q", mode)
 			}
 
 			res.AddAttestation(p.ID, result.Attestation{
 				Kind: gatewaypb.AttestationKindInToto,
+				Metadata: map[string][]byte{
+					result.AttestationReasonKey:     result.AttestationReasonProvenance,
+					result.AttestationInlineOnlyKey: []byte(strconv.FormatBool(inlineOnly)),
+				},
 				InToto: result.InTotoAttestation{
 					PredicateType: slsa.PredicateSLSAProvenance,
 				},
