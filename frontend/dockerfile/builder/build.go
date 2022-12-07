@@ -928,7 +928,6 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 			ResolveMode:  resolveMode,
 			LogName:      fmt.Sprintf("[context %s] load metadata for %s", name, ref),
 			ResolverType: llb.ResolverTypeRegistry,
-			SessionID:    sessionID,
 		})
 		if err != nil {
 			return nil, nil, err
