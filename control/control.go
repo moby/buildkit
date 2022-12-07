@@ -17,6 +17,7 @@ import (
 	apitypes "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/cmd/buildkitd/config"
 	controlgateway "github.com/moby/buildkit/control/gateway"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/util/epoch"
@@ -57,6 +58,7 @@ type Opt struct {
 	HistoryDB                 *bbolt.DB
 	LeaseManager              leases.Manager
 	ContentStore              content.Store
+	HistoryConfig             *config.HistoryConfig
 }
 
 type Controller struct { // TODO: ControlService
@@ -81,6 +83,7 @@ func NewController(opt Opt) (*Controller, error) {
 		DB:           opt.HistoryDB,
 		LeaseManager: opt.LeaseManager,
 		ContentStore: opt.ContentStore,
+		CleanConfig:  opt.HistoryConfig,
 	})
 
 	s, err := llbsolver.New(llbsolver.Opt{
@@ -250,6 +253,22 @@ func (c *Controller) ListenBuildHistory(req *controlapi.BuildHistoryRequest, srv
 		}
 		return nil
 	})
+}
+
+func (c *Controller) UpdateBuildHistory(ctx context.Context, req *controlapi.UpdateBuildHistoryRequest) (*controlapi.UpdateBuildHistoryResponse, error) {
+	if !req.Delete {
+		err := c.history.UpdateRef(ctx, req.Ref, func(r *controlapi.BuildHistoryRecord) error {
+			if req.Pinned == r.Pinned {
+				return nil
+			}
+			r.Pinned = req.Pinned
+			return nil
+		})
+		return &controlapi.UpdateBuildHistoryResponse{}, err
+	}
+
+	err := c.history.Delete(ctx, req.Ref)
+	return &controlapi.UpdateBuildHistoryResponse{}, err
 }
 
 func translateLegacySolveRequest(req *controlapi.SolveRequest) error {

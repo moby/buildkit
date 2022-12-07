@@ -180,11 +180,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 				if err != nil {
 					return err
 				}
-				defer func() {
-					if err != nil && release != nil {
-						release()
-					}
-				}()
+				defer release()
 
 				if err := s.history.UpdateRef(context.TODO(), id, func(rec *controlapi.BuildHistoryRecord) error {
 					rec.Trace = &controlapi.Descriptor{
@@ -198,7 +194,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 				}
 				return nil
 			}(); err != nil {
-				logrus.Errorf("failed to save trace for %s", id)
+				logrus.Errorf("failed to save trace for %s: %+v", id, err)
 			}
 		}()
 	}()

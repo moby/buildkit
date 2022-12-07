@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"io"
 	"os"
+	"sort"
 	"sync"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/containerd/containerd/leases"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/util/leaseutil"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -29,24 +31,119 @@ type HistoryQueueOpt struct {
 	DB           *bolt.DB
 	LeaseManager leases.Manager
 	ContentStore content.Store
+	CleanConfig  *config.HistoryConfig
 }
 
 type HistoryQueue struct {
 	mu       sync.Mutex
 	initOnce sync.Once
 	HistoryQueueOpt
-	ps     *pubsub[*controlapi.BuildHistoryEvent]
-	active map[string]*controlapi.BuildHistoryRecord
+	ps      *pubsub[*controlapi.BuildHistoryEvent]
+	active  map[string]*controlapi.BuildHistoryRecord
+	refs    map[string]int
+	deleted map[string]struct{}
 }
 
 func NewHistoryQueue(opt HistoryQueueOpt) *HistoryQueue {
-	return &HistoryQueue{
+	if opt.CleanConfig == nil {
+		opt.CleanConfig = &config.HistoryConfig{
+			MaxAge:     int64((48 * time.Hour).Seconds()),
+			MaxEntries: 50,
+		}
+	}
+	h := &HistoryQueue{
 		HistoryQueueOpt: opt,
 		ps: &pubsub[*controlapi.BuildHistoryEvent]{
 			m: map[*channel[*controlapi.BuildHistoryEvent]]struct{}{},
 		},
-		active: map[string]*controlapi.BuildHistoryRecord{},
+		active:  map[string]*controlapi.BuildHistoryRecord{},
+		refs:    map[string]int{},
+		deleted: map[string]struct{}{},
 	}
+
+	go func() {
+		for {
+			h.gc()
+			time.Sleep(120 * time.Second)
+		}
+	}()
+
+	return h
+}
+
+func (h *HistoryQueue) gc() error {
+	var records []*controlapi.BuildHistoryRecord
+
+	if err := h.DB.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(recordsBucket))
+		if b == nil {
+			return nil
+		}
+		return b.ForEach(func(key, dt []byte) error {
+			var br controlapi.BuildHistoryRecord
+			if err := br.Unmarshal(dt); err != nil {
+				return errors.Wrapf(err, "failed to unmarshal build record %s", key)
+			}
+			if br.Pinned {
+				return nil
+			}
+			records = append(records, &br)
+			return nil
+		})
+	}); err != nil {
+		return err
+	}
+
+	// in order for record to get deleted by gc it exceed both maxentries and maxage criteria
+
+	if len(records) < int(h.CleanConfig.MaxEntries) {
+		return nil
+	}
+
+	sort.Slice(records, func(i, j int) bool {
+		return records[i].CompletedAt.Before(*records[j].CompletedAt)
+	})
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	now := time.Now()
+	for _, r := range records[h.CleanConfig.MaxEntries:] {
+		if now.Add(time.Duration(h.CleanConfig.MaxAge) * -time.Second).After(*r.CompletedAt) {
+			if err := h.delete(r.Ref, false); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (h *HistoryQueue) delete(ref string, sync bool) error {
+	if _, ok := h.refs[ref]; ok {
+		h.deleted[ref] = struct{}{}
+		return nil
+	}
+	delete(h.deleted, ref)
+	if err := h.DB.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(recordsBucket))
+		if b == nil {
+			return os.ErrNotExist
+		}
+		err1 := b.Delete([]byte(ref))
+		var opts []leases.DeleteOpt
+		if sync {
+			opts = append(opts, leases.SynchronousDelete)
+		}
+		err2 := h.LeaseManager.Delete(context.TODO(), leases.Lease{ID: h.leaseID(ref)}, opts...)
+		if err1 != nil {
+			return err1
+		}
+		return err2
+	}); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (h *HistoryQueue) init() error {
@@ -109,15 +206,20 @@ func (h *HistoryQueue) UpdateRef(ctx context.Context, ref string, upt func(r *co
 	if err := h.update(ctx, br); err != nil {
 		return err
 	}
+	h.ps.Send(&controlapi.BuildHistoryEvent{
+		Type:   controlapi.BuildHistoryEventType_COMPLETE,
+		Record: &br,
+	})
 	return nil
 }
 
 func (h *HistoryQueue) Status(ctx context.Context, ref string, st chan<- *client.SolveStatus) error {
+	h.init()
 	var br controlapi.BuildHistoryRecord
 	if err := h.DB.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(recordsBucket))
 		if b == nil {
-			return nil
+			return os.ErrNotExist
 		}
 		dt := b.Get([]byte(ref))
 		if dt == nil {
@@ -229,6 +331,13 @@ func (h *HistoryQueue) Update(ctx context.Context, e *controlapi.BuildHistoryEve
 		h.ps.Send(e)
 	}
 	return nil
+}
+
+func (h *HistoryQueue) Delete(ctx context.Context, ref string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	return h.delete(ref, true)
 }
 
 func (h *HistoryQueue) OpenBlobWriter(ctx context.Context, mt string) (_ *Writer, err error) {
@@ -357,12 +466,36 @@ func (h *HistoryQueue) Listen(ctx context.Context, req *controlapi.BuildHistoryR
 	sub := h.ps.Subscribe()
 	defer sub.close()
 
+	if req.Ref != "" {
+		if _, ok := h.deleted[req.Ref]; ok {
+			h.mu.Unlock()
+			return errors.Wrapf(os.ErrNotExist, "ref %s is deleted", req.Ref)
+		}
+
+		h.refs[req.Ref]++
+		defer func() {
+			h.mu.Lock()
+			h.refs[req.Ref]--
+			if _, ok := h.deleted[req.Ref]; ok {
+				if h.refs[req.Ref] == 0 {
+					delete(h.refs, req.Ref)
+					h.delete(req.Ref, false)
+				}
+			}
+			h.mu.Unlock()
+		}()
+	}
+
 	for _, e := range h.active {
+		if req.Ref != "" && e.Ref != req.Ref {
+			continue
+		}
 		sub.ps.Send(&controlapi.BuildHistoryEvent{
 			Type:   controlapi.BuildHistoryEventType_STARTED,
 			Record: e,
 		})
 	}
+
 	h.mu.Unlock()
 
 	if !req.ActiveOnly {
@@ -390,6 +523,10 @@ func (h *HistoryQueue) Listen(ctx context.Context, req *controlapi.BuildHistoryR
 		}); err != nil {
 			return err
 		}
+	}
+
+	if req.EarlyExit {
+		return nil
 	}
 
 	for {

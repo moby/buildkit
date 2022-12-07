@@ -692,6 +692,7 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 		HistoryDB:                 historyDB,
 		LeaseManager:              w.LeaseManager(),
 		ContentStore:              w.ContentStore(),
+		HistoryConfig:             cfg.History,
 	})
 }
 

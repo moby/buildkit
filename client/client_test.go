@@ -35,6 +35,7 @@ import (
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/continuity/fs/fstest"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
+	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
@@ -6098,6 +6099,24 @@ func ensurePruneAll(t *testing.T, c *Client, sb integration.Sandbox) {
 }
 
 func checkAllReleasable(t *testing.T, c *Client, sb integration.Sandbox, checkContent bool) {
+	cl, err := c.ControlClient().ListenBuildHistory(sb.Context(), &controlapi.BuildHistoryRequest{
+		EarlyExit: true,
+	})
+	require.NoError(t, err)
+
+	for {
+		resp, err := cl.Recv()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+		_, err = c.ControlClient().UpdateBuildHistory(sb.Context(), &controlapi.UpdateBuildHistoryRequest{
+			Ref:    resp.Record.Ref,
+			Delete: true,
+		})
+		require.NoError(t, err)
+	}
+
 	retries := 0
 loop0:
 	for {
@@ -6114,7 +6133,7 @@ loop0:
 		break
 	}
 
-	err := c.Prune(sb.Context(), nil, PruneAll)
+	err = c.Prune(sb.Context(), nil, PruneAll)
 	require.NoError(t, err)
 
 	du, err := c.DiskUsage(sb.Context())
@@ -6170,7 +6189,7 @@ loop0:
 		if count == 0 {
 			break
 		}
-		if retries >= 20 {
+		if retries >= 50 {
 			require.FailNowf(t, "content still exists", "%+v", infos)
 		}
 		retries++
