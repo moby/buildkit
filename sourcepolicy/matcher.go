@@ -3,18 +3,11 @@ package sourcepolicy
 import (
 	"context"
 	"regexp"
-	"strings"
 
-	sourcetypes "github.com/moby/buildkit/source/types"
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/pkg/errors"
 )
 
-type PatternMatcher interface {
-	MatchString(string) (bool, error)
-}
-
-// Match is a MatcherFn which matches vthe source operation to the identifier and attributes provided by the policy.
 func match(ctx context.Context, src *sourceCache, scheme, ref string, attrs map[string]string) (bool, error) {
 	if src.Type != scheme {
 		return false, nil
@@ -46,13 +39,6 @@ func match(ctx context.Context, src *sourceCache, scheme, ref string, attrs map[
 
 	if src.Identifier == ref {
 		return true, nil
-	}
-
-	if src.Type == sourcetypes.DockerImageScheme {
-		ref, _, _ = strings.Cut(ref, "@")
-		if src.Identifier == ref {
-			return true, nil
-		}
 	}
 
 	switch src.MatchType {

@@ -154,7 +154,7 @@ An example `policy.json`:
     },
     {
       "action": "CONVERT",
-      "soruce": {
+      "source": {
         "type": "http",
         "identifier": "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md"
       },

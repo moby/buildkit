@@ -88,7 +88,7 @@ const (
 	// It may first attempt to due an exact match but will follow up with a wildcard match
 	// For something more powerful, use REGEX
 	MatchType_WILDCARD MatchType = 0
-	// EXACT treats the soruce identifier as a litteral string match
+	// EXACT treats the source identifier as a litteral string match
 	MatchType_EXACT MatchType = 1
 	// REGEX treats the source identifier as a regular expression
 	// With regex matching you can also use match groups to replace values in the destination identifier
@@ -115,7 +115,7 @@ func (MatchType) EnumDescriptor() ([]byte, []int) {
 	return fileDescriptor_ac3b897852294d6a, []int{2}
 }
 
-// Rule defines the action(s) to take whe.n a source is matched
+// Rule defines the action(s) to take when a source is matched
 type Rule struct {
 	Action PolicyAction `protobuf:"varint,1,opt,name=action,proto3,enum=moby.buildkit.v1.sourcepolicy.PolicyAction" json:"action,omitempty"`
 	Source *Source      `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
