@@ -132,14 +132,7 @@ func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 	return s.bridge(b)
 }
 
-func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement, post []Processor) (_ *client.SolveResponse, err error) {
-	j, err := s.solver.NewJob(id)
-	if err != nil {
-		return nil, err
-	}
-
-	defer j.Discard()
-
+func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend.SolveRequest, j *solver.Job) (func(error) error, error) {
 	var stopTrace func() []tracetest.SpanStub
 
 	if s := trace.SpanFromContext(ctx); s.SpanContext().IsValid() {
@@ -149,55 +142,6 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 			}
 		}
 	}
-
-	defer func() {
-		stopTrace := stopTrace
-		if stopTrace == nil {
-			logrus.Warn("no trace recorder found, skipping")
-			return
-		}
-		go func() {
-			time.Sleep(3 * time.Second)
-			spans := stopTrace()
-
-			if len(spans) == 0 {
-				return
-			}
-
-			if err := func() error {
-				w, err := s.history.OpenBlobWriter(context.TODO(), "application/vnd.buildkit.otlp.json.v0")
-				if err != nil {
-					return err
-				}
-				enc := json.NewEncoder(w)
-				for _, sp := range spans {
-					if err := enc.Encode(sp); err != nil {
-						return err
-					}
-				}
-
-				desc, release, err := w.Commit(context.TODO())
-				if err != nil {
-					return err
-				}
-				defer release()
-
-				if err := s.history.UpdateRef(context.TODO(), id, func(rec *controlapi.BuildHistoryRecord) error {
-					rec.Trace = &controlapi.Descriptor{
-						Digest:    desc.Digest,
-						MediaType: desc.MediaType,
-						Size_:     desc.Size,
-					}
-					return nil
-				}); err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				logrus.Errorf("failed to save trace for %s: %+v", id, err)
-			}
-		}()
-	}()
 
 	st := time.Now()
 	rec := &controlapi.BuildHistoryRecord{
@@ -213,7 +157,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		return nil, err
 	}
 
-	defer func() {
+	return func(err error) error {
 		en := time.Now()
 		rec.CompletedAt = &en
 
@@ -264,6 +208,76 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 				err = err1
 			}
 		}
+
+		if err != nil {
+			return err
+		}
+
+		stopTrace := stopTrace
+		if stopTrace != nil {
+			logrus.Warn("no trace recorder found, skipping")
+			return err
+		}
+		go func() {
+			time.Sleep(3 * time.Second)
+			spans := stopTrace()
+
+			if len(spans) == 0 {
+				return
+			}
+
+			if err := func() error {
+				w, err := s.history.OpenBlobWriter(context.TODO(), "application/vnd.buildkit.otlp.json.v0")
+				if err != nil {
+					return err
+				}
+				enc := json.NewEncoder(w)
+				for _, sp := range spans {
+					if err := enc.Encode(sp); err != nil {
+						return err
+					}
+				}
+
+				desc, release, err := w.Commit(context.TODO())
+				if err != nil {
+					return err
+				}
+				defer release()
+
+				if err := s.history.UpdateRef(context.TODO(), id, func(rec *controlapi.BuildHistoryRecord) error {
+					rec.Trace = &controlapi.Descriptor{
+						Digest:    desc.Digest,
+						MediaType: desc.MediaType,
+						Size_:     desc.Size,
+					}
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				logrus.Errorf("failed to save trace for %s: %+v", id, err)
+			}
+		}()
+
+		return err
+	}, nil
+}
+
+func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement, post []Processor) (_ *client.SolveResponse, err error) {
+	j, err := s.solver.NewJob(id)
+	if err != nil {
+		return nil, err
+	}
+
+	defer j.Discard()
+
+	rec, err := s.recordBuildHistory(ctx, id, req, j)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		err = rec(err)
 	}()
 
 	set, err := entitlements.WhiteList(ent, supportedEntitlements(s.entitlements))
