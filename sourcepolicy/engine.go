@@ -65,10 +65,7 @@ func (e *Engine) Evaluate(ctx context.Context, op *pb.Op) (bool, error) {
 		return false, nil
 	}
 
-	var (
-		st      evalState
-		mutated bool
-	)
+	var mutated bool
 	const maxIterr = 20
 
 	for i := 0; ; i++ {
@@ -84,7 +81,7 @@ func (e *Engine) Evaluate(ctx context.Context, op *pb.Op) (bool, error) {
 			ctx = bklog.WithLogger(ctx, bklog.G(ctx).WithField("orig", *srcOp).WithField("updated", op.GetSource()))
 		}
 
-		mut, err := e.evaluatePolicies(ctx, srcOp, &st)
+		mut, err := e.evaluatePolicies(ctx, srcOp)
 		if mut {
 			mutated = true
 		}
@@ -99,7 +96,7 @@ func (e *Engine) Evaluate(ctx context.Context, op *pb.Op) (bool, error) {
 	return mutated, nil
 }
 
-func (e *Engine) evaluatePolicies(ctx context.Context, srcOp *pb.SourceOp, st *evalState) (bool, error) {
+func (e *Engine) evaluatePolicies(ctx context.Context, srcOp *pb.SourceOp) (bool, error) {
 	ident := srcOp.GetIdentifier()
 	scheme, ref, found := strings.Cut(ident, "://")
 	if !found || ref == "" {
@@ -112,7 +109,7 @@ func (e *Engine) evaluatePolicies(ctx context.Context, srcOp *pb.SourceOp, st *e
 	}))
 
 	for _, pol := range e.pol {
-		mut, err := e.evaluatePolicy(ctx, pol, srcOp, st, scheme, ref)
+		mut, err := e.evaluatePolicy(ctx, pol, srcOp, scheme, ref)
 		if mut || err != nil {
 			return mut, err
 		}
@@ -120,7 +117,8 @@ func (e *Engine) evaluatePolicies(ctx context.Context, srcOp *pb.SourceOp, st *e
 	return false, nil
 }
 
-func (e *Engine) evaluatePolicy(ctx context.Context, pol *spb.Policy, srcOp *pb.SourceOp, st *evalState, scheme, ref string) (bool, error) {
+func (e *Engine) evaluatePolicy(ctx context.Context, pol *spb.Policy, srcOp *pb.SourceOp, scheme, ref string) (bool, error) {
+	st := &evalState{}
 	for _, rule := range pol.Rules {
 		mut, err := e.evaluateRule(ctx, rule, scheme, ref, srcOp, st)
 		if mut || err != nil {

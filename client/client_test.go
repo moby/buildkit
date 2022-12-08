@@ -8612,21 +8612,5 @@ func testSourcePolicy(t *testing.T, sb integration.Sandbox) {
 
 		_, err = c.Build(sb.Context(), SolveOpt{}, "", frontend, nil)
 		require.ErrorContains(t, err, sourcepolicy.ErrSourceDenied.Error())
-
-		// Override frontend policy
-		_, err = c.Build(sb.Context(), SolveOpt{
-			SourcePolicy: &sourcepolicypb.Policy{
-				Rules: []*sourcepolicypb.Rule{
-					{
-						Action: sourcepolicypb.PolicyAction_ALLOW,
-						Source: &sourcepolicypb.Source{
-							Type:       "http",
-							Identifier: denied,
-						},
-					},
-				},
-			},
-		}, "", frontend, nil)
-		require.NoError(t, err)
 	})
 }

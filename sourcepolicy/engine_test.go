@@ -23,6 +23,45 @@ func TestEngineEvaluate(t *testing.T) {
 	t.Run("Test convert regex", testConvertRegex)
 	t.Run("Test convert wildcard", testConvertWildcard)
 	t.Run("Test convert multiple", testConvertMultiple)
+	t.Run("test multiple policies", testMultiplePolicies)
+}
+
+func testMultiplePolicies(t *testing.T) {
+	pol := []*spb.Policy{
+		{
+			Rules: []*spb.Rule{
+				{
+					Action: spb.PolicyAction_ALLOW,
+					Source: &spb.Source{
+						Type:       "docker-image",
+						Identifier: "docker.io/library/busybox:latest",
+					},
+				},
+			},
+		},
+		{
+			Rules: []*spb.Rule{
+				{
+					Action: spb.PolicyAction_DENY,
+					Source: &spb.Source{
+						Type:       "docker-image",
+						Identifier: "docker.io/library/busybox:latest",
+					},
+				},
+			},
+		},
+	}
+
+	e := NewEngine(pol)
+	mut, err := e.Evaluate(context.Background(), &pb.Op{
+		Op: &pb.Op_Source{
+			Source: &pb.SourceOp{
+				Identifier: "docker-image://docker.io/library/busybox:latest",
+			},
+		},
+	})
+	require.ErrorIs(t, err, ErrSourceDenied)
+	require.False(t, mut)
 }
 
 func testConvertMultiple(t *testing.T) {
