@@ -27,6 +27,7 @@ import (
 type CreateFSOpts struct {
 	Epoch             *time.Time
 	AttestationPrefix string
+	MultiPlatform     *bool
 }
 
 func CreateFS(ctx context.Context, sessionID string, k string, ref cache.ImmutableRef, refs map[string]cache.ImmutableRef, attestations []result.Attestation, defaultTime time.Time, opt CreateFSOpts) (fsutil.FS, func() error, error) {
