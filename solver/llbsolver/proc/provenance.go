@@ -77,6 +77,8 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 			pr.Metadata.Reproducible = reproducible
 			pr.Metadata.BuildInvocationID = buildID
 
+			pr.Builder.ID = attrs["builder-id"]
+
 			var addLayers func() error
 
 			switch mode {
@@ -162,7 +164,6 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 						}
 					}
 
-					// TODO: pass indent to json.Marshal
 					return json.MarshalIndent(pr, "", "  ")
 				},
 			})
