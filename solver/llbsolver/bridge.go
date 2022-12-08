@@ -83,7 +83,7 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 			pol = append([]*spb.Policy{srcPol}, pol...)
 		}
 
-		polEngine = sourcepolicy.NewEngine(pol, sourcepolicy.MatcherFn(sourcepolicy.Match), sourcepolicy.MutateFn(sourcepolicy.Mutate))
+		polEngine = sourcepolicy.NewEngine(pol)
 		if err != nil {
 			return nil, err
 		}

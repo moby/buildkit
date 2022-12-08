@@ -9,7 +9,7 @@ import (
 )
 
 // Source wraps a a protobuf source in order to store cached state such as the compiled regexes.
-type Source struct {
+type sourceCache struct {
 	*spb.Source
 
 	re *regexp.Regexp
@@ -21,7 +21,7 @@ type Source struct {
 // For example, if the source is a wildcard, the ref will be formatted with the wildcard in the source replacing the parameters in the destination.
 //
 //	matcher: wildcard source: "docker.io/library/golang:*"  match: "docker.io/library/golang:1.19" format: "docker.io/library/golang:${1}-alpine" result: "docker.io/library/golang:1.19-alpine"
-func (s *Source) Format(match, format string) (string, error) {
+func (s *sourceCache) Format(match, format string) (string, error) {
 	switch s.MatchType {
 	case spb.MatchType_EXACT:
 		return s.Identifier, nil
@@ -67,7 +67,7 @@ func (w *wildcardCache) Match(ref string) *wildcard.Match {
 	return m
 }
 
-func (s *Source) wildcard() (*wildcardCache, error) {
+func (s *sourceCache) wildcard() (*wildcardCache, error) {
 	if s.w != nil {
 		return s.w, nil
 	}
@@ -79,7 +79,7 @@ func (s *Source) wildcard() (*wildcardCache, error) {
 	return s.w, nil
 }
 
-func (s *Source) regex() (*regexp.Regexp, error) {
+func (s *sourceCache) regex() (*regexp.Regexp, error) {
 	if s.re != nil {
 		return s.re, nil
 	}

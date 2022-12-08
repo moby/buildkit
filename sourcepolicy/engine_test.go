@@ -75,7 +75,7 @@ func testConvertMultiple(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	e := NewEngine(pol, nil, nil)
+	e := NewEngine(pol)
 
 	mutated, err := e.Evaluate(ctx, op)
 	require.True(t, mutated)
@@ -111,7 +111,7 @@ func testConvertWildcard(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	e := NewEngine(pol, nil, nil)
+	e := NewEngine(pol)
 
 	mutated, err := e.Evaluate(ctx, op)
 	require.True(t, mutated)
@@ -146,7 +146,7 @@ func testConvertRegex(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	e := NewEngine([]*spb.Policy{pol}, nil, nil)
+	e := NewEngine([]*spb.Policy{pol})
 
 	mutated, err := e.Evaluate(ctx, op)
 	require.True(t, mutated)
@@ -179,7 +179,7 @@ func testConvertHTTP(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	e := NewEngine([]*spb.Policy{pol}, nil, nil)
+	e := NewEngine([]*spb.Policy{pol})
 
 	mutated, err := e.Evaluate(ctx, op)
 	require.True(t, mutated)
@@ -224,7 +224,7 @@ func testConvertLoop(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	e := NewEngine([]*spb.Policy{pol}, nil, nil)
+	e := NewEngine([]*spb.Policy{pol})
 
 	mutated, err := e.Evaluate(ctx, op)
 	require.True(t, mutated)
@@ -278,7 +278,7 @@ func testAllowConvertDeny(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	e := NewEngine([]*spb.Policy{pol}, nil, nil)
+	e := NewEngine([]*spb.Policy{pol})
 
 	mutated, err := e.Evaluate(ctx, op)
 	require.True(t, mutated)
@@ -319,7 +319,7 @@ func testConvertDeny(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	e := NewEngine([]*spb.Policy{pol}, nil, nil)
+	e := NewEngine([]*spb.Policy{pol})
 
 	mutated, err := e.Evaluate(ctx, op)
 	require.True(t, mutated)
@@ -363,7 +363,7 @@ func testConvert(t *testing.T) {
 			}
 
 			ctx := context.Background()
-			e := NewEngine([]*spb.Policy{pol}, nil, nil)
+			e := NewEngine([]*spb.Policy{pol})
 
 			mutated, err := e.Evaluate(ctx, op)
 			require.True(t, mutated)
@@ -401,7 +401,7 @@ func testAllowDeny(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	e := NewEngine([]*spb.Policy{pol}, nil, nil)
+	e := NewEngine([]*spb.Policy{pol})
 
 	mutated, err := e.Evaluate(ctx, op)
 	require.False(t, mutated)
@@ -441,7 +441,7 @@ func testDenyAll(t *testing.T) {
 				},
 			}
 
-			e := NewEngine([]*spb.Policy{pol}, nil, nil)
+			e := NewEngine([]*spb.Policy{pol})
 			ctx := context.Background()
 
 			op := &pb.Op{

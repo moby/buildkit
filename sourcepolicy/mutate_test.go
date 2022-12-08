@@ -103,7 +103,7 @@ func TestMutate(t *testing.T) {
 		op := *tc.op
 
 		t.Run(op.String(), func(t *testing.T) {
-			mutated, err := Mutate(ctx, op.GetSource(), tc.dest, tc.destAttrs)
+			mutated, err := mutate(ctx, op.GetSource(), tc.dest, tc.destAttrs)
 			require.Equal(t, tc.expected, mutated)
 			if tc.expectedErr != "" {
 				require.Error(t, err, tc.expectedErr)

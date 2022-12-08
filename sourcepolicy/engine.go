@@ -26,30 +26,20 @@ var (
 // Mutations are delegated to the `Mutater` interface.
 type Engine struct {
 	pol     []*spb.Policy
-	matcher Matcher
-	mutater Mutater
-	sources map[string]*Source
+	sources map[string]*sourceCache
 }
 
 // NewEngine creates a new source policy engine.
-func NewEngine(pol []*spb.Policy, matcher Matcher, mutater Mutater) *Engine {
-	if matcher == nil {
-		matcher = DefaultMatcher
-	}
-	if mutater == nil {
-		mutater = DefaultMutater
-	}
+func NewEngine(pol []*spb.Policy) *Engine {
 	return &Engine{
-		pol:     pol,
-		matcher: matcher,
-		mutater: mutater,
+		pol: pol,
 	}
 }
 
 // TODO: The key here can't be used to cache attr constraint regexes.
-func (e *Engine) source(src *spb.Source) *Source {
+func (e *Engine) sourceCache(src *spb.Source) *sourceCache {
 	if e.sources == nil {
-		e.sources = map[string]*Source{}
+		e.sources = map[string]*sourceCache{}
 	}
 
 	key := src.MatchType.String() + " " + src.Type + "://" + src.Identifier
@@ -57,7 +47,7 @@ func (e *Engine) source(src *spb.Source) *Source {
 	if s, ok := e.sources[key]; ok {
 		return s
 	}
-	s := &Source{Source: src}
+	s := &sourceCache{Source: src}
 
 	e.sources[key] = s
 	return s
@@ -157,8 +147,10 @@ func (e *Engine) evaluateRule(ctx context.Context, rule *spb.Rule, scheme, ref s
 		}
 	}
 
-	src := e.source(rule.Source)
-	match, err := e.matcher.Match(ctx, src, scheme, ref, op.Attrs)
+	// get cached state for this source
+	src := e.sourceCache(rule.Source)
+
+	match, err := match(ctx, src, scheme, ref, op.Attrs)
 	if err != nil {
 		return false, errors.Wrap(err, "error evaluating rule")
 	}
@@ -208,7 +200,7 @@ func (e *Engine) evaluateRule(ctx context.Context, rule *spb.Rule, scheme, ref s
 
 		bklog.G(ctx).Debugf("sourcepolicy: converting %s to %s, pattern: %s", ref, dest, rule.Destination.Identifier)
 
-		return e.mutater.Mutate(ctx, op, dest, rule.Destination.Attrs)
+		return mutate(ctx, op, dest, rule.Destination.Attrs)
 	default:
 		return false, errors.Errorf("source policy: rule %s %s: unknown type %q", rule.Action, rule.Source.Identifier, ref)
 	}
