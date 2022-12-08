@@ -264,7 +264,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 	}, nil
 }
 
-func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement, post []Processor) (_ *client.SolveResponse, err error) {
+func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement, post []Processor, internal bool) (_ *client.SolveResponse, err error) {
 	j, err := s.solver.NewJob(id)
 	if err != nil {
 		return nil, err
@@ -272,13 +272,18 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 
 	defer j.Discard()
 
-	rec, err := s.recordBuildHistory(ctx, id, req, j)
-	if err != nil {
-		return nil, err
+	if internal {
+		defer j.CloseProgress()
+	} else {
+		rec, err := s.recordBuildHistory(ctx, id, req, j)
+		if err != nil {
+			defer j.CloseProgress()
+			return nil, err
+		}
+		defer func() {
+			err = rec(err)
+		}()
 	}
-	defer func() {
-		err = rec(err)
-	}()
 
 	set, err := entitlements.WhiteList(ent, supportedEntitlements(s.entitlements))
 	if err != nil {

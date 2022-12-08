@@ -46,6 +46,7 @@ type SolveOpt struct {
 	AllowedEntitlements   []entitlements.Entitlement
 	SharedSession         *session.Session // TODO: refactor to better session syncing
 	SessionPreInitialized bool             // TODO: refactor to better session syncing
+	Internal              bool
 }
 
 type ExportEntry struct {
@@ -259,6 +260,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			FrontendInputs: frontendInputs,
 			Cache:          cacheOpt.options,
 			Entitlements:   opt.AllowedEntitlements,
+			Internal:       opt.Internal,
 		})
 		if err != nil {
 			return errors.Wrap(err, "failed to solve")

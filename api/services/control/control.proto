@@ -67,6 +67,7 @@ message SolveRequest {
 	CacheOptions Cache = 8 [(gogoproto.nullable) = false];
 	repeated string Entitlements = 9 [(gogoproto.customtype) = "github.com/moby/buildkit/util/entitlements.Entitlement" ];
 	map<string, pb.Definition> FrontendInputs = 10;
+	bool Internal = 11; // Internal builds are not recorded in build history
 }
 
 message CacheOptions {
@@ -181,7 +182,6 @@ enum BuildHistoryEventType {
 	DELETED = 2;
 }
 
-
 message BuildHistoryEvent {
 	BuildHistoryEventType type = 1;
 	BuildHistoryRecord record = 2;
@@ -206,7 +206,6 @@ message BuildHistoryRecord {
 	// TODO: steps/cache summary
 	// TODO: unclipped logs
 }
-
 
 message UpdateBuildHistoryRequest {
 	string Ref = 1;
