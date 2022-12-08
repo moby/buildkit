@@ -122,7 +122,7 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 		return err
 	}
 	defer lm.Unmount()
-	defer executor.MountStubsCleaner(rootfsPath, mounts)()
+	defer executor.MountStubsCleaner(rootfsPath, mounts, meta.RemoveMountStubsRecursive)()
 
 	uid, gid, sgids, err := oci.GetUser(rootfsPath, meta.User)
 	if err != nil {

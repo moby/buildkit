@@ -63,6 +63,7 @@ message Meta {
 	string hostname = 7;
 	repeated Ulimit ulimit = 9;
 	string cgroupParent = 10;
+	bool removeMountStubsRecursive = 11;
 }
 
 message HostIP {

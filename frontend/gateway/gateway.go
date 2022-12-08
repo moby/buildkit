@@ -225,10 +225,11 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	env = append(env, "BUILDKIT_EXPORTEDPRODUCT="+apicaps.ExportedProduct)
 
 	meta := executor.Meta{
-		Env:            env,
-		Args:           args,
-		Cwd:            cwd,
-		ReadonlyRootFS: readonly,
+		Env:                       env,
+		Args:                      args,
+		Cwd:                       cwd,
+		ReadonlyRootFS:            readonly,
+		RemoveMountStubsRecursive: true,
 	}
 
 	if v, ok := img.Config.Labels["moby.buildkit.frontend.network.none"]; ok {
@@ -1263,15 +1264,16 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 				pios[pid] = pio
 
 				proc, err := ctr.Start(initCtx, gwclient.StartRequest{
-					Args:         init.Meta.Args,
-					Env:          init.Meta.Env,
-					User:         init.Meta.User,
-					Cwd:          init.Meta.Cwd,
-					Tty:          init.Tty,
-					Stdin:        pio.processReaders[0],
-					Stdout:       pio.processWriters[1],
-					Stderr:       pio.processWriters[2],
-					SecurityMode: init.Security,
+					Args:                      init.Meta.Args,
+					Env:                       init.Meta.Env,
+					User:                      init.Meta.User,
+					Cwd:                       init.Meta.Cwd,
+					Tty:                       init.Tty,
+					Stdin:                     pio.processReaders[0],
+					Stdout:                    pio.processWriters[1],
+					Stderr:                    pio.processWriters[2],
+					SecurityMode:              init.Security,
+					RemoveMountStubsRecursive: init.Meta.RemoveMountStubsRecursive,
 				})
 				if err != nil {
 					return stack.Enable(err)

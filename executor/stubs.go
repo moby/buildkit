@@ -11,7 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func MountStubsCleaner(dir string, mounts []Mount) func() {
+func MountStubsCleaner(dir string, mounts []Mount, recursive bool) func() {
 	names := []string{"/etc/resolv.conf", "/etc/hosts"}
 
 	for _, m := range mounts {
@@ -30,9 +30,22 @@ func MountStubsCleaner(dir string, mounts []Mount) func() {
 			continue
 		}
 
-		_, err = os.Lstat(realPath)
-		if errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
+		for {
+			_, err = os.Lstat(realPath)
+			if !(errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ENOTDIR)) {
+				break
+			}
 			paths = append(paths, realPath)
+
+			if !recursive {
+				break
+			}
+
+			realPathNext := filepath.Dir(realPath)
+			if realPath == realPathNext {
+				break
+			}
+			realPath = realPathNext
 		}
 	}
 

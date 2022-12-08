@@ -8167,10 +8167,21 @@ func testMountStubsDirectory(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	st := llb.Image("busybox:latest").Run(
-		llb.Args([]string{"/bin/echo", "dummy"}),
-		llb.AddMount("/foo/bar", llb.Scratch(), llb.Tmpfs()),
-	)
+	st := llb.Image("busybox:latest").
+		File(llb.Mkdir("/test", 0700)).
+		File(llb.Mkdir("/test/qux/", 0700)).
+		Run(
+			llb.Args([]string{"touch", "/test/baz/keep"}),
+			// check stubs directory is removed
+			llb.AddMount("/test/foo", llb.Scratch(), llb.Tmpfs()),
+			// check that stubs directory are recursively removed
+			llb.AddMount("/test/bar/x/y", llb.Scratch(), llb.Tmpfs()),
+			// check that only empty stubs directories are removed
+			llb.AddMount("/test/baz/x", llb.Scratch(), llb.Tmpfs()),
+			// check that previously existing directory are not removed
+			llb.AddMount("/test/qux", llb.Scratch(), llb.Tmpfs()),
+		).Root()
+	st = llb.Scratch().File(llb.Copy(st, "/test", "/", &llb.CopyInfo{CopyDirContentsOnly: true}))
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
@@ -8191,21 +8202,22 @@ func testMountStubsDirectory(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	tarFileW.Close()
 
-	tarFileR, err := os.Open(tarFile)
+	dt, err := os.ReadFile(tarFile)
 	require.NoError(t, err)
-	defer tarFileR.Close()
-	tarR := tar.NewReader(tarFileR)
 
-	for {
-		hd, err := tarR.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		require.NoError(t, err)
-		if hd.Name == "foo/bar/" {
-			require.Fail(t, "foo/bar/ should not be in the tar")
-		}
+	m, err := testutil.ReadTarToMap(dt, false)
+	require.NoError(t, err)
+
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
 	}
+
+	require.ElementsMatch(t, []string{
+		"baz/",
+		"baz/keep",
+		"qux/",
+	}, keys)
 }
 
 // https://github.com/moby/buildkit/issues/3148

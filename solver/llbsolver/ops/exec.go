@@ -319,17 +319,18 @@ func (e *ExecOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 	}
 
 	meta := executor.Meta{
-		Args:           e.op.Meta.Args,
-		Env:            e.op.Meta.Env,
-		Cwd:            e.op.Meta.Cwd,
-		User:           e.op.Meta.User,
-		Hostname:       e.op.Meta.Hostname,
-		ReadonlyRootFS: p.ReadonlyRootFS,
-		ExtraHosts:     extraHosts,
-		Ulimit:         e.op.Meta.Ulimit,
-		CgroupParent:   e.op.Meta.CgroupParent,
-		NetMode:        e.op.Network,
-		SecurityMode:   e.op.Security,
+		Args:                      e.op.Meta.Args,
+		Env:                       e.op.Meta.Env,
+		Cwd:                       e.op.Meta.Cwd,
+		User:                      e.op.Meta.User,
+		Hostname:                  e.op.Meta.Hostname,
+		ReadonlyRootFS:            p.ReadonlyRootFS,
+		ExtraHosts:                extraHosts,
+		Ulimit:                    e.op.Meta.Ulimit,
+		CgroupParent:              e.op.Meta.CgroupParent,
+		NetMode:                   e.op.Network,
+		SecurityMode:              e.op.Security,
+		RemoveMountStubsRecursive: e.op.Meta.RemoveMountStubsRecursive,
 	}
 
 	if e.op.Meta.ProxyEnv != nil {

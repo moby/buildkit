@@ -809,6 +809,7 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 		Tty:      req.Tty,
 		Security: req.SecurityMode,
 	}
+	init.Meta.RemoveMountStubsRecursive = req.RemoveMountStubsRecursive
 	if req.Stdin != nil {
 		init.Fds = append(init.Fds, 0)
 	}
