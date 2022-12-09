@@ -197,14 +197,14 @@ func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEval
 	allOps := make(map[digest.Digest]*pb.Op)
 	mutatedDigests := make(map[digest.Digest]digest.Digest) // key: old, val: new
 
-	var dgst digest.Digest
+	var lastDgst digest.Digest
 
 	for _, dt := range def.Def {
 		var op pb.Op
 		if err := (&op).Unmarshal(dt); err != nil {
 			return solver.Edge{}, errors.Wrap(err, "failed to parse llb proto op")
 		}
-		dgst = digest.FromBytes(dt)
+		dgst := digest.FromBytes(dt)
 		if polEngine != nil {
 			mutated, err := polEngine.Evaluate(ctx, &op)
 			if err != nil {
@@ -221,14 +221,45 @@ func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEval
 			}
 		}
 		allOps[dgst] = &op
+		lastDgst = dgst
 	}
 
-	// Rewrite the input digests if some op was mutated
-	for _, op := range allOps {
-		for _, inp := range op.Inputs {
-			if mutatedDgst, ok := mutatedDigests[inp.Digest]; ok {
-				inp.Digest = mutatedDgst
+	recompute := func(mutatedDigests map[digest.Digest]digest.Digest) (map[digest.Digest]digest.Digest, error) {
+		// Rewrite the input digests if some op was mutated
+		newMut := make(map[digest.Digest]digest.Digest)
+		for dgst, op := range allOps {
+			var mutated bool
+			for _, inp := range op.Inputs {
+				if mutatedDgst, ok := mutatedDigests[inp.Digest]; ok {
+					inp.Digest = mutatedDgst
+					mutated = true
+				}
 			}
+			if mutated {
+				dt, err := op.Marshal()
+				if err != nil {
+					return nil, err
+				}
+				newDgst := digest.FromBytes(dt)
+				allOps[newDgst] = op
+				delete(allOps, dgst)
+				newMut[dgst] = newDgst
+				if dgst == lastDgst {
+					lastDgst = newDgst
+				}
+			}
+		}
+		return newMut, nil
+	}
+
+	for {
+		var err error
+		mutatedDigests, err = recompute(mutatedDigests)
+		if err != nil {
+			return solver.Edge{}, err
+		}
+		if len(mutatedDigests) == 0 {
+			break
 		}
 	}
 
@@ -236,12 +267,12 @@ func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEval
 		return solver.Edge{}, errors.Errorf("invalid LLB with %d vertexes", len(allOps))
 	}
 
-	lastOp := allOps[dgst]
-	delete(allOps, dgst)
+	lastOp := allOps[lastDgst]
+	delete(allOps, lastDgst)
 	if len(lastOp.Inputs) == 0 {
 		return solver.Edge{}, errors.Errorf("invalid LLB with no inputs on last vertex")
 	}
-	dgst = lastOp.Inputs[0].Digest
+	dgst := lastOp.Inputs[0].Digest
 
 	cache := make(map[digest.Digest]solver.Vertex)
 
