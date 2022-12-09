@@ -65,6 +65,9 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 	}
 
 	multiPlatform := len(inp.Refs) > 0
+	if len(inp.Attestations) > 0 {
+		multiPlatform = false
+	}
 
 	var p exptypes.Platforms
 	if ok && len(platformsBytes) > 0 {
@@ -74,6 +77,25 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		if len(p.Platforms) > 1 {
 			multiPlatform = true
 		}
+	}
+
+	requiresAttestations := false
+	for _, p := range p.Platforms {
+		if atts, ok := inp.Attestations[p.ID]; ok {
+			atts = attestation.Filter(atts, nil, map[string][]byte{
+				result.AttestationInlineOnlyKey: []byte(strconv.FormatBool(true)),
+			})
+			if len(atts) > 0 {
+				requiresAttestations = true
+				break
+			}
+		}
+	}
+	if requiresAttestations {
+		// if we only have inline attestations, we don't *need* an image index
+		// for the attestations, but if we do have the index, we should still
+		// attach it if possible
+		multiPlatform = true
 	}
 
 	if opts.MultiPlatform != nil {
@@ -106,6 +128,9 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		if len(p.Platforms) > 1 {
 			return nil, errors.Errorf("cannot export multiple platforms without multi-platform enabled")
 		}
+		if requiresAttestations {
+			return nil, errors.Errorf("cannot export attestations without multi-platform enabled")
+		}
 
 		var ref cache.ImmutableRef
 		if inp.Ref != nil {
@@ -113,14 +138,6 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		} else if len(p.Platforms) > 0 {
 			p := p.Platforms[0]
 			ref = inp.Refs[p.ID]
-			if atts, ok := inp.Attestations[p.ID]; ok {
-				atts = attestation.Filter(atts, nil, map[string][]byte{
-					result.AttestationInlineOnlyKey: []byte(strconv.FormatBool(true)),
-				})
-				if len(atts) > 0 {
-					return nil, errors.Errorf("cannot export attestations without multi-platform enabled")
-				}
-			}
 		} else if len(inp.Refs) == 1 {
 			for _, ref = range inp.Refs {
 			}
