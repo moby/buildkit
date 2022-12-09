@@ -14,10 +14,10 @@ const (
 )
 
 func ParseBuildArgs(opt map[string]string) (string, bool) {
-	if v, ok := opt[frontendMultiPlatform]; ok {
+	if v, ok := opt[frontendMultiPlatformArg]; ok {
 		return v, true
 	}
-	if v, ok := opt[frontendMultiPlatformArg]; ok {
+	if v, ok := opt[frontendMultiPlatform]; ok {
 		return v, true
 	}
 	return "", false
