@@ -16,6 +16,7 @@ import (
 	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/frontend/attestations"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
@@ -161,7 +162,7 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 					}
 				}
 
-				if res.Attestations != nil && c.caps.Supports(pb.CapAttestations) == nil {
+				if res.Attestations != nil {
 					attestations := map[string]*pb.Attestations{}
 					for k, as := range res.Attestations {
 						for _, a := range as {
@@ -483,8 +484,20 @@ func (c *grpcClient) ResolveImageConfig(ctx context.Context, ref string, opt llb
 }
 
 func (c *grpcClient) BuildOpts() client.BuildOpts {
+	opts := c.opts
+	if c.caps.Supports(pb.CapAttestations) == nil {
+		opts = map[string]string{}
+		attestOpts := attestations.Filter(c.opts)
+		for k, v := range c.opts {
+			if _, ok := attestOpts[k]; ok {
+				continue
+			}
+			opts[k] = v
+		}
+	}
+
 	return client.BuildOpts{
-		Opts:      c.opts,
+		Opts:      opts,
 		SessionID: c.sessionID,
 		Workers:   c.workers,
 		Product:   c.product,
