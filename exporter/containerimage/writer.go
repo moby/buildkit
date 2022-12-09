@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -111,10 +112,15 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 			ref = inp.Ref
 		} else if len(p.Platforms) > 0 {
 			p := p.Platforms[0]
-			if _, ok := inp.Attestations[p.ID]; ok {
-				return nil, errors.Errorf("cannot export attestations without multi-platform enabled")
-			}
 			ref = inp.Refs[p.ID]
+			if atts, ok := inp.Attestations[p.ID]; ok {
+				atts = attestation.Filter(atts, nil, map[string][]byte{
+					result.AttestationInlineOnlyKey: []byte(strconv.FormatBool(true)),
+				})
+				if len(atts) > 0 {
+					return nil, errors.Errorf("cannot export attestations without multi-platform enabled")
+				}
+			}
 		} else if len(inp.Refs) == 1 {
 			for _, ref = range inp.Refs {
 			}

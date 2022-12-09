@@ -77,6 +77,14 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 		return nil, err
 	}
 
+	if e.opt.Variant == VariantDocker {
+		if i.opts.MultiPlatform != nil && *i.opts.MultiPlatform {
+			return nil, errors.Errorf("docker exporter does not currently support exporting manifest lists")
+		}
+		b := false
+		i.opts.MultiPlatform = &b
+	}
+
 	for k, v := range opt {
 		switch k {
 		case keyTar:
@@ -115,10 +123,6 @@ func (e *imageExporterInstance) Config() *exporter.Config {
 }
 
 func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source, sessionID string) (map[string]string, error) {
-	if e.opt.Variant == VariantDocker && len(src.Refs) > 0 {
-		return nil, errors.Errorf("docker exporter does not currently support exporting manifest lists")
-	}
-
 	if src.Metadata == nil {
 		src.Metadata = make(map[string][]byte)
 	}
