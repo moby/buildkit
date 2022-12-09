@@ -101,6 +101,9 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 	}
 
 	isMap := len(inp.Refs) > 0
+	if len(inp.Attestations) > 0 {
+		isMap = false
+	}
 
 	platformsBytes, ok := inp.Metadata[exptypes.ExporterPlatformsKey]
 	if len(inp.Refs) > 0 && !ok {
