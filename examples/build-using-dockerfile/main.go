@@ -107,7 +107,7 @@ func action(clicontext *cli.Context) error {
 			c = cn
 		}
 		// not using shared context to not disrupt display but let is finish reporting errors
-		_, err = progressui.DisplaySolveStatus(context.TODO(), "", c, os.Stdout, ch)
+		_, err = progressui.DisplaySolveStatus(context.TODO(), c, os.Stdout, ch)
 		return err
 	})
 	eg.Go(func() error {
