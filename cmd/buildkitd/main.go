@@ -413,7 +413,9 @@ func setDefaultConfig(cfg *config.Config) {
 	}
 
 	cfg.Workers.OCI.NetworkConfig = setDefaultNetworkConfig(cfg.Workers.OCI.NetworkConfig)
+	cfg.Workers.OCI.GCKeepStorage = cfg.Workers.OCI.GCKeepStorage * 1e6
 	cfg.Workers.Containerd.NetworkConfig = setDefaultNetworkConfig(cfg.Workers.Containerd.NetworkConfig)
+	cfg.Workers.Containerd.GCKeepStorage = cfg.Workers.Containerd.GCKeepStorage * 1e6
 
 	if userns.RunningInUserNS() {
 		// if buildkitd is being executed as the mapped-root (not only EUID==0 but also $USER==root)
