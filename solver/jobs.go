@@ -230,13 +230,14 @@ func (sb *subBuilder) EachValue(ctx context.Context, key string, fn func(interfa
 }
 
 type Job struct {
-	list        *Solver
-	pr          *progress.MultiReader
-	pw          progress.Writer
-	span        trace.Span
-	values      sync.Map
-	id          string
-	startedTime time.Time
+	list          *Solver
+	pr            *progress.MultiReader
+	pw            progress.Writer
+	span          trace.Span
+	values        sync.Map
+	id            string
+	startedTime   time.Time
+	completedTime time.Time
 
 	progressCloser func()
 	SessionID      string
@@ -590,6 +591,13 @@ func (j *Job) Discard() error {
 
 func (j *Job) StartedTime() time.Time {
 	return j.startedTime
+}
+
+func (j *Job) RegisterCompleteTime() time.Time {
+	if j.completedTime.IsZero() {
+		j.completedTime = time.Now()
+	}
+	return j.completedTime
 }
 
 func (j *Job) InContext(ctx context.Context, f func(context.Context, session.Group) error) error {

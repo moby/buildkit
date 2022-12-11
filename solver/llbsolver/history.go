@@ -308,6 +308,29 @@ func (h *HistoryQueue) update(ctx context.Context, rec controlapi.BuildHistoryRe
 		if err := h.addResource(ctx, l, rec.Logs); err != nil {
 			return err
 		}
+		if err := h.addResource(ctx, l, rec.Trace); err != nil {
+			return err
+		}
+		if rec.Result != nil {
+			if err := h.addResource(ctx, l, rec.Result.Result); err != nil {
+				return err
+			}
+			for _, att := range rec.Result.Attestations {
+				if err := h.addResource(ctx, l, att); err != nil {
+					return err
+				}
+			}
+		}
+		for _, r := range rec.Results {
+			if err := h.addResource(ctx, l, r.Result); err != nil {
+				return err
+			}
+			for _, att := range r.Attestations {
+				if err := h.addResource(ctx, l, att); err != nil {
+					return err
+				}
+			}
+		}
 
 		return b.Put([]byte(rec.Ref), dt)
 	})

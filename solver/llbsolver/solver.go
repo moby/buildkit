@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
+	slsa "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/cache"
 	cacheconfig "github.com/moby/buildkit/cache/config"
@@ -24,6 +26,7 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver/provenance"
 	"github.com/moby/buildkit/solver/result"
+	"github.com/moby/buildkit/util/attestation"
 	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/entitlements"
@@ -32,7 +35,6 @@ import (
 	"github.com/moby/buildkit/util/tracing/detect"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
-	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -132,7 +134,7 @@ func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 	return s.bridge(b)
 }
 
-func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend.SolveRequest, j *solver.Job) (func(error) error, error) {
+func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend.SolveRequest, j *solver.Job) (func(*Result, error) error, error) {
 	var stopTrace func() []tracetest.SpanStub
 
 	if s := trace.SpanFromContext(ctx); s.SpanContext().IsValid() {
@@ -157,27 +159,115 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 		return nil, err
 	}
 
-	return func(err error) error {
+	return func(res *Result, err error) error {
 		en := time.Now()
 		rec.CompletedAt = &en
 
 		j.CloseProgress()
 
+		var mu sync.Mutex
 		ch := make(chan *client.SolveStatus)
 		eg, ctx2 := errgroup.WithContext(ctx)
-		var releaseStatus func()
+		var releasers []func()
+
+		attrs := map[string]string{
+			"mode": "max",
+		}
+
+		makeProvenance := func(res solver.ResultProxy, cap *provenance.Capture) (*controlapi.Descriptor, func(), error) {
+			prc, err := NewProvenanceCreator(ctx2, cap, res, attrs, j)
+			if err != nil {
+				return nil, nil, err
+			}
+			pr, err := prc.Predicate()
+			if err != nil {
+				return nil, nil, err
+			}
+			dt, err := json.MarshalIndent(pr, "", "  ")
+			if err != nil {
+				return nil, nil, err
+			}
+			w, err := s.history.OpenBlobWriter(ctx, attestation.MediaTypeDockerSchema2AttestationType)
+			if err != nil {
+				return nil, nil, err
+			}
+			defer func() {
+				if w != nil {
+					w.Discard()
+				}
+			}()
+			if _, err := w.Write(dt); err != nil {
+				return nil, nil, err
+			}
+			desc, release, err := w.Commit(ctx2)
+			if err != nil {
+				return nil, nil, err
+			}
+			w = nil
+			return &controlapi.Descriptor{
+				Digest:    desc.Digest,
+				Size_:     desc.Size,
+				MediaType: desc.MediaType,
+				Annotations: map[string]string{
+					"in-toto.io/predicate-type": slsa.PredicateSLSAProvenance,
+				},
+			}, release, nil
+		}
+
+		if res.Ref != nil {
+			eg.Go(func() error {
+				desc, release, err := makeProvenance(res.Ref, res.Provenance.Ref)
+				if err != nil {
+					return err
+				}
+
+				mu.Lock()
+				releasers = append(releasers, release)
+				if rec.Result == nil {
+					rec.Result = &controlapi.BuildResultInfo{}
+				}
+				rec.Result.Attestations = append(rec.Result.Attestations, desc)
+				mu.Unlock()
+				return nil
+			})
+		}
+
+		for k, r := range res.Refs {
+			k, r := k, r
+			cp := res.Provenance.Refs[k]
+			eg.Go(func() error {
+				desc, release, err := makeProvenance(r, cp)
+				if err != nil {
+					return err
+				}
+
+				mu.Lock()
+				releasers = append(releasers, release)
+				if rec.Results == nil {
+					rec.Results = make(map[string]*controlapi.BuildResultInfo)
+				}
+				if rec.Results[k] == nil {
+					rec.Results[k] = &controlapi.BuildResultInfo{}
+				}
+				rec.Results[k].Attestations = append(rec.Results[k].Attestations, desc)
+				mu.Unlock()
+				return nil
+			})
+		}
+
 		eg.Go(func() error {
-			var err error
-			var desc *ocispecs.Descriptor
-			desc, releaseStatus, err = s.history.ImportStatus(ctx2, ch)
+			desc, releaseStatus, err := s.history.ImportStatus(ctx2, ch)
 			if err != nil {
 				return err
 			}
+			mu.Lock()
+			releasers = append(releasers, releaseStatus)
 			rec.Logs = &controlapi.Descriptor{
 				Digest:    desc.Digest,
 				Size_:     desc.Size,
 				MediaType: desc.MediaType,
 			}
+			mu.Unlock()
 			return nil
 		})
 		eg.Go(func() error {
@@ -188,8 +278,8 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 		}
 
 		defer func() {
-			if releaseStatus != nil {
-				releaseStatus()
+			for _, f := range releasers {
+				f()
 			}
 		}()
 
@@ -213,8 +303,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 			return err
 		}
 
-		stopTrace := stopTrace
-		if stopTrace != nil {
+		if stopTrace == nil {
 			logrus.Warn("no trace recorder found, skipping")
 			return err
 		}
@@ -272,16 +361,26 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 
 	defer j.Discard()
 
+	var releasers []func()
+	defer func() {
+		for _, f := range releasers {
+			f()
+		}
+	}()
+
+	var res *frontend.Result
+	var resProv *Result
+
 	if internal {
 		defer j.CloseProgress()
 	} else {
-		rec, err := s.recordBuildHistory(ctx, id, req, j)
+		rec, err1 := s.recordBuildHistory(ctx, id, req, j)
 		if err != nil {
 			defer j.CloseProgress()
-			return nil, err
+			return nil, err1
 		}
 		defer func() {
-			err = rec(err)
+			err = rec(resProv, err)
 		}()
 	}
 
@@ -293,7 +392,6 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 
 	j.SessionID = sessionID
 
-	var res *frontend.Result
 	br := s.bridge(j)
 	if s.gatewayForwarder != nil && req.Definition == nil && req.Frontend == "" {
 		fwd := gateway.NewBridgeForwarder(ctx, br, s.workerController, req.FrontendInputs, sessionID, s.sm)
@@ -324,12 +422,12 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		res = &frontend.Result{}
 	}
 
-	defer func() {
+	releasers = append(releasers, func() {
 		res.EachRef(func(ref solver.ResultProxy) error {
 			go ref.Release(context.TODO())
 			return nil
 		})
-	}()
+	})
 
 	eg, ctx2 := errgroup.WithContext(ctx)
 	res.EachRef(func(ref solver.ResultProxy) error {
@@ -343,7 +441,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		return nil, err
 	}
 
-	resProv, err := addProvenanceToResult(res, br)
+	resProv, err = addProvenanceToResult(res, br)
 	if err != nil {
 		return nil, err
 	}
