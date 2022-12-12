@@ -108,12 +108,13 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		}
 
 		var ref cache.ImmutableRef
+		var xp *exptypes.Platform
 		if inp.Ref != nil {
 			ref = inp.Ref
 		} else if len(p.Platforms) > 0 {
-			p := p.Platforms[0]
-			ref = inp.Refs[p.ID]
-			if atts, ok := inp.Attestations[p.ID]; ok {
+			xp = &p.Platforms[0]
+			ref = inp.Refs[xp.ID]
+			if atts, ok := inp.Attestations[xp.ID]; ok {
 				atts = attestation.Filter(atts, nil, map[string][]byte{
 					result.AttestationInlineOnlyKey: []byte(strconv.FormatBool(true)),
 				})
@@ -133,7 +134,11 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 
 		var dtbi []byte
 		if opts.BuildInfo {
-			if dtbi, err = buildinfo.Format(inp.Metadata[exptypes.ExporterBuildInfo], buildinfo.FormatOpts{
+			bi, ok := inp.Metadata[exptypes.ExporterBuildInfo]
+			if !ok && xp != nil {
+				bi = inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, xp.ID)]
+			}
+			if dtbi, err = buildinfo.Format(bi, buildinfo.FormatOpts{
 				RemoveAttrs: !opts.BuildInfoAttrs,
 			}); err != nil {
 				return nil, err
@@ -145,7 +150,16 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 			return nil, errors.Errorf("index annotations not supported for single platform export")
 		}
 
-		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, opts, ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], annotations, inp.Metadata[exptypes.ExporterInlineCache], dtbi, opts.Epoch, session.NewGroup(sessionID))
+		cfg, ok := inp.Metadata[exptypes.ExporterImageConfigKey]
+		if !ok && xp != nil {
+			cfg = inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterImageConfigKey, xp.ID)]
+		}
+		eic, ok := inp.Metadata[exptypes.ExporterInlineCache]
+		if !ok && xp != nil {
+			eic = inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, xp.ID)]
+		}
+
+		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, opts, ref, cfg, &remotes[0], annotations, eic, dtbi, opts.Epoch, session.NewGroup(sessionID))
 		if err != nil {
 			return nil, err
 		}
