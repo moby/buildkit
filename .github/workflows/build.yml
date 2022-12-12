@@ -32,7 +32,7 @@ env:
   CACHE_GHA_SCOPE_BINARIES: "binaries"
   CACHE_GHA_SCOPE_CROSS: "cross"
   TESTFLAGS: "-v --parallel=6 --timeout=30m"
-  BUILDX_VERSION: "v0.9.1"  # leave empty to use the one available on GitHub virtual environment
+  BUILDX_VERSION: "https://github.com/docker/buildx.git#1e72e32ec3b5fbdc4b6226ff74f614ab063d12b0"  # leave empty to use the one available on GitHub virtual environment
   GO_VERSION: "1.19"
 
 jobs:
