@@ -373,16 +373,6 @@ func TestMatch(t *testing.T) {
 			attrs:   map[string]string{"bar": "Bar"},
 			matches: false,
 		},
-		{
-			name: "strip docker-image digest from source op for matching",
-			src: spb.Source{
-				Type:       "docker-image",
-				Identifier: "docker.io/library/busybox:latest",
-			},
-			scheme:  "docker-image",
-			ref:     "docker.io/library/busybox:latest@sha256:f75f3d1a317fc82c793d567de94fc8df2bece37acd5f2bd364a0d91a0d1f3dab",
-			matches: true,
-		},
 	}
 
 	for _, tc := range cases {
