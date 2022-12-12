@@ -369,10 +369,6 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 
 	var procs []llbsolver.Processor
 
-	if len(attests) > 0 {
-		procs = append(procs, proc.ForceRefsProcessor)
-	}
-
 	if attrs, ok := attests["sbom"]; ok {
 		src := attrs["generator"]
 		if src == "" {

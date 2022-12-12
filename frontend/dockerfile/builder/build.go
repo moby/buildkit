@@ -505,7 +505,6 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 			return nil, errors.Wrapf(err, "failed to parse sbom scanner %s", src)
 		}
 		ref = reference.TagNameOnly(ref)
-		exportMap = true
 
 		scanner, err = sbom.CreateSBOMScanner(ctx, c, ref.String())
 		if err != nil {
@@ -620,16 +619,16 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 			}
 
 			attSolve, err := result.ConvertAttestation(&att, func(st llb.State) (client.Reference, error) {
-			def, err := st.Marshal(ctx)
-			if err != nil {
-				return nil, err
-			}
-			r, err := c.Solve(ctx, frontend.SolveRequest{
-				Definition: def.ToPB(),
-			})
-			if err != nil {
-				return nil, err
-			}
+				def, err := st.Marshal(ctx)
+				if err != nil {
+					return nil, err
+				}
+				r, err := c.Solve(ctx, frontend.SolveRequest{
+					Definition: def.ToPB(),
+				})
+				if err != nil {
+					return nil, err
+				}
 				return r.Ref, nil
 			})
 			if err != nil {
