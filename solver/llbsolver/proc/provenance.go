@@ -61,8 +61,8 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 		}
 
 		for _, p := range ps.Platforms {
-			cp, err := res.Provenance.FindRef(p.ID)
-			if err != nil {
+			cp, ok := res.Provenance.FindRef(p.ID)
+			if !ok {
 				return nil, errors.New("no build info found for provenance")
 			}
 
@@ -93,9 +93,9 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 				pr.Invocation.Parameters.Secrets = nil
 				pr.Invocation.Parameters.SSH = nil
 			case "max":
-				ref, err := res.FindRef(p.ID)
-				if err != nil {
-					return nil, err
+				ref, ok := res.FindRef(p.ID)
+				if !ok {
+					return nil, errors.Errorf("could not find ref %s", p.ID)
 				}
 				dgsts, err := provenance.AddBuildConfig(ctx, pr, ref)
 				if err != nil {

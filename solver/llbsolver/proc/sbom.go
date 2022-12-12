@@ -34,8 +34,8 @@ func SBOMProcessor(scannerRef string) llbsolver.Processor {
 		}
 
 		for _, p := range ps.Platforms {
-			ref, err := res.FindRef(p.ID)
-			if err != nil {
+			ref, ok := res.FindRef(p.ID)
+			if !ok {
 				return nil, errors.Errorf("could not find ref %s", p.ID)
 			}
 			defop, err := llb.NewDefinitionOp(ref.Definition())

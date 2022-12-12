@@ -67,7 +67,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 	ps, err := exptypes.ParsePlatforms(inp.Metadata)
 	if err != nil {
 		return nil, err
-		}
+	}
 
 	requiredAttestations := false
 	for _, p := range ps.Platforms {
@@ -78,14 +78,11 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 			if len(atts) > 0 {
 				requiredAttestations = true
 				break
+			}
 		}
-	}
 	}
 	if requiredAttestations {
 		isMap = true
-	}
-	if opts.MultiPlatform != nil {
-		multiPlatform = *opts.MultiPlatform
 	}
 
 	if opts.Epoch == nil {
@@ -98,7 +95,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 
 	for pk, a := range opts.Annotations {
 		if pk != "" {
-			if _, err := inp.FindRef(pk); err != nil {
+			if _, ok := inp.FindRef(pk); !ok {
 				return nil, errors.Errorf("invalid annotation: no platform %s found in source", pk)
 			}
 		}
@@ -119,7 +116,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		var p exptypes.Platform
 		if len(ps.Platforms) > 0 {
 			p = ps.Platforms[0]
-			if r, err := inp.FindRef(p.ID); err == nil {
+			if r, ok := inp.FindRef(p.ID); ok {
 				ref = r
 			}
 		} else {
@@ -169,8 +166,8 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 	refs := make([]cache.ImmutableRef, 0, len(inp.Refs))
 	remotesMap := make(map[string]int, len(inp.Refs))
 	for _, p := range ps.Platforms {
-		r, err := inp.FindRef(p.ID)
-		if err != nil {
+		r, ok := inp.FindRef(p.ID)
+		if !ok {
 			return nil, errors.Errorf("failed to find ref for ID %s", p.ID)
 		}
 		remotesMap[p.ID] = len(refs)
@@ -207,8 +204,8 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 	var attestationManifests []ocispecs.Descriptor
 
 	for i, p := range ps.Platforms {
-		r, err := inp.FindRef(p.ID)
-		if err != nil {
+		r, ok := inp.FindRef(p.ID)
+		if !ok {
 			return nil, errors.Errorf("failed to find ref for ID %s", p.ID)
 		}
 		config := exptypes.ParseKey(inp.Metadata, exptypes.ExporterImageConfigKey, p)

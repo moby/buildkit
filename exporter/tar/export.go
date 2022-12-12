@@ -12,7 +12,6 @@ import (
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/exporter/local"
 	"github.com/moby/buildkit/exporter/util/epoch"
-	"github.com/moby/buildkit/exporter/util/multiplatform"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/util/progress"
@@ -52,12 +51,6 @@ func (e *localExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 		return nil, err
 	}
 	li.opts.Epoch = tm
-
-	multiPlatform, opt, err := multiplatform.ParseExporterAttrs(opt)
-	if err != nil {
-		return nil, err
-	}
-	li.opts.MultiPlatform = multiPlatform
 
 	for k, v := range opt {
 		switch k {
@@ -142,17 +135,14 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 	if !isMap && len(p.Platforms) > 1 {
 		return nil, errors.Errorf("unable to export multiple platforms without map")
 	}
-	if e.opts.MultiPlatform != nil {
-		isMap = *e.opts.MultiPlatform
-	}
 
 	var fs fsutil.FS
 
 	if len(p.Platforms) > 0 {
 		dirs := make([]fsutil.Dir, 0, len(p.Platforms))
 		for _, p := range p.Platforms {
-			r, err := inp.FindRef(p.ID)
-			if err != nil {
+			r, ok := inp.FindRef(p.ID)
+			if !ok {
 				return nil, errors.Errorf("failed to find ref for ID %s", p.ID)
 			}
 			d, err := getDir(ctx, p.ID, r, inp.Attestations[p.ID])

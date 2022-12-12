@@ -6,7 +6,6 @@ import (
 
 	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/exporter/util/epoch"
-	"github.com/moby/buildkit/exporter/util/multiplatform"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -35,7 +34,6 @@ type ImageCommitOpts struct {
 	BuildInfoAttrs bool
 	Annotations    AnnotationsGroup
 	Epoch          *time.Time
-	MultiPlatform  *bool
 }
 
 func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error) {
@@ -48,11 +46,6 @@ func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error)
 	opt = toStringMap(optb)
 
 	c.Epoch, opt, err = epoch.ParseExporterAttrs(opt)
-	if err != nil {
-		return nil, err
-	}
-
-	c.MultiPlatform, opt, err = multiplatform.ParseExporterAttrs(opt)
 	if err != nil {
 		return nil, err
 	}

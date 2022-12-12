@@ -57,25 +57,23 @@ func (r *Result[T]) SingleRef() (T, error) {
 	return r.Ref, nil
 }
 
-func (r *Result[T]) FindRef(key string) (T, error) {
+func (r *Result[T]) FindRef(key string) (T, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	if r.Refs != nil {
 		if ref, ok := r.Refs[key]; ok {
-			return ref, nil
+			return ref, true
 		}
 		if len(r.Refs) == 1 {
 			for _, ref := range r.Refs {
-				return ref, nil
+				return ref, true
 			}
 		}
-	} else if reflect.ValueOf(r.Ref).IsValid() {
-		return r.Ref, nil
+		var t T
+		return t, false
 	}
-
-	var t T
-	return t, errors.Errorf("invalid map result")
+	return r.Ref, true
 }
 
 func (r *Result[T]) EachRef(fn func(T) error) (err error) {

@@ -44,16 +44,10 @@ func (e *localExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 		return nil, err
 	}
 
-	multiPlatform, _, err := multiplatform.ParseExporterAttrs(opt)
-	if err != nil {
-		return nil, err
-	}
-
 	i := &localExporterInstance{
 		localExporter: e,
 		opts: CreateFSOpts{
-			Epoch:         tm,
-			MultiPlatform: multiPlatform,
+			Epoch: tm,
 		},
 	}
 
@@ -107,9 +101,6 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 		return nil, err
 	}
 
-	if e.opts.MultiPlatform != nil {
-		isMap = *e.opts.MultiPlatform
-	}
 	if !isMap && len(p.Platforms) > 1 {
 		return nil, errors.Errorf("unable to export multiple platforms without map")
 	}
@@ -155,8 +146,8 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 
 	if len(p.Platforms) > 0 {
 		for _, p := range p.Platforms {
-			r, err := inp.FindRef(p.ID)
-			if err != nil {
+			r, ok := inp.FindRef(p.ID)
+			if !ok {
 				return nil, errors.Errorf("failed to find ref for ID %s", p.ID)
 			}
 			eg.Go(export(ctx, p.ID, r, inp.Attestations[p.ID]))
