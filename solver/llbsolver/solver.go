@@ -314,7 +314,7 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 		func(exp RemoteCacheExporter, i int) {
 			eg.Go(func() (err error) {
 				id := fmt.Sprint(j.SessionID, "-cache-", i)
-				return inBuilderContext(ctx, j, fmt.Sprint("exporting ", exp.Exporter.Name()), id, func(ctx context.Context, _ session.Group) error {
+				return inBuilderContext(ctx, j, exp.Exporter.Name(), id, func(ctx context.Context, _ session.Group) error {
 					prepareDone := progress.OneOff(ctx, "preparing build cache for export")
 					if err := result.EachRef(cached, inp, func(res solver.CachedResult, ref cache.ImmutableRef) error {
 						ctx = withDescHandlerCacheOpts(ctx, ref)
