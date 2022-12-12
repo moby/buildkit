@@ -56,11 +56,17 @@ func monitor(clicontext *cli.Context) error {
 		}
 
 		if ev.Record.Result != nil {
+			if ev.Record.Result.Result != nil {
+				fmt.Printf("  descriptor: %s\n", ev.Record.Result.Result)
+			}
 			for _, att := range ev.Record.Result.Attestations {
 				fmt.Printf("  attestation: %s\n", att)
 			}
 		}
 		for k, res := range ev.Record.Results {
+			if res.Result != nil {
+				fmt.Printf("  [%s] descriptor: %s\n", k, res.Result)
+			}
 			for _, att := range res.Attestations {
 				fmt.Printf("  [%s] attestation: %s\n", k, att)
 			}

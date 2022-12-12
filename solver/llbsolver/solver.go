@@ -134,7 +134,7 @@ func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 	return s.bridge(b)
 }
 
-func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend.SolveRequest, j *solver.Job) (func(*Result, error) error, error) {
+func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend.SolveRequest, j *solver.Job) (func(*Result, exporter.DescriptorReference, error) error, error) {
 	var stopTrace func() []tracetest.SpanStub
 
 	if s := trace.SpanFromContext(ctx); s.SpanContext().IsValid() {
@@ -159,11 +159,18 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 		return nil, err
 	}
 
-	return func(res *Result, err error) error {
+	return func(res *Result, descref exporter.DescriptorReference, err error) error {
 		en := time.Now()
 		rec.CompletedAt = &en
 
 		j.CloseProgress()
+
+		if res != nil && len(res.Metadata) > 0 {
+			rec.ExporterResponse = map[string]string{}
+			for k, v := range res.Metadata {
+				rec.ExporterResponse[k] = string(v)
+			}
+		}
 
 		var mu sync.Mutex
 		ch := make(chan *client.SolveStatus)
@@ -214,45 +221,47 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 			}, release, nil
 		}
 
-		if res.Ref != nil {
-			eg.Go(func() error {
-				desc, release, err := makeProvenance(res.Ref, res.Provenance.Ref)
-				if err != nil {
-					return err
-				}
+		if res != nil {
+			if res.Ref != nil {
+				eg.Go(func() error {
+					desc, release, err := makeProvenance(res.Ref, res.Provenance.Ref)
+					if err != nil {
+						return err
+					}
 
-				mu.Lock()
-				releasers = append(releasers, release)
-				if rec.Result == nil {
-					rec.Result = &controlapi.BuildResultInfo{}
-				}
-				rec.Result.Attestations = append(rec.Result.Attestations, desc)
-				mu.Unlock()
-				return nil
-			})
-		}
+					mu.Lock()
+					releasers = append(releasers, release)
+					if rec.Result == nil {
+						rec.Result = &controlapi.BuildResultInfo{}
+					}
+					rec.Result.Attestations = append(rec.Result.Attestations, desc)
+					mu.Unlock()
+					return nil
+				})
+			}
 
-		for k, r := range res.Refs {
-			k, r := k, r
-			cp := res.Provenance.Refs[k]
-			eg.Go(func() error {
-				desc, release, err := makeProvenance(r, cp)
-				if err != nil {
-					return err
-				}
+			for k, r := range res.Refs {
+				k, r := k, r
+				cp := res.Provenance.Refs[k]
+				eg.Go(func() error {
+					desc, release, err := makeProvenance(r, cp)
+					if err != nil {
+						return err
+					}
 
-				mu.Lock()
-				releasers = append(releasers, release)
-				if rec.Results == nil {
-					rec.Results = make(map[string]*controlapi.BuildResultInfo)
-				}
-				if rec.Results[k] == nil {
-					rec.Results[k] = &controlapi.BuildResultInfo{}
-				}
-				rec.Results[k].Attestations = append(rec.Results[k].Attestations, desc)
-				mu.Unlock()
-				return nil
-			})
+					mu.Lock()
+					releasers = append(releasers, release)
+					if rec.Results == nil {
+						rec.Results = make(map[string]*controlapi.BuildResultInfo)
+					}
+					if rec.Results[k] == nil {
+						rec.Results[k] = &controlapi.BuildResultInfo{}
+					}
+					rec.Results[k].Attestations = append(rec.Results[k].Attestations, desc)
+					mu.Unlock()
+					return nil
+				})
+			}
 		}
 
 		eg.Go(func() error {
@@ -273,6 +282,25 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 		eg.Go(func() error {
 			return j.Status(ctx2, ch)
 		})
+
+		if descref != nil {
+			eg.Go(func() error {
+				mu.Lock()
+				if rec.Result == nil {
+					rec.Result = &controlapi.BuildResultInfo{}
+				}
+				desc := descref.Descriptor()
+				rec.Result.Result = &controlapi.Descriptor{
+					Digest:      desc.Digest,
+					Size_:       desc.Size,
+					MediaType:   desc.MediaType,
+					Annotations: desc.Annotations,
+				}
+				mu.Unlock()
+				return nil
+			})
+		}
+
 		if err1 := eg.Wait(); err == nil {
 			err = err1
 		}
@@ -361,15 +389,19 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 
 	defer j.Discard()
 
+	var res *frontend.Result
+	var resProv *Result
+	var descref exporter.DescriptorReference
+
 	var releasers []func()
 	defer func() {
 		for _, f := range releasers {
 			f()
 		}
+		if descref != nil {
+			descref.Release()
+		}
 	}()
-
-	var res *frontend.Result
-	var resProv *Result
 
 	if internal {
 		defer j.CloseProgress()
@@ -380,7 +412,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 			return nil, err1
 		}
 		defer func() {
-			err = rec(resProv, err)
+			err = rec(resProv, descref, err)
 		}()
 	}
 
@@ -485,7 +517,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		}
 
 		if err := inBuilderContext(ctx, j, e.Name(), j.SessionID+"-export", func(ctx context.Context, _ session.Group) error {
-			exporterResponse, err = e.Export(ctx, inp, j.SessionID)
+			exporterResponse, descref, err = e.Export(ctx, inp, j.SessionID)
 			return err
 		}); err != nil {
 			return nil, err

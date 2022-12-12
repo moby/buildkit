@@ -82,7 +82,7 @@ func (e *localExporterInstance) Config() *exporter.Config {
 	return exporter.NewConfig()
 }
 
-func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source, sessionID string) (map[string]string, error) {
+func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source, sessionID string) (map[string]string, exporter.DescriptorReference, error) {
 	var defers []func() error
 
 	defer func() {
@@ -93,7 +93,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 
 	if e.opts.Epoch == nil {
 		if tm, ok, err := epoch.ParseSource(inp); err != nil {
-			return nil, err
+			return nil, nil, err
 		} else if ok {
 			e.opts.Epoch = tm
 		}
@@ -126,14 +126,14 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 
 	isMap := len(inp.Refs) > 0
 	if _, ok := inp.Metadata[exptypes.ExporterPlatformsKey]; isMap && !ok {
-		return nil, errors.Errorf("unable to export multiple refs, missing platforms mapping")
+		return nil, nil, errors.Errorf("unable to export multiple refs, missing platforms mapping")
 	}
 	p, err := exptypes.ParsePlatforms(inp.Metadata)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if !isMap && len(p.Platforms) > 1 {
-		return nil, errors.Errorf("unable to export multiple platforms without map")
+		return nil, nil, errors.Errorf("unable to export multiple platforms without map")
 	}
 
 	var fs fsutil.FS
@@ -143,11 +143,11 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 		for _, p := range p.Platforms {
 			r, ok := inp.FindRef(p.ID)
 			if !ok {
-				return nil, errors.Errorf("failed to find ref for ID %s", p.ID)
+				return nil, nil, errors.Errorf("failed to find ref for ID %s", p.ID)
 			}
 			d, err := getDir(ctx, p.ID, r, inp.Attestations[p.ID])
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			dirs = append(dirs, *d)
 		}
@@ -155,7 +155,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 			var err error
 			fs, err = fsutil.SubDirFS(dirs)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		} else {
 			fs = dirs[0].FS
@@ -163,7 +163,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 	} else {
 		d, err := getDir(ctx, "", inp.Ref, nil)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		fs = d.FS
 	}
@@ -173,17 +173,17 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 
 	caller, err := e.opt.SessionManager.Get(timeoutCtx, sessionID, false)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	w, err := filesync.CopyFileWriter(ctx, nil, caller)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	report := progress.OneOff(ctx, "sending tarball")
 	if err := fsutil.WriteTar(ctx, fs, w); err != nil {
 		w.Close()
-		return nil, report(err)
+		return nil, nil, report(err)
 	}
-	return nil, report(w.Close())
+	return nil, nil, report(w.Close())
 }
