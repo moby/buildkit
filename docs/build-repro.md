@@ -166,8 +166,4 @@ An example `policy.json`:
 }
 ```
 
-
-Reproduction is currently supported for the following source types:
-* `docker-image`
-* `http`
-<!-- TODO: git -->
+Any source type is supported, but how to pin a source depends on the type.
