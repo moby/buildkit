@@ -187,6 +187,43 @@ func newVertex(dgst digest.Digest, op *pb.Op, opMeta *pb.OpMetadata, load func(d
 	return vtx, nil
 }
 
+func recomputeDigests(ctx context.Context, all map[digest.Digest]*pb.Op, visited map[digest.Digest]digest.Digest, dgst digest.Digest) (digest.Digest, error) {
+	if dgst, ok := visited[dgst]; ok {
+		return dgst, nil
+	}
+	op := all[dgst]
+
+	var mutated bool
+	for _, input := range op.Inputs {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+
+		iDgst, err := recomputeDigests(ctx, all, visited, input.Digest)
+		if err != nil {
+			return "", err
+		}
+		if input.Digest != iDgst {
+			mutated = true
+			input.Digest = iDgst
+		}
+	}
+
+	if !mutated {
+		return dgst, nil
+	}
+
+	dt, err := op.Marshal()
+	if err != nil {
+		return "", err
+	}
+	newDgst := digest.FromBytes(dt)
+	visited[dgst] = newDgst
+	all[newDgst] = op
+	delete(all, dgst)
+	return newDgst, nil
+}
+
 // loadLLB loads LLB.
 // fn is executed sequentially.
 func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluator, fn func(digest.Digest, *pb.Op, func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error)) (solver.Edge, error) {
@@ -224,42 +261,10 @@ func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEval
 		lastDgst = dgst
 	}
 
-	recompute := func(mutatedDigests map[digest.Digest]digest.Digest) (map[digest.Digest]digest.Digest, error) {
-		// Rewrite the input digests if some op was mutated
-		newMut := make(map[digest.Digest]digest.Digest)
-		for dgst, op := range allOps {
-			var mutated bool
-			for _, inp := range op.Inputs {
-				if mutatedDgst, ok := mutatedDigests[inp.Digest]; ok {
-					inp.Digest = mutatedDgst
-					mutated = true
-				}
-			}
-			if mutated {
-				dt, err := op.Marshal()
-				if err != nil {
-					return nil, err
-				}
-				newDgst := digest.FromBytes(dt)
-				allOps[newDgst] = op
-				delete(allOps, dgst)
-				newMut[dgst] = newDgst
-				if dgst == lastDgst {
-					lastDgst = newDgst
-				}
-			}
-		}
-		return newMut, nil
-	}
-
-	for {
-		var err error
-		mutatedDigests, err = recompute(mutatedDigests)
+	for dgst := range allOps {
+		_, err := recomputeDigests(ctx, allOps, mutatedDigests, dgst)
 		if err != nil {
 			return solver.Edge{}, err
-		}
-		if len(mutatedDigests) == 0 {
-			break
 		}
 	}
 
