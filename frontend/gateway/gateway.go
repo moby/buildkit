@@ -694,6 +694,13 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 					return nil, err
 				}
 
+				if att.Ref != nil {
+					id := identity.NewID()
+					def := att.Ref.Definition()
+					lbf.refs[id] = att.Ref
+					pbAtt.Ref = &pb.Ref{Id: id, Def: def}
+				}
+
 				if pbRes.Attestations[k] == nil {
 					pbRes.Attestations[k] = &pb.Attestations{}
 				}
@@ -915,11 +922,18 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 	if in.Result.Attestations != nil {
 		for k, pbAtts := range in.Result.Attestations {
 			for _, pbAtt := range pbAtts.Attestation {
-				att, err := gwclient.AttestationFromPB(pbAtt)
+				att, err := gwclient.AttestationFromPB[solver.ResultProxy](pbAtt)
 				if err != nil {
 					return nil, err
 				}
-				r.AddAttestation(k, *att, nil)
+				if pbAtt.Ref != nil {
+					ref, err := lbf.cloneRef(pbAtt.Ref.Id)
+					if err != nil {
+						return nil, err
+					}
+					att.Ref = ref
+				}
+				r.AddAttestation(k, *att)
 			}
 		}
 	}

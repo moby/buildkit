@@ -28,7 +28,7 @@ const (
 // build-contexts or multi-stage builds. Handling these separately allows the
 // scanner to optionally ignore these or to mark them as such in the
 // attestation.
-type Scanner func(ctx context.Context, name string, ref llb.State, extras map[string]llb.State) (result.Attestation, llb.State, error)
+type Scanner func(ctx context.Context, name string, ref llb.State, extras map[string]llb.State) (result.Attestation[llb.State], error)
 
 func CreateSBOMScanner(ctx context.Context, resolver llb.ImageMetaResolver, scanner string) (Scanner, error) {
 	if scanner == "" {
@@ -52,7 +52,7 @@ func CreateSBOMScanner(ctx context.Context, resolver llb.ImageMetaResolver, scan
 		return nil, errors.Errorf("scanner %s does not have cmd", scanner)
 	}
 
-	return func(ctx context.Context, name string, ref llb.State, extras map[string]llb.State) (result.Attestation, llb.State, error) {
+	return func(ctx context.Context, name string, ref llb.State, extras map[string]llb.State) (result.Attestation[llb.State], error) {
 		var env []string
 		env = append(env, cfg.Config.Env...)
 		env = append(env, "BUILDKIT_SCAN_DESTINATION="+outDir)
@@ -78,15 +78,16 @@ func CreateSBOMScanner(ctx context.Context, resolver llb.ImageMetaResolver, scan
 		}
 
 		stsbom := runscan.AddMount(outDir, llb.Scratch())
-		return result.Attestation{
+		return result.Attestation[llb.State]{
 			Kind: gatewaypb.AttestationKindBundle,
+			Ref:  stsbom,
 			Metadata: map[string][]byte{
 				result.AttestationReasonKey: result.AttestationReasonSBOM,
 			},
 			InToto: result.InTotoAttestation{
 				PredicateType: intoto.PredicateSPDX,
 			},
-		}, stsbom, nil
+		}, nil
 	}, nil
 }
 

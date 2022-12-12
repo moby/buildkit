@@ -6,7 +6,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func AttestationToPB(a *result.Attestation) (*pb.Attestation, error) {
+func AttestationToPB[T any](a *result.Attestation[T]) (*pb.Attestation, error) {
 	if a.ContentFunc != nil {
 		return nil, errors.Errorf("attestation callback cannot be sent through gateway")
 	}
@@ -22,14 +22,14 @@ func AttestationToPB(a *result.Attestation) (*pb.Attestation, error) {
 
 	return &pb.Attestation{
 		Kind:                a.Kind,
+		Metadata:            a.Metadata,
 		Path:                a.Path,
-		Ref:                 a.Ref,
 		InTotoPredicateType: a.InToto.PredicateType,
 		InTotoSubjects:      subjects,
 	}, nil
 }
 
-func AttestationFromPB(a *pb.Attestation) (*result.Attestation, error) {
+func AttestationFromPB[T any](a *pb.Attestation) (*result.Attestation[T], error) {
 	subjects := make([]result.InTotoSubject, len(a.InTotoSubjects))
 	for i, subject := range a.InTotoSubjects {
 		subjects[i] = result.InTotoSubject{
@@ -39,10 +39,10 @@ func AttestationFromPB(a *pb.Attestation) (*result.Attestation, error) {
 		}
 	}
 
-	return &result.Attestation{
-		Kind: a.Kind,
-		Path: a.Path,
-		Ref:  a.Ref,
+	return &result.Attestation[T]{
+		Kind:     a.Kind,
+		Metadata: a.Metadata,
+		Path:     a.Path,
 		InToto: result.InTotoAttestation{
 			PredicateType: a.InTotoPredicateType,
 			Subjects:      subjects,

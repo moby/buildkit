@@ -3,15 +3,15 @@ package attestation
 import (
 	"bytes"
 
-	"github.com/moby/buildkit/solver/result"
+	"github.com/moby/buildkit/exporter"
 )
 
-func Filter(attestations []result.Attestation, include map[string][]byte, exclude map[string][]byte) []result.Attestation {
+func Filter(attestations []exporter.Attestation, include map[string][]byte, exclude map[string][]byte) []exporter.Attestation {
 	if len(include) == 0 && len(exclude) == 0 {
 		return attestations
 	}
 
-	result := []result.Attestation{}
+	result := []exporter.Attestation{}
 	for _, att := range attestations {
 		meta := att.Metadata
 		if meta == nil {

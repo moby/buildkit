@@ -4,14 +4,12 @@ import (
 	"sort"
 
 	distreference "github.com/docker/distribution/reference"
+	"github.com/moby/buildkit/solver/result"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
-type Result struct {
-	Ref  *Capture
-	Refs map[string]*Capture
-}
+type Result = result.Result[*Capture]
 
 type ImageSource struct {
 	Ref      string

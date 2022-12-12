@@ -8,7 +8,7 @@ import (
 
 	"github.com/containerd/continuity/fs"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
-	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/exporter"
 	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
@@ -19,9 +19,9 @@ import (
 
 // Unbundle iterates over all provided result attestations and un-bundles any
 // bundled attestations by loading them from the provided refs map.
-func Unbundle(ctx context.Context, s session.Group, refs map[string]cache.ImmutableRef, bundled []result.Attestation) ([]result.Attestation, error) {
+func Unbundle(ctx context.Context, s session.Group, bundled []exporter.Attestation) ([]exporter.Attestation, error) {
 	eg, ctx := errgroup.WithContext(ctx)
-	unbundled := make([][]result.Attestation, len(bundled))
+	unbundled := make([][]exporter.Attestation, len(bundled))
 
 	for i, att := range bundled {
 		i, att := i, att
@@ -33,15 +33,11 @@ func Unbundle(ctx context.Context, s session.Group, refs map[string]cache.Immuta
 				if att.ContentFunc != nil {
 					return errors.New("attestation bundle cannot have callback")
 				}
-				if refs == nil {
-					return errors.Errorf("no refs map provided to lookup attestation keys")
-				}
-				ref, ok := refs[att.Ref]
-				if !ok {
-					return errors.Errorf("key %s not found in refs map", att.Ref)
+				if att.Ref == nil {
+					return errors.Errorf("no ref provided for attestation bundle")
 				}
 
-				mount, err := ref.Mount(ctx, true, s)
+				mount, err := att.Ref.Mount(ctx, true, s)
 				if err != nil {
 					return err
 				}
@@ -65,7 +61,7 @@ func Unbundle(ctx context.Context, s session.Group, refs map[string]cache.Immuta
 		return nil, err
 	}
 
-	var joined []result.Attestation
+	var joined []exporter.Attestation
 	for _, atts := range unbundled {
 		joined = append(joined, atts...)
 	}
@@ -77,7 +73,7 @@ func Unbundle(ctx context.Context, s session.Group, refs map[string]cache.Immuta
 	return joined, nil
 }
 
-func unbundle(ctx context.Context, root string, bundle result.Attestation) ([]result.Attestation, error) {
+func unbundle(ctx context.Context, root string, bundle exporter.Attestation) ([]exporter.Attestation, error) {
 	dir, err := fs.RootPath(root, bundle.Path)
 	if err != nil {
 		return nil, err
@@ -87,7 +83,7 @@ func unbundle(ctx context.Context, root string, bundle result.Attestation) ([]re
 		return nil, err
 	}
 
-	var unbundled []result.Attestation
+	var unbundled []exporter.Attestation
 	for _, entry := range entries {
 		p, err := fs.RootPath(dir, entry.Name())
 		if err != nil {
@@ -119,7 +115,7 @@ func unbundle(ctx context.Context, root string, bundle result.Attestation) ([]re
 				Digest: result.FromDigestMap(subject.Digest),
 			}
 		}
-		unbundled = append(unbundled, result.Attestation{
+		unbundled = append(unbundled, exporter.Attestation{
 			Kind:        gatewaypb.AttestationKindInToto,
 			Path:        path.Join(bundle.Path, entry.Name()),
 			ContentFunc: func() ([]byte, error) { return predicate, nil },
@@ -132,11 +128,11 @@ func unbundle(ctx context.Context, root string, bundle result.Attestation) ([]re
 	return unbundled, nil
 }
 
-func validate(att result.Attestation) error {
+func validate(att exporter.Attestation) error {
 	if att.Path == "" {
 		return errors.New("attestation does not have set path")
 	}
-	if att.Ref == "" && att.ContentFunc == nil {
+	if att.Ref == nil && att.ContentFunc == nil {
 		return errors.New("attestation does not have available content")
 	}
 	return nil

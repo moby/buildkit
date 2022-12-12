@@ -7,7 +7,7 @@ import (
 
 	"github.com/containerd/continuity/fs"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
-	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/exporter"
 	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
@@ -17,7 +17,7 @@ import (
 )
 
 // ReadAll reads the content of an attestation.
-func ReadAll(ctx context.Context, s session.Group, refs map[string]cache.ImmutableRef, att result.Attestation) ([]byte, error) {
+func ReadAll(ctx context.Context, s session.Group, att exporter.Attestation) ([]byte, error) {
 	var content []byte
 	if att.ContentFunc != nil {
 		data, err := att.ContentFunc()
@@ -25,15 +25,8 @@ func ReadAll(ctx context.Context, s session.Group, refs map[string]cache.Immutab
 			return nil, err
 		}
 		content = data
-	} else {
-		if refs == nil {
-			return nil, errors.Errorf("no refs map provided to lookup attestation keys")
-		}
-		ref, ok := refs[att.Ref]
-		if !ok {
-			return nil, errors.Errorf("key %s not found in refs map", att.Ref)
-		}
-		mount, err := ref.Mount(ctx, true, s)
+	} else if att.Ref != nil {
+		mount, err := att.Ref.Mount(ctx, true, s)
 		if err != nil {
 			return nil, err
 		}
@@ -52,6 +45,8 @@ func ReadAll(ctx context.Context, s session.Group, refs map[string]cache.Immutab
 		if err != nil {
 			return nil, errors.Wrap(err, "cannot read in-toto attestation")
 		}
+	} else {
+		return nil, errors.New("no available content for attestation")
 	}
 	if len(content) == 0 {
 		content = nil
@@ -61,14 +56,14 @@ func ReadAll(ctx context.Context, s session.Group, refs map[string]cache.Immutab
 
 // MakeInTotoStatements iterates over all provided result attestations and
 // generates intoto attestation statements.
-func MakeInTotoStatements(ctx context.Context, s session.Group, refs map[string]cache.ImmutableRef, attestations []result.Attestation, defaultSubjects []intoto.Subject) ([]intoto.Statement, error) {
+func MakeInTotoStatements(ctx context.Context, s session.Group, attestations []exporter.Attestation, defaultSubjects []intoto.Subject) ([]intoto.Statement, error) {
 	eg, ctx := errgroup.WithContext(ctx)
 	statements := make([]intoto.Statement, len(attestations))
 
 	for i, att := range attestations {
 		i, att := i, att
 		eg.Go(func() error {
-			content, err := ReadAll(ctx, s, refs, att)
+			content, err := ReadAll(ctx, s, att)
 			if err != nil {
 				return err
 			}
@@ -92,7 +87,7 @@ func MakeInTotoStatements(ctx context.Context, s session.Group, refs map[string]
 	return statements, nil
 }
 
-func makeInTotoStatement(ctx context.Context, content []byte, attestation result.Attestation, defaultSubjects []intoto.Subject) (*intoto.Statement, error) {
+func makeInTotoStatement(ctx context.Context, content []byte, attestation exporter.Attestation, defaultSubjects []intoto.Subject) (*intoto.Statement, error) {
 	if len(attestation.InToto.Subjects) == 0 {
 		attestation.InToto.Subjects = []result.InTotoSubject{{
 			Kind: gatewaypb.InTotoSubjectKindSelf,

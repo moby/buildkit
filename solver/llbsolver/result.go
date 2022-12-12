@@ -17,6 +17,8 @@ type Result struct {
 	Provenance *provenance.Result
 }
 
+type Attestation = frontend.Attestation
+
 func workerRefResolver(refCfg cacheconfig.RefConfig, all bool, g session.Group) func(ctx context.Context, res solver.Result) ([]*solver.Remote, error) {
 	return func(ctx context.Context, res solver.Result) ([]*solver.Remote, error) {
 		ref, ok := res.Sys().(*worker.WorkerRef)

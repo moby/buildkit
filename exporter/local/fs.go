@@ -13,6 +13,7 @@ import (
 	"github.com/docker/docker/pkg/idtools"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/attestation"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
@@ -30,7 +31,7 @@ type CreateFSOpts struct {
 	MultiPlatform     *bool
 }
 
-func CreateFS(ctx context.Context, sessionID string, k string, ref cache.ImmutableRef, refs map[string]cache.ImmutableRef, attestations []result.Attestation, defaultTime time.Time, opt CreateFSOpts) (fsutil.FS, func() error, error) {
+func CreateFS(ctx context.Context, sessionID string, k string, ref cache.ImmutableRef, attestations []exporter.Attestation, defaultTime time.Time, opt CreateFSOpts) (fsutil.FS, func() error, error) {
 	var cleanup func() error
 	var src string
 	var err error
@@ -92,7 +93,7 @@ func CreateFS(ctx context.Context, sessionID string, k string, ref cache.Immutab
 	attestations = attestation.Filter(attestations, nil, map[string][]byte{
 		result.AttestationInlineOnlyKey: []byte(strconv.FormatBool(true)),
 	})
-	attestations, err = attestation.Unbundle(ctx, session.NewGroup(sessionID), refs, attestations)
+	attestations, err = attestation.Unbundle(ctx, session.NewGroup(sessionID), attestations)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -124,7 +125,7 @@ func CreateFS(ctx context.Context, sessionID string, k string, ref cache.Immutab
 			return nil, nil, err
 		}
 
-		stmts, err := attestation.MakeInTotoStatements(ctx, session.NewGroup(sessionID), refs, attestations, subjects)
+		stmts, err := attestation.MakeInTotoStatements(ctx, session.NewGroup(sessionID), attestations, subjects)
 		if err != nil {
 			return nil, nil, err
 		}

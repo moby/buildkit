@@ -10,6 +10,8 @@ import (
 
 type Source = result.Result[cache.ImmutableRef]
 
+type Attestation = result.Attestation[cache.ImmutableRef]
+
 type Exporter interface {
 	Resolve(context.Context, map[string]string) (ExporterInstance, error)
 }
