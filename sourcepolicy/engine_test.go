@@ -321,7 +321,7 @@ func testAllowConvertDeny(t *testing.T) {
 
 	mutated, err := e.Evaluate(ctx, op)
 	require.True(t, mutated)
-	require.NoError(t, err)
+	require.ErrorIs(t, err, ErrSourceDenied)
 	require.Equal(t, op.GetSource().Identifier, "docker-image://docker.io/library/alpine:latest")
 }
 
@@ -444,7 +444,7 @@ func testAllowDeny(t *testing.T) {
 
 	mutated, err := e.Evaluate(ctx, op)
 	require.False(t, mutated)
-	require.NoError(t, err)
+	require.ErrorIs(t, err, ErrSourceDenied)
 
 	op = &pb.Op{
 		Op: &pb.Op_Source{

@@ -118,9 +118,8 @@ func (e *Engine) evaluatePolicies(ctx context.Context, srcOp *pb.SourceOp) (bool
 }
 
 func (e *Engine) evaluatePolicy(ctx context.Context, pol *spb.Policy, srcOp *pb.SourceOp, scheme, ref string) (bool, error) {
-	st := &evalState{}
 	for _, rule := range pol.Rules {
-		mut, err := e.evaluateRule(ctx, rule, scheme, ref, srcOp, st)
+		mut, err := e.evaluateRule(ctx, rule, scheme, ref, srcOp)
 		if mut || err != nil {
 			return mut, err
 		}
@@ -128,7 +127,7 @@ func (e *Engine) evaluatePolicy(ctx context.Context, pol *spb.Policy, srcOp *pb.
 	return false, nil
 }
 
-func (e *Engine) evaluateRule(ctx context.Context, rule *spb.Rule, scheme, ref string, op *pb.SourceOp, st *evalState) (bool, error) {
+func (e *Engine) evaluateRule(ctx context.Context, rule *spb.Rule, scheme, ref string, op *pb.SourceOp) (bool, error) {
 	origScheme := scheme
 	var isHTTP bool
 	switch scheme {
@@ -161,13 +160,8 @@ func (e *Engine) evaluateRule(ctx context.Context, rule *spb.Rule, scheme, ref s
 
 	switch rule.Action {
 	case spb.PolicyAction_ALLOW:
-		st.allow(ref)
 		return false, nil
 	case spb.PolicyAction_DENY:
-		// If this has already been allowed by a previous rule then we can ignore it.
-		if st.allowed[ref] {
-			return false, nil
-		}
 		if match {
 			return false, errors.Wrapf(ErrSourceDenied, "rule %s %s applies to source %s://%s", rule.Action, rule.Source.Identifier, scheme, ref)
 		}
@@ -202,15 +196,4 @@ func (e *Engine) evaluateRule(ctx context.Context, rule *spb.Rule, scheme, ref s
 	default:
 		return false, errors.Errorf("source policy: rule %s %s: unknown type %q", rule.Action, rule.Source.Identifier, ref)
 	}
-}
-
-type evalState struct {
-	allowed map[string]bool
-}
-
-func (st *evalState) allow(ref string) {
-	if st.allowed == nil {
-		st.allowed = map[string]bool{}
-	}
-	st.allowed[ref] = true
 }
