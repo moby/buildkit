@@ -272,6 +272,14 @@ func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEval
 		return solver.Edge{}, errors.Errorf("invalid LLB with %d vertexes", len(allOps))
 	}
 
+	for {
+		newDgst, ok := mutatedDigests[lastDgst]
+		if !ok {
+			break
+		}
+		lastDgst = newDgst
+	}
+
 	lastOp := allOps[lastDgst]
 	delete(allOps, lastDgst)
 	if len(lastOp.Inputs) == 0 {

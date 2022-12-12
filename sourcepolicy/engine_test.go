@@ -2,7 +2,6 @@ package sourcepolicy
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/moby/buildkit/solver/pb"
@@ -32,9 +31,8 @@ func testMultiplePolicies(t *testing.T) {
 			Rules: []*spb.Rule{
 				{
 					Action: spb.PolicyAction_ALLOW,
-					Source: &spb.Source{
-						Type:       "docker-image",
-						Identifier: "docker.io/library/busybox:latest",
+					Selector: &spb.Selector{
+						Identifier: "docker-image://docker.io/library/busybox:latest",
 					},
 				},
 			},
@@ -43,9 +41,8 @@ func testMultiplePolicies(t *testing.T) {
 			Rules: []*spb.Rule{
 				{
 					Action: spb.PolicyAction_DENY,
-					Source: &spb.Source{
-						Type:       "docker-image",
-						Identifier: "docker.io/library/busybox:latest",
+					Selector: &spb.Selector{
+						Identifier: "docker-image://docker.io/library/busybox:latest",
 					},
 				},
 			},
@@ -70,35 +67,29 @@ func testConvertMultiple(t *testing.T) {
 			Rules: []*spb.Rule{
 				{
 					Action: spb.PolicyAction_CONVERT,
-					Source: &spb.Source{
-						Type:       "docker-image",
-						Identifier: "docker.io/library/busybox:latest",
+					Selector: &spb.Selector{
+						Identifier: "docker-image://docker.io/library/busybox:latest",
 					},
-					Destination: &spb.Destination{
-						Type:       "docker-image",
-						Identifier: "docker.io/library/alpine:latest",
+					Updates: &spb.Update{
+						Identifier: "docker-image://docker.io/library/alpine:latest",
 					},
 				},
 				{
 					Action: spb.PolicyAction_CONVERT,
-					Source: &spb.Source{
-						Type:       "docker-image",
-						Identifier: "docker.io/library/alpine:latest",
+					Selector: &spb.Selector{
+						Identifier: "docker-image://docker.io/library/alpine:latest",
 					},
-					Destination: &spb.Destination{
-						Type:       "docker-image",
-						Identifier: "docker.io/library/debian:buster",
+					Updates: &spb.Update{
+						Identifier: "docker-image://docker.io/library/debian:buster",
 					},
 				},
 				{
 					Action: spb.PolicyAction_CONVERT,
-					Source: &spb.Source{
-						Type:       "docker-image",
-						Identifier: "docker.io/library/debian:buster",
+					Selector: &spb.Selector{
+						Identifier: "docker-image://docker.io/library/debian:buster",
 					},
-					Destination: &spb.Destination{
-						Type:       "docker-image",
-						Identifier: "docker.io/library/debian:bullseye",
+					Updates: &spb.Update{
+						Identifier: "docker-image://docker.io/library/debian:bullseye",
 					},
 				},
 			},
@@ -127,14 +118,12 @@ func testConvertWildcard(t *testing.T) {
 			Rules: []*spb.Rule{
 				{
 					Action: spb.PolicyAction_CONVERT,
-					Source: &spb.Source{
-						Type:       "docker-image",
-						Identifier: `docker.io/library/golang:*`,
+					Selector: &spb.Selector{
+						Identifier: "docker-image://docker.io/library/golang:*",
 						MatchType:  spb.MatchType_WILDCARD,
 					},
-					Destination: &spb.Destination{
-						Type:       "docker-image",
-						Identifier: "fakereg.io/library/golang:${1}",
+					Updates: &spb.Update{
+						Identifier: "docker-image://fakereg.io/library/golang:${1}",
 					},
 				},
 			},
@@ -163,14 +152,12 @@ func testConvertRegex(t *testing.T) {
 		Rules: []*spb.Rule{
 			{
 				Action: spb.PolicyAction_CONVERT,
-				Source: &spb.Source{
-					Type:       "docker-image",
-					Identifier: `docker\.io/library/golang:(.*)`,
+				Selector: &spb.Selector{
+					Identifier: `docker\-image://docker\.io/library/golang:(.*)`,
 					MatchType:  spb.MatchType_REGEX,
 				},
-				Destination: &spb.Destination{
-					Type:       "docker-image",
-					Identifier: "fakereg.io/library/golang:${1}",
+				Updates: &spb.Update{
+					Identifier: "docker-image://fakereg.io/library/golang:${1}",
 				},
 			},
 		},
@@ -198,11 +185,10 @@ func testConvertHTTP(t *testing.T) {
 		Rules: []*spb.Rule{
 			{
 				Action: spb.PolicyAction_CONVERT,
-				Source: &spb.Source{
-					Type:       "http",
+				Selector: &spb.Selector{
 					Identifier: "https://example.com/foo",
 				},
-				Destination: &spb.Destination{
+				Updates: &spb.Update{
 					Attrs: map[string]string{"http.checksum": "sha256:1234"},
 				},
 			},
@@ -231,24 +217,20 @@ func testConvertLoop(t *testing.T) {
 		Rules: []*spb.Rule{
 			{
 				Action: spb.PolicyAction_CONVERT,
-				Source: &spb.Source{
-					Type:       "docker-image",
-					Identifier: "docker.io/library/busybox:latest",
+				Selector: &spb.Selector{
+					Identifier: "docker-image://docker.io/library/busybox:latest",
 				},
-				Destination: &spb.Destination{
-					Type:       "docker-image",
-					Identifier: "docker.io/library/alpine:latest",
+				Updates: &spb.Update{
+					Identifier: "docker-image://docker.io/library/alpine:latest",
 				},
 			},
 			{
 				Action: spb.PolicyAction_CONVERT,
-				Source: &spb.Source{
-					Type:       "docker-image",
-					Identifier: "docker.io/library/alpine:latest",
+				Selector: &spb.Selector{
+					Identifier: "docker-image://docker.io/library/alpine:latest",
 				},
-				Destination: &spb.Destination{
-					Type:       "docker-image",
-					Identifier: "docker.io/library/busybox:latest",
+				Updates: &spb.Update{
+					Identifier: "docker-image://docker.io/library/busybox:latest",
 				},
 			},
 		},
@@ -275,34 +257,29 @@ func testAllowConvertDeny(t *testing.T) {
 		Rules: []*spb.Rule{
 			{
 				Action: spb.PolicyAction_CONVERT,
-				Source: &spb.Source{
-					Type:       "docker-image",
-					Identifier: "docker.io/library/busybox:latest",
+				Selector: &spb.Selector{
+					Identifier: "docker-image://docker.io/library/busybox:latest",
 				},
-				Destination: &spb.Destination{
-					Type:       "docker-image",
-					Identifier: "docker.io/library/alpine:latest",
+				Updates: &spb.Update{
+					Identifier: "docker-image://docker.io/library/alpine:latest",
 				},
 			},
 			{
 				Action: spb.PolicyAction_ALLOW,
-				Source: &spb.Source{
-					Type:       "docker-image",
-					Identifier: "docker.io/library/alpine:latest",
+				Selector: &spb.Selector{
+					Identifier: "docker-image://docker.io/library/alpine:latest",
 				},
 			},
 			{
 				Action: spb.PolicyAction_DENY,
-				Source: &spb.Source{
-					Type:       "docker-image",
-					Identifier: "docker.io/library/alpine:*",
+				Selector: &spb.Selector{
+					Identifier: "docker-image://docker.io/library/alpine:*",
 				},
 			},
 			{
 				Action: spb.PolicyAction_DENY,
-				Source: &spb.Source{
-					Type:       "docker-image",
-					Identifier: "docker.io/library/busybox:latest",
+				Selector: &spb.Selector{
+					Identifier: "docker-image://docker.io/library/busybox:latest",
 				},
 			},
 		},
@@ -330,20 +307,17 @@ func testConvertDeny(t *testing.T) {
 		Rules: []*spb.Rule{
 			{
 				Action: spb.PolicyAction_DENY,
-				Source: &spb.Source{
-					Type:       "docker-image",
-					Identifier: "docker.io/library/alpine:*",
+				Selector: &spb.Selector{
+					Identifier: "docker-image://docker.io/library/alpine:*",
 				},
 			},
 			{
 				Action: spb.PolicyAction_CONVERT,
-				Source: &spb.Source{
-					Type:       "docker-image",
-					Identifier: "docker.io/library/busybox:latest",
+				Selector: &spb.Selector{
+					Identifier: "docker-image://docker.io/library/busybox:latest",
 				},
-				Destination: &spb.Destination{
-					Type:       "docker-image",
-					Identifier: "docker.io/library/alpine:latest",
+				Updates: &spb.Update{
+					Identifier: "docker-image://docker.io/library/alpine:latest",
 				},
 			},
 		},
@@ -383,19 +357,15 @@ func testConvert(t *testing.T) {
 				},
 			}
 
-			sKind, sRef, _ := strings.Cut(src, "://")
-			dKind, dRef, _ := strings.Cut(dst, "://")
 			pol := &spb.Policy{
 				Rules: []*spb.Rule{
 					{
 						Action: spb.PolicyAction_CONVERT,
-						Source: &spb.Source{
-							Type:       sKind,
-							Identifier: sRef,
+						Selector: &spb.Selector{
+							Identifier: src,
 						},
-						Destination: &spb.Destination{
-							Type:       dKind,
-							Identifier: dRef,
+						Updates: &spb.Update{
+							Identifier: dst,
 						},
 					},
 				},
@@ -424,16 +394,14 @@ func testAllowDeny(t *testing.T) {
 		Rules: []*spb.Rule{
 			{
 				Action: spb.PolicyAction_ALLOW,
-				Source: &spb.Source{
-					Type:       "docker-image",
-					Identifier: "docker.io/library/alpine:latest",
+				Selector: &spb.Selector{
+					Identifier: "docker-image://docker.io/library/alpine:latest",
 				},
 			},
 			{
 				Action: spb.PolicyAction_DENY,
-				Source: &spb.Source{
-					Type:       "docker-image",
-					Identifier: "*",
+				Selector: &spb.Selector{
+					Identifier: "docker-image://*",
 				},
 			},
 		},
@@ -461,20 +429,19 @@ func testAllowDeny(t *testing.T) {
 
 func testDenyAll(t *testing.T) {
 	cases := map[string]string{
-		"docker-image": "docker.io/library/alpine:latest",
-		"git":          "https://github.com/moby/buildkit.git",
-		"http":         "https://example.com",
+		"docker-image": "docker-image://docker.io/library/alpine:latest",
+		"https":        "https://github.com/moby/buildkit.git",
+		"http":         "http://example.com",
 	}
 
 	for kind, ref := range cases {
-		t.Run(kind+"://"+ref, func(t *testing.T) {
+		t.Run(ref, func(t *testing.T) {
 			pol := &spb.Policy{
 				Rules: []*spb.Rule{
 					{
 						Action: spb.PolicyAction_DENY,
-						Source: &spb.Source{
-							Type:       kind,
-							Identifier: "*",
+						Selector: &spb.Selector{
+							Identifier: kind + "://*",
 						},
 					},
 				},
@@ -486,7 +453,7 @@ func testDenyAll(t *testing.T) {
 			op := &pb.Op{
 				Op: &pb.Op_Source{
 					Source: &pb.SourceOp{
-						Identifier: kind + "://" + ref,
+						Identifier: ref,
 					},
 				},
 			}

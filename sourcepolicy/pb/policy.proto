@@ -5,25 +5,22 @@ package moby.buildkit.v1.sourcepolicy;
 // Rule defines the action(s) to take when a source is matched
 message Rule {
 	PolicyAction action = 1; 
-	Source source = 2;
-	// Destination is an optional value that can be set for certain actions (e.g. `CONVERT`)
-	Destination destination = 3;
+	Selector selector = 2;
+	Update updates = 3;
 }
 
-// DestinationIdentifier is used for action types that involves mutating the source
-message Destination {
-	string Type = 1;
-	string identifier = 2;
-	map<string, string> attrs = 3;
+// Update contains updates to the matched build step after rule is applied
+message Update {
+	string identifier = 1;
+	map<string, string> attrs = 2;
 }
 
-// SourceIdentifier identifies a source to match a policy to
-message Source {
-	string type = 1;
-	string identifier = 2;
+// Selector identifies a source to match a policy to
+message Selector {
+	string identifier = 1;
 	// MatchType is the type of match to perform on the source identifier
-	MatchType match_type = 3;
-	repeated AttrConstraint constraints = 4;
+	MatchType match_type = 2;
+	repeated AttrConstraint constraints = 3;
 }
 
 // PolicyAction defines the action to take when a source is matched

@@ -10,7 +10,7 @@ import (
 
 // Source wraps a a protobuf source in order to store cached state such as the compiled regexes.
 type sourceCache struct {
-	*spb.Source
+	*spb.Selector
 
 	re *regexp.Regexp
 	w  *wildcardCache

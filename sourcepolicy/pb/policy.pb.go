@@ -117,10 +117,9 @@ func (MatchType) EnumDescriptor() ([]byte, []int) {
 
 // Rule defines the action(s) to take when a source is matched
 type Rule struct {
-	Action PolicyAction `protobuf:"varint,1,opt,name=action,proto3,enum=moby.buildkit.v1.sourcepolicy.PolicyAction" json:"action,omitempty"`
-	Source *Source      `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
-	// Destination is an optional value that can be set for certain actions (e.g. `CONVERT`)
-	Destination *Destination `protobuf:"bytes,3,opt,name=destination,proto3" json:"destination,omitempty"`
+	Action   PolicyAction `protobuf:"varint,1,opt,name=action,proto3,enum=moby.buildkit.v1.sourcepolicy.PolicyAction" json:"action,omitempty"`
+	Selector *Selector    `protobuf:"bytes,2,opt,name=selector,proto3" json:"selector,omitempty"`
+	Updates  *Update      `protobuf:"bytes,3,opt,name=updates,proto3" json:"updates,omitempty"`
 }
 
 func (m *Rule) Reset()         { *m = Rule{} }
@@ -163,39 +162,38 @@ func (m *Rule) GetAction() PolicyAction {
 	return PolicyAction_ALLOW
 }
 
-func (m *Rule) GetSource() *Source {
+func (m *Rule) GetSelector() *Selector {
 	if m != nil {
-		return m.Source
+		return m.Selector
 	}
 	return nil
 }
 
-func (m *Rule) GetDestination() *Destination {
+func (m *Rule) GetUpdates() *Update {
 	if m != nil {
-		return m.Destination
+		return m.Updates
 	}
 	return nil
 }
 
-// DestinationIdentifier is used for action types that involves mutating the source
-type Destination struct {
-	Type       string            `protobuf:"bytes,1,opt,name=Type,proto3" json:"Type,omitempty"`
-	Identifier string            `protobuf:"bytes,2,opt,name=identifier,proto3" json:"identifier,omitempty"`
-	Attrs      map[string]string `protobuf:"bytes,3,rep,name=attrs,proto3" json:"attrs,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+// Update contains updates to the matched build step after rule is applied
+type Update struct {
+	Identifier string            `protobuf:"bytes,1,opt,name=identifier,proto3" json:"identifier,omitempty"`
+	Attrs      map[string]string `protobuf:"bytes,2,rep,name=attrs,proto3" json:"attrs,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
 
-func (m *Destination) Reset()         { *m = Destination{} }
-func (m *Destination) String() string { return proto.CompactTextString(m) }
-func (*Destination) ProtoMessage()    {}
-func (*Destination) Descriptor() ([]byte, []int) {
+func (m *Update) Reset()         { *m = Update{} }
+func (m *Update) String() string { return proto.CompactTextString(m) }
+func (*Update) ProtoMessage()    {}
+func (*Update) Descriptor() ([]byte, []int) {
 	return fileDescriptor_ac3b897852294d6a, []int{1}
 }
-func (m *Destination) XXX_Unmarshal(b []byte) error {
+func (m *Update) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *Destination) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *Update) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_Destination.Marshal(b, m, deterministic)
+		return xxx_messageInfo_Update.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -205,60 +203,52 @@ func (m *Destination) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) 
 		return b[:n], nil
 	}
 }
-func (m *Destination) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Destination.Merge(m, src)
+func (m *Update) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Update.Merge(m, src)
 }
-func (m *Destination) XXX_Size() int {
+func (m *Update) XXX_Size() int {
 	return m.Size()
 }
-func (m *Destination) XXX_DiscardUnknown() {
-	xxx_messageInfo_Destination.DiscardUnknown(m)
+func (m *Update) XXX_DiscardUnknown() {
+	xxx_messageInfo_Update.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_Destination proto.InternalMessageInfo
+var xxx_messageInfo_Update proto.InternalMessageInfo
 
-func (m *Destination) GetType() string {
-	if m != nil {
-		return m.Type
-	}
-	return ""
-}
-
-func (m *Destination) GetIdentifier() string {
+func (m *Update) GetIdentifier() string {
 	if m != nil {
 		return m.Identifier
 	}
 	return ""
 }
 
-func (m *Destination) GetAttrs() map[string]string {
+func (m *Update) GetAttrs() map[string]string {
 	if m != nil {
 		return m.Attrs
 	}
 	return nil
 }
 
-// SourceIdentifier identifies a source to match a policy to
-type Source struct {
-	Type       string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	Identifier string `protobuf:"bytes,2,opt,name=identifier,proto3" json:"identifier,omitempty"`
+// Selector identifies a source to match a policy to
+type Selector struct {
+	Identifier string `protobuf:"bytes,1,opt,name=identifier,proto3" json:"identifier,omitempty"`
 	// MatchType is the type of match to perform on the source identifier
-	MatchType   MatchType         `protobuf:"varint,3,opt,name=match_type,json=matchType,proto3,enum=moby.buildkit.v1.sourcepolicy.MatchType" json:"match_type,omitempty"`
-	Constraints []*AttrConstraint `protobuf:"bytes,4,rep,name=constraints,proto3" json:"constraints,omitempty"`
+	MatchType   MatchType         `protobuf:"varint,2,opt,name=match_type,json=matchType,proto3,enum=moby.buildkit.v1.sourcepolicy.MatchType" json:"match_type,omitempty"`
+	Constraints []*AttrConstraint `protobuf:"bytes,3,rep,name=constraints,proto3" json:"constraints,omitempty"`
 }
 
-func (m *Source) Reset()         { *m = Source{} }
-func (m *Source) String() string { return proto.CompactTextString(m) }
-func (*Source) ProtoMessage()    {}
-func (*Source) Descriptor() ([]byte, []int) {
+func (m *Selector) Reset()         { *m = Selector{} }
+func (m *Selector) String() string { return proto.CompactTextString(m) }
+func (*Selector) ProtoMessage()    {}
+func (*Selector) Descriptor() ([]byte, []int) {
 	return fileDescriptor_ac3b897852294d6a, []int{2}
 }
-func (m *Source) XXX_Unmarshal(b []byte) error {
+func (m *Selector) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *Source) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *Selector) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_Source.Marshal(b, m, deterministic)
+		return xxx_messageInfo_Selector.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -268,40 +258,33 @@ func (m *Source) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
-func (m *Source) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Source.Merge(m, src)
+func (m *Selector) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Selector.Merge(m, src)
 }
-func (m *Source) XXX_Size() int {
+func (m *Selector) XXX_Size() int {
 	return m.Size()
 }
-func (m *Source) XXX_DiscardUnknown() {
-	xxx_messageInfo_Source.DiscardUnknown(m)
+func (m *Selector) XXX_DiscardUnknown() {
+	xxx_messageInfo_Selector.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_Source proto.InternalMessageInfo
+var xxx_messageInfo_Selector proto.InternalMessageInfo
 
-func (m *Source) GetType() string {
-	if m != nil {
-		return m.Type
-	}
-	return ""
-}
-
-func (m *Source) GetIdentifier() string {
+func (m *Selector) GetIdentifier() string {
 	if m != nil {
 		return m.Identifier
 	}
 	return ""
 }
 
-func (m *Source) GetMatchType() MatchType {
+func (m *Selector) GetMatchType() MatchType {
 	if m != nil {
 		return m.MatchType
 	}
 	return MatchType_WILDCARD
 }
 
-func (m *Source) GetConstraints() []*AttrConstraint {
+func (m *Selector) GetConstraints() []*AttrConstraint {
 	if m != nil {
 		return m.Constraints
 	}
@@ -427,9 +410,9 @@ func init() {
 	proto.RegisterEnum("moby.buildkit.v1.sourcepolicy.AttrMatch", AttrMatch_name, AttrMatch_value)
 	proto.RegisterEnum("moby.buildkit.v1.sourcepolicy.MatchType", MatchType_name, MatchType_value)
 	proto.RegisterType((*Rule)(nil), "moby.buildkit.v1.sourcepolicy.Rule")
-	proto.RegisterType((*Destination)(nil), "moby.buildkit.v1.sourcepolicy.Destination")
-	proto.RegisterMapType((map[string]string)(nil), "moby.buildkit.v1.sourcepolicy.Destination.AttrsEntry")
-	proto.RegisterType((*Source)(nil), "moby.buildkit.v1.sourcepolicy.Source")
+	proto.RegisterType((*Update)(nil), "moby.buildkit.v1.sourcepolicy.Update")
+	proto.RegisterMapType((map[string]string)(nil), "moby.buildkit.v1.sourcepolicy.Update.AttrsEntry")
+	proto.RegisterType((*Selector)(nil), "moby.buildkit.v1.sourcepolicy.Selector")
 	proto.RegisterType((*AttrConstraint)(nil), "moby.buildkit.v1.sourcepolicy.AttrConstraint")
 	proto.RegisterType((*Policy)(nil), "moby.buildkit.v1.sourcepolicy.Policy")
 }
@@ -437,40 +420,40 @@ func init() {
 func init() { proto.RegisterFile("policy.proto", fileDescriptor_ac3b897852294d6a) }
 
 var fileDescriptor_ac3b897852294d6a = []byte{
-	// 526 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x94, 0xcf, 0x8b, 0xd3, 0x40,
-	0x14, 0xc7, 0x33, 0x49, 0xdb, 0xdd, 0xbc, 0x94, 0x25, 0x0c, 0x1e, 0x82, 0x60, 0x28, 0x15, 0xa1,
-	0x54, 0x8c, 0x6e, 0x45, 0x58, 0x05, 0x0f, 0x31, 0x8d, 0xab, 0xd8, 0x6d, 0x75, 0xb6, 0xba, 0xeb,
-	0x41, 0x24, 0x4d, 0x47, 0x1c, 0xb6, 0x4d, 0x4a, 0x32, 0x2d, 0xe4, 0xe6, 0x9f, 0xe0, 0x9f, 0xb5,
-	0xc7, 0x3d, 0xc9, 0x1e, 0xa5, 0xfd, 0x47, 0x64, 0x26, 0xfd, 0x11, 0x2f, 0x9b, 0x9e, 0xfa, 0x5e,
-	0xe6, 0x7d, 0xbe, 0xf3, 0xbe, 0x6f, 0x66, 0x0a, 0xf5, 0x59, 0x3c, 0x61, 0x61, 0xe6, 0xcc, 0x92,
-	0x98, 0xc7, 0xf8, 0xc1, 0x34, 0x1e, 0x65, 0xce, 0x68, 0xce, 0x26, 0xe3, 0x2b, 0xc6, 0x9d, 0xc5,
-	0xb1, 0x93, 0xc6, 0xf3, 0x24, 0xa4, 0x79, 0x51, 0xf3, 0x16, 0x41, 0x85, 0xcc, 0x27, 0x14, 0x7b,
-	0x50, 0x0b, 0x42, 0xce, 0xe2, 0xc8, 0x42, 0x0d, 0xd4, 0x3a, 0xea, 0x3c, 0x76, 0xee, 0x04, 0x9d,
-	0x8f, 0xf2, 0xc7, 0x95, 0x08, 0x59, 0xa3, 0xf8, 0x35, 0xd4, 0xf2, 0x22, 0x4b, 0x6d, 0xa0, 0x96,
-	0xd1, 0x79, 0x54, 0x22, 0x72, 0x2e, 0x13, 0xb2, 0x86, 0x70, 0x0f, 0x8c, 0x31, 0x4d, 0x39, 0x8b,
-	0x02, 0xd9, 0x88, 0x26, 0x35, 0xda, 0x25, 0x1a, 0xdd, 0x1d, 0x41, 0x8a, 0x78, 0xf3, 0x1a, 0x81,
-	0x51, 0x58, 0xc4, 0x18, 0x2a, 0xc3, 0x6c, 0x46, 0xa5, 0x3f, 0x9d, 0xc8, 0x18, 0xdb, 0x00, 0x6c,
-	0x4c, 0x23, 0xce, 0x7e, 0x30, 0x9a, 0xc8, 0xa6, 0x75, 0x52, 0xf8, 0x82, 0x3f, 0x40, 0x35, 0xe0,
-	0x3c, 0x49, 0x2d, 0xad, 0xa1, 0xb5, 0x8c, 0xce, 0x8b, 0xfd, 0x7b, 0x71, 0x5c, 0xc1, 0xf9, 0x11,
-	0x4f, 0x32, 0x92, 0x6b, 0xdc, 0x3f, 0x01, 0xd8, 0x7d, 0xc4, 0x26, 0x68, 0x57, 0x34, 0x5b, 0x77,
-	0x23, 0x42, 0x7c, 0x0f, 0xaa, 0x8b, 0x60, 0x32, 0xa7, 0xeb, 0x3e, 0xf2, 0xe4, 0x95, 0x7a, 0x82,
-	0x9a, 0x7f, 0x10, 0xd4, 0xf2, 0x59, 0x09, 0x17, 0xbc, 0xe0, 0x82, 0xef, 0xe3, 0xe2, 0x14, 0x60,
-	0x1a, 0xf0, 0xf0, 0xe7, 0x77, 0x49, 0x6a, 0xf2, 0x7c, 0x5b, 0x25, 0x56, 0xce, 0x04, 0x20, 0x66,
-	0x44, 0xf4, 0xe9, 0x26, 0xc4, 0x03, 0x30, 0xc2, 0x38, 0x4a, 0x79, 0x12, 0xb0, 0x88, 0xa7, 0x56,
-	0x45, 0x0e, 0xe5, 0x49, 0x89, 0x92, 0xf0, 0xec, 0x6d, 0x29, 0x52, 0x54, 0x68, 0xfe, 0x42, 0x70,
-	0xf4, 0xff, 0xfa, 0xbe, 0x73, 0xc1, 0x6f, 0x41, 0x0f, 0xe3, 0x68, 0xcc, 0xb6, 0x57, 0xa5, 0xdc,
-	0x93, 0xd8, 0x49, 0xfa, 0x22, 0x3b, 0xb4, 0xf9, 0x0d, 0x6a, 0xf9, 0x5d, 0xc6, 0x16, 0x1c, 0x2c,
-	0x68, 0x92, 0x6e, 0xde, 0x80, 0x46, 0x36, 0x29, 0x7e, 0x09, 0xd5, 0x64, 0x3e, 0xa1, 0xa9, 0xa5,
-	0x4a, 0xc7, 0x0f, 0x4b, 0xf6, 0x11, 0x0f, 0x8a, 0xe4, 0x44, 0xfb, 0x19, 0xd4, 0x8b, 0x4f, 0x05,
-	0xeb, 0x50, 0x75, 0x7b, 0xbd, 0xc1, 0x85, 0xa9, 0xe0, 0x43, 0xa8, 0x74, 0xfd, 0xfe, 0x57, 0x13,
-	0x61, 0x03, 0x0e, 0xbc, 0x41, 0xff, 0x8b, 0x4f, 0x86, 0xa6, 0xda, 0x3e, 0x06, 0x7d, 0xdb, 0xa8,
-	0x28, 0xf7, 0x3f, 0x7d, 0x76, 0x7b, 0xa6, 0x82, 0xeb, 0x70, 0xd8, 0x1f, 0x0c, 0xf3, 0x4c, 0x22,
-	0x67, 0xee, 0xd0, 0x7b, 0xe7, 0x9f, 0x9b, 0x6a, 0xfb, 0x29, 0xe8, 0xdb, 0xf3, 0x12, 0x75, 0x17,
-	0xef, 0x7b, 0x5d, 0xcf, 0x25, 0x5d, 0x53, 0x91, 0x02, 0x97, 0xae, 0x37, 0x34, 0x91, 0x08, 0x89,
-	0x7f, 0xea, 0x5f, 0x9a, 0xea, 0x1b, 0xeb, 0x7a, 0x69, 0xa3, 0x9b, 0xa5, 0x8d, 0xfe, 0x2e, 0x6d,
-	0xf4, 0x7b, 0x65, 0x2b, 0x37, 0x2b, 0x5b, 0xb9, 0x5d, 0xd9, 0xca, 0xa8, 0x26, 0xff, 0x36, 0x9e,
-	0xff, 0x0b, 0x00, 0x00, 0xff, 0xff, 0xbd, 0x18, 0x0b, 0x8e, 0x46, 0x04, 0x00, 0x00,
+	// 516 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x93, 0xcd, 0x6e, 0xd3, 0x40,
+	0x10, 0xc7, 0xbd, 0x4e, 0xf3, 0xe1, 0x49, 0x14, 0x59, 0x2b, 0x0e, 0x16, 0x12, 0x56, 0x14, 0x84,
+	0x88, 0x82, 0x30, 0x6d, 0xb8, 0x14, 0x2e, 0xc8, 0x38, 0x6e, 0x41, 0x4a, 0x13, 0xd8, 0xa6, 0xb4,
+	0x1c, 0x10, 0x72, 0x9c, 0x45, 0x58, 0x75, 0x6c, 0xcb, 0x5e, 0x47, 0xf2, 0x8d, 0x47, 0xe0, 0x39,
+	0x78, 0x0e, 0x0e, 0x1c, 0xcb, 0x8d, 0x23, 0x4a, 0x5e, 0x04, 0xed, 0x3a, 0x4e, 0xc3, 0xa5, 0xce,
+	0xc9, 0x3b, 0xe3, 0xf9, 0xfd, 0xe7, 0x63, 0x67, 0xa1, 0x15, 0x85, 0xbe, 0xe7, 0x66, 0x46, 0x14,
+	0x87, 0x2c, 0xc4, 0x0f, 0x16, 0xe1, 0x2c, 0x33, 0x66, 0xa9, 0xe7, 0xcf, 0xaf, 0x3d, 0x66, 0x2c,
+	0x8f, 0x8c, 0x24, 0x4c, 0x63, 0x97, 0xe6, 0x41, 0xdd, 0xdf, 0x08, 0x0e, 0x48, 0xea, 0x53, 0x6c,
+	0x41, 0xcd, 0x71, 0x99, 0x17, 0x06, 0x1a, 0xea, 0xa0, 0x5e, 0x7b, 0xf0, 0xc4, 0xb8, 0x13, 0x34,
+	0xde, 0x89, 0x8f, 0x29, 0x10, 0xb2, 0x41, 0xb1, 0x05, 0x8d, 0x84, 0xfa, 0xd4, 0x65, 0x61, 0xac,
+	0xc9, 0x1d, 0xd4, 0x6b, 0x0e, 0x1e, 0x97, 0xc8, 0x9c, 0x6f, 0xc2, 0xc9, 0x16, 0xc4, 0xaf, 0xa0,
+	0x9e, 0x46, 0x73, 0x87, 0xd1, 0x44, 0xab, 0x08, 0x8d, 0x47, 0x25, 0x1a, 0x17, 0x22, 0x9a, 0x14,
+	0x54, 0xf7, 0x07, 0x82, 0x5a, 0xee, 0xc3, 0x3a, 0x80, 0x37, 0xa7, 0x01, 0xf3, 0xbe, 0x78, 0x34,
+	0x16, 0x9d, 0x29, 0x64, 0xc7, 0x83, 0x4f, 0xa0, 0xea, 0x30, 0x16, 0x27, 0x9a, 0xdc, 0xa9, 0xf4,
+	0x9a, 0x83, 0xc3, 0xbd, 0x32, 0x19, 0x26, 0x47, 0xec, 0x80, 0xc5, 0x19, 0xc9, 0xf1, 0xfb, 0xc7,
+	0x00, 0xb7, 0x4e, 0xac, 0x42, 0xe5, 0x9a, 0x66, 0x9b, 0x74, 0xfc, 0x88, 0xef, 0x41, 0x75, 0xe9,
+	0xf8, 0x29, 0x15, 0x53, 0x51, 0x48, 0x6e, 0xbc, 0x94, 0x8f, 0x51, 0xf7, 0x27, 0x82, 0x46, 0x31,
+	0x84, 0xd2, 0x72, 0x4f, 0x01, 0x16, 0x0e, 0x73, 0xbf, 0x7e, 0x66, 0x59, 0x94, 0x6b, 0xb5, 0x07,
+	0xbd, 0x92, 0x9a, 0xcf, 0x38, 0x30, 0xcd, 0x22, 0x4a, 0x94, 0x45, 0x71, 0xc4, 0x13, 0x68, 0xba,
+	0x61, 0x90, 0xb0, 0xd8, 0xf1, 0x02, 0xc6, 0xe7, 0xcc, 0xbb, 0x7f, 0x5a, 0xa2, 0xc4, 0x3b, 0xb4,
+	0xb6, 0x14, 0xd9, 0x55, 0xe8, 0x7e, 0x43, 0xd0, 0xfe, 0xff, 0xff, 0xbe, 0x53, 0xc0, 0x27, 0xa0,
+	0xb8, 0x61, 0x30, 0xf7, 0xc4, 0xf2, 0x55, 0xf6, 0xea, 0x89, 0x67, 0x12, 0x7d, 0x91, 0x5b, 0xb4,
+	0xfb, 0x09, 0x6a, 0xf9, 0x52, 0x62, 0x0d, 0xea, 0x4b, 0x1a, 0x27, 0xc5, 0x32, 0x57, 0x48, 0x61,
+	0xe2, 0x17, 0x50, 0x8d, 0x53, 0x9f, 0x16, 0xf7, 0xfd, 0xb0, 0x24, 0x0f, 0x7f, 0x19, 0x24, 0x27,
+	0xfa, 0x87, 0xd0, 0xda, 0xdd, 0x79, 0xac, 0x40, 0xd5, 0x1c, 0x8d, 0x26, 0x97, 0xaa, 0x84, 0x1b,
+	0x70, 0x30, 0xb4, 0xc7, 0x1f, 0x55, 0x84, 0x9b, 0x50, 0xb7, 0x26, 0xe3, 0x0f, 0x36, 0x99, 0xaa,
+	0x72, 0xff, 0x08, 0x94, 0x6d, 0xa1, 0x3c, 0xdc, 0x7e, 0x7f, 0x61, 0x8e, 0x54, 0x09, 0xb7, 0xa0,
+	0x31, 0x9e, 0x4c, 0x73, 0x4b, 0x20, 0x67, 0xe6, 0xd4, 0x7a, 0x63, 0x9f, 0xab, 0x72, 0xff, 0x19,
+	0x28, 0xdb, 0xfb, 0xe2, 0x71, 0x97, 0x6f, 0x47, 0x43, 0xcb, 0x24, 0x43, 0x55, 0x12, 0x02, 0x57,
+	0xa6, 0x35, 0x55, 0x11, 0x3f, 0x12, 0xfb, 0xd4, 0xbe, 0x52, 0xe5, 0xd7, 0xda, 0xaf, 0x95, 0x8e,
+	0x6e, 0x56, 0x3a, 0xfa, 0xbb, 0xd2, 0xd1, 0xf7, 0xb5, 0x2e, 0xdd, 0xac, 0x75, 0xe9, 0xcf, 0x5a,
+	0x97, 0x66, 0x35, 0xf1, 0xfe, 0x9f, 0xff, 0x0b, 0x00, 0x00, 0xff, 0xff, 0xae, 0x7a, 0xeb, 0x6c,
+	0x0f, 0x04, 0x00, 0x00,
 }
 
 func (m *Rule) Marshal() (dAtA []byte, err error) {
@@ -493,9 +476,9 @@ func (m *Rule) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.Destination != nil {
+	if m.Updates != nil {
 		{
-			size, err := m.Destination.MarshalToSizedBuffer(dAtA[:i])
+			size, err := m.Updates.MarshalToSizedBuffer(dAtA[:i])
 			if err != nil {
 				return 0, err
 			}
@@ -505,9 +488,9 @@ func (m *Rule) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0x1a
 	}
-	if m.Source != nil {
+	if m.Selector != nil {
 		{
-			size, err := m.Source.MarshalToSizedBuffer(dAtA[:i])
+			size, err := m.Selector.MarshalToSizedBuffer(dAtA[:i])
 			if err != nil {
 				return 0, err
 			}
@@ -525,7 +508,7 @@ func (m *Rule) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *Destination) Marshal() (dAtA []byte, err error) {
+func (m *Update) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -535,12 +518,12 @@ func (m *Destination) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *Destination) MarshalTo(dAtA []byte) (int, error) {
+func (m *Update) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *Destination) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *Update) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -561,7 +544,7 @@ func (m *Destination) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 			dAtA[i] = 0xa
 			i = encodeVarintPolicy(dAtA, i, uint64(baseI-i))
 			i--
-			dAtA[i] = 0x1a
+			dAtA[i] = 0x12
 		}
 	}
 	if len(m.Identifier) > 0 {
@@ -569,19 +552,12 @@ func (m *Destination) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		copy(dAtA[i:], m.Identifier)
 		i = encodeVarintPolicy(dAtA, i, uint64(len(m.Identifier)))
 		i--
-		dAtA[i] = 0x12
-	}
-	if len(m.Type) > 0 {
-		i -= len(m.Type)
-		copy(dAtA[i:], m.Type)
-		i = encodeVarintPolicy(dAtA, i, uint64(len(m.Type)))
-		i--
 		dAtA[i] = 0xa
 	}
 	return len(dAtA) - i, nil
 }
 
-func (m *Source) Marshal() (dAtA []byte, err error) {
+func (m *Selector) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -591,12 +567,12 @@ func (m *Source) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *Source) MarshalTo(dAtA []byte) (int, error) {
+func (m *Selector) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *Source) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *Selector) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -612,25 +588,18 @@ func (m *Source) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 				i = encodeVarintPolicy(dAtA, i, uint64(size))
 			}
 			i--
-			dAtA[i] = 0x22
+			dAtA[i] = 0x1a
 		}
 	}
 	if m.MatchType != 0 {
 		i = encodeVarintPolicy(dAtA, i, uint64(m.MatchType))
 		i--
-		dAtA[i] = 0x18
+		dAtA[i] = 0x10
 	}
 	if len(m.Identifier) > 0 {
 		i -= len(m.Identifier)
 		copy(dAtA[i:], m.Identifier)
 		i = encodeVarintPolicy(dAtA, i, uint64(len(m.Identifier)))
-		i--
-		dAtA[i] = 0x12
-	}
-	if len(m.Type) > 0 {
-		i -= len(m.Type)
-		copy(dAtA[i:], m.Type)
-		i = encodeVarintPolicy(dAtA, i, uint64(len(m.Type)))
 		i--
 		dAtA[i] = 0xa
 	}
@@ -741,27 +710,23 @@ func (m *Rule) Size() (n int) {
 	if m.Action != 0 {
 		n += 1 + sovPolicy(uint64(m.Action))
 	}
-	if m.Source != nil {
-		l = m.Source.Size()
+	if m.Selector != nil {
+		l = m.Selector.Size()
 		n += 1 + l + sovPolicy(uint64(l))
 	}
-	if m.Destination != nil {
-		l = m.Destination.Size()
+	if m.Updates != nil {
+		l = m.Updates.Size()
 		n += 1 + l + sovPolicy(uint64(l))
 	}
 	return n
 }
 
-func (m *Destination) Size() (n int) {
+func (m *Update) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	l = len(m.Type)
-	if l > 0 {
-		n += 1 + l + sovPolicy(uint64(l))
-	}
 	l = len(m.Identifier)
 	if l > 0 {
 		n += 1 + l + sovPolicy(uint64(l))
@@ -777,16 +742,12 @@ func (m *Destination) Size() (n int) {
 	return n
 }
 
-func (m *Source) Size() (n int) {
+func (m *Selector) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	l = len(m.Type)
-	if l > 0 {
-		n += 1 + l + sovPolicy(uint64(l))
-	}
 	l = len(m.Identifier)
 	if l > 0 {
 		n += 1 + l + sovPolicy(uint64(l))
@@ -897,7 +858,7 @@ func (m *Rule) Unmarshal(dAtA []byte) error {
 			}
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Source", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Selector", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -924,16 +885,16 @@ func (m *Rule) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.Source == nil {
-				m.Source = &Source{}
+			if m.Selector == nil {
+				m.Selector = &Selector{}
 			}
-			if err := m.Source.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.Selector.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Destination", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Updates", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -960,10 +921,10 @@ func (m *Rule) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.Destination == nil {
-				m.Destination = &Destination{}
+			if m.Updates == nil {
+				m.Updates = &Update{}
 			}
-			if err := m.Destination.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.Updates.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -988,7 +949,7 @@ func (m *Rule) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *Destination) Unmarshal(dAtA []byte) error {
+func (m *Update) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -1011,45 +972,13 @@ func (m *Destination) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: Destination: wiretype end group for non-group")
+			return fmt.Errorf("proto: Update: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: Destination: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: Update: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Type", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowPolicy
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthPolicy
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthPolicy
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Type = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Identifier", wireType)
 			}
@@ -1081,7 +1010,7 @@ func (m *Destination) Unmarshal(dAtA []byte) error {
 			}
 			m.Identifier = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
-		case 3:
+		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Attrs", wireType)
 			}
@@ -1229,7 +1158,7 @@ func (m *Destination) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *Source) Unmarshal(dAtA []byte) error {
+func (m *Selector) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -1252,45 +1181,13 @@ func (m *Source) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: Source: wiretype end group for non-group")
+			return fmt.Errorf("proto: Selector: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: Source: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: Selector: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Type", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowPolicy
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthPolicy
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthPolicy
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Type = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Identifier", wireType)
 			}
@@ -1322,7 +1219,7 @@ func (m *Source) Unmarshal(dAtA []byte) error {
 			}
 			m.Identifier = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
-		case 3:
+		case 2:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field MatchType", wireType)
 			}
@@ -1341,7 +1238,7 @@ func (m *Source) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
-		case 4:
+		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Constraints", wireType)
 			}
