@@ -476,6 +476,10 @@ func getRefProvenance(ref solver.ResultProxy, br *provenanceBridge) (*provenance
 	}
 
 	if br.req != nil {
+		if pr == nil {
+			return nil, errors.Errorf("missing provenance for %s", ref.ID())
+		}
+
 		pr.Frontend = br.req.Frontend
 		pr.Args = provenance.FilterArgs(br.req.FrontendOpt)
 		// TODO: should also save some output options like compression
