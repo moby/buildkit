@@ -106,3 +106,10 @@ func (r *TraceRecorder) ExportSpans(ctx context.Context, spans []sdktrace.ReadOn
 	}
 	return r.SpanExporter.ExportSpans(ctx, spans)
 }
+
+func (r *TraceRecorder) Shutdown(ctx context.Context) error {
+	if r.SpanExporter == nil {
+		return nil
+	}
+	return r.SpanExporter.Shutdown(ctx)
+}
