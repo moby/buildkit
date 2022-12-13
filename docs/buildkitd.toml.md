@@ -29,6 +29,13 @@ insecure-entitlements = [ "network.host", "security.insecure" ]
     key = "/etc/buildkit/tls.key"
     ca = "/etc/buildkit/tlsca.crt"
 
+# config for build history API that stores information about completed build commands
+[history]
+  # maxAge is the maximum age of history entries to keep, in seconds.
+  maxAge = 172800
+  # maxEntries is the maximum number of history entries to keep.
+  maxEntries = 50
+
 [worker.oci]
   enabled = true
   # platforms is manually configure platforms, detected automatically if unset.

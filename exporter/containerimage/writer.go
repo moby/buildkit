@@ -412,10 +412,9 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *Ima
 		"containerd.io/gc.ref.content.0": configDigest.String(),
 	}
 
-	for i, desc := range remote.Descriptors {
+	for _, desc := range remote.Descriptors {
 		RemoveInternalLayerAnnotations(&desc, opts.OCITypes)
 		mfst.Layers = append(mfst.Layers, desc)
-		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i+1)] = desc.Digest.String()
 	}
 
 	mfstJSON, err := json.MarshalIndent(mfst, "", "  ")

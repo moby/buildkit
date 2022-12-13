@@ -24,6 +24,8 @@ type Config struct {
 	Registries map[string]resolverconfig.RegistryConfig `toml:"registry"`
 
 	DNS *DNSConfig `toml:"dns"`
+
+	History *HistoryConfig `toml:"history"`
 }
 
 type GRPCConfig struct {
@@ -122,4 +124,9 @@ type DNSConfig struct {
 	Nameservers   []string `toml:"nameservers"`
 	Options       []string `toml:"options"`
 	SearchDomains []string `toml:"searchDomains"`
+}
+
+type HistoryConfig struct {
+	MaxAge     int64 `toml:"maxAge"`
+	MaxEntries int64 `toml:"maxEntries"`
 }

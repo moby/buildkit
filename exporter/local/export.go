@@ -74,13 +74,13 @@ func (e *localExporter) Config() *exporter.Config {
 	return exporter.NewConfig()
 }
 
-func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source, sessionID string) (map[string]string, error) {
+func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source, sessionID string) (map[string]string, exporter.DescriptorReference, error) {
 	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	if e.opts.Epoch == nil {
 		if tm, ok, err := epoch.ParseSource(inp); err != nil {
-			return nil, err
+			return nil, nil, err
 		} else if ok {
 			e.opts.Epoch = tm
 		}
@@ -88,21 +88,21 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 
 	caller, err := e.opt.SessionManager.Get(timeoutCtx, sessionID, false)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	isMap := len(inp.Refs) > 0
 
 	if _, ok := inp.Metadata[exptypes.ExporterPlatformsKey]; isMap && !ok {
-		return nil, errors.Errorf("unable to export multiple refs, missing platforms mapping")
+		return nil, nil, errors.Errorf("unable to export multiple refs, missing platforms mapping")
 	}
 	p, err := exptypes.ParsePlatforms(inp.Metadata)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if !isMap && len(p.Platforms) > 1 {
-		return nil, errors.Errorf("unable to export multiple platforms without map")
+		return nil, nil, errors.Errorf("unable to export multiple platforms without map")
 	}
 
 	now := time.Now().Truncate(time.Second)
@@ -148,7 +148,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 		for _, p := range p.Platforms {
 			r, ok := inp.FindRef(p.ID)
 			if !ok {
-				return nil, errors.Errorf("failed to find ref for ID %s", p.ID)
+				return nil, nil, errors.Errorf("failed to find ref for ID %s", p.ID)
 			}
 			eg.Go(export(ctx, p.ID, r, inp.Attestations[p.ID]))
 		}
@@ -157,9 +157,9 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 	}
 
 	if err := eg.Wait(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return nil, nil
+	return nil, nil, nil
 }
 
 func NewProgressHandler(ctx context.Context, id string) func(int, bool) {

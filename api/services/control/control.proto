@@ -23,6 +23,7 @@ service Control {
 	rpc Info(InfoRequest) returns (InfoResponse);
 
 	rpc ListenBuildHistory(BuildHistoryRequest) returns (stream BuildHistoryEvent);
+	rpc UpdateBuildHistory(UpdateBuildHistoryRequest) returns (UpdateBuildHistoryResponse);
 }
 
 message PruneRequest {
@@ -66,6 +67,7 @@ message SolveRequest {
 	CacheOptions Cache = 8 [(gogoproto.nullable) = false];
 	repeated string Entitlements = 9 [(gogoproto.customtype) = "github.com/moby/buildkit/util/entitlements.Entitlement" ];
 	map<string, pb.Definition> FrontendInputs = 10;
+	bool Internal = 11; // Internal builds are not recorded in build history
 }
 
 message CacheOptions {
@@ -171,6 +173,7 @@ message InfoResponse {
 message BuildHistoryRequest {
 	bool ActiveOnly = 1;
 	string Ref = 2;
+	bool EarlyExit = 3;
 }
 
 enum BuildHistoryEventType {
@@ -178,7 +181,6 @@ enum BuildHistoryEventType {
 	COMPLETE = 1;
 	DELETED = 2;
 }
-
 
 message BuildHistoryEvent {
 	BuildHistoryEventType type = 1;
@@ -198,11 +200,20 @@ message BuildHistoryRecord {
 	BuildResultInfo Result = 10;
 	map<string, BuildResultInfo> Results = 11;
 	int32 Generation = 12;
+	Descriptor trace = 13;
+	bool pinned = 14;
 	// TODO: tags
 	// TODO: steps/cache summary
 	// TODO: unclipped logs
-	// TODO: pinning
 }
+
+message UpdateBuildHistoryRequest {
+	string Ref = 1;
+	bool Pinned = 2;
+	bool Delete = 3;
+}
+
+message UpdateBuildHistoryResponse {}
 
 message Descriptor {
 	string media_type = 1;

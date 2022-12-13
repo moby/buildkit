@@ -36,6 +36,14 @@ func (sr *immutableRef) computeBlobChain(ctx context.Context, createIfNeeded boo
 	if _, ok := leases.FromContext(ctx); !ok {
 		return errors.Errorf("missing lease requirement for computeBlobChain")
 	}
+	if !createIfNeeded {
+		sr.mu.Lock()
+		if sr.equalMutable != nil {
+			sr.mu.Unlock()
+			return nil
+		}
+		sr.mu.Unlock()
+	}
 
 	if err := sr.Finalize(ctx); err != nil {
 		return err

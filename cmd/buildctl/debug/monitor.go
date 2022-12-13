@@ -47,6 +47,29 @@ func monitor(clicontext *cli.Context) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("%s %s\n", ev.Type.String(), ev.Record.Ref)
+		fmt.Printf("event: %s ref:%s\n", ev.Type.String(), ev.Record.Ref)
+		if ev.Record.Logs != nil {
+			fmt.Printf("  logs: %s\n", ev.Record.Logs)
+		}
+		if ev.Record.Trace != nil {
+			fmt.Printf("  trace: %s\n", ev.Record.Trace)
+		}
+
+		if ev.Record.Result != nil {
+			if ev.Record.Result.Result != nil {
+				fmt.Printf("  descriptor: %s\n", ev.Record.Result.Result)
+			}
+			for _, att := range ev.Record.Result.Attestations {
+				fmt.Printf("  attestation: %s\n", att)
+			}
+		}
+		for k, res := range ev.Record.Results {
+			if res.Result != nil {
+				fmt.Printf("  [%s] descriptor: %s\n", k, res.Result)
+			}
+			for _, att := range res.Attestations {
+				fmt.Printf("  [%s] attestation: %s\n", k, att)
+			}
+		}
 	}
 }

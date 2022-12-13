@@ -15,5 +15,7 @@ var debugCommand = cli.Command{
 		debug.InfoCommand,
 		debug.MonitorCommand,
 		debug.LogsCommand,
+		debug.CtlCommand,
+		debug.GetCommand,
 	},
 }

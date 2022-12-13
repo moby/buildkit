@@ -194,7 +194,7 @@ func (e *imageExporterInstance) Config() *exporter.Config {
 	return exporter.NewConfigWithCompression(e.opts.RefCfg.Compression)
 }
 
-func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source, sessionID string) (map[string]string, error) {
+func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source, sessionID string) (_ map[string]string, descref exporter.DescriptorReference, err error) {
 	if src.Metadata == nil {
 		src.Metadata = make(map[string][]byte)
 	}
@@ -205,23 +205,28 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	opts := e.opts
 	as, _, err := ParseAnnotations(src.Metadata)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	opts.Annotations = opts.Annotations.Merge(as)
 
 	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	defer done(context.TODO())
+	defer func() {
+		if descref == nil {
+			done(context.TODO())
+		}
+	}()
 
 	desc, err := e.opt.ImageWriter.Commit(ctx, src, sessionID, &opts)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-
 	defer func() {
-		e.opt.ImageWriter.ContentStore().Delete(context.TODO(), desc.Digest)
+		if err == nil {
+			descref = NewDescriptorReference(*desc, done)
+		}
 	}()
 
 	resp := make(map[string]string)
@@ -253,11 +258,11 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 					img.Name = targetName + sfx
 					if _, err := e.opt.Images.Update(ctx, img); err != nil {
 						if !errors.Is(err, errdefs.ErrNotFound) {
-							return nil, tagDone(err)
+							return nil, nil, tagDone(err)
 						}
 
 						if _, err := e.opt.Images.Create(ctx, img); err != nil {
-							return nil, tagDone(err)
+							return nil, nil, tagDone(err)
 						}
 					}
 				}
@@ -265,7 +270,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 
 				if src.Ref != nil && e.unpack {
 					if err := e.unpackImage(ctx, img, src, session.NewGroup(sessionID)); err != nil {
-						return nil, err
+						return nil, nil, err
 					}
 				}
 
@@ -273,12 +278,12 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 					if src.Ref != nil {
 						remotes, err := src.Ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
 						if err != nil {
-							return nil, err
+							return nil, nil, err
 						}
 						remote := remotes[0]
 						if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
 							if err := unlazier.Unlazy(ctx); err != nil {
-								return nil, err
+								return nil, nil, err
 							}
 						}
 					}
@@ -286,12 +291,12 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 						for _, r := range src.Refs {
 							remotes, err := r.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
 							if err != nil {
-								return nil, err
+								return nil, nil, err
 							}
 							remote := remotes[0]
 							if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
 								if err := unlazier.Unlazy(ctx); err != nil {
-									return nil, err
+									return nil, nil, err
 								}
 							}
 						}
@@ -301,7 +306,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 			if e.push {
 				err := e.pushImage(ctx, src, sessionID, targetName, desc.Digest)
 				if err != nil {
-					return nil, errors.Wrapf(err, "failed to push %v", targetName)
+					return nil, nil, errors.Wrapf(err, "failed to push %v", targetName)
 				}
 			}
 		}
@@ -316,11 +321,11 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 
 	dtdesc, err := json.Marshal(desc)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	resp[exptypes.ExporterImageDescriptorKey] = base64.StdEncoding.EncodeToString(dtdesc)
 
-	return resp, nil
+	return resp, nil, nil
 }
 
 func (e *imageExporterInstance) pushImage(ctx context.Context, src *exporter.Source, sessionID string, targetName string, dgst digest.Digest) error {
@@ -459,4 +464,24 @@ func defaultPlatform() string {
 	// Use normalized platform string to avoid the mismatch with platform options which
 	// are normalized using platforms.Normalize()
 	return platforms.Format(platforms.Normalize(platforms.DefaultSpec()))
+}
+
+func NewDescriptorReference(desc ocispecs.Descriptor, release func(context.Context) error) exporter.DescriptorReference {
+	return &descriptorReference{
+		desc:    desc,
+		release: release,
+	}
+}
+
+type descriptorReference struct {
+	desc    ocispecs.Descriptor
+	release func(context.Context) error
+}
+
+func (d *descriptorReference) Descriptor() ocispecs.Descriptor {
+	return d.desc
+}
+
+func (d *descriptorReference) Release() error {
+	return d.release(context.TODO())
 }

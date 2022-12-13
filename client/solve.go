@@ -46,6 +46,7 @@ type SolveOpt struct {
 	AllowedEntitlements   []entitlements.Entitlement
 	SharedSession         *session.Session // TODO: refactor to better session syncing
 	SessionPreInitialized bool             // TODO: refactor to better session syncing
+	Internal              bool
 }
 
 type ExportEntry struct {
@@ -259,6 +260,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			FrontendInputs: frontendInputs,
 			Cache:          cacheOpt.options,
 			Entitlements:   opt.AllowedEntitlements,
+			Internal:       opt.Internal,
 		})
 		if err != nil {
 			return errors.Wrap(err, "failed to solve")
@@ -348,54 +350,6 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		}
 	}
 	return res, nil
-}
-
-func NewSolveStatus(resp *controlapi.StatusResponse) *SolveStatus {
-	s := &SolveStatus{}
-	for _, v := range resp.Vertexes {
-		s.Vertexes = append(s.Vertexes, &Vertex{
-			Digest:        v.Digest,
-			Inputs:        v.Inputs,
-			Name:          v.Name,
-			Started:       v.Started,
-			Completed:     v.Completed,
-			Error:         v.Error,
-			Cached:        v.Cached,
-			ProgressGroup: v.ProgressGroup,
-		})
-	}
-	for _, v := range resp.Statuses {
-		s.Statuses = append(s.Statuses, &VertexStatus{
-			ID:        v.ID,
-			Vertex:    v.Vertex,
-			Name:      v.Name,
-			Total:     v.Total,
-			Current:   v.Current,
-			Timestamp: v.Timestamp,
-			Started:   v.Started,
-			Completed: v.Completed,
-		})
-	}
-	for _, v := range resp.Logs {
-		s.Logs = append(s.Logs, &VertexLog{
-			Vertex:    v.Vertex,
-			Stream:    int(v.Stream),
-			Data:      v.Msg,
-			Timestamp: v.Timestamp,
-		})
-	}
-	for _, v := range resp.Warnings {
-		s.Warnings = append(s.Warnings, &VertexWarning{
-			Vertex:     v.Vertex,
-			Level:      int(v.Level),
-			Short:      v.Short,
-			Detail:     v.Detail,
-			URL:        v.Url,
-			SourceInfo: v.Info,
-			Range:      v.Ranges,
-		})
-	}
-	return s
 }
 
 func prepareSyncedDirs(def *llb.Definition, localDirs map[string]string) (filesync.StaticDirSource, error) {
