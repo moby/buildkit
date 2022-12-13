@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile-upstream:1.4
+# syntax=docker/dockerfile-upstream:master
 
 ARG RUNC_VERSION=v1.1.4
 ARG CONTAINERD_VERSION=v1.6.11

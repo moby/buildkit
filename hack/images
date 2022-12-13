@@ -88,5 +88,5 @@ for tagName in $tagNames; do
   tagFlags="$tagFlags--tag=$tagName "
 done
 
-buildxCmd build $platformFlag $targetFlag $importCacheFlags $exportCacheFlags $tagFlags $outputFlag \
+buildxCmd build $platformFlag $targetFlag $importCacheFlags $exportCacheFlags $tagFlags $outputFlag $(buildAttestFlags) \
   $currentcontext
