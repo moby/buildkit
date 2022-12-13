@@ -548,7 +548,7 @@ func (c *cacheRecord) AddResult(dgst digest.Digest, idx int, createdAt time.Time
 	descs := make([]ocispecs.Descriptor, len(result.Descriptors))
 	for i, desc := range result.Descriptors {
 		d := desc
-		containerimage.RemoveInternalLayerAnnotations(&d, true)
+		d.Annotations = containerimage.RemoveInternalLayerAnnotations(d.Annotations, true)
 		descs[i] = d
 	}
 	c.ce.layers[e] = append(c.ce.layers[e], descs)
