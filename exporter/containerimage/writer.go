@@ -413,7 +413,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *Ima
 	}
 
 	for _, desc := range remote.Descriptors {
-		RemoveInternalLayerAnnotations(&desc, opts.OCITypes)
+		desc.Annotations = RemoveInternalLayerAnnotations(desc.Annotations, opts.OCITypes)
 		mfst.Layers = append(mfst.Layers, desc)
 	}
 
@@ -524,7 +524,7 @@ func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *Ima
 		"containerd.io/gc.ref.content.0": configDigest.String(),
 	}
 	for i, desc := range layers {
-		RemoveInternalLayerAnnotations(&desc, opts.OCITypes)
+		desc.Annotations = RemoveInternalLayerAnnotations(desc.Annotations, opts.OCITypes)
 		mfst.Layers = append(mfst.Layers, desc)
 		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i+1)] = desc.Digest.String()
 	}
@@ -782,19 +782,24 @@ func normalizeLayersAndHistory(ctx context.Context, remote *solver.Remote, histo
 	return remote, history
 }
 
-func RemoveInternalLayerAnnotations(desc *ocispecs.Descriptor, oci bool) {
-	if oci {
-		// oci supports annotations but don't export internal annotations
-		delete(desc.Annotations, "containerd.io/uncompressed")
-		delete(desc.Annotations, "buildkit/createdat")
-		for k := range desc.Annotations {
-			if strings.HasPrefix(k, "containerd.io/distribution.source.") {
-				delete(desc.Annotations, k)
-			}
-		}
-	} else {
-		desc.Annotations = nil
+func RemoveInternalLayerAnnotations(in map[string]string, oci bool) map[string]string {
+	if len(in) == 0 || !oci {
+		return nil
 	}
+	m := make(map[string]string, len(in))
+	for k, v := range in {
+		// oci supports annotations but don't export internal annotations
+		switch k {
+		case "containerd.io/uncompressed", "buildkit/createdat":
+			continue
+		default:
+			if strings.HasPrefix(k, "containerd.io/distribution.source.") {
+				continue
+			}
+			m[k] = v
+		}
+	}
+	return m
 }
 
 type refMetadata struct {
