@@ -86,6 +86,10 @@ func detect() error {
 		exp = Recorder
 	}
 
+	if exp == nil {
+		return nil
+	}
+
 	// enable log with traceID when valid exporter
 	bklog.EnableLogWithTraceID(true)
 
