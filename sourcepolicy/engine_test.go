@@ -23,6 +23,45 @@ func TestEngineEvaluate(t *testing.T) {
 	t.Run("Test convert wildcard", testConvertWildcard)
 	t.Run("Test convert multiple", testConvertMultiple)
 	t.Run("test multiple policies", testMultiplePolicies)
+	t.Run("Last rule wins", testLastRuleWins)
+}
+
+func testLastRuleWins(t *testing.T) {
+	pol := []*spb.Policy{
+		{
+			Rules: []*spb.Rule{
+				{
+					Action: spb.PolicyAction_ALLOW,
+					Selector: &spb.Selector{
+						Identifier: "docker-image://docker.io/library/busybox:latest",
+					},
+				},
+				{
+					Action: spb.PolicyAction_DENY,
+					Selector: &spb.Selector{
+						Identifier: "docker-image://docker.io/library/busybox:latest",
+					},
+				},
+				{
+					Action: spb.PolicyAction_ALLOW,
+					Selector: &spb.Selector{
+						Identifier: "docker-image://docker.io/library/busybox:latest",
+					},
+				},
+			},
+		},
+	}
+
+	e := NewEngine(pol)
+	mut, err := e.Evaluate(context.Background(), &pb.Op{
+		Op: &pb.Op_Source{
+			Source: &pb.SourceOp{
+				Identifier: "docker-image://docker.io/library/busybox:latest",
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.False(t, mut)
 }
 
 func testMultiplePolicies(t *testing.T) {
