@@ -412,6 +412,7 @@ func addProvenanceToResult(res *frontend.Result, br *provenanceBridge) (*Result,
 		Result:     res,
 		Provenance: &provenance.Result{},
 	}
+
 	if res.Ref != nil {
 		cp, err := getProvenance(res.Ref, reqs.ref.bridge, "", reqs)
 		if err != nil {
@@ -425,11 +426,10 @@ func addProvenanceToResult(res *frontend.Result, br *provenanceBridge) (*Result,
 			return nil, err
 		}
 	}
-	if len(res.Refs) == 0 {
-		return out, nil
-	}
-	out.Provenance.Refs = make(map[string]*provenance.Capture, len(res.Refs))
 
+	if len(res.Refs) != 0 {
+		out.Provenance.Refs = make(map[string]*provenance.Capture, len(res.Refs))
+	}
 	for k, ref := range res.Refs {
 		cp, err := getProvenance(ref, reqs.refs[k].bridge, k, reqs)
 		if err != nil {
@@ -443,6 +443,22 @@ func addProvenanceToResult(res *frontend.Result, br *provenanceBridge) (*Result,
 			return nil, err
 		}
 	}
+
+	if len(res.Attestations) != 0 {
+		out.Provenance.Attestations = make(map[string][]result.Attestation[*provenance.Capture], len(res.Attestations))
+	}
+	for k, as := range res.Attestations {
+		for i, a := range as {
+			a2, err := result.ConvertAttestation(&a, func(r solver.ResultProxy) (*provenance.Capture, error) {
+				return getProvenance(r, reqs.atts[k][i].bridge, k, reqs)
+			})
+			if err != nil {
+				return nil, err
+			}
+			out.Provenance.Attestations[k] = append(out.Provenance.Attestations[k], *a2)
+		}
+	}
+
 	return out, nil
 }
 
@@ -460,6 +476,10 @@ func getRefProvenance(ref solver.ResultProxy, br *provenanceBridge) (*provenance
 	}
 
 	if br.req != nil {
+		if pr == nil {
+			return nil, errors.Errorf("missing provenance for %s", ref.ID())
+		}
+
 		pr.Frontend = br.req.Frontend
 		pr.Args = provenance.FilterArgs(br.req.FrontendOpt)
 		// TODO: should also save some output options like compression

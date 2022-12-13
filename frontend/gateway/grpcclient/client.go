@@ -161,7 +161,7 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 					}
 				}
 
-				if res.Attestations != nil && c.caps.Supports(pb.CapAttestations) == nil {
+				if res.Attestations != nil {
 					attestations := map[string]*pb.Attestations{}
 					for k, as := range res.Attestations {
 						for _, a := range as {
@@ -170,6 +170,12 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 								retError = err
 								continue
 							}
+							pbRef, err := convertRef(a.Ref)
+							if err != nil {
+								retError = err
+								continue
+							}
+							pbAtt.Ref = pbRef
 							if attestations[k] == nil {
 								attestations[k] = &pb.Attestations{}
 							}
@@ -451,11 +457,18 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (res *
 		if resp.Result.Attestations != nil {
 			for p, as := range resp.Result.Attestations {
 				for _, a := range as.Attestation {
-					att, err := client.AttestationFromPB(a)
+					att, err := client.AttestationFromPB[client.Reference](a)
 					if err != nil {
 						return nil, err
 					}
-					res.AddAttestation(p, *att, nil)
+					if a.Ref.Id != "" {
+						ref, err := newReference(c, a.Ref)
+						if err != nil {
+							return nil, err
+						}
+						att.Ref = ref
+					}
+					res.AddAttestation(p, *att)
 				}
 			}
 		}

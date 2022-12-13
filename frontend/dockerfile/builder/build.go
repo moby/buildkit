@@ -32,6 +32,7 @@ import (
 	"github.com/moby/buildkit/frontend/subrequests/targets"
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/solver/result"
 	"github.com/moby/buildkit/util/gitutil"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -504,7 +505,6 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 			return nil, errors.Wrapf(err, "failed to parse sbom scanner %s", src)
 		}
 		ref = reference.TagNameOnly(ref)
-		exportMap = true
 
 		scanner, err = sbom.CreateSBOMScanner(ctx, c, ref.String())
 		if err != nil {
@@ -613,23 +613,28 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 
 	if scanner != nil {
 		for i, p := range expPlatforms.Platforms {
-			att, st, err := scanner(ctx, p.ID, scanTargets[i].Core, scanTargets[i].Extras)
+			att, err := scanner(ctx, p.ID, scanTargets[i].Core, scanTargets[i].Extras)
 			if err != nil {
 				return nil, err
 			}
 
-			def, err := st.Marshal(ctx)
-			if err != nil {
-				return nil, err
-			}
-			r, err := c.Solve(ctx, frontend.SolveRequest{
-				Definition: def.ToPB(),
+			attSolve, err := result.ConvertAttestation(&att, func(st llb.State) (client.Reference, error) {
+				def, err := st.Marshal(ctx)
+				if err != nil {
+					return nil, err
+				}
+				r, err := c.Solve(ctx, frontend.SolveRequest{
+					Definition: def.ToPB(),
+				})
+				if err != nil {
+					return nil, err
+				}
+				return r.Ref, nil
 			})
 			if err != nil {
 				return nil, err
 			}
-
-			res.AddAttestation(p.ID, att, r.Ref)
+			res.AddAttestation(p.ID, *attSolve)
 		}
 	}
 

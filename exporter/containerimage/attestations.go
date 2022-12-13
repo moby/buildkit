@@ -9,11 +9,11 @@ import (
 
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/attestation"
 	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
-	"github.com/moby/buildkit/solver/result"
 	"github.com/moby/buildkit/version"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -28,7 +28,7 @@ var intotoPlatform ocispecs.Platform = ocispecs.Platform{
 }
 
 // supplementSBOM modifies SPDX attestations to include the file layers
-func supplementSBOM(ctx context.Context, s session.Group, target cache.ImmutableRef, targetRemote *solver.Remote, refs map[string]cache.ImmutableRef, att result.Attestation) (result.Attestation, error) {
+func supplementSBOM(ctx context.Context, s session.Group, target cache.ImmutableRef, targetRemote *solver.Remote, att exporter.Attestation) (exporter.Attestation, error) {
 	if att.Kind != gatewaypb.AttestationKindInToto {
 		return att, nil
 	}
@@ -36,7 +36,7 @@ func supplementSBOM(ctx context.Context, s session.Group, target cache.Immutable
 		return att, nil
 	}
 
-	content, err := attestation.ReadAll(ctx, s, refs, att)
+	content, err := attestation.ReadAll(ctx, s, att)
 	if err != nil {
 		return att, err
 	}
@@ -100,7 +100,7 @@ func supplementSBOM(ctx context.Context, s session.Group, target cache.Immutable
 		return att, err
 	}
 
-	return result.Attestation{
+	return exporter.Attestation{
 		Kind:        att.Kind,
 		Path:        att.Path,
 		ContentFunc: func() ([]byte, error) { return content, nil },

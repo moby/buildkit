@@ -17,7 +17,6 @@ import (
 	controlgateway "github.com/moby/buildkit/control/gateway"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/util/epoch"
-	"github.com/moby/buildkit/exporter/util/multiplatform"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/attestations"
 	"github.com/moby/buildkit/session"
@@ -305,16 +304,6 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		}
 	}
 
-	// if multi-platform is set, enable it for the exporter
-	if v, ok := multiplatform.ParseBuildArgs(req.FrontendAttrs); ok {
-		if _, ok := req.ExporterAttrs[multiplatform.KeyMultiPlatform]; !ok {
-			if req.ExporterAttrs == nil {
-				req.ExporterAttrs = make(map[string]string)
-			}
-			req.ExporterAttrs[multiplatform.KeyMultiPlatform] = v
-		}
-	}
-
 	if req.Exporter != "" {
 		exp, err := w.Exporter(req.Exporter, c.opt.SessionManager)
 		if err != nil {
@@ -368,10 +357,6 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	}
 
 	var procs []llbsolver.Processor
-
-	if len(attests) > 0 {
-		procs = append(procs, proc.ForceRefsProcessor)
-	}
 
 	if attrs, ok := attests["sbom"]; ok {
 		src := attrs["generator"]

@@ -2,7 +2,6 @@ package llbsolver
 
 import (
 	"context"
-	"encoding/json"
 	"sync"
 
 	"github.com/containerd/containerd/platforms"
@@ -59,7 +58,10 @@ func (b *provenanceBridge) allImages() []provenance.ImageSource {
 }
 
 func (b *provenanceBridge) requests(r *frontend.Result) (*resultRequests, error) {
-	reqs := &resultRequests{refs: make(map[string]*resultWithBridge)}
+	reqs := &resultRequests{
+		refs: make(map[string]*resultWithBridge),
+		atts: make(map[string][]*resultWithBridge),
+	}
 
 	if r.Ref != nil {
 		ref, ok := b.findByResult(r.Ref)
@@ -77,15 +79,24 @@ func (b *provenanceBridge) requests(r *frontend.Result) (*resultRequests, error)
 		reqs.refs[k] = r
 	}
 
-	if platformsBytes, ok := r.Metadata[exptypes.ExporterPlatformsKey]; ok {
-		var ps exptypes.Platforms
-		if len(platformsBytes) > 0 {
-			if err := json.Unmarshal(platformsBytes, &ps); err != nil {
-				return nil, errors.Wrapf(err, "failed to parse platforms passed to provenance processor")
+	for k, atts := range r.Attestations {
+		for _, att := range atts {
+			if att.Ref == nil {
+				continue
 			}
-			reqs.platforms = ps.Platforms
+			r, ok := b.findByResult(att.Ref)
+			if !ok {
+				return nil, errors.Errorf("could not find request for ref %s", att.Ref.ID())
+			}
+			reqs.atts[k] = append(reqs.atts[k], r)
 		}
 	}
+
+	ps, err := exptypes.ParsePlatforms(r.Metadata)
+	if err != nil {
+		return nil, err
+	}
+	reqs.platforms = ps.Platforms
 
 	return reqs, nil
 }
@@ -97,15 +108,15 @@ func (b *provenanceBridge) findByResult(rp solver.ResultProxy) (*resultWithBridg
 		}
 	}
 	for _, bld := range b.builds {
-		if bld.res.Ref != nil {
-			if bld.res.Ref.ID() == rp.ID() {
-				return &bld, true
+		found := false
+		bld.res.EachRef(func(r solver.ResultProxy) error {
+			if r.ID() == rp.ID() {
+				found = true
 			}
-		}
-		for _, ref := range bld.res.Refs {
-			if ref.ID() == rp.ID() {
-				return &bld, true
-			}
+			return nil
+		})
+		if found {
+			return &bld, true
 		}
 	}
 	return nil, false
@@ -165,6 +176,7 @@ func (b *provenanceBridge) Solve(ctx context.Context, req frontend.SolveRequest,
 type resultRequests struct {
 	ref       *resultWithBridge
 	refs      map[string]*resultWithBridge
+	atts      map[string][]*resultWithBridge
 	platforms []exptypes.Platform
 }
 
@@ -227,6 +239,11 @@ func (reqs *resultRequests) allRes() map[string]struct{} {
 	}
 	for _, r := range reqs.refs {
 		res[r.res.Ref.ID()] = struct{}{}
+	}
+	for _, rs := range reqs.atts {
+		for _, r := range rs {
+			res[r.res.Ref.ID()] = struct{}{}
+		}
 	}
 	return res
 }

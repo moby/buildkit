@@ -72,11 +72,12 @@ message Attestations {
 
 message Attestation {
 	AttestationKind kind = 1;
+	map<string, bytes> metadata = 2;
 
-	string ref = 2;
-	string path = 3;
-	string inTotoPredicateType = 4;
-	repeated InTotoSubject inTotoSubjects = 5;
+	Ref ref = 3;
+	string path = 4;
+	string inTotoPredicateType = 5;
+	repeated InTotoSubject inTotoSubjects = 6;
 }
 
 enum AttestationKind {

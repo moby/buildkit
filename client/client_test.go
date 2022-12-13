@@ -7086,8 +7086,9 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 			if err != nil {
 				return nil, err
 			}
-			res.AddAttestation(pk, result.Attestation{
+			res.AddAttestation(pk, gateway.Attestation{
 				Kind: gatewaypb.AttestationKindInToto,
+				Ref:  refAttest,
 				Path: "/attestation.json",
 				InToto: result.InTotoAttestation{
 					PredicateType: "https://example.com/attestations/v1.0",
@@ -7095,9 +7096,10 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 						Kind: gatewaypb.InTotoSubjectKindSelf,
 					}},
 				},
-			}, refAttest)
-			res.AddAttestation(pk, result.Attestation{
+			})
+			res.AddAttestation(pk, gateway.Attestation{
 				Kind: gatewaypb.AttestationKindInToto,
+				Ref:  refAttest,
 				Path: "/attestation2.json",
 				InToto: result.InTotoAttestation{
 					PredicateType: "https://example.com/attestations2/v1.0",
@@ -7107,7 +7109,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 						Digest: []digest.Digest{successDigest},
 					}},
 				},
-			}, refAttest)
+			})
 		}
 
 		dt, err := json.Marshal(expPlatforms)
@@ -7400,13 +7402,14 @@ func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
 			if err != nil {
 				return nil, err
 			}
-			res.AddAttestation(pk, result.Attestation{
+			res.AddAttestation(pk, gateway.Attestation{
 				Kind: gatewaypb.AttestationKindInToto,
+				Ref:  refAttest,
 				Path: "/attestation.json",
 				InToto: result.InTotoAttestation{
 					PredicateType: "https://example.com/attestations/v1.0",
 				},
-			}, refAttest)
+			})
 		}
 
 		dt, err := json.Marshal(expPlatforms)
@@ -7553,10 +7556,11 @@ func testAttestationBundle(t *testing.T, sb integration.Sandbox) {
 			if err != nil {
 				return nil, err
 			}
-			res.AddAttestation(pk, result.Attestation{
+			res.AddAttestation(pk, gateway.Attestation{
 				Kind: gatewaypb.AttestationKindBundle,
+				Ref:  refAttest,
 				Path: "/bundle",
-			}, refAttest)
+			})
 		}
 
 		dt, err := json.Marshal(expPlatforms)
@@ -7755,13 +7759,14 @@ EOF
 					return nil, err
 				}
 
-				res.AddAttestation(pk, result.Attestation{
+				res.AddAttestation(pk, gateway.Attestation{
 					Kind: gatewaypb.AttestationKindInToto,
+					Ref:  refAttest,
 					Path: "/result.spdx",
 					InToto: result.InTotoAttestation{
 						PredicateType: intoto.PredicateSPDX,
 					},
-				}, refAttest)
+				})
 			}
 
 			return res, nil
@@ -8004,6 +8009,15 @@ EOF
 			return nil, errors.Wrapf(err, "failed to marshal image config")
 		}
 		res.AddMeta(exptypes.ExporterImageConfigKey, config)
+
+		expPlatforms := &exptypes.Platforms{
+			Platforms: []exptypes.Platform{{ID: pk, Platform: p}},
+		}
+		dt, err := json.Marshal(expPlatforms)
+		if err != nil {
+			return nil, err
+		}
+		res.AddMeta(exptypes.ExporterPlatformsKey, dt)
 
 		return res, nil
 	}
