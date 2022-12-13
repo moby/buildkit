@@ -49,10 +49,11 @@ func CheckSystemDriveAndRemoveDriveLetter(path string) (string, error) {
 	// whatever need exists.
 	// Alternatively, we could further validate the path and error out here, but that seems outside the
 	// scope of what this function should do.
-	parts := strings.SplitN(path, ":", 2)
-	if len(parts) == 1 || len(path) < 2 {
+	parts := strings.Split(path, ":")
+	if len(parts) != 2 {
 		return filepath.FromSlash(filepath.Clean(path)), nil
 	}
+
 	if !strings.EqualFold(parts[0], "c") {
 		return "", errors.New("The specified path is not on the system drive (C:)")
 	}
