@@ -1,6 +1,7 @@
 package llbsolver
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -144,8 +145,8 @@ func (dpc *detectPrunedCacheID) Load(op *pb.Op, md *pb.OpMetadata, opt *solver.V
 	return nil
 }
 
-func Load(def *pb.Definition, opts ...LoadOpt) (solver.Edge, error) {
-	return loadLLB(def, func(dgst digest.Digest, pbOp *pb.Op, load func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error) {
+func Load(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluator, opts ...LoadOpt) (solver.Edge, error) {
+	return loadLLB(ctx, def, polEngine, func(dgst digest.Digest, pbOp *pb.Op, load func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error) {
 		opMetadata := def.Metadata[dgst]
 		vtx, err := newVertex(dgst, pbOp, &opMetadata, load, opts...)
 		if err != nil {
@@ -186,36 +187,105 @@ func newVertex(dgst digest.Digest, op *pb.Op, opMeta *pb.OpMetadata, load func(d
 	return vtx, nil
 }
 
+func recomputeDigests(ctx context.Context, all map[digest.Digest]*pb.Op, visited map[digest.Digest]digest.Digest, dgst digest.Digest) (digest.Digest, error) {
+	if dgst, ok := visited[dgst]; ok {
+		return dgst, nil
+	}
+	op := all[dgst]
+
+	var mutated bool
+	for _, input := range op.Inputs {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+
+		iDgst, err := recomputeDigests(ctx, all, visited, input.Digest)
+		if err != nil {
+			return "", err
+		}
+		if input.Digest != iDgst {
+			mutated = true
+			input.Digest = iDgst
+		}
+	}
+
+	if !mutated {
+		return dgst, nil
+	}
+
+	dt, err := op.Marshal()
+	if err != nil {
+		return "", err
+	}
+	newDgst := digest.FromBytes(dt)
+	visited[dgst] = newDgst
+	all[newDgst] = op
+	delete(all, dgst)
+	return newDgst, nil
+}
+
 // loadLLB loads LLB.
 // fn is executed sequentially.
-func loadLLB(def *pb.Definition, fn func(digest.Digest, *pb.Op, func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error)) (solver.Edge, error) {
+func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluator, fn func(digest.Digest, *pb.Op, func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error)) (solver.Edge, error) {
 	if len(def.Def) == 0 {
 		return solver.Edge{}, errors.New("invalid empty definition")
 	}
 
 	allOps := make(map[digest.Digest]*pb.Op)
+	mutatedDigests := make(map[digest.Digest]digest.Digest) // key: old, val: new
 
-	var dgst digest.Digest
+	var lastDgst digest.Digest
 
 	for _, dt := range def.Def {
 		var op pb.Op
 		if err := (&op).Unmarshal(dt); err != nil {
 			return solver.Edge{}, errors.Wrap(err, "failed to parse llb proto op")
 		}
-		dgst = digest.FromBytes(dt)
+		dgst := digest.FromBytes(dt)
+		if polEngine != nil {
+			mutated, err := polEngine.Evaluate(ctx, &op)
+			if err != nil {
+				return solver.Edge{}, errors.Wrap(err, "error evaluating the source policy")
+			}
+			if mutated {
+				dtMutated, err := op.Marshal()
+				if err != nil {
+					return solver.Edge{}, err
+				}
+				dgstMutated := digest.FromBytes(dtMutated)
+				mutatedDigests[dgst] = dgstMutated
+				dgst = dgstMutated
+			}
+		}
 		allOps[dgst] = &op
+		lastDgst = dgst
+	}
+
+	for dgst := range allOps {
+		_, err := recomputeDigests(ctx, allOps, mutatedDigests, dgst)
+		if err != nil {
+			return solver.Edge{}, err
+		}
 	}
 
 	if len(allOps) < 2 {
 		return solver.Edge{}, errors.Errorf("invalid LLB with %d vertexes", len(allOps))
 	}
 
-	lastOp := allOps[dgst]
-	delete(allOps, dgst)
+	for {
+		newDgst, ok := mutatedDigests[lastDgst]
+		if !ok {
+			break
+		}
+		lastDgst = newDgst
+	}
+
+	lastOp := allOps[lastDgst]
+	delete(allOps, lastDgst)
 	if len(lastOp.Inputs) == 0 {
 		return solver.Edge{}, errors.Errorf("invalid LLB with no inputs on last vertex")
 	}
-	dgst = lastOp.Inputs[0].Digest
+	dgst := lastOp.Inputs[0].Digest
 
 	cache := make(map[digest.Digest]solver.Vertex)
 

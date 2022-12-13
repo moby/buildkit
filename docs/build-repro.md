@@ -127,3 +127,43 @@ jq '.' metadata.json
   "containerimage.digest": "sha256:..."
 }
 ```
+
+### Reproducing the pinned dependencies
+
+<!-- TODO: s/master/v0.11/ after the release -->
+Reproducing the pinned dependencies is supported in the master branch of BuildKit.
+
+e.g.,
+```bash
+buildctl build --frontend dockerfile.v0 --local dockerfile=. --local context=. --source-policy-file policy.json
+```
+
+An example `policy.json`:
+```json
+{
+  "rules": [
+    {
+      "action": "CONVERT",
+      "source": {
+        "type": "docker-image",
+        "identifier": "docker.io/library/alpine:latest"
+      },
+      "destination": {
+        "identifier": "docker-image://docker.io/library/alpine:latest@sha256:4edbd2beb5f78b1014028f4fbb99f3237d9561100b6881aabbf5acce2c4f9454"
+      }
+    },
+    {
+      "action": "CONVERT",
+      "source": {
+        "type": "http",
+        "identifier": "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md"
+      },
+      "destination": {
+        "attrs": {"http.checksum": "sha256:6e4b94fc270e708e1068be28bd3551dc6917a4fc5a61293d51bb36e6b75c4b53"}
+      }
+    }
+  ]
+}
+```
+
+Any source type is supported, but how to pin a source depends on the type.

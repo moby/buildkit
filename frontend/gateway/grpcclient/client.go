@@ -382,6 +382,7 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (res *
 		AllowResultReturn:   true,
 		AllowResultArrayRef: true,
 		CacheImports:        cacheImports,
+		SourcePolicies:      creq.SourcePolicies,
 	}
 
 	// backwards compatibility with inline return

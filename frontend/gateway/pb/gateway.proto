@@ -8,6 +8,7 @@ import "github.com/moby/buildkit/solver/pb/ops.proto";
 import "github.com/moby/buildkit/api/types/worker.proto";
 import "github.com/moby/buildkit/util/apicaps/pb/caps.proto";
 import "github.com/tonistiigi/fsutil/types/stat.proto";
+import "github.com/moby/buildkit/sourcepolicy/pb/policy.proto";
 
 
 option (gogoproto.sizer_all) = true;
@@ -149,6 +150,8 @@ message SolveRequest {
 	map<string, pb.Definition> FrontendInputs = 13;
 
 	bool Evaluate = 14;
+
+	repeated moby.buildkit.v1.sourcepolicy.Policy SourcePolicies = 15;
 }
 
 // CacheOptionsEntry corresponds to the control.CacheOptionsEntry

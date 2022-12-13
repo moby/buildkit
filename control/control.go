@@ -412,7 +412,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	}, llbsolver.ExporterRequest{
 		Exporter:       expi,
 		CacheExporters: cacheExporters,
-	}, req.Entitlements, procs, req.Internal)
+	}, req.Entitlements, procs, req.Internal, req.SourcePolicy)
 	if err != nil {
 		return nil, err
 	}
