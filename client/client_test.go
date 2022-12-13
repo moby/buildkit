@@ -1773,11 +1773,11 @@ func testOCILayoutSource(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	// reference the OCI Layout in a build
-	// note that the key does not need to be the directory name, just something unique.
-	// since we are doing just one build with one remote here, we can give it any old ID,
-	// even something really imaginative, like "one"
-	csID := "one"
-	st = llb.OCILayout(csID, digest)
+	// note that the key does not need to be the directory name, just something
+	// unique. since we are doing just one build with one remote here, we can
+	// give it any ID
+	csID := "my-content-store"
+	st = llb.OCILayout(fmt.Sprintf("not/real@%s", digest), llb.OCIStore("", csID))
 
 	def, err = st.Marshal(context.TODO())
 	require.NoError(t, err)
@@ -1902,12 +1902,7 @@ func testOCILayoutPlatformSource(t *testing.T, sb integration.Sandbox) {
 
 	store, err := local.NewStore(dir)
 	require.NoError(t, err)
-
-	// reference the OCI Layout in a build
-	// note that the key does not need to be the directory name, just something unique.
-	// since we are doing just one build with one remote here, we can give it any old ID,
-	// even something really imaginative, like "one"
-	csID := "one"
+	csID := "my-content-store"
 
 	destDir := t.TempDir()
 
@@ -1917,7 +1912,7 @@ func testOCILayoutPlatformSource(t *testing.T, sb integration.Sandbox) {
 			Platforms: make([]exptypes.Platform, len(platformsToTest)),
 		}
 		for i, platform := range platformsToTest {
-			st := llb.OCILayout(csID, digest)
+			st := llb.OCILayout(fmt.Sprintf("not/real@%s", digest), llb.OCIStore("", csID))
 
 			def, err := st.Marshal(ctx, llb.Platform(platforms.MustParse(platform)))
 			if err != nil {

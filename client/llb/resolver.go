@@ -42,9 +42,16 @@ const (
 )
 
 type ResolveImageConfigOpt struct {
-	Platform     *ocispecs.Platform
-	ResolveMode  string
-	LogName      string
-	ResolverType // default is ResolverTypeRegistry
-	SessionID    string
+	ResolverType
+
+	Platform    *ocispecs.Platform
+	ResolveMode string
+	LogName     string
+
+	Store ResolveImageConfigOptStore
+}
+
+type ResolveImageConfigOptStore struct {
+	SessionID string
+	StoreID   string
 }
