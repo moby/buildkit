@@ -1,4 +1,8 @@
 *.coverprofile
+coverage.txt
 node_modules/
 vendor
 .idea
+/.local/
+/internal/
+/site/
