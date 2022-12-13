@@ -50,7 +50,8 @@ message Result {
 		RefMap refs = 4;
 	}
 	map<string, bytes> metadata = 10;
-	map<string, Attestations> attestations = 11;
+	// 11 was used during development and is reserved for old attestation format
+	map<string, Attestations> attestations = 12;
 }
 
 message RefMapDeprecated {
