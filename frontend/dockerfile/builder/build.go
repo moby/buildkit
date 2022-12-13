@@ -993,11 +993,17 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 			return nil, nil, errors.Wrap(err, "could not parse oci-layout image config")
 		}
 
+		ociOpt := []llb.OCILayoutOption{
+			llb.WithCustomName("[context " + name + "] OCI load from client"),
+			llb.OCISessionID(c.BuildOpts().SessionID),
+		}
+		if platform != nil {
+			ociOpt = append(ociOpt, llb.Platform(*platform))
+		}
 		st := llb.OCILayout(
 			named.Name(),
 			digested.Digest(),
-			llb.WithCustomName("[context "+name+"] OCI load from client"),
-			llb.OCISessionID(c.BuildOpts().SessionID),
+			ociOpt...,
 		)
 		st, err = st.WithImageConfig(data)
 		if err != nil {
