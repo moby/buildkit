@@ -145,6 +145,11 @@ ARG TARGETPLATFORM
 ENV CGO_ENABLED=1 BUILDTAGS=no_btrfs GO111MODULE=off
 RUN xx-apk add musl-dev gcc && xx-go --wrap
 
+FROM gobuild-base AS gotestsum
+RUN --mount=target=/root/.cache,type=cache \
+  --mount=target=/go/pkg/mod,type=cache \
+  go install gotest.tools/gotestsum@latest
+
 FROM containerd-base AS containerd
 ARG CONTAINERD_VERSION
 RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target=/root/.cache,type=cache \
@@ -245,6 +250,7 @@ COPY --link --from=registry /bin/registry /usr/bin/
 COPY --link --from=runc /usr/bin/runc /usr/bin/
 COPY --link --from=containerd /out/containerd* /usr/bin/
 COPY --link --from=cni-plugins /opt/cni/bin/bridge /opt/cni/bin/host-local /opt/cni/bin/loopback /opt/cni/bin/firewall /opt/cni/bin/dnsname /opt/cni/bin/
+COPY --link --from=gotestsum /go/bin/gotestsum /usr/bin/
 COPY --link hack/fixtures/cni.json /etc/buildkit/cni.json
 COPY --link hack/fixtures/dns-cni.conflist /etc/buildkit/dns-cni.conflist
 COPY --link --from=binaries / /usr/bin/
