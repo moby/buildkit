@@ -7402,7 +7402,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 					Type:      ExporterLocal,
 					OutputDir: dir,
 					Attrs: map[string]string{
-						"attestation-prefix": "test.",
+						"attestations-prefix": "test.",
 					},
 				},
 			},
@@ -7454,7 +7454,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 					Type:   ExporterTar,
 					Output: fixedWriteCloser(outW),
 					Attrs: map[string]string{
-						"attestation-prefix": "test.",
+						"attestations-prefix": "test.",
 					},
 				},
 			},

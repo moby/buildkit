@@ -21,8 +21,6 @@ import (
 )
 
 const (
-	attestationPrefixKey = "attestation-prefix"
-
 	// preferNondistLayersKey is an exporter option which can be used to mark a layer as non-distributable if the layer reference was
 	// already found to use a non-distributable media type.
 	// When this option is not set, the exporter will change the media type of the layer to a distributable one.
@@ -45,12 +43,10 @@ func New(opt Opt) (exporter.Exporter, error) {
 
 func (e *localExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
 	li := &localExporterInstance{localExporter: e}
-
-	tm, opt, err := epoch.ParseExporterAttrs(opt)
+	opt, err := li.opts.Load(opt)
 	if err != nil {
 		return nil, err
 	}
-	li.opts.Epoch = tm
 
 	for k, v := range opt {
 		switch k {
@@ -60,8 +56,6 @@ func (e *localExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 				return nil, errors.Wrapf(err, "non-bool value for %s: %s", preferNondistLayersKey, v)
 			}
 			li.preferNonDist = b
-		case attestationPrefixKey:
-			li.opts.AttestationPrefix = v
 		}
 	}
 

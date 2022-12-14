@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/attestation"
+	"github.com/moby/buildkit/exporter/util/epoch"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/result"
@@ -25,9 +26,34 @@ import (
 	fstypes "github.com/tonistiigi/fsutil/types"
 )
 
+const (
+	keyAttestationsPrefix = "attestations-prefix"
+)
+
 type CreateFSOpts struct {
 	Epoch             *time.Time
 	AttestationPrefix string
+}
+
+func (c *CreateFSOpts) Load(opt map[string]string) (map[string]string, error) {
+	rest := make(map[string]string)
+
+	var err error
+	c.Epoch, opt, err = epoch.ParseExporterAttrs(opt)
+	if err != nil {
+		return nil, err
+	}
+
+	for k, v := range opt {
+		switch k {
+		case keyAttestationsPrefix:
+			c.AttestationPrefix = v
+		default:
+			rest[k] = v
+		}
+	}
+
+	return rest, nil
 }
 
 func CreateFS(ctx context.Context, sessionID string, k string, ref cache.ImmutableRef, attestations []exporter.Attestation, defaultTime time.Time, opt CreateFSOpts) (fsutil.FS, func() error, error) {

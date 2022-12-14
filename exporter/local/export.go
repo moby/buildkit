@@ -20,10 +20,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-const (
-	keyAttestationPrefix = "attestation-prefix"
-)
-
 type Opt struct {
 	SessionManager *session.Manager
 }
@@ -39,24 +35,14 @@ func New(opt Opt) (exporter.Exporter, error) {
 }
 
 func (e *localExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
-	tm, _, err := epoch.ParseExporterAttrs(opt)
+	i := &localExporterInstance{
+		localExporter: e,
+	}
+	opt, err := i.opts.Load(opt)
 	if err != nil {
 		return nil, err
 	}
-
-	i := &localExporterInstance{
-		localExporter: e,
-		opts: CreateFSOpts{
-			Epoch: tm,
-		},
-	}
-
-	for k, v := range opt {
-		switch k {
-		case keyAttestationPrefix:
-			i.opts.AttestationPrefix = v
-		}
-	}
+	_ = opt
 
 	return i, nil
 }
