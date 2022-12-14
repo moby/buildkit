@@ -117,6 +117,7 @@ func unbundle(ctx context.Context, root string, bundle exporter.Attestation) ([]
 		}
 		unbundled = append(unbundled, exporter.Attestation{
 			Kind:        gatewaypb.AttestationKindInToto,
+			Metadata:    bundle.Metadata,
 			Path:        path.Join(bundle.Path, entry.Name()),
 			ContentFunc: func() ([]byte, error) { return predicate, nil },
 			InToto: result.InTotoAttestation{
