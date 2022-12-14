@@ -129,7 +129,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		ex = opt.Exports[0]
 	}
 
-	indicesToUpdate := []string{}
+	storesToUpdate := []string{}
 
 	if !opt.SessionPreInitialized {
 		if len(syncedDirs) > 0 {
@@ -194,7 +194,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 					return nil, err
 				}
 				contentStores["export"] = cs
-				indicesToUpdate = append(indicesToUpdate, filepath.Join(ex.OutputDir, "index.json"))
+				storesToUpdate = append(storesToUpdate, ex.OutputDir)
 			default:
 				s.Allow(filesync.NewFSSyncTargetDir(ex.OutputDir))
 			}
@@ -327,8 +327,9 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		if err = json.Unmarshal([]byte(manifestDescJSON), &manifestDesc); err != nil {
 			return nil, err
 		}
-		for indexJSONPath, tag := range cacheOpt.indicesToUpdate {
-			if err = ociindex.PutDescToIndexJSONFileLocked(indexJSONPath, manifestDesc, tag); err != nil {
+		for storePath, tag := range cacheOpt.storesToUpdate {
+			idx := ociindex.NewStoreIndex(storePath)
+			if err := idx.Put(tag, manifestDesc); err != nil {
 				return nil, err
 			}
 		}
@@ -342,12 +343,13 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		if err = json.Unmarshal([]byte(manifestDescDt), &manifestDesc); err != nil {
 			return nil, err
 		}
-		for _, indexJSONPath := range indicesToUpdate {
+		for _, storePath := range storesToUpdate {
 			tag := "latest"
 			if t, ok := res.ExporterResponse["image.name"]; ok {
 				tag = t
 			}
-			if err = ociindex.PutDescToIndexJSONFileLocked(indexJSONPath, manifestDesc, tag); err != nil {
+			idx := ociindex.NewStoreIndex(storePath)
+			if err := idx.Put(tag, manifestDesc); err != nil {
 				return nil, err
 			}
 		}
@@ -406,10 +408,10 @@ func defaultSessionName() string {
 }
 
 type cacheOptions struct {
-	options         controlapi.CacheOptions
-	contentStores   map[string]content.Store // key: ID of content store ("local:" + csDir)
-	indicesToUpdate map[string]string        // key: index.JSON file name, value: tag
-	frontendAttrs   map[string]string
+	options        controlapi.CacheOptions
+	contentStores  map[string]content.Store // key: ID of content store ("local:" + csDir)
+	storesToUpdate map[string]string        // key: path to content store, value: tag
+	frontendAttrs  map[string]string
 }
 
 func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cacheOptions, error) {
@@ -418,7 +420,7 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 		cacheImports []*controlapi.CacheOptionsEntry
 	)
 	contentStores := make(map[string]content.Store)
-	indicesToUpdate := make(map[string]string) // key: index.JSON file name, value: tag
+	storesToUpdate := make(map[string]string)
 	frontendAttrs := make(map[string]string)
 	for _, ex := range opt.CacheExports {
 		if ex.Type == "local" {
@@ -440,8 +442,7 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 				tag = t
 			}
 			// TODO(AkihiroSuda): support custom index JSON path and tag
-			indexJSONPath := filepath.Join(csDir, "index.json")
-			indicesToUpdate[indexJSONPath] = tag
+			storesToUpdate[csDir] = tag
 		}
 		if ex.Type == "registry" {
 			regRef := ex.Attrs["ref"]
@@ -465,26 +466,25 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 				bklog.G(ctx).Warning("local cache import at " + csDir + " not found due to err: " + err.Error())
 				continue
 			}
-			// if digest is not specified, load from "latest" tag
+			// if digest is not specified, attempt to load from tag
 			if im.Attrs["digest"] == "" {
-				idx, err := ociindex.ReadIndexJSONFileLocked(filepath.Join(csDir, "index.json"))
+				tag := "latest"
+				if t, ok := im.Attrs["tag"]; ok {
+					tag = t
+				}
+
+				idx := ociindex.NewStoreIndex(csDir)
+				desc, err := idx.Get(tag)
 				if err != nil {
 					bklog.G(ctx).Warning("local cache import at " + csDir + " not found due to err: " + err.Error())
 					continue
 				}
-				for _, m := range idx.Manifests {
-					tag := "latest"
-					if t, ok := im.Attrs["tag"]; ok {
-						tag = t
-					}
-					if m.Annotations[ocispecs.AnnotationRefName] == tag {
-						im.Attrs["digest"] = string(m.Digest)
-						break
-					}
+				if desc != nil {
+					im.Attrs["digest"] = desc.Digest.String()
 				}
-				if im.Attrs["digest"] == "" {
-					return nil, errors.New("local cache importer requires either explicit digest, \"latest\" tag or custom tag on index.json")
-				}
+			}
+			if im.Attrs["digest"] == "" {
+				return nil, errors.New("local cache importer requires either explicit digest, \"latest\" tag or custom tag on index.json")
 			}
 			contentStores["local:"+csDir] = cs
 		}
@@ -513,9 +513,9 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 			Exports: cacheExports,
 			Imports: cacheImports,
 		},
-		contentStores:   contentStores,
-		indicesToUpdate: indicesToUpdate,
-		frontendAttrs:   frontendAttrs,
+		contentStores:  contentStores,
+		storesToUpdate: storesToUpdate,
+		frontendAttrs:  frontendAttrs,
 	}
 	return &res, nil
 }
