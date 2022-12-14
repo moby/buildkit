@@ -96,6 +96,13 @@ func toBuildSteps(def *pb.Definition) ([]BuildStep, map[digest.Digest]int, error
 		if err := (&op).Unmarshal(dt); err != nil {
 			return nil, nil, errors.Wrap(err, "failed to parse llb proto op")
 		}
+		if src := op.GetSource(); src != nil {
+			for k := range src.Attrs {
+				if k == "local.session" || k == "local.unique" {
+					delete(src.Attrs, k)
+				}
+			}
+		}
 		dgst = digest.FromBytes(dt)
 		ops[dgst] = &op
 		defs[dgst] = dt
