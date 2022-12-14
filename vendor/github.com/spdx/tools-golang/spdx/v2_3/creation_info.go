@@ -22,5 +22,5 @@ type CreationInfo struct {
 
 	// 6.10: Creator Comment
 	// Cardinality: optional, one
-	CreatorComment string `json:"comment"`
+	CreatorComment string `json:"comment,omitempty"`
 }

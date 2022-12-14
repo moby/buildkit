@@ -152,3 +152,5 @@ require (
 	golang.org/x/text v0.5.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/spdx/tools-golang => github.com/jedevc/spdx-tools-golang v0.0.0-20221205121515-6fe9d226281a

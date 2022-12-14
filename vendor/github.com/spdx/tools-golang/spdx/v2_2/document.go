@@ -53,13 +53,13 @@ type Document struct {
 	DocumentComment string `json:"comment,omitempty"`
 
 	CreationInfo  *CreationInfo   `json:"creationInfo"`
-	Packages      []*Package      `json:"packages"`
-	Files         []*File         `json:"files"`
-	OtherLicenses []*OtherLicense `json:"hasExtractedLicensingInfos"`
-	Relationships []*Relationship `json:"relationships"`
-	Annotations   []*Annotation   `json:"annotations"`
-	Snippets      []Snippet       `json:"snippets"`
+	Packages      []*Package      `json:"packages,omitempty"`
+	Files         []*File         `json:"files,omitempty"`
+	OtherLicenses []*OtherLicense `json:"hasExtractedLicensingInfos,omitempty"`
+	Relationships []*Relationship `json:"relationships,omitempty"`
+	Annotations   []*Annotation   `json:"annotations,omitempty"`
+	Snippets      []Snippet       `json:"snippets,omitempty"`
 
 	// DEPRECATED in version 2.0 of spec
-	Reviews []*Review
+	Reviews []*Review `json:"-"`
 }
