@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -72,9 +71,8 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 	hasAttestations := false
 	for _, p := range ps.Platforms {
 		if atts, ok := inp.Attestations[p.ID]; ok {
-			atts = attestation.Filter(atts, nil, map[string][]byte{
-				result.AttestationInlineOnlyKey: []byte(strconv.FormatBool(true)),
-			})
+			_, atts = attestation.FilterInline(atts)
+			atts, _ = attestation.FilterReasons(atts, opts.AttestationsFilter)
 			if len(atts) > 0 {
 				hasAttestations = true
 				break
@@ -239,6 +237,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i)] = desc.Digest.String()
 
 		if attestations, ok := inp.Attestations[p.ID]; ok {
+			attestations, _ = attestation.FilterReasons(attestations, opts.AttestationsFilter)
 			attestations, err := attestation.Unbundle(ctx, session.NewGroup(sessionID), attestations)
 			if err != nil {
 				return nil, err

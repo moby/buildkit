@@ -2,6 +2,7 @@ package containerimage
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
 	cacheconfig "github.com/moby/buildkit/cache/config"
@@ -28,14 +29,15 @@ const (
 )
 
 type ImageCommitOpts struct {
-	ImageName      string
-	RefCfg         cacheconfig.RefConfig
-	OCITypes       bool
-	BuildInfo      bool
-	BuildInfoAttrs bool
-	Annotations    AnnotationsGroup
-	Epoch          *time.Time
-	Attestations   bool
+	ImageName          string
+	RefCfg             cacheconfig.RefConfig
+	OCITypes           bool
+	BuildInfo          bool
+	BuildInfoAttrs     bool
+	Annotations        AnnotationsGroup
+	Epoch              *time.Time
+	Attestations       bool
+	AttestationsFilter []string
 }
 
 func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error) {
@@ -76,7 +78,10 @@ func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error)
 		case keyBuildInfoAttrs:
 			err = parseBoolWithDefault(&c.BuildInfoAttrs, k, v, false)
 		case keyAttestations:
-			err = parseBool(&c.Attestations, k, v)
+			if parseBool(&c.Attestations, k, v) != nil {
+				c.Attestations = true
+				c.AttestationsFilter = strings.Split(v, ",")
+			}
 		case keyPreferNondistLayers:
 			err = parseBool(&c.RefCfg.PreferNonDistributable, k, v)
 		default:

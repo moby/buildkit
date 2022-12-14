@@ -1,45 +1,49 @@
 package attestation
 
 import (
-	"bytes"
+	"strconv"
 
 	"github.com/moby/buildkit/exporter"
+	"github.com/moby/buildkit/solver/result"
 )
 
-func Filter(attestations []exporter.Attestation, include map[string][]byte, exclude map[string][]byte) []exporter.Attestation {
-	if len(include) == 0 && len(exclude) == 0 {
-		return attestations
-	}
-
-	result := []exporter.Attestation{}
+func FilterInline(attestations []exporter.Attestation) (matching []exporter.Attestation, nonMatching []exporter.Attestation) {
 	for _, att := range attestations {
-		meta := att.Metadata
-		if meta == nil {
-			meta = map[string][]byte{}
-		}
-
-		match := true
-		for k, v := range include {
-			if !bytes.Equal(meta[k], v) {
-				match = false
-				break
+		v, ok := att.Metadata[result.AttestationInlineOnlyKey]
+		if ok {
+			b, err := strconv.ParseBool(string(v))
+			if b && err == nil {
+				matching = append(matching, att)
+				continue
 			}
 		}
-		if !match {
-			continue
-		}
-
-		for k, v := range exclude {
-			if bytes.Equal(meta[k], v) {
-				match = false
-				break
-			}
-		}
-		if !match {
-			continue
-		}
-
-		result = append(result, att)
+		nonMatching = append(nonMatching, att)
 	}
-	return result
+	return matching, nonMatching
+}
+
+func FilterReasons(attestations []exporter.Attestation, reasons []string) (matching []exporter.Attestation, nonMatching []exporter.Attestation) {
+	if reasons == nil {
+		// don't filter if no filter provided
+		return attestations, nil
+	}
+
+	for _, att := range attestations {
+		target, ok := att.Metadata[result.AttestationReasonKey]
+		if ok {
+			matched := false
+			for _, reason := range reasons {
+				if string(target) == reason {
+					matched = true
+					break
+				}
+			}
+			if matched {
+				matching = append(matching, att)
+				continue
+			}
+		}
+		nonMatching = append(nonMatching, att)
+	}
+	return matching, nonMatching
 }
