@@ -241,6 +241,7 @@ type Job struct {
 
 	progressCloser func()
 	SessionID      string
+	uniqueID       string // unique ID is used for provenance. We use a different field that client can't control
 }
 
 type SolverOpt struct {
@@ -451,6 +452,7 @@ func (jl *Solver) NewJob(id string) (*Job, error) {
 		span:           span,
 		id:             id,
 		startedTime:    time.Now(),
+		uniqueID:       identity.NewID(),
 	}
 	jl.jobs[id] = j
 
@@ -598,6 +600,10 @@ func (j *Job) RegisterCompleteTime() time.Time {
 		j.completedTime = time.Now()
 	}
 	return j.completedTime
+}
+
+func (j *Job) UniqueID() string {
+	return j.uniqueID
 }
 
 func (j *Job) InContext(ctx context.Context, f func(context.Context, session.Group) error) error {
