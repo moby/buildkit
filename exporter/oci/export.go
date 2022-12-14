@@ -67,8 +67,9 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 			RefCfg: cacheconfig.RefConfig{
 				Compression: compression.New(compression.Default),
 			},
-			BuildInfo: true,
-			OCITypes:  e.opt.Variant == VariantOCI,
+			BuildInfo:    true,
+			OCITypes:     e.opt.Variant == VariantOCI,
+			Attestations: true,
 		},
 	}
 

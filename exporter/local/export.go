@@ -37,6 +37,9 @@ func New(opt Opt) (exporter.Exporter, error) {
 func (e *localExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
 	i := &localExporterInstance{
 		localExporter: e,
+		opts: CreateFSOpts{
+			Attestations: true,
+		},
 	}
 	opt, err := i.opts.Load(opt)
 	if err != nil {

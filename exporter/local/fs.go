@@ -27,11 +27,13 @@ import (
 )
 
 const (
+	keyAttestations       = "attestations"
 	keyAttestationsPrefix = "attestations-prefix"
 )
 
 type CreateFSOpts struct {
 	Epoch             *time.Time
+	Attestations      bool
 	AttestationPrefix string
 }
 
@@ -46,6 +48,12 @@ func (c *CreateFSOpts) Load(opt map[string]string) (map[string]string, error) {
 
 	for k, v := range opt {
 		switch k {
+		case keyAttestations:
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-bool value for %s: %s", keyAttestations, v)
+			}
+			c.Attestations = b
 		case keyAttestationsPrefix:
 			c.AttestationPrefix = v
 		default:
@@ -118,11 +126,12 @@ func CreateFS(ctx context.Context, sessionID string, k string, ref cache.Immutab
 	attestations = attestation.Filter(attestations, nil, map[string][]byte{
 		result.AttestationInlineOnlyKey: []byte(strconv.FormatBool(true)),
 	})
-	attestations, err = attestation.Unbundle(ctx, session.NewGroup(sessionID), attestations)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(attestations) > 0 {
+	if opt.Attestations && len(attestations) > 0 {
+		attestations, err = attestation.Unbundle(ctx, session.NewGroup(sessionID), attestations)
+		if err != nil {
+			return nil, nil, err
+		}
+
 		subjects := []intoto.Subject{}
 		err = outputFS.Walk(ctx, func(path string, info fs.FileInfo, err error) error {
 			if err != nil {
