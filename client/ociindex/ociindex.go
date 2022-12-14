@@ -119,6 +119,18 @@ func (s StoreIndex) Get(tag string) (*ocispecs.Descriptor, error) {
 	return nil, nil
 }
 
+func (s StoreIndex) GetSingle() (*ocispecs.Descriptor, error) {
+	idx, err := s.Read()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(idx.Manifests) == 1 {
+		return &idx.Manifests[0], nil
+	}
+	return nil, nil
+}
+
 // insertDesc puts desc to index with tag.
 // Existing manifests with the same tag will be removed from the index.
 func insertDesc(index *ocispecs.Index, desc ocispecs.Descriptor, tag string) error {
