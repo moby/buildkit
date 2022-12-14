@@ -69,19 +69,20 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		return nil, err
 	}
 
-	requiredAttestations := false
+	hasAttestations := false
 	for _, p := range ps.Platforms {
 		if atts, ok := inp.Attestations[p.ID]; ok {
 			atts = attestation.Filter(atts, nil, map[string][]byte{
 				result.AttestationInlineOnlyKey: []byte(strconv.FormatBool(true)),
 			})
 			if len(atts) > 0 {
-				requiredAttestations = true
+				hasAttestations = true
 				break
 			}
 		}
 	}
-	if requiredAttestations {
+	hasAttestations = opts.Attestations && hasAttestations
+	if hasAttestations {
 		isMap = true
 	}
 
@@ -108,7 +109,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		if len(ps.Platforms) > 1 {
 			return nil, errors.Errorf("cannot export multiple platforms without multi-platform enabled")
 		}
-		if requiredAttestations {
+		if hasAttestations {
 			return nil, errors.Errorf("cannot export attestations without multi-platform enabled")
 		}
 
@@ -159,7 +160,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		return mfstDesc, nil
 	}
 
-	if len(inp.Attestations) > 0 {
+	if hasAttestations {
 		opts.EnableOCITypes("attestations")
 	}
 

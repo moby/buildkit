@@ -19,6 +19,7 @@ const (
 	keyOCITypes         = "oci-mediatypes"
 	keyBuildInfo        = "buildinfo"
 	keyBuildInfoAttrs   = "buildinfo-attrs"
+	keyAttestations     = "attestations"
 
 	// preferNondistLayersKey is an exporter option which can be used to mark a layer as non-distributable if the layer reference was
 	// already found to use a non-distributable media type.
@@ -34,6 +35,7 @@ type ImageCommitOpts struct {
 	BuildInfoAttrs bool
 	Annotations    AnnotationsGroup
 	Epoch          *time.Time
+	Attestations   bool
 }
 
 func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error) {
@@ -73,6 +75,8 @@ func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error)
 			err = parseBoolWithDefault(&c.BuildInfo, k, v, true)
 		case keyBuildInfoAttrs:
 			err = parseBoolWithDefault(&c.BuildInfoAttrs, k, v, false)
+		case keyAttestations:
+			err = parseBool(&c.Attestations, k, v)
 		case keyPreferNondistLayers:
 			err = parseBool(&c.RefCfg.PreferNonDistributable, k, v)
 		default:
