@@ -31,8 +31,10 @@ else
 fi
 
 buildxCmd() {
-  set -x
-  BUILDX_NO_DEFAULT_LOAD=true BUILDX_BUILDER="${builderName:-${BUILDX_BUILDER}}" $buildxBin "$@" $progressFlag
+  (
+    set -x
+    BUILDX_NO_DEFAULT_LOAD=true BUILDX_BUILDER="${builderName:-${BUILDX_BUILDER}}" $buildxBin "$@" $progressFlag
+  )
 }
 
 buildAttestFlags() {
