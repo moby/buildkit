@@ -607,10 +607,12 @@ The cache for `RUN` instructions can be invalidated by [`ADD`](#add) and [`COPY`
 >
 > Added in [`docker/dockerfile:1.2`](#syntax)
 
-`RUN --mount` allows you to create mounts that process running as part of the
-build can access. This can be used to bind files from other part of the build
-without copying, accessing build secrets or ssh-agent sockets, or creating cache
-locations to speed up your build.
+`RUN --mount` allows you to create filesystem mounts that the build can access.
+This can be used to:
+
+- Create bind mount to the host filesystem or other build stages
+- Access build secrets or ssh-agent sockets
+- Use a persistent package management cache to speed up your build
 
 Syntax: `--mount=[type=<TYPE>][,option=<value>[,option=<value>]...]`
 
@@ -625,8 +627,8 @@ Syntax: `--mount=[type=<TYPE>][,option=<value>[,option=<value>]...]`
 
 ### RUN --mount=type=bind
 
-This mount type allows binding directories (read-only) in the context or in an
-image to the build container.
+This mount type allows binding files or directories to the build container. A
+bind mount is read-only by default.
 
 | Option               | Description                                                                          |
 |----------------------|--------------------------------------------------------------------------------------|
