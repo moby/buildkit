@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/docker/docker/pkg/idtools"
@@ -32,9 +33,10 @@ const (
 )
 
 type CreateFSOpts struct {
-	Epoch             *time.Time
-	Attestations      bool
-	AttestationPrefix string
+	Epoch              *time.Time
+	Attestations       bool
+	AttestationsFilter []string
+	AttestationPrefix  string
 }
 
 func (c *CreateFSOpts) Load(opt map[string]string) (map[string]string, error) {
@@ -50,10 +52,12 @@ func (c *CreateFSOpts) Load(opt map[string]string) (map[string]string, error) {
 		switch k {
 		case keyAttestations:
 			b, err := strconv.ParseBool(v)
-			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value for %s: %s", keyAttestations, v)
+			if err == nil {
+				c.Attestations = b
+			} else {
+				c.Attestations = true
+				c.AttestationsFilter = strings.Split(v, ",")
 			}
-			c.Attestations = b
 		case keyAttestationsPrefix:
 			c.AttestationPrefix = v
 		default:
@@ -123,9 +127,8 @@ func CreateFS(ctx context.Context, sessionID string, k string, ref cache.Immutab
 	}
 
 	outputFS := fsutil.NewFS(src, walkOpt)
-	attestations = attestation.Filter(attestations, nil, map[string][]byte{
-		result.AttestationInlineOnlyKey: []byte(strconv.FormatBool(true)),
-	})
+	_, attestations = attestation.FilterInline(attestations)
+	attestations, _ = attestation.FilterReasons(attestations, opt.AttestationsFilter)
 	if opt.Attestations && len(attestations) > 0 {
 		attestations, err = attestation.Unbundle(ctx, session.NewGroup(sessionID), attestations)
 		if err != nil {
