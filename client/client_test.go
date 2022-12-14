@@ -7321,8 +7321,9 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 
 		for _, p := range ps {
 			var attest intoto.Statement
-			dt := m[path.Join(strings.ReplaceAll(platforms.Format(p), "/", "_"), "test.attestation.json")].Data
-			require.NoError(t, json.Unmarshal(dt, &attest))
+			item := m[path.Join(strings.ReplaceAll(platforms.Format(p), "/", "_"), "test.attestation.json")]
+			require.NotNil(t, item)
+			require.NoError(t, json.Unmarshal(item.Data, &attest))
 
 			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 			require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
@@ -7334,8 +7335,9 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 			}}, attest.Subject)
 
 			var attest2 intoto.Statement
-			dt = m[path.Join(strings.ReplaceAll(platforms.Format(p), "/", "_"), "test.attestation2.json")].Data
-			require.NoError(t, json.Unmarshal(dt, &attest2))
+			item = m[path.Join(strings.ReplaceAll(platforms.Format(p), "/", "_"), "test.attestation2.json")]
+			require.NotNil(t, item)
+			require.NoError(t, json.Unmarshal(item.Data, &attest2))
 
 			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest2.Type)
 			require.Equal(t, "https://example.com/attestations2/v1.0", attest2.PredicateType)
