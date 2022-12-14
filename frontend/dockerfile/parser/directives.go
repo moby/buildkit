@@ -100,7 +100,7 @@ func (d *DirectiveParser) ParseAll(data []byte) ([]*Directive, error) {
 	return directives, nil
 }
 
-// DetectSyntaxFromDockerfile returns the syntax of provided input.
+// DetectSyntax returns the syntax of provided input.
 //
 // The traditional dockerfile directives '# syntax = ...' are used by default,
 // however, the function will also fallback to c-style directives '// syntax = ...'
