@@ -103,14 +103,9 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	if ds.scanContext {
 		sbom.Extras["context"] = ds.opt.buildContext
 	}
-	for dsi := ds; dsi != nil; dsi = dsi.base {
+	for _, dsi := range findReachable(ds) {
 		if ds != dsi && dsi.scanStage {
 			sbom.Extras[dsi.stageName] = dsi.state
-		}
-		for dsi2 := range dsi.deps {
-			if dsi2.scanStage {
-				sbom.Extras[dsi2.stageName] = dsi2.state
-			}
 		}
 	}
 
@@ -1534,6 +1529,20 @@ func isReachable(from, to *dispatchState) (ret bool) {
 		}
 	}
 	return false
+}
+
+func findReachable(from *dispatchState) (ret []*dispatchState) {
+	if from == nil {
+		return nil
+	}
+	ret = append(ret, from)
+	if from.base != nil {
+		ret = append(ret, findReachable(from.base)...)
+	}
+	for d := range from.deps {
+		ret = append(ret, findReachable(d)...)
+	}
+	return ret
 }
 
 func hasCircularDependency(states []*dispatchState) (bool, *dispatchState) {
