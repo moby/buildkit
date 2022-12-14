@@ -127,7 +127,6 @@ func CreateFS(ctx context.Context, sessionID string, k string, ref cache.Immutab
 	}
 
 	outputFS := fsutil.NewFS(src, walkOpt)
-	_, attestations = attestation.FilterInline(attestations)
 	attestations, _ = attestation.FilterReasons(attestations, opt.AttestationsFilter)
 	if opt.Attestations && len(attestations) > 0 {
 		attestations, err = attestation.Unbundle(ctx, session.NewGroup(sessionID), attestations)

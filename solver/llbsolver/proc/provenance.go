@@ -3,7 +3,6 @@ package proc
 import (
 	"context"
 	"encoding/json"
-	"strconv"
 
 	slsa02 "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
@@ -19,11 +18,6 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 		ps, err := exptypes.ParsePlatforms(res.Metadata)
 		if err != nil {
 			return nil, err
-		}
-
-		var inlineOnly bool
-		if v, err := strconv.ParseBool(attrs["inline-only"]); v && err == nil {
-			inlineOnly = true
 		}
 
 		for _, p := range ps.Platforms {
@@ -45,8 +39,7 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 			res.AddAttestation(p.ID, llbsolver.Attestation{
 				Kind: gatewaypb.AttestationKindInToto,
 				Metadata: map[string][]byte{
-					result.AttestationReasonKey:     result.AttestationReasonProvenance,
-					result.AttestationInlineOnlyKey: []byte(strconv.FormatBool(inlineOnly)),
+					result.AttestationReasonKey: result.AttestationReasonProvenance,
 				},
 				InToto: result.InTotoAttestation{
 					PredicateType: slsa02.PredicateSLSAProvenance,

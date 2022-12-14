@@ -8,8 +8,7 @@ import (
 )
 
 const (
-	AttestationReasonKey     = "reason"
-	AttestationInlineOnlyKey = "inline-only"
+	AttestationReasonKey = "reason"
 )
 
 var (

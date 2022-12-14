@@ -71,7 +71,6 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 	hasAttestations := false
 	for _, p := range ps.Platforms {
 		if atts, ok := inp.Attestations[p.ID]; ok {
-			_, atts = attestation.FilterInline(atts)
 			atts, _ = attestation.FilterReasons(atts, opts.AttestationsFilter)
 			if len(atts) > 0 {
 				hasAttestations = true
