@@ -16,6 +16,9 @@ import (
 )
 
 const (
+	CoreSBOMName    = "sbom"
+	ExtraSBOMPrefix = CoreSBOMName + "-"
+
 	srcDir = "/run/src/"
 	outDir = "/run/out/"
 )
@@ -56,7 +59,7 @@ func CreateSBOMScanner(ctx context.Context, resolver llb.ImageMetaResolver, scan
 		var env []string
 		env = append(env, cfg.Config.Env...)
 		env = append(env, "BUILDKIT_SCAN_DESTINATION="+outDir)
-		env = append(env, "BUILDKIT_SCAN_SOURCE="+path.Join(srcDir, "core"))
+		env = append(env, "BUILDKIT_SCAN_SOURCE="+path.Join(srcDir, "core", CoreSBOMName))
 		if len(extras) > 0 {
 			env = append(env, "BUILDKIT_SCAN_SOURCE_EXTRAS="+path.Join(srcDir, "extras/"))
 		}
@@ -72,9 +75,9 @@ func CreateSBOMScanner(ctx context.Context, resolver llb.ImageMetaResolver, scan
 		}
 
 		runscan := llb.Image(scanner).Run(opts...)
-		runscan.AddMount(path.Join(srcDir, "core"), ref, llb.Readonly)
+		runscan.AddMount(path.Join(srcDir, "core", CoreSBOMName), ref, llb.Readonly)
 		for k, extra := range extras {
-			runscan.AddMount(path.Join(srcDir, "extras", k), extra, llb.Readonly)
+			runscan.AddMount(path.Join(srcDir, "extras", ExtraSBOMPrefix+k), extra, llb.Readonly)
 		}
 
 		stsbom := runscan.AddMount(outDir, llb.Scratch())

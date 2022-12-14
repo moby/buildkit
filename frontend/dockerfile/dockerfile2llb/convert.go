@@ -105,11 +105,11 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	}
 	for dsi := ds; dsi != nil; dsi = dsi.base {
 		if ds != dsi && dsi.scanStage {
-			sbom.Extras["stage:"+dsi.stageName] = dsi.state
+			sbom.Extras[dsi.stageName] = dsi.state
 		}
 		for dsi2 := range dsi.deps {
 			if dsi2.scanStage {
-				sbom.Extras["stage:"+dsi2.stageName] = dsi2.state
+				sbom.Extras[dsi2.stageName] = dsi2.state
 			}
 		}
 	}
