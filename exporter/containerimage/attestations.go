@@ -43,7 +43,8 @@ func supplementSBOM(ctx context.Context, s session.Group, target cache.Immutable
 
 	doc, err := decodeSPDX(content)
 	if err != nil {
-		return att, err
+		// ignore decoding error
+		return att, nil
 	}
 
 	layers, err := newFileLayerFinder(target, targetRemote)
