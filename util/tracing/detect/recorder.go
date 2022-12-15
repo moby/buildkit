@@ -43,10 +43,6 @@ func NewTraceRecorder() *TraceRecorder {
 }
 
 func (r *TraceRecorder) Record(traceID trace.TraceID) func() []tracetest.SpanStub {
-	if r.flush != nil {
-		r.flush(context.TODO())
-	}
-
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -55,6 +51,10 @@ func (r *TraceRecorder) Record(traceID trace.TraceID) func() []tracetest.SpanStu
 	var spans []tracetest.SpanStub
 	return func() []tracetest.SpanStub {
 		once.Do(func() {
+			if r.flush != nil {
+				r.flush(context.TODO())
+			}
+
 			r.mu.Lock()
 			defer r.mu.Unlock()
 
