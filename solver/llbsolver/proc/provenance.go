@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"strconv"
 
-	slsa "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
+	slsa02 "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/solver"
@@ -49,7 +49,7 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 					result.AttestationInlineOnlyKey: []byte(strconv.FormatBool(inlineOnly)),
 				},
 				InToto: result.InTotoAttestation{
-					PredicateType: slsa.PredicateSLSAProvenance,
+					PredicateType: slsa02.PredicateSLSAProvenance,
 				},
 				Path: "provenance.json",
 				ContentFunc: func() ([]byte, error) {

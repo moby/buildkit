@@ -197,9 +197,9 @@ func (k *Key) setKeyComponents(pubKeyBytes []byte, privateKeyBytes []byte, keyTy
 parseKey tries to parse a PEM []byte slice. Using the following standards
 in the given order:
 
-	* PKCS8
-	* PKCS1
-	* PKIX
+  - PKCS8
+  - PKCS1
+  - PKIX
 
 On success it returns the parsed key and nil.
 On failure it returns nil and the error ErrFailedPEMParsing
@@ -260,22 +260,22 @@ LoadKey loads the key file at specified file path into the key object.
 It automatically derives the PEM type and the key type.
 Right now the following PEM types are supported:
 
-	* PKCS1 for private keys
-	* PKCS8	for private keys
-	* PKIX for public keys
+  - PKCS1 for private keys
+  - PKCS8	for private keys
+  - PKIX for public keys
 
 The following key types are supported and will be automatically assigned to
 the key type field:
 
-	* ed25519
-	* rsa
-	* ecdsa
+  - ed25519
+  - rsa
+  - ecdsa
 
 The following schemes are supported:
 
-	* ed25519 -> ed25519
-	* rsa -> rsassa-pss-sha256
-	* ecdsa -> ecdsa-sha256-nistp256
+  - ed25519 -> ed25519
+  - rsa -> rsassa-pss-sha256
+  - ecdsa -> ecdsa-sha256-nistp256
 
 Note that, this behavior is consistent with the securesystemslib, except for
 ecdsa. We do not use the scheme string as key type in in-toto-golang.
@@ -283,11 +283,11 @@ Instead we are going with a ecdsa/ecdsa-sha2-nistp256 pair.
 
 On success it will return nil. The following errors can happen:
 
-	* path not found or not readable
-	* no PEM block in the loaded file
-	* no valid PKCS8/PKCS1 private key or PKIX public key
-	* errors while marshalling
-	* unsupported key types
+  - path not found or not readable
+  - no PEM block in the loaded file
+  - no valid PKCS8/PKCS1 private key or PKIX public key
+  - errors while marshalling
+  - unsupported key types
 */
 func (k *Key) LoadKey(path string, scheme string, KeyIDHashAlgorithms []string) error {
 	pemFile, err := os.Open(path)
@@ -450,8 +450,8 @@ with the provided key. If everything goes right GenerateSignature will return
 a for the key valid signature and err=nil. If something goes wrong it will
 return a not initialized signature and an error. Possible errors are:
 
-	* ErrNoPEMBlock
-	* ErrUnsupportedKeyType
+  - ErrNoPEMBlock
+  - ErrUnsupportedKeyType
 
 Currently supported is only one scheme per key.
 
@@ -554,9 +554,9 @@ func GenerateSignature(signable []byte, key Key) (Signature, error) {
 VerifySignature will verify unverified byte data via a passed key and signature.
 Supported key types are:
 
-	* rsa
-	* ed25519
-	* ecdsa
+  - rsa
+  - ed25519
+  - ecdsa
 
 When encountering an RSA key, VerifySignature will decode the PEM block in the key
 and will call rsa.VerifyPSS() for verifying the RSA signature.
@@ -655,7 +655,8 @@ func VerifySignature(key Key, sig Signature, unverified []byte) error {
 /*
 VerifyCertificateTrust verifies that the certificate has a chain of trust
 to a root in rootCertPool, possibly using any intermediates in
-intermediateCertPool */
+intermediateCertPool
+*/
 func VerifyCertificateTrust(cert *x509.Certificate, rootCertPool, intermediateCertPool *x509.CertPool) ([][]*x509.Certificate, error) {
 	verifyOptions := x509.VerifyOptions{
 		Roots:         rootCertPool,
