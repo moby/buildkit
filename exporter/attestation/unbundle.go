@@ -65,11 +65,10 @@ func Unbundle(ctx context.Context, s session.Group, bundled []exporter.Attestati
 	for _, atts := range unbundled {
 		joined = append(joined, atts...)
 	}
-	for _, att := range joined {
-		if err := validate(att); err != nil {
+
+	if err := Validate(joined); err != nil {
 			return nil, err
 		}
-	}
 	return joined, nil
 }
 
@@ -127,6 +126,15 @@ func unbundle(ctx context.Context, root string, bundle exporter.Attestation) ([]
 		})
 	}
 	return unbundled, nil
+}
+
+func Validate(atts []exporter.Attestation) error {
+	for _, att := range atts {
+		if err := validate(att); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func validate(att exporter.Attestation) error {
