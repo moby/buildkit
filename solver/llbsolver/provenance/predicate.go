@@ -233,6 +233,7 @@ func FilterArgs(m map[string]string) map[string]string {
 		"cgroup-parent":      {},
 		"image-resolve-mode": {},
 		"platform":           {},
+		"cache-imports":      {},
 	}
 	out := make(map[string]string)
 	for k, v := range m {

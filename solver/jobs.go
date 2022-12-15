@@ -16,6 +16,7 @@ import (
 	"github.com/moby/buildkit/util/tracing"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -241,6 +242,7 @@ type Job struct {
 
 	progressCloser func()
 	SessionID      string
+	uniqueID       string // unique ID is used for provenance. We use a different field that client can't control
 }
 
 type SolverOpt struct {
@@ -451,6 +453,7 @@ func (jl *Solver) NewJob(id string) (*Job, error) {
 		span:           span,
 		id:             id,
 		startedTime:    time.Now(),
+		uniqueID:       identity.NewID(),
 	}
 	jl.jobs[id] = j
 
@@ -600,6 +603,10 @@ func (j *Job) RegisterCompleteTime() time.Time {
 	return j.completedTime
 }
 
+func (j *Job) UniqueID() string {
+	return j.uniqueID
+}
+
 func (j *Job) InContext(ctx context.Context, f func(context.Context, session.Group) error) error {
 	return f(progress.WithProgress(ctx, j.pw), session.NewGroup(j.SessionID))
 }
@@ -682,7 +689,7 @@ func (s *sharedOp) LoadCache(ctx context.Context, rec *CacheRecord) (Result, err
 		ctx = trace.ContextWithSpan(ctx, s.st.mspan)
 	}
 	// no cache hit. start evaluating the node
-	span, ctx := tracing.StartSpan(ctx, "load cache: "+s.st.vtx.Name())
+	span, ctx := tracing.StartSpan(ctx, "load cache: "+s.st.vtx.Name(), trace.WithAttributes(attribute.String("vertex", s.st.vtx.Digest().String())))
 	notifyCompleted := notifyStarted(ctx, &s.st.clientVertex, true)
 	res, err := s.Cache().Load(withAncestorCacheOpts(ctx, s.st), rec)
 	tracing.FinishWithError(span, err)
@@ -794,7 +801,7 @@ func (s *sharedOp) CacheMap(ctx context.Context, index int) (resp *cacheMapResp,
 		ctx = withAncestorCacheOpts(ctx, s.st)
 		if len(s.st.vtx.Inputs()) == 0 {
 			// no cache hit. start evaluating the node
-			span, ctx := tracing.StartSpan(ctx, "cache request: "+s.st.vtx.Name())
+			span, ctx := tracing.StartSpan(ctx, "cache request: "+s.st.vtx.Name(), trace.WithAttributes(attribute.String("vertex", s.st.vtx.Digest().String())))
 			notifyCompleted := notifyStarted(ctx, &s.st.clientVertex, false)
 			defer func() {
 				tracing.FinishWithError(span, retErr)
@@ -873,7 +880,7 @@ func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result,
 		ctx = withAncestorCacheOpts(ctx, s.st)
 
 		// no cache hit. start evaluating the node
-		span, ctx := tracing.StartSpan(ctx, s.st.vtx.Name())
+		span, ctx := tracing.StartSpan(ctx, s.st.vtx.Name(), trace.WithAttributes(attribute.String("vertex", s.st.vtx.Digest().String())))
 		notifyCompleted := notifyStarted(ctx, &s.st.clientVertex, false)
 		defer func() {
 			tracing.FinishWithError(span, retErr)

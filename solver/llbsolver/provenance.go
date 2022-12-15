@@ -15,7 +15,6 @@ import (
 	"github.com/moby/buildkit/exporter/containerimage"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend"
-	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver/ops"
 	"github.com/moby/buildkit/solver/llbsolver/provenance"
@@ -402,11 +401,9 @@ func NewProvenanceCreator(ctx context.Context, cp *provenance.Capture, res solve
 
 	st := j.StartedTime()
 
-	buildID := identity.NewID()
-
 	pr.Metadata.BuildStartedOn = &st
 	pr.Metadata.Reproducible = reproducible
-	pr.Metadata.BuildInvocationID = buildID
+	pr.Metadata.BuildInvocationID = j.UniqueID()
 
 	pr.Builder.ID = attrs["builder-id"]
 

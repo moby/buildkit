@@ -11,7 +11,8 @@ import (
 )
 
 type BuildConfig struct {
-	Definition []BuildStep `json:"llbDefinition,omitempty"`
+	Definition    []BuildStep              `json:"llbDefinition,omitempty"`
+	DigestMapping map[digest.Digest]string `json:"digestMapping,omitempty"`
 }
 
 type BuildStep struct {
@@ -26,9 +27,18 @@ type Source struct {
 }
 
 type SourceInfo struct {
-	Filename   string      `json:"filename,omitempty"`
-	Data       []byte      `json:"data,omitempty"`
-	Definition []BuildStep `json:"llbDefinition,omitempty"`
+	Filename      string                   `json:"filename,omitempty"`
+	Data          []byte                   `json:"data,omitempty"`
+	Definition    []BuildStep              `json:"llbDefinition,omitempty"`
+	DigestMapping map[digest.Digest]string `json:"digestMapping,omitempty"`
+}
+
+func digestMap(idx map[digest.Digest]int) map[digest.Digest]string {
+	m := map[digest.Digest]string{}
+	for k, v := range idx {
+		m[k] = fmt.Sprintf("step%d", v)
+	}
+	return m
 }
 
 func AddBuildConfig(ctx context.Context, p *ProvenancePredicate, rp solver.ResultProxy) (map[digest.Digest]int, error) {
@@ -39,7 +49,8 @@ func AddBuildConfig(ctx context.Context, p *ProvenancePredicate, rp solver.Resul
 	}
 
 	bc := &BuildConfig{
-		Definition: steps,
+		Definition:    steps,
+		DigestMapping: digestMap(indexes),
 	}
 
 	p.BuildConfig = bc
@@ -47,14 +58,15 @@ func AddBuildConfig(ctx context.Context, p *ProvenancePredicate, rp solver.Resul
 	if def.Source != nil {
 		sis := make([]SourceInfo, len(def.Source.Infos))
 		for i, si := range def.Source.Infos {
-			steps, _, err := toBuildSteps(si.Definition)
+			steps, indexes, err := toBuildSteps(si.Definition)
 			if err != nil {
 				return nil, err
 			}
 			s := SourceInfo{
-				Filename:   si.Filename,
-				Data:       si.Data,
-				Definition: steps,
+				Filename:      si.Filename,
+				Data:          si.Data,
+				Definition:    steps,
+				DigestMapping: digestMap(indexes),
 			}
 			sis[i] = s
 		}
@@ -95,6 +107,13 @@ func toBuildSteps(def *pb.Definition) ([]BuildStep, map[digest.Digest]int, error
 		var op pb.Op
 		if err := (&op).Unmarshal(dt); err != nil {
 			return nil, nil, errors.Wrap(err, "failed to parse llb proto op")
+		}
+		if src := op.GetSource(); src != nil {
+			for k := range src.Attrs {
+				if k == "local.session" || k == "local.unique" {
+					delete(src.Attrs, k)
+				}
+			}
 		}
 		dgst = digest.FromBytes(dt)
 		ops[dgst] = &op
