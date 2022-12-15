@@ -13,7 +13,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func SBOMProcessor(scannerRef string) llbsolver.Processor {
+func SBOMProcessor(scannerRef string, useCache bool) llbsolver.Processor {
 	return func(ctx context.Context, res *llbsolver.Result, s *llbsolver.Solver, j *solver.Job) (*llbsolver.Result, error) {
 		// skip sbom generation if we already have an sbom
 		if sbom.HasSBOM(res.Result) {
@@ -44,7 +44,11 @@ func SBOMProcessor(scannerRef string) llbsolver.Processor {
 			}
 			st := llb.NewState(defop)
 
-			att, err := scanner(ctx, p.ID, st, nil)
+			var opts []llb.ConstraintsOpt
+			if !useCache {
+				opts = append(opts, llb.IgnoreCache)
+			}
+			att, err := scanner(ctx, p.ID, st, nil, opts...)
 			if err != nil {
 				return nil, err
 			}
