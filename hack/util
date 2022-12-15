@@ -2,6 +2,8 @@
 
 : "${CI=}"
 : "${GITHUB_ACTIONS=}"
+: "${GITHUB_REPOSITORY=}"
+: "${GITHUB_RUN_ID=}"
 : "${BUILDX_BUILDER=}"
 
 : "${CONTEXT=}"
@@ -31,13 +33,19 @@ else
 fi
 
 buildxCmd() {
-  set -x
-  BUILDX_NO_DEFAULT_LOAD=true BUILDX_BUILDER="${builderName:-${BUILDX_BUILDER}}" $buildxBin "$@" $progressFlag
+  (
+    set -x
+    BUILDX_NO_DEFAULT_LOAD=true BUILDX_BUILDER="${builderName:-${BUILDX_BUILDER}}" $buildxBin "$@" $progressFlag
+  )
 }
 
 buildAttestFlags() {
   if $buildxBin build --help 2>&1 | grep -- '--attest' >/dev/null; then
-    echo "--attest=type=sbom --attest=type=provenance,mode=max"
+    prvattrs="mode=max"
+    if [ "$GITHUB_ACTIONS" = "true" ]; then
+      prvattrs="$prvattrs,builder-id=https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+    fi
+    echo "--attest=type=sbom --attest=type=provenance,$prvattrs"
   fi
 }
 

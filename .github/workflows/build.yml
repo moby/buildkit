@@ -24,7 +24,7 @@ on:
       - 'frontend/dockerfile/docs/**'
 
 env:
-  REPO_SLUG_ORIGIN: "moby/buildkit:master@sha256:565b144b1b98012407ec0a9b1ac7bc85cc35a12d4381b7f9acf7f211d142e98e"  # https://github.com/moby/buildkit/commit/862b22d7e7cf7b289621de20c8c09e6fe93452d8
+  REPO_SLUG_ORIGIN: "moby/buildkit:v0.11.0-rc2"
   REPO_SLUG_TARGET: "moby/buildkit"
   DF_REPO_SLUG_TARGET: "docker/dockerfile-upstream"
   PLATFORMS: "linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le,linux/riscv64"
@@ -32,7 +32,7 @@ env:
   CACHE_GHA_SCOPE_BINARIES: "binaries"
   CACHE_GHA_SCOPE_CROSS: "cross"
   TESTFLAGS: "-v --parallel=6 --timeout=30m"
-  BUILDX_VERSION: "https://github.com/docker/buildx.git#96aca741a2ddb00aca7d744a94b3f37252be52ce"  # leave empty to use the one available on GitHub virtual environment
+  BUILDX_VERSION: "v0.10.0-rc1"  # leave empty to use the one available on GitHub virtual environment
   GO_VERSION: "1.19"
 
 jobs:
@@ -421,10 +421,6 @@ jobs:
         env:
           PLATFORMS: ${{ env.PLATFORMS }},darwin/amd64,darwin/arm64,windows/amd64,windows/arm64
           CACHE_FROM: type=gha,scope=${{ env.CACHE_GHA_SCOPE_BINARIES }} type=gha,scope=${{ env.CACHE_GHA_SCOPE_CROSS }}
-      -
-        name: Move artifacts
-        run: |
-          mv ./release-out/**/* ./release-out/
       -
         name: Upload artifacts
         uses: actions/upload-artifact@v3
