@@ -88,6 +88,8 @@ type ConvertOpt struct {
 type SBOMTargets struct {
 	Core   llb.State
 	Extras map[string]llb.State
+
+	IgnoreCache bool
 }
 
 func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, *SBOMTargets, error) {
@@ -103,9 +105,15 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	if ds.scanContext {
 		sbom.Extras["context"] = ds.opt.buildContext
 	}
+	if ds.ignoreCache {
+		sbom.IgnoreCache = true
+	}
 	for _, dsi := range findReachable(ds) {
 		if ds != dsi && dsi.scanStage {
 			sbom.Extras[dsi.stageName] = dsi.state
+			if dsi.ignoreCache {
+				sbom.IgnoreCache = true
+			}
 		}
 	}
 

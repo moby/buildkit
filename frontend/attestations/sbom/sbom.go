@@ -31,7 +31,7 @@ const (
 // build-contexts or multi-stage builds. Handling these separately allows the
 // scanner to optionally ignore these or to mark them as such in the
 // attestation.
-type Scanner func(ctx context.Context, name string, ref llb.State, extras map[string]llb.State) (result.Attestation[llb.State], error)
+type Scanner func(ctx context.Context, name string, ref llb.State, extras map[string]llb.State, opts ...llb.ConstraintsOpt) (result.Attestation[llb.State], error)
 
 func CreateSBOMScanner(ctx context.Context, resolver llb.ImageMetaResolver, scanner string) (Scanner, error) {
 	if scanner == "" {
@@ -55,7 +55,7 @@ func CreateSBOMScanner(ctx context.Context, resolver llb.ImageMetaResolver, scan
 		return nil, errors.Errorf("scanner %s does not have cmd", scanner)
 	}
 
-	return func(ctx context.Context, name string, ref llb.State, extras map[string]llb.State) (result.Attestation[llb.State], error) {
+	return func(ctx context.Context, name string, ref llb.State, extras map[string]llb.State, opts ...llb.ConstraintsOpt) (result.Attestation[llb.State], error) {
 		var env []string
 		env = append(env, cfg.Config.Env...)
 		env = append(env, "BUILDKIT_SCAN_DESTINATION="+outDir)
@@ -64,17 +64,20 @@ func CreateSBOMScanner(ctx context.Context, resolver llb.ImageMetaResolver, scan
 			env = append(env, "BUILDKIT_SCAN_SOURCE_EXTRAS="+path.Join(srcDir, "extras/"))
 		}
 
-		opts := []llb.RunOption{
-			llb.Dir(cfg.Config.WorkingDir),
-			llb.Args(args),
+		runOpts := []llb.RunOption{
 			llb.WithCustomName(fmt.Sprintf("[%s] generating sbom using %s", name, scanner)),
 		}
+		for _, opt := range opts {
+			runOpts = append(runOpts, opt)
+		}
+		runOpts = append(runOpts, llb.Dir(cfg.Config.WorkingDir))
+		runOpts = append(runOpts, llb.Args(args))
 		for _, e := range env {
 			k, v, _ := strings.Cut(e, "=")
-			opts = append(opts, llb.AddEnv(k, v))
+			runOpts = append(runOpts, llb.AddEnv(k, v))
 		}
 
-		runscan := llb.Image(scanner).Run(opts...)
+		runscan := llb.Image(scanner).Run(runOpts...)
 		runscan.AddMount(path.Join(srcDir, "core", CoreSBOMName), ref, llb.Readonly)
 		for k, extra := range extras {
 			runscan.AddMount(path.Join(srcDir, "extras", ExtraSBOMPrefix+k), extra, llb.Readonly)

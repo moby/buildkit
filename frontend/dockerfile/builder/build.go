@@ -613,7 +613,13 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 
 	if scanner != nil {
 		for i, p := range expPlatforms.Platforms {
-			att, err := scanner(ctx, p.ID, scanTargets[i].Core, scanTargets[i].Extras)
+			target := scanTargets[i]
+
+			var opts []llb.ConstraintsOpt
+			if target.IgnoreCache {
+				opts = append(opts, llb.IgnoreCache)
+			}
+			att, err := scanner(ctx, p.ID, target.Core, target.Extras, opts...)
 			if err != nil {
 				return nil, err
 			}

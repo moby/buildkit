@@ -395,8 +395,14 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to parse sbom generator %s", src)
 		}
+
+		useCache := true
+		if v, ok := req.FrontendAttrs["no-cache"]; ok && v == "" {
+			// disable cache if cache is disabled for all stages
+			useCache = false
+		}
 		ref = reference.TagNameOnly(ref)
-		procs = append(procs, proc.SBOMProcessor(ref.String()))
+		procs = append(procs, proc.SBOMProcessor(ref.String(), useCache))
 	}
 
 	if attrs, ok := attests["provenance"]; ok {
