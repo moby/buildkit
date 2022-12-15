@@ -12,9 +12,9 @@ const (
 	AttestationInlineOnlyKey = "inline-only"
 )
 
-var (
-	AttestationReasonSBOM       = []byte("sbom")
-	AttestationReasonProvenance = []byte("provenance")
+const (
+	AttestationReasonSBOM       = "sbom"
+	AttestationReasonProvenance = "provenance"
 )
 
 type Attestation[T any] struct {
