@@ -20,6 +20,10 @@ import (
 // Unbundle iterates over all provided result attestations and un-bundles any
 // bundled attestations by loading them from the provided refs map.
 func Unbundle(ctx context.Context, s session.Group, bundled []exporter.Attestation) ([]exporter.Attestation, error) {
+	if err := Validate(bundled); err != nil {
+		return nil, err
+	}
+
 	eg, ctx := errgroup.WithContext(ctx)
 	unbundled := make([][]exporter.Attestation, len(bundled))
 
@@ -138,7 +142,7 @@ func Validate(atts []exporter.Attestation) error {
 }
 
 func validate(att exporter.Attestation) error {
-	if att.Path == "" {
+	if att.Kind != gatewaypb.AttestationKindBundle && att.Path == "" {
 		return errors.New("attestation does not have set path")
 	}
 	if att.Ref == nil && att.ContentFunc == nil {
