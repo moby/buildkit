@@ -89,6 +89,7 @@ func CreateSBOMScanner(ctx context.Context, resolver llb.ImageMetaResolver, scan
 			Ref:  stsbom,
 			Metadata: map[string][]byte{
 				result.AttestationReasonKey: []byte(result.AttestationReasonSBOM),
+				result.AttestationSBOMCore:  []byte(CoreSBOMName),
 			},
 			InToto: result.InTotoAttestation{
 				PredicateType: intoto.PredicateSPDX,

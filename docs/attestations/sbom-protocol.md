@@ -48,9 +48,8 @@ by BuildKit:
   This variable specifies the main target, passing the path to the root
   filesystem of the final build result.
 
-  The scanner should scan this filesystem, and write its SBOM scans to
-  `$BUILDKIT_SCAN_DESTINATION/<scan>.spdx.json`. If the scan name is not
-  significant the scan can be named `$(basename $BUILDKIT_SCAN_SOURCE)`.
+  The scanner should scan this filesystem, and write its SBOM result to
+  `$BUILDKIT_SCAN_DESTINATION/$(basename $BUILDKIT_SCAN_SOURCE).spdx.json`.
 
 - `BUILDKIT_SCAN_SOURCE_EXTRAS` (optional)
 
