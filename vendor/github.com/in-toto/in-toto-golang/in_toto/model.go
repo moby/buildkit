@@ -15,7 +15,9 @@ import (
 	"strings"
 	"time"
 
-	slsa "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
+	"github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/common"
+	slsa01 "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.1"
+	slsa02 "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
 
 	"github.com/secure-systems-lab/go-securesystemslib/cjson"
 	"github.com/secure-systems-lab/go-securesystemslib/dsse"
@@ -80,7 +82,7 @@ const (
 	// version.
 	PredicateSPDX = "https://spdx.dev/Document"
 	// PredicateCycloneDX represents a CycloneDX SBOM
-	PredicateCycloneDX = "https://cyclonedx.org/schema"
+	PredicateCycloneDX = "https://cyclonedx.org/bom"
 	// PredicateLinkV1 represents an in-toto 0.9 link.
 	PredicateLinkV1 = "https://in-toto.io/Link/v1"
 )
@@ -412,6 +414,7 @@ func validateLink(link Link) error {
 LinkNameFormat represents a format string used to create the filename for a
 signed Link (wrapped in a Metablock). It consists of the name of the link and
 the first 8 characters of the signing key id. E.g.:
+
 	fmt.Sprintf(LinkNameFormat, "package",
 	"2f89b9272acfc8f4a0a0f094d789fdb0ba798b0fe41f2f5f417c12f0085ff498")
 	// returns "package.2f89b9272.link"
@@ -421,6 +424,7 @@ const PreliminaryLinkNameFormat = ".%s.%.8s.link-unfinished"
 
 /*
 LinkNameFormatShort is for links that are not signed, e.g.:
+
 	fmt.Sprintf(LinkNameFormatShort, "unsigned")
 	// returns "unsigned.link"
 */
@@ -964,8 +968,8 @@ func (mb *Metablock) Sign(key Key) error {
 
 // Subject describes the set of software artifacts the statement applies to.
 type Subject struct {
-	Name   string         `json:"name"`
-	Digest slsa.DigestSet `json:"digest"`
+	Name   string           `json:"name"`
+	Digest common.DigestSet `json:"digest"`
 }
 
 // StatementHeader defines the common fields for all statements
@@ -985,10 +989,23 @@ type Statement struct {
 	Predicate interface{} `json:"predicate"`
 }
 
-// ProvenanceStatement is the definition for an entire provenance statement.
+// ProvenanceStatementSLSA01 is the definition for an entire provenance statement with SLSA 0.1 predicate.
+type ProvenanceStatementSLSA01 struct {
+	StatementHeader
+	Predicate slsa01.ProvenancePredicate `json:"predicate"`
+}
+
+// ProvenanceStatementSLSA02 is the definition for an entire provenance statement with SLSA 0.2 predicate.
+type ProvenanceStatementSLSA02 struct {
+	StatementHeader
+	Predicate slsa02.ProvenancePredicate `json:"predicate"`
+}
+
+// ProvenanceStatement is the definition for an entire provenance statement with SLSA 0.2 predicate.
+// Deprecated: Only version-specific provenance structs will be maintained (ProvenanceStatementSLSA01, ProvenanceStatementSLSA02).
 type ProvenanceStatement struct {
 	StatementHeader
-	Predicate slsa.ProvenancePredicate `json:"predicate"`
+	Predicate slsa02.ProvenancePredicate `json:"predicate"`
 }
 
 // LinkStatement is the definition for an entire link statement.

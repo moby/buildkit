@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	slsa "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
+	slsa02 "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/cache"
 	cacheconfig "github.com/moby/buildkit/cache/config"
@@ -220,7 +220,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 				Size_:     desc.Size,
 				MediaType: desc.MediaType,
 				Annotations: map[string]string{
-					"in-toto.io/predicate-type": slsa.PredicateSLSAProvenance,
+					"in-toto.io/predicate-type": slsa02.PredicateSLSAProvenance,
 				},
 			}, release, nil
 		}

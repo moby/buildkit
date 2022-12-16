@@ -545,9 +545,11 @@ github.com/hashicorp/go-retryablehttp
 # github.com/hashicorp/golang-lru v0.5.4
 ## explicit; go 1.12
 github.com/hashicorp/golang-lru/simplelru
-# github.com/in-toto/in-toto-golang v0.3.4-0.20220709202702-fa494aaa0add
+# github.com/in-toto/in-toto-golang v0.5.0
 ## explicit; go 1.17
 github.com/in-toto/in-toto-golang/in_toto
+github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/common
+github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.1
 github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2
 # github.com/jmespath/go-jmespath v0.4.0
 ## explicit; go 1.14

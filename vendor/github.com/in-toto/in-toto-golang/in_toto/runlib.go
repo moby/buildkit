@@ -21,6 +21,8 @@ var ErrSymCycle = errors.New("symlink cycle detected")
 // ErrUnsupportedHashAlgorithm signals a missing hash mapping in getHashMapping
 var ErrUnsupportedHashAlgorithm = errors.New("unsupported hash algorithm detected")
 
+var ErrEmptyCommandArgs = errors.New("the command args are empty")
+
 // visitedSymlinks is a hashset that contains all paths that we have visited.
 var visitedSymlinks Set
 
@@ -247,6 +249,9 @@ NOTE: Since stdout and stderr are captured, they cannot be seen during the
 command execution.
 */
 func RunCommand(cmdArgs []string, runDir string) (map[string]interface{}, error) {
+	if len(cmdArgs) == 0 {
+		return nil, ErrEmptyCommandArgs
+	}
 
 	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
 
@@ -298,9 +303,13 @@ func InTotoRun(name string, runDir string, materialPaths []string, productPaths 
 		return linkMb, err
 	}
 
-	byProducts, err := RunCommand(cmdArgs, runDir)
-	if err != nil {
-		return linkMb, err
+	// make sure that we only run RunCommand if cmdArgs is not nil or empty
+	byProducts := map[string]interface{}{}
+	if len(cmdArgs) != 0 {
+		byProducts, err = RunCommand(cmdArgs, runDir)
+		if err != nil {
+			return linkMb, err
+		}
 	}
 
 	products, err := RecordArtifacts(productPaths, hashAlgorithms, gitignorePatterns, lStripPaths, lineNormalization)
