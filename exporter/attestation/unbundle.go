@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path"
+	"strings"
 
 	"github.com/containerd/continuity/fs"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
@@ -32,6 +33,12 @@ func Unbundle(ctx context.Context, s session.Group, bundled []exporter.Attestati
 		eg.Go(func() error {
 			switch att.Kind {
 			case gatewaypb.AttestationKindInToto:
+				if strings.HasPrefix(att.InToto.PredicateType, "https://slsa.dev/provenance/") {
+					if att.ContentFunc == nil {
+						// provenance may only be set buildkit-side using ContentFunc
+						return errors.New("frontend may not set provenance attestations")
+					}
+				}
 				unbundled[i] = append(unbundled[i], att)
 			case gatewaypb.AttestationKindBundle:
 				if att.ContentFunc != nil {
@@ -56,6 +63,11 @@ func Unbundle(ctx context.Context, s session.Group, bundled []exporter.Attestati
 				if err != nil {
 					return err
 				}
+				for _, att := range atts {
+					if strings.HasPrefix(att.InToto.PredicateType, "https://slsa.dev/provenance/") {
+						return errors.New("frontend may not bundle provenance attestations")
+					}
+				}
 				unbundled[i] = append(unbundled[i], atts...)
 			}
 			return nil
@@ -71,8 +83,8 @@ func Unbundle(ctx context.Context, s session.Group, bundled []exporter.Attestati
 	}
 
 	if err := Validate(joined); err != nil {
-			return nil, err
-		}
+		return nil, err
+	}
 	return joined, nil
 }
 
