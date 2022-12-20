@@ -141,11 +141,6 @@ func toBuildSteps(def *pb.Definition) ([]BuildStep, map[digest.Digest]int, error
 	if err != nil {
 		return nil, nil, err
 	}
-	for i := 0; i < len(dgsts)/2; i++ {
-		j := len(dgsts) - 1 - i
-		dgsts[i], dgsts[j] = dgsts[j], dgsts[i]
-	}
-
 	indexes := map[digest.Digest]int{}
 	for i, dgst := range dgsts {
 		indexes[dgst] = i
@@ -179,7 +174,6 @@ func walkDigests(dgsts []digest.Digest, ops map[digest.Digest]*pb.Op, dgst diges
 	if op == nil {
 		return nil, errors.Errorf("invalid nil input %v", dgst)
 	}
-	dgsts = append(dgsts, dgst)
 	visited[dgst] = struct{}{}
 	for _, inp := range op.Inputs {
 		var err error
@@ -188,5 +182,6 @@ func walkDigests(dgsts []digest.Digest, ops map[digest.Digest]*pb.Op, dgst diges
 			return nil, err
 		}
 	}
+	dgsts = append(dgsts, dgst)
 	return dgsts, nil
 }
