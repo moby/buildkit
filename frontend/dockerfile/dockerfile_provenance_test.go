@@ -198,7 +198,7 @@ RUN echo "ok" > /foo
 
 			require.False(t, pred.Metadata.Completeness.Materials)
 			require.False(t, pred.Metadata.Reproducible)
-			require.False(t, pred.Metadata.Completeness.Hermetic)
+			require.False(t, pred.Metadata.Hermetic)
 
 			if mode == "max" || mode == "" {
 				require.Equal(t, 2, len(pred.Metadata.BuildKitMetadata.Layers))
@@ -347,8 +347,8 @@ COPY myapp.Dockerfile /
 	require.Equal(t, 0, len(pred.Invocation.Parameters.Locals))
 
 	require.True(t, pred.Metadata.Completeness.Materials)
-	require.True(t, pred.Metadata.Completeness.Hermetic)
 	require.True(t, pred.Metadata.Completeness.Environment)
+	require.True(t, pred.Metadata.Hermetic)
 
 	if isClient {
 		require.False(t, pred.Metadata.Completeness.Parameters)
