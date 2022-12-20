@@ -46,12 +46,13 @@ and exported with your build result.
 
 ## Parameters
 
-| Parameter      | Type           | Default          | Description                                                                                                 |
+| Parameter      | Type           | Default           | Description                                                                                                 |
 | -------------- | -------------- | ---------------- | ----------------------------------------------------------------------------------------------------------- |
-| `mode`         | `min`,`max`    | `max`            | Configures the amount of provenance to be generated. See [mode](#mode)                                      |
-| `builder-id`   | String         |                  | Explicitly set SLSA [`builder.id`](https://slsa.dev/provenance/v0.2#builder.id) field                       |
-| `reproducible` | `true`,`false` | `false`          | Explicitly set SLSA [`metadata.reproducible`](https://slsa.dev/provenance/v0.2#metadata.reproducible) field |
-| `inline-only`  | `true`,`false` | `false`          | Only embed provenance into exporters that support inline content. See [inline-only](#inline-only)           |
+| `mode`         | `min`,`max`    | `max`             | Configures the amount of provenance to be generated. See [mode](#mode)                                      |
+| `builder-id`   | String         |                   | Explicitly set SLSA [`builder.id`](https://slsa.dev/provenance/v0.2#builder.id) field                       |
+| `filename`     | String         | `provenance.json` | Set filename for provenance attestation when exported with `local` or `tar` exporter |
+| `reproducible` | `true`,`false` | `false`           | Explicitly set SLSA [`metadata.reproducible`](https://slsa.dev/provenance/v0.2#metadata.reproducible) field |
+| `inline-only`  | `true`,`false` | `false`           | Only embed provenance into exporters that support inline content. See [inline-only](#inline-only)           |
 
 ### `mode`
 
