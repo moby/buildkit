@@ -390,6 +390,7 @@ buildctl build ... \
 * `compression=<uncompressed|gzip|estargz|zstd>`: choose compression type for layers newly created and cached, gzip is default value. estargz and zstd should be used with `oci-mediatypes=true`
 * `compression-level=<value>`: choose compression level for gzip, estargz (0-9) and zstd (0-22)
 * `force-compression=true`: forcibly apply `compression` option to all layers
+* `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
 
 `--import-cache` options:
 * `type=registry`
@@ -415,6 +416,7 @@ The directory layout conforms to OCI Image Spec v1.0.
 * `compression=<uncompressed|gzip|estargz|zstd>`: choose compression type for layers newly created and cached, gzip is default value. estargz and zstd should be used with `oci-mediatypes=true`.
 * `compression-level=<value>`: compression level for gzip, estargz (0-9) and zstd (0-22)
 * `force-compression=true`: forcibly apply `compression` option to all layers
+* `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
 
 `--import-cache` options:
 * `type=local`
@@ -449,6 +451,7 @@ in your workflow to expose the runtime.
   * `min`: only export layers for the resulting image
   * `max`: export all the layers of all intermediate steps
 * `scope=<scope>`: which scope cache object belongs to (default `buildkit`)
+* `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
 
 `--import-cache` options:
 * `type=gha`
@@ -496,6 +499,7 @@ Others options are:
 * `prefix=<prefix>`: set global prefix to store / read files on s3 (default: empty)
 * `name=<manifest>`: specify name of the manifest to use (default `buildkit`)
   * Multiple manifest names can be specified at the same time, separated by `;`. The standard use case is to use the git sha1 as name, and the branch name as duplicate, and load both with 2 `import-cache` commands.
+* `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
 
 `--import-cache` options:
 * `type=s3`
@@ -540,6 +544,7 @@ There are 2 options supported for Azure Blob Storage authentication:
 * `prefix=<prefix>`: set global prefix to store / read files on the Azure Blob Storage container (`<container>`) (default: empty)
 * `name=<manifest>`: specify name of the manifest to use (default: `buildkit`)
   * Multiple manifest names can be specified at the same time, separated by `;`. The standard use case is to use the git sha1 as name, and the branch name as duplicate, and load both with 2 `import-cache` commands.
+* `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
 
 `--import-cache` options:
 * `type=azblob`
