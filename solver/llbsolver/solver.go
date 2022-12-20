@@ -58,6 +58,7 @@ type ExporterRequest struct {
 type RemoteCacheExporter struct {
 	remotecache.Exporter
 	solver.CacheExportMode
+	IgnoreError bool
 }
 
 // ResolveWorkerFunc returns default worker for the temporary default non-distributed use cases
@@ -570,7 +571,7 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 		func(exp RemoteCacheExporter, i int) {
 			eg.Go(func() (err error) {
 				id := fmt.Sprint(j.SessionID, "-cache-", i)
-				return inBuilderContext(ctx, j, exp.Exporter.Name(), id, func(ctx context.Context, _ session.Group) error {
+				err = inBuilderContext(ctx, j, exp.Exporter.Name(), id, func(ctx context.Context, _ session.Group) error {
 					prepareDone := progress.OneOff(ctx, "preparing build cache for export")
 					if err := result.EachRef(cached, inp, func(res solver.CachedResult, ref cache.ImmutableRef) error {
 						ctx = withDescHandlerCacheOpts(ctx, ref)
@@ -589,13 +590,13 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 					}); err != nil {
 						return prepareDone(err)
 					}
-					prepareDone(nil)
 					resps[i], err = exp.Finalize(ctx)
-					if err != nil {
-						return err
-					}
-					return nil
+					return prepareDone(err)
 				})
+				if exp.IgnoreError {
+					err = nil
+				}
+				return err
 			})
 		}(exp, i)
 	}
