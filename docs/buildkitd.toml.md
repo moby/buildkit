@@ -95,7 +95,8 @@ insecure-entitlements = [ "network.host", "security.insecure" ]
 
 # registry configures a new Docker register used for cache import or output.
 [registry."docker.io"]
-  mirrors = ["yourmirror.local:5000"]
+  # mirror configuration to handle path in case a mirror registry requires a /project path rather than just a host:port
+  mirrors = ["yourmirror.local:5000", "core.harbor.domain/proxy.docker.io"]
   http = true
   insecure = true
   ca=["/etc/config/myca.pem"]
