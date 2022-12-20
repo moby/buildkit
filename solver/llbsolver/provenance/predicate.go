@@ -44,13 +44,8 @@ type Environment struct {
 
 type ProvenanceMetadata struct {
 	slsa02.ProvenanceMetadata
-	Completeness     ProvenanceComplete `json:"completeness"`
-	BuildKitMetadata BuildKitMetadata   `json:"https://mobyproject.org/buildkit@v1#metadata,omitempty"`
-}
-
-type ProvenanceComplete struct {
-	slsa02.ProvenanceComplete
-	Hermetic bool `json:"https://mobyproject.org/buildkit@v1#hermetic,omitempty"`
+	BuildKitMetadata BuildKitMetadata `json:"https://mobyproject.org/buildkit@v1#metadata,omitempty"`
+	Hermetic         bool             `json:"https://mobyproject.org/buildkit@v1#hermetic,omitempty"`
 }
 
 type BuildKitMetadata struct {
@@ -211,14 +206,14 @@ func NewPredicate(c *Capture) (*ProvenancePredicate, error) {
 			Materials: materials,
 		},
 		Metadata: &ProvenanceMetadata{
-			Completeness: ProvenanceComplete{
-				ProvenanceComplete: slsa02.ProvenanceComplete{
+			ProvenanceMetadata: slsa02.ProvenanceMetadata{
+				Completeness: slsa02.ProvenanceComplete{
 					Parameters:  c.Frontend != "",
 					Environment: true,
 					Materials:   !incompleteMaterials,
 				},
-				Hermetic: !incompleteMaterials && !c.NetworkAccess,
 			},
+			Hermetic: !incompleteMaterials && !c.NetworkAccess,
 		},
 	}
 
