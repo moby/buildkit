@@ -298,16 +298,12 @@ are not complete. Parameters are also not complete on direct LLB builds that did
 from untracked source in a local directory, the materials are not complete, while when building from a remote
 Git repository all materials can be tracked by BuildKit and `completeness.materials` is true. 
 
-`https://mobyproject.org/buildkit@v1#hermetic` is a custom field that is true if the build was hermetic and
-did not access the network. In Dockerfiles, a build is hermetic if it does not use `RUN` commands or disables
-network with `--network=none` flag.
 
 ```
       "completeness": {
         "parameters": true,
         "environment": true,
-        "materials": true,
-        "https://mobyproject.org/buildkit@v1#hermetic": true
+        "materials": true
       }
     }
 ```
@@ -319,6 +315,19 @@ user with the `reproducible=true` attestation parameter.
 
 ```
     "reproducible": false
+```
+
+
+### `metadata.https://mobyproject.org/buildkit@v1#hermetic`
+
+This extension field is set to true if the build was hermetic and did not access the network.
+In Dockerfiles, a build is hermetic if it does not use `RUN` commands or disables
+network with `--network=none` flag.
+
+```
+    "metadata": {
+      "https://mobyproject.org/buildkit@v1#hermetic": true,
+      ...
 ```
 
 ### `metadata.https://mobyproject.org/buildkit@v1#metadata`
