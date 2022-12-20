@@ -353,6 +353,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 					return err
 				}
 				enc := json.NewEncoder(w)
+				enc.SetIndent("", "  ")
 				for _, sp := range spans {
 					if err := enc.Encode(sp); err != nil {
 						return err

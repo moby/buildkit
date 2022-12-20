@@ -132,7 +132,7 @@ func CreateFS(ctx context.Context, sessionID string, k string, ref cache.Immutab
 
 		names := map[string]struct{}{}
 		for i, stmt := range stmts {
-			dt, err := json.Marshal(stmt)
+			dt, err := json.MarshalIndent(stmt, "", "  ")
 			if err != nil {
 				return nil, nil, errors.Wrap(err, "failed to marshal attestation")
 			}
