@@ -42,6 +42,11 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 				return nil, err
 			}
 
+			filename := "provenance.json"
+			if v, ok := attrs["filename"]; ok {
+				filename = v
+			}
+
 			res.AddAttestation(p.ID, llbsolver.Attestation{
 				Kind: gatewaypb.AttestationKindInToto,
 				Metadata: map[string][]byte{
@@ -51,7 +56,7 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 				InToto: result.InTotoAttestation{
 					PredicateType: slsa02.PredicateSLSAProvenance,
 				},
-				Path: "provenance.json",
+				Path: filename,
 				ContentFunc: func() ([]byte, error) {
 					pr, err := pc.Predicate()
 					if err != nil {
