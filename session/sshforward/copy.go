@@ -14,16 +14,19 @@ type Stream interface {
 }
 
 func Copy(ctx context.Context, conn io.ReadWriteCloser, stream Stream, closeStream func() error) error {
+	defer conn.Close()
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() (retErr error) {
 		p := &BytesMessage{}
 		for {
 			if err := stream.RecvMsg(p); err != nil {
-				conn.Close()
 				if err == io.EOF {
+					// indicates client performed CloseSend, but they may still be
+					// reading data, so don't close conn yet
 					return nil
 				}
+				conn.Close()
 				return errors.WithStack(err)
 			}
 			select {
