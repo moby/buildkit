@@ -3598,7 +3598,7 @@ COPY --from=busybox /etc/passwd test
 
 	dockerfile = []byte(`
 FROM busybox AS golang
-RUN mkdir /usr/bin && echo -n foo > /usr/bin/go
+RUN mkdir -p /usr/bin && echo -n foo > /usr/bin/go
 
 FROM scratch
 COPY --from=golang /usr/bin/go go
