@@ -270,17 +270,19 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 		}
 
 		eg.Go(func() error {
-			desc, releaseStatus, err := s.history.ImportStatus(ctx2, ch)
+			st, releaseStatus, err := s.history.ImportStatus(ctx2, ch)
 			if err != nil {
 				return err
 			}
 			mu.Lock()
 			releasers = append(releasers, releaseStatus)
 			rec.Logs = &controlapi.Descriptor{
-				Digest:    desc.Digest,
-				Size_:     desc.Size,
-				MediaType: desc.MediaType,
+				Digest:    st.Descriptor.Digest,
+				Size_:     st.Descriptor.Size,
+				MediaType: st.Descriptor.MediaType,
 			}
+			rec.NumCachedSteps = int32(st.NumCachedSteps)
+			rec.NumTotalSteps = int32(st.NumTotalSteps)
 			mu.Unlock()
 			return nil
 		})

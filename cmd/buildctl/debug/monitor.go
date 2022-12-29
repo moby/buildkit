@@ -48,6 +48,9 @@ func monitor(clicontext *cli.Context) error {
 			return err
 		}
 		fmt.Printf("event: %s ref:%s\n", ev.Type.String(), ev.Record.Ref)
+		if ev.Record.NumTotalSteps != 0 {
+			fmt.Printf("  cache: %d/%d\n", ev.Record.NumCachedSteps, ev.Record.NumTotalSteps)
+		}
 		if ev.Record.Logs != nil {
 			fmt.Printf("  logs: %s\n", ev.Record.Logs)
 		}
