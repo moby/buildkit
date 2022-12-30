@@ -446,7 +446,7 @@ func (s3Client *s3Client) touch(ctx context.Context, key string) error {
 		Bucket:            &s3Client.bucket,
 		CopySource:        &copySource,
 		Key:               &key,
-		Metadata:          map[string]string{"updated_at": time.Now().String()},
+		Metadata:          map[string]string{"updated-at": time.Now().String()},
 		MetadataDirective: "REPLACE",
 	}
 
