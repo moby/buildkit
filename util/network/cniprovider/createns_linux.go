@@ -7,9 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"syscall"
-	"unsafe"
 
 	"github.com/containerd/containerd/oci"
+	"github.com/cpuguy83/gonso"
 	"github.com/moby/buildkit/util/bklog"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -44,57 +44,16 @@ func createNetNS(c *cniProvider, id string) (string, error) {
 		return "", err
 	}
 
-	f, err := os.Create(nsPath)
+	set, err := gonso.Unshare(unix.CLONE_NEWNET)
 	if err != nil {
-		deleteNetNS(nsPath)
-		return "", err
+		return "", errors.Wrap(err, "failed to unshare network namespace")
 	}
-	if err := f.Close(); err != nil {
-		deleteNetNS(nsPath)
-		return "", err
-	}
-	procNetNSBytes, err := syscall.BytePtrFromString("/proc/self/ns/net")
-	if err != nil {
-		deleteNetNS(nsPath)
-		return "", err
-	}
-	nsPathBytes, err := syscall.BytePtrFromString(nsPath)
-	if err != nil {
-		deleteNetNS(nsPath)
-		return "", err
-	}
-	beforeFork()
+	defer set.Close()
 
-	pid, _, errno := syscall.RawSyscall6(syscall.SYS_CLONE, uintptr(syscall.SIGCHLD)|unix.CLONE_NEWNET, 0, 0, 0, 0, 0)
-	if errno != 0 {
-		afterFork()
-		deleteNetNS(nsPath)
-		return "", errno
+	if err := set.MountNS(0, nsPath); err != nil {
+		return "", errors.Wrap(err, "failed to mount network namespace")
 	}
-
-	if pid != 0 {
-		afterFork()
-		var ws unix.WaitStatus
-		_, err = unix.Wait4(int(pid), &ws, 0, nil)
-		for err == syscall.EINTR {
-			_, err = unix.Wait4(int(pid), &ws, 0, nil)
-		}
-
-		if err != nil {
-			deleteNetNS(nsPath)
-			return "", errors.Wrapf(err, "failed to find pid=%d process", pid)
-		}
-		errno = syscall.Errno(ws.ExitStatus())
-		if errno != 0 {
-			deleteNetNS(nsPath)
-			return "", errors.Wrapf(errno, "failed to mount %s (pid=%d)", nsPath, pid)
-		}
-		return nsPath, nil
-	}
-	afterForkInChild()
-	_, _, errno = syscall.RawSyscall6(syscall.SYS_MOUNT, uintptr(unsafe.Pointer(procNetNSBytes)), uintptr(unsafe.Pointer(nsPathBytes)), 0, uintptr(unix.MS_BIND), 0, 0)
-	syscall.RawSyscall(syscall.SYS_EXIT, uintptr(errno), 0, 0)
-	panic("unreachable")
+	return nsPath, nil
 }
 
 func setNetNS(s *specs.Spec, nsPath string) error {
