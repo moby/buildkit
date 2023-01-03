@@ -8,7 +8,7 @@ included when you generate attestations `mode=min` and `mode=max`.
 
 ## `builder.id` [(SLSA)](https://slsa.dev/provenance/v0.2#builder.id)
 
-Included with `mode=min`.
+Included with `mode=min` and `mode=max`.
 
 The `builder.id` field is set to the URL of the build, if available.
 
@@ -22,7 +22,7 @@ This value can be set using the `builder-id` attestation parameter.
 
 ## `buildType` [(SLSA)](https://slsa.dev/provenance/v0.2#buildType)
 
-Included with `mode=min`.
+Included with `mode=min` and `mode=max`.
 
 The `buildType` field is set to `https://mobyproject.org/buildkit@v1` can be
 used to determine the structure of the provenance content.
@@ -33,7 +33,7 @@ used to determine the structure of the provenance content.
 
 ## `invocation.configSource` [(SLSA)](https://slsa.dev/provenance/v0.2#invocation.configSource)
 
-Included with `mode=min`.
+Included with `mode=min` and `mode=max`.
 
 Describes the config that initialized the build.
 
@@ -49,8 +49,8 @@ Describes the config that initialized the build.
 ```
 
 For builds initialized from a remote context, like a Git or HTTP URL, this
-object defines to URL to the context and its immutable digest. For builds using
-a local frontend, such as a Dockerfile, the `entryPoint` field defines the path
+object defines the context URL and its immutable digest in the `uri` and `digest` fields.
+For builds using a local frontend, such as a Dockerfile, the `entryPoint` field defines the path
 for the frontend file that initialized the build (`filename` frontend option).
 
 ## `invocation.parameters` [(SLSA)](https://slsa.dev/provenance/v0.2#invocation.parameters)
@@ -103,7 +103,7 @@ The following fields are only included with `mode=max`:
 
 ## `invocation.environment` [(SLSA)](https://slsa.dev/provenance/v0.2#invocation.environment)
 
-Included with `mode=min`.
+Included with `mode=min` and `mode=max`.
 
 ```json
       "environment": {
@@ -117,7 +117,7 @@ can be determined from the `in-toto` subject field.
 
 ## `materials` [(SLSA)](https://slsa.dev/provenance/v0.2#materials)
 
-Included with `mode=min`.
+Included with `mode=min` and `mode=max`.
 
 Defines all the external artifacts that were part of the build. The value
 depends on the type of artifact:
@@ -202,7 +202,7 @@ field for every step.
 
 ## `metadata.buildInvocationId` [(SLSA)](https://slsa.dev/provenance/v0.2#metadata.buildIncocationId)
 
-Included with `mode=min`.
+Included with `mode=min` and `mode=max`.
 
 Unique identifier for the build invocation. When building a multi-platform image
 with a single build request, this value will be the shared by all the platform
@@ -215,7 +215,7 @@ versions of the image.
 
 ## `metadata.buildStartedOn` [(SLSA)](https://slsa.dev/provenance/v0.2#metadata.buildStartedOn)
 
-Included with `mode=min`.
+Included with `mode=min` and `mode=max`.
 
 Timestamp when the build started.
 
@@ -225,7 +225,7 @@ Timestamp when the build started.
 
 ## `metadata.buildFinishedOn` [(SLSA)](https://slsa.dev/provenance/v0.2#metadata.buildFinishedOn)
 
-Included with `mode=min`.
+Included with `mode=min` and `mode=max`.
 
 Timestamp when the build finished.
 
@@ -235,7 +235,7 @@ Timestamp when the build finished.
 
 ## `metadata.completeness` [(SLSA)](https://slsa.dev/provenance/v0.2#metadata.completeness)
 
-Included with `mode=min`.
+Included with `mode=min` and `mode=max`.
 
 Defines if the provenance information is complete.
 
@@ -273,7 +273,7 @@ value can be set by the user with the `reproducible=true` attestation parameter.
 
 ## `metadata.https://mobyproject.org/buildkit@v1#hermetic`
 
-Included with `mode=min`.
+Included with `mode=min` and `mode=max`.
 
 This extension field is set to true if the build was hermetic and did not access
 the network. In Dockerfiles, a build is hermetic if it does not use `RUN`
@@ -314,7 +314,7 @@ for an image or if the build step pulled in image data as part of the build.
 
 ### `vcs`
 
-Included with both `mode=min` and `mode=max`.
+Included with `mode=min` and `mode=max`.
 
 Defines optional metadata for the version control system used for the build. If
 a build uses a remote context from Git repository, BuildKit extracts the details
