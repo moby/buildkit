@@ -37,7 +37,7 @@ func New(ctx context.Context, cmd string, args ...string) (net.Conn, error) {
 		c   commandConn
 		err error
 	)
-	c.cmd = exec.CommandContext(ctx, cmd, args...)
+	c.cmd = exec.Command(cmd, args...)
 	// we assume that args never contains sensitive information
 	logrus.Debugf("commandconn: starting %s with %v", cmd, args)
 	c.cmd.Env = os.Environ()
