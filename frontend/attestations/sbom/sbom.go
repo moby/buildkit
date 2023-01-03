@@ -33,12 +33,12 @@ const (
 // attestation.
 type Scanner func(ctx context.Context, name string, ref llb.State, extras map[string]llb.State, opts ...llb.ConstraintsOpt) (result.Attestation[*llb.State], error)
 
-func CreateSBOMScanner(ctx context.Context, resolver llb.ImageMetaResolver, scanner string) (Scanner, error) {
+func CreateSBOMScanner(ctx context.Context, resolver llb.ImageMetaResolver, scanner string, resolveOpt llb.ResolveImageConfigOpt) (Scanner, error) {
 	if scanner == "" {
 		return nil, nil
 	}
 
-	_, dt, err := resolver.ResolveImageConfig(ctx, scanner, llb.ResolveImageConfigOpt{})
+	_, dt, err := resolver.ResolveImageConfig(ctx, scanner, resolveOpt)
 	if err != nil {
 		return nil, err
 	}
