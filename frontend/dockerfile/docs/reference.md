@@ -1298,6 +1298,10 @@ guide – Leverage build cache](https://docs.docker.com/develop/develop-images/d
 - If `<dest>` doesn't exist, it is created along with all missing directories
   in its path.
 
+> **Important**
+>
+> When [Registry Access Management](https://docs.docker.com/desktop/hardened-desktop/registry-access-management/) is enabled, the registry restrictions are currently applied to the ADD instruction of the Dockerfile when the parameter of the ADD instruction is a URL. A workaround for this is to add the domains of URL parameters to the list of allowed registry addresses under the Registry Access Management settings of your organization.
+
 ### Verifying a remote file checksum `ADD --checksum=<checksum> <http src> <dest>`
 > **Note**
 >
