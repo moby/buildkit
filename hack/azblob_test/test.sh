@@ -9,10 +9,19 @@ BLOB_PORT=10000
 azurite --silent --location /tmp/azurite --debug /tmp/azurite/azurite.debug --blobPort ${BLOB_PORT} &
 timeout 15 bash -c "until echo > /dev/tcp/localhost/${BLOB_PORT}; do sleep 0.5; done"
 
-buildkitd -debugaddr 0.0.0.0:8060 &
-while true; do
-  curl -s -f http://127.0.0.1:8060/debug/pprof/ >/dev/null && break
-  sleep 1
+# Start buildkitd
+buildkitd &
+
+# Wait for buildkitd to be ready
+try=0
+max=10
+until buildctl debug workers >/dev/null 2>&1; do
+  if [ $try -gt $max ]; then
+    echo >&2 "buildkitd not ready after $max trials"
+    exit 1
+  fi
+  sleep $(awk "BEGIN{print (100 + $try * 20) * 0.001}")
+  try=$(expr $try + 1)
 done
 
 export default_options="type=azblob,container=cachecontainer,account_url=http://${AZURE_ACCOUNT_URL}:${BLOB_PORT},secret_access_key=${AZURE_ACCOUNT_KEY}"
