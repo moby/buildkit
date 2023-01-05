@@ -3,6 +3,9 @@
 . $(dirname $0)/util
 set -eu -o pipefail
 
+: ${HTTP_PROXY=}
+: ${HTTPS_PROXY=}
+: ${NO_PROXY=}
 : ${TEST_INTEGRATION=}
 : ${TEST_GATEWAY=}
 : ${TEST_DOCKERFILE=}
@@ -61,7 +64,10 @@ if [ "$TEST_COVERAGE" = "1" ]; then
 fi
 
 buildxCmd build $cacheFromFlags \
-  --build-arg "BUILDKITD_TAGS=$BUILDKITD_TAGS" \
+  --build-arg BUILDKITD_TAGS \
+  --build-arg HTTP_PROXY \
+  --build-arg HTTPS_PROXY \
+  --build-arg NO_PROXY \
   --target "integration-tests" \
   --output "type=docker,name=$iid" \
   $currentcontext
