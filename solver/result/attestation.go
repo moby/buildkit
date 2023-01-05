@@ -9,6 +9,7 @@ import (
 
 const (
 	AttestationReasonKey     = "reason"
+	AttestationSBOMCore      = "sbom-core"
 	AttestationInlineOnlyKey = "inline-only"
 )
 
