@@ -40,9 +40,11 @@ import (
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/contentutil"
+	"github.com/moby/buildkit/util/iohelper"
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
+	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -168,6 +170,11 @@ var networkTests = []integration.Test{}
 // Tests that depend on heredoc support
 var heredocTests = []integration.Test{}
 
+// Tests that depend on reproducible env
+var reproTests = integration.TestFuncs(
+	testReproSourceDateEpoch,
+)
+
 var opts []integration.TestOpt
 var securityOpts []integration.TestOpt
 
@@ -217,6 +224,10 @@ func TestIntegration(t *testing.T) {
 	integration.Run(t, heredocTests, opts...)
 	integration.Run(t, outlineTests, opts...)
 	integration.Run(t, targetsTests, opts...)
+
+	integration.Run(t, reproTests, append(opts,
+		// Only use the amd64 digest,  regardless to the host platform
+		integration.WithMirroredImages(integration.OfficialImages("debian:bullseye-20230109-slim@sha256:1acb06a0c31fb467eb8327ad361f1091ab265e0bf26d452dea45dcb0c0ea5e75")))...)
 }
 
 func testDefaultEnvWithArgs(t *testing.T, sb integration.Sandbox) {
@@ -6468,6 +6479,87 @@ COPY Dockerfile \
 	require.Equal(t, "Empty continuation lines will become errors in a future release", string(w.Detail[0]))
 	require.Equal(t, "https://github.com/moby/moby/pull/33719", w.URL)
 	require.Equal(t, 1, w.Level)
+}
+
+func testReproSourceDateEpoch(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter, integration.FeatureSourceDateEpoch)
+	if sb.Snapshotter() == "native" {
+		t.Skip("the digest is not reproducible with the \"native\" snapshotter because hardlinks are processed in a different way: https://github.com/moby/buildkit/pull/3456#discussion_r1062650263")
+	}
+	if runtime.GOARCH != "amd64" {
+		t.Skip("FIXME: the image cannot be pulled on non-amd64 (`docker.io/arm64v8/debian:bullseye-20230109-slim@...: not found`): https://github.com/moby/buildkit/pull/3456#discussion_r1068989918")
+	}
+
+	f := getFrontend(t, sb)
+
+	tm := time.Date(2023, time.January, 10, 12, 34, 56, 0, time.UTC)
+	t.Logf("SOURCE_DATE_EPOCH=%d", tm.Unix())
+
+	dockerfile := []byte(`# The base image cannot be busybox, due to https://github.com/moby/buildkit/issues/3455
+FROM --platform=linux/amd64 debian:bullseye-20230109-slim@sha256:1acb06a0c31fb467eb8327ad361f1091ab265e0bf26d452dea45dcb0c0ea5e75
+RUN touch /foo
+RUN touch /foo.1
+RUN touch -d '2010-01-01 12:34:56' /foo-2010
+RUN touch -d '2010-01-01 12:34:56' /foo-2010.1
+RUN touch -d '2030-01-01 12:34:56' /foo-2030
+RUN touch -d '2030-01-01 12:34:56' /foo-2030.1
+RUN rm -f /foo.1
+RUN rm -f /foo-2010.1
+RUN rm -f /foo-2030.1
+
+# Limit the timestamp upper bound to SOURCE_DATE_EPOCH.
+# Workaround for https://github.com/moby/buildkit/issues/3180
+ARG SOURCE_DATE_EPOCH
+RUN find $( ls / | grep -E -v "^(dev|mnt|proc|sys)$" ) -newermt "@${SOURCE_DATE_EPOCH}" -writable -xdev | xargs touch --date="@${SOURCE_DATE_EPOCH}" --no-dereference
+
+# Squash the entire stage for resetting the whiteout timestamps.
+# Workaround for https://github.com/moby/buildkit/issues/3168
+FROM scratch
+COPY --from=0 / /
+`)
+
+	const expectedDigest = "sha256:9e36395384d073e711102b13bd0ba4b779ef6afbaf5cadeb77fe77dba8967d1f"
+
+	dir, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	outDigester := digest.SHA256.Digester()
+	outW := &iohelper.NopWriteCloser{Writer: outDigester.Hash()}
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:SOURCE_DATE_EPOCH": fmt.Sprintf("%d", tm.Unix()),
+			"platform":                    "linux/amd64",
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterOCI,
+				Attrs: map[string]string{
+					// Remove buildinfo, as it contains the digest of the frontend image
+					"buildinfo": "false",
+				},
+				Output: fixedWriteCloser(outW),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	outDigest := outDigester.Digest().String()
+	t.Logf("OCI archive digest=%q", outDigest)
+	t.Log("The digest may change depending on the BuildKit version, the snapshotter configuration, etc.")
+	require.Equal(t, expectedDigest, outDigest)
 }
 
 func runShell(dir string, cmds ...string) error {
