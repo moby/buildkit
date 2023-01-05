@@ -1,9 +1,8 @@
 # SLSA provenance
 
-BuildKit supports automatic creation of [SLSA Provenance](https://slsa.dev/provenance)
-attestations for the build process. Provenance attestations record information describing
-how a build was created, and is important for tracking the security of your software
-artifacts.
+BuildKit supports automatic creation of provenance attestations for the build
+process. Provenance attestations record information describing how a build was
+created, and is important for tracking the security of your software artifacts.
 
 Provenance attestations created by BuildKit include details such as:
 
