@@ -51,7 +51,7 @@ type Package struct {
 	// Cardinality: if FilesAnalyzed == true must be present, if FilesAnalyzed == false must be omitted
 	PackageVerificationCode *common.PackageVerificationCode `json:"packageVerificationCode,omitempty"`
 
-	// 7.10: Package Checksum: may have keys for SHA1, SHA256, MD5, SHA3-256, SHA3-384, SHA3-512, BLAKE2b-256, BLAKE2b-384, BLAKE2b-512, BLAKE3, ADLER32
+	// 7.10: Package Checksum: may have keys for SHA1, SHA256, SHA512, MD5, SHA3-256, SHA3-384, SHA3-512, BLAKE2b-256, BLAKE2b-384, BLAKE2b-512, BLAKE3, ADLER32
 	// Cardinality: optional, one or many
 	PackageChecksums []common.Checksum `json:"checksums,omitempty"`
 

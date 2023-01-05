@@ -50,7 +50,7 @@ type Package struct {
 	// 7.9: Package Verification Code
 	PackageVerificationCode common.PackageVerificationCode `json:"packageVerificationCode"`
 
-	// 7.10: Package Checksum: may have keys for SHA1, SHA256 and/or MD5
+	// 7.10: Package Checksum: may have keys for SHA1, SHA256, SHA512 and/or MD5
 	// Cardinality: optional, one or many
 	PackageChecksums []common.Checksum `json:"checksums,omitempty"`
 
