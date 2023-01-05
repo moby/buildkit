@@ -12,4 +12,9 @@ var pins = map[string]map[string]string{
 		"arm64v8": "sha256:af06af3514c44a964d3b905b498cf6493db8f1cde7c10e078213a89c87308ba0",
 		"library": "sha256:8914eb54f968791faf6a8638949e480fef81e697984fba772b3976835194c6d4",
 	},
+	"debian:bullseye-20230109-slim": {
+		"amd64":   "sha256:1acb06a0c31fb467eb8327ad361f1091ab265e0bf26d452dea45dcb0c0ea5e75",
+		"arm64v8": "sha256:7816383f71131e55256c17d42fd77bd80f3c1c98948ebf449fe56eb6580f4c4c",
+		"library": "sha256:98d3b4b0cee264301eb1354e0b549323af2d0633e1c43375d0b25c01826b6790",
+	},
 }
