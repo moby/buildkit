@@ -30,7 +30,7 @@ Included with `mode=min` and `mode=max`.
 The `buildType` field is set to `https://mobyproject.org/buildkit@v1` can be
 used to determine the structure of the provenance content.
 
-```
+```json
     "buildType": "https://mobyproject.org/buildkit@v1",
 ```
 
@@ -49,6 +49,8 @@ Describes the config that initialized the build.
         },
         "entryPoint": "Dockerfile"
       },
+      ...
+    },
 ```
 
 For builds initialized from a remote context, like a Git or HTTP URL, this
@@ -64,7 +66,6 @@ Describes build inputs passed to the build.
 
 ```json
     "invocation": {
-      ...
       "parameters": {
         "frontend": "gateway.v0",
         "args": {
@@ -77,11 +78,14 @@ Describes build inputs passed to the build.
           {
             "id": "GIT_AUTH_HEADER",
             "optional": true
-          }
+          },
           ...
         ],
         "ssh": [],
-        "locals": [],
+        "locals": []
+      },
+      ...
+    },
 ```
 
 The following fields are included with both `mode=min` and `mode=max`:
@@ -109,9 +113,12 @@ The following fields are only included with `mode=max`:
 Included with `mode=min` and `mode=max`.
 
 ```json
+    "invocation": {
       "environment": {
         "platform": "linux/amd64"
-      }
+      },
+      ...
+    },
 ```
 
 The only value BuildKit currently sets is the `platform` of the current build
@@ -150,7 +157,7 @@ determine if the artifact has been updated compared to when the build ran.
         "digest": {
           "sha1": "4b220de5058abfd01ff619c9d2ff6b09a049bea0"
         }
-      }
+      },
       ...
     ],
 ```
@@ -171,36 +178,38 @@ field for every step.
 
 ```json
   "buildConfig": {
-      "llbDefinition": [
-        {
-          "id": "step0",
-          "op": {
-            "Op": {
-              "exec": {
-                "meta": {
-                  "args": [
-                    "/bin/sh",
-                    "-c",
-                    "go build ."
-                  ],
-                  "env": [
-                    "PATH=/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-                    "GOPATH=/go",
-                    "GOFLAGS=-mod=vendor",
-                  ],
-                  "cwd": "/src",
-                },
-                "mounts": [...]
-              }
-            },
-            "platform": {...},
+    "llbDefinition": [
+      {
+        "id": "step0",
+        "op": {
+          "Op": {
+            "exec": {
+              "meta": {
+                "args": [
+                  "/bin/sh",
+                  "-c",
+                  "go build ."
+                ],
+                "env": [
+                  "PATH=/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                  "GOPATH=/go",
+                  "GOFLAGS=-mod=vendor",
+                ],
+                "cwd": "/src",
+              },
+              "mounts": [...]
+            }
           },
-          "inputs": [
-            "step8:0",
-            "step2:0",
-          ]
+          "platform": {...},
         },
-        ...
+        "inputs": [
+          "step8:0",
+          "step2:0",
+        ]
+      },
+      ...
+    ]
+  },
 ```
 
 ## `metadata.buildInvocationId` [(SLSA)](https://slsa.dev/provenance/v0.2#metadata.buildIncocationId)
@@ -214,6 +223,8 @@ versions of the image.
 ```json
     "metadata": {
       "buildInvocationID": "rpv7a389uzil5lqmrgwhijwjz",
+      ...
+    },
 ```
 
 ## `metadata.buildStartedOn` [(SLSA)](https://slsa.dev/provenance/v0.2#metadata.buildStartedOn)
@@ -223,7 +234,10 @@ Included with `mode=min` and `mode=max`.
 Timestamp when the build started.
 
 ```json
+    "metadata": {
       "buildStartedOn": "2021-11-17T15:00:00Z",
+      ...
+    },
 ```
 
 ## `metadata.buildFinishedOn` [(SLSA)](https://slsa.dev/provenance/v0.2#metadata.buildFinishedOn)
@@ -233,7 +247,10 @@ Included with `mode=min` and `mode=max`.
 Timestamp when the build finished.
 
 ```json
+    "metadata": {
       "buildFinishedOn": "2021-11-17T15:01:00Z",
+      ...
+    },
 ```
 
 ## `metadata.completeness` [(SLSA)](https://slsa.dev/provenance/v0.2#metadata.completeness)
@@ -257,12 +274,14 @@ repository all materials can be tracked by BuildKit and `completeness.materials`
 is true.
 
 ```json
+    "metadata": {
       "completeness": {
         "parameters": true,
         "environment": true,
         "materials": true
-      }
-    }
+      },
+      ...
+    },
 ```
 
 ## `metadata.reproducible` [(SLSA)](https://slsa.dev/provenance/v0.2#metadata.reproducible)
@@ -271,7 +290,10 @@ Defines if the build result is supposed to be byte-by-byte reproducible. This
 value can be set by the user with the `reproducible=true` attestation parameter.
 
 ```json
-    "reproducible": false
+    "metadata": {
+      "reproducible": false,
+      ...
+    },
 ```
 
 ## `metadata.https://mobyproject.org/buildkit@v1#hermetic`
@@ -286,6 +308,7 @@ commands or disables network with `--network=none` flag.
     "metadata": {
       "https://mobyproject.org/buildkit@v1#hermetic": true,
       ...
+    },
 ```
 
 ## `metadata.https://mobyproject.org/buildkit@v1#metadata`
@@ -294,6 +317,17 @@ Partially included with `mode=min`.
 
 This extension field defines BuildKit-specific additional metadata that is not
 part of the SLSA provenance spec.
+
+```json
+    "metadata": {
+      "https://mobyproject.org/buildkit@v1#metadata": {
+        "source": {...},
+        "layers": {...},
+        "vcs": {...},
+      },
+      ...
+    },
+```
 
 ### `source`
 
