@@ -1530,7 +1530,7 @@ func testFileOpCopyIncludeExclude(t *testing.T, sb integration.Sandbox) {
 		),
 	)
 
-	busybox := llb.Image("busybox:latest")
+	busybox := llb.Image("busybox:1.35")
 	run := func(cmd string) {
 		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
 	}
@@ -4558,7 +4558,7 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 	require.NoError(t, err)
 	defer c.Close()
 
-	busybox := llb.Image("busybox:latest")
+	busybox := llb.Image("busybox:1.35")
 	st := llb.Scratch()
 
 	run := func(cmd string) {
@@ -4685,7 +4685,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	busybox := llb.Image("busybox:latest")
+	busybox := llb.Image("busybox:1.35")
 	st := llb.Scratch()
 
 	run := func(cmd string) {
@@ -8237,7 +8237,7 @@ func testMultipleCacheExports(t *testing.T, sb integration.Sandbox) {
 	}
 	require.NoError(t, err)
 
-	busybox := llb.Image("busybox:latest")
+	busybox := llb.Image("busybox:1.35")
 	st := llb.Scratch()
 	run := func(cmd string) {
 		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)

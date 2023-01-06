@@ -762,7 +762,7 @@ func testCopyWildcardCache(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
-FROM busybox AS base
+FROM busybox:1.35 AS base
 COPY foo* files/
 RUN cat /dev/urandom | head -c 100 | sha256sum > unique
 COPY bar files/
@@ -3907,7 +3907,7 @@ func testCacheMultiPlatformImportExport(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	dockerfile := []byte(`
-FROM --platform=$BUILDPLATFORM busybox AS base
+FROM --platform=$BUILDPLATFORM busybox:1.35 AS base
 ARG TARGETARCH
 RUN echo -n $TARGETARCH> arch && cat /dev/urandom | head -c 100 | sha256sum > unique
 FROM scratch
@@ -4030,7 +4030,7 @@ func testCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	dockerfile := []byte(`
-FROM busybox AS base
+FROM busybox:1.35 AS base
 COPY foo const
 #RUN echo -n foobar > const
 RUN cat /dev/urandom | head -c 100 | sha256sum > unique
@@ -4268,9 +4268,9 @@ func testNoCache(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
-FROM busybox AS s0
+FROM busybox:1.35 AS s0
 RUN cat /dev/urandom | head -c 100 | sha256sum | tee unique
-FROM busybox AS s1
+FROM busybox:1.35 AS s1
 RUN cat /dev/urandom | head -c 100 | sha256sum | tee unique2
 FROM scratch
 COPY --from=s0 unique /
@@ -4743,7 +4743,7 @@ func testFrontendInputs(t *testing.T, sb integration.Sandbox) {
 
 	destDir := t.TempDir()
 
-	outMount := llb.Image("busybox").Run(
+	outMount := llb.Image("busybox:1.35").Run(
 		llb.Shlex(`sh -c "cat /dev/urandom | head -c 100 | sha256sum > /out/foo"`),
 	).AddMount("/out", llb.Scratch())
 

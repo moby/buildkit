@@ -166,7 +166,7 @@ from busybox AS build
 copy cachebust /
 run mkdir out && echo foo > out/foo
 
-from busybox as second
+from busybox:1.35 as second
 RUN --mount=from=build,src=out,target=/out,rw touch /out/bar && cat /dev/urandom | head -c 100 | sha256sum > /unique
 
 from scratch
