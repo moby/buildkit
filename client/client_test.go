@@ -168,6 +168,7 @@ func TestIntegration(t *testing.T) {
 		testBuildInfoInline,
 		testBuildInfoNoExport,
 		testZstdLocalCacheExport,
+		testCacheExportIgnoreError,
 		testZstdRegistryCacheImportExport,
 		testZstdLocalCacheImportExport,
 		testUncompressedLocalCacheImportExport,
@@ -4349,6 +4350,113 @@ func testZstdLocalCacheExport(t *testing.T, sb integration.Sandbox) {
 	dt, err = os.ReadFile(filepath.Join(destDir, "blobs/sha256/"+zstdLayerDigest))
 	require.NoError(t, err)
 	require.Equal(t, dt[:4], []byte{0x28, 0xb5, 0x2f, 0xfd})
+}
+
+func testCacheExportIgnoreError(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	cmd := `sh -e -c "echo -n ignore-error > data"`
+
+	st := llb.Scratch()
+	st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	tests := map[string]struct {
+		Exports        []ExportEntry
+		CacheExports   []CacheOptionsEntry
+		expectedErrors []string
+	}{
+		"local-ignore-error": {
+			Exports: []ExportEntry{
+				{
+					Type:      ExporterLocal,
+					OutputDir: t.TempDir(),
+				},
+			},
+			CacheExports: []CacheOptionsEntry{
+				{
+					Type: "local",
+					Attrs: map[string]string{
+						"dest": "éèç",
+					},
+				},
+			},
+			expectedErrors: []string{"failed to solve", "contains value with non-printable ASCII characters"},
+		},
+		"registry-ignore-error": {
+			Exports: []ExportEntry{
+				{
+					Type: ExporterImage,
+					Attrs: map[string]string{
+						"name": "test-registry-ignore-error",
+						"push": "false",
+					},
+				},
+			},
+			CacheExports: []CacheOptionsEntry{
+				{
+					Type: "registry",
+					Attrs: map[string]string{
+						"ref": "fake-url:5000/myrepo:buildcache",
+					},
+				},
+			},
+			expectedErrors: []string{"failed to solve", "dial tcp: lookup fake-url", "no such host"},
+		},
+		"s3-ignore-error": {
+			Exports: []ExportEntry{
+				{
+					Type:      ExporterLocal,
+					OutputDir: t.TempDir(),
+				},
+			},
+			CacheExports: []CacheOptionsEntry{
+				{
+					Type: "s3",
+					Attrs: map[string]string{
+						"endpoint_url":      "http://fake-url:9000",
+						"bucket":            "my-bucket",
+						"region":            "us-east-1",
+						"access_key_id":     "minioadmin",
+						"secret_access_key": "minioadmin",
+						"use_path_style":    "true",
+					},
+				},
+			},
+			expectedErrors: []string{"failed to solve", "dial tcp: lookup fake-url", "no such host"},
+		},
+	}
+	ignoreErrorValues := []bool{true, false}
+	for _, ignoreError := range ignoreErrorValues {
+		ignoreErrStr := strconv.FormatBool(ignoreError)
+		for n, test := range tests {
+			require.Equal(t, 1, len(test.Exports))
+			require.Equal(t, 1, len(test.CacheExports))
+			require.NotEmpty(t, test.CacheExports[0].Attrs)
+			test.CacheExports[0].Attrs["ignore-error"] = ignoreErrStr
+			testName := fmt.Sprintf("%s-%s", n, ignoreErrStr)
+			t.Run(testName, func(t *testing.T) {
+				_, err = c.Solve(sb.Context(), def, SolveOpt{
+					Exports:      test.Exports,
+					CacheExports: test.CacheExports,
+				}, nil)
+				if ignoreError {
+					require.NoError(t, err)
+				} else {
+					require.Error(t, err)
+					for _, errStr := range test.expectedErrors {
+						require.Contains(t, err.Error(), errStr)
+					}
+				}
+			})
+		}
+	}
 }
 
 func testUncompressedLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {

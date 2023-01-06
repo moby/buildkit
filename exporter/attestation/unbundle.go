@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path"
+	"strings"
 
 	"github.com/containerd/continuity/fs"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
@@ -20,6 +21,10 @@ import (
 // Unbundle iterates over all provided result attestations and un-bundles any
 // bundled attestations by loading them from the provided refs map.
 func Unbundle(ctx context.Context, s session.Group, bundled []exporter.Attestation) ([]exporter.Attestation, error) {
+	if err := Validate(bundled); err != nil {
+		return nil, err
+	}
+
 	eg, ctx := errgroup.WithContext(ctx)
 	unbundled := make([][]exporter.Attestation, len(bundled))
 
@@ -28,6 +33,12 @@ func Unbundle(ctx context.Context, s session.Group, bundled []exporter.Attestati
 		eg.Go(func() error {
 			switch att.Kind {
 			case gatewaypb.AttestationKindInToto:
+				if strings.HasPrefix(att.InToto.PredicateType, "https://slsa.dev/provenance/") {
+					if att.ContentFunc == nil {
+						// provenance may only be set buildkit-side using ContentFunc
+						return errors.New("frontend may not set provenance attestations")
+					}
+				}
 				unbundled[i] = append(unbundled[i], att)
 			case gatewaypb.AttestationKindBundle:
 				if att.ContentFunc != nil {
@@ -52,6 +63,11 @@ func Unbundle(ctx context.Context, s session.Group, bundled []exporter.Attestati
 				if err != nil {
 					return err
 				}
+				for _, att := range atts {
+					if strings.HasPrefix(att.InToto.PredicateType, "https://slsa.dev/provenance/") {
+						return errors.New("frontend may not bundle provenance attestations")
+					}
+				}
 				unbundled[i] = append(unbundled[i], atts...)
 			}
 			return nil
@@ -65,10 +81,9 @@ func Unbundle(ctx context.Context, s session.Group, bundled []exporter.Attestati
 	for _, atts := range unbundled {
 		joined = append(joined, atts...)
 	}
-	for _, att := range joined {
-		if err := validate(att); err != nil {
-			return nil, err
-		}
+
+	if err := Validate(joined); err != nil {
+		return nil, err
 	}
 	return joined, nil
 }
@@ -117,6 +132,7 @@ func unbundle(ctx context.Context, root string, bundle exporter.Attestation) ([]
 		}
 		unbundled = append(unbundled, exporter.Attestation{
 			Kind:        gatewaypb.AttestationKindInToto,
+			Metadata:    bundle.Metadata,
 			Path:        path.Join(bundle.Path, entry.Name()),
 			ContentFunc: func() ([]byte, error) { return predicate, nil },
 			InToto: result.InTotoAttestation{
@@ -128,8 +144,17 @@ func unbundle(ctx context.Context, root string, bundle exporter.Attestation) ([]
 	return unbundled, nil
 }
 
+func Validate(atts []exporter.Attestation) error {
+	for _, att := range atts {
+		if err := validate(att); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func validate(att exporter.Attestation) error {
-	if att.Path == "" {
+	if att.Kind != gatewaypb.AttestationKindBundle && att.Path == "" {
 		return errors.New("attestation does not have set path")
 	}
 	if att.Ref == nil && att.ContentFunc == nil {

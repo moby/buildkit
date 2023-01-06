@@ -9,12 +9,13 @@ import (
 
 const (
 	AttestationReasonKey     = "reason"
+	AttestationSBOMCore      = "sbom-core"
 	AttestationInlineOnlyKey = "inline-only"
 )
 
-var (
-	AttestationReasonSBOM       = []byte("sbom")
-	AttestationReasonProvenance = []byte("provenance")
+const (
+	AttestationReasonSBOM       = "sbom"
+	AttestationReasonProvenance = "provenance"
 )
 
 type Attestation[T any] struct {

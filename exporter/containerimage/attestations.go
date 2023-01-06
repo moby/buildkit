@@ -14,6 +14,7 @@ import (
 	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/solver/result"
 	"github.com/moby/buildkit/version"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -35,6 +36,13 @@ func supplementSBOM(ctx context.Context, s session.Group, target cache.Immutable
 	if att.InToto.PredicateType != intoto.PredicateSPDX {
 		return att, nil
 	}
+	name, ok := att.Metadata[result.AttestationSBOMCore]
+	if !ok {
+		return att, nil
+	}
+	if n, _, _ := strings.Cut(att.Path, "."); n != string(name) {
+		return att, nil
+	}
 
 	content, err := attestation.ReadAll(ctx, s, att)
 	if err != nil {
@@ -43,7 +51,8 @@ func supplementSBOM(ctx context.Context, s session.Group, target cache.Immutable
 
 	doc, err := decodeSPDX(content)
 	if err != nil {
-		return att, err
+		// ignore decoding error
+		return att, nil
 	}
 
 	layers, err := newFileLayerFinder(target, targetRemote)

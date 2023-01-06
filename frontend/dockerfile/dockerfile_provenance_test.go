@@ -198,7 +198,7 @@ RUN echo "ok" > /foo
 
 			require.False(t, pred.Metadata.Completeness.Materials)
 			require.False(t, pred.Metadata.Reproducible)
-			require.False(t, pred.Metadata.Completeness.Hermetic)
+			require.False(t, pred.Metadata.Hermetic)
 
 			if mode == "max" || mode == "" {
 				require.Equal(t, 2, len(pred.Metadata.BuildKitMetadata.Layers))
@@ -347,8 +347,8 @@ COPY myapp.Dockerfile /
 	require.Equal(t, 0, len(pred.Invocation.Parameters.Locals))
 
 	require.True(t, pred.Metadata.Completeness.Materials)
-	require.True(t, pred.Metadata.Completeness.Hermetic)
 	require.True(t, pred.Metadata.Completeness.Environment)
+	require.True(t, pred.Metadata.Hermetic)
 
 	if isClient {
 		require.False(t, pred.Metadata.Completeness.Parameters)
@@ -861,4 +861,41 @@ RUN --mount=type=secret,id=mysecret --mount=type=secret,id=othersecret --mount=t
 	require.Equal(t, 1, len(pred.Invocation.Parameters.SSH), "%+v", pred.Invocation.Parameters.SSH)
 	require.Equal(t, "default", pred.Invocation.Parameters.SSH[0].ID)
 	require.True(t, pred.Invocation.Parameters.SSH[0].Optional)
+}
+
+func testNilProvenance(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureProvenance)
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM scratch
+ENV FOO=bar
+`)
+	dir, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"attest:provenance": "mode=max",
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
 }

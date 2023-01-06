@@ -58,6 +58,7 @@ type ExporterRequest struct {
 type RemoteCacheExporter struct {
 	remotecache.Exporter
 	solver.CacheExportMode
+	IgnoreError bool
 }
 
 // ResolveWorkerFunc returns default worker for the temporary default non-distributed use cases
@@ -269,17 +270,19 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 		}
 
 		eg.Go(func() error {
-			desc, releaseStatus, err := s.history.ImportStatus(ctx2, ch)
+			st, releaseStatus, err := s.history.ImportStatus(ctx2, ch)
 			if err != nil {
 				return err
 			}
 			mu.Lock()
 			releasers = append(releasers, releaseStatus)
 			rec.Logs = &controlapi.Descriptor{
-				Digest:    desc.Digest,
-				Size_:     desc.Size,
-				MediaType: desc.MediaType,
+				Digest:    st.Descriptor.Digest,
+				Size_:     st.Descriptor.Size,
+				MediaType: st.Descriptor.MediaType,
 			}
+			rec.NumCachedSteps = int32(st.NumCachedSteps)
+			rec.NumTotalSteps = int32(st.NumTotalSteps)
 			mu.Unlock()
 			return nil
 		})
@@ -353,6 +356,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 					return err
 				}
 				enc := json.NewEncoder(w)
+				enc.SetIndent("", "  ")
 				for _, sp := range spans {
 					if err := enc.Encode(sp); err != nil {
 						return err
@@ -569,7 +573,7 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 		func(exp RemoteCacheExporter, i int) {
 			eg.Go(func() (err error) {
 				id := fmt.Sprint(j.SessionID, "-cache-", i)
-				return inBuilderContext(ctx, j, exp.Exporter.Name(), id, func(ctx context.Context, _ session.Group) error {
+				err = inBuilderContext(ctx, j, exp.Exporter.Name(), id, func(ctx context.Context, _ session.Group) error {
 					prepareDone := progress.OneOff(ctx, "preparing build cache for export")
 					if err := result.EachRef(cached, inp, func(res solver.CachedResult, ref cache.ImmutableRef) error {
 						ctx = withDescHandlerCacheOpts(ctx, ref)
@@ -588,13 +592,13 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 					}); err != nil {
 						return prepareDone(err)
 					}
-					prepareDone(nil)
 					resps[i], err = exp.Finalize(ctx)
-					if err != nil {
-						return err
-					}
-					return nil
+					return prepareDone(err)
 				})
+				if exp.IgnoreError {
+					err = nil
+				}
+				return err
 			})
 		}(exp, i)
 	}

@@ -44,6 +44,12 @@ type HistoryQueue struct {
 	deleted map[string]struct{}
 }
 
+type StatusImportResult struct {
+	Descriptor     ocispecs.Descriptor
+	NumCachedSteps int
+	NumTotalSteps  int
+}
+
 func NewHistoryQueue(opt HistoryQueueOpt) *HistoryQueue {
 	if opt.CleanConfig == nil {
 		opt.CleanConfig = &config.HistoryConfig{
@@ -433,7 +439,7 @@ func (w *Writer) Commit(ctx context.Context) (*ocispecs.Descriptor, func(), erro
 		}, nil
 }
 
-func (h *HistoryQueue) ImportStatus(ctx context.Context, ch chan *client.SolveStatus) (_ *ocispecs.Descriptor, _ func(), err error) {
+func (h *HistoryQueue) ImportStatus(ctx context.Context, ch chan *client.SolveStatus) (_ *StatusImportResult, _ func(), err error) {
 	defer func() {
 		if ch == nil {
 			return
@@ -455,8 +461,19 @@ func (h *HistoryQueue) ImportStatus(ctx context.Context, ch chan *client.SolveSt
 		}
 	}()
 
+	vtxMap := make(map[digest.Digest]bool)
+
 	buf := make([]byte, 32*1024)
 	for st := range ch {
+		for _, vtx := range st.Vertexes {
+			if _, ok := vtxMap[vtx.Digest]; !ok {
+				vtxMap[vtx.Digest] = false
+			}
+			if vtx.Cached {
+				vtxMap[vtx.Digest] = true
+			}
+		}
+
 		hdr := make([]byte, 4)
 		for _, pst := range st.Marshal() {
 			sz := pst.Size()
@@ -479,7 +496,23 @@ func (h *HistoryQueue) ImportStatus(ctx context.Context, ch chan *client.SolveSt
 	if err := bufW.Flush(); err != nil {
 		return nil, nil, err
 	}
-	return w.Commit(ctx)
+	desc, release, err := w.Commit(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	numCached := 0
+	for _, cached := range vtxMap {
+		if cached {
+			numCached++
+		}
+	}
+
+	return &StatusImportResult{
+		Descriptor:     *desc,
+		NumCachedSteps: numCached,
+		NumTotalSteps:  len(vtxMap),
+	}, release, nil
 }
 
 func (h *HistoryQueue) Listen(ctx context.Context, req *controlapi.BuildHistoryRequest, f func(*controlapi.BuildHistoryEvent) error) error {

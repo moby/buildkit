@@ -84,3 +84,65 @@ func TestDuplicateCacheOptions(t *testing.T) {
 		})
 	}
 }
+
+func TestParseCacheExportIgnoreError(t *testing.T) {
+	tests := map[string]struct {
+		expectedIgnoreError bool
+		expectedSupported   bool
+	}{
+		"": {
+			expectedIgnoreError: false,
+			expectedSupported:   false,
+		},
+		".": {
+			expectedIgnoreError: false,
+			expectedSupported:   false,
+		},
+		"fake": {
+			expectedIgnoreError: false,
+			expectedSupported:   false,
+		},
+		"true": {
+			expectedIgnoreError: true,
+			expectedSupported:   true,
+		},
+		"True": {
+			expectedIgnoreError: true,
+			expectedSupported:   true,
+		},
+		"TRUE": {
+			expectedIgnoreError: true,
+			expectedSupported:   true,
+		},
+		"truee": {
+			expectedIgnoreError: false,
+			expectedSupported:   false,
+		},
+		"false": {
+			expectedIgnoreError: false,
+			expectedSupported:   true,
+		},
+		"False": {
+			expectedIgnoreError: false,
+			expectedSupported:   true,
+		},
+		"FALSE": {
+			expectedIgnoreError: false,
+			expectedSupported:   true,
+		},
+		"ffalse": {
+			expectedIgnoreError: false,
+			expectedSupported:   false,
+		},
+	}
+
+	for ignoreErrStr, test := range tests {
+		t.Run(ignoreErrStr, func(t *testing.T) {
+			ignoreErr, supported := parseCacheExportIgnoreError(ignoreErrStr)
+			t.Log("checking expectedIgnoreError")
+			require.Equal(t, ignoreErr, test.expectedIgnoreError)
+			t.Log("checking expectedSupported")
+			require.Equal(t, supported, test.expectedSupported)
+		})
+	}
+}

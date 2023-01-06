@@ -912,8 +912,6 @@ github.com/j-keck/arping v0.0.0-20160618110441-2cf9dc699c56/go.mod h1:ymszkNOg6t
 github.com/j-keck/arping v1.0.2/go.mod h1:aJbELhR92bSk7tp79AWM/ftfc90EfEi2bQJrbBFOsPw=
 github.com/jaguilar/vt100 v0.0.0-20150826170717-2703a27b14ea/go.mod h1:QMdK4dGB3YhEW2BmA1wgGpPYI3HZy/5gD705PXKUVSg=
 github.com/jarcoal/httpmock v1.0.5/go.mod h1:ATjnClrvW/3tijVmpL/va5Z3aAyGvqU3gCT8nX0Txik=
-github.com/jedevc/spdx-tools-golang v0.0.0-20221205121515-6fe9d226281a h1:oEb/YxUfXfGhRJVEg4yBfSnB6ZgS9aBu4RAM0fB9XsA=
-github.com/jedevc/spdx-tools-golang v0.0.0-20221205121515-6fe9d226281a/go.mod h1:VHzvNsKAfAGqs4ZvwRL+7a0dNsL20s7lGui4K9C0xQM=
 github.com/jellevandenhooff/dkim v0.0.0-20150330215556-f50fe3d243e1/go.mod h1:E0B/fFc00Y+Rasa88328GlI/XbtyysCtTHZS8h7IrBU=
 github.com/jingyugao/rowserrcheck v0.0.0-20191204022205-72ab7603b68a/go.mod h1:xRskid8CManxVta/ALEhJha/pweKBaVG6fWgc0yH25s=
 github.com/jirfag/go-printf-func-name v0.0.0-20191110105641-45db9963cdd3/go.mod h1:HEWGJkRDzjJY2sqdDwxccsGicWEf9BQOZsq2tV+xzM0=
@@ -1318,6 +1316,8 @@ github.com/sourcegraph/go-diff v0.5.1/go.mod h1:j2dHj3m8aZgQO8lMTcTnBcXkRRRqi34c
 github.com/sourcegraph/go-diff v0.5.3/go.mod h1:v9JDtjCE4HHHCZGId75rg8gkKKa98RVjBcBGsVmMmak=
 github.com/spaolacci/murmur3 v0.0.0-20180118202830-f09979ecbc72/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
 github.com/spdx/gordf v0.0.0-20201111095634-7098f93598fb/go.mod h1:uKWaldnbMnjsSAXRurWqqrdyZen1R7kxl8TkmWk2OyM=
+github.com/spdx/tools-golang v0.3.1-0.20230104082527-d6f58551be3f h1:9B623Cfs+mclYK6dsae7gLSwuIBHvlgmEup87qpqsAQ=
+github.com/spdx/tools-golang v0.3.1-0.20230104082527-d6f58551be3f/go.mod h1:VHzvNsKAfAGqs4ZvwRL+7a0dNsL20s7lGui4K9C0xQM=
 github.com/spf13/afero v1.1.2/go.mod h1:j4pytiNVoe2o6bmDsKpLACNPDBIoEAkihy7loJ1B0CQ=
 github.com/spf13/afero v1.2.2/go.mod h1:9ZxEEn6pIJ8Rxe320qSDBk6AsU0r9pR7Q4OcevTdifk=
 github.com/spf13/cast v1.3.0/go.mod h1:Qx5cxh0v+4UWYiBimWS+eyWzqEqokIECu5etghLkUJE=
@@ -1379,8 +1379,8 @@ github.com/tmc/grpc-websocket-proxy v0.0.0-20201229170055-e5319fda7802/go.mod h1
 github.com/tommy-muehle/go-mnd v1.1.1/go.mod h1:dSUh0FtTP8VhvkL1S+gUR1OKd9ZnSaozuI6r3m6wOig=
 github.com/tommy-muehle/go-mnd v1.3.1-0.20200224220436-e6f9a994e8fa/go.mod h1:dSUh0FtTP8VhvkL1S+gUR1OKd9ZnSaozuI6r3m6wOig=
 github.com/tonistiigi/fsutil v0.0.0-20201103201449-0834f99b7b85/go.mod h1:a7cilN64dG941IOXfhJhlH0qB92hxJ9A1ewrdUmJ6xo=
-github.com/tonistiigi/fsutil v0.0.0-20221114235510-0127568185cf h1:2n2v98sRhXEG0Kh7+EvctaNIyOim36Ekp4pGDzbuvO8=
-github.com/tonistiigi/fsutil v0.0.0-20221114235510-0127568185cf/go.mod h1:AvLEd1LEIl64G2Jpgwo7aVV5lGH0ePcKl0ygGIHNYl8=
+github.com/tonistiigi/fsutil v0.0.0-20230105215944-fb433841cbfa h1:XOFp/3aBXlqmOFAg3r6e0qQjPnK5I970LilqX+Is1W8=
+github.com/tonistiigi/fsutil v0.0.0-20230105215944-fb433841cbfa/go.mod h1:AvLEd1LEIl64G2Jpgwo7aVV5lGH0ePcKl0ygGIHNYl8=
 github.com/tonistiigi/go-actions-cache v0.0.0-20220404170428-0bdeb6e1eac7 h1:8eY6m1mjgyB8XySUR7WvebTM8D/Vs86jLJzD/Tw7zkc=
 github.com/tonistiigi/go-actions-cache v0.0.0-20220404170428-0bdeb6e1eac7/go.mod h1:qqvyZqkfwkoJuPU/bw61bItaoO0SJ8YSW0vSVRRvsRg=
 github.com/tonistiigi/go-archvariant v1.0.0 h1:5LC1eDWiBNflnTF1prCiX09yfNHIxDC/aukdhCdTyb0=

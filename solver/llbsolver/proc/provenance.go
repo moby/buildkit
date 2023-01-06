@@ -32,6 +32,10 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 				return nil, errors.Errorf("no build info found for provenance %s", p.ID)
 			}
 
+			if cp == nil {
+				continue
+			}
+
 			ref, ok := res.FindRef(p.ID)
 			if !ok {
 				return nil, errors.Errorf("could not find ref %s", p.ID)
@@ -42,16 +46,21 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 				return nil, err
 			}
 
+			filename := "provenance.json"
+			if v, ok := attrs["filename"]; ok {
+				filename = v
+			}
+
 			res.AddAttestation(p.ID, llbsolver.Attestation{
 				Kind: gatewaypb.AttestationKindInToto,
 				Metadata: map[string][]byte{
-					result.AttestationReasonKey:     result.AttestationReasonProvenance,
+					result.AttestationReasonKey:     []byte(result.AttestationReasonProvenance),
 					result.AttestationInlineOnlyKey: []byte(strconv.FormatBool(inlineOnly)),
 				},
 				InToto: result.InTotoAttestation{
 					PredicateType: slsa02.PredicateSLSAProvenance,
 				},
-				Path: "provenance.json",
+				Path: filename,
 				ContentFunc: func() ([]byte, error) {
 					pr, err := pc.Predicate()
 					if err != nil {

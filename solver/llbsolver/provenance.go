@@ -188,7 +188,7 @@ type resultRequests struct {
 	platforms []exptypes.Platform
 }
 
-// filterImagePlatforms filter out images that not for the current platform if an image existist for every platform in a result
+// filterImagePlatforms filter out images that not for the current platform if an image exists for every platform in a result
 func (reqs *resultRequests) filterImagePlatforms(k string, imgs []provenance.ImageSource) []provenance.ImageSource {
 	if len(reqs.platforms) == 0 {
 		return imgs

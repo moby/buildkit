@@ -204,8 +204,9 @@ message BuildHistoryRecord {
 	int32 Generation = 12;
 	Descriptor trace = 13;
 	bool pinned = 14;
+	int32 numCachedSteps = 15;
+	int32 numTotalSteps = 16;
 	// TODO: tags
-	// TODO: steps/cache summary
 	// TODO: unclipped logs
 }
 

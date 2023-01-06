@@ -666,7 +666,7 @@ github.com/shibumi/go-pathspec
 # github.com/sirupsen/logrus v1.9.0
 ## explicit; go 1.13
 github.com/sirupsen/logrus
-# github.com/spdx/tools-golang v0.3.1-0.20221108182156-8a01147e6342 => github.com/jedevc/spdx-tools-golang v0.0.0-20221205121515-6fe9d226281a
+# github.com/spdx/tools-golang v0.3.1-0.20230104082527-d6f58551be3f
 ## explicit; go 1.13
 github.com/spdx/tools-golang/json
 github.com/spdx/tools-golang/spdx/common
@@ -676,7 +676,7 @@ github.com/spdx/tools-golang/spdx/v2_3
 ## explicit; go 1.13
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
-# github.com/tonistiigi/fsutil v0.0.0-20221114235510-0127568185cf
+# github.com/tonistiigi/fsutil v0.0.0-20230105215944-fb433841cbfa
 ## explicit; go 1.18
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy
@@ -928,4 +928,3 @@ google.golang.org/protobuf/types/pluginpb
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
-# github.com/spdx/tools-golang => github.com/jedevc/spdx-tools-golang v0.0.0-20221205121515-6fe9d226281a
