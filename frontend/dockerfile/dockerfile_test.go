@@ -154,6 +154,7 @@ var allTests = integration.TestFuncs(
 	testClientFrontendProvenance,
 	testClientLLBProvenance,
 	testSecretSSHProvenance,
+	testNilProvenance,
 	testSBOMScannerArgs,
 )
 

@@ -32,6 +32,10 @@ func ProvenanceProcessor(attrs map[string]string) llbsolver.Processor {
 				return nil, errors.Errorf("no build info found for provenance %s", p.ID)
 			}
 
+			if cp == nil {
+				continue
+			}
+
 			ref, ok := res.FindRef(p.ID)
 			if !ok {
 				return nil, errors.Errorf("could not find ref %s", p.ID)
