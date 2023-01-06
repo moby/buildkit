@@ -34,6 +34,8 @@ type ImageCommitOpts struct {
 	BuildInfoAttrs bool
 	Annotations    AnnotationsGroup
 	Epoch          *time.Time
+
+	ForceInlineAttestations bool // force inline attestations to be attached
 }
 
 func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error) {

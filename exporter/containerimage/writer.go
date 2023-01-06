@@ -69,22 +69,24 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		return nil, err
 	}
 
-	requiredAttestations := false
-	for _, p := range ps.Platforms {
-		if atts, ok := inp.Attestations[p.ID]; ok {
-			atts = attestation.Filter(atts, nil, map[string][]byte{
-				result.AttestationInlineOnlyKey: []byte(strconv.FormatBool(true)),
-			})
-			if len(atts) > 0 {
-				requiredAttestations = true
-				break
+	if !isMap {
+		// enable index if we need to include attestations
+		for _, p := range ps.Platforms {
+			if atts, ok := inp.Attestations[p.ID]; ok {
+				if !opts.ForceInlineAttestations {
+					// if we don't need force inline attestations (for oci
+					// exporter), filter them out
+					atts = attestation.Filter(atts, nil, map[string][]byte{
+						result.AttestationInlineOnlyKey: []byte(strconv.FormatBool(true)),
+					})
+				}
+				if len(atts) > 0 {
+					isMap = true
+					break
+				}
 			}
 		}
 	}
-	if requiredAttestations {
-		isMap = true
-	}
-
 	if opts.Epoch == nil {
 		if tm, ok, err := epoch.ParseSource(inp); err != nil {
 			return nil, err
@@ -107,9 +109,6 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 	if !isMap {
 		if len(ps.Platforms) > 1 {
 			return nil, errors.Errorf("cannot export multiple platforms without multi-platform enabled")
-		}
-		if requiredAttestations {
-			return nil, errors.Errorf("cannot export attestations without multi-platform enabled")
 		}
 
 		var ref cache.ImmutableRef
