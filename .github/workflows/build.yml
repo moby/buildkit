@@ -115,6 +115,10 @@ jobs:
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
           buildkitd-flags: --debug
       -
+        name: /proc/cpuinfo
+        run: |
+          cat /proc/cpuinfo
+      -
         name: Test pkg=${{ matrix.pkg }} ; typ=${{ matrix.typ }} ; skipit=${{ matrix.skip-integration-tests }} ; worker=${{ matrix.worker }}
         run: |
           if [ -n "${{ matrix.worker }}" ]; then
