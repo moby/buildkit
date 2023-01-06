@@ -529,14 +529,14 @@ In the *shell* form you can use a `\` (backslash) to continue a single
 RUN instruction onto the next line. For example, consider these two lines:
 
 ```dockerfile
-RUN /bin/bash -c 'source $HOME/.bashrc; \
+RUN /bin/bash -c 'source $HOME/.bashrc && \
 echo $HOME'
 ```
 
 Together they are equivalent to this single line:
 
 ```dockerfile
-RUN /bin/bash -c 'source $HOME/.bashrc; echo $HOME'
+RUN /bin/bash -c 'source $HOME/.bashrc && echo $HOME'
 ```
 
 To use a different shell, other than '/bin/sh', use the *exec* form passing in
