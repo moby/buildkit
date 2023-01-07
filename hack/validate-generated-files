@@ -8,3 +8,9 @@ buildxCmd build \
   --output "type=cacheonly" \
   --file "./hack/dockerfiles/generated-files.Dockerfile" \
   .
+
+buildxCmd build \
+  --target "validate-toc" \
+  --output "type=cacheonly" \
+  --file "./hack/dockerfiles/generated-files.Dockerfile" \
+  .
