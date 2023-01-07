@@ -25,7 +25,12 @@ func Helper(u *url.URL) (*connhelper.ConnectionHelper, error) {
 	return &connhelper.ConnectionHelper{
 		ContextDialer: func(ctx context.Context, addr string) (net.Conn, error) {
 			// using background context because context remains active for the duration of the process, after dial has completed
-			return commandconn.New(context.Background(), "nerdctl", []string{"exec", "-i", sp.Container, "buildctl", "dial-stdio"}...)
+			args := []string{"exec"}
+			if sp.Namespace != "" {
+				args = append(args, "--namespace", sp.Namespace)
+			}
+			args = append(args, "-i", sp.Container, "buildctl", "dial-stdio")
+			return commandconn.New(context.Background(), "nerdctl", args...)
 		},
 	}, nil
 }
@@ -33,14 +38,17 @@ func Helper(u *url.URL) (*connhelper.ConnectionHelper, error) {
 // Spec
 type Spec struct {
 	Container string
+	Namespace string
 }
 
 // SpecFromURL creates Spec from URL.
-// URL is like nerdctl-container://<container>
+// URL is like nerdctl-container://<container>?namespace=<namespace>
 // Only <container> part is mandatory.
 func SpecFromURL(u *url.URL) (*Spec, error) {
+	q := u.Query()
 	sp := Spec{
 		Container: u.Hostname(),
+		Namespace: q.Get("namespace"),
 	}
 	if sp.Container == "" {
 		return nil, errors.New("url lacks container name")
