@@ -11,8 +11,14 @@ ARG STARGZ_SNAPSHOTTER_VERSION=v0.13.0
 ARG NERDCTL_VERSION=v1.0.0
 ARG DNSNAME_VERSION=v1.3.1
 ARG NYDUS_VERSION=v2.1.0
+ARG MINIO_VERSION=RELEASE.2022-05-03T20-36-08Z
+ARG MINIO_MC_VERSION=RELEASE.2022-05-04T06-07-55Z
 
 ARG ALPINE_VERSION=3.17
+
+# minio for s3 integration tests
+FROM minio/minio:${MINIO_VERSION} AS minio
+FROM minio/mc:${MINIO_MC_VERSION} AS minio-mc
 
 # alpine base for buildkit image
 # TODO: remove this when alpine image supports riscv64
@@ -240,6 +246,8 @@ ENTRYPOINT ["/docker-entrypoint.sh"]
 ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.5=/opt/containerd-alt-15/bin"
 ENV BUILDKIT_INTEGRATION_SNAPSHOTTER=stargz
 ENV CGO_ENABLED=0
+COPY --link --from=minio /opt/bin/minio /usr/bin/
+COPY --link --from=minio-mc /usr/bin/mc /usr/bin/
 COPY --link --from=nydus /out/nydus-static/* /usr/bin/
 COPY --link --from=stargz-snapshotter /out/* /usr/bin/
 COPY --link --from=rootlesskit /rootlesskit /usr/bin/
