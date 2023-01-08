@@ -112,6 +112,7 @@ func TestIntegration(t *testing.T) {
 		testReadonlyRootFS,
 		testBasicRegistryCacheImportExport,
 		testBasicLocalCacheImportExport,
+		testBasicS3CacheImportExport,
 		testCachedMounts,
 		testCopyFromEmptyImage,
 		testProxyEnv,
@@ -4732,6 +4733,44 @@ func testBasicLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 		Type: "local",
 		Attrs: map[string]string{
 			"dest": dir,
+		},
+	}
+	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
+}
+
+func testBasicS3CacheImportExport(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport)
+
+	opts := integration.MinioOpts{
+		Region:          "us-east-1",
+		AccessKeyID:     "minioadmin",
+		SecretAccessKey: "minioadmin",
+	}
+
+	s3Addr, s3Bucket, cleanup, err := integration.NewMinioServer(t, sb, opts)
+	require.NoError(t, err)
+	defer cleanup()
+
+	im := CacheOptionsEntry{
+		Type: "s3",
+		Attrs: map[string]string{
+			"region":            opts.Region,
+			"access_key_id":     opts.AccessKeyID,
+			"secret_access_key": opts.SecretAccessKey,
+			"bucket":            s3Bucket,
+			"endpoint_url":      s3Addr,
+			"use_path_style":    "true",
+		},
+	}
+	ex := CacheOptionsEntry{
+		Type: "s3",
+		Attrs: map[string]string{
+			"region":            opts.Region,
+			"access_key_id":     opts.AccessKeyID,
+			"secret_access_key": opts.SecretAccessKey,
+			"bucket":            s3Bucket,
+			"endpoint_url":      s3Addr,
+			"use_path_style":    "true",
 		},
 	}
 	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
