@@ -1,0 +1,45 @@
+{
+    "System": {
+        "Memory": 65536,
+        "Conns": 16,
+        "ConnsInbound": 8,
+        "ConnsOutbound": 16,
+        "FD": 16
+    },
+    "ServiceDefault": {
+        "Memory": 8765
+    },
+    "Service": {
+        "A": {
+            "Memory": 8192
+        },
+        "B": {}
+    },
+    "ServicePeerDefault": {
+        "Memory": 2048
+    },
+    "ServicePeer": {
+        "A": {
+            "Memory": 4096
+        }
+    },
+    "ProtocolDefault": {
+        "Memory": 2048
+    },
+    "ProtocolPeerDefault": {
+        "Memory": 1024
+    },
+    "Protocol": {
+        "/A": {
+            "Memory": 8192
+        }
+    },
+    "PeerDefault": {
+        "Memory": 4096
+    },
+    "Peer": {
+        "12D3KooWPFH2Bx2tPfw6RLxN8k2wh47GRXgkt9yrAHU37zFwHWzS": {
+            "Memory": 4097
+        }
+    }
+}

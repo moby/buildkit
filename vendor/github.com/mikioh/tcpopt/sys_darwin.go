@@ -1,0 +1,37 @@
+// Copyright 2016 Mikio Hara. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+package tcpopt
+
+import "time"
+
+var options = [soMax]option{
+	soNodelay:      {ianaProtocolTCP, sysTCP_NODELAY, 0},
+	soMaxseg:       {ianaProtocolTCP, sysTCP_MAXSEG, 0},
+	soSndbuf:       {sysSOL_SOCKET, sysSO_SNDBUF, 0},
+	soRcvbuf:       {sysSOL_SOCKET, sysSO_RCVBUF, 0},
+	soKeepalive:    {sysSOL_SOCKET, sysSO_KEEPALIVE, 0},
+	soKeepidle:     {ianaProtocolTCP, sysTCP_KEEPALIVE, time.Second},
+	soKeepintvl:    {ianaProtocolTCP, sysTCP_KEEPINTVL, time.Second},
+	soKeepcnt:      {ianaProtocolTCP, sysTCP_KEEPCNT, 0},
+	soCork:         {ianaProtocolTCP, sysTCP_NOPUSH, 0},
+	soNotsentLOWAT: {ianaProtocolTCP, sysTCP_NOTSENT_LOWAT, 0},
+	soError:        {sysSOL_SOCKET, sysSO_ERROR, 0},
+	soECN:          {ianaProtocolTCP, sysTCP_ENABLE_ECN, 0},
+}
+
+var parsers = map[int64]func([]byte) (Option, error){
+	ianaProtocolTCP<<32 | sysTCP_NODELAY:       parseNoDelay,
+	ianaProtocolTCP<<32 | sysTCP_MAXSEG:        parseMSS,
+	sysSOL_SOCKET<<32 | sysSO_SNDBUF:           parseSendBuffer,
+	sysSOL_SOCKET<<32 | sysSO_RCVBUF:           parseReceiveBuffer,
+	sysSOL_SOCKET<<32 | sysSO_KEEPALIVE:        parseKeepAlive,
+	ianaProtocolTCP<<32 | sysTCP_KEEPALIVE:     parseKeepAliveIdleInterval,
+	ianaProtocolTCP<<32 | sysTCP_KEEPINTVL:     parseKeepAliveProbeInterval,
+	ianaProtocolTCP<<32 | sysTCP_KEEPCNT:       parseKeepAliveProbeCount,
+	ianaProtocolTCP<<32 | sysTCP_NOPUSH:        parseCork,
+	ianaProtocolTCP<<32 | sysTCP_NOTSENT_LOWAT: parseNotSentLowWMK,
+	sysSOL_SOCKET<<32 | sysSO_ERROR:            parseError,
+	ianaProtocolTCP<<32 | sysTCP_ENABLE_ECN:    parseECN,
+}

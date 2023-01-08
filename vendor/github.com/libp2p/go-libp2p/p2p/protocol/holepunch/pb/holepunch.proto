@@ -1,0 +1,14 @@
+syntax = "proto2";
+
+package holepunch.pb;
+
+// spec: https://github.com/libp2p/specs/blob/master/relay/DCUtR.md
+message HolePunch {
+  enum Type {
+    CONNECT = 100;
+    SYNC = 300;
+  }
+
+  required Type type=1;
+  repeated bytes ObsAddrs = 2;
+}

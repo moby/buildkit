@@ -1,0 +1,18 @@
+version: "{build}"
+
+branches:
+  only:
+    - master
+
+environment:
+  GOPATH: c:\gopath
+
+install:
+  - set PATH=%GOPATH%\bin;c:\go\bin;%PATH%
+  - mkdir c:\gopath
+  - go get github.com/mikioh/tcp
+  - go get github.com/mikioh/tcpopt
+  - go get github.com/mikioh/tcpinfo
+
+build_script:
+  - go test -v -race

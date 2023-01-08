@@ -1,0 +1,40 @@
+syntax = "proto3";
+package api.pb;
+
+option go_package=".;pb";
+
+message Pin {
+  enum PinType {
+    BadType = 0; // 1 << iota
+    DataType = 1; // 2 << iota
+    MetaType = 2;
+    ClusterDAGType = 3;
+    ShardType = 4;
+  }
+
+  bytes Cid = 1;
+  PinType Type = 2;
+  repeated bytes Allocations = 3;
+  sint32 MaxDepth = 4;
+  bytes Reference = 5;
+  PinOptions Options = 6;
+  uint64 Timestamp = 7;
+}
+
+message PinOptions {
+  sint32 ReplicationFactorMin = 1;
+  sint32 ReplicationFactorMax = 2;
+  string Name = 3;
+  uint64 ShardSize = 4;
+  reserved 5; // reserved for UserAllocations
+  map<string, string> Metadata = 6 [deprecated = true];
+  bytes PinUpdate = 7;
+  uint64 ExpireAt = 8;
+  repeated bytes Origins = 9;
+  repeated Metadata SortedMetadata = 10;
+}
+
+message Metadata {
+  string Key = 1;
+  string Value = 2;
+}
