@@ -72,6 +72,10 @@ func (sb *sandbox) Context() context.Context {
 	return sb.ctx
 }
 
+func (sb *sandbox) Logs() map[string]*bytes.Buffer {
+	return sb.logs
+}
+
 func (sb *sandbox) PrintLogs(t *testing.T) {
 	printLogs(sb.logs, t.Log)
 }
