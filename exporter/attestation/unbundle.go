@@ -81,11 +81,39 @@ func Unbundle(ctx context.Context, s session.Group, bundled []exporter.Attestati
 	for _, atts := range unbundled {
 		joined = append(joined, atts...)
 	}
+	joined = sort(joined)
 
 	if err := Validate(joined); err != nil {
 		return nil, err
 	}
 	return joined, nil
+}
+
+func sort(atts []exporter.Attestation) []exporter.Attestation {
+	isCore := make([]bool, len(atts))
+	for i, att := range atts {
+		name, ok := att.Metadata[result.AttestationSBOMCore]
+		if !ok {
+			continue
+		}
+		if n, _, _ := strings.Cut(att.Path, "."); n != string(name) {
+			continue
+		}
+		isCore[i] = true
+	}
+
+	result := make([]exporter.Attestation, 0, len(atts))
+	for i, att := range atts {
+		if isCore[i] {
+			result = append(result, att)
+		}
+	}
+	for i, att := range atts {
+		if !isCore[i] {
+			result = append(result, att)
+		}
+	}
+	return result
 }
 
 func unbundle(ctx context.Context, root string, bundle exporter.Attestation) ([]exporter.Attestation, error) {
