@@ -43,7 +43,7 @@ Describes the config that initialized the build.
 ```json
     "invocation": {
       "configSource": {
-        "uri": "https://github.com/moby/buildkit.git#refs/tags/v0.11.0-rc3",
+        "uri": "https://github.com/moby/buildkit.git#refs/tags/v0.11.0",
         "digest": {
           "sha1": "4b220de5058abfd01ff619c9d2ff6b09a049bea0"
         },
