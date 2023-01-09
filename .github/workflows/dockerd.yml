@@ -61,21 +61,21 @@ jobs:
         if: steps.build.outputs.result == 'true'
         run: |
           if [ -L "/tmp/moby/binary-daemon/dockerd" ]; then
-            mv -f $(readlink /tmp/moby/binary-daemon/dockerd) /tmp/moby/binary-daemon/dockerd
+            mv -f $(readlink /tmp/moby/binary-daemon/dockerd) /tmp/moby/dockerd
           fi
       -
         name: Download
         if: steps.build.outputs.result != 'true'
         run: |
-          mkdir -p /tmp/moby/binary-daemon
-          cd /tmp/moby/binary-daemon
+          mkdir -p /tmp/moby
+          cd /tmp/moby
           wget -qO- "https://download.docker.com/linux/static/stable/x86_64/docker-${{ env.DOCKER_VERSION }}.tgz" | tar xvz --strip 1
       -
         name: Upload dockerd
         uses: actions/upload-artifact@v2
         with:
           name: dockerd
-          path: /tmp/moby/binary-daemon/dockerd
+          path: /tmp/moby/dockerd
           if-no-files-found: error
 
   test:
