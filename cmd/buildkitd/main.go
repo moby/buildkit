@@ -632,7 +632,8 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 	if tc != nil {
 		traceSocket = filepath.Join(cfg.Root, "otel-grpc.sock")
 		if err := runTraceController(traceSocket, tc); err != nil {
-			return nil, err
+			logrus.Warnf("failed set up otel-grpc controller: %v", err)
+			traceSocket = ""
 		}
 	}
 
