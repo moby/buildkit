@@ -3,7 +3,7 @@ package integration
 import (
 	"bytes"
 	"context"
-	"fmt"
+	"encoding/json"
 	"io"
 	"net"
 	"os"
@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/docker/docker/client"
+	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/util/testutil/dockerd"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -63,6 +64,37 @@ func (c moby) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func()
 		return nil, nil, err
 	}
 
+	bkcfg, err := config.LoadFile(cfg.ConfigFile)
+	if err != nil {
+		return nil, nil, errors.Wrapf(err, "failed to load buildkit config file %s", cfg.ConfigFile)
+	}
+
+	dcfg := dockerd.Config{
+		Features: map[string]bool{
+			"containerd-snapshotter": c.name == "dockerd-containerd",
+		},
+	}
+	if reg, ok := bkcfg.Registries["docker.io"]; ok && len(reg.Mirrors) > 0 {
+		for _, m := range reg.Mirrors {
+			dcfg.Mirrors = append(dcfg.Mirrors, "http://"+m)
+		}
+	}
+	if bkcfg.Entitlements != nil {
+		for _, e := range bkcfg.Entitlements {
+			switch e {
+			case "network.host":
+				dcfg.Builder.Entitlements.NetworkHost = true
+			case "security.insecure":
+				dcfg.Builder.Entitlements.SecurityInsecure = true
+			}
+		}
+	}
+
+	dcfgdt, err := json.Marshal(dcfg)
+	if err != nil {
+		return nil, nil, errors.Wrapf(err, "failed to marshal dockerd config")
+	}
+
 	deferF := &multiCloser{}
 	cl = deferF.F()
 
@@ -86,14 +118,8 @@ func (c moby) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func()
 		return nil, nil, errors.Errorf("new daemon error: %q, %s", err, formatLogs(cfg.Logs))
 	}
 
-	dockerdConfig := fmt.Sprintf(`{
-  "features": {
-    "containerd-snapshotter": %v
-  }
-}`, c.name == "dockerd-containerd")
-
 	dockerdConfigFile := filepath.Join(workDir, "daemon.json")
-	if err := os.WriteFile(dockerdConfigFile, []byte(dockerdConfig), 0644); err != nil {
+	if err := os.WriteFile(dockerdConfigFile, dcfgdt, 0644); err != nil {
 		return nil, nil, err
 	}
 
