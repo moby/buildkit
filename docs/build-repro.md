@@ -130,8 +130,7 @@ jq '.' metadata.json
 
 ### Reproducing the pinned dependencies
 
-<!-- TODO: s/master/v0.11/ after the release -->
-Reproducing the pinned dependencies is supported in the master branch of BuildKit.
+Reproducing the pinned dependencies is supported since BuildKit v0.11.
 
 e.g.,
 ```bash
