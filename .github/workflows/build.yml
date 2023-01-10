@@ -28,20 +28,20 @@ env:
 
 jobs:
   base:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       -
         name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v1
+        uses: crazy-max/ghaction-github-runtime@v2
       -
         name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v2
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
         with:
           version: ${{ env.BUILDX_VERSION }}
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
@@ -62,7 +62,7 @@ jobs:
           CACHE_TO: type=gha,scope=${{ env.CACHE_GHA_SCOPE_IT }}
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     needs: [base]
     strategy:
       fail-fast: false
@@ -92,16 +92,16 @@ jobs:
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       -
         name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v1
+        uses: crazy-max/ghaction-github-runtime@v2
       -
         name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v2
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
         with:
           version: ${{ env.BUILDX_VERSION }}
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
@@ -121,7 +121,7 @@ jobs:
           CACHE_FROM: type=gha,scope=${{ env.CACHE_GHA_SCOPE_IT }} type=gha,scope=${{ env.CACHE_GHA_SCOPE_BINARIES }}
       -
         name: Upload coverage file
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: coverage
           path: ./coverage
@@ -132,26 +132,19 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          # - ubuntu-latest
-          # - macOS-latest
-          - windows-latest
+          # - ubuntu-20.04
+          # - macOS-11
+          - windows-2022
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       -
         name: Set up Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
           go-version: 1.18
-      -
-        name: Cache Go modules
-        uses: actions/cache@v2
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+          cache: true
       -
         name: Go mod
         run: |
@@ -167,27 +160,27 @@ jobs:
         shell: bash
       -
         name: Upload coverage file
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: coverage
           path: ./coverage
 
   upload-coverage:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     needs: [test, test-os]
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       -
         name: Download coverage files
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: coverage
           path: ./coverage
       -
         name: List coverage files
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6
         id: files
         with:
           result-encoding: string
@@ -203,20 +196,20 @@ jobs:
           files: ${{ steps.files.outputs.result }}
 
   cross:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       -
         name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v1
+        uses: crazy-max/ghaction-github-runtime@v2
       -
         name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v2
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
         with:
           version: ${{ env.BUILDX_VERSION }}
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
@@ -232,7 +225,7 @@ jobs:
           CACHE_TO: type=gha,scope=${{ env.CACHE_GHA_SCOPE_CROSS }}
 
   release-base:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     outputs:
       tag: ${{ steps.prep.outputs.tag }}
       push: ${{ steps.prep.outputs.push }}
@@ -256,7 +249,7 @@ jobs:
           echo ::set-output name=push::${PUSH}
 
   image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     needs: [release-base, test, cross]
     strategy:
       fail-fast: false
@@ -267,16 +260,16 @@ jobs:
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       -
         name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v1
+        uses: crazy-max/ghaction-github-runtime@v2
       -
         name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v2
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
         with:
           version: ${{ env.BUILDX_VERSION }}
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
@@ -284,7 +277,7 @@ jobs:
       -
         name: Login to DockerHub
         if: needs.release-base.outputs.push == 'push'
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -298,21 +291,21 @@ jobs:
           CACHE_TO: type=gha,scope=image${{ matrix.target-stage }}
 
   binaries:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     needs: [release-base, test, cross]
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       -
         name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v1
+        uses: crazy-max/ghaction-github-runtime@v2
       -
         name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v2
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
         with:
           version: ${{ env.BUILDX_VERSION }}
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
@@ -330,7 +323,7 @@ jobs:
           mv ./release-out/**/* ./release-out/
       -
         name: Upload artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: buildkit
           path: ./release-out/*
@@ -338,7 +331,7 @@ jobs:
       -
         name: GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@1e07f4398721186383de40550babbdf2b84acfc5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -347,7 +340,7 @@ jobs:
           name: ${{ needs.release-base.outputs.tag }}
 
   frontend-base:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     if: github.event_name != 'schedule'
     outputs:
       typ: ${{ steps.prep.outputs.typ }}
@@ -373,29 +366,29 @@ jobs:
           echo ::set-output name=push::${PUSH}
 
   frontend-image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     if: github.event_name != 'schedule'
     needs: [frontend-base, test]
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       -
         name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v1
+        uses: crazy-max/ghaction-github-runtime@v2
       -
         name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v2
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
         with:
           version: ${{ env.BUILDX_VERSION }}
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
           buildkitd-flags: --debug
       -
         name: Login to DockerHub
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         if: needs.frontend-base.outputs.push == 'push'
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}

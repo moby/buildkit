@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"io/ioutil"
 	"net"
@@ -14,7 +15,9 @@ import (
 	"time"
 
 	"github.com/docker/docker/client"
+	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/util/testutil/dockerd"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
@@ -27,18 +30,45 @@ const (
 
 // InitDockerdWorker registers a dockerd worker with the global registry.
 func InitDockerdWorker() {
-	Register(&dockerd{})
+	Register(&moby{})
 }
 
-type dockerd struct{}
+type moby struct{}
 
-func (c dockerd) Name() string {
+func (c moby) Name() string {
 	return dockerdBinary
 }
 
-func (c dockerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func() error, err error) {
+func (c moby) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func() error, err error) {
 	if err := requireRoot(); err != nil {
 		return nil, nil, err
+	}
+
+	bkcfg, err := config.LoadFile(cfg.ConfigFile)
+	if err != nil {
+		return nil, nil, errors.Wrapf(err, "failed to load buildkit config file %s", cfg.ConfigFile)
+	}
+
+	dcfg := dockerd.Config{}
+	if reg, ok := bkcfg.Registries["docker.io"]; ok && len(reg.Mirrors) > 0 {
+		for _, m := range reg.Mirrors {
+			dcfg.Mirrors = append(dcfg.Mirrors, "http://"+m)
+		}
+	}
+	if bkcfg.Entitlements != nil {
+		for _, e := range bkcfg.Entitlements {
+			switch e {
+			case "network.host":
+				dcfg.Builder.Entitlements.NetworkHost = true
+			case "security.insecure":
+				dcfg.Builder.Entitlements.SecurityInsecure = true
+			}
+		}
+	}
+
+	dcfgdt, err := json.Marshal(dcfg)
+	if err != nil {
+		return nil, nil, errors.Wrapf(err, "failed to marshal dockerd config")
 	}
 
 	deferF := &multiCloser{}
@@ -77,7 +107,13 @@ func (c dockerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl fun
 	execRoot := filepath.Join(os.TempDir(), "dxr", id)
 	daemonSocket := "unix://" + filepath.Join(daemonFolder, "docker.sock")
 
+	dockerdConfigFile := filepath.Join(workDir, "daemon.json")
+	if err := os.WriteFile(dockerdConfigFile, dcfgdt, 0644); err != nil {
+		return nil, nil, err
+	}
+
 	cmd := exec.Command(dockerdBinaryPath, []string{
+		"--config-file", dockerdConfigFile,
 		"--data-root", daemonRoot,
 		"--exec-root", execRoot,
 		"--pidfile", filepath.Join(daemonFolder, "docker.pid"),
