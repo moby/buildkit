@@ -1301,8 +1301,7 @@ guide – Leverage build cache](https://docs.docker.com/develop/develop-images/d
 ### Verifying a remote file checksum `ADD --checksum=<checksum> <http src> <dest>`
 > **Note**
 >
-> Available in [`docker/dockerfile-upstream:master-labs`](#syntax).
-> Will be included in `docker/dockerfile:1.5-labs`.
+> Not yet available in stable syntax, use [`docker/dockerfile:1-labs`](#syntax) version (`1.5-labs` or newer).
 
 The checksum of a remote file can be verified with the `--checksum` flag:
 
@@ -1316,8 +1315,7 @@ The `--checksum` flag only supports HTTP sources currently.
 
 > **Note**
 >
-> Available in [`docker/dockerfile-upstream:master-labs`](#syntax).
-> Will be included in `docker/dockerfile:1.5-labs`.
+> Not yet available in stable syntax, use [`docker/dockerfile:1-labs`](#syntax) version (`1.5-labs` or newer).
 
 This form allows adding a git repository to an image directly, without using the `git` command inside the image:
 ```
@@ -2222,7 +2220,7 @@ RUN echo "I'm building for $TARGETPLATFORM"
 | `BUILDKIT_MULTI_PLATFORM`             | Bool   | Opt into determnistic output regardless of multi-platform output or not.                                                                                                                                       |
 | `BUILDKIT_SANDBOX_HOSTNAME`           | String | Set the hostname (default `buildkitsandbox`)                                                                                                                                                                   |
 | `BUILDKIT_SYNTAX`                     | String | Set frontend image                                                                                                                                                                                             |
-| `SOURCE_DATE_EPOCH`                   | Int    | Set the UNIX timestamp for created image and layers. More info from [reproducible builds](https://reproducible-builds.org/docs/source-date-epoch/). Supported since Dockerfile 1.5, BuildKit 0.11 (unreleased) |
+| `SOURCE_DATE_EPOCH`                   | Int    | Set the UNIX timestamp for created image and layers. More info from [reproducible builds](https://reproducible-builds.org/docs/source-date-epoch/). Supported since Dockerfile 1.5, BuildKit 0.11              |
 
 #### Example: keep `.git` dir
 
