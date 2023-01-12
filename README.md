@@ -71,6 +71,7 @@ Join `#buildkit` channel on [Docker Community Slack](https://dockr.ly/comm-slack
   - [Load balancing](#load-balancing)
 - [Containerizing BuildKit](#containerizing-buildkit)
   - [Podman](#podman)
+  - [Nerdctl](#nerdctl)
   - [Kubernetes](#kubernetes)
   - [Daemonless](#daemonless)
 - [Opentracing support](#opentracing-support)
@@ -672,6 +673,16 @@ To connect to a BuildKit daemon running in a Podman container, use `podman-conta
 ```bash
 podman run -d --name buildkitd --privileged moby/buildkit:latest
 buildctl --addr=podman-container://buildkitd build --frontend dockerfile.v0 --local context=. --local dockerfile=. --output type=oci | podman load foo
+```
+
+`sudo` is not required.
+
+### Nerdctl
+To connect to a BuildKit daemon running in a Nerdctl container, use `nerdctl-container://` instead of `docker-container://`.
+
+```bash
+nerdctl run -d --name buildkitd --privileged moby/buildkit:latest
+buildctl --addr=nerdctl-container://buildkitd build --frontend dockerfile.v0 --local context=. --local dockerfile=. --output type=oci | nerdctl load
 ```
 
 `sudo` is not required.
