@@ -5,7 +5,9 @@ import (
 	"path"
 	"testing"
 
+	"github.com/containerd/containerd/remotes/docker"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
+	rconfig "github.com/moby/buildkit/util/resolver/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -65,4 +67,83 @@ mirrors = ["https://url/", "https://url/path/"]
 			require.Equal(t, h.Path, test.path)
 		}
 	}
+}
+
+func TestFillInsecureOptsPlainHTTPOnly(t *testing.T) {
+	plainHTTP := true
+	hosts, err := fillInsecureOpts("testhost:8000", rconfig.RegistryConfig{
+		PlainHTTP: &plainHTTP,
+	}, docker.RegistryHost{
+		Host:   "testhost:8000",
+		Scheme: "https",
+		Path:   "v2/",
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, 1, len(hosts))
+	for _, h := range hosts {
+		require.Equal(t, "http", h.Scheme)
+	}
+}
+
+func TestFillInsecureOptsInsecureOnly(t *testing.T) {
+	insecure := true
+	hosts, err := fillInsecureOpts("testhost:8000", rconfig.RegistryConfig{
+		Insecure: &insecure,
+	}, docker.RegistryHost{
+		Host:   "testhost:8000",
+		Scheme: "https",
+		Path:   "v2/",
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, 1, len(hosts))
+	for _, h := range hosts {
+		require.Equal(t, "https", h.Scheme)
+	}
+}
+
+func TestFillInsecureOptsPlainHTTPAndInsecureWithTheSamePort(t *testing.T) {
+	plainHTTP := true
+	insecure := true
+	hosts, err := fillInsecureOpts("testhost:8000", rconfig.RegistryConfig{
+		Insecure:  &insecure,
+		PlainHTTP: &plainHTTP,
+	}, docker.RegistryHost{
+		Host:   "testhost:8000",
+		Scheme: "https",
+		Path:   "v2/",
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, 2, len(hosts))
+
+	require.Equal(t, "http", hosts[0].Scheme) // THIS
+	require.Equal(t, "testhost:8000", hosts[0].Host)
+
+	require.Equal(t, "https", hosts[1].Scheme) // AND THIS doesn't make sense
+	require.Equal(t, "testhost:8000", hosts[1].Host)
+	// why would you ever want to configure a registry to attempt both http and insecure on the same port?
+}
+
+func TestFillInsecureOptsPlainHTTPAndInsecureWithDefaultPorts(t *testing.T) {
+	plainHTTP := true
+	insecure := true
+	hosts, err := fillInsecureOpts("testhost", rconfig.RegistryConfig{
+		Insecure:  &insecure,
+		PlainHTTP: &plainHTTP,
+	}, docker.RegistryHost{
+		Host:   "testhost",
+		Scheme: "https",
+		Path:   "v2/",
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, 2, len(hosts))
+
+	require.Equal(t, "http", hosts[0].Scheme)
+	require.Equal(t, "testhost", hosts[0].Host)
+
+	require.Equal(t, "https", hosts[1].Scheme)
+	require.Equal(t, "testhost", hosts[1].Host)
 }
