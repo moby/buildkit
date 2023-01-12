@@ -64,10 +64,10 @@ func TestCommandsTooManyArguments(t *testing.T) {
 		"LABEL",
 	}
 
-	for _, command := range commands {
+	for _, cmd := range commands {
 		node := &parser.Node{
-			Original: command + "arg1 arg2 arg3",
-			Value:    strings.ToLower(command),
+			Original: cmd + "arg1 arg2 arg3",
+			Value:    strings.ToLower(cmd),
 			Next: &parser.Node{
 				Value: "arg1",
 				Next: &parser.Node{
@@ -79,7 +79,7 @@ func TestCommandsTooManyArguments(t *testing.T) {
 			},
 		}
 		_, err := ParseInstruction(node)
-		require.EqualError(t, err, errTooManyArguments(command).Error())
+		require.EqualError(t, err, errTooManyArguments(cmd).Error())
 	}
 }
 
@@ -226,8 +226,7 @@ func TestErrorCases(t *testing.T) {
 		}
 		n := ast.AST.Children[0]
 		_, err = ParseInstruction(n)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), c.expectedError)
+		require.ErrorContains(t, err, c.expectedError)
 	}
 }
 
@@ -242,4 +241,14 @@ func TestRunCmdFlagsUsed(t *testing.T) {
 	require.NoError(t, err)
 	require.IsType(t, c, &RunCommand{})
 	require.Equal(t, []string{"mount"}, c.(*RunCommand).FlagsUsed)
+}
+
+func BenchmarkParseBuildStageName(b *testing.B) {
+	b.ReportAllocs()
+	stageNames := []string{"STAGE_NAME", "StageName", "St4g3N4m3"}
+	for i := 0; i < b.N; i++ {
+		for _, s := range stageNames {
+			_, _ = parseBuildStageName([]string{"foo", "as", s})
+		}
+	}
 }

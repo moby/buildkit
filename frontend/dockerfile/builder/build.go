@@ -770,12 +770,10 @@ func parseExtraHosts(v string) ([]llb.HostIP, error) {
 		return nil, err
 	}
 	for _, field := range fields {
-		parts := strings.SplitN(field, "=", 2)
-		if len(parts) != 2 {
+		key, val, ok := strings.Cut(strings.ToLower(field), "=")
+		if !ok {
 			return nil, errors.Errorf("invalid key-value pair %s", field)
 		}
-		key := strings.ToLower(parts[0])
-		val := strings.ToLower(parts[1])
 		ip := net.ParseIP(val)
 		if ip == nil {
 			return nil, errors.Errorf("failed to parse IP %s", val)

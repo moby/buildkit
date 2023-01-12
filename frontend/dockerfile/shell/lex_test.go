@@ -27,12 +27,10 @@ func TestShellParserMandatoryEnvVars(t *testing.T) {
 	require.Equal(t, "plain", newWord)
 
 	_, err = shlex.ProcessWord(noEmpty, emptyEnvs)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "message herex")
+	require.ErrorContains(t, err, "message herex")
 
 	_, err = shlex.ProcessWord(noEmpty, unsetEnvs)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "message herex")
+	require.ErrorContains(t, err, "message herex")
 
 	// disallow unset
 	newWord, err = shlex.ProcessWord(noUnset, setEnvs)
@@ -41,11 +39,10 @@ func TestShellParserMandatoryEnvVars(t *testing.T) {
 
 	newWord, err = shlex.ProcessWord(noUnset, emptyEnvs)
 	require.NoError(t, err)
-	require.Equal(t, "", newWord)
+	require.Empty(t, newWord)
 
 	_, err = shlex.ProcessWord(noUnset, unsetEnvs)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "message herex")
+	require.ErrorContains(t, err, "message herex")
 }
 
 func TestShellParser4EnvVars(t *testing.T) {
