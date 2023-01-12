@@ -637,7 +637,7 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 func runInlineCacheExporter(ctx context.Context, e exporter.ExporterInstance, inlineExporter inlineCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult]) (result *exptypes.InlineCache, err error) {
 	result = &exptypes.InlineCache{}
 	if inlineExporter == nil {
-		return nil, nil
+		return result, nil
 	}
 	if err := inBuilderContext(ctx, j, "preparing layers for inline cache", j.SessionID+"-cache-inline", func(ctx context.Context, _ session.Group) error {
 		if res := cached.Ref; res != nil {
@@ -678,9 +678,13 @@ func (s *Solver) runExporters(ctx context.Context, exporters []exporter.Exporter
 						return err
 					}
 					return inBuilderContext(ctx, job, exp.Name(), job.SessionID+"-export", func(ctx context.Context, _ session.Group) (err error) {
-						resps[i], err = imageExporter.ExportImage(ctx, inp, *inlineCache, sessionID)
+						var dref exporter.DescriptorReference
+						resps[i], dref, err = imageExporter.ExportImage(ctx, inp, *inlineCache, sessionID)
 						if err != nil {
 							return err
+						}
+						if dref != nil {
+							descref = dref
 						}
 						return nil
 					})
@@ -719,7 +723,6 @@ func splitCacheExporters(exporters []RemoteCacheExporter) (rest []RemoteCacheExp
 	for _, exp := range exporters {
 		if ic, ok := asInlineCache(exp.Exporter); ok {
 			inline = ic
-			fmt.Printf("Found inline cache exporter (%T)\n", ic)
 			continue
 		}
 		rest = append(rest, exp)
@@ -858,7 +861,7 @@ func getProvenance(ref solver.ResultProxy, br *provenanceBridge, id string, reqs
 
 type imageExporterInstance interface {
 	exporter.ExporterInstance
-	ExportImage(ctx context.Context, src *exporter.Source, cache exptypes.InlineCache, sessionID string) (map[string]string, error)
+	ExportImage(ctx context.Context, src *exporter.Source, cache exptypes.InlineCache, sessionID string) (map[string]string, exporter.DescriptorReference, error)
 }
 
 func asImageExporter(e exporter.ExporterInstance) (imageExporterInstance, bool) {
