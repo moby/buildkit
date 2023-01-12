@@ -2043,25 +2043,25 @@ elsewhere.  For example, consider this Dockerfile:
 
 ```dockerfile
 FROM busybox
-USER ${user:-some_user}
-ARG user
-USER $user
+USER ${username:-some_user}
+ARG username
+USER $username
 # ...
 ```
 
 A user builds this file by calling:
 
 ```console
-$ docker build --build-arg user=what_user .
+$ docker build --build-arg username=what_user .
 ```
 
-The `USER` at line 2 evaluates to `some_user` as the `user` variable is defined on the
-subsequent line 3. The `USER` at line 4 evaluates to `what_user` as `user` is
+The `USER` at line 2 evaluates to `some_user` as the `username` variable is defined on the
+subsequent line 3. The `USER` at line 4 evaluates to `what_user`, as the `username` argument is
 defined and the `what_user` value was passed on the command line. Prior to its definition by an
 `ARG` instruction, any use of a variable results in an empty string.
 
 An `ARG` instruction goes out of scope at the end of the build
-stage where it was defined. To use an arg in multiple stages, each stage must
+stage where it was defined. To use an argument in multiple stages, each stage must
 include the `ARG` instruction.
 
 ```dockerfile
