@@ -23,7 +23,12 @@ func Copy(ctx context.Context, conn io.ReadWriteCloser, stream Stream, closeStre
 			if err := stream.RecvMsg(p); err != nil {
 				if err == io.EOF {
 					// indicates client performed CloseSend, but they may still be
-					// reading data, so don't close conn yet
+					// reading data
+					if conn, ok := conn.(interface {
+						CloseWrite() error
+					}); ok {
+						conn.CloseWrite()
+					}
 					return nil
 				}
 				conn.Close()
