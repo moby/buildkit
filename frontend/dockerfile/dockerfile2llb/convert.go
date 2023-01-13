@@ -183,6 +183,10 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		opt.ContextLocalName = defaultContextLocalName
 	}
 
+	if opt.Warn == nil {
+		opt.Warn = func(string, string, [][]byte, *parser.Range) {}
+	}
+
 	platformOpt := buildPlatformOpt(&opt)
 
 	optMetaArgs := getPlatformArgs(platformOpt)
