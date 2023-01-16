@@ -16,7 +16,7 @@ func init() {
 }
 
 func otlpExporter() (sdktrace.SpanExporter, error) {
-	set := os.Getenv("OTEL_TRACES_EXPORTER") == "otpl" || os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") != "" || os.Getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") != ""
+	set := os.Getenv("OTEL_TRACES_EXPORTER") == "otlp" || os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") != "" || os.Getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") != ""
 	if !set {
 		return nil, nil
 	}
