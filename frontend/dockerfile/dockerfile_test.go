@@ -156,6 +156,7 @@ var allTests = integration.TestFuncs(
 	testSecretSSHProvenance,
 	testNilProvenance,
 	testSBOMScannerArgs,
+	testMultiPlatformWarnings,
 )
 
 // Tests that depend on the `security.*` entitlements
@@ -6392,6 +6393,81 @@ ARG BUILDKIT_SBOM_SCAN_STAGE=true
 
 	att = imgs.Find("unknown/unknown")
 	require.Equal(t, 1, len(att.LayersRaw))
+}
+
+// #3495
+func testMultiPlatformWarnings(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	// empty line in here is intentional to cause line continuation warning
+	dockerfile := []byte(`
+FROM scratch
+COPY Dockerfile \
+
+.
+`)
+
+	dir, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	status := make(chan *client.SolveStatus)
+	statusDone := make(chan struct{})
+	done := make(chan struct{})
+
+	var warnings []*client.VertexWarning
+
+	go func() {
+		defer close(statusDone)
+		for {
+			select {
+			case st, ok := <-status:
+				if !ok {
+					return
+				}
+				warnings = append(warnings, st.Warnings...)
+			case <-done:
+				return
+			}
+		}
+	}()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"platform": "linux/amd64,linux/arm64",
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, status)
+	require.NoError(t, err)
+
+	select {
+	case <-statusDone:
+	case <-time.After(10 * time.Second):
+		close(done)
+	}
+
+	<-statusDone
+
+	// two platforms only show one warning
+	require.Equal(t, 1, len(warnings))
+
+	w := warnings[0]
+
+	require.Equal(t, "Empty continuation line found in: COPY Dockerfile .", string(w.Short))
+	require.Equal(t, 1, len(w.Detail))
+	require.Equal(t, "Empty continuation lines will become errors in a future release", string(w.Detail[0]))
+	require.Equal(t, "https://github.com/moby/moby/pull/33719", w.URL)
+	require.Equal(t, 1, w.Level)
 }
 
 func runShell(dir string, cmds ...string) error {
