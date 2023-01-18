@@ -37,6 +37,6 @@ mkdir -p $DIR ${DIR}/daemon ${DIR}/client
 	cp -f rootCA.pem client/ca.pem
 	rm -f rootCA.pem rootCA-key.pem
 
-	kubectl create secret generic ${PRODUCT}-daemon-certs --dry-run -o yaml --from-file=./daemon >${PRODUCT}-daemon-certs.yaml
-	kubectl create secret generic ${PRODUCT}-client-certs --dry-run -o yaml --from-file=./client >${PRODUCT}-client-certs.yaml
+	kubectl create secret generic ${PRODUCT}-daemon-certs --dry-run=client -o yaml --from-file=./daemon >${PRODUCT}-daemon-certs.yaml
+	kubectl create secret generic ${PRODUCT}-client-certs --dry-run=client -o yaml --from-file=./client >${PRODUCT}-client-certs.yaml
 )
