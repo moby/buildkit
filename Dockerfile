@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile-upstream:master
 
 ARG RUNC_VERSION=v1.1.4
-ARG CONTAINERD_VERSION=v1.6.13
+ARG CONTAINERD_VERSION=v1.6.14
 # containerd v1.5 for integration tests
 ARG CONTAINERD_ALT_VERSION_15=v1.5.16
 ARG REGISTRY_VERSION=2.8.0
