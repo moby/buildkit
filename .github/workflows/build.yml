@@ -498,7 +498,7 @@ jobs:
         run: |
           ./frontend/dockerfile/cmd/dockerfile-frontend/hack/release "${{ needs.frontend-base.outputs.typ }}" "${{ needs.frontend-base.outputs.tag }}" "$DF_REPO_SLUG_TARGET" "${{ needs.frontend-base.outputs.push }}"
         env:
-          PLATFORMS: ${{ env.PLATFORMS }},linux/mips,linux/mipsle,linux/mips64,linux/mips64le
+          PLATFORMS: ${{ env.PLATFORMS }},linux/386,linux/mips,linux/mipsle,linux/mips64,linux/mips64le
           CACHE_FROM: type=gha,scope=frontend-${{ needs.frontend-base.outputs.typ }}
           CACHE_TO: type=gha,scope=frontend-${{ needs.frontend-base.outputs.typ }}
       -
@@ -507,5 +507,5 @@ jobs:
         run: |
           ./frontend/dockerfile/cmd/dockerfile-frontend/hack/release "${{ needs.frontend-base.outputs.typ }}" labs "$DF_REPO_SLUG_TARGET" "${{ needs.frontend-base.outputs.push }}"
         env:
-          PLATFORMS: ${{ env.PLATFORMS }},linux/mips,linux/mipsle,linux/mips64,linux/mips64le
+          PLATFORMS: ${{ env.PLATFORMS }},linux/386,linux/mips,linux/mipsle,linux/mips64,linux/mips64le
           CACHE_FROM: type=gha,scope=frontend-${{ needs.frontend-base.outputs.typ }}
