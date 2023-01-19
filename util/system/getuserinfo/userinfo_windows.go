@@ -4,7 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"syscall"
+
+	"golang.org/x/sys/windows"
 
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/docker/docker/pkg/reexec"
@@ -24,20 +25,16 @@ func userInfoMain() {
 		os.Exit(1)
 	}
 	username := os.Args[1]
-	sid, _, _, err := syscall.LookupSID("", username)
+	sid, _, _, err := windows.LookupSID("", username)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(3)
 	}
 
-	sidAsString, err := sid.String()
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(4)
-	}
 	ident := idtools.Identity{
-		SID: sidAsString,
+		SID: sid.String(),
 	}
+
 	asJson, err := json.Marshal(ident)
 	if err != nil {
 		fmt.Println(err)
