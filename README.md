@@ -476,7 +476,7 @@ Storage locations:
 
 S3 configuration:
 * `blobs_prefix`: global prefix to store / read blobs on s3 (default: `blobs/`)
-* `manifests_prefix`: global prefix to store / read blobs on s3 (default: `manifests/`)
+* `manifests_prefix`: global prefix to store / read manifests on s3 (default: `manifests/`)
 * `endpoint_url`: specify a specific S3 endpoint (default: empty)
 * `use_path_style`: if set to `true`, put the bucket name in the URL instead of in the hostname (default: `false`)
 
