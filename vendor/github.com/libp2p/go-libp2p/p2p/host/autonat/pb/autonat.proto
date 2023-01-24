@@ -1,0 +1,37 @@
+syntax = "proto2";
+
+package autonat.pb;
+
+message Message {
+  enum MessageType {
+    DIAL          = 0;
+    DIAL_RESPONSE = 1;
+  }
+
+  enum ResponseStatus {
+    OK               = 0;
+    E_DIAL_ERROR     = 100;
+    E_DIAL_REFUSED   = 101;
+    E_BAD_REQUEST    = 200;
+    E_INTERNAL_ERROR = 300;
+  }
+
+  message PeerInfo {
+    optional bytes id = 1;
+    repeated bytes addrs = 2;
+  }
+
+  message Dial {
+    optional PeerInfo peer = 1;
+  }
+
+  message DialResponse {
+    optional ResponseStatus status = 1;
+    optional string statusText = 2;
+    optional bytes addr = 3;
+  }
+
+  optional MessageType type = 1;
+  optional Dial dial = 2;
+  optional DialResponse dialResponse = 3;
+}

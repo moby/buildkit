@@ -1,0 +1,22 @@
+## This Dockerfile compiles the watchdog with delve support. It enables the tests
+## to be debugged inside a container.
+##
+## Run with:
+## docker run --memory=64MiB --memory-swap=64MiB -p 2345:2345 <image> \
+##     --listen=:2345 --headless=true --log=true \
+##     --log-output=debugger,debuglineerr,gdbwire,lldbout,rpc \
+##     --accept-multiclient --api-version=2 exec /root/watchdog.test
+##
+FROM golang:1.15.5
+WORKDIR /watchdog
+COPY . .
+RUN CGO_ENABLED=0 go get -ldflags "-s -w -extldflags '-static'" github.com/go-delve/delve/cmd/dlv
+RUN CGO_ENABLED=0 go test -gcflags "all=-N -l" -c -o ./watchdog.test
+
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates
+WORKDIR /root/
+COPY --from=0 /go/bin/dlv /dlv
+COPY --from=0 /watchdog/watchdog.test .
+ENTRYPOINT [ "/dlv" ]
+EXPOSE 2345

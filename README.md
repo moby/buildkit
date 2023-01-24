@@ -64,6 +64,7 @@ Join `#buildkit` channel on [Docker Community Slack](https://dockr.ly/comm-slack
     - [GitHub Actions cache (experimental)](#github-actions-cache-experimental)
     - [S3 cache (experimental)](#s3-cache-experimental)
     - [Azure Blob Storage cache (experimental)](#azure-blob-storage-cache-experimental)
+    - [IPFS cache (experimental)](#ipfs-cache-experimental)
   - [Consistent hashing](#consistent-hashing)
 - [Metadata](#metadata)
 - [Systemd socket activation](#systemd-socket-activation)
@@ -557,6 +558,54 @@ There are 2 options supported for Azure Blob Storage authentication:
 * `blobs_prefix=<prefix>`: set global prefix to store / read blobs on the Azure Blob Storage container (`<container>`) (default: `blobs/`)
 * `manifests_prefix=<prefix>`: set global prefix to store / read manifests on the Azure Blob Storage container (`<container>`) (default: `manifests/`)
 * `name=<manifest>`: name of the manifest to use (default: `buildkit`)
+
+#### IPFS cache (experimental)
+
+Requirements:
+
+- An IPFS set-up (IPFS daemon and cluster peer(s) running). If you don't have one, you can follow [this example](https://github.com/felipecruz91/docker-ipfs-cluster) to create a **private** IPFS cluster with Docker Compose.
+
+```bash
+buildctl build ... \
+  --output type=image,name=docker.io/username/image,push=true \
+  --export-cache type=ipfs,cluster_api=192.168.65.2:9094,daemon_api=192.168.65.2:5001,mode=max \
+  --import-cache type=ipfs,cluster_api=192.168.65.2:9094,daemon_api=192.168.65.2:5001
+```
+
+The following attributes are required:
+* `cluster_api`: The IPFS cluster HTTP API endpoint in the form`IP:PORT`(default: `$BUILDKIT_IPFS_CLUSTER_API`)
+* `daemon_api`: The IPFS daemon API endpoint where Kubo is running in the form `IP:PORT` (default: `$BUILDKIT_IPFS_DAEMON_API`)
+
+> Note: If you're running a containerized setup where both IPFS and buildkitd run as containers in Docker Desktop, the `IP` address to reach the IPFS daemon and cluster peer containers from the buildkitd container MUST be the one associated to `host.docker.internal` which normally is `192.168.65.2`.
+
+Storage locations:
+
+When the cache is exported, both blobs and manifest files are added to the IPFS cluster, pinned and, replicated to all the cluster peers by default - same as`ipfs-cluster-ctl pin add` with a `replication_factor_min` and `replication_factor_max` of `-1`.
+
+Also, they are made available in the node's MFS local directory to make it easier to explore and see the content of the IPFS files.
+You can see the exported cache files in the [IPFS Dashboard](http://localhost:5001/ipfs/QmfQkD8pBSBCBxWEwFSu4XaDVSWK6bjnNuaWZjMyQbyDub/#/files/) under the "Files" menu or with `ipfs files ls`.
+
+* blobs: `<mfs_dir>/blobs/<sha256>`, default: `/buildkit-cache/blobs/<sha256>`
+* manifest: `<mfs_dir>/manifest/manifest`, default: `/buildkit-cache/manifest/manifest`
+
+IPFS Storage configuration:
+* `pin_name`: The name of the pin to identify the exported cache across the IPFS cluster peers (default: `buildkit-cache`)
+* `mfs_dir`: The name of MFS (Mutable File System) directory that references the cache files (default: `/buildkit-cache`)
+
+`--export-cache` options:
+* `type=ipfs`
+* `mode=<min|max>`: specify cache layers to export (default: `min`)
+  * `min`: only export layers for the resulting image
+  * `max`: export all the layers of all intermediate steps
+* `pin_name=<pin_name>`: set a name for the pin when the cache files are exported. See `--name` flag in `ipfs-cluster-ctl pin add`. (default: `buildkit`)
+* `mfs_dir=<mfs_dir>`: specify name of the MFS local directory to export the cache files to (default: `/buildkit`)
+* `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
+
+`--import-cache` options:
+* `type=ipfs`
+* `pin_name=<pin_name>`: the name of the pin that cluster peer(s) will use to retrieve the cache files from. See `--name` flag in `ipfs-cluster-ctl pin add`. (default: `buildkit`)
+* `mfs_dir=<mfs_dir>`: specify name of the MFS local directory where the cache files are (default: `/buildkit`)
+* `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
 
 ### Consistent hashing
 

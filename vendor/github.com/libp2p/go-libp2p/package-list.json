@@ -1,0 +1,82 @@
+{
+  "columns": [
+    "Name",
+    "CI/Travis",
+    "Coverage",
+    "Description"
+  ],
+  "rows": [
+    "Libp2p",
+    ["libp2p/go-libp2p", "go-libp2p", "go-libp2p entry point"],
+    ["libp2p/go-libp2p-core", "go-libp2p-core", "core interfaces, types, and abstractions"],
+    ["libp2p/go-libp2p-blankhost", "go-libp2p-blankhost", "minimal implementation of the \"host\" interface"],
+
+    "Network",
+    ["libp2p/go-libp2p-swarm", "go-libp2p-swarm", "reference implementation of network state machine"],
+
+    "Transport",
+    ["libp2p/go-ws-transport", "go-ws-transport", "WebSocket transport"],
+    ["libp2p/go-tcp-transport", "go-tcp-transport", "TCP transport"],
+    ["libp2p/go-libp2p-quic-transport", "go-libp2p-quic-transport", "QUIC transport"],
+    ["libp2p/go-udp-transport", "go-udp-transport", "UDP transport"],
+    ["libp2p/go-utp-transport", "go-utp-transport", "uTorrent transport (UTP)"],
+    ["libp2p/go-libp2p-circuit", "go-libp2p-circuit", "relay transport"],
+    ["libp2p/go-libp2p-transport-upgrader", "go-libp2p-transport-upgrader", "upgrades multiaddr-net connections into full libp2p transports"],
+    ["libp2p/go-libp2p-reuseport-transport", "go-libp2p-reuseport-transport", "partial transport for building transports that reuse ports"],
+
+    "Encrypted Channels",
+    ["libp2p/go-libp2p-secio", "go-libp2p-secio", "SecIO crypto channel"],
+    ["libp2p/go-libp2p-tls-transport", "go-libp2p-tls-transport", "TLS 1.3+ crypto channel"],
+    ["libp2p/go-conn-security-multistream", "go-conn-security-multistream", "multistream multiplexed meta crypto channel"],
+
+    "Private Network",
+    ["libp2p/go-libp2p-pnet", "go-libp2p-pnet", "reference private networking implementation"],
+
+    "Stream Muxers",
+    ["libp2p/go-libp2p-yamux", "go-libp2p-yamux", "YAMUX stream multiplexer"],
+    ["libp2p/go-libp2p-mplex", "go-libp2p-mplex", "MPLEX stream multiplexer"],
+
+    "NAT Traversal",
+    ["libp2p/go-libp2p-nat", "go-libp2p-nat"],
+
+    "Peerstore",
+    ["libp2p/go-libp2p-peerstore", "go-libp2p-peerstore", "reference implementation of peer metadata storage component"],
+
+    "Connection Manager",
+    ["libp2p/go-libp2p-connmgr", "go-libp2p-connmgr", "reference implementation of connection manager"],
+
+    "Routing",
+    ["libp2p/go-libp2p-record", "go-libp2p-record", "record type and validator logic"],
+    ["libp2p/go-libp2p-kad-dht", "go-libp2p-kad-dht", "Kademlia-like router"],
+    ["libp2p/go-libp2p-kbucket", "go-libp2p-kbucket", "Kademlia routing table helper types"],
+    ["libp2p/go-libp2p-coral-dht", "go-libp2p-coral-dht", "Router based on Coral DHT"],
+    ["libp2p/go-libp2p-pubsub-router", "go-libp2p-pubsub-router", "record-store over pubsub adapter"],
+
+    "Consensus",
+    ["libp2p/go-libp2p-consensus", "go-libp2p-consensus", "consensus protocols interfaces"],
+    ["libp2p/go-libp2p-raft", "go-libp2p-raft", "consensus implementation over raft"],
+
+    "Pubsub",
+    ["libp2p/go-libp2p-pubsub", "go-libp2p-pubsub", "multiple pubsub over libp2p implementations"],
+
+    "RPC",
+    ["libp2p/go-libp2p-gorpc", "go-libp2p-gorpc", "a simple RPC library for libp2p"],
+
+    "Utilities/miscellaneous",
+    ["libp2p/go-libp2p-loggables", "go-libp2p-loggables", "logging helpers"],
+    ["libp2p/go-maddr-filter", "go-maddr-filter", "multiaddr filtering helpers"],
+    ["libp2p/go-libp2p-netutil", "go-libp2p-netutil", "misc utilities"],
+    ["libp2p/go-msgio", "go-msgio", "length prefixed data channel"],
+    ["libp2p/go-addr-util", "go-addr-util", "address utilities for libp2p swarm"],
+    ["libp2p/go-buffer-pool", "go-buffer-pool", "a variable size buffer pool for go"],
+    ["libp2p/go-libp2p-routing-helpers", "go-libp2p-routing-helpers", "routing helpers"],
+    ["libp2p/go-reuseport", "go-reuseport", "enables reuse of addresses"],
+    ["libp2p/go-sockaddr", "go-sockaddr", "utils for sockaddr conversions"],
+    ["libp2p/go-flow-metrics", "go-flow-metrics", "metrics library"],
+    ["libp2p/go-libp2p-gostream", "go-libp2p-gostream", "Go 'net' wrappers for libp2p"],
+    ["libp2p/go-libp2p-http", "go-libp2p-http", "HTTP on top of libp2p streams"],
+
+    "Testing and examples",
+    ["libp2p/go-libp2p-testing", "go-libp2p-testing", "a collection of testing utilities for libp2p"]
+  ]
+}
