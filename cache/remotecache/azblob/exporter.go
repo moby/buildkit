@@ -26,12 +26,12 @@ func ResolveCacheExporterFunc() remotecache.ResolveCacheExporterFunc {
 	return func(ctx context.Context, g session.Group, attrs map[string]string) (remotecache.Exporter, error) {
 		config, err := getConfig(attrs)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create azblob config: %v", err)
+			return nil, errors.WithMessage(err, "failed to create azblob config")
 		}
 
 		containerClient, err := createContainerClient(ctx, config)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create container client: %v", err)
+			return nil, errors.WithMessage(err, "failed to create container client")
 		}
 
 		cc := v1.NewCacheChains()
@@ -95,7 +95,8 @@ func (ce *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 			layerDone := progress.OneOff(ctx, fmt.Sprintf("writing layer %s", l.Blob))
 			ra, err := dgstPair.Provider.ReaderAt(ctx, dgstPair.Descriptor)
 			if err != nil {
-				return nil, layerDone(fmt.Errorf("failed to get reader for %s: %v", dgstPair.Descriptor.Digest, err))
+				err = errors.Wrapf(err, "failed to get reader for %s", dgstPair.Descriptor.Digest)
+				return nil, layerDone(err)
 			}
 			if err := ce.uploadBlobIfNotExists(ctx, key, content.NewReader(ra)); err != nil {
 				return nil, layerDone(err)
@@ -120,12 +121,12 @@ func (ce *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 
 	dt, err := json.Marshal(config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal config: %v", err)
+		return nil, errors.Wrap(err, "failed to marshal config")
 	}
 
 	for _, name := range ce.config.Names {
 		if innerError := ce.uploadManifest(ctx, manifestKey(ce.config, name), bytesToReadSeekCloser(dt)); innerError != nil {
-			return nil, errors.Errorf("error writing manifest %s: %v", name, innerError)
+			return nil, errors.Wrapf(innerError, "error writing manifest %s", name)
 		}
 	}
 

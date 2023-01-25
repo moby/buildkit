@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,19 +13,18 @@ import (
 	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/platforms"
-	"github.com/containerd/continuity/fs"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/moby/buildkit/cache"
 	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/exporter"
+	"github.com/moby/buildkit/exporter/attestation"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/exporter/util/epoch"
-	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/result"
-	"github.com/moby/buildkit/util/attestation"
+	attestationTypes "github.com/moby/buildkit/util/attestation"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/buildinfo"
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
@@ -59,19 +58,35 @@ type ImageWriter struct {
 }
 
 func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, sessionID string, opts *ImageCommitOpts) (*ocispecs.Descriptor, error) {
-	platformsBytes, ok := inp.Metadata[exptypes.ExporterPlatformsKey]
-
-	if len(inp.Refs) > 0 && !ok {
+	if _, ok := inp.Metadata[exptypes.ExporterPlatformsKey]; len(inp.Refs) > 0 && !ok {
 		return nil, errors.Errorf("unable to export multiple refs, missing platforms mapping")
 	}
 
-	var p exptypes.Platforms
-	if ok && len(platformsBytes) > 0 {
-		if err := json.Unmarshal(platformsBytes, &p); err != nil {
-			return nil, errors.Wrapf(err, "failed to parse platforms passed to exporter")
-		}
+	isMap := len(inp.Refs) > 0
+
+	ps, err := exptypes.ParsePlatforms(inp.Metadata)
+	if err != nil {
+		return nil, err
 	}
 
+	if !isMap {
+		// enable index if we need to include attestations
+		for _, p := range ps.Platforms {
+			if atts, ok := inp.Attestations[p.ID]; ok {
+				if !opts.ForceInlineAttestations {
+					// if we don't need force inline attestations (for oci
+					// exporter), filter them out
+					atts = attestation.Filter(atts, nil, map[string][]byte{
+						result.AttestationInlineOnlyKey: []byte(strconv.FormatBool(true)),
+					})
+				}
+				if len(atts) > 0 {
+					isMap = true
+					break
+				}
+			}
+		}
+	}
 	if opts.Epoch == nil {
 		if tm, ok, err := epoch.ParseSource(inp); err != nil {
 			return nil, err
@@ -80,52 +95,81 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		}
 	}
 
-	if len(inp.Refs) == 0 {
-		remotes, err := ic.exportLayers(ctx, opts.RefCfg, session.NewGroup(sessionID), inp.Ref)
+	for pk, a := range opts.Annotations {
+		if pk != "" {
+			if _, ok := inp.FindRef(pk); !ok {
+				return nil, errors.Errorf("invalid annotation: no platform %s found in source", pk)
+			}
+		}
+		if len(a.Index)+len(a.IndexDescriptor)+len(a.ManifestDescriptor) > 0 {
+			opts.EnableOCITypes("annotations")
+		}
+	}
+
+	if !isMap {
+		if len(ps.Platforms) > 1 {
+			return nil, errors.Errorf("cannot export multiple platforms without multi-platform enabled")
+		}
+
+		var ref cache.ImmutableRef
+		var p exptypes.Platform
+		if len(ps.Platforms) > 0 {
+			p = ps.Platforms[0]
+			if r, ok := inp.FindRef(p.ID); ok {
+				ref = r
+			}
+		} else {
+			ref = inp.Ref
+		}
+
+		remotes, err := ic.exportLayers(ctx, opts.RefCfg, session.NewGroup(sessionID), ref)
 		if err != nil {
 			return nil, err
 		}
 
 		var dtbi []byte
 		if opts.BuildInfo {
-			if dtbi, err = buildinfo.Format(inp.Metadata[exptypes.ExporterBuildInfo], buildinfo.FormatOpts{
+			if dtbi, err = buildinfo.Format(exptypes.ParseKey(inp.Metadata, exptypes.ExporterBuildInfo, p), buildinfo.FormatOpts{
 				RemoveAttrs: !opts.BuildInfoAttrs,
 			}); err != nil {
 				return nil, err
 			}
 		}
 
-		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, opts, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], opts.Annotations.Platform(nil), inp.Metadata[exptypes.ExporterInlineCache], dtbi, opts.Epoch, session.NewGroup(sessionID))
+		annotations := opts.Annotations.Platform(nil)
+		if len(annotations.Index) > 0 || len(annotations.IndexDescriptor) > 0 {
+			return nil, errors.Errorf("index annotations not supported for single platform export")
+		}
+
+		config := exptypes.ParseKey(inp.Metadata, exptypes.ExporterImageConfigKey, p)
+		inlineCache := exptypes.ParseKey(inp.Metadata, exptypes.ExporterInlineCache, p)
+		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, opts, ref, config, &remotes[0], annotations, inlineCache, dtbi, opts.Epoch, session.NewGroup(sessionID))
 		if err != nil {
 			return nil, err
 		}
 		if mfstDesc.Annotations == nil {
 			mfstDesc.Annotations = make(map[string]string)
 		}
-		if len(p.Platforms) == 1 {
-			mfstDesc.Platform = &p.Platforms[0].Platform
+		if len(ps.Platforms) == 1 {
+			mfstDesc.Platform = &ps.Platforms[0].Platform
 		}
 		mfstDesc.Annotations[exptypes.ExporterConfigDigestKey] = configDesc.Digest.String()
 
 		return mfstDesc, nil
 	}
 
-	attestCount := 0
-	for _, attests := range inp.Attestations {
-		attestCount += len(attests)
-	}
-	if count := attestCount + len(p.Platforms); count != len(inp.Refs) {
-		return nil, errors.Errorf("number of required refs (%d) does not match number of references (%d)", count, len(inp.Refs))
-	}
-
-	if attestCount > 0 {
+	if len(inp.Attestations) > 0 {
 		opts.EnableOCITypes("attestations")
 	}
 
 	refs := make([]cache.ImmutableRef, 0, len(inp.Refs))
 	remotesMap := make(map[string]int, len(inp.Refs))
-	for id, r := range inp.Refs {
-		remotesMap[id] = len(refs)
+	for _, p := range ps.Platforms {
+		r, ok := inp.FindRef(p.ID)
+		if !ok {
+			return nil, errors.Errorf("failed to find ref for ID %s", p.ID)
+		}
+		remotesMap[p.ID] = len(refs)
 		refs = append(refs, r)
 	}
 
@@ -158,24 +202,31 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 
 	var attestationManifests []ocispecs.Descriptor
 
-	for i, p := range p.Platforms {
-		r, ok := inp.Refs[p.ID]
+	for i, p := range ps.Platforms {
+		r, ok := inp.FindRef(p.ID)
 		if !ok {
 			return nil, errors.Errorf("failed to find ref for ID %s", p.ID)
 		}
-		config := inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterImageConfigKey, p.ID)]
-		inlineCache := inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, p.ID)]
+		config := exptypes.ParseKey(inp.Metadata, exptypes.ExporterImageConfigKey, p)
+		inlineCache := exptypes.ParseKey(inp.Metadata, exptypes.ExporterInlineCache, p)
 
 		var dtbi []byte
 		if opts.BuildInfo {
-			if dtbi, err = buildinfo.Format(inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, p.ID)], buildinfo.FormatOpts{
+			if dtbi, err = buildinfo.Format(exptypes.ParseKey(inp.Metadata, exptypes.ExporterBuildInfo, p), buildinfo.FormatOpts{
 				RemoveAttrs: !opts.BuildInfoAttrs,
 			}); err != nil {
 				return nil, err
 			}
 		}
 
-		desc, _, err := ic.commitDistributionManifest(ctx, opts, r, config, &remotes[remotesMap[p.ID]], opts.Annotations.Platform(&p.Platform), inlineCache, dtbi, opts.Epoch, session.NewGroup(sessionID))
+		remote := &remotes[remotesMap[p.ID]]
+		if remote == nil {
+			remote = &solver.Remote{
+				Provider: ic.opt.ContentStore,
+			}
+		}
+
+		desc, _, err := ic.commitDistributionManifest(ctx, opts, r, config, remote, opts.Annotations.Platform(&p.Platform), inlineCache, dtbi, opts.Epoch, session.NewGroup(sessionID))
 		if err != nil {
 			return nil, err
 		}
@@ -186,12 +237,47 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i)] = desc.Digest.String()
 
 		if attestations, ok := inp.Attestations[p.ID]; ok {
-			inTotos, err := ic.extractAttestations(ctx, opts, session.NewGroup(sessionID), desc, inp.Refs, attestations)
+			attestations, err := attestation.Unbundle(ctx, session.NewGroup(sessionID), attestations)
 			if err != nil {
 				return nil, err
 			}
 
-			desc, err := ic.commitAttestationsManifest(ctx, opts, p, desc.Digest.String(), inTotos)
+			eg, ctx2 := errgroup.WithContext(ctx)
+			for i, att := range attestations {
+				i, att := i, att
+				eg.Go(func() error {
+					att, err := supplementSBOM(ctx2, session.NewGroup(sessionID), r, remote, att)
+					if err != nil {
+						return err
+					}
+					attestations[i] = att
+					return nil
+				})
+			}
+			if err := eg.Wait(); err != nil {
+				return nil, err
+			}
+
+			var defaultSubjects []intoto.Subject
+			for _, name := range strings.Split(opts.ImageName, ",") {
+				if name == "" {
+					continue
+				}
+				pl, err := purl.RefToPURL(name, &p.Platform)
+				if err != nil {
+					return nil, err
+				}
+				defaultSubjects = append(defaultSubjects, intoto.Subject{
+					Name:   pl,
+					Digest: result.ToDigestMap(desc.Digest),
+				})
+			}
+			stmts, err := attestation.MakeInTotoStatements(ctx, session.NewGroup(sessionID), attestations, defaultSubjects)
+			if err != nil {
+				return nil, err
+			}
+
+			desc, err := ic.commitAttestationsManifest(ctx, opts, p, desc.Digest.String(), stmts)
 			if err != nil {
 				return nil, err
 			}
@@ -202,10 +288,10 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 
 	for i, mfst := range attestationManifests {
 		idx.Manifests = append(idx.Manifests, mfst)
-		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", len(p.Platforms)+i)] = mfst.Digest.String()
+		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", len(ps.Platforms)+i)] = mfst.Digest.String()
 	}
 
-	idxBytes, err := json.MarshalIndent(idx, "", "   ")
+	idxBytes, err := json.MarshalIndent(idx, "", "  ")
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to marshal index")
 	}
@@ -264,166 +350,12 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, refCfg cacheconfig.RefC
 	return out, err
 }
 
-func (ic *ImageWriter) extractAttestations(ctx context.Context, opts *ImageCommitOpts, s session.Group, desc *ocispecs.Descriptor, refs map[string]cache.ImmutableRef, attestations []result.Attestation) ([]intoto.Statement, error) {
-	eg, ctx := errgroup.WithContext(ctx)
-	statements := make([][]intoto.Statement, len(attestations))
-
-	var purls []string
-	for _, name := range strings.Split(opts.ImageName, ",") {
-		if name == "" {
-			continue
-		}
-		p, err := purl.RefToPURL(name, desc.Platform)
-		if err != nil {
-			return nil, err
-		}
-		purls = append(purls, p)
-	}
-
-	if len(attestations) > 0 && refs == nil {
-		return nil, errors.Errorf("no refs map provided to lookup attestation keys")
-	}
-
-	for i, att := range attestations {
-		i, att := i, att
-		eg.Go(func() error {
-			ref, ok := refs[att.Ref]
-			if !ok {
-				return errors.Errorf("key %s not found in refs map", att.Ref)
-			}
-			mount, err := ref.Mount(ctx, true, s)
-			if err != nil {
-				return err
-			}
-			lm := snapshot.LocalMounter(mount)
-			src, err := lm.Mount()
-			if err != nil {
-				return err
-			}
-			defer lm.Unmount()
-
-			switch att.Kind {
-			case gatewaypb.AttestationKindInToto:
-				p, err := fs.RootPath(src, att.Path)
-				if err != nil {
-					return err
-				}
-				data, err := os.ReadFile(p)
-				if err != nil {
-					return errors.Wrap(err, "cannot read in-toto attestation")
-				}
-				if len(data) == 0 {
-					data = nil
-				}
-
-				var subjects []intoto.Subject
-				if len(att.InToto.Subjects) == 0 {
-					att.InToto.Subjects = []result.InTotoSubject{{
-						Kind: gatewaypb.InTotoSubjectKindSelf,
-					}}
-				}
-				for _, subject := range att.InToto.Subjects {
-					name := "_"
-					if subject.Name != "" {
-						name = subject.Name
-					}
-
-					switch subject.Kind {
-					case gatewaypb.InTotoSubjectKindSelf:
-						names := []string{}
-						if name != "_" {
-							names = append(names, name)
-						}
-						names = append(names, purls...)
-						for _, name := range names {
-							subjects = append(subjects, intoto.Subject{
-								Name:   name,
-								Digest: result.DigestMap(desc.Digest),
-							})
-						}
-					case gatewaypb.InTotoSubjectKindRaw:
-						subjects = append(subjects, intoto.Subject{
-							Name:   name,
-							Digest: result.DigestMap(subject.Digest...),
-						})
-					default:
-						return errors.Errorf("unknown attestation subject type %T", subject)
-					}
-				}
-
-				stmt := intoto.Statement{
-					StatementHeader: intoto.StatementHeader{
-						Type:          intoto.StatementInTotoV01,
-						PredicateType: att.InToto.PredicateType,
-						Subject:       subjects,
-					},
-					Predicate: json.RawMessage(data),
-				}
-				statements[i] = append(statements[i], stmt)
-			case gatewaypb.AttestationKindBundle:
-				dir, err := fs.RootPath(src, att.Path)
-				if err != nil {
-					return err
-				}
-				entries, err := os.ReadDir(dir)
-				if err != nil {
-					return err
-				}
-
-				for _, entry := range entries {
-					p, err := fs.RootPath(dir, entry.Name())
-					if err != nil {
-						return err
-					}
-					f, err := os.Open(p)
-					if err != nil {
-						return err
-					}
-					dec := json.NewDecoder(f)
-					var stmt intoto.Statement
-					if err := dec.Decode(&stmt); err != nil {
-						return errors.Wrap(err, "cannot decode in-toto statement")
-					}
-					if att.InToto.PredicateType != "" && stmt.PredicateType != att.InToto.PredicateType {
-						return errors.Errorf("bundle entry %s does not match required predicate type %s", stmt.PredicateType, att.InToto.PredicateType)
-					}
-					if stmt.Subject == nil {
-						for _, name := range purls {
-							stmt.Subject = append(stmt.Subject, intoto.Subject{
-								Name:   name,
-								Digest: result.DigestMap(desc.Digest),
-							})
-						}
-					}
-					statements[i] = append(statements[i], stmt)
-				}
-			}
-			return nil
-		})
-	}
-	if err := eg.Wait(); err != nil {
-		return nil, err
-	}
-
-	var allStatements []intoto.Statement
-	for _, statements := range statements {
-		allStatements = append(allStatements, statements...)
-	}
-	return allStatements, nil
-}
-
 func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *ImageCommitOpts, ref cache.ImmutableRef, config []byte, remote *solver.Remote, annotations *Annotations, inlineCache []byte, buildInfo []byte, epoch *time.Time, sg session.Group) (*ocispecs.Descriptor, *ocispecs.Descriptor, error) {
 	if len(config) == 0 {
 		var err error
 		config, err = defaultImageConfig()
 		if err != nil {
 			return nil, nil, err
-		}
-	}
-
-	if remote == nil {
-		remote = &solver.Remote{
-			Provider: ic.opt.ContentStore,
 		}
 	}
 
@@ -479,13 +411,12 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *Ima
 		"containerd.io/gc.ref.content.0": configDigest.String(),
 	}
 
-	for i, desc := range remote.Descriptors {
-		removeInternalLayerAnnotations(&desc, opts.OCITypes)
+	for _, desc := range remote.Descriptors {
+		desc.Annotations = RemoveInternalLayerAnnotations(desc.Annotations, opts.OCITypes)
 		mfst.Layers = append(mfst.Layers, desc)
-		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i+1)] = desc.Digest.String()
 	}
 
-	mfstJSON, err := json.MarshalIndent(mfst, "", "   ")
+	mfstJSON, err := json.MarshalIndent(mfst, "", "  ")
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to marshal manifest")
 	}
@@ -542,7 +473,7 @@ func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *Ima
 		}
 		digest := digest.FromBytes(data)
 		desc := ocispecs.Descriptor{
-			MediaType: attestation.MediaTypeDockerSchema2AttestationType,
+			MediaType: attestationTypes.MediaTypeDockerSchema2AttestationType,
 			Digest:    digest,
 			Size:      int64(len(data)),
 			Annotations: map[string]string{
@@ -592,12 +523,12 @@ func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *Ima
 		"containerd.io/gc.ref.content.0": configDigest.String(),
 	}
 	for i, desc := range layers {
-		removeInternalLayerAnnotations(&desc, opts.OCITypes)
+		desc.Annotations = RemoveInternalLayerAnnotations(desc.Annotations, opts.OCITypes)
 		mfst.Layers = append(mfst.Layers, desc)
 		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i+1)] = desc.Digest.String()
 	}
 
-	mfstJSON, err := json.MarshalIndent(mfst, "", "   ")
+	mfstJSON, err := json.MarshalIndent(mfst, "", "  ")
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to marshal manifest")
 	}
@@ -622,8 +553,8 @@ func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *Ima
 		Size:      int64(len(mfstJSON)),
 		MediaType: manifestType,
 		Annotations: map[string]string{
-			attestation.DockerAnnotationReferenceType:   attestation.DockerAnnotationReferenceTypeDefault,
-			attestation.DockerAnnotationReferenceDigest: target,
+			attestationTypes.DockerAnnotationReferenceType:   attestationTypes.DockerAnnotationReferenceTypeDefault,
+			attestationTypes.DockerAnnotationReferenceDigest: target,
 		},
 	}, nil
 }
@@ -850,19 +781,24 @@ func normalizeLayersAndHistory(ctx context.Context, remote *solver.Remote, histo
 	return remote, history
 }
 
-func removeInternalLayerAnnotations(desc *ocispecs.Descriptor, oci bool) {
-	if oci {
-		// oci supports annotations but don't export internal annotations
-		delete(desc.Annotations, "containerd.io/uncompressed")
-		delete(desc.Annotations, "buildkit/createdat")
-		for k := range desc.Annotations {
-			if strings.HasPrefix(k, "containerd.io/distribution.source.") {
-				delete(desc.Annotations, k)
-			}
-		}
-	} else {
-		desc.Annotations = nil
+func RemoveInternalLayerAnnotations(in map[string]string, oci bool) map[string]string {
+	if len(in) == 0 || !oci {
+		return nil
 	}
+	m := make(map[string]string, len(in))
+	for k, v := range in {
+		// oci supports annotations but don't export internal annotations
+		switch k {
+		case "containerd.io/uncompressed", "buildkit/createdat":
+			continue
+		default:
+			if strings.HasPrefix(k, "containerd.io/distribution.source.") {
+				continue
+			}
+			m[k] = v
+		}
+	}
+	return m
 }
 
 type refMetadata struct {

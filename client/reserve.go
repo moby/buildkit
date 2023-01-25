@@ -3,12 +3,13 @@ package client
 import (
 	"context"
 
-	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/pkg/errors"
+
+	controlapi "github.com/moby/buildkit/api/services/control"
 )
 
 func (c *Client) Reserve(ctx context.Context) error {
-	_, err := c.controlClient().Reserve(ctx, &controlapi.ReserveRequest{})
+	_, err := c.ControlClient().Reserve(ctx, &controlapi.ReserveRequest{})
 	if err != nil {
 		return errors.WithStack(err)
 	}

@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/containerd/console"
@@ -41,7 +42,7 @@ func parseOutputCSV(s string) (client.ExportEntry, error) {
 	if v, ok := ex.Attrs["output"]; ok {
 		return ex, errors.Errorf("output=%s not supported for --output, you meant dest=%s?", v, v)
 	}
-	ex.Output, ex.OutputDir, err = resolveExporterDest(ex.Type, ex.Attrs["dest"])
+	ex.Output, ex.OutputDir, err = resolveExporterDest(ex.Type, ex.Attrs["dest"], ex.Attrs)
 	if err != nil {
 		return ex, errors.Wrap(err, "invalid output option: output")
 	}
@@ -65,19 +66,35 @@ func ParseOutput(exports []string) ([]client.ExportEntry, error) {
 }
 
 // resolveExporterDest returns at most either one of io.WriteCloser (single file) or a string (directory path).
-func resolveExporterDest(exporter, dest string) (func(map[string]string) (io.WriteCloser, error), string, error) {
+func resolveExporterDest(exporter, dest string, attrs map[string]string) (func(map[string]string) (io.WriteCloser, error), string, error) {
 	wrapWriter := func(wc io.WriteCloser) func(map[string]string) (io.WriteCloser, error) {
 		return func(m map[string]string) (io.WriteCloser, error) {
 			return wc, nil
 		}
 	}
+
+	var supportFile bool
+	var supportDir bool
 	switch exporter {
 	case client.ExporterLocal:
+		supportDir = true
+	case client.ExporterTar:
+		supportFile = true
+	case client.ExporterOCI, client.ExporterDocker:
+		tar, err := strconv.ParseBool(attrs["tar"])
+		if err != nil {
+			tar = true
+		}
+		supportFile = tar
+		supportDir = !tar
+	}
+
+	if supportDir {
 		if dest == "" {
-			return nil, "", errors.New("output directory is required for local exporter")
+			return nil, "", errors.Errorf("output directory is required for %s exporter", exporter)
 		}
 		return nil, dest, nil
-	case client.ExporterOCI, client.ExporterDocker, client.ExporterTar:
+	} else if supportFile {
 		if dest != "" && dest != "-" {
 			fi, err := os.Stat(dest)
 			if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -94,7 +111,8 @@ func resolveExporterDest(exporter, dest string) (func(map[string]string) (io.Wri
 			return nil, "", errors.Errorf("output file is required for %s exporter. refusing to write to console", exporter)
 		}
 		return wrapWriter(os.Stdout), "", nil
-	default: // e.g. client.ExporterImage
+	} else {
+		// e.g. client.ExporterImage
 		if dest != "" {
 			return nil, "", errors.Errorf("output %s is not supported by %s exporter", dest, exporter)
 		}

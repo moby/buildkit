@@ -1,48 +1,77 @@
 # syntax=docker/dockerfile-upstream:master
 
-# protoc is dynamically linked to glibc to can't use golang:1.10-alpine
-FROM golang:1.19-buster AS gobuild-base
+ARG GO_VERSION="1.19"
+ARG NODE_VERSION="19"
+ARG PROTOC_VERSION="3.11.4"
 
-RUN apt-get update && apt-get --no-install-recommends install -y \
-	unzip \
-	&& true
-
-# https://github.com/golang/protobuf/blob/v1.3.5/.travis.yml#L15
-ARG PROTOC_VERSION=3.11.4
-ARG TARGETOS TARGETARCH
-RUN set -e; \
-	arch=$(echo $TARGETARCH | sed -e s/amd64/x86_64/ -e s/arm64/aarch_64/); \
-	wget -q https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-${TARGETOS}-${arch}.zip && unzip protoc-${PROTOC_VERSION}-${TARGETOS}-${arch}.zip -d /usr/local
-
-ARG GOGO_VERSION=v1.3.2
-RUN --mount=target=/root/.cache,type=cache GO111MODULE=on go install \
-	github.com/gogo/protobuf/protoc-gen-gogo@${GOGO_VERSION} \
-	github.com/gogo/protobuf/protoc-gen-gogofaster@${GOGO_VERSION} \
-	github.com/gogo/protobuf/protoc-gen-gogoslick@${GOGO_VERSION}
-
-ARG PROTOBUF_VERSION=v1.3.5
-RUN --mount=target=/root/.cache,type=cache GO111MODULE=on go install \
-	github.com/golang/protobuf/protoc-gen-go@${PROTOBUF_VERSION}
-
+# protoc is dynamically linked to glibc so can't use alpine base
+FROM golang:${GO_VERSION}-buster AS base
+RUN apt-get update && apt-get --no-install-recommends install -y git unzip
+ARG PROTOC_VERSION
+ARG TARGETOS
+ARG TARGETARCH
+RUN <<EOT
+  set -e
+  arch=$(echo $TARGETARCH | sed -e s/amd64/x86_64/ -e s/arm64/aarch_64/)
+  wget -q https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-${TARGETOS}-${arch}.zip
+  unzip protoc-${PROTOC_VERSION}-${TARGETOS}-${arch}.zip -d /usr/local
+EOT
 WORKDIR /go/src/github.com/moby/buildkit
 
-# Generate into a subdirectory because if it is in the root then the
-# extraction with `docker export` ends up putting `.dockerenv`, `dev`,
-# `sys` and `proc` into the source directory. With this we can use
-# `tar --strip-components=1 generated-files` on the output of `docker
-# export`.
-FROM gobuild-base AS generated
-RUN mkdir /generated-files
-RUN --mount=target=/tmp/src \
-	cp -r /tmp/src/. . && \
-	git add -A && \
-	go generate -mod=vendor -v ./... && \
-	git ls-files -m --others -- **/*.pb.go | tar -cf - --files-from - | tar -C /generated-files -xf -
+FROM base AS tools
+RUN --mount=type=bind,target=.,rw \
+    --mount=type=cache,target=/root/.cache \
+    --mount=type=cache,target=/go/pkg/mod \
+    go install \
+      github.com/gogo/protobuf/protoc-gen-gogo \
+      github.com/gogo/protobuf/protoc-gen-gogofaster \
+      github.com/gogo/protobuf/protoc-gen-gogoslick \
+      github.com/golang/protobuf/protoc-gen-go
+
+FROM tools AS generated
+RUN --mount=type=bind,target=.,rw <<EOT
+  set -ex
+  go generate -mod=vendor -v ./...
+  mkdir /out
+  git ls-files -m --others -- ':!vendor' '**/*.pb.go' | tar -cf - --files-from - | tar -C /out -xf -
+EOT
 
 FROM scratch AS update
-COPY --from=generated /generated-files /generated-files
+COPY --from=generated /out /
 
-FROM gobuild-base AS validate
-RUN --mount=target=/tmp/src \
-	cp -r /tmp/src/. . && \
-	go generate -mod=vendor -v ./... && git diff && ./hack/validate-generated-files check
+FROM base AS validate
+RUN --mount=type=bind,target=.,rw \
+    --mount=type=bind,from=generated,source=/out,target=/generated-files <<EOT
+  set -e
+  git add -A
+  if [ "$(ls -A /generated-files)" ]; then
+    cp -rf /generated-files/* .
+  fi
+  diff=$(git status --porcelain -- ':!vendor' '**/*.pb.go')
+  if [ -n "$diff" ]; then
+    echo >&2 'ERROR: The result of "go generate" differs. Please update with "make generated-files"'
+    echo "$diff"
+    exit 1
+  fi
+EOT
+
+FROM node:${NODE_VERSION}-alpine AS doctoc
+RUN npm install -g doctoc
+WORKDIR /buildkit
+RUN --mount=type=bind,target=.,rw <<EOT
+  doctoc README.md
+  mkdir /out
+  cp README.md /out/
+EOT
+
+FROM base AS validate-toc
+RUN --mount=type=bind,target=.,rw \
+    --mount=type=bind,from=doctoc,source=/out/README.md,target=./README.md <<EOT
+  set -e
+  diff=$(git status --porcelain -- 'README.md')
+  if [ -n "$diff" ]; then
+    echo >&2 'ERROR: The result of "doctoc" differs. Please update with "doctoc README.md"'
+    echo "$diff"
+    exit 1
+  fi
+EOT

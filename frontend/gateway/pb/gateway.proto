@@ -8,6 +8,7 @@ import "github.com/moby/buildkit/solver/pb/ops.proto";
 import "github.com/moby/buildkit/api/types/worker.proto";
 import "github.com/moby/buildkit/util/apicaps/pb/caps.proto";
 import "github.com/tonistiigi/fsutil/types/stat.proto";
+import "github.com/moby/buildkit/sourcepolicy/pb/policy.proto";
 
 
 option (gogoproto.sizer_all) = true;
@@ -52,7 +53,8 @@ message Result {
 		RefMap refs = 4;
 	}
 	map<string, bytes> metadata = 10;
-	map<string, Attestations> attestations = 11;
+	// 11 was used during development and is reserved for old attestation format
+	map<string, Attestations> attestations = 12;
 }
 
 message RefMapDeprecated {
@@ -74,11 +76,12 @@ message Attestations {
 
 message Attestation {
 	AttestationKind kind = 1;
+	map<string, bytes> metadata = 2;
 
-	string ref = 2;
-	string path = 3;
-	string inTotoPredicateType = 4;
-	repeated InTotoSubject inTotoSubjects = 5;
+	Ref ref = 3;
+	string path = 4;
+	string inTotoPredicateType = 5;
+	repeated InTotoSubject inTotoSubjects = 6;
 }
 
 enum AttestationKind {
@@ -122,6 +125,7 @@ message ResolveImageConfigRequest {
 	string LogName = 4;
 	int32 ResolverType = 5;
 	string SessionID = 6;
+	string StoreID = 7;
 }
 
 message ResolveImageConfigResponse {
@@ -148,6 +152,8 @@ message SolveRequest {
 	map<string, pb.Definition> FrontendInputs = 13;
 
 	bool Evaluate = 14;
+
+	repeated moby.buildkit.v1.sourcepolicy.Policy SourcePolicies = 15;
 }
 
 // CacheOptionsEntry corresponds to the control.CacheOptionsEntry

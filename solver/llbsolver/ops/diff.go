@@ -10,7 +10,7 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
-	"github.com/moby/buildkit/solver/llbsolver"
+	"github.com/moby/buildkit/solver/llbsolver/ops/opsutils"
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 )
@@ -24,7 +24,7 @@ type diffOp struct {
 }
 
 func NewDiffOp(v solver.Vertex, op *pb.Op_Diff, w worker.Worker) (solver.Op, error) {
-	if err := llbsolver.ValidateOp(&pb.Op{Op: op}); err != nil {
+	if err := opsutils.Validate(&pb.Op{Op: op}); err != nil {
 		return nil, err
 	}
 	return &diffOp{

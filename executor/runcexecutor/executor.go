@@ -227,7 +227,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 	}
 	defer mount.Unmount(rootFSPath, 0)
 
-	defer executor.MountStubsCleaner(rootFSPath, mounts)()
+	defer executor.MountStubsCleaner(rootFSPath, mounts, meta.RemoveMountStubsRecursive)()
 
 	uid, gid, sgids, err := oci.GetUser(rootFSPath, meta.User)
 	if err != nil {

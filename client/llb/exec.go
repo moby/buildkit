@@ -194,12 +194,13 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 	}
 
 	meta := &pb.Meta{
-		Args:         args,
-		Env:          env.ToArray(),
-		Cwd:          cwd,
-		User:         user,
-		Hostname:     hostname,
-		CgroupParent: cgrpParent,
+		Args:                      args,
+		Env:                       env.ToArray(),
+		Cwd:                       cwd,
+		User:                      user,
+		Hostname:                  hostname,
+		CgroupParent:              cgrpParent,
+		RemoveMountStubsRecursive: true,
 	}
 
 	extraHosts, err := getExtraHosts(e.base)(ctx, c)
@@ -343,7 +344,7 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 			inputIndex = pb.Empty
 		}
 
-		outputIndex := pb.OutputIndex(-1)
+		outputIndex := pb.SkipOutput
 		if !m.noOutput && !m.readonly && m.cacheID == "" && !m.tmpfs {
 			outputIndex = pb.OutputIndex(outIndex)
 			outIndex++

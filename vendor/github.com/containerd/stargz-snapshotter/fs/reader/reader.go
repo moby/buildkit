@@ -148,7 +148,6 @@ func (vr *VerifiableReader) cacheWithReader(ctx context.Context, currentDepth in
 	if currentDepth > maxWalkDepth {
 		return fmt.Errorf("tree is too deep (depth:%d)", currentDepth)
 	}
-	gr := vr.r
 	rootID := r.RootID()
 	r.ForeachChild(dirID, func(name string, id uint32, mode os.FileMode) bool {
 		e, err := r.GetAttr(id)
@@ -188,7 +187,9 @@ func (vr *VerifiableReader) cacheWithReader(ctx context.Context, currentDepth in
 			return true
 		}
 
-		fr, err := r.OpenFile(id)
+		fr, err := r.OpenFileWithPreReader(id, func(nid uint32, chunkOffset, chunkSize int64, chunkDigest string, r io.Reader) (retErr error) {
+			return vr.readAndCache(nid, r, chunkOffset, chunkSize, chunkDigest, opts...)
+		})
 		if err != nil {
 			rErr = err
 			return false
@@ -207,61 +208,13 @@ func (vr *VerifiableReader) cacheWithReader(ctx context.Context, currentDepth in
 				return false
 			}
 
-			eg.Go(func() (retErr error) {
+			eg.Go(func() error {
 				defer sem.Release(1)
-				defer func() {
-					if retErr != nil {
-						vr.storeLastVerifyErr(retErr)
-					}
-				}()
-
-				// Check if the target chunks exists in the cache
-				cacheID := genID(id, chunkOffset, chunkSize)
-				if r, err := gr.cache.Get(cacheID, opts...); err == nil {
-					return r.Close()
-				}
-
-				// missed cache, needs to fetch and add it to the cache
-				br := bufio.NewReaderSize(io.NewSectionReader(fr, chunkOffset, chunkSize), int(chunkSize))
-				if _, err := br.Peek(int(chunkSize)); err != nil {
-					return fmt.Errorf("cacheWithReader.peek: %v", err)
-				}
-				w, err := gr.cache.Add(cacheID, opts...)
+				err := vr.readAndCache(id, io.NewSectionReader(fr, chunkOffset, chunkSize), chunkOffset, chunkSize, chunkDigestStr, opts...)
 				if err != nil {
-					return err
+					return fmt.Errorf("failed to read %q (off:%d,size:%d): %w", name, chunkOffset, chunkSize, err)
 				}
-				defer w.Close()
-				v, err := vr.verifier(id, chunkDigestStr)
-				if err != nil {
-					vr.prohibitVerifyFailureMu.RLock()
-					if vr.prohibitVerifyFailure {
-						vr.prohibitVerifyFailureMu.RUnlock()
-						return fmt.Errorf("verifier not found %q(off:%d,size:%d): %w", name, chunkOffset, chunkSize, err)
-					}
-					vr.storeLastVerifyErr(err)
-					vr.prohibitVerifyFailureMu.RUnlock()
-				}
-				tee := io.Discard
-				if v != nil {
-					tee = io.Writer(v) // verification is required
-				}
-				if _, err := io.CopyN(w, io.TeeReader(br, tee), chunkSize); err != nil {
-					w.Abort()
-					return fmt.Errorf("failed to cache file payload of %q (offset:%d,size:%d): %w", name, chunkOffset, chunkSize, err)
-				}
-				if v != nil && !v.Verified() {
-					err := fmt.Errorf("invalid chunk %q (offset:%d,size:%d)", name, chunkOffset, chunkSize)
-					vr.prohibitVerifyFailureMu.RLock()
-					if vr.prohibitVerifyFailure {
-						vr.prohibitVerifyFailureMu.RUnlock()
-						w.Abort()
-						return err
-					}
-					vr.storeLastVerifyErr(err)
-					vr.prohibitVerifyFailureMu.RUnlock()
-				}
-
-				return w.Commit()
+				return nil
 			})
 		}
 
@@ -269,6 +222,63 @@ func (vr *VerifiableReader) cacheWithReader(ctx context.Context, currentDepth in
 	})
 
 	return
+}
+
+func (vr *VerifiableReader) readAndCache(id uint32, fr io.Reader, chunkOffset, chunkSize int64, chunkDigest string, opts ...cache.Option) (retErr error) {
+	gr := vr.r
+
+	if retErr != nil {
+		vr.storeLastVerifyErr(retErr)
+	}
+
+	// Check if it already exists in the cache
+	cacheID := genID(id, chunkOffset, chunkSize)
+	if r, err := gr.cache.Get(cacheID); err == nil {
+		r.Close()
+		return nil
+	}
+
+	// missed cache, needs to fetch and add it to the cache
+	br := bufio.NewReaderSize(fr, int(chunkSize))
+	if _, err := br.Peek(int(chunkSize)); err != nil {
+		return fmt.Errorf("cacheWithReader.peek: %v", err)
+	}
+	w, err := gr.cache.Add(cacheID, opts...)
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+	v, err := vr.verifier(id, chunkDigest)
+	if err != nil {
+		vr.prohibitVerifyFailureMu.RLock()
+		if vr.prohibitVerifyFailure {
+			vr.prohibitVerifyFailureMu.RUnlock()
+			return fmt.Errorf("verifier not found: %w", err)
+		}
+		vr.storeLastVerifyErr(err)
+		vr.prohibitVerifyFailureMu.RUnlock()
+	}
+	tee := io.Discard
+	if v != nil {
+		tee = io.Writer(v) // verification is required
+	}
+	if _, err := io.CopyN(w, io.TeeReader(br, tee), chunkSize); err != nil {
+		w.Abort()
+		return fmt.Errorf("failed to cache file payload: %w", err)
+	}
+	if v != nil && !v.Verified() {
+		err := fmt.Errorf("invalid chunk")
+		vr.prohibitVerifyFailureMu.RLock()
+		if vr.prohibitVerifyFailure {
+			vr.prohibitVerifyFailureMu.RUnlock()
+			w.Abort()
+			return err
+		}
+		vr.storeLastVerifyErr(err)
+		vr.prohibitVerifyFailureMu.RUnlock()
+	}
+
+	return w.Commit()
 }
 
 func (vr *VerifiableReader) Close() error {
@@ -345,7 +355,27 @@ func (gr *reader) OpenFile(id uint32) (io.ReaderAt, error) {
 		return nil, fmt.Errorf("reader is already closed")
 	}
 	var fr metadata.File
-	fr, err := gr.r.OpenFile(id)
+	fr, err := gr.r.OpenFileWithPreReader(id, func(nid uint32, chunkOffset, chunkSize int64, chunkDigest string, r io.Reader) error {
+		// Check if it already exists in the cache
+		cacheID := genID(nid, chunkOffset, chunkSize)
+		if r, err := gr.cache.Get(cacheID); err == nil {
+			r.Close()
+			return nil
+		}
+
+		// Read and cache
+		b := gr.bufPool.Get().(*bytes.Buffer)
+		b.Reset()
+		b.Grow(int(chunkSize))
+		ip := b.Bytes()[:chunkSize]
+		if _, err := io.ReadFull(r, ip); err != nil {
+			gr.putBuffer(b)
+			return err
+		}
+		err := gr.verifyAndCache(nid, ip, chunkDigest, cacheID)
+		gr.putBuffer(b)
+		return err
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file %d: %w", id, err)
 	}
@@ -427,24 +457,8 @@ func (sf *file) ReadAt(p []byte, offset int64) (int, error) {
 			if err != nil && err != io.EOF {
 				return 0, fmt.Errorf("failed to read data: %w", err)
 			}
-
-			commonmetrics.IncOperationCount(commonmetrics.OnDemandRemoteRegistryFetchCount, sf.gr.layerSha) // increment the number of on demand file fetches from remote registry
-			commonmetrics.AddBytesCount(commonmetrics.OnDemandBytesFetched, sf.gr.layerSha, int64(n))       // record total bytes fetched
-			sf.gr.setLastReadTime(time.Now())
-
-			// Verify this chunk
-			if err := sf.verify(sf.id, ip, chunkDigestStr); err != nil {
-				return 0, fmt.Errorf("invalid chunk: %w", err)
-			}
-
-			// Cache this chunk
-			if w, err := sf.gr.cache.Add(id); err == nil {
-				if cn, err := w.Write(ip); err != nil || cn != len(ip) {
-					w.Abort()
-				} else {
-					w.Commit()
-				}
-				w.Close()
+			if err := sf.gr.verifyAndCache(sf.id, ip, chunkDigestStr, id); err != nil {
+				return 0, err
 			}
 			nr += n
 			continue
@@ -459,26 +473,9 @@ func (sf *file) ReadAt(p []byte, offset int64) (int, error) {
 			sf.gr.putBuffer(b)
 			return 0, fmt.Errorf("failed to read data: %w", err)
 		}
-
-		// We can end up doing on demand registry fetch when aligning the chunk
-		commonmetrics.IncOperationCount(commonmetrics.OnDemandRemoteRegistryFetchCount, sf.gr.layerSha) // increment the number of on demand file fetches from remote registry
-		commonmetrics.AddBytesCount(commonmetrics.OnDemandBytesFetched, sf.gr.layerSha, int64(len(ip))) // record total bytes fetched
-		sf.gr.setLastReadTime(time.Now())
-
-		// Verify this chunk
-		if err := sf.verify(sf.id, ip, chunkDigestStr); err != nil {
+		if err := sf.gr.verifyAndCache(sf.id, ip, chunkDigestStr, id); err != nil {
 			sf.gr.putBuffer(b)
-			return 0, fmt.Errorf("invalid chunk: %w", err)
-		}
-
-		// Cache this chunk
-		if w, err := sf.gr.cache.Add(id); err == nil {
-			if cn, err := w.Write(ip); err != nil || cn != len(ip) {
-				w.Abort()
-			} else {
-				w.Commit()
-			}
-			w.Close()
+			return 0, err
 		}
 		n := copy(p[nr:], ip[lowerDiscard:chunkSize-upperDiscard])
 		sf.gr.putBuffer(b)
@@ -493,11 +490,35 @@ func (sf *file) ReadAt(p []byte, offset int64) (int, error) {
 	return nr, nil
 }
 
-func (sf *file) verify(id uint32, p []byte, chunkDigestStr string) error {
-	if !sf.gr.verify {
+func (gr *reader) verifyAndCache(entryID uint32, ip []byte, chunkDigestStr string, cacheID string) error {
+	// We can end up doing on demand registry fetch when aligning the chunk
+	commonmetrics.IncOperationCount(commonmetrics.OnDemandRemoteRegistryFetchCount, gr.layerSha) // increment the number of on demand file fetches from remote registry
+	commonmetrics.AddBytesCount(commonmetrics.OnDemandBytesFetched, gr.layerSha, int64(len(ip))) // record total bytes fetched
+	gr.setLastReadTime(time.Now())
+
+	// Verify this chunk
+	if err := gr.verifyChunk(entryID, ip, chunkDigestStr); err != nil {
+		return fmt.Errorf("invalid chunk: %w", err)
+	}
+
+	// Cache this chunk
+	if w, err := gr.cache.Add(cacheID); err == nil {
+		if cn, err := w.Write(ip); err != nil || cn != len(ip) {
+			w.Abort()
+		} else {
+			w.Commit()
+		}
+		w.Close()
+	}
+
+	return nil
+}
+
+func (gr *reader) verifyChunk(id uint32, p []byte, chunkDigestStr string) error {
+	if !gr.verify {
 		return nil // verification is not required
 	}
-	v, err := sf.gr.verifier(id, chunkDigestStr)
+	v, err := gr.verifier(id, chunkDigestStr)
 	if err != nil {
 		return fmt.Errorf("invalid chunk: %w", err)
 	}
@@ -552,7 +573,7 @@ func WithReader(sr *io.SectionReader) CacheOption {
 func digestVerifier(id uint32, chunkDigestStr string) (digest.Verifier, error) {
 	chunkDigest, err := digest.Parse(chunkDigestStr)
 	if err != nil {
-		return nil, fmt.Errorf("invalid chunk: no digset is recorded: %w", err)
+		return nil, fmt.Errorf("invalid chunk: no digest is recorded(len=%d): %w", len(chunkDigestStr), err)
 	}
 	return chunkDigest.Verifier(), nil
 }

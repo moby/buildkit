@@ -13,7 +13,7 @@ on:
       - 'earthly-main'
 
 env:
-  REPO_SLUG_ORIGIN: "moby/buildkit:latest"
+  REPO_SLUG_ORIGIN: "moby/buildkit:v0.11.0-rc4"
   REPO_SLUG_TARGET: "moby/buildkit"
   DF_REPO_SLUG_TARGET: "docker/dockerfile-upstream"
   PLATFORMS: "linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le,linux/riscv64"
@@ -21,7 +21,7 @@ env:
   CACHE_GHA_SCOPE_BINARIES: "binaries"
   CACHE_GHA_SCOPE_CROSS: "cross"
   TESTFLAGS: "-v --parallel=6 --timeout=30m"
-  BUILDX_VERSION: "v0.9.1"  # leave empty to use the one available on GitHub virtual environment
+  BUILDX_VERSION: "v0.10.0-rc3"  # leave empty to use the one available on GitHub virtual environment
   GO_VERSION: "1.19"
 
 jobs:
@@ -411,10 +411,6 @@ jobs:
         env:
           PLATFORMS: ${{ env.PLATFORMS }},darwin/amd64,darwin/arm64,windows/amd64,windows/arm64
           CACHE_FROM: type=gha,scope=${{ env.CACHE_GHA_SCOPE_BINARIES }} type=gha,scope=${{ env.CACHE_GHA_SCOPE_CROSS }}
-      -
-        name: Move artifacts
-        run: |
-          mv ./release-out/**/* ./release-out/
       -
         name: Upload artifacts
         uses: actions/upload-artifact@v3

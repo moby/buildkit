@@ -7,7 +7,6 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 
 	"github.com/containerd/containerd/content"
@@ -50,11 +49,11 @@ func needsForceCompression(ctx context.Context, cs content.Store, source ocispec
 func MergeNydus(ctx context.Context, ref ImmutableRef, comp compression.Config, s session.Group) (*ocispecs.Descriptor, error) {
 	iref, ok := ref.(*immutableRef)
 	if !ok {
-		return nil, fmt.Errorf("unsupported ref")
+		return nil, errors.Errorf("unsupported ref type %T", ref)
 	}
 	refs := iref.layerChain()
 	if len(refs) == 0 {
-		return nil, fmt.Errorf("refs can't be empty")
+		return nil, errors.Errorf("refs can't be empty")
 	}
 
 	// Extracts nydus bootstrap from nydus format for each layer.

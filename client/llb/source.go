@@ -464,7 +464,7 @@ func Differ(t DiffType, required bool) LocalOption {
 	})
 }
 
-func OCILayout(contentStoreID string, dig digest.Digest, opts ...OCILayoutOption) State {
+func OCILayout(ref string, opts ...OCILayoutOption) State {
 	gi := &OCILayoutInfo{}
 
 	for _, o := range opts {
@@ -473,17 +473,17 @@ func OCILayout(contentStoreID string, dig digest.Digest, opts ...OCILayoutOption
 	attrs := map[string]string{}
 	if gi.sessionID != "" {
 		attrs[pb.AttrOCILayoutSessionID] = gi.sessionID
-		addCap(&gi.Constraints, pb.CapSourceOCILayoutSessionID)
 	}
-
-	if ll := gi.layerLimit; ll != nil {
-		attrs[pb.AttrOCILayoutLayerLimit] = strconv.FormatInt(int64(*ll), 10)
-		addCap(&gi.Constraints, pb.CapSourceOCILayoutLayerLimit)
+	if gi.storeID != "" {
+		attrs[pb.AttrOCILayoutStoreID] = gi.storeID
+	}
+	if gi.layerLimit != nil {
+		attrs[pb.AttrOCILayoutLayerLimit] = strconv.FormatInt(int64(*gi.layerLimit), 10)
 	}
 
 	addCap(&gi.Constraints, pb.CapSourceOCILayout)
 
-	source := NewSource(fmt.Sprintf("oci-layout://%s@%s", contentStoreID, dig), attrs, gi.Constraints)
+	source := NewSource("oci-layout://"+ref, attrs, gi.Constraints)
 	return NewState(source.Output())
 }
 
@@ -497,9 +497,10 @@ func (fn ociLayoutOptionFunc) SetOCILayoutOption(li *OCILayoutInfo) {
 	fn(li)
 }
 
-func OCISessionID(id string) OCILayoutOption {
+func OCIStore(sessionID string, storeID string) OCILayoutOption {
 	return ociLayoutOptionFunc(func(oi *OCILayoutInfo) {
-		oi.sessionID = id
+		oi.sessionID = sessionID
+		oi.storeID = storeID
 	})
 }
 
@@ -512,6 +513,7 @@ func OCILayerLimit(limit int) OCILayoutOption {
 type OCILayoutInfo struct {
 	constraintsWrapper
 	sessionID  string
+	storeID    string
 	layerLimit *int
 }
 

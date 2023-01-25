@@ -27,6 +27,8 @@ type Config struct {
 
 	DNS *DNSConfig `toml:"dns"`
 
+	History *HistoryConfig `toml:"history"`
+
 	Health HealthConfig `toml:"health"`
 }
 
@@ -135,6 +137,11 @@ type DNSConfig struct {
 	Nameservers   []string `toml:"nameservers"`
 	Options       []string `toml:"options"`
 	SearchDomains []string `toml:"searchDomains"`
+}
+
+type HistoryConfig struct {
+	MaxAge     int64 `toml:"maxAge"`
+	MaxEntries int64 `toml:"maxEntries"`
 }
 
 type Hook struct {

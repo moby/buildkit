@@ -16,6 +16,11 @@ import (
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/hashicorp/go-multierror"
+	digest "github.com/opencontainers/go-digest"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
@@ -47,10 +52,6 @@ import (
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/progress/controller"
 	"github.com/moby/buildkit/util/semutil"
-	digest "github.com/opencontainers/go-digest"
-	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
 )
 
 const labelCreatedAt = "buildkit/createdat"
@@ -233,6 +234,10 @@ func (w *Worker) ContentStore() content.Store {
 	return w.WorkerOpt.ContentStore
 }
 
+func (w *Worker) LeaseManager() leases.Manager {
+	return w.WorkerOpt.LeaseManager
+}
+
 func (w *Worker) ID() string {
 	return w.WorkerOpt.ID
 }
@@ -391,7 +396,7 @@ func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, 
 			SessionManager: sm,
 			ImageWriter:    w.imageWriter,
 			RegistryHosts:  w.RegistryHosts,
-			LeaseManager:   w.LeaseManager,
+			LeaseManager:   w.LeaseManager(),
 		})
 	case client.ExporterLocal:
 		return localexporter.New(localexporter.Opt{
@@ -406,14 +411,14 @@ func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, 
 			SessionManager: sm,
 			ImageWriter:    w.imageWriter,
 			Variant:        ociexporter.VariantOCI,
-			LeaseManager:   w.LeaseManager,
+			LeaseManager:   w.LeaseManager(),
 		})
 	case client.ExporterDocker:
 		return ociexporter.New(ociexporter.Opt{
 			SessionManager: sm,
 			ImageWriter:    w.imageWriter,
 			Variant:        ociexporter.VariantDocker,
-			LeaseManager:   w.LeaseManager,
+			LeaseManager:   w.LeaseManager(),
 		})
 	case client.ExporterEarthly:
 		return earthlyoutputs.New(earthlyoutputs.Opt{
@@ -421,7 +426,7 @@ func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, 
 			ImageWriter:    w.imageWriter,
 			Variant:        ociexporter.VariantDocker,
 			RegistryHosts:  w.RegistryHosts,
-			LeaseManager:   w.LeaseManager,
+			LeaseManager:   w.LeaseManager(),
 		})
 	default:
 		return nil, errors.Errorf("exporter %q could not be found", name)

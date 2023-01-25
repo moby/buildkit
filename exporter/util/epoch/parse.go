@@ -10,10 +10,17 @@ import (
 )
 
 const (
+	frontendSourceDateEpochArg = "build-arg:SOURCE_DATE_EPOCH"
+
 	KeySourceDateEpoch = "source-date-epoch"
 )
 
-func ParseAttr(opt map[string]string) (*time.Time, map[string]string, error) {
+func ParseBuildArgs(opt map[string]string) (string, bool) {
+	v, ok := opt[frontendSourceDateEpochArg]
+	return v, ok
+}
+
+func ParseExporterAttrs(opt map[string]string) (*time.Time, map[string]string, error) {
 	rest := make(map[string]string, len(opt))
 
 	var tm *time.Time

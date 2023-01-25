@@ -13,8 +13,8 @@ type Info struct {
 	BuildkitVersion BuildkitVersion `json:"buildkitVersion"`
 
 	// Earthly-specific.
-	NumSessions int	`json:"numSessions"`
-	SecondsIdle int	`json:"secondsIdle"`
+	NumSessions int `json:"numSessions"`
+	SecondsIdle int `json:"secondsIdle"`
 }
 
 type BuildkitVersion struct {
@@ -24,7 +24,7 @@ type BuildkitVersion struct {
 }
 
 func (c *Client) Info(ctx context.Context) (*Info, error) {
-	res, err := c.controlClient().Info(ctx, &controlapi.InfoRequest{})
+	res, err := c.ControlClient().Info(ctx, &controlapi.InfoRequest{})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to call info")
 	}

@@ -4,21 +4,23 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+
 	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/exporter/util/epoch"
 	"github.com/moby/buildkit/util/compression"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 const (
-	keyImageName        = "name"
-	keyLayerCompression = "compression"
-	keyCompressionLevel = "compression-level"
-	keyForceCompression = "force-compression"
-	keyOCITypes         = "oci-mediatypes"
-	keyBuildInfo        = "buildinfo"
-	keyBuildInfoAttrs   = "buildinfo-attrs"
+	keyImageName               = "name"
+	keyLayerCompression        = "compression"
+	keyCompressionLevel        = "compression-level"
+	keyForceCompression        = "force-compression"
+	keyOCITypes                = "oci-mediatypes"
+	keyBuildInfo               = "buildinfo"
+	keyBuildInfoAttrs          = "buildinfo-attrs"
+	keyForceInlineAttestations = "attestation-inline"
 
 	// preferNondistLayersKey is an exporter option which can be used to mark a layer as non-distributable if the layer reference was
 	// already found to use a non-distributable media type.
@@ -34,6 +36,8 @@ type ImageCommitOpts struct {
 	BuildInfoAttrs bool
 	Annotations    AnnotationsGroup
 	Epoch          *time.Time
+
+	ForceInlineAttestations bool // force inline attestations to be attached
 }
 
 func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error) {
@@ -45,7 +49,7 @@ func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error)
 	}
 	opt = toStringMap(optb)
 
-	c.Epoch, opt, err = epoch.ParseAttr(opt)
+	c.Epoch, opt, err = epoch.ParseExporterAttrs(opt)
 	if err != nil {
 		return nil, err
 	}
@@ -73,6 +77,8 @@ func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error)
 			err = parseBoolWithDefault(&c.BuildInfo, k, v, true)
 		case keyBuildInfoAttrs:
 			err = parseBoolWithDefault(&c.BuildInfoAttrs, k, v, false)
+		case keyForceInlineAttestations:
+			err = parseBool(&c.ForceInlineAttestations, k, v)
 		case keyPreferNondistLayers:
 			err = parseBool(&c.RefCfg.PreferNonDistributable, k, v)
 		default:
@@ -92,24 +98,9 @@ func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error)
 		c.EnableForceCompression(c.RefCfg.Compression.Type.String())
 	}
 
-	c.AddAnnotations(as)
+	c.Annotations = c.Annotations.Merge(as)
 
 	return rest, nil
-}
-
-func (c *ImageCommitOpts) AddAnnotations(annotations AnnotationsGroup) {
-	if annotations == nil {
-		return
-	}
-	if c.Annotations == nil {
-		c.Annotations = AnnotationsGroup{}
-	}
-	c.Annotations = c.Annotations.Merge(annotations)
-	for _, a := range annotations {
-		if len(a.Index)+len(a.IndexDescriptor)+len(a.ManifestDescriptor) > 0 {
-			c.EnableOCITypes("annotations")
-		}
-	}
 }
 
 func (c *ImageCommitOpts) EnableOCITypes(reason string) {

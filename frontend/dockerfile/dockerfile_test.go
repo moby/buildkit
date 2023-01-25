@@ -28,6 +28,7 @@ import (
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/continuity/fs/fstest"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
+	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/dockerfile/builder"
@@ -39,9 +40,11 @@ import (
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/contentutil"
+	"github.com/moby/buildkit/util/iohelper"
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
+	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -89,7 +92,6 @@ var allTests = integration.TestFuncs(
 	testQuotedMetaArgs,
 	testIgnoreEntrypoint,
 	testSymlinkedDockerfile,
-	testDockerfileAddArchiveWildcard,
 	testEmptyWildcard,
 	testWorkdirCreatesDir,
 	testDockerfileAddArchiveWildcard,
@@ -148,6 +150,15 @@ var allTests = integration.TestFuncs(
 	testDockerfileAddChownExpand,
 	testSourceDateEpochWithoutExporter,
 	testSBOMScannerImage,
+	testProvenanceAttestation,
+	testGitProvenanceAttestation,
+	testMultiPlatformProvenance,
+	testClientFrontendProvenance,
+	testClientLLBProvenance,
+	testSecretSSHProvenance,
+	testNilProvenance,
+	testSBOMScannerArgs,
+	testMultiPlatformWarnings,
 )
 
 // Tests that depend on the `security.*` entitlements
@@ -158,6 +169,11 @@ var networkTests = []integration.Test{}
 
 // Tests that depend on heredoc support
 var heredocTests = []integration.Test{}
+
+// Tests that depend on reproducible env
+var reproTests = integration.TestFuncs(
+	testReproSourceDateEpoch,
+)
 
 var opts []integration.TestOpt
 var securityOpts []integration.TestOpt
@@ -208,6 +224,10 @@ func TestIntegration(t *testing.T) {
 	integration.Run(t, heredocTests, opts...)
 	integration.Run(t, outlineTests, opts...)
 	integration.Run(t, targetsTests, opts...)
+
+	integration.Run(t, reproTests, append(opts,
+		// Only use the amd64 digest,  regardless to the host platform
+		integration.WithMirroredImages(integration.OfficialImages("debian:bullseye-20230109-slim@sha256:1acb06a0c31fb467eb8327ad361f1091ab265e0bf26d452dea45dcb0c0ea5e75")))...)
 }
 
 func testDefaultEnvWithArgs(t *testing.T, sb integration.Sandbox) {
@@ -397,7 +417,7 @@ RUN [ "$(cat testfile)" == "contents0" ]
 }
 
 func testExportCacheLoop(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "cache export")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport)
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -1252,7 +1272,7 @@ COPY --from=build /out .
 }
 
 func testDefaultShellAndPath(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "oci exporter")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter)
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -1340,7 +1360,7 @@ COPY Dockerfile .
 }
 
 func testExportMultiPlatform(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "oci exporter", "multi-platform")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter, integration.FeatureMultiPlatform)
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -2549,7 +2569,7 @@ ENV foo=bar
 }
 
 func testExposeExpansion(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "image export")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureImageExporter)
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -2787,7 +2807,7 @@ RUN ["ls"]
 	args, trace := f.DFCmdArgs(dir, dir)
 	defer os.RemoveAll(trace)
 
-	integration.SkipIfDockerd(t, sb, "image export")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureImageExporter)
 
 	target := "example.com/moby/dockerfilescratch:test"
 	cmd := sb.Cmd(args + " --output type=image,name=" + target)
@@ -2841,7 +2861,7 @@ RUN ["ls"]
 }
 
 func testUser(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "image export")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureImageExporter)
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -3591,7 +3611,7 @@ COPY --from=busybox /etc/passwd test
 
 	dockerfile = []byte(`
 FROM busybox AS golang
-RUN mkdir /usr/bin && echo -n foo > /usr/bin/go
+RUN mkdir -p /usr/bin && echo -n foo > /usr/bin/go
 
 FROM scratch
 COPY --from=golang /usr/bin/go go
@@ -3671,7 +3691,7 @@ COPY --from=stage1 baz bax
 }
 
 func testLabels(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "image export")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureImageExporter)
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -3783,7 +3803,7 @@ RUN ls /files/file1
 }
 
 func testOnBuildCleared(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "direct push")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()
@@ -3889,7 +3909,7 @@ ONBUILD RUN mkdir -p /out && echo -n 11 >> /out/foo
 }
 
 func testCacheMultiPlatformImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "direct push")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()
@@ -4012,7 +4032,7 @@ COPY --from=base arch /
 }
 
 func testCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "remote cache export")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport)
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()
@@ -4104,7 +4124,7 @@ COPY --from=base unique /
 }
 
 func testReproducibleIDs(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "image export")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureImageExporter)
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -5104,7 +5124,7 @@ COPY --from=base /out /
 	require.NoError(t, err)
 	require.True(t, len(dt) > 0)
 
-	integration.SkipIfDockerd(t, sb, "direct push")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
 
 	// Now test with an image with custom envs
 	dockerfile = []byte(`
@@ -5195,7 +5215,7 @@ COPY --from=base /env_foobar /
 }
 
 func testNamedImageContextPlatform(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "direct push")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -5269,7 +5289,7 @@ RUN echo hello
 }
 
 func testNamedImageContextTimestamps(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "direct push")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -5468,7 +5488,7 @@ COPY --from=base /o* /
 }
 
 func testNamedOCILayoutContext(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "oci exporter")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter, integration.FeatureOCILayout)
 	// how this test works:
 	// 1- we use a regular builder with a dockerfile to create an image two files: "out" with content "first", "out2" with content "second"
 	// 2- we save the output to an OCI layout dir
@@ -5606,7 +5626,7 @@ COPY --from=imported /test/outfoo /
 }
 
 func testNamedOCILayoutContextExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "oci exporter")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter, integration.FeatureOCILayout)
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -5827,7 +5847,7 @@ COPY --from=build /foo /out /
 }
 
 func testNamedMultiplatformInputContext(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "multiplatform")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureMultiPlatform)
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -5975,7 +5995,7 @@ COPY --from=build /foo /out /
 }
 
 func testSourceDateEpochWithoutExporter(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "oci exporter")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter, integration.FeatureSourceDateEpoch)
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -6051,6 +6071,7 @@ COPY Dockerfile .
 }
 
 func testSBOMScannerImage(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush, integration.FeatureSBOM)
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -6073,7 +6094,7 @@ COPY <<-"EOF" /scan.sh
 	{
 	  "_type": "https://in-toto.io/Statement/v0.1",
 	  "predicateType": "https://spdx.dev/Document",
-	  "predicate": {"success": true}
+	  "predicate": {"name": "sbom-scan"}
 	}
 	BUNDLE
 EOF
@@ -6147,11 +6168,398 @@ EOF
 	require.Equal(t, []byte("data\n"), img.Layers[0]["foo"].Data)
 
 	att := imgs.Find("unknown/unknown")
+	require.Equal(t, 1, len(att.LayersRaw))
 	var attest intoto.Statement
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
-	require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
+	require.Subset(t, attest.Predicate, map[string]interface{}{"name": "sbom-scan"})
+}
+
+func testSBOMScannerArgs(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush, integration.FeatureSBOM)
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox:latest
+COPY <<-"EOF" /scan.sh
+	set -e
+	cat <<BUNDLE > $BUILDKIT_SCAN_DESTINATION/spdx.json
+	{
+	  "_type": "https://in-toto.io/Statement/v0.1",
+	  "predicateType": "https://spdx.dev/Document",
+	  "predicate": {"name": "core"}
+	}
+	BUNDLE
+	if [ "${BUILDKIT_SCAN_SOURCE_EXTRAS}" ]; then
+		for src in "${BUILDKIT_SCAN_SOURCE_EXTRAS}"/*; do
+			cat <<BUNDLE > $BUILDKIT_SCAN_DESTINATION/$(basename $src).spdx.json
+			{
+			  "_type": "https://in-toto.io/Statement/v0.1",
+			  "predicateType": "https://spdx.dev/Document",
+			  "predicate": {"name": "extra"}
+			}
+			BUNDLE
+		done
+	fi
+EOF
+CMD sh /scan.sh
+`)
+
+	scannerDir, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	scannerTarget := registry + "/buildkit/testsbomscannerargs:latest"
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: scannerDir,
+			builder.DefaultLocalNameContext:    scannerDir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": scannerTarget,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// scan an image with no additional sboms
+	dockerfile = []byte(`
+FROM scratch as base
+COPY <<EOF /foo
+data
+EOF
+FROM base
+`)
+	dir, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	target := registry + "/buildkit/testsbomscannerargstarget1:latest"
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"attest:sbom":                          "generator=" + scannerTarget,
+			"build-arg:BUILDKIT_SBOM_SCAN_CONTEXT": "true",
+			"build-arg:BUILDKIT_SBOM_SCAN_STAGE":   "true",
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	desc, provider, err := contentutil.ProviderFromRef(target)
+	require.NoError(t, err)
+	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(imgs.Images))
+
+	img := imgs.Find(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
+	require.NotNil(t, img)
+
+	att := imgs.Find("unknown/unknown")
+	require.Equal(t, 1, len(att.LayersRaw))
+	var attest intoto.Statement
+	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
+	require.Subset(t, attest.Predicate, map[string]interface{}{"name": "core"})
+
+	dockerfile = []byte(`
+ARG BUILDKIT_SBOM_SCAN_CONTEXT=true
+
+FROM scratch as file
+ARG BUILDKIT_SBOM_SCAN_STAGE=true
+COPY <<EOF /file
+data
+EOF
+
+FROM scratch as base
+ARG BUILDKIT_SBOM_SCAN_STAGE=true
+COPY --from=file /file /foo
+
+FROM scratch as base2
+ARG BUILDKIT_SBOM_SCAN_STAGE=true
+COPY --from=file /file /bar
+RUN non-existent-command-would-fail
+
+FROM base
+ARG BUILDKIT_SBOM_SCAN_STAGE=true
+`)
+	dir, err = integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	// scan an image with additional sboms
+	target = registry + "/buildkit/testsbomscannertarget2:latest"
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"attest:sbom": "generator=" + scannerTarget,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	desc, provider, err = contentutil.ProviderFromRef(target)
+	require.NoError(t, err)
+	imgs, err = testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(imgs.Images))
+
+	img = imgs.Find(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
+	require.NotNil(t, img)
+
+	att = imgs.Find("unknown/unknown")
+	require.Equal(t, 4, len(att.LayersRaw))
+	extraCount := 0
+	for _, l := range att.LayersRaw {
+		var attest intoto.Statement
+		require.NoError(t, json.Unmarshal(l, &attest))
+		att := attest.Predicate.(map[string]interface{})
+		switch att["name"] {
+		case "core":
+		case "extra":
+			extraCount++
+		default:
+			require.Fail(t, "unexpected attestation", "%v", att)
+		}
+	}
+	require.Equal(t, extraCount, len(att.LayersRaw)-1)
+
+	// scan an image with additional sboms, but disable them
+	target = registry + "/buildkit/testsbomscannertarget3:latest"
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"attest:sbom":                          "generator=" + scannerTarget,
+			"build-arg:BUILDKIT_SBOM_SCAN_STAGE":   "false",
+			"build-arg:BUILDKIT_SBOM_SCAN_CONTEXT": "false",
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	desc, provider, err = contentutil.ProviderFromRef(target)
+	require.NoError(t, err)
+	imgs, err = testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(imgs.Images))
+
+	img = imgs.Find(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
+	require.NotNil(t, img)
+
+	att = imgs.Find("unknown/unknown")
+	require.Equal(t, 1, len(att.LayersRaw))
+}
+
+// #3495
+func testMultiPlatformWarnings(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	// empty line in here is intentional to cause line continuation warning
+	dockerfile := []byte(`
+FROM scratch
+COPY Dockerfile \
+
+.
+`)
+
+	dir, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	status := make(chan *client.SolveStatus)
+	statusDone := make(chan struct{})
+	done := make(chan struct{})
+
+	var warnings []*client.VertexWarning
+
+	go func() {
+		defer close(statusDone)
+		for {
+			select {
+			case st, ok := <-status:
+				if !ok {
+					return
+				}
+				warnings = append(warnings, st.Warnings...)
+			case <-done:
+				return
+			}
+		}
+	}()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"platform": "linux/amd64,linux/arm64",
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, status)
+	require.NoError(t, err)
+
+	select {
+	case <-statusDone:
+	case <-time.After(10 * time.Second):
+		close(done)
+	}
+
+	<-statusDone
+
+	// two platforms only show one warning
+	require.Equal(t, 1, len(warnings))
+
+	w := warnings[0]
+
+	require.Equal(t, "Empty continuation line found in: COPY Dockerfile .", string(w.Short))
+	require.Equal(t, 1, len(w.Detail))
+	require.Equal(t, "Empty continuation lines will become errors in a future release", string(w.Detail[0]))
+	require.Equal(t, "https://github.com/moby/moby/pull/33719", w.URL)
+	require.Equal(t, 1, w.Level)
+}
+
+func testReproSourceDateEpoch(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter, integration.FeatureSourceDateEpoch)
+	if sb.Snapshotter() == "native" {
+		t.Skip("the digest is not reproducible with the \"native\" snapshotter because hardlinks are processed in a different way: https://github.com/moby/buildkit/pull/3456#discussion_r1062650263")
+	}
+	if runtime.GOARCH != "amd64" {
+		t.Skip("FIXME: the image cannot be pulled on non-amd64 (`docker.io/arm64v8/debian:bullseye-20230109-slim@...: not found`): https://github.com/moby/buildkit/pull/3456#discussion_r1068989918")
+	}
+
+	f := getFrontend(t, sb)
+
+	tm := time.Date(2023, time.January, 10, 12, 34, 56, 0, time.UTC)
+	t.Logf("SOURCE_DATE_EPOCH=%d", tm.Unix())
+
+	dockerfile := []byte(`# The base image cannot be busybox, due to https://github.com/moby/buildkit/issues/3455
+FROM --platform=linux/amd64 debian:bullseye-20230109-slim@sha256:1acb06a0c31fb467eb8327ad361f1091ab265e0bf26d452dea45dcb0c0ea5e75
+RUN touch /foo
+RUN touch /foo.1
+RUN touch -d '2010-01-01 12:34:56' /foo-2010
+RUN touch -d '2010-01-01 12:34:56' /foo-2010.1
+RUN touch -d '2030-01-01 12:34:56' /foo-2030
+RUN touch -d '2030-01-01 12:34:56' /foo-2030.1
+RUN rm -f /foo.1
+RUN rm -f /foo-2010.1
+RUN rm -f /foo-2030.1
+
+# Limit the timestamp upper bound to SOURCE_DATE_EPOCH.
+# Workaround for https://github.com/moby/buildkit/issues/3180
+ARG SOURCE_DATE_EPOCH
+RUN find $( ls / | grep -E -v "^(dev|mnt|proc|sys)$" ) -newermt "@${SOURCE_DATE_EPOCH}" -writable -xdev | xargs touch --date="@${SOURCE_DATE_EPOCH}" --no-dereference
+
+# Squash the entire stage for resetting the whiteout timestamps.
+# Workaround for https://github.com/moby/buildkit/issues/3168
+FROM scratch
+COPY --from=0 / /
+`)
+
+	const expectedDigest = "sha256:9e36395384d073e711102b13bd0ba4b779ef6afbaf5cadeb77fe77dba8967d1f"
+
+	dir, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	outDigester := digest.SHA256.Digester()
+	outW := &iohelper.NopWriteCloser{Writer: outDigester.Hash()}
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:SOURCE_DATE_EPOCH": fmt.Sprintf("%d", tm.Unix()),
+			"platform":                    "linux/amd64",
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterOCI,
+				Attrs: map[string]string{
+					// Remove buildinfo, as it contains the digest of the frontend image
+					"buildinfo": "false",
+				},
+				Output: fixedWriteCloser(outW),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	outDigest := outDigester.Digest().String()
+	t.Logf("OCI archive digest=%q", outDigest)
+	t.Log("The digest may change depending on the BuildKit version, the snapshotter configuration, etc.")
+	require.Equal(t, expectedDigest, outDigest)
 }
 
 func runShell(dir string, cmds ...string) error {
@@ -6192,6 +6600,24 @@ func ensurePruneAll(t *testing.T, c *client.Client, sb integration.Sandbox) {
 }
 
 func checkAllReleasable(t *testing.T, c *client.Client, sb integration.Sandbox, checkContent bool) {
+	cl, err := c.ControlClient().ListenBuildHistory(sb.Context(), &controlapi.BuildHistoryRequest{
+		EarlyExit: true,
+	})
+	require.NoError(t, err)
+
+	for {
+		resp, err := cl.Recv()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+		_, err = c.ControlClient().UpdateBuildHistory(sb.Context(), &controlapi.UpdateBuildHistoryRequest{
+			Ref:    resp.Record.Ref,
+			Delete: true,
+		})
+		require.NoError(t, err)
+	}
+
 	retries := 0
 loop0:
 	for {
@@ -6208,7 +6634,7 @@ loop0:
 		break
 	}
 
-	err := c.Prune(sb.Context(), nil, client.PruneAll)
+	err = c.Prune(sb.Context(), nil, client.PruneAll)
 	require.NoError(t, err)
 
 	du, err := c.DiskUsage(sb.Context())

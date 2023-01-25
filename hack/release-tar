@@ -22,7 +22,25 @@ if [ -n "$PLATFORMS" ]; then
   platformFlag="--platform=$PLATFORMS"
 fi
 
-buildxCmd build $platformFlag $cacheFromFlags \
+output=$(mktemp -d -t buildkit-output.XXXXXXXXXX)
+
+buildxCmd build $platformFlag $cacheFromFlags $(buildAttestFlags) \
+  --build-arg "BUILDKIT_MULTI_PLATFORM=true" \
   --target release \
-  --output "type=local,dest=$OUT" \
+  --output "type=local,dest=$output" \
   $currentcontext
+
+for pdir in "${output}"/*/; do
+  (
+    cd "$pdir"
+    releasetar=$(find . -name '*.tar.gz')
+    filename=$(basename "${releasetar%.tar.gz}")
+    mv "provenance.json" "${filename}.provenance.json"
+    mv "sbom-binaries.spdx.json" "${filename}.sbom.json"
+    find . -name 'sbom*.json' -exec rm {} \;
+  )
+done
+
+mkdir -p "$OUT"
+mv "$output"/**/* "$OUT/"
+rm -rf $output

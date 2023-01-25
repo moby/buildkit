@@ -52,7 +52,7 @@ func testBuildInfoSources(t *testing.T, sb integration.Sandbox) {
 	dockerfile := `
 FROM alpine:latest@sha256:21a3deaa0d32a8057914f36584b5288d2e5ecc984380bc0118285c70fa8c9300 AS alpine
 FROM busybox:latest
-ADD https://raw.githubusercontent.com/moby/moby/master/README.md /
+ADD https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md /
 COPY --from=alpine /bin/busybox /alpine-busybox
 `
 
@@ -78,7 +78,7 @@ COPY --from=alpine /bin/busybox /alpine-busybox
 	defer c.Close()
 
 	var exports []client.ExportEntry
-	if integration.IsTestDockerd() {
+	if integration.IsTestDockerdMoby(sb) {
 		exports = []client.ExportEntry{{
 			Type: "moby",
 			Attrs: map[string]string{
@@ -112,9 +112,16 @@ COPY --from=alpine /bin/busybox /alpine-busybox
 	require.Contains(t, bi.Attrs, "context")
 	require.Equal(t, server.URL+"/.git#buildinfo", *bi.Attrs["context"])
 
-	sources := bi.Sources
-	require.Equal(t, 3, len(sources))
+	_, isGateway := f.(*gatewayFrontend)
 
+	sources := bi.Sources
+	if isGateway {
+		require.Equal(t, 5, len(sources), "%+v", sources)
+		assert.Equal(t, binfotypes.SourceTypeDockerImage, sources[0].Type)
+		assert.Contains(t, sources[0].Ref, "buildkit_test")
+		sources = sources[1:]
+	}
+	require.Equal(t, 4, len(sources), "%+v", sources)
 	assert.Equal(t, binfotypes.SourceTypeDockerImage, sources[0].Type)
 	assert.Equal(t, "docker.io/library/alpine:latest@sha256:21a3deaa0d32a8057914f36584b5288d2e5ecc984380bc0118285c70fa8c9300", sources[0].Ref)
 	assert.Equal(t, "sha256:21a3deaa0d32a8057914f36584b5288d2e5ecc984380bc0118285c70fa8c9300", sources[0].Pin)
@@ -123,9 +130,13 @@ COPY --from=alpine /bin/busybox /alpine-busybox
 	assert.Equal(t, "docker.io/library/busybox:latest", sources[1].Ref)
 	assert.NotEmpty(t, sources[1].Pin)
 
-	assert.Equal(t, binfotypes.SourceTypeHTTP, sources[2].Type)
-	assert.Equal(t, "https://raw.githubusercontent.com/moby/moby/master/README.md", sources[2].Ref)
-	assert.Equal(t, "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c", sources[2].Pin)
+	assert.Equal(t, binfotypes.SourceTypeGit, sources[2].Type)
+	assert.Equal(t, server.URL+"/.git#buildinfo", sources[2].Ref)
+	assert.NotEmpty(t, sources[2].Pin)
+
+	assert.Equal(t, binfotypes.SourceTypeHTTP, sources[3].Type)
+	assert.Equal(t, "https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md", sources[3].Ref)
+	assert.Equal(t, "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c", sources[3].Pin)
 }
 
 func testBuildInfoSourcesNoop(t *testing.T, sb integration.Sandbox) {
@@ -147,7 +158,7 @@ FROM busybox:latest
 	defer c.Close()
 
 	var exports []client.ExportEntry
-	if integration.IsTestDockerd() {
+	if integration.IsTestDockerdMoby(sb) {
 		exports = []client.ExportEntry{{
 			Type: "moby",
 			Attrs: map[string]string{
@@ -180,8 +191,12 @@ FROM busybox:latest
 	require.NoError(t, err)
 
 	sources := bi.Sources
-	require.Equal(t, 1, len(sources))
 
+	if _, isGateway := f.(*gatewayFrontend); isGateway {
+		require.Equal(t, 2, len(sources), "%+v", sources)
+		sources = sources[1:]
+	}
+	require.Equal(t, 1, len(sources))
 	assert.Equal(t, binfotypes.SourceTypeDockerImage, sources[0].Type)
 	assert.Equal(t, "docker.io/library/busybox:latest", sources[0].Ref)
 	assert.NotEmpty(t, sources[0].Pin)
@@ -209,7 +224,7 @@ RUN echo $foo
 	defer c.Close()
 
 	var exports []client.ExportEntry
-	if integration.IsTestDockerd() {
+	if integration.IsTestDockerdMoby(sb) {
 		exports = []client.ExportEntry{{
 			Type: "moby",
 			Attrs: map[string]string{
@@ -250,7 +265,7 @@ RUN echo $foo
 
 // moby/buildkit#2476
 func testBuildInfoMultiPlatform(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "multi-platform")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter, integration.FeatureMultiPlatform)
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
@@ -258,7 +273,7 @@ func testBuildInfoMultiPlatform(t *testing.T, sb integration.Sandbox) {
 FROM busybox:latest
 ARG foo
 RUN echo $foo
-ADD https://raw.githubusercontent.com/moby/moby/master/README.md /
+ADD https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md /
 `
 
 	dir, err := integration.Tmpdir(
@@ -303,15 +318,21 @@ ADD https://raw.githubusercontent.com/moby/moby/master/README.md /
 		require.Contains(t, bi.Attrs, "build-arg:foo")
 		require.Equal(t, "bar", *bi.Attrs["build-arg:foo"])
 
+		_, isGateway := f.(*gatewayFrontend)
+
 		sources := bi.Sources
-		require.Equal(t, 2, len(sources))
+		if isGateway {
+			require.Equal(t, 3, len(sources), "%+v", sources)
+			sources = sources[1:]
+		}
+		require.Equal(t, 2, len(sources), "%+v", sources)
 
 		assert.Equal(t, binfotypes.SourceTypeDockerImage, sources[0].Type)
 		assert.Equal(t, "docker.io/library/busybox:latest", sources[0].Ref)
 		assert.NotEmpty(t, sources[0].Pin)
 
 		assert.Equal(t, binfotypes.SourceTypeHTTP, sources[1].Type)
-		assert.Equal(t, "https://raw.githubusercontent.com/moby/moby/master/README.md", sources[1].Ref)
+		assert.Equal(t, "https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md", sources[1].Ref)
 		assert.Equal(t, "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c", sources[1].Pin)
 	}
 }
@@ -338,7 +359,7 @@ COPY --from=base /out /
 	defer c.Close()
 
 	var exports []client.ExportEntry
-	if integration.IsTestDockerd() {
+	if integration.IsTestDockerdMoby(sb) {
 		exports = []client.ExportEntry{{
 			Type: "moby",
 			Attrs: map[string]string{
@@ -379,8 +400,15 @@ COPY --from=base /out /
 	require.Contains(t, bi.Attrs, "build-arg:foo")
 	require.Equal(t, "bar", *bi.Attrs["build-arg:foo"])
 
+	_, isGateway := f.(*gatewayFrontend)
+
 	sources := bi.Sources
-	require.Equal(t, 1, len(sources))
+	if isGateway {
+		require.Equal(t, 2, len(sources), "%+v", sources)
+		sources = sources[1:]
+	} else {
+		require.Equal(t, 1, len(sources))
+	}
 	assert.Equal(t, binfotypes.SourceTypeDockerImage, sources[0].Type)
 	assert.Equal(t, "docker.io/library/alpine:latest", sources[0].Ref)
 	assert.NotEmpty(t, sources[0].Pin)
@@ -418,7 +446,7 @@ COPY --from=base /o* /
 	require.NoError(t, err)
 
 	var exports []client.ExportEntry
-	if integration.IsTestDockerd() {
+	if integration.IsTestDockerdMoby(sb) {
 		exports = []client.ExportEntry{{
 			Type: "moby",
 			Attrs: map[string]string{
@@ -460,10 +488,17 @@ COPY --from=base /o* /
 	require.Contains(t, bi.Attrs, "build-arg:foo")
 	require.Equal(t, "bar", *bi.Attrs["build-arg:foo"])
 
-	require.Equal(t, 0, len(bi.Sources))
+	_, isGateway := f.(*gatewayFrontend)
+	if isGateway {
+		require.Equal(t, 1, len(bi.Sources))
+	} else {
+		require.Equal(t, 0, len(bi.Sources))
+	}
 }
 
 func testBuildInfoDeps(t *testing.T, sb integration.Sandbox) {
+	t.Skip("deps temporarily disabled with SLSA provenance support")
+
 	ctx := sb.Context()
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
@@ -475,7 +510,7 @@ func testBuildInfoDeps(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
 FROM alpine
 ENV FOO=bar
-ADD https://raw.githubusercontent.com/moby/moby/master/README.md /
+ADD https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md /
 RUN echo first > /out
 `)
 
@@ -586,7 +621,7 @@ COPY --from=build /foo /out /
 	assert.NotEmpty(t, bi.Sources[0].Pin)
 
 	assert.Equal(t, binfotypes.SourceTypeHTTP, bi.Sources[1].Type)
-	assert.Equal(t, "https://raw.githubusercontent.com/moby/moby/master/README.md", bi.Sources[1].Ref)
+	assert.Equal(t, "https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md", bi.Sources[1].Ref)
 	assert.Equal(t, "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c", bi.Sources[1].Pin)
 
 	require.Contains(t, bi.Deps, "base")
@@ -598,6 +633,8 @@ COPY --from=build /foo /out /
 }
 
 func testBuildInfoDepsMultiPlatform(t *testing.T, sb integration.Sandbox) {
+	t.Skip("deps temporarily disabled with SLSA provenance support")
+
 	ctx := sb.Context()
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
@@ -739,6 +776,8 @@ COPY --from=build /foo /out /
 }
 
 func testBuildInfoDepsMainNoSource(t *testing.T, sb integration.Sandbox) {
+	t.Skip("deps temporarily disabled with SLSA provenance support")
+
 	ctx := sb.Context()
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
@@ -750,7 +789,7 @@ func testBuildInfoDepsMainNoSource(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
 FROM alpine
 ENV FOO=bar
-ADD https://raw.githubusercontent.com/moby/moby/master/README.md /
+ADD https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md /
 RUN echo first > /out
 `)
 
@@ -855,7 +894,7 @@ RUN echo "foo is $FOO" > /foo
 	require.Equal(t, 1, len(bi.Sources))
 
 	assert.Equal(t, binfotypes.SourceTypeHTTP, bi.Sources[0].Type)
-	assert.Equal(t, "https://raw.githubusercontent.com/moby/moby/master/README.md", bi.Sources[0].Ref)
+	assert.Equal(t, "https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md", bi.Sources[0].Ref)
 	assert.Equal(t, "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c", bi.Sources[0].Pin)
 
 	require.Contains(t, bi.Deps, "base")

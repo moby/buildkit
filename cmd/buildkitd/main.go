@@ -23,6 +23,19 @@ import (
 	"github.com/docker/docker/pkg/reexec"
 	"github.com/gofrs/flock"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"github.com/urfave/cli"
+	"go.etcd.io/bbolt"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
+	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
+
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/cache/remotecache/azblob"
 	"github.com/moby/buildkit/cache/remotecache/gha"
@@ -56,17 +69,6 @@ import (
 	"github.com/moby/buildkit/util/tracing/transform"
 	"github.com/moby/buildkit/version"
 	"github.com/moby/buildkit/worker"
-	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
-	"github.com/urfave/cli"
-	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	"go.opentelemetry.io/otel/propagation"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/trace"
-	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
-	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
 )
 
 func init() {
@@ -77,6 +79,9 @@ func init() {
 	if reexec.Init() {
 		os.Exit(0)
 	}
+
+	// enable in memory recording for buildkitd traces
+	detect.Recorder = detect.NewTraceRecorder()
 }
 
 var propagators = propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
@@ -312,7 +317,7 @@ func main() {
 				case "network.host":
 					cfg.Entitlements = append(cfg.Entitlements, e)
 				default:
-					return fmt.Errorf("invalid entitlement : %v", e)
+					return errors.Errorf("invalid entitlement : %s", e)
 				}
 			}
 		}
@@ -421,10 +426,10 @@ func setDefaultNetworkConfig(nc config.NetworkConfig) config.NetworkConfig {
 		nc.Mode = "auto"
 	}
 	if nc.CNIConfigPath == "" {
-		nc.CNIConfigPath = "/etc/buildkit/cni.json"
+		nc.CNIConfigPath = appdefaults.DefaultCNIConfigPath
 	}
 	if nc.CNIBinaryPath == "" {
-		nc.CNIBinaryPath = "/opt/cni/bin"
+		nc.CNIBinaryPath = appdefaults.DefaultCNIBinDir
 	}
 	return nc
 }
@@ -702,6 +707,11 @@ func newController(c *cli.Context, cfg *config.Config, shutdownCh chan struct{})
 		return nil, err
 	}
 
+	historyDB, err := bbolt.Open(filepath.Join(cfg.Root, "history.db"), 0600, nil)
+	if err != nil {
+		return nil, err
+	}
+
 	resolverFn := resolverFunc(cfg)
 
 	w, err := wc.GetDefault()
@@ -733,6 +743,10 @@ func newController(c *cli.Context, cfg *config.Config, shutdownCh chan struct{})
 		CacheKeyStorage:           cacheStorage,
 		Entitlements:              cfg.Entitlements,
 		TraceCollector:            tc,
+		HistoryDB:                 historyDB,
+		LeaseManager:              w.LeaseManager(),
+		ContentStore:              w.ContentStore(),
+		HistoryConfig:             cfg.History,
 	})
 }
 

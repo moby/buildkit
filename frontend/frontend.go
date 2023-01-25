@@ -15,6 +15,8 @@ import (
 
 type Result = result.Result[solver.ResultProxy]
 
+type Attestation = result.Attestation[solver.ResultProxy]
+
 type Frontend interface {
 	Solve(ctx context.Context, llb FrontendLLBBridge, opt map[string]string, inputs map[string]*pb.Definition, sid string, sm *session.Manager) (*Result, error)
 }

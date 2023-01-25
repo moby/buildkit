@@ -29,6 +29,13 @@ insecure-entitlements = [ "network.host", "security.insecure" ]
     key = "/etc/buildkit/tls.key"
     ca = "/etc/buildkit/tlsca.crt"
 
+# config for build history API that stores information about completed build commands
+[history]
+  # maxAge is the maximum age of history entries to keep, in seconds.
+  maxAge = 172800
+  # maxEntries is the maximum number of history entries to keep.
+  maxEntries = 50
+
 [worker.oci]
   enabled = true
   # platforms is manually configure platforms, detected automatically if unset.
@@ -88,7 +95,8 @@ insecure-entitlements = [ "network.host", "security.insecure" ]
 
 # registry configures a new Docker register used for cache import or output.
 [registry."docker.io"]
-  mirrors = ["yourmirror.local:5000"]
+  # mirror configuration to handle path in case a mirror registry requires a /project path rather than just a host:port
+  mirrors = ["yourmirror.local:5000", "core.harbor.domain/proxy.docker.io"]
   http = true
   insecure = true
   ca=["/etc/config/myca.pem"]

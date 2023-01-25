@@ -46,6 +46,7 @@ type Sandbox interface {
 	Context() context.Context
 	Cmd(...string) *exec.Cmd
 	PrintLogs(*testing.T)
+	ClearLogs()
 	NewRegistry() (string, error)
 	Value(string) interface{} // chosen matrix value
 	Name() string
@@ -88,8 +89,14 @@ func (f testFunc) Run(t *testing.T, sb Sandbox) {
 
 func TestFuncs(funcs ...func(t *testing.T, sb Sandbox)) []Test {
 	var tests []Test
+	names := map[string]struct{}{}
 	for _, f := range funcs {
-		tests = append(tests, testFunc{name: getFunctionName(f), run: f})
+		name := getFunctionName(f)
+		if _, ok := names[name]; ok {
+			panic("duplicate test: " + name)
+		}
+		names[name] = struct{}{}
+		tests = append(tests, testFunc{name: name, run: f})
 	}
 	return tests
 }
@@ -257,12 +264,18 @@ func OfficialImages(names ...string) map[string]string {
 	ns := runtime.GOARCH
 	if ns == "arm64" {
 		ns = "arm64v8"
-	} else if ns != "amd64" && ns != "armhf" {
+	} else if ns != "amd64" {
 		ns = "library"
 	}
 	m := map[string]string{}
 	for _, name := range names {
-		m["library/"+name] = "docker.io/" + ns + "/" + name
+		ref := "docker.io/" + ns + "/" + name
+		if pns, ok := pins[name]; ok {
+			if dgst, ok := pns[ns]; ok {
+				ref += "@" + dgst
+			}
+		}
+		m["library/"+name] = ref
 	}
 	return m
 }

@@ -7,7 +7,7 @@ on:
       version:
         description: 'Docker version'
         required: true
-        default: '20.10.13'
+        default: '20.10.19'
 
 env:
   REPO_SLUG_ORIGIN: "moby/buildkit:latest"
@@ -25,7 +25,7 @@ jobs:
         run: |
           version=${{ github.event.inputs.version }}
           if [ -z "$version" ]; then
-            version=20.10.13
+            version=20.10.19
           fi
           echo "DOCKER_VERSION=$version" >> $GITHUB_ENV
       -
@@ -61,21 +61,21 @@ jobs:
         if: steps.build.outputs.result == 'true'
         run: |
           if [ -L "/tmp/moby/binary-daemon/dockerd" ]; then
-            mv -f $(readlink /tmp/moby/binary-daemon/dockerd) /tmp/moby/binary-daemon/dockerd
+            mv -f $(readlink /tmp/moby/binary-daemon/dockerd) /tmp/moby/dockerd
           fi
       -
         name: Download
         if: steps.build.outputs.result != 'true'
         run: |
-          mkdir -p /tmp/moby/binary-daemon
-          cd /tmp/moby/binary-daemon
+          mkdir -p /tmp/moby
+          cd /tmp/moby
           wget -qO- "https://download.docker.com/linux/static/stable/x86_64/docker-${{ env.DOCKER_VERSION }}.tgz" | tar xvz --strip 1
       -
         name: Upload dockerd
         uses: actions/upload-artifact@v3
         with:
           name: dockerd
-          path: /tmp/moby/binary-daemon/dockerd
+          path: /tmp/moby/dockerd
           if-no-files-found: error
 
   test:
@@ -85,6 +85,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        worker:
+          - dockerd
+          - dockerd-containerd
         pkg:
           - ./client
           - ./cmd/buildctl
@@ -124,13 +127,6 @@ jobs:
         run: |
           chmod +x ./build/dockerd
       -
-        name: Update daemon.json
-        run: |
-          sudo rm /etc/docker/daemon.json
-          sudo service docker restart
-          docker version
-          docker info
-      -
         name: Test
         run: |
           ./hack/test ${{ matrix.typ }}
@@ -138,6 +134,6 @@ jobs:
           TEST_DOCKERD: "1"
           TEST_DOCKERD_BINARY: "./build/dockerd"
           TESTPKGS: "${{ matrix.pkg }}"
-          TESTFLAGS: "${{ env.TESTFLAGS }} --run=//worker=dockerd$"
+          TESTFLAGS: "${{ env.TESTFLAGS }} --run=//worker=${{ matrix.worker }}$"
           SKIP_INTEGRATION_TESTS: "${{ matrix.skip-integration-tests }}"
           CACHE_FROM: "type=gha,scope=${{ env.CACHE_GHA_SCOPE_IT }} type=gha,scope=${{ env.CACHE_GHA_SCOPE_BINARIES }}"

@@ -42,7 +42,6 @@ Join `#buildkit` channel on [Docker Community Slack](https://dockr.ly/comm-slack
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 
-
 - [Used by](#used-by)
 - [Quick start](#quick-start)
   - [Starting the `buildkitd` daemon](#starting-the-buildkitd-daemon)
@@ -72,6 +71,7 @@ Join `#buildkit` channel on [Docker Community Slack](https://dockr.ly/comm-slack
   - [Load balancing](#load-balancing)
 - [Containerizing BuildKit](#containerizing-buildkit)
   - [Podman](#podman)
+  - [Nerdctl](#nerdctl)
   - [Kubernetes](#kubernetes)
   - [Daemonless](#daemonless)
 - [Opentracing support](#opentracing-support)
@@ -124,6 +124,8 @@ $ brew install buildkit
 ```
 
 To build BuildKit from source, see [`.github/CONTRIBUTING.md`](./.github/CONTRIBUTING.md).
+
+For a `buildctl` reference, see [this document](./docs/buildctl.md).
 
 ### Starting the `buildkitd` daemon
 
@@ -388,6 +390,7 @@ buildctl build ... \
 * `compression=<uncompressed|gzip|estargz|zstd>`: choose compression type for layers newly created and cached, gzip is default value. estargz and zstd should be used with `oci-mediatypes=true`
 * `compression-level=<value>`: choose compression level for gzip, estargz (0-9) and zstd (0-22)
 * `force-compression=true`: forcibly apply `compression` option to all layers
+* `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
 
 `--import-cache` options:
 * `type=registry`
@@ -413,6 +416,7 @@ The directory layout conforms to OCI Image Spec v1.0.
 * `compression=<uncompressed|gzip|estargz|zstd>`: choose compression type for layers newly created and cached, gzip is default value. estargz and zstd should be used with `oci-mediatypes=true`.
 * `compression-level=<value>`: compression level for gzip, estargz (0-9) and zstd (0-22)
 * `force-compression=true`: forcibly apply `compression` option to all layers
+* `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
 
 `--import-cache` options:
 * `type=local`
@@ -447,6 +451,7 @@ in your workflow to expose the runtime.
   * `min`: only export layers for the resulting image
   * `max`: export all the layers of all intermediate steps
 * `scope=<scope>`: which scope cache object belongs to (default `buildkit`)
+* `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
 
 `--import-cache` options:
 * `type=gha`
@@ -471,7 +476,7 @@ Storage locations:
 
 S3 configuration:
 * `blobs_prefix`: global prefix to store / read blobs on s3 (default: `blobs/`)
-* `manifests_prefix`: global prefix to store / read blobs on s3 (default: `manifests/`)
+* `manifests_prefix`: global prefix to store / read manifests on s3 (default: `manifests/`)
 * `endpoint_url`: specify a specific S3 endpoint (default: empty)
 * `use_path_style`: if set to `true`, put the bucket name in the URL instead of in the hostname (default: `false`)
 
@@ -494,6 +499,7 @@ Others options are:
 * `prefix=<prefix>`: set global prefix to store / read files on s3 (default: empty)
 * `name=<manifest>`: specify name of the manifest to use (default `buildkit`)
   * Multiple manifest names can be specified at the same time, separated by `;`. The standard use case is to use the git sha1 as name, and the branch name as duplicate, and load both with 2 `import-cache` commands.
+* `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
 
 `--import-cache` options:
 * `type=s3`
@@ -530,6 +536,11 @@ There are 2 options supported for Azure Blob Storage authentication:
 * Any system using environment variables supported by the [Azure SDK for Go](https://docs.microsoft.com/en-us/azure/developer/go/azure-sdk-authentication). The configuration must be available for the buildkit daemon, not for the client.
 * Secret Access Key, using the `secret_access_key` attribute to specify the primary or secondary account key for your Azure Blob Storage account. [Azure Blob Storage account keys](https://docs.microsoft.com/en-us/azure/storage/common/storage-account-keys-manage)
 
+> **Note**
+>
+> Account name can also be specified with `account_name` attribute (or `$BUILDKIT_AZURE_STORAGE_ACCOUNT_NAME`)
+> if it is not part of the account URL host.
+
 `--export-cache` options:
 * `type=azblob`
 * `mode=<min|max>`: specify cache layers to export (default: `min`)
@@ -538,6 +549,7 @@ There are 2 options supported for Azure Blob Storage authentication:
 * `prefix=<prefix>`: set global prefix to store / read files on the Azure Blob Storage container (`<container>`) (default: empty)
 * `name=<manifest>`: specify name of the manifest to use (default: `buildkit`)
   * Multiple manifest names can be specified at the same time, separated by `;`. The standard use case is to use the git sha1 as name, and the branch name as duplicate, and load both with 2 `import-cache` commands.
+* `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
 
 `--import-cache` options:
 * `type=azblob`
@@ -661,6 +673,16 @@ To connect to a BuildKit daemon running in a Podman container, use `podman-conta
 ```bash
 podman run -d --name buildkitd --privileged moby/buildkit:latest
 buildctl --addr=podman-container://buildkitd build --frontend dockerfile.v0 --local context=. --local dockerfile=. --output type=oci | podman load foo
+```
+
+`sudo` is not required.
+
+### Nerdctl
+To connect to a BuildKit daemon running in a Nerdctl container, use `nerdctl-container://` instead of `docker-container://`.
+
+```bash
+nerdctl run -d --name buildkitd --privileged moby/buildkit:latest
+buildctl --addr=nerdctl-container://buildkitd build --frontend dockerfile.v0 --local context=. --local dockerfile=. --output type=oci | nerdctl load
 ```
 
 `sudo` is not required.

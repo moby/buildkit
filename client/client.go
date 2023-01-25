@@ -10,16 +10,10 @@ import (
 	"strings"
 	"time"
 
+	contentapi "github.com/containerd/containerd/api/services/content/v1"
 	"github.com/containerd/containerd/defaults"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
-	controlapi "github.com/moby/buildkit/api/services/control"
-	"github.com/moby/buildkit/client/connhelper"
-	"github.com/moby/buildkit/session"
-	"github.com/moby/buildkit/session/grpchijack"
-	"github.com/moby/buildkit/util/appdefaults"
-	"github.com/moby/buildkit/util/grpcerrors"
-	"github.com/moby/buildkit/util/tracing/otlptracegrpc"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
@@ -29,6 +23,14 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+
+	controlapi "github.com/moby/buildkit/api/services/control"
+	"github.com/moby/buildkit/client/connhelper"
+	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/grpchijack"
+	"github.com/moby/buildkit/util/appdefaults"
+	"github.com/moby/buildkit/util/grpcerrors"
+	"github.com/moby/buildkit/util/tracing/otlptracegrpc"
 )
 
 type Client struct {
@@ -182,12 +184,16 @@ func (c *Client) setupDelegatedTracing(ctx context.Context, td TracerDelegate) e
 	return td.SetSpanExporter(ctx, e)
 }
 
-func (c *Client) controlClient() controlapi.ControlClient {
+func (c *Client) ControlClient() controlapi.ControlClient {
 	return controlapi.NewControlClient(c.conn)
 }
 
+func (c *Client) ContentClient() contentapi.ContentClient {
+	return contentapi.NewContentClient(c.conn)
+}
+
 func (c *Client) Dialer() session.Dialer {
-	return grpchijack.Dialer(c.controlClient())
+	return grpchijack.Dialer(c.ControlClient())
 }
 
 func (c *Client) Close() error {

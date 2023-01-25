@@ -5,19 +5,18 @@ import (
 	"os"
 	"testing"
 
-	"github.com/docker/docker/libnetwork/resolvconf"
 	"github.com/stretchr/testify/require"
 )
 
 // TestResolvConfNotExist modifies a global variable
 // It must not run in parallel.
 func TestResolvConfNotExist(t *testing.T) {
-	oldResolvconfGet := resolvconfGet
-	defer func() {
-		resolvconfGet = oldResolvconfGet
-	}()
-	resolvconfGet = func() (*resolvconf.File, error) {
-		return nil, os.ErrNotExist
+	oldResolvconfPath := resolvconfPath
+	t.Cleanup(func() {
+		resolvconfPath = oldResolvconfPath
+	})
+	resolvconfPath = func() string {
+		return "no-such-file"
 	}
 
 	defaultResolvConf := `

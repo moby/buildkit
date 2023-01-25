@@ -84,7 +84,7 @@ case $TYP in
     pushTag=${pushTag}-$TAG
   fi
 
-  buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags \
+  buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags $(buildAttestFlags) \
     --build-arg "CHANNEL=$TAG" \
     --build-arg "BUILDTAGS=$buildTags" \
     --output "type=image,name=$REPO:$pushTag,buildinfo-attrs=true,$pushFlag" \
@@ -101,7 +101,7 @@ case $TYP in
   fi
   buildTags=$(cat $tagf)
 
-  buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags \
+  buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags $(buildAttestFlags) \
     --build-arg "CHANNEL=$TAG" \
     --build-arg "BUILDTAGS=$buildTags" \
     --output "type=image,\"name=$publishedNames\",buildinfo-attrs=true,$pushFlag" \
@@ -141,7 +141,7 @@ case $TYP in
       buildid=$(cat $tmp/buildid)
       echo "buildid: $buildid"
 
-      buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags \
+      buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags $(buildAttestFlags) \
         --build-arg "CHANNEL=$TAG" \
         --build-arg "BUILDTAGS=$buildTags" \
         --output "type=image,name=$REPO:$dt-$TAG,buildinfo-attrs=true,$pushFlag" \

@@ -39,7 +39,6 @@ import (
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/bklog"
-	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/stack"
 	"github.com/moby/buildkit/util/tracing"
@@ -226,10 +225,11 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	env = append(env, "BUILDKIT_EXPORTEDPRODUCT="+apicaps.ExportedProduct)
 
 	meta := executor.Meta{
-		Env:            env,
-		Args:           args,
-		Cwd:            cwd,
-		ReadonlyRootFS: readonly,
+		Env:                       env,
+		Args:                      args,
+		Cwd:                       cwd,
+		ReadonlyRootFS:            readonly,
+		RemoveMountStubsRecursive: true,
 	}
 
 	if v, ok := img.Config.Labels["moby.buildkit.frontend.network.none"]; ok {
@@ -548,10 +548,14 @@ func (lbf *llbBridgeForwarder) ResolveImageConfig(ctx context.Context, req *pb.R
 		}
 	}
 	dgst, dt, err := lbf.llbBridge.ResolveImageConfig(ctx, req.Ref, llb.ResolveImageConfigOpt{
+		ResolverType: llb.ResolverType(req.ResolverType),
 		Platform:     platform,
 		ResolveMode:  req.ResolveMode,
 		LogName:      req.LogName,
-		ResolverType: llb.ResolverType(req.ResolverType),
+		Store: llb.ResolveImageConfigOptStore{
+			SessionID: req.SessionID,
+			StoreID:   req.StoreID,
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -632,6 +636,7 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 		FrontendOpt:    req.FrontendOpt,
 		FrontendInputs: req.FrontendInputs,
 		CacheImports:   cacheImports,
+		SourcePolicies: req.SourcePolicies,
 	}, lbf.sid)
 	if err != nil {
 		return nil, lbf.wrapSolveError(err)
@@ -657,16 +662,6 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 			if ref == nil {
 				id = ""
 			} else {
-				dtbi, err := buildinfo.Encode(ctx, pbRes.Metadata, fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, k), ref.BuildSources())
-				if err != nil {
-					return nil, err
-				}
-				if len(dtbi) > 0 {
-					if pbRes.Metadata == nil {
-						pbRes.Metadata = make(map[string][]byte)
-					}
-					pbRes.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, k)] = dtbi
-				}
 				lbf.refs[id] = ref
 			}
 			ids[k] = id
@@ -690,16 +685,6 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 		if ref == nil {
 			id = ""
 		} else {
-			dtbi, err := buildinfo.Encode(ctx, pbRes.Metadata, exptypes.ExporterBuildInfo, ref.BuildSources())
-			if err != nil {
-				return nil, err
-			}
-			if len(dtbi) > 0 {
-				if pbRes.Metadata == nil {
-					pbRes.Metadata = make(map[string][]byte)
-				}
-				pbRes.Metadata[exptypes.ExporterBuildInfo] = dtbi
-			}
 			def = ref.Definition()
 			lbf.refs[id] = ref
 		}
@@ -719,6 +704,13 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 				pbAtt, err := gwclient.AttestationToPB(&att)
 				if err != nil {
 					return nil, err
+				}
+
+				if att.Ref != nil {
+					id := identity.NewID()
+					def := att.Ref.Definition()
+					lbf.refs[id] = att.Ref
+					pbAtt.Ref = &pb.Ref{Id: id, Def: def}
 				}
 
 				if pbRes.Attestations[k] == nil {
@@ -962,11 +954,18 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 	if in.Result.Attestations != nil {
 		for k, pbAtts := range in.Result.Attestations {
 			for _, pbAtt := range pbAtts.Attestation {
-				att, err := gwclient.AttestationFromPB(pbAtt)
+				att, err := gwclient.AttestationFromPB[solver.ResultProxy](pbAtt)
 				if err != nil {
 					return nil, err
 				}
-				r.AddAttestation(k, *att, nil)
+				if pbAtt.Ref != nil {
+					ref, err := lbf.cloneRef(pbAtt.Ref.Id)
+					if err != nil {
+						return nil, err
+					}
+					att.Ref = ref
+				}
+				r.AddAttestation(k, *att)
 			}
 		}
 	}
@@ -1311,15 +1310,16 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 				pios[pid] = pio
 
 				proc, err := ctr.Start(initCtx, gwclient.StartRequest{
-					Args:         init.Meta.Args,
-					Env:          init.Meta.Env,
-					User:         init.Meta.User,
-					Cwd:          init.Meta.Cwd,
-					Tty:          init.Tty,
-					Stdin:        pio.processReaders[0],
-					Stdout:       pio.processWriters[1],
-					Stderr:       pio.processWriters[2],
-					SecurityMode: init.Security,
+					Args:                      init.Meta.Args,
+					Env:                       init.Meta.Env,
+					User:                      init.Meta.User,
+					Cwd:                       init.Meta.Cwd,
+					Tty:                       init.Tty,
+					Stdin:                     pio.processReaders[0],
+					Stdout:                    pio.processWriters[1],
+					Stderr:                    pio.processWriters[2],
+					SecurityMode:              init.Security,
+					RemoveMountStubsRecursive: init.Meta.RemoveMountStubsRecursive,
 				})
 				if err != nil {
 					return stack.Enable(err)

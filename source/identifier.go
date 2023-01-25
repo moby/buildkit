@@ -207,10 +207,8 @@ func FromLLB(op *pb.Op_Source, platform *pb.Platform) (Identifier, error) {
 			switch k {
 			case pb.AttrOCILayoutSessionID:
 				id.SessionID = v
-				if p := strings.SplitN(v, ":", 2); len(p) == 2 {
-					id.Name = p[0] + "-" + id.Name
-					id.SessionID = p[1]
-				}
+			case pb.AttrOCILayoutStoreID:
+				id.StoreID = v
 			case pb.AttrOCILayoutLayerLimit:
 				l, err := strconv.Atoi(v)
 				if err != nil {
@@ -291,24 +289,23 @@ func (*HTTPIdentifier) ID() string {
 }
 
 type OCIIdentifier struct {
-	Name       string
-	Manifest   digest.Digest
+	Reference  reference.Spec
 	Platform   *ocispecs.Platform
 	SessionID  string
+	StoreID    string
 	LayerLimit *int
 }
 
 func NewOCIIdentifier(str string) (*OCIIdentifier, error) {
-	// OCI identifier arg is of the format: path@hash
-	parts := strings.SplitN(str, "@", 2)
-	if len(parts) != 2 {
-		return nil, errors.New("OCI must be in format of storeID@manifest-hash")
-	}
-	dig, err := digest.Parse(parts[1])
+	ref, err := reference.Parse(str)
 	if err != nil {
-		return nil, errors.Wrap(err, "OCI must be in format of storeID@manifest-hash, invalid digest")
+		return nil, errors.WithStack(err)
 	}
-	return &OCIIdentifier{Name: parts[0], Manifest: dig}, nil
+
+	if ref.Object == "" {
+		return nil, errors.WithStack(reference.ErrObjectRequired)
+	}
+	return &OCIIdentifier{Reference: ref}, nil
 }
 
 func (*OCIIdentifier) ID() string {

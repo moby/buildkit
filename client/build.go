@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/moby/buildkit/client/buildid"
-	"github.com/moby/buildkit/frontend/attestations"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/frontend/gateway/grpcclient"
 	gatewayapi "github.com/moby/buildkit/frontend/gateway/pb"
@@ -24,7 +23,6 @@ func (c *Client) Build(ctx context.Context, opt SolveOpt, product string, buildF
 	feOpts := opt.FrontendAttrs
 
 	opt.Frontend = ""
-	opt.FrontendAttrs = attestations.Filter(opt.FrontendAttrs)
 
 	if product == "" {
 		product = apicaps.ExportedProduct

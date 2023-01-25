@@ -23,6 +23,7 @@ var targetsTests = integration.TestFuncs(
 )
 
 func testTargetsList(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureFrontendTargets)
 	f := getFrontend(t, sb)
 	if _, ok := f.(*clientFrontend); !ok {
 		t.Skip("only test with client frontend")
@@ -123,6 +124,7 @@ FROM second AS binary
 }
 
 func testTargetsDescribeDefinition(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureFrontendTargets)
 	f := getFrontend(t, sb)
 	if _, ok := f.(*clientFrontend); !ok {
 		t.Skip("only test with client frontend")

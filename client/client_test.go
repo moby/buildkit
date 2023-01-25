@@ -35,6 +35,7 @@ import (
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/continuity/fs/fstest"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
+	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
@@ -46,6 +47,9 @@ import (
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/solver/result"
+	"github.com/moby/buildkit/sourcepolicy"
+	sourcepolicypb "github.com/moby/buildkit/sourcepolicy/pb"
+	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/attestation"
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/contentutil"
@@ -87,6 +91,7 @@ func TestIntegration(t *testing.T) {
 		testFileOpCopyRm,
 		testFileOpCopyIncludeExclude,
 		testFileOpRmWildcard,
+		testFileOpCopyUIDCache,
 		testCallDiskUsage,
 		testBuildMultiMount,
 		testBuildHTTPSource,
@@ -96,6 +101,7 @@ func TestIntegration(t *testing.T) {
 		testResolveAndHosts,
 		testUser,
 		testOCIExporter,
+		testOCIExporterContentStore,
 		testWhiteoutParentDir,
 		testFrontendImageNaming,
 		testDuplicateWhiteouts,
@@ -131,6 +137,7 @@ func TestIntegration(t *testing.T) {
 		testHostnameSpecifying,
 		testPushByDigest,
 		testBasicInlineCacheImportExport,
+		testBasicGhaCacheImportExport,
 		testExportBusyboxLocal,
 		testBridgeNetworking,
 		testCacheMountNoCache,
@@ -162,6 +169,7 @@ func TestIntegration(t *testing.T) {
 		testBuildInfoInline,
 		testBuildInfoNoExport,
 		testZstdLocalCacheExport,
+		testCacheExportIgnoreError,
 		testZstdRegistryCacheImportExport,
 		testZstdLocalCacheImportExport,
 		testUncompressedLocalCacheImportExport,
@@ -183,6 +191,9 @@ func TestIntegration(t *testing.T) {
 		testSBOMScan,
 		testSBOMScanSingleRef,
 		testMultipleCacheExports,
+		testMountStubsDirectory,
+		testMountStubsTimestamp,
+		testSourcePolicy,
 	)
 }
 
@@ -234,7 +245,7 @@ func newContainerd(cdAddress string) (*containerd.Client, error) {
 
 // moby/buildkit#1336
 func testCacheExportCacheKeyLoop(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "remote cache export")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -299,7 +310,7 @@ func testBridgeNetworking(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBridgeNetworkingDNSNoRootless(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "https://github.com/moby/buildkit/issues/3171")
+	integration.CheckFeatureCompat(t, sb, "hangs: https://github.com/moby/buildkit/issues/3171")
 	if os.Getenv("BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS") == "" {
 		t.SkipNow()
 	}
@@ -770,7 +781,7 @@ func testNetworkMode(t *testing.T, sb integration.Sandbox) {
 }
 
 func testPushByDigest(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "direct push")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -815,6 +826,7 @@ func testPushByDigest(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSecurityMode(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureSecurityMode)
 	command := `sh -c 'cat /proc/self/status | grep CapEff | cut -f 2 > /out'`
 	mode := llb.SecurityModeSandbox
 	var allowedEntitlements []entitlements.Entitlement
@@ -831,7 +843,6 @@ func testSecurityMode(t *testing.T, sb integration.Sandbox) {
 		}
 		allowedEntitlements = []entitlements.Entitlement{}
 	} else {
-		integration.SkipIfDockerd(t, sb)
 		assertCaps = func(caps uint64) {
 			/*
 				$ capsh --decode=0000003fffffffff
@@ -886,6 +897,7 @@ func testSecurityMode(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureSecurityMode)
 	if sb.Rootless() {
 		t.SkipNow()
 	}
@@ -896,7 +908,6 @@ func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
 	if secMode == securitySandbox {
 		allowedEntitlements = []entitlements.Entitlement{}
 	} else {
-		integration.SkipIfDockerd(t, sb)
 		mode = llb.SecurityModeInsecure
 		allowedEntitlements = []entitlements.Entitlement{entitlements.EntitlementSecurityInsecure}
 	}
@@ -905,7 +916,12 @@ func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	command := `mkdir /sys/fs/cgroup/cpuset/securitytest`
+	cg := "/sys/fs/cgroup/cpuset/securitytest" // cgroup v1
+	if _, err := os.Stat("/sys/fs/cgroup/cpuset"); errors.Is(err, os.ErrNotExist) {
+		cg = "/sys/fs/cgroup/securitytest" // cgroup v2
+	}
+
+	command := "mkdir " + cg
 	st := llb.Image("busybox:latest").
 		Run(llb.Shlex(command),
 			llb.Security(mode))
@@ -920,7 +936,7 @@ func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
 	if secMode == securitySandbox {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "did not complete successfully")
-		require.Contains(t, err.Error(), "mkdir /sys/fs/cgroup/cpuset/securitytest")
+		require.Contains(t, err.Error(), "mkdir "+cg)
 	} else {
 		require.NoError(t, err)
 	}
@@ -958,7 +974,7 @@ func testSecurityModeErrors(t *testing.T, sb integration.Sandbox) {
 }
 
 func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "oci exporter", "direct push")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter, integration.FeatureDirectPush)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -1431,6 +1447,65 @@ func testFileOpCopyRm(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, []byte("file2"), dt)
 }
 
+// moby/buildkit#3291
+func testFileOpCopyUIDCache(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Scratch().File(
+		llb.Copy(llb.Image("alpine").Run(llb.Shlex(`sh -c 'echo 123 > /foo && chown 1000:1000 /foo'`)).Root(), "foo", "foo"))
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterTar,
+				Output: fixedWriteCloser(&nopWriteCloser{&buf}),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(buf.Bytes(), false)
+	require.NoError(t, err)
+
+	fi, ok := m["foo"]
+	require.True(t, ok)
+	require.Equal(t, 1000, fi.Header.Uid)
+	require.Equal(t, 1000, fi.Header.Gid)
+
+	// repeat to check cache does not apply for different uid
+	st = llb.Scratch().File(
+		llb.Copy(llb.Image("alpine").Run(llb.Shlex(`sh -c 'echo 123 > /foo'`)).Root(), "foo", "foo"))
+
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	buf = bytes.Buffer{}
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterTar,
+				Output: fixedWriteCloser(&nopWriteCloser{&buf}),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	m, err = testutil.ReadTarToMap(buf.Bytes(), false)
+	require.NoError(t, err)
+
+	fi, ok = m["foo"]
+	require.True(t, ok)
+	require.Equal(t, 0, fi.Header.Uid)
+	require.Equal(t, 0, fi.Header.Gid)
+}
+
 func testFileOpCopyIncludeExclude(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
@@ -1641,7 +1716,7 @@ func testLocalSourceWithDiffer(t *testing.T, sb integration.Sandbox, d llb.DiffT
 }
 
 func testOCILayoutSource(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "oci exporter")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter, integration.FeatureOCILayout)
 	requiresLinux(t)
 	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
@@ -1704,11 +1779,11 @@ func testOCILayoutSource(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	// reference the OCI Layout in a build
-	// note that the key does not need to be the directory name, just something unique.
-	// since we are doing just one build with one remote here, we can give it any old ID,
-	// even something really imaginative, like "one"
-	csID := "one"
-	st = llb.OCILayout(csID, digest)
+	// note that the key does not need to be the directory name, just something
+	// unique. since we are doing just one build with one remote here, we can
+	// give it any ID
+	csID := "my-content-store"
+	st = llb.OCILayout(fmt.Sprintf("not/real@%s", digest), llb.OCIStore("", csID))
 
 	def, err = st.Marshal(context.TODO())
 	require.NoError(t, err)
@@ -1738,7 +1813,7 @@ func testOCILayoutSource(t *testing.T, sb integration.Sandbox) {
 }
 
 func testOCILayoutPlatformSource(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "oci exporter")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter, integration.FeatureOCILayout)
 	requiresLinux(t)
 	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
@@ -1833,12 +1908,7 @@ func testOCILayoutPlatformSource(t *testing.T, sb integration.Sandbox) {
 
 	store, err := local.NewStore(dir)
 	require.NoError(t, err)
-
-	// reference the OCI Layout in a build
-	// note that the key does not need to be the directory name, just something unique.
-	// since we are doing just one build with one remote here, we can give it any old ID,
-	// even something really imaginative, like "one"
-	csID := "one"
+	csID := "my-content-store"
 
 	destDir := t.TempDir()
 
@@ -1848,7 +1918,7 @@ func testOCILayoutPlatformSource(t *testing.T, sb integration.Sandbox) {
 			Platforms: make([]exptypes.Platform, len(platformsToTest)),
 		}
 		for i, platform := range platformsToTest {
-			st := llb.OCILayout(csID, digest)
+			st := llb.OCILayout(fmt.Sprintf("not/real@%s", digest), llb.OCIStore("", csID))
 
 			def, err := st.Marshal(ctx, llb.Platform(platforms.MustParse(platform)))
 			if err != nil {
@@ -1991,8 +2061,7 @@ func testBuildMultiMount(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildExportScratch(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "image exporter")
-
+	integration.CheckFeatureCompat(t, sb, integration.FeatureImageExporter)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2250,7 +2319,7 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 }
 
 func testOCIExporter(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "oci exporter")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2350,8 +2419,101 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 	checkAllReleasable(t, c, sb, true)
 }
 
+func testOCIExporterContentStore(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter)
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+
+	run := func(cmd string) {
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+
+	run(`sh -c "echo -n first > foo"`)
+	run(`sh -c "echo -n second > bar"`)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	for _, exp := range []string{ExporterOCI, ExporterDocker} {
+		destDir := t.TempDir()
+		target := "example.com/buildkit/testoci:latest"
+
+		outTar := filepath.Join(destDir, "out.tar")
+		outW, err := os.Create(outTar)
+		require.NoError(t, err)
+		attrs := map[string]string{}
+		if exp == ExporterDocker {
+			attrs["name"] = target
+		}
+		_, err = c.Solve(sb.Context(), def, SolveOpt{
+			Exports: []ExportEntry{
+				{
+					Type:   exp,
+					Attrs:  attrs,
+					Output: fixedWriteCloser(outW),
+				},
+			},
+		}, nil)
+		require.NoError(t, err)
+
+		outDir := filepath.Join(destDir, "out.d")
+		attrs = map[string]string{
+			"tar": "false",
+		}
+		if exp == ExporterDocker {
+			attrs["name"] = target
+		}
+		_, err = c.Solve(sb.Context(), def, SolveOpt{
+			Exports: []ExportEntry{
+				{
+					Type:      exp,
+					Attrs:     attrs,
+					OutputDir: outDir,
+				},
+			},
+		}, nil)
+		require.NoError(t, err)
+
+		dt, err := os.ReadFile(outTar)
+		require.NoError(t, err)
+		m, err := testutil.ReadTarToMap(dt, false)
+		require.NoError(t, err)
+
+		filepath.Walk(outDir, func(filename string, fi os.FileInfo, err error) error {
+			filename = strings.TrimPrefix(filename, outDir)
+			filename = strings.Trim(filename, "/")
+			if filename == "" || filename == "ingest" {
+				return nil
+			}
+
+			if fi.IsDir() {
+				require.Contains(t, m, filename+"/")
+			} else {
+				require.Contains(t, m, filename)
+				if filename == "index.json" {
+					// this file has a timestamp in it, so we can't compare
+					return nil
+				}
+				f, err := os.Open(path.Join(outDir, filename))
+				require.NoError(t, err)
+				data, err := io.ReadAll(f)
+				require.NoError(t, err)
+				require.Equal(t, m[filename].Data, data)
+			}
+			return nil
+		})
+	}
+
+	checkAllReleasable(t, c, sb, true)
+}
+
 func testSourceDateEpochLayerTimestamps(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "oci exporter")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter, integration.FeatureSourceDateEpoch)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2396,8 +2558,9 @@ func testSourceDateEpochLayerTimestamps(t *testing.T, sb integration.Sandbox) {
 	dt, err := os.ReadFile(out)
 	require.NoError(t, err)
 
-	tms, err := readImageTimestamps(dt)
+	tmsX, err := readImageTimestamps(dt)
 	require.NoError(t, err)
+	tms := tmsX.FromImage
 
 	require.Equal(t, len(tms), 3)
 
@@ -2410,7 +2573,7 @@ func testSourceDateEpochLayerTimestamps(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSourceDateEpochClamp(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "oci exporter")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter, integration.FeatureSourceDateEpoch)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2462,8 +2625,9 @@ func testSourceDateEpochClamp(t *testing.T, sb integration.Sandbox) {
 	dt, err := os.ReadFile(out)
 	require.NoError(t, err)
 
-	busyboxTms, err := readImageTimestamps(dt)
+	busyboxTmsX, err := readImageTimestamps(dt)
 	require.NoError(t, err)
+	busyboxTms := busyboxTmsX.FromImage
 
 	require.True(t, len(busyboxTms) > 1)
 	bboxLayerLen := len(busyboxTms) - 1
@@ -2501,8 +2665,9 @@ func testSourceDateEpochClamp(t *testing.T, sb integration.Sandbox) {
 	dt, err = os.ReadFile(out)
 	require.NoError(t, err)
 
-	tms, err := readImageTimestamps(dt)
+	tmsX, err := readImageTimestamps(dt)
 	require.NoError(t, err)
+	tms := tmsX.FromImage
 
 	require.Equal(t, len(tms), bboxLayerLen+2)
 
@@ -2510,13 +2675,14 @@ func testSourceDateEpochClamp(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, expected, tms[0])
 	require.Equal(t, busyboxTms[1], tms[1])
 	require.Equal(t, expected, tms[bboxLayerLen+1])
+	require.Equal(t, expected, tmsX.FromAnnotation)
 
 	checkAllReleasable(t, c, sb, true)
 }
 
 // testSourceDateEpochReset tests that the SOURCE_DATE_EPOCH is reset if exporter option is set
 func testSourceDateEpochReset(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "oci exporter")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter, integration.FeatureSourceDateEpoch)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2562,8 +2728,9 @@ func testSourceDateEpochReset(t *testing.T, sb integration.Sandbox) {
 	dt, err := os.ReadFile(out)
 	require.NoError(t, err)
 
-	tms, err := readImageTimestamps(dt)
+	tmsX, err := readImageTimestamps(dt)
 	require.NoError(t, err)
+	tms := tmsX.FromImage
 
 	require.Equal(t, len(tms), 3)
 
@@ -2579,6 +2746,7 @@ func testSourceDateEpochReset(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSourceDateEpochLocalExporter(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureSourceDateEpoch)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2628,6 +2796,7 @@ func testSourceDateEpochLocalExporter(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSourceDateEpochTarExporter(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureSourceDateEpoch)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2682,7 +2851,6 @@ func testSourceDateEpochTarExporter(t *testing.T, sb integration.Sandbox) {
 
 	checkAllReleasable(t, c, sb, true)
 }
-
 func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
@@ -2698,7 +2866,7 @@ func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
 	}
 
 	var exports []ExportEntry
-	if integration.IsTestDockerd() {
+	if integration.IsTestDockerdMoby(sb) {
 		exports = []ExportEntry{{
 			Type: "moby",
 			Attrs: map[string]string{
@@ -2789,7 +2957,7 @@ func testFrontendUseSolveResults(t *testing.T, sb integration.Sandbox) {
 }
 
 func testExporterTargetExists(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "oci exporter")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2910,8 +3078,7 @@ func testTarExporterSymlink(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildExportWithForeignLayer(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "image exporter")
-
+	integration.CheckFeatureCompat(t, sb, integration.FeatureImageExporter)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -3018,8 +3185,7 @@ func testBuildExportWithForeignLayer(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "image exporter")
-
+	integration.CheckFeatureCompat(t, sb, integration.FeatureImageExporter)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -3210,7 +3376,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildExportZstd(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "oci export")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -3306,7 +3472,7 @@ func testBuildExportZstd(t *testing.T, sb integration.Sandbox) {
 }
 
 func testPullZstdImage(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "direct push")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -3345,11 +3511,6 @@ func testPullZstdImage(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	if sb.Name() == "containerd-1.4" {
-		// containerd 1.4 doesn't support zstd compression
-		return
-	}
-
 	ensurePruneAll(t, c, sb)
 
 	st = llb.Scratch().File(llb.Copy(llb.Image(target), "/data", "/zdata"))
@@ -3374,7 +3535,7 @@ func testPullZstdImage(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, dt, []byte("zstd"))
 }
 func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "direct push")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -3572,9 +3733,8 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 }
 
 func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "remote cache export")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport)
 	requiresLinux(t)
-
 	cdAddress := sb.ContainerdAddress()
 	if cdAddress == "" || sb.Snapshotter() != "stargz" {
 		t.Skip("test requires containerd worker with stargz snapshotter")
@@ -3720,9 +3880,8 @@ func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbo
 }
 
 func testStargzLazyInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "remote cache export")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport)
 	requiresLinux(t)
-
 	cdAddress := sb.ContainerdAddress()
 	if cdAddress == "" || sb.Snapshotter() != "stargz" {
 		t.Skip("test requires containerd worker with stargz snapshotter")
@@ -3997,9 +4156,8 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 }
 
 func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "direct push")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
 	requiresLinux(t)
-
 	cdAddress := sb.ContainerdAddress()
 	if cdAddress == "" {
 		t.Skip("test requires containerd worker")
@@ -4137,7 +4295,7 @@ func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
 }
 
 func testZstdLocalCacheExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "remote cache export")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -4195,8 +4353,115 @@ func testZstdLocalCacheExport(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, dt[:4], []byte{0x28, 0xb5, 0x2f, 0xfd})
 }
 
+func testCacheExportIgnoreError(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	cmd := `sh -e -c "echo -n ignore-error > data"`
+
+	st := llb.Scratch()
+	st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	tests := map[string]struct {
+		Exports        []ExportEntry
+		CacheExports   []CacheOptionsEntry
+		expectedErrors []string
+	}{
+		"local-ignore-error": {
+			Exports: []ExportEntry{
+				{
+					Type:      ExporterLocal,
+					OutputDir: t.TempDir(),
+				},
+			},
+			CacheExports: []CacheOptionsEntry{
+				{
+					Type: "local",
+					Attrs: map[string]string{
+						"dest": "éèç",
+					},
+				},
+			},
+			expectedErrors: []string{"failed to solve", "contains value with non-printable ASCII characters"},
+		},
+		"registry-ignore-error": {
+			Exports: []ExportEntry{
+				{
+					Type: ExporterImage,
+					Attrs: map[string]string{
+						"name": "test-registry-ignore-error",
+						"push": "false",
+					},
+				},
+			},
+			CacheExports: []CacheOptionsEntry{
+				{
+					Type: "registry",
+					Attrs: map[string]string{
+						"ref": "fake-url:5000/myrepo:buildcache",
+					},
+				},
+			},
+			expectedErrors: []string{"failed to solve", "dial tcp: lookup fake-url", "no such host"},
+		},
+		"s3-ignore-error": {
+			Exports: []ExportEntry{
+				{
+					Type:      ExporterLocal,
+					OutputDir: t.TempDir(),
+				},
+			},
+			CacheExports: []CacheOptionsEntry{
+				{
+					Type: "s3",
+					Attrs: map[string]string{
+						"endpoint_url":      "http://fake-url:9000",
+						"bucket":            "my-bucket",
+						"region":            "us-east-1",
+						"access_key_id":     "minioadmin",
+						"secret_access_key": "minioadmin",
+						"use_path_style":    "true",
+					},
+				},
+			},
+			expectedErrors: []string{"failed to solve", "dial tcp: lookup fake-url", "no such host"},
+		},
+	}
+	ignoreErrorValues := []bool{true, false}
+	for _, ignoreError := range ignoreErrorValues {
+		ignoreErrStr := strconv.FormatBool(ignoreError)
+		for n, test := range tests {
+			require.Equal(t, 1, len(test.Exports))
+			require.Equal(t, 1, len(test.CacheExports))
+			require.NotEmpty(t, test.CacheExports[0].Attrs)
+			test.CacheExports[0].Attrs["ignore-error"] = ignoreErrStr
+			testName := fmt.Sprintf("%s-%s", n, ignoreErrStr)
+			t.Run(testName, func(t *testing.T) {
+				_, err = c.Solve(sb.Context(), def, SolveOpt{
+					Exports:      test.Exports,
+					CacheExports: test.CacheExports,
+				}, nil)
+				if ignoreError {
+					require.NoError(t, err)
+				} else {
+					require.Error(t, err)
+					for _, errStr := range test.expectedErrors {
+						require.Contains(t, err.Error(), errStr)
+					}
+				}
+			})
+		}
+	}
+}
+
 func testUncompressedLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "remote cache export")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport)
 	dir := t.TempDir()
 	im := CacheOptionsEntry{
 		Type: "local",
@@ -4216,7 +4481,7 @@ func testUncompressedLocalCacheImportExport(t *testing.T, sb integration.Sandbox
 }
 
 func testUncompressedRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "remote cache export")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport)
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
@@ -4241,11 +4506,7 @@ func testUncompressedRegistryCacheImportExport(t *testing.T, sb integration.Sand
 }
 
 func testZstdLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "remote cache export")
-	if sb.Name() == "containerd-1.4" {
-		// containerd 1.4 doesn't support zstd compression
-		return
-	}
+	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport)
 	dir := t.TempDir()
 	im := CacheOptionsEntry{
 		Type: "local",
@@ -4266,11 +4527,7 @@ func testZstdLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testZstdRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "remote cache export")
-	if sb.Name() == "containerd-1.4" {
-		// containerd 1.4 doesn't support zstd compression
-		return
-	}
+	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport)
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
@@ -4358,7 +4615,7 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 }
 
 func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "remote cache export")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport)
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
@@ -4375,7 +4632,7 @@ func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testMultipleRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "remote cache export")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport)
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
@@ -4398,7 +4655,7 @@ func testMultipleRegistryCacheImportExport(t *testing.T, sb integration.Sandbox)
 }
 
 func testBasicLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "remote cache export")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport)
 	dir := t.TempDir()
 	im := CacheOptionsEntry{
 		Type: "local",
@@ -4416,7 +4673,7 @@ func testBasicLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "direct push")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush, integration.FeatureCacheImport)
 	requiresLinux(t)
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
@@ -4573,6 +4830,45 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	unique3, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst3, "/unique")
 	require.NoError(t, err)
 	require.EqualValues(t, unique, unique3)
+}
+
+func testBasicGhaCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport)
+	runtimeToken := os.Getenv("ACTIONS_RUNTIME_TOKEN")
+	cacheURL := os.Getenv("ACTIONS_CACHE_URL")
+	if runtimeToken == "" || cacheURL == "" {
+		t.Skip("ACTIONS_RUNTIME_TOKEN and ACTIONS_CACHE_URL must be set")
+	}
+
+	scope := "buildkit-" + t.Name()
+	if ref := os.Getenv("GITHUB_REF"); ref != "" {
+		if strings.HasPrefix(ref, "refs/heads/") {
+			scope += "-" + strings.TrimPrefix(ref, "refs/heads/")
+		} else if strings.HasPrefix(ref, "refs/tags/") {
+			scope += "-" + strings.TrimPrefix(ref, "refs/tags/")
+		} else if strings.HasPrefix(ref, "refs/pull/") {
+			scope += "-pr" + strings.TrimPrefix(strings.TrimSuffix(strings.TrimSuffix(ref, "/head"), "/merge"), "refs/pull/")
+		}
+	}
+
+	im := CacheOptionsEntry{
+		Type: "gha",
+		Attrs: map[string]string{
+			"url":   cacheURL,
+			"token": runtimeToken,
+			"scope": scope,
+		},
+	}
+	ex := CacheOptionsEntry{
+		Type: "gha",
+		Attrs: map[string]string{
+			"url":   cacheURL,
+			"token": runtimeToken,
+			"scope": scope,
+			"mode":  "max",
+		},
+	}
+	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
 }
 
 func readFileInImage(ctx context.Context, t *testing.T, c *Client, ref, path string) ([]byte, error) {
@@ -4853,7 +5149,7 @@ func testCopyFromEmptyImage(t *testing.T, sb integration.Sandbox) {
 
 // containerd/containerd#2119
 func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "oci exporter")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -4923,7 +5219,7 @@ func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
 
 // #276
 func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "oci exporter")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -4988,7 +5284,7 @@ func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
 
 // #2490
 func testMoveParentDir(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "oci export")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -5355,7 +5651,7 @@ func testMergeOp(t *testing.T, sb integration.Sandbox) {
 	}
 
 	var imageTarget string
-	if integration.IsTestDockerd() {
+	if integration.IsTestDockerdMoby(sb) {
 		// do image export but use a fake url as the image should just end up in moby's
 		// local store
 		imageTarget = "fake.invalid:33333/buildkit/testmergeop:latest"
@@ -5454,7 +5750,7 @@ func testMergeOpCacheMax(t *testing.T, sb integration.Sandbox) {
 
 func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 	t.Helper()
-	integration.SkipIfDockerd(t, sb, "direct push")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
 	requiresLinux(t)
 
 	cdAddress := sb.ContainerdAddress()
@@ -5847,7 +6143,7 @@ func requireContents(ctx context.Context, t *testing.T, c *Client, sb integratio
 
 	if imageTarget != "" {
 		var exports []ExportEntry
-		if integration.IsTestDockerd() {
+		if integration.IsTestDockerdMoby(sb) {
 			exports = []ExportEntry{{
 				Type: "moby",
 				Attrs: map[string]string{
@@ -5950,6 +6246,24 @@ func ensurePruneAll(t *testing.T, c *Client, sb integration.Sandbox) {
 }
 
 func checkAllReleasable(t *testing.T, c *Client, sb integration.Sandbox, checkContent bool) {
+	cl, err := c.ControlClient().ListenBuildHistory(sb.Context(), &controlapi.BuildHistoryRequest{
+		EarlyExit: true,
+	})
+	require.NoError(t, err)
+
+	for {
+		resp, err := cl.Recv()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+		_, err = c.ControlClient().UpdateBuildHistory(sb.Context(), &controlapi.UpdateBuildHistoryRequest{
+			Ref:    resp.Record.Ref,
+			Delete: true,
+		})
+		require.NoError(t, err)
+	}
+
 	retries := 0
 loop0:
 	for {
@@ -5966,7 +6280,7 @@ loop0:
 		break
 	}
 
-	err := c.Prune(sb.Context(), nil, PruneAll)
+	err = c.Prune(sb.Context(), nil, PruneAll)
 	require.NoError(t, err)
 
 	du, err := c.DiskUsage(sb.Context())
@@ -6022,7 +6336,7 @@ loop0:
 		if count == 0 {
 			break
 		}
-		if retries >= 20 {
+		if retries >= 50 {
 			require.FailNowf(t, "content still exists", "%+v", infos)
 		}
 		retries++
@@ -6202,13 +6516,12 @@ func testBuildInfoExporter(t *testing.T, sb integration.Sandbox) {
 			return nil, err
 		}
 		return c.Solve(ctx, gateway.SolveRequest{
-			Definition:  def.ToPB(),
-			FrontendOpt: map[string]string{"build-arg:foo": "bar"},
+			Definition: def.ToPB(),
 		})
 	}
 
 	var exports []ExportEntry
-	if integration.IsTestDockerd() {
+	if integration.IsTestDockerdMoby(sb) {
 		exports = []ExportEntry{{
 			Type: "moby",
 			Attrs: map[string]string{
@@ -6236,8 +6549,6 @@ func testBuildInfoExporter(t *testing.T, sb integration.Sandbox) {
 	err = json.Unmarshal(decbi, &exbi)
 	require.NoError(t, err)
 
-	attrval := "bar"
-	require.Equal(t, exbi.Attrs, map[string]*string{"build-arg:foo": &attrval})
 	require.Equal(t, len(exbi.Sources), 1)
 	require.Equal(t, exbi.Sources[0].Type, binfotypes.SourceTypeDockerImage)
 	require.Equal(t, exbi.Sources[0].Ref, "docker.io/library/busybox:latest")
@@ -6245,7 +6556,7 @@ func testBuildInfoExporter(t *testing.T, sb integration.Sandbox) {
 
 // moby/buildkit#2476
 func testBuildInfoInline(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "direct push")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -6274,66 +6585,42 @@ func testBuildInfoInline(t *testing.T, sb integration.Sandbox) {
 
 	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
 
-	for _, tt := range []struct {
-		name       string
-		buildAttrs bool
-	}{{
-		"attrsEnabled",
-		true,
-	}, {
-		"attrsDisabled",
-		false,
-	}} {
-		t.Run(tt.name, func(t *testing.T) {
-			target := registry + "/buildkit/test-buildinfo:latest"
+	target := registry + "/buildkit/test-buildinfo:latest"
 
-			_, err = c.Solve(sb.Context(), def, SolveOpt{
-				Exports: []ExportEntry{
-					{
-						Type: ExporterImage,
-						Attrs: map[string]string{
-							"name":            target,
-							"push":            "true",
-							"buildinfo-attrs": strconv.FormatBool(tt.buildAttrs),
-						},
-					},
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
 				},
-				FrontendAttrs: map[string]string{
-					"build-arg:foo": "bar",
-				},
-			}, nil)
-			require.NoError(t, err)
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
 
-			img, err := client.GetImage(ctx, target)
-			require.NoError(t, err)
+	img, err := client.GetImage(ctx, target)
+	require.NoError(t, err)
 
-			desc, err := img.Config(ctx)
-			require.NoError(t, err)
+	desc, err := img.Config(ctx)
+	require.NoError(t, err)
 
-			dt, err := content.ReadBlob(ctx, img.ContentStore(), desc)
-			require.NoError(t, err)
+	dt, err := content.ReadBlob(ctx, img.ContentStore(), desc)
+	require.NoError(t, err)
 
-			var config binfotypes.ImageConfig
-			require.NoError(t, json.Unmarshal(dt, &config))
+	var config binfotypes.ImageConfig
+	require.NoError(t, json.Unmarshal(dt, &config))
 
-			dec, err := base64.StdEncoding.DecodeString(config.BuildInfo)
-			require.NoError(t, err)
+	dec, err := base64.StdEncoding.DecodeString(config.BuildInfo)
+	require.NoError(t, err)
 
-			var bi binfotypes.BuildInfo
-			require.NoError(t, json.Unmarshal(dec, &bi))
+	var bi binfotypes.BuildInfo
+	require.NoError(t, json.Unmarshal(dec, &bi))
 
-			if tt.buildAttrs {
-				attrval := "bar"
-				require.Contains(t, bi.Attrs, "build-arg:foo")
-				require.Equal(t, bi.Attrs["build-arg:foo"], &attrval)
-			} else {
-				require.NotContains(t, bi.Attrs, "build-arg:foo")
-			}
-			require.Equal(t, len(bi.Sources), 1)
-			require.Equal(t, bi.Sources[0].Type, binfotypes.SourceTypeDockerImage)
-			require.Equal(t, bi.Sources[0].Ref, "docker.io/library/busybox:latest")
-		})
-	}
+	require.Equal(t, len(bi.Sources), 1)
+	require.Equal(t, bi.Sources[0].Type, binfotypes.SourceTypeDockerImage)
+	require.Equal(t, bi.Sources[0].Ref, "docker.io/library/busybox:latest")
 }
 
 func testBuildInfoNoExport(t *testing.T, sb integration.Sandbox) {
@@ -6351,8 +6638,7 @@ func testBuildInfoNoExport(t *testing.T, sb integration.Sandbox) {
 			return nil, err
 		}
 		return c.Solve(ctx, gateway.SolveRequest{
-			Definition:  def.ToPB(),
-			FrontendOpt: map[string]string{"build-arg:foo": "bar"},
+			Definition: def.ToPB(),
 		})
 	}
 
@@ -6367,15 +6653,13 @@ func testBuildInfoNoExport(t *testing.T, sb integration.Sandbox) {
 	err = json.Unmarshal(decbi, &exbi)
 	require.NoError(t, err)
 
-	attrval := "bar"
-	require.Equal(t, exbi.Attrs, map[string]*string{"build-arg:foo": &attrval})
 	require.Equal(t, len(exbi.Sources), 1)
 	require.Equal(t, exbi.Sources[0].Type, binfotypes.SourceTypeDockerImage)
 	require.Equal(t, exbi.Sources[0].Ref, "docker.io/library/busybox:latest")
 }
 
 func testPullWithLayerLimit(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "direct push")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -6490,7 +6774,7 @@ func testPullWithLayerLimit(t *testing.T, sb integration.Sandbox) {
 }
 
 func testCallInfo(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "not implemented")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureInfo)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -6499,7 +6783,7 @@ func testCallInfo(t *testing.T, sb integration.Sandbox) {
 }
 
 func testValidateDigestOrigin(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "direct push")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -6565,7 +6849,7 @@ func testValidateDigestOrigin(t *testing.T, sb integration.Sandbox) {
 }
 
 func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "oci exporter")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -6782,7 +7066,7 @@ func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 }
 
 func testExportAnnotationsMediaTypes(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "direct push")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -6896,7 +7180,7 @@ func testExportAnnotationsMediaTypes(t *testing.T, sb integration.Sandbox) {
 }
 
 func testExportAttestations(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "direct push")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -6968,8 +7252,9 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 			if err != nil {
 				return nil, err
 			}
-			res.AddAttestation(pk, result.Attestation{
+			res.AddAttestation(pk, gateway.Attestation{
 				Kind: gatewaypb.AttestationKindInToto,
+				Ref:  refAttest,
 				Path: "/attestation.json",
 				InToto: result.InTotoAttestation{
 					PredicateType: "https://example.com/attestations/v1.0",
@@ -6977,9 +7262,10 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 						Kind: gatewaypb.InTotoSubjectKindSelf,
 					}},
 				},
-			}, refAttest)
-			res.AddAttestation(pk, result.Attestation{
+			})
+			res.AddAttestation(pk, gateway.Attestation{
 				Kind: gatewaypb.AttestationKindInToto,
+				Ref:  refAttest,
 				Path: "/attestation2.json",
 				InToto: result.InTotoAttestation{
 					PredicateType: "https://example.com/attestations2/v1.0",
@@ -6989,7 +7275,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 						Digest: []digest.Digest{successDigest},
 					}},
 				},
-			}, refAttest)
+			})
 		}
 
 		dt, err := json.Marshal(expPlatforms)
@@ -7001,114 +7287,220 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 		return res, nil
 	}
 
-	targets := []string{
-		registry + "/buildkit/testattestationsfoo:latest",
-		registry + "/buildkit/testattestationsbar:latest",
-	}
-	_, err = c.Build(sb.Context(), SolveOpt{
-		Exports: []ExportEntry{
-			{
-				Type: ExporterImage,
-				Attrs: map[string]string{
-					"name": strings.Join(targets, ","),
-					"push": "true",
-				},
-			},
-		},
-	}, "", frontend, nil)
-	require.NoError(t, err)
-
-	desc, provider, err := contentutil.ProviderFromRef(targets[0])
-	require.NoError(t, err)
-
-	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
-	require.NoError(t, err)
-	require.Equal(t, len(ps)*2, len(imgs.Images))
-
-	var bases []*testutil.ImageInfo
-	for _, p := range ps {
-		pk := platforms.Format(p)
-		img := imgs.Find(pk)
-		require.NotNil(t, img)
-		require.Equal(t, pk, platforms.Format(*img.Desc.Platform))
-		require.Equal(t, 1, len(img.Layers))
-		require.Equal(t, []byte(fmt.Sprintf("hello %s!", pk)), img.Layers[0]["greeting"].Data)
-		bases = append(bases, img)
-	}
-
-	atts := imgs.Filter("unknown/unknown")
-	require.Equal(t, len(ps), len(atts.Images))
-	for i, att := range atts.Images {
-		require.Equal(t, ocispecs.MediaTypeImageManifest, att.Desc.MediaType)
-		require.Equal(t, "unknown/unknown", platforms.Format(*att.Desc.Platform))
-		require.Equal(t, "unknown/unknown", att.Img.OS+"/"+att.Img.Architecture)
-		require.Equal(t, attestation.DockerAnnotationReferenceTypeDefault, att.Desc.Annotations[attestation.DockerAnnotationReferenceType])
-		require.Equal(t, bases[i].Desc.Digest.String(), att.Desc.Annotations[attestation.DockerAnnotationReferenceDigest])
-		require.Equal(t, 2, len(att.Layers))
-		require.Equal(t, len(att.Layers), len(att.Img.RootFS.DiffIDs))
-		require.Equal(t, len(att.Img.History), 0)
-
-		var attest intoto.Statement
-		require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
-
-		purls := map[string]string{}
-		for _, k := range targets {
-			p, _ := purl.RefToPURL(k, &ps[i])
-			purls[k] = p
+	t.Run("image", func(t *testing.T) {
+		targets := []string{
+			registry + "/buildkit/testattestationsfoo:latest",
+			registry + "/buildkit/testattestationsbar:latest",
 		}
-
-		require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
-		require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
-		require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
-		subjects := []intoto.Subject{
-			{
-				Name: purls[targets[0]],
-				Digest: map[string]string{
-					"sha256": bases[i].Desc.Digest.Encoded(),
+		_, err = c.Build(sb.Context(), SolveOpt{
+			Exports: []ExportEntry{
+				{
+					Type: ExporterImage,
+					Attrs: map[string]string{
+						"name": strings.Join(targets, ","),
+						"push": "true",
+					},
 				},
 			},
-			{
-				Name: purls[targets[1]],
-				Digest: map[string]string{
-					"sha256": bases[i].Desc.Digest.Encoded(),
-				},
-			},
-		}
-		require.Equal(t, subjects, attest.Subject)
-
-		var attest2 intoto.Statement
-		require.NoError(t, json.Unmarshal(att.LayersRaw[1], &attest2))
-
-		require.Equal(t, "https://in-toto.io/Statement/v0.1", attest2.Type)
-		require.Equal(t, "https://example.com/attestations2/v1.0", attest2.PredicateType)
-		require.Nil(t, attest2.Predicate)
-		subjects = []intoto.Subject{{
-			Name: "/attestation.json",
-			Digest: map[string]string{
-				"sha256": successDigest.Encoded(),
-			},
-		}}
-		require.Equal(t, subjects, attest2.Subject)
-	}
-
-	cdAddress := sb.ContainerdAddress()
-	if cdAddress == "" {
-		return
-	}
-	client, err := containerd.New(cdAddress)
-	require.NoError(t, err)
-	defer client.Close()
-	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
-
-	for _, target := range targets {
-		err = client.ImageService().Delete(ctx, target, images.SynchronousDelete())
+		}, "", frontend, nil)
 		require.NoError(t, err)
-	}
-	checkAllReleasable(t, c, sb, true)
+
+		desc, provider, err := contentutil.ProviderFromRef(targets[0])
+		require.NoError(t, err)
+
+		imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
+		require.NoError(t, err)
+		require.Equal(t, len(ps)*2, len(imgs.Images))
+
+		var bases []*testutil.ImageInfo
+		for _, p := range ps {
+			pk := platforms.Format(p)
+			img := imgs.Find(pk)
+			require.NotNil(t, img)
+			require.Equal(t, pk, platforms.Format(*img.Desc.Platform))
+			require.Equal(t, 1, len(img.Layers))
+			require.Equal(t, []byte(fmt.Sprintf("hello %s!", pk)), img.Layers[0]["greeting"].Data)
+			bases = append(bases, img)
+		}
+
+		atts := imgs.Filter("unknown/unknown")
+		require.Equal(t, len(ps), len(atts.Images))
+		for i, att := range atts.Images {
+			require.Equal(t, ocispecs.MediaTypeImageManifest, att.Desc.MediaType)
+			require.Equal(t, "unknown/unknown", platforms.Format(*att.Desc.Platform))
+			require.Equal(t, "unknown/unknown", att.Img.OS+"/"+att.Img.Architecture)
+			require.Equal(t, attestation.DockerAnnotationReferenceTypeDefault, att.Desc.Annotations[attestation.DockerAnnotationReferenceType])
+			require.Equal(t, bases[i].Desc.Digest.String(), att.Desc.Annotations[attestation.DockerAnnotationReferenceDigest])
+			require.Equal(t, 2, len(att.Layers))
+			require.Equal(t, len(att.Layers), len(att.Img.RootFS.DiffIDs))
+			require.Equal(t, len(att.Img.History), 0)
+
+			var attest intoto.Statement
+			require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
+
+			purls := map[string]string{}
+			for _, k := range targets {
+				p, _ := purl.RefToPURL(k, &ps[i])
+				purls[k] = p
+			}
+
+			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+			require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
+			require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
+			subjects := []intoto.Subject{
+				{
+					Name: purls[targets[0]],
+					Digest: map[string]string{
+						"sha256": bases[i].Desc.Digest.Encoded(),
+					},
+				},
+				{
+					Name: purls[targets[1]],
+					Digest: map[string]string{
+						"sha256": bases[i].Desc.Digest.Encoded(),
+					},
+				},
+			}
+			require.Equal(t, subjects, attest.Subject)
+
+			var attest2 intoto.Statement
+			require.NoError(t, json.Unmarshal(att.LayersRaw[1], &attest2))
+
+			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest2.Type)
+			require.Equal(t, "https://example.com/attestations2/v1.0", attest2.PredicateType)
+			require.Nil(t, attest2.Predicate)
+			subjects = []intoto.Subject{{
+				Name: "/attestation.json",
+				Digest: map[string]string{
+					"sha256": successDigest.Encoded(),
+				},
+			}}
+			require.Equal(t, subjects, attest2.Subject)
+		}
+
+		cdAddress := sb.ContainerdAddress()
+		if cdAddress == "" {
+			return
+		}
+		client, err := containerd.New(cdAddress)
+		require.NoError(t, err)
+		defer client.Close()
+		ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
+
+		for _, target := range targets {
+			err = client.ImageService().Delete(ctx, target, images.SynchronousDelete())
+			require.NoError(t, err)
+		}
+		checkAllReleasable(t, c, sb, true)
+	})
+
+	t.Run("local", func(t *testing.T) {
+		dir := t.TempDir()
+		_, err = c.Build(sb.Context(), SolveOpt{
+			Exports: []ExportEntry{
+				{
+					Type:      ExporterLocal,
+					OutputDir: dir,
+					Attrs: map[string]string{
+						"attestation-prefix": "test.",
+					},
+				},
+			},
+		}, "", frontend, nil)
+		require.NoError(t, err)
+
+		for _, p := range ps {
+			var attest intoto.Statement
+			dt, err := os.ReadFile(path.Join(dir, strings.ReplaceAll(platforms.Format(p), "/", "_"), "test.attestation.json"))
+			require.NoError(t, err)
+			require.NoError(t, json.Unmarshal(dt, &attest))
+
+			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+			require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
+			require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
+
+			require.Equal(t, []intoto.Subject{{
+				Name:   "greeting",
+				Digest: result.ToDigestMap(digest.Canonical.FromString("hello " + platforms.Format(p) + "!")),
+			}}, attest.Subject)
+
+			var attest2 intoto.Statement
+			dt, err = os.ReadFile(path.Join(dir, strings.ReplaceAll(platforms.Format(p), "/", "_"), "test.attestation2.json"))
+			require.NoError(t, err)
+			require.NoError(t, json.Unmarshal(dt, &attest2))
+
+			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest2.Type)
+			require.Equal(t, "https://example.com/attestations2/v1.0", attest2.PredicateType)
+			require.Nil(t, attest2.Predicate)
+			subjects := []intoto.Subject{{
+				Name: "/attestation.json",
+				Digest: map[string]string{
+					"sha256": successDigest.Encoded(),
+				},
+			}}
+			require.Equal(t, subjects, attest2.Subject)
+		}
+	})
+
+	t.Run("tar", func(t *testing.T) {
+		dir := t.TempDir()
+		out := filepath.Join(dir, "out.tar")
+		outW, err := os.Create(out)
+		require.NoError(t, err)
+
+		_, err = c.Build(sb.Context(), SolveOpt{
+			Exports: []ExportEntry{
+				{
+					Type:   ExporterTar,
+					Output: fixedWriteCloser(outW),
+					Attrs: map[string]string{
+						"attestation-prefix": "test.",
+					},
+				},
+			},
+		}, "", frontend, nil)
+		require.NoError(t, err)
+
+		dt, err := os.ReadFile(out)
+		require.NoError(t, err)
+
+		m, err := testutil.ReadTarToMap(dt, false)
+		require.NoError(t, err)
+
+		for _, p := range ps {
+			var attest intoto.Statement
+			dt := m[path.Join(strings.ReplaceAll(platforms.Format(p), "/", "_"), "test.attestation.json")].Data
+			require.NoError(t, json.Unmarshal(dt, &attest))
+
+			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+			require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
+			require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
+
+			require.Equal(t, []intoto.Subject{{
+				Name:   "greeting",
+				Digest: result.ToDigestMap(digest.Canonical.FromString("hello " + platforms.Format(p) + "!")),
+			}}, attest.Subject)
+
+			var attest2 intoto.Statement
+			dt = m[path.Join(strings.ReplaceAll(platforms.Format(p), "/", "_"), "test.attestation2.json")].Data
+			require.NoError(t, json.Unmarshal(dt, &attest2))
+
+			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest2.Type)
+			require.Equal(t, "https://example.com/attestations2/v1.0", attest2.PredicateType)
+			require.Nil(t, attest2.Predicate)
+			subjects := []intoto.Subject{{
+				Name: "/attestation.json",
+				Digest: map[string]string{
+					"sha256": successDigest.Encoded(),
+				},
+			}}
+			require.Equal(t, subjects, attest2.Subject)
+		}
+	})
 }
 
 func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "direct push")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -7176,13 +7568,14 @@ func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
 			if err != nil {
 				return nil, err
 			}
-			res.AddAttestation(pk, result.Attestation{
+			res.AddAttestation(pk, gateway.Attestation{
 				Kind: gatewaypb.AttestationKindInToto,
+				Ref:  refAttest,
 				Path: "/attestation.json",
 				InToto: result.InTotoAttestation{
 					PredicateType: "https://example.com/attestations/v1.0",
 				},
-			}, refAttest)
+			})
 		}
 
 		dt, err := json.Marshal(expPlatforms)
@@ -7244,6 +7637,7 @@ func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
 }
 
 func testAttestationBundle(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -7328,10 +7722,11 @@ func testAttestationBundle(t *testing.T, sb integration.Sandbox) {
 			if err != nil {
 				return nil, err
 			}
-			res.AddAttestation(pk, result.Attestation{
+			res.AddAttestation(pk, gateway.Attestation{
 				Kind: gatewaypb.AttestationKindBundle,
+				Ref:  refAttest,
 				Path: "/bundle",
-			}, refAttest)
+			})
 		}
 
 		dt, err := json.Marshal(expPlatforms)
@@ -7391,6 +7786,7 @@ func testAttestationBundle(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSBOMScan(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush, integration.FeatureSBOM)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -7441,7 +7837,7 @@ cat <<EOF > $BUILDKIT_SCAN_DESTINATION/spdx.json
 {
   "_type": "https://in-toto.io/Statement/v0.1",
   "predicateType": "https://spdx.dev/Document",
-  "predicate": {"success": false}
+  "predicate": {"name": "fallback"}
 }
 EOF
 `
@@ -7509,7 +7905,7 @@ EOF
 			// build attestations
 			if attest {
 				st = llb.Scratch().
-					File(llb.Mkfile("/result.spdx", 0600, []byte(`{"success": true}`)))
+					File(llb.Mkfile("/result.spdx", 0600, []byte(`{"name": "frontend"}`)))
 				def, err = st.Marshal(ctx)
 				if err != nil {
 					return nil, err
@@ -7529,13 +7925,14 @@ EOF
 					return nil, err
 				}
 
-				res.AddAttestation(pk, result.Attestation{
+				res.AddAttestation(pk, gateway.Attestation{
 					Kind: gatewaypb.AttestationKindInToto,
+					Ref:  refAttest,
 					Path: "/result.spdx",
 					InToto: result.InTotoAttestation{
 						PredicateType: intoto.PredicateSPDX,
 					},
-				}, refAttest)
+				})
 			}
 
 			return res, nil
@@ -7597,7 +7994,7 @@ EOF
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
-	require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
+	require.Subset(t, attest.Predicate, map[string]interface{}{"name": "frontend"})
 
 	// test the specified fallback scanner
 	target = registry + "/buildkit/testsbom3:latest"
@@ -7629,7 +8026,7 @@ EOF
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
-	require.Equal(t, map[string]interface{}{"success": false}, attest.Predicate)
+	require.Subset(t, attest.Predicate, map[string]interface{}{"name": "fallback"})
 
 	// test the builtin frontend scanner and the specified fallback scanner together
 	target = registry + "/buildkit/testsbom3:latest"
@@ -7661,10 +8058,11 @@ EOF
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
-	require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
+	require.Subset(t, attest.Predicate, map[string]interface{}{"name": "frontend"})
 }
 
 func testSBOMScanSingleRef(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush, integration.FeatureSBOM)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -7715,7 +8113,7 @@ cat <<EOF > $BUILDKIT_SCAN_DESTINATION/spdx.json
 {
   "_type": "https://in-toto.io/Statement/v0.1",
   "predicateType": "https://spdx.dev/Document",
-  "predicate": {"success": false}
+  "predicate": {"name": "fallback"}
 }
 EOF
 `
@@ -7778,6 +8176,15 @@ EOF
 		}
 		res.AddMeta(exptypes.ExporterImageConfigKey, config)
 
+		expPlatforms := &exptypes.Platforms{
+			Platforms: []exptypes.Platform{{ID: pk, Platform: p}},
+		}
+		dt, err := json.Marshal(expPlatforms)
+		if err != nil {
+			return nil, err
+		}
+		res.AddMeta(exptypes.ExporterPlatformsKey, dt)
+
 		return res, nil
 	}
 
@@ -7815,11 +8222,11 @@ EOF
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
-	require.Equal(t, map[string]interface{}{"success": false}, attest.Predicate)
+	require.Subset(t, attest.Predicate, map[string]interface{}{"name": "fallback"})
 }
 
 func testMultipleCacheExports(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "multiple cache exports")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureMultiCacheExport)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -7935,6 +8342,133 @@ func testMultipleCacheExports(t *testing.T, sb integration.Sandbox) {
 	ensureFileContents(t, filepath.Join(destDir, "unique"), string(uniqueFile))
 }
 
+func testMountStubsDirectory(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("busybox:latest").
+		File(llb.Mkdir("/test", 0700)).
+		File(llb.Mkdir("/test/qux/", 0700)).
+		Run(
+			llb.Args([]string{"touch", "/test/baz/keep"}),
+			// check stubs directory is removed
+			llb.AddMount("/test/foo", llb.Scratch(), llb.Tmpfs()),
+			// check that stubs directory are recursively removed
+			llb.AddMount("/test/bar/x/y", llb.Scratch(), llb.Tmpfs()),
+			// check that only empty stubs directories are removed
+			llb.AddMount("/test/baz/x", llb.Scratch(), llb.Tmpfs()),
+			// check that previously existing directory are not removed
+			llb.AddMount("/test/qux", llb.Scratch(), llb.Tmpfs()),
+		).Root()
+	st = llb.Scratch().File(llb.Copy(st, "/test", "/", &llb.CopyInfo{CopyDirContentsOnly: true}))
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	tarFile := filepath.Join(tmpDir, "out.tar")
+	tarFileW, err := os.Create(tarFile)
+	require.NoError(t, err)
+	defer tarFileW.Close()
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterTar,
+				Output: fixedWriteCloser(tarFileW),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+	tarFileW.Close()
+
+	dt, err := os.ReadFile(tarFile)
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(dt, false)
+	require.NoError(t, err)
+
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+
+	require.ElementsMatch(t, []string{
+		"baz/",
+		"baz/keep",
+		"qux/",
+	}, keys)
+}
+
+// https://github.com/moby/buildkit/issues/3148
+func testMountStubsTimestamp(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	const sourceDateEpoch = int64(1234567890) // Fri Feb 13 11:31:30 PM UTC 2009
+	st := llb.Image("busybox:latest").Run(
+		llb.Args([]string{"/bin/touch", fmt.Sprintf("--date=@%d", sourceDateEpoch),
+			"/bin",
+			"/etc",
+			"/var",
+			"/var/foo",
+			"/tmp",
+			"/tmp/foo2",
+			"/tmp/foo2/bar",
+		}),
+		llb.AddMount("/var/foo", llb.Scratch(), llb.Tmpfs()),
+		llb.AddMount("/tmp/foo2/bar", llb.Scratch(), llb.Tmpfs()),
+	)
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	tarFile := filepath.Join(tmpDir, "out.tar")
+	tarFileW, err := os.Create(tarFile)
+	require.NoError(t, err)
+	defer tarFileW.Close()
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterTar,
+				Output: fixedWriteCloser(tarFileW),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+	tarFileW.Close()
+
+	tarFileR, err := os.Open(tarFile)
+	require.NoError(t, err)
+	defer tarFileR.Close()
+	tarR := tar.NewReader(tarFileR)
+	touched := map[string]*tar.Header{
+		"bin/": nil, // Regular dir
+		"etc/": nil, // Parent of file mounts (etc/{resolv.conf, hosts})
+		"var/": nil, // Parent of dir mount (var/foo/)
+		"tmp/": nil, // Grandparent of dir mount (tmp/foo2/bar/)
+		// No support for reproducing the timestamps of mount point directories such as var/foo/ and tmp/foo2/bar/,
+		// because the touched timestamp value is lost when the mount is unmounted.
+	}
+	for {
+		hd, err := tarR.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+		if x, ok := touched[hd.Name]; ok && x == nil {
+			touched[hd.Name] = hd
+		}
+	}
+	for name, hd := range touched {
+		t.Logf("Verifying %q (%+v)", name, hd)
+		require.NotNil(t, hd, name)
+		require.Equal(t, sourceDateEpoch, hd.ModTime.Unix(), name)
+	}
+}
+
 func ensureFile(t *testing.T, path string) {
 	st, err := os.Stat(path)
 	require.NoError(t, err, "expected file at %s", path)
@@ -7969,7 +8503,12 @@ func makeSSHAgentSock(t *testing.T, agent agent.Agent) (p string, err error) {
 	return sockPath, nil
 }
 
-func readImageTimestamps(dt []byte) ([]string, error) {
+type imageTimestamps struct {
+	FromImage      []string // from img.Created and img.[]History.Created
+	FromAnnotation string   // from index.Manifests[0].Annotations["org.opencontainers.image.created"]
+}
+
+func readImageTimestamps(dt []byte) (*imageTimestamps, error) {
 	m, err := testutil.ReadTarToMap(dt, false)
 	if err != nil {
 		return nil, err
@@ -7986,6 +8525,9 @@ func readImageTimestamps(dt []byte) ([]string, error) {
 	if len(index.Manifests) != 1 {
 		return nil, errors.Errorf("invalid manifest count %d", len(index.Manifests))
 	}
+
+	var res imageTimestamps
+	res.FromAnnotation = index.Manifests[0].Annotations[ocispecs.AnnotationCreated]
 
 	var mfst ocispecs.Manifest
 	if err := json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].Data, &mfst); err != nil {
@@ -8005,13 +8547,13 @@ func readImageTimestamps(dt []byte) ([]string, error) {
 		return nil, err
 	}
 
-	out := []string{
+	res.FromImage = []string{
 		img.Created,
 	}
 	for _, h := range img.History {
-		out = append(out, h.Created)
+		res.FromImage = append(res.FromImage, h.Created)
 	}
-	return out, nil
+	return &res, nil
 }
 
 type server struct {
@@ -8082,4 +8624,133 @@ func fixedWriteCloser(wc io.WriteCloser) func(map[string]string) (io.WriteCloser
 	return func(map[string]string) (io.WriteCloser, error) {
 		return wc, nil
 	}
+}
+
+func testSourcePolicy(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		st := llb.Image("busybox:1.34.1-uclibc").File(
+			llb.Copy(llb.HTTP("https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md"),
+				"README.md", "README.md"))
+		def, err := st.Marshal(sb.Context())
+		if err != nil {
+			return nil, err
+		}
+		return c.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+	}
+
+	type testCase struct {
+		srcPol      *sourcepolicypb.Policy
+		expectedErr string
+	}
+	testCases := []testCase{
+		{
+			// Valid
+			srcPol: &sourcepolicypb.Policy{
+				Rules: []*sourcepolicypb.Rule{
+					{
+						Action: sourcepolicypb.PolicyAction_CONVERT,
+						Selector: &sourcepolicypb.Selector{
+							Identifier: "docker-image://docker.io/library/busybox:1.34.1-uclibc",
+						},
+						Updates: &sourcepolicypb.Update{
+							Identifier: "docker-image://docker.io/library/busybox:1.34.1-uclibc@sha256:3614ca5eacf0a3a1bcc361c939202a974b4902b9334ff36eb29ffe9011aaad83",
+						},
+					},
+					{
+						Action: sourcepolicypb.PolicyAction_CONVERT,
+						Selector: &sourcepolicypb.Selector{
+							Identifier: "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md",
+						},
+						Updates: &sourcepolicypb.Update{
+							Identifier: "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md",
+							Attrs:      map[string]string{"http.checksum": "sha256:6e4b94fc270e708e1068be28bd3551dc6917a4fc5a61293d51bb36e6b75c4b53"},
+						},
+					},
+				},
+			},
+			expectedErr: "",
+		},
+		{
+			// Invalid docker-image source
+			srcPol: &sourcepolicypb.Policy{
+				Rules: []*sourcepolicypb.Rule{
+					{
+						Action: sourcepolicypb.PolicyAction_CONVERT,
+						Selector: &sourcepolicypb.Selector{
+							Identifier: "docker-image://docker.io/library/busybox:1.34.1-uclibc",
+						},
+						Updates: &sourcepolicypb.Update{
+							Identifier: "docker-image://docker.io/library/busybox:1.34.1-uclibc@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", // invalid
+						},
+					},
+				},
+			},
+			expectedErr: "docker.io/library/busybox:1.34.1-uclibc@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: not found",
+		},
+		{
+			// Invalid http source
+			srcPol: &sourcepolicypb.Policy{
+				Rules: []*sourcepolicypb.Rule{
+					{
+						Action: sourcepolicypb.PolicyAction_CONVERT,
+						Selector: &sourcepolicypb.Selector{
+							Identifier: "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md",
+						},
+						Updates: &sourcepolicypb.Update{
+							Attrs: map[string]string{pb.AttrHTTPChecksum: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}, // invalid
+						},
+					},
+				},
+			},
+			expectedErr: "digest mismatch sha256:6e4b94fc270e708e1068be28bd3551dc6917a4fc5a61293d51bb36e6b75c4b53: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		},
+	}
+	for i, tc := range testCases {
+		tc := tc
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			_, err = c.Build(sb.Context(), SolveOpt{SourcePolicy: tc.srcPol}, "", frontend, nil)
+			if tc.expectedErr == "" {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.expectedErr)
+			}
+		})
+	}
+
+	t.Run("Frontend policies", func(t *testing.T) {
+		denied := "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md"
+		frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+			st := llb.Image("busybox:1.34.1-uclibc").File(
+				llb.Copy(llb.HTTP(denied),
+					"README.md", "README.md"))
+			def, err := st.Marshal(sb.Context())
+			if err != nil {
+				return nil, err
+			}
+			return c.Solve(ctx, gateway.SolveRequest{
+				Definition: def.ToPB(),
+				SourcePolicies: []*spb.Policy{{
+					Rules: []*spb.Rule{
+						{
+							Action: spb.PolicyAction_DENY,
+							Selector: &spb.Selector{
+								Identifier: denied,
+							},
+						},
+					},
+				}},
+			})
+		}
+
+		_, err = c.Build(sb.Context(), SolveOpt{}, "", frontend, nil)
+		require.ErrorContains(t, err, sourcepolicy.ErrSourceDenied.Error())
+	})
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/reference"
 	"github.com/containerd/containerd/remotes"
+	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/session"
 	sessioncontent "github.com/moby/buildkit/session/content"
 	"github.com/moby/buildkit/util/imageutil"
@@ -20,22 +21,20 @@ const (
 )
 
 // getOCILayoutResolver gets a resolver to an OCI layout for a specified store from the client using the given session.
-func getOCILayoutResolver(storeID string, sm *session.Manager, sessionID string, g session.Group) *ociLayoutResolver {
+func getOCILayoutResolver(store llb.ResolveImageConfigOptStore, sm *session.Manager, g session.Group) *ociLayoutResolver {
 	r := &ociLayoutResolver{
-		storeID:   storeID,
-		sm:        sm,
-		sessionID: sessionID,
-		g:         g,
+		store: store,
+		sm:    sm,
+		g:     g,
 	}
 	return r
 }
 
 type ociLayoutResolver struct {
 	remotes.Resolver
-	storeID   string
-	sm        *session.Manager
-	sessionID string
-	g         session.Group
+	store llb.ResolveImageConfigOptStore
+	sm    *session.Manager
+	g     session.Group
 }
 
 // Fetcher returns a new fetcher for the provided reference.
@@ -47,7 +46,7 @@ func (r *ociLayoutResolver) Fetcher(ctx context.Context, ref string) (remotes.Fe
 func (r *ociLayoutResolver) Fetch(ctx context.Context, desc ocispecs.Descriptor) (io.ReadCloser, error) {
 	var rc io.ReadCloser
 	err := r.withCaller(ctx, func(ctx context.Context, caller session.Caller) error {
-		store := sessioncontent.NewCallerStore(caller, r.storeID)
+		store := sessioncontent.NewCallerStore(caller, "oci:"+r.store.StoreID)
 		readerAt, err := store.ReaderAt(ctx, desc)
 		if err != nil {
 			return err
@@ -63,12 +62,11 @@ func (r *ociLayoutResolver) Fetch(ctx context.Context, desc ocispecs.Descriptor)
 func (r *ociLayoutResolver) Resolve(ctx context.Context, refString string) (string, ocispecs.Descriptor, error) {
 	ref, err := reference.Parse(refString)
 	if err != nil {
-		return "", ocispecs.Descriptor{}, errors.Wrapf(err, "invalid reference '%s'", refString)
+		return "", ocispecs.Descriptor{}, errors.Wrapf(err, "invalid reference %q", refString)
 	}
-
-	dig := ref.Digest()
-	if dig == "" {
-		return "", ocispecs.Descriptor{}, errors.Errorf("reference must have format @sha256:<hash>: %s", refString)
+	dgst := ref.Digest()
+	if dgst == "" {
+		return "", ocispecs.Descriptor{}, errors.Errorf("reference %q must have digest", refString)
 	}
 
 	info, err := r.info(ctx, ref)
@@ -80,7 +78,7 @@ func (r *ociLayoutResolver) Resolve(ctx context.Context, refString string) (stri
 	// This is necessary because we do not know the media-type of the descriptor,
 	// and there are descriptor processing elements that expect it.
 	desc := ocispecs.Descriptor{
-		Digest: dig,
+		Digest: info.Digest,
 		Size:   info.Size,
 	}
 	rc, err := r.Fetch(ctx, desc)
@@ -91,19 +89,20 @@ func (r *ociLayoutResolver) Resolve(ctx context.Context, refString string) (stri
 	if err != nil {
 		return "", ocispecs.Descriptor{}, errors.Wrap(err, "unable to read root manifest")
 	}
-	// try it first as an index, then as a manifest
+
 	mediaType, err := imageutil.DetectManifestBlobMediaType(b)
 	if err != nil {
-		return "", ocispecs.Descriptor{}, errors.Wrapf(err, "reference %s contains neither an index nor a manifest", refString)
+		return "", ocispecs.Descriptor{}, errors.Wrapf(err, "reference %q contains neither an index nor a manifest", refString)
 	}
 	desc.MediaType = mediaType
+
 	return refString, desc, nil
 }
 
 func (r *ociLayoutResolver) info(ctx context.Context, ref reference.Spec) (content.Info, error) {
 	var info *content.Info
 	err := r.withCaller(ctx, func(ctx context.Context, caller session.Caller) error {
-		store := sessioncontent.NewCallerStore(caller, r.storeID)
+		store := sessioncontent.NewCallerStore(caller, "oci:"+r.store.StoreID)
 
 		_, dgst := reference.SplitObject(ref.Object)
 		if dgst == "" {
@@ -123,11 +122,11 @@ func (r *ociLayoutResolver) info(ctx context.Context, ref reference.Spec) (conte
 }
 
 func (r *ociLayoutResolver) withCaller(ctx context.Context, f func(context.Context, session.Caller) error) error {
-	if r.sessionID != "" {
+	if r.store.SessionID != "" {
 		timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 
-		caller, err := r.sm.Get(timeoutCtx, r.sessionID, false)
+		caller, err := r.sm.Get(timeoutCtx, r.store.SessionID, false)
 		if err != nil {
 			return err
 		}

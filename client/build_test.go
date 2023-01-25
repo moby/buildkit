@@ -3,8 +3,6 @@ package client
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -16,7 +14,6 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/client/llb"
-	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	gatewayapi "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
@@ -25,7 +22,6 @@ import (
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
-	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/entitlements"
 	utilsystem "github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/util/testutil/echoserver"
@@ -58,7 +54,6 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewayContainerExtraHosts,
 		testClientGatewayContainerSignal,
 		testWarnings,
-		testClientGatewayFrontendAttrs,
 		testClientGatewayNilResult,
 		testClientGatewayEmptyImageExec,
 	), integration.WithMirroredImages(integration.OfficialImages("busybox:latest")))
@@ -1620,6 +1615,7 @@ func testClientGatewayExecFileActionError(t *testing.T, sb integration.Sandbox) 
 // testClientGatewayContainerSecurityMode ensures that the correct security mode
 // is propagated to the gateway container
 func testClientGatewayContainerSecurityMode(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureSecurityMode)
 	requiresLinux(t)
 
 	ctx := sb.Context()
@@ -1646,7 +1642,6 @@ func testClientGatewayContainerSecurityMode(t *testing.T, sb integration.Sandbox
 		}
 		allowedEntitlements = []entitlements.Entitlement{}
 	} else {
-		integration.SkipIfDockerd(t, sb)
 		assertCaps = func(caps uint64) {
 			/*
 				$ capsh --decode=0000003fffffffff
@@ -1995,65 +1990,8 @@ func testClientGatewayContainerSignal(t *testing.T, sb integration.Sandbox) {
 	checkAllReleasable(t, c, sb, true)
 }
 
-// moby/buildkit#2476
-func testClientGatewayFrontendAttrs(t *testing.T, sb integration.Sandbox) {
-	requiresLinux(t)
-	c, err := New(sb.Context(), sb.Address())
-	require.NoError(t, err)
-	defer c.Close()
-
-	fooattrval := "bar"
-	bazattrval := "fuu"
-
-	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
-		st := llb.Image("busybox:latest").Run(
-			llb.ReadonlyRootFS(),
-			llb.Args([]string{"/bin/sh", "-c", `echo hello`}),
-		)
-		def, err := st.Marshal(sb.Context())
-		if err != nil {
-			return nil, err
-		}
-		res, err := c.Solve(ctx, client.SolveRequest{
-			Definition: def.ToPB(),
-			FrontendOpt: map[string]string{
-				"build-arg:foo": fooattrval,
-			},
-		})
-		require.NoError(t, err)
-		require.Contains(t, res.Metadata, exptypes.ExporterBuildInfo)
-
-		var bi binfotypes.BuildInfo
-		require.NoError(t, json.Unmarshal(res.Metadata[exptypes.ExporterBuildInfo], &bi))
-		require.Contains(t, bi.Attrs, "build-arg:foo")
-		bi.Attrs["build-arg:baz"] = &bazattrval
-
-		bmbi, err := json.Marshal(bi)
-		require.NoError(t, err)
-
-		res.AddMeta(exptypes.ExporterBuildInfo, bmbi)
-		return res, err
-	}
-
-	res, err := c.Build(sb.Context(), SolveOpt{}, "", b, nil)
-	require.NoError(t, err)
-
-	require.Contains(t, res.ExporterResponse, exptypes.ExporterBuildInfo)
-	decbi, err := base64.StdEncoding.DecodeString(res.ExporterResponse[exptypes.ExporterBuildInfo])
-	require.NoError(t, err)
-
-	var bi binfotypes.BuildInfo
-	require.NoError(t, json.Unmarshal(decbi, &bi))
-
-	require.Contains(t, bi.Attrs, "build-arg:foo")
-	require.Equal(t, &fooattrval, bi.Attrs["build-arg:foo"])
-	require.Contains(t, bi.Attrs, "build-arg:baz")
-	require.Equal(t, &bazattrval, bi.Attrs["build-arg:baz"])
-
-	checkAllReleasable(t, c, sb, true)
-}
-
 func testClientGatewayNilResult(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, "hangs: https://github.com/moby/buildkit/pull/3176#issuecomment-1323954327")
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2088,7 +2026,7 @@ func testClientGatewayNilResult(t *testing.T, sb integration.Sandbox) {
 }
 
 func testClientGatewayEmptyImageExec(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "direct push")
+	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()

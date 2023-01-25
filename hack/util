@@ -1,45 +1,51 @@
 #!/usr/bin/env sh
-export BUILDX_NO_DEFAULT_LOAD=true
 
-: ${PREFER_BUILDCTL=}
-: ${PREFER_LEGACY=}
-: ${CI=}
-: ${GITHUB_ACTIONS=}
+: "${CI=}"
+: "${GITHUB_ACTIONS=}"
+: "${GITHUB_REPOSITORY=}"
+: "${GITHUB_RUN_ID=}"
+: "${BUILDX_BUILDER=}"
 
-: ${CONTEXT=}
-: ${CACHE_FROM=}
-: ${CACHE_TO=}
-
-if [ "$PREFER_BUILDCTL" = "1" ]; then
-  echo >&2 "WARNING: PREFER_BUILDCTL is no longer supported. Ignoring."
-fi
-
-if [ "$PREFER_LEGACY" = "1" ]; then
-  echo >&2 "WARNING: PREFER_LEGACY is no longer supported. Ignoring."
-fi
+: "${CONTEXT=}"
+: "${CACHE_FROM=}"
+: "${CACHE_TO=}"
 
 progressFlag=""
 if [ "$CI" = "true" ]; then
   progressFlag="--progress=plain"
 fi
 
+buildxBin=""
+builderName=""
+if docker buildx version >/dev/null 2>&1; then
+  buildxBin="docker buildx"
+elif buildx version >/dev/null 2>&1; then
+  buildxBin="buildx"
+else
+  topdir="$(realpath $(dirname "$0")/..)"
+  if [ ! -x "${topdir}/bin/buildx" ]; then
+    set -x
+    "${topdir}/hack/install-buildx"
+  fi
+  buildxBin="${topdir}/bin/buildx"
+  builderName="moby-buildkit"
+  "${topdir}/hack/bootstrap-buildx" "${builderName}"
+fi
+
 buildxCmd() {
-  if docker buildx version >/dev/null 2>&1; then
+  (
     set -x
-    docker buildx "$@" $progressFlag
-  elif buildx version >/dev/null 2>&1; then
-    set -x
-    buildx "$@" $progressFlag
-  else
-    topdir="$(realpath $(dirname "$0")/..)"
-    if [ ! -x "${topdir}/bin/buildx" ]; then
-      set -x
-      "${topdir}/hack/install-buildx"
+    BUILDX_NO_DEFAULT_LOAD=true BUILDX_BUILDER="${builderName:-${BUILDX_BUILDER}}" $buildxBin "$@" $progressFlag
+  )
+}
+
+buildAttestFlags() {
+  if $buildxBin build --help 2>&1 | grep -- '--attest' >/dev/null; then
+    prvattrs="mode=max"
+    if [ "$GITHUB_ACTIONS" = "true" ]; then
+      prvattrs="$prvattrs,builder-id=https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
     fi
-    set -x
-    bootstrapName="moby-buildkit"
-    "${topdir}/hack/bootstrap-buildx" "${bootstrapName}"
-    BUILDX_BUILDER="${bootstrapName}" "${topdir}/bin/buildx" "$@" $progressFlag
+    echo "--attest=type=sbom --attest=type=provenance,$prvattrs"
   fi
 }
 

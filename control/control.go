@@ -2,16 +2,34 @@ package control
 
 import (
 	"context"
+	"fmt"
 	"math"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	contentapi "github.com/containerd/containerd/api/services/content/v1"
+	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/leases"
+	"github.com/containerd/containerd/services/content/contentserver"
 	"github.com/docker/distribution/reference"
+	"github.com/mitchellh/hashstructure/v2"
+	digest "github.com/opencontainers/go-digest"
+	"github.com/pkg/errors"
+	"go.etcd.io/bbolt"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	controlapi "github.com/moby/buildkit/api/services/control"
 	apitypes "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/cmd/buildkitd/config"
 	controlgateway "github.com/moby/buildkit/control/gateway"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/util/epoch"
@@ -22,7 +40,6 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver"
 	"github.com/moby/buildkit/solver/llbsolver/proc"
-	solverutil "github.com/moby/buildkit/solver/llbsolver/util"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/imageutil"
@@ -30,13 +47,6 @@ import (
 	"github.com/moby/buildkit/util/tracing/transform"
 	"github.com/moby/buildkit/version"
 	"github.com/moby/buildkit/worker"
-	"github.com/pkg/errors"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
-	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 type Opt struct {
@@ -48,6 +58,10 @@ type Opt struct {
 	ResolveCacheImporterFuncs map[string]remotecache.ResolveCacheImporterFunc
 	Entitlements              []string
 	TraceCollector            sdktrace.SpanExporter
+	HistoryDB                 *bbolt.DB
+	LeaseManager              leases.Manager
+	ContentStore              content.Store
+	HistoryConfig             *config.HistoryConfig
 }
 
 type Controller struct { // TODO: ControlService
@@ -55,6 +69,7 @@ type Controller struct { // TODO: ControlService
 	buildCount       int64
 	opt              Opt
 	solver           *llbsolver.Solver
+	history          *llbsolver.HistoryQueue
 	cache            solver.CacheManager
 	gatewayForwarder *controlgateway.GatewayForwarder
 	throttledGC      func()
@@ -67,6 +82,13 @@ func NewController(opt Opt) (*Controller, error) {
 
 	gatewayForwarder := controlgateway.NewGatewayForwarder()
 
+	hq := llbsolver.NewHistoryQueue(llbsolver.HistoryQueueOpt{
+		DB:           opt.HistoryDB,
+		LeaseManager: opt.LeaseManager,
+		ContentStore: opt.ContentStore,
+		CleanConfig:  opt.HistoryConfig,
+	})
+
 	s, err := llbsolver.New(llbsolver.Opt{
 		WorkerController: opt.WorkerController,
 		Frontends:        opt.Frontends,
@@ -75,6 +97,7 @@ func NewController(opt Opt) (*Controller, error) {
 		GatewayForwarder: gatewayForwarder,
 		SessionManager:   opt.SessionManager,
 		Entitlements:     opt.Entitlements,
+		HistoryQueue:     hq,
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create solver")
@@ -83,6 +106,7 @@ func NewController(opt Opt) (*Controller, error) {
 	c := &Controller{
 		opt:              opt,
 		solver:           s,
+		history:          hq,
 		cache:            cache,
 		gatewayForwarder: gatewayForwarder,
 	}
@@ -103,6 +127,9 @@ func (c *Controller) Register(server *grpc.Server) {
 	controlapi.RegisterControlServer(server, c)
 	c.gatewayForwarder.Register(server)
 	tracev1.RegisterTraceServiceServer(server, c)
+
+	store := &roContentStore{c.opt.ContentStore}
+	contentapi.RegisterContentServer(server, contentserver.New(store))
 }
 
 func (c *Controller) DiskUsage(ctx context.Context, r *controlapi.DiskUsageRequest) (*controlapi.DiskUsageResponse, error) {
@@ -222,6 +249,31 @@ func (c *Controller) Export(ctx context.Context, req *tracev1.ExportTraceService
 	return &tracev1.ExportTraceServiceResponse{}, nil
 }
 
+func (c *Controller) ListenBuildHistory(req *controlapi.BuildHistoryRequest, srv controlapi.Control_ListenBuildHistoryServer) error {
+	return c.history.Listen(srv.Context(), req, func(h *controlapi.BuildHistoryEvent) error {
+		if err := srv.Send(h); err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
+func (c *Controller) UpdateBuildHistory(ctx context.Context, req *controlapi.UpdateBuildHistoryRequest) (*controlapi.UpdateBuildHistoryResponse, error) {
+	if !req.Delete {
+		err := c.history.UpdateRef(ctx, req.Ref, func(r *controlapi.BuildHistoryRecord) error {
+			if req.Pinned == r.Pinned {
+				return nil
+			}
+			r.Pinned = req.Pinned
+			return nil
+		})
+		return &controlapi.UpdateBuildHistoryResponse{}, err
+	}
+
+	err := c.history.Delete(ctx, req.Ref)
+	return &controlapi.UpdateBuildHistoryResponse{}, err
+}
+
 func translateLegacySolveRequest(req *controlapi.SolveRequest) error {
 	// translates ExportRef and ExportAttrs to new Exports (v0.4.0)
 	if legacyExportRef := req.Cache.ExportRefDeprecated; legacyExportRef != "" {
@@ -274,12 +326,12 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	}
 
 	// if SOURCE_DATE_EPOCH is set, enable it for the exporter
-	if epochVal, ok := req.FrontendAttrs["build-arg:SOURCE_DATE_EPOCH"]; ok {
+	if v, ok := epoch.ParseBuildArgs(req.FrontendAttrs); ok {
 		if _, ok := req.ExporterAttrs[epoch.KeySourceDateEpoch]; !ok {
 			if req.ExporterAttrs == nil {
 				req.ExporterAttrs = make(map[string]string)
 			}
-			req.ExporterAttrs[epoch.KeySourceDateEpoch] = epochVal
+			req.ExporterAttrs[epoch.KeySourceDateEpoch] = v
 		}
 	}
 
@@ -294,14 +346,17 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		}
 	}
 
-	var cacheImports []frontend.CacheOptionsEntry
-
-	var cacheExporters []llbsolver.RemoteCacheExporter
-	exportCacheOptEntries, err := solverutil.DedupCacheOptions(req.Cache.Exports)
-	if err != nil {
+	if c, err := findDuplicateCacheOptions(req.Cache.Exports); err != nil {
 		return nil, err
+	} else if c != nil {
+		types := []string{}
+		for _, c := range c {
+			types = append(types, c.Type)
+		}
+		return nil, errors.Errorf("duplicate cache exports %s", types)
 	}
-	for _, e := range exportCacheOptEntries {
+	var cacheExporters []llbsolver.RemoteCacheExporter
+	for _, e := range req.Cache.Exports {
 		cacheExporterFunc, ok := c.opt.ResolveCacheExporterFuncs[e.Type]
 		if !ok {
 			return nil, errors.Errorf("unknown cache exporter: %q", e.Type)
@@ -316,8 +371,17 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		} else {
 			exp.CacheExportMode = exportMode
 		}
+		if ignoreErrorStr, ok := e.Attrs["ignore-error"]; ok {
+			if ignoreError, supported := parseCacheExportIgnoreError(ignoreErrorStr); !supported {
+				bklog.G(ctx).Debugf("skipping invalid cache export ignore-error: %s", e.Attrs["ignore-error"])
+			} else {
+				exp.IgnoreError = ignoreError
+			}
+		}
 		cacheExporters = append(cacheExporters, exp)
 	}
+
+	var cacheImports []frontend.CacheOptionsEntry
 	for _, im := range req.Cache.Imports {
 		cacheImports = append(cacheImports, frontend.CacheOptionsEntry{
 			Type:  im.Type,
@@ -331,6 +395,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	}
 
 	var procs []llbsolver.Processor
+
 	if attrs, ok := attests["sbom"]; ok {
 		src := attrs["generator"]
 		if src == "" {
@@ -340,8 +405,18 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to parse sbom generator %s", src)
 		}
+
+		useCache := true
+		if v, ok := req.FrontendAttrs["no-cache"]; ok && v == "" {
+			// disable cache if cache is disabled for all stages
+			useCache = false
+		}
 		ref = reference.TagNameOnly(ref)
-		procs = append(procs, proc.ForceRefsProcessor, proc.SBOMProcessor(ref.String()))
+		procs = append(procs, proc.SBOMProcessor(ref.String(), useCache))
+	}
+
+	if attrs, ok := attests["provenance"]; ok {
+		procs = append(procs, proc.ProvenanceProcessor(attrs))
 	}
 
 	resp, err := c.solver.Solve(ctx, req.Ref, req.Session, frontend.SolveRequest{
@@ -353,7 +428,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	}, llbsolver.ExporterRequest{
 		Exporter:       expi,
 		CacheExporters: cacheExporters,
-	}, req.Entitlements, procs)
+	}, req.Entitlements, procs, req.Internal, req.SourcePolicy)
 	if err != nil {
 		return nil, err
 	}
@@ -597,6 +672,14 @@ func parseCacheExportMode(mode string) (solver.CacheExportMode, bool) {
 	return solver.CacheExportModeMin, false
 }
 
+func parseCacheExportIgnoreError(ignoreErrorStr string) (bool, bool) {
+	ignoreError, err := strconv.ParseBool(ignoreErrorStr)
+	if err != nil {
+		return false, false
+	}
+	return ignoreError, true
+}
+
 func toPBGCPolicy(in []client.PruneInfo) []*apitypes.GCPolicy {
 	policy := make([]*apitypes.GCPolicy, 0, len(in))
 	for _, p := range in {
@@ -616,4 +699,72 @@ func toPBBuildkitVersion(in client.BuildkitVersion) *apitypes.BuildkitVersion {
 		Version:  in.Version,
 		Revision: in.Revision,
 	}
+}
+
+func findDuplicateCacheOptions(cacheOpts []*controlapi.CacheOptionsEntry) ([]*controlapi.CacheOptionsEntry, error) {
+	seen := map[string]*controlapi.CacheOptionsEntry{}
+	duplicate := map[string]struct{}{}
+	for _, opt := range cacheOpts {
+		k, err := cacheOptKey(*opt)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := seen[k]; ok {
+			duplicate[k] = struct{}{}
+		}
+		seen[k] = opt
+	}
+
+	var duplicates []*controlapi.CacheOptionsEntry
+	for k := range duplicate {
+		duplicates = append(duplicates, seen[k])
+	}
+	return duplicates, nil
+}
+
+func cacheOptKey(opt controlapi.CacheOptionsEntry) (string, error) {
+	if opt.Type == "registry" && opt.Attrs["ref"] != "" {
+		return opt.Attrs["ref"], nil
+	}
+	var rawOpt = struct {
+		Type  string
+		Attrs map[string]string
+	}{
+		Type:  opt.Type,
+		Attrs: opt.Attrs,
+	}
+	hash, err := hashstructure.Hash(rawOpt, hashstructure.FormatV2, nil)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprint(opt.Type, ":", hash), nil
+}
+
+type roContentStore struct {
+	content.Store
+}
+
+func (cs *roContentStore) Writer(ctx context.Context, opts ...content.WriterOpt) (content.Writer, error) {
+	return nil, errors.Errorf("read-only content store")
+}
+
+func (cs *roContentStore) Delete(ctx context.Context, dgst digest.Digest) error {
+	return errors.Errorf("read-only content store")
+}
+
+func (cs *roContentStore) Update(ctx context.Context, info content.Info, fieldpaths ...string) (content.Info, error) {
+	return content.Info{}, errors.Errorf("read-only content store")
+}
+
+func (cs *roContentStore) Abort(ctx context.Context, ref string) error {
+	return errors.Errorf("read-only content store")
+}
+
+// earthly
+var emptyLogVertexSize int
+
+// earthly
+func init() {
+	emptyLogVertex := controlapi.VertexLog{}
+	emptyLogVertexSize = emptyLogVertex.Size()
 }
