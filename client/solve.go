@@ -49,6 +49,7 @@ type SolveOpt struct {
 	SessionPreInitialized bool             // TODO: refactor to better session syncing
 	Internal              bool
 	SourcePolicy          *spb.Policy
+	Ref                   string
 }
 
 type ExportEntry struct {
@@ -95,6 +96,9 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	}
 
 	ref := identity.NewID()
+	if opt.Ref != "" {
+		ref = opt.Ref
+	}
 	eg, ctx := errgroup.WithContext(ctx)
 
 	statusContext, cancelStatus := context.WithCancel(context.Background())
