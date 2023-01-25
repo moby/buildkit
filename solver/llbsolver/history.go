@@ -45,9 +45,10 @@ type HistoryQueue struct {
 }
 
 type StatusImportResult struct {
-	Descriptor     ocispecs.Descriptor
-	NumCachedSteps int
-	NumTotalSteps  int
+	Descriptor        ocispecs.Descriptor
+	NumCachedSteps    int
+	NumCompletedSteps int
+	NumTotalSteps     int
 }
 
 func NewHistoryQueue(opt HistoryQueueOpt) *HistoryQueue {
@@ -461,16 +462,23 @@ func (h *HistoryQueue) ImportStatus(ctx context.Context, ch chan *client.SolveSt
 		}
 	}()
 
-	vtxMap := make(map[digest.Digest]bool)
+	type vtxInfo struct {
+		cached    bool
+		completed bool
+	}
+	vtxMap := make(map[digest.Digest]*vtxInfo)
 
 	buf := make([]byte, 32*1024)
 	for st := range ch {
 		for _, vtx := range st.Vertexes {
 			if _, ok := vtxMap[vtx.Digest]; !ok {
-				vtxMap[vtx.Digest] = false
+				vtxMap[vtx.Digest] = &vtxInfo{}
 			}
 			if vtx.Cached {
-				vtxMap[vtx.Digest] = true
+				vtxMap[vtx.Digest].cached = true
+			}
+			if vtx.Completed != nil {
+				vtxMap[vtx.Digest].completed = true
 			}
 		}
 
@@ -502,16 +510,21 @@ func (h *HistoryQueue) ImportStatus(ctx context.Context, ch chan *client.SolveSt
 	}
 
 	numCached := 0
-	for _, cached := range vtxMap {
-		if cached {
+	numCompleted := 0
+	for _, info := range vtxMap {
+		if info.cached {
 			numCached++
+		}
+		if info.completed {
+			numCompleted++
 		}
 	}
 
 	return &StatusImportResult{
-		Descriptor:     *desc,
-		NumCachedSteps: numCached,
-		NumTotalSteps:  len(vtxMap),
+		Descriptor:        *desc,
+		NumCachedSteps:    numCached,
+		NumCompletedSteps: numCompleted,
+		NumTotalSteps:     len(vtxMap),
 	}, release, nil
 }
 

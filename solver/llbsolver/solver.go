@@ -295,6 +295,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 				MediaType: st.Descriptor.MediaType,
 			}
 			rec.NumCachedSteps = int32(st.NumCachedSteps)
+			rec.NumCompletedSteps = int32(st.NumCompletedSteps)
 			rec.NumTotalSteps = int32(st.NumTotalSteps)
 			mu.Unlock()
 			return nil
