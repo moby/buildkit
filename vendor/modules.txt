@@ -215,7 +215,7 @@ github.com/containerd/cgroups/stats/v1
 # github.com/containerd/console v1.0.3
 ## explicit; go 1.13
 github.com/containerd/console
-# github.com/containerd/containerd v1.6.14
+# github.com/containerd/containerd v1.6.16-0.20230124210447-1709cfe273d9
 ## explicit; go 1.17
 github.com/containerd/containerd
 github.com/containerd/containerd/api/services/containers/v1
@@ -617,7 +617,7 @@ github.com/opencontainers/selinux/pkg/pwalkdir
 # github.com/package-url/packageurl-go v0.1.1-0.20220428063043-89078438f170
 ## explicit; go 1.17
 github.com/package-url/packageurl-go
-# github.com/pelletier/go-toml v1.9.4
+# github.com/pelletier/go-toml v1.9.5
 ## explicit; go 1.12
 github.com/pelletier/go-toml
 # github.com/pkg/browser v0.0.0-20210115035449-ce105d075bb4
