@@ -51,6 +51,8 @@ const (
 )
 
 type ExporterRequest struct {
+	Type           string
+	Attrs          map[string]string
 	Exporter       exporter.ExporterInstance
 	CacheExporters []RemoteCacheExporter
 }
@@ -139,7 +141,7 @@ func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 	return s.bridge(b)
 }
 
-func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend.SolveRequest, j *solver.Job) (func(*Result, exporter.DescriptorReference, error) error, error) {
+func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend.SolveRequest, exp ExporterRequest, j *solver.Job) (func(*Result, exporter.DescriptorReference, error) error, error) {
 	var stopTrace func() []tracetest.SpanStub
 
 	if s := trace.SpanFromContext(ctx); s.SpanContext().IsValid() {
@@ -157,6 +159,14 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 		FrontendAttrs: req.FrontendOpt,
 		CreatedAt:     &st,
 	}
+
+	if exp.Type != "" {
+		rec.Exporters = []*controlapi.Exporter{{
+			Type:  exp.Type,
+			Attrs: exp.Attrs,
+		}}
+	}
+
 	if err := s.history.Update(ctx, &controlapi.BuildHistoryEvent{
 		Type:   controlapi.BuildHistoryEventType_STARTED,
 		Record: rec,
@@ -413,7 +423,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	if internal {
 		defer j.CloseProgress()
 	} else {
-		rec, err1 := s.recordBuildHistory(ctx, id, req, j)
+		rec, err1 := s.recordBuildHistory(ctx, id, req, exp, j)
 		if err != nil {
 			defer j.CloseProgress()
 			return nil, err1
