@@ -206,6 +206,7 @@ message BuildHistoryRecord {
 	bool pinned = 14;
 	int32 numCachedSteps = 15;
 	int32 numTotalSteps = 16;
+	int32 numCompletedSteps = 17;
 	// TODO: tags
 	// TODO: unclipped logs
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/moby/buildkit/cmd/buildctl/build"
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth/authprovider"
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
@@ -99,6 +100,10 @@ var buildCommand = cli.Command{
 		cli.StringFlag{
 			Name:  "source-policy-file",
 			Usage: "Read source policy file from a JSON file",
+		},
+		cli.StringFlag{
+			Name:  "ref-file",
+			Usage: "Write build ref to a file",
 		},
 	},
 }
@@ -209,6 +214,8 @@ func buildAction(clicontext *cli.Context) error {
 
 	eg, ctx := errgroup.WithContext(bccommon.CommandContext(clicontext))
 
+	ref := identity.NewID()
+
 	solveOpt := client.SolveOpt{
 		Exports: exports,
 		// LocalDirs is set later
@@ -220,6 +227,7 @@ func buildAction(clicontext *cli.Context) error {
 		Session:             attachable,
 		AllowedEntitlements: allowed,
 		SourcePolicy:        srcPol,
+		Ref:                 ref,
 	}
 
 	solveOpt.FrontendAttrs, err = build.ParseOpt(clicontext.StringSlice("opt"))
@@ -253,6 +261,13 @@ func buildAction(clicontext *cli.Context) error {
 		if clicontext.Bool("no-cache") {
 			solveOpt.FrontendAttrs["no-cache"] = ""
 		}
+	}
+
+	refFile := clicontext.String("ref-file")
+	if refFile != "" {
+		defer func() {
+			continuity.AtomicWriteFile(refFile, []byte(ref), 0666)
+		}()
 	}
 
 	// not using shared context to not disrupt display but let is finish reporting errors
