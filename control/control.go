@@ -44,6 +44,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -248,6 +249,9 @@ func (c *Controller) Export(ctx context.Context, req *tracev1.ExportTraceService
 }
 
 func (c *Controller) ListenBuildHistory(req *controlapi.BuildHistoryRequest, srv controlapi.Control_ListenBuildHistoryServer) error {
+	if err := sendTimestampHeader(srv); err != nil {
+		return err
+	}
 	return c.history.Listen(srv.Context(), req, func(h *controlapi.BuildHistoryEvent) error {
 		if err := srv.Send(h); err != nil {
 			return err
@@ -426,6 +430,8 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	}, llbsolver.ExporterRequest{
 		Exporter:       expi,
 		CacheExporters: cacheExporters,
+		Type:           req.Exporter,
+		Attrs:          req.ExporterAttrs,
 	}, req.Entitlements, procs, req.Internal, req.SourcePolicy)
 	if err != nil {
 		return nil, err
@@ -436,6 +442,9 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 }
 
 func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Control_StatusServer) error {
+	if err := sendTimestampHeader(stream); err != nil {
+		return err
+	}
 	ch := make(chan *client.SolveStatus, 8)
 
 	eg, ctx := errgroup.WithContext(stream.Context())
@@ -644,4 +653,10 @@ func (cs *roContentStore) Update(ctx context.Context, info content.Info, fieldpa
 
 func (cs *roContentStore) Abort(ctx context.Context, ref string) error {
 	return errors.Errorf("read-only content store")
+}
+
+const timestampKey = "buildkit-current-timestamp"
+
+func sendTimestampHeader(srv grpc.ServerStream) error {
+	return srv.SendHeader(metadata.Pairs(timestampKey, time.Now().Format(time.RFC3339Nano)))
 }
