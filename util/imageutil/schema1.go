@@ -69,7 +69,7 @@ func convertSchema1ConfigMeta(in []byte) ([]byte, error) {
 		}
 	}
 
-	dt, err := json.MarshalIndent(img, "", "  ")
+	dt, err := json.MarshalIndent(img, "", "   ")
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to marshal schema1 config")
 	}

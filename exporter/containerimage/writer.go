@@ -291,7 +291,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", len(ps.Platforms)+i)] = mfst.Digest.String()
 	}
 
-	idxBytes, err := json.MarshalIndent(idx, "", "  ")
+	idxBytes, err := json.MarshalIndent(idx, "", "   ")
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to marshal index")
 	}
@@ -416,7 +416,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *Ima
 		mfst.Layers = append(mfst.Layers, desc)
 	}
 
-	mfstJSON, err := json.MarshalIndent(mfst, "", "  ")
+	mfstJSON, err := json.MarshalIndent(mfst, "", "   ")
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to marshal manifest")
 	}
@@ -528,7 +528,7 @@ func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *Ima
 		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i+1)] = desc.Digest.String()
 	}
 
-	mfstJSON, err := json.MarshalIndent(mfst, "", "  ")
+	mfstJSON, err := json.MarshalIndent(mfst, "", "   ")
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to marshal manifest")
 	}
