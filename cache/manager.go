@@ -1169,6 +1169,7 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt
 			cr.mu.Unlock()
 		}
 		if err != nil {
+			cm.mu.Unlock()
 			return err
 		}
 		toDelete = toDelete[:1]
