@@ -199,6 +199,7 @@ func main() {
 		},
 	)
 	app.Flags = append(app.Flags, appFlags...)
+	app.Flags = append(app.Flags, serviceFlags()...)
 
 	app.Action = func(c *cli.Context) error {
 		// TODO: On Windows this always returns -1. The actual "are you admin" check is very Windows-specific.
@@ -254,6 +255,15 @@ func main() {
 			return errors.Wrapf(err, "failed to create %s", root)
 		}
 
+		// Stop if we are registering or unregistering against Windows SCM.
+		stop, err := registerUnregisterService(cfg.Root)
+		if err != nil {
+			logrus.Fatal(err)
+		}
+		if stop {
+			return nil
+		}
+
 		lockPath := filepath.Join(root, "buildkitd.lock")
 		lock := flock.New(lockPath)
 		locked, err := lock.TryLock()
@@ -291,6 +301,12 @@ func main() {
 				}
 			}
 		}
+
+		// Launch as a Windows Service if necessary
+		if err := launchService(server); err != nil {
+			logrus.Fatal(err)
+		}
+
 		errCh := make(chan error, 1)
 		if err := serveGRPC(cfg.GRPC, server, errCh); err != nil {
 			return err
@@ -486,6 +502,8 @@ func applyMainFlags(c *cli.Context, cfg *config.Config) error {
 	if tlsca := c.String("tlscacert"); tlsca != "" {
 		cfg.GRPC.TLS.CA = tlsca
 	}
+	applyPlatformFlags(c)
+
 	return nil
 }
 
