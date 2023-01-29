@@ -4,6 +4,7 @@ import (
 	"context"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -112,7 +113,7 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 
 	if tracingSocket != "" {
 		// https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/protocol/exporter.md
-		meta.Env = append(meta.Env, "OTEL_TRACES_EXPORTER=otlp", "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=unix:///dev/otel-grpc.sock", "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=grpc")
+		meta.Env = append(meta.Env, tracingEnvVars...)
 		meta.Env = append(meta.Env, traceexec.Environ(ctx)...)
 	}
 
@@ -183,12 +184,20 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 	}
 
 	if tracingSocket != "" {
-		s.Mounts = append(s.Mounts, specs.Mount{
-			Destination: "/dev/otel-grpc.sock",
-			Type:        "bind",
-			Source:      tracingSocket,
-			Options:     []string{"ro", "rbind"},
-		})
+		if runtime.GOOS == "windows" {
+			s.Mounts = append(s.Mounts, specs.Mount{
+				Destination: `\\.\pipe\otel-grpc`,
+				Source:      tracingSocket,
+				Options:     []string{"ro"},
+			})
+		} else {
+			s.Mounts = append(s.Mounts, specs.Mount{
+				Destination: "/dev/otel-grpc.sock",
+				Type:        "bind",
+				Source:      tracingSocket,
+				Options:     []string{"ro", "rbind"},
+			})
+		}
 	}
 
 	s.Mounts = dedupMounts(s.Mounts)

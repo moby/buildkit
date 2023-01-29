@@ -10,6 +10,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+var tracingEnvVars = []string{
+	"OTEL_TRACES_EXPORTER=otlp",
+	"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=npipe:////./pipe/otel-grpc",
+	"OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=grpc",
+}
+
 func generateMountOpts(resolvConf, hostsFile string) ([]oci.SpecOpts, error) {
 	return nil, nil
 }
