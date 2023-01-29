@@ -21,6 +21,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+var tracingEnvVars = []string{
+	"OTEL_TRACES_EXPORTER=otlp",
+	"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=unix:///dev/otel-grpc.sock",
+	"OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=grpc",
+}
+
 func generateMountOpts(resolvConf, hostsFile string) ([]oci.SpecOpts, error) {
 	return []oci.SpecOpts{
 		// https://github.com/moby/buildkit/issues/429
