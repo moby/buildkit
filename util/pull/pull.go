@@ -10,7 +10,7 @@ import (
 	"github.com/containerd/containerd/reference"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
-	"github.com/containerd/containerd/remotes/docker/schema1"
+	"github.com/containerd/containerd/remotes/docker/schema1" //nolint:staticcheck // SA1019 deprecated
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/flightcontrol"

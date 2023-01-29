@@ -14,7 +14,7 @@ This doc includes:
 
 To build the `containerd` daemon, and the `ctr` simple test client, the following build system dependencies are required:
 
-* Go 1.13.x or above except 1.14.x
+* Go 1.18.x or above
 * Protoc 3.x compiler and headers (download at the [Google protobuf releases page](https://github.com/protocolbuffers/protobuf/releases))
 * Btrfs headers and libraries for your distribution. Note that building the btrfs driver can be disabled via the build tag `no_btrfs`, removing this dependency.
 
@@ -40,9 +40,13 @@ sudo unzip protoc-3.11.4-linux-x86_64.zip -d /usr/local
 `containerd` uses [Btrfs](https://en.wikipedia.org/wiki/Btrfs) it means that you
 need to satisfy these dependencies in your system:
 
-* CentOS/Fedora: `yum install btrfs-progs-devel`
+* CentOS 7 / Fedora: `yum install btrfs-progs-devel`
+  * Note with CentOS 9: [Btrfs has been deprecated](https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/7/html/storage_administration_guide/ch-btrfs) in RHEL / CentOS 7.4, and removed in RHEL/CentOS 9 .
+    Please see the [release notes](https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/7/html/7.4_release_notes/chap-red_hat_enterprise_linux-7.4_release_notes-deprecated_functionality_in_rhel7#idm139789147351408) for additional information on deprecated features.
 * Debian/Ubuntu: `apt-get install btrfs-progs libbtrfs-dev`
   * Debian(before Buster)/Ubuntu(before 19.10): `apt-get install btrfs-tools`
+* For unsupported [Btrfs](https://en.wikipedia.org/wiki/Btrfs) system:
+  * Use the `no_btrfs` build tag to build without btrfs support.
 
 At this point you are ready to build `containerd` yourself!
 
@@ -236,6 +240,7 @@ During the automated CI the unit tests and integration tests are run as part of 
  - `make test`: run all non-integration tests that do not require `root` privileges
  - `make root-test`: run all non-integration tests which require `root`
  - `make integration`: run all tests, including integration tests and those which require `root`. `TESTFLAGS_PARALLEL` can be used to control parallelism. For example, `TESTFLAGS_PARALLEL=1 make integration` will lead a non-parallel execution. The default value of `TESTFLAGS_PARALLEL` is **8**.
+ - `make cri-integration`: [CRI Integration Tests](https://github.com/containerd/containerd/blob/main/docs/cri/testing.md#cri-integration-test) run cri integration tests
 
 To execute a specific test or set of tests you can use the `go test` capabilities
 without using the `Makefile` targets. The following examples show how to specify a test
@@ -271,7 +276,7 @@ In addition to `go test`-based testing executed via the `Makefile` targets, the 
 With this tool you can stress a running containerd daemon for a specified period of time, selecting a concurrency level to generate stress against the daemon. The following command is an example of having five workers running for two hours against a default containerd gRPC socket address:
 
 ```sh
-containerd-stress -c 5 -t 120
+containerd-stress -c 5 -d 120m
 ```
 
 For more information on this tool's options please run `containerd-stress --help`.
