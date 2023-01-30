@@ -8,14 +8,17 @@ import (
 
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
+	"github.com/moby/buildkit/frontend/dockerfile/parser"
+	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/pkg/errors"
 )
 
-func detectRunMount(cmd *command, allDispatchStates *dispatchStates) bool {
+func detectRunMount(cmd *command, allDispatchStates *dispatchStates, shlex *shell.Lex, metaArgs map[string]string) (map[string]struct{}, error) {
 	if c, ok := cmd.Command.(*instructions.RunCommand); ok {
 		mounts := instructions.GetMounts(c)
 		sources := make([]*dispatchState, len(mounts))
+		usedArgs := map[string]struct{}{}
 		for i, mount := range mounts {
 			var from string
 			if mount.From == "" {
@@ -24,7 +27,14 @@ func detectRunMount(cmd *command, allDispatchStates *dispatchStates) bool {
 				// mount.Type because it might be a variable)
 				from = emptyImageName
 			} else {
-				from = mount.From
+				name, used, err := shlex.ProcessWordWithMatches(mount.From, metaArgs)
+				if err != nil {
+					return nil, parser.WithLocation(err, cmd.Location())
+				}
+				for k := range used {
+					usedArgs[k] = struct{}{}
+				}
+				from = name
 			}
 			stn, ok := allDispatchStates.findStateByName(from)
 			if !ok {
@@ -37,10 +47,10 @@ func detectRunMount(cmd *command, allDispatchStates *dispatchStates) bool {
 			sources[i] = stn
 		}
 		cmd.sources = sources
-		return true
+		return usedArgs, nil
 	}
 
-	return false
+	return nil, nil
 }
 
 func setCacheUIDGID(m *instructions.Mount, st llb.State) llb.State {
