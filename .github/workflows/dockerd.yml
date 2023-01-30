@@ -49,10 +49,17 @@ jobs:
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
           buildkitd-flags: --debug
       -
+        name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          tag-sha: true # add git short SHA as Docker tag
+      -
         name: Build
         if: steps.build.outputs.result == 'true'
         uses: docker/build-push-action@v3
         with:
+          labels: ${{ steps.meta.outputs.labels }}
           context: ${{ env.DOCKER_VERSION }}
           target: binary
           outputs: /tmp/moby
