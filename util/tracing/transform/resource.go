@@ -15,16 +15,14 @@
 package transform
 
 import (
-	"go.opentelemetry.io/otel/sdk/instrumentation"
-	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
+	"go.opentelemetry.io/otel/sdk/resource"
+	resourcepb "go.opentelemetry.io/proto/otlp/resource/v1"
 )
 
-func InstrumentationScope(il instrumentation.Scope) *commonpb.InstrumentationScope {
-	if il == (instrumentation.Scope{}) {
+// Resource transforms a Resource into an OTLP Resource.
+func Resource(r *resource.Resource) *resourcepb.Resource {
+	if r == nil {
 		return nil
 	}
-	return &commonpb.InstrumentationScope{
-		Name:    il.Name,
-		Version: il.Version,
-	}
+	return &resourcepb.Resource{Attributes: ResourceAttributes(r)}
 }

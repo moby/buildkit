@@ -1,259 +1,205 @@
+// Copyright The OpenTelemetry Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package transform
 
 import (
-	"time"
-
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/sdk/instrumentation"
-	"go.opentelemetry.io/otel/sdk/resource"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
-	v11 "go.opentelemetry.io/proto/otlp/common/v1"
-	v1 "go.opentelemetry.io/proto/otlp/resource/v1"
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 )
 
-const (
-	maxMessageEventsPerSpan = 128
-)
-
-// Spans transforms slice of OTLP ResourceSpan into a slice of SpanSnapshots.
-func Spans(sdl []*tracepb.ResourceSpans) []tracesdk.ReadOnlySpan {
+// Spans transforms a slice of OpenTelemetry spans into a slice of OTLP
+// ResourceSpans.
+func Spans(sdl []tracesdk.ReadOnlySpan) []*tracepb.ResourceSpans {
 	if len(sdl) == 0 {
 		return nil
 	}
 
-	var out []tracesdk.ReadOnlySpan
+	rsm := make(map[attribute.Distinct]*tracepb.ResourceSpans)
 
+	type key struct {
+		r  attribute.Distinct
+		is instrumentation.Scope
+	}
+	ssm := make(map[key]*tracepb.ScopeSpans)
+
+	var resources int
 	for _, sd := range sdl {
 		if sd == nil {
 			continue
 		}
 
-		for _, sdi := range sd.ScopeSpans {
-			sda := make([]tracesdk.ReadOnlySpan, len(sdi.Spans))
-			for i, s := range sdi.Spans {
-				sda[i] = &readOnlySpan{
-					pb:        s,
-					is:        sdi.Scope,
-					resource:  sd.Resource,
-					schemaURL: sd.SchemaUrl,
-				}
+		rKey := sd.Resource().Equivalent()
+		k := key{
+			r:  rKey,
+			is: sd.InstrumentationScope(),
+		}
+		scopeSpan, iOk := ssm[k]
+		if !iOk {
+			// Either the resource or instrumentation scope were unknown.
+			scopeSpan = &tracepb.ScopeSpans{
+				Scope:     InstrumentationScope(sd.InstrumentationScope()),
+				Spans:     []*tracepb.Span{},
+				SchemaUrl: sd.InstrumentationScope().SchemaURL,
 			}
-			out = append(out, sda...)
+		}
+		scopeSpan.Spans = append(scopeSpan.Spans, span(sd))
+		ssm[k] = scopeSpan
+
+		rs, rOk := rsm[rKey]
+		if !rOk {
+			resources++
+			// The resource was unknown.
+			rs = &tracepb.ResourceSpans{
+				Resource:   Resource(sd.Resource()),
+				ScopeSpans: []*tracepb.ScopeSpans{scopeSpan},
+				SchemaUrl:  sd.Resource().SchemaURL(),
+			}
+			rsm[rKey] = rs
+			continue
+		}
+
+		// The resource has been seen before. Check if the instrumentation
+		// library lookup was unknown because if so we need to add it to the
+		// ResourceSpans. Otherwise, the instrumentation library has already
+		// been seen and the append we did above will be included it in the
+		// ScopeSpans reference.
+		if !iOk {
+			rs.ScopeSpans = append(rs.ScopeSpans, scopeSpan)
 		}
 	}
 
-	return out
-}
-
-type readOnlySpan struct {
-	// Embed the interface to implement the private method.
-	tracesdk.ReadOnlySpan
-
-	pb        *tracepb.Span
-	is        *v11.InstrumentationScope
-	resource  *v1.Resource
-	schemaURL string
-}
-
-func (s *readOnlySpan) Name() string {
-	return s.pb.Name
-}
-
-func (s *readOnlySpan) SpanContext() trace.SpanContext {
-	var tid trace.TraceID
-	copy(tid[:], s.pb.TraceId)
-	var sid trace.SpanID
-	copy(sid[:], s.pb.SpanId)
-
-	st, _ := trace.ParseTraceState(s.pb.TraceState)
-
-	return trace.NewSpanContext(trace.SpanContextConfig{
-		TraceID:    tid,
-		SpanID:     sid,
-		TraceState: st,
-	})
-}
-
-func (s *readOnlySpan) Parent() trace.SpanContext {
-	if len(s.pb.ParentSpanId) == 0 {
-		return trace.SpanContext{}
+	// Transform the categorized map into a slice
+	rss := make([]*tracepb.ResourceSpans, 0, resources)
+	for _, rs := range rsm {
+		rss = append(rss, rs)
 	}
-	var tid trace.TraceID
-	copy(tid[:], s.pb.TraceId)
-	var psid trace.SpanID
-	copy(psid[:], s.pb.ParentSpanId)
-	return trace.NewSpanContext(trace.SpanContextConfig{
-		TraceID: tid,
-		SpanID:  psid,
-	})
+	return rss
 }
 
-func (s *readOnlySpan) SpanKind() trace.SpanKind {
-	return spanKind(s.pb.Kind)
-}
-
-func (s *readOnlySpan) StartTime() time.Time {
-	return time.Unix(0, int64(s.pb.StartTimeUnixNano))
-}
-
-func (s *readOnlySpan) EndTime() time.Time {
-	return time.Unix(0, int64(s.pb.EndTimeUnixNano))
-}
-
-func (s *readOnlySpan) Attributes() []attribute.KeyValue {
-	return Attributes(s.pb.Attributes)
-}
-
-func (s *readOnlySpan) Links() []tracesdk.Link {
-	return links(s.pb.Links)
-}
-
-func (s *readOnlySpan) Events() []tracesdk.Event {
-	return spanEvents(s.pb.Events)
-}
-
-func (s *readOnlySpan) Status() tracesdk.Status {
-	return tracesdk.Status{
-		Code:        statusCode(s.pb.Status),
-		Description: s.pb.Status.GetMessage(),
-	}
-}
-
-func (s *readOnlySpan) InstrumentationScope() instrumentation.Scope {
-	return instrumentationScope(s.is)
-}
-
-// Deprecated: use InstrumentationScope.
-func (s *readOnlySpan) InstrumentationLibrary() instrumentation.Library {
-	return s.InstrumentationScope()
-}
-
-// Resource returns information about the entity that produced the span.
-func (s *readOnlySpan) Resource() *resource.Resource {
-	if s.resource == nil {
+// span transforms a Span into an OTLP span.
+func span(sd tracesdk.ReadOnlySpan) *tracepb.Span {
+	if sd == nil {
 		return nil
 	}
-	if s.schemaURL != "" {
-		return resource.NewWithAttributes(s.schemaURL, Attributes(s.resource.Attributes)...)
+
+	tid := sd.SpanContext().TraceID()
+	sid := sd.SpanContext().SpanID()
+
+	s := &tracepb.Span{
+		TraceId:                tid[:],
+		SpanId:                 sid[:],
+		TraceState:             sd.SpanContext().TraceState().String(),
+		Status:                 status(sd.Status().Code, sd.Status().Description),
+		StartTimeUnixNano:      uint64(sd.StartTime().UnixNano()),
+		EndTimeUnixNano:        uint64(sd.EndTime().UnixNano()),
+		Links:                  links(sd.Links()),
+		Kind:                   spanKind(sd.SpanKind()),
+		Name:                   sd.Name(),
+		Attributes:             KeyValues(sd.Attributes()),
+		Events:                 spanEvents(sd.Events()),
+		DroppedAttributesCount: uint32(sd.DroppedAttributes()),
+		DroppedEventsCount:     uint32(sd.DroppedEvents()),
+		DroppedLinksCount:      uint32(sd.DroppedLinks()),
 	}
-	return resource.NewSchemaless(Attributes(s.resource.Attributes)...)
+
+	if psid := sd.Parent().SpanID(); psid.IsValid() {
+		s.ParentSpanId = psid[:]
+	}
+
+	return s
 }
 
-// DroppedAttributes returns the number of attributes dropped by the span
-// due to limits being reached.
-func (s *readOnlySpan) DroppedAttributes() int {
-	return int(s.pb.DroppedAttributesCount)
-}
-
-// DroppedLinks returns the number of links dropped by the span due to
-// limits being reached.
-func (s *readOnlySpan) DroppedLinks() int {
-	return int(s.pb.DroppedLinksCount)
-}
-
-// DroppedEvents returns the number of events dropped by the span due to
-// limits being reached.
-func (s *readOnlySpan) DroppedEvents() int {
-	return int(s.pb.DroppedEventsCount)
-}
-
-// ChildSpanCount returns the count of spans that consider the span a
-// direct parent.
-func (s *readOnlySpan) ChildSpanCount() int {
-	return 0
-}
-
-var _ tracesdk.ReadOnlySpan = &readOnlySpan{}
-
-// status transform a OTLP span status into span code.
-func statusCode(st *tracepb.Status) codes.Code {
-	switch st.Code {
-	case tracepb.Status_STATUS_CODE_ERROR:
-		return codes.Error
+// status transform a span code and message into an OTLP span status.
+func status(status codes.Code, message string) *tracepb.Status {
+	var c tracepb.Status_StatusCode
+	switch status {
+	case codes.Ok:
+		c = tracepb.Status_STATUS_CODE_OK
+	case codes.Error:
+		c = tracepb.Status_STATUS_CODE_ERROR
 	default:
-		return codes.Ok
+		c = tracepb.Status_STATUS_CODE_UNSET
+	}
+	return &tracepb.Status{
+		Code:    c,
+		Message: message,
 	}
 }
 
-// links transforms OTLP span links to span Links.
-func links(links []*tracepb.Span_Link) []tracesdk.Link {
+// links transforms span Links to OTLP span links.
+func links(links []tracesdk.Link) []*tracepb.Span_Link {
 	if len(links) == 0 {
 		return nil
 	}
 
-	sl := make([]tracesdk.Link, 0, len(links))
+	sl := make([]*tracepb.Span_Link, 0, len(links))
 	for _, otLink := range links {
 		// This redefinition is necessary to prevent otLink.*ID[:] copies
 		// being reused -- in short we need a new otLink per iteration.
 		otLink := otLink
 
-		var tid trace.TraceID
-		copy(tid[:], otLink.TraceId)
-		var sid trace.SpanID
-		copy(sid[:], otLink.SpanId)
+		tid := otLink.SpanContext.TraceID()
+		sid := otLink.SpanContext.SpanID()
 
-		sctx := trace.NewSpanContext(trace.SpanContextConfig{
-			TraceID: tid,
-			SpanID:  sid,
-		})
-
-		sl = append(sl, tracesdk.Link{
-			SpanContext: sctx,
-			Attributes:  Attributes(otLink.Attributes),
+		sl = append(sl, &tracepb.Span_Link{
+			TraceId:                tid[:],
+			SpanId:                 sid[:],
+			Attributes:             KeyValues(otLink.Attributes),
+			DroppedAttributesCount: uint32(otLink.DroppedAttributeCount),
 		})
 	}
 	return sl
 }
 
-// spanEvents transforms OTLP span events to span Events.
-func spanEvents(es []*tracepb.Span_Event) []tracesdk.Event {
+// spanEvents transforms span Events to an OTLP span events.
+func spanEvents(es []tracesdk.Event) []*tracepb.Span_Event {
 	if len(es) == 0 {
 		return nil
 	}
 
-	evCount := len(es)
-	if evCount > maxMessageEventsPerSpan {
-		evCount = maxMessageEventsPerSpan
-	}
-	events := make([]tracesdk.Event, 0, evCount)
-	messageEvents := 0
-
+	events := make([]*tracepb.Span_Event, len(es))
 	// Transform message events
-	for _, e := range es {
-		if messageEvents >= maxMessageEventsPerSpan {
-			break
+	for i := 0; i < len(es); i++ {
+		events[i] = &tracepb.Span_Event{
+			Name:                   es[i].Name,
+			TimeUnixNano:           uint64(es[i].Time.UnixNano()),
+			Attributes:             KeyValues(es[i].Attributes),
+			DroppedAttributesCount: uint32(es[i].DroppedAttributeCount),
 		}
-		messageEvents++
-		events = append(events,
-			tracesdk.Event{
-				Name:                  e.Name,
-				Time:                  time.Unix(0, int64(e.TimeUnixNano)),
-				Attributes:            Attributes(e.Attributes),
-				DroppedAttributeCount: int(e.DroppedAttributesCount),
-			},
-		)
 	}
-
 	return events
 }
 
-// spanKind transforms a an OTLP span kind to SpanKind.
-func spanKind(kind tracepb.Span_SpanKind) trace.SpanKind {
+// spanKind transforms a SpanKind to an OTLP span kind.
+func spanKind(kind trace.SpanKind) tracepb.Span_SpanKind {
 	switch kind {
-	case tracepb.Span_SPAN_KIND_INTERNAL:
-		return trace.SpanKindInternal
-	case tracepb.Span_SPAN_KIND_CLIENT:
-		return trace.SpanKindClient
-	case tracepb.Span_SPAN_KIND_SERVER:
-		return trace.SpanKindServer
-	case tracepb.Span_SPAN_KIND_PRODUCER:
-		return trace.SpanKindProducer
-	case tracepb.Span_SPAN_KIND_CONSUMER:
-		return trace.SpanKindConsumer
+	case trace.SpanKindInternal:
+		return tracepb.Span_SPAN_KIND_INTERNAL
+	case trace.SpanKindClient:
+		return tracepb.Span_SPAN_KIND_CLIENT
+	case trace.SpanKindServer:
+		return tracepb.Span_SPAN_KIND_SERVER
+	case trace.SpanKindProducer:
+		return tracepb.Span_SPAN_KIND_PRODUCER
+	case trace.SpanKindConsumer:
+		return tracepb.Span_SPAN_KIND_CONSUMER
 	default:
-		return trace.SpanKindUnspecified
+		return tracepb.Span_SPAN_KIND_UNSPECIFIED
 	}
 }
