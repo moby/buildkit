@@ -97,6 +97,10 @@ DOCKERFILE_RELEASES=labs TESTFLAGS="--run /TestRunGlobalNetwork/worker=oci$/ -v"
 Set `TEST_KEEP_CACHE=1` for the test framework to keep external dependant images in a docker volume
 if you are repeatedly calling `./hack/test` script. This helps to avoid rate limiting on the remote registry side.
 
+If you are working behind a proxy, you can set some of or all
+`HTTP_PROXY=http://ip:port`, `HTTPS_PROXY=http://ip:port`, `NO_PROXY=http://ip:port` for the test framework
+to specify the proxy build args.
+
 Updating vendored dependencies:
 
 ```bash
