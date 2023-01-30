@@ -82,7 +82,7 @@ jobs:
         worker:
           - containerd
           - containerd-rootless
-          - containerd-1.5
+          - containerd-1.6
           - containerd-snapshotter-stargz
           - oci
           - oci-rootless
