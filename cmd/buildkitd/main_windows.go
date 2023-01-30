@@ -8,6 +8,7 @@ import (
 	"net"
 
 	_ "github.com/moby/buildkit/solver/llbsolver/ops"
+	_ "github.com/moby/buildkit/util/system/getuserinfo"
 	"github.com/pkg/errors"
 )
 
