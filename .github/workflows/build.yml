@@ -15,9 +15,6 @@ on:
       - 'v*'
       - 'dockerfile/*'
   pull_request:
-    branches:
-      - 'master'
-      - 'v*'
     paths-ignore:
       - 'README.md'
       - 'docs/**'
