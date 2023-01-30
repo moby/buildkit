@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile-upstream:master
 
 ARG RUNC_VERSION=v1.1.4
-ARG CONTAINERD_VERSION=v1.6.13
-# containerd v1.5 for integration tests
-ARG CONTAINERD_ALT_VERSION_15=v1.5.16
+ARG CONTAINERD_VERSION=v1.7.0-beta.3
+# containerd v1.6 for integration tests
+ARG CONTAINERD_ALT_VERSION_16=v1.6.16
 ARG REGISTRY_VERSION=2.8.0
 ARG ROOTLESSKIT_VERSION=v1.0.1
 ARG CNI_VERSION=v1.1.1
@@ -158,12 +158,12 @@ RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target
   && make bin/ctr \
   && mv bin /out
 
-# containerd v1.5 for integration tests
-FROM containerd-base as containerd-alt-15
-ARG CONTAINERD_ALT_VERSION_15
+# containerd v1.6 for integration tests
+FROM containerd-base as containerd-alt-16
+ARG CONTAINERD_ALT_VERSION_16
 RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target=/root/.cache,type=cache \
   git fetch origin \
-  && git checkout -q "$CONTAINERD_ALT_VERSION_15" \
+  && git checkout -q "$CONTAINERD_ALT_VERSION_16" \
   && make bin/containerd \
   && make bin/containerd-shim-runc-v2 \
   && mv bin /out
@@ -237,13 +237,13 @@ RUN curl -Ls https://raw.githubusercontent.com/moby/moby/v20.10.21/hack/dind > /
   && chmod 0755 /docker-entrypoint.sh
 ENTRYPOINT ["/docker-entrypoint.sh"]
 # musl is needed to directly use the registry binary that is built on alpine
-ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.5=/opt/containerd-alt-15/bin"
+ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.6=/opt/containerd-alt-16/bin"
 ENV BUILDKIT_INTEGRATION_SNAPSHOTTER=stargz
 ENV CGO_ENABLED=0
 COPY --link --from=nydus /out/nydus-static/* /usr/bin/
 COPY --link --from=stargz-snapshotter /out/* /usr/bin/
 COPY --link --from=rootlesskit /rootlesskit /usr/bin/
-COPY --link --from=containerd-alt-15 /out/containerd* /opt/containerd-alt-15/bin/
+COPY --link --from=containerd-alt-16 /out/containerd* /opt/containerd-alt-16/bin/
 COPY --link --from=registry /bin/registry /usr/bin/
 COPY --link --from=runc /usr/bin/runc /usr/bin/
 COPY --link --from=containerd /out/containerd* /usr/bin/
