@@ -1137,9 +1137,9 @@ func testSecretMounts(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	// test optional
+	// test optional, mount should not exist when secret not present in SolveOpt
 	st = llb.Image("busybox:latest").
-		Run(llb.Shlex(`echo secret2`), llb.AddSecret("/run/secrets/mysecret2", llb.SecretOptional))
+		Run(llb.Shlex(`test ! -f /run/secrets/mysecret2`), llb.AddSecret("/run/secrets/mysecret2", llb.SecretOptional))
 
 	def, err = st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -1173,6 +1173,20 @@ func testSecretMounts(t *testing.T, sb integration.Sandbox) {
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Session: []session.Attachable{secretsprovider.FromMap(map[string][]byte{
 			"mysecret": []byte("pw"),
+		})},
+	}, nil)
+	require.NoError(t, err)
+
+	// test empty cert still creates secret file
+	st = llb.Image("busybox:latest").
+		Run(llb.Shlex(`test -f /run/secrets/mysecret5`), llb.AddSecret("/run/secrets/mysecret5", llb.SecretID("mysecret")))
+
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Session: []session.Attachable{secretsprovider.FromMap(map[string][]byte{
+			"mysecret": []byte(""),
 		})},
 	}, nil)
 	require.NoError(t, err)
