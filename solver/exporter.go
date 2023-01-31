@@ -116,7 +116,7 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 			return nil, err
 		}
 
-		remotes, err := cm.results.LoadRemotes(ctx, res, opt.CompressionOpt, opt.Session)
+		remotes, err := cm.results.LoadRemotes(ctx, res, opt.CompressionOpt, opt.Session, opt.SourceDateEpoch)
 		if err != nil {
 			return nil, err
 		}

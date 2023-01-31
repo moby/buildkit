@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"context"
 	"io"
+	"time"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
@@ -25,7 +26,7 @@ var emptyDesc = ocispecs.Descriptor{}
 // diff between lower and upper snapshot. If the passed mounts cannot
 // be computed (e.g. because the mounts aren't overlayfs), it returns
 // an error.
-func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper []mount.Mount, mediaType string, ref string, compressorFunc compression.Compressor) (_ ocispecs.Descriptor, ok bool, err error) {
+func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper []mount.Mount, mediaType string, ref string, compressorFunc compression.Compressor, sourceDateEpoch *time.Time) (_ ocispecs.Descriptor, ok bool, err error) {
 	// Get upperdir location if mounts are overlayfs that can be processed by this differ.
 	upperdir, err := overlay.GetUpperdir(lower, upper)
 	if err != nil {
@@ -60,7 +61,7 @@ func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper 
 		}
 		// Close ensure compressorFunc does some finalization works.
 		defer compressed.Close()
-		if err := overlay.WriteUpperdir(ctx, io.MultiWriter(compressed, dgstr.Hash()), upperdir, lower); err != nil {
+		if err := overlay.WriteUpperdir(ctx, io.MultiWriter(compressed, dgstr.Hash()), upperdir, lower, sourceDateEpoch); err != nil {
 			return emptyDesc, false, errors.Wrap(err, "failed to write compressed diff")
 		}
 		if err := compressed.Close(); err != nil {
@@ -71,7 +72,7 @@ func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper 
 		}
 		labels[containerdUncompressed] = dgstr.Digest().String()
 	} else {
-		if err = overlay.WriteUpperdir(ctx, bufW, upperdir, lower); err != nil {
+		if err = overlay.WriteUpperdir(ctx, bufW, upperdir, lower, sourceDateEpoch); err != nil {
 			return emptyDesc, false, errors.Wrap(err, "failed to write diff")
 		}
 	}

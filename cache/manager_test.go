@@ -412,7 +412,7 @@ func TestMergeBlobchainID(t *testing.T) {
 	mergeRef, err := cm.Merge(ctx, mergeInputs, nil)
 	require.NoError(t, err)
 
-	_, err = mergeRef.GetRemotes(ctx, true, config.RefConfig{Compression: compression.New(compression.Default)}, false, nil)
+	_, err = mergeRef.GetRemotes(ctx, true, config.RefConfig{Compression: compression.New(compression.Default)}, false, nil, nil)
 	require.NoError(t, err)
 
 	// verify the merge blobchain ID isn't just set to one of the inputs (regression test)
@@ -616,7 +616,7 @@ func TestExtractOnMutable(t *testing.T) {
 	leaseCtx, done, err := leaseutil.WithLease(ctx, co.lm, leases.WithExpiration(0))
 	require.NoError(t, err)
 
-	err = snap.(*immutableRef).setBlob(leaseCtx, desc)
+	err = snap.(*immutableRef).setBlob(leaseCtx, desc, nil)
 	done(context.TODO())
 	require.NoError(t, err)
 	err = snap.(*immutableRef).computeChainMetadata(leaseCtx, map[string]struct{}{snap.ID(): {}})
@@ -733,10 +733,10 @@ func TestSetBlob(t *testing.T) {
 		Annotations: map[string]string{
 			"containerd.io/uncompressed": digest.FromBytes([]byte("foobar2")).String(),
 		},
-	})
+	}, nil)
 	require.Error(t, err)
 
-	err = snap.(*immutableRef).setBlob(ctx, desc)
+	err = snap.(*immutableRef).setBlob(ctx, desc, nil)
 	require.NoError(t, err)
 	err = snap.(*immutableRef).computeChainMetadata(ctx, map[string]struct{}{snap.ID(): {}})
 	require.NoError(t, err)
@@ -762,7 +762,7 @@ func TestSetBlob(t *testing.T) {
 	err = content.WriteBlob(ctx, co.cs, "ref2", bytes.NewBuffer(b2), desc2)
 	require.NoError(t, err)
 
-	err = snap2.(*immutableRef).setBlob(ctx, desc2)
+	err = snap2.(*immutableRef).setBlob(ctx, desc2, nil)
 	require.NoError(t, err)
 	err = snap2.(*immutableRef).computeChainMetadata(ctx, map[string]struct{}{snap.ID(): {}, snap2.ID(): {}})
 	require.NoError(t, err)
@@ -1171,7 +1171,7 @@ func TestLoopLeaseContent(t *testing.T) {
 	}()
 	var chain []ocispecs.Descriptor
 	for _, compressionType := range compressionLoop {
-		remotes, err := ref.GetRemotes(ctx, true, config.RefConfig{Compression: compression.New(compressionType).SetForce(true)}, false, nil)
+		remotes, err := ref.GetRemotes(ctx, true, config.RefConfig{Compression: compression.New(compressionType).SetForce(true)}, false, nil, nil)
 		require.NoError(t, err)
 		require.Equal(t, 1, len(remotes))
 		require.Equal(t, 1, len(remotes[0].Descriptors))
@@ -1368,7 +1368,7 @@ func testSharingCompressionVariant(ctx context.Context, t *testing.T, co *cmOut,
 		defer aRef.Release(ctx)
 		var bDesc ocispecs.Descriptor
 		for _, compressionType := range append([]compression.Type{testCase.a}, testCase.aVariants...) {
-			remotes, err := aRef.GetRemotes(ctx, true, config.RefConfig{Compression: compression.New(compressionType).SetForce(true)}, false, nil)
+			remotes, err := aRef.GetRemotes(ctx, true, config.RefConfig{Compression: compression.New(compressionType).SetForce(true)}, false, nil, nil)
 			require.NoError(t, err)
 			require.Equal(t, 1, len(remotes))
 			require.Equal(t, 1, len(remotes[0].Descriptors))
@@ -1381,7 +1381,7 @@ func testSharingCompressionVariant(ctx context.Context, t *testing.T, co *cmOut,
 		require.NoError(t, err)
 		defer bRef.Release(ctx)
 		for _, compressionType := range append([]compression.Type{testCase.b}, testCase.bVariants...) {
-			remotes, err := bRef.GetRemotes(ctx, true, config.RefConfig{Compression: compression.New(compressionType).SetForce(true)}, false, nil)
+			remotes, err := bRef.GetRemotes(ctx, true, config.RefConfig{Compression: compression.New(compressionType).SetForce(true)}, false, nil, nil)
 			require.NoError(t, err)
 			require.Equal(t, 1, len(remotes))
 			require.Equal(t, 1, len(remotes[0].Descriptors))
@@ -1730,7 +1730,7 @@ func TestGetRemotes(t *testing.T) {
 			compressionType := compressionType
 			refCfg := config.RefConfig{Compression: compression.New(compressionType).SetForce(true)}
 			eg.Go(func() error {
-				remotes, err := ir.GetRemotes(egctx, true, refCfg, false, nil)
+				remotes, err := ir.GetRemotes(egctx, true, refCfg, false, nil, nil)
 				require.NoError(t, err)
 				require.Equal(t, 1, len(remotes))
 				remote := remotes[0]
@@ -1819,13 +1819,13 @@ func TestGetRemotes(t *testing.T) {
 			compressionType := compressionType
 			refCfg := config.RefConfig{Compression: compression.New(compressionType)}
 			eg.Go(func() error {
-				remotes, err := ir.GetRemotes(egctx, false, refCfg, true, nil)
+				remotes, err := ir.GetRemotes(egctx, false, refCfg, true, nil, nil)
 				require.NoError(t, err)
 				require.True(t, len(remotes) > 0, "for %s : %d", compressionType, len(remotes))
 				gotMain, gotVariants := remotes[0], remotes[1:]
 
 				// Check the main blob is compatible with all == false
-				mainOnly, err := ir.GetRemotes(egctx, false, refCfg, false, nil)
+				mainOnly, err := ir.GetRemotes(egctx, false, refCfg, false, nil, nil)
 				require.NoError(t, err)
 				require.Equal(t, 1, len(mainOnly))
 				mainRemote := mainOnly[0]
@@ -1944,7 +1944,7 @@ func TestNondistributableBlobs(t *testing.T) {
 	ref, err := cm.GetByBlob(ctx, desc, nil, descHandlers)
 	require.NoError(t, err)
 
-	remotes, err := ref.GetRemotes(ctx, true, config.RefConfig{PreferNonDistributable: true}, false, nil)
+	remotes, err := ref.GetRemotes(ctx, true, config.RefConfig{PreferNonDistributable: true}, false, nil, nil)
 	require.NoError(t, err)
 
 	desc2 := remotes[0].Descriptors[0]
@@ -1952,7 +1952,7 @@ func TestNondistributableBlobs(t *testing.T) {
 	require.Equal(t, desc.MediaType, desc2.MediaType)
 	require.Equal(t, desc.URLs, desc2.URLs)
 
-	remotes, err = ref.GetRemotes(ctx, true, config.RefConfig{PreferNonDistributable: false}, false, nil)
+	remotes, err = ref.GetRemotes(ctx, true, config.RefConfig{PreferNonDistributable: false}, false, nil, nil)
 	require.NoError(t, err)
 
 	desc2 = remotes[0].Descriptors[0]

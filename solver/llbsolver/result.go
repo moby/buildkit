@@ -2,6 +2,7 @@ package llbsolver
 
 import (
 	"context"
+	"time"
 
 	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/frontend"
@@ -19,13 +20,13 @@ type Result struct {
 
 type Attestation = frontend.Attestation
 
-func workerRefResolver(refCfg cacheconfig.RefConfig, all bool, g session.Group) func(ctx context.Context, res solver.Result) ([]*solver.Remote, error) {
+func workerRefResolver(refCfg cacheconfig.RefConfig, all bool, g session.Group, sourceDateEpoch *time.Time) func(ctx context.Context, res solver.Result) ([]*solver.Remote, error) {
 	return func(ctx context.Context, res solver.Result) ([]*solver.Remote, error) {
 		ref, ok := res.Sys().(*worker.WorkerRef)
 		if !ok {
 			return nil, errors.Errorf("invalid result: %T", res.Sys())
 		}
 
-		return ref.GetRemotes(ctx, true, refCfg, all, g)
+		return ref.GetRemotes(ctx, true, refCfg, all, g, sourceDateEpoch)
 	}
 }

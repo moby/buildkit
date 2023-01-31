@@ -112,6 +112,8 @@ type CacheExportOpt struct {
 	CompressionOpt *compression.Config
 	// ExportRoots defines if records for root vertexes should be exported.
 	ExportRoots bool
+	// SourceDateEpoch is for resolving the cache
+	SourceDateEpoch *time.Time
 }
 
 // CacheExporter can export the artifacts of the build chain

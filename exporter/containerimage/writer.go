@@ -121,7 +121,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 			ref = inp.Ref
 		}
 
-		remotes, err := ic.exportLayers(ctx, opts.RefCfg, session.NewGroup(sessionID), ref)
+		remotes, err := ic.exportLayers(ctx, opts.RefCfg, session.NewGroup(sessionID), opts.Epoch, ref)
 		if err != nil {
 			return nil, err
 		}
@@ -163,7 +163,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		refs = append(refs, r)
 	}
 
-	remotes, err := ic.exportLayers(ctx, opts.RefCfg, session.NewGroup(sessionID), refs...)
+	remotes, err := ic.exportLayers(ctx, opts.RefCfg, session.NewGroup(sessionID), opts.Epoch, refs...)
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +286,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 	return &idxDesc, nil
 }
 
-func (ic *ImageWriter) exportLayers(ctx context.Context, refCfg cacheconfig.RefConfig, s session.Group, refs ...cache.ImmutableRef) ([]solver.Remote, error) {
+func (ic *ImageWriter) exportLayers(ctx context.Context, refCfg cacheconfig.RefConfig, s session.Group, sourceDateEpoch *time.Time, refs ...cache.ImmutableRef) ([]solver.Remote, error) {
 	attr := []attribute.KeyValue{
 		attribute.String("exportLayers.compressionType", refCfg.Compression.Type.String()),
 		attribute.Bool("exportLayers.forceCompression", refCfg.Compression.Force),
@@ -307,7 +307,7 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, refCfg cacheconfig.RefC
 				return
 			}
 			eg.Go(func() error {
-				remotes, err := ref.GetRemotes(ctx, true, refCfg, false, s)
+				remotes, err := ref.GetRemotes(ctx, true, refCfg, false, s, sourceDateEpoch)
 				if err != nil {
 					return err
 				}

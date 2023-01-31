@@ -63,9 +63,9 @@ See also the [documentation](/frontend/dockerfile/docs/reference.md#buildkit-bui
 
 ## Caveats
 ### Timestamps of the files inside the image
-Currently, the `SOURCE_DATE_EPOCH` value is not used for the timestamps of the files inside the image.
+In BuildKit v0.11, the `SOURCE_DATE_EPOCH` value is not used for the timestamps of the files inside the image.
 
-Workaround:
+Workaround for BuildKit v0.11:
 ```dockerfile
 # Limit the timestamp upper bound to SOURCE_DATE_EPOCH.
 # Workaround for https://github.com/moby/buildkit/issues/3180
@@ -76,10 +76,15 @@ RUN find $( ls / | grep -E -v "^(dev|mnt|proc|sys)$" ) -newermt "@${SOURCE_DATE_
 The `touch` command above is [not effective](https://github.com/moby/buildkit/issues/3309) for mount point directories.
 A workaround is to create mount point directories below `/dev` (tmpfs) so that the mount points will not be included in the image layer.
 
-### Timestamps of whiteouts
-Currently, the `SOURCE_DATE_EPOCH` value is not used for the timestamps of "whiteouts" that are created on removing files.
+> **Note**
+> <!-- TODO: s/master/v0.12/ -->
+> This issue is already fixed in the master branch.
+> containerd >= 1.7 is needed for the containerd worker mode.
 
-Workaround:
+### Timestamps of whiteouts
+In BuildKit v0.11, the `SOURCE_DATE_EPOCH` value is not used for the timestamps of "whiteouts" that are created on removing files.
+
+Workaround for BuildKit v0.11:
 ```dockerfile
 # Squash the entire stage for resetting the whiteout timestamps.
 # Workaround for https://github.com/moby/buildkit/issues/3168
@@ -88,3 +93,8 @@ COPY --from=0 / /
 ```
 
 The timestamps of the regular files in the original stage are maintained in the squashed stage, so you do not need to touch the files after this `COPY` instruction.
+
+> **Note**
+> <!-- TODO: s/master/v0.12/ -->
+> This issue is already fixed in the master branch.
+> containerd >= 1.7 is needed for the containerd worker mode.

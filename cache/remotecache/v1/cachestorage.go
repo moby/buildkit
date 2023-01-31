@@ -268,7 +268,7 @@ func (cs *cacheResultStorage) Load(ctx context.Context, res solver.CacheResult) 
 	return worker.NewWorkerRefResult(ref, cs.w), nil
 }
 
-func (cs *cacheResultStorage) LoadRemotes(ctx context.Context, res solver.CacheResult, compressionopts *compression.Config, _ session.Group) ([]*solver.Remote, error) {
+func (cs *cacheResultStorage) LoadRemotes(ctx context.Context, res solver.CacheResult, compressionopts *compression.Config, _ session.Group, _ *time.Time) ([]*solver.Remote, error) {
 	if r := cs.byResultID(res.ID); r != nil && r.result != nil {
 		if compressionopts == nil {
 			return []*solver.Remote{r.result}, nil

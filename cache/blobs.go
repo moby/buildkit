@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/diff/walking"
@@ -19,6 +20,7 @@ import (
 	imagespecidentity "github.com/opencontainers/image-spec/identity"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -32,7 +34,7 @@ var ErrNoBlobs = errors.Errorf("no blobs for snapshot")
 // a blob is missing and createIfNeeded is true, then the blob will be created, otherwise ErrNoBlobs will
 // be returned. Caller must hold a lease when calling this function.
 // If forceCompression is specified but the blob of compressionType doesn't exist, this function creates it.
-func (sr *immutableRef) computeBlobChain(ctx context.Context, createIfNeeded bool, comp compression.Config, s session.Group) error {
+func (sr *immutableRef) computeBlobChain(ctx context.Context, createIfNeeded bool, comp compression.Config, s session.Group, sourceDateEpoch *time.Time) error {
 	if _, ok := leases.FromContext(ctx); !ok {
 		return errors.Errorf("missing lease requirement for computeBlobChain")
 	}
@@ -58,36 +60,58 @@ func (sr *immutableRef) computeBlobChain(ctx context.Context, createIfNeeded boo
 	// refs rather than every single layer present among their ancestors.
 	filter := sr.layerSet()
 
-	return computeBlobChain(ctx, sr, createIfNeeded, comp, s, filter)
+	return computeBlobChain(ctx, sr, createIfNeeded, comp, s, filter, sourceDateEpoch)
 }
 
-func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool, comp compression.Config, s session.Group, filter map[string]struct{}) error {
+func blobExistsWithSourceDateEpoch(sr *immutableRef, sourceDateEpoch *time.Time) bool {
+	if sr.getBlob() == "" {
+		return false
+	}
+	if sourceDateEpoch == nil {
+		// nil means "any epoch is ok"
+		return true
+	}
+	srEpoch := sr.GetSourceDateEpoch()
+	return srEpoch != nil && srEpoch.Equal(*sourceDateEpoch)
+}
+
+func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool, comp compression.Config, s session.Group, filter map[string]struct{}, sourceDateEpoch *time.Time) error {
+	if blob := sr.getBlob(); blob != "" {
+		imageRefs := sr.getImageRefs()
+		logrus.Debugf("blob=%q, imageRefs=%v", blob, imageRefs)
+		if len(imageRefs) > 0 {
+			// Do not check the epoch for the blobs of the base images.
+			// https://github.com/moby/buildkit/pull/3560#pullrequestreview-1353829200
+			sourceDateEpoch = nil
+		}
+	}
+
 	eg, ctx := errgroup.WithContext(ctx)
 	switch sr.kind() {
 	case Merge:
 		for _, parent := range sr.mergeParents {
 			parent := parent
 			eg.Go(func() error {
-				return computeBlobChain(ctx, parent, createIfNeeded, comp, s, filter)
+				return computeBlobChain(ctx, parent, createIfNeeded, comp, s, filter, sourceDateEpoch)
 			})
 		}
 	case Diff:
 		if _, ok := filter[sr.ID()]; !ok && sr.diffParents.upper != nil {
 			// This diff is just re-using the upper blob, compute that
 			eg.Go(func() error {
-				return computeBlobChain(ctx, sr.diffParents.upper, createIfNeeded, comp, s, filter)
+				return computeBlobChain(ctx, sr.diffParents.upper, createIfNeeded, comp, s, filter, sourceDateEpoch)
 			})
 		}
 	case Layer:
 		eg.Go(func() error {
-			return computeBlobChain(ctx, sr.layerParent, createIfNeeded, comp, s, filter)
+			return computeBlobChain(ctx, sr.layerParent, createIfNeeded, comp, s, filter, sourceDateEpoch)
 		})
 	}
 
 	if _, ok := filter[sr.ID()]; ok {
 		eg.Go(func() error {
 			_, err := g.Do(ctx, fmt.Sprintf("%s-%t", sr.ID(), createIfNeeded), func(ctx context.Context) (interface{}, error) {
-				if sr.getBlob() != "" {
+				if blobExistsWithSourceDateEpoch(sr, sourceDateEpoch) {
 					return nil, nil
 				}
 				if !createIfNeeded {
@@ -169,7 +193,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 					}
 				}
 				if enableOverlay {
-					computed, ok, err := sr.tryComputeOverlayBlob(ctx, lower, upper, mediaType, sr.ID(), compressorFunc)
+					computed, ok, err := sr.tryComputeOverlayBlob(ctx, lower, upper, mediaType, sr.ID(), compressorFunc, sourceDateEpoch)
 					if !ok || err != nil {
 						if !fallback {
 							if !ok {
@@ -196,6 +220,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 						diff.WithMediaType(mediaType),
 						diff.WithReference(sr.ID()),
 						diff.WithCompressor(compressorFunc),
+						diff.WithSourceDateEpoch(sourceDateEpoch),
 					)
 					if err != nil {
 						bklog.G(ctx).WithError(err).Warnf("failed to compute blob by buildkit differ")
@@ -207,6 +232,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 						diff.WithMediaType(mediaType),
 						diff.WithReference(sr.ID()),
 						diff.WithCompressor(compressorFunc),
+						diff.WithSourceDateEpoch(sourceDateEpoch),
 					)
 					if err != nil {
 						return nil, err
@@ -238,7 +264,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 					return nil, errors.Errorf("unknown layer compression type")
 				}
 
-				if err := sr.setBlob(ctx, desc); err != nil {
+				if err := sr.setBlob(ctx, desc, sourceDateEpoch); err != nil {
 					return nil, err
 				}
 				return nil, nil
@@ -264,7 +290,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 
 // setBlob associates a blob with the cache record.
 // A lease must be held for the blob when calling this function
-func (sr *immutableRef) setBlob(ctx context.Context, desc ocispecs.Descriptor) (rerr error) {
+func (sr *immutableRef) setBlob(ctx context.Context, desc ocispecs.Descriptor, sourceDateEpoch *time.Time) (rerr error) {
 	if _, ok := leases.FromContext(ctx); !ok {
 		return errors.Errorf("missing lease requirement for setBlob")
 	}
@@ -285,7 +311,7 @@ func (sr *immutableRef) setBlob(ctx context.Context, desc ocispecs.Descriptor) (
 	sr.mu.Lock()
 	defer sr.mu.Unlock()
 
-	if sr.getBlob() != "" {
+	if blobExistsWithSourceDateEpoch(sr, sourceDateEpoch) {
 		return nil
 	}
 
@@ -305,6 +331,9 @@ func (sr *immutableRef) setBlob(ctx context.Context, desc ocispecs.Descriptor) (
 	sr.queueMediaType(desc.MediaType)
 	sr.queueBlobSize(desc.Size)
 	sr.appendURLs(desc.URLs)
+	if sourceDateEpoch != nil {
+		sr.queueSourceDateEpoch(*sourceDateEpoch)
+	}
 	if err := sr.commitMetadata(); err != nil {
 		return err
 	}

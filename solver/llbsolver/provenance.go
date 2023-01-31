@@ -374,7 +374,7 @@ type ProvenanceCreator struct {
 	addLayers func() error
 }
 
-func NewProvenanceCreator(ctx context.Context, cp *provenance.Capture, res solver.ResultProxy, attrs map[string]string, j *solver.Job) (*ProvenanceCreator, error) {
+func NewProvenanceCreator(ctx context.Context, cp *provenance.Capture, res solver.ResultProxy, attrs map[string]string, j *solver.Job, sourceDateEpoch *time.Time) (*ProvenanceCreator, error) {
 	var reproducible bool
 	if v, ok := attrs["reproducible"]; ok {
 		b, err := strconv.ParseBool(v)
@@ -448,9 +448,10 @@ func NewProvenanceCreator(ctx context.Context, cp *provenance.Capture, res solve
 			}
 
 			if _, err := r.CacheKeys()[0].Exporter.ExportTo(ctx, e, solver.CacheExportOpt{
-				ResolveRemotes: resolveRemotes,
-				Mode:           solver.CacheExportModeRemoteOnly,
-				ExportRoots:    true,
+				ResolveRemotes:  resolveRemotes(sourceDateEpoch),
+				Mode:            solver.CacheExportModeRemoteOnly,
+				ExportRoots:     true,
+				SourceDateEpoch: sourceDateEpoch,
 			}); err != nil {
 				return err
 			}
@@ -556,20 +557,22 @@ func (c *cacheRecord) AddResult(dgst digest.Digest, idx int, createdAt time.Time
 func (c *cacheRecord) LinkFrom(rec solver.CacheExporterRecord, index int, selector string) {
 }
 
-func resolveRemotes(ctx context.Context, res solver.Result) ([]*solver.Remote, error) {
-	ref, ok := res.Sys().(*worker.WorkerRef)
-	if !ok {
-		return nil, errors.Errorf("invalid result: %T", res.Sys())
-	}
-
-	remotes, err := ref.GetRemotes(ctx, false, config.RefConfig{}, true, nil)
-	if err != nil {
-		if errors.Is(err, cache.ErrNoBlobs) {
-			return nil, nil
+func resolveRemotes(sourceDateEpoch *time.Time) func(ctx context.Context, res solver.Result) ([]*solver.Remote, error) {
+	return func(ctx context.Context, res solver.Result) ([]*solver.Remote, error) {
+		ref, ok := res.Sys().(*worker.WorkerRef)
+		if !ok {
+			return nil, errors.Errorf("invalid result: %T", res.Sys())
 		}
-		return nil, err
+
+		remotes, err := ref.GetRemotes(ctx, false, config.RefConfig{}, true, nil, sourceDateEpoch)
+		if err != nil {
+			if errors.Is(err, cache.ErrNoBlobs) {
+				return nil, nil
+			}
+			return nil, err
+		}
+		return remotes, nil
 	}
-	return remotes, nil
 }
 
 func AddBuildConfig(ctx context.Context, p *provenance.ProvenancePredicate, rp solver.ResultProxy) (map[digest.Digest]int, error) {

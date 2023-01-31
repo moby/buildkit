@@ -207,7 +207,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 
 	mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
 	if src.Ref != nil {
-		remotes, err := src.Ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
+		remotes, err := src.Ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID), e.opts.Epoch)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -225,7 +225,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	}
 	if len(src.Refs) > 0 {
 		for _, r := range src.Refs {
-			remotes, err := r.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
+			remotes, err := r.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID), e.opts.Epoch)
 			if err != nil {
 				return nil, nil, err
 			}

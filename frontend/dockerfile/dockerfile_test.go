@@ -6638,12 +6638,13 @@ COPY Dockerfile \
 
 func testReproSourceDateEpoch(t *testing.T, sb integration.Sandbox) {
 	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter, integration.FeatureSourceDateEpoch)
-	if sb.Snapshotter() == "native" {
-		t.Skip("the digest is not reproducible with the \"native\" snapshotter because hardlinks are processed in a different way: https://github.com/moby/buildkit/pull/3456#discussion_r1062650263")
+	if cdAddress := sb.ContainerdAddress(); cdAddress != "" {
+		// https://github.com/containerd/containerd/commit/9c9f564a35df7990870a53a125afbf88ac412753
+		integration.CheckContainerdVersion(t, cdAddress, ">= 1.7.0-beta.1")
 	}
 	f := getFrontend(t, sb)
 
-	tm := time.Date(2023, time.January, 10, 12, 34, 56, 0, time.UTC)
+	tm := time.Date(2023, time.January, 10, 12, 34, 56, 0, time.UTC) // 1673354096
 	t.Logf("SOURCE_DATE_EPOCH=%d", tm.Unix())
 
 	dockerfile := []byte(`# The base image cannot be busybox, due to https://github.com/moby/buildkit/issues/3455
@@ -6657,19 +6658,9 @@ RUN touch -d '2030-01-01 12:34:56' /foo-2030.1
 RUN rm -f /foo.1
 RUN rm -f /foo-2010.1
 RUN rm -f /foo-2030.1
-
-# Limit the timestamp upper bound to SOURCE_DATE_EPOCH.
-# Workaround for https://github.com/moby/buildkit/issues/3180
-ARG SOURCE_DATE_EPOCH
-RUN find $( ls / | grep -E -v "^(dev|mnt|proc|sys)$" ) -newermt "@${SOURCE_DATE_EPOCH}" -writable -xdev | xargs touch --date="@${SOURCE_DATE_EPOCH}" --no-dereference
-
-# Squash the entire stage for resetting the whiteout timestamps.
-# Workaround for https://github.com/moby/buildkit/issues/3168
-FROM scratch
-COPY --from=0 / /
 `)
 
-	const expectedDigest = "sha256:d286483eccf4d57c313a3f389cdc196e668d914d319c574b15aabdf1963c5eeb"
+	const expectedDigest = "sha256:a4aebad4391470aa29fc52b7d69498366a57cebd86f0ef425065151a8b799344"
 
 	dir, err := integration.Tmpdir(
 		t,

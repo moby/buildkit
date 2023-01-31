@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
@@ -33,7 +34,7 @@ type Unlazier interface {
 // layers. If all is true, all available chains that has the specified compression type of topmost blob are
 // appended to the result.
 // Note: Use WorkerRef.GetRemotes instead as moby integration requires custom GetRemotes implementation.
-func (sr *immutableRef) GetRemotes(ctx context.Context, createIfNeeded bool, refCfg config.RefConfig, all bool, s session.Group) ([]*solver.Remote, error) {
+func (sr *immutableRef) GetRemotes(ctx context.Context, createIfNeeded bool, refCfg config.RefConfig, all bool, s session.Group, sourceDateEpoch *time.Time) ([]*solver.Remote, error) {
 	ctx, done, err := leaseutil.WithLease(ctx, sr.cm.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
 		return nil, err
@@ -42,7 +43,7 @@ func (sr *immutableRef) GetRemotes(ctx context.Context, createIfNeeded bool, ref
 
 	// fast path if compression variants aren't required
 	// NOTE: compressionopt is applied only to *newly created layers* if Force != true.
-	remote, err := sr.getRemote(ctx, createIfNeeded, refCfg, s)
+	remote, err := sr.getRemote(ctx, createIfNeeded, refCfg, s, sourceDateEpoch)
 	if err != nil {
 		return nil, err
 	}
@@ -138,8 +139,8 @@ func getAvailableBlobs(ctx context.Context, cs content.Store, chain *solver.Remo
 	return res, nil
 }
 
-func (sr *immutableRef) getRemote(ctx context.Context, createIfNeeded bool, refCfg config.RefConfig, s session.Group) (*solver.Remote, error) {
-	err := sr.computeBlobChain(ctx, createIfNeeded, refCfg.Compression, s)
+func (sr *immutableRef) getRemote(ctx context.Context, createIfNeeded bool, refCfg config.RefConfig, s session.Group, sourceDateEpoch *time.Time) (*solver.Remote, error) {
+	err := sr.computeBlobChain(ctx, createIfNeeded, refCfg.Compression, s, sourceDateEpoch)
 	if err != nil {
 		return nil, err
 	}

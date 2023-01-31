@@ -18,6 +18,7 @@ const keyEqualMutable = "cache.equalMutable"
 const keyCachePolicy = "cache.cachePolicy"
 const keyDescription = "cache.description"
 const keyCreatedAt = "cache.createdAt"
+const keySourceDateEpoch = "cache.sourceDateEpoch"
 const keyLastUsedAt = "cache.lastUsedAt"
 const keyUsageCount = "cache.usageCount"
 const keyLayerType = "cache.layerType"
@@ -189,6 +190,14 @@ func (md *cacheMetadata) queueCreatedAt(tm time.Time) error {
 
 func (md *cacheMetadata) GetCreatedAt() time.Time {
 	return md.getTime(keyCreatedAt)
+}
+
+func (md *cacheMetadata) queueSourceDateEpoch(tm time.Time) error {
+	return md.queueTime(keySourceDateEpoch, tm, "")
+}
+
+func (md *cacheMetadata) GetSourceDateEpoch() *time.Time {
+	return md.getTimeOrNil(keySourceDateEpoch)
 }
 
 func (md *cacheMetadata) HasCachePolicyDefault() bool {
@@ -506,16 +515,25 @@ func (md *cacheMetadata) queueTime(key string, value time.Time, index string) er
 	return md.queueValue(key, value.UnixNano(), index)
 }
 
-func (md *cacheMetadata) getTime(key string) time.Time {
+func (md *cacheMetadata) getTimeOrNil(key string) *time.Time {
 	v := md.si.Get(key)
 	if v == nil {
-		return time.Time{}
+		return nil
 	}
 	var tm int64
 	if err := v.Unmarshal(&tm); err != nil {
+		return nil
+	}
+	u := time.Unix(tm/1e9, tm%1e9)
+	return &u
+}
+
+func (md *cacheMetadata) getTime(key string) time.Time {
+	v := md.getTimeOrNil(key)
+	if v == nil {
 		return time.Time{}
 	}
-	return time.Unix(tm/1e9, tm%1e9)
+	return *v
 }
 
 func (md *cacheMetadata) getBool(key string) bool {

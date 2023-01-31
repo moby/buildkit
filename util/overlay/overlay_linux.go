@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/containerd/containerd/archive"
 	"github.com/containerd/containerd/mount"
@@ -111,7 +112,7 @@ func GetOverlayLayers(m mount.Mount) ([]string, error) {
 
 // WriteUpperdir writes a layer tar archive into the specified writer, based on
 // the diff information stored in the upperdir.
-func WriteUpperdir(ctx context.Context, w io.Writer, upperdir string, lower []mount.Mount) error {
+func WriteUpperdir(ctx context.Context, w io.Writer, upperdir string, lower []mount.Mount, sourceDateEpoch *time.Time) error {
 	emptyLower, err := os.MkdirTemp("", "buildkit") // empty directory used for the lower of diff view
 	if err != nil {
 		return errors.Wrapf(err, "failed to create temp dir")
@@ -126,7 +127,14 @@ func WriteUpperdir(ctx context.Context, w io.Writer, upperdir string, lower []mo
 	}
 	return mount.WithTempMount(ctx, lower, func(lowerRoot string) error {
 		return mount.WithTempMount(ctx, upperView, func(upperViewRoot string) error {
-			cw := archive.NewChangeWriter(&cancellableWriter{ctx, w}, upperViewRoot)
+			var opts []archive.ChangeWriterOpt
+			if sourceDateEpoch != nil {
+				opts = append(opts,
+					archive.WithModTimeUpperBound(*sourceDateEpoch),
+					archive.WithWhiteoutTime(*sourceDateEpoch),
+				)
+			}
+			cw := archive.NewChangeWriter(&cancellableWriter{ctx, w}, upperViewRoot, opts...)
 			if err := Changes(ctx, cw.HandleChange, upperdir, upperViewRoot, lowerRoot); err != nil {
 				if err2 := cw.Close(); err2 != nil {
 					return errors.Wrapf(err, "failed to record upperdir changes (close error: %v)", err2)

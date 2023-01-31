@@ -331,7 +331,14 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	}
 
 	// if SOURCE_DATE_EPOCH is set, enable it for the exporter
+	var sourceDateEpoch *time.Time
 	if v, ok := epoch.ParseBuildArgs(req.FrontendAttrs); ok {
+		i64, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return nil, errors.Wrapf(err, "invalid epoch value %q", v)
+		}
+		sourceDateEpochX := time.Unix(i64, 0).UTC()
+		sourceDateEpoch = &sourceDateEpochX
 		if _, ok := req.ExporterAttrs[string(exptypes.OptKeySourceDateEpoch)]; !ok {
 			if req.ExporterAttrs == nil {
 				req.ExporterAttrs = make(map[string]string)
@@ -439,7 +446,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		CacheExporters: cacheExporters,
 		Type:           req.Exporter,
 		Attrs:          req.ExporterAttrs,
-	}, req.Entitlements, procs, req.Internal, req.SourcePolicy)
+	}, req.Entitlements, procs, req.Internal, req.SourcePolicy, sourceDateEpoch)
 	if err != nil {
 		return nil, err
 	}

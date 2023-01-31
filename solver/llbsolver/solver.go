@@ -91,7 +91,7 @@ type Solver struct {
 
 // Processor defines a processing function to be applied after solving, but
 // before exporting
-type Processor func(ctx context.Context, result *Result, s *Solver, j *solver.Job) (*Result, error)
+type Processor func(ctx context.Context, result *Result, s *Solver, j *solver.Job, sourceDateEpoch *time.Time) (*Result, error)
 
 func New(opt Opt) (*Solver, error) {
 	s := &Solver{
@@ -139,7 +139,7 @@ func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 	return s.bridge(b)
 }
 
-func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend.SolveRequest, exp ExporterRequest, j *solver.Job) (func(*Result, exporter.DescriptorReference, error) error, error) {
+func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend.SolveRequest, exp ExporterRequest, j *solver.Job, sourceDateEpoch *time.Time) (func(*Result, exporter.DescriptorReference, error) error, error) {
 	var stopTrace func() []tracetest.SpanStub
 
 	if s := trace.SpanFromContext(ctx); s.SpanContext().IsValid() {
@@ -198,7 +198,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 		}
 
 		makeProvenance := func(res solver.ResultProxy, cap *provenance.Capture) (*controlapi.Descriptor, func(), error) {
-			prc, err := NewProvenanceCreator(ctx2, cap, res, attrs, j)
+			prc, err := NewProvenanceCreator(ctx2, cap, res, attrs, j, sourceDateEpoch)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -397,7 +397,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 	}, nil
 }
 
-func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement, post []Processor, internal bool, srcPol *spb.Policy) (_ *client.SolveResponse, err error) {
+func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement, post []Processor, internal bool, srcPol *spb.Policy, sourceDateEpoch *time.Time) (_ *client.SolveResponse, err error) {
 	j, err := s.solver.NewJob(id)
 	if err != nil {
 		return nil, err
@@ -451,7 +451,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	}
 
 	if !internal {
-		rec, err1 := s.recordBuildHistory(ctx, id, req, exp, j)
+		rec, err1 := s.recordBuildHistory(ctx, id, req, exp, j, sourceDateEpoch)
 		if err1 != nil {
 			defer j.CloseProgress()
 			return nil, err1
@@ -508,7 +508,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	}
 
 	for _, post := range post {
-		res2, err := post(ctx, resProv, s, j)
+		res2, err := post(ctx, resProv, s, j, sourceDateEpoch)
 		if err != nil {
 			return nil, err
 		}
@@ -537,7 +537,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 
 	var exporterResponse map[string]string
 	if e := exp.Exporter; e != nil {
-		meta, err := runInlineCacheExporter(ctx, e, inlineCacheExporter, j, cached)
+		meta, err := runInlineCacheExporter(ctx, e, inlineCacheExporter, j, cached, sourceDateEpoch)
 		if err != nil {
 			return nil, err
 		}
@@ -553,7 +553,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		}
 	}
 
-	cacheExporterResponse, err := runCacheExporters(ctx, cacheExporters, j, cached, inp)
+	cacheExporterResponse, err := runCacheExporters(ctx, cacheExporters, j, cached, inp, sourceDateEpoch)
 	if err != nil {
 		return nil, err
 	}
@@ -578,7 +578,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	}, nil
 }
 
-func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult], inp *result.Result[cache.ImmutableRef]) (map[string]string, error) {
+func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult], inp *result.Result[cache.ImmutableRef], sourceDateEpoch *time.Time) (map[string]string, error) {
 	eg, ctx := errgroup.WithContext(ctx)
 	g := session.NewGroup(j.SessionID)
 	var cacheExporterResponse map[string]string
@@ -597,10 +597,11 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 
 						// all keys have same export chain so exporting others is not needed
 						_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, exp, solver.CacheExportOpt{
-							ResolveRemotes: workerRefResolver(cacheconfig.RefConfig{Compression: compressionConfig}, false, g),
-							Mode:           exp.CacheExportMode,
-							Session:        g,
-							CompressionOpt: &compressionConfig,
+							ResolveRemotes:  workerRefResolver(cacheconfig.RefConfig{Compression: compressionConfig}, false, g, sourceDateEpoch),
+							Mode:            exp.CacheExportMode,
+							Session:         g,
+							CompressionOpt:  &compressionConfig,
+							SourceDateEpoch: sourceDateEpoch,
 						})
 						return err
 					}); err != nil {
@@ -630,14 +631,14 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 	return cacheExporterResponse, nil
 }
 
-func runInlineCacheExporter(ctx context.Context, e exporter.ExporterInstance, inlineExporter *RemoteCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult]) (map[string][]byte, error) {
+func runInlineCacheExporter(ctx context.Context, e exporter.ExporterInstance, inlineExporter *RemoteCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult], sourceDateEpoch *time.Time) (map[string][]byte, error) {
 	meta := map[string][]byte{}
 	if inlineExporter == nil {
 		return nil, nil
 	}
 	if err := inBuilderContext(ctx, j, "preparing layers for inline cache", j.SessionID+"-cache-inline", func(ctx context.Context, _ session.Group) error {
 		if res := cached.Ref; res != nil {
-			dtic, err := inlineCache(ctx, inlineExporter.Exporter, res, e.Config().Compression(), session.NewGroup(j.SessionID))
+			dtic, err := inlineCache(ctx, inlineExporter.Exporter, res, e.Config().Compression(), session.NewGroup(j.SessionID), sourceDateEpoch)
 			if err != nil {
 				return err
 			}
@@ -646,7 +647,7 @@ func runInlineCacheExporter(ctx context.Context, e exporter.ExporterInstance, in
 			}
 		}
 		for k, res := range cached.Refs {
-			dtic, err := inlineCache(ctx, inlineExporter.Exporter, res, e.Config().Compression(), session.NewGroup(j.SessionID))
+			dtic, err := inlineCache(ctx, inlineExporter.Exporter, res, e.Config().Compression(), session.NewGroup(j.SessionID), sourceDateEpoch)
 			if err != nil {
 				return err
 			}
@@ -810,7 +811,7 @@ func asInlineCache(e remotecache.Exporter) (inlineCacheExporter, bool) {
 	return ie, ok
 }
 
-func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedResult, compressionopt compression.Config, g session.Group) ([]byte, error) {
+func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedResult, compressionopt compression.Config, g session.Group, sourceDateEpoch *time.Time) ([]byte, error) {
 	ie, ok := asInlineCache(e)
 	if !ok {
 		return nil, nil
@@ -820,7 +821,7 @@ func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedR
 		return nil, errors.Errorf("invalid reference: %T", res.Sys())
 	}
 
-	remotes, err := workerRef.GetRemotes(ctx, true, cacheconfig.RefConfig{Compression: compressionopt}, false, g)
+	remotes, err := workerRef.GetRemotes(ctx, true, cacheconfig.RefConfig{Compression: compressionopt}, false, g, sourceDateEpoch)
 	if err != nil || len(remotes) == 0 {
 		return nil, nil
 	}
@@ -834,10 +835,11 @@ func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedR
 	ctx = withDescHandlerCacheOpts(ctx, workerRef.ImmutableRef)
 	refCfg := cacheconfig.RefConfig{Compression: compressionopt}
 	if _, err := res.CacheKeys()[0].Exporter.ExportTo(ctx, e, solver.CacheExportOpt{
-		ResolveRemotes: workerRefResolver(refCfg, true, g), // load as many compression blobs as possible
-		Mode:           solver.CacheExportModeMin,
-		Session:        g,
-		CompressionOpt: &compressionopt, // cache possible compression variants
+		ResolveRemotes:  workerRefResolver(refCfg, true, g, sourceDateEpoch), // load as many compression blobs as possible
+		Mode:            solver.CacheExportModeMin,
+		Session:         g,
+		CompressionOpt:  &compressionopt, // cache possible compression variants
+		SourceDateEpoch: sourceDateEpoch,
 	}); err != nil {
 		return nil, err
 	}
