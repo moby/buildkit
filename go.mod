@@ -25,9 +25,9 @@ require (
 	github.com/containerd/stargz-snapshotter/estargz v0.13.0
 	github.com/containerd/typeurl v1.0.3-0.20220422153119-7f6e6d160d67
 	github.com/coreos/go-systemd/v22 v22.4.0
-	github.com/docker/cli v23.0.0-rc.2+incompatible
+	github.com/docker/cli v23.0.0-rc.3+incompatible
 	github.com/docker/distribution v2.8.1+incompatible
-	github.com/docker/docker v23.0.0-rc.2+incompatible
+	github.com/docker/docker v23.0.0-rc.3+incompatible
 	github.com/docker/go-connections v0.4.0
 	github.com/docker/go-units v0.5.0
 	github.com/gofrs/flock v0.8.1
@@ -80,9 +80,9 @@ require (
 	go.opentelemetry.io/otel/trace v1.11.1
 	go.opentelemetry.io/proto/otlp v0.19.0
 	golang.org/x/crypto v0.2.0
-	golang.org/x/net v0.4.0
+	golang.org/x/net v0.5.0
 	golang.org/x/sync v0.1.0
-	golang.org/x/sys v0.3.0
+	golang.org/x/sys v0.4.0
 	golang.org/x/time v0.1.0
 	google.golang.org/genproto v0.0.0-20221206210731-b1a01be3a5f6
 	google.golang.org/grpc v1.51.0
@@ -155,7 +155,7 @@ require (
 	go.opentelemetry.io/otel/metric v0.27.0 // indirect
 	golang.org/x/mod v0.6.0 // indirect
 	golang.org/x/oauth2 v0.0.0-20221014153046-6fdb5e3db783 // indirect
-	golang.org/x/text v0.5.0 // indirect
+	golang.org/x/text v0.6.0 // indirect
 	golang.org/x/tools v0.2.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
