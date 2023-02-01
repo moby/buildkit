@@ -1131,6 +1131,6 @@ func parseSourceDateEpoch(v string) (*time.Time, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "invalid SOURCE_DATE_EPOCH: %s", v)
 	}
-	tm := time.Unix(sde, 0)
+	tm := time.Unix(sde, 0).UTC()
 	return &tm, nil
 }
