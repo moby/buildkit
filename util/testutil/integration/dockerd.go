@@ -33,6 +33,7 @@ func InitDockerdWorker() {
 			FeatureProvenance,
 			FeatureSBOM,
 			FeatureSecurityMode,
+			FeatureCNINetwork,
 		},
 	})
 	Register(&moby{
@@ -40,6 +41,7 @@ func InitDockerdWorker() {
 		rootless: false,
 		unsupported: []string{
 			FeatureSecurityMode,
+			FeatureCNINetwork,
 		},
 	})
 }
