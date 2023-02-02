@@ -444,8 +444,8 @@ jobs:
     if: github.event_name != 'schedule'
     outputs:
       typ: ${{ steps.prep.outputs.typ }}
-      tag: ${{ steps.prep.outputs.tag }}
       push: ${{ steps.prep.outputs.push }}
+      matrix: ${{ steps.prep.outputs.matrix }}
     steps:
       -
         name: Prepare
@@ -462,14 +462,30 @@ jobs:
             PUSH=push
           fi
           echo "typ=${TYP}" >>${GITHUB_OUTPUT}
-          echo "tag=${TAG}" >>${GITHUB_OUTPUT}
           echo "push=${PUSH}" >>${GITHUB_OUTPUT}
+          if [ "${TYP}" = "master" ]; then
+            echo "matrix=$(jq -cn --arg tag "$TAG" '[$tag, "labs"]')" >>${GITHUB_OUTPUT}
+          else
+            echo "matrix=$(jq -cn --arg tag "$TAG" '[$tag]')" >>${GITHUB_OUTPUT}
+          fi
 
   frontend-image:
     runs-on: ubuntu-20.04
     if: github.event_name != 'schedule'
     needs: [frontend-base, test]
+    strategy:
+      fail-fast: false
+      matrix:
+        tag: ${{ fromJson(needs.frontend-base.outputs.matrix) }}
     steps:
+      -
+        name: Prepare
+        run: |
+          if [ "${{ matrix.tag }}" = "labs" ]; then
+            echo "CACHE_SCOPE=frontend-labs" >>${GITHUB_ENV}
+          else
+            echo "CACHE_SCOPE=frontend-mainline" >>${GITHUB_ENV}
+          fi
       -
         name: Checkout
         uses: actions/checkout@v3
@@ -494,18 +510,10 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       -
-        name: Build ${{ needs.frontend-base.outputs.typ }}/${{ needs.frontend-base.outputs.tag }}
+        name: Build
         run: |
-          ./frontend/dockerfile/cmd/dockerfile-frontend/hack/release "${{ needs.frontend-base.outputs.typ }}" "${{ needs.frontend-base.outputs.tag }}" "$DF_REPO_SLUG_TARGET" "${{ needs.frontend-base.outputs.push }}"
+          ./frontend/dockerfile/cmd/dockerfile-frontend/hack/release "${{ needs.frontend-base.outputs.typ }}" "${{ matrix.tag }}" "$DF_REPO_SLUG_TARGET" "${{ needs.frontend-base.outputs.push }}"
         env:
           PLATFORMS: ${{ env.PLATFORMS }},linux/386,linux/mips,linux/mipsle,linux/mips64,linux/mips64le
-          CACHE_FROM: type=gha,scope=frontend-${{ needs.frontend-base.outputs.typ }}
-          CACHE_TO: type=gha,scope=frontend-${{ needs.frontend-base.outputs.typ }}
-      -
-        name: Build ${{ needs.frontend-base.outputs.typ }}/labs
-        if: needs.frontend-base.outputs.typ == 'master'
-        run: |
-          ./frontend/dockerfile/cmd/dockerfile-frontend/hack/release "${{ needs.frontend-base.outputs.typ }}" labs "$DF_REPO_SLUG_TARGET" "${{ needs.frontend-base.outputs.push }}"
-        env:
-          PLATFORMS: ${{ env.PLATFORMS }},linux/386,linux/mips,linux/mipsle,linux/mips64,linux/mips64le
-          CACHE_FROM: type=gha,scope=frontend-${{ needs.frontend-base.outputs.typ }}
+          CACHE_FROM: type=gha,scope=${{ env.CACHE_SCOPE }}
+          CACHE_TO: type=gha,scope=${{ env.CACHE_SCOPE }}
