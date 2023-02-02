@@ -6,6 +6,7 @@ OUT=$2
 . $(dirname $0)/util
 set -eu -o pipefail
 
+: ${RELEASE=false}
 : ${PLATFORMS=}
 
 usage() {
@@ -22,9 +23,14 @@ if [ -n "$PLATFORMS" ]; then
   platformFlag="--platform=$PLATFORMS"
 fi
 
+nocacheFilterFlag=""
+if [[ "$RELEASE" = "true" ]] && [[ "$GITHUB_ACTIONS" = "true" ]]; then
+  nocacheFilterFlag="--no-cache-filter=git,gobuild-base"
+fi
+
 output=$(mktemp -d -t buildkit-output.XXXXXXXXXX)
 
-buildxCmd build $platformFlag $cacheFromFlags $(buildAttestFlags) \
+buildxCmd build $platformFlag $cacheFromFlags $nocacheFilterFlag $(buildAttestFlags) \
   --build-arg "BUILDKIT_MULTI_PLATFORM=true" \
   --target release \
   --output "type=local,dest=$output" \
