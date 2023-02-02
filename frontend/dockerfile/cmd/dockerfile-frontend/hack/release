@@ -3,6 +3,7 @@
 . $(dirname $0)/../../../../../hack/util
 set -eu
 
+: "${RELEASE=false}"
 : "${PLATFORMS=}"
 : "${DAILY_TARGETS=}"
 
@@ -70,6 +71,11 @@ if [ "$PUSH" = "push" ]; then
   pushFlag="push=true"
 fi
 
+nocacheFilterFlag=""
+if [[ "$RELEASE" = "true" ]] && [[ "$GITHUB_ACTIONS" = "true" ]]; then
+  nocacheFilterFlag="--no-cache-filter=base"
+fi
+
 case $TYP in
 "master")
   tagf=./frontend/dockerfile/release/$TAG/tags
@@ -84,7 +90,7 @@ case $TYP in
     pushTag=${pushTag}-$TAG
   fi
 
-  buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags $(buildAttestFlags) \
+  buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags $nocacheFilterFlag $(buildAttestFlags) \
     --build-arg "CHANNEL=$TAG" \
     --build-arg "BUILDTAGS=$buildTags" \
     --output "type=image,name=$REPO:$pushTag,buildinfo-attrs=true,$pushFlag" \
@@ -101,7 +107,7 @@ case $TYP in
   fi
   buildTags=$(cat $tagf)
 
-  buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags $(buildAttestFlags) \
+  buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags $nocacheFilterFlag $(buildAttestFlags) \
     --build-arg "CHANNEL=$TAG" \
     --build-arg "BUILDTAGS=$buildTags" \
     --output "type=image,\"name=$publishedNames\",buildinfo-attrs=true,$pushFlag" \
@@ -127,7 +133,7 @@ case $TYP in
 
     tmp=$(mktemp -d -t buildid.XXXXXXXXXX)
     dt=$(date +%Y%m%d)
-    buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags \
+    buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags $nocacheFilterFlag \
       --target "buildid" \
       --build-arg "CHANNEL=$TAG" \
       --build-arg "BUILDTAGS=$buildTags" \
@@ -141,7 +147,7 @@ case $TYP in
       buildid=$(cat $tmp/buildid)
       echo "buildid: $buildid"
 
-      buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags $(buildAttestFlags) \
+      buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags $nocacheFilterFlag $(buildAttestFlags) \
         --build-arg "CHANNEL=$TAG" \
         --build-arg "BUILDTAGS=$buildTags" \
         --output "type=image,name=$REPO:$dt-$TAG,buildinfo-attrs=true,$pushFlag" \

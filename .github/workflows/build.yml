@@ -390,6 +390,7 @@ jobs:
         run: |
           ./hack/images "${{ needs.release-base.outputs.tag }}" "$REPO_SLUG_TARGET" "${{ needs.release-base.outputs.push }}"
         env:
+          RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
           TARGET: ${{ matrix.target-stage }}
           CACHE_FROM: type=gha,scope=${{ env.CACHE_GHA_SCOPE_CROSS }} type=gha,scope=image${{ matrix.target-stage }}
           CACHE_TO: type=gha,scope=image${{ matrix.target-stage }}
@@ -419,6 +420,7 @@ jobs:
         run: |
           ./hack/release-tar "${{ needs.release-base.outputs.tag }}" release-out
         env:
+          RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
           PLATFORMS: ${{ env.PLATFORMS }},darwin/amd64,darwin/arm64,windows/amd64,windows/arm64
           CACHE_FROM: type=gha,scope=${{ env.CACHE_GHA_SCOPE_BINARIES }} type=gha,scope=${{ env.CACHE_GHA_SCOPE_CROSS }}
       -
@@ -514,6 +516,7 @@ jobs:
         run: |
           ./frontend/dockerfile/cmd/dockerfile-frontend/hack/release "${{ needs.frontend-base.outputs.typ }}" "${{ matrix.tag }}" "$DF_REPO_SLUG_TARGET" "${{ needs.frontend-base.outputs.push }}"
         env:
+          RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
           PLATFORMS: ${{ env.PLATFORMS }},linux/386,linux/mips,linux/mipsle,linux/mips64,linux/mips64le
           CACHE_FROM: type=gha,scope=${{ env.CACHE_SCOPE }}
           CACHE_TO: type=gha,scope=${{ env.CACHE_SCOPE }}
