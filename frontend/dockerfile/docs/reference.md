@@ -1323,7 +1323,7 @@ ADD [--keep-git-dir=<boolean>] <git ref> <dir>
 ```
 
 ```dockerfile
-# syntax=docker/dockerfile-upstream:master-labs
+# syntax=docker/dockerfile:1-labs
 FROM alpine
 ADD --keep-git-dir=true https://github.com/moby/buildkit.git#v0.10.1 /buildkit
 ```
@@ -1331,9 +1331,11 @@ ADD --keep-git-dir=true https://github.com/moby/buildkit.git#v0.10.1 /buildkit
 The `--keep-git-dir=true` flag adds the `.git` directory. This flag defaults to false.
 
 ### Adding a private git repository
+
 To add a private repo via SSH, create a Dockerfile with the following form:
+
 ```dockerfile
-# syntax = docker/dockerfile-upstream:master-labs
+# syntax=docker/dockerfile:1-labs
 FROM alpine
 ADD git@git.example.com:foo/bar.git /bar
 ```
