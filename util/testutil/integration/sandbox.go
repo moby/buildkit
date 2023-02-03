@@ -281,6 +281,7 @@ const (
 	FeatureSBOM             = "sbom"
 	FeatureSecurityMode     = "security mode"
 	FeatureSourceDateEpoch  = "source date epoch"
+	FeatureCNINetwork       = "cni network"
 )
 
 var features = map[string]struct{}{
@@ -299,6 +300,7 @@ var features = map[string]struct{}{
 	FeatureSBOM:             {},
 	FeatureSecurityMode:     {},
 	FeatureSourceDateEpoch:  {},
+	FeatureCNINetwork:       {},
 }
 
 func CheckFeatureCompat(t *testing.T, sb Sandbox, reason ...string) {
