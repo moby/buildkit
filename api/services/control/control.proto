@@ -43,33 +43,33 @@ message DiskUsageResponse {
 }
 
 message UsageRecord {
-	string ID = 1;
-	bool Mutable = 2;
-	bool InUse = 3;
-	int64 Size = 4;
-	string Parent = 5 [deprecated=true];
-	google.protobuf.Timestamp CreatedAt = 6 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
-	google.protobuf.Timestamp LastUsedAt = 7 [(gogoproto.stdtime) = true];
-	int64 UsageCount = 8;
-	string Description = 9;
-	string RecordType = 10;
-	bool Shared = 11;
-	repeated string Parents = 12;
+	string id = 1;
+	bool mutable = 2;
+	bool inUse = 3;
+	int64 size = 4;
+	string parent = 5 [deprecated=true];
+	google.protobuf.Timestamp createdAt = 6 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+	google.protobuf.Timestamp lastUsedAt = 7 [(gogoproto.stdtime) = true];
+	int64 usageCount = 8;
+	string description = 9;
+	string recordType = 10;
+	bool shared = 11;
+	repeated string parents = 12;
 }
 
 message SolveRequest {
-	string Ref = 1;
-	pb.Definition Definition = 2;
-	string Exporter = 3;
-	map<string, string> ExporterAttrs = 4;
-	string Session = 5;
-	string Frontend = 6;
-	map<string, string> FrontendAttrs = 7;
-	CacheOptions Cache = 8 [(gogoproto.nullable) = false];
-	repeated string Entitlements = 9 [(gogoproto.customtype) = "github.com/moby/buildkit/util/entitlements.Entitlement" ];
-	map<string, pb.Definition> FrontendInputs = 10;
-	bool Internal = 11; // Internal builds are not recorded in build history
-	moby.buildkit.v1.sourcepolicy.Policy SourcePolicy = 12;
+	string ref = 1;
+	pb.Definition definition = 2;
+	string exporter = 3;
+	map<string, string> exporterAttrs = 4;
+	string session = 5;
+	string frontend = 6;
+	map<string, string> frontendAttrs = 7;
+	CacheOptions cache = 8 [(gogoproto.nullable) = false];
+	repeated string entitlements = 9 [(gogoproto.customtype) = "github.com/moby/buildkit/util/entitlements.Entitlement" ];
+	map<string, pb.Definition> frontendInputs = 10;
+	bool internal = 11; // Internal builds are not recorded in build history
+	moby.buildkit.v1.sourcepolicy.Policy sourcePolicy = 12;
 }
 
 message CacheOptions {
@@ -77,35 +77,35 @@ message CacheOptions {
 	// When ExportRefDeprecated is set, the solver appends
 	// {.Type = "registry", .Attrs = ExportAttrs.add("ref", ExportRef)}
 	// to Exports for compatibility. (planned to be removed)
-	string ExportRefDeprecated = 1;
+	string exportRefDeprecated = 1;
 	// ImportRefsDeprecated is deprecated in favor or the new Imports since BuildKit v0.4.0.
 	// When ImportRefsDeprecated is set, the solver appends
 	// {.Type = "registry", .Attrs = {"ref": importRef}}
 	// for each of the ImportRefs entry to Imports for compatibility. (planned to be removed)
-	repeated string ImportRefsDeprecated = 2;
+	repeated string importRefsDeprecated = 2;
 	// ExportAttrsDeprecated is deprecated since BuildKit v0.4.0.
 	// See the description of ExportRefDeprecated.
-	map<string, string> ExportAttrsDeprecated = 3;
+	map<string, string> exportAttrsDeprecated = 3;
 	// Exports was introduced in BuildKit v0.4.0.
-	repeated CacheOptionsEntry Exports = 4;
+	repeated CacheOptionsEntry exports = 4;
 	// Imports was introduced in BuildKit v0.4.0.
-	repeated CacheOptionsEntry Imports = 5;
+	repeated CacheOptionsEntry imports = 5;
 }
 
 message CacheOptionsEntry {
 	// Type is like "registry" or "local"
-	string Type = 1;
+	string type = 1;
 	// Attrs are like mode=(min,max), ref=example.com:5000/foo/bar .
 	// See cache importer/exporter implementations' documentation.
-	map<string, string> Attrs = 2;
+	map<string, string> attrs = 2;
 }
 
 message SolveResponse {
-	map<string, string> ExporterResponse = 1;
+	map<string, string> exporterResponse = 1;
 }
 
 message StatusRequest {
-	string Ref = 1;
+	string ref = 1;
 }
 
 message StatusResponse {
@@ -127,7 +127,7 @@ message Vertex {
 }
 
 message VertexStatus {
-	string ID = 1;
+	string id = 1;
 	string vertex = 2 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
 	string name = 3;
 	int64 current = 4;
@@ -173,9 +173,9 @@ message InfoResponse {
 }
 
 message BuildHistoryRequest {
-	bool ActiveOnly = 1;
-	string Ref = 2;
-	bool EarlyExit = 3;
+	bool activeOnly = 1;
+	string ref = 2;
+	bool earlyExit = 3;
 }
 
 enum BuildHistoryEventType {
@@ -190,18 +190,18 @@ message BuildHistoryEvent {
 }
 
 message BuildHistoryRecord {
-	string Ref = 1;
-	string Frontend = 2;
-	map<string, string> FrontendAttrs = 3;
-	repeated Exporter Exporters = 4;
+	string ref = 1;
+	string frontend = 2;
+	map<string, string> frontendAttrs = 3;
+	repeated Exporter exporters = 4;
 	google.rpc.Status error = 5;
-	google.protobuf.Timestamp CreatedAt = 6 [(gogoproto.stdtime) = true];
-	google.protobuf.Timestamp CompletedAt = 7 [(gogoproto.stdtime) = true];
+	google.protobuf.Timestamp createdAt = 6 [(gogoproto.stdtime) = true];
+	google.protobuf.Timestamp completedAt = 7 [(gogoproto.stdtime) = true];
 	Descriptor logs = 8;
-	map<string, string> ExporterResponse = 9;
-	BuildResultInfo Result = 10;
-	map<string, BuildResultInfo> Results = 11;
-	int32 Generation = 12;
+	map<string, string> exporterResponse = 9;
+	BuildResultInfo result = 10;
+	map<string, BuildResultInfo> results = 11;
+	int32 generation = 12;
 	Descriptor trace = 13;
 	bool pinned = 14;
 	int32 numCachedSteps = 15;
@@ -212,9 +212,9 @@ message BuildHistoryRecord {
 }
 
 message UpdateBuildHistoryRequest {
-	string Ref = 1;
-	bool Pinned = 2;
-	bool Delete = 3;
+	string ref = 1;
+	bool pinned = 2;
+	bool delete = 3;
 }
 
 message UpdateBuildHistoryResponse {}
@@ -227,11 +227,11 @@ message Descriptor {
 }
 
 message BuildResultInfo {
-	Descriptor Result = 1;
-	repeated Descriptor Attestations = 2;
+	Descriptor result = 1;
+	repeated Descriptor attestations = 2;
 }
 
 message Exporter {
-	string Type = 1;
-	map<string, string> Attrs = 2;
+	string type = 1;
+	map<string, string> attrs = 2;
 }
