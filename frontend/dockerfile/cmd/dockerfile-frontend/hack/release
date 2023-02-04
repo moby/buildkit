@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
 . $(dirname $0)/../../../../../hack/util
-set -e
+set -eu
 
-: ${PLATFORMS=}
-: ${DAILY_TARGETS=}
+: "${PLATFORMS=}"
+: "${DAILY_TARGETS=}"
 
 usage() {
   echo "$0 (master|tag|daily) (tag|channel) <repo> [push]"
@@ -23,7 +23,7 @@ parseTag() {
   fi
   local suffix=$(echo $1 | awk -F- '{print $NF}')
   local tagf=./frontend/dockerfile/release/$suffix/tags
-  if [ "$sufffix" == "$1" ] || [ ! -f $tagf ]; then
+  if [ "$suffix" == "$1" ] || [ ! -f $tagf ]; then
     suffix="mainline"
   fi
 
