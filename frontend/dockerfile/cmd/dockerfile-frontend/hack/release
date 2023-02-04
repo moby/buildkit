@@ -23,7 +23,7 @@ parseTag() {
   fi
   local suffix=$(echo $1 | awk -F- '{print $NF}')
   local tagf=./frontend/dockerfile/release/$suffix/tags
-  if [ "$sufffix" == "$1" ] || [ ! -f $tagf ]; then
+  if [ "$suffix" == "$1" ] || [ ! -f $tagf ]; then
     suffix="mainline"
   fi
 
