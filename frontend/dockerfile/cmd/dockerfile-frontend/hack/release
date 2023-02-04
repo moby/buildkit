@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
 . $(dirname $0)/../../../../../hack/util
-set -e
+set -eu
 
-: ${PLATFORMS=}
-: ${DAILY_TARGETS=}
+: "${PLATFORMS=}"
+: "${DAILY_TARGETS=}"
 
 usage() {
   echo "$0 (master|tag|daily) (tag|channel) <repo> [push]"
