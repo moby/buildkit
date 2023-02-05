@@ -27,6 +27,20 @@ features:
   migrate to alternatives. In such cases, a warning may be printed, and users
   should not rely on this feature.
 
-| Status | Feature | Deprecated | Remove | Recommendation |
-|--------|---------|------------|--------|----------------|
-|        |         | -          | -      |                |
+| Status     | Feature                                 | Deprecated | Remove | Recommendation                                                   |
+|------------|-----------------------------------------|------------|--------|------------------------------------------------------------------|
+| Deprecated | [Build information](#build-information) | v0.11      | v0.12  | Use [provenance attestations](./attestations/slsa-provenance.md) |
+
+## Build information
+
+[Build information](https://github.com/moby/buildkit/blob/v0.11/docs/buildinfo.md)
+structures have been introduced in [BuildKit v0.10.0](https://github.com/moby/buildkit/releases/tag/v0.10.0)
+and are generated with build metadata that allows you to see all the sources
+(images, git repositories) that were used by the build with their exact
+versions and also the configuration that was passed to the build. This
+information is also embedded into the image configuration if one is generated.
+
+With the introduction of [provenance attestations](./attestations/slsa-provenance.md)
+in [BuildKit v0.11.0](https://github.com/moby/buildkit/releases/tag/v0.11.0),
+the build information feature has been deprecated and will be removed in the
+next release.

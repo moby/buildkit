@@ -25,15 +25,16 @@ const (
 )
 
 type ImageCommitOpts struct {
-	ImageName      string
-	RefCfg         cacheconfig.RefConfig
-	OCITypes       bool
-	BuildInfo      bool
-	BuildInfoAttrs bool
-	Annotations    AnnotationsGroup
-	Epoch          *time.Time
+	ImageName   string
+	RefCfg      cacheconfig.RefConfig
+	OCITypes    bool
+	Annotations AnnotationsGroup
+	Epoch       *time.Time
 
 	ForceInlineAttestations bool // force inline attestations to be attached
+
+	BuildInfo      bool // Deprecated: Build information format has been deprecated. Status and alternative recommendation can be found at: https://github.com/moby/buildkit/blob/master/docs/deprecated.md
+	BuildInfoAttrs bool // Deprecated: Build information format has been deprecated. Status and alternative recommendation can be found at: https://github.com/moby/buildkit/blob/master/docs/deprecated.md
 }
 
 func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error) {

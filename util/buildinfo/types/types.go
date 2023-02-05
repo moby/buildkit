@@ -1,3 +1,7 @@
+// Package binfotypes implements types for build information.
+//
+// Deprecated: Build information format has been deprecated. Status and
+// alternative recommendation can be found at: https://github.com/moby/buildkit/blob/master/docs/deprecated.md
 package binfotypes
 
 import (
