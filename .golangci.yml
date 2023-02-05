@@ -65,3 +65,6 @@ issues:
     - linters:
         - revive
       text: "stutters"
+    - linters:
+        - staticcheck
+      text: "SA1019: .*Build information format has been deprecated. Status and alternative recommendation can be found at: https://github.com/moby/buildkit/blob/master/docs/deprecated.md"
