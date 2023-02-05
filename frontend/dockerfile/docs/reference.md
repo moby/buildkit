@@ -2224,6 +2224,12 @@ RUN echo "I'm building for $TARGETPLATFORM"
 | `BUILDKIT_SYNTAX`                     | String | Set frontend image                                                                                                                                                                                             |
 | `SOURCE_DATE_EPOCH`                   | Int    | Set the UNIX timestamp for created image and layers. More info from [reproducible builds](https://reproducible-builds.org/docs/source-date-epoch/). Supported since Dockerfile 1.5, BuildKit 0.11              |
 
+> **Warning**
+>
+> Build information along `BUILDKIT_INLINE_BUILDINFO_ATTRS` build arg are
+> deprecated and will be removed in the next release. See the [BuildKit Deprecated features page](https://github.com/moby/buildkit/blob/master/docs/deprecated.md)
+> for status and alternative recommendation about this feature.
+
 #### Example: keep `.git` dir
 
 When using a Git context, `.git` dir is not kept on git checkouts. It can be

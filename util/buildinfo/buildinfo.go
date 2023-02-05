@@ -1,3 +1,6 @@
+// Package buildinfo implements utilities for build information.
+//
+// Deprecated: Build information is deprecated: https://github.com/moby/buildkit/blob/master/docs/deprecated.md
 package buildinfo
 
 import (
@@ -16,9 +19,6 @@ import (
 	"github.com/moby/buildkit/util/urlutil"
 	"github.com/pkg/errors"
 )
-
-// BuildInfo format has been deprecated and will be removed in a future release.
-// Use provenance attestations instead.
 
 func FromProvenance(c *provenance.Capture) (*binfotypes.BuildInfo, error) {
 	var bi binfotypes.BuildInfo
