@@ -31,6 +31,9 @@ var intotoPlatform ocispecs.Platform = ocispecs.Platform{
 
 // supplementSBOM modifies SPDX attestations to include the file layers
 func supplementSBOM(ctx context.Context, s session.Group, target cache.ImmutableRef, targetRemote *solver.Remote, att exporter.Attestation) (exporter.Attestation, error) {
+	if target == nil {
+		return att, nil
+	}
 	if att.Kind != gatewaypb.AttestationKindInToto {
 		return att, nil
 	}
