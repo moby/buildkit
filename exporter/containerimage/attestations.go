@@ -172,6 +172,8 @@ func newFileLayerFinder(target cache.ImmutableRef, remote *solver.Remote) (fileL
 //
 // find is not concurrency-safe.
 func (c *fileLayerFinder) find(ctx context.Context, s session.Group, filename string) (cache.ImmutableRef, *ocispecs.Descriptor, error) {
+	filename = filepath.Join("/", filename)
+
 	// return immediately if we've already found the layer containing filename
 	if cache, ok := c.cache[filename]; ok {
 		return cache.ref, &cache.desc, nil
@@ -188,6 +190,8 @@ func (c *fileLayerFinder) find(ctx context.Context, s session.Group, filename st
 
 		found := false
 		for _, f := range files {
+			f = filepath.Join("/", f)
+
 			if strings.HasPrefix(f, ".wh.") {
 				// skip whiteout files, we only care about file creations
 				continue
