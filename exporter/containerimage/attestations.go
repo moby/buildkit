@@ -44,7 +44,7 @@ func supplementSBOM(ctx context.Context, s session.Group, target cache.Immutable
 	if !ok {
 		return att, nil
 	}
-	if n, _, _ := strings.Cut(att.Path, "."); n != string(name) {
+	if n, _, _ := strings.Cut(filepath.Base(att.Path), "."); n != string(name) {
 		return att, nil
 	}
 
