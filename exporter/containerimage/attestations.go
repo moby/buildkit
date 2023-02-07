@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"path/filepath"
 	"strings"
 
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
@@ -192,7 +193,7 @@ func (c *fileLayerFinder) find(ctx context.Context, s session.Group, filename st
 		for _, f := range files {
 			f = filepath.Join("/", f)
 
-			if strings.HasPrefix(f, ".wh.") {
+			if strings.HasPrefix(filepath.Base(f), ".wh.") {
 				// skip whiteout files, we only care about file creations
 				continue
 			}
