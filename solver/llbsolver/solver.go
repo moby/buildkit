@@ -212,7 +212,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 			if err != nil {
 				return nil, nil, err
 			}
-			w, err := s.history.OpenBlobWriter(ctx, attestation.MediaTypeDockerSchema2AttestationType)
+			w, err := s.history.OpenBlobWriter(ctx, attestation.MediaTypeAttestationLayer)
 			if err != nil {
 				return nil, nil, err
 			}

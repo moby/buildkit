@@ -440,7 +440,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *Ima
 func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *ImageCommitOpts, p exptypes.Platform, target string, statements []intoto.Statement) (*ocispecs.Descriptor, error) {
 	var (
 		manifestType = ocispecs.MediaTypeImageManifest
-		configType   = ocispecs.MediaTypeImageConfig
+		configType   = attestationTypes.MediaTypeOCIAttestationConfig
 	)
 	if !opts.OCITypes {
 		manifestType = images.MediaTypeDockerSchema2Manifest
@@ -457,7 +457,7 @@ func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *Ima
 		}
 		digest := digest.FromBytes(data)
 		desc := ocispecs.Descriptor{
-			MediaType: attestationTypes.MediaTypeDockerSchema2AttestationType,
+			MediaType: attestationTypes.MediaTypeAttestationLayer,
 			Digest:    digest,
 			Size:      int64(len(data)),
 			Annotations: map[string]string{
@@ -472,10 +472,7 @@ func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *Ima
 		layers[i] = desc
 	}
 
-	config, err := attestationsConfig(layers)
-	if err != nil {
-		return nil, err
-	}
+	config := []byte("{}")
 	configDigest := digest.FromBytes(config)
 	configDesc := ocispecs.Descriptor{
 		Digest:    configDigest,
@@ -488,11 +485,7 @@ func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *Ima
 		Versioned: specs.Versioned{
 			SchemaVersion: 2,
 		},
-		Config: ocispecs.Descriptor{
-			Digest:    configDigest,
-			Size:      int64(len(config)),
-			MediaType: configType,
-		},
+		Config: configDesc,
 	}
 
 	labels := map[string]string{
@@ -560,22 +553,6 @@ func defaultImageConfig() ([]byte, error) {
 	img.Config.Env = []string{"PATH=" + system.DefaultPathEnv(pl.OS)}
 	dt, err := json.Marshal(img)
 	return dt, errors.Wrap(err, "failed to create empty image config")
-}
-
-func attestationsConfig(layers []ocispecs.Descriptor) ([]byte, error) {
-	img := ocispecs.Image{
-		Architecture: intotoPlatform.Architecture,
-		OS:           intotoPlatform.OS,
-		OSVersion:    intotoPlatform.OSVersion,
-		OSFeatures:   intotoPlatform.OSFeatures,
-		Variant:      intotoPlatform.Variant,
-	}
-	img.RootFS.Type = "layers"
-	for _, layer := range layers {
-		img.RootFS.DiffIDs = append(img.RootFS.DiffIDs, digest.Digest(layer.Annotations["containerd.io/uncompressed"]))
-	}
-	dt, err := json.Marshal(img)
-	return dt, errors.Wrap(err, "failed to create attestations image config")
 }
 
 func parseHistoryFromConfig(dt []byte) ([]ocispecs.History, error) {

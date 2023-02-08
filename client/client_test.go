@@ -7501,13 +7501,11 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 		require.Equal(t, len(ps), len(atts.Images))
 		for i, att := range atts.Images {
 			require.Equal(t, ocispecs.MediaTypeImageManifest, att.Desc.MediaType)
+			require.Empty(t, att.Img)
 			require.Equal(t, "unknown/unknown", platforms.Format(*att.Desc.Platform))
-			require.Equal(t, "unknown/unknown", att.Img.OS+"/"+att.Img.Architecture)
 			require.Equal(t, attestation.DockerAnnotationReferenceTypeDefault, att.Desc.Annotations[attestation.DockerAnnotationReferenceType])
 			require.Equal(t, bases[i].Desc.Digest.String(), att.Desc.Annotations[attestation.DockerAnnotationReferenceDigest])
 			require.Equal(t, 2, len(att.Layers))
-			require.Equal(t, len(att.Layers), len(att.Img.RootFS.DiffIDs))
-			require.Equal(t, len(att.Img.History), 0)
 
 			var attest intoto.Statement
 			require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))

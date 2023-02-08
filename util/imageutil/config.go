@@ -174,7 +174,7 @@ func childrenConfigHandler(provider content.Provider, platform platforms.MatchCo
 				descs = append(descs, index.Manifests...)
 			}
 		case images.MediaTypeDockerSchema2Config, ocispecs.MediaTypeImageConfig, docker.LegacyConfigMediaType,
-			attestation.MediaTypeDockerSchema2AttestationType:
+			attestation.MediaTypeAttestationLayer, attestation.MediaTypeOCIAttestationConfig:
 			// childless data types.
 			return nil, nil
 		default:
