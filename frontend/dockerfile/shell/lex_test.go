@@ -234,34 +234,148 @@ func TestProcessWithMatches(t *testing.T) {
 		matches     map[string]struct{}
 	}{
 		{
-			input:    "foo ${BAR} ${UNUSED}",
-			envs:     map[string]string{"ANOTHER": "bar", "BAR": "baz"},
-			expected: "foo baz ",
+			input:    "x",
+			envs:     map[string]string{"DUMMY": "dummy"},
+			expected: "x",
+			matches:  nil,
+		},
+		{
+			input:    "x ${UNUSED}",
+			envs:     map[string]string{"DUMMY": "dummy"},
+			expected: "x ",
+			matches:  nil,
+		},
+		{
+			input:    "x ${FOO}",
+			envs:     map[string]string{"FOO": "y"},
+			expected: "x y",
+			matches:  map[string]struct{}{"FOO": {}},
+		},
+
+		{
+			input: "${FOO-aaa} ${BAR-bbb} ${BAZ-ccc}",
+			envs: map[string]string{
+				"FOO": "xxx",
+				"BAR": "",
+			},
+			expected: "xxx  ccc",
+			matches:  map[string]struct{}{"FOO": {}, "BAR": {}},
+		},
+		{
+			input: "${FOO:-aaa} ${BAR:-bbb} ${BAZ:-ccc}",
+			envs: map[string]string{
+				"FOO": "xxx",
+				"BAR": "",
+			},
+			expected: "xxx bbb ccc",
+			matches:  map[string]struct{}{"FOO": {}, "BAR": {}},
+		},
+
+		{
+			input: "${FOO+aaa} ${BAR+bbb} ${BAZ+ccc}",
+			envs: map[string]string{
+				"FOO": "xxx",
+				"BAR": "",
+			},
+			expected: "aaa bbb ",
+			matches:  map[string]struct{}{"FOO": {}, "BAR": {}},
+		},
+		{
+			input: "${FOO:+aaa} ${BAR:+bbb} ${BAZ:+ccc}",
+			envs: map[string]string{
+				"FOO": "xxx",
+				"BAR": "",
+			},
+			expected: "aaa  ",
+			matches:  map[string]struct{}{"FOO": {}, "BAR": {}},
+		},
+
+		{
+			input: "${FOO?aaa}",
+			envs: map[string]string{
+				"FOO": "xxx",
+				"BAR": "",
+			},
+			expected: "xxx",
+			matches:  map[string]struct{}{"FOO": {}},
+		},
+		{
+			input: "${BAR?bbb}",
+			envs: map[string]string{
+				"FOO": "xxx",
+				"BAR": "",
+			},
+			expected: "",
 			matches:  map[string]struct{}{"BAR": {}},
 		},
 		{
-			input:    "foo ${BAR:-abc} ${UNUSED}",
-			envs:     map[string]string{"ANOTHER": "bar"},
-			expected: "foo abc ",
-			matches:  map[string]struct{}{},
+			input: "${BAZ?ccc}",
+			envs: map[string]string{
+				"FOO": "xxx",
+				"BAR": "",
+			},
+			expectedErr: true,
+		},
+		{
+			input: "${FOO:?aaa}",
+			envs: map[string]string{
+				"FOO": "xxx",
+				"BAR": "",
+			},
+			expected: "xxx",
+			matches:  map[string]struct{}{"FOO": {}},
+		},
+		{
+			input: "${BAR:?bbb}",
+			envs: map[string]string{
+				"FOO": "xxx",
+				"BAR": "",
+			},
+			expectedErr: true,
+		},
+		{
+			input: "${BAZ:?ccc}",
+			envs: map[string]string{
+				"FOO": "xxx",
+				"BAR": "",
+			},
+			expectedErr: true,
+		},
+
+		{
+			input: "${FOO=aaa}",
+			envs: map[string]string{
+				"FOO": "xxx",
+				"BAR": "",
+			},
+			expectedErr: true,
+		},
+		{
+			input: "${FOO=:aaa}",
+			envs: map[string]string{
+				"FOO": "xxx",
+				"BAR": "",
+			},
+			expectedErr: true,
 		},
 	}
 
 	for _, c := range tc {
 		c := c
 		t.Run(c.input, func(t *testing.T) {
-		w, matches, err := shlex.ProcessWordWithMatches(c.input, c.envs)
+			w, matches, err := shlex.ProcessWordWithMatches(c.input, c.envs)
 			if c.expectedErr {
 				require.Error(t, err)
 				return
 			}
-		require.NoError(t, err)
-		require.Equal(t, c.expected, w)
+			require.NoError(t, err)
+			require.Equal(t, c.expected, w)
 
-		require.Equal(t, len(c.matches), len(matches))
-		for k := range c.matches {
-			require.Contains(t, matches, k)
-		}
+			require.Equal(t, len(c.matches), len(matches))
+			for k := range c.matches {
+				require.Contains(t, matches, k)
+			}
+		})
 	}
 }
 
