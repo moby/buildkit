@@ -6519,7 +6519,7 @@ FROM scratch
 COPY --from=0 / /
 `)
 
-	const expectedDigest = "sha256:9e36395384d073e711102b13bd0ba4b779ef6afbaf5cadeb77fe77dba8967d1f"
+	const expectedDigest = "sha256:23bfe9c494f4b4ae9368d989035c70b3a34aa0bfc991618b3e54dcce2eee4bf8"
 
 	dir, err := integration.Tmpdir(
 		t,
