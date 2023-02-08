@@ -110,6 +110,14 @@ func TestParseGitRef(t *testing.T) {
 			ref:      "http://github.com/docker/docker.git:#branch",
 			expected: nil,
 		},
+		{
+			ref: "https://github.com/docker/docker.git#:myfolder",
+			expected: &GitRef{
+				Remote:    "https://github.com/docker/docker.git",
+				ShortName: "docker",
+				SubDir:    "myfolder",
+			},
+		},
 	}
 	for _, tt := range cases {
 		tt := tt
