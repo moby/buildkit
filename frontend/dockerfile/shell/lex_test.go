@@ -226,24 +226,43 @@ func TestGetEnv(t *testing.T) {
 func TestProcessWithMatches(t *testing.T) {
 	shlex := NewLex('\\')
 
-	w, matches, err := shlex.ProcessWordWithMatches("foo ${BAR} ${UNUSED}", map[string]string{
-		"ANOTHER": "bar",
-		"BAR":     "baz",
-	})
-	require.NoError(t, err)
-	require.Equal(t, "foo baz ", w)
+	tc := []struct {
+		input       string
+		envs        map[string]string
+		expected    string
+		expectedErr bool
+		matches     map[string]struct{}
+	}{
+		{
+			input:    "foo ${BAR} ${UNUSED}",
+			envs:     map[string]string{"ANOTHER": "bar", "BAR": "baz"},
+			expected: "foo baz ",
+			matches:  map[string]struct{}{"BAR": {}},
+		},
+		{
+			input:    "foo ${BAR:-abc} ${UNUSED}",
+			envs:     map[string]string{"ANOTHER": "bar"},
+			expected: "foo abc ",
+			matches:  map[string]struct{}{},
+		},
+	}
 
-	require.Equal(t, 1, len(matches))
-	_, ok := matches["BAR"]
-	require.True(t, ok)
+	for _, c := range tc {
+		c := c
+		t.Run(c.input, func(t *testing.T) {
+		w, matches, err := shlex.ProcessWordWithMatches(c.input, c.envs)
+			if c.expectedErr {
+				require.Error(t, err)
+				return
+			}
+		require.NoError(t, err)
+		require.Equal(t, c.expected, w)
 
-	w, matches, err = shlex.ProcessWordWithMatches("foo ${BAR:-abc} ${UNUSED}", map[string]string{
-		"ANOTHER": "bar",
-	})
-	require.NoError(t, err)
-	require.Equal(t, "foo abc ", w)
-
-	require.Equal(t, 0, len(matches))
+		require.Equal(t, len(c.matches), len(matches))
+		for k := range c.matches {
+			require.Contains(t, matches, k)
+		}
+	}
 }
 
 func TestProcessWithMatchesPlatform(t *testing.T) {
