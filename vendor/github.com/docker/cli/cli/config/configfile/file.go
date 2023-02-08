@@ -300,7 +300,8 @@ func (configFile *ConfigFile) GetAllCredentials() (map[string]types.AuthConfig, 
 	for registryHostname := range configFile.CredentialHelpers {
 		newAuth, err := configFile.GetAuthConfig(registryHostname)
 		if err != nil {
-			return nil, err
+			logrus.WithError(err).Warnf("Failed to get credentials for registry: %s", registryHostname)
+			continue
 		}
 		auths[registryHostname] = newAuth
 	}
