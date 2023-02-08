@@ -37,6 +37,77 @@ func TestNewGitIdentifier(t *testing.T) {
 				Ref:    "main",
 			},
 		},
+		{
+			url: "git://github.com/user/repo.git",
+			expected: GitIdentifier{
+				Remote: "git://github.com/user/repo.git",
+			},
+		},
+		{
+			url: "git://github.com/user/repo.git#mybranch:mydir/mysubdir/",
+			expected: GitIdentifier{
+				Remote: "git://github.com/user/repo.git",
+				Ref:    "mybranch",
+				Subdir: "mydir/mysubdir/",
+			},
+		},
+		{
+			url: "git://github.com/user/repo.git#:mydir/mysubdir/",
+			expected: GitIdentifier{
+				Remote: "git://github.com/user/repo.git",
+				Subdir: "mydir/mysubdir/",
+			},
+		},
+		{
+			url: "https://github.com/user/repo.git",
+			expected: GitIdentifier{
+				Remote: "https://github.com/user/repo.git",
+			},
+		},
+		{
+			url: "https://github.com/user/repo.git#mybranch:mydir/mysubdir/",
+			expected: GitIdentifier{
+				Remote: "https://github.com/user/repo.git",
+				Ref:    "mybranch",
+				Subdir: "mydir/mysubdir/",
+			},
+		},
+		{
+			url: "git@github.com:user/repo.git",
+			expected: GitIdentifier{
+				Remote: "git@github.com:user/repo.git",
+			},
+		},
+		{
+			url: "git@github.com:user/repo.git#mybranch:mydir/mysubdir/",
+			expected: GitIdentifier{
+				Remote: "git@github.com:user/repo.git",
+				Ref:    "mybranch",
+				Subdir: "mydir/mysubdir/",
+			},
+		},
+		{
+			url: "ssh://github.com/user/repo.git",
+			expected: GitIdentifier{
+				Remote: "ssh://github.com/user/repo.git",
+			},
+		},
+		{
+			url: "ssh://github.com/user/repo.git#mybranch:mydir/mysubdir/",
+			expected: GitIdentifier{
+				Remote: "ssh://github.com/user/repo.git",
+				Ref:    "mybranch",
+				Subdir: "mydir/mysubdir/",
+			},
+		},
+		{
+			url: "ssh://foo%40barcorp.com@github.com/user/repo.git#mybranch:mydir/mysubdir/",
+			expected: GitIdentifier{
+				Remote: "ssh://foo%40barcorp.com@github.com/user/repo.git",
+				Ref:    "mybranch",
+				Subdir: "mydir/mysubdir/",
+			},
+		},
 	}
 	for _, tt := range tests {
 		tt := tt
