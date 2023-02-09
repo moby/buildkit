@@ -1,7 +1,6 @@
 package integration
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -141,9 +140,8 @@ func (c moby) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func()
 	}
 	deferF.append(d.StopWithError)
 
-	logs := map[string]*bytes.Buffer{}
 	if err := waitUnix(d.Sock(), 5*time.Second); err != nil {
-		return nil, nil, errors.Errorf("dockerd did not start up: %q, %s", err, formatLogs(logs))
+		return nil, nil, errors.Errorf("dockerd did not start up: %q, %s", err, formatLogs(cfg.Logs))
 	}
 
 	dockerAPI, err := client.NewClientWithOpts(client.WithHost(d.Sock()))
