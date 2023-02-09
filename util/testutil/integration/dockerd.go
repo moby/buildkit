@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/docker/docker/client"
@@ -125,13 +126,16 @@ func (c moby) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func()
 		return nil, nil, err
 	}
 
-	err = d.StartWithError(cfg.Logs,
+	dockerdFlags := []string{
 		"--config-file", dockerdConfigFile,
 		"--userland-proxy=false",
-		"--bip", "10.66.66.1/24",
-		"--default-address-pool", "base=10.66.66.0/16,size=24",
 		"--debug",
-	)
+	}
+	if s := os.Getenv("BUILDKIT_INTEGRATION_DOCKERD_FLAGS"); s != "" {
+		dockerdFlags = append(dockerdFlags, strings.Split(strings.TrimSpace(s), "\n")...)
+	}
+
+	err = d.StartWithError(cfg.Logs, dockerdFlags...)
 	if err != nil {
 		return nil, nil, err
 	}
