@@ -91,7 +91,7 @@ func NewExporter(c *Config) (remotecache.Exporter, error) {
 }
 
 func (*exporter) Name() string {
-	return "exporting to GitHub cache"
+	return "exporting to GitHub Actions Cache"
 }
 
 func (ce *exporter) Config() remotecache.Config {
