@@ -4,7 +4,6 @@ import (
 	"context"
 	"path"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 
@@ -35,6 +34,12 @@ const (
 	// NoProcessSandbox should be enabled only when the BuildKit is running in a container as an unprivileged user.
 	NoProcessSandbox
 )
+
+var tracingEnvVars = []string{
+	"OTEL_TRACES_EXPORTER=otlp",
+	"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=" + getTracingSocket(),
+	"OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=grpc",
+}
 
 func (pm ProcessMode) String() string {
 	switch pm {
@@ -184,20 +189,7 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 	}
 
 	if tracingSocket != "" {
-		if runtime.GOOS == "windows" {
-			s.Mounts = append(s.Mounts, specs.Mount{
-				Destination: `\\.\pipe\otel-grpc`,
-				Source:      tracingSocket,
-				Options:     []string{"ro"},
-			})
-		} else {
-			s.Mounts = append(s.Mounts, specs.Mount{
-				Destination: "/dev/otel-grpc.sock",
-				Type:        "bind",
-				Source:      tracingSocket,
-				Options:     []string{"ro", "rbind"},
-			})
-		}
+		s.Mounts = append(s.Mounts, getTracingSocketMount(tracingSocket))
 	}
 
 	s.Mounts = dedupMounts(s.Mounts)
