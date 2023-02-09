@@ -23,6 +23,14 @@ const (
 	contentStoreIDPrefix = "local:"
 )
 
+type exporter struct {
+	remotecache.Exporter
+}
+
+func (*exporter) Name() string {
+	return "exporting cache to client directory"
+}
+
 // ResolveCacheExporterFunc for "local" cache exporter.
 func ResolveCacheExporterFunc(sm *session.Manager) remotecache.ResolveCacheExporterFunc {
 	return func(ctx context.Context, g session.Group, attrs map[string]string) (remotecache.Exporter, error) {
@@ -47,7 +55,7 @@ func ResolveCacheExporterFunc(sm *session.Manager) remotecache.ResolveCacheExpor
 		if err != nil {
 			return nil, err
 		}
-		return remotecache.NewExporter(cs, "", ociMediatypes, compressionConfig), nil
+		return &exporter{remotecache.NewExporter(cs, "", ociMediatypes, compressionConfig)}, nil
 	}
 }
 
