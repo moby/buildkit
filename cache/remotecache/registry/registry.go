@@ -35,17 +35,14 @@ func canonicalizeRef(rawRef string) (reference.Named, error) {
 }
 
 const (
-	attrRef              = "ref"
-	attrOCIMediatypes    = "oci-mediatypes"
-	attrLayerCompression = "compression"
-	attrForceCompression = "force-compression"
-	attrCompressionLevel = "compression-level"
-	attrInsecure         = "registry.insecure"
+	attrRef           = "ref"
+	attrOCIMediatypes = "oci-mediatypes"
+	attrInsecure      = "registry.insecure"
 )
 
 func ResolveCacheExporterFunc(sm *session.Manager, hosts docker.RegistryHosts) remotecache.ResolveCacheExporterFunc {
 	return func(ctx context.Context, g session.Group, attrs map[string]string) (remotecache.Exporter, error) {
-		compressionConfig, err := attrsToCompression(attrs)
+		compressionConfig, err := compression.ParseAttributes(attrs)
 		if err != nil {
 			return nil, err
 		}
@@ -77,7 +74,7 @@ func ResolveCacheExporterFunc(sm *session.Manager, hosts docker.RegistryHosts) r
 		if err != nil {
 			return nil, err
 		}
-		return remotecache.NewExporter(contentutil.FromPusher(pusher), refString, ociMediatypes, *compressionConfig), nil
+		return remotecache.NewExporter(contentutil.FromPusher(pusher), refString, ociMediatypes, compressionConfig), nil
 	}
 }
 
@@ -153,41 +150,6 @@ func (dsl *withDistributionSourceLabel) SnapshotLabels(descs []ocispecs.Descript
 		labels[k] = v
 	}
 	return labels
-}
-
-func attrsToCompression(attrs map[string]string) (*compression.Config, error) {
-	var compressionType compression.Type
-	if v, ok := attrs[attrLayerCompression]; ok {
-		c, err := compression.Parse(v)
-		if err != nil {
-			return nil, err
-		}
-		compressionType = c
-	} else {
-		compressionType = compression.Default
-	}
-	compressionConfig := compression.New(compressionType)
-	if v, ok := attrs[attrForceCompression]; ok {
-		var force bool
-		if v == "" {
-			force = true
-		} else {
-			b, err := strconv.ParseBool(v)
-			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value %s specified for %s", v, attrForceCompression)
-			}
-			force = b
-		}
-		compressionConfig = compressionConfig.SetForce(force)
-	}
-	if v, ok := attrs[attrCompressionLevel]; ok {
-		ii, err := strconv.ParseInt(v, 10, 64)
-		if err != nil {
-			return nil, errors.Wrapf(err, "non-integer value %s specified for %s", v, attrCompressionLevel)
-		}
-		compressionConfig = compressionConfig.SetLevel(int(ii))
-	}
-	return &compressionConfig, nil
 }
 
 func registryConfig(hosts docker.RegistryHosts, ref reference.Named, scope string, insecure bool) (string, docker.RegistryHosts) {
