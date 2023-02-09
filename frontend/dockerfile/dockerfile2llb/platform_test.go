@@ -13,22 +13,24 @@ func TestResolveBuildPlatforms(t *testing.T) {
 	dummyPlatform2 := ocispecs.Platform{Architecture: "DummyArchitecture2", OS: "DummyOS2"}
 
 	// BuildPlatforms is set and TargetPlatform is set
-	opt := ConvertOpt{TargetPlatform: &dummyPlatform1, BuildPlatforms: []ocispecs.Platform{dummyPlatform2}}
+	opt := ConvertOpt{TargetPlatform: &dummyPlatform1}
+	opt.BuildPlatforms = []ocispecs.Platform{dummyPlatform2}
 	result := buildPlatformOpt(&opt).buildPlatforms
 	assert.Equal(t, []ocispecs.Platform{dummyPlatform2}, result)
 
 	// BuildPlatforms is not set and TargetPlatform is set
-	opt = ConvertOpt{TargetPlatform: &dummyPlatform1, BuildPlatforms: nil}
+	opt = ConvertOpt{TargetPlatform: &dummyPlatform1}
 	result = buildPlatformOpt(&opt).buildPlatforms
 	assert.Equal(t, []ocispecs.Platform{dummyPlatform1}, result)
 
 	// BuildPlatforms is set and TargetPlatform is not set
-	opt = ConvertOpt{TargetPlatform: nil, BuildPlatforms: []ocispecs.Platform{dummyPlatform2}}
+	opt = ConvertOpt{TargetPlatform: nil}
+	opt.BuildPlatforms = []ocispecs.Platform{dummyPlatform2}
 	result = buildPlatformOpt(&opt).buildPlatforms
 	assert.Equal(t, []ocispecs.Platform{dummyPlatform2}, result)
 
 	// BuildPlatforms is not set and TargetPlatform is not set
-	opt = ConvertOpt{TargetPlatform: nil, BuildPlatforms: nil}
+	opt = ConvertOpt{}
 	result = buildPlatformOpt(&opt).buildPlatforms
 	assert.Equal(t, []ocispecs.Platform{platforms.DefaultSpec()}, result)
 }
