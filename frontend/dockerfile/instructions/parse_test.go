@@ -216,6 +216,21 @@ func TestErrorCases(t *testing.T) {
 			dockerfile:    `foo bar`,
 			expectedError: "unknown instruction: foo",
 		},
+		{
+			name:          "copy missing",
+			dockerfile:    "COPY --chown=a: /a /b",
+			expectedError: "a: is missing group part",
+		},
+		{
+			name:          "copy missing",
+			dockerfile:    "COPY --chown=:a /a /b",
+			expectedError: ":a is missing user part",
+		},
+		{
+			name:          "copy missing",
+			dockerfile:    "COPY --chown=a:b:c /a /b",
+			expectedError: "a:b:c has too many parts",
+		},
 	}
 	for _, c := range cases {
 		r := strings.NewReader(c.dockerfile)
