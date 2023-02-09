@@ -13,9 +13,6 @@ import (
 
 const (
 	keyImageName               = "name"
-	keyLayerCompression        = "compression"
-	keyCompressionLevel        = "compression-level"
-	keyForceCompression        = "force-compression"
 	keyOCITypes                = "oci-mediatypes"
 	keyBuildInfo               = "buildinfo"
 	keyBuildInfoAttrs          = "buildinfo-attrs"
@@ -53,23 +50,15 @@ func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error)
 		return nil, err
 	}
 
+	if c.RefCfg.Compression, err = compression.ParseAttributes(opt); err != nil {
+		return nil, err
+	}
+
 	for k, v := range opt {
 		var err error
 		switch k {
 		case keyImageName:
 			c.ImageName = v
-		case keyLayerCompression:
-			c.RefCfg.Compression.Type, err = compression.Parse(v)
-		case keyCompressionLevel:
-			ii, err2 := strconv.ParseInt(v, 10, 64)
-			if err != nil {
-				err = errors.Wrapf(err2, "non-int value %s specified for %s", v, k)
-				break
-			}
-			v := int(ii)
-			c.RefCfg.Compression.Level = &v
-		case keyForceCompression:
-			err = parseBoolWithDefault(&c.RefCfg.Compression.Force, k, v, true)
 		case keyOCITypes:
 			err = parseBoolWithDefault(&c.OCITypes, k, v, true)
 		case keyBuildInfo:
