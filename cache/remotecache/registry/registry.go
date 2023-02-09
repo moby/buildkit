@@ -40,6 +40,14 @@ const (
 	attrInsecure      = "registry.insecure"
 )
 
+type exporter struct {
+	remotecache.Exporter
+}
+
+func (*exporter) Name() string {
+	return "exporting cache to registry"
+}
+
 func ResolveCacheExporterFunc(sm *session.Manager, hosts docker.RegistryHosts) remotecache.ResolveCacheExporterFunc {
 	return func(ctx context.Context, g session.Group, attrs map[string]string) (remotecache.Exporter, error) {
 		compressionConfig, err := compression.ParseAttributes(attrs)
@@ -74,7 +82,7 @@ func ResolveCacheExporterFunc(sm *session.Manager, hosts docker.RegistryHosts) r
 		if err != nil {
 			return nil, err
 		}
-		return remotecache.NewExporter(contentutil.FromPusher(pusher), refString, ociMediatypes, compressionConfig), nil
+		return &exporter{remotecache.NewExporter(contentutil.FromPusher(pusher), refString, ociMediatypes, compressionConfig)}, nil
 	}
 }
 
