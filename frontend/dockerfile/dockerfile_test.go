@@ -32,6 +32,7 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/dockerfile/builder"
+	"github.com/moby/buildkit/frontend/dockerui"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/frontend/subrequests"
 	"github.com/moby/buildkit/identity"
@@ -280,8 +281,8 @@ echo -n $my_arg $1 > /out
 					},
 				},
 				LocalDirs: map[string]string{
-					builder.DefaultLocalNameDockerfile: dir,
-					builder.DefaultLocalNameContext:    dir,
+					dockerui.DefaultLocalNameDockerfile: dir,
+					dockerui.DefaultLocalNameContext:    dir,
 				},
 			}, nil)
 			require.NoError(t, err)
@@ -322,8 +323,8 @@ RUN [ "$myenv" = 'foo%sbar' ]
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -368,8 +369,8 @@ foo
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -379,8 +380,8 @@ foo
 			"filename": "Dockerfile2",
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -409,8 +410,8 @@ RUN [ "$(cat testfile)" == "contents0" ]
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -451,8 +452,8 @@ COPY --from=base2 /foo /f
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		CacheExports: []client.CacheOptionsEntry{
 			{
@@ -470,8 +471,8 @@ COPY --from=base2 /foo /f
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		CacheExports: []client.CacheOptionsEntry{
 			{
@@ -528,8 +529,8 @@ FROM stage-$TARGETOS
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -554,8 +555,8 @@ FROM stage-$TARGETOS
 			"platform": "linux/amd64,darwin/amd64",
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -601,8 +602,8 @@ WORKDIR /
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -631,16 +632,16 @@ FROM busybox
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -669,8 +670,8 @@ ENV foo bar
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -752,8 +753,8 @@ RUN e="300:400"; p="/file"                         ; a=` + "`" + `stat -c "%u:%g
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -763,8 +764,8 @@ RUN e="300:400"; p="/file"                         ; a=` + "`" + `stat -c "%u:%g
 			"target": "copy_from",
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -805,8 +806,8 @@ COPY --from=base unique /
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -827,8 +828,8 @@ COPY --from=base unique /
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -850,8 +851,8 @@ COPY --from=base unique /
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -890,8 +891,8 @@ COPY foo nomatch* /
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -924,8 +925,8 @@ RUN [ "$(stat -c "%U %G" /mydir)" == "user user" ]
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -955,8 +956,8 @@ COPY --from=base Dockerfile .
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -985,8 +986,8 @@ RUN [ "$(stat -c "%U %G" /mydir)" == "user user" ]
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -1022,8 +1023,8 @@ RUN [ "$(stat -c "%U %G" /dest01)" == "user01 user" ]
 			"build-arg:group": "user",
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -1060,8 +1061,8 @@ COPY link/foo .
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -1102,8 +1103,8 @@ COPY --from=build /sub2/foo bar
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -1142,8 +1143,8 @@ COPY . /
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -1175,8 +1176,8 @@ RUN ["ls"]
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -1210,8 +1211,8 @@ COPY --from=build /out .
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -1254,8 +1255,8 @@ COPY --from=build /out .
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -1299,8 +1300,8 @@ COPY Dockerfile .
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		FrontendAttrs: map[string]string{
 			"platform": "windows/amd64,linux/amd64",
@@ -1389,8 +1390,8 @@ COPY arch-$TARGETARCH whoami
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		FrontendAttrs: map[string]string{
 			"platform": "windows/amd64,linux/arm,linux/s390x",
@@ -1426,8 +1427,8 @@ COPY arch-$TARGETARCH whoami
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		FrontendAttrs: map[string]string{
 			"platform": "windows/amd64,linux/arm/v6,linux/ppc64le",
@@ -1518,8 +1519,8 @@ COPY foo /
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -1541,8 +1542,8 @@ COPY foo /
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -1573,8 +1574,8 @@ COPY foo /
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -1584,8 +1585,8 @@ COPY foo /
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -1621,8 +1622,8 @@ COPY foo/sub bar
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -1666,8 +1667,8 @@ COPY sub/l* alllinks/
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -1773,8 +1774,8 @@ CMD ["test"]
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -1802,8 +1803,8 @@ ENTRYPOINT my entrypoint
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -1865,8 +1866,8 @@ LABEL foo=bar
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -1895,8 +1896,8 @@ COPY foo .
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -1946,8 +1947,8 @@ COPY foo .
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -1980,8 +1981,8 @@ FROM busybox:${tag}
 			"build-arg:tag": "latest",
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -2101,8 +2102,8 @@ func testDockerfileInvalidInstruction(t *testing.T, sb integration.Sandbox) {
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 
@@ -2408,8 +2409,8 @@ ADD *.tar /dest
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -2450,8 +2451,8 @@ RUN [ "$(stat -c "%u %G" /foo)" == "1000 nobody" ]
 			"build-arg:group": "nobody",
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -2600,8 +2601,8 @@ EXPOSE 5000
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -2684,8 +2685,8 @@ Dockerfile
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -2739,8 +2740,8 @@ COPY . .
 
 	_, err = f.Solve(ctx, c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	// err is either the expected error due to invalid dockerignore or error from the timeout
@@ -2773,8 +2774,8 @@ func testDockerfileLowercase(t *testing.T, sb integration.Sandbox) {
 
 	_, err = f.Solve(ctx, c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -2944,8 +2945,8 @@ USER nobody
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -2970,8 +2971,8 @@ USER nobody
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -3047,8 +3048,8 @@ COPY --from=base /out /
 			"build-arg:group": "nobody",
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -3106,8 +3107,8 @@ COPY --from=base /out /
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 
@@ -3164,8 +3165,8 @@ COPY files dest
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -3210,8 +3211,8 @@ COPY $FOO baz
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -3263,8 +3264,8 @@ COPY sub/dir1 subdest6
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -3350,8 +3351,8 @@ RUN sh -c "[ $(cat /test5/foo) = 'hello' ]"
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -3403,8 +3404,8 @@ COPY --from=build /dest /dest
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -3597,8 +3598,8 @@ COPY --from=busybox /etc/passwd test
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -3633,8 +3634,8 @@ COPY --from=golang /usr/bin/go go
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -3676,8 +3677,8 @@ COPY --from=stage1 baz bax
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		FrontendAttrs: map[string]string{
 			"target": "Stage1",
@@ -3722,8 +3723,8 @@ LABEL foo=bar
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -3783,8 +3784,8 @@ RUN ls /files/file1
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -3795,8 +3796,8 @@ RUN ls /files/file1
 	// cache should be invalidated and build should fail
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.Error(t, err)
@@ -3840,8 +3841,8 @@ ONBUILD RUN mkdir -p /out && echo -n 11 >> /out/foo
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -3869,8 +3870,8 @@ ONBUILD RUN mkdir -p /out && echo -n 11 >> /out/foo
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -3897,8 +3898,8 @@ ONBUILD RUN mkdir -p /out && echo -n 11 >> /out/foo
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -3969,8 +3970,8 @@ COPY --from=base arch /
 			"platform": "linux/amd64,linux/arm/v7",
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -4007,8 +4008,8 @@ COPY --from=base arch /
 			},
 			CacheExports: exportCache,
 			LocalDirs: map[string]string{
-				builder.DefaultLocalNameDockerfile: dir,
-				builder.DefaultLocalNameContext:    dir,
+				dockerui.DefaultLocalNameDockerfile: dir,
+				dockerui.DefaultLocalNameContext:    dir,
 			},
 		}, nil)
 		require.NoError(t, err)
@@ -4080,8 +4081,8 @@ COPY --from=base unique /
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -4108,8 +4109,8 @@ COPY --from=base unique /
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -4156,8 +4157,8 @@ RUN echo bar > bar
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}
 
@@ -4240,8 +4241,8 @@ RUN echo bar > bar
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}
 
@@ -4309,8 +4310,8 @@ COPY --from=s1 unique2 /
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}
 
@@ -4390,8 +4391,8 @@ COPY foo2 bar2
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}
 
@@ -4443,8 +4444,8 @@ COPY --from=build out .
 			"build-arg:TARGETOS": "freebsd",
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}
 
@@ -4498,8 +4499,8 @@ COPY --from=build /out /
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}
 
@@ -4525,8 +4526,8 @@ COPY --from=build /out /
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}
 
@@ -4552,8 +4553,8 @@ COPY --from=build /out /
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}
 
@@ -4656,12 +4657,12 @@ COPY foo bar
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
 			"context":       url,
-			"dockerfilekey": builder.DefaultLocalNameDockerfile,
+			"dockerfilekey": dockerui.DefaultLocalNameDockerfile,
 			"contextsubdir": "sub/dir",
 		},
 		Session: []session.Attachable{up},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -4735,8 +4736,8 @@ COPY foo foo2
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, "", frontend, nil)
 	require.NoError(t, err)
@@ -4794,10 +4795,10 @@ COPY foo foo2
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
 		},
 		FrontendInputs: map[string]llb.State{
-			builder.DefaultLocalNameContext: outMount,
+			dockerui.DefaultLocalNameContext: outMount,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -4878,7 +4879,7 @@ COPY Dockerfile Dockerfile
 
 	_, err = c.Build(sb.Context(), client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
 		},
 	}, "", frontend, nil)
 	require.NoError(t, err)
@@ -4936,8 +4937,8 @@ RUN echo $(hostname) | grep foo
 			_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 				FrontendAttrs: tt.attrs,
 				LocalDirs: map[string]string{
-					builder.DefaultLocalNameDockerfile: dir,
-					builder.DefaultLocalNameContext:    dir,
+					dockerui.DefaultLocalNameDockerfile: dir,
+					dockerui.DefaultLocalNameContext:    dir,
 				},
 			}, nil)
 			require.NoError(t, err)
@@ -4971,8 +4972,8 @@ COPY --from=base /shmsize /
 			"shm-size": "134217728",
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -5014,8 +5015,8 @@ COPY --from=base /ulimit /
 			"ulimit": "nofile=1062:1062",
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -5061,8 +5062,8 @@ COPY --from=base /out /
 			"cgroup-parent": "foocgroup",
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -5108,8 +5109,8 @@ COPY --from=base /out /
 			"context:busybox": "docker-image://alpine",
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -5148,8 +5149,8 @@ ENV FOOBAR=foobar
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -5189,8 +5190,8 @@ COPY --from=base /env_foobar /
 			"context:busybox": "docker-image://" + target,
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -5245,8 +5246,8 @@ func testNamedImageContextPlatform(t *testing.T, sb integration.Sandbox) {
 			"build-arg:BUILDKIT_MULTI_PLATFORM": "true",
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -5281,8 +5282,8 @@ RUN echo hello
 			"platform": "darwin/ppc64le",
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -5317,8 +5318,8 @@ RUN echo foo >> /test
 	target := registry + "/buildkit/testnamedimagecontexttimestamps:latest"
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -5349,8 +5350,8 @@ RUN echo foo >> /test
 			"context:alpine": "docker-image://" + target,
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dirDerived,
-			builder.DefaultLocalNameContext:    dirDerived,
+			dockerui.DefaultLocalNameDockerfile: dirDerived,
+			dockerui.DefaultLocalNameContext:    dirDerived,
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -5404,8 +5405,8 @@ EOF
 			"context:busybox": "docker-image://scratch",
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -5465,9 +5466,9 @@ COPY --from=base /o* /
 			"context:base": "local:basedir",
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
-			"basedir":                          dir2,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+			"basedir":                           dir2,
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -5522,8 +5523,8 @@ func testNamedOCILayoutContext(t *testing.T, sb integration.Sandbox) {
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: inDir,
-			builder.DefaultLocalNameContext:    inDir,
+			dockerui.DefaultLocalNameDockerfile: inDir,
+			dockerui.DefaultLocalNameContext:    inDir,
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -5594,8 +5595,8 @@ COPY --from=imported /test/outfoo /
 			"context:foo":  fmt.Sprintf("oci-layout:%s@sha256:%s", ociID, digest),
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		OCIStores: map[string]content.Store{
 			ociID: store,
@@ -5651,8 +5652,8 @@ ENV foo=bar
 	outW := bytes.NewBuffer(nil)
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		Exports: []client.ExportEntry{{
 			Type:   client.ExporterOCI,
@@ -5703,8 +5704,8 @@ FROM nonexistent AS base
 			"context:nonexistent": fmt.Sprintf("oci-layout:%s@sha256:%s", ociID, digest),
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		OCIStores: map[string]content.Store{
 			ociID: store,
@@ -5804,7 +5805,7 @@ COPY --from=build /foo /out /
 
 		res, err = f.SolveGateway(ctx, c, gateway.SolveRequest{
 			FrontendOpt: map[string]string{
-				"dockerfilekey":       builder.DefaultLocalNameDockerfile + "2",
+				"dockerfilekey":       dockerui.DefaultLocalNameDockerfile + "2",
 				"context:base":        "input:base",
 				"input-metadata:base": string(dt),
 			},
@@ -5824,9 +5825,9 @@ COPY --from=build /foo /out /
 
 	_, err = c.Build(ctx, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile:       dir,
-			builder.DefaultLocalNameContext:          dir,
-			builder.DefaultLocalNameDockerfile + "2": dir2,
+			dockerui.DefaultLocalNameDockerfile:       dir,
+			dockerui.DefaultLocalNameContext:          dir,
+			dockerui.DefaultLocalNameDockerfile + "2": dir2,
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -5918,7 +5919,7 @@ COPY --from=build /foo /out /
 		inputs["base::linux/arm64"] = def.ToPB()
 
 		frontendOpt := map[string]string{
-			"dockerfilekey":             builder.DefaultLocalNameDockerfile + "2",
+			"dockerfilekey":             dockerui.DefaultLocalNameDockerfile + "2",
 			"context:base::linux/amd64": "input:base::linux/amd64",
 			"context:base::linux/arm64": "input:base::linux/arm64",
 			"platform":                  "linux/amd64,linux/arm64",
@@ -5964,9 +5965,9 @@ COPY --from=build /foo /out /
 
 	_, err = c.Build(ctx, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile:       dir,
-			builder.DefaultLocalNameContext:          dir,
-			builder.DefaultLocalNameDockerfile + "2": dir2,
+			dockerui.DefaultLocalNameDockerfile:       dir,
+			dockerui.DefaultLocalNameContext:          dir,
+			dockerui.DefaultLocalNameDockerfile + "2": dir2,
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -6030,8 +6031,8 @@ COPY Dockerfile .
 			"build-arg:SOURCE_DATE_EPOCH": fmt.Sprintf("%d", tm.Unix()),
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -6109,8 +6110,8 @@ CMD sh /scan.sh
 	scannerTarget := registry + "/buildkit/testsbomscanner:latest"
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: scannerDir,
-			builder.DefaultLocalNameContext:    scannerDir,
+			dockerui.DefaultLocalNameDockerfile: scannerDir,
+			dockerui.DefaultLocalNameContext:    scannerDir,
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -6139,8 +6140,8 @@ EOF
 	target := registry + "/buildkit/testsbomscannertarget:latest"
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		FrontendAttrs: map[string]string{
 			"attest:sbom": "generator=" + scannerTarget,
@@ -6227,8 +6228,8 @@ CMD sh /scan.sh
 	scannerTarget := registry + "/buildkit/testsbomscannerargs:latest"
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: scannerDir,
-			builder.DefaultLocalNameContext:    scannerDir,
+			dockerui.DefaultLocalNameDockerfile: scannerDir,
+			dockerui.DefaultLocalNameContext:    scannerDir,
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -6259,8 +6260,8 @@ FROM base
 	target := registry + "/buildkit/testsbomscannerargstarget1:latest"
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		FrontendAttrs: map[string]string{
 			"attest:sbom":                          "generator=" + scannerTarget,
@@ -6325,8 +6326,8 @@ ARG BUILDKIT_SBOM_SCAN_STAGE=true
 	target = registry + "/buildkit/testsbomscannertarget2:latest"
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		FrontendAttrs: map[string]string{
 			"attest:sbom": "generator=" + scannerTarget,
@@ -6373,8 +6374,8 @@ ARG BUILDKIT_SBOM_SCAN_STAGE=true
 	target = registry + "/buildkit/testsbomscannertarget3:latest"
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		FrontendAttrs: map[string]string{
 			"attest:sbom":                          "generator=" + scannerTarget,
@@ -6455,8 +6456,8 @@ COPY Dockerfile \
 			"platform": "linux/amd64,linux/arm64",
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, status)
 	require.NoError(t, err)
@@ -6540,8 +6541,8 @@ COPY --from=0 / /
 			"platform":                    "linux/amd64",
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		Exports: []client.ExportEntry{
 			{

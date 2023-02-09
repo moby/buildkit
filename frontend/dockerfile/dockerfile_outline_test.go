@@ -8,7 +8,7 @@ import (
 
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/moby/buildkit/client"
-	"github.com/moby/buildkit/frontend/dockerfile/builder"
+	"github.com/moby/buildkit/frontend/dockerui"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/frontend/subrequests"
 	"github.com/moby/buildkit/frontend/subrequests/outline"
@@ -130,7 +130,7 @@ FROM second
 
 	_, err = c.Build(sb.Context(), client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
 		},
 	}, "", frontend, nil)
 	require.NoError(t, err)
@@ -231,7 +231,7 @@ FROM second
 
 	_, err = c.Build(sb.Context(), client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
 		},
 	}, "", frontend, nil)
 	require.NoError(t, err)
@@ -288,7 +288,7 @@ COPY Dockerfile Dockerfile
 
 	_, err = c.Build(sb.Context(), client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
 		},
 	}, "", frontend, nil)
 	require.NoError(t, err)

@@ -5,6 +5,7 @@ import (
 
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
+	"github.com/moby/buildkit/frontend/dockerui"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/stretchr/testify/assert"
 )
@@ -50,12 +51,16 @@ COPY --from=foo f1 /
 COPY --from=0 f2 /
 	`
 	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
-		Target: "Foo",
+		Config: dockerui.Config{
+			Target: "Foo",
+		},
 	})
 	assert.NoError(t, err)
 
 	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
-		Target: "nosuch",
+		Config: dockerui.Config{
+			Target: "nosuch",
+		},
 	})
 	assert.Error(t, err)
 

@@ -24,6 +24,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
+	"github.com/moby/buildkit/frontend/dockerui"
 	"github.com/moby/buildkit/frontend/subrequests/outline"
 	"github.com/moby/buildkit/frontend/subrequests/targets"
 	"github.com/moby/buildkit/identity"
@@ -41,9 +42,8 @@ import (
 )
 
 const (
-	emptyImageName          = "scratch"
-	defaultContextLocalName = "context"
-	historyComment          = "buildkit.dockerfile.v0"
+	emptyImageName = "scratch"
+	historyComment = "buildkit.dockerfile.v0"
 
 	sbomScanContext = "BUILDKIT_SBOM_SCAN_CONTEXT"
 	sbomScanStage   = "BUILDKIT_SBOM_SCAN_STAGE"
@@ -55,34 +55,13 @@ var nonEnvArgs = map[string]struct{}{
 }
 
 type ConvertOpt struct {
-	Target       string
-	MetaResolver llb.ImageMetaResolver
-	BuildArgs    map[string]string
-	Labels       map[string]string
-	SessionID    string
-	BuildContext *llb.State
-	Excludes     []string
-	// IgnoreCache contains names of the stages that should not use build cache.
-	// Empty slice means ignore cache for all stages. Nil doesn't disable cache.
-	IgnoreCache []string
-	// CacheIDNamespace scopes the IDs for different cache mounts
-	CacheIDNamespace string
-	ImageResolveMode llb.ResolveMode
-	TargetPlatform   *ocispecs.Platform
-	BuildPlatforms   []ocispecs.Platform
-	PrefixPlatform   bool
-	ExtraHosts       []llb.HostIP
-	ShmSize          int64
-	Ulimit           []pb.Ulimit
-	CgroupParent     string
-	ForceNetMode     pb.NetMode
-	LLBCaps          *apicaps.CapSet
-	ContextLocalName string
-	SourceMap        *llb.SourceMap
-	Hostname         string
-	SourceDateEpoch  *time.Time
-	Warn             func(short, url string, detail [][]byte, location *parser.Range)
-	ContextByName    func(ctx context.Context, name, resolveMode string, p *ocispecs.Platform) (*llb.State, *Image, error)
+	dockerui.Config
+	Client         *dockerui.Client
+	SourceMap      *llb.SourceMap
+	TargetPlatform *ocispecs.Platform
+	MetaResolver   llb.ImageMetaResolver
+	LLBCaps        *apicaps.CapSet
+	Warn           func(short, url string, detail [][]byte, location *parser.Range)
 }
 
 type SBOMTargets struct {
@@ -92,7 +71,7 @@ type SBOMTargets struct {
 	IgnoreCache bool
 }
 
-func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, *SBOMTargets, error) {
+func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *image.Image, *SBOMTargets, error) {
 	ds, err := toDispatchState(ctx, dt, opt)
 	if err != nil {
 		return nil, nil, nil, err
@@ -158,33 +137,34 @@ func ListTargets(ctx context.Context, dt []byte) (*targets.List, error) {
 }
 
 func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchState, error) {
-	contextByName := opt.ContextByName
-	opt.ContextByName = func(ctx context.Context, name, resolveMode string, p *ocispecs.Platform) (*llb.State, *Image, error) {
-		if !strings.EqualFold(name, "scratch") && !strings.EqualFold(name, "context") {
-			if contextByName != nil {
-				if p == nil {
-					p = opt.TargetPlatform
-				}
-				st, img, err := contextByName(ctx, name, resolveMode, p)
-				if err != nil {
-					return nil, nil, err
-				}
-				return st, img, nil
-			}
-		}
-		return nil, nil, nil
-	}
-
 	if len(dt) == 0 {
 		return nil, errors.Errorf("the Dockerfile cannot be empty")
 	}
 
-	if opt.ContextLocalName == "" {
-		opt.ContextLocalName = defaultContextLocalName
+	namedContext := func(ctx context.Context, name string, copt dockerui.ContextOpt) (*llb.State, *image.Image, error) {
+		if opt.Client == nil {
+			return nil, nil, nil
+		}
+		if !strings.EqualFold(name, "scratch") && !strings.EqualFold(name, "context") {
+			if copt.Platform == nil {
+				copt.Platform = opt.TargetPlatform
+			}
+			st, img, err := opt.Client.NamedContext(ctx, name, copt)
+			if err != nil {
+				return nil, nil, err
+			}
+			return st, img, nil
+		}
+		return nil, nil, nil
 	}
 
 	if opt.Warn == nil {
 		opt.Warn = func(string, string, [][]byte, *parser.Range) {}
+	}
+
+	if opt.Client != nil && opt.LLBCaps == nil {
+		caps := opt.Client.BuildOpts().LLBCaps
+		opt.LLBCaps = &caps
 	}
 
 	platformOpt := buildPlatformOpt(&opt)
@@ -254,9 +234,9 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			deps:           make(map[*dispatchState]struct{}),
 			ctxPaths:       make(map[string]struct{}),
 			stageName:      st.Name,
-			prefixPlatform: opt.PrefixPlatform,
+			prefixPlatform: opt.MultiPlatformRequested,
 			outline:        outline.clone(),
-			epoch:          opt.SourceDateEpoch,
+			epoch:          opt.Epoch,
 		}
 
 		if v := st.Platform; v != "" {
@@ -276,7 +256,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		}
 
 		if st.Name != "" {
-			s, img, err := opt.ContextByName(ctx, st.Name, opt.ImageResolveMode.String(), ds.platform)
+			s, img, err := namedContext(ctx, st.Name, dockerui.ContextOpt{Platform: ds.platform, ResolveMode: opt.ImageResolveMode.String()})
 			if err != nil {
 				return nil, err
 			}
@@ -284,7 +264,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 				ds.noinit = true
 				ds.state = *s
 				if img != nil {
-					ds.image = clampTimes(*img, opt.SourceDateEpoch)
+					ds.image = clampTimes(*img, opt.Epoch)
 					if img.Architecture != "" && img.OS != "" {
 						ds.platform = &ocispecs.Platform{
 							OS:           img.OS,
@@ -321,17 +301,8 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			}
 		}
 		ds.cmdTotal = total
-
-		if opt.IgnoreCache != nil {
-			if len(opt.IgnoreCache) == 0 {
-				ds.ignoreCache = true
-			} else if st.Name != "" {
-				for _, n := range opt.IgnoreCache {
-					if strings.EqualFold(n, st.Name) {
-						ds.ignoreCache = true
-					}
-				}
-			}
+		if opt.Client != nil {
+			ds.ignoreCache = opt.Client.IsNoCache(st.Name)
 		}
 	}
 
@@ -381,6 +352,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		}
 	}
 
+	baseCtx := ctx
 	eg, ctx := errgroup.WithContext(ctx)
 	for i, d := range allDispatchStates.states {
 		reachable := isReachable(target, d)
@@ -410,7 +382,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 					d.stage.BaseName = reference.TagNameOnly(ref).String()
 
 					var isScratch bool
-					st, img, err := opt.ContextByName(ctx, d.stage.BaseName, opt.ImageResolveMode.String(), platform)
+					st, img, err := namedContext(ctx, d.stage.BaseName, dockerui.ContextOpt{ResolveMode: opt.ImageResolveMode.String(), Platform: platform})
 					if err != nil {
 						return err
 					}
@@ -426,7 +398,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 					}
 					if reachable {
 						prefix := "["
-						if opt.PrefixPlatform && platform != nil {
+						if opt.MultiPlatformRequested && platform != nil {
 							prefix += platforms.Format(*platform) + " "
 						}
 						prefix += "internal]"
@@ -439,7 +411,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 						if err != nil {
 							return suggest.WrapError(errors.Wrap(err, origName), origName, append(allStageNames, commonImageNames()...), true)
 						}
-						var img Image
+						var img image.Image
 						if err := json.Unmarshal(dt, &img); err != nil {
 							return errors.Wrap(err, "failed to parse image config")
 						}
@@ -485,7 +457,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 							dfCmd(d.stage.SourceCode),
 							llb.Platform(*platform),
 							opt.ImageResolveMode,
-							llb.WithCustomName(prefixCommand(d, "FROM "+d.stage.BaseName, opt.PrefixPlatform, platform, nil)),
+							llb.WithCustomName(prefixCommand(d, "FROM "+d.stage.BaseName, opt.MultiPlatformRequested, platform, nil)),
 							location(opt.SourceMap, d.stage.Location),
 						)
 					}
@@ -500,6 +472,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		return nil, err
 	}
 
+	ctx = baseCtx
 	buildContext := &mutableOutput{}
 	ctxPaths := map[string]struct{}{}
 
@@ -541,14 +514,12 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 				return nil, parser.WithLocation(err, d.stage.Location)
 			}
 		}
-		d.state = d.state.Network(opt.ForceNetMode)
-
+		d.state = d.state.Network(opt.NetworkMode)
 		opt := dispatchOpt{
 			allDispatchStates: allDispatchStates,
 			metaArgs:          optMetaArgs,
 			buildArgValues:    opt.BuildArgs,
 			shlex:             shlex,
-			sessionID:         opt.SessionID,
 			buildContext:      llb.NewState(buildContext),
 			proxyEnv:          proxyEnv,
 			cacheIDNamespace:  opt.CacheIDNamespace,
@@ -556,7 +527,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			targetPlatform:    platformOpt.targetPlatform,
 			extraHosts:        opt.ExtraHosts,
 			shmSize:           opt.ShmSize,
-			ulimit:            opt.Ulimit,
+			ulimit:            opt.Ulimits,
 			cgroupParent:      opt.CgroupParent,
 			llbCaps:           opt.LLBCaps,
 			sourceMap:         opt.SourceMap,
@@ -598,21 +569,17 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		target.image.Config.Labels[k] = v
 	}
 
-	opts := []llb.LocalOption{
-		llb.SessionID(opt.SessionID),
-		llb.ExcludePatterns(opt.Excludes),
-		llb.SharedKeyHint(opt.ContextLocalName),
-		WithInternalName("load build context"),
-	}
+	opts := []llb.LocalOption{}
 	if includePatterns := normalizeContextPaths(ctxPaths); includePatterns != nil {
 		opts = append(opts, llb.FollowPaths(includePatterns))
 	}
-
-	bc := llb.Local(opt.ContextLocalName, opts...)
-	if opt.BuildContext != nil {
-		bc = *opt.BuildContext
+	if opt.Client != nil {
+		bctx, err := opt.Client.MainContext(ctx, opts...)
+		if err != nil {
+			return nil, err
+		}
+		buildContext.Output = bctx.Output()
 	}
-	buildContext.Output = bc.Output()
 
 	defaults := []llb.ConstraintsOpt{
 		llb.Platform(platformOpt.targetPlatform),
@@ -678,7 +645,6 @@ type dispatchOpt struct {
 	metaArgs          []instructions.KeyValuePairOptional
 	buildArgValues    map[string]string
 	shlex             *shell.Lex
-	sessionID         string
 	buildContext      llb.State
 	proxyEnv          *llb.ProxyEnv
 	cacheIDNamespace  string
@@ -809,7 +775,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 type dispatchState struct {
 	opt            dispatchOpt
 	state          llb.State
-	image          Image
+	image          image.Image
 	platform       *ocispecs.Platform
 	stage          instructions.Stage
 	base           *dispatchState
@@ -936,7 +902,7 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 				}
 				st := llb.Scratch().Dir(sourcePath).File(
 					llb.Mkfile(f, 0755, []byte(data)),
-					WithInternalName("preparing inline document"),
+					dockerui.WithInternalName("preparing inline document"),
 				)
 
 				mount := llb.AddMount(destPath, st, llb.SourcePath(sourcePath), llb.Readonly)
@@ -1206,7 +1172,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		f := src.Path
 		st := llb.Scratch().File(
 			llb.Mkfile(f, 0664, []byte(data)),
-			WithInternalName("preparing inline document"),
+			dockerui.WithInternalName("preparing inline document"),
 		)
 
 		opts := append([]llb.CopyOption{&llb.CopyInfo{
@@ -1514,7 +1480,7 @@ func runCommandString(args []string, buildArgs []instructions.KeyValuePairOption
 	return strings.Join(append(tmpBuildEnv, args...), " ")
 }
 
-func commitToHistory(img *Image, msg string, withLayer bool, st *llb.State, tm *time.Time) error {
+func commitToHistory(img *image.Image, msg string, withLayer bool, st *llb.State, tm *time.Time) error {
 	if st != nil {
 		msg += " # buildkit"
 	}
@@ -1642,7 +1608,7 @@ type mutableOutput struct {
 	llb.Output
 }
 
-func withShell(img Image, args []string) []string {
+func withShell(img image.Image, args []string) []string {
 	var shell []string
 	if len(img.Config.Shell) > 0 {
 		shell = append([]string{}, img.Config.Shell...)
@@ -1652,7 +1618,7 @@ func withShell(img Image, args []string) []string {
 	return append(shell, strings.Join(args, " "))
 }
 
-func autoDetectPlatform(img Image, target ocispecs.Platform, supported []ocispecs.Platform) ocispecs.Platform {
+func autoDetectPlatform(img image.Image, target ocispecs.Platform, supported []ocispecs.Platform) ocispecs.Platform {
 	os := img.OS
 	arch := img.Architecture
 	if target.OS == os && target.Architecture == arch {
@@ -1664,10 +1630,6 @@ func autoDetectPlatform(img Image, target ocispecs.Platform, supported []ocispec
 		}
 	}
 	return target
-}
-
-func WithInternalName(name string) llb.ConstraintsOpt {
-	return llb.WithCustomName("[internal] " + name)
 }
 
 func uppercaseCmd(str string) string {
@@ -1794,7 +1756,7 @@ func commonImageNames() []string {
 	return out
 }
 
-func clampTimes(img Image, tm *time.Time) Image {
+func clampTimes(img image.Image, tm *time.Time) image.Image {
 	if tm == nil {
 		return img
 	}

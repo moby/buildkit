@@ -8,7 +8,7 @@ import (
 
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/moby/buildkit/client"
-	"github.com/moby/buildkit/frontend/dockerfile/builder"
+	"github.com/moby/buildkit/frontend/dockerui"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -87,8 +87,8 @@ COPY --from=build /dest /
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -158,8 +158,8 @@ EOF
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -228,8 +228,8 @@ COPY --from=build /dest /dest
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -276,8 +276,8 @@ COPY --from=build /dest /dest
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -325,8 +325,8 @@ COPY --from=build /dest /dest
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -388,8 +388,8 @@ COPY --from=build /dest /
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -478,8 +478,8 @@ COPY --from=build /dest /
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -572,8 +572,8 @@ COPY --from=build /dest /
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -638,8 +638,8 @@ EOF
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -666,8 +666,8 @@ EOF
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
