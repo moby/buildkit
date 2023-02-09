@@ -21,11 +21,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-var tracingEnvVars = []string{
-	"OTEL_TRACES_EXPORTER=otlp",
-	"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=unix:///dev/otel-grpc.sock",
-	"OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=grpc",
-}
+const (
+	tracingSocketPath = "/dev/otel-grpc.sock"
+)
 
 func generateMountOpts(resolvConf, hostsFile string) ([]oci.SpecOpts, error) {
 	return []oci.SpecOpts{
@@ -127,4 +125,17 @@ func withDefaultProfile() oci.SpecOpts {
 		s.Linux.Seccomp, err = seccomp.GetDefaultProfile(s)
 		return err
 	}
+}
+
+func getTracingSocketMount(socket string) specs.Mount {
+	return specs.Mount{
+		Destination: tracingSocketPath,
+		Type:        "bind",
+		Source:      socket,
+		Options:     []string{"ro", "rbind"},
+	}
+}
+
+func getTracingSocket() string {
+	return fmt.Sprintf("unix://%s", tracingSocketPath)
 }
