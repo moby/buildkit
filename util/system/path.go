@@ -42,7 +42,7 @@ func NormalizeWorkdir(current, wd string) (string, error) {
 
 	current = filepath.FromSlash(current)
 	if !IsAbs(current) {
-		// Convert to absolute paths.
+		// Convert to absolute paths. We are normalizing the CWD.
 		//
 		// On Windows:
 		// Paths that start with a / or \ are absolute paths relative to the current drive

@@ -14,51 +14,53 @@ import (
 // This is used, for example, when validating a user provided path in docker cp.
 // If a drive letter is supplied, it must be the system drive. The drive letter
 // is always removed. Also, it translates it to OS semantics (IOW / to \). We
-// need the path in this syntax so that it can ultimately be contatenated with
+// need the path in this syntax so that it can ultimately be concatenated with
 // a Windows long-path which doesn't support drive-letters. Examples:
 // C:			--> Fail
+// C:somepath   --> somepath // This is a relative path to the CWD set for that drive letter
 // C:\			--> \
 // a			--> a
 // /a			--> \a
 // d:\			--> Fail
+//
+// UNC paths can refer to multiple types of paths. From local filesystem paths,
+// to remote filesystems like SMB or named pipes.
+// There is no sane way to support this without adding a lot of complexity
+// which I am not sure is worth it.
+// \\.\C$\a     --> Fail
 func CheckSystemDriveAndRemoveDriveLetter(path string) (string, error) {
 	if len(path) == 2 && string(path[1]) == ":" {
 		return "", errors.Errorf("No relative path specified in %q", path)
 	}
-	// On Windows, filepath.IsAbs() will return true for paths that:
-	//   * Begin with drive letter (DOS style paths)
-	//   * Are volume paths \\?\Volume{UUID}
-	//   * Are UNC paths
-	//   * Are a reserved name (COM, AUX, NUL, etc)
-	// Using filepath.IsAbs() here, will yield undesirable results, as a proper, valid absolute
-	// path that is a UNC path (for example), will skip any !filepath.IsAbs() check, and reach
-	// the end of this function, where we would simply strip the first two characters (which in
-	// a UNC path are "\\") and return a string that makes no sense. In the context of what we're
-	// using this function for, we only care about DOS style absolute paths.
-	//
-	// On Windows, the ":" character is illegal inside a folder or fie name, mainly because
-	// it's used to delimit drive letters from the rest of the path that resides inside that
-	// DOS path.
-	// Thus, it's easier to simply split the path by ":", and regard the first element as the drive
-	// letter, and the second one as the path.
-	// NOTE: This function only cares about DOS style absolute paths. If the path is any other kind of
-	// absolute path, we will return it here, without mangling it, aside from cleaning it and
-	// making sure the windows path delimiter is used (which should be fine).
-	//
-	// By not mangling the path, we allow any subsequent check to determine if the path is suitable for
-	// whatever need exists.
-	// Alternatively, we could further validate the path and error out here, but that seems outside the
-	// scope of what this function should do.
-	parts := strings.Split(path, ":")
-	if len(parts) != 2 {
-		return filepath.FromSlash(filepath.Clean(path)), nil
+
+	// UNC paths should error out
+	if len(path) >= 2 && filepath.ToSlash(path[:2]) == "//" {
+		return "", errors.Errorf("UNC paths are not supported")
 	}
 
+	// Since this function expects a DOS path which may or may not contain a drive
+	// letter, we can split by ":". The only Windows paths where a ":" is present are
+	// DOS paths. It should be safe to split using that as a delimiter and return the
+	// result after we validate.
+	parts := strings.Split(path, ":")
+	if len(parts) > 2 {
+		return "", errors.Errorf("invalid path: %q", path)
+	}
+
+	// Path does not have a drive letter. Just return it.
+	if len(parts) < 2 {
+		return filepath.Clean(filepath.FromSlash(path)), nil
+	}
+
+	// We expect all paths to be in C:
 	if !strings.EqualFold(parts[0], "c") {
 		return "", errors.New("The specified path is not on the system drive (C:)")
 	}
 
-	// Apparently, a path of the form F:somepath, seems to be valid in a cmd shell:
+	// A path of the form F:somepath, is a path that is relative CWD set for a particular
+	// drive letter. See:
+	// https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file#fully-qualified-vs-relative-paths
+	//
 	// C:\>mkdir F:somepath
 	// C:\>dir F:\
 	// Volume in drive F is New Volume
@@ -70,8 +72,9 @@ func CheckSystemDriveAndRemoveDriveLetter(path string) (string, error) {
 	// 			0 File(s)              0 bytes
 	// 			1 Dir(s)   1,052,876,800 bytes free
 	//
-	// Join with "/" and return it
-	return filepath.Join("/", filepath.Clean(parts[1])), nil
+	// We must return the second element of the split path, as is, without attempting to convert
+	// it to an absolute path. We have no knowledge of the CWD; that is treated elsewhere.
+	return filepath.Clean(parts[1]), nil
 }
 
 func isAbs(pth string) bool {

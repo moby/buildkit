@@ -83,6 +83,11 @@ func TestCheckSystemDriveAndRemoveDriveLetter(t *testing.T) {
 	if err.Error() != `No relative path specified in "d:"` {
 		t.Fatalf(path, err)
 	}
+
+	// UNC path should fail.
+	if _, err = CheckSystemDriveAndRemoveDriveLetter(`\\.\C$\test`); err == nil {
+		t.Fatalf("UNC path should fail")
+	}
 }
 
 // TestNormalizeWorkdir tests NormalizeWorkdir
@@ -196,7 +201,7 @@ func TestNormalizeWorkdir(t *testing.T) {
 			name:           "new WD has no slash after drive letter",
 			currentWorkdir: `/test`,
 			newWorkDir:     `C:testing`,
-			desiredResult:  `\testing`,
+			desiredResult:  `\test\testing`,
 			err:            "",
 		},
 		{
@@ -240,9 +245,9 @@ func TestIsAbs(t *testing.T) {
 			desiredResult: true,
 		},
 		{
-			name:          "path with drive letter but no slash is absolute",
+			name:          "path with drive letter but no slash is relative",
 			path:          `C:test`,
-			desiredResult: true,
+			desiredResult: false,
 		},
 		{
 			name:          "path with drive letter and linux style slashes is absolute",
