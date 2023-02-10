@@ -9,7 +9,7 @@ import (
 
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/moby/buildkit/client"
-	"github.com/moby/buildkit/frontend/dockerfile/builder"
+	"github.com/moby/buildkit/frontend/dockerui"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
@@ -54,8 +54,8 @@ ADD --checksum=%s %s /tmp/foo
 		require.NoError(t, err)
 		_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 			LocalDirs: map[string]string{
-				builder.DefaultLocalNameDockerfile: dir,
-				builder.DefaultLocalNameContext:    dir,
+				dockerui.DefaultLocalNameDockerfile: dir,
+				dockerui.DefaultLocalNameContext:    dir,
 			},
 		}, nil)
 		require.NoError(t, err)
@@ -74,8 +74,8 @@ ADD --checksum=${DIGEST} ${LINK} /tmp/foo
 		require.NoError(t, err)
 		_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 			LocalDirs: map[string]string{
-				builder.DefaultLocalNameDockerfile: dir,
-				builder.DefaultLocalNameContext:    dir,
+				dockerui.DefaultLocalNameDockerfile: dir,
+				dockerui.DefaultLocalNameContext:    dir,
 			},
 		}, nil)
 		require.NoError(t, err)
@@ -92,8 +92,8 @@ ADD --checksum=%s %s /tmp/foo
 		require.NoError(t, err)
 		_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 			LocalDirs: map[string]string{
-				builder.DefaultLocalNameDockerfile: dir,
-				builder.DefaultLocalNameContext:    dir,
+				dockerui.DefaultLocalNameDockerfile: dir,
+				dockerui.DefaultLocalNameContext:    dir,
 			},
 		}, nil)
 		require.Error(t, err, "digest mismatch")
@@ -110,8 +110,8 @@ ADD --checksum=md5:7e55db001d319a94b0b713529a756623 %s /tmp/foo
 		require.NoError(t, err)
 		_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 			LocalDirs: map[string]string{
-				builder.DefaultLocalNameDockerfile: dir,
-				builder.DefaultLocalNameContext:    dir,
+				dockerui.DefaultLocalNameDockerfile: dir,
+				dockerui.DefaultLocalNameContext:    dir,
 			},
 		}, nil)
 		require.Error(t, err, "unsupported digest algorithm")
@@ -128,8 +128,8 @@ ADD --checksum=unknown:%s %s /tmp/foo
 		require.NoError(t, err)
 		_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 			LocalDirs: map[string]string{
-				builder.DefaultLocalNameDockerfile: dir,
-				builder.DefaultLocalNameContext:    dir,
+				dockerui.DefaultLocalNameDockerfile: dir,
+				dockerui.DefaultLocalNameContext:    dir,
 			},
 		}, nil)
 		require.Error(t, err, "unsupported digest algorithm")
@@ -146,8 +146,8 @@ ADD --checksum=%s %s /tmp/foo
 		require.NoError(t, err)
 		_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 			LocalDirs: map[string]string{
-				builder.DefaultLocalNameDockerfile: dir,
-				builder.DefaultLocalNameContext:    dir,
+				dockerui.DefaultLocalNameDockerfile: dir,
+				dockerui.DefaultLocalNameContext:    dir,
 			},
 		}, nil)
 		require.Error(t, err, "invalid checksum digest format")
@@ -166,8 +166,8 @@ ADD --checksum=%s foo /tmp/foo
 		require.NoError(t, err)
 		_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 			LocalDirs: map[string]string{
-				builder.DefaultLocalNameDockerfile: dir,
-				builder.DefaultLocalNameContext:    dir,
+				dockerui.DefaultLocalNameDockerfile: dir,
+				dockerui.DefaultLocalNameContext:    dir,
 			},
 		}, nil)
 		require.Error(t, err, "checksum can't be specified for non-HTTP sources")

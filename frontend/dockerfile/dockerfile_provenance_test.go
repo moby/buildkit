@@ -18,7 +18,7 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
-	"github.com/moby/buildkit/frontend/dockerfile/builder"
+	"github.com/moby/buildkit/frontend/dockerui"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/solver/llbsolver/provenance"
 	"github.com/moby/buildkit/util/contentutil"
@@ -70,8 +70,8 @@ RUN echo "ok" > /foo
 			}
 			_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 				LocalDirs: map[string]string{
-					builder.DefaultLocalNameDockerfile: dir,
-					builder.DefaultLocalNameContext:    dir,
+					dockerui.DefaultLocalNameDockerfile: dir,
+					dockerui.DefaultLocalNameContext:    dir,
 				},
 				FrontendAttrs: map[string]string{
 					"attest:provenance": provReq,
@@ -391,8 +391,8 @@ RUN echo "ok-$TARGETARCH" > /foo
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		FrontendAttrs: map[string]string{
 			"attest:provenance": "mode=max",
@@ -596,8 +596,8 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 			},
 		},
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, "", frontend, nil)
 	require.NoError(t, err)
@@ -814,8 +814,8 @@ RUN --mount=type=secret,id=mysecret --mount=type=secret,id=othersecret --mount=t
 	target := registry + "/buildkit/testsecretprovenance:latest"
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		FrontendAttrs: map[string]string{
 			"attest:provenance": "mode=max",
@@ -885,8 +885,8 @@ ENV FOO=bar
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
 		},
 		FrontendAttrs: map[string]string{
 			"attest:provenance": "mode=max",
