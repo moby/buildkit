@@ -159,6 +159,7 @@ var allTests = integration.TestFuncs(
 	testNilProvenance,
 	testSBOMScannerArgs,
 	testMultiPlatformWarnings,
+	testFromArgs,
 )
 
 // Tests that depend on the `security.*` entitlements
@@ -6560,6 +6561,39 @@ COPY --from=0 / /
 	t.Logf("OCI archive digest=%q", outDigest)
 	t.Log("The digest may change depending on the BuildKit version, the snapshotter configuration, etc.")
 	require.Equal(t, expectedDigest, outDigest)
+}
+
+func testFromArgs(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	require.NoError(t, err)
+
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+ARG bbox=busybox:latest
+FROM $bbox
+COPY --from=$bbox /bin/sh /bin/sh
+RUN --mount=from=$bbox,src=/bin,target=/bin2 /bin2/sh -c "echo test"
+`)
+
+	dir, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
 }
 
 func runShell(dir string, cmds ...string) error {

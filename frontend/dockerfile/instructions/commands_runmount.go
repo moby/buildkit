@@ -2,7 +2,6 @@ package instructions
 
 import (
 	"encoding/csv"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -169,17 +168,17 @@ func parseMount(val string, expander SingleWordExpander) (*Mount, error) {
 			}
 		}
 
+		// never expand from now - defer evaluation to when we create the dispatchState
+		if key == "from" {
+			m.From = value
+			continue
+		}
+
 		// check for potential variable
 		if expander != nil {
 			value, err = expander(value)
 			if err != nil {
 				return nil, err
-			}
-		} else if key == "from" {
-			if matched, err := regexp.MatchString(`\$.`, value); err != nil { //nolint
-				return nil, err
-			} else if matched {
-				return nil, errors.Errorf("'%s' doesn't support variable expansion, define alias stage instead", key)
 			}
 		} else {
 			// if we don't have an expander, defer evaluation to later
@@ -193,8 +192,6 @@ func parseMount(val string, expander SingleWordExpander) (*Mount, error) {
 				return nil, suggest.WrapError(errors.Errorf("unsupported mount type %q", value), value, allMountTypes(), true)
 			}
 			m.Type = v
-		case "from":
-			m.From = value
 		case "source", "src":
 			m.Source = value
 		case "target", "dst", "destination":

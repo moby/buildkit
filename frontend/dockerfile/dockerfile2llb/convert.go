@@ -350,7 +350,10 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	for _, d := range allDispatchStates.states {
 		d.commands = make([]command, len(d.stage.Commands))
 		for i, cmd := range d.stage.Commands {
-			newCmd, err := toCommand(cmd, allDispatchStates)
+			newCmd, used, err := toCommand(cmd, allDispatchStates, shlex, metaArgsToMap(optMetaArgs))
+			for k := range used {
+				d.outline.usedArgs[k] = struct{}{}
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -641,17 +644,26 @@ func metaArgsToMap(metaArgs []instructions.KeyValuePairOptional) map[string]stri
 	return m
 }
 
-func toCommand(ic instructions.Command, allDispatchStates *dispatchStates) (command, error) {
+func toCommand(ic instructions.Command, allDispatchStates *dispatchStates, shlex *shell.Lex, metaArgs map[string]string) (command, map[string]struct{}, error) {
 	cmd := command{Command: ic}
+	usedArgs := map[string]struct{}{}
 	if c, ok := ic.(*instructions.CopyCommand); ok {
 		if c.From != "" {
 			var stn *dispatchState
 			index, err := strconv.Atoi(c.From)
 			if err != nil {
-				stn, ok = allDispatchStates.findStateByName(c.From)
+				name, used, err := shlex.ProcessWordWithMatches(c.From, metaArgs)
+				if err != nil {
+					return command{}, nil, parser.WithLocation(err, ic.Location())
+				}
+				for k := range used {
+					usedArgs[k] = struct{}{}
+				}
+
+				stn, ok = allDispatchStates.findStateByName(name)
 				if !ok {
 					stn = &dispatchState{
-						stage:        instructions.Stage{BaseName: c.From, Location: ic.Location()},
+						stage:        instructions.Stage{BaseName: name, Location: ic.Location()},
 						deps:         make(map[*dispatchState]struct{}),
 						unregistered: true,
 					}
@@ -659,18 +671,21 @@ func toCommand(ic instructions.Command, allDispatchStates *dispatchStates) (comm
 			} else {
 				stn, err = allDispatchStates.findStateByIndex(index)
 				if err != nil {
-					return command{}, err
+					return command{}, nil, err
 				}
 			}
 			cmd.sources = []*dispatchState{stn}
 		}
 	}
 
-	if ok := detectRunMount(&cmd, allDispatchStates); ok {
-		return cmd, nil
+	used, err := detectRunMount(&cmd, allDispatchStates, shlex, metaArgs)
+	if err != nil {
+		return command{}, nil, err
 	}
-
-	return cmd, nil
+	for k := range used {
+		usedArgs[k] = struct{}{}
+	}
+	return cmd, usedArgs, nil
 }
 
 type dispatchOpt struct {
@@ -888,7 +903,7 @@ func dispatchOnBuildTriggers(d *dispatchState, triggers []string, opt dispatchOp
 		if err != nil {
 			return err
 		}
-		cmd, err := toCommand(ic, opt.allDispatchStates)
+		cmd, _, err := toCommand(ic, opt.allDispatchStates, d.opt.shlex, nil)
 		if err != nil {
 			return err
 		}

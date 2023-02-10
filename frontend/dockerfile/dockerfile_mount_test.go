@@ -21,7 +21,6 @@ var mountTests = integration.TestFuncs(
 	testMountArg,
 	testMountEnvAcrossStages,
 	testMountMetaArg,
-	testMountFromError,
 	testMountInvalid,
 	testMountTmpfsSize,
 	testCacheMountUser,
@@ -409,38 +408,6 @@ RUN --mount=type=cache,id=mycache,target=$META_PATH [ -f /tmp/meta/foo ]
 		},
 	}, nil)
 	require.NoError(t, err)
-}
-
-func testMountFromError(t *testing.T, sb integration.Sandbox) {
-	f := getFrontend(t, sb)
-
-	dockerfile := []byte(`
-FROM busybox as test
-RUN touch /tmp/test
-
-FROM busybox
-ENV ttt=test
-RUN --mount=from=$ttt,type=cache,target=/tmp ls
-`)
-
-	dir, err := integration.Tmpdir(
-		t,
-		fstest.CreateFile("Dockerfile", dockerfile, 0600),
-	)
-	require.NoError(t, err)
-
-	c, err := client.New(sb.Context(), sb.Address())
-	require.NoError(t, err)
-	defer c.Close()
-
-	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
-		},
-	}, nil)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "'from' doesn't support variable expansion, define alias stage instead")
 }
 
 func testMountTmpfsSize(t *testing.T, sb integration.Sandbox) {
