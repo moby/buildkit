@@ -21,10 +21,15 @@ const (
 	attrDest             = "dest"
 	attrOCIMediatypes    = "oci-mediatypes"
 	contentStoreIDPrefix = "local:"
-	attrLayerCompression = "compression"
-	attrForceCompression = "force-compression"
-	attrCompressionLevel = "compression-level"
 )
+
+type exporter struct {
+	remotecache.Exporter
+}
+
+func (*exporter) Name() string {
+	return "exporting cache to client directory"
+}
 
 // ResolveCacheExporterFunc for "local" cache exporter.
 func ResolveCacheExporterFunc(sm *session.Manager) remotecache.ResolveCacheExporterFunc {
@@ -33,7 +38,7 @@ func ResolveCacheExporterFunc(sm *session.Manager) remotecache.ResolveCacheExpor
 		if store == "" {
 			return nil, errors.New("local cache exporter requires dest")
 		}
-		compressionConfig, err := attrsToCompression(attrs)
+		compressionConfig, err := compression.ParseAttributes(attrs)
 		if err != nil {
 			return nil, err
 		}
@@ -50,7 +55,7 @@ func ResolveCacheExporterFunc(sm *session.Manager) remotecache.ResolveCacheExpor
 		if err != nil {
 			return nil, err
 		}
-		return remotecache.NewExporter(cs, "", ociMediatypes, *compressionConfig), nil
+		return &exporter{remotecache.NewExporter(cs, "", ociMediatypes, compressionConfig)}, nil
 	}
 }
 
@@ -108,39 +113,4 @@ type unlazyProvider struct {
 
 func (p *unlazyProvider) UnlazySession(desc ocispecs.Descriptor) session.Group {
 	return p.s
-}
-
-func attrsToCompression(attrs map[string]string) (*compression.Config, error) {
-	var compressionType compression.Type
-	if v, ok := attrs[attrLayerCompression]; ok {
-		c, err := compression.Parse(v)
-		if err != nil {
-			return nil, err
-		}
-		compressionType = c
-	} else {
-		compressionType = compression.Default
-	}
-	compressionConfig := compression.New(compressionType)
-	if v, ok := attrs[attrForceCompression]; ok {
-		var force bool
-		if v == "" {
-			force = true
-		} else {
-			b, err := strconv.ParseBool(v)
-			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value %s specified for %s", v, attrForceCompression)
-			}
-			force = b
-		}
-		compressionConfig = compressionConfig.SetForce(force)
-	}
-	if v, ok := attrs[attrCompressionLevel]; ok {
-		ii, err := strconv.ParseInt(v, 10, 64)
-		if err != nil {
-			return nil, errors.Wrapf(err, "non-integer value %s specified for %s", v, attrCompressionLevel)
-		}
-		compressionConfig = compressionConfig.SetLevel(int(ii))
-	}
-	return &compressionConfig, nil
 }

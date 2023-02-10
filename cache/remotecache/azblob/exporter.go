@@ -54,7 +54,7 @@ type exporter struct {
 }
 
 func (ce *exporter) Name() string {
-	return "exporting cache to azure blob store"
+	return "exporting cache to Azure Blob Storage"
 }
 
 func (ce *exporter) Finalize(ctx context.Context) (map[string]string, error) {
