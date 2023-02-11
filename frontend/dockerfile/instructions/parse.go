@@ -324,12 +324,12 @@ func parseCopy(req parseRequest) (*CopyCommand, error) {
 		return nil, err
 	}
 
-	if flChown.Value != "" && strings.Contains(flChown.Value, ":") {
+	if strings.Contains(flChown.Value, ":") {
 		const partsLen = 2
 
 		parts := strings.Split(flChown.Value, ":")
 		if len(parts) != partsLen {
-			return nil, errChownTooManyParts(flChown.Value)
+			return nil, errors.Errorf("COPY chown flag %s has too many parts", flChown.Value)
 		}
 
 		const (
@@ -338,11 +338,11 @@ func parseCopy(req parseRequest) (*CopyCommand, error) {
 		)
 
 		if parts[0] == "" {
-			return nil, errChownMissingPart(flChown.Value, partUser)
+			return nil, errors.Errorf("COPY chown flag %s is missing %s part", flChown.Value, partUser)
 		}
 
 		if parts[1] == "" {
-			return nil, errChownMissingPart(flChown.Value, partGroup)
+			return nil, errors.Errorf("COPY chown flag %s is missing %s part", flChown.Value, partGroup)
 		}
 	}
 
@@ -772,14 +772,6 @@ func errBlankCommandNames(command string) error {
 
 func errTooManyArguments(command string) error {
 	return errors.Errorf("Bad input to %s, too many arguments", command)
-}
-
-func errChownMissingPart(chown string, part string) error {
-	return errors.Errorf("COPY chown flag %s is missing %s part", chown, part)
-}
-
-func errChownTooManyParts(arg string) error {
-	return errors.Errorf("COPY chown flag %s has too many parts", arg)
 }
 
 func getComment(comments []string, name string) string {
