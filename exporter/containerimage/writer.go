@@ -178,19 +178,11 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		return nil, err
 	}
 
-	idx := struct {
-		// MediaType is reserved in the OCI spec but
-		// excluded from go types.
-		MediaType string `json:"mediaType,omitempty"`
-
-		ocispecs.Index
-	}{
-		MediaType: ocispecs.MediaTypeImageIndex,
-		Index: ocispecs.Index{
-			Annotations: opts.Annotations.Platform(nil).Index,
-			Versioned: specs.Versioned{
-				SchemaVersion: 2,
-			},
+	idx := ocispecs.Index{
+		MediaType:   ocispecs.MediaTypeImageIndex,
+		Annotations: opts.Annotations.Platform(nil).Index,
+		Versioned: specs.Versioned{
+			SchemaVersion: 2,
 		},
 	}
 
@@ -386,24 +378,16 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *Ima
 		configType = images.MediaTypeDockerSchema2Config
 	}
 
-	mfst := struct {
-		// MediaType is reserved in the OCI spec but
-		// excluded from go types.
-		MediaType string `json:"mediaType,omitempty"`
-
-		ocispecs.Manifest
-	}{
-		MediaType: manifestType,
-		Manifest: ocispecs.Manifest{
-			Annotations: annotations.Manifest,
-			Versioned: specs.Versioned{
-				SchemaVersion: 2,
-			},
-			Config: ocispecs.Descriptor{
-				Digest:    configDigest,
-				Size:      int64(len(config)),
-				MediaType: configType,
-			},
+	mfst := ocispecs.Manifest{
+		MediaType:   manifestType,
+		Annotations: annotations.Manifest,
+		Versioned: specs.Versioned{
+			SchemaVersion: 2,
+		},
+		Config: ocispecs.Descriptor{
+			Digest:    configDigest,
+			Size:      int64(len(config)),
+			MediaType: configType,
 		},
 	}
 
@@ -499,23 +483,15 @@ func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *Ima
 		MediaType: configType,
 	}
 
-	mfst := struct {
-		// MediaType is reserved in the OCI spec but
-		// excluded from go types.
-		MediaType string `json:"mediaType,omitempty"`
-
-		ocispecs.Manifest
-	}{
+	mfst := ocispecs.Manifest{
 		MediaType: manifestType,
-		Manifest: ocispecs.Manifest{
-			Versioned: specs.Versioned{
-				SchemaVersion: 2,
-			},
-			Config: ocispecs.Descriptor{
-				Digest:    configDigest,
-				Size:      int64(len(config)),
-				MediaType: configType,
-			},
+		Versioned: specs.Versioned{
+			SchemaVersion: 2,
+		},
+		Config: ocispecs.Descriptor{
+			Digest:    configDigest,
+			Size:      int64(len(config)),
+			MediaType: configType,
 		},
 	}
 
