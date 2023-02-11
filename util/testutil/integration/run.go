@@ -320,6 +320,9 @@ func runMirror(t *testing.T, mirroredImages map[string]string) (host string, _ f
 
 	var lock *flock.Flock
 	if mirrorDir != "" {
+		if err := os.MkdirAll(mirrorDir, 0700); err != nil {
+			return "", nil, err
+		}
 		lock = flock.New(filepath.Join(mirrorDir, "lock"))
 		if err := lock.Lock(); err != nil {
 			return "", nil, err
