@@ -50,6 +50,17 @@ func (bc *Client) Build(ctx context.Context, fn BuildFunc) (*ResultBuilder, erro
 			if tp != nil {
 				p = *tp
 			}
+
+			// in certain conditions we allow input platform to be extended from base image
+			if p.OS == "windows" && img.OS == p.OS {
+				if p.OSVersion == "" && img.OSVersion != "" {
+					p.OSVersion = img.OSVersion
+				}
+				if p.OSFeatures == nil && len(img.OSFeatures) > 0 {
+					p.OSFeatures = img.OSFeatures
+				}
+			}
+
 			p = platforms.Normalize(p)
 			k := platforms.Format(p)
 
