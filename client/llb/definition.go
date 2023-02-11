@@ -70,7 +70,7 @@ func NewDefinitionOp(def *pb.Definition) (*DefinitionOp, error) {
 				state := NewState(op)
 				st = &state
 			}
-			sourceMaps[i] = NewSourceMap(st, info.Filename, info.Data)
+			sourceMaps[i] = NewSourceMap(st, info.Filename, info.Language, info.Data)
 		}
 
 		for dgst, locs := range def.Source.Locations {

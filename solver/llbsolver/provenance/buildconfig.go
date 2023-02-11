@@ -28,6 +28,7 @@ type Source struct {
 
 type SourceInfo struct {
 	Filename      string                   `json:"filename,omitempty"`
+	Language      string                   `json:"language,omitempty"`
 	Data          []byte                   `json:"data,omitempty"`
 	Definition    []BuildStep              `json:"llbDefinition,omitempty"`
 	DigestMapping map[digest.Digest]string `json:"digestMapping,omitempty"`
@@ -65,6 +66,7 @@ func AddBuildConfig(ctx context.Context, p *ProvenancePredicate, rp solver.Resul
 			s := SourceInfo{
 				Filename:      si.Filename,
 				Data:          si.Data,
+				Language:      si.Language,
 				Definition:    steps,
 				DigestMapping: digestMap(indexes),
 			}

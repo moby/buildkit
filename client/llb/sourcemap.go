@@ -21,13 +21,16 @@ type SourceMap struct {
 	State      *State
 	Definition *Definition
 	Filename   string
-	Data       []byte
+	// Language should use names defined in https://github.com/github/linguist/blob/v7.24.1/lib/linguist/languages.yml
+	Language string
+	Data     []byte
 }
 
-func NewSourceMap(st *State, filename string, dt []byte) *SourceMap {
+func NewSourceMap(st *State, filename string, lang string, dt []byte) *SourceMap {
 	return &SourceMap{
 		State:    st,
 		Filename: filename,
+		Language: lang,
 		Data:     dt,
 	}
 }
@@ -92,6 +95,7 @@ func (smc *sourceMapCollector) Marshal(ctx context.Context, co ...ConstraintsOpt
 		info := &pb.SourceInfo{
 			Data:     m.Data,
 			Filename: m.Filename,
+			Language: m.Language,
 		}
 
 		if def != nil {

@@ -41,7 +41,7 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 		return nil, capsError
 	}
 
-	src, err := bc.ReadEntrypoint(ctx)
+	src, err := bc.ReadEntrypoint(ctx, "Dockerfile")
 	if err != nil {
 		return nil, err
 	}
@@ -254,6 +254,7 @@ func wrapSource(err error, sm *llb.SourceMap, ranges []parser.Range) error {
 		Info: &pb.SourceInfo{
 			Data:       sm.Data,
 			Filename:   sm.Filename,
+			Language:   sm.Language,
 			Definition: sm.Definition.ToPB(),
 		},
 		Ranges: make([]*pb.Range, 0, len(ranges)),

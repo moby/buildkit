@@ -97,6 +97,7 @@ env bar=baz`,
 			require.Equal(t, 1, len(srcs))
 
 			require.Equal(t, "Dockerfile", srcs[0].Info.Filename)
+			require.Equal(t, "Dockerfile", srcs[0].Info.Language)
 			require.Equal(t, tc.dockerfile, string(srcs[0].Info.Data))
 			require.Equal(t, len(tc.errorLine), len(srcs[0].Ranges))
 			require.NotNil(t, srcs[0].Info.Definition)

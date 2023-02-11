@@ -58,8 +58,8 @@ func TestFormattingPatterns(t *testing.T) {
 func TestStateSourceMapMarshal(t *testing.T) {
 	t.Parallel()
 
-	sm1 := NewSourceMap(nil, "foo", []byte("data1"))
-	sm2 := NewSourceMap(nil, "bar", []byte("data2"))
+	sm1 := NewSourceMap(nil, "foo", "lang1", []byte("data1"))
+	sm2 := NewSourceMap(nil, "bar", "lang2", []byte("data2"))
 
 	s := Image(
 		"myimage",
@@ -78,10 +78,12 @@ func TestStateSourceMapMarshal(t *testing.T) {
 	require.Equal(t, 1, len(def.Source.Locations))
 
 	require.Equal(t, "foo", def.Source.Infos[0].Filename)
+	require.Equal(t, "lang1", def.Source.Infos[0].Language)
 	require.Equal(t, []byte("data1"), def.Source.Infos[0].Data)
 	require.Nil(t, def.Source.Infos[0].Definition)
 
 	require.Equal(t, "bar", def.Source.Infos[1].Filename)
+	require.Equal(t, "lang2", def.Source.Infos[1].Language)
 	require.Equal(t, []byte("data2"), def.Source.Infos[1].Data)
 	require.Nil(t, def.Source.Infos[1].Definition)
 
