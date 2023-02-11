@@ -30,6 +30,7 @@ GLOBAL OPTIONS:
    --tlskey value         client key
    --tlsdir value         directory containing CA certificate, client certificate, and client key
    --timeout value        timeout backend connection after value seconds (default: 5)
+   --wait                 block RPCs until the connection becomes available
    --help, -h             show help
    --version, -v          print the version
 ```

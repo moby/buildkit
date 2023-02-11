@@ -90,10 +90,25 @@ func ResolveClient(c *cli.Context) (*client.Client, error) {
 	}
 
 	timeout := time.Duration(c.GlobalInt("timeout"))
-	ctx, cancel := context.WithTimeout(ctx, timeout*time.Second)
-	defer cancel()
+	if timeout > 0 {
+		ctx2, cancel := context.WithTimeout(ctx, timeout*time.Second)
+		ctx = ctx2
+		defer cancel()
+	}
 
-	return client.New(ctx, c.GlobalString("addr"), opts...)
+	cl, err := client.New(ctx, c.GlobalString("addr"), opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	wait := c.GlobalBool("wait")
+	if wait {
+		if err := cl.Wait(ctx); err != nil {
+			return nil, err
+		}
+	}
+
+	return cl, nil
 }
 
 func ParseTemplate(format string) (*template.Template, error) {

@@ -87,6 +87,10 @@ func main() {
 			Usage: "timeout backend connection after value seconds",
 			Value: 5,
 		},
+		cli.BoolFlag{
+			Name:  "wait",
+			Usage: "block RPCs until the connection becomes available",
+		},
 	}
 
 	app.Commands = []cli.Command{

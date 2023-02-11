@@ -25,6 +25,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -182,6 +183,19 @@ func (c *Client) ContentClient() contentapi.ContentClient {
 
 func (c *Client) Dialer() session.Dialer {
 	return grpchijack.Dialer(c.ControlClient())
+}
+
+func (c *Client) Wait(ctx context.Context) error {
+	opts := []grpc.CallOption{grpc.WaitForReady(true)}
+	_, err := c.ControlClient().Info(ctx, &controlapi.InfoRequest{}, opts...)
+	if err != nil {
+		if code := grpcerrors.Code(err); code == codes.Unimplemented {
+			// only buildkit v0.11+ supports the info api, but an unimplemented
+			// response error is still a response so we can ignore it
+			return nil
+		}
+	}
+	return err
 }
 
 func (c *Client) Close() error {
