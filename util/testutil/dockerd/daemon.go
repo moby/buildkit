@@ -2,6 +2,7 @@ package dockerd
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -137,6 +138,7 @@ func (d *Daemon) StartWithError(daemonLogs map[string]*bytes.Buffer, providedArg
 		d.cmd.Stderr = &lockingWriter{Writer: b}
 	}
 
+	fmt.Fprintf(d.cmd.Stderr, "> startCmd %v %+v\n", time.Now(), d.cmd.String())
 	if err := d.cmd.Start(); err != nil {
 		return errors.Wrapf(err, "[%s] could not start daemon container", d.id)
 	}
