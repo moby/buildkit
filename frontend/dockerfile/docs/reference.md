@@ -1602,6 +1602,14 @@ will _not_ receive Unix signals - so your executable will not receive a
 
 Only the last `ENTRYPOINT` instruction in the `Dockerfile` will have an effect.
 
+To unset the `ENTRYPOINT` set in a base image, use:
+
+```dockerfile
+ENTRYPOINT []
+```
+
+Passing `ENTRYPOINT` with no argument results in undefined behavior.
+
 ### Exec form ENTRYPOINT example
 
 You can use the *exec* form of `ENTRYPOINT` to set fairly stable default commands
