@@ -19,6 +19,7 @@ import (
 	"github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/flightcontrol"
+	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
@@ -96,6 +97,7 @@ type ContextOpt struct {
 	LocalOpts      []llb.LocalOption
 	Platform       *ocispecs.Platform
 	ResolveMode    string
+	CaptureDigest  *digest.Digest
 }
 
 func validateMinCaps(c client.Client) error {

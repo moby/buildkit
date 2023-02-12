@@ -1,4 +1,4 @@
-package gateway
+package container
 
 import (
 	"context"
@@ -261,9 +261,9 @@ func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manage
 				})
 				root = active
 			}
-			p.Root = mountWithSession(root, g)
+			p.Root = MountWithSession(root, g)
 		} else {
-			mws := mountWithSession(mountable, g)
+			mws := MountWithSession(mountable, g)
 			dest := m.Dest
 			if !filepath.IsAbs(filepath.Clean(dest)) {
 				dest = filepath.Join("/", cwd, dest)
@@ -501,7 +501,7 @@ func addDefaultEnvvar(env []string, k, v string) []string {
 	return append(env, k+"="+v)
 }
 
-func mountWithSession(m cache.Mountable, g session.Group) executor.Mount {
+func MountWithSession(m cache.Mountable, g session.Group) executor.Mount {
 	_, readonly := m.(cache.ImmutableRef)
 	return executor.Mount{
 		Src:      &mountable{m: m, g: g},

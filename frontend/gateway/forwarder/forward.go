@@ -7,8 +7,8 @@ import (
 	cacheutil "github.com/moby/buildkit/cache/util"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend"
-	"github.com/moby/buildkit/frontend/gateway"
 	"github.com/moby/buildkit/frontend/gateway/client"
+	"github.com/moby/buildkit/frontend/gateway/container"
 	gwpb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
@@ -26,7 +26,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func llbBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string, inputs map[string]*opspb.Definition, w worker.Infos, sid string, sm *session.Manager) (*bridgeClient, error) {
+func LLBBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string, inputs map[string]*opspb.Definition, w worker.Infos, sid string, sm *session.Manager) (*bridgeClient, error) {
 	bc := &bridgeClient{
 		opts:              opts,
 		inputs:            inputs,
@@ -232,11 +232,11 @@ func (c *bridgeClient) Warn(ctx context.Context, dgst digest.Digest, msg string,
 }
 
 func (c *bridgeClient) NewContainer(ctx context.Context, req client.NewContainerRequest) (client.Container, error) {
-	ctrReq := gateway.NewContainerRequest{
+	ctrReq := container.NewContainerRequest{
 		ContainerID: identity.NewID(),
 		NetMode:     req.NetMode,
 		Hostname:    req.Hostname,
-		Mounts:      make([]gateway.Mount, len(req.Mounts)),
+		Mounts:      make([]container.Mount, len(req.Mounts)),
 	}
 
 	eg, ctx := errgroup.WithContext(ctx)
@@ -267,7 +267,7 @@ func (c *bridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 					return errors.Errorf("failed to find ref %s for %q mount", m.ResultID, m.Dest)
 				}
 			}
-			ctrReq.Mounts[i] = gateway.Mount{
+			ctrReq.Mounts[i] = container.Mount{
 				WorkerRef: workerRef,
 				Mount: &opspb.Mount{
 					Dest:      m.Dest,
@@ -288,7 +288,7 @@ func (c *bridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 		return nil, err
 	}
 
-	ctrReq.ExtraHosts, err = gateway.ParseExtraHosts(req.ExtraHosts)
+	ctrReq.ExtraHosts, err = container.ParseExtraHosts(req.ExtraHosts)
 	if err != nil {
 		return nil, err
 	}
@@ -299,7 +299,7 @@ func (c *bridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 	}
 
 	group := session.NewGroup(c.sid)
-	ctr, err := gateway.NewContainer(ctx, w, c.sm, group, ctrReq)
+	ctr, err := container.NewContainer(ctx, w, c.sm, group, ctrReq)
 	if err != nil {
 		return nil, err
 	}
