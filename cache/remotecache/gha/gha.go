@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"sync"
 	"time"
@@ -369,6 +370,13 @@ func (p *ciProvider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (co
 type readerAt struct {
 	actionscache.ReaderAtCloser
 	desc ocispecs.Descriptor
+}
+
+func (r *readerAt) ReadAt(p []byte, off int64) (int, error) {
+	if off >= r.desc.Size {
+		return 0, io.EOF
+	}
+	return r.ReaderAtCloser.ReadAt(p, off)
 }
 
 func (r *readerAt) Size() int64 {

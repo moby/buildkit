@@ -7,6 +7,7 @@ PUSH=$3
 . $(dirname $0)/util
 set -eu -o pipefail
 
+: ${RELEASE=false}
 : ${PLATFORMS=}
 : ${TARGET=}
 
@@ -39,12 +40,15 @@ if [[ "$TAG" == "local" ]]; then
   fi
 fi
 
+attestFlags="$(buildAttestFlags)"
+
 outputFlag="--output=type=image,push=false"
 if [ "$PUSH" = "push" ]; then
   outputFlag="--output=type=image,buildinfo-attrs=true,push=true"
 fi
 if [ -n "$localmode" ]; then
   outputFlag="--output=type=docker,buildinfo-attrs=true"
+  attestFlags=""
 fi
 
 targetFlag=""
@@ -88,5 +92,10 @@ for tagName in $tagNames; do
   tagFlags="$tagFlags--tag=$tagName "
 done
 
-buildxCmd build $platformFlag $targetFlag $importCacheFlags $exportCacheFlags $tagFlags $outputFlag $(buildAttestFlags) \
+nocacheFilterFlag=""
+if [[ "$RELEASE" = "true" ]] && [[ "$GITHUB_ACTIONS" = "true" ]]; then
+  nocacheFilterFlag="--no-cache-filter=git,buildkit-export,gobuild-base"
+fi
+
+buildxCmd build $platformFlag $targetFlag $importCacheFlags $exportCacheFlags $tagFlags $outputFlag $nocacheFilterFlag $attestFlags \
   $currentcontext

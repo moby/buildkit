@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 
 . $(dirname $0)/../../../../../hack/util
-set -e
+set -eu
 
-: ${PLATFORMS=}
-: ${DAILY_TARGETS=}
+: "${RELEASE=false}"
+: "${PLATFORMS=}"
+: "${DAILY_TARGETS=}"
 
 usage() {
   echo "$0 (master|tag|daily) (tag|channel) <repo> [push]"
@@ -23,7 +24,7 @@ parseTag() {
   fi
   local suffix=$(echo $1 | awk -F- '{print $NF}')
   local tagf=./frontend/dockerfile/release/$suffix/tags
-  if [ "$sufffix" == "$1" ] || [ ! -f $tagf ]; then
+  if [ "$suffix" == "$1" ] || [ ! -f $tagf ]; then
     suffix="mainline"
   fi
 
@@ -70,6 +71,11 @@ if [ "$PUSH" = "push" ]; then
   pushFlag="push=true"
 fi
 
+nocacheFilterFlag=""
+if [[ "$RELEASE" = "true" ]] && [[ "$GITHUB_ACTIONS" = "true" ]]; then
+  nocacheFilterFlag="--no-cache-filter=base"
+fi
+
 case $TYP in
 "master")
   tagf=./frontend/dockerfile/release/$TAG/tags
@@ -84,7 +90,7 @@ case $TYP in
     pushTag=${pushTag}-$TAG
   fi
 
-  buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags $(buildAttestFlags) \
+  buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags $nocacheFilterFlag $(buildAttestFlags) \
     --build-arg "CHANNEL=$TAG" \
     --build-arg "BUILDTAGS=$buildTags" \
     --output "type=image,name=$REPO:$pushTag,buildinfo-attrs=true,$pushFlag" \
@@ -101,7 +107,7 @@ case $TYP in
   fi
   buildTags=$(cat $tagf)
 
-  buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags $(buildAttestFlags) \
+  buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags $nocacheFilterFlag $(buildAttestFlags) \
     --build-arg "CHANNEL=$TAG" \
     --build-arg "BUILDTAGS=$buildTags" \
     --output "type=image,\"name=$publishedNames\",buildinfo-attrs=true,$pushFlag" \
@@ -127,7 +133,7 @@ case $TYP in
 
     tmp=$(mktemp -d -t buildid.XXXXXXXXXX)
     dt=$(date +%Y%m%d)
-    buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags \
+    buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags $nocacheFilterFlag \
       --target "buildid" \
       --build-arg "CHANNEL=$TAG" \
       --build-arg "BUILDTAGS=$buildTags" \
@@ -141,7 +147,7 @@ case $TYP in
       buildid=$(cat $tmp/buildid)
       echo "buildid: $buildid"
 
-      buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags $(buildAttestFlags) \
+      buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags $nocacheFilterFlag $(buildAttestFlags) \
         --build-arg "CHANNEL=$TAG" \
         --build-arg "BUILDTAGS=$buildTags" \
         --output "type=image,name=$REPO:$dt-$TAG,buildinfo-attrs=true,$pushFlag" \
