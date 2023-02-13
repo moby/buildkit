@@ -87,6 +87,8 @@ jobs:
         typ:
           - integration
           - dockerfile
+        tags:
+          - ''
         exclude:
           - pkg: ./client ./cmd/buildctl ./worker/containerd ./solver ./frontend
             typ: dockerfile
@@ -94,61 +96,16 @@ jobs:
           - pkg: ./...
             skip-integration-tests: 1
             typ: integration gateway
-    steps:
-      -
-        name: Checkout
-        uses: actions/checkout@v3
-      -
-        name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v2
-      -
-        name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-      -
-        name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-        with:
-          version: ${{ env.BUILDX_VERSION }}
-          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
-          buildkitd-flags: --debug
-      -
-        name: Test pkg=${{ matrix.pkg }} ; typ=${{ matrix.typ }} ; skipit=${{ matrix.skip-integration-tests }} ; worker=${{ matrix.worker }}
-        run: |
-          if [ -n "${{ matrix.worker }}" ]; then
-            export TESTFLAGS="${TESTFLAGS} --run=//worker=${{ matrix.worker }}$"
-          fi
-          ./hack/test ${{ matrix.typ }}
-          mv ./coverage/coverage.txt ./coverage/coverage-${{ github.job }}-$(echo "${{ matrix.pkg }}-${{ matrix.skip-integration-tests }}-${{ matrix.typ }}-${{ matrix.worker }}" | tr -dc '[:alnum:]-\n\r' | tr '[:upper:]' '[:lower:]').txt
-        env:
-          TEST_COVERAGE: 1
-          TESTPKGS: ${{ matrix.pkg }}
-          SKIP_INTEGRATION_TESTS: ${{ matrix.skip-integration-tests }}
-          CACHE_FROM: type=gha,scope=${{ env.CACHE_GHA_SCOPE_IT }} type=gha,scope=${{ env.CACHE_GHA_SCOPE_BINARIES }}
-      -
-        name: Upload coverage file
-        uses: actions/upload-artifact@v3
-        with:
-          name: coverage
-          path: ./coverage
-
-  test-nydus:
-    runs-on: ubuntu-20.04
-    needs: [base]
-    strategy:
-      fail-fast: false
-      matrix:
-        pkg:
-          - ./client
-        worker:
-          - containerd
-          - oci
-        typ:
-          - integration
-        exclude:
-          - pkg: ./client ./cmd/buildctl ./worker/containerd ./solver ./frontend
-            typ: dockerfile
-        include:
+          - pkg: ./client
+            worker: containerd
+            tags: nydus
+            typ: integration
+          - pkg: ./client
+            worker: oci
+            tags: nydus
+            typ: integration
           - pkg: ./...
+            tags: nydus
             skip-integration-tests: 1
             typ: integration
     steps:
@@ -169,17 +126,30 @@ jobs:
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
           buildkitd-flags: --debug
       -
-        name: Test pkg=${{ matrix.pkg }} ; typ=${{ matrix.typ }} ; skipit=${{ matrix.skip-integration-tests }} ; worker=${{ matrix.worker }}
+        name: Test
+        continue-on-error: ${{ matrix.tags == 'nydus' }}
         run: |
+          if [ -n "${{ matrix.tags }}" ]; then
+            TESTFLAGS="${TESTFLAGS} --tags=${{ matrix.tags }}"
+            export BUILDKITD_TAGS="${{ matrix.tags }}"
+          fi
           if [ -n "${{ matrix.worker }}" ]; then
-            export TESTFLAGS="${TESTFLAGS} --tags=nydus --run=//worker=${{ matrix.worker }}$"
+            export TESTFLAGS="${TESTFLAGS} --run=//worker=${{ matrix.worker }}$"
           fi
           ./hack/test ${{ matrix.typ }}
+          mv ./coverage/coverage.txt ./coverage/coverage-${{ github.job }}-$(echo "${{ matrix.pkg }}-${{ matrix.skip-integration-tests }}-${{ matrix.typ }}-${{ matrix.worker }}-${{ matrix.tags }}" | tr -dc '[:alnum:]-\n\r' | tr '[:upper:]' '[:lower:]').txt
         env:
-          BUILDKITD_TAGS: nydus
+          TEST_COVERAGE: 1
           TESTPKGS: ${{ matrix.pkg }}
           SKIP_INTEGRATION_TESTS: ${{ matrix.skip-integration-tests }}
           CACHE_FROM: type=gha,scope=${{ env.CACHE_GHA_SCOPE_IT }} type=gha,scope=${{ env.CACHE_GHA_SCOPE_BINARIES }}
+      -
+        name: Upload coverage file
+        continue-on-error: ${{ matrix.tags == 'nydus' }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage
+          path: ./coverage
 
   test-os:
     runs-on: ${{ matrix.os }}
