@@ -17,7 +17,7 @@ import (
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/network"
-	traceexec "github.com/moby/buildkit/util/tracing/exec"
+	tracingchildprocess "github.com/moby/buildkit/util/tracing/childprocess"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/opencontainers/selinux/go-selinux"
 	"github.com/pkg/errors"
@@ -113,7 +113,7 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 	if tracingSocket != "" {
 		// https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/protocol/exporter.md
 		meta.Env = append(meta.Env, "OTEL_TRACES_EXPORTER=otlp", "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=unix:///dev/otel-grpc.sock", "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=grpc")
-		meta.Env = append(meta.Env, traceexec.Environ(ctx)...)
+		meta.Env = append(meta.Env, tracingchildprocess.MakeEnvFromContext(ctx)...)
 	}
 
 	opts = append(opts,
