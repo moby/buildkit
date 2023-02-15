@@ -49,7 +49,7 @@ func TestInMemoryCache(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, len(keys), 1)
 
-	matches, err := m.Records(keys[0])
+	matches, err := m.Records(context.TODO(), keys[0])
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 1)
 
@@ -65,7 +65,7 @@ func TestInMemoryCache(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, len(keys), 1)
 
-	matches, err = m.Records(keys[0])
+	matches, err = m.Records(context.TODO(), keys[0])
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 1)
 
@@ -99,7 +99,7 @@ func TestInMemoryCache(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, len(keys), 1)
 
-	matches, err = m.Records(keys[0])
+	matches, err = m.Records(context.TODO(), keys[0])
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 1)
 
@@ -121,7 +121,7 @@ func TestInMemoryCache(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, len(keys), 1)
 
-	matches, err = m.Records(keys[0])
+	matches, err = m.Records(context.TODO(), keys[0])
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 2)
 
@@ -175,7 +175,7 @@ func TestInMemoryCacheSelector(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, len(keys), 1)
 
-	matches, err := m.Records(keys[0])
+	matches, err := m.Records(context.TODO(), keys[0])
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 1)
 
@@ -203,7 +203,7 @@ func TestInMemoryCacheSelectorNested(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, len(keys), 1)
 
-	matches, err := m.Records(keys[0])
+	matches, err := m.Records(context.TODO(), keys[0])
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 1)
 
@@ -223,7 +223,7 @@ func TestInMemoryCacheSelectorNested(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, len(keys), 1)
 
-	matches, err = m.Records(keys[0])
+	matches, err = m.Records(context.TODO(), keys[0])
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 1)
 
@@ -253,7 +253,7 @@ func TestInMemoryCacheReleaseParent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, len(keys), 1)
 
-	matches, err := m.Records(keys[0])
+	matches, err := m.Records(context.TODO(), keys[0])
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 1)
 
@@ -265,7 +265,7 @@ func TestInMemoryCacheReleaseParent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, len(keys), 1)
 
-	matches, err = m.Records(keys[0])
+	matches, err = m.Records(context.TODO(), keys[0])
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 0)
 
@@ -273,7 +273,7 @@ func TestInMemoryCacheReleaseParent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, len(keys), 1)
 
-	matches, err = m.Records(keys[0])
+	matches, err = m.Records(context.TODO(), keys[0])
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 1)
 
@@ -311,7 +311,7 @@ func TestInMemoryCacheRestoreOfflineDeletion(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, len(keys), 1)
 
-	matches, err := m.Records(keys[0])
+	matches, err := m.Records(context.TODO(), keys[0])
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 0)
 
@@ -319,7 +319,7 @@ func TestInMemoryCacheRestoreOfflineDeletion(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, len(keys), 1)
 
-	matches, err = m.Records(keys[0])
+	matches, err = m.Records(context.TODO(), keys[0])
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 1)
 }

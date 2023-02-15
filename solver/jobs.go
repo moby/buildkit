@@ -680,7 +680,18 @@ func (s *sharedOp) IgnoreCache() bool {
 }
 
 func (s *sharedOp) Cache() CacheManager {
-	return s.st.combinedCacheManager()
+	return &cacheWithCacheOpts{s.st.combinedCacheManager(), s.st}
+}
+
+type cacheWithCacheOpts struct {
+	CacheManager
+	st *state
+}
+
+func (c cacheWithCacheOpts) Records(ctx context.Context, ck *CacheKey) ([]*CacheRecord, error) {
+	// Allow Records accessing to cache opts through ctx. This enable to use remote provider
+	// during checking the cache existence.
+	return c.CacheManager.Records(withAncestorCacheOpts(ctx, c.st), ck)
 }
 
 func (s *sharedOp) LoadCache(ctx context.Context, rec *CacheRecord) (Result, error) {
