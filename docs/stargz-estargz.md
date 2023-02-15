@@ -1,4 +1,4 @@
-# Lazy pulling stargz/eStargz base images (Experimental)
+# Lazy pulling stargz/eStargz base images
 
 This document describes the configuration that allows buildkit to lazily pull [stargz](https://github.com/google/crfs/blob/master/README.md#introducing-stargz)/[eStargz](https://github.com/containerd/stargz-snapshotter/blob/main/docs/estargz.md)-formatted images from registries and how to obtain stargz/eStargz images.
 
