@@ -32,6 +32,7 @@ type textMux struct {
 	last      map[string]lastStatus
 	notFirst  bool
 	nextIndex int
+	desc      string
 }
 
 func (p *textMux) printVtx(t *trace, dgst digest.Digest) {
@@ -63,6 +64,9 @@ func (p *textMux) printVtx(t *trace, dgst digest.Digest) {
 		if p.notFirst {
 			fmt.Fprintln(p.w, "")
 		} else {
+			if p.desc != "" {
+				fmt.Fprintf(p.w, "#0 %s\n\n", p.desc)
+			}
 			p.notFirst = true
 		}
 
