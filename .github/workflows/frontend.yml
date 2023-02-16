@@ -21,129 +21,21 @@ env:
   REPO_SLUG_ORIGIN: "moby/buildkit:latest"
   REPO_SLUG_TARGET: "docker/dockerfile-upstream"
   PLATFORMS: "linux/386,linux/amd64,linux/arm/v7,linux/arm64,linux/mips,linux/mipsle,linux/mips64,linux/mips64le,linux/s390x,linux/ppc64le,linux/riscv64"
-  CACHE_GHA_SCOPE_IT: "frontend-integration-tests"
-  TESTFLAGS: "-v --parallel=6 --timeout=30m"
   BUILDX_VERSION: "latest"  # leave empty to use the one available on GitHub virtual environment
   GO_VERSION: "1.19"
 
 jobs:
-  base:
-    runs-on: ubuntu-20.04
-    steps:
-      -
-        name: Checkout
-        uses: actions/checkout@v3
-      -
-        name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v2
-      -
-        name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-      -
-        name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-        with:
-          version: ${{ env.BUILDX_VERSION }}
-          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
-          buildkitd-flags: --debug
-      -
-        name: Build ${{ env.CACHE_GHA_SCOPE_IT }}
-        run: |
-          ./hack/build_ci_first_pass integration-tests
-        env:
-          CACHE_FROM: type=gha,scope=${{ env.CACHE_GHA_SCOPE_IT }}
-          CACHE_TO: type=gha,scope=${{ env.CACHE_GHA_SCOPE_IT }}
-
   test:
-    runs-on: ubuntu-20.04
-    needs:
-      - base
-    strategy:
-      fail-fast: false
-      matrix:
-        pkg:
-          - ./frontend/dockerfile
-        worker:
-          - containerd
-          - containerd-rootless
-          - containerd-1.6
-          - containerd-snapshotter-stargz
-          - oci
-          - oci-rootless
-          - oci-snapshotter-stargz
-        typ:
-          - integration
-          - dockerfile
-    steps:
-      -
-        name: Checkout
-        uses: actions/checkout@v3
-      -
-        name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v2
-      -
-        name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-      -
-        name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-        with:
-          version: ${{ env.BUILDX_VERSION }}
-          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
-          buildkitd-flags: --debug
-      -
-        name: Test
-        continue-on-error: ${{ matrix.tags == 'nydus' }}
-        run: |
-          if [ -n "${{ matrix.worker }}" ]; then
-            export TESTFLAGS="${TESTFLAGS} --run=//worker=${{ matrix.worker }}$"
-          fi
-          ./hack/test ${{ matrix.typ }}
-          mv ./coverage/coverage.txt ./coverage/coverage-${{ github.job }}-$(echo "${{ matrix.pkg }}-${{ matrix.typ }}-${{ matrix.worker }}" | tr -dc '[:alnum:]-\n\r' | tr '[:upper:]' '[:lower:]').txt
-        env:
-          TEST_COVERAGE: 1
-          TESTPKGS: ${{ matrix.pkg }}
-          CACHE_FROM: type=gha,scope=${{ env.CACHE_GHA_SCOPE_IT }}
-      -
-        name: Upload coverage file
-        continue-on-error: ${{ matrix.tags == 'nydus' }}
-        uses: actions/upload-artifact@v3
-        with:
-          name: frontend-coverage
-          path: ./coverage
+    uses: ./.github/workflows/.test.yml
+    with:
+      cache_scope: frontend-integration-tests
+      pkgs: ./frontend/dockerfile
+      kinds: |
+        integration
+        dockerfile
+      codecov_flags: dockerfile-frontend
 
-  upload-coverage:
-    runs-on: ubuntu-20.04
-    needs:
-      - test
-    steps:
-      -
-        name: Checkout
-        uses: actions/checkout@v3
-      -
-        name: Download coverage files
-        uses: actions/download-artifact@v3
-        with:
-          name: frontend-coverage
-          path: ./coverage
-      -
-        name: List coverage files
-        uses: actions/github-script@v6
-        id: files
-        with:
-          result-encoding: string
-          script: |
-            return require('fs').readdirSync('./coverage', {withFileTypes: true})
-              .filter(item => !item.isDirectory())
-              .map(item => `./coverage/${item.name}`)
-              .join(',');
-      -
-        name: Send to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          files: ${{ steps.files.outputs.result }}
-
-  prepare-image:
+  prepare:
     runs-on: ubuntu-20.04
     if: github.event_name != 'schedule'
     outputs:
@@ -177,10 +69,11 @@ jobs:
     runs-on: ubuntu-20.04
     needs:
       - test
+      - prepare
     strategy:
       fail-fast: false
       matrix:
-        tag: ${{ fromJson(needs.prepare-image.outputs.tags) }}
+        tag: ${{ fromJson(needs.prepare.outputs.tags) }}
     steps:
       -
         name: Prepare
@@ -209,14 +102,14 @@ jobs:
       -
         name: Login to DockerHub
         uses: docker/login-action@v2
-        if: needs.prepare-image.outputs.push == 'push'
+        if: needs.prepare.outputs.push == 'push'
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       -
         name: Build
         run: |
-          ./frontend/dockerfile/cmd/dockerfile-frontend/hack/release "${{ needs.prepare-image.outputs.typ }}" "${{ matrix.tag }}" "$REPO_SLUG_TARGET" "${{ needs.prepare-image.outputs.push }}"
+          ./frontend/dockerfile/cmd/dockerfile-frontend/hack/release "${{ needs.prepare.outputs.typ }}" "${{ matrix.tag }}" "$REPO_SLUG_TARGET" "${{ needs.prepare.outputs.push }}"
         env:
           RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
           CACHE_FROM: type=gha,scope=${{ env.CACHE_SCOPE }}
