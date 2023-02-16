@@ -1,0 +1,50 @@
+# tag     1.5.2
+# result  docker/dockerfile-upstream:1.5.2  > docker/dockerfile:1.5.2
+name: promote-frontend
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Upstream tag to promote'
+        required: true
+      release:
+        description: 'Push tag'
+        required: false
+        type: boolean
+
+env:
+  SETUP_BUILDX_VERSION: "latest"
+  UPSTREAM_IMAGE: "docker/dockerfile-upstream"
+  DOWNSTREAM_IMAGE: "docker/dockerfile"
+
+jobs:
+  promote:
+    runs-on: ubuntu-20.04
+    steps:
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          version: ${{ env.SETUP_BUILDX_VERSION }}
+          buildkitd-flags: --debug
+      -
+        name: Login to DockerHub
+        if: ${{ inputs.release }}
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      -
+        name: Run
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const tag = `${{ inputs.tag }}`.trim();
+            const release = (/true/i).test(`${{ inputs.release }}`.trim());
+            let args = ['buildx', 'imagetools', 'create'];
+            if (!release) {
+              args.push('--dry-run');
+            }
+            args.push('--tag', `${{ env.DOWNSTREAM_IMAGE }}:${tag}`, `${{ env.UPSTREAM_IMAGE }}:${tag}`);
+            await exec.exec('docker', args);
