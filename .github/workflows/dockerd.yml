@@ -7,50 +7,43 @@ on:
       version:
         description: 'Docker version'
         required: true
-        default: '20.10.19'
+        default: '23.0.1'
 
 env:
-  REPO_SLUG_ORIGIN: "moby/buildkit:latest"
+  SETUP_BUILDX_VERSION: "latest"
+  SETUP_BUILDKIT_IMAGE: "moby/buildkit:latest"
   CACHE_GHA_SCOPE_IT: "integration-tests"
   CACHE_GHA_SCOPE_BINARIES: "binaries"
   TESTFLAGS: "-v --parallel=1 --timeout=30m"
-  BUILDX_VERSION: "latest"  # leave empty to use the one available on GitHub virtual environment
 
 jobs:
   prepare:
     runs-on: ubuntu-20.04
     steps:
       -
-        name: Check version
-        run: |
-          version=${{ github.event.inputs.version }}
-          if [ -z "$version" ]; then
-            version=20.10.19
-          fi
-          echo "DOCKER_VERSION=$version" >> $GITHUB_ENV
-      -
-        name: Check build
+        name: Prepare
         uses: actions/github-script@v6
-        id: build
         with:
-          result-encoding: string
           script: |
+            const version = `${{ inputs.version }}` || '23.0.1';
+            let build = 'true';
             try {
-              new URL("${{ env.DOCKER_VERSION }}");
+              new URL(version);
             } catch (e) {
-              return false;
+              build = 'false';
             }
-            return true;
+            core.exportVariable('DOCKER_VERSION', version);
+            core.exportVariable('DOCKER_BUILD', build);
       -
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
         with:
-          version: ${{ env.BUILDX_VERSION }}
-          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
+          version: ${{ env.SETUP_BUILDX_VERSION }}
+          driver-opts: image=${{ env.SETUP_BUILDKIT_IMAGE }}
           buildkitd-flags: --debug
       -
         name: Build
-        if: steps.build.outputs.result == 'true'
+        if: ${{ env.DOCKER_BUILD == 'true' }}
         uses: docker/build-push-action@v3
         with:
           context: ${{ env.DOCKER_VERSION }}
@@ -58,14 +51,14 @@ jobs:
           outputs: /tmp/moby
       -
         name: Rename binary
-        if: steps.build.outputs.result == 'true'
+        if: ${{ env.DOCKER_BUILD == 'true' }}
         run: |
           if [ -L "/tmp/moby/binary-daemon/dockerd" ]; then
             mv -f $(readlink /tmp/moby/binary-daemon/dockerd) /tmp/moby/dockerd
           fi
       -
         name: Download
-        if: steps.build.outputs.result != 'true'
+        if: ${{ env.DOCKER_BUILD != 'true' }}
         run: |
           mkdir -p /tmp/moby
           cd /tmp/moby
@@ -113,8 +106,8 @@ jobs:
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
         with:
-          version: ${{ env.BUILDX_VERSION }}
-          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
+          version: ${{ env.SETUP_BUILDX_VERSION }}
+          driver-opts: image=${{ env.SETUP_BUILDKIT_IMAGE }}
           buildkitd-flags: --debug
       -
         name: Download dockerd

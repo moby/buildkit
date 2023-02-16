@@ -30,8 +30,8 @@ on:
         default: 'true'
 
 env:
+  SETUP_BUILDX_VERSION: "latest"
   REPO_SLUG_TARGET: "moby/buildkit"
-  BUILDX_VERSION: "latest"  # leave empty to use the one available on GitHub virtual environment
 
 jobs:
   create:
@@ -47,7 +47,7 @@ jobs:
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
         with:
-          version: ${{ env.BUILDX_VERSION }}
+          version: ${{ env.SETUP_BUILDX_VERSION }}
           buildkitd-flags: --debug
       -
         name: Login to DockerHub
