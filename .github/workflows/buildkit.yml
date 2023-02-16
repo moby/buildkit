@@ -1,4 +1,4 @@
-name: build
+name: buildkit
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
