@@ -12,8 +12,6 @@ on:
 env:
   SETUP_BUILDX_VERSION: "latest"
   SETUP_BUILDKIT_IMAGE: "moby/buildkit:latest"
-  CACHE_GHA_SCOPE_IT: "integration-tests"
-  CACHE_GHA_SCOPE_BINARIES: "binaries"
   TESTFLAGS: "-v --parallel=1 --timeout=30m"
 
 jobs:
@@ -129,7 +127,7 @@ jobs:
           TESTPKGS: "${{ matrix.pkg }}"
           TESTFLAGS: "${{ env.TESTFLAGS }} --run=//worker=${{ matrix.worker }}$"
           SKIP_INTEGRATION_TESTS: "${{ matrix.skip-integration-tests }}"
-          CACHE_FROM: "type=gha,scope=${{ env.CACHE_GHA_SCOPE_IT }} type=gha,scope=${{ env.CACHE_GHA_SCOPE_BINARIES }}"
+          CACHE_FROM: "type=gha,scope=build-integration-tests"
           BUILDKIT_INTEGRATION_DOCKERD_FLAGS: |
             --bip=10.66.66.1/24
             --default-address-pool=base=10.66.66.0/16,size=24
