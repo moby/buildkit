@@ -1,0 +1,62 @@
+name: test-os
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  schedule:
+    - cron: '0 10 * * *'
+  workflow_dispatch:
+  push:
+    branches:
+      - 'master'
+  pull_request:
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+      - 'frontend/dockerfile/docs/**'
+
+env:
+  GO_VERSION: "1.19"
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          # - ubuntu-20.04
+          # - macOS-11
+          - windows-2022
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v3
+      -
+        name: Set up Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      -
+        name: Go mod
+        run: |
+          go mod download
+      -
+        name: Test
+        env:
+          TMPDIR: ${{ runner.temp }}
+          SKIP_INTEGRATION_TESTS: 1
+        run: |
+          mkdir -p ./coverage
+          go test -coverprofile=./coverage/coverage.txt -covermode=atomic ${TESTFLAGS} ./...
+        shell: bash
+      -
+        name: Send to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage/coverage.txt
+          env_vars: RUNNER_OS
+          flags: unit
