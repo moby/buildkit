@@ -2,10 +2,12 @@
 
 # BuildKit <!-- omit in toc -->
 
-[![GoDoc](https://godoc.org/github.com/moby/buildkit?status.svg)](https://godoc.org/github.com/moby/buildkit/client/llb)
-[![Build Status](https://github.com/moby/buildkit/workflows/build/badge.svg)](https://github.com/moby/buildkit/actions?query=workflow%3Abuild)
-[![Go Report Card](https://goreportcard.com/badge/github.com/moby/buildkit)](https://goreportcard.com/report/github.com/moby/buildkit)
-[![codecov](https://codecov.io/gh/moby/buildkit/branch/master/graph/badge.svg)](https://codecov.io/gh/moby/buildkit)
+[![GitHub Release](https://img.shields.io/github/release/moby/buildkit.svg?style=flat-square)](https://github.com/moby/buildkit/releases/latest)
+[![PkgGoDev](https://img.shields.io/badge/go.dev-docs-007d9c?style=flat-square&logo=go&logoColor=white)](https://pkg.go.dev/github.com/moby/buildkit/client/llb)
+[![CI BuildKit Status](https://img.shields.io/github/actions/workflow/status/moby/buildkit/buildkit.yml?label=buildkit&logo=github&style=flat-square)](https://github.com/moby/buildkit/actions?query=workflow%3Abuildkit)
+[![CI Frontend Status](https://img.shields.io/github/actions/workflow/status/moby/buildkit/frontend.yml?label=frontend&logo=github&style=flat-square)](https://github.com/moby/buildkit/actions?query=workflow%3Afrontend)
+[![Go Report Card](https://goreportcard.com/badge/github.com/moby/buildkit?style=flat-square)](https://goreportcard.com/report/github.com/moby/buildkit)
+[![Codecov](https://img.shields.io/codecov/c/github/moby/buildkit?logo=codecov&style=flat-square)](https://codecov.io/gh/moby/buildkit)
 
 BuildKit is a toolkit for converting source code to build artifacts in an efficient, expressive and repeatable manner.
 
