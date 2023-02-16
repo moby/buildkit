@@ -6,7 +6,7 @@ TYP=$1
 set -e
 
 usage() {
-  echo "usage: ./hack/build_ci_first_pass <binaries|integration-tests>"
+  echo "usage: ./hack/build_ci_first_pass <integration-tests>"
   exit 1
 }
 
@@ -15,11 +15,6 @@ if [ -z "$TYP" ]; then
 fi
 
 case $TYP in
-  "binaries")
-    buildxCmd build $cacheFromFlags $cacheToFlags \
-      --target "binaries" \
-      $currentcontext
-    ;;
   "integration-tests")
     buildxCmd build $cacheFromFlags $cacheToFlags \
       --target "integration-tests-base" \
