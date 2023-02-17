@@ -18,7 +18,7 @@ on:
       - 'frontend/dockerfile/docs/**'
 
 env:
-  GO_VERSION: "1.19"
+  GO_VERSION: "1.20"
   SETUP_BUILDX_VERSION: "latest"
   SETUP_BUILDKIT_TAG: "moby/buildkit:latest"
   IMAGE_NAME: "docker/dockerfile-upstream"
