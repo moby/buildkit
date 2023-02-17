@@ -197,7 +197,7 @@ func (d *client) UploadTraces(ctx context.Context, protoSpans []*tracepb.Resourc
 			}
 			return newResponseError(resp.Header)
 		default:
-			return fmt.Errorf("failed to send %s to %s: %s", d.name, request.URL, resp.Status)
+			return fmt.Errorf("failed to send to %s: %s", request.URL, resp.Status)
 		}
 	})
 }
