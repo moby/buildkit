@@ -293,7 +293,7 @@ type gatewayContainer struct {
 	cancel     func()
 }
 
-func (gwCtr *gatewayContainer) Start(ctx context.Context, req client.StartRequest) (client.ContainerProcess, error) {
+func (gwCtr *gatewayContainer) Start(_ context.Context, req client.StartRequest) (client.ContainerProcess, error) {
 	resize := make(chan executor.WinSize)
 	signal := make(chan syscall.Signal)
 	procInfo := executor.ProcessInfo{

@@ -81,7 +81,7 @@ const (
 	mediaTypeImageLayerZstd         = ocispecs.MediaTypeImageLayer + "+zstd" // unreleased image-spec#790
 )
 
-var Default gzipType = Gzip
+var Default = Gzip
 
 func parse(t string) (Type, error) {
 	switch t {
