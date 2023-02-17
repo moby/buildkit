@@ -46,24 +46,36 @@ var (
 	ErrNotFound = errors.New("not found")
 )
 
+// Any contains an arbitrary protcol buffer message along with its type.
+//
+// While there is google.golang.org/protobuf/types/known/anypb.Any,
+// we'd like to have our own to hide the underlying protocol buffer
+// implementations from containerd clients.
+//
+// https://developers.google.com/protocol-buffers/docs/proto3#any
 type Any interface {
+	// GetTypeUrl returns a URL/resource name that uniquely identifies
+	// the type of the serialized protocol buffer message.
 	GetTypeUrl() string
+
+	// GetValue returns a valid serialized protocol buffer of the type that
+	// GetTypeUrl() indicates.
 	GetValue() []byte
 }
 
-type any struct {
+type anyType struct {
 	typeURL string
 	value   []byte
 }
 
-func (a *any) GetTypeUrl() string {
+func (a *anyType) GetTypeUrl() string {
 	if a == nil {
 		return ""
 	}
 	return a.typeURL
 }
 
-func (a *any) GetValue() []byte {
+func (a *anyType) GetValue() []byte {
 	if a == nil {
 		return nil
 	}
@@ -150,7 +162,7 @@ func MarshalAny(v interface{}) (Any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &any{
+	return &anyType{
 		typeURL: url,
 		value:   data,
 	}, nil

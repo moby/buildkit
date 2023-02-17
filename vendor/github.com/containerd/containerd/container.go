@@ -35,7 +35,7 @@ import (
 	"github.com/containerd/containerd/protobuf"
 	"github.com/containerd/containerd/runtime/v2/runc/options"
 	"github.com/containerd/fifo"
-	"github.com/containerd/typeurl"
+	"github.com/containerd/typeurl/v2"
 	ver "github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/opencontainers/selinux/go-selinux/label"
@@ -258,6 +258,7 @@ func (c *container) NewTask(ctx context.Context, ioCreate cio.Creator, opts ...N
 			request.Rootfs = append(request.Rootfs, &types.Mount{
 				Type:    m.Type,
 				Source:  m.Source,
+				Target:  m.Target,
 				Options: m.Options,
 			})
 		}
@@ -275,6 +276,7 @@ func (c *container) NewTask(ctx context.Context, ioCreate cio.Creator, opts ...N
 			request.Rootfs = append(request.Rootfs, &types.Mount{
 				Type:    m.Type,
 				Source:  m.Source,
+				Target:  m.Target,
 				Options: m.Options,
 			})
 		}

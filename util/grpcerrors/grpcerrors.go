@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/containerd/typeurl"
+	"github.com/containerd/typeurl/v2"
 	rpc "github.com/gogo/googleapis/google/rpc"
 	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/golang/protobuf/proto" //nolint:staticcheck
