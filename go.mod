@@ -18,7 +18,7 @@ require (
 	github.com/containerd/containerd v1.7.0-beta.3
 	github.com/containerd/continuity v0.3.0
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
-	github.com/containerd/go-cni v1.1.6
+	github.com/containerd/go-cni v1.1.9-0.20230211172349-6603d5bd8941
 	github.com/containerd/go-runc v1.0.0
 	github.com/containerd/nydus-snapshotter v0.3.1
 	github.com/containerd/stargz-snapshotter v0.14.1
@@ -115,7 +115,7 @@ require (
 	github.com/containerd/cgroups v1.1.0 // indirect
 	github.com/containerd/fifo v1.0.0 // indirect
 	github.com/containerd/ttrpc v1.1.1-0.20220420014843-944ef4a40df3 // indirect
-	github.com/containernetworking/cni v1.1.1 // indirect
+	github.com/containernetworking/cni v1.1.2 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
 	github.com/cyphar/filepath-securejoin v0.2.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
