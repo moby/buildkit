@@ -71,6 +71,7 @@ var allTests = integration.TestFuncs(
 	testExportedHistory,
 	testExposeExpansion,
 	testUser,
+	testUserAdditionalGids,
 	testCacheReleased,
 	testDockerignore,
 	testDockerignoreInvalid,
@@ -3003,6 +3004,43 @@ USER nobody
 	require.NoError(t, err)
 
 	require.Equal(t, "nobody", ociimg.Config.User)
+}
+
+// testUserAdditionalGids ensures that that the primary GID is also included in the additional GID list.
+// CVE-2023-25173: https://github.com/advisories/GHSA-hmfx-3pcx-653p
+func testUserAdditionalGids(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+# Mimics the tests in https://github.com/containerd/containerd/commit/3eda46af12b1deedab3d0802adb2e81cb3521950
+FROM busybox
+SHELL ["/bin/sh", "-euxc"]
+RUN [ "$(id)" = "uid=0(root) gid=0(root) groups=0(root),10(wheel)" ]
+USER 1234
+RUN [ "$(id)" = "uid=1234 gid=0(root) groups=0(root)" ]
+USER 1234:1234
+RUN [ "$(id)" = "uid=1234 gid=1234 groups=1234" ]
+USER daemon
+RUN [ "$(id)" = "uid=1(daemon) gid=1(daemon) groups=1(daemon)" ]
+`)
+
+	dir, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
 }
 
 func testCopyChown(t *testing.T, sb integration.Sandbox) {
