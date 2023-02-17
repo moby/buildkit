@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"runtime"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/trace"
@@ -36,7 +37,12 @@ func setupDebugHandlers(addr string) error {
 	if err != nil {
 		return err
 	}
+	server := &http.Server{
+		Addr:              l.Addr().String(),
+		Handler:           m,
+		ReadHeaderTimeout: time.Minute,
+	}
 	logrus.Debugf("debug handlers listening at %s", addr)
-	go http.Serve(l, m)
+	go server.ListenAndServe()
 	return nil
 }

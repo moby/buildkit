@@ -392,6 +392,9 @@ func (hs *httpSourceHandler) Snapshot(ctx context.Context, g session.Group) (cac
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	ref, dgst, err := hs.save(ctx, resp, g)
 	if err != nil {
