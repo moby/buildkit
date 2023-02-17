@@ -190,10 +190,11 @@ func newDefaultTransport() *http.Transport {
 			KeepAlive: 60 * time.Second,
 		}).DialContext,
 		MaxIdleConns:          30,
-		IdleConnTimeout:       120 * time.Second,
+		IdleConnTimeout:       5 * time.Second, // earthly needs this to stay low
 		MaxIdleConnsPerHost:   4,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 5 * time.Second,
 		TLSNextProto:          make(map[string]func(authority string, c *tls.Conn) http.RoundTripper),
+		ResponseHeaderTimeout: 30 * time.Second,
 	}
 }
