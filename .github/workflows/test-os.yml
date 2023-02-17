@@ -21,6 +21,8 @@ on:
 env:
   GO_VERSION: "1.20"
   TESTFLAGS: "-v --parallel=6 --timeout=30m"
+  GOTESTSUM_VERSION: "v1.9.0"  # same as one in Dockerfile
+  GOTESTSUM_FORMAT: "standard-verbose"
 
 jobs:
   test:
@@ -43,6 +45,10 @@ jobs:
           go-version: "${{ env.GO_VERSION }}"
           cache: true
       -
+        name: Install gotestsum
+        run: |
+          go install gotest.tools/gotestsum@${{ env.GOTESTSUM_VERSION }}
+      -
         name: Go mod
         run: |
           go mod download
@@ -52,13 +58,27 @@ jobs:
           TMPDIR: ${{ runner.temp }}
           SKIP_INTEGRATION_TESTS: 1
         run: |
-          mkdir -p ./coverage
-          go test -coverprofile=./coverage/coverage.txt -covermode=atomic ${TESTFLAGS} ./...
+          mkdir -p ./bin/testreports
+          gotestsum \
+            --jsonfile="./bin/testreports/go-test-report.json" \
+            --junitfile="./bin/testreports/junit-report.xml" \
+            --packages="./..." \
+            -- \
+              "-coverprofile" "./bin/testreports/coverage.txt" \
+              "-covermode" "atomic" ${TESTFLAGS}
         shell: bash
       -
         name: Send to Codecov
+        if: always()
         uses: codecov/codecov-action@v3
         with:
-          files: ./coverage/coverage.txt
+          directory: ./bin/testreports
           env_vars: RUNNER_OS
           flags: unit
+      -
+        name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-reports
+          path: ./bin/testreports

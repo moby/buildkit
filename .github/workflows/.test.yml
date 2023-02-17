@@ -31,6 +31,7 @@ env:
   SETUP_BUILDX_VERSION: "latest"
   SETUP_BUILDKIT_IMAGE: "moby/buildkit:latest"
   TESTFLAGS: "-v --parallel=6 --timeout=30m"
+  GOTESTSUM_FORMAT: "standard-verbose"
 
 jobs:
   prepare:
@@ -143,6 +144,7 @@ jobs:
         name: Test
         continue-on-error: ${{ matrix.tags == 'nydus' }}
         run: |
+          export TEST_REPORT_SUFFIX=-${{ github.job }}-$(echo "${{ matrix.pkg }}-${{ matrix.skip-integration-tests }}-${{ matrix.kind }}-${{ matrix.worker }}-${{ matrix.tags }}" | tr -dc '[:alnum:]-\n\r' | tr '[:upper:]' '[:lower:]')
           if [ -n "${{ matrix.tags }}" ]; then
             TESTFLAGS="${TESTFLAGS} --tags=${{ matrix.tags }}"
             export BUILDKITD_TAGS="${{ matrix.tags }}"
@@ -151,48 +153,22 @@ jobs:
             export TESTFLAGS="${TESTFLAGS} --run=//worker=${{ matrix.worker }}$"
           fi
           ./hack/test ${{ matrix.kind }}
-          mv ./coverage/coverage.txt ./coverage/coverage-${{ github.job }}-$(echo "${{ matrix.pkg }}-${{ matrix.skip-integration-tests }}-${{ matrix.kind }}-${{ matrix.worker }}-${{ matrix.tags }}" | tr -dc '[:alnum:]-\n\r' | tr '[:upper:]' '[:lower:]').txt
         env:
           TEST_COVERAGE: 1
           TESTPKGS: ${{ matrix.pkg }}
           SKIP_INTEGRATION_TESTS: ${{ matrix.skip-integration-tests }}
           CACHE_FROM: type=gha,scope=${{ inputs.cache_scope }}
       -
-        name: Upload coverage file
-        continue-on-error: ${{ matrix.tags == 'nydus' }}
-        uses: actions/upload-artifact@v3
-        with:
-          name: coverage
-          path: ./coverage
-
-  upload-coverage:
-    runs-on: ubuntu-20.04
-    needs:
-      - run
-    steps:
-      -
-        name: Checkout
-        uses: actions/checkout@v3
-      -
-        name: Download coverage files
-        uses: actions/download-artifact@v3
-        with:
-          name: coverage
-          path: ./coverage
-      -
-        name: List coverage files
-        id: files
-        uses: actions/github-script@v6
-        with:
-          result-encoding: string
-          script: |
-            return require('fs').readdirSync('./coverage', {withFileTypes: true})
-              .filter(item => !item.isDirectory())
-              .map(item => `./coverage/${item.name}`)
-              .join(',');
-      -
         name: Send to Codecov
+        if: always()
         uses: codecov/codecov-action@v3
         with:
-          files: ${{ steps.files.outputs.result }}
+          directory: ./bin/testreports
           flags: ${{ matrix.codecov_flags }}
+      -
+        name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-reports
+          path: ./bin/testreports

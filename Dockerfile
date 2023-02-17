@@ -14,6 +14,7 @@ ARG NYDUS_VERSION=v2.1.0
 ARG MINIO_VERSION=RELEASE.2022-05-03T20-36-08Z
 ARG MINIO_MC_VERSION=RELEASE.2022-05-04T06-07-55Z
 ARG AZURITE_VERSION=3.18.0
+ARG GOTESTSUM_VERSION=v1.9.0
 
 ARG GO_VERSION=1.20
 ARG ALPINE_VERSION=3.17
@@ -207,6 +208,12 @@ SHELL ["/bin/bash", "-c"]
 RUN wget https://github.com/dragonflyoss/image-service/releases/download/$NYDUS_VERSION/nydus-static-$NYDUS_VERSION-$TARGETOS-$TARGETARCH.tgz
 RUN mkdir -p /out/nydus-static && tar xzvf nydus-static-$NYDUS_VERSION-$TARGETOS-$TARGETARCH.tgz -C /out
 
+FROM gobuild-base AS gotestsum
+ARG GOTESTSUM_VERSION
+RUN --mount=target=/root/.cache,type=cache \
+  GOBIN=/out/ go install "gotest.tools/gotestsum@${GOTESTSUM_VERSION}" && \
+  /out/gotestsum --version
+
 FROM buildkit-export AS buildkit-linux
 COPY --link --from=binaries / /usr/bin/
 ENTRYPOINT ["buildkitd"]
@@ -249,6 +256,8 @@ ENTRYPOINT ["/docker-entrypoint.sh"]
 ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.6=/opt/containerd-alt-16/bin"
 ENV BUILDKIT_INTEGRATION_SNAPSHOTTER=stargz
 ENV CGO_ENABLED=0
+ENV GOTESTSUM_FORMAT=standard-verbose
+COPY --link --from=gotestsum /out/gotestsum /usr/bin/
 COPY --link --from=minio /opt/bin/minio /usr/bin/
 COPY --link --from=minio-mc /usr/bin/mc /usr/bin/
 COPY --link --from=nydus /out/nydus-static/* /usr/bin/
