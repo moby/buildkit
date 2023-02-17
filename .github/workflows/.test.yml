@@ -27,7 +27,7 @@ on:
         type: string
 
 env:
-  GO_VERSION: "1.19"
+  GO_VERSION: "1.20"
   SETUP_BUILDX_VERSION: "latest"
   SETUP_BUILDKIT_IMAGE: "moby/buildkit:latest"
   TESTFLAGS: "-v --parallel=6 --timeout=30m"

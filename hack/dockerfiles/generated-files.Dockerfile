@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile-upstream:master
 
-ARG GO_VERSION="1.19"
+ARG GO_VERSION="1.20"
 ARG NODE_VERSION="19"
 ARG PROTOC_VERSION="3.11.4"
 
