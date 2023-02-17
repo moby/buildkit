@@ -12,7 +12,6 @@ run:
 
 linters:
   enable:
-    - deadcode
     - depguard
     - gofmt
     - goimports
@@ -25,7 +24,6 @@ linters:
     - staticcheck
     - typecheck
     - unused
-    - varcheck
     - bodyclose
     - errname
     - makezero
