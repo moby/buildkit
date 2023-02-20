@@ -733,17 +733,16 @@ func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, p PreprocessF
 		complete := true
 		if p != nil {
 			st := s.st.solver.getState(s.st.vtx.Inputs()[index])
-			if st == nil {
-				return nil, errors.Errorf("failed to get state for index %d on %v", index, s.st.vtx.Name())
-			}
-			ctx2 := progress.WithProgress(ctx, st.mpw)
-			if st.mspan.Span != nil {
-				ctx2 = trace.ContextWithSpan(ctx2, st.mspan)
-			}
-			err = p(ctx2, res, st)
-			if err != nil {
-				f = nil
-				ctx = ctx2
+			if st != nil {
+				ctx2 := progress.WithProgress(ctx, st.mpw)
+				if st.mspan.Span != nil {
+					ctx2 = trace.ContextWithSpan(ctx2, st.mspan)
+				}
+				err = p(ctx2, res, st)
+				if err != nil {
+					f = nil
+					ctx = ctx2
+				}
 			}
 		}
 
