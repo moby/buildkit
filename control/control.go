@@ -368,6 +368,10 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to configure %v cache exporter", e.Type)
 		}
+		if exp.Exporter == nil {
+			bklog.G(ctx).Debugf("cache exporter resolver for %v returned nil, skipping exporter", e.Type)
+			continue
+		}
 		if exportMode, supported := parseCacheExportMode(e.Attrs["mode"]); !supported {
 			bklog.G(ctx).Debugf("skipping invalid cache export mode: %s", e.Attrs["mode"])
 		} else {
