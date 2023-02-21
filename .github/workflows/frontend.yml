@@ -9,6 +9,7 @@ on:
   push:
     branches:
       - 'master'
+      - 'v[0-9]+.[0-9]+'
     tags:
       - 'dockerfile/*'
   pull_request:
@@ -56,7 +57,9 @@ jobs:
             TAG=${GITHUB_REF#refs/tags/}
             PUSH=push
           elif [[ $GITHUB_REF == refs/heads/* ]]; then
-            PUSH=push
+            if [ $GITHUB_REF = "refs/heads/${{ github.event.repository.default_branch }}" ]; then
+              PUSH=push
+            fi
           fi
           echo "typ=${TYP}" >>${GITHUB_OUTPUT}
           echo "push=${PUSH}" >>${GITHUB_OUTPUT}
