@@ -126,34 +126,6 @@ jobs:
           path: ./release-out/*
           if-no-files-found: error
 
-  binaries:
-    runs-on: ubuntu-20.04
-    needs:
-      - prepare
-      - cross
-      - test
-    steps:
-      -
-        name: Download artifacts
-        uses: actions/download-artifact@v3
-        with:
-          name: buildkit
-          path: ./release-out/*
-      -
-        name: List artifacts
-        run: |
-          tree -nh ./release-out/
-      -
-        name: GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844  # v0.1.15
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          draft: true
-          files: ./release-out/*
-          name: ${{ needs.prepare.outputs.tag }}
-
   image:
     runs-on: ubuntu-20.04
     needs:
@@ -198,3 +170,32 @@ jobs:
           TARGET: ${{ matrix.target-stage }}
           CACHE_FROM: type=gha,scope=image${{ matrix.target-stage }}
           CACHE_TO: type=gha,scope=image${{ matrix.target-stage }}
+
+  release:
+    runs-on: ubuntu-20.04
+    needs:
+      - prepare
+      - test
+      - cross
+      - image
+    steps:
+      -
+        name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: buildkit
+          path: ./release-out/*
+      -
+        name: List artifacts
+        run: |
+          tree -nh ./release-out/
+      -
+        name: GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844  # v0.1.15
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          draft: true
+          files: ./release-out/*
+          name: ${{ needs.prepare.outputs.tag }}
