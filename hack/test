@@ -58,7 +58,7 @@ testReportsDir="$(pwd)/bin/testreports"
 mkdir -p "$testReportsDir"
 testReportsVol="-v $testReportsDir:/testreports"
 gotestsumArgs="--format=standard-verbose --jsonfile=/testreports/go-test-report$TEST_REPORT_SUFFIX.json --junitfile=/testreports/junit-report$TEST_REPORT_SUFFIX.xml"
-gotestArgs="-coverprofile=/testreports/coverage-report$TEST_REPORT_SUFFIX.txt -covermode=atomic"
+gotestArgs="-mod=vendor -coverprofile=/testreports/coverage-report$TEST_REPORT_SUFFIX.txt -covermode=atomic"
 
 buildxCmd build $cacheFromFlags \
   --build-arg BUILDKITD_TAGS \

@@ -49,10 +49,6 @@ jobs:
         run: |
           go install gotest.tools/gotestsum@${{ env.GOTESTSUM_VERSION }}
       -
-        name: Go mod
-        run: |
-          go mod download
-      -
         name: Test
         env:
           TMPDIR: ${{ runner.temp }}
@@ -64,6 +60,7 @@ jobs:
             --junitfile="./bin/testreports/junit-report.xml" \
             --packages="./..." \
             -- \
+              "-mod=vendor" \
               "-coverprofile" "./bin/testreports/coverage.txt" \
               "-covermode" "atomic" ${TESTFLAGS}
         shell: bash
