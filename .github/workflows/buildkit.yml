@@ -25,37 +25,8 @@ env:
   SETUP_BUILDKIT_IMAGE: "moby/buildkit:latest"
   IMAGE_NAME: "moby/buildkit"
   PLATFORMS: "linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le,linux/riscv64"
-  CACHE_GHA_SCOPE_BINARIES: "binaries"
-  CACHE_GHA_SCOPE_CROSS: "cross"
 
 jobs:
-  base:
-    runs-on: ubuntu-20.04
-    steps:
-      -
-        name: Checkout
-        uses: actions/checkout@v3
-      -
-        name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v2
-      -
-        name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-      -
-        name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-        with:
-          version: ${{ env.SETUP_BUILDX_VERSION }}
-          driver-opts: image=${{ env.SETUP_BUILDKIT_IMAGE }}
-          buildkitd-flags: --debug
-      -
-        name: Build ${{ env.CACHE_GHA_SCOPE_BINARIES }}
-        run: |
-          ./hack/build_ci_first_pass binaries
-        env:
-          CACHE_FROM: type=gha,scope=${{ env.CACHE_GHA_SCOPE_BINARIES }}
-          CACHE_TO: type=gha,scope=${{ env.CACHE_GHA_SCOPE_BINARIES }}
-
   test:
     uses: ./.github/workflows/.test.yml
     with:
@@ -80,9 +51,48 @@ jobs:
           skip-integration-tests: 1
           typ: integration
 
+  prepare:
+    runs-on: ubuntu-20.04
+    outputs:
+      tag: ${{ steps.prep.outputs.tag }}
+      push: ${{ steps.prep.outputs.push }}
+      platforms: ${{ steps.prep.outputs.platforms }}
+    steps:
+      -
+        name: Prepare
+        id: prep
+        run: |
+          TAG=pr
+          PUSH=false
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            TAG=nightly
+            PUSH=push
+          elif [[ $GITHUB_REF == refs/tags/v* ]]; then
+            TAG=${GITHUB_REF#refs/tags/}
+            PUSH=push
+          elif [[ $GITHUB_REF == refs/heads/* ]]; then
+            TAG=$(echo ${GITHUB_REF#refs/heads/} | sed -r 's#/+#-#g')
+            PUSH=push
+          fi
+          echo "tag=${TAG}" >>${GITHUB_OUTPUT}
+          echo "push=${PUSH}" >>${GITHUB_OUTPUT}
+          platforms=$(jq -c -n --argjson str '"${{ env.PLATFORMS }},darwin/amd64,darwin/arm64,windows/amd64,windows/arm64"' '$str|split(",")')
+          echo "platforms=$platforms" >>${GITHUB_OUTPUT}
+
   cross:
     runs-on: ubuntu-20.04
+    needs:
+      - prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJson(needs.prepare.outputs.platforms) }}
     steps:
+      -
+        name: Prepare
+        run: |
+          platform=${{ matrix.platform }}
+          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
       -
         name: Checkout
         uses: actions/checkout@v3
@@ -100,45 +110,27 @@ jobs:
           driver-opts: image=${{ env.SETUP_BUILDKIT_IMAGE }}
           buildkitd-flags: --debug
       -
-        name: Cross
+        name: Build
         run: |
-          ./hack/cross
+          ./hack/release-tar "${{ needs.prepare.outputs.tag }}" release-out
         env:
-          PLATFORMS: ${{ env.PLATFORMS }},darwin/amd64,darwin/arm64,windows/amd64,windows/arm64
-          RUNC_PLATFORMS: ${{ env.PLATFORMS }}
-          CACHE_FROM: type=gha,scope=${{ env.CACHE_GHA_SCOPE_CROSS }}
-          CACHE_TO: type=gha,scope=${{ env.CACHE_GHA_SCOPE_CROSS }}
-
-  release-base:
-    runs-on: ubuntu-20.04
-    outputs:
-      tag: ${{ steps.prep.outputs.tag }}
-      push: ${{ steps.prep.outputs.push }}
-    steps:
-      - name: Prepare
-        id: prep
-        run: |
-          TAG=pr
-          PUSH=false
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            TAG=nightly
-            PUSH=push
-          elif [[ $GITHUB_REF == refs/tags/v* ]]; then
-            TAG=${GITHUB_REF#refs/tags/}
-            PUSH=push
-          elif [[ $GITHUB_REF == refs/heads/* ]]; then
-            TAG=$(echo ${GITHUB_REF#refs/heads/} | sed -r 's#/+#-#g')
-            PUSH=push
-          fi
-          echo "tag=${TAG}" >>${GITHUB_OUTPUT}
-          echo "push=${PUSH}" >>${GITHUB_OUTPUT}
+          RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          PLATFORMS: ${{ matrix.platform }}
+          CACHE_FROM: type=gha,scope=cross-${{ env.PLATFORM_PAIR }}
+          CACHE_TO: type=gha,scope=cross-${{ env.PLATFORM_PAIR }}
+      -
+        name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: buildkit
+          path: ./release-out/*
+          if-no-files-found: error
 
   image:
     runs-on: ubuntu-20.04
     needs:
-      - release-base
+      - prepare
       - test
-      - cross
     strategy:
       fail-fast: false
       matrix:
@@ -164,66 +156,46 @@ jobs:
           buildkitd-flags: --debug
       -
         name: Login to DockerHub
-        if: needs.release-base.outputs.push == 'push'
+        if: needs.prepare.outputs.push == 'push'
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       -
-        name: Build ${{ needs.release-base.outputs.tag }}
+        name: Build ${{ needs.prepare.outputs.tag }}
         run: |
-          ./hack/images "${{ needs.release-base.outputs.tag }}" "$IMAGE_NAME" "${{ needs.release-base.outputs.push }}"
+          ./hack/images "${{ needs.prepare.outputs.tag }}" "$IMAGE_NAME" "${{ needs.prepare.outputs.push }}"
         env:
           RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
           TARGET: ${{ matrix.target-stage }}
-          CACHE_FROM: type=gha,scope=${{ env.CACHE_GHA_SCOPE_CROSS }} type=gha,scope=image${{ matrix.target-stage }}
+          CACHE_FROM: type=gha,scope=image${{ matrix.target-stage }}
           CACHE_TO: type=gha,scope=image${{ matrix.target-stage }}
 
-  binaries:
+  release:
     runs-on: ubuntu-20.04
     needs:
-      - release-base
+      - prepare
       - test
       - cross
+      - image
     steps:
       -
-        name: Checkout
-        uses: actions/checkout@v3
-      -
-        name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v2
-      -
-        name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-      -
-        name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-        with:
-          version: ${{ env.SETUP_BUILDX_VERSION }}
-          driver-opts: image=${{ env.SETUP_BUILDKIT_IMAGE }}
-          buildkitd-flags: --debug
-      -
-        name: Build ${{ needs.release-base.outputs.tag }}
-        run: |
-          ./hack/release-tar "${{ needs.release-base.outputs.tag }}" release-out
-        env:
-          RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
-          PLATFORMS: ${{ env.PLATFORMS }},darwin/amd64,darwin/arm64,windows/amd64,windows/arm64
-          CACHE_FROM: type=gha,scope=${{ env.CACHE_GHA_SCOPE_BINARIES }} type=gha,scope=${{ env.CACHE_GHA_SCOPE_CROSS }}
-      -
-        name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        name: Download artifacts
+        uses: actions/download-artifact@v3
         with:
           name: buildkit
           path: ./release-out/*
-          if-no-files-found: error
+      -
+        name: List artifacts
+        run: |
+          tree -nh ./release-out/
       -
         name: GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@1e07f4398721186383de40550babbdf2b84acfc5
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844  # v0.1.15
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           draft: true
           files: ./release-out/*
-          name: ${{ needs.release-base.outputs.tag }}
+          name: ${{ needs.prepare.outputs.tag }}

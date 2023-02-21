@@ -41,6 +41,7 @@ jobs:
     outputs:
       typ: ${{ steps.prep.outputs.typ }}
       push: ${{ steps.prep.outputs.push }}
+      tag: ${{ steps.prep.outputs.tag }}
       tags: ${{ steps.prep.outputs.tags }}
     steps:
       -
@@ -59,6 +60,7 @@ jobs:
           fi
           echo "typ=${TYP}" >>${GITHUB_OUTPUT}
           echo "push=${PUSH}" >>${GITHUB_OUTPUT}
+          echo "tag=${TAG}" >>${GITHUB_OUTPUT}
           if [ "${TYP}" = "master" ]; then
             echo "tags=$(jq -cn --arg tag "$TAG" '[$tag, "labs"]')" >>${GITHUB_OUTPUT}
           else
@@ -114,3 +116,20 @@ jobs:
           RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
           CACHE_FROM: type=gha,scope=${{ env.CACHE_SCOPE }}
           CACHE_TO: type=gha,scope=${{ env.CACHE_SCOPE }}
+
+  release:
+    runs-on: ubuntu-20.04
+    if: startsWith(github.ref, 'refs/tags/dockerfile')
+    needs:
+      - prepare
+      - test
+      - image
+    steps:
+      -
+        name: GitHub Release
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844  # v0.1.15
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          draft: true
+          name: ${{ needs.prepare.outputs.tag }}
