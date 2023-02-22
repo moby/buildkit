@@ -28,7 +28,7 @@ test:
 
 .PHONY: lint
 lint:
-	./hack/lint
+	$(BUILDX_CMD) bake lint
 
 .PHONY: validate-vendor
 validate-vendor:
