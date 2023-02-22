@@ -1,7 +1,6 @@
 # syntax=docker/dockerfile-upstream:master
 
 ARG GO_VERSION="1.20"
-ARG NODE_VERSION="19"
 ARG PROTOC_VERSION="3.11.4"
 
 # protoc is dynamically linked to glibc so can't use alpine base
@@ -50,27 +49,6 @@ RUN --mount=type=bind,target=.,rw \
   diff=$(git status --porcelain -- ':!vendor' '**/*.pb.go')
   if [ -n "$diff" ]; then
     echo >&2 'ERROR: The result of "go generate" differs. Please update with "make generated-files"'
-    echo "$diff"
-    exit 1
-  fi
-EOT
-
-FROM node:${NODE_VERSION}-alpine AS doctoc
-RUN npm install -g doctoc
-WORKDIR /buildkit
-RUN --mount=type=bind,target=.,rw <<EOT
-  doctoc README.md
-  mkdir /out
-  cp README.md /out/
-EOT
-
-FROM base AS validate-toc
-RUN --mount=type=bind,target=.,rw \
-    --mount=type=bind,from=doctoc,source=/out/README.md,target=./README.md <<EOT
-  set -e
-  diff=$(git status --porcelain -- 'README.md')
-  if [ -n "$diff" ]; then
-    echo >&2 'ERROR: The result of "doctoc" differs. Please update with "doctoc README.md"'
     echo "$diff"
     exit 1
   fi

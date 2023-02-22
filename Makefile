@@ -50,8 +50,12 @@ validate-authors:
 validate-generated-files:
 	./hack/validate-generated-files
 
+.PHONY: validate-doctoc
+validate-doctoc:
+	$(BUILDX_CMD) bake validate-doctoc
+
 .PHONY: validate-all
-validate-all: test lint validate-vendor validate-generated-files
+validate-all: test lint validate-vendor validate-generated-files validate-doctoc
 
 .PHONY: vendor
 vendor:
@@ -68,3 +72,7 @@ generated-files:
 .PHONY: authors
 authors:
 	$(BUILDX_CMD) bake authors
+
+.PHONY: doctoc
+doctoc:
+	$(BUILDX_CMD) bake doctoc
