@@ -20,7 +20,7 @@ target "_common" {
 }
 
 group "validate" {
-  targets = ["lint", "validate-vendor", "validate-doctoc", "validate-generated-files"]
+  targets = ["lint", "validate-vendor", "validate-doctoc", "validate-generated-files", "validate-shfmt"]
 }
 
 target "lint" {
@@ -39,6 +39,13 @@ target "validate-vendor" {
 target "validate-generated-files" {
   inherits = ["_common"]
   dockerfile = "./hack/dockerfiles/generated-files.Dockerfile"
+  target = "validate"
+  output = ["type=cacheonly"]
+}
+
+target "validate-shfmt" {
+  inherits = ["_common"]
+  dockerfile = "./hack/dockerfiles/shfmt.Dockerfile"
   target = "validate"
   output = ["type=cacheonly"]
 }
@@ -67,6 +74,13 @@ target "vendor" {
 target "generated-files" {
   inherits = ["_common"]
   dockerfile = "./hack/dockerfiles/generated-files.Dockerfile"
+  target = "update"
+  output = ["."]
+}
+
+target "shfmt" {
+  inherits = ["_common"]
+  dockerfile = "./hack/dockerfiles/shfmt.Dockerfile"
   target = "update"
   output = ["."]
 }

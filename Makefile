@@ -36,11 +36,11 @@ validate-vendor:
 
 .PHONY: validate-shfmt
 validate-shfmt:
-	./hack/validate-shfmt
+	$(BUILDX_CMD) bake validate-shfmt
 
 .PHONY: shfmt
 shfmt:
-	./hack/shfmt
+	$(BUILDX_CMD) bake shfmt
 
 .PHONY: validate-authors
 validate-authors:
