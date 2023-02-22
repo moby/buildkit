@@ -9,13 +9,11 @@ on:
   push:
     branches:
       - 'master'
+      - 'v[0-9]+.[0-9]+'
     tags:
       - 'v*'
       - 'dockerfile/*'
   pull_request:
-    branches:
-      - 'master'
-      - 'v*'
 
 env:
   REPO_SLUG_ORIGIN: "moby/buildkit:latest"
