@@ -6,16 +6,21 @@ variable "GO_VERSION" {
   default = null
 }
 
+variable "NODE_VERSION" {
+  default = null
+}
+
 target "_common" {
   args = {
     ALPINE_VERSION = ALPINE_VERSION
     GO_VERSION = GO_VERSION
+    NODE_VERSION = NODE_VERSION
     BUILDKIT_CONTEXT_KEEP_GIT_DIR = 1
   }
 }
 
 group "validate" {
-  targets = ["lint", "validate-vendor"]
+  targets = ["lint", "validate-vendor", "validate-doctoc"]
 }
 
 target "lint" {
@@ -31,6 +36,13 @@ target "validate-vendor" {
   output = ["type=cacheonly"]
 }
 
+target "validate-doctoc" {
+  inherits = ["_common"]
+  dockerfile = "./hack/dockerfiles/doctoc.Dockerfile"
+  target = "validate-toc"
+  output = ["type=cacheonly"]
+}
+
 target "validate-authors" {
   inherits = ["_common"]
   dockerfile = "./hack/dockerfiles/authors.Dockerfile"
@@ -41,6 +53,13 @@ target "validate-authors" {
 target "vendor" {
   inherits = ["_common"]
   dockerfile = "./hack/dockerfiles/vendor.Dockerfile"
+  target = "update"
+  output = ["."]
+}
+
+target "doctoc" {
+  inherits = ["_common"]
+  dockerfile = "./hack/dockerfiles/doctoc.Dockerfile"
   target = "update"
   output = ["."]
 }
