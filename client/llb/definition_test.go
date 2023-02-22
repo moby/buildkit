@@ -118,3 +118,9 @@ func TestDefinitionInputCache(t *testing.T) {
 	// 1 exec + 2x2 mounts from stA and stB + 1 src = 6 vertexes
 	require.Equal(t, 6, len(vertexCache))
 }
+
+func TestDefinitionNil(t *testing.T) {
+	// should be an error, not a panic
+	_, err := NewDefinitionOp(nil)
+	require.Error(t, err)
+}
