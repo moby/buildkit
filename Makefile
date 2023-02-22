@@ -42,6 +42,10 @@ validate-shfmt:
 shfmt:
 	./hack/shfmt
 
+.PHONY: validate-authors
+validate-authors:
+	$(BUILDX_CMD) bake validate-authors
+
 .PHONY: validate-generated-files
 validate-generated-files:
 	./hack/validate-generated-files
@@ -60,3 +64,7 @@ vendor:
 .PHONY: generated-files
 generated-files:
 	./hack/update-generated-files
+
+.PHONY: authors
+authors:
+	$(BUILDX_CMD) bake authors
