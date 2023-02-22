@@ -22,6 +22,7 @@ import (
 )
 
 func init() {
+	rand.Seed(time.Now().UnixNano()) //nolint:staticcheck // Ignore SA1019. No way to get the automatically generated seed since Go 1.20.
 	if debugScheduler {
 		logrus.SetOutput(os.Stdout)
 		logrus.SetLevel(logrus.DebugLevel)
@@ -716,8 +717,6 @@ func TestHugeGraph(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	rand.Seed(time.Now().UnixNano())
-
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
 	l := NewSolver(SolverOpt{
@@ -1036,8 +1035,6 @@ func TestSlowCache(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	rand.Seed(time.Now().UnixNano())
-
 	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 	})
@@ -1117,8 +1114,6 @@ func TestParallelInputs(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	rand.Seed(time.Now().UnixNano())
-
 	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 	})
@@ -1174,8 +1169,6 @@ func TestParallelInputs(t *testing.T) {
 func TestErrorReturns(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
-
-	rand.Seed(time.Now().UnixNano())
 
 	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
@@ -3047,8 +3040,6 @@ func TestCacheExportingMergedKey(t *testing.T) {
 func TestMergedEdgesLookup(t *testing.T) {
 	t.Parallel()
 
-	rand.Seed(time.Now().UnixNano())
-
 	// this test requires multiple runs to trigger the race
 	for i := 0; i < 20; i++ {
 		func() {
@@ -3101,8 +3092,6 @@ func TestMergedEdgesLookup(t *testing.T) {
 
 func TestCacheLoadError(t *testing.T) {
 	t.Parallel()
-
-	rand.Seed(time.Now().UnixNano())
 
 	ctx := context.TODO()
 

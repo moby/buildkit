@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile-upstream:master
 
-FROM golang:1.19-alpine AS vendored
+ARG GO_VERSION=1.20
+
+FROM golang:${GO_VERSION}-alpine AS vendored
 RUN  apk add --no-cache git
 WORKDIR /src
 RUN --mount=target=/src,rw \
