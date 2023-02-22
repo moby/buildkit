@@ -48,7 +48,7 @@ validate-authors:
 
 .PHONY: validate-generated-files
 validate-generated-files:
-	./hack/validate-generated-files
+	$(BUILDX_CMD) bake validate-generated-files
 
 .PHONY: validate-doctoc
 validate-doctoc:
@@ -67,7 +67,7 @@ vendor:
 
 .PHONY: generated-files
 generated-files:
-	./hack/update-generated-files
+	$(BUILDX_CMD) bake generated-files
 
 .PHONY: authors
 authors:
