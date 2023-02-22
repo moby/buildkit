@@ -160,6 +160,7 @@ var allTests = integration.TestFuncs(
 	testNilProvenance,
 	testSBOMScannerArgs,
 	testMultiPlatformWarnings,
+	testNilContextInSolveGateway,
 )
 
 // Tests that depend on the `security.*` entitlements
@@ -6598,6 +6599,29 @@ COPY --from=0 / /
 	t.Logf("OCI archive digest=%q", outDigest)
 	t.Log("The digest may change depending on the BuildKit version, the snapshotter configuration, etc.")
 	require.Equal(t, expectedDigest, outDigest)
+}
+
+func testNilContextInSolveGateway(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = c.Build(sb.Context(), client.SolveOpt{}, "", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		res, err := f.SolveGateway(ctx, c, gateway.SolveRequest{
+			Frontend: "dockerfile.v0",
+			FrontendInputs: map[string]*pb.Definition{
+				builder.DefaultLocalNameDockerfile: nil,
+				builder.DefaultLocalNameContext:    nil,
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		return res, nil
+	}, nil)
+	// should not cause buildkitd to panic
+	require.ErrorContains(t, err, "invalid nil input definition to definition op")
 }
 
 func runShell(dir string, cmds ...string) error {
