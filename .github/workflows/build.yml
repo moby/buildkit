@@ -11,13 +11,11 @@ on:
   push:
     branches:
       - 'master'
+      - 'v[0-9]+.[0-9]+'
     tags:
       - 'v*'
       - 'dockerfile/*'
   pull_request:
-    branches:
-      - 'master'
-      - 'v*'
     paths-ignore:
       - 'README.md'
       - 'docs/**'
@@ -347,7 +345,9 @@ jobs:
             PUSH=push
           elif [[ $GITHUB_REF == refs/heads/* ]]; then
             TAG=$(echo ${GITHUB_REF#refs/heads/} | sed -r 's#/+#-#g')
-            PUSH=push
+            if [ $GITHUB_REF = "refs/heads/${{ github.event.repository.default_branch }}" ]; then
+              PUSH=push
+            fi
           fi
           echo "tag=${TAG}" >>${GITHUB_OUTPUT}
           echo "push=${PUSH}" >>${GITHUB_OUTPUT}
@@ -460,7 +460,7 @@ jobs:
             TYP=tag
             TAG=${GITHUB_REF#refs/tags/}
             PUSH=push
-          elif [[ $GITHUB_REF == refs/heads/* ]]; then
+          elif [ $GITHUB_REF = "refs/heads/${{ github.event.repository.default_branch }}" ]; then
             PUSH=push
           fi
           echo "typ=${TYP}" >>${GITHUB_OUTPUT}
