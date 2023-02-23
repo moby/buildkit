@@ -3,6 +3,5 @@
 #  please consider a global .gitignore https://help.github.com/articles/ignoring-files
 bin
 coverage
-release-out
 .certs
 .tmp
