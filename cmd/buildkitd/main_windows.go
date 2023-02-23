@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	defaultTraceSocketPath = `\\.\pipe\otel-grpc`
+	defaultTraceSocketPath = `\\.\pipe\buildkit-otel-grpc`
 )
 
 func listenFD(addr string, tlsConfig *tls.Config) (net.Listener, error) {
