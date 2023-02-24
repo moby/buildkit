@@ -400,6 +400,10 @@ func TestMergeFileCapabilities(t *testing.T) {
 
 			actualCaps := getFileCap(ctx, t, sn, mergeSnap.Name, "hasCaps")
 			require.Equal(t, "cap_net_bind_service=ep", actualCaps)
+			stat := statPath(ctx, t, sn, mergeSnap.Name, "hasCaps")
+			require.EqualValues(t, 1000, stat.Uid)
+			require.EqualValues(t, 1000, stat.Gid)
+			require.EqualValues(t, 0700, stat.Mode&0777)
 		})
 	}
 }
