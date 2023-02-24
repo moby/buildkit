@@ -1890,6 +1890,10 @@ k8s.io/legacy-cloud-providers v0.17.4/go.mod h1:FikRNoD64ECjkxO36gkDgJeiQWwyZTuB
 k8s.io/utils v0.0.0-20191114184206-e782cd3c129f/go.mod h1:sZAwmy6armz5eXlNoLmJcl4F1QuKu7sr+mFQ0byX7Ew=
 k8s.io/utils v0.0.0-20200729134348-d5654de09c73/go.mod h1:jPW/WVKK9YHAvNhRxK0md/EJ228hCsBRufyofKtW8HA=
 k8s.io/utils v0.0.0-20201110183641-67b214c5f920/go.mod h1:jPW/WVKK9YHAvNhRxK0md/EJ228hCsBRufyofKtW8HA=
+kernel.org/pub/linux/libs/security/libcap/cap v1.2.67 h1:sPQ9qlSNR26fToTKbxe/HDWJlXvBLqGmt84LGCQkOy0=
+kernel.org/pub/linux/libs/security/libcap/cap v1.2.67/go.mod h1:GkntoBuwffz19qtdFVB+k2NtWNN+yCKnC/Ykv/hMiTU=
+kernel.org/pub/linux/libs/security/libcap/psx v1.2.67 h1:NxbXJ7pDVq0FKBsqjieT92QDXI2XaqH2HAi4QcCOHt8=
+kernel.org/pub/linux/libs/security/libcap/psx v1.2.67/go.mod h1:+l6Ee2F59XiJ2I6WR5ObpC1utCQJZ/VLsEbQCD8RG24=
 modernc.org/cc v1.0.0/go.mod h1:1Sk4//wdnYJiUIxnW8ddKpaOJCF37yAdqYnkxUpaYxw=
 modernc.org/golex v1.0.0/go.mod h1:b/QX9oBD/LhixY6NDh+IdGv17hgB+51fET1i2kPSmvk=
 modernc.org/mathutil v1.0.0/go.mod h1:wU0vUrJsVWBZ4P6e7xtFJEhFSNsfRLJ8H458uRjg03k=
