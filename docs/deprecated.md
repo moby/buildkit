@@ -44,3 +44,6 @@ With the introduction of [provenance attestations](./attestations/slsa-provenanc
 in [BuildKit v0.11.0](https://github.com/moby/buildkit/releases/tag/v0.11.0),
 the build information feature has been deprecated and will be removed in the
 next release.
+
+To completely disable the build information feature, set the build-arg
+`BUILDKIT_BUILDINFO=false`.
