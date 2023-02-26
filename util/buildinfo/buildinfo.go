@@ -419,6 +419,7 @@ func filterAttrs(key string, attrs map[string]*string) map[string]*string {
 var knownControlArgs = []string{
 	"BUILDKIT_CACHE_MOUNT_NS",
 	"BUILDKIT_CONTEXT_KEEP_GIT_DIR",
+	"BUILDKIT_BUILDINFO",
 	"BUILDKIT_INLINE_BUILDINFO_ATTRS",
 	"BUILDKIT_INLINE_CACHE",
 	"BUILDKIT_MULTI_PLATFORM",
