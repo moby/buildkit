@@ -14,8 +14,6 @@ import (
 const (
 	keyImageName               = "name"
 	keyOCITypes                = "oci-mediatypes"
-	keyBuildInfo               = "buildinfo"
-	keyBuildInfoAttrs          = "buildinfo-attrs"
 	keyForceInlineAttestations = "attestation-inline"
 
 	// preferNondistLayersKey is an exporter option which can be used to mark a layer as non-distributable if the layer reference was
@@ -32,9 +30,6 @@ type ImageCommitOpts struct {
 	Epoch       *time.Time
 
 	ForceInlineAttestations bool // force inline attestations to be attached
-
-	BuildInfo      bool // Deprecated: Build information format has been deprecated. Status and alternative recommendation can be found at: https://github.com/moby/buildkit/blob/master/docs/deprecated.md
-	BuildInfoAttrs bool // Deprecated: Build information format has been deprecated. Status and alternative recommendation can be found at: https://github.com/moby/buildkit/blob/master/docs/deprecated.md
 }
 
 func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error) {
@@ -62,10 +57,6 @@ func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error)
 			c.ImageName = v
 		case keyOCITypes:
 			err = parseBoolWithDefault(&c.OCITypes, k, v, true)
-		case keyBuildInfo:
-			err = parseBoolWithDefault(&c.BuildInfo, k, v, true)
-		case keyBuildInfoAttrs:
-			err = parseBoolWithDefault(&c.BuildInfoAttrs, k, v, false)
 		case keyForceInlineAttestations:
 			err = parseBool(&c.ForceInlineAttestations, k, v)
 		case keyPreferNondistLayers:

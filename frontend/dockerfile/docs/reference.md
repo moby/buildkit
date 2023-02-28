@@ -2213,23 +2213,15 @@ RUN echo "I'm building for $TARGETPLATFORM"
 
 ### BuildKit built-in build args
 
-| Arg                                   | Type   | Description                                                                                                                                                                                       |
-|---------------------------------------|--------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `BUILDKIT_CACHE_MOUNT_NS`             | String | Set optional cache ID namespace.                                                                                                                                                                  |
-| `BUILDKIT_CONTEXT_KEEP_GIT_DIR`       | Bool   | Trigger git context to keep the `.git` directory.                                                                                                                                                 |
-| `BUILDKIT_BUILDINFO`                  | Bool   | Enable build info (default `true`).                                                                                                                                                               |
-| `BUILDKIT_INLINE_BUILDINFO_ATTRS`[^2] | Bool   | Inline build info attributes in image config or not.                                                                                                                                              |
-| `BUILDKIT_INLINE_CACHE`[^2]           | Bool   | Inline cache metadata to image config or not.                                                                                                                                                     |
-| `BUILDKIT_MULTI_PLATFORM`             | Bool   | Opt into determnistic output regardless of multi-platform output or not.                                                                                                                          |
-| `BUILDKIT_SANDBOX_HOSTNAME`           | String | Set the hostname (default `buildkitsandbox`)                                                                                                                                                      |
-| `BUILDKIT_SYNTAX`                     | String | Set frontend image                                                                                                                                                                                |
-| `SOURCE_DATE_EPOCH`                   | Int    | Set the UNIX timestamp for created image and layers. More info from [reproducible builds](https://reproducible-builds.org/docs/source-date-epoch/). Supported since Dockerfile 1.5, BuildKit 0.11 |
-
-> **Warning**
->
-> Build information along `BUILDKIT_BUILDINFO` and `BUILDKIT_INLINE_BUILDINFO_ATTRS`
-> build args are deprecated and will be removed in the next release. See the [BuildKit Deprecated features page](https://github.com/moby/buildkit/blob/master/docs/deprecated.md)
-> for status and alternative recommendation about this feature.
+| Arg                                   | Type   | Description                                                                                                                                                                                                    |
+|---------------------------------------|--------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `BUILDKIT_CACHE_MOUNT_NS`             | String | Set optional cache ID namespace.                                                                                                                                                                               |
+| `BUILDKIT_CONTEXT_KEEP_GIT_DIR`       | Bool   | Trigger git context to keep the `.git` directory.                                                                                                                                                              |
+| `BUILDKIT_INLINE_CACHE`[^2]           | Bool   | Inline cache metadata to image config or not.                                                                                                                                                                  |
+| `BUILDKIT_MULTI_PLATFORM`             | Bool   | Opt into determnistic output regardless of multi-platform output or not.                                                                                                                                       |
+| `BUILDKIT_SANDBOX_HOSTNAME`           | String | Set the hostname (default `buildkitsandbox`)                                                                                                                                                                   |
+| `BUILDKIT_SYNTAX`                     | String | Set frontend image                                                                                                                                                                                             |
+| `SOURCE_DATE_EPOCH`                   | Int    | Set the UNIX timestamp for created image and layers. More info from [reproducible builds](https://reproducible-builds.org/docs/source-date-epoch/). Supported since Dockerfile 1.5, BuildKit 0.11              |
 
 #### Example: keep `.git` dir
 

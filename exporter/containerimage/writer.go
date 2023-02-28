@@ -26,8 +26,6 @@ import (
 	"github.com/moby/buildkit/solver/result"
 	attestationTypes "github.com/moby/buildkit/util/attestation"
 	"github.com/moby/buildkit/util/bklog"
-	"github.com/moby/buildkit/util/buildinfo"
-	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/purl"
@@ -127,15 +125,6 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 			return nil, err
 		}
 
-		var dtbi []byte
-		if opts.BuildInfo {
-			if dtbi, err = buildinfo.Format(exptypes.ParseKey(inp.Metadata, exptypes.ExporterBuildInfo, p), buildinfo.FormatOpts{
-				RemoveAttrs: !opts.BuildInfoAttrs,
-			}); err != nil {
-				return nil, err
-			}
-		}
-
 		annotations := opts.Annotations.Platform(nil)
 		if len(annotations.Index) > 0 || len(annotations.IndexDescriptor) > 0 {
 			return nil, errors.Errorf("index annotations not supported for single platform export")
@@ -143,7 +132,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 
 		config := exptypes.ParseKey(inp.Metadata, exptypes.ExporterImageConfigKey, p)
 		inlineCache := exptypes.ParseKey(inp.Metadata, exptypes.ExporterInlineCache, p)
-		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, opts, ref, config, &remotes[0], annotations, inlineCache, dtbi, opts.Epoch, session.NewGroup(sessionID))
+		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, opts, ref, config, &remotes[0], annotations, inlineCache, opts.Epoch, session.NewGroup(sessionID))
 		if err != nil {
 			return nil, err
 		}
@@ -202,15 +191,6 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		config := exptypes.ParseKey(inp.Metadata, exptypes.ExporterImageConfigKey, p)
 		inlineCache := exptypes.ParseKey(inp.Metadata, exptypes.ExporterInlineCache, p)
 
-		var dtbi []byte
-		if opts.BuildInfo {
-			if dtbi, err = buildinfo.Format(exptypes.ParseKey(inp.Metadata, exptypes.ExporterBuildInfo, p), buildinfo.FormatOpts{
-				RemoveAttrs: !opts.BuildInfoAttrs,
-			}); err != nil {
-				return nil, err
-			}
-		}
-
 		remote := &remotes[remotesMap[p.ID]]
 		if remote == nil {
 			remote = &solver.Remote{
@@ -218,7 +198,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 			}
 		}
 
-		desc, _, err := ic.commitDistributionManifest(ctx, opts, r, config, remote, opts.Annotations.Platform(&p.Platform), inlineCache, dtbi, opts.Epoch, session.NewGroup(sessionID))
+		desc, _, err := ic.commitDistributionManifest(ctx, opts, r, config, remote, opts.Annotations.Platform(&p.Platform), inlineCache, opts.Epoch, session.NewGroup(sessionID))
 		if err != nil {
 			return nil, err
 		}
@@ -342,7 +322,7 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, refCfg cacheconfig.RefC
 	return out, err
 }
 
-func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *ImageCommitOpts, ref cache.ImmutableRef, config []byte, remote *solver.Remote, annotations *Annotations, inlineCache []byte, buildInfo []byte, epoch *time.Time, sg session.Group) (*ocispecs.Descriptor, *ocispecs.Descriptor, error) {
+func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *ImageCommitOpts, ref cache.ImmutableRef, config []byte, remote *solver.Remote, annotations *Annotations, inlineCache []byte, epoch *time.Time, sg session.Group) (*ocispecs.Descriptor, *ocispecs.Descriptor, error) {
 	if len(config) == 0 {
 		var err error
 		config, err = defaultImageConfig()
@@ -361,7 +341,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *Ima
 		return nil, nil, err
 	}
 
-	config, err = patchImageConfig(config, remote.Descriptors, history, inlineCache, buildInfo, epoch)
+	config, err = patchImageConfig(config, remote.Descriptors, history, inlineCache, epoch)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -588,7 +568,7 @@ func parseHistoryFromConfig(dt []byte) ([]ocispecs.History, error) {
 	return config.History, nil
 }
 
-func patchImageConfig(dt []byte, descs []ocispecs.Descriptor, history []ocispecs.History, cache []byte, buildInfo []byte, epoch *time.Time) ([]byte, error) {
+func patchImageConfig(dt []byte, descs []ocispecs.Descriptor, history []ocispecs.History, cache []byte, epoch *time.Time) ([]byte, error) {
 	m := map[string]json.RawMessage{}
 	if err := json.Unmarshal(dt, &m); err != nil {
 		return nil, errors.Wrap(err, "failed to parse image config for patch")
@@ -654,16 +634,6 @@ func patchImageConfig(dt []byte, descs []ocispecs.Descriptor, history []ocispecs
 			return nil, err
 		}
 		m["moby.buildkit.cache.v0"] = dt
-	}
-
-	if buildInfo != nil {
-		dt, err := json.Marshal(buildInfo)
-		if err != nil {
-			return nil, err
-		}
-		m[binfotypes.ImageConfigField] = dt
-	} else {
-		delete(m, binfotypes.ImageConfigField)
 	}
 
 	dt, err = json.Marshal(m)

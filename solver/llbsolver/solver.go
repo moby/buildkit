@@ -2,7 +2,6 @@ package llbsolver
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -28,7 +27,6 @@ import (
 	"github.com/moby/buildkit/solver/result"
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/attestation"
-	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/grpcerrors"
@@ -559,9 +557,6 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		if strings.HasPrefix(k, "frontend.") {
 			exporterResponse[k] = string(v)
 		}
-		if strings.HasPrefix(k, exptypes.ExporterBuildInfo) {
-			exporterResponse[k] = base64.StdEncoding.EncodeToString(v)
-		}
 	}
 	for k, v := range cacheExporterResponse {
 		if strings.HasPrefix(k, "cache.") {
@@ -691,9 +686,6 @@ func addProvenanceToResult(res *frontend.Result, br *provenanceBridge) (*Result,
 		if res.Metadata == nil {
 			res.Metadata = map[string][]byte{}
 		}
-		if err := buildinfo.AddMetadata(res.Metadata, exptypes.ExporterBuildInfo, cp); err != nil {
-			return nil, err
-		}
 	}
 
 	if len(res.Refs) != 0 {
@@ -707,9 +699,6 @@ func addProvenanceToResult(res *frontend.Result, br *provenanceBridge) (*Result,
 		out.Provenance.Refs[k] = cp
 		if res.Metadata == nil {
 			res.Metadata = map[string][]byte{}
-		}
-		if err := buildinfo.AddMetadata(res.Metadata, fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, k), cp); err != nil {
-			return nil, err
 		}
 	}
 

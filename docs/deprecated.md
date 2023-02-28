@@ -42,8 +42,5 @@ information is also embedded into the image configuration if one is generated.
 
 With the introduction of [provenance attestations](./attestations/slsa-provenance.md)
 in [BuildKit v0.11.0](https://github.com/moby/buildkit/releases/tag/v0.11.0),
-the build information feature has been deprecated and will be removed in the
-next release.
-
-To completely disable the build information feature, set the build-arg
-`BUILDKIT_BUILDINFO=false`.
+the build information feature has been deprecated and removed in v0.12.0
+release.
