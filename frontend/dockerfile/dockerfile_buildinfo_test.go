@@ -55,7 +55,7 @@ func testBuildInfoSources(t *testing.T, sb integration.Sandbox) {
 	dockerfile := `
 FROM alpine:latest@sha256:21a3deaa0d32a8057914f36584b5288d2e5ecc984380bc0118285c70fa8c9300 AS alpine
 FROM busybox:latest
-ADD https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md /
+ADD https://user2:pw2@raw.githubusercontent.com/moby/moby/v20.10.21/README.md /
 COPY --from=alpine /bin/busybox /alpine-busybox
 `
 
@@ -96,10 +96,15 @@ COPY --from=alpine /bin/busybox /alpine-busybox
 		}}
 	}
 
+	expectedURL := strings.Replace(server.URL, "http://", "http://xxxxx:xxxxx@", 1)
+	require.NotEqual(t, expectedURL, server.URL)
+	server.URL = strings.Replace(server.URL, "http://", "http://user:pass@", 1)
+
 	res, err := f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: exports,
 		FrontendAttrs: map[string]string{
-			builder.DefaultLocalNameContext: server.URL + "/.git#buildinfo",
+			builder.DefaultLocalNameContext:          server.URL + "/.git#buildinfo",
+			builder.DefaultLocalNameContext + ":foo": "https://foo:bar@example.invalid/foo.html",
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -113,7 +118,9 @@ COPY --from=alpine /bin/busybox /alpine-busybox
 	require.NoError(t, err)
 
 	require.Contains(t, bi.Attrs, "context")
-	require.Equal(t, server.URL+"/.git#buildinfo", *bi.Attrs["context"])
+	require.Equal(t, expectedURL+"/.git#buildinfo", *bi.Attrs["context"])
+
+	require.Equal(t, "https://xxxxx:xxxxx@example.invalid/foo.html", *bi.Attrs["context:foo"])
 
 	sources := bi.Sources
 	require.Equal(t, 3, len(sources))
@@ -127,7 +134,7 @@ COPY --from=alpine /bin/busybox /alpine-busybox
 	assert.NotEmpty(t, sources[1].Pin)
 
 	assert.Equal(t, binfotypes.SourceTypeHTTP, sources[2].Type)
-	assert.Equal(t, "https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md", sources[2].Ref)
+	assert.Equal(t, "https://xxxxx:xxxxx@raw.githubusercontent.com/moby/moby/v20.10.21/README.md", sources[2].Ref)
 	assert.Equal(t, "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c", sources[2].Pin)
 }
 
