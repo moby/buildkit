@@ -257,8 +257,8 @@ Keys supported by image output:
 * `compression=<uncompressed|gzip|estargz|zstd>`: choose compression type for layers newly created and cached, gzip is default value. estargz should be used with `oci-mediatypes=true`.
 * `compression-level=<value>`: compression level for gzip, estargz (0-9) and zstd (0-22)
 * `force-compression=true`: forcefully apply `compression` option to all layers (including already existing layers)
-* `buildinfo=true`: attach inline build info in [image config](docs/build-repro.md#image-config) (default `true`)
-* `buildinfo-attrs=true`: attach inline build info attributes in [image config](docs/build-repro.md#image-config) (default `false`)
+* `buildinfo=true`: attach inline build info in [image config](docs/buildinfo.md#image-config) (default `true`)
+* `buildinfo-attrs=true`: attach inline build info attributes in [image config](docs/buildinfo.md#image-config) (default `false`)
 * `store=true`: store the result images to the worker's (e.g. containerd) image store as well as ensures that the image has all blobs in the content store (default `true`). Ignored if the worker doesn't have image store (e.g. OCI worker).
 * `annotation.<key>=<value>`: attach an annotation with the respective `key` and `value` to the built image
   * Using the extended syntaxes, `annotation-<type>.<key>=<value>`, `annotation[<platform>].<key>=<value>` and both combined with `annotation-<type>[<platform>].<key>=<value>`, allows configuring exactly where to attach the annotation.
@@ -268,6 +268,12 @@ Keys supported by image output:
 
 If credentials are required, `buildctl` will attempt to read Docker configuration file `$DOCKER_CONFIG/config.json`.
 `$DOCKER_CONFIG` defaults to `~/.docker`.
+
+> **Warning**
+>
+> Build information along `buildinfo` and `buildinfo-attrs` attributes are
+> deprecated and will be removed in the next release. See the [Deprecated features page](./docs/deprecated.md)
+> for status and alternative recommendation about this feature.
 
 #### Local directory
 
@@ -575,26 +581,6 @@ jq '.' metadata.json
 ```
 ```json
 {
-  "containerimage.buildinfo": {
-    "frontend": "dockerfile.v0",
-    "attrs": {
-      "context": "https://github.com/crazy-max/buildkit-buildsources-test.git#master",
-      "filename": "Dockerfile",
-      "source": "docker/dockerfile:master"
-    },
-    "sources": [
-      {
-        "type": "docker-image",
-        "ref": "docker.io/docker/buildx-bin:0.6.1@sha256:a652ced4a4141977c7daaed0a074dcd9844a78d7d2615465b12f433ae6dd29f0",
-        "pin": "sha256:a652ced4a4141977c7daaed0a074dcd9844a78d7d2615465b12f433ae6dd29f0"
-      },
-      {
-        "type": "docker-image",
-        "ref": "docker.io/library/alpine:3.13",
-        "pin": "sha256:026f721af4cf2843e07bba648e158fb35ecc876d822130633cc49f707f0fc88c"
-      }
-    ]
-  },
   "containerimage.config.digest": "sha256:2937f66a9722f7f4a2df583de2f8cb97fc9196059a410e7f00072fc918930e66",
   "containerimage.descriptor": {
     "annotations": {
