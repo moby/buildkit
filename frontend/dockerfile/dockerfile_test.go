@@ -6585,11 +6585,7 @@ COPY --from=0 / /
 		},
 		Exports: []client.ExportEntry{
 			{
-				Type: client.ExporterOCI,
-				Attrs: map[string]string{
-					// Remove buildinfo, as it contains the digest of the frontend image
-					"buildinfo": "false",
-				},
+				Type:   client.ExporterOCI,
 				Output: fixedWriteCloser(outW),
 			},
 		},

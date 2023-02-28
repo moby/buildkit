@@ -58,7 +58,7 @@ func SBOMProcessor(scannerRef string, useCache bool) llbsolver.Processor {
 					return nil, err
 				}
 
-				r, err := s.Bridge(j).Solve(ctx, frontend.SolveRequest{ // TODO: buildinfo
+				r, err := s.Bridge(j).Solve(ctx, frontend.SolveRequest{
 					Definition: def.ToPB(),
 				}, j.SessionID)
 				if err != nil {
