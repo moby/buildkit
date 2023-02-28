@@ -7356,11 +7356,13 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
+	defer c.Close()
 
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
+	require.NoError(t, err)
 
 	ps := []ocispecs.Platform{
 		platforms.MustParse("linux/amd64"),
@@ -7676,11 +7678,13 @@ func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
+	defer c.Close()
 
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
+	require.NoError(t, err)
 
 	ps := []ocispecs.Platform{
 		platforms.MustParse("linux/amd64"),
@@ -7813,11 +7817,13 @@ func testAttestationBundle(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
+	defer c.Close()
 
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
+	require.NoError(t, err)
 
 	ps := []ocispecs.Platform{
 		platforms.MustParse("linux/amd64"),
@@ -7962,11 +7968,13 @@ func testSBOMScan(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
+	defer c.Close()
 
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
+	require.NoError(t, err)
 
 	p := platforms.MustParse("linux/amd64")
 	pk := platforms.Format(p)
@@ -8238,11 +8246,13 @@ func testSBOMScanSingleRef(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
+	defer c.Close()
 
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
+	require.NoError(t, err)
 
 	p := platforms.DefaultSpec()
 	pk := platforms.Format(p)
@@ -8402,11 +8412,13 @@ func testSBOMSupplements(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
+	defer c.Close()
 
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
+	require.NoError(t, err)
 
 	p := platforms.MustParse("linux/amd64")
 	pk := platforms.Format(p)
