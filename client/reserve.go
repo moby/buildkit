@@ -8,7 +8,7 @@ import (
 )
 
 func (c *Client) Reserve(ctx context.Context) error {
-	_, err := c.controlClient().Reserve(ctx, &controlapi.ReserveRequest{})
+	_, err := c.ControlClient().Reserve(ctx, &controlapi.ReserveRequest{})
 	if err != nil {
 		return errors.WithStack(err)
 	}

@@ -3,7 +3,6 @@ package compression
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 
 	cdcompression "github.com/containerd/containerd/archive/compression"
@@ -95,7 +94,7 @@ func parse(t string) (Type, error) {
 	case Zstd.String():
 		return Zstd, nil
 	default:
-		return nil, fmt.Errorf("unsupported compression type %s", t)
+		return nil, errors.Errorf("unsupported compression type %s", t)
 	}
 }
 
@@ -108,7 +107,7 @@ func fromMediaType(mediaType string) (Type, error) {
 	case mediaTypeImageLayerZstd, ocispecs.MediaTypeImageLayerNonDistributableZstd:
 		return Zstd, nil
 	default:
-		return nil, fmt.Errorf("unsupported media type %s", mediaType)
+		return nil, errors.Errorf("unsupported media type %s", mediaType)
 	}
 }
 

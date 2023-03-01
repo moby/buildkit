@@ -88,8 +88,14 @@ func (f testFunc) Run(t *testing.T, sb Sandbox) {
 
 func TestFuncs(funcs ...func(t *testing.T, sb Sandbox)) []Test {
 	var tests []Test
+	names := map[string]struct{}{}
 	for _, f := range funcs {
-		tests = append(tests, testFunc{name: getFunctionName(f), run: f})
+		name := getFunctionName(f)
+		if _, ok := names[name]; ok {
+			panic("duplicate test: " + name)
+		}
+		names[name] = struct{}{}
+		tests = append(tests, testFunc{name: name, run: f})
 	}
 	return tests
 }

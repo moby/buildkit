@@ -277,6 +277,7 @@ func buildAction(clicontext *cli.Context) error {
 				close(w.Status())
 			}
 		}()
+
 		sreq := gateway.SolveRequest{
 			Frontend:    solveOpt.Frontend,
 			FrontendOpt: solveOpt.FrontendAttrs,
@@ -284,7 +285,6 @@ func buildAction(clicontext *cli.Context) error {
 		if def != nil {
 			sreq.Definition = def.ToPB()
 		}
-
 		resp, err := c.Build(ctx, solveOpt, "buildctl", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 			_, isSubRequest := sreq.FrontendOpt["requestid"]
 			if isSubRequest {

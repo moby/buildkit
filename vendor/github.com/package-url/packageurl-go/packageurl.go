@@ -47,10 +47,20 @@ var (
 var (
 	// TypeBitbucket is a pkg:bitbucket purl.
 	TypeBitbucket = "bitbucket"
+	// TypeCocoapods is a pkg:cocoapods purl.
+	TypeCocoapods = "cocoapods"
+	// TypeCargo is a pkg:cargo purl.
+	TypeCargo = "cargo"
 	// TypeComposer is a pkg:composer purl.
 	TypeComposer = "composer"
+	// TypeConan is a pkg:conan purl.
+	TypeConan = "conan"
+	// TypeConda is a pkg:conda purl.
+	TypeConda = "conda"
+	// TypeCran is a pkg:cran purl.
+	TypeCran = "cran"
 	// TypeDebian is a pkg:deb purl.
-	TypeDebian = "debian"
+	TypeDebian = "deb"
 	// TypeDocker is a pkg:docker purl.
 	TypeDocker = "docker"
 	// TypeGem is a pkg:gem purl.
@@ -61,16 +71,24 @@ var (
 	TypeGithub = "github"
 	// TypeGolang is a pkg:golang purl.
 	TypeGolang = "golang"
+	// TypeHackage is a pkg:hackage purl.
+	TypeHackage = "hackage"
+	// TypeHex is a pkg:hex purl.
+	TypeHex = "hex"
 	// TypeMaven is a pkg:maven purl.
 	TypeMaven = "maven"
 	// TypeNPM is a pkg:npm purl.
 	TypeNPM = "npm"
 	// TypeNuget is a pkg:nuget purl.
 	TypeNuget = "nuget"
+	// TypeOCI is a pkg:oci purl
+	TypeOCI = "oci"
 	// TypePyPi is a pkg:pypi purl.
 	TypePyPi = "pypi"
 	// TypeRPM is a pkg:rpm purl.
 	TypeRPM = "rpm"
+	// TypeSwift is pkg:swift purl
+	TypeSwift = "swift"
 )
 
 // Qualifier represents a single key=value qualifier in the package url
@@ -80,7 +98,7 @@ type Qualifier struct {
 }
 
 func (q Qualifier) String() string {
-	// A value must be must be a percent-encoded string
+	// A value must be a percent-encoded string
 	return fmt.Sprintf("%s=%s", q.Key, url.PathEscape(q.Value))
 }
 
@@ -106,7 +124,7 @@ func QualifiersFromMap(mm map[string]string) Qualifiers {
 
 // Map converts a Qualifiers struct to a string map.
 func (qq Qualifiers) Map() map[string]string {
-	m := make(map[string]string, 0)
+	m := make(map[string]string)
 
 	for i := 0; i < len(qq); i++ {
 		k := qq[i].Key
@@ -149,21 +167,22 @@ func NewPackageURL(purlType, namespace, name, version string,
 	}
 }
 
-// ToString returns the human readable instance of the PackageURL structure.
+// ToString returns the human-readable instance of the PackageURL structure.
 // This is the literal purl as defined by the spec.
 func (p *PackageURL) ToString() string {
 	// Start with the type and a colon
 	purl := fmt.Sprintf("pkg:%s/", p.Type)
 	// Add namespaces if provided
 	if p.Namespace != "" {
-		ns := []string{}
+		var ns []string
 		for _, item := range strings.Split(p.Namespace, "/") {
 			ns = append(ns, url.QueryEscape(item))
 		}
 		purl = purl + strings.Join(ns, "/") + "/"
 	}
 	// The name is always required and must be a percent-encoded string
-	purl = purl + url.PathEscape(p.Name)
+	// Use url.QueryEscape instead of PathEscape, as it handles @ signs
+	purl = purl + url.QueryEscape(p.Name)
 	// If a version is provided, add it after the at symbol
 	if p.Version != "" {
 		// A name must be a percent-encoded string
@@ -175,7 +194,7 @@ func (p *PackageURL) ToString() string {
 	for _, q := range p.Qualifiers {
 		qualifiers = append(qualifiers, q.String())
 	}
-	// If there one or more key=value pairs then append on the package url
+	// If there are one or more key=value pairs, append on the package url
 	if len(qualifiers) != 0 {
 		purl = purl + "?" + strings.Join(qualifiers, "&")
 	}
@@ -186,7 +205,7 @@ func (p *PackageURL) ToString() string {
 	return purl
 }
 
-func (p *PackageURL) String() string {
+func (p PackageURL) String() string {
 	return p.ToString()
 }
 
@@ -274,9 +293,14 @@ func FromString(purl string) (PackageURL, error) {
 			return PackageURL{}, fmt.Errorf("failed to unescape purl version: %s", err)
 		}
 		version = v
-		name = name[:atIndex]
+
+		unecapeName, err := url.PathUnescape(name[:atIndex])
+		if err != nil {
+			return PackageURL{}, fmt.Errorf("failed to unescape purl name: %s", err)
+		}
+		name = unecapeName
 	}
-	namespaces := []string{}
+	var namespaces []string
 
 	if index != -1 {
 		remainder = remainder[:index]
@@ -297,6 +321,11 @@ func FromString(purl string) (PackageURL, error) {
 	// Fail if name is empty at this point
 	if name == "" {
 		return PackageURL{}, errors.New("name is required")
+	}
+
+	err := validCustomRules(purlType, name, namespace, version, qualifiers)
+	if err != nil {
+		return PackageURL{}, err
 	}
 
 	return PackageURL{
@@ -331,6 +360,43 @@ func typeAdjustName(purlType, name string) string {
 	return name
 }
 
+// validQualifierKey validates a qualifierKey against our QualifierKeyPattern.
 func validQualifierKey(key string) bool {
 	return QualifierKeyPattern.MatchString(key)
+}
+
+// validCustomRules evaluates additional rules for each package url type, as specified in the package-url specification.
+// On success, it returns nil. On failure, a descriptive error will be returned.
+func validCustomRules(purlType, name, ns, version string, qualifiers Qualifiers) error {
+	q := qualifiers.Map()
+	switch purlType {
+	case TypeConan:
+		if ns != "" {
+			if val, ok := q["channel"]; ok {
+				if val == "" {
+					return errors.New("the qualifier channel must be not empty if namespace is present")
+				}
+			} else {
+				return errors.New("channel qualifier does not exist")
+			}
+		} else {
+			if val, ok := q["channel"]; ok {
+				if val != "" {
+					return errors.New("namespace is required if channel is non empty")
+				}
+			}
+		}
+	case TypeSwift:
+		if ns == "" {
+			return errors.New("namespace is required")
+		}
+		if version == "" {
+			return errors.New("version is required")
+		}
+	case TypeCran:
+		if version == "" {
+			return errors.New("version is required")
+		}
+	}
+	return nil
 }

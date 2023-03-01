@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"os"
@@ -14,6 +15,7 @@ import (
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/ociindex"
+	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	sessioncontent "github.com/moby/buildkit/session/content"
@@ -128,6 +130,8 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		ex = opt.Exports[0]
 	}
 
+	indicesToUpdate := []string{}
+
 	if !opt.SessionPreInitialized {
 		if len(syncedDirs) > 0 {
 			s.Allow(filesync.NewFSSyncProvider(syncedDirs))
@@ -137,60 +141,73 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			s.Allow(a)
 		}
 
-		switch ex.Type {
-		case ExporterLocal:
-			if ex.Output != nil {
-				return nil, errors.New("output file writer is not supported by local exporter")
-			}
-			if ex.OutputDir == "" {
-				return nil, errors.New("output directory is required for local exporter")
-			}
-			s.Allow(filesync.NewFSSyncTargetDir(ex.OutputDir, ex.VerboseProgressCB))
-		case ExporterOCI, ExporterDocker, ExporterTar:
-			if ex.OutputDir != "" {
-				return nil, errors.Errorf("output directory %s is not supported by %s exporter", ex.OutputDir, ex.Type)
-			}
-			if ex.Output == nil {
-				return nil, errors.Errorf("output file writer is required for %s exporter", ex.Type)
-			}
-			s.Allow(filesync.NewFSSyncTarget(ex.Output, ex.VerboseProgressCB))
-		case ExporterEarthly:
-			if ex.OutputDir != "" {
-				return nil, errors.Errorf("output directory %s is not supported by %s exporter", ex.OutputDir, ex.Type)
-			}
-			if ex.Output == nil {
-				return nil, errors.Errorf("output file writer is required for %s exporter", ex.Type)
-			}
-			if ex.OutputPullCallback != nil {
-				s.Allow(pullping.NewPullPing(ex.OutputPullCallback))
-			}
-			s.Allow(filesync.NewFSSyncMultiTarget(ex.Output, ex.OutputDirFunc, ex.VerboseProgressCB))
-		default:
-			if ex.Output != nil {
-				return nil, errors.Errorf("output file writer is not supported by %s exporter", ex.Type)
-			}
-			if ex.OutputDir != "" {
-				return nil, errors.Errorf("output directory %s is not supported by %s exporter", ex.OutputDir, ex.Type)
-			}
-		}
-
-		// this is a new map that contains both cacheOpt stores and OCILayout stores
-		contentStores := make(map[string]content.Store, len(cacheOpt.contentStores)+len(opt.OCIStores))
-		// copy over the stores references from cacheOpt
+		contentStores := map[string]content.Store{}
 		for key, store := range cacheOpt.contentStores {
 			contentStores[key] = store
 		}
-		// copy over the stores references from ociLayout opts
 		for key, store := range opt.OCIStores {
-			// conflicts are not allowed
-			if _, ok := contentStores[key]; ok {
-				// we probably should check if the store is identical, but given that
-				// https://pkg.go.dev/github.com/containerd/containerd/content#Store
-				// is just an interface, composing 4 others, that is rather hard to do.
-				// For a future iteration.
-				return nil, errors.Errorf("contentStore key %s exists in both cache and OCI layouts", key)
+			key2 := "oci:" + key
+			if _, ok := contentStores[key2]; ok {
+				return nil, errors.Errorf("oci store key %q already exists", key)
 			}
-			contentStores[key] = store
+			contentStores[key2] = store
+		}
+
+		var supportFile bool
+		var supportDir bool
+		switch ex.Type {
+		case ExporterLocal:
+			supportDir = true
+		case ExporterTar:
+			supportFile = true
+		case ExporterOCI, ExporterDocker:
+			supportDir = ex.OutputDir != ""
+			supportFile = ex.Output != nil
+		case ExporterEarthly:
+			supportFile = true
+		}
+
+		if supportFile && supportDir {
+			return nil, errors.Errorf("both file and directory output is not support by %s exporter", ex.Type)
+		}
+		if !supportFile && ex.Output != nil {
+			return nil, errors.Errorf("output file writer is not supported by %s exporter", ex.Type)
+		}
+		if !supportDir && ex.OutputDir != "" {
+			return nil, errors.Errorf("output directory is not supported by %s exporter", ex.Type)
+		}
+
+		if supportFile {
+			if ex.Output == nil {
+				return nil, errors.Errorf("output file writer is required for %s exporter", ex.Type)
+			}
+			if ex.Type == ExporterEarthly {
+				if ex.OutputPullCallback != nil {
+					s.Allow(pullping.NewPullPing(ex.OutputPullCallback))
+				}
+				s.Allow(filesync.NewFSSyncMultiTarget(ex.Output, ex.OutputDirFunc, ex.VerboseProgressCB))
+			} else {
+				s.Allow(filesync.NewFSSyncTarget(ex.Output, ex.VerboseProgressCB))
+			}
+		}
+		if supportDir {
+			if ex.OutputDir == "" {
+				return nil, errors.Errorf("output directory is required for %s exporter", ex.Type)
+			}
+			switch ex.Type {
+			case ExporterOCI, ExporterDocker:
+				if err := os.MkdirAll(ex.OutputDir, 0755); err != nil {
+					return nil, err
+				}
+				cs, err := contentlocal.NewStore(ex.OutputDir)
+				if err != nil {
+					return nil, err
+				}
+				contentStores["export"] = cs
+				indicesToUpdate = append(indicesToUpdate, filepath.Join(ex.OutputDir, "index.json"))
+			default:
+				s.Allow(filesync.NewFSSyncTargetDir(ex.OutputDir, ex.VerboseProgressCB))
+			}
 		}
 
 		if len(contentStores) > 0 {
@@ -200,7 +217,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		eg.Go(func() error {
 			sd := c.sessionDialer
 			if sd == nil {
-				sd = grpchijack.Dialer(c.controlClient())
+				sd = grpchijack.Dialer(c.ControlClient())
 			}
 			return s.Run(statusContext, sd)
 		})
@@ -243,7 +260,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			frontendInputs[key] = def.ToPB()
 		}
 
-		resp, err := c.controlClient().Solve(ctx, &controlapi.SolveRequest{
+		resp, err := c.ControlClient().Solve(ctx, &controlapi.SolveRequest{
 			Ref:            ref,
 			Definition:     pbd,
 			Exporter:       ex.Type,
@@ -287,7 +304,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	}
 
 	eg.Go(func() error {
-		stream, err := c.controlClient().Status(statusContext, &controlapi.StatusRequest{
+		stream, err := c.ControlClient().Status(statusContext, &controlapi.StatusRequest{
 			Ref: ref,
 		})
 		if err != nil {
@@ -301,52 +318,8 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 				}
 				return errors.Wrap(err, "failed to receive status")
 			}
-			s := SolveStatus{}
-			for _, v := range resp.Vertexes {
-				s.Vertexes = append(s.Vertexes, &Vertex{
-					Digest:        v.Digest,
-					Inputs:        v.Inputs,
-					Name:          v.Name,
-					Started:       v.Started,
-					Completed:     v.Completed,
-					Error:         v.Error,
-					Cached:        v.Cached,
-					ProgressGroup: v.ProgressGroup,
-				})
-			}
-			for _, v := range resp.Statuses {
-				s.Statuses = append(s.Statuses, &VertexStatus{
-					ID:        v.ID,
-					Vertex:    v.Vertex,
-					Name:      v.Name,
-					Total:     v.Total,
-					Current:   v.Current,
-					Timestamp: v.Timestamp,
-					Started:   v.Started,
-					Completed: v.Completed,
-				})
-			}
-			for _, v := range resp.Logs {
-				s.Logs = append(s.Logs, &VertexLog{
-					Vertex:    v.Vertex,
-					Stream:    int(v.Stream),
-					Data:      v.Msg,
-					Timestamp: v.Timestamp,
-				})
-			}
-			for _, v := range resp.Warnings {
-				s.Warnings = append(s.Warnings, &VertexWarning{
-					Vertex:     v.Vertex,
-					Level:      int(v.Level),
-					Short:      v.Short,
-					Detail:     v.Detail,
-					URL:        v.Url,
-					SourceInfo: v.Info,
-					Range:      v.Ranges,
-				})
-			}
 			if statusChan != nil {
-				statusChan <- &s
+				statusChan <- NewSolveStatus(resp)
 			}
 		}
 	})
@@ -367,7 +340,74 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			}
 		}
 	}
+	if manifestDescDt := res.ExporterResponse[exptypes.ExporterImageDescriptorKey]; manifestDescDt != "" {
+		manifestDescDt, err := base64.StdEncoding.DecodeString(manifestDescDt)
+		if err != nil {
+			return nil, err
+		}
+		var manifestDesc ocispecs.Descriptor
+		if err = json.Unmarshal([]byte(manifestDescDt), &manifestDesc); err != nil {
+			return nil, err
+		}
+		for _, indexJSONPath := range indicesToUpdate {
+			tag := "latest"
+			if t, ok := res.ExporterResponse["image.name"]; ok {
+				tag = t
+			}
+			if err = ociindex.PutDescToIndexJSONFileLocked(indexJSONPath, manifestDesc, tag); err != nil {
+				return nil, err
+			}
+		}
+	}
 	return res, nil
+}
+
+func NewSolveStatus(resp *controlapi.StatusResponse) *SolveStatus {
+	s := &SolveStatus{}
+	for _, v := range resp.Vertexes {
+		s.Vertexes = append(s.Vertexes, &Vertex{
+			Digest:        v.Digest,
+			Inputs:        v.Inputs,
+			Name:          v.Name,
+			Started:       v.Started,
+			Completed:     v.Completed,
+			Error:         v.Error,
+			Cached:        v.Cached,
+			ProgressGroup: v.ProgressGroup,
+		})
+	}
+	for _, v := range resp.Statuses {
+		s.Statuses = append(s.Statuses, &VertexStatus{
+			ID:        v.ID,
+			Vertex:    v.Vertex,
+			Name:      v.Name,
+			Total:     v.Total,
+			Current:   v.Current,
+			Timestamp: v.Timestamp,
+			Started:   v.Started,
+			Completed: v.Completed,
+		})
+	}
+	for _, v := range resp.Logs {
+		s.Logs = append(s.Logs, &VertexLog{
+			Vertex:    v.Vertex,
+			Stream:    int(v.Stream),
+			Data:      v.Msg,
+			Timestamp: v.Timestamp,
+		})
+	}
+	for _, v := range resp.Warnings {
+		s.Warnings = append(s.Warnings, &VertexWarning{
+			Vertex:     v.Vertex,
+			Level:      int(v.Level),
+			Short:      v.Short,
+			Detail:     v.Detail,
+			URL:        v.Url,
+			SourceInfo: v.Info,
+			Range:      v.Ranges,
+		})
+	}
+	return s
 }
 
 func prepareSyncedDirs(def *llb.Definition, localDirs map[string]string) (filesync.StaticDirSource, error) {

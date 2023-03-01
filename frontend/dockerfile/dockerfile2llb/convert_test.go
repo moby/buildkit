@@ -1,16 +1,12 @@
 package dockerfile2llb
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/moby/buildkit/util/appcontext"
-	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
-	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func toEnvMap(args []instructions.KeyValuePairOptional, env []string) map[string]string {
@@ -191,31 +187,4 @@ COPY --from=stage1 f2 /sub/
 `
 	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.EqualError(t, err, "circular dependency detected on stage: stage0")
-}
-
-// moby/buildkit#2311
-func TestTargetBuildInfo(t *testing.T) {
-	df := `
-FROM busybox
-ADD https://raw.githubusercontent.com/moby/buildkit/master/README.md /
-`
-	_, _, bi, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
-		TargetPlatform: &ocispecs.Platform{
-			Architecture: "amd64",
-			OS:           "linux",
-		},
-		BuildPlatforms: []ocispecs.Platform{
-			{
-				Architecture: "amd64",
-				OS:           "linux",
-			},
-		},
-	})
-	require.NoError(t, err)
-
-	require.Equal(t, 1, len(bi.Sources))
-	assert.Equal(t, binfotypes.SourceTypeDockerImage, bi.Sources[0].Type)
-	assert.Equal(t, "busybox", bi.Sources[0].Ref)
-	assert.True(t, strings.HasPrefix(bi.Sources[0].Alias, "docker.io/library/busybox@"))
-	assert.NotEmpty(t, bi.Sources[0].Pin)
 }

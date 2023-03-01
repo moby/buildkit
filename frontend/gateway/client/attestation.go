@@ -3,9 +3,14 @@ package client
 import (
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/solver/result"
+	"github.com/pkg/errors"
 )
 
 func AttestationToPB(a *result.Attestation) (*pb.Attestation, error) {
+	if a.ContentFunc != nil {
+		return nil, errors.Errorf("attestation callback cannot be sent through gateway")
+	}
+
 	subjects := make([]*pb.InTotoSubject, len(a.InToto.Subjects))
 	for i, subject := range a.InToto.Subjects {
 		subjects[i] = &pb.InTotoSubject{

@@ -32,18 +32,13 @@ type reader struct {
 	r      *estargz.Reader
 	rootID uint32
 
-	idMap map[uint32]*estargz.TOCEntry
-	// NOTE: Once "reader.idOfEntry" is initialized by "reader.asssignIDs()", it must keyed by the value of "reader.idMap"
-	//       but not by "*estargz.TOCEntry" returned by "estargz.Reader" calls (e.g. "estargz.Reader.Lookup()"). This is because once
-	//       "reader" is replicated by "reader.Clone()", the replicated one has the different instance of "estargz.Reader" than the original
-	//       "*reader". Thus a "*estargz.TOCEntry" obtained by that (cloned) "estargz.Reader" is the different instance than the original and
-	//       can the key of "reader.idOfEntry".
-	idOfEntry map[*estargz.TOCEntry]uint32
+	idMap     map[uint32]*estargz.TOCEntry
+	idOfEntry map[string]uint32
 
 	estargzOpts []estargz.OpenOption
 }
 
-func newReader(er *estargz.Reader, rootID uint32, idMap map[uint32]*estargz.TOCEntry, idOfEntry map[*estargz.TOCEntry]uint32, estargzOpts []estargz.OpenOption) *reader {
+func newReader(er *estargz.Reader, rootID uint32, idMap map[uint32]*estargz.TOCEntry, idOfEntry map[string]uint32, estargzOpts []estargz.OpenOption) *reader {
 	return &reader{r: er, rootID: rootID, idMap: idMap, idOfEntry: idOfEntry, estargzOpts: estargzOpts}
 }
 
@@ -88,9 +83,9 @@ func NewReader(sr *io.SectionReader, opts ...metadata.Option) (metadata.Reader, 
 }
 
 // assignIDs assigns an to each TOC item and returns a mapping from ID to entry and vice-versa.
-func assignIDs(er *estargz.Reader, e *estargz.TOCEntry) (rootID uint32, idMap map[uint32]*estargz.TOCEntry, idOfEntry map[*estargz.TOCEntry]uint32, err error) {
+func assignIDs(er *estargz.Reader, e *estargz.TOCEntry) (rootID uint32, idMap map[uint32]*estargz.TOCEntry, idOfEntry map[string]uint32, err error) {
 	idMap = make(map[uint32]*estargz.TOCEntry)
-	idOfEntry = make(map[*estargz.TOCEntry]uint32)
+	idOfEntry = make(map[string]uint32)
 	curID := uint32(0)
 
 	nextID := func() (uint32, error) {
@@ -108,14 +103,14 @@ func assignIDs(er *estargz.Reader, e *estargz.TOCEntry) (rootID uint32, idMap ma
 		}
 
 		var ok bool
-		id, ok := idOfEntry[e]
+		id, ok := idOfEntry[e.Name]
 		if !ok {
 			id, err = nextID()
 			if err != nil {
 				return 0, err
 			}
 			idMap[id] = e
-			idOfEntry[e] = id
+			idOfEntry[e.Name] = id
 		}
 
 		e.ForeachChild(func(_ string, ent *estargz.TOCEntry) bool {
@@ -174,7 +169,7 @@ func (r *reader) GetChild(pid uint32, base string) (id uint32, attr metadata.Att
 		err = fmt.Errorf("child %q of entry %d not found", base, pid)
 		return
 	}
-	cid, ok := r.idOfEntry[child]
+	cid, ok := r.idOfEntry[child.Name]
 	if !ok {
 		err = fmt.Errorf("id of entry %q not found", base)
 		return
@@ -191,7 +186,7 @@ func (r *reader) ForeachChild(id uint32, f func(name string, id uint32, mode os.
 	}
 	var err error
 	e.ForeachChild(func(baseName string, ent *estargz.TOCEntry) bool {
-		id, ok := r.idOfEntry[ent]
+		id, ok := r.idOfEntry[ent.Name]
 		if !ok {
 			err = fmt.Errorf("id of child entry %q not found", baseName)
 			return false
@@ -207,6 +202,24 @@ func (r *reader) OpenFile(id uint32) (metadata.File, error) {
 		return nil, fmt.Errorf("entry %d not found", id)
 	}
 	sr, err := r.r.OpenFile(e.Name)
+	if err != nil {
+		return nil, err
+	}
+	return &file{r, e, sr}, nil
+}
+
+func (r *reader) OpenFileWithPreReader(id uint32, preRead func(id uint32, chunkOffset, chunkSize int64, chunkDigest string, r io.Reader) error) (metadata.File, error) {
+	e, ok := r.idMap[id]
+	if !ok {
+		return nil, fmt.Errorf("entry %d not found", id)
+	}
+	sr, err := r.r.OpenFileWithPreReader(e.Name, func(e *estargz.TOCEntry, chunkR io.Reader) error {
+		cid, ok := r.idOfEntry[e.Name]
+		if !ok {
+			return fmt.Errorf("id of entry %q not found", e.Name)
+		}
+		return preRead(cid, e.ChunkOffset, e.ChunkSize, e.ChunkDigest, chunkR)
+	})
 	if err != nil {
 		return nil, err
 	}

@@ -60,6 +60,26 @@ ADD --checksum=%s %s /tmp/foo
 		}, nil)
 		require.NoError(t, err)
 	})
+	t.Run("DigestFromEnv", func(t *testing.T) {
+		dockerfile := []byte(fmt.Sprintf(`
+FROM scratch
+ENV DIGEST=%s
+ENV LINK=%s
+ADD --checksum=${DIGEST} ${LINK} /tmp/foo
+`, digest.FromBytes(resp.Content).String(), server.URL+"/foo"))
+		dir, err := integration.Tmpdir(
+			t,
+			fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		)
+		require.NoError(t, err)
+		_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+			LocalDirs: map[string]string{
+				builder.DefaultLocalNameDockerfile: dir,
+				builder.DefaultLocalNameContext:    dir,
+			},
+		}, nil)
+		require.NoError(t, err)
+	})
 	t.Run("DigestMismatch", func(t *testing.T) {
 		dockerfile := []byte(fmt.Sprintf(`
 FROM scratch

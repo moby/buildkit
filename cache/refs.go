@@ -57,6 +57,7 @@ type ImmutableRef interface {
 	Extract(ctx context.Context, s session.Group) error // +progress
 	GetRemotes(ctx context.Context, createIfNeeded bool, cfg config.RefConfig, all bool, s session.Group) ([]*solver.Remote, error)
 	LayerChain() RefList
+	FileList(ctx context.Context, s session.Group) ([]string, error)
 }
 
 type MutableRef interface {
@@ -836,11 +837,11 @@ func getBlobDesc(ctx context.Context, cs content.Store, dgst digest.Digest) (oci
 		return ocispecs.Descriptor{}, err
 	}
 	if info.Labels == nil {
-		return ocispecs.Descriptor{}, fmt.Errorf("no blob metadata is stored for %q", info.Digest)
+		return ocispecs.Descriptor{}, errors.Errorf("no blob metadata is stored for %q", info.Digest)
 	}
 	mt, ok := info.Labels[blobMediaTypeLabel]
 	if !ok {
-		return ocispecs.Descriptor{}, fmt.Errorf("no media type is stored for %q", info.Digest)
+		return ocispecs.Descriptor{}, errors.Errorf("no media type is stored for %q", info.Digest)
 	}
 	desc := ocispecs.Descriptor{
 		Digest:    info.Digest,
@@ -1550,12 +1551,12 @@ func readonlyOverlay(opt []string) []string {
 func newSharableMountPool(tmpdirRoot string) (sharableMountPool, error) {
 	if tmpdirRoot != "" {
 		if err := os.MkdirAll(tmpdirRoot, 0700); err != nil {
-			return sharableMountPool{}, fmt.Errorf("failed to prepare mount pool: %w", err)
+			return sharableMountPool{}, errors.Wrap(err, "failed to prepare mount pool")
 		}
 		// If tmpdirRoot is specified, remove existing mounts to avoid conflict.
 		files, err := os.ReadDir(tmpdirRoot)
 		if err != nil {
-			return sharableMountPool{}, fmt.Errorf("failed to read mount pool: %w", err)
+			return sharableMountPool{}, errors.Wrap(err, "failed to read mount pool")
 		}
 		for _, file := range files {
 			if file.IsDir() {

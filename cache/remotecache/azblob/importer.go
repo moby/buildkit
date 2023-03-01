@@ -27,12 +27,12 @@ func ResolveCacheImporterFunc() remotecache.ResolveCacheImporterFunc {
 	return func(ctx context.Context, g session.Group, attrs map[string]string) (remotecache.Importer, ocispecs.Descriptor, error) {
 		config, err := getConfig(attrs)
 		if err != nil {
-			return nil, ocispecs.Descriptor{}, fmt.Errorf("failed to create azblob config: %v", err)
+			return nil, ocispecs.Descriptor{}, errors.WithMessage(err, "failed to create azblob config")
 		}
 
 		containerClient, err := createContainerClient(ctx, config)
 		if err != nil {
-			return nil, ocispecs.Descriptor{}, fmt.Errorf("failed to create container client: %v", err)
+			return nil, ocispecs.Descriptor{}, errors.WithMessage(err, "failed to create container client")
 		}
 
 		importer := &importer{
@@ -60,7 +60,7 @@ func (ci *importer) Resolve(ctx context.Context, _ ocispecs.Descriptor, id strin
 			eg.Go(func() error {
 				cc, err := ci.loadManifest(ctx, name)
 				if err != nil {
-					return fmt.Errorf("failed to load cache manifest %s: %v", name, err)
+					return errors.Wrapf(err, "failed to load cache manifest %s", name)
 				}
 				ccs[i] = cc
 				return nil
@@ -105,12 +105,12 @@ func (ci *importer) loadManifest(ctx context.Context, name string) (*v1.CacheCha
 
 	res, err := blobClient.Download(ctx, &azblob.BlobDownloadOptions{})
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	bytes, err := io.ReadAll(res.RawResponse.Body)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	logrus.Debugf("imported config: %s", string(bytes))
@@ -151,7 +151,7 @@ func (ci *importer) makeDescriptorProviderPair(l v1.CacheLayer) (*v1.DescriptorP
 	if !l.Annotations.CreatedAt.IsZero() {
 		txt, err := l.Annotations.CreatedAt.MarshalText()
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 		annotations["buildkit/createdat"] = string(txt)
 	}

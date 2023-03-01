@@ -34,7 +34,7 @@ type BuildEStargzOption func(o *buildEStargzOptions) error
 // WithEStargzOptions specifies options for estargz lib
 func WithEStargzOptions(eo ...estargz.Option) BuildEStargzOption {
 	return func(o *buildEStargzOptions) error {
-		o.estargzOptions = eo
+		o.estargzOptions = append(o.estargzOptions, eo...)
 		return nil
 	}
 }
@@ -42,7 +42,7 @@ func WithEStargzOptions(eo ...estargz.Option) BuildEStargzOption {
 // WithBuildTarOptions option specifies the options for tar creation
 func WithBuildTarOptions(to ...BuildTarOption) BuildEStargzOption {
 	return func(o *buildEStargzOptions) error {
-		o.buildTarOptions = to
+		o.buildTarOptions = append(o.buildTarOptions, to...)
 		return nil
 	}
 }

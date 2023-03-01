@@ -5,7 +5,6 @@ package snapshot
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,6 +23,7 @@ import (
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/leaseutil"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
 )
@@ -52,7 +52,7 @@ func newSnapshotter(ctx context.Context, t *testing.T, snapshotterName string) (
 			return nil, nil, err
 		}
 	default:
-		return nil, nil, fmt.Errorf("unhandled snapshotter: %s", snapshotterName)
+		return nil, nil, errors.Errorf("unhandled snapshotter: %s", snapshotterName)
 	}
 	t.Cleanup(func() {
 		require.NoError(t, ctdSnapshotter.Close())

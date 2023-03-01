@@ -112,22 +112,23 @@ type Info struct {
 
 // Resolver resolves the layer location and provieds the handler of that layer.
 type Resolver struct {
-	rootDir               string
-	resolver              *remote.Resolver
-	prefetchTimeout       time.Duration
-	layerCache            *cacheutil.TTLCache
-	layerCacheMu          sync.Mutex
-	blobCache             *cacheutil.TTLCache
-	blobCacheMu           sync.Mutex
-	backgroundTaskManager *task.BackgroundTaskManager
-	resolveLock           *namedmutex.NamedMutex
-	config                config.Config
-	metadataStore         metadata.Store
-	overlayOpaqueType     OverlayOpaqueType
+	rootDir                 string
+	resolver                *remote.Resolver
+	prefetchTimeout         time.Duration
+	layerCache              *cacheutil.TTLCache
+	layerCacheMu            sync.Mutex
+	blobCache               *cacheutil.TTLCache
+	blobCacheMu             sync.Mutex
+	backgroundTaskManager   *task.BackgroundTaskManager
+	resolveLock             *namedmutex.NamedMutex
+	config                  config.Config
+	metadataStore           metadata.Store
+	overlayOpaqueType       OverlayOpaqueType
+	additionalDecompressors func(context.Context, source.RegistryHosts, reference.Spec, ocispec.Descriptor) []metadata.Decompressor
 }
 
 // NewResolver returns a new layer resolver.
-func NewResolver(root string, backgroundTaskManager *task.BackgroundTaskManager, cfg config.Config, resolveHandlers map[string]remote.Handler, metadataStore metadata.Store, overlayOpaqueType OverlayOpaqueType) (*Resolver, error) {
+func NewResolver(root string, backgroundTaskManager *task.BackgroundTaskManager, cfg config.Config, resolveHandlers map[string]remote.Handler, metadataStore metadata.Store, overlayOpaqueType OverlayOpaqueType, additionalDecompressors func(context.Context, source.RegistryHosts, reference.Spec, ocispec.Descriptor) []metadata.Decompressor) (*Resolver, error) {
 	resolveResultEntryTTL := time.Duration(cfg.ResolveResultEntryTTLSec) * time.Second
 	if resolveResultEntryTTL == 0 {
 		resolveResultEntryTTL = defaultResolveResultEntryTTLSec * time.Second
@@ -165,16 +166,17 @@ func NewResolver(root string, backgroundTaskManager *task.BackgroundTaskManager,
 	}
 
 	return &Resolver{
-		rootDir:               root,
-		resolver:              remote.NewResolver(cfg.BlobConfig, resolveHandlers),
-		layerCache:            layerCache,
-		blobCache:             blobCache,
-		prefetchTimeout:       prefetchTimeout,
-		backgroundTaskManager: backgroundTaskManager,
-		config:                cfg,
-		resolveLock:           new(namedmutex.NamedMutex),
-		metadataStore:         metadataStore,
-		overlayOpaqueType:     overlayOpaqueType,
+		rootDir:                 root,
+		resolver:                remote.NewResolver(cfg.BlobConfig, resolveHandlers),
+		layerCache:              layerCache,
+		blobCache:               blobCache,
+		prefetchTimeout:         prefetchTimeout,
+		backgroundTaskManager:   backgroundTaskManager,
+		config:                  cfg,
+		resolveLock:             new(namedmutex.NamedMutex),
+		metadataStore:           metadataStore,
+		overlayOpaqueType:       overlayOpaqueType,
+		additionalDecompressors: additionalDecompressors,
 	}, nil
 }
 
@@ -297,8 +299,13 @@ func (r *Resolver) Resolve(ctx context.Context, hosts source.RegistryHosts, refs
 			commonmetrics.MeasureLatencyInMilliseconds(commonmetrics.DeserializeTocJSON, desc.Digest, start)
 		},
 	}
+
+	additionalDecompressors := []metadata.Decompressor{new(zstdchunked.Decompressor)}
+	if r.additionalDecompressors != nil {
+		additionalDecompressors = append(additionalDecompressors, r.additionalDecompressors(ctx, hosts, refspec, desc)...)
+	}
 	meta, err := r.metadataStore(sr,
-		append(esgzOpts, metadata.WithTelemetry(&telemetry), metadata.WithDecompressors(new(zstdchunked.Decompressor)))...)
+		append(esgzOpts, metadata.WithTelemetry(&telemetry), metadata.WithDecompressors(additionalDecompressors...))...)
 	if err != nil {
 		return nil, err
 	}

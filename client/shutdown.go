@@ -8,7 +8,7 @@ import (
 )
 
 func (c *Client) ShutdownIfIdle(ctx context.Context) (bool, int, error) {
-	res, err := c.controlClient().ShutdownIfIdle(
+	res, err := c.ControlClient().ShutdownIfIdle(
 		ctx, &controlapi.ShutdownIfIdleRequest{})
 	if err != nil {
 		return false, 0, errors.Wrap(err, "failed to call shutdown if idle")

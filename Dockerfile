@@ -1,30 +1,38 @@
 # syntax=docker/dockerfile-upstream:1.4
 
-ARG RUNC_VERSION=v1.1.3
-ARG CONTAINERD_VERSION=v1.6.6
+ARG RUNC_VERSION=v1.1.4
+ARG CONTAINERD_VERSION=v1.6.10
 # containerd v1.5 for integration tests
-ARG CONTAINERD_ALT_VERSION_15=v1.5.11
-# containerd v1.4 for integration tests
-ARG CONTAINERD_ALT_VERSION_14=v1.4.13
+ARG CONTAINERD_ALT_VERSION_15=v1.5.14
 ARG REGISTRY_VERSION=2.8.0
-ARG ROOTLESSKIT_VERSION=v0.14.6
-ARG CNI_VERSION=v1.1.0
-ARG STARGZ_SNAPSHOTTER_VERSION=v0.12.0
-ARG NERDCTL_VERSION=v0.17.1
+ARG ROOTLESSKIT_VERSION=v1.0.1
+ARG CNI_VERSION=v1.1.1
+ARG STARGZ_SNAPSHOTTER_VERSION=v0.13.0
+ARG NERDCTL_VERSION=v1.0.0
 ARG DNSNAME_VERSION=v1.3.1
 ARG NYDUS_VERSION=v2.1.0
 
-# ALPINE_VERSION sets version for the base layers
-ARG ALPINE_VERSION=3.15
+ARG ALPINE_VERSION=3.17
+
+# alpine base for buildkit image
+# TODO: remove this when alpine image supports riscv64
+FROM alpine:${ALPINE_VERSION} AS alpine-amd64
+FROM alpine:${ALPINE_VERSION} AS alpine-arm
+FROM alpine:${ALPINE_VERSION} AS alpine-arm64
+FROM alpine:${ALPINE_VERSION} AS alpine-s390x
+FROM alpine:${ALPINE_VERSION} AS alpine-ppc64le
+FROM alpine:edge@sha256:c223f84e05c23c0571ce8decefef818864869187e1a3ea47719412e205c8c64e AS alpine-riscv64
+FROM alpine-$TARGETARCH AS alpinebase
+
+# xx is a helper for cross-compilation
+FROM --platform=$BUILDPLATFORM tonistiigi/xx:1.1.2 AS xx
+
+# go base image
+FROM --platform=$BUILDPLATFORM golang:1.19-alpine${ALPINE_VERSION} AS golatest
 
 # git stage is used for checking out remote repository sources
 FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS git
 RUN apk add --no-cache git
-
-# xx is a helper for cross-compilation
-FROM --platform=$BUILDPLATFORM tonistiigi/xx@sha256:1e96844fadaa2f9aea021b2b05299bc02fe4c39a92d8e735b93e8e2b15610128 AS xx
-
-FROM --platform=$BUILDPLATFORM golang:1.19-alpine AS golatest
 
 # gobuild is base stage for compiling go/cgo
 FROM golatest AS gobuild-base
@@ -120,8 +128,7 @@ RUN --mount=from=binaries \
 FROM scratch AS release
 COPY --link --from=releaser /out/ /
 
-# tonistiigi/alpine supports riscv64
-FROM tonistiigi/alpine:${ALPINE_VERSION} AS buildkit-export
+FROM alpinebase AS buildkit-export
 RUN apk add --no-cache fuse3 git openssh pigz xz \
   && ln -s fusermount3 /usr/bin/fusermount
 COPY --link examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
@@ -155,16 +162,6 @@ ARG CONTAINERD_ALT_VERSION_15
 RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target=/root/.cache,type=cache \
   git fetch origin \
   && git checkout -q "$CONTAINERD_ALT_VERSION_15" \
-  && make bin/containerd \
-  && make bin/containerd-shim-runc-v2 \
-  && mv bin /out
-
-# containerd v1.4 for integration tests
-FROM containerd-base as containerd-alt-14
-ARG CONTAINERD_ALT_VERSION_14
-RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target=/root/.cache,type=cache \
-  git fetch origin \
-  && git checkout -q "$CONTAINERD_ALT_VERSION_14" \
   && make bin/containerd \
   && make bin/containerd-shim-runc-v2 \
   && mv bin /out
@@ -212,14 +209,6 @@ FROM binaries AS buildkit-windows
 # this is not in binaries-windows because it is not intended for release yet, just CI
 COPY --link --from=buildkitd /usr/bin/buildkitd /buildkitd.exe
 
-FROM alpine:${ALPINE_VERSION} AS containerd-runtime
-COPY --link --from=runc /usr/bin/runc /usr/bin/
-COPY --link --from=containerd /out/containerd* /usr/bin/
-COPY --link --from=containerd /out/ctr /usr/bin/
-VOLUME /var/lib/containerd
-VOLUME /run/containerd
-ENTRYPOINT ["containerd"]
-
 FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS cni-plugins
 RUN apk add --no-cache curl
 ARG CNI_VERSION
@@ -241,14 +230,17 @@ RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables ip6tables dnsmasq 
   && xx-go --wrap \
   && curl -Ls https://raw.githubusercontent.com/containerd/nerdctl/$NERDCTL_VERSION/extras/rootless/containerd-rootless.sh > /usr/bin/containerd-rootless.sh \
   && chmod 0755 /usr/bin/containerd-rootless.sh
+# The entrypoint script is needed for enabling nested cgroup v2 (https://github.com/moby/buildkit/issues/3265#issuecomment-1309631736)
+RUN curl -Ls https://raw.githubusercontent.com/moby/moby/v20.10.21/hack/dind > /docker-entrypoint.sh \
+  && chmod 0755 /docker-entrypoint.sh
+ENTRYPOINT ["/docker-entrypoint.sh"]
 # musl is needed to directly use the registry binary that is built on alpine
-ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.4=/opt/containerd-alt-14/bin,containerd-1.5=/opt/containerd-alt-15/bin"
+ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.5=/opt/containerd-alt-15/bin"
 ENV BUILDKIT_INTEGRATION_SNAPSHOTTER=stargz
 ENV CGO_ENABLED=0
 COPY --link --from=nydus /out/nydus-static/* /usr/bin/
 COPY --link --from=stargz-snapshotter /out/* /usr/bin/
 COPY --link --from=rootlesskit /rootlesskit /usr/bin/
-COPY --link --from=containerd-alt-14 /out/containerd* /opt/containerd-alt-14/bin/
 COPY --link --from=containerd-alt-15 /out/containerd* /opt/containerd-alt-15/bin/
 COPY --link --from=registry /bin/registry /usr/bin/
 COPY --link --from=runc /usr/bin/runc /usr/bin/
@@ -267,7 +259,7 @@ FROM integration-tests AS dev-env
 VOLUME /var/lib/buildkit
 
 # Rootless mode.
-FROM tonistiigi/alpine:${ALPINE_VERSION} AS rootless
+FROM alpinebase AS rootless
 RUN apk add --no-cache fuse3 fuse-overlayfs git openssh pigz shadow-uidmap xz
 RUN adduser -D -u 1000 user \
   && mkdir -p /run/user/1000 /home/user/.local/tmp /home/user/.local/share/buildkit \

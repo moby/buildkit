@@ -60,6 +60,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
+	"go.etcd.io/bbolt"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -312,7 +313,7 @@ func main() {
 				case "network.host":
 					cfg.Entitlements = append(cfg.Entitlements, e)
 				default:
-					return fmt.Errorf("invalid entitlement : %v", e)
+					return errors.Errorf("invalid entitlement : %s", e)
 				}
 			}
 		}
@@ -421,10 +422,10 @@ func setDefaultNetworkConfig(nc config.NetworkConfig) config.NetworkConfig {
 		nc.Mode = "auto"
 	}
 	if nc.CNIConfigPath == "" {
-		nc.CNIConfigPath = "/etc/buildkit/cni.json"
+		nc.CNIConfigPath = appdefaults.DefaultCNIConfigPath
 	}
 	if nc.CNIBinaryPath == "" {
-		nc.CNIBinaryPath = "/opt/cni/bin"
+		nc.CNIBinaryPath = appdefaults.DefaultCNIBinDir
 	}
 	return nc
 }
@@ -702,6 +703,11 @@ func newController(c *cli.Context, cfg *config.Config, shutdownCh chan struct{})
 		return nil, err
 	}
 
+	historyDB, err := bbolt.Open(filepath.Join(cfg.Root, "history.db"), 0600, nil)
+	if err != nil {
+		return nil, err
+	}
+
 	resolverFn := resolverFunc(cfg)
 
 	w, err := wc.GetDefault()
@@ -733,6 +739,8 @@ func newController(c *cli.Context, cfg *config.Config, shutdownCh chan struct{})
 		CacheKeyStorage:           cacheStorage,
 		Entitlements:              cfg.Entitlements,
 		TraceCollector:            tc,
+		HistoryDB:                 historyDB,
+		LeaseManager:              w.LeaseManager(),
 	})
 }
 

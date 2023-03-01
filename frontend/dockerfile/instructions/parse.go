@@ -17,7 +17,6 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/command"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/util/suggest"
-	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
 
@@ -297,14 +296,6 @@ func parseAdd(req parseRequest) (*AddCommand, error) {
 		return nil, err
 	}
 
-	var checksum digest.Digest
-	if flChecksum.Value != "" {
-		checksum, err = digest.Parse(flChecksum.Value)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	return &AddCommand{
 		withNameAndCode: newWithNameAndCode(req),
 		SourcesAndDest:  *sourcesAndDest,
@@ -312,7 +303,7 @@ func parseAdd(req parseRequest) (*AddCommand, error) {
 		Chmod:           flChmod.Value,
 		Link:            flLink.Value == "true",
 		KeepGitDir:      flKeepGitDir.Value == "true",
-		Checksum:        checksum,
+		Checksum:        flChecksum.Value,
 	}, nil
 }
 
@@ -394,7 +385,7 @@ func parseOnBuild(req parseRequest) (*OnbuildCommand, error) {
 	case "ONBUILD":
 		return nil, errors.New("Chaining ONBUILD via `ONBUILD ONBUILD` isn't allowed")
 	case "MAINTAINER", "FROM":
-		return nil, fmt.Errorf("%s isn't allowed as an ONBUILD trigger", triggerInstruction)
+		return nil, errors.Errorf("%s isn't allowed as an ONBUILD trigger", triggerInstruction)
 	}
 
 	original := regexp.MustCompile(`(?i)^\s*ONBUILD\s*`).ReplaceAllString(req.original, "")
@@ -524,7 +515,7 @@ func parseOptInterval(f *Flag) (time.Duration, error) {
 		return 0, nil
 	}
 	if d < container.MinimumDuration {
-		return 0, fmt.Errorf("Interval %#v cannot be less than %s", f.name, container.MinimumDuration)
+		return 0, errors.Errorf("Interval %#v cannot be less than %s", f.name, container.MinimumDuration)
 	}
 	return d, nil
 }
@@ -571,7 +562,7 @@ func parseHealthcheck(req parseRequest) (*HealthCheckCommand, error) {
 
 			healthcheck.Test = strslice.StrSlice(append([]string{typ}, cmdSlice...))
 		default:
-			return nil, fmt.Errorf("Unknown type %#v in HEALTHCHECK (try CMD)", typ)
+			return nil, errors.Errorf("Unknown type %#v in HEALTHCHECK (try CMD)", typ)
 		}
 
 		interval, err := parseOptInterval(flInterval)
@@ -598,7 +589,7 @@ func parseHealthcheck(req parseRequest) (*HealthCheckCommand, error) {
 				return nil, err
 			}
 			if retries < 0 {
-				return nil, fmt.Errorf("--retries cannot be negative (%d)", retries)
+				return nil, errors.Errorf("--retries cannot be negative (%d)", retries)
 			}
 			healthcheck.Retries = int(retries)
 		} else {

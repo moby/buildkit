@@ -24,6 +24,7 @@ package layer
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -47,9 +48,10 @@ import (
 	"github.com/containerd/stargz-snapshotter/fs/source"
 	"github.com/containerd/stargz-snapshotter/metadata"
 	"github.com/containerd/stargz-snapshotter/task"
-	"github.com/containerd/stargz-snapshotter/util/testutil"
+	tutil "github.com/containerd/stargz-snapshotter/util/testutil"
 	fusefs "github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
+	"github.com/klauspost/compress/zstd"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"golang.org/x/sys/unix"
@@ -61,15 +63,22 @@ const (
 	sampleData2     = "abcdefghij"
 )
 
+var srcCompressions = map[string]tutil.CompressionFactory{
+	"zstd-fastest":               tutil.ZstdCompressionWithLevel(zstd.SpeedFastest),
+	"gzip-bestspeed":             tutil.GzipCompressionWithLevel(gzip.BestSpeed),
+	"externaltoc-gzip-bestspeed": tutil.ExternalTOCGzipCompressionWithLevel(gzip.BestSpeed),
+}
+
 func TestSuiteLayer(t *testing.T, store metadata.Store) {
 	testPrefetch(t, store)
 	testNodeRead(t, store)
-	testExistence(t, store)
+	testNodes(t, store)
 }
 
 var testStateLayerDigest = digest.FromString("dummy")
 
 func testPrefetch(t *testing.T, factory metadata.Store) {
+	data64KB := string(tutil.RandomBytes(t, 64000))
 	defaultPrefetchSize := int64(10000)
 	landmarkPosition := func(t *testing.T, l *layer) int64 {
 		if l.r == nil {
@@ -86,7 +95,9 @@ func testPrefetch(t *testing.T, factory metadata.Store) {
 	}
 	tests := []struct {
 		name             string
-		in               []testutil.TarEntry
+		chunkSize        int // default is "sampleChunkSize"
+		minChunkSize     int
+		in               []tutil.TarEntry
 		wantNum          int      // number of chunks wanted in the cache
 		wants            []string // filenames to compare
 		prefetchSize     func(*testing.T, *layer) int64
@@ -94,17 +105,17 @@ func testPrefetch(t *testing.T, factory metadata.Store) {
 	}{
 		{
 			name: "no_prefetch",
-			in: []testutil.TarEntry{
-				testutil.File("foo.txt", sampleData1),
+			in: []tutil.TarEntry{
+				tutil.File("foo.txt", sampleData1),
 			},
 			wantNum:          0,
 			prioritizedFiles: nil,
 		},
 		{
 			name: "prefetch",
-			in: []testutil.TarEntry{
-				testutil.File("foo.txt", sampleData1),
-				testutil.File("bar.txt", sampleData2),
+			in: []tutil.TarEntry{
+				tutil.File("foo.txt", sampleData1),
+				tutil.File("bar.txt", sampleData2),
 			},
 			wantNum:          chunkNum(sampleData1),
 			wants:            []string{"foo.txt"},
@@ -113,101 +124,152 @@ func testPrefetch(t *testing.T, factory metadata.Store) {
 		},
 		{
 			name: "with_dir",
-			in: []testutil.TarEntry{
-				testutil.Dir("foo/"),
-				testutil.File("foo/bar.txt", sampleData1),
-				testutil.Dir("buz/"),
-				testutil.File("buz/buzbuz.txt", sampleData2),
+			in: []tutil.TarEntry{
+				tutil.Dir("foo/"),
+				tutil.File("foo/bar.txt", sampleData1),
+				tutil.Dir("buz/"),
+				tutil.File("buz/buzbuz.txt", sampleData2),
 			},
 			wantNum:          chunkNum(sampleData1),
 			wants:            []string{"foo/bar.txt"},
 			prefetchSize:     landmarkPosition,
 			prioritizedFiles: []string{"foo/", "foo/bar.txt"},
 		},
+		{
+			name:         "several_files_in_chunk",
+			minChunkSize: 8000,
+			chunkSize:    1000000000, // do not chunk
+			in: []tutil.TarEntry{
+				tutil.Dir("foo/"),
+				tutil.File("foo/foo1", data64KB),
+				tutil.File("foo2", "bb"),
+				tutil.File("foo22", "ccc"),
+				tutil.Dir("bar/"),
+				tutil.File("bar/bar.txt", "aaa"),
+				tutil.File("foo3", data64KB),
+			},
+			// NOTE: we assume that the compressed "data64KB" is still larger than 8KB
+			// landmark+dir+foo1, foo2+foo22+dir+bar.txt+foo3, TOC, footer
+			wantNum:          5, // foo1 + foo2 + foo22 + bar.txt + foo3
+			wants:            []string{"foo/foo1", "foo2", "foo22", "bar/bar.txt", "foo3"},
+			prefetchSize:     landmarkPosition,
+			prioritizedFiles: []string{"foo/", "foo/foo1", "foo2", "foo22", "bar/", "bar/bar.txt", "foo3"},
+		},
+		{
+			name:         "several_files_in_chunk_chunked",
+			minChunkSize: 8000,
+			chunkSize:    32000,
+			in: []tutil.TarEntry{
+				tutil.Dir("foo/"),
+				tutil.File("foo/foo1", data64KB),
+				tutil.File("foo2", "bb"),
+				tutil.Dir("bar/"),
+				tutil.File("foo3", data64KB),
+			},
+			// NOTE: we assume that the compressed chunk of "data64KB" is still larger than 8KB
+			// landmark+dir+foo1(1), foo1(2), foo2, dir+foo3(1), foo3(2), TOC, footer
+			wantNum:          3, // foo1(2) + foo2 (foo3(1) shouldn't be in a separated stream)
+			wants:            []string{"foo/foo1", "foo2"},
+			prefetchSize:     landmarkPosition,
+			prioritizedFiles: []string{"foo/", "foo/foo1", "foo2"},
+		},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			sr, dgst, err := testutil.BuildEStargz(tt.in,
-				testutil.WithEStargzOptions(
-					estargz.WithChunkSize(sampleChunkSize),
-					estargz.WithPrioritizedFiles(tt.prioritizedFiles),
-				))
-			if err != nil {
-				t.Fatalf("failed to build eStargz: %v", err)
-			}
-			blob := newBlob(sr)
-			mcache := cache.NewMemoryCache()
-			mr, err := factory(sr)
-			if err != nil {
-				t.Fatalf("failed to create metadata reader: %v", err)
-			}
-			defer mr.Close()
-			vr, err := reader.NewReader(mr, mcache, digest.FromString(""))
-			if err != nil {
-				t.Fatalf("failed to create reader: %v", err)
-			}
-			l := newLayer(
-				&Resolver{
-					prefetchTimeout:       time.Second,
-					backgroundTaskManager: task.NewBackgroundTaskManager(10, 5*time.Second),
-				},
-				ocispec.Descriptor{Digest: testStateLayerDigest},
-				&blobRef{blob, func() {}},
-				vr,
-			)
-			if err := l.Verify(dgst); err != nil {
-				t.Errorf("failed to verify reader: %v", err)
-				return
-			}
-			prefetchSize := int64(0)
-			if tt.prefetchSize != nil {
-				prefetchSize = tt.prefetchSize(t, l)
-			}
-			if err := l.Prefetch(defaultPrefetchSize); err != nil {
-				t.Errorf("failed to prefetch: %v", err)
-				return
-			}
-			if blob.calledPrefetchOffset != 0 {
-				t.Errorf("invalid prefetch offset %d; want %d",
-					blob.calledPrefetchOffset, 0)
-			}
-			if blob.calledPrefetchSize != prefetchSize {
-				t.Errorf("invalid prefetch size %d; want %d",
-					blob.calledPrefetchSize, prefetchSize)
-			}
-			if cLen := len(mcache.(*cache.MemoryCache).Membuf); tt.wantNum != cLen {
-				t.Errorf("number of chunks in the cache %d; want %d: %v", cLen, tt.wantNum, err)
-				return
-			}
-
-			lr := l.r
-			if lr == nil {
-				t.Fatalf("failed to get reader from layer: %v", err)
-			}
-			for _, file := range tt.wants {
-				id, err := lookup(lr.Metadata(), file)
+		for srcCompressionName, srcCompression := range srcCompressions {
+			cl := srcCompression()
+			t.Run("testPrefetch-"+tt.name+"-"+srcCompressionName, func(t *testing.T) {
+				chunkSize := sampleChunkSize
+				if tt.chunkSize > 0 {
+					chunkSize = tt.chunkSize
+				}
+				minChunkSize := 0
+				if tt.minChunkSize > 0 {
+					minChunkSize = tt.minChunkSize
+				}
+				sr, dgst, err := tutil.BuildEStargz(tt.in,
+					tutil.WithEStargzOptions(
+						estargz.WithChunkSize(chunkSize),
+						estargz.WithMinChunkSize(minChunkSize),
+						estargz.WithPrioritizedFiles(tt.prioritizedFiles),
+						estargz.WithCompression(cl),
+					))
 				if err != nil {
-					t.Fatalf("failed to lookup %q: %v", file, err)
+					t.Fatalf("failed to build eStargz: %v", err)
 				}
-				e, err := lr.Metadata().GetAttr(id)
+				blob := newBlob(t, sr)
+				mcache := cache.NewMemoryCache()
+				mr, err := factory(sr, metadata.WithDecompressors(cl))
 				if err != nil {
-					t.Fatalf("failed to get attr of %q: %v", file, err)
+					t.Fatalf("failed to create metadata reader: %v", err)
 				}
-				wantFile, err := lr.OpenFile(id)
+				defer mr.Close()
+				vr, err := reader.NewReader(mr, mcache, digest.FromString(""))
 				if err != nil {
-					t.Fatalf("failed to open file %q", file)
+					t.Fatalf("failed to create reader: %v", err)
 				}
-				blob.readCalled = false
-				if _, err := io.Copy(io.Discard, io.NewSectionReader(wantFile, 0, e.Size)); err != nil {
-					t.Fatalf("failed to read file %q", file)
-				}
-				if blob.readCalled {
-					t.Errorf("chunks of file %q aren't cached", file)
+				l := newLayer(
+					&Resolver{
+						prefetchTimeout:       time.Second,
+						backgroundTaskManager: task.NewBackgroundTaskManager(10, 5*time.Second),
+					},
+					ocispec.Descriptor{Digest: testStateLayerDigest},
+					&blobRef{blob, func() {}},
+					vr,
+				)
+				if err := l.Verify(dgst); err != nil {
+					t.Errorf("failed to verify reader: %v", err)
 					return
 				}
-			}
-		})
+				prefetchSize := int64(0)
+				if tt.prefetchSize != nil {
+					prefetchSize = tt.prefetchSize(t, l)
+				}
+				if err := l.Prefetch(defaultPrefetchSize); err != nil {
+					t.Errorf("failed to prefetch: %v", err)
+					return
+				}
+				if blob.calledPrefetchOffset != 0 {
+					t.Errorf("invalid prefetch offset %d; want %d",
+						blob.calledPrefetchOffset, 0)
+				}
+				if blob.calledPrefetchSize != prefetchSize {
+					t.Errorf("invalid prefetch size %d; want %d",
+						blob.calledPrefetchSize, prefetchSize)
+				}
+				if cLen := len(mcache.(*cache.MemoryCache).Membuf); tt.wantNum != cLen {
+					t.Errorf("number of chunks in the cache %d; want %d: %v", cLen, tt.wantNum, err)
+					return
+				}
+
+				lr := l.r
+				if lr == nil {
+					t.Fatalf("failed to get reader from layer: %v", err)
+				}
+				for _, file := range tt.wants {
+					id, err := lookup(lr.Metadata(), file)
+					if err != nil {
+						t.Fatalf("failed to lookup %q: %v", file, err)
+					}
+					e, err := lr.Metadata().GetAttr(id)
+					if err != nil {
+						t.Fatalf("failed to get attr of %q: %v", file, err)
+					}
+					wantFile, err := lr.OpenFile(id)
+					if err != nil {
+						t.Fatalf("failed to open file %q", file)
+					}
+					blob.readCalled = false
+					if _, err := io.Copy(io.Discard, io.NewSectionReader(wantFile, 0, e.Size)); err != nil {
+						t.Fatalf("failed to read file %q", file)
+					}
+					if blob.readCalled {
+						t.Errorf("chunks of file %q aren't cached", file)
+						return
+					}
+				}
+			})
+		}
 	}
 }
 
@@ -229,17 +291,34 @@ func chunkNum(data string) int {
 	return (len(data)-1)/sampleChunkSize + 1
 }
 
-func newBlob(sr *io.SectionReader) *sampleBlob {
+type region struct {
+	begin int64
+	end   int64 // inclusive
+}
+
+func isDup(a, b region) bool {
+	if a.begin < b.begin {
+		return a.end >= b.begin
+	}
+	// b.begin <= a.begin
+	return b.end >= a.begin
+}
+
+func newBlob(t *testing.T, sr *io.SectionReader) *sampleBlob {
 	return &sampleBlob{
+		t: t,
 		r: sr,
 	}
 }
 
 type sampleBlob struct {
+	t *testing.T
+
 	r                    *io.SectionReader
 	readCalled           bool
 	calledPrefetchOffset int64
 	calledPrefetchSize   int64
+	calledRegions        []region // sorted
 }
 
 func (sb *sampleBlob) Authn(tr http.RoundTripper) (http.RoundTripper, error) { return nil, nil }
@@ -247,6 +326,39 @@ func (sb *sampleBlob) Check() error                                          { r
 func (sb *sampleBlob) Size() int64                                           { return sb.r.Size() }
 func (sb *sampleBlob) FetchedSize() int64                                    { return 0 }
 func (sb *sampleBlob) ReadAt(p []byte, offset int64, opts ...remote.Option) (int, error) {
+	if len(p) > 0 {
+		target := region{offset, offset + int64(len(p)) - 1}
+		if len(sb.calledRegions) == 0 {
+			sb.calledRegions = []region{target}
+		} else {
+			pos := 0
+			found := false
+			for i, r := range sb.calledRegions {
+				if target.begin < r.begin {
+					pos = i
+					found = true
+					break
+				}
+			}
+			if !found {
+				pos = len(sb.calledRegions)
+			}
+			if pos > 0 {
+				b := sb.calledRegions[pos-1]
+				if isDup(b, target) {
+					sb.t.Fatalf("reading on the previous region is duplicated: %+v and %+v", b, target)
+				}
+			}
+			if pos+1 < len(sb.calledRegions) {
+				a := sb.calledRegions[pos+1]
+				if isDup(a, target) {
+					sb.t.Fatalf("reading on the next region is duplicated: %+v and %+v", a, target)
+				}
+			}
+			sb.calledRegions = append(sb.calledRegions[:pos], append([]region{target}, sb.calledRegions[pos:]...)...)
+		}
+	}
+
 	sb.readCalled = true
 	return sb.r.ReadAt(p, offset)
 }
@@ -288,74 +400,77 @@ func testNodeRead(t *testing.T, factory metadata.Store) {
 		for in, innero := range innerOffsetCond {
 			for bo, baseo := range baseOffsetCond {
 				for fn, filesize := range fileSizeCond {
-					t.Run(fmt.Sprintf("reading_%s_%s_%s_%s", sn, in, bo, fn), func(t *testing.T) {
-						if filesize > int64(len(sampleData1)) {
-							t.Fatal("sample file size is larger than sample data")
-						}
-
-						wantN := size
-						offset := baseo + innero
-						if remain := filesize - offset; remain < wantN {
-							if wantN = remain; wantN < 0 {
-								wantN = 0
+					for _, srcCompression := range srcCompressions {
+						cl := srcCompression()
+						t.Run(fmt.Sprintf("reading_%s_%s_%s_%s", sn, in, bo, fn), func(t *testing.T) {
+							if filesize > int64(len(sampleData1)) {
+								t.Fatal("sample file size is larger than sample data")
 							}
-						}
 
-						// use constant string value as a data source.
-						want := strings.NewReader(sampleData1)
+							wantN := size
+							offset := baseo + innero
+							if remain := filesize - offset; remain < wantN {
+								if wantN = remain; wantN < 0 {
+									wantN = 0
+								}
+							}
 
-						// data we want to get.
-						wantData := make([]byte, wantN)
-						_, err := want.ReadAt(wantData, offset)
-						if err != nil && err != io.EOF {
-							t.Fatalf("want.ReadAt (offset=%d,size=%d): %v", offset, wantN, err)
-						}
+							// use constant string value as a data source.
+							want := strings.NewReader(sampleData1)
 
-						// data we get from the file node.
-						f, closeFn := makeNodeReader(t, []byte(sampleData1)[:filesize], sampleChunkSize, factory)
-						defer closeFn()
-						tmpbuf := make([]byte, size) // fuse library can request bigger than remain
-						rr, errno := f.Read(context.Background(), tmpbuf, offset)
-						if errno != 0 {
-							t.Errorf("failed to read off=%d, size=%d, filesize=%d: %v", offset, size, filesize, err)
-							return
-						}
-						if rsize := rr.Size(); int64(rsize) != wantN {
-							t.Errorf("read size: %d; want: %d; passed %d", rsize, wantN, size)
-							return
-						}
-						tmpbuf = make([]byte, len(tmpbuf))
-						respData, fs := rr.Bytes(tmpbuf)
-						if fs != fuse.OK {
-							t.Errorf("failed to read result data for off=%d, size=%d, filesize=%d: %v", offset, size, filesize, err)
-						}
+							// data we want to get.
+							wantData := make([]byte, wantN)
+							_, err := want.ReadAt(wantData, offset)
+							if err != nil && err != io.EOF {
+								t.Fatalf("want.ReadAt (offset=%d,size=%d): %v", offset, wantN, err)
+							}
 
-						if !bytes.Equal(wantData, respData) {
-							t.Errorf("off=%d, filesize=%d; read data{size=%d,data=%q}; want (size=%d,data=%q)",
-								offset, filesize, len(respData), string(respData), wantN, string(wantData))
-							return
-						}
-					})
+							// data we get from the file node.
+							f, closeFn := makeNodeReader(t, []byte(sampleData1)[:filesize], sampleChunkSize, factory, cl)
+							defer closeFn()
+							tmpbuf := make([]byte, size) // fuse library can request bigger than remain
+							rr, errno := f.Read(context.Background(), tmpbuf, offset)
+							if errno != 0 {
+								t.Errorf("failed to read off=%d, size=%d, filesize=%d: %v", offset, size, filesize, err)
+								return
+							}
+							if rsize := rr.Size(); int64(rsize) != wantN {
+								t.Errorf("read size: %d; want: %d; passed %d", rsize, wantN, size)
+								return
+							}
+							tmpbuf = make([]byte, len(tmpbuf))
+							respData, fs := rr.Bytes(tmpbuf)
+							if fs != fuse.OK {
+								t.Errorf("failed to read result data for off=%d, size=%d, filesize=%d: %v", offset, size, filesize, err)
+							}
+
+							if !bytes.Equal(wantData, respData) {
+								t.Errorf("off=%d, filesize=%d; read data{size=%d,data=%q}; want (size=%d,data=%q)",
+									offset, filesize, len(respData), string(respData), wantN, string(wantData))
+								return
+							}
+						})
+					}
 				}
 			}
 		}
 	}
 }
 
-func makeNodeReader(t *testing.T, contents []byte, chunkSize int, factory metadata.Store) (_ *file, closeFn func() error) {
+func makeNodeReader(t *testing.T, contents []byte, chunkSize int, factory metadata.Store, cl tutil.Compression) (_ *file, closeFn func() error) {
 	testName := "test"
-	sr, _, err := testutil.BuildEStargz(
-		[]testutil.TarEntry{testutil.File(testName, string(contents))},
-		testutil.WithEStargzOptions(estargz.WithChunkSize(chunkSize)),
+	sr, tocDgst, err := tutil.BuildEStargz(
+		[]tutil.TarEntry{tutil.File(testName, string(contents))},
+		tutil.WithEStargzOptions(estargz.WithChunkSize(chunkSize), estargz.WithCompression(cl)),
 	)
 	if err != nil {
 		t.Fatalf("failed to build sample eStargz: %v", err)
 	}
-	r, err := factory(sr)
+	r, err := factory(sr, metadata.WithDecompressors(cl))
 	if err != nil {
 		t.Fatalf("failed to create reader: %v", err)
 	}
-	rootNode := getRootNode(t, r, OverlayOpaqueAll)
+	rootNode := getRootNode(t, r, OverlayOpaqueAll, tocDgst, cache.NewMemoryCache())
 	var eo fuse.EntryOut
 	inode, errno := rootNode.Lookup(context.Background(), testName, &eo)
 	if errno != 0 {
@@ -370,31 +485,34 @@ func makeNodeReader(t *testing.T, contents []byte, chunkSize int, factory metada
 	return f.(*file), r.Close
 }
 
-func testExistence(t *testing.T, factory metadata.Store) {
+func testNodes(t *testing.T, factory metadata.Store) {
 	for _, o := range []OverlayOpaqueType{OverlayOpaqueAll, OverlayOpaqueTrusted, OverlayOpaqueUser} {
-		testExistenceWithOpaque(t, factory, o)
+		testNodesWithOpaque(t, factory, o)
 	}
 }
 
-func testExistenceWithOpaque(t *testing.T, factory metadata.Store, opaque OverlayOpaqueType) {
+func testNodesWithOpaque(t *testing.T, factory metadata.Store, opaque OverlayOpaqueType) {
+	data64KB := string(tutil.RandomBytes(t, 64000))
 	hasOpaque := func(entry string) check {
-		return func(t *testing.T, root *node) {
+		return func(t *testing.T, root *node, cc cache.BlobCache, cr *calledReaderAt) {
 			for _, k := range opaqueXattrs[opaque] {
-				hasNodeXattrs(entry, k, opaqueXattrValue)(t, root)
+				hasNodeXattrs(entry, k, opaqueXattrValue)(t, root, cc, cr)
 			}
 		}
 	}
 	tests := []struct {
-		name string
-		in   []testutil.TarEntry
-		want []check
+		name         string
+		chunkSize    int
+		minChunkSize int
+		in           []tutil.TarEntry
+		want         []check
 	}{
 		{
 			name: "1_whiteout_with_sibling",
-			in: []testutil.TarEntry{
-				testutil.Dir("foo/"),
-				testutil.File("foo/bar.txt", ""),
-				testutil.File("foo/.wh.foo.txt", ""),
+			in: []tutil.TarEntry{
+				tutil.Dir("foo/"),
+				tutil.File("foo/bar.txt", ""),
+				tutil.File("foo/.wh.foo.txt", ""),
 			},
 			want: []check{
 				hasValidWhiteout("foo/foo.txt"),
@@ -403,10 +521,10 @@ func testExistenceWithOpaque(t *testing.T, factory metadata.Store, opaque Overla
 		},
 		{
 			name: "1_whiteout_with_duplicated_name",
-			in: []testutil.TarEntry{
-				testutil.Dir("foo/"),
-				testutil.File("foo/bar.txt", "test"),
-				testutil.File("foo/.wh.bar.txt", ""),
+			in: []tutil.TarEntry{
+				tutil.Dir("foo/"),
+				tutil.File("foo/bar.txt", "test"),
+				tutil.File("foo/.wh.bar.txt", ""),
 			},
 			want: []check{
 				hasFileDigest("foo/bar.txt", digestFor("test")),
@@ -415,9 +533,9 @@ func testExistenceWithOpaque(t *testing.T, factory metadata.Store, opaque Overla
 		},
 		{
 			name: "1_opaque",
-			in: []testutil.TarEntry{
-				testutil.Dir("foo/"),
-				testutil.File("foo/.wh..wh..opq", ""),
+			in: []tutil.TarEntry{
+				tutil.Dir("foo/"),
+				tutil.File("foo/.wh..wh..opq", ""),
 			},
 			want: []check{
 				hasOpaque("foo/"),
@@ -426,10 +544,10 @@ func testExistenceWithOpaque(t *testing.T, factory metadata.Store, opaque Overla
 		},
 		{
 			name: "1_opaque_with_sibling",
-			in: []testutil.TarEntry{
-				testutil.Dir("foo/"),
-				testutil.File("foo/.wh..wh..opq", ""),
-				testutil.File("foo/bar.txt", "test"),
+			in: []tutil.TarEntry{
+				tutil.Dir("foo/"),
+				tutil.File("foo/.wh..wh..opq", ""),
+				tutil.File("foo/bar.txt", "test"),
 			},
 			want: []check{
 				hasOpaque("foo/"),
@@ -439,9 +557,9 @@ func testExistenceWithOpaque(t *testing.T, factory metadata.Store, opaque Overla
 		},
 		{
 			name: "1_opaque_with_xattr",
-			in: []testutil.TarEntry{
-				testutil.Dir("foo/", testutil.WithDirXattrs(map[string]string{"foo": "bar"})),
-				testutil.File("foo/.wh..wh..opq", ""),
+			in: []tutil.TarEntry{
+				tutil.Dir("foo/", tutil.WithDirXattrs(map[string]string{"foo": "bar"})),
+				tutil.File("foo/.wh..wh..opq", ""),
 			},
 			want: []check{
 				hasOpaque("foo/"),
@@ -451,10 +569,10 @@ func testExistenceWithOpaque(t *testing.T, factory metadata.Store, opaque Overla
 		},
 		{
 			name: "prefetch_landmark",
-			in: []testutil.TarEntry{
-				testutil.File(estargz.PrefetchLandmark, "test"),
-				testutil.Dir("foo/"),
-				testutil.File(fmt.Sprintf("foo/%s", estargz.PrefetchLandmark), "test"),
+			in: []tutil.TarEntry{
+				tutil.File(estargz.PrefetchLandmark, "test"),
+				tutil.Dir("foo/"),
+				tutil.File(fmt.Sprintf("foo/%s", estargz.PrefetchLandmark), "test"),
 			},
 			want: []check{
 				fileNotExist(estargz.PrefetchLandmark),
@@ -463,10 +581,10 @@ func testExistenceWithOpaque(t *testing.T, factory metadata.Store, opaque Overla
 		},
 		{
 			name: "no_prefetch_landmark",
-			in: []testutil.TarEntry{
-				testutil.File(estargz.NoPrefetchLandmark, "test"),
-				testutil.Dir("foo/"),
-				testutil.File(fmt.Sprintf("foo/%s", estargz.NoPrefetchLandmark), "test"),
+			in: []tutil.TarEntry{
+				tutil.File(estargz.NoPrefetchLandmark, "test"),
+				tutil.Dir("foo/"),
+				tutil.File(fmt.Sprintf("foo/%s", estargz.NoPrefetchLandmark), "test"),
 			},
 			want: []check{
 				fileNotExist(estargz.NoPrefetchLandmark),
@@ -475,8 +593,8 @@ func testExistenceWithOpaque(t *testing.T, factory metadata.Store, opaque Overla
 		},
 		{
 			name: "state_file",
-			in: []testutil.TarEntry{
-				testutil.File("test", "test"),
+			in: []tutil.TarEntry{
+				tutil.File("test", "test"),
 			},
 			want: []check{
 				hasFileDigest("test", digestFor("test")),
@@ -485,8 +603,8 @@ func testExistenceWithOpaque(t *testing.T, factory metadata.Store, opaque Overla
 		},
 		{
 			name: "file_suid",
-			in: []testutil.TarEntry{
-				testutil.File("test", "test", testutil.WithFileMode(0644|os.ModeSetuid)),
+			in: []tutil.TarEntry{
+				tutil.File("test", "test", tutil.WithFileMode(0644|os.ModeSetuid)),
 			},
 			want: []check{
 				hasExtraMode("test", os.ModeSetuid),
@@ -494,8 +612,8 @@ func testExistenceWithOpaque(t *testing.T, factory metadata.Store, opaque Overla
 		},
 		{
 			name: "dir_sgid",
-			in: []testutil.TarEntry{
-				testutil.Dir("test/", testutil.WithDirMode(0755|os.ModeSetgid)),
+			in: []tutil.TarEntry{
+				tutil.Dir("test/", tutil.WithDirMode(0755|os.ModeSetgid)),
 			},
 			want: []check{
 				hasExtraMode("test/", os.ModeSetgid),
@@ -503,8 +621,8 @@ func testExistenceWithOpaque(t *testing.T, factory metadata.Store, opaque Overla
 		},
 		{
 			name: "file_sticky",
-			in: []testutil.TarEntry{
-				testutil.File("test", "test", testutil.WithFileMode(0644|os.ModeSticky)),
+			in: []tutil.TarEntry{
+				tutil.File("test", "test", tutil.WithFileMode(0644|os.ModeSticky)),
 			},
 			want: []check{
 				hasExtraMode("test", os.ModeSticky),
@@ -512,53 +630,123 @@ func testExistenceWithOpaque(t *testing.T, factory metadata.Store, opaque Overla
 		},
 		{
 			name: "symlink_size",
-			in: []testutil.TarEntry{
-				testutil.Symlink("test", "target"),
+			in: []tutil.TarEntry{
+				tutil.Symlink("test", "target"),
 			},
 			want: []check{
 				hasSize("test", len("target")),
 			},
 		},
+		{
+			name:         "several_files_in_chunk",
+			minChunkSize: 8000,
+			in: []tutil.TarEntry{
+				tutil.Dir("foo/"),
+				tutil.File("foo/foo1", data64KB),
+				tutil.File("foo2", "bb"),
+				tutil.File("foo22", "ccc"),
+				tutil.Dir("bar/"),
+				tutil.File("bar/bar.txt", "aaa"),
+				tutil.File("foo3", data64KB),
+			},
+			// NOTE: we assume that the compressed "data64KB" is still larger than 8KB
+			// landmark+dir+foo1, foo2+foo22+dir+bar.txt+foo3, TOC, footer
+			want: []check{
+				hasFileContentsWithPreCached("foo22", 0, "ccc", chunkInfo{"foo2", "bb", 0, 2}, chunkInfo{"bar/bar.txt", "aaa", 0, 3}, chunkInfo{"foo3", data64KB, 0, 64000}),
+				hasFileContentsOffset("foo2", 0, "bb", true),
+				hasFileContentsOffset("bar/bar.txt", 0, "aaa", true),
+				hasFileContentsOffset("bar/bar.txt", 1, "aa", true),
+				hasFileContentsOffset("bar/bar.txt", 2, "a", true),
+				hasFileContentsOffset("foo3", 0, data64KB, true),
+				hasFileContentsOffset("foo22", 0, "ccc", true),
+				hasFileContentsOffset("foo/foo1", 0, data64KB, false),
+				hasFileContentsOffset("foo/foo1", 0, data64KB, true),
+				hasFileContentsOffset("foo/foo1", 1, data64KB[1:], true),
+				hasFileContentsOffset("foo/foo1", 2, data64KB[2:], true),
+				hasFileContentsOffset("foo/foo1", 3, data64KB[3:], true),
+			},
+		},
+		{
+			name:         "several_files_in_chunk_chunked",
+			minChunkSize: 8000,
+			chunkSize:    32000,
+			in: []tutil.TarEntry{
+				tutil.Dir("foo/"),
+				tutil.File("foo/foo1", data64KB),
+				tutil.File("foo2", "bb"),
+				tutil.Dir("bar/"),
+				tutil.File("foo3", data64KB),
+			},
+			// NOTE: we assume that the compressed chunk of "data64KB" is still larger than 8KB
+			// landmark+dir+foo1(1), foo1(2), foo2+dir+foo3(1), foo3(2), TOC, footer
+			want: []check{
+				hasFileContentsWithPreCached("foo2", 0, "bb", chunkInfo{"foo3", data64KB[:32000], 0, 32000}),
+				hasFileContentsOffset("foo2", 0, "bb", true),
+				hasFileContentsOffset("foo2", 1, "b", true),
+				hasFileContentsOffset("foo3", 0, data64KB[:len(data64KB)/2], true),
+				hasFileContentsOffset("foo3", 1, data64KB[1:len(data64KB)/2], true),
+				hasFileContentsOffset("foo3", 2, data64KB[2:len(data64KB)/2], true),
+				hasFileContentsOffset("foo3", int64(len(data64KB)/2), data64KB[len(data64KB)/2:], false),
+				hasFileContentsOffset("foo3", int64(len(data64KB)-1), data64KB[len(data64KB)-1:], true),
+				hasFileContentsOffset("foo/foo1", 0, data64KB, false),
+				hasFileContentsOffset("foo/foo1", 1, data64KB[1:], true),
+				hasFileContentsOffset("foo/foo1", 2, data64KB[2:], true),
+				hasFileContentsOffset("foo/foo1", int64(len(data64KB)/2), data64KB[len(data64KB)/2:], true),
+				hasFileContentsOffset("foo/foo1", int64(len(data64KB)-1), data64KB[len(data64KB)-1:], true),
+			},
+		},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			sgz, _, err := testutil.BuildEStargz(tt.in)
-			if err != nil {
-				t.Fatalf("failed to build sample eStargz: %v", err)
-			}
+		for _, srcCompression := range srcCompressions {
+			cl := srcCompression()
+			t.Run(tt.name, func(t *testing.T) {
+				opts := []tutil.BuildEStargzOption{
+					tutil.WithEStargzOptions(estargz.WithCompression(cl)),
+				}
+				if tt.chunkSize > 0 {
+					opts = append(opts, tutil.WithEStargzOptions(estargz.WithChunkSize(tt.chunkSize)))
+				}
+				if tt.minChunkSize > 0 {
+					opts = append(opts, tutil.WithEStargzOptions(estargz.WithMinChunkSize(tt.minChunkSize)))
+				}
+				sgz, tocDgst, err := tutil.BuildEStargz(tt.in, opts...)
+				if err != nil {
+					t.Fatalf("failed to build sample eStargz: %v", err)
+				}
 
-			r, err := factory(sgz)
-			if err != nil {
-				t.Fatalf("failed to create reader: %v", err)
-			}
-			defer r.Close()
-			rootNode := getRootNode(t, r, opaque)
-			for _, want := range tt.want {
-				want(t, rootNode)
-			}
-		})
+				testR := &calledReaderAt{sgz, nil}
+				r, err := factory(io.NewSectionReader(testR, 0, sgz.Size()), metadata.WithDecompressors(cl))
+				if err != nil {
+					t.Fatalf("failed to create reader: %v", err)
+				}
+				defer r.Close()
+				mcache := cache.NewMemoryCache()
+				rootNode := getRootNode(t, r, opaque, tocDgst, mcache)
+				for _, want := range tt.want {
+					want(t, rootNode, mcache, testR)
+				}
+			})
+		}
 	}
 }
 
-func getRootNode(t *testing.T, r metadata.Reader, opaque OverlayOpaqueType) *node {
-	rootNode, err := newNode(testStateLayerDigest, &testReader{r}, &testBlobState{10, 5}, 100, opaque)
+func getRootNode(t *testing.T, r metadata.Reader, opaque OverlayOpaqueType, tocDgst digest.Digest, cc cache.BlobCache) *node {
+	vr, err := reader.NewReader(r, cc, digest.FromString(""))
+	if err != nil {
+		t.Fatalf("failed to create reader: %v", err)
+	}
+	rr, err := vr.VerifyTOC(tocDgst)
+	if err != nil {
+		t.Fatalf("failed to verify reader: %v", err)
+	}
+	rootNode, err := newNode(testStateLayerDigest, rr, &testBlobState{10, 5}, 100, opaque)
 	if err != nil {
 		t.Fatalf("failed to get root node: %v", err)
 	}
 	fusefs.NewNodeFS(rootNode, &fusefs.Options{}) // initializes root node
 	return rootNode.(*node)
 }
-
-type testReader struct {
-	r metadata.Reader
-}
-
-func (tr *testReader) OpenFile(id uint32) (io.ReaderAt, error) { return tr.r.OpenFile(id) }
-func (tr *testReader) Metadata() metadata.Reader               { return tr.r }
-func (tr *testReader) Cache(opts ...reader.CacheOption) error  { return nil }
-func (tr *testReader) Close() error                            { return nil }
-func (tr *testReader) LastOnDemandReadTime() time.Time         { return time.Now() }
 
 type testBlobState struct {
 	size        int64
@@ -577,10 +765,10 @@ func (tb *testBlobState) Refresh(ctx context.Context, host source.RegistryHosts,
 }
 func (tb *testBlobState) Close() error { return nil }
 
-type check func(*testing.T, *node)
+type check func(*testing.T, *node, cache.BlobCache, *calledReaderAt)
 
 func fileNotExist(file string) check {
-	return func(t *testing.T, root *node) {
+	return func(t *testing.T, root *node, cc cache.BlobCache, cr *calledReaderAt) {
 		if _, _, err := getDirentAndNode(t, root, file); err == nil {
 			t.Errorf("Node %q exists", file)
 		}
@@ -588,7 +776,7 @@ func fileNotExist(file string) check {
 }
 
 func hasFileDigest(filename string, digest string) check {
-	return func(t *testing.T, root *node) {
+	return func(t *testing.T, root *node, cc cache.BlobCache, cr *calledReaderAt) {
 		_, n, err := getDirentAndNode(t, root, filename)
 		if err != nil {
 			t.Fatalf("failed to get node %q: %v", filename, err)
@@ -617,7 +805,7 @@ func hasFileDigest(filename string, digest string) check {
 }
 
 func hasSize(name string, size int) check {
-	return func(t *testing.T, root *node) {
+	return func(t *testing.T, root *node, cc cache.BlobCache, cr *calledReaderAt) {
 		_, n, err := getDirentAndNode(t, root, name)
 		if err != nil {
 			t.Fatalf("failed to get node %q: %v", name, err)
@@ -633,7 +821,7 @@ func hasSize(name string, size int) check {
 }
 
 func hasExtraMode(name string, mode os.FileMode) check {
-	return func(t *testing.T, root *node) {
+	return func(t *testing.T, root *node, cc cache.BlobCache, cr *calledReaderAt) {
 		_, n, err := getDirentAndNode(t, root, name)
 		if err != nil {
 			t.Fatalf("failed to get node %q: %v", name, err)
@@ -652,7 +840,7 @@ func hasExtraMode(name string, mode os.FileMode) check {
 }
 
 func hasValidWhiteout(name string) check {
-	return func(t *testing.T, root *node) {
+	return func(t *testing.T, root *node, cc cache.BlobCache, cr *calledReaderAt) {
 		ent, n, err := getDirentAndNode(t, root, name)
 		if err != nil {
 			t.Fatalf("failed to get node %q: %v", name, err)
@@ -688,7 +876,7 @@ func hasValidWhiteout(name string) check {
 }
 
 func hasNodeXattrs(entry, name, value string) check {
-	return func(t *testing.T, root *node) {
+	return func(t *testing.T, root *node, cc cache.BlobCache, cr *calledReaderAt) {
 		_, n, err := getDirentAndNode(t, root, entry)
 		if err != nil {
 			t.Fatalf("failed to get node %q: %v", entry, err)
@@ -743,7 +931,7 @@ func hasEntry(t *testing.T, name string, ents fusefs.DirStream) (fuse.DirEntry, 
 }
 
 func hasStateFile(t *testing.T, id string) check {
-	return func(t *testing.T, root *node) {
+	return func(t *testing.T, root *node, cc cache.BlobCache, cr *calledReaderAt) {
 
 		// Check the state dir is hidden on OpenDir for "/"
 		ents, errno := root.Readdir(context.Background())
@@ -903,4 +1091,97 @@ func extraModeToTarMode(fm os.FileMode) (tm int64) {
 		tm |= cISVTX
 	}
 	return
+}
+
+type chunkInfo struct {
+	name        string
+	data        string
+	chunkOffset int64
+	chunkSize   int64
+}
+
+func hasFileContentsWithPreCached(name string, off int64, contents string, extra ...chunkInfo) check {
+	return func(t *testing.T, root *node, cc cache.BlobCache, cr *calledReaderAt) {
+		buf := readFile(t, root, name, int64(len(contents)), off)
+		if len(buf) != len(contents) {
+			t.Fatalf("failed to read contents %q (off:%d, want:%q) got %q", name, off, longBytesView([]byte(contents)), longBytesView(buf))
+		}
+		if string(buf) != contents {
+			t.Fatalf("unexpected content of %q: %q want %q", name, longBytesView(buf), longBytesView([]byte(contents)))
+		}
+		for _, e := range extra {
+			cr.called = nil // reset test
+			data := readFile(t, root, e.name, e.chunkSize, e.chunkOffset)
+			if string(data) != e.data {
+				t.Fatalf("unexpected contents of %q (%+v): %q; wanted %q", e.name, e, longBytesView(data), longBytesView([]byte(e.data)))
+			}
+			if len(cr.called) != 0 {
+				t.Fatalf("unexpected read on %q: offsets: %v", e.name, cr.called)
+			}
+		}
+	}
+}
+
+func hasFileContentsOffset(name string, off int64, contents string, fromCache bool) check {
+	return func(t *testing.T, root *node, cc cache.BlobCache, cr *calledReaderAt) {
+		cr.called = nil // reset test
+		buf := readFile(t, root, name, int64(len(contents)), off)
+		if len(buf) != len(contents) {
+			t.Fatalf("failed to read contents %q (off:%d, want:%q) got %q", name, off, longBytesView([]byte(contents)), longBytesView(buf))
+		}
+		if string(buf) != contents {
+			t.Fatalf("unexpected content of %q: %q want %q", name, longBytesView(buf), longBytesView([]byte(contents)))
+		}
+		t.Logf("reader calls for %q: offsets: %+v", name, cr.called)
+		if fromCache {
+			if len(cr.called) != 0 {
+				t.Fatalf("unexpected read on %q: offsets: %v", name, cr.called)
+			}
+		} else {
+			if len(cr.called) == 0 {
+				t.Fatalf("no call happened to reader for %q", name)
+			}
+		}
+	}
+}
+
+func readFile(t *testing.T, root *node, filename string, size, off int64) []byte {
+	_, n, err := getDirentAndNode(t, root, filename)
+	if err != nil {
+		t.Fatalf("failed to get node %q: %v", filename, err)
+	}
+	ni := n.Operations().(*node)
+	fh, _, errno := ni.Open(context.Background(), 0)
+	if errno != 0 {
+		t.Fatalf("failed to open node %q: %v", filename, errno)
+	}
+	rr, errno := fh.(*file).Read(context.Background(), make([]byte, size), off)
+	if errno != 0 {
+		t.Fatalf("failed to read node %q: %v", filename, errno)
+	}
+	buf, status := rr.Bytes(make([]byte, size))
+	if status != fuse.OK {
+		t.Fatalf("failed to get read result of node %q: %v", filename, status)
+	}
+	return buf
+}
+
+type calledReaderAt struct {
+	io.ReaderAt
+	called []int64
+}
+
+func (r *calledReaderAt) ReadAt(p []byte, off int64) (int, error) {
+	r.called = append(r.called, off)
+	return r.ReaderAt.ReadAt(p, off)
+}
+
+// longBytesView is an alias of []byte suitable for printing a long data as an omitted string to avoid long data being printed.
+type longBytesView []byte
+
+func (b longBytesView) String() string {
+	if len(b) < 100 {
+		return string(b)
+	}
+	return string(b[:50]) + "...(omit)..." + string(b[len(b)-50:])
 }

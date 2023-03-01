@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/cache"
 	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/cache/remotecache"
@@ -19,15 +20,19 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/solver/llbsolver/provenance"
 	"github.com/moby/buildkit/solver/result"
 	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/entitlements"
+	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const keyEntitlements = "llb.entitlements"
@@ -55,6 +60,7 @@ type Opt struct {
 	GatewayForwarder *controlgateway.GatewayForwarder
 	SessionManager   *session.Manager
 	WorkerController *worker.Controller
+	HistoryQueue     *HistoryQueue
 }
 
 type Solver struct {
@@ -67,11 +73,12 @@ type Solver struct {
 	gatewayForwarder          *controlgateway.GatewayForwarder
 	sm                        *session.Manager
 	entitlements              []string
+	history                   *HistoryQueue
 }
 
 // Processor defines a processing function to be applied after solving, but
 // before exporting
-type Processor func(ctx context.Context, result *frontend.Result, s *Solver, j *solver.Job) (*frontend.Result, error)
+type Processor func(ctx context.Context, result *Result, s *Solver, j *solver.Job) (*Result, error)
 
 func New(opt Opt) (*Solver, error) {
 	s := &Solver{
@@ -83,6 +90,7 @@ func New(opt Opt) (*Solver, error) {
 		gatewayForwarder:          opt.GatewayForwarder,
 		sm:                        opt.SessionManager,
 		entitlements:              opt.Entitlements,
+		history:                   opt.HistoryQueue,
 	}
 
 	s.solver = solver.NewSolver(solver.SolverOpt{
@@ -102,8 +110,8 @@ func (s *Solver) resolver() solver.ResolveOpFunc {
 	}
 }
 
-func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
-	return &llbBridge{
+func (s *Solver) bridge(b solver.Builder) *provenanceBridge {
+	return &provenanceBridge{llbBridge: &llbBridge{
 		builder:                   b,
 		frontends:                 s.frontends,
 		resolveWorker:             s.resolveWorker,
@@ -111,16 +119,55 @@ func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 		resolveCacheImporterFuncs: s.resolveCacheImporterFuncs,
 		cms:                       map[string]solver.CacheManager{},
 		sm:                        s.sm,
-	}
+	}}
 }
 
-func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement, post []Processor) (*client.SolveResponse, error) {
+func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
+	return s.bridge(b)
+}
+
+func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement, post []Processor) (_ *client.SolveResponse, err error) {
 	j, err := s.solver.NewJob(id)
 	if err != nil {
 		return nil, err
 	}
 
 	defer j.Discard()
+
+	st := time.Now()
+	rec := &controlapi.BuildHistoryRecord{
+		Ref:           id,
+		Frontend:      req.Frontend,
+		FrontendAttrs: req.FrontendOpt,
+		CreatedAt:     &st,
+	}
+	if err := s.history.Update(ctx, &controlapi.BuildHistoryEvent{
+		Type:   controlapi.BuildHistoryEventType_STARTED,
+		Record: rec,
+	}); err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		en := time.Now()
+		rec.CompletedAt = &en
+
+		if err != nil {
+			st, ok := grpcerrors.AsGRPCStatus(grpcerrors.ToGRPC(err))
+			if !ok {
+				st = status.New(codes.Unknown, err.Error())
+			}
+			rec.Error = grpcerrors.ToRPCStatus(st.Proto())
+		}
+		if err1 := s.history.Update(ctx, &controlapi.BuildHistoryEvent{
+			Type:   controlapi.BuildHistoryEventType_COMPLETE,
+			Record: rec,
+		}); err1 != nil {
+			if err == nil {
+				err = err1
+			}
+		}
+	}()
 
 	set, err := entitlements.WhiteList(ent, supportedEntitlements(s.entitlements))
 	if err != nil {
@@ -132,8 +179,9 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	j.SessionID = sessionID
 
 	var res *frontend.Result
+	br := s.bridge(j)
 	if s.gatewayForwarder != nil && req.Definition == nil && req.Frontend == "" {
-		fwd := gateway.NewBridgeForwarder(ctx, s.Bridge(j), s.workerController, req.FrontendInputs, sessionID, s.sm)
+		fwd := gateway.NewBridgeForwarder(ctx, br, s.workerController, req.FrontendInputs, sessionID, s.sm)
 		defer fwd.Discard()
 		if err := s.gatewayForwarder.RegisterBuild(ctx, id, fwd); err != nil {
 			return nil, err
@@ -151,18 +199,10 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 			return nil, err
 		}
 	} else {
-		res, err = s.Bridge(j).Solve(ctx, req, sessionID)
+		res, err = br.Solve(ctx, req, sessionID)
 		if err != nil {
 			return nil, err
 		}
-	}
-
-	for _, post := range post {
-		res2, err := post(ctx, res, s, j)
-		if err != nil {
-			return nil, err
-		}
-		res = res2
 	}
 
 	if res == nil {
@@ -188,27 +228,19 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		return nil, err
 	}
 
-	if r := res.Ref; r != nil {
-		dtbi, err := buildinfo.Encode(ctx, res.Metadata, exptypes.ExporterBuildInfo, r.BuildSources())
+	resProv, err := addProvenanceToResult(res, br)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, post := range post {
+		res2, err := post(ctx, resProv, s, j)
 		if err != nil {
 			return nil, err
 		}
-		if len(dtbi) > 0 {
-			res.AddMeta(exptypes.ExporterBuildInfo, dtbi)
-		}
+		resProv = res2
 	}
-	for k, r := range res.Refs {
-		if r == nil {
-			continue
-		}
-		dtbi, err := buildinfo.Encode(ctx, res.Metadata, fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, k), r.BuildSources())
-		if err != nil {
-			return nil, err
-		}
-		if len(dtbi) > 0 {
-			res.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, k), dtbi)
-		}
-	}
+	res = resProv.Result
 
 	cached, err := result.ConvertResult(res, func(res solver.ResultProxy) (solver.CachedResult, error) {
 		return res.Result(ctx)
@@ -227,11 +259,22 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		return nil, err
 	}
 
-	var exporterResponse map[string]string
 	cacheExporters, inlineCacheExporter := splitCacheExporters(exp.CacheExporters)
+
+	var exporterResponse map[string]string
 	if e := exp.Exporter; e != nil {
-		exporterResponse, err = exportWithInlineCacheExporter(ctx, e, inlineCacheExporter, j, cached, inp)
+		meta, err := runInlineCacheExporter(ctx, e, inlineCacheExporter, j, cached)
 		if err != nil {
+			return nil, err
+		}
+		for k, v := range meta {
+			inp.AddMeta(k, v)
+		}
+
+		if err := inBuilderContext(ctx, j, e.Name(), j.SessionID+"-export", func(ctx context.Context, _ session.Group) error {
+			exporterResponse, err = e.Export(ctx, inp, j.SessionID)
+			return err
+		}); err != nil {
 			return nil, err
 		}
 	}
@@ -316,39 +359,35 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 	return cacheExporterResponse, nil
 }
 
-func exportWithInlineCacheExporter(ctx context.Context, e exporter.ExporterInstance, inlineExporter *RemoteCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult], inp *result.Result[cache.ImmutableRef]) (exporterResponse map[string]string, err error) {
-	if inlineExporter != nil {
-		if err := inBuilderContext(ctx, j, "preparing layers for inline cache", j.SessionID+"-cache-inline", func(ctx context.Context, _ session.Group) error {
-			if cached.Ref != nil {
-				dtic, err := inlineCache(ctx, inlineExporter.Exporter, cached.Ref, e.Config().Compression(), session.NewGroup(j.SessionID))
-				if err != nil {
-					return err
-				}
-				if dtic != nil {
-					inp.AddMeta(exptypes.ExporterInlineCache, dtic)
-				}
-			}
-			for k, res := range cached.Refs {
-				dtic, err := inlineCache(ctx, inlineExporter.Exporter, res, e.Config().Compression(), session.NewGroup(j.SessionID))
-				if err != nil {
-					return err
-				}
-				if dtic != nil {
-					inp.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, k), dtic)
-				}
-			}
-			return nil
-		}); err != nil {
-			return nil, err
-		}
+func runInlineCacheExporter(ctx context.Context, e exporter.ExporterInstance, inlineExporter *RemoteCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult]) (map[string][]byte, error) {
+	meta := map[string][]byte{}
+	if inlineExporter == nil {
+		return nil, nil
 	}
-	if err := inBuilderContext(ctx, j, e.Name(), j.SessionID+"-export", func(ctx context.Context, _ session.Group) error {
-		exporterResponse, err = e.Export(ctx, inp, j.SessionID)
-		return err
+	if err := inBuilderContext(ctx, j, "preparing layers for inline cache", j.SessionID+"-cache-inline", func(ctx context.Context, _ session.Group) error {
+		if res := cached.Ref; res != nil {
+			dtic, err := inlineCache(ctx, inlineExporter.Exporter, res, e.Config().Compression(), session.NewGroup(j.SessionID))
+			if err != nil {
+				return err
+			}
+			if dtic != nil {
+				meta[exptypes.ExporterInlineCache] = dtic
+			}
+		}
+		for k, res := range cached.Refs {
+			dtic, err := inlineCache(ctx, inlineExporter.Exporter, res, e.Config().Compression(), session.NewGroup(j.SessionID))
+			if err != nil {
+				return err
+			}
+			if dtic != nil {
+				meta[fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, k)] = dtic
+			}
+		}
+		return nil
 	}); err != nil {
 		return nil, err
 	}
-	return exporterResponse, nil
+	return meta, nil
 }
 
 func splitCacheExporters(exporters []RemoteCacheExporter) (rest []RemoteCacheExporter, inline *RemoteCacheExporter) {
@@ -361,6 +400,120 @@ func splitCacheExporters(exporters []RemoteCacheExporter) (rest []RemoteCacheExp
 		rest = append(rest, exp)
 	}
 	return rest, inline
+}
+
+func addProvenanceToResult(res *frontend.Result, br *provenanceBridge) (*Result, error) {
+	if res == nil {
+		return nil, nil
+	}
+	reqs, err := br.requests(res)
+	if err != nil {
+		return nil, err
+	}
+	out := &Result{
+		Result:     res,
+		Provenance: &provenance.Result{},
+	}
+	if res.Ref != nil {
+		cp, err := getProvenance(res.Ref, reqs.ref.bridge, "", reqs)
+		if err != nil {
+			return nil, err
+		}
+		out.Provenance.Ref = cp
+		if res.Metadata == nil {
+			res.Metadata = map[string][]byte{}
+		}
+		if err := buildinfo.AddMetadata(res.Metadata, exptypes.ExporterBuildInfo, cp); err != nil {
+			return nil, err
+		}
+	}
+	if len(res.Refs) == 0 {
+		return out, nil
+	}
+	out.Provenance.Refs = make(map[string]*provenance.Capture, len(res.Refs))
+
+	for k, ref := range res.Refs {
+		cp, err := getProvenance(ref, reqs.refs[k].bridge, k, reqs)
+		if err != nil {
+			return nil, err
+		}
+		out.Provenance.Refs[k] = cp
+		if res.Metadata == nil {
+			res.Metadata = map[string][]byte{}
+		}
+		if err := buildinfo.AddMetadata(res.Metadata, fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, k), cp); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+func getRefProvenance(ref solver.ResultProxy, br *provenanceBridge) (*provenance.Capture, error) {
+	if ref == nil {
+		return nil, nil
+	}
+	p := ref.Provenance()
+	if p == nil {
+		return nil, errors.Errorf("missing provenance for %s", ref.ID())
+	}
+	pr, ok := p.(*provenance.Capture)
+	if !ok {
+		return nil, errors.Errorf("invalid provenance type %T", p)
+	}
+
+	if br.req != nil {
+		pr.Frontend = br.req.Frontend
+		pr.Args = provenance.FilterArgs(br.req.FrontendOpt)
+		// TODO: should also save some output options like compression
+
+		if len(br.req.FrontendInputs) > 0 {
+			pr.IncompleteMaterials = true // not implemented
+		}
+	}
+
+	return pr, nil
+}
+
+func getProvenance(ref solver.ResultProxy, br *provenanceBridge, id string, reqs *resultRequests) (*provenance.Capture, error) {
+	pr, err := getRefProvenance(ref, br)
+	if err != nil {
+		return nil, err
+	}
+	if pr == nil {
+		return nil, nil
+	}
+
+	visited := reqs.allRes()
+	visited[ref.ID()] = struct{}{}
+	// provenance for all the refs not directly in the result needs to be captured as well
+	if err := br.eachRef(func(r solver.ResultProxy) error {
+		if _, ok := visited[r.ID()]; ok {
+			return nil
+		}
+		visited[r.ID()] = struct{}{}
+		pr2, err := getRefProvenance(r, br)
+		if err != nil {
+			return err
+		}
+		return pr.Merge(pr2)
+	}); err != nil {
+		return nil, err
+	}
+
+	imgs := br.allImages()
+	if id != "" {
+		imgs = reqs.filterImagePlatforms(id, imgs)
+	}
+	for _, img := range imgs {
+		pr.AddImage(img)
+	}
+
+	if err := pr.OptimizeImageSources(); err != nil {
+		return nil, err
+	}
+	pr.Sort()
+
+	return pr, nil
 }
 
 type inlineCacheExporter interface {

@@ -8,7 +8,6 @@ package parser
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -153,7 +152,7 @@ func parseNameVal(rest string, key string, d *directives) (*Node, error) {
 	if !strings.Contains(words[0], "=") {
 		parts := reWhitespace.Split(rest, 2)
 		if len(parts) < 2 {
-			return nil, fmt.Errorf(key + " must have two arguments")
+			return nil, errors.Errorf("%s must have two arguments", key)
 		}
 		return newKeyValueNode(parts[0], parts[1]), nil
 	}
@@ -162,7 +161,7 @@ func parseNameVal(rest string, key string, d *directives) (*Node, error) {
 	var prevNode *Node
 	for _, word := range words {
 		if !strings.Contains(word, "=") {
-			return nil, fmt.Errorf("Syntax error - can't find = in %q. Must be of the form: name=value", word)
+			return nil, errors.Errorf("Syntax error - can't find = in %q. Must be of the form: name=value", word)
 		}
 
 		parts := strings.SplitN(word, "=", 2)
@@ -273,7 +272,7 @@ func parseString(rest string, d *directives) (*Node, map[string]bool, error) {
 func parseJSON(rest string, d *directives) (*Node, map[string]bool, error) {
 	rest = strings.TrimLeftFunc(rest, unicode.IsSpace)
 	if !strings.HasPrefix(rest, "[") {
-		return nil, nil, fmt.Errorf(`Error parsing "%s" as a JSON array`, rest)
+		return nil, nil, errors.Errorf("Error parsing %q as a JSON array", rest)
 	}
 
 	var myJSON []interface{}

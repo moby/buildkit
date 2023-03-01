@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/containerd/typeurl"
+	rpc "github.com/gogo/googleapis/google/rpc"
 	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/golang/protobuf/proto" //nolint:staticcheck
 	"github.com/golang/protobuf/ptypes/any"
@@ -181,7 +182,7 @@ func FromGRPC(err error) error {
 
 	for _, s := range stacks {
 		if s != nil {
-			err = stack.Wrap(err, *s)
+			err = stack.Wrap(err, s)
 		}
 	}
 
@@ -194,6 +195,20 @@ func FromGRPC(err error) error {
 	}
 
 	return stack.Enable(err)
+}
+
+func ToRPCStatus(st *spb.Status) *rpc.Status {
+	details := make([]*gogotypes.Any, len(st.Details))
+
+	for i, d := range st.Details {
+		details[i] = gogoAny(d)
+	}
+
+	return &rpc.Status{
+		Code:    int32(st.Code),
+		Message: st.Message,
+		Details: details,
+	}
 }
 
 type grpcStatusError struct {
