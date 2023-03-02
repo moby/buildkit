@@ -635,7 +635,9 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 }
 
 func runInlineCacheExporter(ctx context.Context, e exporter.ExporterInstance, inlineExporter inlineCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult]) (result *exptypes.InlineCache, err error) {
-	result = &exptypes.InlineCache{}
+	result = &exptypes.InlineCache{
+		Platforms: make(map[string][]byte),
+	}
 	if inlineExporter == nil {
 		return result, nil
 	}
