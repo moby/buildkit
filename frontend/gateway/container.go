@@ -29,6 +29,7 @@ import (
 type NewContainerRequest struct {
 	ContainerID string
 	NetMode     opspb.NetMode
+	Hostname    string
 	ExtraHosts  []executor.HostIP
 	Mounts      []Mount
 	Platform    *opspb.Platform
@@ -56,6 +57,7 @@ func NewContainer(ctx context.Context, w worker.Worker, sm *session.Manager, g s
 	ctr := &gatewayContainer{
 		id:         req.ContainerID,
 		netMode:    req.NetMode,
+		hostname:   req.Hostname,
 		extraHosts: req.ExtraHosts,
 		platform:   platform,
 		executor:   w.Executor(),
@@ -280,6 +282,7 @@ func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manage
 type gatewayContainer struct {
 	id         string
 	netMode    opspb.NetMode
+	hostname   string
 	extraHosts []executor.HostIP
 	platform   opspb.Platform
 	rootFS     executor.Mount
@@ -304,6 +307,7 @@ func (gwCtr *gatewayContainer) Start(_ context.Context, req client.StartRequest)
 			Cwd:                       req.Cwd,
 			Tty:                       req.Tty,
 			NetMode:                   gwCtr.netMode,
+			Hostname:                  gwCtr.hostname,
 			ExtraHosts:                gwCtr.extraHosts,
 			SecurityMode:              req.SecurityMode,
 			RemoveMountStubsRecursive: req.RemoveMountStubsRecursive,
