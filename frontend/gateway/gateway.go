@@ -957,6 +957,7 @@ func (lbf *llbBridgeForwarder) NewContainer(ctx context.Context, in *pb.NewConta
 	ctrReq := NewContainerRequest{
 		ContainerID: in.ContainerID,
 		NetMode:     in.Network,
+		Hostname:    in.Hostname,
 		Platform:    in.Platform,
 		Constraints: in.Constraints,
 	}
