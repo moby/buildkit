@@ -311,7 +311,7 @@ func translateLegacySolveRequest(req *controlapi.SolveRequest) {
 		req.Cache.Imports = append(req.Cache.Imports, im)
 	}
 	req.Cache.ImportRefsDeprecated = nil
-	// translate single exporter to a slice (v0.11.0)
+	// translate single exporter to a slice (v0.12.0)
 	if len(req.Exporters) == 0 && req.ExporterDeprecated != "" {
 		req.Exporters = append(req.Exporters, &controlapi.Exporter{
 			Type:  req.ExporterDeprecated,
@@ -332,7 +332,6 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		time.AfterFunc(time.Second, c.throttledGC)
 	}()
 
-	var expis []exporter.ExporterInstance
 	// TODO: multiworker
 	// This is actually tricky, as the exporter should come from the worker that has the returned reference. We may need to delay this so that the solver loads this.
 	w, err := c.opt.WorkerController.GetDefault()
@@ -352,6 +351,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		}
 	}
 
+	var expis []exporter.ExporterInstance
 	for _, ex := range req.Exporters {
 		exp, err := w.Exporter(ex.Type, ex.ID, c.opt.SessionManager)
 		if err != nil {
@@ -455,8 +455,6 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	}, llbsolver.ExporterRequest{
 		Exporters:      expis,
 		CacheExporters: cacheExporters,
-		Type:           req.Exporter,
-		Attrs:          req.ExporterAttrs,
 	}, req.Entitlements, procs, req.Internal, req.SourcePolicy)
 	if err != nil {
 		return nil, err

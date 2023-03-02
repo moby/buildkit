@@ -283,7 +283,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		}
 
 		exports := make([]*controlapi.Exporter, 0, len(opt.Exports))
-		var localExporter bool
+		var localExporter *controlapi.Exporter
 		for _, exp := range exporters {
 			if exp.Type != ExporterLocal {
 				exports = append(exports, &controlapi.Exporter{
@@ -291,30 +291,40 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 					Type:  exp.Type,
 					Attrs: exp.Attrs,
 				})
-			} else {
-				localExporter = true
+			} else if localExporter == nil {
+				// TODO(dima): different options per local exporter?
+				localExporter = &controlapi.Exporter{
+					Type:  ExporterLocal,
+					Attrs: exp.Attrs,
+				}
 			}
 		}
-		if localExporter {
+		if localExporter != nil {
 			// Add a single instance of the local exporter
 			// since it's replicated entirely on the client
-			exports = append(exports, &controlapi.Exporter{
-				Type: ExporterLocal,
-			})
+			exports = append(exports, localExporter)
+		}
+
+		// For older server, use the first exporter
+		var ex ExportEntry
+		if len(opt.Exports) != 0 {
+			ex = opt.Exports[0]
 		}
 
 		resp, err := c.ControlClient().Solve(ctx, &controlapi.SolveRequest{
-			Ref:            ref,
-			Definition:     pbd,
-			Exporters:      exports,
-			Session:        s.ID(),
-			Frontend:       opt.Frontend,
-			FrontendAttrs:  frontendAttrs,
-			FrontendInputs: frontendInputs,
-			Cache:          cacheOpt.options,
-			Entitlements:   opt.AllowedEntitlements,
-			Internal:       opt.Internal,
-			SourcePolicy:   opt.SourcePolicy,
+			Ref:                     ref,
+			Definition:              pbd,
+			ExporterDeprecated:      ex.Type,
+			ExporterAttrsDeprecated: ex.Attrs,
+			Exporters:               exports,
+			Session:                 s.ID(),
+			Frontend:                opt.Frontend,
+			FrontendAttrs:           frontendAttrs,
+			FrontendInputs:          frontendInputs,
+			Cache:                   cacheOpt.options,
+			Entitlements:            opt.AllowedEntitlements,
+			Internal:                opt.Internal,
+			SourcePolicy:            opt.SourcePolicy,
 		})
 		if err != nil {
 			return errors.Wrap(err, "failed to solve")

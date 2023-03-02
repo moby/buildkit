@@ -190,8 +190,6 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 			return nil, errors.Errorf("failed to find ref for ID %s", p.ID)
 		}
 		config := exptypes.ParseKey(inp.Metadata, exptypes.ExporterImageConfigKey, p)
-		// FIXME(dima)
-		//inlineCache := exptypes.ParseKey(inp.Metadata, exptypes.ExporterInlineCache, p)
 
 		remote := &remotes[remotesMap[p.ID]]
 		if remote == nil {
