@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/moby/sys/mount"
 	"github.com/pkg/errors"
 )
 
@@ -19,6 +20,16 @@ func withChroot(cmd *exec.Cmd, dir string) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Chroot: dir,
 	}
+}
+
+func mountProc(target string) (func() error, error) {
+	err := mount.Mount("proc", target, "proc", "")
+	if err != nil {
+		return nil, err
+	}
+	return func() error {
+		return mount.Unmount(target)
+	}, nil
 }
 
 func check(arch, bin string) (string, error) {
@@ -49,6 +60,22 @@ func check(arch, bin string) (string, error) {
 
 	cmd := exec.Command("/check")
 	withChroot(cmd, tmpdir)
+
+	if arch == "amd64" {
+		// in case rosetta is used, /proc needs to be mounted since rosetta tries to access /proc/self/exe
+		tmpProcDir := filepath.Join(tmpdir, "proc")
+		err = os.Mkdir(tmpProcDir, 0700)
+		if err != nil {
+			return "", err
+		}
+
+		umount, err := mountProc(tmpProcDir)
+		if err != nil {
+			return "", err
+		}
+		defer umount()
+	}
+
 	err = cmd.Run()
 	if arch != "amd64" {
 		return "", err
