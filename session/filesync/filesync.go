@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"os"
 	"strconv"
-	"strings"
 	"unicode"
 
 	"github.com/moby/buildkit/session"

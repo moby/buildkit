@@ -1,8 +1,6 @@
 package result
 
 import (
-	"sync"
-
 	"github.com/pkg/errors"
 )
 
