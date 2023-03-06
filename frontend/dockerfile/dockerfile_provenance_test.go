@@ -77,9 +77,10 @@ RUN echo "ok" > /foo
 					"attest:provenance": provReq,
 					"build-arg:FOO":     "bar",
 					"label:lbl":         "abc",
-					"vcs:source":        "https://example.invalid/repo.git",
+					"vcs:source":        "https://user:pass@example.invalid/repo.git",
 					"vcs:revision":      "123456",
 					"filename":          "Dockerfile",
+					dockerui.DefaultLocalNameContext + ":foo": "https://foo:bar@example.invalid/foo.html",
 				},
 				Exports: []client.ExportEntry{
 					{
@@ -137,7 +138,7 @@ RUN echo "ok" > /foo
 				require.Equal(t, "gateway.v0", pred.Invocation.Parameters.Frontend)
 
 				if mode == "max" || mode == "" {
-					require.Equal(t, 3, len(args), "%v", args)
+					require.Equal(t, 4, len(args), "%v", args)
 					require.True(t, pred.Metadata.Completeness.Parameters)
 
 					require.Equal(t, "bar", args["build-arg:FOO"])
@@ -145,22 +146,24 @@ RUN echo "ok" > /foo
 					require.Contains(t, args["source"], "buildkit_test/")
 				} else {
 					require.False(t, pred.Metadata.Completeness.Parameters)
-					require.Equal(t, 1, len(args), "%v", args)
+					require.Equal(t, 2, len(args), "%v", args)
 					require.Contains(t, args["source"], "buildkit_test/")
 				}
+				require.Equal(t, "https://xxxxx:xxxxx@example.invalid/foo.html", args["context:foo"])
 			} else {
 				require.Equal(t, "dockerfile.v0", pred.Invocation.Parameters.Frontend)
 
 				if mode == "max" || mode == "" {
-					require.Equal(t, 2, len(args))
+					require.Equal(t, 3, len(args))
 					require.True(t, pred.Metadata.Completeness.Parameters)
 
 					require.Equal(t, "bar", args["build-arg:FOO"])
 					require.Equal(t, "abc", args["label:lbl"])
 				} else {
 					require.False(t, pred.Metadata.Completeness.Parameters)
-					require.Equal(t, 0, len(args), "%v", args)
+					require.Equal(t, 1, len(args), "%v", args)
 				}
+				require.Equal(t, "https://xxxxx:xxxxx@example.invalid/foo.html", args["context:foo"])
 			}
 
 			expectedBase := "pkg:docker/busybox@latest?platform=" + url.PathEscape(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
@@ -177,7 +180,7 @@ RUN echo "ok" > /foo
 
 			if !isClient {
 				require.Equal(t, "Dockerfile", pred.Invocation.ConfigSource.EntryPoint)
-				require.Equal(t, "https://example.invalid/repo.git", pred.Metadata.BuildKitMetadata.VCS["source"])
+				require.Equal(t, "https://xxxxx:xxxxx@example.invalid/repo.git", pred.Metadata.BuildKitMetadata.VCS["source"])
 				require.Equal(t, "123456", pred.Metadata.BuildKitMetadata.VCS["revision"])
 			}
 
@@ -265,6 +268,11 @@ COPY myapp.Dockerfile /
 
 	target := registry + "/buildkit/testwithprovenance:git"
 
+	// inject dummy credentials to test that they are masked
+	expectedURL := strings.Replace(server.URL, "http://", "http://xxxxx:xxxxx@", 1)
+	require.NotEqual(t, expectedURL, server.URL)
+	server.URL = strings.Replace(server.URL, "http://", "http://user:pass@", 1)
+
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
 			"context":           server.URL + "/.git#v1",
@@ -318,7 +326,7 @@ COPY myapp.Dockerfile /
 		require.Equal(t, "", pred.Invocation.ConfigSource.EntryPoint)
 	} else {
 		require.NotEmpty(t, pred.Invocation.Parameters.Frontend)
-		require.Equal(t, server.URL+"/.git#v1", pred.Invocation.ConfigSource.URI)
+		require.Equal(t, expectedURL+"/.git#v1", pred.Invocation.ConfigSource.URI)
 		require.Equal(t, "myapp.Dockerfile", pred.Invocation.ConfigSource.EntryPoint)
 	}
 
@@ -332,7 +340,7 @@ COPY myapp.Dockerfile /
 		require.Equal(t, expBase, pred.Materials[1].URI)
 		require.NotEmpty(t, pred.Materials[1].Digest["sha256"])
 
-		require.Equal(t, server.URL+"/.git#v1", pred.Materials[2].URI)
+		require.Equal(t, expectedURL+"/.git#v1", pred.Materials[2].URI)
 		require.Equal(t, strings.TrimSpace(string(expectedGitSHA)), pred.Materials[2].Digest["sha1"])
 	} else {
 		require.Equal(t, 2, len(pred.Materials), "%+v", pred.Materials)
@@ -340,7 +348,7 @@ COPY myapp.Dockerfile /
 		require.Equal(t, expBase, pred.Materials[0].URI)
 		require.NotEmpty(t, pred.Materials[0].Digest["sha256"])
 
-		require.Equal(t, server.URL+"/.git#v1", pred.Materials[1].URI)
+		require.Equal(t, expectedURL+"/.git#v1", pred.Materials[1].URI)
 		require.Equal(t, strings.TrimSpace(string(expectedGitSHA)), pred.Materials[1].Digest["sha1"])
 	}
 
