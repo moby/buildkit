@@ -105,6 +105,10 @@ var buildCommand = cli.Command{
 			Name:  "ref-file",
 			Usage: "Write build ref to a file",
 		},
+		cli.StringFlag{
+			Name:  "registry-auth-tlscacert",
+			Usage: "CA certificate to validate TLS when authenticating with registries",
+		},
 	},
 }
 
@@ -158,7 +162,7 @@ func buildAction(clicontext *cli.Context) error {
 	}
 
 	dockerConfig := config.LoadDefaultConfigFile(os.Stderr)
-	attachable := []session.Attachable{authprovider.NewDockerAuthProvider(dockerConfig, clicontext.String("tlscacert"))}
+	attachable := []session.Attachable{authprovider.NewDockerAuthProvider(dockerConfig, clicontext.String("registry-auth-tlscacert"))}
 
 	if ssh := clicontext.StringSlice("ssh"); len(ssh) > 0 {
 		configs, err := build.ParseSSH(ssh)

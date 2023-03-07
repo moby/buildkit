@@ -98,12 +98,15 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 		if err != nil {
 			return nil, err
 		}
-		caCertPool := x509.NewCertPool()
-		caCertPool.AppendCertsFromPEM(caCert)
+		rootCAs, _ := x509.SystemCertPool()
+		if rootCAs == nil {
+			rootCAs = x509.NewCertPool()
+		}
+		rootCAs.AppendCertsFromPEM(caCert)
 		httpClient = &http.Client{
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{
-					RootCAs: caCertPool,
+					RootCAs: rootCAs,
 				},
 			},
 		}
