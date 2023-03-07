@@ -5,7 +5,10 @@ import (
 	"crypto/ed25519"
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"strconv"
@@ -30,12 +33,13 @@ import (
 
 const defaultExpiration = 60
 
-func NewDockerAuthProvider(cfg *configfile.ConfigFile) session.Attachable {
+func NewDockerAuthProvider(cfg *configfile.ConfigFile, tlscacert string) session.Attachable {
 	return &authProvider{
 		authConfigCache: map[string]*types.AuthConfig{},
 		config:          cfg,
 		seeds:           &tokenSeeds{dir: config.Dir()},
 		loggerCache:     map[string]struct{}{},
+		tlscacert:       tlscacert,
 	}
 }
 
@@ -45,6 +49,7 @@ type authProvider struct {
 	seeds           *tokenSeeds
 	logger          progresswriter.Logger
 	loggerCache     map[string]struct{}
+	tlscacert       string
 
 	// The need for this mutex is not well understood.
 	// Without it, the docker cli on OS X hangs when
@@ -87,6 +92,23 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 		Secret:   creds.Secret,
 	}
 
+	var httpClient = http.DefaultClient
+	if ap.tlscacert != "" {
+		caCert, err := ioutil.ReadFile(ap.tlscacert)
+		if err != nil {
+			return nil, err
+		}
+		caCertPool := x509.NewCertPool()
+		caCertPool.AppendCertsFromPEM(caCert)
+		httpClient = &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					RootCAs: caCertPool,
+				},
+			},
+		}
+	}
+
 	if creds.Secret != "" {
 		done := func(progresswriter.SubLogger) error {
 			return err
@@ -101,7 +123,7 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 		}
 		ap.mu.Unlock()
 		// credential information is provided, use oauth POST endpoint
-		resp, err := authutil.FetchTokenWithOAuth(ctx, http.DefaultClient, nil, "buildkit-client", to)
+		resp, err := authutil.FetchTokenWithOAuth(ctx, httpClient, nil, "buildkit-client", to)
 		if err != nil {
 			var errStatus remoteserrors.ErrUnexpectedStatus
 			if errors.As(err, &errStatus) {
@@ -109,7 +131,7 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 				// As of September 2017, GCR is known to return 404.
 				// As of February 2018, JFrog Artifactory is known to return 401.
 				if (errStatus.StatusCode == 405 && to.Username != "") || errStatus.StatusCode == 404 || errStatus.StatusCode == 401 {
-					resp, err := authutil.FetchToken(ctx, http.DefaultClient, nil, to)
+					resp, err := authutil.FetchToken(ctx, httpClient, nil, to)
 					if err != nil {
 						return nil, err
 					}
@@ -121,7 +143,7 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 		return toTokenResponse(resp.AccessToken, resp.IssuedAt, resp.ExpiresIn), nil
 	}
 	// do request anonymously
-	resp, err := authutil.FetchToken(ctx, http.DefaultClient, nil, to)
+	resp, err := authutil.FetchToken(ctx, httpClient, nil, to)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch anonymous token")
 	}
