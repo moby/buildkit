@@ -20,10 +20,10 @@ import (
 	"context"
 	"io"
 
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/images"
-	"github.com/containerd/containerd/pkg/unpack"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 type Transferrer interface {
@@ -69,6 +69,17 @@ type ImageGetter interface {
 	Get(context.Context, images.Store) (images.Image, error)
 }
 
+// ImageLookup is a type which returns images from an image store
+// based on names or prefixes
+type ImageLookup interface {
+	Lookup(context.Context, images.Store) ([]images.Image, error)
+}
+
+// ImageExporter exports images to a writer
+type ImageExporter interface {
+	Export(context.Context, content.Store, []images.Image) error
+}
+
 // ImageImporter imports an image into a content store
 type ImageImporter interface {
 	Import(context.Context, content.Store) (ocispec.Descriptor, error)
@@ -86,8 +97,15 @@ type ImageExportStreamer interface {
 }
 
 type ImageUnpacker interface {
-	// TODO: consider using unpack options
-	UnpackPlatforms() []unpack.Platform
+	UnpackPlatforms() []UnpackConfiguration
+}
+
+// UnpackConfiguration specifies the platform and snapshotter to use for resolving
+// the unpack Platform, if snapshotter is not specified the platform default will
+// be used.
+type UnpackConfiguration struct {
+	Platform    ocispec.Platform
+	Snapshotter string
 }
 
 type ProgressFunc func(Progress)
