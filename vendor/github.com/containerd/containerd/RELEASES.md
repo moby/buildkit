@@ -113,7 +113,7 @@ The current state is available in the following tables:
 | [1.2](https://github.com/containerd/containerd/releases/tag/v1.2.13) | End of Life   | October 24, 2018   | October 15, 2020                              |
 | [1.3](https://github.com/containerd/containerd/releases/tag/v1.3.10) | End of Life   | September 26, 2019 | March 4, 2021                                 |
 | [1.4](https://github.com/containerd/containerd/releases/tag/v1.4.13) | End of Life   | August 17, 2020    | March 3, 2022                                 |
-| [1.5](https://github.com/containerd/containerd/releases/tag/v1.5.17) | Active        | May 3, 2021        | February 28, 2023                             |
+| [1.5](https://github.com/containerd/containerd/releases/tag/v1.5.17) | End of Life   | May 3, 2021        | February 28, 2023                             |
 | [1.6](https://github.com/containerd/containerd/releases/tag/v1.6.16) | LTS           | February 15, 2022  | max(February 15, 2025 or next LTS + 6 months) |
 | [1.7](https://github.com/containerd/containerd/milestone/42)         | Next          | TBD                | TBD                                           |
 
@@ -380,3 +380,23 @@ The deprecated features are shown in the following table:
 | Built-in `aufs` snapshotter                                                      | containerd v1.5     | containerd v2.0            | Use `overlayfs` snapshotter       |
 | `cri-containerd-*.tar.gz` release bundles                                        | containerd v1.6     | containerd v2.0            | Use `containerd-*.tar.gz` bundles |
 | Pulling Schema 1 images (`application/vnd.docker.distribution.manifest.v1+json`) | containerd v1.7     | containerd v2.0            | Use Schema 2 or OCI images        |
+| CRI `v1alpha2`                                                                   | containerd v1.7     | containerd v2.0            | Use CRI `v1`                      |
+
+## Experimental features
+
+Experimental features are new features added to containerd which do not have the
+same stability guarantees as the rest of containerd. An effort is made to avoid
+breaking interfaces between versions, but changes to experimental features before
+being fully supported is possible. Users can still expect experimental features
+to be high quality and are encouraged to use new features to help them stabilize
+more quickly.
+
+| Component                                                                              | Initial Release | Target Supported Release |
+|----------------------------------------------------------------------------------------|-----------------|--------------------------|
+| [Sandbox Service](https://github.com/containerd/containerd/pull/6703)                  | containerd v1.7 | containerd v2.0          |
+| [Sandbox CRI Server](https://github.com/containerd/containerd/pull/7228)               | containerd v1.7 | containerd v2.0          |
+| [Transfer Service](https://github.com/containerd/containerd/pull/7320)                 | containerd v1.7 | containerd v2.0          |
+| [NRI in CRI Support](https://github.com/containerd/containerd/pull/6019)               | containerd v1.7 | containerd v2.0          |
+| [gRPC Shim](https://github.com/containerd/containerd/pull/8052)                        | containerd v1.7 | containerd v2.0          |
+| [CRI Runtime Specific Snapshotter](https://github.com/containerd/containerd/pull/6899) | containerd v1.7 | containerd v2.0          |
+| [CRI Support for User Namespaces](https://github.com/containerd/containerd/pull/7679)  | containerd v1.7 | containerd v2.0          |
