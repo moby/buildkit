@@ -22,6 +22,7 @@ func withChroot(cmd *exec.Cmd, dir string) {
 	}
 }
 
+// Earthly-specific.
 func mountProc(target string) (func() error, error) {
 	err := mount.Mount("proc", target, "proc", "")
 	if err != nil {
@@ -61,20 +62,18 @@ func check(arch, bin string) (string, error) {
 	cmd := exec.Command("/check")
 	withChroot(cmd, tmpdir)
 
-	if arch == "amd64" {
-		// in case rosetta is used, /proc needs to be mounted since rosetta tries to access /proc/self/exe
-		tmpProcDir := filepath.Join(tmpdir, "proc")
-		err = os.Mkdir(tmpProcDir, 0700)
-		if err != nil {
-			return "", err
-		}
-
-		umount, err := mountProc(tmpProcDir)
-		if err != nil {
-			return "", err
-		}
-		defer umount()
+	// Earthly-specific.
+	// In case rosetta is used, /proc needs to be mounted since rosetta tries to access /proc/self/exe (unavailable in a chroot environment)
+	tmpProcDir := filepath.Join(tmpdir, "proc")
+	err = os.Mkdir(tmpProcDir, 0700)
+	if err != nil {
+		return "", err
 	}
+	umount, err := mountProc(tmpProcDir)
+	if err != nil {
+		return "", err
+	}
+	defer umount()
 
 	err = cmd.Run()
 	if arch != "amd64" {
