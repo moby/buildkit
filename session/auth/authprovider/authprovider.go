@@ -103,13 +103,8 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 			rootCAs = x509.NewCertPool()
 		}
 		rootCAs.AppendCertsFromPEM(caCert)
-		httpClient = &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					RootCAs: rootCAs,
-				},
-			},
-		}
+		httpClient.Transport = http.DefaultTransport
+		httpClient.Transport.(*http.Transport).TLSClientConfig = &tls.Config{RootCAs: rootCAs}
 	}
 
 	if creds.Secret != "" {
