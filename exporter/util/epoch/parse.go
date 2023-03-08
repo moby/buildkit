@@ -11,8 +11,6 @@ import (
 
 const (
 	frontendSourceDateEpochArg = "build-arg:SOURCE_DATE_EPOCH"
-
-	KeySourceDateEpoch = "source-date-epoch"
 )
 
 func ParseBuildArgs(opt map[string]string) (string, bool) {
@@ -27,7 +25,7 @@ func ParseExporterAttrs(opt map[string]string) (*time.Time, map[string]string, e
 
 	for k, v := range opt {
 		switch k {
-		case KeySourceDateEpoch:
+		case exptypes.OptKeySourceDateEpoch:
 			var err error
 			tm, err = parseTime(k, v)
 			if err != nil {

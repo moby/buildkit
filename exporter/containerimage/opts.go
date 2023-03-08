@@ -6,21 +6,11 @@ import (
 	"time"
 
 	cacheconfig "github.com/moby/buildkit/cache/config"
+	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/exporter/util/epoch"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/pkg/errors"
-)
-
-const (
-	keyImageName               = "name"
-	keyOCITypes                = "oci-mediatypes"
-	keyForceInlineAttestations = "attestation-inline"
-
-	// preferNondistLayersKey is an exporter option which can be used to mark a layer as non-distributable if the layer reference was
-	// already found to use a non-distributable media type.
-	// When this option is not set, the exporter will change the media type of the layer to a distributable one.
-	keyPreferNondistLayers = "prefer-nondist-layers"
 )
 
 type ImageCommitOpts struct {
@@ -54,13 +44,13 @@ func (c *ImageCommitOpts) Load(ctx context.Context, opt map[string]string) (map[
 	for k, v := range opt {
 		var err error
 		switch k {
-		case keyImageName:
+		case exptypes.OptKeyName:
 			c.ImageName = v
-		case keyOCITypes:
+		case exptypes.OptKeyOCITypes:
 			err = parseBoolWithDefault(&c.OCITypes, k, v, true)
-		case keyForceInlineAttestations:
+		case exptypes.OptKeyForceInlineAttestations:
 			err = parseBool(&c.ForceInlineAttestations, k, v)
-		case keyPreferNondistLayers:
+		case exptypes.OptKeyPreferNondistLayers:
 			err = parseBool(&c.RefCfg.PreferNonDistributable, k, v)
 		default:
 			rest[k] = v
