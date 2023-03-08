@@ -631,7 +631,7 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 
 	var traceSocket string
 	if tc != nil {
-		traceSocket = filepath.Join(cfg.Root, "otel-grpc.sock")
+		traceSocket = traceSocketPath(cfg.Root)
 		if err := runTraceController(traceSocket, tc); err != nil {
 			return nil, err
 		}
@@ -814,14 +814,9 @@ func parseBoolOrAuto(s string) (*bool, error) {
 func runTraceController(p string, exp sdktrace.SpanExporter) error {
 	server := grpc.NewServer()
 	tracev1.RegisterTraceServiceServer(server, &traceCollector{exporter: exp})
-	uid := os.Getuid()
-	l, err := sys.GetLocalListener(p, uid, uid)
+	l, err := getLocalListener(p)
 	if err != nil {
-		return err
-	}
-	if err := os.Chmod(p, 0666); err != nil {
-		l.Close()
-		return err
+		return errors.Wrap(err, "creating trace controller listener")
 	}
 	go server.Serve(l)
 	return nil

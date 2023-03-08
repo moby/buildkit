@@ -21,6 +21,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	tracingSocketPath = "/dev/otel-grpc.sock"
+)
+
 func generateMountOpts(resolvConf, hostsFile string) ([]oci.SpecOpts, error) {
 	return []oci.SpecOpts{
 		// https://github.com/moby/buildkit/issues/429
@@ -121,4 +125,17 @@ func withDefaultProfile() oci.SpecOpts {
 		s.Linux.Seccomp, err = seccomp.GetDefaultProfile(s)
 		return err
 	}
+}
+
+func getTracingSocketMount(socket string) specs.Mount {
+	return specs.Mount{
+		Destination: tracingSocketPath,
+		Type:        "bind",
+		Source:      socket,
+		Options:     []string{"ro", "rbind"},
+	}
+}
+
+func getTracingSocket() string {
+	return fmt.Sprintf("unix://%s", tracingSocketPath)
 }
