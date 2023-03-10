@@ -19,6 +19,7 @@ import (
 	"time"
 
 	ctdcompression "github.com/containerd/containerd/archive/compression"
+	"github.com/containerd/containerd/archive/tarheader"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/content/local"
 	"github.com/containerd/containerd/diff/apply"
@@ -2597,7 +2598,7 @@ func fileToBlob(file *os.File, compress bool) ([]byte, ocispecs.Descriptor, erro
 		return nil, ocispecs.Descriptor{}, err
 	}
 
-	fi, err := tar.FileInfoHeader(info, "")
+	fi, err := tarheader.FileInfoHeaderNoLookups(info, "")
 	if err != nil {
 		return nil, ocispecs.Descriptor{}, err
 	}

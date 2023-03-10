@@ -23,6 +23,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-logr/logr"
+	"github.com/go-logr/stdr"
+
 	gen "go.opentelemetry.io/otel/exporters/jaeger/internal/gen-go/jaeger"
 	"go.opentelemetry.io/otel/exporters/jaeger/internal/third_party/thrift/lib/go/thrift"
 )
@@ -112,8 +115,17 @@ func WithAgentPort(port string) AgentEndpointOption {
 	})
 }
 
+var emptyLogger = logr.Logger{}
+
 // WithLogger sets a logger to be used by agent client.
+// WithLogger and WithLogr will overwrite each other.
 func WithLogger(logger *log.Logger) AgentEndpointOption {
+	return WithLogr(stdr.New(logger))
+}
+
+// WithLogr sets a logr.Logger to be used by agent client.
+// WithLogr and WithLogger will overwrite each other.
+func WithLogr(logger logr.Logger) AgentEndpointOption {
 	return agentEndpointOptionFunc(func(o agentEndpointConfig) agentEndpointConfig {
 		o.Logger = logger
 		return o
