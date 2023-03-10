@@ -106,6 +106,7 @@ BuildKit is used by the following projects:
 -   [Dagger](https://dagger.io)
 -   [envd](https://github.com/tensorchord/envd/)
 -   [Depot](https://depot.dev)
+-   [Namespace](https://namespace.so)
 
 ## Quick start
 
