@@ -51,9 +51,6 @@ func SpecFromURL(u *url.URL) (*Spec, error) {
 		Pod:       u.Hostname(),
 		Container: q.Get("container"),
 	}
-	if sp.Context != "" && !validKubeIdentifier(sp.Context) {
-		return nil, errors.Errorf("unsupported context name: %q", sp.Context)
-	}
 	if sp.Namespace != "" && !validKubeIdentifier(sp.Namespace) {
 		return nil, errors.Errorf("unsupported namespace name: %q", sp.Namespace)
 	}
