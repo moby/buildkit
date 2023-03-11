@@ -235,6 +235,7 @@ func (c *bridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 	ctrReq := gateway.NewContainerRequest{
 		ContainerID: identity.NewID(),
 		NetMode:     req.NetMode,
+		Hostname:    req.Hostname,
 		Mounts:      make([]gateway.Mount, len(req.Mounts)),
 	}
 

@@ -38,6 +38,7 @@ type Client interface {
 // new container, without defining the initial process.
 type NewContainerRequest struct {
 	Mounts      []Mount
+	Hostname    string
 	NetMode     pb.NetMode
 	ExtraHosts  []*pb.HostIP
 	Platform    *pb.Platform
