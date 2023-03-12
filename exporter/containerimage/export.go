@@ -83,7 +83,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 		store: true,
 	}
 
-	opt, err := i.opts.Load(opt)
+	opt, err := i.opts.Load(ctx, opt)
 	if err != nil {
 		return nil, err
 	}

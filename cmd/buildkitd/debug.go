@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/moby/buildkit/util/bklog"
 	"golang.org/x/net/trace"
 )
 
@@ -25,7 +25,7 @@ func setupDebugHandlers(addr string) error {
 
 	m.Handle("/debug/gc", http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		runtime.GC()
-		logrus.Debugf("triggered GC from debug endpoint")
+		bklog.G(req.Context()).Debugf("triggered GC from debug endpoint")
 	}))
 
 	// setting debugaddr is opt-in. permission is defined by listener address
@@ -42,7 +42,7 @@ func setupDebugHandlers(addr string) error {
 		Handler:           m,
 		ReadHeaderTimeout: time.Minute,
 	}
-	logrus.Debugf("debug handlers listening at %s", addr)
+	bklog.L.Debugf("debug handlers listening at %s", addr)
 	go server.ListenAndServe()
 	return nil
 }

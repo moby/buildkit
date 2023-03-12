@@ -190,7 +190,7 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 				}
 			}
 			if retError != nil {
-				st, _ := status.FromError(grpcerrors.ToGRPC(retError))
+				st, _ := status.FromError(grpcerrors.ToGRPC(ctx, retError))
 				stp := st.Proto()
 				req.Error = &rpc.Status{
 					Code:    stp.Code,

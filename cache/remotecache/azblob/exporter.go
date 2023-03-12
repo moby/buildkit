@@ -14,11 +14,11 @@ import (
 	v1 "github.com/moby/buildkit/cache/remotecache/v1"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 // ResolveCacheExporterFunc for "azblob" cache exporter.
@@ -89,7 +89,7 @@ func (ce *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 			return nil, err
 		}
 
-		logrus.Debugf("layers %s exists = %t", key, exists)
+		bklog.G(ctx).Debugf("layers %s exists = %t", key, exists)
 
 		if !exists {
 			layerDone := progress.OneOff(ctx, fmt.Sprintf("writing layer %s", l.Blob))
