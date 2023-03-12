@@ -7,8 +7,8 @@ import (
 	"os"
 	"runtime"
 
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 func InitOCIWorker() {
@@ -18,7 +18,7 @@ func InitOCIWorker() {
 	if s := os.Getenv("BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR"); s != "" {
 		var uid, gid int
 		if _, err := fmt.Sscanf(s, "%d:%d", &uid, &gid); err != nil {
-			logrus.Fatalf("unexpected BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR: %q", s)
+			bklog.L.Fatalf("unexpected BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR: %q", s)
 		}
 		if rootlessSupported(uid) {
 			Register(&oci{uid: uid, gid: gid})

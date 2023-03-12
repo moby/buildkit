@@ -9,7 +9,7 @@ import (
 
 	"github.com/moby/buildkit/client"
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
-	"github.com/sirupsen/logrus"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/tonistiigi/units"
 	"github.com/urfave/cli"
 )
@@ -47,7 +47,7 @@ func diskUsage(clicontext *cli.Context) error {
 
 	if format := clicontext.String("format"); format != "" {
 		if clicontext.Bool("verbose") {
-			logrus.Debug("Ignoring --verbose")
+			bklog.L.Debug("Ignoring --verbose")
 		}
 		tmpl, err := bccommon.ParseTemplate(format)
 		if err != nil {

@@ -6,7 +6,7 @@ import (
 	"os/signal"
 	"sync"
 
-	"github.com/sirupsen/logrus"
+	"github.com/moby/buildkit/util/bklog"
 )
 
 var appContextCache context.Context
@@ -36,7 +36,7 @@ func Context() context.Context {
 				cancel()
 				retries++
 				if retries >= exitLimit {
-					logrus.Errorf("got %d SIGTERM/SIGINTs, forcing shutdown", retries)
+					bklog.G(ctx).Errorf("got %d SIGTERM/SIGINTs, forcing shutdown", retries)
 					os.Exit(1)
 				}
 			}

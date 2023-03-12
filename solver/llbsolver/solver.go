@@ -27,6 +27,7 @@ import (
 	"github.com/moby/buildkit/solver/result"
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/attestation"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/grpcerrors"
@@ -35,7 +36,6 @@ import (
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
@@ -331,7 +331,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 		}()
 
 		if err != nil {
-			st, ok := grpcerrors.AsGRPCStatus(grpcerrors.ToGRPC(err))
+			st, ok := grpcerrors.AsGRPCStatus(grpcerrors.ToGRPC(ctx, err))
 			if !ok {
 				st = status.New(codes.Unknown, err.Error())
 			}
@@ -347,7 +347,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 		}
 
 		if stopTrace == nil {
-			logrus.Warn("no trace recorder found, skipping")
+			bklog.G(ctx).Warn("no trace recorder found, skipping")
 			return err
 		}
 		go func() {
@@ -389,7 +389,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 				}
 				return nil
 			}(); err != nil {
-				logrus.Errorf("failed to save trace for %s: %+v", id, err)
+				bklog.G(ctx).Errorf("failed to save trace for %s: %+v", id, err)
 			}
 		}()
 
@@ -872,6 +872,7 @@ func defaultResolver(wc *worker.Controller) ResolveWorkerFunc {
 		return wc.GetDefault()
 	}
 }
+
 func allWorkers(wc *worker.Controller) func(func(w worker.Worker) error) error {
 	return func(f func(worker.Worker) error) error {
 		all, err := wc.List()

@@ -13,12 +13,12 @@ import (
 	v1 "github.com/moby/buildkit/cache/remotecache/v1"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -92,7 +92,7 @@ func (ci *importer) loadManifest(ctx context.Context, name string) (*v1.CacheCha
 		return nil, err
 	}
 
-	logrus.Debugf("name %s cache with key %s exists = %v", name, key, exists)
+	bklog.G(ctx).Debugf("name %s cache with key %s exists = %v", name, key, exists)
 
 	if !exists {
 		return v1.NewCacheChains(), nil
@@ -113,7 +113,7 @@ func (ci *importer) loadManifest(ctx context.Context, name string) (*v1.CacheCha
 		return nil, errors.WithStack(err)
 	}
 
-	logrus.Debugf("imported config: %s", string(bytes))
+	bklog.G(ctx).Debugf("imported config: %s", string(bytes))
 
 	var config v1.CacheConfig
 	if err := json.Unmarshal(bytes, &config); err != nil {
@@ -188,7 +188,7 @@ func (f *fetcher) Fetch(ctx context.Context, desc ocispecs.Descriptor) (io.ReadC
 		return nil, errors.Errorf("blob %s not found", desc.Digest)
 	}
 
-	logrus.Debugf("reading layer from cache: %s", key)
+	bklog.G(ctx).Debugf("reading layer from cache: %s", key)
 
 	blobClient, err := f.containerClient.NewBlockBlobClient(key)
 	if err != nil {

@@ -12,12 +12,12 @@ import (
 	v1 "github.com/moby/buildkit/cache/remotecache/v1"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -162,7 +162,7 @@ func (ci *contentCacheImporter) importInlineCache(ctx context.Context, dt []byte
 				}
 
 				if len(img.Rootfs.DiffIDs) != len(m.Layers) {
-					logrus.Warnf("invalid image with mismatching manifest and config")
+					bklog.G(ctx).Warnf("invalid image with mismatching manifest and config")
 					return nil
 				}
 

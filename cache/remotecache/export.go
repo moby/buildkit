@@ -104,7 +104,7 @@ func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string
 		mfst.Manifests = append(mfst.Manifests, dgstPair.Descriptor)
 	}
 
-	mfst.Manifests = compression.ConvertAllLayerMediaTypes(ce.oci, mfst.Manifests...)
+	mfst.Manifests = compression.ConvertAllLayerMediaTypes(ctx, ce.oci, mfst.Manifests...)
 
 	dt, err := json.Marshal(config)
 	if err != nil {

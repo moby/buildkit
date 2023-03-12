@@ -100,7 +100,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 			}
 		}
 		if len(a.Index)+len(a.IndexDescriptor)+len(a.ManifestDescriptor) > 0 {
-			opts.EnableOCITypes("annotations")
+			opts.EnableOCITypes(ctx, "annotations")
 		}
 	}
 
@@ -148,7 +148,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 	}
 
 	if len(inp.Attestations) > 0 {
-		opts.EnableOCITypes("attestations")
+		opts.EnableOCITypes(ctx, "attestations")
 	}
 
 	refs := make([]cache.ImmutableRef, 0, len(inp.Refs))
@@ -722,7 +722,7 @@ func normalizeLayersAndHistory(ctx context.Context, remote *solver.Remote, histo
 	}
 
 	// convert between oci and docker media types (or vice versa) if needed
-	remote.Descriptors = compression.ConvertAllLayerMediaTypes(oci, remote.Descriptors...)
+	remote.Descriptors = compression.ConvertAllLayerMediaTypes(ctx, oci, remote.Descriptors...)
 
 	return remote, history
 }

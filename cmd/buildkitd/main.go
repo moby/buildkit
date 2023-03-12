@@ -347,13 +347,13 @@ func serveGRPC(cfg config.GRPCConfig, server *grpc.Server, errCh chan error) err
 
 	if os.Getenv("NOTIFY_SOCKET") != "" {
 		notified, notifyErr := sddaemon.SdNotify(false, sddaemon.SdNotifyReady)
-		logrus.Debugf("SdNotifyReady notified=%v, err=%v", notified, notifyErr)
+		bklog.L.Debugf("SdNotifyReady notified=%v, err=%v", notified, notifyErr)
 	}
 	for _, l := range listeners {
 		func(l net.Listener) {
 			eg.Go(func() error {
 				defer l.Close()
-				logrus.Infof("running server on %s", l.Addr())
+				bklog.L.Infof("running server on %s", l.Addr())
 				return server.Serve(l)
 			})
 		}(l)
@@ -378,7 +378,7 @@ func defaultConf() (config.Config, error) {
 		if !errors.As(err, &pe) {
 			return config.Config{}, err
 		}
-		logrus.Warnf("failed to load default config: %v", err)
+		bklog.L.Warnf("failed to load default config: %v", err)
 	}
 	setDefaultConfig(&cfg)
 
@@ -530,7 +530,7 @@ func getListener(addr string, uid, gid int, tlsConfig *tls.Config) (net.Listener
 	switch proto {
 	case "unix", "npipe":
 		if tlsConfig != nil {
-			logrus.Warnf("TLS is disabled for %s", addr)
+			bklog.L.Warnf("TLS is disabled for %s", addr)
 		}
 		return sys.GetLocalListener(listenAddr, uid, gid)
 	case "fd":
@@ -542,7 +542,7 @@ func getListener(addr string, uid, gid int, tlsConfig *tls.Config) (net.Listener
 		}
 
 		if tlsConfig == nil {
-			logrus.Warnf("TLS is not enabled for %s. enabling mutual TLS authentication is highly recommended", addr)
+			bklog.L.Warnf("TLS is not enabled for %s. enabling mutual TLS authentication is highly recommended", addr)
 			return l, nil
 		}
 		return tls.NewListener(l, tlsConfig), nil
@@ -572,7 +572,7 @@ func unaryInterceptor(globalCtx context.Context, tp trace.TracerProvider) grpc.U
 
 		resp, err = withTrace(ctx, req, info, handler)
 		if err != nil {
-			logrus.Errorf("%s returned error: %v", info.FullMethod, err)
+			bklog.G(ctx).Errorf("%s returned error: %v", info.FullMethod, err)
 			if logrus.GetLevel() >= logrus.DebugLevel {
 				fmt.Fprintf(os.Stderr, "%+v", stack.Formatter(grpcerrors.FromGRPC(err)))
 			}
@@ -711,7 +711,7 @@ func newWorkerController(c *cli.Context, wiOpt workerInitializerOpt) (*worker.Co
 		}
 		for _, w := range ws {
 			p := w.Platforms(false)
-			logrus.Infof("found worker %q, labels=%v, platforms=%v", w.ID(), w.Labels(), formatPlatforms(p))
+			bklog.L.Infof("found worker %q, labels=%v, platforms=%v", w.ID(), w.Labels(), formatPlatforms(p))
 			archutil.WarnIfUnsupported(p)
 			if err = wc.Add(w); err != nil {
 				return nil, err
@@ -726,8 +726,8 @@ func newWorkerController(c *cli.Context, wiOpt workerInitializerOpt) (*worker.Co
 	if err != nil {
 		return nil, err
 	}
-	logrus.Infof("found %d workers, default=%q", nWorkers, defaultWorker.ID())
-	logrus.Warn("currently, only the default worker can be used.")
+	bklog.L.Infof("found %d workers, default=%q", nWorkers, defaultWorker.ID())
+	bklog.L.Warn("currently, only the default worker can be used.")
 	return wc, nil
 }
 

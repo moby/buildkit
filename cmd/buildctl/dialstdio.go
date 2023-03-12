@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
 
@@ -74,10 +74,10 @@ func dialer(address string, timeout time.Duration) (net.Conn, error) {
 func copier(to halfWriteCloser, from halfReadCloser, debugDescription string) error {
 	defer func() {
 		if err := from.CloseRead(); err != nil {
-			logrus.Errorf("error while CloseRead (%s): %v", debugDescription, err)
+			bklog.L.Errorf("error while CloseRead (%s): %v", debugDescription, err)
 		}
 		if err := to.CloseWrite(); err != nil {
-			logrus.Errorf("error while CloseWrite (%s): %v", debugDescription, err)
+			bklog.L.Errorf("error while CloseWrite (%s): %v", debugDescription, err)
 		}
 	}()
 	if _, err := io.Copy(to, from); err != nil {

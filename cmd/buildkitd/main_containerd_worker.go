@@ -13,13 +13,13 @@ import (
 	ctd "github.com/containerd/containerd"
 	"github.com/containerd/containerd/pkg/userns"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/network/cniprovider"
 	"github.com/moby/buildkit/util/network/netproviders"
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/containerd"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"golang.org/x/sync/semaphore"
 )
@@ -247,7 +247,7 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 	}
 
 	if cfg.Rootless {
-		logrus.Debugf("running in rootless mode")
+		bklog.L.Debugf("running in rootless mode")
 		if common.config.Workers.Containerd.NetworkConfig.Mode == "auto" {
 			common.config.Workers.Containerd.NetworkConfig.Mode = "host"
 		}
@@ -305,16 +305,16 @@ func validContainerdSocket(cfg config.ContainerdConfig) bool {
 	socketPath := strings.TrimPrefix(socket, "unix://")
 	if _, err := os.Stat(socketPath); errors.Is(err, os.ErrNotExist) {
 		// FIXME(AkihiroSuda): add more conditions
-		logrus.Warnf("skipping containerd worker, as %q does not exist", socketPath)
+		bklog.L.Warnf("skipping containerd worker, as %q does not exist", socketPath)
 		return false
 	}
 	c, err := ctd.New(socketPath, ctd.WithDefaultNamespace(cfg.Namespace))
 	if err != nil {
-		logrus.Warnf("skipping containerd worker, as failed to connect client to %q: %v", socketPath, err)
+		bklog.L.Warnf("skipping containerd worker, as failed to connect client to %q: %v", socketPath, err)
 		return false
 	}
 	if _, err := c.Server(context.Background()); err != nil {
-		logrus.Warnf("skipping containerd worker, as failed to call introspection API on %q: %v", socketPath, err)
+		bklog.L.Warnf("skipping containerd worker, as failed to call introspection API on %q: %v", socketPath, err)
 		return false
 	}
 	return true

@@ -22,10 +22,10 @@ import (
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
 	"github.com/moby/buildkit/solver/pb"
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/progress/progresswriter"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"golang.org/x/sync/errgroup"
 )
@@ -154,7 +154,7 @@ func buildAction(clicontext *cli.Context) error {
 		defer traceFile.Close()
 		traceEnc = json.NewEncoder(traceFile)
 
-		logrus.Infof("tracing logs to %s", traceFile.Name())
+		bklog.L.Infof("tracing logs to %s", traceFile.Name())
 	}
 
 	dockerConfig := config.LoadDefaultConfigFile(os.Stderr)
@@ -339,7 +339,7 @@ func buildAction(clicontext *cli.Context) error {
 			return err
 		}
 		for k, v := range resp.ExporterResponse {
-			logrus.Debugf("exporter response: %s=%s", k, v)
+			bklog.G(ctx).Debugf("exporter response: %s=%s", k, v)
 		}
 
 		metadataFile := clicontext.String("metadata-file")

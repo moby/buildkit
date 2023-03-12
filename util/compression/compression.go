@@ -9,11 +9,11 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/stargz-snapshotter/estargz"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/iohelper"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 type Compressor func(dest io.Writer, mediaType string) (io.WriteCloser, error)
@@ -211,7 +211,7 @@ var toOCILayerType = map[string]string{
 	mediaTypeDockerSchema2LayerZstd:                  mediaTypeImageLayerZstd,
 }
 
-func convertLayerMediaType(mediaType string, oci bool) string {
+func convertLayerMediaType(ctx context.Context, mediaType string, oci bool) string {
 	var converted string
 	if oci {
 		converted = toOCILayerType[mediaType]
@@ -219,16 +219,16 @@ func convertLayerMediaType(mediaType string, oci bool) string {
 		converted = toDockerLayerType[mediaType]
 	}
 	if converted == "" {
-		logrus.Warnf("unhandled conversion for mediatype %q", mediaType)
+		bklog.G(ctx).Warnf("unhandled conversion for mediatype %q", mediaType)
 		return mediaType
 	}
 	return converted
 }
 
-func ConvertAllLayerMediaTypes(oci bool, descs ...ocispecs.Descriptor) []ocispecs.Descriptor {
+func ConvertAllLayerMediaTypes(ctx context.Context, oci bool, descs ...ocispecs.Descriptor) []ocispecs.Descriptor {
 	var converted []ocispecs.Descriptor
 	for _, desc := range descs {
-		desc.MediaType = convertLayerMediaType(desc.MediaType, oci)
+		desc.MediaType = convertLayerMediaType(ctx, desc.MediaType, oci)
 		converted = append(converted, desc)
 	}
 	return converted
