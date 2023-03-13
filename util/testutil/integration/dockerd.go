@@ -25,6 +25,11 @@ func InitDockerdWorker() {
 		unsupported: []string{
 			FeatureCacheExport,
 			FeatureCacheImport,
+			FeatureCacheBackendAzblob,
+			FeatureCacheBackendGha,
+			FeatureCacheBackendLocal,
+			FeatureCacheBackendRegistry,
+			FeatureCacheBackendS3,
 			FeatureDirectPush,
 			FeatureImageExporter,
 			FeatureMultiCacheExport,

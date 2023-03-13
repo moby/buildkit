@@ -419,7 +419,7 @@ RUN [ "$(cat testfile)" == "contents0" ]
 }
 
 func testExportCacheLoop(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport)
+	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport, integration.FeatureCacheImport, integration.FeatureCacheBackendLocal)
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -3948,7 +3948,12 @@ ONBUILD RUN mkdir -p /out && echo -n 11 >> /out/foo
 }
 
 func testCacheMultiPlatformImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
+	integration.CheckFeatureCompat(t, sb,
+		integration.FeatureDirectPush,
+		integration.FeatureCacheExport,
+		integration.FeatureCacheBackendInline,
+		integration.FeatureCacheBackendRegistry,
+	)
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()
@@ -4071,7 +4076,7 @@ COPY --from=base arch /
 }
 
 func testCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport)
+	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport, integration.FeatureCacheBackendLocal)
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()
