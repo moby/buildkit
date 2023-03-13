@@ -68,6 +68,12 @@ target "release" {
   output = [bindir("release")]
 }
 
+target "integration-tests-base" {
+  inherits = ["_common"]
+  target = "integration-tests-base"
+  output = ["type=cacheonly"]
+}
+
 group "validate" {
   targets = ["lint", "validate-vendor", "validate-doctoc", "validate-generated-files", "validate-shfmt"]
 }

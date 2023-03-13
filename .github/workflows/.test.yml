@@ -90,11 +90,12 @@ jobs:
             });
       -
         name: Build
-        run: |
-          ./hack/build_ci_first_pass integration-tests
-        env:
-          CACHE_FROM: type=gha,scope=${{ inputs.cache_scope }}
-          CACHE_TO: type=gha,scope=${{ inputs.cache_scope }}
+        uses: docker/bake-action@v2
+        with:
+          targets: integration-tests-base
+          set: |
+            *.cache-from=type=gha,scope=${{ inputs.cache_scope }}
+            *.cache-to=type=gha,scope=${{ inputs.cache_scope }}
 
   run:
     runs-on: ubuntu-20.04
