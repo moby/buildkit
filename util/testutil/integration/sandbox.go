@@ -46,6 +46,20 @@ func (b backend) Snapshotter() string {
 }
 
 func (b backend) isUnsupportedFeature(feature string) bool {
+	if enabledFeatures := os.Getenv("BUILDKIT_TEST_ENABLE_FEATURES"); enabledFeatures != "" {
+		for _, enabledFeature := range strings.Split(enabledFeatures, ",") {
+			if feature == enabledFeature {
+				return false
+			}
+		}
+	}
+	if disabledFeatures := os.Getenv("BUILDKIT_TEST_DISABLE_FEATURES"); disabledFeatures != "" {
+		for _, disabledFeature := range strings.Split(disabledFeatures, ",") {
+			if feature == disabledFeature {
+				return true
+			}
+		}
+	}
 	for _, unsupportedFeature := range b.unsupportedFeatures {
 		if feature == unsupportedFeature {
 			return true
@@ -266,22 +280,22 @@ func printLogs(logs map[string]*bytes.Buffer, f func(args ...interface{})) {
 }
 
 const (
-	FeatureCacheExport      = "cache export"
-	FeatureCacheImport      = "cache import"
-	FeatureDirectPush       = "direct push"
-	FeatureFrontendOutline  = "frontend outline"
-	FeatureFrontendTargets  = "frontend targets"
-	FeatureImageExporter    = "image exporter"
+	FeatureCacheExport      = "cache_export"
+	FeatureCacheImport      = "cache_import"
+	FeatureDirectPush       = "direct_push"
+	FeatureFrontendOutline  = "frontend_outline"
+	FeatureFrontendTargets  = "frontend_targets"
+	FeatureImageExporter    = "image_exporter"
 	FeatureInfo             = "info"
-	FeatureMultiCacheExport = "multi cache export"
-	FeatureMultiPlatform    = "multi-platform"
-	FeatureOCIExporter      = "oci exporter"
-	FeatureOCILayout        = "oci layout"
+	FeatureMultiCacheExport = "multi_cache_export"
+	FeatureMultiPlatform    = "multi_platform"
+	FeatureOCIExporter      = "oci_exporter"
+	FeatureOCILayout        = "oci_layout"
 	FeatureProvenance       = "provenance"
 	FeatureSBOM             = "sbom"
-	FeatureSecurityMode     = "security mode"
-	FeatureSourceDateEpoch  = "source date epoch"
-	FeatureCNINetwork       = "cni network"
+	FeatureSecurityMode     = "security_mode"
+	FeatureSourceDateEpoch  = "source_date_epoch"
+	FeatureCNINetwork       = "cni_network"
 )
 
 var features = map[string]struct{}{
