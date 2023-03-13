@@ -51,7 +51,6 @@ import (
 	sourcepolicypb "github.com/moby/buildkit/sourcepolicy/pb"
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/attestation"
-	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/purl"
@@ -168,9 +167,6 @@ func TestIntegration(t *testing.T) {
 		testRmSymlink,
 		testMoveParentDir,
 		testBuildExportWithForeignLayer,
-		testBuildInfoExporter,
-		testBuildInfoInline,
-		testBuildInfoNoExport,
 		testZstdLocalCacheExport,
 		testCacheExportIgnoreError,
 		testZstdRegistryCacheImportExport,
@@ -6670,164 +6666,6 @@ func testRelativeMountpoint(t *testing.T, sb integration.Sandbox) {
 	dt, err := os.ReadFile(filepath.Join(destDir, "data"))
 	require.NoError(t, err)
 	require.Equal(t, dt, []byte(id))
-}
-
-// moby/buildkit#2476
-func testBuildInfoExporter(t *testing.T, sb integration.Sandbox) {
-	requiresLinux(t)
-	c, err := New(sb.Context(), sb.Address())
-	require.NoError(t, err)
-	defer c.Close()
-
-	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
-		st := llb.Image("busybox:latest").Run(
-			llb.Args([]string{"/bin/sh", "-c", `echo hello`}),
-		)
-		def, err := st.Marshal(sb.Context())
-		if err != nil {
-			return nil, err
-		}
-		return c.Solve(ctx, gateway.SolveRequest{
-			Definition: def.ToPB(),
-		})
-	}
-
-	var exports []ExportEntry
-	if integration.IsTestDockerdMoby(sb) {
-		exports = []ExportEntry{{
-			Type: "moby",
-			Attrs: map[string]string{
-				"name": "reg.dummy:5000/buildkit/test:latest",
-			},
-		}}
-	} else {
-		exports = []ExportEntry{{
-			Type:   ExporterOCI,
-			Attrs:  map[string]string{},
-			Output: fixedWriteCloser(nopWriteCloser{io.Discard}),
-		}}
-	}
-
-	res, err := c.Build(sb.Context(), SolveOpt{
-		Exports: exports,
-	}, "", frontend, nil)
-	require.NoError(t, err)
-
-	require.Contains(t, res.ExporterResponse, exptypes.ExporterBuildInfo)
-	decbi, err := base64.StdEncoding.DecodeString(res.ExporterResponse[exptypes.ExporterBuildInfo])
-	require.NoError(t, err)
-
-	var exbi binfotypes.BuildInfo
-	err = json.Unmarshal(decbi, &exbi)
-	require.NoError(t, err)
-
-	require.Equal(t, len(exbi.Sources), 1)
-	require.Equal(t, exbi.Sources[0].Type, binfotypes.SourceTypeDockerImage)
-	require.Equal(t, exbi.Sources[0].Ref, "docker.io/library/busybox:latest")
-}
-
-// moby/buildkit#2476
-func testBuildInfoInline(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
-	requiresLinux(t)
-	c, err := New(sb.Context(), sb.Address())
-	require.NoError(t, err)
-	defer c.Close()
-
-	st := llb.Image("busybox:latest").Run(
-		llb.Args([]string{"/bin/sh", "-c", `echo hello`}),
-	)
-	def, err := st.Marshal(sb.Context())
-	require.NoError(t, err)
-
-	registry, err := sb.NewRegistry()
-	if errors.Is(err, integration.ErrRequirements) {
-		t.Skip(err.Error())
-	}
-	require.NoError(t, err)
-
-	cdAddress := sb.ContainerdAddress()
-	if cdAddress == "" {
-		t.Skip("rest of test requires containerd worker")
-	}
-
-	client, err := newContainerd(cdAddress)
-	require.NoError(t, err)
-	defer client.Close()
-
-	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
-
-	target := registry + "/buildkit/test-buildinfo:latest"
-
-	_, err = c.Solve(sb.Context(), def, SolveOpt{
-		Exports: []ExportEntry{
-			{
-				Type: ExporterImage,
-				Attrs: map[string]string{
-					"name": target,
-					"push": "true",
-				},
-			},
-		},
-	}, nil)
-	require.NoError(t, err)
-
-	img, err := client.GetImage(ctx, target)
-	require.NoError(t, err)
-
-	desc, err := img.Config(ctx)
-	require.NoError(t, err)
-
-	dt, err := content.ReadBlob(ctx, img.ContentStore(), desc)
-	require.NoError(t, err)
-
-	var config binfotypes.ImageConfig
-	require.NoError(t, json.Unmarshal(dt, &config))
-
-	dec, err := base64.StdEncoding.DecodeString(config.BuildInfo)
-	require.NoError(t, err)
-
-	var bi binfotypes.BuildInfo
-	require.NoError(t, json.Unmarshal(dec, &bi))
-
-	require.Equal(t, len(bi.Sources), 1)
-	require.Equal(t, bi.Sources[0].Type, binfotypes.SourceTypeDockerImage)
-	require.Equal(t, bi.Sources[0].Ref, "docker.io/library/busybox:latest")
-}
-
-func testBuildInfoNoExport(t *testing.T, sb integration.Sandbox) {
-	requiresLinux(t)
-	c, err := New(sb.Context(), sb.Address())
-	require.NoError(t, err)
-	defer c.Close()
-
-	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
-		st := llb.Image("busybox:latest").Run(
-			llb.Args([]string{"/bin/sh", "-c", `echo hello`}),
-		)
-		def, err := st.Marshal(sb.Context())
-		if err != nil {
-			return nil, err
-		}
-		return c.Solve(ctx, gateway.SolveRequest{
-			Definition: def.ToPB(),
-		})
-	}
-
-	res, err := c.Build(sb.Context(), SolveOpt{}, "", frontend, nil)
-	require.NoError(t, err)
-
-	require.Contains(t, res.ExporterResponse, exptypes.ExporterBuildInfo)
-	decbi, err := base64.StdEncoding.DecodeString(res.ExporterResponse[exptypes.ExporterBuildInfo])
-	require.NoError(t, err)
-
-	var exbi binfotypes.BuildInfo
-	err = json.Unmarshal(decbi, &exbi)
-	require.NoError(t, err)
-
-	require.Equal(t, len(exbi.Sources), 1)
-	require.Equal(t, exbi.Sources[0].Type, binfotypes.SourceTypeDockerImage)
-	require.Equal(t, exbi.Sources[0].Ref, "docker.io/library/busybox:latest")
 }
 
 func testPullWithLayerLimit(t *testing.T, sb integration.Sandbox) {

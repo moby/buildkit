@@ -44,10 +44,10 @@ attestFlags="$(buildAttestFlags)"
 
 outputFlag="--output=type=image,push=false"
 if [ "$PUSH" = "push" ]; then
-  outputFlag="--output=type=image,buildinfo-attrs=true,push=true"
+  outputFlag="--output=type=image,push=true"
 fi
 if [ -n "$localmode" ]; then
-  outputFlag="--output=type=docker,buildinfo-attrs=true"
+  outputFlag="--output=type=docker"
   attestFlags=""
 fi
 

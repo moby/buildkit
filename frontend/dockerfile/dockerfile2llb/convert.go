@@ -30,7 +30,6 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
-	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/gitutil"
 	"github.com/moby/buildkit/util/suggest"
 	"github.com/moby/buildkit/util/system"
@@ -438,16 +437,6 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 								}
 							}
 						}
-						if !isScratch {
-							// if image not scratch set original image name as ref
-							// and actual reference as alias in binfotypes.Source
-							d.buildInfo.Sources = append(d.buildInfo.Sources, binfotypes.Source{
-								Type:  binfotypes.SourceTypeDockerImage,
-								Ref:   origName,
-								Alias: ref.String(),
-								Pin:   dgst.String(),
-							})
-						}
 						d.image = img
 					}
 					if isScratch {
@@ -791,7 +780,6 @@ type dispatchState struct {
 	cmdIndex       int
 	cmdTotal       int
 	prefixPlatform bool
-	buildInfo      binfotypes.BuildInfo
 	outline        outlineCapture
 	epoch          *time.Time
 	scanStage      bool

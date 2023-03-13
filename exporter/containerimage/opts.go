@@ -14,8 +14,6 @@ import (
 const (
 	keyImageName               = "name"
 	keyOCITypes                = "oci-mediatypes"
-	keyBuildInfo               = "buildinfo"
-	keyBuildInfoAttrs          = "buildinfo-attrs"
 	keyForceInlineAttestations = "attestation-inline"
 
 	// preferNondistLayersKey is an exporter option which can be used to mark a layer as non-distributable if the layer reference was
@@ -25,13 +23,11 @@ const (
 )
 
 type ImageCommitOpts struct {
-	ImageName      string
-	RefCfg         cacheconfig.RefConfig
-	OCITypes       bool
-	BuildInfo      bool
-	BuildInfoAttrs bool
-	Annotations    AnnotationsGroup
-	Epoch          *time.Time
+	ImageName   string
+	RefCfg      cacheconfig.RefConfig
+	OCITypes    bool
+	Annotations AnnotationsGroup
+	Epoch       *time.Time
 
 	ForceInlineAttestations bool // force inline attestations to be attached
 }
@@ -61,10 +57,6 @@ func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error)
 			c.ImageName = v
 		case keyOCITypes:
 			err = parseBoolWithDefault(&c.OCITypes, k, v, true)
-		case keyBuildInfo:
-			err = parseBoolWithDefault(&c.BuildInfo, k, v, true)
-		case keyBuildInfoAttrs:
-			err = parseBoolWithDefault(&c.BuildInfoAttrs, k, v, false)
 		case keyForceInlineAttestations:
 			err = parseBool(&c.ForceInlineAttestations, k, v)
 		case keyPreferNondistLayers:
