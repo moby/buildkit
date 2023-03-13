@@ -360,6 +360,10 @@ func newS3Client(ctx context.Context, config Config) (*s3Client, error) {
 	client := s3.NewFromConfig(cfg, func(options *s3.Options) {
 		if config.AccessKeyID != "" && config.SecretAccessKey != "" {
 			options.Credentials = credentials.NewStaticCredentialsProvider(config.AccessKeyID, config.SecretAccessKey, config.SessionToken)
+		} else {
+			// Setting `nil` for anonymous credentials as per
+			// https://pkg.go.dev/github.com/aws/aws-sdk-go-v2@v1.17.6/aws#AnonymousCredentials
+			options.Credentials = nil
 		}
 		if config.EndpointURL != "" {
 			options.UsePathStyle = config.UsePathStyle
