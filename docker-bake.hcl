@@ -10,6 +10,19 @@ variable "NODE_VERSION" {
   default = null
 }
 
+variable "BUILDKITD_TAGS" {
+  default = null
+}
+
+# Defines the output folder
+variable "DESTDIR" {
+  default = ""
+}
+function "bindir" {
+  params = [defaultdir]
+  result = DESTDIR != "" ? DESTDIR : "./bin/${defaultdir}"
+}
+
 target "_common" {
   args = {
     ALPINE_VERSION = ALPINE_VERSION
@@ -17,6 +30,42 @@ target "_common" {
     NODE_VERSION = NODE_VERSION
     BUILDKIT_CONTEXT_KEEP_GIT_DIR = 1
   }
+}
+
+group "default" {
+  targets = ["binaries"]
+}
+
+target "binaries" {
+  inherits = ["_common"]
+  target = "binaries"
+  args = {
+    BUILDKITD_TAGS = BUILDKITD_TAGS
+  }
+  output = [bindir("build")]
+}
+
+target "binaries-cross" {
+  inherits = ["binaries"]
+  output = [bindir("cross")]
+  platforms = [
+    "darwin/amd64",
+    "darwin/arm64",
+    "linux/amd64",
+    "linux/arm/v7",
+    "linux/arm64",
+    "linux/s390x",
+    "linux/ppc64le",
+    "linux/riscv64",
+    "windows/amd64",
+    "windows/arm64"
+  ]
+}
+
+target "release" {
+  inherits = ["binaries-cross"]
+  target = "release"
+  output = [bindir("release")]
 }
 
 group "validate" {

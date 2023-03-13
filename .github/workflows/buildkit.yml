@@ -26,6 +26,7 @@ env:
   SETUP_BUILDKIT_IMAGE: "moby/buildkit:latest"
   IMAGE_NAME: "moby/buildkit"
   PLATFORMS: "linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le,linux/riscv64"
+  DESTDIR: "./bin"
 
 jobs:
   test:
@@ -60,6 +61,9 @@ jobs:
       platforms: ${{ steps.prep.outputs.platforms }}
     steps:
       -
+        name: Checkout
+        uses: actions/checkout@v3
+      -
         name: Prepare
         id: prep
         run: |
@@ -79,10 +83,10 @@ jobs:
           fi
           echo "tag=${TAG}" >>${GITHUB_OUTPUT}
           echo "push=${PUSH}" >>${GITHUB_OUTPUT}
-          platforms=$(jq -c -n --argjson str '"${{ env.PLATFORMS }},darwin/amd64,darwin/arm64,windows/amd64,windows/arm64"' '$str|split(",")')
+          platforms=$(docker buildx bake release --print | jq -cr '.target."release".platforms')
           echo "platforms=$platforms" >>${GITHUB_OUTPUT}
 
-  cross:
+  binaries:
     runs-on: ubuntu-20.04
     needs:
       - prepare
@@ -99,6 +103,8 @@ jobs:
       -
         name: Checkout
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
       -
         name: Expose GitHub Runtime
         uses: crazy-max/ghaction-github-runtime@v2
@@ -115,18 +121,18 @@ jobs:
       -
         name: Build
         run: |
-          ./hack/release-tar "${{ needs.prepare.outputs.tag }}" release-out
+          make release
         env:
           RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
           PLATFORMS: ${{ matrix.platform }}
-          CACHE_FROM: type=gha,scope=cross-${{ env.PLATFORM_PAIR }}
-          CACHE_TO: type=gha,scope=cross-${{ env.PLATFORM_PAIR }}
+          CACHE_FROM: type=gha,scope=binaries-${{ env.PLATFORM_PAIR }}
+          CACHE_TO: type=gha,scope=binaries-${{ env.PLATFORM_PAIR }}
       -
         name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
           name: buildkit
-          path: ./release-out/*
+          path: ${{ env.DESTDIR }}/*
           if-no-files-found: error
 
   image:
@@ -179,7 +185,7 @@ jobs:
     needs:
       - prepare
       - test
-      - cross
+      - binaries
       - image
     steps:
       -
@@ -187,11 +193,11 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: buildkit
-          path: ./release-out/*
+          path: ${{ env.DESTDIR }}
       -
         name: List artifacts
         run: |
-          tree -nh ./release-out/
+          tree -nh ${{ env.DESTDIR }}
       -
         name: GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -200,5 +206,5 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           draft: true
-          files: ./release-out/*
+          files: ${{ env.DESTDIR }}/*
           name: ${{ needs.prepare.outputs.tag }}
