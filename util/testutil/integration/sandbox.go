@@ -297,6 +297,7 @@ const (
 	FeatureFrontendTargets      = "frontend_targets"
 	FeatureImageExporter        = "image_exporter"
 	FeatureInfo                 = "info"
+	FeatureMergeDiff            = "merge_diff"
 	FeatureMultiCacheExport     = "multi_cache_export"
 	FeatureMultiPlatform        = "multi_platform"
 	FeatureOCIExporter          = "oci_exporter"
@@ -322,6 +323,7 @@ var features = map[string]struct{}{
 	FeatureFrontendTargets:      {},
 	FeatureImageExporter:        {},
 	FeatureInfo:                 {},
+	FeatureMergeDiff:            {},
 	FeatureMultiCacheExport:     {},
 	FeatureMultiPlatform:        {},
 	FeatureOCIExporter:          {},
