@@ -276,7 +276,7 @@ func (c *Controller) UpdateBuildHistory(ctx context.Context, req *controlapi.Upd
 	return &controlapi.UpdateBuildHistoryResponse{}, err
 }
 
-func translateLegacySolveRequest(req *controlapi.SolveRequest) error {
+func translateLegacySolveRequest(req *controlapi.SolveRequest) {
 	// translates ExportRef and ExportAttrs to new Exports (v0.4.0)
 	if legacyExportRef := req.Cache.ExportRefDeprecated; legacyExportRef != "" {
 		ex := &controlapi.CacheOptionsEntry{
@@ -302,18 +302,13 @@ func translateLegacySolveRequest(req *controlapi.SolveRequest) error {
 		req.Cache.Imports = append(req.Cache.Imports, im)
 	}
 	req.Cache.ImportRefsDeprecated = nil
-	return nil
 }
 
 func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*controlapi.SolveResponse, error) {
 	atomic.AddInt64(&c.buildCount, 1)
 	defer atomic.AddInt64(&c.buildCount, -1)
 
-	// This method registers job ID in solver.Solve. Make sure there are no blocking calls before that might delay this.
-
-	if err := translateLegacySolveRequest(req); err != nil {
-		return nil, err
-	}
+	translateLegacySolveRequest(req)
 
 	defer func() {
 		time.AfterFunc(time.Second, c.throttledGC)
