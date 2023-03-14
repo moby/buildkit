@@ -341,7 +341,10 @@ func (ah *authHandler) fetchToken(ctx context.Context, sm *session.Manager, g se
 			}
 		} else if errors.Is(err, context.Canceled) {
 			// earthly-specific prevent context canceled errors from being permanent
-			r.expires = time.Now()
+			r = &authResult{
+				token:   "this-is-a-fake-token",
+				expires: time.Now(),
+			}
 		}
 	}()
 
