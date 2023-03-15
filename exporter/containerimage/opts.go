@@ -1,14 +1,15 @@
 package containerimage
 
 import (
+	"context"
 	"strconv"
 	"time"
 
 	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/exporter/util/epoch"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -32,7 +33,7 @@ type ImageCommitOpts struct {
 	ForceInlineAttestations bool // force inline attestations to be attached
 }
 
-func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error) {
+func (c *ImageCommitOpts) Load(ctx context.Context, opt map[string]string) (map[string]string, error) {
 	rest := make(map[string]string)
 
 	as, optb, err := ParseAnnotations(toBytesMap(opt))
@@ -71,11 +72,11 @@ func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error)
 	}
 
 	if c.RefCfg.Compression.Type.OnlySupportOCITypes() {
-		c.EnableOCITypes(c.RefCfg.Compression.Type.String())
+		c.EnableOCITypes(ctx, c.RefCfg.Compression.Type.String())
 	}
 
 	if c.RefCfg.Compression.Type.NeedsForceCompression() {
-		c.EnableForceCompression(c.RefCfg.Compression.Type.String())
+		c.EnableForceCompression(ctx, c.RefCfg.Compression.Type.String())
 	}
 
 	c.Annotations = c.Annotations.Merge(as)
@@ -83,25 +84,25 @@ func (c *ImageCommitOpts) Load(opt map[string]string) (map[string]string, error)
 	return rest, nil
 }
 
-func (c *ImageCommitOpts) EnableOCITypes(reason string) {
+func (c *ImageCommitOpts) EnableOCITypes(ctx context.Context, reason string) {
 	if !c.OCITypes {
 		message := "forcibly turning on oci-mediatype mode"
 		if reason != "" {
 			message += " for " + reason
 		}
-		logrus.Warn(message)
+		bklog.G(ctx).Warn(message)
 
 		c.OCITypes = true
 	}
 }
 
-func (c *ImageCommitOpts) EnableForceCompression(reason string) {
+func (c *ImageCommitOpts) EnableForceCompression(ctx context.Context, reason string) {
 	if !c.RefCfg.Compression.Force {
 		message := "forcibly turning on force-compression mode"
 		if reason != "" {
 			message += " for " + reason
 		}
-		logrus.Warn(message)
+		bklog.G(ctx).Warn(message)
 
 		c.RefCfg.Compression.Force = true
 	}

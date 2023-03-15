@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 func parseImportCacheCSV(s string) (client.CacheOptionsEntry, error) {
@@ -48,7 +48,7 @@ func ParseImportCache(importCaches []string) ([]client.CacheOptionsEntry, error)
 		legacy := !strings.Contains(importCache, "type=")
 		if legacy {
 			// Deprecated since BuildKit v0.4.0, but no plan to remove: https://github.com/moby/buildkit/pull/2783#issuecomment-1093449772
-			logrus.Warn("--import-cache <ref> is deprecated. Please use --import-cache type=registry,ref=<ref>,<opt>=<optval>[,<opt>=<optval>] instead.")
+			bklog.L.Warn("--import-cache <ref> is deprecated. Please use --import-cache type=registry,ref=<ref>,<opt>=<optval>[,<opt>=<optval>] instead.")
 			imports = append(imports, client.CacheOptionsEntry{
 				Type:  "registry",
 				Attrs: map[string]string{"ref": importCache},

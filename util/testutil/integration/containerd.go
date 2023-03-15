@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 func InitContainerdWorker() {
@@ -45,7 +45,7 @@ func InitContainerdWorker() {
 	if s := os.Getenv("BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR"); s != "" {
 		var uid, gid int
 		if _, err := fmt.Sscanf(s, "%d:%d", &uid, &gid); err != nil {
-			logrus.Fatalf("unexpected BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR: %q", s)
+			bklog.L.Fatalf("unexpected BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR: %q", s)
 		}
 		if rootlessSupported(uid) {
 			Register(&containerd{

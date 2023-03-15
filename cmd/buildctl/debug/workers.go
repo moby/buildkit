@@ -11,8 +11,8 @@ import (
 	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/client"
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
+	"github.com/moby/buildkit/util/bklog"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/sirupsen/logrus"
 	"github.com/tonistiigi/units"
 	"github.com/urfave/cli"
 )
@@ -49,7 +49,7 @@ func listWorkers(clicontext *cli.Context) error {
 	}
 	if format := clicontext.String("format"); format != "" {
 		if clicontext.Bool("verbose") {
-			logrus.Debug("Ignoring --verbose")
+			bklog.L.Debug("Ignoring --verbose")
 		}
 		tmpl, err := bccommon.ParseTemplate(format)
 		if err != nil {

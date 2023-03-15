@@ -1324,7 +1324,7 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 					var statusError *rpc.Status
 					if err != nil {
 						statusCode = pb.UnknownExitStatus
-						st, _ := status.FromError(grpcerrors.ToGRPC(err))
+						st, _ := status.FromError(grpcerrors.ToGRPC(ctx, err))
 						stp := st.Proto()
 						statusError = &rpc.Status{
 							Code:    stp.Code,

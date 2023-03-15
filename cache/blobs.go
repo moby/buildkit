@@ -11,6 +11,7 @@ import (
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/mount"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/winlayers"
@@ -18,7 +19,6 @@ import (
 	imagespecidentity "github.com/opencontainers/image-spec/identity"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -180,7 +180,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 							}
 						}
 						if logWarnOnErr {
-							logrus.Warnf("failed to compute blob by overlay differ (ok=%v): %v", ok, err)
+							bklog.G(ctx).Warnf("failed to compute blob by overlay differ (ok=%v): %v", ok, err)
 						}
 					}
 					if ok {
@@ -198,7 +198,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 						diff.WithCompressor(compressorFunc),
 					)
 					if err != nil {
-						logrus.WithError(err).Warnf("failed to compute blob by buildkit differ")
+						bklog.G(ctx).WithError(err).Warnf("failed to compute blob by buildkit differ")
 					}
 				}
 

@@ -1,6 +1,7 @@
 package metadata
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
@@ -140,14 +141,15 @@ func TestIndexes(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	sis, err := s.Search("tag:baz")
+	ctx := context.Background()
+	sis, err := s.Search(ctx, "tag:baz")
 	require.NoError(t, err)
 	require.Equal(t, 2, len(sis))
 
 	require.Equal(t, sis[0].ID(), "foo1")
 	require.Equal(t, sis[1].ID(), "foo3")
 
-	sis, err = s.Search("tag:bax")
+	sis, err = s.Search(ctx, "tag:bax")
 	require.NoError(t, err)
 	require.Equal(t, 1, len(sis))
 
@@ -156,7 +158,7 @@ func TestIndexes(t *testing.T) {
 	err = s.Clear("foo1")
 	require.NoError(t, err)
 
-	sis, err = s.Search("tag:baz")
+	sis, err = s.Search(ctx, "tag:baz")
 	require.NoError(t, err)
 	require.Equal(t, 1, len(sis))
 

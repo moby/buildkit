@@ -16,6 +16,7 @@ import (
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/attestation"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/progress"
@@ -27,7 +28,6 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 type pusher struct {
@@ -254,7 +254,7 @@ func childrenHandler(provider content.Provider) images.HandlerFunc {
 			// childless data types.
 			return nil, nil
 		default:
-			logrus.Warnf("encountered unknown type %v; children may not be fetched", desc.MediaType)
+			bklog.G(ctx).Warnf("encountered unknown type %v; children may not be fetched", desc.MediaType)
 		}
 
 		return descs, nil
@@ -289,7 +289,7 @@ func updateDistributionSourceHandler(manager content.Manager, pushF images.Handl
 		// update distribution source to layer
 		if islayer {
 			if _, err := updateF(ctx, desc); err != nil {
-				logrus.Warnf("failed to update distribution source for layer %v: %v", desc.Digest, err)
+				bklog.G(ctx).Warnf("failed to update distribution source for layer %v: %v", desc.Digest, err)
 			}
 		}
 		return children, nil
