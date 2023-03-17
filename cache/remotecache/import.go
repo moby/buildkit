@@ -3,9 +3,13 @@ package remotecache
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"sync"
 	"time"
+
+	"github.com/moby/buildkit/util/progress"
+	"github.com/opencontainers/image-spec/specs-go"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/images"
@@ -20,6 +24,27 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
+
+type ManifestType int
+
+const (
+	NotInferred ManifestType = iota
+	ManifestList
+	ImageManifest
+)
+
+func (data ManifestType) String() string {
+	switch data {
+	case NotInferred:
+		return "Not Inferred"
+	case ManifestList:
+		return "Manifest List"
+	case ImageManifest:
+		return "Image Manifest"
+	default:
+		return "Not Inferred"
+	}
+}
 
 // ResolveCacheImporterFunc returns importer and descriptor.
 type ResolveCacheImporterFunc func(ctx context.Context, g session.Group, attrs map[string]string) (Importer, ocispecs.Descriptor, error)
@@ -47,24 +72,52 @@ func (ci *contentCacheImporter) Resolve(ctx context.Context, desc ocispecs.Descr
 		return nil, err
 	}
 
-	var mfst ocispecs.Index
-	if err := json.Unmarshal(dt, &mfst); err != nil {
+	manifestType, err := inferManifestType(ctx, dt)
+	if err != nil {
 		return nil, err
 	}
 
-	allLayers := v1.DescriptorProvider{}
+	layerDone := progress.OneOff(ctx, fmt.Sprintf("inferred cache manifest type: %s", manifestType))
+	layerDone(nil)
 
+	allLayers := v1.DescriptorProvider{}
 	var configDesc ocispecs.Descriptor
 
-	for _, m := range mfst.Manifests {
-		if m.MediaType == v1.CacheConfigMediaTypeV0 {
-			configDesc = m
-			continue
+	if manifestType == ManifestList {
+		var mfst ocispecs.Index
+		if err := json.Unmarshal(dt, &mfst); err != nil {
+			return nil, err
 		}
-		allLayers[m.Digest] = v1.DescriptorProviderPair{
-			Descriptor: m,
-			Provider:   ci.provider,
+
+		for _, m := range mfst.Manifests {
+			if m.MediaType == v1.CacheConfigMediaTypeV0 {
+				configDesc = m
+				continue
+			}
+			allLayers[m.Digest] = v1.DescriptorProviderPair{
+				Descriptor: m,
+				Provider:   ci.provider,
+			}
 		}
+	} else if manifestType == ImageManifest {
+		var mfst ocispecs.Manifest
+		if err := json.Unmarshal(dt, &mfst); err != nil {
+			return nil, err
+		}
+
+		for _, m := range mfst.Layers {
+			if m.MediaType == v1.CacheConfigMediaTypeV0 {
+				configDesc = m
+				continue
+			}
+			allLayers[m.Digest] = v1.DescriptorProviderPair{
+				Descriptor: m,
+				Provider:   ci.provider,
+			}
+		}
+	} else {
+		err = errors.Wrapf(err, "Unsupported or uninferrable manifest type")
+		return nil, err
 	}
 
 	if dsls, ok := ci.provider.(DistributionSourceLabelSetter); ok {
@@ -95,6 +148,37 @@ func (ci *contentCacheImporter) Resolve(ctx context.Context, desc ocispecs.Descr
 		return nil, err
 	}
 	return solver.NewCacheManager(ctx, id, keysStorage, resultStorage), nil
+}
+
+// extends support for "new"-style image-manifest style remote cache manifests and determining downstream
+// handling based on inference of document structure (is this a new or old cache manifest type?)
+func inferManifestType(ctx context.Context, dt []byte) (ManifestType, error) {
+	// this is a loose schema superset of both OCI Index and Manifest in order to
+	// be able to poke at the structure of the imported cache manifest
+	type OpenManifest struct {
+		specs.Versioned
+
+		MediaType string                 `json:"mediaType,omitempty"`
+		Config    map[string]interface{} `json:"config,omitempty"`
+		// Manifests references platform specific manifests.
+		Manifests []map[string]interface{} `json:"manifests,omitempty"`
+		Layers    []map[string]interface{} `json:"layers,omitempty"`
+	}
+
+	var openManifest OpenManifest
+	if err := json.Unmarshal(dt, &openManifest); err != nil {
+		return NotInferred, err
+	}
+
+	if len(openManifest.Manifests) == 0 && len(openManifest.Layers) > 0 {
+		return ImageManifest, nil
+	}
+
+	if len(openManifest.Layers) == 0 && len(openManifest.Manifests) > 0 {
+		return ManifestList, nil
+	}
+
+	return NotInferred, nil
 }
 
 func readBlob(ctx context.Context, provider content.Provider, desc ocispecs.Descriptor) ([]byte, error) {

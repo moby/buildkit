@@ -36,6 +36,7 @@ func canonicalizeRef(rawRef string) (reference.Named, error) {
 
 const (
 	attrRef           = "ref"
+	attrImageManifest = "image-manifest"
 	attrOCIMediatypes = "oci-mediatypes"
 	attrInsecure      = "registry.insecure"
 )
@@ -67,6 +68,14 @@ func ResolveCacheExporterFunc(sm *session.Manager, hosts docker.RegistryHosts) r
 			}
 			ociMediatypes = b
 		}
+		imageManifest := false
+		if v, ok := attrs[attrImageManifest]; ok {
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to parse %s", attrImageManifest)
+			}
+			imageManifest = b
+		}
 		insecure := false
 		if v, ok := attrs[attrInsecure]; ok {
 			b, err := strconv.ParseBool(v)
@@ -82,7 +91,7 @@ func ResolveCacheExporterFunc(sm *session.Manager, hosts docker.RegistryHosts) r
 		if err != nil {
 			return nil, err
 		}
-		return &exporter{remotecache.NewExporter(contentutil.FromPusher(pusher), refString, ociMediatypes, compressionConfig)}, nil
+		return &exporter{remotecache.NewExporter(contentutil.FromPusher(pusher), refString, ociMediatypes, imageManifest, compressionConfig)}, nil
 	}
 }
 

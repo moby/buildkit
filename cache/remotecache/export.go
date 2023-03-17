@@ -43,18 +43,19 @@ const (
 	ExporterResponseManifestDesc = "cache.manifest"
 )
 
-type contentCacheExporter struct {
-	solver.CacheExporterTarget
-	chains   *v1.CacheChains
-	ingester content.Ingester
-	oci      bool
-	ref      string
-	comp     compression.Config
+func NewExporter(ingester content.Ingester, ref string, oci bool, imageManifest bool, compressionConfig compression.Config) Exporter {
+	cc := v1.NewCacheChains()
+	return &contentCacheExporter{CacheExporterTarget: cc, chains: cc, ingester: ingester, oci: oci, imageManifest: imageManifest, ref: ref, comp: compressionConfig}
 }
 
-func NewExporter(ingester content.Ingester, ref string, oci bool, compressionConfig compression.Config) Exporter {
-	cc := v1.NewCacheChains()
-	return &contentCacheExporter{CacheExporterTarget: cc, chains: cc, ingester: ingester, oci: oci, ref: ref, comp: compressionConfig}
+type contentCacheExporter struct {
+	solver.CacheExporterTarget
+	chains        *v1.CacheChains
+	ingester      content.Ingester
+	oci           bool
+	imageManifest bool
+	ref           string
+	comp          compression.Config
 }
 
 func (ce *contentCacheExporter) Name() string {
@@ -75,20 +76,23 @@ func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string
 	}
 
 	// own type because oci type can't be pushed and docker type doesn't have annotations
-	type manifestList struct {
+	type abstractManifest struct {
 		specs.Versioned
 
-		MediaType string `json:"mediaType,omitempty"`
-
+		MediaType string               `json:"mediaType,omitempty"`
+		Config    *ocispecs.Descriptor `json:"config,omitempty"`
 		// Manifests references platform specific manifests.
-		Manifests []ocispecs.Descriptor `json:"manifests"`
+		Manifests []ocispecs.Descriptor `json:"manifests,omitempty"`
+		Layers    []ocispecs.Descriptor `json:"layers,omitempty"`
 	}
 
-	var mfst manifestList
+	var mfst abstractManifest
 	mfst.SchemaVersion = 2
 	mfst.MediaType = images.MediaTypeDockerSchema2ManifestList
-	if ce.oci {
+	if ce.oci && !ce.imageManifest {
 		mfst.MediaType = ocispecs.MediaTypeImageIndex
+	} else if ce.imageManifest {
+		mfst.MediaType = ocispecs.MediaTypeImageManifest
 	}
 
 	for _, l := range config.Layers {
@@ -101,10 +105,16 @@ func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string
 			return nil, layerDone(errors.Wrap(err, "error writing layer blob"))
 		}
 		layerDone(nil)
-		mfst.Manifests = append(mfst.Manifests, dgstPair.Descriptor)
+		if ce.imageManifest {
+			mfst.Layers = append(mfst.Layers, dgstPair.Descriptor)
+		} else {
+			mfst.Manifests = append(mfst.Manifests, dgstPair.Descriptor)
+		}
 	}
 
-	mfst.Manifests = compression.ConvertAllLayerMediaTypes(ctx, ce.oci, mfst.Manifests...)
+	if !ce.imageManifest {
+		mfst.Manifests = compression.ConvertAllLayerMediaTypes(ctx, ce.oci, mfst.Manifests...)
+	}
 
 	dt, err := json.Marshal(config)
 	if err != nil {
@@ -122,7 +132,11 @@ func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string
 	}
 	configDone(nil)
 
-	mfst.Manifests = append(mfst.Manifests, desc)
+	if ce.imageManifest {
+		mfst.Config = &desc
+	} else {
+		mfst.Manifests = append(mfst.Manifests, desc)
+	}
 
 	dt, err = json.Marshal(mfst)
 	if err != nil {
@@ -135,7 +149,12 @@ func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string
 		Size:      int64(len(dt)),
 		MediaType: mfst.MediaType,
 	}
-	mfstDone := progress.OneOff(ctx, fmt.Sprintf("writing manifest %s", dgst))
+
+	mfstLog := fmt.Sprintf("writing cache manifest %s", dgst)
+	if ce.imageManifest {
+		mfstLog = fmt.Sprintf("writing cache image manifest %s", dgst)
+	}
+	mfstDone := progress.OneOff(ctx, mfstLog)
 	if err := content.WriteBlob(ctx, ce.ingester, dgst.String(), bytes.NewReader(dt), desc); err != nil {
 		return nil, mfstDone(errors.Wrap(err, "error writing manifest blob"))
 	}
@@ -145,5 +164,6 @@ func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string
 	}
 	res[ExporterResponseManifestDesc] = string(descJSON)
 	mfstDone(nil)
+
 	return res, nil
 }
