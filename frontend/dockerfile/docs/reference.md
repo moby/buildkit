@@ -1143,6 +1143,12 @@ The latter form is required for paths containing whitespace.
 > translating user and group names to IDs restricts this feature to only be viable
 > for Linux OS-based containers.
 
+> **Note**
+>
+> `--chmod` is supported since [Dockerfile 1.3](https://docs.docker.com/build/buildkit/dockerfile-frontend/).
+> Only octal notation is currently supported. Non-octal support is tracked in
+> [moby/buildkit#1951](https://github.com/moby/buildkit/issues/1951).
+
 The `ADD` instruction copies new files, directories or remote file URLs from `<src>`
 and adds them to the filesystem of the image at the path `<dest>`.
 
