@@ -14,6 +14,15 @@ spec:
       labels:
         app: buildkitd
     spec:
+      initContainers:
+      - name: qemu
+        image: 'tonistiigi/binfmt:latest'
+        args:
+          - '--install'
+          - all
+        imagePullPolicy: Always
+        securityContext:
+          privileged: true
       containers:
         - name: buildkitd
           image: moby/buildkit:master
