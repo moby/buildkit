@@ -39,6 +39,7 @@ import (
 	"github.com/moby/buildkit/frontend/gateway"
 	"github.com/moby/buildkit/frontend/gateway/forwarder"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/bboltcachestorage"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/appcontext"
@@ -687,7 +688,7 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 		Frontends:                 frontends,
 		ResolveCacheExporterFuncs: remoteCacheExporterFuncs,
 		ResolveCacheImporterFuncs: remoteCacheImporterFuncs,
-		CacheKeyStorage:           cacheStorage,
+		CacheManager:              solver.NewCacheManager(context.TODO(), "local", cacheStorage, worker.NewCacheResultStorage(wc)),
 		Entitlements:              cfg.Entitlements,
 		TraceCollector:            tc,
 		HistoryDB:                 historyDB,
