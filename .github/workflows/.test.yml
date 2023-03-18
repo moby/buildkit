@@ -166,6 +166,12 @@ jobs:
           directory: ./bin/testreports
           flags: ${{ matrix.codecov_flags }}
       -
+        name: Generate annotations
+        if: always()
+        uses: crazy-max/.github/.github/actions/gotest-annotations@5af0882e0496d2f7e98a53ae4048e3d86682496f
+        with:
+          directory: ./bin/testreports
+      -
         name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v3
