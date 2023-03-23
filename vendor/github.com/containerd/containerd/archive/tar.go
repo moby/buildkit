@@ -30,7 +30,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/containerd/containerd/archive/tarheader"
 	"github.com/containerd/containerd/log"
+	"github.com/containerd/containerd/pkg/userns"
 	"github.com/containerd/continuity/fs"
 )
 
@@ -119,6 +121,8 @@ const (
 	whiteoutOpaqueDir = whiteoutMetaPrefix + ".opq"
 
 	paxSchilyXattr = "SCHILY.xattr."
+
+	userXattrPrefix = "user."
 )
 
 // Apply applies a tar stream of an OCI style diff tar.
@@ -380,6 +384,10 @@ func createTarFile(ctx context.Context, path, extractDir string, hdr *tar.Header
 	// Lchown is not supported on Windows.
 	if runtime.GOOS != "windows" {
 		if err := os.Lchown(path, hdr.Uid, hdr.Gid); err != nil {
+			err = fmt.Errorf("failed to Lchown %q for UID %d, GID %d: %w", path, hdr.Uid, hdr.Gid, err)
+			if errors.Is(err, syscall.EINVAL) && userns.RunningInUserNS() {
+				err = fmt.Errorf("%w (Hint: try increasing the number of subordinate IDs in /etc/subuid and /etc/subgid)", err)
+			}
 			return err
 		}
 	}
@@ -388,11 +396,19 @@ func createTarFile(ctx context.Context, path, extractDir string, hdr *tar.Header
 		if strings.HasPrefix(key, paxSchilyXattr) {
 			key = key[len(paxSchilyXattr):]
 			if err := setxattr(path, key, value); err != nil {
+				if errors.Is(err, syscall.EPERM) && strings.HasPrefix(key, userXattrPrefix) {
+					// In the user.* namespace, only regular files and directories can have extended attributes.
+					// See https://man7.org/linux/man-pages/man7/xattr.7.html for details.
+					if fi, err := os.Lstat(path); err == nil && (!fi.Mode().IsRegular() && !fi.Mode().IsDir()) {
+						log.G(ctx).WithError(err).Warnf("ignored xattr %s in archive", key)
+						continue
+					}
+				}
 				if errors.Is(err, syscall.ENOTSUP) {
 					log.G(ctx).WithError(err).Warnf("ignored xattr %s in archive", key)
 					continue
 				}
-				return err
+				return fmt.Errorf("failed to setxattr %q for key %q: %w", path, key, err)
 			}
 		}
 	}
@@ -539,7 +555,8 @@ func (cw *ChangeWriter) HandleChange(k fs.ChangeKind, p string, f os.FileInfo, e
 			}
 		}
 
-		hdr, err := tar.FileInfoHeader(f, link)
+		// Use FileInfoHeaderNoLookups to avoid propagating user names and group names from the host
+		hdr, err := tarheader.FileInfoHeaderNoLookups(f, link)
 		if err != nil {
 			return err
 		}

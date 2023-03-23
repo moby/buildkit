@@ -19,13 +19,13 @@
 //
 // Grammar
 //
-// 	reference                       := name [ ":" tag ] [ "@" digest ]
+//	reference                       := name [ ":" tag ] [ "@" digest ]
 //	name                            := [domain '/'] path-component ['/' path-component]*
 //	domain                          := domain-component ['.' domain-component]* [':' port-number]
 //	domain-component                := /([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9])/
 //	port-number                     := /[0-9]+/
 //	path-component                  := alpha-numeric [separator alpha-numeric]*
-// 	alpha-numeric                   := /[a-z0-9]+/
+//	alpha-numeric                   := /[a-z0-9]+/
 //	separator                       := /[_.]|__|[-]*/
 //
 //	tag                             := /[\w][\w.-]{0,127}/
@@ -683,7 +683,7 @@ func splitDockerDomain(name string) (domain, remainder string) {
 }
 
 // familiarizeName returns a shortened version of the name familiar
-// to to the Docker UI. Familiar names have the default domain
+// to the Docker UI. Familiar names have the default domain
 // "docker.io" and "library/" repository prefix removed.
 // For example, "docker.io/library/redis" will have the familiar
 // name "redis" and "docker.io/dmcgowan/myapp" will be "dmcgowan/myapp".

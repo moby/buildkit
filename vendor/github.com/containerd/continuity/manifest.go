@@ -23,7 +23,8 @@ import (
 	"sort"
 
 	pb "github.com/containerd/continuity/proto"
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/encoding/prototext"
+	"google.golang.org/protobuf/proto"
 )
 
 // Manifest provides the contents of a manifest. Users of this struct should
@@ -68,7 +69,12 @@ func MarshalText(w io.Writer, m *Manifest) error {
 		bm.Resource = append(bm.Resource, toProto(resource))
 	}
 
-	return proto.MarshalText(w, &bm)
+	b, err := prototext.Marshal(&bm)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(b)
+	return err
 }
 
 // BuildManifest creates the manifest for the given context
