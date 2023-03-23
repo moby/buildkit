@@ -2,7 +2,6 @@ package llb
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,19 +10,19 @@ import (
 
 func TestRelativeWd(t *testing.T) {
 	st := Scratch().Dir("foo")
-	assert.Equal(t, getDirHelper(t, st), filepath.FromSlash("/foo"))
+	assert.Equal(t, getDirHelper(t, st), "/foo")
 
 	st = st.Dir("bar")
-	assert.Equal(t, getDirHelper(t, st), filepath.FromSlash("/foo/bar"))
+	assert.Equal(t, getDirHelper(t, st), "/foo/bar")
 
 	st = st.Dir("..")
-	assert.Equal(t, getDirHelper(t, st), filepath.FromSlash("/foo"))
+	assert.Equal(t, getDirHelper(t, st), "/foo")
 
 	st = st.Dir("/baz")
-	assert.Equal(t, getDirHelper(t, st), filepath.FromSlash("/baz"))
+	assert.Equal(t, getDirHelper(t, st), "/baz")
 
 	st = st.Dir("../../..")
-	assert.Equal(t, getDirHelper(t, st), filepath.FromSlash("/"))
+	assert.Equal(t, getDirHelper(t, st), "/")
 }
 
 func getDirHelper(t *testing.T, s State) string {

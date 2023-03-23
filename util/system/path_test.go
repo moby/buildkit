@@ -13,7 +13,7 @@ import (
 // TestCheckSystemDriveAndRemoveDriveLetter tests CheckSystemDriveAndRemoveDriveLetter
 func TestCheckSystemDriveAndRemoveDriveLetter(t *testing.T) {
 	// Fails if not C drive.
-	_, err := CheckSystemDriveAndRemoveDriveLetter(`d:\`)
+	_, err := CheckSystemDriveAndRemoveDriveLetter(`d:\`, "windows")
 	if err == nil || (err != nil && err.Error() != "The specified path is not on the system drive (C:)") {
 		t.Fatalf("Expected error for d:")
 	}
@@ -21,7 +21,7 @@ func TestCheckSystemDriveAndRemoveDriveLetter(t *testing.T) {
 	var path string
 
 	// Single character is unchanged
-	if path, err = CheckSystemDriveAndRemoveDriveLetter("z"); err != nil {
+	if path, err = CheckSystemDriveAndRemoveDriveLetter("z", "windows"); err != nil {
 		t.Fatalf("Single character should pass")
 	}
 	if path != "z" {
@@ -29,7 +29,7 @@ func TestCheckSystemDriveAndRemoveDriveLetter(t *testing.T) {
 	}
 
 	// Two characters without colon is unchanged
-	if path, err = CheckSystemDriveAndRemoveDriveLetter("AB"); err != nil {
+	if path, err = CheckSystemDriveAndRemoveDriveLetter("AB", "windows"); err != nil {
 		t.Fatalf("2 characters without colon should pass")
 	}
 	if path != "AB" {
@@ -37,39 +37,39 @@ func TestCheckSystemDriveAndRemoveDriveLetter(t *testing.T) {
 	}
 
 	// Abs path without drive letter
-	if path, err = CheckSystemDriveAndRemoveDriveLetter(`\l`); err != nil {
+	if path, err = CheckSystemDriveAndRemoveDriveLetter(`\l`, "windows"); err != nil {
 		t.Fatalf("abs path no drive letter should pass")
 	}
-	if path != `\l` {
+	if path != `/l` {
 		t.Fatalf("abs path without drive letter should be unchanged")
 	}
 
 	// Abs path without drive letter, linux style
-	if path, err = CheckSystemDriveAndRemoveDriveLetter(`/l`); err != nil {
+	if path, err = CheckSystemDriveAndRemoveDriveLetter(`/l`, "windows"); err != nil {
 		t.Fatalf("abs path no drive letter linux style should pass")
 	}
-	if path != `\l` {
+	if path != `/l` {
 		t.Fatalf("abs path without drive letter linux failed %s", path)
 	}
 
 	// Drive-colon should be stripped
-	if path, err = CheckSystemDriveAndRemoveDriveLetter(`c:\`); err != nil {
+	if path, err = CheckSystemDriveAndRemoveDriveLetter(`c:\`, "windows"); err != nil {
 		t.Fatalf("An absolute path should pass")
 	}
-	if path != `\` {
+	if path != `/` {
 		t.Fatalf(`An absolute path should have been shortened to \ %s`, path)
 	}
 
 	// Verify with a linux-style path
-	if path, err = CheckSystemDriveAndRemoveDriveLetter(`c:/`); err != nil {
+	if path, err = CheckSystemDriveAndRemoveDriveLetter(`c:/`, "windows"); err != nil {
 		t.Fatalf("An absolute path should pass")
 	}
-	if path != `\` {
+	if path != `/` {
 		t.Fatalf(`A linux style absolute path should have been shortened to \ %s`, path)
 	}
 
 	// Failure on c:
-	if path, err = CheckSystemDriveAndRemoveDriveLetter(`c:`); err == nil {
+	if path, err = CheckSystemDriveAndRemoveDriveLetter(`c:`, "windows"); err == nil {
 		t.Fatalf("c: should fail")
 	}
 	if err.Error() != `No relative path specified in "c:"` {
@@ -77,7 +77,7 @@ func TestCheckSystemDriveAndRemoveDriveLetter(t *testing.T) {
 	}
 
 	// Failure on d:
-	if path, err = CheckSystemDriveAndRemoveDriveLetter(`d:`); err == nil {
+	if path, err = CheckSystemDriveAndRemoveDriveLetter(`d:`, "windows"); err == nil {
 		t.Fatalf("c: should fail")
 	}
 	if err.Error() != `No relative path specified in "d:"` {
@@ -85,13 +85,13 @@ func TestCheckSystemDriveAndRemoveDriveLetter(t *testing.T) {
 	}
 
 	// UNC path should fail.
-	if _, err = CheckSystemDriveAndRemoveDriveLetter(`\\.\C$\test`); err == nil {
+	if _, err = CheckSystemDriveAndRemoveDriveLetter(`\\.\C$\test`, "windows"); err == nil {
 		t.Fatalf("UNC path should fail")
 	}
 }
 
 // TestNormalizeWorkdir tests NormalizeWorkdir
-func TestNormalizeWorkdir(t *testing.T) {
+func TestNormalizeWorkdirWindows(t *testing.T) {
 	testCases := []struct {
 		name           string
 		currentWorkdir string
@@ -222,7 +222,72 @@ func TestNormalizeWorkdir(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := NormalizeWorkdir(tc.currentWorkdir, tc.newWorkDir)
+			result, err := NormalizeWorkdir(tc.currentWorkdir, tc.newWorkDir, "windows")
+			if tc.err != "" {
+				require.EqualError(t, errors.Cause(err), tc.err)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, tc.desiredResult, result)
+		})
+	}
+}
+
+func TestNormalizeWorkdirUnix(t *testing.T) {
+	testCases := []struct {
+		name           string
+		currentWorkdir string
+		newWorkDir     string
+		desiredResult  string
+		err            string
+	}{
+		{
+			name:           "no current wd with relative wd",
+			currentWorkdir: "",
+			newWorkDir:     "test",
+			desiredResult:  `/test`,
+			err:            "",
+		},
+		{
+			name:           "no current wd with absolute wd",
+			currentWorkdir: "",
+			newWorkDir:     `/strippedWd`,
+			desiredResult:  `/strippedWd`,
+			err:            "",
+		},
+		{
+			name:           "current wd is relative no wd",
+			currentWorkdir: "testing",
+			newWorkDir:     "",
+			desiredResult:  `/testing`,
+			err:            "",
+		},
+		{
+			name:           "current wd is relative with relative wd",
+			currentWorkdir: "testing",
+			newWorkDir:     "newTesting",
+			desiredResult:  `/testing/newTesting`,
+			err:            "",
+		},
+		{
+			name:           "absolute current wd with relative new wd",
+			currentWorkdir: "/test",
+			newWorkDir:     "relative/path",
+			desiredResult:  `/test/relative/path`,
+			err:            "",
+		},
+		{
+			name:           "absolute current wd with no new wd",
+			currentWorkdir: "/test",
+			newWorkDir:     "",
+			desiredResult:  `/test`,
+			err:            "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := NormalizeWorkdir(tc.currentWorkdir, tc.newWorkDir, "linux")
 			if tc.err != "" {
 				require.EqualError(t, errors.Cause(err), tc.err)
 			} else {
@@ -283,7 +348,7 @@ func TestIsAbs(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := IsAbs(tc.path)
+			result := IsAbs(tc.path, "windows")
 			require.Equal(t, tc.desiredResult, result)
 		})
 	}

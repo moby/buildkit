@@ -78,7 +78,7 @@ func TestNormalizeWorkdir(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := NormalizeWorkdir(tc.currentWorkdir, tc.newWorkDir)
+			result, err := NormalizeWorkdir(tc.currentWorkdir, tc.newWorkDir, "linux")
 			if tc.err != "" {
 				require.EqualError(t, errors.Cause(err), tc.err)
 			} else {

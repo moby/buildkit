@@ -994,17 +994,16 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 }
 
 func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bool, opt *dispatchOpt) error {
-	withoutDriveLetter, err := system.CheckSystemDriveAndRemoveDriveLetter(c.Path)
-	if err != nil {
-		return errors.Wrap(err, "removing drive letter")
+	var platformOS string
+	if d != nil && d.platform != nil {
+		platformOS = d.platform.OS
 	}
-
-	d.state = d.state.Dir(withoutDriveLetter)
-	wd, err := system.NormalizeWorkdir(d.image.Config.WorkingDir, withoutDriveLetter)
+	wd, err := system.NormalizeWorkdir(d.image.Config.WorkingDir, c.Path, platformOS)
 	if err != nil {
 		return errors.Wrap(err, "normalizing workdir")
 	}
 
+	d.state = d.state.Dir(wd)
 	d.image.Config.WorkingDir = wd
 	if commit {
 		withLayer := false
@@ -1033,7 +1032,11 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bo
 }
 
 func dispatchCopy(d *dispatchState, cfg copyConfig) error {
-	pp, err := pathRelativeToWorkingDir(d.state, cfg.params.DestPath)
+	var platformOS string
+	if d.platform != nil {
+		platformOS = d.platform.OS
+	}
+	pp, err := pathRelativeToWorkingDir(d.state, cfg.params.DestPath, platformOS)
 	if err != nil {
 		return err
 	}
@@ -1142,7 +1145,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 				a = a.Copy(st, f, dest, opts...)
 			}
 		} else {
-			src, err = system.CheckSystemDriveAndRemoveDriveLetter(src)
+			src, err = system.CheckSystemDriveAndRemoveDriveLetter(src, platformOS)
 			if err != nil {
 				return errors.Wrap(err, "removing drive letter")
 			}
@@ -1169,7 +1172,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		commitMessage.WriteString(" <<" + src.Path)
 
 		data := src.Data
-		f, err := system.CheckSystemDriveAndRemoveDriveLetter(src.Path)
+		f, err := system.CheckSystemDriveAndRemoveDriveLetter(src.Path, platformOS)
 		if err != nil {
 			return errors.Wrap(err, "removing drive letter")
 		}
@@ -1183,7 +1186,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 			CreateDestPath: true,
 		}}, copyOpt...)
 
-		dest, err = system.CheckSystemDriveAndRemoveDriveLetter(dest)
+		dest, err = system.CheckSystemDriveAndRemoveDriveLetter(dest, platformOS)
 		if err != nil {
 			return errors.Wrap(err, "removing drive letter")
 		}
@@ -1414,7 +1417,7 @@ func dispatchArg(d *dispatchState, c *instructions.ArgCommand, metaArgs []instru
 	return commitToHistory(&d.image, "ARG "+strings.Join(commitStrs, " "), false, nil, d.epoch)
 }
 
-func pathRelativeToWorkingDir(s llb.State, p string) (string, error) {
+func pathRelativeToWorkingDir(s llb.State, p, platform string) (string, error) {
 	dir, err := s.GetDir(context.TODO())
 	if err != nil {
 		return "", err
@@ -1424,12 +1427,12 @@ func pathRelativeToWorkingDir(s llb.State, p string) (string, error) {
 		return dir, nil
 	}
 
-	p, err = system.CheckSystemDriveAndRemoveDriveLetter(p)
+	p, err = system.CheckSystemDriveAndRemoveDriveLetter(p, platform)
 	if err != nil {
 		return "", errors.Wrap(err, "remving drive letter")
 	}
 
-	if system.IsAbs(p) {
+	if system.IsAbs(p, platform) {
 		return p, nil
 	}
 	return filepath.Join(dir, p), nil

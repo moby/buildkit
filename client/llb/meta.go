@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"path/filepath"
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/google/shlex"
@@ -68,22 +67,21 @@ func dirf(value string, replace bool, v ...interface{}) StateOption {
 	}
 	return func(s State) State {
 		return s.withValue(keyDir, func(ctx context.Context, c *Constraints) (interface{}, error) {
-			if !system.IsAbs(value) {
+			var platform string
+			if c != nil && c.Platform != nil {
+				platform = c.Platform.OS
+			}
+			if !system.IsAbs(value, platform) {
 				prev, err := getDir(s)(ctx, c)
 				if err != nil {
-					return nil, err
+					return nil, errors.Wrap(err, "getting dir from state")
 				}
-
-				if prev == "" {
-					prev = "/"
+				value, err = system.NormalizePath(prev, value, platform, false)
+				if err != nil {
+					return nil, errors.Wrap(err, "normalizing path")
 				}
-				value = filepath.Join(prev, value)
 			}
-			cleaned, err := system.CheckSystemDriveAndRemoveDriveLetter(value)
-			if err != nil {
-				return nil, errors.Wrap(err, "removing drive letter")
-			}
-			return cleaned, nil
+			return value, nil
 		})
 	}
 }

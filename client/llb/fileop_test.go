@@ -2,7 +2,6 @@ package llb
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -40,7 +39,7 @@ func TestFileMkdir(t *testing.T) {
 
 	mkdir := action.Action.(*pb.FileAction_Mkdir).Mkdir
 
-	require.Equal(t, filepath.FromSlash("/foo"), mkdir.Path)
+	require.Equal(t, "/foo", mkdir.Path)
 	require.Equal(t, 0700, int(mkdir.Mode))
 	require.Equal(t, int64(-1), mkdir.Timestamp)
 }
@@ -72,7 +71,7 @@ func TestFileMkdirChain(t *testing.T) {
 	require.Equal(t, -1, int(action.SecondaryInput))
 	require.Equal(t, -1, int(action.Output))
 	mkdir := action.Action.(*pb.FileAction_Mkdir).Mkdir
-	require.Equal(t, filepath.FromSlash("/foo"), mkdir.Path)
+	require.Equal(t, "/foo", mkdir.Path)
 	require.Equal(t, 0700, int(mkdir.Mode))
 	require.Equal(t, false, mkdir.MakeParents)
 	require.Nil(t, mkdir.Owner)
@@ -82,7 +81,7 @@ func TestFileMkdirChain(t *testing.T) {
 	require.Equal(t, -1, int(action.SecondaryInput))
 	require.Equal(t, -1, int(action.Output))
 	mkdir = action.Action.(*pb.FileAction_Mkdir).Mkdir
-	require.Equal(t, filepath.FromSlash("/etc/bar"), mkdir.Path)
+	require.Equal(t, "/etc/bar", mkdir.Path)
 	require.Equal(t, 0600, int(mkdir.Mode))
 	require.Equal(t, true, mkdir.MakeParents)
 	require.Nil(t, mkdir.Owner)
@@ -92,7 +91,7 @@ func TestFileMkdirChain(t *testing.T) {
 	require.Equal(t, -1, int(action.SecondaryInput))
 	require.Equal(t, 0, int(action.Output))
 	mkdir = action.Action.(*pb.FileAction_Mkdir).Mkdir
-	require.Equal(t, filepath.FromSlash("/etc/bar/baz"), mkdir.Path)
+	require.Equal(t, "/etc/bar/baz", mkdir.Path)
 	require.Equal(t, 0701, int(mkdir.Mode))
 	require.Equal(t, false, mkdir.MakeParents)
 	require.Nil(t, mkdir.Owner)
@@ -127,7 +126,7 @@ func TestFileMkdirMkfile(t *testing.T) {
 
 	mkdir := action.Action.(*pb.FileAction_Mkdir).Mkdir
 
-	require.Equal(t, filepath.FromSlash("/foo"), mkdir.Path)
+	require.Equal(t, "/foo", mkdir.Path)
 	require.Equal(t, 0700, int(mkdir.Mode))
 	require.Equal(t, int64(-1), mkdir.Timestamp)
 
@@ -138,7 +137,7 @@ func TestFileMkdirMkfile(t *testing.T) {
 
 	mkfile := action.Action.(*pb.FileAction_Mkfile).Mkfile
 
-	require.Equal(t, filepath.FromSlash("/bar"), mkfile.Path)
+	require.Equal(t, "/bar", mkfile.Path)
 	require.Equal(t, 0700, int(mkfile.Mode))
 	require.Equal(t, "data", string(mkfile.Data))
 	require.Equal(t, int64(-1), mkfile.Timestamp)
@@ -173,7 +172,7 @@ func TestFileMkfile(t *testing.T) {
 
 	mkdir := action.Action.(*pb.FileAction_Mkfile).Mkfile
 
-	require.Equal(t, filepath.FromSlash("/foo"), mkdir.Path)
+	require.Equal(t, "/foo", mkdir.Path)
 	require.Equal(t, 0700, int(mkdir.Mode))
 	require.Equal(t, "data", string(mkdir.Data))
 	require.Equal(t, int64(-1), mkdir.Timestamp)
@@ -207,7 +206,7 @@ func TestFileRm(t *testing.T) {
 	require.Equal(t, 0, int(action.Output))
 
 	rm := action.Action.(*pb.FileAction_Rm).Rm
-	require.Equal(t, filepath.FromSlash("/foo"), rm.Path)
+	require.Equal(t, "/foo", rm.Path)
 }
 
 func TestFileSimpleChains(t *testing.T) {
@@ -247,7 +246,7 @@ func TestFileSimpleChains(t *testing.T) {
 	require.Equal(t, -1, int(action.Output))
 
 	rm := action.Action.(*pb.FileAction_Rm).Rm
-	require.Equal(t, filepath.FromSlash("/tmp/sub/foo"), rm.Path)
+	require.Equal(t, "/tmp/sub/foo", rm.Path)
 
 	action = f.Actions[1]
 	require.Equal(t, 1, int(action.Input))
@@ -255,7 +254,7 @@ func TestFileSimpleChains(t *testing.T) {
 	require.Equal(t, 0, int(action.Output))
 
 	mkfile := action.Action.(*pb.FileAction_Mkfile).Mkfile
-	require.Equal(t, filepath.FromSlash("/abc"), mkfile.Path)
+	require.Equal(t, "/abc", mkfile.Path)
 
 	f = arr[1].Op.(*pb.Op_File).File
 	require.Equal(t, len(arr[1].Inputs), 1)
@@ -269,7 +268,7 @@ func TestFileSimpleChains(t *testing.T) {
 	require.Equal(t, -1, int(action.Output))
 
 	mkdir := action.Action.(*pb.FileAction_Mkdir).Mkdir
-	require.Equal(t, filepath.FromSlash("/tmp/foo/bar"), mkdir.Path)
+	require.Equal(t, "/tmp/foo/bar", mkdir.Path)
 
 	action = f.Actions[1]
 	require.Equal(t, 1, int(action.Input))
@@ -277,7 +276,7 @@ func TestFileSimpleChains(t *testing.T) {
 	require.Equal(t, -1, int(action.Output))
 
 	rm = action.Action.(*pb.FileAction_Rm).Rm
-	require.Equal(t, filepath.FromSlash("/tmp/abc"), rm.Path)
+	require.Equal(t, "/tmp/abc", rm.Path)
 
 	action = f.Actions[2]
 	require.Equal(t, 2, int(action.Input))
@@ -285,7 +284,7 @@ func TestFileSimpleChains(t *testing.T) {
 	require.Equal(t, 0, int(action.Output))
 
 	mkfile = action.Action.(*pb.FileAction_Mkfile).Mkfile
-	require.Equal(t, filepath.FromSlash("/tmp/foo/bar/baz"), mkfile.Path)
+	require.Equal(t, "/tmp/foo/bar/baz", mkfile.Path)
 }
 
 func TestFileCopy(t *testing.T) {
@@ -319,8 +318,8 @@ func TestFileCopy(t *testing.T) {
 
 	copy := action.Action.(*pb.FileAction_Copy).Copy
 
-	require.Equal(t, filepath.FromSlash("/etc/foo"), copy.Src)
-	require.Equal(t, filepath.FromSlash("/tmp/bar"), copy.Dest)
+	require.Equal(t, "/etc/foo", copy.Src)
+	require.Equal(t, "/tmp/bar", copy.Dest)
 	require.Equal(t, int64(-1), copy.Timestamp)
 }
 
@@ -358,7 +357,7 @@ func TestFileCopyFromAction(t *testing.T) {
 
 	mkdir := action.Action.(*pb.FileAction_Mkdir).Mkdir
 
-	require.Equal(t, filepath.FromSlash("/tmp/foo"), mkdir.Path)
+	require.Equal(t, "/tmp/foo", mkdir.Path)
 	require.Equal(t, 0700, int(mkdir.Mode))
 
 	action = f.Actions[1]
@@ -368,7 +367,7 @@ func TestFileCopyFromAction(t *testing.T) {
 
 	mkfile := action.Action.(*pb.FileAction_Mkfile).Mkfile
 
-	require.Equal(t, filepath.FromSlash("/tmp/foo/bar"), mkfile.Path)
+	require.Equal(t, "/tmp/foo/bar", mkfile.Path)
 	require.Equal(t, 0600, int(mkfile.Mode))
 	require.Equal(t, "dt", string(mkfile.Data))
 
@@ -379,8 +378,8 @@ func TestFileCopyFromAction(t *testing.T) {
 
 	copy := action.Action.(*pb.FileAction_Copy).Copy
 
-	require.Equal(t, filepath.FromSlash("/tmp/foo/bar"), copy.Src)
-	require.Equal(t, filepath.FromSlash("/out/baz"), copy.Dest)
+	require.Equal(t, "/tmp/foo/bar", copy.Src)
+	require.Equal(t, "/out/baz", copy.Dest)
 }
 
 func TestFilePipeline(t *testing.T) {
@@ -429,7 +428,7 @@ func TestFilePipeline(t *testing.T) {
 
 	mkdir := action.Action.(*pb.FileAction_Mkdir).Mkdir
 
-	require.Equal(t, filepath.FromSlash("/bar"), mkdir.Path)
+	require.Equal(t, "/bar", mkdir.Path)
 	require.Equal(t, 0701, int(mkdir.Mode))
 
 	action = f.Actions[1]
@@ -439,8 +438,8 @@ func TestFilePipeline(t *testing.T) {
 
 	copy := action.Action.(*pb.FileAction_Copy).Copy
 
-	require.Equal(t, filepath.FromSlash("/in"), copy.Src)
-	require.Equal(t, filepath.FromSlash("/out/out"), copy.Dest)
+	require.Equal(t, "/in", copy.Src)
+	require.Equal(t, "/out/out", copy.Dest)
 
 	action = f.Actions[2]
 	require.Equal(t, 4, int(action.Input))
@@ -449,8 +448,8 @@ func TestFilePipeline(t *testing.T) {
 
 	copy = action.Action.(*pb.FileAction_Copy).Copy
 
-	require.Equal(t, filepath.FromSlash("/base/in2"), copy.Src)
-	require.Equal(t, filepath.FromSlash("/out/out2"), copy.Dest)
+	require.Equal(t, "/base/in2", copy.Src)
+	require.Equal(t, "/out/out2", copy.Dest)
 
 	f = m[arr[4].Inputs[0].Digest].Op.(*pb.Op_File).File
 	op := m[arr[4].Inputs[0].Digest]
@@ -464,7 +463,7 @@ func TestFilePipeline(t *testing.T) {
 	require.Equal(t, "docker-image://docker.io/library/bar:latest", m[op.Inputs[1].Digest].Op.(*pb.Op_Source).Source.Identifier)
 	mkdir = action.Action.(*pb.FileAction_Mkdir).Mkdir
 
-	require.Equal(t, filepath.FromSlash("/tmp/foo"), mkdir.Path)
+	require.Equal(t, "/tmp/foo", mkdir.Path)
 	require.Equal(t, 0700, int(mkdir.Mode))
 
 	action = f.Actions[1]
@@ -474,7 +473,7 @@ func TestFilePipeline(t *testing.T) {
 
 	mkfile := action.Action.(*pb.FileAction_Mkfile).Mkfile
 
-	require.Equal(t, filepath.FromSlash("/tmp/foo/bar"), mkfile.Path)
+	require.Equal(t, "/tmp/foo/bar", mkfile.Path)
 	require.Equal(t, 0600, int(mkfile.Mode))
 	require.Equal(t, "dt", string(mkfile.Data))
 
@@ -486,8 +485,8 @@ func TestFilePipeline(t *testing.T) {
 
 	copy = action.Action.(*pb.FileAction_Copy).Copy
 
-	require.Equal(t, filepath.FromSlash("/tmp/foo/bar"), copy.Src)
-	require.Equal(t, filepath.FromSlash("/out/baz"), copy.Dest)
+	require.Equal(t, "/tmp/foo/bar", copy.Src)
+	require.Equal(t, "/out/baz", copy.Dest)
 
 	action = f.Actions[3]
 	require.Equal(t, 4, int(action.Input))
@@ -495,7 +494,7 @@ func TestFilePipeline(t *testing.T) {
 	require.Equal(t, 0, int(action.Output))
 
 	rm := action.Action.(*pb.FileAction_Rm).Rm
-	require.Equal(t, filepath.FromSlash("/out/foo/bax"), rm.Path)
+	require.Equal(t, "/out/foo/bax", rm.Path)
 }
 
 func TestFileOwner(t *testing.T) {
@@ -574,28 +573,28 @@ func TestFileCopyOwner(t *testing.T) {
 
 	action = f.Actions[1]
 	copy := action.Action.(*pb.FileAction_Copy).Copy
-	require.Equal(t, filepath.FromSlash("/src1"), copy.Src)
+	require.Equal(t, "/src1", copy.Src)
 	require.Equal(t, "user2", copy.Owner.User.User.(*pb.UserOpt_ByName).ByName.Name)
 	require.Equal(t, -1, int(copy.Owner.User.User.(*pb.UserOpt_ByName).ByName.Input))
 	require.Nil(t, copy.Owner.Group)
 
 	action = f.Actions[2]
 	copy = action.Action.(*pb.FileAction_Copy).Copy
-	require.Equal(t, filepath.FromSlash("/src0"), copy.Src)
+	require.Equal(t, "/src0", copy.Src)
 	require.Equal(t, "user3", copy.Owner.User.User.(*pb.UserOpt_ByName).ByName.Name)
 	require.Equal(t, 0, int(copy.Owner.User.User.(*pb.UserOpt_ByName).ByName.Input))
 	require.Nil(t, copy.Owner.Group)
 
 	action = f.Actions[3]
 	copy = action.Action.(*pb.FileAction_Copy).Copy
-	require.Equal(t, filepath.FromSlash("/src2"), copy.Src)
+	require.Equal(t, "/src2", copy.Src)
 	require.Equal(t, "user4", copy.Owner.User.User.(*pb.UserOpt_ByName).ByName.Name)
 	require.Equal(t, -1, int(copy.Owner.User.User.(*pb.UserOpt_ByName).ByName.Input))
 	require.Nil(t, copy.Owner.Group)
 
 	action = f.Actions[4]
 	copy = action.Action.(*pb.FileAction_Copy).Copy
-	require.Equal(t, filepath.FromSlash("/src3"), copy.Src)
+	require.Equal(t, "/src3", copy.Src)
 	require.Equal(t, 1, int(copy.Owner.User.User.(*pb.UserOpt_ByID).ByID))
 	require.Equal(t, 2, int(copy.Owner.Group.User.(*pb.UserOpt_ByID).ByID))
 }

@@ -3,7 +3,6 @@ package llb
 import (
 	"context"
 	_ "crypto/sha256" // for opencontainers/go-digest
-	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -56,7 +55,7 @@ type CopyInput interface {
 }
 
 type subAction interface {
-	toProtoAction(context.Context, string, pb.InputIndex) (pb.IsFileAction, error)
+	toProtoAction(ctx context.Context, parent string, base pb.InputIndex, platform string) (pb.IsFileAction, error)
 }
 
 type capAdder interface {
@@ -158,8 +157,8 @@ type fileActionMkdir struct {
 	info MkdirInfo
 }
 
-func (a *fileActionMkdir) toProtoAction(ctx context.Context, parent string, base pb.InputIndex) (pb.IsFileAction, error) {
-	normalizedPath, err := normalizePath(parent, a.file, false)
+func (a *fileActionMkdir) toProtoAction(ctx context.Context, parent string, base pb.InputIndex, platform string) (pb.IsFileAction, error) {
+	normalizedPath, err := system.NormalizePath(parent, a.file, platform, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "normalizing path")
 	}
@@ -336,8 +335,8 @@ type fileActionMkfile struct {
 	info MkfileInfo
 }
 
-func (a *fileActionMkfile) toProtoAction(ctx context.Context, parent string, base pb.InputIndex) (pb.IsFileAction, error) {
-	normalizedPath, err := normalizePath(parent, a.file, false)
+func (a *fileActionMkfile) toProtoAction(ctx context.Context, parent string, base pb.InputIndex, platform string) (pb.IsFileAction, error) {
+	normalizedPath, err := system.NormalizePath(parent, a.file, platform, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "normalizing path")
 	}
@@ -408,8 +407,8 @@ type fileActionRm struct {
 	info RmInfo
 }
 
-func (a *fileActionRm) toProtoAction(ctx context.Context, parent string, base pb.InputIndex) (pb.IsFileAction, error) {
-	normalizedPath, err := normalizePath(parent, a.file, false)
+func (a *fileActionRm) toProtoAction(ctx context.Context, parent string, base pb.InputIndex, platform string) (pb.IsFileAction, error) {
+	normalizedPath, err := system.NormalizePath(parent, a.file, platform, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "normalizing path")
 	}
@@ -502,12 +501,12 @@ type fileActionCopy struct {
 	info  CopyInfo
 }
 
-func (a *fileActionCopy) toProtoAction(ctx context.Context, parent string, base pb.InputIndex) (pb.IsFileAction, error) {
-	src, err := a.sourcePath(ctx)
+func (a *fileActionCopy) toProtoAction(ctx context.Context, parent string, base pb.InputIndex, platform string) (pb.IsFileAction, error) {
+	src, err := a.sourcePath(ctx, platform)
 	if err != nil {
 		return nil, err
 	}
-	normalizedPath, err := normalizePath(parent, a.dest, true)
+	normalizedPath, err := system.NormalizePath(parent, a.dest, platform, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "normalizing path")
 	}
@@ -535,21 +534,22 @@ func (a *fileActionCopy) toProtoAction(ctx context.Context, parent string, base 
 	}, nil
 }
 
-func (a *fileActionCopy) sourcePath(ctx context.Context) (string, error) {
+func (a *fileActionCopy) sourcePath(ctx context.Context, platform string) (string, error) {
 	p := filepath.Clean(a.src)
-	if !system.IsAbs(p) {
+	if !system.IsAbs(p, platform) {
+		var dir string
+		var err error
 		if a.state != nil {
-			dir, err := a.state.GetDir(ctx)
-			if err != nil {
-				return "", err
-			}
-			p = filepath.Join("/", dir, p)
+			dir, err = a.state.GetDir(ctx)
 		} else if a.fas != nil {
-			dir, err := a.fas.state.GetDir(ctx)
-			if err != nil {
-				return "", err
-			}
-			p = filepath.Join("/", dir, p)
+			dir, err = a.fas.state.GetDir(ctx)
+		}
+		if err != nil {
+			return "", err
+		}
+		p, err = system.NormalizePath(dir, p, platform, false)
+		if err != nil {
+			return "", errors.Wrap(err, "normalizing source path")
 		}
 	}
 	return p, nil
@@ -766,7 +766,11 @@ func (f *FileOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 			}
 		}
 
-		action, err := st.action.toProtoAction(ctx, parent, st.base)
+		var platform string
+		if f.constraints.Platform != nil {
+			platform = f.constraints.Platform.OS
+		}
+		action, err := st.action.toProtoAction(ctx, parent, st.base, platform)
 		if err != nil {
 			return "", nil, nil, nil, err
 		}
@@ -785,33 +789,6 @@ func (f *FileOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 	}
 	f.Store(dt, md, f.constraints.SourceLocations, c)
 	return f.Load()
-}
-
-func normalizePath(parent, p string, keepSlash bool) (string, error) {
-	var err error
-	parent, err = system.CheckSystemDriveAndRemoveDriveLetter(parent)
-	if err != nil {
-		return "", errors.Wrap(err, "cleaning parent")
-	}
-	p, err = system.CheckSystemDriveAndRemoveDriveLetter(p)
-	if err != nil {
-		return "", errors.Wrap(err, "cleaning path")
-	}
-	origPath := filepath.FromSlash(p)
-	if !system.IsAbs(p) {
-		p = filepath.Join("/", parent, p)
-	}
-	if keepSlash {
-		if strings.HasSuffix(origPath, string(filepath.Separator)) && !strings.HasSuffix(p, string(filepath.Separator)) {
-			p += string(filepath.Separator)
-		} else if strings.HasSuffix(origPath, fmt.Sprintf("%c.", filepath.Separator)) {
-			if p != string(filepath.Separator) {
-				p += string(filepath.Separator)
-			}
-			p += "."
-		}
-	}
-	return p, nil
 }
 
 func (f *FileOp) Output() Output {

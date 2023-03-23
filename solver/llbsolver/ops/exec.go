@@ -252,10 +252,14 @@ func (e *ExecOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 		}
 	}
 
+	var platformOS string
+	if e.platform != nil {
+		platformOS = e.platform.OS
+	}
 	p, err := gateway.PrepareMounts(ctx, e.mm, e.cm, g, e.op.Meta.Cwd, e.op.Mounts, refs, func(m *pb.Mount, ref cache.ImmutableRef) (cache.MutableRef, error) {
 		desc := fmt.Sprintf("mount %s from exec %s", m.Dest, strings.Join(e.op.Meta.Args, " "))
 		return e.cm.New(ctx, ref, g, cache.WithDescription(desc))
-	})
+	}, platformOS)
 	defer func() {
 		if err != nil {
 			execInputs := make([]solver.Result, len(e.op.Mounts))

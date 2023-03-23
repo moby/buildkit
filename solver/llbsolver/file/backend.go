@@ -2,10 +2,10 @@ package file
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -68,11 +68,11 @@ func mapUserToChowner(user *copy.User, idmap *idtools.IdentityMapping) (copy.Cho
 }
 
 func mkdir(ctx context.Context, d string, action pb.FileActionMkDir, user *copy.User, idmap *idtools.IdentityMapping) error {
-	actionPath, err := system.CheckSystemDriveAndRemoveDriveLetter(action.Path)
+	actionPath, err := system.NormalizePath("/", action.Path, runtime.GOOS, false)
 	if err != nil {
 		return errors.Wrap(err, "removing drive letter")
 	}
-	p, err := fs.RootPath(d, filepath.Join("/", actionPath))
+	p, err := fs.RootPath(d, filepath.FromSlash(actionPath))
 	if err != nil {
 		return err
 	}
@@ -352,12 +352,12 @@ func (fb *Backend) Copy(ctx context.Context, m1, m2, user, group fileoptypes.Mou
 }
 
 func cleanPath(s string) (string, error) {
-	s, err := system.CheckSystemDriveAndRemoveDriveLetter(s)
+	s, err := system.CheckSystemDriveAndRemoveDriveLetter(s, runtime.GOOS)
 	if err != nil {
 		return "", errors.Wrap(err, "removing drive letter")
 	}
 	s2 := filepath.Join("/", s)
-	if strings.HasSuffix(filepath.FromSlash(s), fmt.Sprintf("%c.", filepath.Separator)) {
+	if strings.HasSuffix(filepath.FromSlash(s), string(filepath.Separator)+".") {
 		if s2 != string(filepath.Separator) {
 			s2 += string(filepath.Separator)
 		}

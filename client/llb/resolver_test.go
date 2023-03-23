@@ -3,7 +3,6 @@ package llb
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"testing"
 
 	"github.com/containerd/containerd/platforms"
@@ -40,7 +39,7 @@ func TestImageMetaResolver(t *testing.T) {
 
 	d, err := st.GetDir(context.TODO())
 	require.NoError(t, err)
-	require.Equal(t, filepath.FromSlash("/bar"), d)
+	require.Equal(t, "/bar", d)
 }
 
 func TestImageResolveDigest(t *testing.T) {
@@ -65,7 +64,7 @@ func TestImageResolveDigest(t *testing.T) {
 
 	d, err := st.GetDir(context.TODO())
 	require.NoError(t, err)
-	require.Equal(t, filepath.FromSlash("/foo"), d)
+	require.Equal(t, "/foo", d)
 }
 
 type testResolver struct {
