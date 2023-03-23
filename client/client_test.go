@@ -195,6 +195,7 @@ func TestIntegration(t *testing.T) {
 		testMountStubsDirectory,
 		testMountStubsTimestamp,
 		testSourcePolicy,
+		testLLBMountPerformance,
 	)
 }
 
@@ -8944,4 +8945,32 @@ func testSourcePolicy(t *testing.T, sb integration.Sandbox) {
 		_, err = c.Build(sb.Context(), SolveOpt{}, "", frontend, nil)
 		require.ErrorContains(t, err, sourcepolicy.ErrSourceDenied.Error())
 	})
+}
+
+func testLLBMountPerformance(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	mntInput := llb.Image("busybox:latest")
+	st := llb.Image("busybox:latest")
+	var mnts []llb.State
+	for i := 0; i < 20; i++ {
+		execSt := st.Run(
+			llb.Args([]string{"true"}),
+		)
+		mnts = append(mnts, mntInput)
+		for j := range mnts {
+			mnts[j] = execSt.AddMount(fmt.Sprintf("/tmp/bin%d", j), mnts[j], llb.SourcePath("/bin"))
+		}
+		st = execSt.Root()
+	}
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	timeoutCtx, cancel := context.WithTimeout(sb.Context(), time.Minute)
+	defer cancel()
+	_, err = c.Solve(timeoutCtx, def, SolveOpt{}, nil)
+	require.NoError(t, err)
 }
