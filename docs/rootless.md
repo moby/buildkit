@@ -26,9 +26,14 @@ See also the [example manifests](#Kubernetes).
 
 ### Bottlerocket OS
 
-Needs to run `sysctl -w user.max_user_namespaces=N` (N=positive integer, like 63359) on the host nodes.
+Needs to set the max user namespaces to a positive integer, through the [API settings](https://github.com/bottlerocket-os/bottlerocket#kernel-settings):
 
-See [`../examples/kubernetes/sysctl-userns.privileged.yaml`](../examples/kubernetes/sysctl-userns.privileged.yaml).
+```toml
+[settings.kernel.sysctl]
+"user.max_user_namespaces" = "16384"
+```
+
+See [`../examples/eksctl/bottlerocket.yaml`](../examples/eskctl/bottlerocket.yaml) for an example to configure a Node Group in EKS.
 
 <details>
 <summary>Old distributions</summary>
