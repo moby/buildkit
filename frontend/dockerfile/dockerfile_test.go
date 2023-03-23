@@ -6562,7 +6562,10 @@ FROM scratch
 COPY --from=0 / /
 `)
 
-	const expectedDigest = "sha256:9e36395384d073e711102b13bd0ba4b779ef6afbaf5cadeb77fe77dba8967d1f"
+	// note that this digest differs from the one in master, due to
+	// commit a89f482dcb3428c0297f39474eebd7de15e4792a not being included
+	// in this branch.
+	const expectedDigest = "sha256:e26093cc8a7524089a1d0136457e6c09a34176e2b2efcf99ac471baa729c7dc9"
 
 	dir, err := integration.Tmpdir(
 		t,
