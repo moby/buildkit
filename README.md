@@ -177,6 +177,7 @@ Currently, the following high-level languages has been implemented for LLB:
 -   [mopy (Python)](https://github.com/cmdjulian/mopy)
 -   [envd (starlark)](https://github.com/tensorchord/envd/)
 -   [Blubber](https://gitlab.wikimedia.org/repos/releng/blubber)
+-   [Bass](https://github.com/vito/bass)
 -   (open a PR to add your own language)
 
 ### Exploring Dockerfiles
