@@ -678,7 +678,7 @@ func git(ctx context.Context, dir, sshAuthSock, knownHosts string, args ...strin
 		}
 		// remote git commands spawn helper processes that inherit FDs and don't
 		// handle parent death signal so exec.CommandContext can't be used
-		err := runProcessGroup(ctx, cmd)
+		err := runWithStandardUmask(ctx, cmd)
 		if err != nil {
 			if strings.Contains(errbuf.String(), "--depth") || strings.Contains(errbuf.String(), "shallow") {
 				if newArgs := argsNoDepth(args); len(args) > len(newArgs) {
