@@ -65,6 +65,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
 )
 
 func init() {
@@ -195,6 +196,7 @@ func TestIntegration(t *testing.T) {
 		testMountStubsTimestamp,
 		testSourcePolicy,
 		testLLBMountPerformance,
+		testClientCustomGRPCOpts,
 	)
 }
 
@@ -9019,4 +9021,23 @@ func testLLBMountPerformance(t *testing.T, sb integration.Sandbox) {
 	defer cancel()
 	_, err = c.Solve(timeoutCtx, def, SolveOpt{}, nil)
 	require.NoError(t, err)
+}
+
+func testClientCustomGRPCOpts(t *testing.T, sb integration.Sandbox) {
+	var interceptedMethods []string
+	intercept := func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		interceptedMethods = append(interceptedMethods, method)
+		return invoker(ctx, method, req, reply, cc, opts...)
+	}
+	c, err := New(sb.Context(), sb.Address(), grpc.WithChainUnaryInterceptor(intercept))
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("busybox:latest")
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+
+	require.Contains(t, interceptedMethods, "/moby.buildkit.v1.Control/Solve")
 }
