@@ -324,6 +324,21 @@ func parseCopy(req parseRequest) (*CopyCommand, error) {
 		return nil, err
 	}
 
+	if strings.Contains(flChown.Value, ":") {
+		parts := strings.Split(flChown.Value, ":")
+		if len(parts) != 2 {
+			return nil, errors.Errorf("COPY chown flag %s has too many parts", flChown.Value)
+		}
+
+		if parts[0] == "" {
+			return nil, errors.Errorf("COPY chown flag %s is missing %s part", flChown.Value, "user")
+		}
+
+		if parts[1] == "" {
+			return nil, errors.Errorf("COPY chown flag %s is missing %s part", flChown.Value, "group")
+		}
+	}
+
 	return &CopyCommand{
 		withNameAndCode: newWithNameAndCode(req),
 		SourcesAndDest:  *sourcesAndDest,
