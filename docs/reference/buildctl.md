@@ -2,6 +2,7 @@
 
 `buildctl` is the command-line interface to `buildkitd`.
 
+<!---GENERATE_START buildctl --help-->
 ```
 NAME:
    buildctl - build utility
@@ -10,14 +11,15 @@ USAGE:
    buildctl [global options] command [command options] [arguments...]
 
 VERSION:
-   0.0.0+unknown
+   v0.0.0+unknown
 
 COMMANDS:
-   du        disk usage
-   prune     clean up build cache
-   build, b  build
-   debug     debug utilities
-   help, h   Shows a list of commands or help for one command
+   du               disk usage
+   prune            clean up build cache
+   prune-histories  clean up build histories
+   build, b         build
+   debug            debug utilities
+   help, h          Shows a list of commands or help for one command
 
 GLOBAL OPTIONS:
    --debug                enable debug output in logs
@@ -31,6 +33,7 @@ GLOBAL OPTIONS:
    --help, -h             show help
    --version, -v          print the version
 ```
+<!---GENERATE_END-->
 
 ## Connecting
 
@@ -45,9 +48,37 @@ Practically, that normally will be one of:
 
 Synopsis:
 
+<!---GENERATE_START buildctl build --help-->
 ```
-buildctl build --frontend dockerfile.v0 --opt target=foo --opt build-arg:foo=bar --local context=. --local dockerfile=. --output type=image,name=docker.io/username/image,push=true
+NAME:
+   buildctl build - build
+
+USAGE:
+   
+  To build and push an image using Dockerfile:
+    $ buildctl build --frontend dockerfile.v0 --opt target=foo --opt build-arg:foo=bar --local context=. --local dockerfile=. --output type=image,name=docker.io/username/image,push=true
+  
+
+OPTIONS:
+   --output value, -o value    Define exports for build result, e.g. --output type=image,name=docker.io/username/image,push=true
+   --progress value            Set type of progress (auto, plain, tty). Use plain to show container output (default: "auto")
+   --trace value               Path to trace file. Defaults to no tracing.
+   --local value               Allow build access to the local directory
+   --oci-layout value          Allow build access to the local OCI layout
+   --frontend value            Define frontend used for build
+   --opt value                 Define custom options for frontend, e.g. --opt target=foo --opt build-arg:foo=bar
+   --no-cache                  Disable cache for all the vertices
+   --export-cache value        Export build cache, e.g. --export-cache type=registry,ref=example.com/foo/bar, or --export-cache type=local,dest=path/to/dir
+   --import-cache value        Import build cache, e.g. --import-cache type=registry,ref=example.com/foo/bar, or --import-cache type=local,src=path/to/dir
+   --secret value              Secret value exposed to the build. Format id=secretname,src=filepath
+   --allow value               Allow extra privileged entitlement, e.g. network.host, security.insecure
+   --ssh value                 Allow forwarding SSH agent to the builder. Format default|<id>[=<socket>|<key>[,<key>]]
+   --metadata-file value       Output build metadata (e.g., image digest) to a file as JSON
+   --source-policy-file value  Read source policy file from a JSON file
+   --ref-file value            Write build ref to a file
+   
 ```
+<!---GENERATE_END-->
 
 `buildctl build` uses a buildkit daemon `buildkitd` to drive a build.
 
