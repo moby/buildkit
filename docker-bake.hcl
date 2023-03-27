@@ -75,7 +75,7 @@ target "integration-tests-base" {
 }
 
 group "validate" {
-  targets = ["lint", "validate-vendor", "validate-doctoc", "validate-generated-files", "validate-shfmt"]
+  targets = ["lint", "validate-vendor", "validate-doctoc", "validate-generated-files", "validate-shfmt", "validate-docs"]
 }
 
 target "lint" {
@@ -119,6 +119,13 @@ target "validate-authors" {
   output = ["type=cacheonly"]
 }
 
+target "validate-docs" {
+  inherits = ["_common"]
+  dockerfile = "./hack/dockerfiles/docs.Dockerfile"
+  target = "validate"
+  output = ["type=cacheonly"]
+}
+
 target "vendor" {
   inherits = ["_common"]
   dockerfile = "./hack/dockerfiles/vendor.Dockerfile"
@@ -152,4 +159,11 @@ target "authors" {
   dockerfile = "./hack/dockerfiles/authors.Dockerfile"
   target = "update"
   output = ["."]
+}
+
+target "docs" {
+  inherits = ["_common"]
+  dockerfile = "./hack/dockerfiles/docs.Dockerfile"
+  target = "update"
+  output = ["./docs"]
 }

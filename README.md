@@ -128,7 +128,7 @@ $ brew install buildkit
 
 To build BuildKit from source, see [`.github/CONTRIBUTING.md`](./.github/CONTRIBUTING.md).
 
-For a `buildctl` reference, see [this document](./docs/buildctl.md).
+For a `buildctl` reference, see [this document](./docs/reference/buildctl.md).
 
 ### Starting the `buildkitd` daemon
 
