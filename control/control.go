@@ -52,7 +52,7 @@ type Opt struct {
 	SessionManager            *session.Manager
 	WorkerController          *worker.Controller
 	Frontends                 map[string]frontend.Frontend
-	CacheKeyStorage           solver.CacheKeyStorage
+	CacheManager              solver.CacheManager
 	ResolveCacheExporterFuncs map[string]remotecache.ResolveCacheExporterFunc
 	ResolveCacheImporterFuncs map[string]remotecache.ResolveCacheImporterFunc
 	Entitlements              []string
@@ -77,8 +77,6 @@ type Controller struct { // TODO: ControlService
 }
 
 func NewController(opt Opt) (*Controller, error) {
-	cache := solver.NewCacheManager(context.TODO(), "local", opt.CacheKeyStorage, worker.NewCacheResultStorage(opt.WorkerController))
-
 	gatewayForwarder := controlgateway.NewGatewayForwarder()
 
 	hq := llbsolver.NewHistoryQueue(llbsolver.HistoryQueueOpt{
@@ -91,7 +89,7 @@ func NewController(opt Opt) (*Controller, error) {
 	s, err := llbsolver.New(llbsolver.Opt{
 		WorkerController: opt.WorkerController,
 		Frontends:        opt.Frontends,
-		CacheManager:     cache,
+		CacheManager:     opt.CacheManager,
 		CacheResolvers:   opt.ResolveCacheImporterFuncs,
 		GatewayForwarder: gatewayForwarder,
 		SessionManager:   opt.SessionManager,
@@ -106,7 +104,7 @@ func NewController(opt Opt) (*Controller, error) {
 		opt:              opt,
 		solver:           s,
 		history:          hq,
-		cache:            cache,
+		cache:            opt.CacheManager,
 		gatewayForwarder: gatewayForwarder,
 	}
 	c.throttledGC = throttle.After(time.Minute, c.gc)
