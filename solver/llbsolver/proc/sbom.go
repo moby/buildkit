@@ -52,7 +52,7 @@ func SBOMProcessor(scannerRef string, useCache bool) llbsolver.Processor {
 			if err != nil {
 				return nil, err
 			}
-			attSolve, err := result.ConvertAttestation(&att, func(st llb.State) (solver.ResultProxy, error) {
+			attSolve, err := result.ConvertAttestation(&att, func(st *llb.State) (solver.ResultProxy, error) {
 				def, err := st.Marshal(ctx)
 				if err != nil {
 					return nil, err

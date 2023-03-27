@@ -169,7 +169,7 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 				return err
 			}
 
-			attSolve, err := result.ConvertAttestation(&att, func(st llb.State) (client.Reference, error) {
+			attSolve, err := result.ConvertAttestation(&att, func(st *llb.State) (client.Reference, error) {
 				def, err := st.Marshal(ctx)
 				if err != nil {
 					return nil, err
