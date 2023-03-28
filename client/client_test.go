@@ -2189,6 +2189,13 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	require.Equal(t, []byte("content1"), dt)
 
+	allReqs := server.Stats("/foo").Requests
+	require.Equal(t, 2, len(allReqs))
+	require.Equal(t, http.MethodGet, allReqs[0].Method)
+	require.Equal(t, "gzip", allReqs[0].Header.Get("Accept-Encoding"))
+	require.Equal(t, http.MethodHead, allReqs[1].Method)
+	require.Equal(t, "gzip", allReqs[1].Header.Get("Accept-Encoding"))
+
 	// test extra options
 	st = llb.HTTP(server.URL+"/foo", llb.Filename("bar"), llb.Chmod(0741), llb.Chown(1000, 1000))
 

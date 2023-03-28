@@ -178,6 +178,9 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, inde
 	// manual ETag value comparison.
 	if len(m) > 0 {
 		req.Method = "HEAD"
+		// we need to add accept-encoding header manually because stdlib only adds it to GET requests
+		// some servers will return different etags if Accept-Encoding header is different
+		req.Header.Add("Accept-Encoding", "gzip")
 		resp, err := client.Do(req)
 		if err == nil {
 			if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNotModified {

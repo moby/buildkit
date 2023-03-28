@@ -45,6 +45,7 @@ func (s *TestServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.stats[r.URL.Path].AllRequests++
+	s.stats[r.URL.Path].Requests = append(s.stats[r.URL.Path].Requests, newRequest(r))
 
 	if resp.LastModified != nil {
 		w.Header().Set("Last-Modified", resp.LastModified.Format(time.RFC850))
@@ -81,4 +82,21 @@ type Response struct {
 
 type Stat struct {
 	AllRequests, CachedRequests int
+	Requests                    []Request
+}
+
+type Request struct {
+	Method string
+	Header http.Header
+}
+
+func newRequest(r *http.Request) Request {
+	headers := http.Header{}
+	for k, v := range r.Header {
+		headers[k] = append([]string{}, v...)
+	}
+	return Request{
+		Method: r.Method,
+		Header: headers,
+	}
 }
