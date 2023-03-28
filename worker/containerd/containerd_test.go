@@ -24,6 +24,7 @@ func TestContainerdWorkerIntegration(t *testing.T) {
 	integration.Run(t, integration.TestFuncs(
 		testContainerdWorkerExec,
 		testContainerdWorkerExecFailures,
+		testContainerdWorkerCancel,
 	))
 }
 
@@ -61,4 +62,15 @@ func testContainerdWorkerExecFailures(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	tests.TestWorkerExecFailures(t, w)
+}
+
+func testContainerdWorkerCancel(t *testing.T, sb integration.Sandbox) {
+	if sb.Rootless() {
+		t.Skip("requires root")
+	}
+	workerOpt := newWorkerOpt(t, sb.ContainerdAddress())
+	w, err := base.NewWorker(context.TODO(), workerOpt)
+	require.NoError(t, err)
+
+	tests.TestWorkerCancel(t, w)
 }

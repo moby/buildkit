@@ -229,6 +229,17 @@ func TestRuncWorkerExecFailures(t *testing.T) {
 	tests.TestWorkerExecFailures(t, w)
 }
 
+func TestRuncWorkerCancel(t *testing.T) {
+	t.Parallel()
+	checkRequirement(t)
+
+	workerOpt := newWorkerOpt(t, oci.ProcessSandbox)
+	w, err := base.NewWorker(context.TODO(), workerOpt)
+	require.NoError(t, err)
+
+	tests.TestWorkerCancel(t, w)
+}
+
 type nopCloser struct {
 	io.Writer
 }

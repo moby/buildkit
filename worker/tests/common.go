@@ -232,6 +232,79 @@ func TestWorkerExecFailures(t *testing.T, w *base.Worker) {
 	require.NoError(t, err)
 }
 
+func TestWorkerCancel(t *testing.T, w *base.Worker) {
+	ctx := NewCtx("buildkit-test")
+	sm, err := session.NewManager()
+	require.NoError(t, err)
+
+	snap := NewBusyboxSourceSnapshot(ctx, t, w, sm)
+	root, err := w.CacheMgr.New(ctx, snap, nil)
+	require.NoError(t, err)
+
+	id := identity.NewID()
+
+	started := make(chan struct{})
+
+	pid1Ctx, pid1Cancel := context.WithCancel(ctx)
+	defer pid1Cancel()
+
+	var (
+		pid1Err, pid2Err error
+		pid1Done         = make(chan struct{})
+		pid2Done         = make(chan struct{})
+	)
+
+	go func() {
+		defer close(pid1Done)
+		pid1Err = w.WorkerOpt.Executor.Run(pid1Ctx, id, execMount(root), nil, executor.ProcessInfo{
+			Meta: executor.Meta{
+				Args: []string{"/bin/sleep", "10"},
+				Cwd:  "/",
+			},
+		}, started)
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(10 * time.Second):
+		t.Error("Unexpected timeout waiting for pid1 to start")
+	}
+
+	pid2Ctx, pid2Cancel := context.WithCancel(ctx)
+	defer pid2Cancel()
+
+	started = make(chan struct{})
+
+	go func() {
+		defer close(pid2Done)
+		// TODO why doesn't Exec allow for started channel??  Fake it for now
+		go func() {
+			<-time.After(2 * time.Second)
+			close(started)
+		}()
+		pid2Err = w.WorkerOpt.Executor.Exec(pid2Ctx, id, executor.ProcessInfo{
+			Meta: executor.Meta{
+				Args: []string{"/bin/sleep", "10"},
+				Cwd:  "/",
+			},
+		})
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(10 * time.Second):
+		t.Error("Unexpected timeout waiting for pid2 to start")
+	}
+
+	pid2Cancel()
+	<-pid2Done
+	require.Contains(t, pid2Err.Error(), "exit code: 137", "pid2 exits with sigkill")
+
+	pid1Cancel()
+	<-pid1Done
+	require.Contains(t, pid1Err.Error(), "exit code: 137", "pid1 exits with sigkill")
+}
+
 type nopCloser struct {
 	io.Writer
 }
