@@ -82,8 +82,11 @@ func ResolveClient(c *cli.Context) (*client.Client, error) {
 		}
 	}
 
-	if caCert != "" || cert != "" || key != "" {
-		opts = append(opts, client.WithCredentials(serverName, caCert, cert, key))
+	if caCert != "" {
+		opts = append(opts, client.WithServerConfig(serverName, caCert))
+	}
+	if cert != "" || key != "" {
+		opts = append(opts, client.WithCredentials(cert, key))
 	}
 
 	timeout := time.Duration(c.GlobalInt("timeout"))
