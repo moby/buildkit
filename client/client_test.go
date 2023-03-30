@@ -9036,7 +9036,7 @@ func testClientCustomGRPCOpts(t *testing.T, sb integration.Sandbox) {
 		interceptedMethods = append(interceptedMethods, method)
 		return invoker(ctx, method, req, reply, cc, opts...)
 	}
-	c, err := New(sb.Context(), sb.Address(), grpc.WithChainUnaryInterceptor(intercept))
+	c, err := New(sb.Context(), sb.Address(), WithGRPCDialOption(grpc.WithChainUnaryInterceptor(intercept)))
 	require.NoError(t, err)
 	defer c.Close()
 

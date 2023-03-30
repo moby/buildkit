@@ -34,7 +34,9 @@ type Client struct {
 	sessionDialer func(ctx context.Context, proto string, meta map[string][]string) (net.Conn, error)
 }
 
-type ClientOpt interface{}
+type ClientOpt interface {
+	isClientOpt()
+}
 
 // New returns a new buildkit client. Address can be empty for the system-default address.
 func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error) {
@@ -82,8 +84,8 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 		if sd, ok := o.(*withSessionDialer); ok {
 			sessionDialer = sd.dialer
 		}
-		if opt, ok := o.(grpc.DialOption); ok {
-			customDialOptions = append(customDialOptions, opt)
+		if opt, ok := o.(*withGRPCDialOption); ok {
+			customDialOptions = append(customDialOptions, opt.opt)
 		}
 	}
 
@@ -182,6 +184,8 @@ func (c *Client) Close() error {
 
 type withFailFast struct{}
 
+func (*withFailFast) isClientOpt() {}
+
 func WithFailFast() ClientOpt {
 	return &withFailFast{}
 }
@@ -189,6 +193,8 @@ func WithFailFast() ClientOpt {
 type withDialer struct {
 	dialer func(context.Context, string) (net.Conn, error)
 }
+
+func (*withDialer) isClientOpt() {}
 
 func WithContextDialer(df func(context.Context, string) (net.Conn, error)) ClientOpt {
 	return &withDialer{dialer: df}
@@ -200,6 +206,8 @@ type withCredentials struct {
 	Cert       string
 	Key        string
 }
+
+func (*withCredentials) isClientOpt() {}
 
 // WithCredentials configures the TLS parameters of the client.
 // Arguments:
@@ -247,6 +255,8 @@ type withTracer struct {
 	tp trace.TracerProvider
 }
 
+func (w *withTracer) isClientOpt() {}
+
 type TracerDelegate interface {
 	SetSpanExporter(context.Context, sdktrace.SpanExporter) error
 }
@@ -261,6 +271,8 @@ type withTracerDelegate struct {
 	TracerDelegate
 }
 
+func (w *withTracerDelegate) isClientOpt() {}
+
 func WithSessionDialer(dialer func(context.Context, string, map[string][]string) (net.Conn, error)) ClientOpt {
 	return &withSessionDialer{dialer}
 }
@@ -268,6 +280,8 @@ func WithSessionDialer(dialer func(context.Context, string, map[string][]string)
 type withSessionDialer struct {
 	dialer func(context.Context, string, map[string][]string) (net.Conn, error)
 }
+
+func (w *withSessionDialer) isClientOpt() {}
 
 func resolveDialer(address string) (func(context.Context, string) (net.Conn, error), error) {
 	ch, err := connhelper.GetConnectionHelper(address)
@@ -288,4 +302,14 @@ func filterInterceptor(intercept grpc.UnaryClientInterceptor) grpc.UnaryClientIn
 		}
 		return intercept(ctx, method, req, reply, cc, invoker, opts...)
 	}
+}
+
+type withGRPCDialOption struct {
+	opt grpc.DialOption
+}
+
+func (*withGRPCDialOption) isClientOpt() {}
+
+func WithGRPCDialOption(opt grpc.DialOption) ClientOpt {
+	return &withGRPCDialOption{opt}
 }
