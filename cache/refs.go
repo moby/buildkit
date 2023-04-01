@@ -27,6 +27,7 @@ import (
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/leaseutil"
+	"github.com/moby/buildkit/util/overlay"
 	"github.com/moby/buildkit/util/progress"
 	rootlessmountopts "github.com/moby/buildkit/util/rootless/mountopts"
 	"github.com/moby/buildkit/util/winlayers"
@@ -1513,7 +1514,7 @@ func (m *readOnlyMounter) Mount() ([]mount.Mount, func() error, error) {
 		return nil, nil, err
 	}
 	for i, m := range mounts {
-		if m.Type == "overlay" {
+		if overlay.IsOverlayMountType(m) {
 			mounts[i].Options = readonlyOverlay(m.Options)
 			continue
 		}
@@ -1623,7 +1624,7 @@ func (sm *sharableMountable) Mount() (_ []mount.Mount, _ func() error, retErr er
 		}()
 		var isOverlay bool
 		for _, m := range mounts {
-			if m.Type == "overlay" {
+			if overlay.IsOverlayMountType(m) {
 				isOverlay = true
 				break
 			}

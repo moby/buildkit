@@ -45,6 +45,7 @@ import (
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/iohelper"
 	"github.com/moby/buildkit/util/leaseutil"
+	"github.com/moby/buildkit/util/overlay"
 	"github.com/moby/buildkit/util/winlayers"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -2701,7 +2702,7 @@ func isReadOnly(mnt mount.Mount) bool {
 			hasUpperdir = true
 		}
 	}
-	if mnt.Type == "overlay" {
+	if overlay.IsOverlayMountType(mnt) {
 		return !hasUpperdir
 	}
 	return false

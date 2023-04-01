@@ -23,6 +23,7 @@ import (
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/leaseutil"
+	overlayutil "github.com/moby/buildkit/util/overlay"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
@@ -602,7 +603,7 @@ func pathCallback[T any](ctx context.Context, t *testing.T, sn *mergeSnapshotter
 	require.Len(t, mounts, 1)
 	mnt := mounts[0]
 
-	if mnt.Type == "overlay" {
+	if overlayutil.IsOverlayMountType(mnt) {
 		var upperdir string
 		var lowerdirs []string
 		for _, opt := range mnt.Options {
