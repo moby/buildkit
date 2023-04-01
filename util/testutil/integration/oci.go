@@ -21,7 +21,25 @@ func InitOCIWorker() {
 			bklog.L.Fatalf("unexpected BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR: %q", s)
 		}
 		if rootlessSupported(uid) {
-			Register(&OCI{ID: "oci-rootless", UID: uid, GID: gid})
+			Register(&OCI{
+				ID:  "oci-rootless",
+				UID: uid,
+				GID: gid,
+			})
+			Register(&OCI{
+				ID:                     "oci-rootless-snapshotter-fuse-overlayfs",
+				UID:                    uid,
+				GID:                    gid,
+				Snapshotter:            "fuse-overlayfs",
+				FuseDisableOvlWhiteout: false,
+			})
+			Register(&OCI{
+				ID:                     "oci-rootless-snapshotter-fuse-overlayfs-disable-ovl-whiteout",
+				UID:                    uid,
+				GID:                    gid,
+				Snapshotter:            "fuse-overlayfs",
+				FuseDisableOvlWhiteout: true,
+			})
 		}
 	}
 
@@ -31,10 +49,11 @@ func InitOCIWorker() {
 }
 
 type OCI struct {
-	ID          string
-	UID         int
-	GID         int
-	Snapshotter string
+	ID                     string
+	UID                    int
+	GID                    int
+	Snapshotter            string
+	FuseDisableOvlWhiteout bool
 }
 
 func (s *OCI) Name() string {
@@ -71,6 +90,9 @@ func (s *OCI) New(ctx context.Context, cfg *BackendConfig) (Backend, func() erro
 	var extraEnv []string
 	if runtime.GOOS != "windows" && s.Snapshotter != "native" {
 		extraEnv = append(extraEnv, "BUILDKIT_DEBUG_FORCE_OVERLAY_DIFF=true")
+	}
+	if s.FuseDisableOvlWhiteout {
+		extraEnv = append(extraEnv, "FUSE_OVERLAYFS_DISABLE_OVL_WHITEOUT=1")
 	}
 	buildkitdSock, stop, err := runBuildkitd(ctx, cfg, buildkitdArgs, cfg.Logs, s.UID, s.GID, extraEnv)
 	if err != nil {
