@@ -44,8 +44,8 @@ func startCmd(cmd *exec.Cmd, logs map[string]*bytes.Buffer) (func() error, error
 	stopped := make(chan struct{})
 	stop := make(chan struct{})
 	eg.Go(func() error {
-		st, err := cmd.Process.Wait()
-		fmt.Fprintf(cmd.Stderr, "> stopped %v %+v %v\n", time.Now(), st, st.ExitCode())
+		err := cmd.Wait()
+		fmt.Fprintf(cmd.Stderr, "> stopped %v %+v %v\n", time.Now(), cmd.ProcessState, cmd.ProcessState.ExitCode())
 		close(stopped)
 		select {
 		case <-stop:
@@ -88,7 +88,7 @@ func setCmdLogs(cmd *exec.Cmd, logs map[string]*bytes.Buffer) {
 	cmd.Stderr = &lockingWriter{Writer: b}
 }
 
-func waitUnix(address string, d time.Duration) error {
+func waitUnix(address string, d time.Duration, cmd *exec.Cmd) error {
 	address = strings.TrimPrefix(address, "unix://")
 	addr, err := net.ResolveUnixAddr("unix", address)
 	if err != nil {
@@ -98,6 +98,10 @@ func waitUnix(address string, d time.Duration) error {
 	step := 50 * time.Millisecond
 	i := 0
 	for {
+		if cmd != nil && cmd.ProcessState != nil {
+			return errors.Errorf("process exited: %s", cmd.String())
+		}
+
 		if conn, err := net.DialUnix("unix", nil, addr); err == nil {
 			conn.Close()
 			break

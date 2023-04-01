@@ -185,7 +185,7 @@ disabled_plugins = ["cri"]
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := waitUnix(address, 10*time.Second); err != nil {
+	if err := waitUnix(address, 10*time.Second, cmd); err != nil {
 		ctdStop()
 		return nil, nil, errors.Wrapf(err, "containerd did not start up: %s", formatLogs(cfg.Logs))
 	}

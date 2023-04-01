@@ -145,7 +145,7 @@ func (c moby) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func()
 	}
 	deferF.append(d.StopWithError)
 
-	if err := waitUnix(d.Sock(), 5*time.Second); err != nil {
+	if err := waitUnix(d.Sock(), 5*time.Second, nil); err != nil {
 		return nil, nil, errors.Errorf("dockerd did not start up: %q, %s", err, formatLogs(cfg.Logs))
 	}
 
