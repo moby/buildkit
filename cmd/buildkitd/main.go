@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/containerd/containerd/pkg/seed" //nolint:staticcheck // SA1019 deprecated
 	"github.com/containerd/containerd/pkg/userns"
@@ -777,7 +776,7 @@ func getGCPolicy(cfg config.GCConfig, root string) []client.PruneInfo {
 			Filter:       rule.Filters,
 			All:          rule.All,
 			KeepBytes:    rule.KeepBytes.AsBytes(root),
-			KeepDuration: time.Duration(rule.KeepDuration) * time.Second,
+			KeepDuration: rule.KeepDuration.Duration,
 		})
 	}
 	return out

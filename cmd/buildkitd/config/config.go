@@ -116,7 +116,7 @@ type ContainerdConfig struct {
 type GCPolicy struct {
 	All          bool      `toml:"all"`
 	KeepBytes    DiskSpace `toml:"keepBytes"`
-	KeepDuration int64     `toml:"keepDuration"`
+	KeepDuration Duration  `toml:"keepDuration"`
 	Filters      []string  `toml:"filters"`
 }
 
@@ -127,6 +127,6 @@ type DNSConfig struct {
 }
 
 type HistoryConfig struct {
-	MaxAge     int64 `toml:"maxAge"`
-	MaxEntries int64 `toml:"maxEntries"`
+	MaxAge     Duration `toml:"maxAge"`
+	MaxEntries int64    `toml:"maxEntries"`
 }

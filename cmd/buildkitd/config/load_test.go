@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -48,6 +49,7 @@ keepBytes="40MB"
 keepDuration=7200
 [[worker.containerd.gcpolicy]]
 keepBytes="20%"
+keepDuration="24h"
 
 [registry."docker.io"]
 mirrors=["hub.docker.io"]
@@ -104,8 +106,9 @@ searchDomains=["example.com"]
 	require.Equal(t, int64(20), cfg.Workers.Containerd.GCPolicy[0].KeepBytes.Bytes)
 	require.Equal(t, int64(40*1024*1024), cfg.Workers.Containerd.GCPolicy[1].KeepBytes.Bytes)
 	require.Equal(t, int64(20), cfg.Workers.Containerd.GCPolicy[2].KeepBytes.Percentage)
-	require.Equal(t, int64(3600), cfg.Workers.Containerd.GCPolicy[0].KeepDuration)
-	require.Equal(t, int64(7200), cfg.Workers.Containerd.GCPolicy[1].KeepDuration)
+	require.Equal(t, time.Duration(3600), cfg.Workers.Containerd.GCPolicy[0].KeepDuration.Duration/time.Second)
+	require.Equal(t, time.Duration(7200), cfg.Workers.Containerd.GCPolicy[1].KeepDuration.Duration/time.Second)
+	require.Equal(t, time.Duration(86400), cfg.Workers.Containerd.GCPolicy[2].KeepDuration.Duration/time.Second)
 	require.Equal(t, 1, len(cfg.Workers.Containerd.GCPolicy[0].Filters))
 	require.Equal(t, 0, len(cfg.Workers.Containerd.GCPolicy[1].Filters))
 
