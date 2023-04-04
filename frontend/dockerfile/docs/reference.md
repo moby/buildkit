@@ -2596,7 +2596,7 @@ here-doc delimiter as part of the same command.
 ### Example: Running a multi-line script
 
 ```dockerfile
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1.4
 FROM debian
 RUN <<EOT bash
   apt-get update
@@ -2608,7 +2608,7 @@ If the command only contains a here-document, its contents is evaluated with
 the default shell.
 
 ```dockerfile
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1.4
 FROM debian
 RUN <<EOT
   mkdir -p foo/bar
@@ -2618,7 +2618,7 @@ EOT
 Alternatively, shebang header can be used to define an interpreter.
 
 ```dockerfile
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1.4
 FROM python:3.6
 RUN <<EOT
 #!/usr/bin/env python
@@ -2629,7 +2629,7 @@ EOT
 More complex examples may use multiple here-documents.
 
 ```dockerfile
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1.4
 FROM alpine
 RUN <<FILE1 cat > file1 && <<FILE2 cat > file2
 I am
@@ -2646,7 +2646,7 @@ In `COPY` commands source parameters can be replaced with here-doc indicators.
 Regular here-doc [variable expansion and tab stripping rules](https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_07_04) apply.
 
 ```dockerfile
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1.4
 FROM alpine
 ARG FOO=bar
 COPY <<-EOT /app/foo
@@ -2655,7 +2655,7 @@ EOT
 ```
 
 ```dockerfile
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1.4
 FROM alpine
 COPY <<-"EOT" /app/script.sh
 	echo hello ${FOO}
