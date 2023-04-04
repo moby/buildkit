@@ -63,8 +63,13 @@ insecure-entitlements = [ "network.host", "security.insecure" ]
     "foo" = "bar"
 
   [[worker.oci.gcpolicy]]
-    keepBytes = 512000000
-    keepDuration = 172800
+    # keepBytes can be an integer number of bytes (e.g. 512000000), a string
+    # with a unit (e.g. "512MB"), or a string percentage of available disk
+    # space (e.g. "10%")
+    keepBytes = "512MB"
+    # keepDuration can be an integer number of seconds (e.g. 172800), or a
+    # string duration (e.g. "48h")
+    keepDuration = "48h"
     filters = [ "type==source.local", "type==exec.cachemount", "type==source.git.checkout"]
   [[worker.oci.gcpolicy]]
     all = true
@@ -87,7 +92,7 @@ insecure-entitlements = [ "network.host", "security.insecure" ]
 
   [[worker.containerd.gcpolicy]]
     keepBytes = 512000000
-    keepDuration = 172800 # in seconds
+    keepDuration = 172800
     filters = [ "type==source.local", "type==exec.cachemount", "type==source.git.checkout"]
   [[worker.containerd.gcpolicy]]
     all = true
