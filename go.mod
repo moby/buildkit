@@ -16,7 +16,7 @@ require (
 	github.com/aws/smithy-go v1.13.5
 	github.com/containerd/console v1.0.3
 	github.com/containerd/containerd v1.7.1
-	github.com/containerd/continuity v0.3.0
+	github.com/containerd/continuity v0.3.1-0.20230206214859-2a963a2f56e8
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
 	github.com/containerd/go-cni v1.1.9
 	github.com/containerd/go-runc v1.1.0
@@ -61,7 +61,7 @@ require (
 	github.com/sirupsen/logrus v1.9.0
 	github.com/spdx/tools-golang v0.5.0
 	github.com/stretchr/testify v1.8.2
-	github.com/tonistiigi/fsutil v0.0.0-20230105215944-fb433841cbfa
+	github.com/tonistiigi/fsutil v0.0.0-20230407161946-9e7a6df48576
 	github.com/tonistiigi/go-actions-cache v0.0.0-20220404170428-0bdeb6e1eac7
 	github.com/tonistiigi/go-archvariant v1.0.0
 	github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea
