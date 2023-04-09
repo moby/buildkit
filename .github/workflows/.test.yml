@@ -35,7 +35,7 @@ env:
 
 jobs:
   prepare:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     outputs:
       pkgs: ${{ steps.set.outputs.pkgs }}
       kinds: ${{ steps.set.outputs.kinds }}
@@ -99,7 +99,7 @@ jobs:
             *.cache-to=type=gha,scope=${{ inputs.cache_scope }}
 
   run:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs:
       - prepare
     strategy:

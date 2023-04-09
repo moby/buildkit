@@ -21,7 +21,7 @@ env:
 
 jobs:
   prepare:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     outputs:
       targets: ${{ steps.targets.outputs.matrix }}
     steps:
@@ -35,7 +35,7 @@ jobs:
           echo "matrix=$(docker buildx bake validate --print | jq -cr '.group.validate.targets')" >> $GITHUB_OUTPUT
 
   validate:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs:
       - prepare
     strategy:
