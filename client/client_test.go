@@ -3,6 +3,7 @@ package client
 import (
 	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -2196,6 +2197,49 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, http.MethodHead, allReqs[1].Method)
 	require.Equal(t, "gzip", allReqs[1].Header.Get("Accept-Encoding"))
 
+	require.NoError(t, os.RemoveAll(filepath.Join(tmpdir, "foo")))
+
+	// update the content at the url to be gzipped now, the final output
+	// should remain the same
+	modTime = time.Now().Add(-23 * time.Hour)
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	_, err = gw.Write(resp.Content)
+	require.NoError(t, err)
+	require.NoError(t, gw.Close())
+	gzipBytes := buf.Bytes()
+	respGzip := httpserver.Response{
+		Etag:            identity.NewID(),
+		Content:         gzipBytes,
+		LastModified:    &modTime,
+		ContentEncoding: "gzip",
+	}
+	server.SetRoute("/foo", respGzip)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: tmpdir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	require.Equal(t, server.Stats("/foo").AllRequests, 4)
+	require.Equal(t, server.Stats("/foo").CachedRequests, 1)
+
+	dt, err = os.ReadFile(filepath.Join(tmpdir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, resp.Content, dt)
+
+	allReqs = server.Stats("/foo").Requests
+	require.Equal(t, 4, len(allReqs))
+	require.Equal(t, http.MethodHead, allReqs[2].Method)
+	require.Equal(t, "gzip", allReqs[2].Header.Get("Accept-Encoding"))
+	require.Equal(t, http.MethodGet, allReqs[3].Method)
+	require.Equal(t, "gzip", allReqs[3].Header.Get("Accept-Encoding"))
+
 	// test extra options
 	st = llb.HTTP(server.URL+"/foo", llb.Filename("bar"), llb.Chmod(0741), llb.Chown(1000, 1000))
 
@@ -2212,7 +2256,7 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	require.Equal(t, server.Stats("/foo").AllRequests, 3)
+	require.Equal(t, server.Stats("/foo").AllRequests, 5)
 	require.Equal(t, server.Stats("/foo").CachedRequests, 1)
 
 	dt, err = os.ReadFile(filepath.Join(tmpdir, "bar"))
