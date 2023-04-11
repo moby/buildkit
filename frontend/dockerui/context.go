@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"path/filepath"
 	"regexp"
 	"strconv"
 
@@ -72,12 +73,11 @@ func (bc *Client) initContext(ctx context.Context) (*buildContext, error) {
 	if v, err := strconv.ParseBool(opts[keyContextKeepGitDirArg]); err == nil {
 		keepGit = v
 	}
-	if st, ok := detectGitContext(opts[localNameContext], keepGit); ok {
+	if st, ok := DetectGitContext(opts[localNameContext], keepGit); ok {
 		bctx.context = st
 		bctx.dockerfile = st
-	} else if httpPrefix.MatchString(opts[localNameContext]) {
-		httpContext := llb.HTTP(opts[localNameContext], llb.Filename("context"), WithInternalName("load remote build context"))
-		def, err := httpContext.Marshal(ctx, bc.marshalOpts()...)
+	} else if st, filename, ok := DetectHTTPContext(opts[localNameContext]); ok {
+		def, err := st.Marshal(ctx, bc.marshalOpts()...)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to marshal httpcontext")
 		}
@@ -94,7 +94,7 @@ func (bc *Client) initContext(ctx context.Context) (*buildContext, error) {
 		}
 
 		dt, err := ref.ReadFile(ctx, client.ReadRequest{
-			Filename: "context",
+			Filename: filename,
 			Range: &client.FileRange{
 				Length: 1024,
 			},
@@ -103,13 +103,13 @@ func (bc *Client) initContext(ctx context.Context) (*buildContext, error) {
 			return nil, errors.Wrapf(err, "failed to read downloaded context")
 		}
 		if isArchive(dt) {
-			bc := llb.Scratch().File(llb.Copy(httpContext, "/context", "/", &llb.CopyInfo{
+			bc := llb.Scratch().File(llb.Copy(*st, filepath.Join("/", filename), "/", &llb.CopyInfo{
 				AttemptUnpack: true,
 			}))
 			bctx.context = &bc
 		} else {
-			bctx.filename = "context"
-			bctx.context = &httpContext
+			bctx.filename = filename
+			bctx.context = st
 		}
 		bctx.dockerfile = bctx.context
 	} else if (&gwcaps).Supports(gwpb.CapFrontendInputs) == nil {
@@ -140,7 +140,7 @@ func (bc *Client) initContext(ctx context.Context) (*buildContext, error) {
 	return bctx, nil
 }
 
-func detectGitContext(ref string, keepGit bool) (*llb.State, bool) {
+func DetectGitContext(ref string, keepGit bool) (*llb.State, bool) {
 	g, err := gitutil.ParseGitRef(ref)
 	if err != nil {
 		return nil, false
@@ -156,6 +156,15 @@ func detectGitContext(ref string, keepGit bool) (*llb.State, bool) {
 
 	st := llb.Git(g.Remote, commit, gitOpts...)
 	return &st, true
+}
+
+func DetectHTTPContext(ref string) (*llb.State, string, bool) {
+	filename := "context"
+	if httpPrefix.MatchString(ref) {
+		st := llb.HTTP(ref, llb.Filename(filename), WithInternalName("load remote build context"))
+		return &st, filename, true
+	}
+	return nil, "", false
 }
 
 func isArchive(header []byte) bool {

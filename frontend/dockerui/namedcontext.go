@@ -81,13 +81,13 @@ func (bc *Client) namedContext(ctx context.Context, name string, nameWithPlatfor
 		}
 		return &st, &img, nil
 	case "git":
-		st, ok := detectGitContext(v, true)
+		st, ok := DetectGitContext(v, true)
 		if !ok {
 			return nil, nil, errors.Errorf("invalid git context %s", v)
 		}
 		return st, nil, nil
 	case "http", "https":
-		st, ok := detectGitContext(v, true)
+		st, ok := DetectGitContext(v, true)
 		if !ok {
 			httpst := llb.HTTP(v, llb.WithCustomName("[context "+nameWithPlatform+"] "+v))
 			st = &httpst
