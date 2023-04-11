@@ -68,6 +68,7 @@ import (
 	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 )
 
 func init() {
@@ -274,6 +275,7 @@ func main() {
 		defer controller.Close()
 
 		controller.Register(server)
+		reflection.Register(server)
 
 		ents := c.GlobalStringSlice("allow-insecure-entitlement")
 		if len(ents) > 0 {
