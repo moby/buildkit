@@ -21,8 +21,8 @@ require (
 	github.com/containerd/go-cni v1.1.9
 	github.com/containerd/go-runc v1.0.0
 	github.com/containerd/nydus-snapshotter v0.3.1
-	github.com/containerd/stargz-snapshotter v0.14.1
-	github.com/containerd/stargz-snapshotter/estargz v0.14.1
+	github.com/containerd/stargz-snapshotter v0.14.3
+	github.com/containerd/stargz-snapshotter/estargz v0.14.3
 	github.com/containerd/typeurl/v2 v2.1.0
 	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/docker/cli v23.0.1+incompatible
@@ -130,7 +130,7 @@ require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.11.3 // indirect
-	github.com/hanwen/go-fuse/v2 v2.1.1-0.20220112183258-f57e95bda82d // indirect
+	github.com/hanwen/go-fuse/v2 v2.2.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.2 // indirect

@@ -200,3 +200,72 @@ func appendWithValidation(key string, values []string) string {
 	}
 	return strings.TrimSuffix(v, ",")
 }
+
+// TODO: switch to "github.com/containerd/containerd/pkg/snapshotters" once all tools using
+//
+//	stargz-snapshotter (e.g. k3s) move to containerd version where that pkg is available.
+const (
+	// targetImageLayersLabel is a label which contains layer digests contained in
+	// the target image and will be passed to snapshotters for preparing layers in
+	// parallel. Skipping some layers is allowed and only affects performance.
+	targetImageLayersLabelContainerd = "containerd.io/snapshot/cri.image-layers"
+)
+
+// AppendExtraLabelsHandler adds optional labels that aren't provided by
+// "github.com/containerd/containerd/pkg/snapshotters" but can be used for stargz snapshotter's extra functionalities.
+func AppendExtraLabelsHandler(prefetchSize int64, wrapper func(images.Handler) images.Handler) func(images.Handler) images.Handler {
+	return func(f images.Handler) images.Handler {
+		return images.HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+			children, err := wrapper(f).Handle(ctx, desc)
+			if err != nil {
+				return nil, err
+			}
+			switch desc.MediaType {
+			case ocispec.MediaTypeImageManifest, images.MediaTypeDockerSchema2Manifest:
+				for i := range children {
+					c := &children[i]
+					if !images.IsLayerType(c.MediaType) {
+						continue
+					}
+					if _, ok := c.Annotations[targetURLsLabel]; !ok { // nop if this key is already set
+						c.Annotations[targetURLsLabel] = appendWithValidation(targetURLsLabel, c.URLs)
+					}
+
+					if _, ok := c.Annotations[config.TargetPrefetchSizeLabel]; !ok { // nop if this key is already set
+						c.Annotations[config.TargetPrefetchSizeLabel] = fmt.Sprintf("%d", prefetchSize)
+					}
+
+					// Store URLs of the neighbouring layer as well.
+					nlayers, ok := c.Annotations[targetImageLayersLabelContainerd]
+					if !ok {
+						continue
+					}
+					for j, dstr := range strings.Split(nlayers, ",") {
+						d, err := digest.Parse(dstr)
+						if err != nil {
+							return nil, err
+						}
+						l, ok := layerFromDigest(children, d)
+						if !ok {
+							continue
+						}
+						urlsKey := targetImageURLsLabelPrefix + fmt.Sprintf("%d", j)
+						if _, ok := c.Annotations[urlsKey]; !ok { // nop if this key is already set
+							c.Annotations[urlsKey] = appendWithValidation(urlsKey, l.URLs)
+						}
+					}
+				}
+			}
+			return children, nil
+		})
+	}
+}
+
+func layerFromDigest(layers []ocispec.Descriptor, target digest.Digest) (ocispec.Descriptor, bool) {
+	for _, l := range layers {
+		if l.Digest == target {
+			return l, images.IsLayerType(l.MediaType)
+		}
+	}
+	return ocispec.Descriptor{}, false
+}

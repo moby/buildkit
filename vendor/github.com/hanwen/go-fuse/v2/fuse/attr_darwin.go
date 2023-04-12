@@ -23,4 +23,5 @@ func (a *Attr) FromStat(s *syscall.Stat_t) {
 	a.Uid = uint32(s.Uid)
 	a.Gid = uint32(s.Gid)
 	a.Rdev = uint32(s.Rdev)
+	a.Blksize = uint32(s.Blksize)
 }

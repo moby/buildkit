@@ -349,7 +349,7 @@ github.com/containerd/go-runc
 github.com/containerd/nydus-snapshotter/pkg/converter
 github.com/containerd/nydus-snapshotter/pkg/converter/tool
 github.com/containerd/nydus-snapshotter/pkg/errdefs
-# github.com/containerd/stargz-snapshotter v0.14.1
+# github.com/containerd/stargz-snapshotter v0.14.3
 ## explicit; go 1.19
 github.com/containerd/stargz-snapshotter/cache
 github.com/containerd/stargz-snapshotter/fs
@@ -367,7 +367,7 @@ github.com/containerd/stargz-snapshotter/task
 github.com/containerd/stargz-snapshotter/util/cacheutil
 github.com/containerd/stargz-snapshotter/util/namedmutex
 github.com/containerd/stargz-snapshotter/util/testutil
-# github.com/containerd/stargz-snapshotter/estargz v0.14.1
+# github.com/containerd/stargz-snapshotter/estargz v0.14.3
 ## explicit; go 1.19
 github.com/containerd/stargz-snapshotter/estargz
 github.com/containerd/stargz-snapshotter/estargz/errorutil
@@ -552,7 +552,7 @@ github.com/grpc-ecosystem/go-grpc-middleware
 github.com/grpc-ecosystem/grpc-gateway/v2/internal/httprule
 github.com/grpc-ecosystem/grpc-gateway/v2/runtime
 github.com/grpc-ecosystem/grpc-gateway/v2/utilities
-# github.com/hanwen/go-fuse/v2 v2.1.1-0.20220112183258-f57e95bda82d
+# github.com/hanwen/go-fuse/v2 v2.2.0
 ## explicit; go 1.13
 github.com/hanwen/go-fuse/v2/fs
 github.com/hanwen/go-fuse/v2/fuse
