@@ -30,8 +30,10 @@ type Attr struct {
 	Mode        uint32
 	Nlink       uint32
 	Owner
-	Rdev   uint32
-	Flags_ uint32 //  OS X
+	Rdev    uint32
+	Flags_  uint32 //  OS X
+	Blksize uint32
+	Padding uint32
 }
 
 const (
@@ -67,38 +69,52 @@ const (
 
 type GetAttrIn struct {
 	InHeader
+
+	Flags_ uint32
+	Dummy  uint32
+	Fh_    uint64
 }
 
 func (g *GetAttrIn) Flags() uint32 {
-	return 0
+	return g.Flags_
 }
 
 func (g *GetAttrIn) Fh() uint64 {
-	return 0
+	return g.Fh_
 }
 
 // Uses OpenIn struct for create.
 type CreateIn struct {
 	InHeader
-
 	Flags uint32
-	Mode  uint32
+
+	// Mode for the new file; already takes Umask into account.
+	Mode uint32
+
+	// Umask used for this create call.
+	Umask   uint32
+	Padding uint32
 }
 
 type MknodIn struct {
 	InHeader
 
-	Mode uint32
-	Rdev uint32
+	// Mode to use, including the Umask value
+	Mode    uint32
+	Rdev    uint32
+	Umask   uint32
+	Padding uint32
 }
 
 type ReadIn struct {
 	InHeader
-
 	Fh        uint64
 	Offset    uint64
 	Size      uint32
 	ReadFlags uint32
+	LockOwner uint64
+	Flags     uint32
+	Padding   uint32
 }
 
 type WriteIn struct {
@@ -107,6 +123,9 @@ type WriteIn struct {
 	Offset     uint64
 	Size       uint32
 	WriteFlags uint32
+	LockOwner  uint64
+	Flags      uint32
+	Padding    uint32
 }
 
 type SetXAttrIn struct {

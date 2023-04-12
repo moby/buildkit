@@ -32,7 +32,7 @@ func pollHack(mountPoint string) error {
 		POLLHUP   = 0x10
 	)
 
-	fd, err := syscall.Open(filepath.Join(mountPoint, pollHackName), syscall.O_CREAT|syscall.O_TRUNC|syscall.O_RDWR, 0644)
+	fd, err := syscall.Open(filepath.Join(mountPoint, pollHackName), syscall.O_RDONLY, 0)
 	if err != nil {
 		return err
 	}

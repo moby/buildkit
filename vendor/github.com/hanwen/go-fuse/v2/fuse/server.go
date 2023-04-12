@@ -262,6 +262,13 @@ func (o *MountOptions) optionsStrings() []string {
 		r = append(r, "subtype="+o.Name)
 	}
 
+	// OSXFUSE applies a 60-second timeout for file operations. This
+	// is inconsistent with how FUSE works on Linux, where operations
+	// last as long as the daemon is willing to let them run.
+	if runtime.GOOS == "darwin" {
+		r = append(r, "daemon_timeout=0")
+	}
+
 	return r
 }
 
@@ -298,9 +305,6 @@ func handleEINTR(fn func() error) (err error) {
 // Returns a new request, or error. In case exitIdle is given, returns
 // nil, OK if we have too many readers already.
 func (ms *Server) readRequest(exitIdle bool) (req *request, code Status) {
-	req = ms.reqPool.Get().(*request)
-	dest := ms.readPool.Get().([]byte)
-
 	ms.reqMu.Lock()
 	if ms.reqReaders > ms.maxReaders {
 		ms.reqMu.Unlock()
@@ -308,6 +312,9 @@ func (ms *Server) readRequest(exitIdle bool) (req *request, code Status) {
 	}
 	ms.reqReaders++
 	ms.reqMu.Unlock()
+
+	req = ms.reqPool.Get().(*request)
+	dest := ms.readPool.Get().([]byte)
 
 	var n int
 	err := handleEINTR(func() error {
