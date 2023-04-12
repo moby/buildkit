@@ -447,6 +447,14 @@ func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (ref cac
 			cache.WithCreationTime(tm),
 			descHandlers,
 		}
+		if ul, ok := remote.Provider.(interface {
+			UnlazySession(ocispecs.Descriptor) session.Group
+		}); ok {
+			s := ul.UnlazySession(desc)
+			if s != nil {
+				opts = append(opts, cache.Unlazy(s))
+			}
+		}
 		if dh, ok := descHandlers[desc.Digest]; ok {
 			if ref, ok := dh.Annotations["containerd.io/distribution.source.ref"]; ok {
 				opts = append(opts, cache.WithImageRef(ref)) // can set by registry cache importer
