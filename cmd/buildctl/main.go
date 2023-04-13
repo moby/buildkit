@@ -33,6 +33,12 @@ func init() {
 	otel.SetErrorHandler(skipErrors{})
 }
 
+type Config struct {
+    App struct {
+        Format string `toml:"format"`
+    } `toml:"app"`
+}
+
 func main() {
 	cli.VersionPrinter = func(c *cli.Context) {
 		fmt.Println(c.App.Name, version.Package, c.App.Version, version.Revision)
@@ -56,6 +62,12 @@ func main() {
 			Name:  "addr",
 			Usage: "buildkitd address",
 			Value: defaultAddress,
+		},
+		// Add format flag to control log formatter
+		cli.StringFlag{
+			Name:  "format",
+			Usage: "log formatter: json or text",
+			Value: "text",
 		},
 		cli.StringFlag{
 			Name:  "tlsservername",
@@ -102,8 +114,15 @@ func main() {
 
 	app.Before = func(context *cli.Context) error {
 		debugEnabled = context.GlobalBool("debug")
-
+		if _, err := toml.DecodeFile("config.toml", &config); err != nil {
+			handleErr(debugEnabled, err)
+		}
+		
+		logFormat := config.App.Format
 		logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
+		if logFormat == "json" {
+			logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
+		}
 		if debugEnabled {
 			logrus.SetLevel(logrus.DebugLevel)
 		}
