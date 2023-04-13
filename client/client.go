@@ -14,6 +14,7 @@ import (
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/connhelper"
+	"github.com/moby/buildkit/okteto"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/grpchijack"
 	"github.com/moby/buildkit/util/appdefaults"
@@ -82,6 +83,9 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 		if sd, ok := o.(*withSessionDialer); ok {
 			sessionDialer = sd.dialer
 		}
+		if rpc, ok := o.(*withRPCCreds); ok {
+			gopts = append(gopts, grpc.WithPerRPCCredentials(rpc.creds))
+		}
 	}
 
 	if !customTracer {
@@ -142,6 +146,8 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 	} else if len(stream) > 1 {
 		gopts = append(gopts, grpc.WithStreamInterceptor(grpc_middleware.ChainStreamClient(stream...)))
 	}
+
+	gopts = append(gopts, grpc.WithKeepaliveParams(okteto.LoadKeepaliveClientParams()))
 
 	conn, err := grpc.DialContext(ctx, address, gopts...)
 	if err != nil {
@@ -272,6 +278,14 @@ func WithSessionDialer(dialer func(context.Context, string, map[string][]string)
 
 type withSessionDialer struct {
 	dialer func(context.Context, string, map[string][]string) (net.Conn, error)
+}
+
+type withRPCCreds struct {
+	creds credentials.PerRPCCredentials
+}
+
+func WithRPCCreds(c credentials.PerRPCCredentials) ClientOpt {
+	return &withRPCCreds{c}
 }
 
 func resolveDialer(address string) (func(context.Context, string) (net.Conn, error), error) {

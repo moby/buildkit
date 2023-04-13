@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -23,6 +24,8 @@ import (
 	"github.com/docker/docker/pkg/reexec"
 	"github.com/gofrs/flock"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpc_auth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
+	"github.com/moby/buildkit/auth"
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/cache/remotecache/azblob"
 	"github.com/moby/buildkit/cache/remotecache/gha"
@@ -38,6 +41,7 @@ import (
 	dockerfile "github.com/moby/buildkit/frontend/dockerfile/builder"
 	"github.com/moby/buildkit/frontend/gateway"
 	"github.com/moby/buildkit/frontend/gateway/forwarder"
+	"github.com/moby/buildkit/okteto"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver/bboltcachestorage"
 	"github.com/moby/buildkit/util/apicaps"
@@ -57,6 +61,7 @@ import (
 	"github.com/moby/buildkit/worker"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"go.etcd.io/bbolt"
@@ -194,6 +199,11 @@ func main() {
 			Name:  "allow-insecure-entitlement",
 			Usage: "allows insecure entitlements e.g. network.host, security.insecure",
 		},
+		cli.StringFlag{
+			Name:  "authorization-endpoint",
+			Usage: "authorization endpoint (optional)",
+			Value: "",
+		},
 	)
 	app.Flags = append(app.Flags, appFlags...)
 
@@ -234,10 +244,29 @@ func main() {
 
 		streamTracer := otelgrpc.StreamServerInterceptor(otelgrpc.WithTracerProvider(tp), otelgrpc.WithPropagators(propagators))
 
-		unary := grpc_middleware.ChainUnaryServer(unaryInterceptor(ctx, tp), grpcerrors.UnaryServerInterceptor)
-		stream := grpc_middleware.ChainStreamServer(streamTracer, grpcerrors.StreamServerInterceptor)
+		var unary grpc.UnaryServerInterceptor
+		var stream grpc.StreamServerInterceptor
+
+		if cfg.AuthorizationEndpoint == "" {
+			logrus.Fatal("no authorization endpoint was provided, this is required for this fork of buildkitd")
+			unary = grpc_middleware.ChainUnaryServer(unaryInterceptor(ctx, tp), grpcerrors.UnaryServerInterceptor)
+			stream = grpc_middleware.ChainStreamServer(streamTracer, grpcerrors.StreamServerInterceptor)
+		} else {
+			logrus.Info("buildkitd is running with auth required")
+			svc := auth.NewService(cfg.AuthorizationEndpoint)
+			unaryAuthorizer := grpc_auth.UnaryServerInterceptor(svc.EnsureValidToken)
+			streamAuthorizer := grpc_auth.StreamServerInterceptor(svc.EnsureValidToken)
+
+			unary = grpc_middleware.ChainUnaryServer(unaryInterceptor(ctx, tp), unaryAuthorizer, grpcerrors.UnaryServerInterceptor)
+			stream = grpc_middleware.ChainStreamServer(streamTracer, streamAuthorizer, grpcerrors.StreamServerInterceptor)
+		}
 
 		opts := []grpc.ServerOption{grpc.UnaryInterceptor(unary), grpc.StreamInterceptor(stream)}
+
+		opts = append(opts, grpc.KeepaliveEnforcementPolicy(okteto.LoadKeepaliveEnforcementPolicy()))
+
+		opts = append(opts, grpc.KeepaliveParams(okteto.LoadKeepaliveServerParams()))
+
 		server := grpc.NewServer(opts...)
 
 		// relative path does not work with nightlyone/lockfile
@@ -291,6 +320,12 @@ func main() {
 		if err := serveGRPC(cfg.GRPC, server, errCh); err != nil {
 			return err
 		}
+
+		http.Handle("/metrics", promhttp.Handler())
+		go func() {
+			logrus.Info("running metrics server on :2112")
+			http.ListenAndServe(":2112", nil)
+		}()
 
 		select {
 		case serverErr := <-errCh:
@@ -471,6 +506,10 @@ func applyMainFlags(c *cli.Context, cfg *config.Config) error {
 			return err
 		}
 		cfg.GRPC.GID = &gid
+	}
+
+	if authEndpoint := c.String("authorization-endpoint"); authEndpoint != "" {
+		cfg.AuthorizationEndpoint = authEndpoint
 	}
 
 	if tlscert := c.String("tlscert"); tlscert != "" {

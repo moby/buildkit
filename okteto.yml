@@ -1,0 +1,40 @@
+name: buildkit
+context: ${OKTETO_DEV_CLUSTER}
+namespace: okteto
+
+# The build section defines how to build the images of your development environment
+# More info: https://www.okteto.com/docs/reference/manifest/#build
+# build:
+#   my-service:
+#     context: .
+
+
+# The deploy section defines how to deploy your development environment
+# More info: https://www.okteto.com/docs/reference/manifest/#deploy
+
+# The dependencies section defines other git repositories to be deployed as part of your development environment
+# More info: https://www.okteto.com/docs/reference/manifest/#dependencies
+# dependencies:
+#   - https://github.com/okteto/sample
+# The dev section defines how to activate a development container
+# More info: https://www.okteto.com/docs/reference/manifest/#dev
+dev:
+  buildkit:
+    selector:
+      app.kubernetes.io/component: buildkit
+      app.kubernetes.io/part-of: okteto
+    image: okteto/dev:latest
+    command: bash
+    securityContext:
+      capabilities:
+        add:
+          - SYS_PTRACE
+    volumes:
+      - /go/pkg/
+      - /root/.cache/go-build/
+    workdir: /usr/src/app
+    sync:
+      - .:/usr/src/app
+    forward:
+      - 2345:2345
+      - 8080:8080
