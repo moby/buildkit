@@ -341,8 +341,8 @@ github.com/containerd/fuse-overlayfs-snapshotter
 # github.com/containerd/go-cni v1.1.9
 ## explicit; go 1.19
 github.com/containerd/go-cni
-# github.com/containerd/go-runc v1.0.0
-## explicit; go 1.13
+# github.com/containerd/go-runc v1.0.1-0.20230316182144-f5d58d02d6c8
+## explicit; go 1.18
 github.com/containerd/go-runc
 # github.com/containerd/nydus-snapshotter v0.3.1
 ## explicit; go 1.17

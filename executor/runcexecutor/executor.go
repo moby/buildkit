@@ -309,7 +309,7 @@ func exitError(ctx context.Context, err error) error {
 			Err:      err,
 		}
 		var runcExitError *runc.ExitError
-		if errors.As(err, &runcExitError) {
+		if errors.As(err, &runcExitError) && runcExitError.Status >= 0 {
 			exitErr = &gatewayapi.ExitError{
 				ExitCode: uint32(runcExitError.Status),
 			}
