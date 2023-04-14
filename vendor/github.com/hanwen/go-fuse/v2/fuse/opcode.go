@@ -103,6 +103,10 @@ func doInit(server *Server, req *request) {
 		// Clear CAP_ASYNC_READ
 		server.kernelSettings.Flags &= ^uint32(CAP_ASYNC_READ)
 	}
+	if server.opts.DisableReadDirPlus {
+		// Clear CAP_READDIRPLUS
+		server.kernelSettings.Flags &= ^uint32(CAP_READDIRPLUS)
+	}
 
 	dataCacheMode := input.Flags & CAP_AUTO_INVAL_DATA
 	if server.opts.ExplicitDataCacheControl {
