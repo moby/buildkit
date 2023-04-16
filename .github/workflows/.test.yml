@@ -105,10 +105,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pkg: ${{ fromJson(needs.prepare.outputs.pkgs) }}
-        kind: ${{ fromJson(needs.prepare.outputs.kinds) }}
-        tags: ${{ fromJson(needs.prepare.outputs.tags) }}
-        include: ${{ fromJson(needs.prepare.outputs.includes) }}
         worker:
           - containerd
           - containerd-rootless
@@ -117,6 +113,10 @@ jobs:
           - oci
           - oci-rootless
           - oci-snapshotter-stargz
+        pkg: ${{ fromJson(needs.prepare.outputs.pkgs) }}
+        kind: ${{ fromJson(needs.prepare.outputs.kinds) }}
+        tags: ${{ fromJson(needs.prepare.outputs.tags) }}
+        include: ${{ fromJson(needs.prepare.outputs.includes) }}
     steps:
       -
         name: Environment variables
