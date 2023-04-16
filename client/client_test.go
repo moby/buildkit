@@ -6648,7 +6648,8 @@ loop0:
 	defer client.Close()
 
 	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
-	snapshotService := client.SnapshotService("overlayfs")
+	snapshotterName := sb.Snapshotter()
+	snapshotService := client.SnapshotService(snapshotterName)
 
 	retries = 0
 	for {
