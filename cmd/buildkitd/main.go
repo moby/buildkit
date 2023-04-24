@@ -84,6 +84,12 @@ func init() {
 	detect.Recorder = detect.NewTraceRecorder()
 }
 
+type Config struct {
+    App struct {
+        Format string `toml:"format"`
+    } `toml:"app"`
+}
+
 var propagators = propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
 
 type workerInitializerOpt struct {
@@ -167,6 +173,12 @@ func main() {
 			Usage: "listening address (socket or tcp)",
 			Value: &cli.StringSlice{defaultConf.GRPC.Address[0]},
 		},
+		// Add format flag to control log formatter
+		cli.StringFlag{
+			Name:  "format",
+			Usage: "log formatter: json or text",
+			Value: "text",
+		},
 		cli.StringFlag{
 			Name:  "group",
 			Usage: "group (name or gid) which will own all Unix socket listening addresses",
@@ -217,8 +229,20 @@ func main() {
 		if err := applyMainFlags(c, &cfg); err != nil {
 			return err
 		}
-
-		logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
+		// Use TOML config file if it exists
+		if _, err := toml.DecodeFile("buildkitd.toml", &config); err != nil {
+			handleErr(debugEnabled, err)
+		}
+		// Get TOML log format otherwise use flag format
+		logFormat := config.App.Format
+		if logFormat == "" {
+			logFormat = context.GlobalString("format")
+		}
+		if logFormat == "json" {
+			logrus.SetFormatter(&logrus.JSONFormatter{})
+		} else {
+			logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
+		}
 		if cfg.Debug {
 			logrus.SetLevel(logrus.DebugLevel)
 		}

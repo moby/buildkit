@@ -114,13 +114,11 @@ func main() {
 
 	app.Before = func(context *cli.Context) error {
 		debugEnabled = context.GlobalBool("debug")
-		if _, err := toml.DecodeFile("config.toml", &config); err != nil {
-			handleErr(debugEnabled, err)
-		}
-		
-		logFormat := config.App.Format
-		logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
+		// Use Format flag to control log formatter
+		logFormat = context.GlobalString("format")
 		if logFormat == "json" {
+			logrus.SetFormatter(&logrus.JSONFormatter{})
+		} else {
 			logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
 		}
 		if debugEnabled {
