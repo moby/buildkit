@@ -217,6 +217,11 @@ func (c *cacheManager) LoadWithParents(ctx context.Context, rec *CacheRecord) ([
 			r.Release(context.TODO())
 		}
 	}
+	for _, r := range m {
+		// refs added to results are deleted from m by filterResults
+		// so release any leftovers
+		r.Release(context.TODO())
+	}
 
 	return results, nil
 }

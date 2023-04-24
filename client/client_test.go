@@ -198,6 +198,7 @@ func TestIntegration(t *testing.T) {
 		testSourcePolicy,
 		testLLBMountPerformance,
 		testClientCustomGRPCOpts,
+		testMultipleRecordsWithSameLayersCacheImportExport,
 	)
 }
 
@@ -5157,6 +5158,64 @@ func testBasicGhaCacheImportExport(t *testing.T, sb integration.Sandbox) {
 		},
 	}
 	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
+}
+
+func testMultipleRecordsWithSameLayersCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb,
+		integration.FeatureCacheExport,
+		integration.FeatureCacheImport,
+		integration.FeatureCacheBackendRegistry,
+	)
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+	target := registry + "/buildkit/testexport:latest"
+	cacheOpts := []CacheOptionsEntry{{
+		Type: "registry",
+		Attrs: map[string]string{
+			"ref": target,
+		},
+	}}
+
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	base := llb.Image("busybox:latest")
+	// layerA and layerB create identical layers with different LLB
+	layerA := base.Run(llb.Args([]string{"sh", "-c",
+		`echo $(( 1 + 2 )) > /result && touch -d "1970-01-01 00:00:00" /result`,
+	})).Root()
+	layerB := base.Run(llb.Args([]string{"sh", "-c",
+		`echo $(( 2 + 1 )) > /result && touch -d "1970-01-01 00:00:00" /result`,
+	})).Root()
+
+	combined := llb.Merge([]llb.State{layerA, layerB})
+	combinedDef, err := combined.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), combinedDef, SolveOpt{
+		CacheExports: cacheOpts,
+	}, nil)
+	require.NoError(t, err)
+
+	ensurePruneAll(t, c, sb)
+
+	singleDef, err := layerA.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), singleDef, SolveOpt{
+		CacheImports: cacheOpts,
+	}, nil)
+	require.NoError(t, err)
+
+	// Ensure that even though layerA and layerB were both loaded as possible results
+	// and only was used, all the cache refs are released
+	// More context: https://github.com/moby/buildkit/pull/3815
+	ensurePruneAll(t, c, sb)
 }
 
 func readFileInImage(ctx context.Context, t *testing.T, c *Client, ref, path string) ([]byte, error) {
