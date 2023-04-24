@@ -191,7 +191,7 @@ import (
 // * If the object is previously
 // restored, Amazon S3 returns 200 OK in the response.
 //
-// Special Errors
+// # Special Errors
 //
 // * Code:
 // RestoreAlreadyInProgress
@@ -217,7 +217,7 @@ import (
 //
 // * SOAP Fault Code Prefix: N/A
 //
-// Related Resources
+// # Related Resources
 //
 // *
 // PutBucketLifecycleConfiguration

@@ -79,7 +79,7 @@ import (
 // *
 // x-amz-server-side-encryption-customer-key-MD5
 //
-// Special Errors
+// # Special Errors
 //
 // * Code:
 // NoSuchUpload
@@ -93,7 +93,7 @@ import (
 // * SOAP Fault Code Prefix:
 // Client
 //
-// Related Resources
+// # Related Resources
 //
 // * CreateMultipartUpload
 // (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html)

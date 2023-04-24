@@ -71,11 +71,11 @@ type awsChunkedTrailerValue struct {
 // Here is the aws-chunked payload stream as read from the awsChunkedEncoding
 // if original request stream is "Hello world", and checksum hash used is SHA256
 //
-//    <b>\r\n
-//    Hello world\r\n
-//    0\r\n
-//    x-amz-checksum-sha256:ZOyIygCyaOW6GjVnihtTFtIS9PNmskdyMlNKiuyjfzw=\r\n
-//    \r\n
+//	<b>\r\n
+//	Hello world\r\n
+//	0\r\n
+//	x-amz-checksum-sha256:ZOyIygCyaOW6GjVnihtTFtIS9PNmskdyMlNKiuyjfzw=\r\n
+//	\r\n
 type awsChunkedEncoding struct {
 	options awsChunkedEncodingOptions
 

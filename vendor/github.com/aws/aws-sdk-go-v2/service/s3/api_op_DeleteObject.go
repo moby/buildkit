@@ -237,3 +237,34 @@ func addDeleteObjectUpdateEndpoint(stack *middleware.Stack, options Options) err
 		DisableMultiRegionAccessPoints: options.DisableMultiRegionAccessPoints,
 	})
 }
+
+// PresignDeleteObject is used to generate a presigned HTTP Request which contains
+// presigned URL, signed headers and HTTP method used.
+func (c *PresignClient) PresignDeleteObject(ctx context.Context, params *DeleteObjectInput, optFns ...func(*PresignOptions)) (*v4.PresignedHTTPRequest, error) {
+	if params == nil {
+		params = &DeleteObjectInput{}
+	}
+	options := c.options.copy()
+	for _, fn := range optFns {
+		fn(&options)
+	}
+	clientOptFns := append(options.ClientOptions, withNopHTTPClientAPIOption)
+
+	result, _, err := c.client.invokeOperation(ctx, "DeleteObject", params, clientOptFns,
+		c.client.addOperationDeleteObjectMiddlewares,
+		presignConverter(options).convertToPresignMiddleware,
+		addDeleteObjectPayloadAsUnsigned,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	out := result.(*v4.PresignedHTTPRequest)
+	return out, nil
+}
+
+func addDeleteObjectPayloadAsUnsigned(stack *middleware.Stack, options Options) error {
+	v4.RemoveContentSHA256HeaderMiddleware(stack)
+	v4.RemoveComputePayloadSHA256Middleware(stack)
+	return v4.AddUnsignedPayloadMiddleware(stack)
+}

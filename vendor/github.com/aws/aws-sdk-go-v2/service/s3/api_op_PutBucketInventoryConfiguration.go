@@ -64,7 +64,7 @@ import (
 // of the specified bucket, or you do not have the s3:PutInventoryConfiguration
 // bucket permission to set the configuration on the bucket.
 //
-// Related Resources
+// # Related Resources
 //
 // *
 // GetBucketInventoryConfiguration

@@ -7,7 +7,6 @@ import (
 	"hash"
 	"io"
 	"strconv"
-	"strings"
 
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/smithy-go/middleware"
@@ -97,9 +96,9 @@ func (e computeInputHeaderChecksumError) Error() string {
 func (e computeInputHeaderChecksumError) Unwrap() error { return e.Err }
 
 // HandleBuild handles computing the payload's checksum, in the following cases:
-//   * Is HTTP, not HTTPS
-//   * RequireChecksum is true, and no checksums were specified via the Input
-//   * Trailing checksums are not supported
+//   - Is HTTP, not HTTPS
+//   - RequireChecksum is true, and no checksums were specified via the Input
+//   - Trailing checksums are not supported
 //
 // The build handler must be inserted in the stack before ContentPayloadHash
 // and after ComputeContentLength.
@@ -176,7 +175,7 @@ func (m *computeInputPayloadChecksum) HandleBuild(
 	//
 	// Nil and empty streams will always be handled as a request header,
 	// regardless if the operation supports trailing checksums or not.
-	if strings.EqualFold(req.URL.Scheme, "https") {
+	if req.IsHTTPS() {
 		if stream != nil && streamLength != 0 && m.EnableTrailingChecksum {
 			if m.EnableComputePayloadHash {
 				// payload hash is set as header in Build middleware handler,
@@ -246,9 +245,9 @@ func (e computeInputTrailingChecksumError) Error() string {
 func (e computeInputTrailingChecksumError) Unwrap() error { return e.Err }
 
 // HandleFinalize handles computing the payload's checksum, in the following cases:
-//   * Is HTTPS, not HTTP
-//   * A checksum was specified via the Input
-//   * Trailing checksums are supported.
+//   - Is HTTPS, not HTTP
+//   - A checksum was specified via the Input
+//   - Trailing checksums are supported.
 //
 // The finalize handler must be inserted in the stack before Signing, and after Retry.
 func (m *computeInputPayloadChecksum) HandleFinalize(
@@ -273,7 +272,7 @@ func (m *computeInputPayloadChecksum) HandleFinalize(
 	}
 
 	// Trailing checksums are only supported when TLS is enabled.
-	if !strings.EqualFold(req.URL.Scheme, "https") {
+	if !req.IsHTTPS() {
 		return out, metadata, computeInputTrailingChecksumError{
 			Msg: "HTTPS required",
 		}

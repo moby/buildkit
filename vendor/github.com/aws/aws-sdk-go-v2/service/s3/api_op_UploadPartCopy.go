@@ -97,7 +97,7 @@ import (
 // * HTTP Status Code: 400
 // Bad Request
 //
-// Related Resources
+// # Related Resources
 //
 // * CreateMultipartUpload
 // (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html)
