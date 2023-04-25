@@ -33,12 +33,6 @@ func init() {
 	otel.SetErrorHandler(skipErrors{})
 }
 
-type Config struct {
-    App struct {
-        Format string `toml:"format"`
-    } `toml:"app"`
-}
-
 func main() {
 	cli.VersionPrinter = func(c *cli.Context) {
 		fmt.Println(c.App.Name, version.Package, c.App.Version, version.Revision)
