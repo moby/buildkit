@@ -19,7 +19,7 @@ import (
 )
 
 // ResolveClient resolves a client from CLI args
-func ResolveClient(c *cli.Context) (*client.Client, error) {
+func ResolveClient(c *cli.Context) (client.Client, error) {
 	serverName := c.GlobalString("tlsservername")
 	if serverName == "" {
 		// guess servername as hostname of target address

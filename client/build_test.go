@@ -313,7 +313,7 @@ func testNoBuildID(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	g := gatewayapi.NewLLBBridgeClient(c.conn)
+	g := c.(*cl).gatewayClient("")
 	_, err = g.Ping(ctx, &gatewayapi.PingRequest{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no buildid found in context")
@@ -328,7 +328,7 @@ func testUnknownBuildID(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	g := c.gatewayClientForBuild(t.Name() + identity.NewID())
+	g := c.(*cl).gatewayClient(t.Name() + identity.NewID())
 	_, err = g.Ping(ctx, &gatewayapi.PingRequest{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no such job")

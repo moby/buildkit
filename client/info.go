@@ -18,7 +18,7 @@ type BuildkitVersion struct {
 	Revision string `json:"revision"`
 }
 
-func (c *Client) Info(ctx context.Context) (*Info, error) {
+func (c *cl) Info(ctx context.Context) (*Info, error) {
 	res, err := c.ControlClient().Info(ctx, &controlapi.InfoRequest{})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to call info")

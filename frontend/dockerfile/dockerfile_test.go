@@ -182,7 +182,7 @@ var opts []integration.TestOpt
 var securityOpts []integration.TestOpt
 
 type frontend interface {
-	Solve(context.Context, *client.Client, client.SolveOpt, chan *client.SolveStatus) (*client.SolveResponse, error)
+	Solve(context.Context, client.Client, client.SolveOpt, chan *client.SolveStatus) (*client.SolveResponse, error)
 	SolveGateway(context.Context, gateway.Client, gateway.SolveRequest) (*gateway.Result, error)
 	DFCmdArgs(string, string) (string, string)
 	RequiresBuildctl(t *testing.T)
@@ -6646,7 +6646,7 @@ func runShell(dir string, cmds ...string) error {
 // there can be situation where a build has finished but the following prune doesn't
 // cleanup cache because some records still haven't been released.
 // This function tries to ensure prune by retrying it.
-func ensurePruneAll(t *testing.T, c *client.Client, sb integration.Sandbox) {
+func ensurePruneAll(t *testing.T, c client.Client, sb integration.Sandbox) {
 	for i := 0; i < 2; i++ {
 		require.NoError(t, c.Prune(sb.Context(), nil, client.PruneAll))
 		for j := 0; j < 20; j++ {
@@ -6662,7 +6662,7 @@ func ensurePruneAll(t *testing.T, c *client.Client, sb integration.Sandbox) {
 	t.Fatalf("failed to ensure prune")
 }
 
-func checkAllReleasable(t *testing.T, c *client.Client, sb integration.Sandbox, checkContent bool) {
+func checkAllReleasable(t *testing.T, c client.Client, sb integration.Sandbox, checkContent bool) {
 	cl, err := c.ControlClient().ListenBuildHistory(sb.Context(), &controlapi.BuildHistoryRequest{
 		EarlyExit: true,
 	})
@@ -6769,7 +6769,7 @@ type builtinFrontend struct{}
 
 var _ frontend = &builtinFrontend{}
 
-func (f *builtinFrontend) Solve(ctx context.Context, c *client.Client, opt client.SolveOpt, statusChan chan *client.SolveStatus) (*client.SolveResponse, error) {
+func (f *builtinFrontend) Solve(ctx context.Context, c client.Client, opt client.SolveOpt, statusChan chan *client.SolveStatus) (*client.SolveResponse, error) {
 	opt.Frontend = "dockerfile.v0"
 	return c.Solve(ctx, nil, opt, statusChan)
 }
@@ -6789,7 +6789,7 @@ type clientFrontend struct{}
 
 var _ frontend = &clientFrontend{}
 
-func (f *clientFrontend) Solve(ctx context.Context, c *client.Client, opt client.SolveOpt, statusChan chan *client.SolveStatus) (*client.SolveResponse, error) {
+func (f *clientFrontend) Solve(ctx context.Context, c client.Client, opt client.SolveOpt, statusChan chan *client.SolveStatus) (*client.SolveResponse, error) {
 	return c.Build(ctx, opt, "", builder.Build, statusChan)
 }
 
@@ -6813,7 +6813,7 @@ type gatewayFrontend struct {
 
 var _ frontend = &gatewayFrontend{}
 
-func (f *gatewayFrontend) Solve(ctx context.Context, c *client.Client, opt client.SolveOpt, statusChan chan *client.SolveStatus) (*client.SolveResponse, error) {
+func (f *gatewayFrontend) Solve(ctx context.Context, c client.Client, opt client.SolveOpt, statusChan chan *client.SolveStatus) (*client.SolveResponse, error) {
 	opt.Frontend = "gateway.v0"
 	if opt.FrontendAttrs == nil {
 		opt.FrontendAttrs = make(map[string]string)

@@ -66,7 +66,7 @@ type CacheOptionsEntry struct {
 
 // Solve calls Solve on the controller.
 // def must be nil if (and only if) opt.Frontend is set.
-func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, statusChan chan *SolveStatus) (*SolveResponse, error) {
+func (c *cl) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, statusChan chan *SolveStatus) (*SolveResponse, error) {
 	defer func() {
 		if statusChan != nil {
 			close(statusChan)
@@ -85,7 +85,7 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 
 type runGatewayCB func(ref string, s *session.Session, opts map[string]string) error
 
-func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runGatewayCB, opt SolveOpt, statusChan chan *SolveStatus) (*SolveResponse, error) {
+func (c *cl) solve(ctx context.Context, def *llb.Definition, runGateway runGatewayCB, opt SolveOpt, statusChan chan *SolveStatus) (*SolveResponse, error) {
 	if def != nil && runGateway != nil {
 		return nil, errors.New("invalid with def and cb")
 	}

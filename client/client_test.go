@@ -5218,7 +5218,7 @@ func testMultipleRecordsWithSameLayersCacheImportExport(t *testing.T, sb integra
 	ensurePruneAll(t, c, sb)
 }
 
-func readFileInImage(ctx context.Context, t *testing.T, c *Client, ref, path string) ([]byte, error) {
+func readFileInImage(ctx context.Context, t *testing.T, c Client, ref, path string) ([]byte, error) {
 	def, err := llb.Image(ref).Marshal(ctx)
 	if err != nil {
 		return nil, err
@@ -6467,7 +6467,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 	}
 }
 
-func requireContents(ctx context.Context, t *testing.T, c *Client, sb integration.Sandbox, state llb.State, cacheImports, cacheExports []CacheOptionsEntry, imageTarget string, files ...fstest.Applier) {
+func requireContents(ctx context.Context, t *testing.T, c Client, sb integration.Sandbox, state llb.State, cacheImports, cacheExports []CacheOptionsEntry, imageTarget string, files ...fstest.Applier) {
 	t.Helper()
 
 	def, err := state.Marshal(ctx)
@@ -6515,7 +6515,7 @@ func requireContents(ctx context.Context, t *testing.T, c *Client, sb integratio
 	}
 }
 
-func requireEqualContents(ctx context.Context, t *testing.T, c *Client, stateA, stateB llb.State) {
+func requireEqualContents(ctx context.Context, t *testing.T, c Client, stateA, stateB llb.State) {
 	t.Helper()
 
 	defA, err := stateA.Marshal(ctx)
@@ -6577,7 +6577,7 @@ func requiresLinux(t *testing.T) {
 // there can be situation where a build has finished but the following prune doesn't
 // cleanup cache because some records still haven't been released.
 // This function tries to ensure prune by retrying it.
-func ensurePruneAll(t *testing.T, c *Client, sb integration.Sandbox) {
+func ensurePruneAll(t *testing.T, c Client, sb integration.Sandbox) {
 	for i := 0; i < 2; i++ {
 		require.NoError(t, c.Prune(sb.Context(), nil, PruneAll))
 		for j := 0; j < 20; j++ {
@@ -6593,7 +6593,7 @@ func ensurePruneAll(t *testing.T, c *Client, sb integration.Sandbox) {
 	t.Fatalf("failed to ensure prune")
 }
 
-func checkAllReleasable(t *testing.T, c *Client, sb integration.Sandbox, checkContent bool) {
+func checkAllReleasable(t *testing.T, c Client, sb integration.Sandbox, checkContent bool) {
 	cl, err := c.ControlClient().ListenBuildHistory(sb.Context(), &controlapi.BuildHistoryRequest{
 		EarlyExit: true,
 	})

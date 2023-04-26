@@ -13,6 +13,9 @@ import (
 	"github.com/containerd/containerd/defaults"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/connhelper"
+	"github.com/moby/buildkit/client/llb"
+	gateway "github.com/moby/buildkit/frontend/gateway/client"
+	gatewayapi "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/grpchijack"
 	"github.com/moby/buildkit/util/appdefaults"
@@ -29,7 +32,23 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-type Client struct {
+type Client interface {
+	ControlClient() controlapi.ControlClient
+	ContentClient() contentapi.ContentClient
+
+	Dialer() session.Dialer
+
+	Info(ctx context.Context) (*Info, error)
+	ListWorkers(ctx context.Context, opts ...ListWorkersOption) ([]*WorkerInfo, error)
+	Build(ctx context.Context, opt SolveOpt, product string, buildFunc gateway.BuildFunc, statusChan chan *SolveStatus) (*SolveResponse, error)
+	Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, statusChan chan *SolveStatus) (*SolveResponse, error)
+	DiskUsage(ctx context.Context, opts ...DiskUsageOption) ([]*UsageInfo, error)
+	Prune(ctx context.Context, ch chan UsageInfo, opts ...PruneOption) error
+
+	Close() error
+}
+
+type cl struct {
 	conn          *grpc.ClientConn
 	sessionDialer func(ctx context.Context, proto string, meta map[string][]string) (net.Conn, error)
 }
@@ -39,7 +58,7 @@ type ClientOpt interface {
 }
 
 // New returns a new buildkit client. Address can be empty for the system-default address.
-func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error) {
+func New(ctx context.Context, address string, opts ...ClientOpt) (Client, error) {
 	gopts := []grpc.DialOption{
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(defaults.DefaultMaxRecvMsgSize)),
 		grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(defaults.DefaultMaxSendMsgSize)),
@@ -151,7 +170,7 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 		return nil, errors.Wrapf(err, "failed to dial %q . make sure buildkitd is running", address)
 	}
 
-	c := &Client{
+	c := &cl{
 		conn:          conn,
 		sessionDialer: sessionDialer,
 	}
@@ -163,7 +182,7 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 	return c, nil
 }
 
-func (c *Client) setupDelegatedTracing(ctx context.Context, td TracerDelegate) error {
+func (c *cl) setupDelegatedTracing(ctx context.Context, td TracerDelegate) error {
 	pd := otlptracegrpc.NewClient(c.conn)
 	e, err := otlptrace.New(ctx, pd)
 	if err != nil {
@@ -172,19 +191,27 @@ func (c *Client) setupDelegatedTracing(ctx context.Context, td TracerDelegate) e
 	return td.SetSpanExporter(ctx, e)
 }
 
-func (c *Client) ControlClient() controlapi.ControlClient {
+func (c *cl) ControlClient() controlapi.ControlClient {
 	return controlapi.NewControlClient(c.conn)
 }
 
-func (c *Client) ContentClient() contentapi.ContentClient {
+func (c *cl) ContentClient() contentapi.ContentClient {
 	return contentapi.NewContentClient(c.conn)
 }
 
-func (c *Client) Dialer() session.Dialer {
+func (c *cl) gatewayClient(buildid string) *gatewayClientForBuild {
+	g := gatewayapi.NewLLBBridgeClient(c.conn)
+	return &gatewayClientForBuild{
+		gateway: g,
+		buildID: buildid,
+	}
+}
+
+func (c *cl) Dialer() session.Dialer {
 	return grpchijack.Dialer(c.ControlClient())
 }
 
-func (c *Client) Close() error {
+func (c *cl) Close() error {
 	return c.conn.Close()
 }
 

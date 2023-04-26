@@ -21,7 +21,7 @@ type WorkerInfo struct {
 }
 
 // ListWorkers lists all active workers
-func (c *Client) ListWorkers(ctx context.Context, opts ...ListWorkersOption) ([]*WorkerInfo, error) {
+func (c *cl) ListWorkers(ctx context.Context, opts ...ListWorkersOption) ([]*WorkerInfo, error) {
 	info := &ListWorkersInfo{}
 	for _, o := range opts {
 		o.SetListWorkersOption(info)

@@ -24,7 +24,7 @@ type UsageInfo struct {
 	Shared      bool            `json:"shared"`
 }
 
-func (c *Client) DiskUsage(ctx context.Context, opts ...DiskUsageOption) ([]*UsageInfo, error) {
+func (c *cl) DiskUsage(ctx context.Context, opts ...DiskUsageOption) ([]*UsageInfo, error) {
 	info := &DiskUsageInfo{}
 	for _, o := range opts {
 		o.SetDiskUsageOption(info)

@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-func (c *Client) Build(ctx context.Context, opt SolveOpt, product string, buildFunc gateway.BuildFunc, statusChan chan *SolveStatus) (*SolveResponse, error) {
+func (c *cl) Build(ctx context.Context, opt SolveOpt, product string, buildFunc gateway.BuildFunc, statusChan chan *SolveStatus) (*SolveResponse, error) {
 	defer func() {
 		if statusChan != nil {
 			close(statusChan)
@@ -48,7 +48,7 @@ func (c *Client) Build(ctx context.Context, opt SolveOpt, product string, buildF
 			}
 			feOpts[k] = v
 		}
-		gwClient := c.gatewayClientForBuild(ref)
+		gwClient := c.gatewayClient(ref)
 		g, err := grpcclient.New(ctx, feOpts, s.ID(), product, gwClient, gworkers)
 		if err != nil {
 			return err
@@ -63,14 +63,6 @@ func (c *Client) Build(ctx context.Context, opt SolveOpt, product string, buildF
 	}
 
 	return c.solve(ctx, nil, cb, opt, statusChan)
-}
-
-func (c *Client) gatewayClientForBuild(buildid string) *gatewayClientForBuild {
-	g := gatewayapi.NewLLBBridgeClient(c.conn)
-	return &gatewayClientForBuild{
-		gateway: g,
-		buildID: buildid,
-	}
 }
 
 type gatewayClientForBuild struct {

@@ -1408,7 +1408,7 @@ func (tc verifyBlobReuse) Run(t *testing.T, sb integration.Sandbox) {
 	}), img.Target()))
 }
 
-func resetState(t *testing.T, c *Client, sb integration.Sandbox) {
+func resetState(t *testing.T, c Client, sb integration.Sandbox) {
 	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
 	cdAddress := sb.ContainerdAddress()
 	if cdAddress != "" {

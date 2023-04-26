@@ -9,7 +9,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (c *Client) Prune(ctx context.Context, ch chan UsageInfo, opts ...PruneOption) error {
+func (c *cl) Prune(ctx context.Context, ch chan UsageInfo, opts ...PruneOption) error {
 	info := &PruneInfo{}
 	for _, o := range opts {
 		o.SetPruneOption(info)
