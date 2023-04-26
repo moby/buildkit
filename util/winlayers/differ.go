@@ -15,12 +15,10 @@ import (
 	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/mount"
+	log "github.com/moby/buildkit/util/bklog"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-
-	"github.com/moby/buildkit/util/bklog"
-	log "github.com/moby/buildkit/util/bklog"
 )
 
 const (
@@ -259,7 +257,7 @@ func makeWindowsLayer(ctx context.Context, w io.Writer) (io.Writer, func(error),
 			return tarWriter.Close()
 		}()
 		if err != nil {
-			bklog.G(ctx).Errorf("makeWindowsLayer %+v", err)
+			log.G(ctx).Errorf("makeWindowsLayer %+v", err)
 		}
 		pw.CloseWithError(err)
 		done <- err

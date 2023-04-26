@@ -50,7 +50,6 @@ import (
 	"github.com/moby/buildkit/solver/result"
 	"github.com/moby/buildkit/sourcepolicy"
 	sourcepolicypb "github.com/moby/buildkit/sourcepolicy/pb"
-	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/attestation"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/entitlements"
@@ -9087,11 +9086,11 @@ func testSourcePolicy(t *testing.T, sb integration.Sandbox) {
 			}
 			return c.Solve(ctx, gateway.SolveRequest{
 				Definition: def.ToPB(),
-				SourcePolicies: []*spb.Policy{{
-					Rules: []*spb.Rule{
+				SourcePolicies: []*sourcepolicypb.Policy{{
+					Rules: []*sourcepolicypb.Rule{
 						{
-							Action: spb.PolicyAction_DENY,
-							Selector: &spb.Selector{
+							Action: sourcepolicypb.PolicyAction_DENY,
+							Selector: &sourcepolicypb.Selector{
 								Identifier: denied,
 							},
 						},
