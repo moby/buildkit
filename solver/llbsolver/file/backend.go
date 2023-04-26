@@ -178,7 +178,7 @@ func rmPath(root, src string, allowNotFound bool) error {
 func docopy(ctx context.Context, src, dest string, action pb.FileActionCopy, u *copy.User, idmap *idtools.IdentityMapping) error {
 	srcPath, err := cleanPath(action.Src)
 	if err != nil {
-		return errors.Wrap(err, "cleaning path")
+		return errors.Wrap(err, "cleaning source path")
 	}
 	destPath, err := cleanPath(action.Dest)
 	if err != nil {
