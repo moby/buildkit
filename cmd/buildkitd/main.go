@@ -84,6 +84,9 @@ func init() {
 	detect.Recorder = detect.NewTraceRecorder()
 }
 
+// TOML STRUCTUTRE
+// [app]
+// format = "json"
 type Config struct {
     App struct {
         Format string `toml:"format"`
@@ -229,20 +232,18 @@ func main() {
 		if err := applyMainFlags(c, &cfg); err != nil {
 			return err
 		}
-		// Use TOML config file if it exists
-		if _, err := toml.DecodeFile("buildkitd.toml", &config); err != nil {
-			handleErr(debugEnabled, err)
-		}
-		// Get TOML log format otherwise use flag format
-		logFormat := config.App.Format
-		if logFormat == "" {
-			logFormat = context.GlobalString("format")
+
+		logFormat = cfg.App.Format
+		// If toml does not have format, use the flag format
+		if logFormat == ""{
+			logFormat = cfg.Format
 		}
 		if logFormat == "json" {
 			logrus.SetFormatter(&logrus.JSONFormatter{})
 		} else {
 			logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
 		}
+
 		if cfg.Debug {
 			logrus.SetLevel(logrus.DebugLevel)
 		}
@@ -467,7 +468,9 @@ func applyMainFlags(c *cli.Context, cfg *config.Config) error {
 	if c.IsSet("root") {
 		cfg.Root = c.String("root")
 	}
-
+	if c.IsSet("format") {
+		cfg.Format = c.String("format")
+	}
 	if c.IsSet("addr") || len(cfg.GRPC.Address) == 0 {
 		cfg.GRPC.Address = c.StringSlice("addr")
 	}
