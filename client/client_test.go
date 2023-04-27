@@ -3,6 +3,7 @@ package client
 import (
 	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -49,7 +50,6 @@ import (
 	"github.com/moby/buildkit/solver/result"
 	"github.com/moby/buildkit/sourcepolicy"
 	sourcepolicypb "github.com/moby/buildkit/sourcepolicy/pb"
-	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/attestation"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/entitlements"
@@ -197,6 +197,7 @@ func TestIntegration(t *testing.T) {
 		testSourcePolicy,
 		testLLBMountPerformance,
 		testClientCustomGRPCOpts,
+		testMultipleRecordsWithSameLayersCacheImportExport,
 	)
 }
 
@@ -2196,6 +2197,49 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, http.MethodHead, allReqs[1].Method)
 	require.Equal(t, "gzip", allReqs[1].Header.Get("Accept-Encoding"))
 
+	require.NoError(t, os.RemoveAll(filepath.Join(tmpdir, "foo")))
+
+	// update the content at the url to be gzipped now, the final output
+	// should remain the same
+	modTime = time.Now().Add(-23 * time.Hour)
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	_, err = gw.Write(resp.Content)
+	require.NoError(t, err)
+	require.NoError(t, gw.Close())
+	gzipBytes := buf.Bytes()
+	respGzip := httpserver.Response{
+		Etag:            identity.NewID(),
+		Content:         gzipBytes,
+		LastModified:    &modTime,
+		ContentEncoding: "gzip",
+	}
+	server.SetRoute("/foo", respGzip)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: tmpdir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	require.Equal(t, server.Stats("/foo").AllRequests, 4)
+	require.Equal(t, server.Stats("/foo").CachedRequests, 1)
+
+	dt, err = os.ReadFile(filepath.Join(tmpdir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, resp.Content, dt)
+
+	allReqs = server.Stats("/foo").Requests
+	require.Equal(t, 4, len(allReqs))
+	require.Equal(t, http.MethodHead, allReqs[2].Method)
+	require.Equal(t, "gzip", allReqs[2].Header.Get("Accept-Encoding"))
+	require.Equal(t, http.MethodGet, allReqs[3].Method)
+	require.Equal(t, "gzip", allReqs[3].Header.Get("Accept-Encoding"))
+
 	// test extra options
 	st = llb.HTTP(server.URL+"/foo", llb.Filename("bar"), llb.Chmod(0741), llb.Chown(1000, 1000))
 
@@ -2212,7 +2256,7 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	require.Equal(t, server.Stats("/foo").AllRequests, 3)
+	require.Equal(t, server.Stats("/foo").AllRequests, 5)
 	require.Equal(t, server.Stats("/foo").CachedRequests, 1)
 
 	dt, err = os.ReadFile(filepath.Join(tmpdir, "bar"))
@@ -5113,6 +5157,64 @@ func testBasicGhaCacheImportExport(t *testing.T, sb integration.Sandbox) {
 		},
 	}
 	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
+}
+
+func testMultipleRecordsWithSameLayersCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb,
+		integration.FeatureCacheExport,
+		integration.FeatureCacheImport,
+		integration.FeatureCacheBackendRegistry,
+	)
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+	target := registry + "/buildkit/testexport:latest"
+	cacheOpts := []CacheOptionsEntry{{
+		Type: "registry",
+		Attrs: map[string]string{
+			"ref": target,
+		},
+	}}
+
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	base := llb.Image("busybox:latest")
+	// layerA and layerB create identical layers with different LLB
+	layerA := base.Run(llb.Args([]string{"sh", "-c",
+		`echo $(( 1 + 2 )) > /result && touch -d "1970-01-01 00:00:00" /result`,
+	})).Root()
+	layerB := base.Run(llb.Args([]string{"sh", "-c",
+		`echo $(( 2 + 1 )) > /result && touch -d "1970-01-01 00:00:00" /result`,
+	})).Root()
+
+	combined := llb.Merge([]llb.State{layerA, layerB})
+	combinedDef, err := combined.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), combinedDef, SolveOpt{
+		CacheExports: cacheOpts,
+	}, nil)
+	require.NoError(t, err)
+
+	ensurePruneAll(t, c, sb)
+
+	singleDef, err := layerA.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), singleDef, SolveOpt{
+		CacheImports: cacheOpts,
+	}, nil)
+	require.NoError(t, err)
+
+	// Ensure that even though layerA and layerB were both loaded as possible results
+	// and only was used, all the cache refs are released
+	// More context: https://github.com/moby/buildkit/pull/3815
+	ensurePruneAll(t, c, sb)
 }
 
 func readFileInImage(ctx context.Context, t *testing.T, c *Client, ref, path string) ([]byte, error) {
@@ -8984,11 +9086,11 @@ func testSourcePolicy(t *testing.T, sb integration.Sandbox) {
 			}
 			return c.Solve(ctx, gateway.SolveRequest{
 				Definition: def.ToPB(),
-				SourcePolicies: []*spb.Policy{{
-					Rules: []*spb.Rule{
+				SourcePolicies: []*sourcepolicypb.Policy{{
+					Rules: []*sourcepolicypb.Rule{
 						{
-							Action: spb.PolicyAction_DENY,
-							Selector: &spb.Selector{
+							Action: sourcepolicypb.PolicyAction_DENY,
+							Selector: &sourcepolicypb.Selector{
 								Identifier: denied,
 							},
 						},

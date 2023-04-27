@@ -205,6 +205,10 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, inde
 			resp.Body.Close()
 		}
 		req.Method = "GET"
+		// Unset explicit Accept-Encoding for GET, otherwise the go http library will not
+		// transparently decompress the response body when it is gzipped. It will still add
+		// this header implicitly when the request is made though.
+		req.Header.Del("Accept-Encoding")
 	}
 
 	resp, err := client.Do(req)
