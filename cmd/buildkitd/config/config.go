@@ -26,6 +26,9 @@ type Config struct {
 	DNS *DNSConfig `toml:"dns"`
 
 	History *HistoryConfig `toml:"history"`
+
+	// LogFormat is the format of the logs. It can be "json" or "text".
+	LogFormat string `toml:"log-format"`
 }
 
 type GRPCConfig struct {

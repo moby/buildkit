@@ -85,15 +85,6 @@ func init() {
 	detect.Recorder = detect.NewTraceRecorder()
 }
 
-// TOML STRUCTUTRE
-// [app]
-// format = "json"
-type Config struct {
-    App struct {
-        Format string `toml:"format"`
-    } `toml:"app"`
-}
-
 var propagators = propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
 
 type workerInitializerOpt struct {
@@ -179,7 +170,7 @@ func main() {
 		},
 		// Add format flag to control log formatter
 		cli.StringFlag{
-			Name:  "format",
+			Name:  "log-format",
 			Usage: "log formatter: json or text",
 			Value: "text",
 		},
@@ -234,12 +225,8 @@ func main() {
 			return err
 		}
 
-		logFormat = cfg.App.Format
-		// If toml does not have format, use the flag format
-		if logFormat == ""{
-			logFormat = cfg.Format
-		}
-		if logFormat == "json" {
+
+		if cfg.LogFormat == "json" {
 			logrus.SetFormatter(&logrus.JSONFormatter{})
 		} else {
 			logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
@@ -470,8 +457,11 @@ func applyMainFlags(c *cli.Context, cfg *config.Config) error {
 	if c.IsSet("root") {
 		cfg.Root = c.String("root")
 	}
-	if c.IsSet("format") {
-		cfg.Format = c.String("format")
+	if c.IsSet("log-format") {
+		// set format if not set by config toml
+		if cfg.LogFormat == "" {
+			cfg.LogFormat = c.String("log-format")
+		}
 	}
 	if c.IsSet("addr") || len(cfg.GRPC.Address) == 0 {
 		cfg.GRPC.Address = c.StringSlice("addr")
