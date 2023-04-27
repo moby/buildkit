@@ -59,7 +59,7 @@ func main() {
 		},
 		// Add format flag to control log formatter
 		cli.StringFlag{
-			Name:  "format",
+			Name:  "log-format",
 			Usage: "log formatter: json or text",
 			Value: "text",
 		},
@@ -109,7 +109,7 @@ func main() {
 	app.Before = func(context *cli.Context) error {
 		debugEnabled = context.GlobalBool("debug")
 		// Use Format flag to control log formatter
-		logFormat = context.GlobalString("format")
+		logFormat = context.GlobalString("log-format")
 		if logFormat == "json" {
 			logrus.SetFormatter(&logrus.JSONFormatter{})
 		} else {
