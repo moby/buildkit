@@ -173,8 +173,8 @@ and `<target>` is a properly formatted target. These can be the following:
 Complete examples of using local and OCI layout:
 
 ```sh
-$ buildctl build --frontend dockerfile.v0 --local context=. --local dockerfile=. --local foo1=/home/dir/abc --opt context:alpine=foo1
-$ buildctl build --frontend dockerfile.v0 --local context=. --local dockerfile=. --oci-layout foo2=/home/dir/oci --opt context:alpine=foo2@sha256:bd04a5b26dec16579cd1d7322e949c5905c4742269663fcbc84dcb2e9f4592fb
+$ buildctl build --frontend dockerfile.v0 --local context=. --local dockerfile=. --local foo1=/home/dir/abc --opt context:alpine=local:foo1
+$ buildctl build --frontend dockerfile.v0 --local context=. --local dockerfile=. --oci-layout foo2=/home/dir/oci --opt context:alpine=local:foo2@sha256:bd04a5b26dec16579cd1d7322e949c5905c4742269663fcbc84dcb2e9f4592fb
 ```
 
 #### gateway-specific options
