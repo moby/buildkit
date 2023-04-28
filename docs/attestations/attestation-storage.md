@@ -19,17 +19,19 @@ style to OCI artifacts.
 Attestation manifests are attached to the root image index object, under a
 separate [OCI image manifest](https://github.com/opencontainers/image-spec/blob/main/manifest.md).
 Each attestation manifest can contain multiple [attestation blobs](#attestation-blob),
-with all the of the attestations in a manifest applying to a single platform
+with all of the attestations in a manifest applying to a single platform
 manifest. All properties of standard OCI and Docker manifests continue to
 apply.
 
-The image `config` descriptor will point to a valid [image config](https://github.com/opencontainers/image-spec/blob/main/config.md),
-however, it will not contain attestation-specific details, and should be
-ignored as it is only included for compatibility purposes.
+The image `config` descriptor should point to a config object with a media type
+of `application/vnd.docker.attestation.config.v1+json`. For now, only an empty
+JSON object is included, however, in the future, additional content may be
+allowed - implementations should ignore fields that they do not recognize if
+they choose to parse the config.
 
 Each image layer in `layers` will contain a descriptor for a single
 [attestation blob](#attestation-blob). The `mediaType` of each layer will be
-set in accordance to its contents, one of:
+set in accordance with its contents, one of:
 
 - `application/vnd.in-toto+json` (currently, the only supported option)
 

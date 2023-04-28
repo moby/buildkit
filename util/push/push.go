@@ -250,7 +250,7 @@ func childrenHandler(provider content.Provider) images.HandlerFunc {
 		case images.MediaTypeDockerSchema2Layer, images.MediaTypeDockerSchema2LayerGzip,
 			images.MediaTypeDockerSchema2Config, ocispecs.MediaTypeImageConfig,
 			ocispecs.MediaTypeImageLayer, ocispecs.MediaTypeImageLayerGzip,
-			attestation.MediaTypeDockerSchema2AttestationType:
+			attestation.MediaTypeAttestationLayer, attestation.MediaTypeOCIAttestationConfig:
 			// childless data types.
 			return nil, nil
 		default:

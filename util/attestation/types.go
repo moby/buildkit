@@ -1,7 +1,8 @@
 package attestation
 
 const (
-	MediaTypeDockerSchema2AttestationType = "application/vnd.in-toto+json"
+	MediaTypeAttestationLayer     = "application/vnd.in-toto+json"
+	MediaTypeOCIAttestationConfig = "application/vnd.docker.attestation.config.v1+json"
 
 	DockerAnnotationReferenceType        = "vnd.docker.reference.type"
 	DockerAnnotationReferenceDigest      = "vnd.docker.reference.digest"
