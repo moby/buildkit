@@ -567,7 +567,7 @@ func (h *HistoryQueue) Listen(ctx context.Context, req *controlapi.BuildHistoryR
 		if _, ok := h.deleted[e.Ref]; ok {
 			continue
 		}
-		sub.ps.Send(&controlapi.BuildHistoryEvent{
+		sub.send(&controlapi.BuildHistoryEvent{
 			Type:   controlapi.BuildHistoryEventType_STARTED,
 			Record: e,
 		})
