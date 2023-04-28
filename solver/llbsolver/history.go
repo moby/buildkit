@@ -133,6 +133,10 @@ func (h *HistoryQueue) delete(ref string, sync bool) error {
 		return nil
 	}
 	delete(h.deleted, ref)
+	h.ps.Send(&controlapi.BuildHistoryEvent{
+		Type:   controlapi.BuildHistoryEventType_DELETED,
+		Record: &controlapi.BuildHistoryRecord{Ref: ref},
+	})
 	if err := h.DB.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(recordsBucket))
 		if b == nil {
