@@ -66,3 +66,18 @@ issues:
     - linters:
         - revive
       text: "stutters"
+    - linters:
+        - revive
+      text: "empty-block"
+    - linters:
+        - revive
+      text: "superfluous-else"
+    - linters:
+        - revive
+      text: "unused-parameter"
+    - linters:
+        - revive
+      text: "redefines-builtin-id"
+    - linters:
+        - revive
+      text: "if-return"
