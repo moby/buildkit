@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -16,6 +17,8 @@ import (
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
+	"github.com/moby/buildkit/identity"
+	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/util/leaseutil"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -25,24 +28,27 @@ import (
 
 const (
 	recordsBucket = "_records"
+	versionBucket = "_version"
 )
 
 type HistoryQueueOpt struct {
 	DB           *bolt.DB
-	LeaseManager leases.Manager
-	ContentStore content.Store
+	LeaseManager *leaseutil.Manager
+	ContentStore *containerdsnapshot.Store
 	CleanConfig  *config.HistoryConfig
 }
 
 type HistoryQueue struct {
 	// mu protects active, refs and deleted maps
-	mu       sync.Mutex
-	initOnce sync.Once
-	HistoryQueueOpt
-	ps      *pubsub[*controlapi.BuildHistoryEvent]
-	active  map[string]*controlapi.BuildHistoryRecord
-	refs    map[string]int
-	deleted map[string]struct{}
+	mu            sync.Mutex
+	initOnce      sync.Once
+	opt           HistoryQueueOpt
+	ps            *pubsub[*controlapi.BuildHistoryEvent]
+	active        map[string]*controlapi.BuildHistoryRecord
+	refs          map[string]int
+	deleted       map[string]struct{}
+	hContentStore *containerdsnapshot.Store
+	hLeaseManager *leaseutil.Manager
 }
 
 type StatusImportResult struct {
@@ -52,7 +58,7 @@ type StatusImportResult struct {
 	NumTotalSteps     int
 }
 
-func NewHistoryQueue(opt HistoryQueueOpt) *HistoryQueue {
+func NewHistoryQueue(opt HistoryQueueOpt) (*HistoryQueue, error) {
 	if opt.CleanConfig == nil {
 		opt.CleanConfig = &config.HistoryConfig{
 			MaxAge:     config.Duration{Duration: 48 * time.Hour},
@@ -60,13 +66,46 @@ func NewHistoryQueue(opt HistoryQueueOpt) *HistoryQueue {
 		}
 	}
 	h := &HistoryQueue{
-		HistoryQueueOpt: opt,
+		opt: opt,
 		ps: &pubsub[*controlapi.BuildHistoryEvent]{
 			m: map[*channel[*controlapi.BuildHistoryEvent]]struct{}{},
 		},
 		active:  map[string]*controlapi.BuildHistoryRecord{},
 		refs:    map[string]int{},
 		deleted: map[string]struct{}{},
+	}
+
+	ns := h.opt.ContentStore.Namespace()
+	// double check invalid configuration
+	ns2 := h.opt.LeaseManager.Namespace()
+	if ns != ns2 {
+		return nil, errors.Errorf("invalid configuration: content store namespace %q does not match lease manager namespace %q", ns, ns2)
+	}
+	h.hContentStore = h.opt.ContentStore.WithNamespace(ns + "_history")
+	h.hLeaseManager = h.opt.LeaseManager.WithNamespace(ns + "_history")
+
+	// v2 migration: all records need to be on isolated containerd ns from rest of buildkit
+	needsMigration := false
+	if err := h.opt.DB.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(versionBucket))
+		if b != nil {
+			v := b.Get([]byte("version"))
+			if v != nil {
+				vi, err := strconv.ParseInt(string(v), 10, 64)
+				if err == nil && vi > 1 {
+					return nil
+				}
+			}
+		}
+		needsMigration = true
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	if needsMigration {
+		if err := h.migrateV2(); err != nil {
+			return nil, err
+		}
 	}
 
 	go func() {
@@ -76,13 +115,108 @@ func NewHistoryQueue(opt HistoryQueueOpt) *HistoryQueue {
 		}
 	}()
 
-	return h
+	return h, nil
+}
+
+func (h *HistoryQueue) migrateV2() error {
+	ctx := context.Background()
+
+	if err := h.opt.DB.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(recordsBucket))
+		if b == nil {
+			return nil
+		}
+		ctx, release, err := leaseutil.WithLease(ctx, h.hLeaseManager, leases.WithID("history_migration_"+identity.NewID()), leaseutil.MakeTemporary)
+		if err != nil {
+			return err
+		}
+		defer release(ctx)
+		return b.ForEach(func(key, dt []byte) error {
+			recs, err := h.opt.LeaseManager.ListResources(ctx, leases.Lease{ID: h.leaseID(string(key))})
+			if err != nil {
+				if errdefs.IsNotFound(err) {
+					return nil
+				}
+				return err
+			}
+			recs2 := make([]leases.Resource, 0, len(recs))
+			for _, r := range recs {
+				if r.Type == "content" {
+					if ok, err := h.migrateBlobV2(ctx, r.ID); err != nil {
+						return err
+					} else if ok {
+						recs2 = append(recs2, r)
+					}
+				} else {
+					return errors.Errorf("unknown resource type %q", r.Type)
+				}
+			}
+
+			l, err := h.hLeaseManager.Create(ctx, leases.WithID(h.leaseID(string(key))))
+			if err != nil {
+				if !errors.Is(err, errdefs.ErrAlreadyExists) {
+					return err
+				}
+				l = leases.Lease{ID: string(key)}
+			}
+
+			for _, r := range recs2 {
+				if err := h.hLeaseManager.AddResource(ctx, l, r); err != nil {
+					return err
+				}
+			}
+
+			return h.opt.LeaseManager.Delete(ctx, leases.Lease{ID: h.leaseID(string(key))})
+		})
+	}); err != nil {
+		return err
+	}
+
+	if err := h.opt.DB.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucketIfNotExists([]byte(versionBucket))
+		if err != nil {
+			return err
+		}
+		return b.Put([]byte("version"), []byte("2"))
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (h *HistoryQueue) migrateBlobV2(ctx context.Context, id string) (bool, error) {
+	dgst, err := digest.Parse(id)
+	if err != nil {
+		return false, err
+	}
+	w, err := content.OpenWriter(ctx, h.hContentStore, content.WithDescriptor(ocispecs.Descriptor{
+		Digest: dgst,
+	}), content.WithRef("history-migrate-"+id))
+	if err != nil {
+		if errdefs.IsAlreadyExists(err) {
+			return true, nil
+		}
+		return false, err
+	}
+	defer w.Close()
+	ra, err := h.opt.ContentStore.ReaderAt(ctx, ocispecs.Descriptor{
+		Digest: dgst,
+	})
+	if err != nil {
+		return false, nil // allow skipping
+	}
+	defer ra.Close()
+	if err := content.Copy(ctx, w, &reader{ReaderAt: ra}, 0, dgst); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (h *HistoryQueue) gc() error {
 	var records []*controlapi.BuildHistoryRecord
 
-	if err := h.DB.View(func(tx *bolt.Tx) error {
+	if err := h.opt.DB.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(recordsBucket))
 		if b == nil {
 			return nil
@@ -103,7 +237,7 @@ func (h *HistoryQueue) gc() error {
 	}
 
 	// in order for record to get deleted by gc it exceed both maxentries and maxage criteria
-	if len(records) < int(h.CleanConfig.MaxEntries) {
+	if len(records) < int(h.opt.CleanConfig.MaxEntries) {
 		return nil
 	}
 
@@ -116,8 +250,8 @@ func (h *HistoryQueue) gc() error {
 	defer h.mu.Unlock()
 
 	now := time.Now()
-	for _, r := range records[h.CleanConfig.MaxEntries:] {
-		if now.Add(0 - h.CleanConfig.MaxAge.Duration).After(*r.CompletedAt) {
+	for _, r := range records[h.opt.CleanConfig.MaxEntries:] {
+		if now.Add(-h.opt.CleanConfig.MaxAge.Duration).After(*r.CompletedAt) {
 			if err := h.delete(r.Ref, false); err != nil {
 				return err
 			}
@@ -137,7 +271,7 @@ func (h *HistoryQueue) delete(ref string, sync bool) error {
 		Type:   controlapi.BuildHistoryEventType_DELETED,
 		Record: &controlapi.BuildHistoryRecord{Ref: ref},
 	})
-	if err := h.DB.Update(func(tx *bolt.Tx) error {
+	if err := h.opt.DB.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(recordsBucket))
 		if b == nil {
 			return os.ErrNotExist
@@ -147,7 +281,7 @@ func (h *HistoryQueue) delete(ref string, sync bool) error {
 		if sync {
 			opts = append(opts, leases.SynchronousDelete)
 		}
-		err2 := h.LeaseManager.Delete(context.TODO(), leases.Lease{ID: h.leaseID(ref)}, opts...)
+		err2 := h.hLeaseManager.Delete(context.TODO(), leases.Lease{ID: h.leaseID(ref)}, opts...)
 		if err1 != nil {
 			return err1
 		}
@@ -161,7 +295,7 @@ func (h *HistoryQueue) delete(ref string, sync bool) error {
 func (h *HistoryQueue) init() error {
 	var err error
 	h.initOnce.Do(func() {
-		err = h.DB.Update(func(tx *bolt.Tx) error {
+		err = h.opt.DB.Update(func(tx *bolt.Tx) error {
 			_, err := tx.CreateBucketIfNotExists([]byte(recordsBucket))
 			return err
 		})
@@ -177,7 +311,23 @@ func (h *HistoryQueue) addResource(ctx context.Context, l leases.Lease, desc *co
 	if desc == nil {
 		return nil
 	}
-	return h.LeaseManager.AddResource(ctx, l, leases.Resource{
+	if _, err := h.hContentStore.Info(ctx, desc.Digest); err != nil {
+		if errdefs.IsNotFound(err) {
+			ctx, release, err := leaseutil.WithLease(ctx, h.hLeaseManager, leases.WithID("history_migration_"+identity.NewID()), leaseutil.MakeTemporary)
+			if err != nil {
+				return err
+			}
+			defer release(ctx)
+			ok, err := h.migrateBlobV2(ctx, string(desc.Digest))
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return errors.Errorf("unknown blob %s in history", desc.Digest)
+			}
+		}
+	}
+	return h.hLeaseManager.AddResource(ctx, l, leases.Resource{
 		ID:   string(desc.Digest),
 		Type: "content",
 	})
@@ -188,7 +338,7 @@ func (h *HistoryQueue) UpdateRef(ctx context.Context, ref string, upt func(r *co
 	defer h.mu.Unlock()
 
 	var br controlapi.BuildHistoryRecord
-	if err := h.DB.View(func(tx *bolt.Tx) error {
+	if err := h.opt.DB.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(recordsBucket))
 		if b == nil {
 			return os.ErrNotExist
@@ -228,7 +378,7 @@ func (h *HistoryQueue) UpdateRef(ctx context.Context, ref string, upt func(r *co
 func (h *HistoryQueue) Status(ctx context.Context, ref string, st chan<- *client.SolveStatus) error {
 	h.init()
 	var br controlapi.BuildHistoryRecord
-	if err := h.DB.View(func(tx *bolt.Tx) error {
+	if err := h.opt.DB.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(recordsBucket))
 		if b == nil {
 			return os.ErrNotExist
@@ -250,7 +400,7 @@ func (h *HistoryQueue) Status(ctx context.Context, ref string, st chan<- *client
 		return nil
 	}
 
-	ra, err := h.ContentStore.ReaderAt(ctx, ocispecs.Descriptor{
+	ra, err := h.hContentStore.ReaderAt(ctx, ocispecs.Descriptor{
 		Digest:    br.Logs.Digest,
 		Size:      br.Logs.Size_,
 		MediaType: br.Logs.MediaType,
@@ -291,7 +441,7 @@ func (h *HistoryQueue) Status(ctx context.Context, ref string, st chan<- *client
 }
 
 func (h *HistoryQueue) update(ctx context.Context, rec controlapi.BuildHistoryRecord) error {
-	return h.DB.Update(func(tx *bolt.Tx) (err error) {
+	return h.opt.DB.Update(func(tx *bolt.Tx) (err error) {
 		b := tx.Bucket([]byte(recordsBucket))
 		if b == nil {
 			return nil
@@ -301,7 +451,7 @@ func (h *HistoryQueue) update(ctx context.Context, rec controlapi.BuildHistoryRe
 			return err
 		}
 
-		l, err := h.LeaseManager.Create(ctx, leases.WithID(h.leaseID(rec.Ref)))
+		l, err := h.hLeaseManager.Create(ctx, leases.WithID(h.leaseID(rec.Ref)))
 		created := true
 		if err != nil {
 			if !errors.Is(err, errdefs.ErrAlreadyExists) {
@@ -313,7 +463,7 @@ func (h *HistoryQueue) update(ctx context.Context, rec controlapi.BuildHistoryRe
 
 		defer func() {
 			if err != nil && created {
-				h.LeaseManager.Delete(ctx, l)
+				h.hLeaseManager.Delete(ctx, l)
 			}
 		}()
 
@@ -376,27 +526,27 @@ func (h *HistoryQueue) Delete(ctx context.Context, ref string) error {
 }
 
 func (h *HistoryQueue) OpenBlobWriter(ctx context.Context, mt string) (_ *Writer, err error) {
-	l, err := h.LeaseManager.Create(ctx, leases.WithRandomID(), leases.WithExpiration(5*time.Minute), leaseutil.MakeTemporary)
+	l, err := h.hLeaseManager.Create(ctx, leases.WithRandomID(), leases.WithExpiration(5*time.Minute), leaseutil.MakeTemporary)
 	if err != nil {
 		return nil, err
 	}
 
 	defer func() {
 		if err != nil {
-			h.LeaseManager.Delete(ctx, l)
+			h.hLeaseManager.Delete(ctx, l)
 		}
 	}()
 
 	ctx = leases.WithLease(ctx, l.ID)
 
-	w, err := content.OpenWriter(ctx, h.ContentStore, content.WithRef("history-"+h.leaseID(l.ID)))
+	w, err := content.OpenWriter(ctx, h.hContentStore, content.WithRef("history-"+h.leaseID(l.ID)))
 	if err != nil {
 		return nil, err
 	}
 
 	return &Writer{
 		mt:    mt,
-		lm:    h.LeaseManager,
+		lm:    h.hLeaseManager,
 		l:     l,
 		w:     w,
 		dgstr: digest.Canonical.Digester(),
@@ -577,7 +727,7 @@ func (h *HistoryQueue) Listen(ctx context.Context, req *controlapi.BuildHistoryR
 
 	if !req.ActiveOnly {
 		events := []*controlapi.BuildHistoryEvent{}
-		if err := h.DB.View(func(tx *bolt.Tx) error {
+		if err := h.opt.DB.View(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte(recordsBucket))
 			if b == nil {
 				return nil

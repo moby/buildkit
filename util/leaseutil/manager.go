@@ -35,13 +35,23 @@ func MakeTemporary(l *leases.Lease) error {
 	return nil
 }
 
-func WithNamespace(lm leases.Manager, ns string) leases.Manager {
+type Manager = nsLM
+
+func WithNamespace(lm leases.Manager, ns string) *Manager {
 	return &nsLM{manager: lm, ns: ns}
 }
 
 type nsLM struct {
 	manager leases.Manager
 	ns      string
+}
+
+func (l *nsLM) Namespace() string {
+	return l.ns
+}
+
+func (l *nsLM) WithNamespace(ns string) *Manager {
+	return WithNamespace(l.manager, ns)
 }
 
 func (l *nsLM) Create(ctx context.Context, opts ...leases.Opt) (leases.Lease, error) {

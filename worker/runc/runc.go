@@ -78,7 +78,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		return opt, err
 	}
 
-	c, err := local.NewStore(filepath.Join(root, "content"))
+	localstore, err := local.NewStore(filepath.Join(root, "content"))
 	if err != nil {
 		return opt, err
 	}
@@ -88,14 +88,14 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		return opt, err
 	}
 
-	mdb := ctdmetadata.NewDB(db, c, map[string]ctdsnapshot.Snapshotter{
+	mdb := ctdmetadata.NewDB(db, localstore, map[string]ctdsnapshot.Snapshotter{
 		snFactory.Name: s,
 	})
 	if err := mdb.Init(context.TODO()); err != nil {
 		return opt, err
 	}
 
-	c = containerdsnapshot.NewContentStore(mdb.ContentStore(), "buildkit")
+	c := containerdsnapshot.NewContentStore(mdb.ContentStore(), "buildkit")
 
 	id, err := base.ID(root)
 	if err != nil {
@@ -122,7 +122,6 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 	}
 	lm := leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), "buildkit")
 	snap := containerdsnapshot.NewSnapshotter(snFactory.Name, mdb.Snapshotter(snFactory.Name), "buildkit", idmap)
-
 	if err := cache.MigrateV2(
 		context.TODO(),
 		filepath.Join(root, "metadata.db"),
