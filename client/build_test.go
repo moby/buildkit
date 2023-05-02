@@ -30,6 +30,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/ssh/agent"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestClientGatewayIntegration(t *testing.T) {
@@ -58,6 +59,7 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testWarnings,
 		testClientGatewayNilResult,
 		testClientGatewayEmptyImageExec,
+		testClientGatewayContainerKilledAfterContextCancelled,
 	), integration.WithMirroredImages(integration.OfficialImages("busybox:latest")))
 
 	integration.Run(t, integration.TestFuncs(
@@ -398,6 +400,85 @@ func testClientGatewayContainerCancelOnRelease(t *testing.T, sb integration.Sand
 		err = pid2.Wait()
 		require.Contains(t, err.Error(), context.Canceled.Error())
 
+		return &client.Result{}, nil
+	}
+
+	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
+	require.NoError(t, err)
+	checkAllReleasable(t, c, sb, true)
+}
+
+func testClientGatewayContainerKilledAfterContextCancelled(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+
+	ctx := sb.Context()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	product := "buildkit_test"
+
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		st := llb.Image("busybox:latest")
+
+		def, err := st.Marshal(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to marshal state")
+		}
+
+		r, err := c.Solve(ctx, client.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to solve")
+		}
+
+		var eg errgroup.Group
+		for i := 0; i < 10; i++ {
+			eg.Go(func() error {
+				ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+				defer cancel()
+
+				ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
+					Mounts: []client.Mount{{
+						Dest:      "/",
+						MountType: pb.MountType_BIND,
+						Ref:       r.Ref,
+					}},
+				})
+				if err != nil {
+					return err
+				}
+
+				pid1, err := ctr.Start(ctx, client.StartRequest{
+					Args:   []string{"yes"},
+					Stdout: &nopCloser{io.Discard},
+					Stderr: &nopCloser{io.Discard},
+				})
+				if err != nil {
+					return err
+				}
+
+				waitErr := pid1.Wait()
+				if waitErr != nil {
+					t.Logf("waitErr: %v", waitErr)
+				}
+
+				return ctr.Release(context.Background())
+			})
+		}
+		doneCh := make(chan error)
+		go func() {
+			defer close(doneCh)
+			doneCh <- eg.Wait()
+		}()
+		select {
+		case err := <-doneCh:
+			require.NoError(t, err)
+		case <-time.After(40 * time.Second):
+			return nil, fmt.Errorf("timeout")
+		}
 		return &client.Result{}, nil
 	}
 
