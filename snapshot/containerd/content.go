@@ -11,76 +11,74 @@ import (
 	"github.com/pkg/errors"
 )
 
-type Store = nsContent
-
 func NewContentStore(store content.Store, ns string) *Store {
-	return &nsContent{ns, store}
+	return &Store{ns, store}
 }
 
-type nsContent struct {
+type Store struct {
 	ns string
 	content.Store
 }
 
-func (c *nsContent) Namespace() string {
+func (c *Store) Namespace() string {
 	return c.ns
 }
 
-func (c *nsContent) WithNamespace(ns string) *Store {
+func (c *Store) WithNamespace(ns string) *Store {
 	return NewContentStore(c.Store, ns)
 }
 
-func (c *nsContent) Info(ctx context.Context, dgst digest.Digest) (content.Info, error) {
+func (c *Store) Info(ctx context.Context, dgst digest.Digest) (content.Info, error) {
 	ctx = namespaces.WithNamespace(ctx, c.ns)
 	return c.Store.Info(ctx, dgst)
 }
 
-func (c *nsContent) Update(ctx context.Context, info content.Info, fieldpaths ...string) (content.Info, error) {
+func (c *Store) Update(ctx context.Context, info content.Info, fieldpaths ...string) (content.Info, error) {
 	ctx = namespaces.WithNamespace(ctx, c.ns)
 	return c.Store.Update(ctx, info, fieldpaths...)
 }
 
-func (c *nsContent) Walk(ctx context.Context, fn content.WalkFunc, filters ...string) error {
+func (c *Store) Walk(ctx context.Context, fn content.WalkFunc, filters ...string) error {
 	ctx = namespaces.WithNamespace(ctx, c.ns)
 	return c.Store.Walk(ctx, fn, filters...)
 }
 
-func (c *nsContent) Delete(ctx context.Context, dgst digest.Digest) error {
+func (c *Store) Delete(ctx context.Context, dgst digest.Digest) error {
 	return errors.Errorf("contentstore.Delete usage is forbidden")
 }
 
-func (c *nsContent) Status(ctx context.Context, ref string) (content.Status, error) {
+func (c *Store) Status(ctx context.Context, ref string) (content.Status, error) {
 	ctx = namespaces.WithNamespace(ctx, c.ns)
 	return c.Store.Status(ctx, ref)
 }
 
-func (c *nsContent) ListStatuses(ctx context.Context, filters ...string) ([]content.Status, error) {
+func (c *Store) ListStatuses(ctx context.Context, filters ...string) ([]content.Status, error) {
 	ctx = namespaces.WithNamespace(ctx, c.ns)
 	return c.Store.ListStatuses(ctx, filters...)
 }
 
-func (c *nsContent) Abort(ctx context.Context, ref string) error {
+func (c *Store) Abort(ctx context.Context, ref string) error {
 	ctx = namespaces.WithNamespace(ctx, c.ns)
 	return c.Store.Abort(ctx, ref)
 }
 
-func (c *nsContent) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
+func (c *Store) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
 	ctx = namespaces.WithNamespace(ctx, c.ns)
 	return c.Store.ReaderAt(ctx, desc)
 }
 
-func (c *nsContent) Writer(ctx context.Context, opts ...content.WriterOpt) (content.Writer, error) {
+func (c *Store) Writer(ctx context.Context, opts ...content.WriterOpt) (content.Writer, error) {
 	return c.writer(ctx, 3, opts...)
 }
 
-func (c *nsContent) WithFallbackNS(ns string) content.Store {
+func (c *Store) WithFallbackNS(ns string) content.Store {
 	return &nsFallbackStore{
 		main: c,
 		fb:   c.WithNamespace(ns),
 	}
 }
 
-func (c *nsContent) writer(ctx context.Context, retries int, opts ...content.WriterOpt) (content.Writer, error) {
+func (c *Store) writer(ctx context.Context, retries int, opts ...content.WriterOpt) (content.Writer, error) {
 	ctx = namespaces.WithNamespace(ctx, c.ns)
 	w, err := c.Store.Writer(ctx, opts...)
 	if err != nil {
@@ -100,8 +98,8 @@ func (w *nsWriter) Commit(ctx context.Context, size int64, expected digest.Diges
 }
 
 type nsFallbackStore struct {
-	main *nsContent
-	fb   *nsContent
+	main *Store
+	fb   *Store
 }
 
 var _ content.Store = &nsFallbackStore{}
