@@ -582,7 +582,7 @@ func (t *trace) update(s *client.SolveStatus, termWidth int) {
 				} else if sec < 100 {
 					prec = 2
 				}
-				v.logs = append(v.logs, []byte(fmt.Sprintf("#%d %s %s", v.index, fmt.Sprintf("%.[2]*[1]f", sec, prec), dt)))
+				v.logs = append(v.logs, []byte(fmt.Sprintf("%s %s", fmt.Sprintf("%.[2]*[1]f", sec, prec), dt)))
 			}
 			i++
 		})
