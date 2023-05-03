@@ -229,7 +229,7 @@ func runBuildkitd(ctx context.Context, conf *BackendConfig, args []string, logs 
 	}
 	deferF.append(stop)
 
-	if err := waitUnix(address, 15*time.Second); err != nil {
+	if err := waitUnix(address, 15*time.Second, cmd); err != nil {
 		return "", nil, err
 	}
 
