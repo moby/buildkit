@@ -195,6 +195,7 @@ func TestIntegration(t *testing.T) {
 		testMountStubsDirectory,
 		testMountStubsTimestamp,
 		testSourcePolicy,
+		testImageManifestRegistryCacheImportExport,
 		testLLBMountPerformance,
 		testClientCustomGRPCOpts,
 		testMultipleRecordsWithSameLayersCacheImportExport,
@@ -4705,6 +4706,36 @@ func testZstdLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 			"compression":       "zstd",
 			"force-compression": "true",
 			"oci-mediatypes":    "true", // containerd applier supports only zstd with oci-mediatype.
+		},
+	}
+	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
+}
+
+func testImageManifestRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb,
+		integration.FeatureCacheExport,
+		integration.FeatureCacheImport,
+		integration.FeatureCacheBackendRegistry,
+	)
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+	target := registry + "/buildkit/testexport:latest"
+	im := CacheOptionsEntry{
+		Type: "registry",
+		Attrs: map[string]string{
+			"ref": target,
+		},
+	}
+	ex := CacheOptionsEntry{
+		Type: "registry",
+		Attrs: map[string]string{
+			"ref":            target,
+			"image-manifest": "true",
+			"oci-mediatypes": "true",
+			"mode":           "max",
 		},
 	}
 	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
