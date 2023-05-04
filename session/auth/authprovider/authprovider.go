@@ -8,7 +8,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"strconv"
@@ -94,7 +93,7 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 
 	var httpClient = http.DefaultClient
 	if ap.tlscacert != "" {
-		caCert, err := ioutil.ReadFile(ap.tlscacert)
+		caCert, err := os.ReadFile(ap.tlscacert)
 		if err != nil {
 			return nil, err
 		}
