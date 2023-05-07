@@ -614,11 +614,11 @@ func layerToDistributable(mt string) string {
 	}
 
 	switch mt {
-	case ocispecs.MediaTypeImageLayerNonDistributable:
+	case ocispecs.MediaTypeImageLayerNonDistributable: //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
 		return ocispecs.MediaTypeImageLayer
-	case ocispecs.MediaTypeImageLayerNonDistributableGzip:
+	case ocispecs.MediaTypeImageLayerNonDistributableGzip: //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
 		return ocispecs.MediaTypeImageLayerGzip
-	case ocispecs.MediaTypeImageLayerNonDistributableZstd:
+	case ocispecs.MediaTypeImageLayerNonDistributableZstd: //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
 		return ocispecs.MediaTypeImageLayerZstd
 	case images.MediaTypeDockerSchema2LayerForeign:
 		return images.MediaTypeDockerSchema2Layer
@@ -632,11 +632,11 @@ func layerToDistributable(mt string) string {
 func layerToNonDistributable(mt string) string {
 	switch mt {
 	case ocispecs.MediaTypeImageLayer:
-		return ocispecs.MediaTypeImageLayerNonDistributable
+		return ocispecs.MediaTypeImageLayerNonDistributable //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
 	case ocispecs.MediaTypeImageLayerGzip:
-		return ocispecs.MediaTypeImageLayerNonDistributableGzip
+		return ocispecs.MediaTypeImageLayerNonDistributableGzip //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
 	case ocispecs.MediaTypeImageLayerZstd:
-		return ocispecs.MediaTypeImageLayerNonDistributableZstd
+		return ocispecs.MediaTypeImageLayerNonDistributableZstd //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
 	case images.MediaTypeDockerSchema2Layer:
 		return images.MediaTypeDockerSchema2LayerForeign
 	case images.MediaTypeDockerSchema2LayerForeignGzip:
