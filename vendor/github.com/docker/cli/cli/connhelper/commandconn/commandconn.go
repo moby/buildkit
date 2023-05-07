@@ -32,7 +32,7 @@ import (
 )
 
 // New returns net.Conn
-func New(ctx context.Context, cmd string, args ...string) (net.Conn, error) {
+func New(_ context.Context, cmd string, args ...string) (net.Conn, error) {
 	var (
 		c   commandConn
 		err error
