@@ -1425,12 +1425,13 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 						d.Size = 0
 						return nil
 					}
+					defer ref.Release(context.TODO())
 					s, err := ref.size(ctx)
 					if err != nil {
 						return err
 					}
 					d.Size = s
-					return ref.Release(context.TODO())
+					return nil
 				})
 			}(d)
 		}
