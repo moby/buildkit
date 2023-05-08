@@ -920,7 +920,6 @@ func notifyStarted(ctx context.Context, v *client.Vertex) func(err error) {
 	start := time.Now()
 	v.Started = &start
 	v.Completed = nil
-	v.Cached = false
 	id := identity.NewID()
 	pw.Write(id, *v)
 	return func(err error) {
