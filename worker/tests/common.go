@@ -63,7 +63,7 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 	}()
 	stdout := bytes.NewBuffer(nil)
 	stderr := bytes.NewBuffer(nil)
-	err = w.WorkerOpt.Executor.Run(ctxTimeout, id, execMount(root), nil, executor.ProcessInfo{
+	_, err = w.WorkerOpt.Executor.Run(ctxTimeout, id, execMount(root), nil, executor.ProcessInfo{
 		Meta: executor.Meta{
 			Args: []string{"cat"},
 			Cwd:  "/",
@@ -84,13 +84,14 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 	eg := errgroup.Group{}
 	started = make(chan struct{})
 	eg.Go(func() error {
-		return w.WorkerOpt.Executor.Run(ctx, id, execMount(root), nil, executor.ProcessInfo{
+		_, err := w.WorkerOpt.Executor.Run(ctx, id, execMount(root), nil, executor.ProcessInfo{
 			Meta: executor.Meta{
 				Args: []string{"sleep", "10"},
 				Cwd:  "/",
 				Env:  []string{"PATH=/bin:/usr/bin:/sbin:/usr/sbin"},
 			},
 		}, started)
+		return err
 	})
 
 	select {
@@ -175,12 +176,13 @@ func TestWorkerExecFailures(t *testing.T, w *base.Worker) {
 	eg := errgroup.Group{}
 	started := make(chan struct{})
 	eg.Go(func() error {
-		return w.WorkerOpt.Executor.Run(ctx, id, execMount(root), nil, executor.ProcessInfo{
+		_, err := w.WorkerOpt.Executor.Run(ctx, id, execMount(root), nil, executor.ProcessInfo{
 			Meta: executor.Meta{
 				Args: []string{"/bin/false"},
 				Cwd:  "/",
 			},
 		}, started)
+		return err
 	})
 
 	select {
@@ -204,11 +206,12 @@ func TestWorkerExecFailures(t *testing.T, w *base.Worker) {
 	eg = errgroup.Group{}
 	started = make(chan struct{})
 	eg.Go(func() error {
-		return w.WorkerOpt.Executor.Run(ctx, id, execMount(root), nil, executor.ProcessInfo{
+		_, err := w.WorkerOpt.Executor.Run(ctx, id, execMount(root), nil, executor.ProcessInfo{
 			Meta: executor.Meta{
 				Args: []string{"bogus"},
 			},
 		}, started)
+		return err
 	})
 
 	select {
@@ -256,7 +259,7 @@ func TestWorkerCancel(t *testing.T, w *base.Worker) {
 
 	go func() {
 		defer close(pid1Done)
-		pid1Err = w.WorkerOpt.Executor.Run(pid1Ctx, id, execMount(root), nil, executor.ProcessInfo{
+		_, pid1Err = w.WorkerOpt.Executor.Run(pid1Ctx, id, execMount(root), nil, executor.ProcessInfo{
 			Meta: executor.Meta{
 				Args: []string{"/bin/sleep", "10"},
 				Cwd:  "/",

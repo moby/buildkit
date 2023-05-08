@@ -13,6 +13,7 @@ import (
 	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/executor"
+	resourcestypes "github.com/moby/buildkit/executor/resources/types"
 	"github.com/moby/buildkit/frontend/gateway"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/secrets"
@@ -43,6 +44,8 @@ type ExecOp struct {
 	platform    *pb.Platform
 	numInputs   int
 	parallelism *semaphore.Weighted
+	rec         resourcestypes.Recorder
+	digest      digest.Digest
 }
 
 var _ solver.Op = &ExecOp{}
@@ -62,7 +65,12 @@ func NewExecOp(v solver.Vertex, op *pb.Op_Exec, platform *pb.Platform, cm cache.
 		w:           w,
 		platform:    platform,
 		parallelism: parallelism,
+		digest:      v.Digest(),
 	}, nil
+}
+
+func (e *ExecOp) Digest() digest.Digest {
+	return e.digest
 }
 
 func (e *ExecOp) Proto() *pb.ExecOp {
@@ -357,7 +365,7 @@ func (e *ExecOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 		}
 	}()
 
-	execErr := e.exec.Run(ctx, "", p.Root, p.Mounts, executor.ProcessInfo{
+	rec, execErr := e.exec.Run(ctx, "", p.Root, p.Mounts, executor.ProcessInfo{
 		Meta:   meta,
 		Stdin:  nil,
 		Stdout: stdout,
@@ -377,6 +385,7 @@ func (e *ExecOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 		// Prevent the result from being released.
 		p.OutputRefs[i].Ref = nil
 	}
+	e.rec = rec
 	return results, errors.Wrapf(execErr, "process %q did not complete successfully", strings.Join(e.op.Meta.Args, " "))
 }
 
@@ -445,4 +454,11 @@ func (e *ExecOp) loadSecretEnv(ctx context.Context, g session.Group) ([]string, 
 }
 
 func (e *ExecOp) IsProvenanceProvider() {
+}
+
+func (e *ExecOp) Samples() ([]*resourcestypes.Sample, error) {
+	if e.rec == nil {
+		return nil, nil
+	}
+	return e.rec.Samples()
 }

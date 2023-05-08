@@ -216,6 +216,7 @@ RUN --mount=target=/root/.cache,type=cache \
 
 FROM buildkit-export AS buildkit-linux
 COPY --link --from=binaries / /usr/bin/
+ENV BUILDKIT_SETUP_CGROUPV2_ROOT=1
 ENTRYPOINT ["buildkitd"]
 
 FROM binaries AS buildkit-darwin
@@ -255,6 +256,7 @@ ENTRYPOINT ["/docker-entrypoint.sh"]
 # musl is needed to directly use the registry binary that is built on alpine
 ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.6=/opt/containerd-alt-16/bin"
 ENV BUILDKIT_INTEGRATION_SNAPSHOTTER=stargz
+ENV BUILDKIT_SETUP_CGROUPV2_ROOT=1
 ENV CGO_ENABLED=0
 ENV GOTESTSUM_FORMAT=standard-verbose
 COPY --link --from=gotestsum /out/gotestsum /usr/bin/

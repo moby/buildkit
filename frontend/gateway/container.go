@@ -345,7 +345,7 @@ func (gwCtr *gatewayContainer) Start(_ context.Context, req client.StartRequest)
 		startedCh := make(chan struct{})
 		gwProc.errGroup.Go(func() error {
 			bklog.G(gwCtr.ctx).Debugf("Starting new container for %s with args: %q", gwCtr.id, procInfo.Meta.Args)
-			err := gwCtr.executor.Run(ctx, gwCtr.id, gwCtr.rootFS, gwCtr.mounts, procInfo, startedCh)
+			_, err := gwCtr.executor.Run(ctx, gwCtr.id, gwCtr.rootFS, gwCtr.mounts, procInfo, startedCh)
 			return stack.Enable(err)
 		})
 		select {

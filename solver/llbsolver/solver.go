@@ -194,7 +194,8 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 		var releasers []func()
 
 		attrs := map[string]string{
-			"mode": "max",
+			"mode":          "max",
+			"capture-usage": "true",
 		}
 
 		makeProvenance := func(res solver.ResultProxy, cap *provenance.Capture) (*controlapi.Descriptor, func(), error) {
