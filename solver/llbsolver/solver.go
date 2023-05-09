@@ -736,8 +736,12 @@ func getRefProvenance(ref solver.ResultProxy, br *provenanceBridge) (*provenance
 	}
 	p := ref.Provenance()
 	if p == nil {
-		return nil, errors.Errorf("missing provenance for %s", ref.ID())
+		if br.req != nil {
+			return nil, errors.Errorf("missing provenance for %s", ref.ID())
+		}
+		return nil, nil
 	}
+
 	pr, ok := p.(*provenance.Capture)
 	if !ok {
 		return nil, errors.Errorf("invalid provenance type %T", p)

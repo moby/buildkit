@@ -300,12 +300,25 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 
 	bklog.G(ctx).Debugf("> creating %s %v", id, meta.Args)
 
+	cgroupPath := spec.Linux.CgroupsPath
+	if cgroupPath != "" {
+		rec, err = w.resmon.RecordNamespace(cgroupPath, resources.RecordOpt{
+			NetworkSampler: namespace,
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	trace.SpanFromContext(ctx).AddEvent("Container created")
 	err = w.run(ctx, id, bundle, process, func() {
 		startedOnce.Do(func() {
 			trace.SpanFromContext(ctx).AddEvent("Container started")
 			if started != nil {
 				close(started)
+			}
+			if rec != nil {
+				rec.Start()
 			}
 		})
 	}, true)
@@ -326,14 +339,11 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 		return nil, err
 	}
 
-	cgroupPath := spec.Linux.CgroupsPath
-	if cgroupPath != "" {
-		return w.resmon.RecordNamespace(cgroupPath, resources.RecordOpt{
-			Release:        releaseContainer,
-			NetworkSampler: namespace,
-		})
+	if rec == nil {
+		return nil, releaseContainer(context.TODO())
 	}
-	return nil, releaseContainer(context.TODO())
+
+	return rec, rec.CloseAsync(releaseContainer)
 }
 
 func exitError(ctx context.Context, err error) error {

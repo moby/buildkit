@@ -19,7 +19,7 @@ func getCgroupPIDsStat(path string) (*types.PIDsStat, error) {
 
 	v, err := parseSingleValueFile(filepath.Join(path, pidsCurrentFile))
 	if err != nil {
-		if !os.IsNotExist(err) {
+		if !errors.Is(err, os.ErrNotExist) {
 			return nil, err
 		}
 	} else {

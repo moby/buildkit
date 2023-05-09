@@ -3,7 +3,6 @@ package resources
 import (
 	"bufio"
 	"context"
-	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -13,7 +12,7 @@ import (
 
 	"github.com/moby/buildkit/executor/resources/types"
 	"github.com/moby/buildkit/util/network"
-	"golang.org/x/sys/unix"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -30,8 +29,8 @@ var isCgroupV2 bool
 type cgroupRecord struct {
 	once       sync.Once
 	ns         string
-	release    func(context.Context) error
-	lastSample *types.Sample
+	sampler    *Sub[*types.Sample]
+	samples    []*types.Sample
 	err        error
 	done       chan struct{}
 	monitor    *Monitor
@@ -44,30 +43,40 @@ func (r *cgroupRecord) Wait() error {
 	return r.err
 }
 
+func (r *cgroupRecord) Start() {
+	s := NewSampler(2*time.Second, r.sample)
+	r.sampler = s.Record()
+}
+
+func (r *cgroupRecord) CloseAsync(next func(context.Context) error) error {
+	go func() {
+		r.close()
+		next(context.TODO())
+	}()
+	return nil
+}
+
 func (r *cgroupRecord) close() {
 	r.once.Do(func() {
-		s, err := r.sample()
-		if err != nil {
-			r.err = err
-		} else {
-			r.lastSample = s
-		}
-		if err := r.release(context.Background()); err != nil {
-			if r.err == nil {
-				r.err = err
-			}
-		}
-		close(r.done)
+		defer close(r.done)
 		go func() {
 			r.monitor.mu.Lock()
 			delete(r.monitor.records, r.ns)
 			r.monitor.mu.Unlock()
 		}()
+		if r.sampler == nil {
+			return
+		}
+		s, err := r.sampler.Close(true)
+		if err != nil {
+			r.err = err
+		} else {
+			r.samples = s
+		}
 	})
 }
 
-func (r *cgroupRecord) sample() (*types.Sample, error) {
-	now := time.Now()
+func (r *cgroupRecord) sample(tm time.Time) (*types.Sample, error) {
 	cpu, err := getCgroupCPUStat(filepath.Join(defaultMountpoint, r.ns))
 	if err != nil {
 		return nil, err
@@ -85,7 +94,7 @@ func (r *cgroupRecord) sample() (*types.Sample, error) {
 		return nil, err
 	}
 	sample := &types.Sample{
-		Timestamp:  now,
+		Timestamp_: tm,
 		CPUStat:    cpu,
 		MemoryStat: memory,
 		IOStat:     io,
@@ -106,7 +115,7 @@ func (r *cgroupRecord) Samples() ([]*types.Sample, error) {
 	if r.err != nil {
 		return nil, r.err
 	}
-	return []*types.Sample{r.lastSample}, nil
+	return r.samples, nil
 }
 
 type nopRecord struct {
@@ -120,6 +129,13 @@ func (r *nopRecord) Samples() ([]*types.Sample, error) {
 	return nil, nil
 }
 
+func (r *nopRecord) CloseAsync(next func(context.Context) error) error {
+	return next(context.TODO())
+}
+
+func (r *nopRecord) Start() {
+}
+
 type Monitor struct {
 	mu      sync.Mutex
 	closed  chan struct{}
@@ -131,7 +147,6 @@ type NetworkSampler interface {
 }
 
 type RecordOpt struct {
-	Release        func(context.Context) error
 	NetworkSampler NetworkSampler
 }
 
@@ -143,14 +158,10 @@ func (m *Monitor) RecordNamespace(ns string, opt RecordOpt) (types.Recorder, err
 	default:
 	}
 	if !isCgroupV2 || isClosed {
-		if err := opt.Release(context.TODO()); err != nil {
-			return nil, err
-		}
 		return &nopRecord{}, nil
 	}
 	r := &cgroupRecord{
 		ns:         ns,
-		release:    opt.Release,
 		done:       make(chan struct{}),
 		monitor:    m,
 		netSampler: opt.NetworkSampler,
@@ -158,7 +169,6 @@ func (m *Monitor) RecordNamespace(ns string, opt RecordOpt) (types.Recorder, err
 	m.mu.Lock()
 	m.records[ns] = r
 	m.mu.Unlock()
-	go r.close()
 	return r, nil
 }
 
@@ -180,7 +190,7 @@ func NewMonitor() (*Monitor, error) {
 			return
 		}
 		if err := prepareCgroupControllers(); err != nil {
-			log.Printf("failed to prepare cgroup controllers: %+v", err)
+			logrus.Warnf("failed to prepare cgroup controllers: %+v", err)
 		}
 	})
 
@@ -225,17 +235,8 @@ func prepareCgroupControllers() error {
 		}
 		if err := os.WriteFile(filepath.Join(defaultMountpoint, cgroupSubtreeFile), []byte("+"+c), 0); err != nil {
 			// ignore error
-			log.Printf("failed to enable cgroup controller %q: %+v", c, err)
+			logrus.Warnf("failed to enable cgroup controller %q: %+v", c, err)
 		}
 	}
 	return nil
-}
-
-func isCgroup2() bool {
-	var st unix.Statfs_t
-	err := unix.Statfs(defaultMountpoint, &st)
-	if err != nil {
-		return false
-	}
-	return st.Type == unix.CGROUP2_SUPER_MAGIC
 }

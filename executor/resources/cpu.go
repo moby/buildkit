@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/moby/buildkit/executor/resources/types"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -25,6 +26,9 @@ func getCgroupCPUStat(cgroupPath string) (*types.CPUStat, error) {
 	// Read cpu.stat file
 	cpuStatFile, err := os.Open(filepath.Join(cgroupPath, "cpu.stat"))
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	defer cpuStatFile.Close()
@@ -77,6 +81,9 @@ func getCgroupCPUStat(cgroupPath string) (*types.CPUStat, error) {
 func parsePressureFile(filename string) (*types.Pressure, error) {
 	content, err := os.ReadFile(filename)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) { // pressure file requires CONFIG_PSI
+			return nil, nil
+		}
 		return nil, err
 	}
 

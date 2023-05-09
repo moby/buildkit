@@ -177,6 +177,9 @@ func (rp *resultProxy) Definition() *pb.Definition {
 }
 
 func (rp *resultProxy) Provenance() interface{} {
+	if rp.provenance == nil {
+		return nil
+	}
 	return rp.provenance
 }
 
@@ -270,17 +273,18 @@ func (rp *resultProxy) Result(ctx context.Context) (res solver.CachedResult, err
 			rp.mu.Unlock()
 			return nil, errors.Errorf("evaluating released result")
 		}
-		rp.v = v
-		rp.err = err
 		if err == nil {
-			capture, err := captureProvenance(ctx, v)
-			if err != nil && rp.err != nil {
-				rp.err = errors.Wrapf(rp.err, "failed to capture provenance: %v", err)
+			var capture *provenance.Capture
+			capture, err = captureProvenance(ctx, v)
+			if err != nil {
+				err = errors.Errorf("failed to capture provenance: %v", err)
 				v.Release(context.TODO())
-				rp.v = nil
+				v = nil
 			}
 			rp.provenance = capture
 		}
+		rp.v = v
+		rp.err = err
 		rp.mu.Unlock()
 		return v, err
 	})

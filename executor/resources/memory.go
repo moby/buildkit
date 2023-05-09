@@ -78,7 +78,7 @@ func getCgroupMemoryStat(path string) (*types.MemoryStat, error) {
 		}
 	})
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
 		}
 		return nil, err
@@ -113,7 +113,7 @@ func getCgroupMemoryStat(path string) (*types.MemoryStat, error) {
 
 	peak, err := parseSingleValueFile(filepath.Join(path, memoryPeakFile))
 	if err != nil {
-		if !os.IsNotExist(err) {
+		if !errors.Is(err, os.ErrNotExist) {
 			return nil, err
 		}
 	} else {
@@ -122,7 +122,7 @@ func getCgroupMemoryStat(path string) (*types.MemoryStat, error) {
 
 	swap, err := parseSingleValueFile(filepath.Join(path, memorySwapCurrentFile))
 	if err != nil {
-		if !os.IsNotExist(err) {
+		if !errors.Is(err, os.ErrNotExist) {
 			return nil, err
 		}
 	} else {
@@ -135,7 +135,7 @@ func getCgroupMemoryStat(path string) (*types.MemoryStat, error) {
 func parseKeyValueFile(filePath string, callback func(key string, value uint64)) error {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
-		return errors.Errorf("failed to read %s: %v", filePath, err)
+		return errors.Wrapf(err, "failed to read %s", filePath)
 	}
 
 	lines := strings.Split(string(content), "\n")
@@ -149,7 +149,7 @@ func parseKeyValueFile(filePath string, callback func(key string, value uint64))
 		valueStr := fields[1]
 		value, err := strconv.ParseUint(valueStr, 10, 64)
 		if err != nil {
-			return errors.Errorf("failed to parse value for %s: %v", key, err)
+			return errors.Wrapf(err, "failed to parse value for %s", key)
 		}
 
 		callback(key, value)

@@ -28,6 +28,9 @@ func getCgroupIOStat(cgroupPath string) (*types.IOStat, error) {
 	ioStatPath := filepath.Join(cgroupPath, ioStatFile)
 	data, err := os.ReadFile(ioStatPath)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
 		return nil, errors.Wrapf(err, "failed to read %s", ioStatPath)
 	}
 

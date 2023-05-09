@@ -1,24 +1,31 @@
 package types
 
 import (
+	"context"
 	"time"
 
 	"github.com/moby/buildkit/util/network"
 )
 
 type Recorder interface {
+	Start()
+	CloseAsync(func(context.Context) error) error
 	Wait() error
 	Samples() ([]*Sample, error)
 }
 
 // Sample represents a wrapper for sampled data of cgroupv2 controllers
 type Sample struct {
-	Timestamp  time.Time       `json:"timestamp"`
+	Timestamp_ time.Time       `json:"timestamp"`
 	CPUStat    *CPUStat        `json:"cpuStat,omitempty"`
 	MemoryStat *MemoryStat     `json:"memoryStat,omitempty"`
 	IOStat     *IOStat         `json:"ioStat,omitempty"`
 	PIDsStat   *PIDsStat       `json:"pidsStat,omitempty"`
 	NetStat    *network.Sample `json:"netStat,omitempty"`
+}
+
+func (s *Sample) Timestamp() time.Time {
+	return s.Timestamp_
 }
 
 // CPUStat represents the sampling state of the cgroupv2 CPU controller
