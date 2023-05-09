@@ -1,6 +1,10 @@
 package types
 
-import "time"
+import (
+	"time"
+
+	"github.com/moby/buildkit/util/network"
+)
 
 type Recorder interface {
 	Wait() error
@@ -9,11 +13,12 @@ type Recorder interface {
 
 // Sample represents a wrapper for sampled data of cgroupv2 controllers
 type Sample struct {
-	Timestamp  time.Time   `json:"timestamp"`
-	CPUStat    *CPUStat    `json:"cpuStat,omitempty"`
-	MemoryStat *MemoryStat `json:"memoryStat,omitempty"`
-	IOStat     *IOStat     `json:"ioStat,omitempty"`
-	PIDsStat   *PIDsStat   `json:"pidsStat,omitempty"`
+	Timestamp  time.Time       `json:"timestamp"`
+	CPUStat    *CPUStat        `json:"cpuStat,omitempty"`
+	MemoryStat *MemoryStat     `json:"memoryStat,omitempty"`
+	IOStat     *IOStat         `json:"ioStat,omitempty"`
+	PIDsStat   *PIDsStat       `json:"pidsStat,omitempty"`
+	NetStat    *network.Sample `json:"netStat,omitempty"`
 }
 
 // CPUStat represents the sampling state of the cgroupv2 CPU controller

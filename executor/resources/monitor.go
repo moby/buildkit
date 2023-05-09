@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/executor/resources/types"
+	"github.com/moby/buildkit/util/network"
 	"golang.org/x/sys/unix"
 )
 
@@ -34,6 +35,7 @@ type cgroupRecord struct {
 	err        error
 	done       chan struct{}
 	monitor    *Monitor
+	netSampler NetworkSampler
 }
 
 func (r *cgroupRecord) Wait() error {
@@ -89,6 +91,13 @@ func (r *cgroupRecord) sample() (*types.Sample, error) {
 		IOStat:     io,
 		PIDsStat:   pids,
 	}
+	if r.netSampler != nil {
+		net, err := r.netSampler.Sample()
+		if err != nil {
+			return nil, err
+		}
+		sample.NetStat = net
+	}
 	return sample, nil
 }
 
@@ -117,7 +126,16 @@ type Monitor struct {
 	records map[string]*cgroupRecord
 }
 
-func (m *Monitor) RecordNamespace(ns string, release func(context.Context) error) (types.Recorder, error) {
+type NetworkSampler interface {
+	Sample() (*network.Sample, error)
+}
+
+type RecordOpt struct {
+	Release        func(context.Context) error
+	NetworkSampler NetworkSampler
+}
+
+func (m *Monitor) RecordNamespace(ns string, opt RecordOpt) (types.Recorder, error) {
 	isClosed := false
 	select {
 	case <-m.closed:
@@ -125,16 +143,17 @@ func (m *Monitor) RecordNamespace(ns string, release func(context.Context) error
 	default:
 	}
 	if !isCgroupV2 || isClosed {
-		if err := release(context.TODO()); err != nil {
+		if err := opt.Release(context.TODO()); err != nil {
 			return nil, err
 		}
 		return &nopRecord{}, nil
 	}
 	r := &cgroupRecord{
-		ns:      ns,
-		release: release,
-		done:    make(chan struct{}),
-		monitor: m,
+		ns:         ns,
+		release:    opt.Release,
+		done:       make(chan struct{}),
+		monitor:    m,
+		netSampler: opt.NetworkSampler,
 	}
 	m.mu.Lock()
 	m.records[ns] = r

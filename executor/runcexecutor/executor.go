@@ -174,7 +174,12 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 	if err != nil {
 		return nil, err
 	}
-	defer namespace.Close()
+	doReleaseNetwork := true
+	defer func() {
+		if doReleaseNetwork {
+			namespace.Close()
+		}
+	}()
 
 	if meta.NetMode == pb.NetMode_HOST {
 		bklog.G(ctx).Info("enabling HostNetworking")
@@ -304,19 +309,31 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 			}
 		})
 	}, true)
+
+	releaseContainer := func(ctx context.Context) error {
+		err := w.runc.Delete(ctx, id, &runc.DeleteOpts{})
+		err1 := namespace.Close()
+		if err == nil {
+			err = err1
+		}
+		return err
+	}
+	doReleaseNetwork = false
+
 	err = exitError(ctx, err)
 	if err != nil {
-		w.runc.Delete(context.TODO(), id, &runc.DeleteOpts{})
+		releaseContainer(context.TODO())
 		return nil, err
 	}
 
 	cgroupPath := spec.Linux.CgroupsPath
 	if cgroupPath != "" {
-		return w.resmon.RecordNamespace(cgroupPath, func(ctx context.Context) error {
-			return w.runc.Delete(ctx, id, &runc.DeleteOpts{})
+		return w.resmon.RecordNamespace(cgroupPath, resources.RecordOpt{
+			Release:        releaseContainer,
+			NetworkSampler: namespace,
 		})
 	}
-	return nil, w.runc.Delete(context.TODO(), id, &runc.DeleteOpts{})
+	return nil, releaseContainer(context.TODO())
 }
 
 func exitError(ctx context.Context, err error) error {
