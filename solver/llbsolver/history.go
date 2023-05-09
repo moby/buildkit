@@ -54,7 +54,7 @@ type StatusImportResult struct {
 func NewHistoryQueue(opt HistoryQueueOpt) *HistoryQueue {
 	if opt.CleanConfig == nil {
 		opt.CleanConfig = &config.HistoryConfig{
-			MaxAge:     int64((48 * time.Hour).Seconds()),
+			MaxAge:     config.Duration{Duration: 48 * time.Hour},
 			MaxEntries: 50,
 		}
 	}
@@ -116,7 +116,7 @@ func (h *HistoryQueue) gc() error {
 
 	now := time.Now()
 	for _, r := range records[h.CleanConfig.MaxEntries:] {
-		if now.Add(time.Duration(h.CleanConfig.MaxAge) * -time.Second).After(*r.CompletedAt) {
+		if now.Add(0 - h.CleanConfig.MaxAge.Duration).After(*r.CompletedAt) {
 			if err := h.delete(r.Ref, false); err != nil {
 				return err
 			}

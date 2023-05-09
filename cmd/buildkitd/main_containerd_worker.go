@@ -137,10 +137,11 @@ func init() {
 		Name:  "containerd-worker-gc-keepstorage",
 		Usage: "Amount of storage GC keep locally (MB)",
 		Value: func() int64 {
-			if defaultConf.Workers.Containerd.GCKeepStorage != 0 {
-				return defaultConf.Workers.Containerd.GCKeepStorage / 1e6
+			keep := defaultConf.Workers.Containerd.GCKeepStorage.AsBytes(defaultConf.Root)
+			if keep == 0 {
+				keep = config.DetectDefaultGCCap().AsBytes(defaultConf.Root)
 			}
-			return config.DetectDefaultGCCap(defaultConf.Root) / 1e6
+			return keep / 1e6
 		}(),
 		Hidden: len(defaultConf.Workers.Containerd.GCPolicy) != 0,
 	})
@@ -207,7 +208,7 @@ func applyContainerdFlags(c *cli.Context, cfg *config.Config) error {
 	}
 
 	if c.GlobalIsSet("containerd-worker-gc-keepstorage") {
-		cfg.Workers.Containerd.GCKeepStorage = c.GlobalInt64("containerd-worker-gc-keepstorage") * 1e6
+		cfg.Workers.Containerd.GCKeepStorage = config.DiskSpace{Bytes: c.GlobalInt64("containerd-worker-gc-keepstorage") * 1e6}
 	}
 
 	if c.GlobalIsSet("containerd-worker-net") {
