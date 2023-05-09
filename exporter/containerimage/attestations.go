@@ -24,7 +24,7 @@ import (
 	spdx "github.com/spdx/tools-golang/spdx/v2_3"
 )
 
-var intotoPlatform ocispecs.Platform = ocispecs.Platform{
+var intotoPlatform = ocispecs.Platform{
 	Architecture: "unknown",
 	OS:           "unknown",
 }
