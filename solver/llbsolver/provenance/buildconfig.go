@@ -12,10 +12,10 @@ type BuildConfig struct {
 }
 
 type BuildStep struct {
-	ID            string                   `json:"id,omitempty"`
-	Op            interface{}              `json:"op,omitempty"`
-	Inputs        []string                 `json:"inputs,omitempty"`
-	ResourceUsage []*resourcestypes.Sample `json:"resourceUsage,omitempty"`
+	ID            string                  `json:"id,omitempty"`
+	Op            interface{}             `json:"op,omitempty"`
+	Inputs        []string                `json:"inputs,omitempty"`
+	ResourceUsage *resourcestypes.Samples `json:"resourceUsage,omitempty"`
 }
 
 type Source struct {

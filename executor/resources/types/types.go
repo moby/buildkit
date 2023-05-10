@@ -11,7 +11,25 @@ type Recorder interface {
 	Start()
 	CloseAsync(func(context.Context) error) error
 	Wait() error
-	Samples() ([]*Sample, error)
+	Samples() (*Samples, error)
+}
+
+type SysCPUStat struct {
+	User      float64 `json:"user"`
+	Nice      float64 `json:"nice"`
+	System    float64 `json:"system"`
+	Idle      float64 `json:"idle"`
+	Iowait    float64 `json:"iowait"`
+	IRQ       float64 `json:"irq"`
+	SoftIRQ   float64 `json:"softirq"`
+	Steal     float64 `json:"steal"`
+	Guest     float64 `json:"guest"`
+	GuestNice float64 `json:"guestNice"`
+}
+
+type Samples struct {
+	Samples    []*Sample   `json:"samples,omitempty"`
+	SysCPUStat *SysCPUStat `json:"sysCPUStat,omitempty"`
 }
 
 // Sample represents a wrapper for sampled data of cgroupv2 controllers

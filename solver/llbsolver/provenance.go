@@ -361,7 +361,7 @@ func captureProvenance(ctx context.Context, res solver.CachedResultWithProvenanc
 			if err != nil {
 				return err
 			}
-			if len(samples) > 0 {
+			if samples != nil {
 				c.AddSamples(op.Digest(), samples)
 			}
 		case *ops.BuildOp:

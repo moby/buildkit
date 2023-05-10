@@ -456,7 +456,7 @@ func (e *ExecOp) loadSecretEnv(ctx context.Context, g session.Group) ([]string, 
 func (e *ExecOp) IsProvenanceProvider() {
 }
 
-func (e *ExecOp) Samples() ([]*resourcestypes.Sample, error) {
+func (e *ExecOp) Samples() (*resourcestypes.Samples, error) {
 	if e.rec == nil {
 		return nil, nil
 	}

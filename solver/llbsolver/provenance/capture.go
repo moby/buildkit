@@ -59,7 +59,7 @@ type Capture struct {
 	SSH                 []SSH
 	NetworkAccess       bool
 	IncompleteMaterials bool
-	Samples             map[digest.Digest][]*resourcestypes.Sample
+	Samples             map[digest.Digest]*resourcestypes.Samples
 }
 
 func (c *Capture) Merge(c2 *Capture) error {
@@ -217,9 +217,9 @@ func (c *Capture) AddSSH(s SSH) {
 	c.SSH = append(c.SSH, s)
 }
 
-func (c *Capture) AddSamples(dgst digest.Digest, samples []*resourcestypes.Sample) {
+func (c *Capture) AddSamples(dgst digest.Digest, samples *resourcestypes.Samples) {
 	if c.Samples == nil {
-		c.Samples = map[digest.Digest][]*resourcestypes.Sample{}
+		c.Samples = map[digest.Digest]*resourcestypes.Samples{}
 	}
 	c.Samples[dgst] = samples
 }

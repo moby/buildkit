@@ -12,6 +12,7 @@ import (
 
 	"github.com/moby/buildkit/executor/resources/types"
 	"github.com/moby/buildkit/util/network"
+	"github.com/prometheus/procfs"
 	"github.com/sirupsen/logrus"
 )
 
@@ -27,14 +28,16 @@ var initOnce sync.Once
 var isCgroupV2 bool
 
 type cgroupRecord struct {
-	once       sync.Once
-	ns         string
-	sampler    *Sub[*types.Sample]
-	samples    []*types.Sample
-	err        error
-	done       chan struct{}
-	monitor    *Monitor
-	netSampler NetworkSampler
+	once         sync.Once
+	ns           string
+	sampler      *Sub[*types.Sample]
+	samples      []*types.Sample
+	err          error
+	done         chan struct{}
+	monitor      *Monitor
+	netSampler   NetworkSampler
+	startCPUStat *procfs.CPUStat
+	sysCPUStat   *types.SysCPUStat
 }
 
 func (r *cgroupRecord) Wait() error {
@@ -44,6 +47,9 @@ func (r *cgroupRecord) Wait() error {
 }
 
 func (r *cgroupRecord) Start() {
+	if stat, err := r.monitor.proc.Stat(); err == nil {
+		r.startCPUStat = &stat.CPUTotal
+	}
 	s := NewSampler(2*time.Second, r.sample)
 	r.sampler = s.Record()
 }
@@ -73,6 +79,26 @@ func (r *cgroupRecord) close() {
 		} else {
 			r.samples = s
 		}
+
+		if r.startCPUStat != nil {
+			stat, err := r.monitor.proc.Stat()
+			if err == nil {
+				cpu := &types.SysCPUStat{
+					User:      stat.CPUTotal.User - r.startCPUStat.User,
+					Nice:      stat.CPUTotal.Nice - r.startCPUStat.Nice,
+					System:    stat.CPUTotal.System - r.startCPUStat.System,
+					Idle:      stat.CPUTotal.Idle - r.startCPUStat.Idle,
+					Iowait:    stat.CPUTotal.Iowait - r.startCPUStat.Iowait,
+					IRQ:       stat.CPUTotal.IRQ - r.startCPUStat.IRQ,
+					SoftIRQ:   stat.CPUTotal.SoftIRQ - r.startCPUStat.SoftIRQ,
+					Steal:     stat.CPUTotal.Steal - r.startCPUStat.Steal,
+					Guest:     stat.CPUTotal.Guest - r.startCPUStat.Guest,
+					GuestNice: stat.CPUTotal.GuestNice - r.startCPUStat.GuestNice,
+				}
+				r.sysCPUStat = cpu
+			}
+		}
+
 	})
 }
 
@@ -110,12 +136,15 @@ func (r *cgroupRecord) sample(tm time.Time) (*types.Sample, error) {
 	return sample, nil
 }
 
-func (r *cgroupRecord) Samples() ([]*types.Sample, error) {
+func (r *cgroupRecord) Samples() (*types.Samples, error) {
 	<-r.done
 	if r.err != nil {
 		return nil, r.err
 	}
-	return r.samples, nil
+	return &types.Samples{
+		Samples:    r.samples,
+		SysCPUStat: r.sysCPUStat,
+	}, nil
 }
 
 type nopRecord struct {
@@ -125,7 +154,7 @@ func (r *nopRecord) Wait() error {
 	return nil
 }
 
-func (r *nopRecord) Samples() ([]*types.Sample, error) {
+func (r *nopRecord) Samples() (*types.Samples, error) {
 	return nil, nil
 }
 
@@ -140,6 +169,7 @@ type Monitor struct {
 	mu      sync.Mutex
 	closed  chan struct{}
 	records map[string]*cgroupRecord
+	proc    procfs.FS
 }
 
 type NetworkSampler interface {
@@ -194,9 +224,15 @@ func NewMonitor() (*Monitor, error) {
 		}
 	})
 
+	fs, err := procfs.NewDefaultFS()
+	if err != nil {
+		return nil, err
+	}
+
 	return &Monitor{
 		closed:  make(chan struct{}),
 		records: make(map[string]*cgroupRecord),
+		proc:    fs,
 	}, nil
 }
 
