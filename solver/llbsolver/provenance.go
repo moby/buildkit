@@ -12,6 +12,7 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/executor/resources"
 	"github.com/moby/buildkit/exporter/containerimage"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend"
@@ -378,10 +379,11 @@ func captureProvenance(ctx context.Context, res solver.CachedResultWithProvenanc
 type ProvenanceCreator struct {
 	pr        *provenance.ProvenancePredicate
 	j         *solver.Job
+	sampler   *resources.SysSampler
 	addLayers func() error
 }
 
-func NewProvenanceCreator(ctx context.Context, cp *provenance.Capture, res solver.ResultProxy, attrs map[string]string, j *solver.Job) (*ProvenanceCreator, error) {
+func NewProvenanceCreator(ctx context.Context, cp *provenance.Capture, res solver.ResultProxy, attrs map[string]string, j *solver.Job, usage *resources.SysSampler) (*ProvenanceCreator, error) {
 	var reproducible bool
 	if v, ok := attrs["reproducible"]; ok {
 		b, err := strconv.ParseBool(v)
@@ -493,11 +495,15 @@ func NewProvenanceCreator(ctx context.Context, cp *provenance.Capture, res solve
 		return nil, errors.Errorf("invalid mode %q", mode)
 	}
 
-	return &ProvenanceCreator{
+	pc := &ProvenanceCreator{
 		pr:        pr,
 		j:         j,
 		addLayers: addLayers,
-	}, nil
+	}
+	if withUsage {
+		pc.sampler = usage
+	}
+	return pc, nil
 }
 
 func (p *ProvenanceCreator) Predicate() (*provenance.ProvenancePredicate, error) {
@@ -508,6 +514,14 @@ func (p *ProvenanceCreator) Predicate() (*provenance.ProvenancePredicate, error)
 		if err := p.addLayers(); err != nil {
 			return nil, err
 		}
+	}
+
+	if p.sampler != nil {
+		sysSamples, err := p.sampler.Close(true)
+		if err != nil {
+			return nil, err
+		}
+		p.pr.Metadata.BuildKitMetadata.SysUsage = sysSamples
 	}
 
 	return p.pr, nil

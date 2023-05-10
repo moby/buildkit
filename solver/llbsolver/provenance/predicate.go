@@ -6,6 +6,7 @@ import (
 	"github.com/containerd/containerd/platforms"
 	slsa "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/common"
 	slsa02 "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
+	resourcetypes "github.com/moby/buildkit/executor/resources/types"
 	"github.com/moby/buildkit/util/purl"
 	"github.com/moby/buildkit/util/urlutil"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -50,9 +51,10 @@ type ProvenanceMetadata struct {
 }
 
 type BuildKitMetadata struct {
-	VCS    map[string]string                  `json:"vcs,omitempty"`
-	Source *Source                            `json:"source,omitempty"`
-	Layers map[string][][]ocispecs.Descriptor `json:"layers,omitempty"`
+	VCS      map[string]string                  `json:"vcs,omitempty"`
+	Source   *Source                            `json:"source,omitempty"`
+	Layers   map[string][][]ocispecs.Descriptor `json:"layers,omitempty"`
+	SysUsage []*resourcetypes.SysSample         `json:"sysUsage,omitempty"`
 }
 
 func slsaMaterials(srcs Sources) ([]slsa.ProvenanceMaterial, error) {

@@ -31,6 +31,7 @@ type cgroupRecord struct {
 	once         sync.Once
 	ns           string
 	sampler      *Sub[*types.Sample]
+	closeSampler func() error
 	samples      []*types.Sample
 	err          error
 	done         chan struct{}
@@ -52,6 +53,7 @@ func (r *cgroupRecord) Start() {
 	}
 	s := NewSampler(2*time.Second, r.sample)
 	r.sampler = s.Record()
+	r.closeSampler = s.Close
 }
 
 func (r *cgroupRecord) CloseAsync(next func(context.Context) error) error {
@@ -79,6 +81,7 @@ func (r *cgroupRecord) close() {
 		} else {
 			r.samples = s
 		}
+		r.closeSampler()
 
 		if r.startCPUStat != nil {
 			stat, err := r.monitor.proc.Stat()
@@ -98,7 +101,6 @@ func (r *cgroupRecord) close() {
 				r.sysCPUStat = cpu
 			}
 		}
-
 	})
 }
 

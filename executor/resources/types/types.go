@@ -14,19 +14,6 @@ type Recorder interface {
 	Samples() (*Samples, error)
 }
 
-type SysCPUStat struct {
-	User      float64 `json:"user"`
-	Nice      float64 `json:"nice"`
-	System    float64 `json:"system"`
-	Idle      float64 `json:"idle"`
-	Iowait    float64 `json:"iowait"`
-	IRQ       float64 `json:"irq"`
-	SoftIRQ   float64 `json:"softirq"`
-	Steal     float64 `json:"steal"`
-	Guest     float64 `json:"guest"`
-	GuestNice float64 `json:"guestNice"`
-}
-
 type Samples struct {
 	Samples    []*Sample   `json:"samples,omitempty"`
 	SysCPUStat *SysCPUStat `json:"sysCPUStat,omitempty"`
@@ -34,6 +21,7 @@ type Samples struct {
 
 // Sample represents a wrapper for sampled data of cgroupv2 controllers
 type Sample struct {
+	//nolint
 	Timestamp_ time.Time       `json:"timestamp"`
 	CPUStat    *CPUStat        `json:"cpuStat,omitempty"`
 	MemoryStat *MemoryStat     `json:"memoryStat,omitempty"`

@@ -84,7 +84,7 @@ func (s *Sampler[T]) Record() *Sub[T] {
 }
 
 func (s *Sampler[T]) run() {
-	ticker := time.NewTicker(s.minInterval)
+	ticker := time.NewTimer(s.minInterval)
 	for {
 		select {
 		case <-s.done:
@@ -102,6 +102,10 @@ func (s *Sampler[T]) run() {
 				active = append(active, ss)
 			}
 			s.mu.RUnlock()
+			ticker = time.NewTimer(s.minInterval)
+			if len(active) == 0 {
+				continue
+			}
 			value, err := s.callback(tm)
 			for _, ss := range active {
 				if err != nil {
@@ -111,7 +115,7 @@ func (s *Sampler[T]) run() {
 					ss.err = nil
 				}
 				dur := ss.last.Sub(ss.first)
-				if time.Duration(ss.interval)*10 >= dur {
+				if time.Duration(ss.interval)*10 <= dur {
 					ss.interval *= 2
 				}
 			}
