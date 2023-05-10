@@ -33,7 +33,6 @@ type ImageConfig struct {
 	ocispecs.ImageConfig
 
 	Healthcheck *HealthConfig `json:",omitempty"` // Healthcheck describes how to check the container is healthy
-	ArgsEscaped bool          `json:",omitempty"` // True if command is already escaped (Windows specific)
 
 	//	NetworkDisabled bool                `json:",omitempty"` // Is network disabled
 	//	MacAddress      string              `json:",omitempty"` // Mac Address of the container

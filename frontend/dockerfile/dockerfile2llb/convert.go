@@ -1261,7 +1261,7 @@ func dispatchCmd(d *dispatchState, c *instructions.CmdCommand) error {
 		args = withShell(d.image, args)
 	}
 	d.image.Config.Cmd = args
-	d.image.Config.ArgsEscaped = true
+	d.image.Config.ArgsEscaped = true //nolint:staticcheck // ignore SA1019: field is deprecated in OCI Image spec, but used for backward-compatibility with Docker image spec.
 	d.cmdSet = true
 	return commitToHistory(&d.image, fmt.Sprintf("CMD %q", args), false, nil, d.epoch)
 }

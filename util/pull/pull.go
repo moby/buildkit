@@ -233,15 +233,15 @@ func filterLayerBlobs(metadata map[digest.Digest]ocispecs.Descriptor, mu sync.Lo
 		switch desc.MediaType {
 		case
 			ocispecs.MediaTypeImageLayer,
-			ocispecs.MediaTypeImageLayerNonDistributable,
+			ocispecs.MediaTypeImageLayerNonDistributable, //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
 			images.MediaTypeDockerSchema2Layer,
 			images.MediaTypeDockerSchema2LayerForeign,
 			ocispecs.MediaTypeImageLayerGzip,
 			images.MediaTypeDockerSchema2LayerGzip,
-			ocispecs.MediaTypeImageLayerNonDistributableGzip,
+			ocispecs.MediaTypeImageLayerNonDistributableGzip, //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
 			images.MediaTypeDockerSchema2LayerForeignGzip,
 			ocispecs.MediaTypeImageLayerZstd,
-			ocispecs.MediaTypeImageLayerNonDistributableZstd:
+			ocispecs.MediaTypeImageLayerNonDistributableZstd: //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
 			return nil, images.ErrSkipDesc
 		default:
 			if metadata != nil {
