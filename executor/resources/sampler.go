@@ -12,6 +12,7 @@ type WithTimestamp interface {
 type Sampler[T WithTimestamp] struct {
 	mu          sync.RWMutex
 	minInterval time.Duration
+	maxSamples  int
 	callback    func(ts time.Time) (T, error)
 	doneOnce    sync.Once
 	done        chan struct{}
@@ -57,9 +58,10 @@ func (s *Sub[T]) Close(captureLast bool) ([]T, error) {
 	return out, nil
 }
 
-func NewSampler[T WithTimestamp](minInterval time.Duration, cb func(time.Time) (T, error)) *Sampler[T] {
+func NewSampler[T WithTimestamp](minInterval time.Duration, maxSamples int, cb func(time.Time) (T, error)) *Sampler[T] {
 	s := &Sampler[T]{
 		minInterval: minInterval,
+		maxSamples:  maxSamples,
 		callback:    cb,
 		done:        make(chan struct{}),
 		subs:        make(map[*Sub[T]]struct{}),
@@ -115,7 +117,7 @@ func (s *Sampler[T]) run() {
 					ss.err = nil
 				}
 				dur := ss.last.Sub(ss.first)
-				if time.Duration(ss.interval)*10 <= dur {
+				if time.Duration(ss.interval)*time.Duration(s.maxSamples) <= dur {
 					ss.interval *= 2
 				}
 			}

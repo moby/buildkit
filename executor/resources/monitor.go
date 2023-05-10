@@ -51,7 +51,7 @@ func (r *cgroupRecord) Start() {
 	if stat, err := r.monitor.proc.Stat(); err == nil {
 		r.startCPUStat = &stat.CPUTotal
 	}
-	s := NewSampler(2*time.Second, r.sample)
+	s := NewSampler(2*time.Second, 10, r.sample)
 	r.sampler = s.Record()
 	r.closeSampler = s.Close
 }

@@ -16,7 +16,7 @@ func NewSysSampler() (*Sampler[*types.SysSample], error) {
 		return nil, err
 	}
 
-	return NewSampler(2*time.Second, func(tm time.Time) (*types.SysSample, error) {
+	return NewSampler(2*time.Second, 20, func(tm time.Time) (*types.SysSample, error) {
 		return sampleSys(procfs, tm)
 	}), nil
 }
