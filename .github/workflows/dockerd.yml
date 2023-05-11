@@ -16,7 +16,7 @@ env:
 
 jobs:
   prepare:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       -
         name: Prepare
@@ -70,7 +70,7 @@ jobs:
           if-no-files-found: error
 
   test:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs:
       - prepare
     strategy:

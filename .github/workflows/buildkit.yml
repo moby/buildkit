@@ -54,7 +54,7 @@ jobs:
           typ: integration
 
   prepare:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     outputs:
       tag: ${{ steps.prep.outputs.tag }}
       push: ${{ steps.prep.outputs.push }}
@@ -87,7 +87,7 @@ jobs:
           echo "platforms=$platforms" >>${GITHUB_OUTPUT}
 
   binaries:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs:
       - prepare
     strategy:
@@ -136,7 +136,7 @@ jobs:
           if-no-files-found: error
 
   image:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs:
       - prepare
       - test
@@ -181,7 +181,7 @@ jobs:
           CACHE_TO: type=gha,scope=image${{ matrix.target-stage }}
 
   release:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs:
       - prepare
       - test
