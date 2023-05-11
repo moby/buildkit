@@ -59,8 +59,8 @@ Line continuation characters are not supported in comments.
 > equivalent:
 >
 > ```dockerfile
->         # this is a comment-line
->     RUN echo hello
+> # this is a comment-line
+> RUN echo hello
 > RUN echo world
 > ```
 > 
