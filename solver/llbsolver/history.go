@@ -35,6 +35,7 @@ type HistoryQueueOpt struct {
 }
 
 type HistoryQueue struct {
+	// mu protects active, refs and deleted maps
 	mu       sync.Mutex
 	initOnce sync.Once
 	HistoryQueueOpt
@@ -132,6 +133,10 @@ func (h *HistoryQueue) delete(ref string, sync bool) error {
 		return nil
 	}
 	delete(h.deleted, ref)
+	h.ps.Send(&controlapi.BuildHistoryEvent{
+		Type:   controlapi.BuildHistoryEventType_DELETED,
+		Record: &controlapi.BuildHistoryRecord{Ref: ref},
+	})
 	if err := h.DB.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(recordsBucket))
 		if b == nil {
@@ -559,7 +564,10 @@ func (h *HistoryQueue) Listen(ctx context.Context, req *controlapi.BuildHistoryR
 		if req.Ref != "" && e.Ref != req.Ref {
 			continue
 		}
-		sub.ps.Send(&controlapi.BuildHistoryEvent{
+		if _, ok := h.deleted[e.Ref]; ok {
+			continue
+		}
+		sub.send(&controlapi.BuildHistoryEvent{
 			Type:   controlapi.BuildHistoryEventType_STARTED,
 			Record: e,
 		})
@@ -568,6 +576,7 @@ func (h *HistoryQueue) Listen(ctx context.Context, req *controlapi.BuildHistoryR
 	h.mu.Unlock()
 
 	if !req.ActiveOnly {
+		events := []*controlapi.BuildHistoryEvent{}
 		if err := h.DB.View(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte(recordsBucket))
 			if b == nil {
@@ -581,16 +590,30 @@ func (h *HistoryQueue) Listen(ctx context.Context, req *controlapi.BuildHistoryR
 				if err := br.Unmarshal(dt); err != nil {
 					return errors.Wrapf(err, "failed to unmarshal build record %s", key)
 				}
-				if err := f(&controlapi.BuildHistoryEvent{
+				events = append(events, &controlapi.BuildHistoryEvent{
 					Record: &br,
 					Type:   controlapi.BuildHistoryEventType_COMPLETE,
-				}); err != nil {
-					return err
-				}
+				})
 				return nil
 			})
 		}); err != nil {
 			return err
+		}
+		// filter out records that have been marked for deletion
+		h.mu.Lock()
+		for i, e := range events {
+			if _, ok := h.deleted[e.Record.Ref]; ok {
+				events[i] = nil
+			}
+		}
+		h.mu.Unlock()
+		for _, e := range events {
+			if e.Record == nil {
+				continue
+			}
+			if err := f(e); err != nil {
+				return err
+			}
 		}
 	}
 
