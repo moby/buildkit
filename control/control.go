@@ -168,7 +168,7 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 		imageutil.CancelCacheLeases()
 	}
 
-	ch := make(chan client.UsageInfo)
+	ch := make(chan client.UsageInfo, 32)
 
 	eg, ctx := errgroup.WithContext(stream.Context())
 	workers, err := c.opt.WorkerController.List()
@@ -210,6 +210,11 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 	})
 
 	eg2.Go(func() error {
+		defer func() {
+			// drain channel on error
+			for range ch {
+			}
+		}()
 		for r := range ch {
 			didPrune = true
 			if err := stream.Send(&controlapi.UsageRecord{
@@ -450,6 +455,11 @@ func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Con
 	})
 
 	eg.Go(func() error {
+		defer func() {
+			// drain channel on error
+			for range ch {
+			}
+		}()
 		for {
 			ss, ok := <-ch
 			if !ok {
