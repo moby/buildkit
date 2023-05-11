@@ -110,7 +110,9 @@ func (cm *cacheManager) GetCacheContext(ctx context.Context, md cache.RefMetadat
 	cm.lruMu.Unlock()
 	if ok {
 		cm.locker.Unlock(md.ID())
+		v.(*cacheContext).mu.Lock()
 		v.(*cacheContext).linkMap = map[string][][]byte{}
+		v.(*cacheContext).mu.Unlock()
 		return v.(*cacheContext), nil
 	}
 	cc, err := newCacheContext(md)

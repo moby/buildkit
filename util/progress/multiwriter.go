@@ -69,9 +69,9 @@ func (ps *MultiWriter) Write(id string, v interface{}) error {
 }
 
 func (ps *MultiWriter) WriteRawProgress(p *Progress) error {
-	meta := p.meta
 	if len(ps.meta) > 0 {
-		meta = map[string]interface{}{}
+		meta := map[string]interface{}{}
+		p.metaMu.Lock()
 		for k, v := range p.meta {
 			meta[k] = v
 		}
@@ -80,8 +80,9 @@ func (ps *MultiWriter) WriteRawProgress(p *Progress) error {
 				meta[k] = v
 			}
 		}
+		p.meta = meta
+		p.metaMu.Unlock()
 	}
-	p.meta = meta
 	return ps.writeRawProgress(p)
 }
 
