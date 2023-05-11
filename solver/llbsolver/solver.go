@@ -907,27 +907,26 @@ func inBuilderContext(ctx context.Context, b solver.Builder, name, id string, f 
 	}
 	return b.InContext(ctx, func(ctx context.Context, g session.Group) error {
 		pw, _, ctx := progress.NewFromContext(ctx, progress.WithMetadata("vertex", v.Digest))
-		notifyCompleted := notifyStarted(ctx, &v, false)
+		notifyCompleted := notifyStarted(ctx, &v)
 		defer pw.Close()
 		err := f(ctx, g)
-		notifyCompleted(err, false)
+		notifyCompleted(err)
 		return err
 	})
 }
 
-func notifyStarted(ctx context.Context, v *client.Vertex, cached bool) func(err error, cached bool) {
+func notifyStarted(ctx context.Context, v *client.Vertex) func(err error) {
 	pw, _, _ := progress.NewFromContext(ctx)
 	start := time.Now()
 	v.Started = &start
 	v.Completed = nil
-	v.Cached = cached
 	id := identity.NewID()
 	pw.Write(id, *v)
-	return func(err error, cached bool) {
+	return func(err error) {
 		defer pw.Close()
 		stop := time.Now()
 		v.Completed = &stop
-		v.Cached = cached
+		v.Cached = false
 		if err != nil {
 			v.Error = err.Error()
 		}
