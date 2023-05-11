@@ -38,24 +38,23 @@ func GetUpperdir(lower, upper []mount.Mount) (string, error) {
 		// Get layer directories of lower snapshot
 		var lowerlayers []string
 		lowerM := lower[0]
-		switch lowerM.Type {
-		case "bind":
+		if lowerM.Type == "bind" {
 			// lower snapshot is a bind mount of one layer
 			lowerlayers = []string{lowerM.Source}
-		case "overlay":
+		} else if IsOverlayMountType(lowerM) {
 			// lower snapshot is an overlay mount of multiple layers
 			var err error
 			lowerlayers, err = GetOverlayLayers(lowerM)
 			if err != nil {
 				return "", err
 			}
-		default:
+		} else {
 			return "", errors.Errorf("cannot get layer information from mount option (type = %q)", lowerM.Type)
 		}
 
 		// Get layer directories of upper snapshot
 		upperM := upper[0]
-		if upperM.Type != "overlay" {
+		if !IsOverlayMountType(upperM) {
 			return "", errors.Errorf("upper snapshot isn't overlay mounted (type = %q)", upperM.Type)
 		}
 		upperlayers, err := GetOverlayLayers(upperM)
