@@ -12,7 +12,7 @@ import (
 )
 
 func InitOCIWorker() {
-	Register(&oci{})
+	Register(&OCI{ID: "oci"})
 
 	// the rootless uid is defined in Dockerfile
 	if s := os.Getenv("BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR"); s != "" {
@@ -21,36 +21,31 @@ func InitOCIWorker() {
 			bklog.L.Fatalf("unexpected BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR: %q", s)
 		}
 		if rootlessSupported(uid) {
-			Register(&oci{uid: uid, gid: gid})
+			Register(&OCI{ID: "oci-rootless", UID: uid, GID: gid})
 		}
 	}
 
 	if s := os.Getenv("BUILDKIT_INTEGRATION_SNAPSHOTTER"); s != "" {
-		Register(&oci{snapshotter: s})
+		Register(&OCI{ID: "oci-snapshotter-" + s, Snapshotter: s})
 	}
 }
 
-type oci struct {
-	uid         int
-	gid         int
-	snapshotter string
+type OCI struct {
+	ID          string
+	UID         int
+	GID         int
+	Snapshotter string
 }
 
-func (s *oci) Name() string {
-	if s.uid != 0 {
-		return "oci-rootless"
-	}
-	if s.snapshotter != "" {
-		return fmt.Sprintf("oci-snapshotter-%s", s.snapshotter)
-	}
-	return "oci"
+func (s *OCI) Name() string {
+	return s.ID
 }
 
-func (s *oci) Rootless() bool {
-	return s.uid != 0
+func (s *OCI) Rootless() bool {
+	return s.UID != 0
 }
 
-func (s *oci) New(ctx context.Context, cfg *BackendConfig) (Backend, func() error, error) {
+func (s *OCI) New(ctx context.Context, cfg *BackendConfig) (Backend, func() error, error) {
 	if err := lookupBinary("buildkitd"); err != nil {
 		return nil, nil, err
 	}
@@ -60,24 +55,24 @@ func (s *oci) New(ctx context.Context, cfg *BackendConfig) (Backend, func() erro
 	// Include use of --oci-worker-labels to trigger https://github.com/moby/buildkit/pull/603
 	buildkitdArgs := []string{"buildkitd", "--oci-worker=true", "--containerd-worker=false", "--oci-worker-gc=false", "--oci-worker-labels=org.mobyproject.buildkit.worker.sandbox=true"}
 
-	if s.snapshotter != "" {
+	if s.Snapshotter != "" {
 		buildkitdArgs = append(buildkitdArgs,
-			fmt.Sprintf("--oci-worker-snapshotter=%s", s.snapshotter))
+			fmt.Sprintf("--oci-worker-snapshotter=%s", s.Snapshotter))
 	}
 
-	if s.uid != 0 {
-		if s.gid == 0 {
-			return nil, nil, errors.Errorf("unsupported id pair: uid=%d, gid=%d", s.uid, s.gid)
+	if s.UID != 0 {
+		if s.GID == 0 {
+			return nil, nil, errors.Errorf("unsupported id pair: uid=%d, gid=%d", s.UID, s.GID)
 		}
 		// TODO: make sure the user exists and subuid/subgid are configured.
-		buildkitdArgs = append([]string{"sudo", "-u", fmt.Sprintf("#%d", s.uid), "-i", "--", "exec", "rootlesskit"}, buildkitdArgs...)
+		buildkitdArgs = append([]string{"sudo", "-u", fmt.Sprintf("#%d", s.UID), "-i", "--", "exec", "rootlesskit"}, buildkitdArgs...)
 	}
 
 	var extraEnv []string
-	if runtime.GOOS != "windows" && s.snapshotter != "native" {
+	if runtime.GOOS != "windows" && s.Snapshotter != "native" {
 		extraEnv = append(extraEnv, "BUILDKIT_DEBUG_FORCE_OVERLAY_DIFF=true")
 	}
-	buildkitdSock, stop, err := runBuildkitd(ctx, cfg, buildkitdArgs, cfg.Logs, s.uid, s.gid, extraEnv)
+	buildkitdSock, stop, err := runBuildkitd(ctx, cfg, buildkitdArgs, cfg.Logs, s.UID, s.GID, extraEnv)
 	if err != nil {
 		printLogs(cfg.Logs, log.Println)
 		return nil, nil, err
@@ -85,7 +80,7 @@ func (s *oci) New(ctx context.Context, cfg *BackendConfig) (Backend, func() erro
 
 	return backend{
 		address:     buildkitdSock,
-		rootless:    s.uid != 0,
-		snapshotter: s.snapshotter,
+		rootless:    s.UID != 0,
+		snapshotter: s.Snapshotter,
 	}, stop, nil
 }

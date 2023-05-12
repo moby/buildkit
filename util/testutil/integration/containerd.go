@@ -18,9 +18,9 @@ import (
 )
 
 func InitContainerdWorker() {
-	Register(&containerd{
-		name:       "containerd",
-		containerd: "containerd",
+	Register(&Containerd{
+		ID:         "containerd",
+		Containerd: "containerd",
 	})
 	// defined in Dockerfile
 	// e.g. `containerd-1.1=/opt/containerd-1.1/bin,containerd-42.0=/opt/containerd-42.0/bin`
@@ -32,11 +32,11 @@ func InitContainerdWorker() {
 				panic(errors.Errorf("unexpected BUILDKIT_INTEGRATION_CONTAINERD_EXTRA: %q", s))
 			}
 			name, bin := pair[0], pair[1]
-			Register(&containerd{
-				name:       name,
-				containerd: filepath.Join(bin, "containerd"),
+			Register(&Containerd{
+				ID:         name,
+				Containerd: filepath.Join(bin, "containerd"),
 				// override PATH to make sure that the expected version of the shim binary is used
-				extraEnv: []string{fmt.Sprintf("PATH=%s:%s", bin, os.Getenv("PATH"))},
+				ExtraEnv: []string{fmt.Sprintf("PATH=%s:%s", bin, os.Getenv("PATH"))},
 			})
 		}
 	}
@@ -48,44 +48,44 @@ func InitContainerdWorker() {
 			bklog.L.Fatalf("unexpected BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR: %q", s)
 		}
 		if rootlessSupported(uid) {
-			Register(&containerd{
-				name:        "containerd-rootless",
-				containerd:  "containerd",
-				uid:         uid,
-				gid:         gid,
-				snapshotter: "native", // TODO: test with fuse-overlayfs as well, or automatically determine snapshotter
+			Register(&Containerd{
+				ID:          "containerd-rootless",
+				Containerd:  "containerd",
+				UID:         uid,
+				GID:         gid,
+				Snapshotter: "native", // TODO: test with fuse-overlayfs as well, or automatically determine snapshotter
 			})
 		}
 	}
 
 	if s := os.Getenv("BUILDKIT_INTEGRATION_SNAPSHOTTER"); s != "" {
-		Register(&containerd{
-			name:        fmt.Sprintf("containerd-snapshotter-%s", s),
-			containerd:  "containerd",
-			snapshotter: s,
+		Register(&Containerd{
+			ID:          fmt.Sprintf("containerd-snapshotter-%s", s),
+			Containerd:  "containerd",
+			Snapshotter: s,
 		})
 	}
 }
 
-type containerd struct {
-	name        string
-	containerd  string
-	snapshotter string
-	uid         int
-	gid         int
-	extraEnv    []string // e.g. "PATH=/opt/containerd-1.4/bin:/usr/bin:..."
+type Containerd struct {
+	ID          string
+	Containerd  string
+	Snapshotter string
+	UID         int
+	GID         int
+	ExtraEnv    []string // e.g. "PATH=/opt/containerd-1.4/bin:/usr/bin:..."
 }
 
-func (c *containerd) Name() string {
-	return c.name
+func (c *Containerd) Name() string {
+	return c.ID
 }
 
-func (c *containerd) Rootless() bool {
-	return c.uid != 0
+func (c *Containerd) Rootless() bool {
+	return c.UID != 0
 }
 
-func (c *containerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func() error, err error) {
-	if err := lookupBinary(c.containerd); err != nil {
+func (c *Containerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func() error, err error) {
+	if err := lookupBinary(c.Containerd); err != nil {
 		return nil, nil, err
 	}
 	if err := lookupBinary("buildkitd"); err != nil {
@@ -106,9 +106,9 @@ func (c *containerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl
 	}()
 
 	rootless := false
-	if c.uid != 0 {
-		if c.gid == 0 {
-			return nil, nil, errors.Errorf("unsupported id pair: uid=%d, gid=%d", c.uid, c.gid)
+	if c.UID != 0 {
+		if c.GID == 0 {
+			return nil, nil, errors.Errorf("unsupported id pair: uid=%d, gid=%d", c.UID, c.GID)
 		}
 		rootless = true
 	}
@@ -118,7 +118,7 @@ func (c *containerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl
 		return nil, nil, err
 	}
 	if rootless {
-		if err := os.Chown(tmpdir, c.uid, c.gid); err != nil {
+		if err := os.Chown(tmpdir, c.UID, c.GID); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -141,10 +141,10 @@ disabled_plugins = ["cri"]
 `, filepath.Join(tmpdir, "root"), filepath.Join(tmpdir, "state"), address, filepath.Join(tmpdir, "debug.sock"))
 
 	var snBuildkitdArgs []string
-	if c.snapshotter != "" {
+	if c.Snapshotter != "" {
 		snBuildkitdArgs = append(snBuildkitdArgs,
-			fmt.Sprintf("--containerd-worker-snapshotter=%s", c.snapshotter))
-		if c.snapshotter == "stargz" {
+			fmt.Sprintf("--containerd-worker-snapshotter=%s", c.Snapshotter))
+		if c.Snapshotter == "stargz" {
 			snPath, snCl, err := runStargzSnapshotter(cfg)
 			if err != nil {
 				return nil, nil, err
@@ -165,21 +165,21 @@ disabled_plugins = ["cri"]
 		return nil, nil, err
 	}
 
-	containerdArgs := []string{c.containerd, "--config", configFile}
+	containerdArgs := []string{c.Containerd, "--config", configFile}
 	rootlessKitState := filepath.Join(tmpdir, "rootlesskit-containerd")
 	if rootless {
-		containerdArgs = append(append([]string{"sudo", "-u", fmt.Sprintf("#%d", c.uid), "-i",
+		containerdArgs = append(append([]string{"sudo", "-u", fmt.Sprintf("#%d", c.UID), "-i",
 			fmt.Sprintf("CONTAINERD_ROOTLESS_ROOTLESSKIT_STATE_DIR=%s", rootlessKitState),
 			// Integration test requires the access to localhost of the host network namespace.
 			// TODO: remove these configurations
 			"CONTAINERD_ROOTLESS_ROOTLESSKIT_NET=host",
 			"CONTAINERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=none",
 			"CONTAINERD_ROOTLESS_ROOTLESSKIT_FLAGS=--mtu=0",
-		}, c.extraEnv...), "containerd-rootless.sh", "-c", configFile)
+		}, c.ExtraEnv...), "containerd-rootless.sh", "-c", configFile)
 	}
 
 	cmd := exec.Command(containerdArgs[0], containerdArgs[1:]...) //nolint:gosec // test utility
-	cmd.Env = append(os.Environ(), c.extraEnv...)
+	cmd.Env = append(os.Environ(), c.ExtraEnv...)
 
 	ctdStop, err := startCmd(cmd, cfg.Logs)
 	if err != nil {
@@ -199,8 +199,8 @@ disabled_plugins = ["cri"]
 		"--containerd-worker-labels=org.mobyproject.buildkit.worker.sandbox=true", // Include use of --containerd-worker-labels to trigger https://github.com/moby/buildkit/pull/603
 	}, snBuildkitdArgs...)
 
-	if runtime.GOOS != "windows" && c.snapshotter != "native" {
-		c.extraEnv = append(c.extraEnv, "BUILDKIT_DEBUG_FORCE_OVERLAY_DIFF=true")
+	if runtime.GOOS != "windows" && c.Snapshotter != "native" {
+		c.ExtraEnv = append(c.ExtraEnv, "BUILDKIT_DEBUG_FORCE_OVERLAY_DIFF=true")
 	}
 	if rootless {
 		pidStr, err := os.ReadFile(filepath.Join(rootlessKitState, "child_pid"))
@@ -211,11 +211,11 @@ disabled_plugins = ["cri"]
 		if err != nil {
 			return nil, nil, err
 		}
-		buildkitdArgs = append([]string{"sudo", "-u", fmt.Sprintf("#%d", c.uid), "-i", "--", "exec",
+		buildkitdArgs = append([]string{"sudo", "-u", fmt.Sprintf("#%d", c.UID), "-i", "--", "exec",
 			"nsenter", "-U", "--preserve-credentials", "-m", "-t", fmt.Sprintf("%d", pid)},
 			append(buildkitdArgs, "--containerd-worker-snapshotter=native")...)
 	}
-	buildkitdSock, stop, err := runBuildkitd(ctx, cfg, buildkitdArgs, cfg.Logs, c.uid, c.gid, c.extraEnv)
+	buildkitdSock, stop, err := runBuildkitd(ctx, cfg, buildkitdArgs, cfg.Logs, c.UID, c.GID, c.ExtraEnv)
 	if err != nil {
 		printLogs(cfg.Logs, log.Println)
 		return nil, nil, err
@@ -226,7 +226,7 @@ disabled_plugins = ["cri"]
 		address:           buildkitdSock,
 		containerdAddress: address,
 		rootless:          rootless,
-		snapshotter:       c.snapshotter,
+		snapshotter:       c.Snapshotter,
 	}, cl, nil
 }
 

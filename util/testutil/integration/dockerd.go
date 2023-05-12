@@ -19,10 +19,10 @@ import (
 
 // InitDockerdWorker registers a dockerd worker with the global registry.
 func InitDockerdWorker() {
-	Register(&moby{
-		name:     "dockerd",
-		rootless: false,
-		unsupported: []string{
+	Register(&Moby{
+		ID:         "dockerd",
+		IsRootless: false,
+		Unsupported: []string{
 			FeatureCacheExport,
 			FeatureCacheImport,
 			FeatureCacheBackendAzblob,
@@ -42,31 +42,35 @@ func InitDockerdWorker() {
 			FeatureCNINetwork,
 		},
 	})
-	Register(&moby{
-		name:     "dockerd-containerd",
-		rootless: false,
-		unsupported: []string{
+	Register(&Moby{
+		ID:                    "dockerd-containerd",
+		IsRootless:            false,
+		ContainerdSnapshotter: true,
+		Unsupported: []string{
 			FeatureSecurityMode,
 			FeatureCNINetwork,
 		},
 	})
 }
 
-type moby struct {
-	name        string
-	rootless    bool
-	unsupported []string
+type Moby struct {
+	ID         string
+	IsRootless bool
+
+	ContainerdSnapshotter bool
+
+	Unsupported []string
 }
 
-func (c moby) Name() string {
-	return c.name
+func (c Moby) Name() string {
+	return c.ID
 }
 
-func (c moby) Rootless() bool {
-	return c.rootless
+func (c Moby) Rootless() bool {
+	return c.IsRootless
 }
 
-func (c moby) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func() error, err error) {
+func (c Moby) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func() error, err error) {
 	if err := requireRoot(); err != nil {
 		return nil, nil, err
 	}
@@ -78,7 +82,7 @@ func (c moby) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func()
 
 	dcfg := dockerd.Config{
 		Features: map[string]bool{
-			"containerd-snapshotter": c.name == "dockerd-containerd",
+			"containerd-snapshotter": c.ContainerdSnapshotter,
 		},
 	}
 	if reg, ok := bkcfg.Registries["docker.io"]; ok && len(reg.Mirrors) > 0 {
@@ -208,9 +212,9 @@ func (c moby) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func()
 
 	return backend{
 		address:             "unix://" + listener.Addr().String(),
-		rootless:            c.rootless,
+		rootless:            c.IsRootless,
 		isDockerd:           true,
-		unsupportedFeatures: c.unsupported,
+		unsupportedFeatures: c.Unsupported,
 	}, cl, nil
 }
 
