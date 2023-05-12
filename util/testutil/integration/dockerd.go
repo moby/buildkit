@@ -212,6 +212,7 @@ func (c Moby) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func()
 
 	return backend{
 		address:             "unix://" + listener.Addr().String(),
+		dockerAddress:       d.Sock(),
 		rootless:            c.IsRootless,
 		isDockerd:           true,
 		unsupportedFeatures: c.Unsupported,
