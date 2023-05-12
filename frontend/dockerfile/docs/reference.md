@@ -2599,6 +2599,7 @@ here-doc delimiter as part of the same command.
 # syntax=docker/dockerfile:1
 FROM debian
 RUN <<EOT bash
+  set -ex
   apt-get update
   apt-get install -y vim
 EOT
