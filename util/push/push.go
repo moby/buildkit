@@ -14,8 +14,10 @@ import (
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/docker/distribution/reference"
+	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/progress"
@@ -45,6 +47,7 @@ func Pusher(ctx context.Context, resolver remotes.Resolver, ref string) (remotes
 }
 
 func Push(ctx context.Context, sm *session.Manager, sid string, provider content.Provider, manager content.Manager, dgst digest.Digest, ref string, insecure bool, hosts docker.RegistryHosts, byDigest bool, annotations map[digest.Digest]map[string]string) error {
+	ctx = contentutil.RegisterContentPayloadTypes(ctx)
 	desc := ocispecs.Descriptor{
 		Digest: dgst,
 	}
