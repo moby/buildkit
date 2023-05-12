@@ -437,7 +437,7 @@ func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *Ima
 		}
 		digest := digest.FromBytes(data)
 		desc := ocispecs.Descriptor{
-			MediaType: attestationTypes.MediaTypeDockerSchema2AttestationType,
+			MediaType: intoto.PayloadType,
 			Digest:    digest,
 			Size:      int64(len(data)),
 			Annotations: map[string]string{

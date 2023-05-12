@@ -13,7 +13,7 @@ import (
 	"github.com/containerd/containerd/reference"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
-	"github.com/moby/buildkit/util/attestation"
+	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/resolver/limited"
@@ -174,7 +174,7 @@ func childrenConfigHandler(provider content.Provider, platform platforms.MatchCo
 				descs = append(descs, index.Manifests...)
 			}
 		case images.MediaTypeDockerSchema2Config, ocispecs.MediaTypeImageConfig, docker.LegacyConfigMediaType,
-			attestation.MediaTypeDockerSchema2AttestationType:
+			intoto.PayloadType:
 			// childless data types.
 			return nil, nil
 		default:
