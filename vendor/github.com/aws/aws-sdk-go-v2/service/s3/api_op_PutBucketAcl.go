@@ -142,7 +142,7 @@ import (
 // (https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region) in the
 // Amazon Web Services General Reference.
 //
-// Related Resources
+// # Related Resources
 //
 // * CreateBucket
 // (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html)

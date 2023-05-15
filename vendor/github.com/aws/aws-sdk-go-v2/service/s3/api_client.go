@@ -487,8 +487,7 @@ func resolveCredentialProvider(o *Options) {
 		return
 	}
 
-	switch o.Credentials.(type) {
-	case aws.AnonymousCredentials, *aws.AnonymousCredentials:
+	if aws.IsCredentialsProvider(o.Credentials, (*aws.AnonymousCredentials)(nil)) {
 		return
 	}
 
@@ -728,6 +727,9 @@ func (c presignConverter) convertToPresignMiddleware(stack *middleware.Stack, op
 	})
 	err = stack.Finalize.Add(pmw, middleware.After)
 	if err != nil {
+		return err
+	}
+	if err = smithyhttp.AddNoPayloadDefaultContentTypeRemover(stack); err != nil {
 		return err
 	}
 

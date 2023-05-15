@@ -50,7 +50,6 @@ const DefaultUploadConcurrency = 5
 //			fmt.Printf("upload failure, %s\n", err.Error())
 //		}
 //	}
-//
 type MultiUploadFailure interface {
 	error
 
@@ -72,7 +71,7 @@ type multiUploadError struct {
 
 // batchItemError returns the string representation of the error.
 //
-// See apierr.BaseError ErrorWithExtra for output format
+// # See apierr.BaseError ErrorWithExtra for output format
 //
 // Satisfies the error interface.
 func (m *multiUploadError) Error() string {
@@ -167,7 +166,7 @@ func WithUploaderRequestOptions(opts ...func(*s3.Options)) func(*Uploader) {
 // on this structure for multiple objects and across concurrent goroutines.
 // Mutating the Uploader's properties is not safe to be done concurrently.
 //
-// Pre-computed Checksums
+// # Pre-computed Checksums
 //
 // Care must be taken when using pre-computed checksums the transfer upload
 // manager. The format and value of the checksum differs based on if the upload
@@ -188,7 +187,7 @@ func WithUploaderRequestOptions(opts ...func(*s3.Options)) func(*Uploader) {
 // ContentMD5 for multipart upload is explicitly ignored for multipart upload,
 // and its value is suppressed.
 //
-// Automatically Computed Checksums
+// # Automatically Computed Checksums
 //
 // When the ChecksumAlgorithm member of Upload's input parameter PutObjectInput
 // is set to a valid value, the SDK will automatically compute the checksum of
@@ -250,6 +249,7 @@ type Uploader struct {
 // satisfies the client.ConfigProvider interface.
 //
 // Example:
+//
 //	// Load AWS Config
 //	cfg, err := config.LoadDefaultConfig(context.TODO())
 //	if err != nil {

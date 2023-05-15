@@ -135,6 +135,7 @@ func (m *awsRestxml_serializeOpCompleteMultipartUpload) HandleSerialize(ctx cont
 
 	if input.MultipartUpload != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -540,6 +541,7 @@ func (m *awsRestxml_serializeOpCreateBucket) HandleSerialize(ctx context.Context
 
 	if input.CreateBucketConfiguration != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -1793,6 +1795,7 @@ func (m *awsRestxml_serializeOpDeleteObjects) HandleSerialize(ctx context.Contex
 
 	if input.Delete != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -5073,6 +5076,7 @@ func (m *awsRestxml_serializeOpPutBucketAccelerateConfiguration) HandleSerialize
 
 	if input.AccelerateConfiguration != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -5164,6 +5168,7 @@ func (m *awsRestxml_serializeOpPutBucketAcl) HandleSerialize(ctx context.Context
 
 	if input.AccessControlPolicy != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -5290,6 +5295,7 @@ func (m *awsRestxml_serializeOpPutBucketAnalyticsConfiguration) HandleSerialize(
 
 	if input.AnalyticsConfiguration != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -5380,6 +5386,7 @@ func (m *awsRestxml_serializeOpPutBucketCors) HandleSerialize(ctx context.Contex
 
 	if input.CORSConfiguration != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -5476,6 +5483,7 @@ func (m *awsRestxml_serializeOpPutBucketEncryption) HandleSerialize(ctx context.
 
 	if input.ServerSideEncryptionConfiguration != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -5572,6 +5580,7 @@ func (m *awsRestxml_serializeOpPutBucketIntelligentTieringConfiguration) HandleS
 
 	if input.IntelligentTieringConfiguration != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -5657,6 +5666,7 @@ func (m *awsRestxml_serializeOpPutBucketInventoryConfiguration) HandleSerialize(
 
 	if input.InventoryConfiguration != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -5747,6 +5757,7 @@ func (m *awsRestxml_serializeOpPutBucketLifecycleConfiguration) HandleSerialize(
 
 	if input.LifecycleConfiguration != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -5838,6 +5849,7 @@ func (m *awsRestxml_serializeOpPutBucketLogging) HandleSerialize(ctx context.Con
 
 	if input.BucketLoggingStatus != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -5934,6 +5946,7 @@ func (m *awsRestxml_serializeOpPutBucketMetricsConfiguration) HandleSerialize(ct
 
 	if input.MetricsConfiguration != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -6024,6 +6037,7 @@ func (m *awsRestxml_serializeOpPutBucketNotificationConfiguration) HandleSeriali
 
 	if input.NotificationConfiguration != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -6115,6 +6129,7 @@ func (m *awsRestxml_serializeOpPutBucketOwnershipControls) HandleSerialize(ctx c
 
 	if input.OwnershipControls != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -6204,11 +6219,12 @@ func (m *awsRestxml_serializeOpPutBucketPolicy) HandleSerialize(ctx context.Cont
 		return out, metadata, &smithy.SerializationError{Err: err}
 	}
 
-	if input.Policy != nil {
-		if !restEncoder.HasHeader("Content-Type") {
-			restEncoder.SetHeader("Content-Type").String("text/plain")
-		}
+	if !restEncoder.HasHeader("Content-Type") {
+		ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
+		restEncoder.SetHeader("Content-Type").String("text/plain")
+	}
 
+	if input.Policy != nil {
 		payload := strings.NewReader(*input.Policy)
 		if request, err = request.SetStream(payload); err != nil {
 			return out, metadata, &smithy.SerializationError{Err: err}
@@ -6295,6 +6311,7 @@ func (m *awsRestxml_serializeOpPutBucketReplication) HandleSerialize(ctx context
 
 	if input.ReplicationConfiguration != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -6396,6 +6413,7 @@ func (m *awsRestxml_serializeOpPutBucketRequestPayment) HandleSerialize(ctx cont
 
 	if input.RequestPaymentConfiguration != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -6492,6 +6510,7 @@ func (m *awsRestxml_serializeOpPutBucketTagging) HandleSerialize(ctx context.Con
 
 	if input.Tagging != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -6588,6 +6607,7 @@ func (m *awsRestxml_serializeOpPutBucketVersioning) HandleSerialize(ctx context.
 
 	if input.VersioningConfiguration != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -6689,6 +6709,7 @@ func (m *awsRestxml_serializeOpPutBucketWebsite) HandleSerialize(ctx context.Con
 
 	if input.WebsiteConfiguration != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -6783,11 +6804,12 @@ func (m *awsRestxml_serializeOpPutObject) HandleSerialize(ctx context.Context, i
 		return out, metadata, &smithy.SerializationError{Err: err}
 	}
 
-	if input.Body != nil {
-		if !restEncoder.HasHeader("Content-Type") {
-			restEncoder.SetHeader("Content-Type").String("application/octet-stream")
-		}
+	if !restEncoder.HasHeader("Content-Type") {
+		ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
+		restEncoder.SetHeader("Content-Type").String("application/octet-stream")
+	}
 
+	if input.Body != nil {
 		payload := input.Body
 		if request, err = request.SetStream(payload); err != nil {
 			return out, metadata, &smithy.SerializationError{Err: err}
@@ -7037,6 +7059,7 @@ func (m *awsRestxml_serializeOpPutObjectAcl) HandleSerialize(ctx context.Context
 
 	if input.AccessControlPolicy != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -7181,6 +7204,7 @@ func (m *awsRestxml_serializeOpPutObjectLegalHold) HandleSerialize(ctx context.C
 
 	if input.LegalHold != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -7295,6 +7319,7 @@ func (m *awsRestxml_serializeOpPutObjectLockConfiguration) HandleSerialize(ctx c
 
 	if input.ObjectLockConfiguration != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -7401,6 +7426,7 @@ func (m *awsRestxml_serializeOpPutObjectRetention) HandleSerialize(ctx context.C
 
 	if input.Retention != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -7520,6 +7546,7 @@ func (m *awsRestxml_serializeOpPutObjectTagging) HandleSerialize(ctx context.Con
 
 	if input.Tagging != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -7634,6 +7661,7 @@ func (m *awsRestxml_serializeOpPutPublicAccessBlock) HandleSerialize(ctx context
 
 	if input.PublicAccessBlockConfiguration != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -7730,6 +7758,7 @@ func (m *awsRestxml_serializeOpRestoreObject) HandleSerialize(ctx context.Contex
 
 	if input.RestoreRequest != nil {
 		if !restEncoder.HasHeader("Content-Type") {
+			ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
 			restEncoder.SetHeader("Content-Type").String("application/xml")
 		}
 
@@ -8021,11 +8050,12 @@ func (m *awsRestxml_serializeOpUploadPart) HandleSerialize(ctx context.Context, 
 		return out, metadata, &smithy.SerializationError{Err: err}
 	}
 
-	if input.Body != nil {
-		if !restEncoder.HasHeader("Content-Type") {
-			restEncoder.SetHeader("Content-Type").String("application/octet-stream")
-		}
+	if !restEncoder.HasHeader("Content-Type") {
+		ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
+		restEncoder.SetHeader("Content-Type").String("application/octet-stream")
+	}
 
+	if input.Body != nil {
 		payload := input.Body
 		if request, err = request.SetStream(payload); err != nil {
 			return out, metadata, &smithy.SerializationError{Err: err}
@@ -8317,11 +8347,12 @@ func (m *awsRestxml_serializeOpWriteGetObjectResponse) HandleSerialize(ctx conte
 		return out, metadata, &smithy.SerializationError{Err: err}
 	}
 
-	if input.Body != nil {
-		if !restEncoder.HasHeader("Content-Type") {
-			restEncoder.SetHeader("Content-Type").String("application/octet-stream")
-		}
+	if !restEncoder.HasHeader("Content-Type") {
+		ctx = smithyhttp.SetIsContentTypeDefaultValue(ctx, true)
+		restEncoder.SetHeader("Content-Type").String("application/octet-stream")
+	}
 
+	if input.Body != nil {
 		payload := input.Body
 		if request, err = request.SetStream(payload); err != nil {
 			return out, metadata, &smithy.SerializationError{Err: err}

@@ -508,3 +508,34 @@ func addHeadBucketUpdateEndpoint(stack *middleware.Stack, options Options) error
 		DisableMultiRegionAccessPoints: options.DisableMultiRegionAccessPoints,
 	})
 }
+
+// PresignHeadBucket is used to generate a presigned HTTP Request which contains
+// presigned URL, signed headers and HTTP method used.
+func (c *PresignClient) PresignHeadBucket(ctx context.Context, params *HeadBucketInput, optFns ...func(*PresignOptions)) (*v4.PresignedHTTPRequest, error) {
+	if params == nil {
+		params = &HeadBucketInput{}
+	}
+	options := c.options.copy()
+	for _, fn := range optFns {
+		fn(&options)
+	}
+	clientOptFns := append(options.ClientOptions, withNopHTTPClientAPIOption)
+
+	result, _, err := c.client.invokeOperation(ctx, "HeadBucket", params, clientOptFns,
+		c.client.addOperationHeadBucketMiddlewares,
+		presignConverter(options).convertToPresignMiddleware,
+		addHeadBucketPayloadAsUnsigned,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	out := result.(*v4.PresignedHTTPRequest)
+	return out, nil
+}
+
+func addHeadBucketPayloadAsUnsigned(stack *middleware.Stack, options Options) error {
+	v4.RemoveContentSHA256HeaderMiddleware(stack)
+	v4.RemoveComputePayloadSHA256Middleware(stack)
+	return v4.AddUnsignedPayloadMiddleware(stack)
+}
