@@ -49,6 +49,10 @@ func NewState(o Output) State {
 	return s
 }
 
+// State represents all operations that must be done to produce a given output.
+// States are immutable, and all operations return a new state linked to the previous one.
+// State is the core type of the LLB API and is used to build a graph of operations.
+// The graph is then marshaled into a definition that can be executed by a backend (such as buildkitd).
 type State struct {
 	out   Output
 	prev  *State

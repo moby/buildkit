@@ -91,6 +91,10 @@ func (s *SourceOp) Inputs() []Output {
 	return nil
 }
 
+// Image returns a state that represents a docker image in a registry.
+// Example:
+//
+//	st := llb.Image("busybox:latest")
 func Image(ref string, opts ...ImageOption) State {
 	r, err := reference.ParseNormalizedNamed(ref)
 	if err == nil {
@@ -215,6 +219,17 @@ type ImageInfo struct {
 	RecordType    string
 }
 
+// Git returns a state that represents a git repository.
+// Example:
+//
+//	st := llb.Git("https://github.com/moby/buildkit.git#v0.11.6")
+//
+// The example fetches the v0.11.6 tag of the buildkit repository.
+// You can also use a commit hash or a branch name.
+//
+// Other URL formats are supported such as "git@github.com:moby/buildkit.git", "git://...", "ssh://..."
+// Formats that utilize SSH may need to supply credentials as a [GitOption].
+// You may need to check the source code for a full list of supported formats.
 func Git(remote, ref string, opts ...GitOption) State {
 	url := strings.Split(remote, "#")[0]
 
@@ -346,10 +361,12 @@ func MountSSHSock(sshID string) GitOption {
 	})
 }
 
+// Scratch returns a state that represents an empty filesystem.
 func Scratch() State {
 	return NewState(nil)
 }
 
+// Local returns a state that represents a directory local to the client.
 func Local(name string, opts ...LocalOption) State {
 	gi := &LocalInfo{}
 
