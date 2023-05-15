@@ -12,6 +12,7 @@ func TestLoad(t *testing.T) {
 	const testConfig = `
 root = "/foo/bar"
 debug=true
+trace=true
 insecure-entitlements = ["security.insecure"]
 
 [gc]
@@ -72,6 +73,7 @@ searchDomains=["example.com"]
 
 	require.Equal(t, "/foo/bar", cfg.Root)
 	require.Equal(t, true, cfg.Debug)
+	require.Equal(t, true, cfg.Trace)
 	require.Equal(t, "security.insecure", cfg.Entitlements[0])
 
 	require.Equal(t, "buildkit.sock", cfg.GRPC.Address[0])
