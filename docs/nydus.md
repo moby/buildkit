@@ -16,7 +16,7 @@ go build -tags=nydus -o ./bin/buildkitd ./cmd/buildkitd
 
 ### Building Nydus with BuildKit
 
-Download `nydus-image` binary from [nydus release page](https://github.com/dragonflyoss/image-service/releases) (require v2.1.0 or higher), then put the `nydus-image` binary path into $PATH or specifying it on `NYDUS_BUILDER` environment variable for buildkitd:
+Download `nydus-image` binary from [nydus release page](https://github.com/dragonflyoss/image-service/releases) (require v2.1.6 or higher), then put the `nydus-image` binary path into $PATH or specifying it on `NYDUS_BUILDER` environment variable for buildkitd:
 
 ```
 env NYDUS_BUILDER=/path/to/nydus-image buildkitd ...
