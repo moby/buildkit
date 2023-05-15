@@ -7,6 +7,7 @@ import (
 // Config provides containerd configuration data for the server
 type Config struct {
 	Debug bool `toml:"debug"`
+	Trace bool `toml:"trace"`
 
 	// Root is the path to a directory where buildkit will store persistent data
 	Root string `toml:"root"`

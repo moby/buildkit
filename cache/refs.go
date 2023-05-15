@@ -107,6 +107,12 @@ func (cr *cacheRecord) ref(triggerLastUsed bool, descHandlers DescHandlers, pg p
 		progress:        pg,
 	}
 	cr.refs[ref] = struct{}{}
+	bklog.G(context.TODO()).WithFields(map[string]any{
+		"id":          cr.ID(),
+		"newRefCount": len(cr.refs),
+		"mutable":     false,
+		"stack":       bklog.LazyStackTrace{},
+	}).Trace("acquired cache ref")
 	return ref
 }
 
@@ -118,6 +124,12 @@ func (cr *cacheRecord) mref(triggerLastUsed bool, descHandlers DescHandlers) *mu
 		descHandlers:    descHandlers,
 	}
 	cr.refs[ref] = struct{}{}
+	bklog.G(context.TODO()).WithFields(map[string]any{
+		"id":          cr.ID(),
+		"newRefCount": len(cr.refs),
+		"mutable":     true,
+		"stack":       bklog.LazyStackTrace{},
+	}).Trace("acquired cache ref")
 	return ref
 }
 
@@ -438,7 +450,19 @@ func (cr *cacheRecord) mount(ctx context.Context, s session.Group) (_ snapshot.M
 }
 
 // call when holding the manager lock
-func (cr *cacheRecord) remove(ctx context.Context, removeSnapshot bool) error {
+func (cr *cacheRecord) remove(ctx context.Context, removeSnapshot bool) (rerr error) {
+	defer func() {
+		l := bklog.G(ctx).WithFields(map[string]any{
+			"id":             cr.ID(),
+			"refCount":       len(cr.refs),
+			"removeSnapshot": removeSnapshot,
+			"stack":          bklog.LazyStackTrace{},
+		})
+		if rerr != nil {
+			l = l.WithError(rerr)
+		}
+		l.Trace("removed cache record")
+	}()
 	delete(cr.cm.records, cr.ID())
 	if removeSnapshot {
 		if err := cr.cm.LeaseManager.Delete(ctx, leases.Lease{
@@ -1294,9 +1318,21 @@ func (sr *immutableRef) updateLastUsedNow() bool {
 	return true
 }
 
-func (sr *immutableRef) release(ctx context.Context) error {
-	delete(sr.refs, sr)
+func (sr *immutableRef) release(ctx context.Context) (rerr error) {
+	defer func() {
+		l := bklog.G(ctx).WithFields(map[string]any{
+			"id":          sr.ID(),
+			"newRefCount": len(sr.refs),
+			"mutable":     false,
+			"stack":       bklog.LazyStackTrace{},
+		})
+		if rerr != nil {
+			l = l.WithError(rerr)
+		}
+		l.Trace("released cache ref")
+	}()
 
+	delete(sr.refs, sr)
 	if sr.updateLastUsedNow() {
 		sr.updateLastUsed()
 		if sr.equalMutable != nil {
@@ -1476,8 +1512,21 @@ func (sr *mutableRef) Release(ctx context.Context) error {
 	return sr.release(ctx)
 }
 
-func (sr *mutableRef) release(ctx context.Context) error {
+func (sr *mutableRef) release(ctx context.Context) (rerr error) {
+	defer func() {
+		l := bklog.G(ctx).WithFields(map[string]any{
+			"id":          sr.ID(),
+			"newRefCount": len(sr.refs),
+			"mutable":     true,
+			"stack":       bklog.LazyStackTrace{},
+		})
+		if rerr != nil {
+			l = l.WithError(rerr)
+		}
+		l.Trace("released cache ref")
+	}()
 	delete(sr.refs, sr)
+
 	if !sr.HasCachePolicyRetain() {
 		if sr.equalImmutable != nil {
 			if sr.equalImmutable.HasCachePolicyRetain() {
