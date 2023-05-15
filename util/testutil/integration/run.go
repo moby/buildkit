@@ -35,6 +35,7 @@ func init() {
 // Backend is the minimal interface that describes a testing backend.
 type Backend interface {
 	Address() string
+	DockerAddress() string
 	ContainerdAddress() string
 	Rootless() bool
 	Snapshotter() string
