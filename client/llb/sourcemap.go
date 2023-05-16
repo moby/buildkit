@@ -7,6 +7,16 @@ import (
 	digest "github.com/opencontainers/go-digest"
 )
 
+// SourceMap maps a source file/location to an LLB state/definition.
+// SourceMaps are used to provide information for debugging and helpful error messages to the user.
+// As an example, lets say you have a Dockerfile with the following content:
+//
+//	FROM alpine
+//	RUN exit 1
+//
+// When the "RUN" statement exits with a non-zero exit code buildkit will treat
+// it as an error and is able to provide the user with a helpful error message
+// pointing to exactly the line in the Dockerfile that caused the error.
 type SourceMap struct {
 	State      *State
 	Definition *Definition
