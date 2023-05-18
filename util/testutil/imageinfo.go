@@ -8,6 +8,7 @@ import (
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/platforms"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/pkg/errors"
 )
 
 type ImageInfo struct {
@@ -66,6 +67,15 @@ func ReadImages(ctx context.Context, p content.Provider, desc ocispecs.Descripto
 	if err := json.Unmarshal(dt, &idx.Index); err != nil {
 		return nil, err
 	}
+	if !images.IsIndexType(idx.Index.MediaType) {
+		img, err := ReadImage(ctx, p, desc)
+		if err != nil {
+			return nil, err
+		}
+		img.descPlatform = platforms.Format(img.Img.Platform)
+		idx.Images = append(idx.Images, img)
+		return idx, nil
+	}
 
 	for _, m := range idx.Index.Manifests {
 		img, err := ReadImage(ctx, p, m)
@@ -87,6 +97,9 @@ func ReadImage(ctx context.Context, p content.Provider, desc ocispecs.Descriptor
 	}
 	if err := json.Unmarshal(dt, &ii.Manifest); err != nil {
 		return nil, err
+	}
+	if !images.IsManifestType(ii.Manifest.MediaType) {
+		return nil, errors.Errorf("invalid manifest type %s", ii.Manifest.MediaType)
 	}
 
 	dt, err = content.ReadBlob(ctx, p, ii.Manifest.Config)
