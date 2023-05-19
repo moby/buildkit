@@ -100,6 +100,9 @@ github.com/Microsoft/hcsshim/pkg/ociwclayer
 # github.com/agext/levenshtein v1.2.3
 ## explicit
 github.com/agext/levenshtein
+# github.com/anchore/go-struct-converter v0.0.0-20221118182256-c68fdcfa2092
+## explicit; go 1.18
+github.com/anchore/go-struct-converter
 # github.com/armon/circbuf v0.0.0-20190214190532-5111143e8da2
 ## explicit
 github.com/armon/circbuf
@@ -708,12 +711,16 @@ github.com/shibumi/go-pathspec
 # github.com/sirupsen/logrus v1.9.0
 ## explicit; go 1.13
 github.com/sirupsen/logrus
-# github.com/spdx/tools-golang v0.3.1-0.20230104082527-d6f58551be3f
+# github.com/spdx/tools-golang v0.5.0
 ## explicit; go 1.13
+github.com/spdx/tools-golang/convert
 github.com/spdx/tools-golang/json
+github.com/spdx/tools-golang/spdx
 github.com/spdx/tools-golang/spdx/common
-github.com/spdx/tools-golang/spdx/v2_2
-github.com/spdx/tools-golang/spdx/v2_3
+github.com/spdx/tools-golang/spdx/v2/common
+github.com/spdx/tools-golang/spdx/v2/v2_1
+github.com/spdx/tools-golang/spdx/v2/v2_2
+github.com/spdx/tools-golang/spdx/v2/v2_3
 # github.com/stretchr/testify v1.8.2
 ## explicit; go 1.13
 github.com/stretchr/testify/assert
