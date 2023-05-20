@@ -52,7 +52,7 @@ layer descriptor:
 
 ### Attestation Blob
 
-The contents of each layer will be a blob dependent on it's `mediaType`.
+The contents of each layer will be a blob dependent on its `mediaType`.
 
 - `application/vnd.in-toto+json`
 
