@@ -15,6 +15,8 @@ ARG MINIO_VERSION=RELEASE.2022-05-03T20-36-08Z
 ARG MINIO_MC_VERSION=RELEASE.2022-05-04T06-07-55Z
 ARG AZURITE_VERSION=3.18.0
 ARG GOTESTSUM_VERSION=v1.9.0
+ARG FUSEOVERLAYFS_VERSION=v1.11
+ARG FUSEOVERLAYFS_SNAPSHOTTER_VERSION=v1.0.5
 
 ARG GO_VERSION=1.20
 ARG ALPINE_VERSION=3.17
@@ -188,6 +190,30 @@ RUN  --mount=target=/root/.cache,type=cache \
   CGO_ENABLED=0 xx-go build -o /rootlesskit ./cmd/rootlesskit && \
   xx-verify --static /rootlesskit
 
+FROM gobuild-base AS fuse-overlayfs
+ARG FUSEOVERLAYFS_VERSION
+RUN git clone https://github.com/containers/fuse-overlayfs /usr/src/fuse-overlayfs
+WORKDIR /usr/src/fuse-overlayfs
+RUN xx-apk add build-base autoconf automake fuse3-dev linux-headers
+ARG TARGETPLATFORM
+RUN --mount=type=tmpfs,target=/build \
+  git checkout -q "$FUSEOVERLAYFS_VERSION" && \
+  ./autogen.sh && \
+  cd /build && \
+  /usr/src/fuse-overlayfs/configure --prefix=/usr && \
+  make install
+
+FROM gobuild-base AS fuse-overlayfs-snapshotter
+ARG FUSEOVERLAYFS_SNAPSHOTTER_VERSION
+RUN git clone https://github.com/containerd/fuse-overlayfs-snapshotter.git /go/src/github.com/containerd/fuse-overlayfs-snapshotter
+WORKDIR /go/src/github.com/containerd/fuse-overlayfs-snapshotter
+ARG TARGETPLATFORM
+RUN --mount=target=/root/.cache,type=cache \
+  git checkout -q "$FUSEOVERLAYFS_SNAPSHOTTER_VERSION" && \
+  xx-go --wrap && \
+  mkdir /out && CGO_ENABLED=0 BINDIR=/out/ make all install && \
+  xx-verify --static /out/containerd-fuse-overlayfs-grpc
+
 FROM gobuild-base AS stargz-snapshotter
 ARG STARGZ_SNAPSHOTTER_VERSION
 RUN git clone https://github.com/containerd/stargz-snapshotter.git /go/src/github.com/containerd/stargz-snapshotter
@@ -235,7 +261,7 @@ COPY --link --from=dnsname /usr/bin/dnsname /opt/cni/bin/
 
 FROM buildkit-base AS integration-tests-base
 ENV BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR="1000:1000"
-RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables ip6tables dnsmasq fuse curl git-daemon openssh-client \
+RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables ip6tables dnsmasq fuse curl git-daemon openssh-client fuse3 \
   && useradd --create-home --home-dir /home/user --uid 1000 -s /bin/sh user \
   && echo "XDG_RUNTIME_DIR=/run/user/1000; export XDG_RUNTIME_DIR" >> /home/user/.profile \
   && mkdir -m 0700 -p /run/user/1000 \
@@ -271,6 +297,8 @@ COPY --link --from=cni-plugins /opt/cni/bin/bridge /opt/cni/bin/host-local /opt/
 COPY --link hack/fixtures/cni.json /etc/buildkit/cni.json
 COPY --link hack/fixtures/dns-cni.conflist /etc/buildkit/dns-cni.conflist
 COPY --link --from=binaries / /usr/bin/
+COPY --link --from=fuse-overlayfs /usr/bin/fuse-overlayfs /usr/bin/
+COPY --link --from=fuse-overlayfs-snapshotter /out/* /usr/bin/
 
 # integration-tests prepares an image suitable for running all tests
 FROM integration-tests-base AS integration-tests

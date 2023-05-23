@@ -6640,6 +6640,15 @@ func testReproSourceDateEpoch(t *testing.T, sb integration.Sandbox) {
 	if sb.Snapshotter() == "native" {
 		t.Skip("the digest is not reproducible with the \"native\" snapshotter because hardlinks are processed in a different way: https://github.com/moby/buildkit/pull/3456#discussion_r1062650263")
 	}
+	// Skip fuse-overlayfs, there is an issue where hardlinks are sometimes
+	// reported with nlink == 1 instead of > 1 by fuse-overlayfs.
+	// For example, here is a ls -li command on a fuse-overlayfs mount where
+	// both files are hard-linked together, but perl has nlink == 1 instead of 2:
+	//   7735135 -rwxr-xr-x    1 root     root       3681152 Sep 24  2021 perl
+	//   7735135 -rwxr-xr-x    2 root     root       3681152 Sep 24  2021 perl5.32.1
+	if sb.Snapshotter() == "fuse-overlayfs" {
+		t.Skip("the digest is not reproducible with the \"fuse-overlayfs\" snapshotter because hardlinks are not always properly reported with nlink > 1 by fuse-overlayfs")
+	}
 	f := getFrontend(t, sb)
 
 	tm := time.Date(2023, time.January, 10, 12, 34, 56, 0, time.UTC)

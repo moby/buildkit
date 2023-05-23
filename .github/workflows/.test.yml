@@ -108,10 +108,14 @@ jobs:
         worker:
           - containerd
           - containerd-rootless
+          - containerd-rootless-snapshotter-fuse-overlayfs
+          - containerd-rootless-snapshotter-fuse-overlayfs-disable-ovl-whiteout
           - containerd-1.6
           - containerd-snapshotter-stargz
           - oci
           - oci-rootless
+          - oci-rootless-snapshotter-fuse-overlayfs
+          - oci-rootless-snapshotter-fuse-overlayfs-disable-ovl-whiteout
           - oci-snapshotter-stargz
         pkg: ${{ fromJson(needs.prepare.outputs.pkgs) }}
         kind: ${{ fromJson(needs.prepare.outputs.kinds) }}
