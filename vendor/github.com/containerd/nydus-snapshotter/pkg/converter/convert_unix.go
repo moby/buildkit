@@ -140,6 +140,11 @@ func unpackNydusBlob(bootDst, blobDst string, ra content.ReaderAt, unpackBlob bo
 		defer blob.Close()
 
 		if _, err = UnpackEntry(ra, EntryBlob, blob); err != nil {
+			if errors.Is(err, ErrNotFound) {
+				// The nydus layer may contain only bootstrap and no blob
+				// data, which should be ignored.
+				return nil
+			}
 			return errors.Wrap(err, "unpack blob from nydus")
 		}
 	}
