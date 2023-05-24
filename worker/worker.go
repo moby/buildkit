@@ -4,8 +4,6 @@ import (
 	"context"
 	"io"
 
-	"github.com/containerd/containerd/content"
-	"github.com/containerd/containerd/leases"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
@@ -13,7 +11,9 @@ import (
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/session"
+	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/util/leaseutil"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 )
@@ -36,10 +36,10 @@ type Worker interface {
 	Prune(ctx context.Context, ch chan client.UsageInfo, opt ...client.PruneInfo) error
 	FromRemote(ctx context.Context, remote *solver.Remote) (cache.ImmutableRef, error)
 	PruneCacheMounts(ctx context.Context, ids []string) error
-	ContentStore() content.Store
+	ContentStore() *containerdsnapshot.Store
 	Executor() executor.Executor
 	CacheManager() cache.Manager
-	LeaseManager() leases.Manager
+	LeaseManager() *leaseutil.Manager
 }
 
 type Infos interface {
