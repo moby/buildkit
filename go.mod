@@ -5,8 +5,8 @@ go 1.20
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.4.1
-	github.com/Microsoft/go-winio v0.6.0
-	github.com/Microsoft/hcsshim v0.10.0-rc.7
+	github.com/Microsoft/go-winio v0.6.1
+	github.com/Microsoft/hcsshim v0.10.0-rc.8
 	github.com/agext/levenshtein v1.2.3
 	github.com/armon/circbuf v0.0.0-20190214190532-5111143e8da2
 	github.com/aws/aws-sdk-go-v2/config v1.18.16
@@ -15,7 +15,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.30.6
 	github.com/aws/smithy-go v1.13.5
 	github.com/containerd/console v1.0.3
-	github.com/containerd/containerd v1.7.0
+	github.com/containerd/containerd v1.7.1
 	github.com/containerd/continuity v0.3.0
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
 	github.com/containerd/go-cni v1.1.9
@@ -23,7 +23,7 @@ require (
 	github.com/containerd/nydus-snapshotter v0.8.2
 	github.com/containerd/stargz-snapshotter v0.14.3
 	github.com/containerd/stargz-snapshotter/estargz v0.14.3
-	github.com/containerd/typeurl/v2 v2.1.0
+	github.com/containerd/typeurl/v2 v2.1.1
 	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/docker/cli v24.0.1+incompatible
 	github.com/docker/distribution v2.8.2+incompatible
@@ -82,7 +82,7 @@ require (
 	golang.org/x/crypto v0.2.0
 	golang.org/x/net v0.8.0
 	golang.org/x/sync v0.1.0
-	golang.org/x/sys v0.6.0
+	golang.org/x/sys v0.7.0
 	golang.org/x/time v0.3.0
 	google.golang.org/genproto v0.0.0-20230306155012-7f2fa6fef1f4
 	google.golang.org/grpc v1.53.0
@@ -115,7 +115,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/containerd/cgroups v1.1.0 // indirect
 	github.com/containerd/fifo v1.1.0 // indirect
-	github.com/containerd/ttrpc v1.2.1 // indirect
+	github.com/containerd/ttrpc v1.2.2 // indirect
 	github.com/containernetworking/cni v1.1.2 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
 	github.com/cyphar/filepath-securejoin v0.2.3 // indirect
