@@ -61,7 +61,7 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	spdx "github.com/spdx/tools-golang/spdx/v2_3"
+	"github.com/spdx/tools-golang/spdx"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/sync/errgroup"
@@ -8510,6 +8510,7 @@ func testSBOMSupplements(t *testing.T, sb integration.Sandbox) {
 
 		// build attestations
 		doc := spdx.Document{
+			SPDXVersion:    "SPDX-2.2",
 			SPDXIdentifier: "DOCUMENT",
 			Files: []*spdx.File{
 				{
