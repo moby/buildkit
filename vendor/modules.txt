@@ -364,6 +364,7 @@ github.com/containerd/go-runc
 ## explicit; go 1.19
 github.com/containerd/nydus-snapshotter/pkg/converter
 github.com/containerd/nydus-snapshotter/pkg/converter/tool
+github.com/containerd/nydus-snapshotter/pkg/errdefs
 github.com/containerd/nydus-snapshotter/pkg/label
 # github.com/containerd/stargz-snapshotter v0.14.3
 ## explicit; go 1.19
