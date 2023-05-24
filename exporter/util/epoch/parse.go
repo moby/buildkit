@@ -25,7 +25,7 @@ func ParseExporterAttrs(opt map[string]string) (*time.Time, map[string]string, e
 
 	for k, v := range opt {
 		switch k {
-		case exptypes.OptKeySourceDateEpoch:
+		case string(exptypes.OptKeySourceDateEpoch):
 			var err error
 			tm, err = parseTime(k, v)
 			if err != nil {

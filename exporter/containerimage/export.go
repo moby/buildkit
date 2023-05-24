@@ -79,7 +79,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 	}
 
 	for k, v := range opt {
-		switch k {
+		switch exptypes.ImageExporterOptKey(k) {
 		case exptypes.OptKeyPush:
 			if v == "" {
 				i.push = true

@@ -332,11 +332,11 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 
 	// if SOURCE_DATE_EPOCH is set, enable it for the exporter
 	if v, ok := epoch.ParseBuildArgs(req.FrontendAttrs); ok {
-		if _, ok := req.ExporterAttrs[exptypes.OptKeySourceDateEpoch]; !ok {
+		if _, ok := req.ExporterAttrs[string(exptypes.OptKeySourceDateEpoch)]; !ok {
 			if req.ExporterAttrs == nil {
 				req.ExporterAttrs = make(map[string]string)
 			}
-			req.ExporterAttrs[exptypes.OptKeySourceDateEpoch] = v
+			req.ExporterAttrs[string(exptypes.OptKeySourceDateEpoch)] = v
 		}
 	}
 

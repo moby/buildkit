@@ -43,7 +43,7 @@ func (c *ImageCommitOpts) Load(ctx context.Context, opt map[string]string) (map[
 
 	for k, v := range opt {
 		var err error
-		switch k {
+		switch exptypes.ImageExporterOptKey(k) {
 		case exptypes.OptKeyName:
 			c.ImageName = v
 		case exptypes.OptKeyOCITypes:
