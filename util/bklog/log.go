@@ -70,3 +70,7 @@ type LazyStackTrace struct{}
 func (LazyStackTrace) String() string {
 	return string(debug.Stack())
 }
+
+func (LazyStackTrace) MarshalText() ([]byte, error) {
+	return debug.Stack(), nil
+}
