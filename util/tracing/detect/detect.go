@@ -80,9 +80,7 @@ func getExporter() (sdktrace.SpanExporter, error) {
 	}
 
 	if exp != nil {
-		exp = &threadSafeExporterWrapper{
-			exporter: exp,
-		}
+		exp = makeThreadSafe(exp)
 	}
 
 	if Recorder != nil {

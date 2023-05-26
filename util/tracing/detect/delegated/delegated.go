@@ -1,4 +1,4 @@
-package jaeger
+package delegated
 
 import (
 	"context"
