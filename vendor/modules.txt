@@ -338,8 +338,8 @@ github.com/containerd/containerd/snapshots/storage
 github.com/containerd/containerd/sys
 github.com/containerd/containerd/tracing
 github.com/containerd/containerd/version
-# github.com/containerd/continuity v0.3.0
-## explicit; go 1.17
+# github.com/containerd/continuity v0.4.1
+## explicit; go 1.19
 github.com/containerd/continuity
 github.com/containerd/continuity/devices
 github.com/containerd/continuity/driver
@@ -733,7 +733,7 @@ github.com/spdx/tools-golang/spdx/v2/v2_3
 ## explicit; go 1.13
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
-# github.com/tonistiigi/fsutil v0.0.0-20230105215944-fb433841cbfa
+# github.com/tonistiigi/fsutil v0.0.0-20230407161946-9e7a6df48576
 ## explicit; go 1.18
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy

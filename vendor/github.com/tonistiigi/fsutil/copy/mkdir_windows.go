@@ -28,6 +28,15 @@ func fixRootDirectory(p string) string {
 }
 
 func Utimes(p string, tm *time.Time) error {
+	info, err := os.Lstat(p)
+	if err != nil {
+		return errors.Wrap(err, "fetching file info")
+	}
+	if tm != nil && info.Mode()&os.ModeSymlink == 0 {
+		if err := os.Chtimes(p, *tm, *tm); err != nil {
+			return errors.Wrap(err, "changing times")
+		}
+	}
 	return nil
 }
 
@@ -39,8 +48,10 @@ func Chown(p string, old *User, fn Chowner) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
-	userSIDstring := user.SID
+	var userSIDstring string
+	if user != nil && user.SID != "" {
+		userSIDstring = user.SID
+	}
 	if userSIDstring == "" {
 		userSIDstring = containerAdministratorSidString
 
