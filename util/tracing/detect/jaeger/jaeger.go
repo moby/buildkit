@@ -1,9 +1,11 @@
 package jaeger
 
 import (
+	"context"
 	"net"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/moby/buildkit/util/tracing/detect"
 	"go.opentelemetry.io/otel/exporters/jaeger"
@@ -48,7 +50,14 @@ func jaegerExporter() (sdktrace.SpanExporter, error) {
 		epo = jaeger.WithAgentEndpoint(jaeger.WithAgentHost(host), jaeger.WithAgentPort(port))
 	}
 
-	return jaeger.New(epo)
+	exp, err := jaeger.New(epo)
+	if err != nil {
+		return nil, err
+	}
+
+	return &threadSafeExporterWrapper{
+		exporter: exp,
+	}, nil
 }
 
 func envOr(key, defaultValue string) string {
@@ -56,4 +65,23 @@ func envOr(key, defaultValue string) string {
 		return v
 	}
 	return defaultValue
+}
+
+// We've received reports that the Jaeger exporter is not thread-safe,
+// so wrap it in a mutex.
+type threadSafeExporterWrapper struct {
+	mu       sync.Mutex
+	exporter sdktrace.SpanExporter
+}
+
+func (tse *threadSafeExporterWrapper) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnlySpan) error {
+	tse.mu.Lock()
+	defer tse.mu.Unlock()
+	return tse.exporter.ExportSpans(ctx, spans)
+}
+
+func (tse *threadSafeExporterWrapper) Shutdown(ctx context.Context) error {
+	tse.mu.Lock()
+	defer tse.mu.Unlock()
+	return tse.exporter.Shutdown(ctx)
 }
