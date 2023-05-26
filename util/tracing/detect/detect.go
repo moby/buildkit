@@ -79,12 +79,6 @@ func getExporter() (sdktrace.SpanExporter, error) {
 		return nil, err
 	}
 
-	if exp != nil {
-		exp = &threadSafeExporterWrapper{
-			exporter: exp,
-		}
-	}
-
 	if Recorder != nil {
 		Recorder.SpanExporter = exp
 		exp = Recorder
