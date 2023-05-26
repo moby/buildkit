@@ -32,6 +32,7 @@ import (
 	"time"
 
 	specs "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/opencontainers/runtime-spec/specs-go/features"
 )
 
 // Format is the type of log formatting options available
@@ -742,6 +743,26 @@ func parseVersion(data []byte) (Version, error) {
 	}
 
 	return v, nil
+}
+
+// Features shows the features implemented by the runtime.
+//
+// Availability:
+//
+//   - runc:  supported since runc v1.1.0
+//   - crun:  https://github.com/containers/crun/issues/1177
+//   - youki: https://github.com/containers/youki/issues/815
+func (r *Runc) Features(context context.Context) (*features.Features, error) {
+	data, err := r.cmdOutput(r.command(context, "features"), false, nil)
+	defer putBuf(data)
+	if err != nil {
+		return nil, err
+	}
+	var feat features.Features
+	if err := json.Unmarshal(data.Bytes(), &feat); err != nil {
+		return nil, err
+	}
+	return &feat, nil
 }
 
 func (r *Runc) args() (out []string) {
