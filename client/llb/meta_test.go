@@ -4,24 +4,25 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestRelativeWd(t *testing.T) {
 	st := Scratch().Dir("foo")
-	require.Equal(t, getDirHelper(t, st), "/foo")
+	assert.Equal(t, getDirHelper(t, st), "/foo")
 
 	st = st.Dir("bar")
-	require.Equal(t, getDirHelper(t, st), "/foo/bar")
+	assert.Equal(t, getDirHelper(t, st), "/foo/bar")
 
 	st = st.Dir("..")
-	require.Equal(t, getDirHelper(t, st), "/foo")
+	assert.Equal(t, getDirHelper(t, st), "/foo")
 
 	st = st.Dir("/baz")
-	require.Equal(t, getDirHelper(t, st), "/baz")
+	assert.Equal(t, getDirHelper(t, st), "/baz")
 
 	st = st.Dir("../../..")
-	require.Equal(t, getDirHelper(t, st), "/")
+	assert.Equal(t, getDirHelper(t, st), "/")
 }
 
 func getDirHelper(t *testing.T, s State) string {

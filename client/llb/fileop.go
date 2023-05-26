@@ -4,12 +4,13 @@ import (
 	"context"
 	_ "crypto/sha256" // for opencontainers/go-digest
 	"os"
-	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/system"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
@@ -54,7 +55,7 @@ type CopyInput interface {
 }
 
 type subAction interface {
-	toProtoAction(context.Context, string, pb.InputIndex) (pb.IsFileAction, error)
+	toProtoAction(ctx context.Context, parent string, base pb.InputIndex, platform string) (pb.IsFileAction, error)
 }
 
 type capAdder interface {
@@ -160,10 +161,14 @@ type fileActionMkdir struct {
 	info MkdirInfo
 }
 
-func (a *fileActionMkdir) toProtoAction(ctx context.Context, parent string, base pb.InputIndex) (pb.IsFileAction, error) {
+func (a *fileActionMkdir) toProtoAction(ctx context.Context, parent string, base pb.InputIndex, platform string) (pb.IsFileAction, error) {
+	normalizedPath, err := system.NormalizePath(parent, a.file, platform, false)
+	if err != nil {
+		return nil, errors.Wrap(err, "normalizing path")
+	}
 	return &pb.FileAction_Mkdir{
 		Mkdir: &pb.FileActionMkDir{
-			Path:        normalizePath(parent, a.file, false),
+			Path:        normalizedPath,
 			Mode:        int32(a.mode & 0777),
 			MakeParents: a.info.MakeParents,
 			Owner:       a.info.ChownOpt.marshal(base),
@@ -334,10 +339,14 @@ type fileActionMkfile struct {
 	info MkfileInfo
 }
 
-func (a *fileActionMkfile) toProtoAction(ctx context.Context, parent string, base pb.InputIndex) (pb.IsFileAction, error) {
+func (a *fileActionMkfile) toProtoAction(ctx context.Context, parent string, base pb.InputIndex, platform string) (pb.IsFileAction, error) {
+	normalizedPath, err := system.NormalizePath(parent, a.file, platform, false)
+	if err != nil {
+		return nil, errors.Wrap(err, "normalizing path")
+	}
 	return &pb.FileAction_Mkfile{
 		Mkfile: &pb.FileActionMkFile{
-			Path:      normalizePath(parent, a.file, false),
+			Path:      normalizedPath,
 			Mode:      int32(a.mode & 0777),
 			Data:      a.dt,
 			Owner:     a.info.ChownOpt.marshal(base),
@@ -402,10 +411,14 @@ type fileActionRm struct {
 	info RmInfo
 }
 
-func (a *fileActionRm) toProtoAction(ctx context.Context, parent string, base pb.InputIndex) (pb.IsFileAction, error) {
+func (a *fileActionRm) toProtoAction(ctx context.Context, parent string, base pb.InputIndex, platform string) (pb.IsFileAction, error) {
+	normalizedPath, err := system.NormalizePath(parent, a.file, platform, false)
+	if err != nil {
+		return nil, errors.Wrap(err, "normalizing path")
+	}
 	return &pb.FileAction_Rm{
 		Rm: &pb.FileActionRm{
-			Path:          normalizePath(parent, a.file, false),
+			Path:          normalizedPath,
 			AllowNotFound: a.info.AllowNotFound,
 			AllowWildcard: a.info.AllowWildcard,
 		},
@@ -492,14 +505,18 @@ type fileActionCopy struct {
 	info  CopyInfo
 }
 
-func (a *fileActionCopy) toProtoAction(ctx context.Context, parent string, base pb.InputIndex) (pb.IsFileAction, error) {
-	src, err := a.sourcePath(ctx)
+func (a *fileActionCopy) toProtoAction(ctx context.Context, parent string, base pb.InputIndex, platform string) (pb.IsFileAction, error) {
+	src, err := a.sourcePath(ctx, platform)
 	if err != nil {
 		return nil, err
 	}
+	normalizedPath, err := system.NormalizePath(parent, a.dest, platform, false)
+	if err != nil {
+		return nil, errors.Wrap(err, "normalizing path")
+	}
 	c := &pb.FileActionCopy{
 		Src:                              src,
-		Dest:                             normalizePath(parent, a.dest, true),
+		Dest:                             normalizedPath,
 		Owner:                            a.info.ChownOpt.marshal(base),
 		IncludePatterns:                  a.info.IncludePatterns,
 		ExcludePatterns:                  a.info.ExcludePatterns,
@@ -521,21 +538,22 @@ func (a *fileActionCopy) toProtoAction(ctx context.Context, parent string, base 
 	}, nil
 }
 
-func (a *fileActionCopy) sourcePath(ctx context.Context) (string, error) {
-	p := path.Clean(a.src)
-	if !path.IsAbs(p) {
+func (a *fileActionCopy) sourcePath(ctx context.Context, platform string) (string, error) {
+	p := filepath.Clean(a.src)
+	if !system.IsAbs(p, platform) {
+		var dir string
+		var err error
 		if a.state != nil {
-			dir, err := a.state.GetDir(ctx)
-			if err != nil {
-				return "", err
-			}
-			p = path.Join("/", dir, p)
+			dir, err = a.state.GetDir(ctx)
 		} else if a.fas != nil {
-			dir, err := a.fas.state.GetDir(ctx)
-			if err != nil {
-				return "", err
-			}
-			p = path.Join("/", dir, p)
+			dir, err = a.fas.state.GetDir(ctx)
+		}
+		if err != nil {
+			return "", err
+		}
+		p, err = system.NormalizePath(dir, p, platform, false)
+		if err != nil {
+			return "", errors.Wrap(err, "normalizing source path")
 		}
 	}
 	return p, nil
@@ -753,7 +771,11 @@ func (f *FileOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 			}
 		}
 
-		action, err := st.action.toProtoAction(ctx, parent, st.base)
+		var platform string
+		if f.constraints.Platform != nil {
+			platform = f.constraints.Platform.OS
+		}
+		action, err := st.action.toProtoAction(ctx, parent, st.base, platform)
 		if err != nil {
 			return "", nil, nil, nil, err
 		}
@@ -772,25 +794,6 @@ func (f *FileOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 	}
 	f.Store(dt, md, f.constraints.SourceLocations, c)
 	return f.Load()
-}
-
-func normalizePath(parent, p string, keepSlash bool) string {
-	origPath := p
-	p = path.Clean(p)
-	if !path.IsAbs(p) {
-		p = path.Join("/", parent, p)
-	}
-	if keepSlash {
-		if strings.HasSuffix(origPath, "/") && !strings.HasSuffix(p, "/") {
-			p += "/"
-		} else if strings.HasSuffix(origPath, "/.") {
-			if p != "/" {
-				p += "/"
-			}
-			p += "."
-		}
-	}
-	return p
 }
 
 func (f *FileOp) Output() Output {
