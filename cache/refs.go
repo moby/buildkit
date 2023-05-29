@@ -35,6 +35,7 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -107,12 +108,7 @@ func (cr *cacheRecord) ref(triggerLastUsed bool, descHandlers DescHandlers, pg p
 		progress:        pg,
 	}
 	cr.refs[ref] = struct{}{}
-	bklog.G(context.TODO()).WithFields(map[string]any{
-		"id":          cr.ID(),
-		"newRefCount": len(cr.refs),
-		"mutable":     false,
-		"stack":       bklog.LazyStackTrace{},
-	}).Trace("acquired cache ref")
+	bklog.G(context.TODO()).WithFields(ref.traceLogFields()).Trace("acquired cache ref")
 	return ref
 }
 
@@ -124,12 +120,7 @@ func (cr *cacheRecord) mref(triggerLastUsed bool, descHandlers DescHandlers) *mu
 		descHandlers:    descHandlers,
 	}
 	cr.refs[ref] = struct{}{}
-	bklog.G(context.TODO()).WithFields(map[string]any{
-		"id":          cr.ID(),
-		"newRefCount": len(cr.refs),
-		"mutable":     true,
-		"stack":       bklog.LazyStackTrace{},
-	}).Trace("acquired cache ref")
+	bklog.G(context.TODO()).WithFields(ref.traceLogFields()).Trace("acquired cache ref")
 	return ref
 }
 
@@ -493,6 +484,24 @@ type immutableRef struct {
 	progress progress.Controller
 }
 
+// hold ref lock before calling
+func (sr *immutableRef) traceLogFields() logrus.Fields {
+	m := map[string]any{
+		"id":          sr.ID(),
+		"refID":       fmt.Sprintf("%p", sr),
+		"newRefCount": len(sr.refs),
+		"mutable":     false,
+		"stack":       bklog.LazyStackTrace{},
+	}
+	if sr.equalMutable != nil {
+		m["equalMutableID"] = sr.equalMutable.ID()
+	}
+	if sr.equalImmutable != nil {
+		m["equalImmutableID"] = sr.equalImmutable.ID()
+	}
+	return m
+}
+
 // Order is from parent->child, sr will be at end of slice. Refs should not
 // be released as they are used internally in the underlying cacheRecords.
 func (sr *immutableRef) layerChain() []*immutableRef {
@@ -613,6 +622,24 @@ type mutableRef struct {
 	*cacheRecord
 	triggerLastUsed bool
 	descHandlers    DescHandlers
+}
+
+// hold ref lock before calling
+func (sr *mutableRef) traceLogFields() logrus.Fields {
+	m := map[string]any{
+		"id":          sr.ID(),
+		"refID":       fmt.Sprintf("%p", sr),
+		"newRefCount": len(sr.refs),
+		"mutable":     true,
+		"stack":       bklog.LazyStackTrace{},
+	}
+	if sr.equalMutable != nil {
+		m["equalMutableID"] = sr.equalMutable.ID()
+	}
+	if sr.equalImmutable != nil {
+		m["equalImmutableID"] = sr.equalImmutable.ID()
+	}
+	return m
 }
 
 func (sr *mutableRef) DescHandler(dgst digest.Digest) *DescHandler {
@@ -1320,12 +1347,7 @@ func (sr *immutableRef) updateLastUsedNow() bool {
 
 func (sr *immutableRef) release(ctx context.Context) (rerr error) {
 	defer func() {
-		l := bklog.G(ctx).WithFields(map[string]any{
-			"id":          sr.ID(),
-			"newRefCount": len(sr.refs),
-			"mutable":     false,
-			"stack":       bklog.LazyStackTrace{},
-		})
+		l := bklog.G(ctx).WithFields(sr.traceLogFields())
 		if rerr != nil {
 			l = l.WithError(rerr)
 		}
@@ -1514,12 +1536,7 @@ func (sr *mutableRef) Release(ctx context.Context) error {
 
 func (sr *mutableRef) release(ctx context.Context) (rerr error) {
 	defer func() {
-		l := bklog.G(ctx).WithFields(map[string]any{
-			"id":          sr.ID(),
-			"newRefCount": len(sr.refs),
-			"mutable":     true,
-			"stack":       bklog.LazyStackTrace{},
-		})
+		l := bklog.G(ctx).WithFields(sr.traceLogFields())
 		if rerr != nil {
 			l = l.WithError(rerr)
 		}
