@@ -60,7 +60,7 @@ func slsaMaterials(srcs Sources) ([]slsa.ProvenanceMaterial, error) {
 	out := make([]slsa.ProvenanceMaterial, 0, count)
 
 	for _, s := range srcs.Images {
-		uri, err := purl.RefToPURL(s.Ref, s.Platform)
+		uri, err := purl.RefToPURL(packageurl.TypeDocker, s.Ref, s.Platform)
 		if err != nil {
 			return nil, err
 		}

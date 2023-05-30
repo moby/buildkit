@@ -7,6 +7,7 @@ import (
 	"github.com/containerd/containerd/platforms"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
+	packageurl "github.com/package-url/packageurl-go"
 	"github.com/stretchr/testify/require"
 )
 
@@ -74,7 +75,7 @@ func TestRefToPURL(t *testing.T) {
 	for _, tc := range tcases {
 		tc := tc
 		t.Run(tc.ref, func(t *testing.T) {
-			purl, err := RefToPURL(tc.ref, tc.platform)
+			purl, err := RefToPURL(packageurl.TypeDocker, tc.ref, tc.platform)
 			if tc.err {
 				require.Error(t, err)
 				return
