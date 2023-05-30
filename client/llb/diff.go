@@ -106,5 +106,5 @@ func Diff(lower, upper State, opts ...ConstraintsOpt) State {
 	for _, o := range opts {
 		o.SetConstraintsOption(&c)
 	}
-	return NewState(NewDiff(lower, upper, c).Output())
+	return lower.WithOutput(NewDiff(lower, upper, c).Output())
 }

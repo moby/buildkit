@@ -724,6 +724,7 @@ func (f *FileOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 	}
 
 	pop, md := MarshalConstraints(c, &f.constraints)
+	pop.Platform = nil // file op is not platform specific
 	pop.Op = &pb.Op_File{
 		File: pfo,
 	}

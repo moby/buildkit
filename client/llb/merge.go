@@ -117,5 +117,5 @@ func Merge(inputs []State, opts ...ConstraintsOpt) State {
 		o.SetConstraintsOption(&c)
 	}
 	addCap(&c, pb.CapMergeOp)
-	return NewState(NewMerge(filteredInputs, c).Output())
+	return filteredInputs[0].WithOutput(NewMerge(filteredInputs, c).Output())
 }
