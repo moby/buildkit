@@ -140,6 +140,7 @@ func (b *provenanceBridge) ResolveImageConfig(ctx context.Context, ref string, o
 		Ref:      ref,
 		Platform: opt.Platform,
 		Digest:   dgst,
+		Local:    opt.ResolverType == llb.ResolverTypeOCILayout,
 	})
 	return dgst, config, nil
 }
@@ -322,10 +323,11 @@ func captureProvenance(ctx context.Context, res solver.CachedResultWithProvenanc
 				if err != nil {
 					return errors.Wrapf(err, "failed to parse OCI digest %s", pin)
 				}
-				c.AddLocalImage(provenance.ImageSource{
+				c.AddImage(provenance.ImageSource{
 					Ref:      s.Reference.String(),
 					Platform: s.Platform,
 					Digest:   dgst,
+					Local:    true,
 				})
 			default:
 				return errors.Errorf("unknown source identifier %T", id)
