@@ -48,7 +48,7 @@ type Package struct {
 
 	// 7.8: FilesAnalyzed
 	// Cardinality: optional, one; default value is "true" if omitted
-	FilesAnalyzed bool `json:"filesAnalyzed,omitempty"`
+	FilesAnalyzed bool `json:"filesAnalyzed"`
 	// NOT PART OF SPEC: did FilesAnalyzed tag appear?
 	IsFilesAnalyzedTagPresent bool `json:"-" yaml:"-"`
 
@@ -86,8 +86,8 @@ type Package struct {
 	PackageLicenseComments string `json:"licenseComments,omitempty"`
 
 	// 7.17: Copyright Text: copyright notice(s) text, "NONE" or "NOASSERTION"
-	// Cardinality: mandatory, one
-	PackageCopyrightText string `json:"copyrightText"`
+	// Cardinality: optional, zero or one
+	PackageCopyrightText string `json:"copyrightText,omitempty"`
 
 	// 7.18: Package Summary Description
 	// Cardinality: optional, one
@@ -143,7 +143,8 @@ type Package struct {
 func (p *Package) UnmarshalJSON(b []byte) error {
 	type pkg Package
 	type extras struct {
-		HasFiles []common.DocElementID `json:"hasFiles"`
+		HasFiles      []common.DocElementID `json:"hasFiles"`
+		FilesAnalyzed *bool                 `json:"filesAnalyzed"`
 	}
 
 	var p2 pkg
@@ -159,6 +160,13 @@ func (p *Package) UnmarshalJSON(b []byte) error {
 	*p = Package(p2)
 
 	p.hasFiles = e.HasFiles
+
+	// FilesAnalyzed defaults to true if omitted
+	if e.FilesAnalyzed == nil {
+		p.FilesAnalyzed = true
+	} else {
+		p.IsFilesAnalyzedTagPresent = true
+	}
 
 	return nil
 }

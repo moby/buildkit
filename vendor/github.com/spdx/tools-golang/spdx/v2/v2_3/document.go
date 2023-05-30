@@ -5,6 +5,7 @@ package v2_3
 
 import (
 	"encoding/json"
+	"fmt"
 
 	converter "github.com/anchore/go-struct-converter"
 
@@ -97,27 +98,47 @@ func (d *Document) UnmarshalJSON(b []byte) error {
 
 	*d = Document(d2)
 
+	relationshipExists := map[string]bool{}
+	serializeRel := func(r *Relationship) string {
+		return fmt.Sprintf("%v-%v->%v", common.RenderDocElementID(r.RefA), r.Relationship, common.RenderDocElementID(r.RefB))
+	}
+
+	// index current list of relationships to ensure no duplication
+	for _, r := range d.Relationships {
+		relationshipExists[serializeRel(r)] = true
+	}
+
 	// build relationships for documentDescribes field
 	for _, id := range e.DocumentDescribes {
-		d.Relationships = append(d.Relationships, &Relationship{
+		r := &Relationship{
 			RefA: common.DocElementID{
 				ElementRefID: d.SPDXIdentifier,
 			},
 			RefB:         id,
 			Relationship: common.TypeRelationshipDescribe,
-		})
+		}
+
+		if !relationshipExists[serializeRel(r)] {
+			d.Relationships = append(d.Relationships, r)
+			relationshipExists[serializeRel(r)] = true
+		}
 	}
 
 	// build relationships for package hasFiles field
+	// build relationships for package hasFiles field
 	for _, p := range d.Packages {
 		for _, f := range p.hasFiles {
-			d.Relationships = append(d.Relationships, &Relationship{
+			r := &Relationship{
 				RefA: common.DocElementID{
 					ElementRefID: p.PackageSPDXIdentifier,
 				},
 				RefB:         f,
 				Relationship: common.TypeRelationshipContains,
-			})
+			}
+			if !relationshipExists[serializeRel(r)] {
+				d.Relationships = append(d.Relationships, r)
+				relationshipExists[serializeRel(r)] = true
+			}
 		}
 
 		p.hasFiles = nil

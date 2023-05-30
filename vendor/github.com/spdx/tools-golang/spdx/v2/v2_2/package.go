@@ -48,12 +48,12 @@ type Package struct {
 
 	// 7.8: FilesAnalyzed
 	// Cardinality: optional, one; default value is "true" if omitted
-	FilesAnalyzed bool `json:"filesAnalyzed,omitempty"`
+	FilesAnalyzed bool `json:"filesAnalyzed"`
 	// NOT PART OF SPEC: did FilesAnalyzed tag appear?
 	IsFilesAnalyzedTagPresent bool `json:"-"`
 
 	// 7.9: Package Verification Code
-	PackageVerificationCode common.PackageVerificationCode `json:"packageVerificationCode"`
+	PackageVerificationCode common.PackageVerificationCode `json:"packageVerificationCode,omitempty"`
 
 	// 7.10: Package Checksum: may have keys for SHA1, SHA256, SHA512 and/or MD5
 	// Cardinality: optional, one or many
@@ -125,7 +125,8 @@ type Package struct {
 func (p *Package) UnmarshalJSON(b []byte) error {
 	type pkg Package
 	type extras struct {
-		HasFiles []common.DocElementID `json:"hasFiles"`
+		HasFiles      []common.DocElementID `json:"hasFiles"`
+		FilesAnalyzed *bool                 `json:"filesAnalyzed"`
 	}
 
 	var p2 pkg
@@ -141,6 +142,12 @@ func (p *Package) UnmarshalJSON(b []byte) error {
 	*p = Package(p2)
 
 	p.hasFiles = e.HasFiles
+	// FilesAnalyzed defaults to true if omitted
+	if e.FilesAnalyzed == nil {
+		p.FilesAnalyzed = true
+	} else {
+		p.IsFilesAnalyzedTagPresent = true
+	}
 
 	return nil
 }
