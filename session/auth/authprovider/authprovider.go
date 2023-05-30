@@ -29,6 +29,8 @@ import (
 )
 
 const defaultExpiration = 60
+const dockerHubConfigfileKey = "https://index.docker.io/v1/"
+const dockerHubRegistryHost = "registry-1.docker.io"
 
 func NewDockerAuthProvider(cfg *configfile.ConfigFile) session.Attachable {
 	return &authProvider{
@@ -183,10 +185,12 @@ func (ap *authProvider) VerifyTokenAuthority(ctx context.Context, req *auth.Veri
 func (ap *authProvider) getAuthConfig(host string) (*types.AuthConfig, error) {
 	ap.mu.Lock()
 	defer ap.mu.Unlock()
+
+	if host == dockerHubRegistryHost {
+		host = dockerHubConfigfileKey
+	}
+
 	if _, exists := ap.authConfigCache[host]; !exists {
-		if host == "registry-1.docker.io" {
-			host = "https://index.docker.io/v1/"
-		}
 		ac, err := ap.config.GetAuthConfig(host)
 		if err != nil {
 			return nil, err
