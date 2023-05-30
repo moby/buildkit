@@ -11,7 +11,7 @@ import (
 type CreationInfo struct {
 	// 6.7: License List Version
 	// Cardinality: optional, one
-	LicenseListVersion string `json:"licenseListVersion"`
+	LicenseListVersion string `json:"licenseListVersion,omitempty"`
 
 	// 6.8: Creators: may have multiple keys for Person, Organization
 	//      and/or Tool
