@@ -5805,8 +5805,8 @@ func testSourceMap(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	sm1 := llb.NewSourceMap(nil, "foo", []byte("data1"))
-	sm2 := llb.NewSourceMap(nil, "bar", []byte("data2"))
+	sm1 := llb.NewSourceMap(nil, "foo", "", []byte("data1"))
+	sm2 := llb.NewSourceMap(nil, "bar", "", []byte("data2"))
 
 	st := llb.Scratch().Run(
 		llb.Shlex("not-exist"),
@@ -5860,7 +5860,7 @@ func testSourceMapFromRef(t *testing.T, sb integration.Sandbox) {
 
 	srcState := llb.Scratch().File(
 		llb.Mkfile("foo", 0600, []byte("data")))
-	sm := llb.NewSourceMap(&srcState, "bar", []byte("bardata"))
+	sm := llb.NewSourceMap(&srcState, "bar", "mylang", []byte("bardata"))
 
 	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 		st := llb.Scratch().File(
@@ -5911,6 +5911,7 @@ func testSourceMapFromRef(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, 1, len(srcs))
 
 	require.Equal(t, "bar", srcs[0].Info.Filename)
+	require.Equal(t, "mylang", srcs[0].Info.Language)
 	require.Equal(t, []byte("bardata"), srcs[0].Info.Data)
 	require.NotNil(t, srcs[0].Info.Definition)
 

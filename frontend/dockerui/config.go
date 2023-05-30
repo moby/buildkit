@@ -294,7 +294,7 @@ func (bc *Client) buildContext(ctx context.Context) (*buildContext, error) {
 	return bctx.(*buildContext), nil
 }
 
-func (bc *Client) ReadEntrypoint(ctx context.Context, opts ...llb.LocalOption) (*Source, error) {
+func (bc *Client) ReadEntrypoint(ctx context.Context, lang string, opts ...llb.LocalOption) (*Source, error) {
 	bctx, err := bc.buildContext(ctx)
 	if err != nil {
 		return nil, err
@@ -369,7 +369,7 @@ func (bc *Client) ReadEntrypoint(ctx context.Context, opts ...llb.LocalOption) (
 			return nil, errors.Wrapf(err, "failed to read dockerfile")
 		}
 	}
-	smap := llb.NewSourceMap(src, bctx.filename, dt)
+	smap := llb.NewSourceMap(src, bctx.filename, lang, dt)
 	smap.Definition = def
 
 	dt, err = ref.ReadFile(ctx, client.ReadRequest{
@@ -389,6 +389,7 @@ func (bc *Client) ReadEntrypoint(ctx context.Context, opts ...llb.LocalOption) (
 				opts.SourceInfo = &pb.SourceInfo{
 					Data:       smap.Data,
 					Filename:   smap.Filename,
+					Language:   smap.Language,
 					Definition: smap.Definition.ToPB(),
 				}
 			}
