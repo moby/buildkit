@@ -3,7 +3,6 @@ package system
 import (
 	"path"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -34,6 +33,10 @@ func DefaultPathEnv(os string) string {
 //   - optionally keep the trailing slashes on paths
 //   - paths are returned using forward slashes
 func NormalizePath(parent, newPath, inputOS string, keepSlash bool) (string, error) {
+	if inputOS == "" {
+		inputOS = "linux"
+	}
+
 	newPath = toSlash(newPath, inputOS)
 	parent = toSlash(parent, inputOS)
 	origPath := newPath
@@ -105,6 +108,10 @@ func fromSlash(inputPath, inputOS string) string {
 // On Windows we remove the drive letter and convert the path delimiter to "\".
 // Paths that begin with os.PathSeparator are considered absolute even on Windows.
 func NormalizeWorkdir(current, wd string, inputOS string) (string, error) {
+	if inputOS == "" {
+		inputOS = "linux"
+	}
+
 	wd, err := NormalizePath(current, wd, inputOS, false)
 	if err != nil {
 		return "", errors.Wrap(err, "normalizing working directory")
@@ -129,7 +136,7 @@ func NormalizeWorkdir(current, wd string, inputOS string) (string, error) {
 //   - Are UNC paths
 func IsAbs(pth, inputOS string) bool {
 	if inputOS == "" {
-		inputOS = runtime.GOOS
+		inputOS = "linux"
 	}
 	cleanedPath, err := CheckSystemDriveAndRemoveDriveLetter(pth, inputOS)
 	if err != nil {
@@ -170,7 +177,7 @@ func IsAbs(pth, inputOS string) bool {
 // \\.\C$\a     --> Fail
 func CheckSystemDriveAndRemoveDriveLetter(path string, inputOS string) (string, error) {
 	if inputOS == "" {
-		inputOS = runtime.GOOS
+		inputOS = "linux"
 	}
 
 	if inputOS != "windows" {
