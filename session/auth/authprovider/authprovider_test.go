@@ -14,16 +14,16 @@ import (
 func TestFetchTokenCaching(t *testing.T) {
 	cfg := &configfile.ConfigFile{
 		AuthConfigs: map[string]types.AuthConfig{
-			dockerIndexConfigfileKey: {Username: "user", RegistryToken: "hunter2"},
+			dockerHubConfigfileKey: {Username: "user", RegistryToken: "hunter2"},
 		},
 	}
 	p := NewDockerAuthProvider(cfg).(*authProvider)
-	res, err := p.FetchToken(context.Background(), &auth.FetchTokenRequest{Host: dockerRegistryHost})
+	res, err := p.FetchToken(context.Background(), &auth.FetchTokenRequest{Host: dockerHubRegistryHost})
 	require.NoError(t, err)
 	assert.Equal(t, "hunter2", res.Token)
 
-	cfg.AuthConfigs[dockerIndexConfigfileKey] = types.AuthConfig{Username: "user", RegistryToken: "hunter3"}
-	res, err = p.FetchToken(context.Background(), &auth.FetchTokenRequest{Host: dockerRegistryHost})
+	cfg.AuthConfigs[dockerHubConfigfileKey] = types.AuthConfig{Username: "user", RegistryToken: "hunter3"}
+	res, err = p.FetchToken(context.Background(), &auth.FetchTokenRequest{Host: dockerHubRegistryHost})
 	require.NoError(t, err)
 
 	// Verify that we cached the result instead of returning hunter3.
