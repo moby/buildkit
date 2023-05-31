@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -260,7 +261,7 @@ func (e *ExecOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 		}
 	}
 
-	var platformOS string
+	platformOS := runtime.GOOS
 	if e.platform != nil {
 		platformOS = e.platform.OS
 	}

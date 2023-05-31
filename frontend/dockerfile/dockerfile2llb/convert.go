@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -994,7 +995,7 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 }
 
 func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bool, opt *dispatchOpt) error {
-	var platformOS string
+	platformOS := runtime.GOOS
 	if d != nil && d.platform != nil {
 		platformOS = d.platform.OS
 	}
@@ -1032,7 +1033,7 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bo
 }
 
 func dispatchCopy(d *dispatchState, cfg copyConfig) error {
-	var platformOS string
+	platformOS := runtime.GOOS
 	if d.platform != nil {
 		platformOS = d.platform.OS
 	}
