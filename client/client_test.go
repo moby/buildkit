@@ -15,6 +15,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -35,6 +36,7 @@ import (
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/continuity/fs/fstest"
+	"github.com/docker/distribution/reference"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
@@ -53,7 +55,6 @@ import (
 	"github.com/moby/buildkit/util/attestation"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/entitlements"
-	"github.com/moby/buildkit/util/purl"
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/echoserver"
 	"github.com/moby/buildkit/util/testutil/httpserver"
@@ -7564,7 +7565,14 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 
 			purls := map[string]string{}
 			for _, k := range targets {
-				p, _ := purl.RefToPURL(k, &ps[i])
+				named, err := reference.ParseNormalizedNamed(k)
+				require.NoError(t, err)
+				name := reference.FamiliarName(named)
+				version := ""
+				if tagged, ok := named.(reference.Tagged); ok {
+					version = tagged.Tag()
+				}
+				p := fmt.Sprintf("pkg:docker/%s%s@%s?platform=%s", url.QueryEscape(registry), strings.TrimPrefix(name, registry), version, url.PathEscape(platforms.Format(ps[i])))
 				purls[k] = p
 			}
 
@@ -7852,8 +7860,7 @@ func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
 		require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
 		require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
 
-		name, _ := purl.RefToPURL(target, &ps[0])
-
+		name := fmt.Sprintf("pkg:docker/%s/buildkit/testattestationsemptysubject@latest?platform=%s", url.QueryEscape(registry), url.QueryEscape(platforms.Format(ps[i])))
 		subjects := []intoto.Subject{{
 			Name: name,
 			Digest: map[string]string{
@@ -8004,7 +8011,7 @@ func testAttestationBundle(t *testing.T, sb integration.Sandbox) {
 
 		require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
 		require.Equal(t, map[string]interface{}{"foo": "1"}, attest.Predicate)
-		name, _ := purl.RefToPURL(target, &ps[i])
+		name := fmt.Sprintf("pkg:docker/%s/buildkit/testattestationsbundle@latest?platform=%s", url.QueryEscape(registry), url.QueryEscape(platforms.Format(ps[i])))
 		subjects := []intoto.Subject{{
 			Name: name,
 			Digest: map[string]string{
