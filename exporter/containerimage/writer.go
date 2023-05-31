@@ -34,6 +34,7 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/package-url/packageurl-go"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -235,7 +236,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 				if name == "" {
 					continue
 				}
-				pl, err := purl.RefToPURL(name, &p.Platform)
+				pl, err := purl.RefToPURL(packageurl.TypeDocker, name, &p.Platform)
 				if err != nil {
 					return nil, err
 				}

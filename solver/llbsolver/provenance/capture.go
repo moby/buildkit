@@ -16,6 +16,7 @@ type ImageSource struct {
 	Ref      string
 	Platform *ocispecs.Platform
 	Digest   digest.Digest
+	Local    bool
 }
 
 type GitSource struct {
@@ -43,11 +44,10 @@ type SSH struct {
 }
 
 type Sources struct {
-	Images      []ImageSource
-	LocalImages []ImageSource
-	Git         []GitSource
-	HTTP        []HTTPSource
-	Local       []LocalSource
+	Images []ImageSource
+	Git    []GitSource
+	HTTP   []HTTPSource
+	Local  []LocalSource
 }
 
 type Capture struct {
@@ -66,9 +66,6 @@ func (c *Capture) Merge(c2 *Capture) error {
 	}
 	for _, i := range c2.Sources.Images {
 		c.AddImage(i)
-	}
-	for _, i := range c2.Sources.LocalImages {
-		c.AddLocalImage(i)
 	}
 	for _, l := range c2.Sources.Local {
 		c.AddLocal(l)
@@ -97,9 +94,6 @@ func (c *Capture) Merge(c2 *Capture) error {
 func (c *Capture) Sort() {
 	sort.Slice(c.Sources.Images, func(i, j int) bool {
 		return c.Sources.Images[i].Ref < c.Sources.Images[j].Ref
-	})
-	sort.Slice(c.Sources.LocalImages, func(i, j int) bool {
-		return c.Sources.LocalImages[i].Ref < c.Sources.LocalImages[j].Ref
 	})
 	sort.Slice(c.Sources.Local, func(i, j int) bool {
 		return c.Sources.Local[i].Name < c.Sources.Local[j].Name
@@ -151,7 +145,7 @@ func (c *Capture) OptimizeImageSources() error {
 
 func (c *Capture) AddImage(i ImageSource) {
 	for _, v := range c.Sources.Images {
-		if v.Ref == i.Ref {
+		if v.Ref == i.Ref && v.Local == i.Local {
 			if v.Platform == i.Platform {
 				return
 			}
@@ -163,22 +157,6 @@ func (c *Capture) AddImage(i ImageSource) {
 		}
 	}
 	c.Sources.Images = append(c.Sources.Images, i)
-}
-
-func (c *Capture) AddLocalImage(i ImageSource) {
-	for _, v := range c.Sources.LocalImages {
-		if v.Ref == i.Ref {
-			if v.Platform == i.Platform {
-				return
-			}
-			if v.Platform != nil && i.Platform != nil {
-				if v.Platform.Architecture == i.Platform.Architecture && v.Platform.OS == i.Platform.OS && v.Platform.Variant == i.Platform.Variant {
-					return
-				}
-			}
-		}
-	}
-	c.Sources.LocalImages = append(c.Sources.LocalImages, i)
 }
 
 func (c *Capture) AddLocal(l LocalSource) {

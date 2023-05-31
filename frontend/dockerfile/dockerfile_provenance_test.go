@@ -3,18 +3,23 @@ package dockerfile
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/content/local"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/continuity/fs/fstest"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
+	provenanceCommon "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/common"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
@@ -869,6 +874,141 @@ RUN --mount=type=secret,id=mysecret --mount=type=secret,id=othersecret --mount=t
 	require.Equal(t, 1, len(pred.Invocation.Parameters.SSH), "%+v", pred.Invocation.Parameters.SSH)
 	require.Equal(t, "default", pred.Invocation.Parameters.SSH[0].ID)
 	require.True(t, pred.Invocation.Parameters.SSH[0].Optional)
+}
+
+func testOCILayoutProvenance(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureProvenance)
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+	target := registry + "/buildkit/clientprovenance:ocilayout"
+
+	f := getFrontend(t, sb)
+	_, isGateway := f.(*gatewayFrontend)
+
+	ocidir := t.TempDir()
+	ociDockerfile := []byte(`
+FROM scratch
+COPY <<EOF /foo
+foo
+EOF
+	`)
+	dir, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", ociDockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterOCI,
+				OutputDir: ocidir,
+				Attrs: map[string]string{
+					"tar": "false",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	var index ocispecs.Index
+	dt, err := os.ReadFile(filepath.Join(ocidir, "index.json"))
+	require.NoError(t, err)
+	err = json.Unmarshal(dt, &index)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(index.Manifests))
+	digest := index.Manifests[0].Digest.Hex()
+
+	store, err := local.NewStore(ocidir)
+	require.NoError(t, err)
+	ociID := "ocione"
+
+	dockerfile := []byte(`
+FROM foo
+COPY <<EOF /bar
+bar
+EOF
+`)
+	dir, err = integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"context:foo":       fmt.Sprintf("oci-layout:%s@sha256:%s", ociID, digest),
+			"attest:provenance": "mode=max",
+		},
+		OCIStores: map[string]content.Store{
+			ociID: store,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	desc, provider, err := contentutil.ProviderFromRef(target)
+	require.NoError(t, err)
+	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(imgs.Images))
+
+	expPlatform := platforms.Format(platforms.Normalize(platforms.DefaultSpec()))
+
+	img := imgs.Find(expPlatform)
+	require.NotNil(t, img)
+	require.Equal(t, []byte("foo\n"), img.Layers[0]["foo"].Data)
+	require.Equal(t, []byte("bar\n"), img.Layers[1]["bar"].Data)
+
+	att := imgs.FindAttestation(expPlatform)
+	type stmtT struct {
+		Predicate provenance.ProvenancePredicate `json:"predicate"`
+	}
+	var stmt stmtT
+	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
+	pred := stmt.Predicate
+
+	if isGateway {
+		require.Len(t, pred.Materials, 2)
+	} else {
+		require.Len(t, pred.Materials, 1)
+	}
+	var material *provenanceCommon.ProvenanceMaterial
+	for _, m := range pred.Materials {
+		if strings.Contains(m.URI, "/foo") {
+			require.Nil(t, material, pred.Materials)
+			material = &m
+		}
+	}
+	require.NotNil(t, material)
+	prefix, _, _ := strings.Cut(material.URI, "/")
+	require.Equal(t, "pkg:oci", prefix)
+	require.Equal(t, digest, material.Digest["sha256"])
 }
 
 func testNilProvenance(t *testing.T, sb integration.Sandbox) {

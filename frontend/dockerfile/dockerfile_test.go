@@ -161,6 +161,7 @@ var allTests = integration.TestFuncs(
 	testClientFrontendProvenance,
 	testClientLLBProvenance,
 	testSecretSSHProvenance,
+	testOCILayoutProvenance,
 	testNilProvenance,
 	testSBOMScannerArgs,
 	testMultiPlatformWarnings,
