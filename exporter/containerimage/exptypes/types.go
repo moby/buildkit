@@ -12,7 +12,6 @@ const (
 	ExporterImageDescriptorKey   = "containerimage.descriptor"
 	ExporterInlineCache          = "containerimage.inlinecache"
 	ExporterPlatformsKey         = "refs.platforms"
-	ExporterEpochKey             = "source.date.epoch"
 )
 
 // KnownRefMetadataKeys are the subset of exporter keys that can be suffixed by

@@ -1,5 +1,7 @@
 package exptypes
 
+import commonexptypes "github.com/moby/buildkit/exporter/exptypes"
+
 type ImageExporterOptKey string
 
 // Options keys supported by the image exporter output.
@@ -55,7 +57,7 @@ var (
 	// Clamp produced timestamps. For more information see the
 	// SOURCE_DATE_EPOCH specification.
 	// Value: int (number of seconds since Unix epoch)
-	OptKeySourceDateEpoch ImageExporterOptKey = "source-date-epoch"
+	OptKeySourceDateEpoch ImageExporterOptKey = ImageExporterOptKey(commonexptypes.OptKeySourceDateEpoch)
 
 	// Compression type for newly created and cached layers.
 	// estargz should be used with OptKeyOCITypes set to true.
