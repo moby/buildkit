@@ -56,7 +56,7 @@ type CopyInput interface {
 }
 
 type subAction interface {
-	toProtoAction(ctx context.Context, parent string, base pb.InputIndex, platform string) (pb.IsFileAction, error)
+	toProtoAction(ctx context.Context, parent string, base pb.InputIndex, platformOS string) (pb.IsFileAction, error)
 }
 
 type capAdder interface {
@@ -162,8 +162,8 @@ type fileActionMkdir struct {
 	info MkdirInfo
 }
 
-func (a *fileActionMkdir) toProtoAction(ctx context.Context, parent string, base pb.InputIndex, platform string) (pb.IsFileAction, error) {
-	normalizedPath, err := system.NormalizePath(parent, a.file, platform, false)
+func (a *fileActionMkdir) toProtoAction(ctx context.Context, parent string, base pb.InputIndex, platformOS string) (pb.IsFileAction, error) {
+	normalizedPath, err := system.NormalizePath(parent, a.file, platformOS, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "normalizing path")
 	}
@@ -340,8 +340,8 @@ type fileActionMkfile struct {
 	info MkfileInfo
 }
 
-func (a *fileActionMkfile) toProtoAction(ctx context.Context, parent string, base pb.InputIndex, platform string) (pb.IsFileAction, error) {
-	normalizedPath, err := system.NormalizePath(parent, a.file, platform, false)
+func (a *fileActionMkfile) toProtoAction(ctx context.Context, parent string, base pb.InputIndex, platformOS string) (pb.IsFileAction, error) {
+	normalizedPath, err := system.NormalizePath(parent, a.file, platformOS, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "normalizing path")
 	}
@@ -412,8 +412,8 @@ type fileActionRm struct {
 	info RmInfo
 }
 
-func (a *fileActionRm) toProtoAction(ctx context.Context, parent string, base pb.InputIndex, platform string) (pb.IsFileAction, error) {
-	normalizedPath, err := system.NormalizePath(parent, a.file, platform, false)
+func (a *fileActionRm) toProtoAction(ctx context.Context, parent string, base pb.InputIndex, platformOS string) (pb.IsFileAction, error) {
+	normalizedPath, err := system.NormalizePath(parent, a.file, platformOS, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "normalizing path")
 	}
@@ -506,12 +506,12 @@ type fileActionCopy struct {
 	info  CopyInfo
 }
 
-func (a *fileActionCopy) toProtoAction(ctx context.Context, parent string, base pb.InputIndex, platform string) (pb.IsFileAction, error) {
-	src, err := a.sourcePath(ctx, platform)
+func (a *fileActionCopy) toProtoAction(ctx context.Context, parent string, base pb.InputIndex, platformOS string) (pb.IsFileAction, error) {
+	src, err := a.sourcePath(ctx, platformOS)
 	if err != nil {
 		return nil, err
 	}
-	normalizedPath, err := system.NormalizePath(parent, a.dest, platform, false)
+	normalizedPath, err := system.NormalizePath(parent, a.dest, platformOS, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "normalizing path")
 	}
@@ -773,11 +773,11 @@ func (f *FileOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		}
 
 		// Assume that we're building an image for the same OS we're running on.
-		platform := runtime.GOOS
+		platformOS := runtime.GOOS
 		if f.constraints.Platform != nil {
-			platform = f.constraints.Platform.OS
+			platformOS = f.constraints.Platform.OS
 		}
-		action, err := st.action.toProtoAction(ctx, parent, st.base, platform)
+		action, err := st.action.toProtoAction(ctx, parent, st.base, platformOS)
 		if err != nil {
 			return "", nil, nil, nil, err
 		}
