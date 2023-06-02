@@ -68,11 +68,7 @@ func mapUserToChowner(user *copy.User, idmap *idtools.IdentityMapping) (copy.Cho
 }
 
 func mkdir(ctx context.Context, d string, action pb.FileActionMkDir, user *copy.User, idmap *idtools.IdentityMapping) error {
-	actionPath, err := system.NormalizePath("/", action.Path, runtime.GOOS, false)
-	if err != nil {
-		return errors.Wrap(err, "removing drive letter")
-	}
-	p, err := fs.RootPath(d, filepath.FromSlash(actionPath))
+	p, err := fs.RootPath(d, action.Path)
 	if err != nil {
 		return err
 	}

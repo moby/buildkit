@@ -995,11 +995,7 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 }
 
 func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bool, opt *dispatchOpt) error {
-	platformOS := runtime.GOOS
-	if d.platform != nil {
-		platformOS = d.platform.OS
-	}
-	wd, err := system.NormalizeWorkdir(d.image.Config.WorkingDir, c.Path, platformOS)
+	wd, err := system.NormalizeWorkdir(d.image.Config.WorkingDir, c.Path, d.platform.OS)
 	if err != nil {
 		return errors.Wrap(err, "normalizing workdir")
 	}
