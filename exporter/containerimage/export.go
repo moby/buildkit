@@ -34,14 +34,6 @@ import (
 )
 
 const (
-	keyPush           = "push"
-	keyPushByDigest   = "push-by-digest"
-	keyInsecure       = "registry.insecure"
-	keyUnpack         = "unpack"
-	keyDanglingPrefix = "dangling-name-prefix"
-	keyNameCanonical  = "name-canonical"
-	keyStore          = "store"
-
 	// keyUnsafeInternalStoreAllowIncomplete should only be used for tests. This option allows exporting image to the image store
 	// as well as lacking some blobs in the content store. Some integration tests for lazyref behaviour depends on this option.
 	// Ignored when store=false.
@@ -87,8 +79,8 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 	}
 
 	for k, v := range opt {
-		switch k {
-		case keyPush:
+		switch exptypes.ImageExporterOptKey(k) {
+		case exptypes.OptKeyPush:
 			if v == "" {
 				i.push = true
 				continue
@@ -98,7 +90,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
 			i.push = b
-		case keyPushByDigest:
+		case exptypes.OptKeyPushByDigest:
 			if v == "" {
 				i.pushByDigest = true
 				continue
@@ -108,7 +100,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
 			i.pushByDigest = b
-		case keyInsecure:
+		case exptypes.OptKeyInsecure:
 			if v == "" {
 				i.insecure = true
 				continue
@@ -118,7 +110,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
 			i.insecure = b
-		case keyUnpack:
+		case exptypes.OptKeyUnpack:
 			if v == "" {
 				i.unpack = true
 				continue
@@ -128,7 +120,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
 			i.unpack = b
-		case keyStore:
+		case exptypes.OptKeyStore:
 			if v == "" {
 				i.store = true
 				continue
@@ -148,9 +140,9 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
 			i.storeAllowIncomplete = b
-		case keyDanglingPrefix:
+		case exptypes.OptKeyDanglingPrefix:
 			i.danglingPrefix = v
-		case keyNameCanonical:
+		case exptypes.OptKeyNameCanonical:
 			if v == "" {
 				i.nameCanonical = true
 				continue
