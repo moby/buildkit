@@ -533,6 +533,8 @@ func (wp *withProvenance) WalkProvenance(ctx context.Context, f func(ProvenanceP
 	if wp.j == nil {
 		return nil
 	}
+	wp.j.list.mu.RLock()
+	defer wp.j.list.mu.RUnlock()
 	m := map[digest.Digest]struct{}{}
 	return wp.j.walkProvenance(ctx, wp.e, f, m)
 }
