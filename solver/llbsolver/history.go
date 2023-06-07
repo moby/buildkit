@@ -579,7 +579,7 @@ func (w *Writer) Discard() {
 func (w *Writer) Commit(ctx context.Context) (*ocispecs.Descriptor, func(), error) {
 	dgst := w.dgstr.Digest()
 	sz := int64(w.sz)
-	if err := w.w.Commit(ctx, int64(w.sz), dgst); err != nil {
+	if err := w.w.Commit(leases.WithLease(ctx, w.l.ID), int64(w.sz), dgst); err != nil {
 		if !errdefs.IsAlreadyExists(err) {
 			w.Discard()
 			return nil, nil, err
