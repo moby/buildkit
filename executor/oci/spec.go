@@ -216,7 +216,7 @@ type submounts struct {
 }
 
 func (s *submounts) subMount(m mount.Mount, subPath string) (mount.Mount, error) {
-	if path.Join("/", subPath) == "/" {
+	if !s.useLocalMounter(m, subPath) {
 		return m, nil
 	}
 	if s.m == nil {
@@ -262,6 +262,20 @@ func (s *submounts) subMount(m mount.Mount, subPath string) (mount.Mount, error)
 		return mount.Mount{}, err
 	}
 	return sm, nil
+}
+
+func (s *submounts) useLocalMounter(m mount.Mount, subPath string) bool {
+	// fuse-overlayfs mounts can't be mounted by runc, so use the local mounter.
+	if m.Type == "fuse3.fuse-overlayfs" {
+		return true
+	}
+	// Else, only use local mount when we want to mount a subdirectory of
+	// the mount.
+	if path.Join("/", subPath) != "/" {
+		return true
+	}
+
+	return false
 }
 
 func (s *submounts) cleanup() {
