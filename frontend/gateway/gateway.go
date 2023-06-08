@@ -1176,7 +1176,21 @@ func (w *outputWriter) Write(msg []byte) (int, error) {
 	return len(msg), stack.Enable(err)
 }
 
+type execProcessServerThreadSafe struct {
+	pb.LLBBridge_ExecProcessServer
+	sendMu sync.Mutex
+}
+
+func (w *execProcessServerThreadSafe) Send(m *pb.ExecMessage) error {
+	w.sendMu.Lock()
+	defer w.sendMu.Unlock()
+	return w.LLBBridge_ExecProcessServer.Send(m)
+}
+
 func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) error {
+	srv = &execProcessServerThreadSafe{
+		LLBBridge_ExecProcessServer: srv,
+	}
 	eg, ctx := errgroup.WithContext(srv.Context())
 
 	msgs := make(chan *pb.ExecMessage)
