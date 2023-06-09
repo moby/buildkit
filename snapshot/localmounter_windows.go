@@ -36,6 +36,13 @@ func (lm *localMounter) Mount() (string, error) {
 	}
 
 	if m.Type == "bind" || m.Type == "rbind" {
+		if !m.ReadOnly() {
+			// This is a rw bind mount, we can simply return the source.
+			// NOTE(gabriel-samfira): This is safe to do if the source of the bind mount is a DOS path
+			// of a local folder. If it's a \\?\Volume{} (for any reason that I can't think of now)
+			// we should allow bindfilter.ApplyFileBinding() to mount it.
+			return m.Source, nil
+		}
 		// The Windows snapshotter does not have any notion of bind mounts. We emulate
 		// bind mounts here using the bind filter.
 		if err := bindfilter.ApplyFileBinding(dir, m.Source, m.ReadOnly()); err != nil {
