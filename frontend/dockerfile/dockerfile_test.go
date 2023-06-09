@@ -166,6 +166,7 @@ var allTests = integration.TestFuncs(
 	testSBOMScannerArgs,
 	testMultiPlatformWarnings,
 	testNilContextInSolveGateway,
+	testCopyUnicodePath,
 )
 
 // Tests that depend on the `security.*` entitlements
@@ -6730,6 +6731,46 @@ func testNilContextInSolveGateway(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	// should not cause buildkitd to panic
 	require.ErrorContains(t, err, "invalid nil input definition to definition op")
+}
+
+func testCopyUnicodePath(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dockerfile := []byte(`
+FROM alpine
+COPY test-äöü.txt /
+`)
+
+	dir, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("test-äöü.txt", []byte("test"), 0644),
+	)
+	require.NoError(t, err)
+
+	destDir, err := integration.Tmpdir(t)
+	require.NoError(t, err)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalDirs: map[string]string{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "test-äöü.txt"))
+	require.NoError(t, err)
+	require.Equal(t, "test", string(dt))
 }
 
 func runShell(dir string, cmds ...string) error {
