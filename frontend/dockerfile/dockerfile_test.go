@@ -163,6 +163,7 @@ var allTests = integration.TestFuncs(
 	testSecretSSHProvenance,
 	testOCILayoutProvenance,
 	testNilProvenance,
+	testDuplicatePlatformProvenance,
 	testDockerIgnoreMissingProvenance,
 	testSBOMScannerArgs,
 	testMultiPlatformWarnings,
