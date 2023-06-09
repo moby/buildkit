@@ -1047,3 +1047,48 @@ ENV FOO=bar
 	}, nil)
 	require.NoError(t, err)
 }
+
+// https://github.com/moby/buildkit/issues/3928
+func testDockerIgnoreMissingProvenance(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureProvenance)
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dockerfile := []byte(`FROM alpine`)
+	dirDockerfile, err := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	dirContext, err := integration.Tmpdir(t)
+	require.NoError(t, err)
+
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		// remove the directory to simulate the case where the context
+		// directory does not exist, and either no validation checks were run,
+		// or they passed erroneously
+		if err := os.RemoveAll(dirContext); err != nil {
+			return nil, err
+		}
+
+		res, err := c.Solve(ctx, gateway.SolveRequest{
+			Frontend: "dockerfile.v0",
+		})
+		if err != nil {
+			return nil, err
+		}
+		return res, nil
+	}
+
+	_, err = c.Build(sb.Context(), client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"attest:provenance": "mode=max",
+		},
+		LocalDirs: map[string]string{
+			dockerui.DefaultLocalNameDockerfile: dirDockerfile,
+			dockerui.DefaultLocalNameContext:    dirContext,
+		},
+	}, "", frontend, nil)
+	require.NoError(t, err)
+}
