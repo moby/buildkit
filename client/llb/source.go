@@ -230,6 +230,9 @@ type ImageInfo struct {
 // Other URL formats are supported such as "git@github.com:moby/buildkit.git", "git://...", "ssh://..."
 // Formats that utilize SSH may need to supply credentials as a [GitOption].
 // You may need to check the source code for a full list of supported formats.
+//
+// By default the git repository is cloned with `--depth=1` to reduce the amount of data downloaded.
+// Additionally the ".git" directory is removed after the clone, you can keep ith with the [KeepGitDir] [GitOption].
 func Git(remote, ref string, opts ...GitOption) State {
 	url := strings.Split(remote, "#")[0]
 
