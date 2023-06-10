@@ -61,6 +61,10 @@ type capAdder interface {
 	addCaps(*FileOp)
 }
 
+// FileAction is used to specify a file operation on a [State].
+// It can be used to create a directory, create a file, or remove a file, etc.
+// This is used by [State.File]
+// Typically a FileAction is created by calling one of the helper functions such as [Mkdir], [Copy], [Rm], [Mkfile]
 type FileAction struct {
 	state  *State
 	prev   *FileAction
