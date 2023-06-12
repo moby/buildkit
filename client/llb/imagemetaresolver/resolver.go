@@ -45,7 +45,6 @@ func New(with ...ImageMetaResolverOpt) llb.ImageMetaResolver {
 	headers.Set("User-Agent", version.UserAgent())
 	return &imageMetaResolver{
 		resolver: docker.NewResolver(docker.ResolverOptions{
-			Client:  http.DefaultClient,
 			Headers: headers,
 		}),
 		platform: opts.platform,
