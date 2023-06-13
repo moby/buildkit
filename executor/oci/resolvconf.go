@@ -11,7 +11,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-var g flightcontrol.Group
+var g flightcontrol.Group[struct{}]
 var notFirstRun bool
 var lastNotEmpty bool
 
@@ -26,7 +26,7 @@ type DNSConfig struct {
 
 func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.IdentityMapping, dns *DNSConfig) (string, error) {
 	p := filepath.Join(stateDir, "resolv.conf")
-	_, err := g.Do(ctx, stateDir, func(ctx context.Context) (interface{}, error) {
+	_, err := g.Do(ctx, stateDir, func(ctx context.Context) (struct{}, error) {
 		generate := !notFirstRun
 		notFirstRun = true
 
@@ -34,7 +34,7 @@ func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.Identity
 			fi, err := os.Stat(p)
 			if err != nil {
 				if !errors.Is(err, os.ErrNotExist) {
-					return "", err
+					return struct{}{}, err
 				}
 				generate = true
 			}
@@ -42,7 +42,7 @@ func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.Identity
 				fiMain, err := os.Stat(resolvconfPath())
 				if err != nil {
 					if !errors.Is(err, os.ErrNotExist) {
-						return nil, err
+						return struct{}{}, err
 					}
 					if lastNotEmpty {
 						generate = true
@@ -57,12 +57,12 @@ func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.Identity
 		}
 
 		if !generate {
-			return "", nil
+			return struct{}{}, nil
 		}
 
 		dt, err := os.ReadFile(resolvconfPath())
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return "", err
+			return struct{}{}, err
 		}
 
 		var f *resolvconf.File
@@ -85,31 +85,31 @@ func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.Identity
 
 			f, err = resolvconf.Build(tmpPath, dnsNameservers, dnsSearchDomains, dnsOptions)
 			if err != nil {
-				return "", err
+				return struct{}{}, err
 			}
 			dt = f.Content
 		}
 
 		f, err = resolvconf.FilterResolvDNS(dt, true)
 		if err != nil {
-			return "", err
+			return struct{}{}, err
 		}
 
 		if err := os.WriteFile(tmpPath, f.Content, 0644); err != nil {
-			return "", err
+			return struct{}{}, err
 		}
 
 		if idmap != nil {
 			root := idmap.RootPair()
 			if err := os.Chown(tmpPath, root.UID, root.GID); err != nil {
-				return "", err
+				return struct{}{}, err
 			}
 		}
 
 		if err := os.Rename(tmpPath, p); err != nil {
-			return "", err
+			return struct{}{}, err
 		}
-		return "", nil
+		return struct{}{}, nil
 	})
 	if err != nil {
 		return "", err

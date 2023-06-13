@@ -93,7 +93,7 @@ type cacheManager struct {
 	mountPool sharableMountPool
 
 	muPrune sync.Mutex // make sure parallel prune is not allowed so there will not be inconsistent results
-	unlazyG flightcontrol.Group
+	unlazyG flightcontrol.Group[struct{}]
 }
 
 func NewManager(opt ManagerOpt) (Manager, error) {

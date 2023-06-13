@@ -299,12 +299,12 @@ func updateDistributionSourceHandler(manager content.Manager, pushF images.Handl
 }
 
 func dedupeHandler(h images.HandlerFunc) images.HandlerFunc {
-	var g flightcontrol.Group
+	var g flightcontrol.Group[[]ocispecs.Descriptor]
 	res := map[digest.Digest][]ocispecs.Descriptor{}
 	var mu sync.Mutex
 
 	return images.HandlerFunc(func(ctx context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
-		res, err := g.Do(ctx, desc.Digest.String(), func(ctx context.Context) (interface{}, error) {
+		return g.Do(ctx, desc.Digest.String(), func(ctx context.Context) ([]ocispecs.Descriptor, error) {
 			mu.Lock()
 			if r, ok := res[desc.Digest]; ok {
 				mu.Unlock()
@@ -322,12 +322,5 @@ func dedupeHandler(h images.HandlerFunc) images.HandlerFunc {
 			mu.Unlock()
 			return children, nil
 		})
-		if err != nil {
-			return nil, err
-		}
-		if res == nil {
-			return nil, nil
-		}
-		return res.([]ocispecs.Descriptor), nil
 	})
 }
