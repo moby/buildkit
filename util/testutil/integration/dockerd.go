@@ -123,6 +123,9 @@ func (c Moby) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func()
 	if err != nil {
 		return nil, nil, err
 	}
+	deferF.append(func() error {
+		return os.RemoveAll(workDir)
+	})
 
 	d, err := dockerd.NewDaemon(workDir)
 	if err != nil {
