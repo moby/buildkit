@@ -62,6 +62,72 @@ To build containerized `moby/buildkit:local` and `moby/buildkit:local-rootless` 
 make images
 ```
 
+### Run BuildKit
+
+You can launch the backend BuildKit daemon either in a container, or directly:
+
+```bash
+# run the daemon in a container
+$ docker run --rm -d --name buildkitd --privileged moby/buildkit:local
+$ export BUILDKIT_HOST=docker-container://buildkitd
+$ buildctl debug info
+BuildKit: github.com/moby/buildkit v0.11.0-rc3-623-g2ff0d2a2f.m 2ff0d2a2f53663aae917980fa27eada7950ff69c.m
+```
+
+```bash
+# run the daemon directly (only on linux)
+$ sudo buildkitd
+$ export BUILDKIT_HOST=unix:///run/buildkit/buildkitd.sock
+$ sudo buildctl debug info
+BuildKit: github.com/moby/buildkit v0.11.0-rc3-506-g539bab193.m 539bab193c28d3ce731e6013f471ba24848f5c41.m
+```
+
+You can also connect buildx to the BuildKit daemon using the [`remote` driver](https://docs.docker.com/build/drivers/remote/):
+
+```bash
+$ docker buildx create --driver=remote --name=dev $BUILDKIT_HOST
+$ docker buildx --builder=dev inspect
+Name:          dev
+Driver:        remote
+Last Activity: 2023-06-06 14:15:52 +0000 UTC
+
+Nodes:
+Name:      dev0
+Endpoint:  tcp://localhost:1234
+Status:    running
+Buildkit:  v0.11.0-rc3-506-g539bab193.m
+Platforms: linux/amd64, linux/amd64/v2, linux/amd64/v3, linux/386
+```
+
+### Run BuildKit using Buildx
+
+You can also have buildx run and manage the custom BuildKit daemon itself using
+the [`docker-container` driver](https://docs.docker.com/build/drivers/remote/).
+
+This is usually the easiest way to get started with a custom BuildKit daemon
+for development or debugging.
+    
+```bash
+$ docker buildx rm dev || true # remove previous dev builder if exists
+$ docker buildx create --driver=docker-container --name=dev --driver-opt image=moby/buildkit:local --bootstrap
+[+] Building 0.3s (1/1) FINISHED                                                                                                                           
+ => [internal] booting buildkit
+ => => starting container buildx_buildkit_dev0
+dev
+$ docker buildx --builder=dev inspect
+Name:          dev
+Driver:        docker-container
+Last Activity: 2023-06-06 14:15:52 +0000 UTC
+
+Nodes:
+Name:           dev0
+Endpoint:       desktop-linux
+Driver Options: image="moby/buildkit:local"
+Status:         running
+Buildkit:       v0.11.0-rc3-623-g2ff0d2a2f.m
+Platforms:      linux/amd64, linux/amd64/v2, linux/amd64/v3, linux/arm64, linux/riscv64, linux/ppc64le, linux/s390x, linux/386, linux/mips64le, linux/mips64, linux/arm/v7, linux/arm/v6
+```
+
 ### Run the unit- and integration-tests
 
 Running tests:
