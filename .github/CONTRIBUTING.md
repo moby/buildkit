@@ -99,20 +99,25 @@ If you are working behind a proxy, you can set some of or all
 `HTTP_PROXY=http://ip:port`, `HTTPS_PROXY=http://ip:port`, `NO_PROXY=http://ip:port` for the test framework
 to specify the proxy build args.
 
-Updating vendored dependencies:
+### Run the helper commands
+
+To validate PRs before submitting them you should run:
 
 ```bash
-# update vendor.conf
-make vendor
+$ make validate-all
 ```
 
-Validating your updates before submission:
+To generate new vendored files with go modules run:
 
 ```bash
-make validate-all
+$ make vendor
 ```
 
+To generate new versions of automatically generated files run:
 
+```bash
+$ make generated-files
+```
 
 ### Pull requests are always welcome
 
