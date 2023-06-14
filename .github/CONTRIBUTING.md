@@ -18,7 +18,6 @@ We also like to send gifts&mdash;if you're into schwag, make sure to let
 us know. We currently do not offer a paid security bounty program, but are not
 ruling it out in the future.
 
-
 ## Reporting other issues
 
 A great way to contribute to the project is to send a detailed report when you
@@ -51,7 +50,6 @@ Dependencies:
 
 - [runc](https://github.com/opencontainers/runc)
 - [containerd](https://github.com/containerd/containerd) (if you want to use containerd worker)
-
 
 The following command installs `buildkitd` and `buildctl` to `/usr/local/bin`:
 
@@ -330,12 +328,10 @@ down to one.
   from the Git history.
 - See the [Coding Style](#coding-style) for further guidelines.
 
-
 ### Merge approval
 
 Project maintainers use LGTM (Looks Good To Me) in comments on the code review to
 indicate acceptance, or use the Github review approval feature.
-
 
 ## Coding Style
 
@@ -353,29 +349,29 @@ mind when nudging others to comply.
 
 The rules:
 
-1. All code should be formatted with `gofmt -s`.
-2. All code should pass the default levels of
-   [`golint`](https://github.com/golang/lint).
-3. All code should follow the guidelines covered in [Effective
-   Go](http://golang.org/doc/effective_go.html) and [Go Code Review
-   Comments](https://github.com/golang/go/wiki/CodeReviewComments).
-4. Comment the code. Tell us the why, the history and the context.
-5. Document _all_ declarations and methods, even private ones. Declare
-   expectations, caveats and anything else that may be important. If a type
-   gets exported, having the comments already there will ensure it's ready.
-6. Variable name length should be proportional to its context and no longer.
-   `noCommaALongVariableNameLikeThisIsNotMoreClearWhenASimpleCommentWouldDo`.
-   In practice, short methods will have short variable names and globals will
-   have longer names.
-7. No underscores in package names. If you need a compound name, step back,
-   and re-examine why you need a compound name. If you still think you need a
-   compound name, lose the underscore.
-8. No utils or helpers packages. If a function is not general enough to
-   warrant its own package, it has not been written generally enough to be a
-   part of a util package. Just leave it unexported and well-documented.
-9. All tests should run with `go test` and outside tooling should not be
-   required. No, we don't need another unit testing framework. Assertion
-   packages are acceptable if they provide _real_ incremental value.
+1.  All code should be formatted with `gofmt -s`.
+2.  All code should pass the default levels of
+    [`golint`](https://github.com/golang/lint).
+3.  All code should follow the guidelines covered in [Effective
+    Go](http://golang.org/doc/effective_go.html) and [Go Code Review
+    Comments](https://github.com/golang/go/wiki/CodeReviewComments).
+4.  Comment the code. Tell us the why, the history and the context.
+5.  Document _all_ declarations and methods, even private ones. Declare
+    expectations, caveats and anything else that may be important. If a type
+    gets exported, having the comments already there will ensure it's ready.
+6.  Variable name length should be proportional to its context and no longer.
+    `noCommaALongVariableNameLikeThisIsNotMoreClearWhenASimpleCommentWouldDo`.
+    In practice, short methods will have short variable names and globals will
+    have longer names.
+7.  No underscores in package names. If you need a compound name, step back,
+    and re-examine why you need a compound name. If you still think you need a
+    compound name, lose the underscore.
+8.  No utils or helpers packages. If a function is not general enough to
+    warrant its own package, it has not been written generally enough to be a
+    part of a util package. Just leave it unexported and well-documented.
+9.  All tests should run with `go test` and outside tooling should not be
+    required. No, we don't need another unit testing framework. Assertion
+    packages are acceptable if they provide _real_ incremental value.
 10. Even though we call these "rules" above, they are actually just
     guidelines. Since you've read all the rules, you now know that.
 
