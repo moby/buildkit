@@ -10,7 +10,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -361,6 +360,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			if d.stage.BaseName == emptyImageName {
 				d.state = llb.Scratch()
 				d.image = emptyImage(platformOpt.targetPlatform)
+				d.platform = &platformOpt.targetPlatform
 				continue
 			}
 			func(i int, d *dispatchState) {
@@ -479,11 +479,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 
 		// make sure that PATH is always set
 		if _, ok := shell.BuildEnvs(d.image.Config.Env)["PATH"]; !ok {
-			var pathOS string
-			if d.platform != nil {
-				pathOS = d.platform.OS
-			}
-			d.image.Config.Env = append(d.image.Config.Env, "PATH="+system.DefaultPathEnv(pathOS))
+			d.image.Config.Env = append(d.image.Config.Env, "PATH="+system.DefaultPathEnv(d.platform.OS))
 		}
 
 		// initialize base metadata from image conf
@@ -892,6 +888,7 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 				st := llb.Scratch().Dir(sourcePath).File(
 					llb.Mkfile(f, 0755, []byte(data)),
 					dockerui.WithInternalName("preparing inline document"),
+					llb.Platform(*d.platform),
 				)
 
 				mount := llb.AddMount(destPath, st, llb.SourcePath(sourcePath), llb.Readonly)
@@ -995,11 +992,7 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 }
 
 func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bool, opt *dispatchOpt) error {
-	platformOS := runtime.GOOS
-	if d.platform != nil {
-		platformOS = d.platform.OS
-	}
-	wd, err := system.NormalizeWorkdir(d.image.Config.WorkingDir, c.Path, platformOS)
+	wd, err := system.NormalizeWorkdir(d.image.Config.WorkingDir, c.Path, d.platform.OS)
 	if err != nil {
 		return errors.Wrap(err, "normalizing workdir")
 	}
@@ -1024,6 +1017,7 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bo
 			d.state = d.state.File(llb.Mkdir(wd, 0755, mkdirOpt...),
 				llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(opt.shlex, c.String(), env)), d.prefixPlatform, &platform, env)),
 				location(opt.sourceMap, c.Location()),
+				llb.Platform(*d.platform),
 			)
 			withLayer = true
 		}
@@ -1033,11 +1027,7 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bo
 }
 
 func dispatchCopy(d *dispatchState, cfg copyConfig) error {
-	platformOS := runtime.GOOS
-	if d.platform != nil {
-		platformOS = d.platform.OS
-	}
-	pp, err := pathRelativeToWorkingDir(d.state, cfg.params.DestPath, platformOS)
+	pp, err := pathRelativeToWorkingDir(d.state, cfg.params.DestPath, *d.platform)
 	if err != nil {
 		return err
 	}
@@ -1146,7 +1136,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 				a = a.Copy(st, f, dest, opts...)
 			}
 		} else {
-			src, err = system.CheckSystemDriveAndRemoveDriveLetter(src, platformOS)
+			src, err = system.CheckSystemDriveAndRemoveDriveLetter(src, d.platform.OS)
 			if err != nil {
 				return errors.Wrap(err, "removing drive letter")
 			}
@@ -1173,13 +1163,14 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		commitMessage.WriteString(" <<" + src.Path)
 
 		data := src.Data
-		f, err := system.CheckSystemDriveAndRemoveDriveLetter(src.Path, platformOS)
+		f, err := system.CheckSystemDriveAndRemoveDriveLetter(src.Path, d.platform.OS)
 		if err != nil {
 			return errors.Wrap(err, "removing drive letter")
 		}
 		st := llb.Scratch().File(
 			llb.Mkfile(f, 0664, []byte(data)),
 			dockerui.WithInternalName("preparing inline document"),
+			llb.Platform(*d.platform),
 		)
 
 		opts := append([]llb.CopyOption{&llb.CopyInfo{
@@ -1187,7 +1178,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 			CreateDestPath: true,
 		}}, copyOpt...)
 
-		dest, err = system.CheckSystemDriveAndRemoveDriveLetter(dest, platformOS)
+		dest, err = system.CheckSystemDriveAndRemoveDriveLetter(dest, d.platform.OS)
 		if err != nil {
 			return errors.Wrap(err, "removing drive letter")
 		}
@@ -1226,7 +1217,9 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		d.cmdIndex-- // prefixCommand increases it
 		pgName := prefixCommand(d, name, d.prefixPlatform, &platform, env)
 
-		var copyOpts []llb.ConstraintsOpt
+		copyOpts := []llb.ConstraintsOpt{
+			llb.Platform(*d.platform),
+		}
 		copy(copyOpts, fileOpt)
 		copyOpts = append(copyOpts, llb.ProgressGroup(pgID, pgName, true))
 
@@ -1418,8 +1411,8 @@ func dispatchArg(d *dispatchState, c *instructions.ArgCommand, metaArgs []instru
 	return commitToHistory(&d.image, "ARG "+strings.Join(commitStrs, " "), false, nil, d.epoch)
 }
 
-func pathRelativeToWorkingDir(s llb.State, p, platform string) (string, error) {
-	dir, err := s.GetDir(context.TODO())
+func pathRelativeToWorkingDir(s llb.State, p string, platform ocispecs.Platform) (string, error) {
+	dir, err := s.GetDir(context.TODO(), llb.Platform(platform))
 	if err != nil {
 		return "", err
 	}
@@ -1428,15 +1421,15 @@ func pathRelativeToWorkingDir(s llb.State, p, platform string) (string, error) {
 		return dir, nil
 	}
 
-	p, err = system.CheckSystemDriveAndRemoveDriveLetter(p, platform)
+	p, err = system.CheckSystemDriveAndRemoveDriveLetter(p, platform.OS)
 	if err != nil {
 		return "", errors.Wrap(err, "remving drive letter")
 	}
 
-	if system.IsAbs(p, platform) {
+	if system.IsAbs(p, platform.OS) {
 		return p, nil
 	}
-	return filepath.Join(dir, p), nil
+	return system.NormalizePath(dir, p, platform.OS, false)
 }
 
 func addEnv(env []string, k, v string) []string {

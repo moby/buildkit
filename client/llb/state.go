@@ -299,6 +299,11 @@ func (s State) File(a *FileAction, opts ...ConstraintsOpt) State {
 		o.SetConstraintsOption(&c)
 	}
 
+	// No platform was set by constraint options. Set the current OS and arch.
+	if c.Platform == nil {
+		platform := platforms.DefaultSpec()
+		c.Platform = &platform
+	}
 	return s.WithOutput(NewFileOp(s, a, c).Output())
 }
 

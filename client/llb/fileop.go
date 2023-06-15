@@ -5,7 +5,6 @@ import (
 	_ "crypto/sha256" // for opencontainers/go-digest
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -772,12 +771,7 @@ func (f *FileOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 			}
 		}
 
-		// Assume that we're building an image for the same OS we're running on.
-		platformOS := runtime.GOOS
-		if f.constraints.Platform != nil {
-			platformOS = f.constraints.Platform.OS
-		}
-		action, err := st.action.toProtoAction(ctx, parent, st.base, platformOS)
+		action, err := st.action.toProtoAction(ctx, parent, st.base, f.constraints.Platform.OS)
 		if err != nil {
 			return "", nil, nil, nil, err
 		}
