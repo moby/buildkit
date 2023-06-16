@@ -2787,7 +2787,7 @@ func testSourceDateEpochClamp(t *testing.T, sb integration.Sandbox) {
 
 	var bboxConfig []byte
 	_, err = c.Build(sb.Context(), SolveOpt{}, "", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
-		_, bboxConfig, err = c.ResolveImageConfig(ctx, "docker.io/library/busybox:latest", llb.ResolveImageConfigOpt{})
+		_, _, bboxConfig, err = c.ResolveImageConfig(ctx, "docker.io/library/busybox:latest", llb.ResolveImageConfigOpt{})
 		if err != nil {
 			return nil, err
 		}
@@ -9470,32 +9470,88 @@ func testSourcePolicy(t *testing.T, sb integration.Sandbox) {
 	}
 
 	t.Run("Frontend policies", func(t *testing.T) {
-		denied := "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md"
-		frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
-			st := llb.Image("busybox:1.34.1-uclibc").File(
-				llb.Copy(llb.HTTP(denied),
-					"README.md", "README.md"))
-			def, err := st.Marshal(sb.Context())
-			if err != nil {
-				return nil, err
+		t.Run("deny http", func(t *testing.T) {
+			denied := "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md"
+			frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+				st := llb.Image("busybox:1.34.1-uclibc").File(
+					llb.Copy(llb.HTTP(denied),
+						"README.md", "README.md"))
+				def, err := st.Marshal(sb.Context())
+				if err != nil {
+					return nil, err
+				}
+				return c.Solve(ctx, gateway.SolveRequest{
+					Definition: def.ToPB(),
+					SourcePolicies: []*sourcepolicypb.Policy{{
+						Rules: []*sourcepolicypb.Rule{
+							{
+								Action: sourcepolicypb.PolicyAction_DENY,
+								Selector: &sourcepolicypb.Selector{
+									Identifier: denied,
+								},
+							},
+						},
+					}},
+				})
 			}
-			return c.Solve(ctx, gateway.SolveRequest{
-				Definition: def.ToPB(),
-				SourcePolicies: []*sourcepolicypb.Policy{{
-					Rules: []*sourcepolicypb.Rule{
-						{
-							Action: sourcepolicypb.PolicyAction_DENY,
-							Selector: &sourcepolicypb.Selector{
-								Identifier: denied,
+
+			_, err = c.Build(sb.Context(), SolveOpt{}, "", frontend, nil)
+			require.ErrorContains(t, err, sourcepolicy.ErrSourceDenied.Error())
+		})
+		t.Run("resolve image config", func(t *testing.T) {
+			frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+				const (
+					origRef    = "docker.io/library/busybox:1.34.1-uclibc"
+					updatedRef = "docker.io/library/busybox:latest"
+				)
+				pol := []*sourcepolicypb.Policy{
+					{
+						Rules: []*sourcepolicypb.Rule{
+							{
+								Action: sourcepolicypb.PolicyAction_DENY,
+								Selector: &sourcepolicypb.Selector{
+									Identifier: "*",
+								},
+							},
+							{
+								Action: sourcepolicypb.PolicyAction_ALLOW,
+								Selector: &sourcepolicypb.Selector{
+									Identifier: "docker-image://" + updatedRef + "*",
+								},
+							},
+							{
+								Action: sourcepolicypb.PolicyAction_CONVERT,
+								Selector: &sourcepolicypb.Selector{
+									Identifier: "docker-image://" + origRef,
+								},
+								Updates: &sourcepolicypb.Update{
+									Identifier: "docker-image://" + updatedRef,
+								},
 							},
 						},
 					},
-				}},
-			})
-		}
+				}
 
-		_, err = c.Build(sb.Context(), SolveOpt{}, "", frontend, nil)
-		require.ErrorContains(t, err, sourcepolicy.ErrSourceDenied.Error())
+				ref, dgst, _, err := c.ResolveImageConfig(ctx, origRef, llb.ResolveImageConfigOpt{
+					SourcePolicies: pol,
+				})
+				if err != nil {
+					return nil, err
+				}
+				require.Equal(t, updatedRef, ref)
+				st := llb.Image(ref + "@" + dgst.String())
+				def, err := st.Marshal(sb.Context())
+				if err != nil {
+					return nil, err
+				}
+				return c.Solve(ctx, gateway.SolveRequest{
+					Definition:     def.ToPB(),
+					SourcePolicies: pol,
+				})
+			}
+			_, err = c.Build(sb.Context(), SolveOpt{}, "", frontend, nil)
+			require.NoError(t, err)
+		})
 	})
 }
 
