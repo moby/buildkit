@@ -84,3 +84,7 @@ func (s *OCI) New(ctx context.Context, cfg *BackendConfig) (Backend, func() erro
 		snapshotter: s.Snapshotter,
 	}, stop, nil
 }
+
+func (s *OCI) Close() error {
+	return nil
+}

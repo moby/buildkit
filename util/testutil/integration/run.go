@@ -62,6 +62,7 @@ type BackendConfig struct {
 
 type Worker interface {
 	New(context.Context, *BackendConfig) (Backend, func() error, error)
+	Close() error
 	Name() string
 	Rootless() bool
 }
@@ -168,6 +169,11 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 		rng := rand.New(rand.NewSource(time.Now().UnixNano())) //nolint:gosec // using math/rand is fine in a test utility
 		list = []Worker{list[rng.Intn(len(list))]}
 	}
+	t.Cleanup(func() {
+		for _, br := range list {
+			_ = br.Close()
+		}
+	})
 
 	for _, br := range list {
 		for _, tc := range testCases {
