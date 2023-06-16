@@ -342,6 +342,14 @@ func (jl *Solver) loadUnlocked(v, parent Vertex, j *Job, cache map[Vertex]Vertex
 	// if same vertex is already loaded without cache just use that
 	st, ok := jl.actives[dgstWithoutCache]
 
+	if ok {
+		v = &vertexWithCacheOptions{
+			Vertex: v,
+			dgst:   dgstWithoutCache,
+			inputs: inputs,
+		}
+	}
+
 	if !ok {
 		st, ok = jl.actives[dgst]
 
