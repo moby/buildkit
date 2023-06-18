@@ -44,6 +44,7 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewayContainerPID1Fail,
 		testClientGatewayContainerPID1Exit,
 		testClientGatewayContainerMounts,
+		testClientGatewayContainerSecretEnv,
 		testClientGatewayContainerPID1Tty,
 		testClientGatewayContainerCancelPID1Tty,
 		testClientGatewayContainerExecTty,
@@ -839,6 +840,75 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 	}, product, b, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), context.Canceled.Error())
+
+	checkAllReleasable(t, c, sb, true)
+}
+
+func testClientGatewayContainerSecretEnv(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+
+	ctx := sb.Context()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	product := "buildkit_test"
+
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		mounts := map[string]llb.State{
+			"/": llb.Image("busybox:latest"),
+		}
+
+		var containerMounts []client.Mount
+		for mountpoint, st := range mounts {
+			def, err := st.Marshal(ctx)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to marshal state")
+			}
+
+			r, err := c.Solve(ctx, client.SolveRequest{
+				Definition: def.ToPB(),
+			})
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to solve")
+			}
+			containerMounts = append(containerMounts, client.Mount{
+				Dest:      mountpoint,
+				MountType: pb.MountType_BIND,
+				Ref:       r.Ref,
+			})
+		}
+
+		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{Mounts: containerMounts})
+		if err != nil {
+			return nil, err
+		}
+
+		pid, err := ctr.Start(ctx, client.StartRequest{
+			Args: []string{"sh", "-c", "test $SOME_SECRET = foo-secret"},
+			SecretEnv: []*pb.SecretEnv{
+				{
+					ID:   "sekrit",
+					Name: "SOME_SECRET",
+				},
+			},
+		})
+		require.NoError(t, err)
+		err = pid.Wait()
+		require.NoError(t, err)
+
+		return &client.Result{}, ctr.Release(ctx)
+	}
+
+	_, err = c.Build(ctx, SolveOpt{
+		Session: []session.Attachable{
+			secretsprovider.FromMap(map[string][]byte{
+				"sekrit": []byte("foo-secret"),
+			}),
+		},
+	}, product, b, nil)
+	require.NoError(t, err)
 
 	checkAllReleasable(t, c, sb, true)
 }

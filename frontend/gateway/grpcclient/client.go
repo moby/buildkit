@@ -824,10 +824,11 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 	init := &pb.InitMessage{
 		ContainerID: ctr.id,
 		Meta: &opspb.Meta{
-			Args: req.Args,
-			Env:  req.Env,
-			Cwd:  req.Cwd,
-			User: req.User,
+			Args:      req.Args,
+			Env:       req.Env,
+			Cwd:       req.Cwd,
+			User:      req.User,
+			Secretenv: req.SecretEnv,
 		},
 		Tty:      req.Tty,
 		Security: req.SecurityMode,
