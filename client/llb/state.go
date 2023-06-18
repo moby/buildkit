@@ -284,6 +284,7 @@ func (s State) Run(ro ...RunOption) ExecState {
 	}
 	exec.secrets = ei.Secrets
 	exec.ssh = ei.SSH
+	exec.netConfigID = ei.NetworkConfigID
 
 	return ExecState{
 		State: s.WithOutput(exec.Output()),

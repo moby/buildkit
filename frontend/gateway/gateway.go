@@ -986,11 +986,12 @@ func (lbf *llbBridgeForwarder) Inputs(ctx context.Context, in *pb.InputsRequest)
 func (lbf *llbBridgeForwarder) NewContainer(ctx context.Context, in *pb.NewContainerRequest) (_ *pb.NewContainerResponse, err error) {
 	bklog.G(ctx).Debugf("|<--- NewContainer %s", in.ContainerID)
 	ctrReq := container.NewContainerRequest{
-		ContainerID: in.ContainerID,
-		NetMode:     in.Network,
-		Hostname:    in.Hostname,
-		Platform:    in.Platform,
-		Constraints: in.Constraints,
+		ContainerID:     in.ContainerID,
+		NetMode:         in.Network,
+		NetworkConfigID: in.NetworkConfigID,
+		Hostname:        in.Hostname,
+		Platform:        in.Platform,
+		Constraints:     in.Constraints,
 	}
 
 	for _, m := range in.Mounts {

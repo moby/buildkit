@@ -6,25 +6,36 @@ import (
 	"net/http"
 
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/networks"
 	"github.com/moby/buildkit/session/upload"
+	"github.com/moby/buildkit/source/netconfhttp"
 	"github.com/pkg/errors"
 )
 
-func newTransport(rt http.RoundTripper, sm *session.Manager, g session.Group) http.RoundTripper {
-	return &sessionHandler{rt: rt, sm: sm, g: g}
+func newTransport(rt http.RoundTripper, sm *session.Manager, g session.Group, netConfig *networks.Config) http.RoundTripper {
+	return &sessionHandler{
+		rt: netconfhttp.NewTransport(rt, netConfig),
+		sm: sm,
+		g:  g,
+	}
 }
 
 type sessionHandler struct {
-	sm *session.Manager
 	rt http.RoundTripper
+
+	sm *session.Manager
 	g  session.Group
 }
 
 func (h *sessionHandler) RoundTrip(req *http.Request) (*http.Response, error) {
-	if req.URL.Host != "buildkit-session" {
-		return h.rt.RoundTrip(req)
+	if req.URL.Host == "buildkit-session" {
+		return h.handleSession(req)
 	}
 
+	return h.rt.RoundTrip(req)
+}
+
+func (h *sessionHandler) handleSession(req *http.Request) (*http.Response, error) {
 	if req.Method != "GET" {
 		return nil, errors.Errorf("invalid request")
 	}

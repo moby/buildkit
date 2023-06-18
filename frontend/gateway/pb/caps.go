@@ -48,6 +48,10 @@ const (
 	// containers created via gateway exec.
 	CapGatewayExecSecretEnv apicaps.CapID = "gateway.exec.secretenv"
 
+	// CapGatewayExecNetworkConfig is the capability to configure network
+	// settings for containers directly through the gateway
+	CapGatewayExecNetworkConfig apicaps.CapID = "gateway.exec.networkconfig"
+
 	// CapGatewayExecExtraHosts is the capability to send signals to a process
 	// created via gateway exec.
 	CapGatewayExecSignals apicaps.CapID = "gateway.exec.signals"
@@ -186,6 +190,13 @@ func init() {
 	Caps.Init(apicaps.Cap{
 		ID:      CapGatewayExecSecretEnv,
 		Name:    "gateway exec secret env",
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapGatewayExecNetworkConfig,
+		Name:    "gateway exec network config",
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

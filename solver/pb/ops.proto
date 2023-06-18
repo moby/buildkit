@@ -48,6 +48,7 @@ message ExecOp {
 	NetMode network = 3;
 	SecurityMode security = 4;
 	repeated SecretEnv secretenv = 5;
+	string networkConfigID = 6;
 }
 
 // Meta is a set of arguments for ExecOp.

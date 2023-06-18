@@ -17,7 +17,9 @@ import (
 
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/networks"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/source"
@@ -31,12 +33,14 @@ import (
 type Opt struct {
 	CacheAccessor cache.Accessor
 	Transport     http.RoundTripper
+	DNSConfig     *executor.DNSConfig
 }
 
 type httpSource struct {
 	cache     cache.Accessor
 	locker    *locker.Locker
 	transport http.RoundTripper
+	dns       *executor.DNSConfig
 }
 
 func NewSource(opt Opt) (source.Source, error) {
@@ -48,6 +52,7 @@ func NewSource(opt Opt) (source.Source, error) {
 		cache:     opt.CacheAccessor,
 		locker:    locker.New(),
 		transport: transport,
+		dns:       opt.DNSConfig,
 	}
 	return hs, nil
 }
@@ -77,8 +82,30 @@ func (hs *httpSource) Resolve(ctx context.Context, id source.Identifier, sm *ses
 	}, nil
 }
 
-func (hs *httpSourceHandler) client(g session.Group) *http.Client {
-	return &http.Client{Transport: newTransport(hs.transport, hs.sm, g)}
+func (hs *httpSourceHandler) client(ctx context.Context, g session.Group) (*http.Client, error) {
+	netConfig := &networks.Config{}
+
+	if hs.dns != nil {
+		// base network config inherits from system-wide config
+		netConfig.Dns = &networks.DNSConfig{
+			Nameservers:   hs.dns.Nameservers,
+			Options:       hs.dns.Options,
+			SearchDomains: hs.dns.SearchDomains,
+		}
+	}
+
+	if hs.src.NetworkConfigID != "" {
+		err := hs.sm.Any(ctx, g, func(ctx context.Context, _ string, caller session.Caller) error {
+			var err error
+			netConfig, err = networks.MergeConfig(ctx, caller, netConfig, hs.src.NetworkConfigID)
+			return err
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &http.Client{Transport: newTransport(hs.transport, hs.sm, g, netConfig)}, nil
 }
 
 // urlHash is internal hash the etag is stored by that doesn't leak outside
@@ -171,7 +198,10 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, inde
 		}
 	}
 
-	client := hs.client(g)
+	client, err := hs.client(ctx, g)
+	if err != nil {
+		return "", "", nil, false, err
+	}
 
 	// Some servers seem to have trouble supporting If-None-Match properly even
 	// though they return ETag-s. So first, optionally try a HEAD request with
@@ -393,7 +423,10 @@ func (hs *httpSourceHandler) Snapshot(ctx context.Context, g session.Group) (cac
 	}
 	req = req.WithContext(ctx)
 
-	client := hs.client(g)
+	client, err := hs.client(ctx, g)
+	if err != nil {
+		return nil, err
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {

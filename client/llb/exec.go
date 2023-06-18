@@ -58,6 +58,7 @@ type ExecOp struct {
 	isValidated bool
 	secrets     []SecretInfo
 	ssh         []SSHInfo
+	netConfigID NetworkConfigID
 }
 
 func (e *ExecOp) AddMount(target string, source Output, opt ...MountOption) Output {
@@ -413,6 +414,11 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		peo.Mounts = append(peo.Mounts, pm)
 	}
 
+	if e.netConfigID != "" {
+		addCap(&e.constraints, pb.CapNetworkConfigs)
+		peo.NetworkConfigID = e.netConfigID.String()
+	}
+
 	dt, err := pop.Marshal()
 	if err != nil {
 		return "", nil, nil, nil, err
@@ -723,12 +729,13 @@ func WithProxy(ps ProxyEnv) RunOption {
 
 type ExecInfo struct {
 	constraintsWrapper
-	State          State
-	Mounts         []MountInfo
-	ReadonlyRootFS bool
-	ProxyEnv       *ProxyEnv
-	Secrets        []SecretInfo
-	SSH            []SSHInfo
+	State           State
+	Mounts          []MountInfo
+	ReadonlyRootFS  bool
+	ProxyEnv        *ProxyEnv
+	Secrets         []SecretInfo
+	SSH             []SSHInfo
+	NetworkConfigID NetworkConfigID
 }
 
 type MountInfo struct {

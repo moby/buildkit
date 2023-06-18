@@ -33,7 +33,7 @@ const (
 	CapSourceHTTP         apicaps.CapID = "source.http"
 	CapSourceHTTPChecksum apicaps.CapID = "source.http.checksum"
 	CapSourceHTTPPerm     apicaps.CapID = "source.http.perm"
-	CapSourceHTTPUIDGID   apicaps.CapID = "soruce.http.uidgid"
+	CapSourceHTTPUIDGID   apicaps.CapID = "soruce.http.uidgid" // NB: typo here, can it be changed?
 
 	CapSourceOCILayout apicaps.CapID = "source.ocilayout"
 
@@ -86,6 +86,8 @@ const (
 	CapSourceDateEpoch apicaps.CapID = "exporter.sourcedateepoch"
 
 	CapSourcePolicy apicaps.CapID = "source.policy"
+
+	CapNetworkConfigs apicaps.CapID = "networkconfigs"
 )
 
 func init() {
@@ -456,6 +458,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapSourcePolicy,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapNetworkConfigs,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

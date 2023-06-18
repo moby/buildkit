@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"path"
 	"runtime"
@@ -17,6 +18,7 @@ import (
 	resourcestypes "github.com/moby/buildkit/executor/resources/types"
 	"github.com/moby/buildkit/frontend/gateway/container"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/networks"
 	"github.com/moby/buildkit/session/secrets"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver/errdefs"
@@ -346,6 +348,33 @@ func (e *ExecOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 		RemoveMountStubsRecursive: e.op.Meta.RemoveMountStubsRecursive,
 	}
 
+	netCfg, err := e.loadNetworkConfig(ctx, g)
+	if err != nil {
+		return nil, err
+	}
+
+	if netCfg != nil {
+		for _, ipHosts := range netCfg.IpHosts {
+			for _, host := range ipHosts.Hosts {
+				ip := net.ParseIP(ipHosts.Ip)
+				if ip == nil {
+					return nil, errors.Errorf("invalid ip %q", ipHosts.Ip)
+				}
+				meta.ExtraHosts = append(meta.ExtraHosts, executor.HostIP{
+					Host: host,
+					IP:   ip,
+				})
+			}
+		}
+		if netCfg.Dns != nil {
+			meta.DNS = &executor.DNSConfig{
+				Nameservers:   netCfg.Dns.Nameservers,
+				SearchDomains: netCfg.Dns.SearchDomains,
+				Options:       netCfg.Dns.Options,
+			}
+		}
+	}
+
 	if e.op.Meta.ProxyEnv != nil {
 		meta.Env = append(meta.Env, proxyEnvList(e.op.Meta.ProxyEnv)...)
 	}
@@ -456,6 +485,23 @@ func (e *ExecOp) loadSecretEnv(ctx context.Context, g session.Group) ([]string, 
 		out = append(out, fmt.Sprintf("%s=%s", sopt.Name, string(dt)))
 	}
 	return out, nil
+}
+
+func (e *ExecOp) loadNetworkConfig(ctx context.Context, g session.Group) (*networks.Config, error) {
+	id := e.op.NetworkConfigID
+	if id == "" {
+		return nil, nil
+	}
+	cfg := &networks.Config{}
+	err := e.sm.Any(ctx, g, func(ctx context.Context, _ string, caller session.Caller) error {
+		var err error
+		cfg, err = networks.MergeConfig(ctx, caller, cfg, id)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return cfg, nil
 }
 
 func (e *ExecOp) IsProvenanceProvider() {

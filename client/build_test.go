@@ -18,6 +18,7 @@ import (
 	gatewayapi "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/networks"
 	"github.com/moby/buildkit/session/secrets/secretsprovider"
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
 	"github.com/moby/buildkit/solver/errdefs"
@@ -45,6 +46,7 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewayContainerPID1Exit,
 		testClientGatewayContainerMounts,
 		testClientGatewayContainerSecretEnv,
+		testClientGatewayContainerNetworkConfig,
 		testClientGatewayContainerPID1Tty,
 		testClientGatewayContainerCancelPID1Tty,
 		testClientGatewayContainerExecTty,
@@ -909,6 +911,101 @@ func testClientGatewayContainerSecretEnv(t *testing.T, sb integration.Sandbox) {
 		},
 	}, product, b, nil)
 	require.NoError(t, err)
+
+	checkAllReleasable(t, c, sb, true)
+}
+
+func testClientGatewayContainerNetworkConfig(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+
+	ctx := sb.Context()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	product := "buildkit_test"
+
+	outBuf := new(bytes.Buffer)
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		mounts := map[string]llb.State{
+			"/": llb.Image("busybox:latest"),
+		}
+
+		var containerMounts []client.Mount
+		for mountpoint, st := range mounts {
+			def, err := st.Marshal(ctx)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to marshal state")
+			}
+
+			r, err := c.Solve(ctx, client.SolveRequest{
+				Definition: def.ToPB(),
+			})
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to solve")
+			}
+			containerMounts = append(containerMounts, client.Mount{
+				Dest:      mountpoint,
+				MountType: pb.MountType_BIND,
+				Ref:       r.Ref,
+			})
+		}
+
+		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
+			Mounts:          containerMounts,
+			NetworkConfigID: "my-network",
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		pid, err := ctr.Start(ctx, client.StartRequest{
+			Args:   []string{"sh", "-c", "echo hosts; cat /etc/hosts; echo resolv; cat /etc/resolv.conf"},
+			Stdout: &nopCloser{outBuf},
+		})
+		require.NoError(t, err)
+		err = pid.Wait()
+		require.NoError(t, err)
+
+		return &client.Result{}, ctr.Release(ctx)
+	}
+
+	_, err = c.Build(ctx, SolveOpt{
+		Session: []session.Attachable{
+			networks.NewConfigProvider(func(id string) *networks.Config {
+				switch id {
+				case "my-network":
+					return &networks.Config{
+						Dns: &networks.DNSConfig{
+							Nameservers:   []string{"1.1.1.1"},
+							SearchDomains: []string{"zombo.com"},
+							Options:       []string{"ndots:999"},
+						},
+						IpHosts: []*networks.IPHosts{
+							{
+								Ip:    "1.2.3.4",
+								Hosts: []string{"example.com"},
+							},
+						},
+					}
+				default:
+					panic("unknown network ID")
+				}
+			}),
+		},
+	}, product, b, nil)
+	require.NoError(t, err)
+
+	require.Equal(t, `hosts
+127.0.0.1	localhost buildkitsandbox
+::1	localhost ip6-localhost ip6-loopback
+1.2.3.4	example.com
+resolv
+search zombo.com
+nameserver 1.1.1.1
+options ndots:999
+`, outBuf.String())
 
 	checkAllReleasable(t, c, sb, true)
 }

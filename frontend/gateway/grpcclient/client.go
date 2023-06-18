@@ -769,6 +769,13 @@ func (c *grpcClient) NewContainer(ctx context.Context, req client.NewContainerRe
 	if err != nil {
 		return nil, err
 	}
+
+	if req.NetworkConfigID != "" {
+		if err := c.caps.Supports(pb.CapGatewayExecNetworkConfig); err != nil {
+			return nil, err
+		}
+	}
+
 	id := identity.NewID()
 	var mounts []*opspb.Mount
 	for _, m := range req.Mounts {
@@ -794,13 +801,14 @@ func (c *grpcClient) NewContainer(ctx context.Context, req client.NewContainerRe
 
 	bklog.G(ctx).Debugf("|---> NewContainer %s", id)
 	_, err = c.client.NewContainer(ctx, &pb.NewContainerRequest{
-		ContainerID: id,
-		Mounts:      mounts,
-		Platform:    req.Platform,
-		Constraints: req.Constraints,
-		Network:     req.NetMode,
-		ExtraHosts:  req.ExtraHosts,
-		Hostname:    req.Hostname,
+		ContainerID:     id,
+		Mounts:          mounts,
+		Platform:        req.Platform,
+		Constraints:     req.Constraints,
+		Network:         req.NetMode,
+		NetworkConfigID: req.NetworkConfigID,
+		ExtraHosts:      req.ExtraHosts,
+		Hostname:        req.Hostname,
 	})
 	if err != nil {
 		return nil, err

@@ -67,6 +67,7 @@ type WorkerOpt struct {
 	GCPolicy         []client.PruneInfo
 	BuildkitVersion  client.BuildkitVersion
 	NetworkProviders map[pb.NetMode]network.Provider
+	DNSConfig        *executor.DNSConfig
 	Executor         executor.Executor
 	Snapshotter      snapshot.Snapshotter
 	ContentStore     *containerdsnapshot.Store
@@ -140,6 +141,7 @@ func NewWorker(ctx context.Context, opt WorkerOpt) (*Worker, error) {
 	if err := git.Supported(); err == nil {
 		gs, err := git.NewSource(git.Opt{
 			CacheAccessor: cm,
+			DNSConfig:     opt.DNSConfig,
 		})
 		if err != nil {
 			return nil, err
@@ -151,6 +153,7 @@ func NewWorker(ctx context.Context, opt WorkerOpt) (*Worker, error) {
 
 	hs, err := http.NewSource(http.Opt{
 		CacheAccessor: cm,
+		DNSConfig:     opt.DNSConfig,
 	})
 	if err != nil {
 		return nil, err

@@ -20,12 +20,19 @@ type Meta struct {
 	Tty            bool
 	ReadonlyRootFS bool
 	ExtraHosts     []HostIP
+	DNS            *DNSConfig
 	Ulimit         []*pb.Ulimit
 	CgroupParent   string
 	NetMode        pb.NetMode
 	SecurityMode   pb.SecurityMode
 
 	RemoveMountStubsRecursive bool
+}
+
+type DNSConfig struct {
+	Nameservers   []string
+	Options       []string
+	SearchDomains []string
 }
 
 type Mountable interface {

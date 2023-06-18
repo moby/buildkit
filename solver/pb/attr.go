@@ -6,6 +6,7 @@ const AttrAuthHeaderSecret = "git.authheadersecret"
 const AttrAuthTokenSecret = "git.authtokensecret"
 const AttrKnownSSHHosts = "git.knownsshhosts"
 const AttrMountSSHSock = "git.mountsshsock"
+
 const AttrLocalSessionID = "local.session"
 const AttrLocalUniqueID = "local.unique"
 const AttrIncludePatterns = "local.includepattern"
@@ -35,5 +36,7 @@ const AttrOCILayoutLayerLimit = "oci.layerlimit"
 const AttrLocalDiffer = "local.differ"
 const AttrLocalDifferNone = "none"
 const AttrLocalDifferMetadata = "metadata"
+
+const AttrNetworkConfigID = "network.config"
 
 type IsFileAction = isFileAction_Action

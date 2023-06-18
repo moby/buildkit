@@ -37,7 +37,7 @@ type containerdExecutor struct {
 	root             string
 	networkProviders map[pb.NetMode]network.Provider
 	cgroupParent     string
-	dnsConfig        *oci.DNSConfig
+	dnsConfig        *executor.DNSConfig
 	running          map[string]chan error
 	mu               sync.Mutex
 	apparmorProfile  string
@@ -60,7 +60,7 @@ type OnCreateRuntimer interface {
 }
 
 // New creates a new executor backed by connection to containerd API
-func New(client *containerd.Client, root, cgroup string, networkProviders map[pb.NetMode]network.Provider, dnsConfig *oci.DNSConfig, apparmorProfile string, selinux bool, traceSocket string, rootless bool) executor.Executor {
+func New(client *containerd.Client, root, cgroup string, networkProviders map[pb.NetMode]network.Provider, dnsConfig *executor.DNSConfig, apparmorProfile string, selinux bool, traceSocket string, rootless bool) executor.Executor {
 	// clean up old hosts/resolv.conf file. ignore errors
 	os.RemoveAll(filepath.Join(root, "hosts"))
 	os.RemoveAll(filepath.Join(root, "resolv.conf"))
@@ -104,17 +104,20 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 
 	meta := process.Meta
 
-	resolvConf, err := oci.GetResolvConf(ctx, w.root, nil, w.dnsConfig)
+	resolvConf, cleanResolv, err := oci.GetResolvConf(ctx, w.root, nil, w.dnsConfig, meta.DNS)
 	if err != nil {
 		return nil, err
+	}
+	if cleanResolv != nil {
+		defer cleanResolv()
 	}
 
-	hostsFile, clean, err := oci.GetHostsFile(ctx, w.root, meta.ExtraHosts, nil, meta.Hostname)
+	hostsFile, cleanHosts, err := oci.GetHostsFile(ctx, w.root, meta.ExtraHosts, nil, meta.Hostname)
 	if err != nil {
 		return nil, err
 	}
-	if clean != nil {
-		defer clean()
+	if cleanHosts != nil {
+		defer cleanHosts()
 	}
 
 	mountable, err := root.Src.Mount(ctx, false)

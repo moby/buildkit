@@ -48,7 +48,7 @@ type Opt struct {
 	IdentityMapping *idtools.IdentityMapping
 	// runc run --no-pivot (unrecommended)
 	NoPivot         bool
-	DNS             *oci.DNSConfig
+	DNS             *executor.DNSConfig
 	OOMScoreAdj     *int
 	ApparmorProfile string
 	SELinux         bool
@@ -67,7 +67,7 @@ type runcExecutor struct {
 	processMode      oci.ProcessMode
 	idmap            *idtools.IdentityMapping
 	noPivot          bool
-	dns              *oci.DNSConfig
+	dns              *executor.DNSConfig
 	oomScoreAdj      *int
 	running          map[string]chan error
 	mu               sync.Mutex
@@ -185,17 +185,20 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 		bklog.G(ctx).Info("enabling HostNetworking")
 	}
 
-	resolvConf, err := oci.GetResolvConf(ctx, w.root, w.idmap, w.dns)
+	resolvConf, cleanResolv, err := oci.GetResolvConf(ctx, w.root, w.idmap, w.dns, meta.DNS)
 	if err != nil {
 		return nil, err
+	}
+	if cleanResolv != nil {
+		defer cleanResolv()
 	}
 
-	hostsFile, clean, err := oci.GetHostsFile(ctx, w.root, meta.ExtraHosts, w.idmap, meta.Hostname)
+	hostsFile, cleanHosts, err := oci.GetHostsFile(ctx, w.root, meta.ExtraHosts, w.idmap, meta.Hostname)
 	if err != nil {
 		return nil, err
 	}
-	if clean != nil {
-		defer clean()
+	if cleanHosts != nil {
+		defer cleanHosts()
 	}
 
 	mountable, err := root.Src.Mount(ctx, false)

@@ -119,6 +119,8 @@ func FromLLB(op *pb.Op_Source, platform *pb.Platform) (Identifier, error) {
 				id.KnownSSHHosts = v
 			case pb.AttrMountSSHSock:
 				id.MountSSHSock = v
+			case pb.AttrNetworkConfigID:
+				id.NetworkConfigID = v
 			}
 		}
 	}
@@ -190,6 +192,8 @@ func FromLLB(op *pb.Op_Source, platform *pb.Platform) (Identifier, error) {
 					return nil, err
 				}
 				id.GID = int(i)
+			case pb.AttrNetworkConfigID:
+				id.NetworkConfigID = v
 			}
 		}
 	}
@@ -275,13 +279,14 @@ func NewHTTPIdentifier(str string, tls bool) (*HTTPIdentifier, error) {
 }
 
 type HTTPIdentifier struct {
-	TLS      bool
-	URL      string
-	Checksum digest.Digest
-	Filename string
-	Perm     int
-	UID      int
-	GID      int
+	TLS             bool
+	URL             string
+	Checksum        digest.Digest
+	Filename        string
+	Perm            int
+	UID             int
+	GID             int
+	NetworkConfigID string
 }
 
 func (*HTTPIdentifier) ID() string {

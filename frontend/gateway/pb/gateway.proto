@@ -243,6 +243,7 @@ message NewContainerRequest {
 	pb.WorkerConstraints constraints = 5;
 	repeated pb.HostIP extraHosts = 6;
 	string hostname = 7;
+	string networkConfigID = 8;
 }
 
 message NewContainerResponse{}

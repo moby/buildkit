@@ -2,6 +2,7 @@ package client
 
 import (
 	"archive/tar"
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -46,6 +47,7 @@ import (
 	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/networks"
 	"github.com/moby/buildkit/session/secrets/secretsprovider"
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
 	"github.com/moby/buildkit/solver/errdefs"
@@ -205,6 +207,7 @@ func TestIntegration(t *testing.T) {
 		testMultipleRecordsWithSameLayersCacheImportExport,
 		testExportLocalNoPlatformSplit,
 		testExportLocalNoPlatformSplitOverwrite,
+		testExecNetworkConfig,
 	)
 }
 
@@ -242,6 +245,8 @@ func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sa
 
 	integration.Run(t, integration.TestFuncs(
 		testBridgeNetworkingDNSNoRootless,
+		testBridgeNetworkingDNSGitNoRootless,
+		testBridgeNetworkingDNSHTTPNoRootless,
 	),
 		mirrors,
 		integration.WithMatrix("netmode", map[string]interface{}{
@@ -356,6 +361,270 @@ func testBridgeNetworkingDNSNoRootless(t *testing.T, sb integration.Sandbox) {
 		return err
 	})
 	err = eg.Wait()
+	require.NoError(t, err)
+}
+
+func testBridgeNetworkingDNSGitNoRootless(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureCNINetwork)
+	if os.Getenv("BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS") == "" {
+		t.SkipNow()
+	}
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	serverBase := llb.Image("alpine:latest").
+		Run(llb.Shlexf(`apk add git git-daemon`)).
+		File(
+			llb.Mkdir("/root/repo", 0755).
+				Mkfile("/root/repo/some-file", 0644, []byte(`hello`)),
+		).
+		File(llb.Mkfile("/start.sh", 0755, []byte(`#!/bin/sh
+
+set -e -u -x
+
+cd /root
+
+git config --global user.email "root@localhost"
+git config --global user.name "Test User"
+git config --global init.defaultBranch main
+
+mkdir srv
+
+cd repo
+	git init
+	git add *
+	git commit -m "init"
+cd ..
+
+cd srv
+	git clone --bare ../repo repo.git
+cd ..
+
+git daemon --verbose --export-all --base-path=/root/srv
+`)))
+
+	myDomain := "mydomain"
+	testGit := func(ctx context.Context, gw gateway.Client) (*gateway.Result, error) {
+		def, err := serverBase.Marshal(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		res, err := gw.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		gitHost := identity.NewID()
+		gitCtr, err := gw.NewContainer(ctx, gateway.NewContainerRequest{
+			Mounts: []gateway.Mount{
+				{
+					Dest:      "/",
+					MountType: pb.MountType_BIND,
+					Ref:       res.Ref,
+				},
+			},
+			Hostname: gitHost + "." + myDomain,
+		})
+		if err != nil {
+			return nil, err
+		}
+		defer gitCtr.Release(context.Background())
+
+		stderrR, stderrW := io.Pipe()
+
+		proc, err := gitCtr.Start(ctx, gateway.StartRequest{
+			Args:   []string{"/start.sh"},
+			Stderr: stderrW,
+		})
+		if err != nil {
+			return nil, err
+		}
+		defer proc.Signal(ctx, syscall.SIGKILL)
+
+		scan := bufio.NewScanner(stderrR)
+		for scan.Scan() {
+			line := scan.Text()
+			t.Log(line)
+			if strings.Contains(line, "Ready to rumble") {
+				t.Logf("git server is ready")
+				break
+			}
+		}
+
+		gitSt := llb.Git(
+			"git://"+gitHost+"/repo.git",
+			"main",
+			llb.WithNetworkConfig("git-client"),
+		)
+
+		def, err = gitSt.Marshal(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		res, err = gw.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+			Evaluate:   true,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = res.Ref.StatFile(ctx, gateway.StatRequest{
+			Path: "some-file",
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		return gateway.NewResult(), nil
+	}
+
+	_, err = c.Build(sb.Context(), SolveOpt{
+		Session: []session.Attachable{
+			networks.NewConfigProvider(func(id string) *networks.Config {
+				switch id {
+				case "git-client":
+					return &networks.Config{
+						Dns: &networks.DNSConfig{
+							SearchDomains: []string{myDomain},
+						},
+					}
+				default:
+					panic("unknown network: " + id)
+				}
+			}),
+		},
+	}, "", testGit, nil)
+	require.NoError(t, err)
+}
+
+func testBridgeNetworkingDNSHTTPNoRootless(t *testing.T, sb integration.Sandbox) {
+	integration.CheckFeatureCompat(t, sb, integration.FeatureCNINetwork)
+	if os.Getenv("BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS") == "" {
+		t.SkipNow()
+	}
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	serverBase := llb.Image("alpine:latest").
+		Run(llb.Shlexf(`apk add python3`)).
+		File(
+			llb.Mkdir("/root/www", 0755).
+				Mkfile("/root/www/some-file", 0644, []byte(`hello`)),
+		).
+		File(llb.Mkfile("/start.sh", 0755, []byte(`#!/bin/sh
+
+set -e -u -x
+
+cd /root/www
+
+python -m http.server 8000
+`)))
+
+	myDomain := "mydomain"
+	testGit := func(ctx context.Context, gw gateway.Client) (*gateway.Result, error) {
+		def, err := serverBase.Marshal(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		res, err := gw.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		httpHost := identity.NewID()
+		httpCtr, err := gw.NewContainer(ctx, gateway.NewContainerRequest{
+			Mounts: []gateway.Mount{
+				{
+					Dest:      "/",
+					MountType: pb.MountType_BIND,
+					Ref:       res.Ref,
+				},
+			},
+			Hostname: httpHost + "." + myDomain,
+		})
+		if err != nil {
+			return nil, err
+		}
+		defer httpCtr.Release(context.Background())
+
+		stdoutR, stdoutW := io.Pipe()
+
+		proc, err := httpCtr.Start(ctx, gateway.StartRequest{
+			Args:   []string{"/start.sh"},
+			Stdout: stdoutW,
+			Tty:    true,
+		})
+		if err != nil {
+			return nil, err
+		}
+		defer proc.Signal(ctx, syscall.SIGKILL)
+
+		scan := bufio.NewScanner(stdoutR)
+		for scan.Scan() {
+			line := scan.Text()
+			t.Logf("from server: %s", line)
+			if strings.Contains(line, "Serving HTTP") {
+				t.Logf("HTTP server is ready")
+				break
+			}
+		}
+
+		httpSt := llb.HTTP(
+			"http://"+httpHost+":8000/some-file",
+			llb.WithNetworkConfig("http-client"),
+		)
+
+		def, err = httpSt.Marshal(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		res, err = gw.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+			Evaluate:   true,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = res.Ref.StatFile(ctx, gateway.StatRequest{
+			Path: "some-file",
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		return gateway.NewResult(), nil
+	}
+
+	_, err = c.Build(sb.Context(), SolveOpt{
+		Session: []session.Attachable{
+			networks.NewConfigProvider(func(id string) *networks.Config {
+				switch id {
+				case "http-client":
+					return &networks.Config{
+						Dns: &networks.DNSConfig{
+							SearchDomains: []string{myDomain},
+						},
+					}
+				default:
+					panic("unknown network: " + id)
+				}
+			}),
+		},
+	}, "", testGit, nil)
 	require.NoError(t, err)
 }
 
@@ -9626,4 +9895,68 @@ func testClientCustomGRPCOpts(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	require.Contains(t, interceptedMethods, "/moby.buildkit.v1.Control/Solve")
+}
+
+func testExecNetworkConfig(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("busybox:latest").
+		Run(
+			llb.Shlex(`sh -c 'cp /etc/hosts /out/hosts && cp /etc/resolv.conf /out/resolv.conf'`),
+			llb.WithNetworkConfig("my-network"),
+		)
+
+	out := st.AddMount("/out", llb.Scratch())
+	def, err := out.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		Session: []session.Attachable{
+			networks.NewConfigProvider(func(id string) *networks.Config {
+				switch id {
+				case "my-network":
+					return &networks.Config{
+						Dns: &networks.DNSConfig{
+							Nameservers:   []string{"1.1.1.1"},
+							SearchDomains: []string{"zombo.com"},
+							Options:       []string{"ndots:999"},
+						},
+						IpHosts: []*networks.IPHosts{
+							{
+								Ip:    "1.2.3.4",
+								Hosts: []string{"example.com"},
+							},
+						},
+					}
+				default:
+					panic("unknown network ID")
+				}
+			}),
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	resolv, err := os.ReadFile(filepath.Join(destDir, "resolv.conf"))
+	require.NoError(t, err)
+	require.Equal(t, `search zombo.com
+nameserver 1.1.1.1
+options ndots:999
+`, string(resolv))
+
+	hosts, err := os.ReadFile(filepath.Join(destDir, "hosts"))
+	require.NoError(t, err)
+	require.Equal(t, `127.0.0.1	localhost buildkitsandbox
+::1	localhost ip6-localhost ip6-loopback
+1.2.3.4	example.com
+`, string(hosts))
 }

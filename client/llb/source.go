@@ -309,6 +309,10 @@ func Git(remote, ref string, opts ...GitOption) State {
 		}
 		addCap(&gi.Constraints, pb.CapSourceGitMountSSHSock)
 	}
+	if gi.NetworkConfigID != "" {
+		attrs[pb.AttrNetworkConfigID] = gi.NetworkConfigID.String()
+		addCap(&gi.Constraints, pb.CapNetworkConfigs)
+	}
 
 	addCap(&gi.Constraints, pb.CapSourceGit)
 
@@ -333,6 +337,7 @@ type GitInfo struct {
 	addAuthCap       bool
 	KnownSSHHosts    string
 	MountSSHSock     string
+	NetworkConfigID  NetworkConfigID
 }
 
 func KeepGitDir() GitOption {
@@ -583,6 +588,10 @@ func HTTP(url string, opts ...HTTPOption) State {
 		attrs[pb.AttrHTTPGID] = strconv.Itoa(hi.GID)
 		addCap(&hi.Constraints, pb.CapSourceHTTPUIDGID)
 	}
+	if hi.NetworkConfigID != "" {
+		attrs[pb.AttrNetworkConfigID] = hi.NetworkConfigID.String()
+		addCap(&hi.Constraints, pb.CapNetworkConfigs)
+	}
 
 	addCap(&hi.Constraints, pb.CapSourceHTTP)
 	source := NewSource(url, attrs, hi.Constraints)
@@ -591,11 +600,12 @@ func HTTP(url string, opts ...HTTPOption) State {
 
 type HTTPInfo struct {
 	constraintsWrapper
-	Checksum digest.Digest
-	Filename string
-	Perm     int
-	UID      int
-	GID      int
+	Checksum        digest.Digest
+	Filename        string
+	Perm            int
+	UID             int
+	GID             int
+	NetworkConfigID NetworkConfigID
 }
 
 type HTTPOption interface {
@@ -631,6 +641,34 @@ func Chown(uid, gid int) HTTPOption {
 		hi.UID = uid
 		hi.GID = gid
 	})
+}
+
+type NetworkConfigID string
+
+func (id NetworkConfigID) String() string {
+	return string(id)
+}
+
+func WithNetworkConfig(id string) NetworkConfigID {
+	return NetworkConfigID(id)
+}
+
+var _ GitOption = NetworkConfigID("")
+
+func (id NetworkConfigID) SetGitOption(i *GitInfo) {
+	i.NetworkConfigID = id
+}
+
+var _ HTTPOption = NetworkConfigID("")
+
+func (id NetworkConfigID) SetHTTPOption(i *HTTPInfo) {
+	i.NetworkConfigID = id
+}
+
+var _ RunOption = NetworkConfigID("")
+
+func (id NetworkConfigID) SetRunOption(i *ExecInfo) {
+	i.NetworkConfigID = id
 }
 
 func platformSpecificSource(id string) bool {

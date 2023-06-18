@@ -3,6 +3,7 @@ package container
 import (
 	"context"
 	"fmt"
+	"net"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -10,6 +11,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/moby/buildkit/session/networks"
 	"github.com/moby/buildkit/session/secrets"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/system"
@@ -30,13 +32,14 @@ import (
 )
 
 type NewContainerRequest struct {
-	ContainerID string
-	NetMode     opspb.NetMode
-	Hostname    string
-	ExtraHosts  []executor.HostIP
-	Mounts      []Mount
-	Platform    *opspb.Platform
-	Constraints *opspb.WorkerConstraints
+	ContainerID     string
+	NetMode         opspb.NetMode
+	NetworkConfigID string
+	Hostname        string
+	ExtraHosts      []executor.HostIP
+	Mounts          []Mount
+	Platform        *opspb.Platform
+	Constraints     *opspb.WorkerConstraints
 }
 
 // Mount used for the gateway.Container is nearly identical to the client.Mount
@@ -60,6 +63,7 @@ func NewContainer(ctx context.Context, w worker.Worker, sm *session.Manager, g s
 	ctr := &gatewayContainer{
 		id:         req.ContainerID,
 		netMode:    req.NetMode,
+		netConfID:  req.NetworkConfigID,
 		hostname:   req.Hostname,
 		extraHosts: req.ExtraHosts,
 		platform:   platform,
@@ -289,6 +293,7 @@ type gatewayContainer struct {
 	netMode    opspb.NetMode
 	hostname   string
 	extraHosts []executor.HostIP
+	netConfID  string
 	platform   opspb.Platform
 	rootFS     executor.Mount
 	mounts     []executor.Mount
@@ -338,6 +343,32 @@ func (gwCtr *gatewayContainer) Start(ctx context.Context, req client.StartReques
 		return nil, err
 	}
 	procInfo.Meta.Env = append(procInfo.Meta.Env, secretEnv...)
+
+	netCfg, err := gwCtr.loadNetworkConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if netCfg != nil {
+		for _, ipHosts := range netCfg.IpHosts {
+			for _, host := range ipHosts.Hosts {
+				ip := net.ParseIP(ipHosts.Ip)
+				if ip == nil {
+					return nil, errors.Errorf("invalid ip %q", ipHosts.Ip)
+				}
+				procInfo.Meta.ExtraHosts = append(procInfo.Meta.ExtraHosts, executor.HostIP{
+					Host: host,
+					IP:   ip,
+				})
+			}
+		}
+		if netCfg.Dns != nil {
+			procInfo.Meta.DNS = &executor.DNSConfig{
+				Nameservers:   netCfg.Dns.Nameservers,
+				SearchDomains: netCfg.Dns.SearchDomains,
+				Options:       netCfg.Dns.Options,
+			}
+		}
+	}
 
 	// mark that we have started on the first call to execProcess for this
 	// container, so that future calls will call Exec rather than Run
@@ -403,6 +434,23 @@ func (gwCtr *gatewayContainer) loadSecretEnv(ctx context.Context, secretEnv []*p
 		out = append(out, fmt.Sprintf("%s=%s", sopt.Name, string(dt)))
 	}
 	return out, nil
+}
+
+func (gwCtr *gatewayContainer) loadNetworkConfig(ctx context.Context) (*networks.Config, error) {
+	id := gwCtr.netConfID
+	if id == "" {
+		return nil, nil
+	}
+	cfg := &networks.Config{}
+	err := gwCtr.sm.Any(ctx, gwCtr.group, func(ctx context.Context, _ string, caller session.Caller) error {
+		var err error
+		cfg, err = networks.MergeConfig(ctx, caller, cfg, id)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return cfg, nil
 }
 
 func (gwCtr *gatewayContainer) Release(ctx context.Context) error {
