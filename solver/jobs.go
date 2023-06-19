@@ -342,6 +342,13 @@ func (jl *Solver) loadUnlocked(v, parent Vertex, j *Job, cache map[Vertex]Vertex
 	// if same vertex is already loaded without cache just use that
 	st, ok := jl.actives[dgstWithoutCache]
 
+	if ok {
+		// When matching an existing active vertext by dgstWithoutCache, set v to the
+		// existing active vertex, as otherwise the original vertex will use an
+		// incorrect digest and can incorrectly delete it while it is still in use.
+		v = st.vtx
+	}
+
 	if !ok {
 		st, ok = jl.actives[dgst]
 
