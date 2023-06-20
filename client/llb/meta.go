@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"runtime"
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/google/shlex"
@@ -77,7 +76,7 @@ func dirf(value string, replace bool, v ...interface{}) StateOption {
 	}
 	return func(s State) State {
 		return s.withValue(keyDir, func(ctx context.Context, c *Constraints) (interface{}, error) {
-			platform := runtime.GOOS
+			platform := "linux"
 			if c != nil && c.Platform != nil {
 				platform = c.Platform.OS
 			}
