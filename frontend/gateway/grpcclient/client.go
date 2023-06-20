@@ -806,6 +806,7 @@ func (c *grpcClient) NewContainer(ctx context.Context, req client.NewContainerRe
 
 	return &container{
 		client:   c.client,
+		caps:     c.caps,
 		id:       id,
 		execMsgs: c.execMsgs,
 	}, nil
@@ -813,6 +814,7 @@ func (c *grpcClient) NewContainer(ctx context.Context, req client.NewContainerRe
 
 type container struct {
 	client   pb.LLBBridgeClient
+	caps     apicaps.CapSet
 	id       string
 	execMsgs *messageForwarder
 }
@@ -820,6 +822,12 @@ type container struct {
 func (ctr *container) Start(ctx context.Context, req client.StartRequest) (client.ContainerProcess, error) {
 	pid := fmt.Sprintf("%s:%s", ctr.id, identity.NewID())
 	msgs := ctr.execMsgs.Register(pid)
+
+	if len(req.SecretEnv) > 0 {
+		if err := ctr.caps.Supports(pb.CapGatewayExecSecretEnv); err != nil {
+			return nil, err
+		}
+	}
 
 	init := &pb.InitMessage{
 		ContainerID: ctr.id,
