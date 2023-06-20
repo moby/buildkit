@@ -460,7 +460,6 @@ func Copy(input CopyInput, src, dest string, opts ...CopyOption) *FileAction {
 	for _, o := range opts {
 		o.SetCopyOption(&mi)
 	}
-
 	return &FileAction{
 		action: &fileActionCopy{
 			state: state,
@@ -539,10 +538,12 @@ func (a *fileActionCopy) toProtoAction(ctx context.Context, parent string, base 
 }
 
 func (a *fileActionCopy) sourcePath(ctx context.Context, platform string) (string, error) {
-	p := filepath.Clean(a.src)
+	// filepath.Clean() also does a filepath.FromSlash(). Explicitly convert back to UNIX path
+	// separators.
+	p := filepath.ToSlash(filepath.Clean(a.src))
+	dir := "/"
+	var err error
 	if !system.IsAbs(p, platform) {
-		var dir string
-		var err error
 		if a.state != nil {
 			dir, err = a.state.GetDir(ctx)
 		} else if a.fas != nil {
@@ -551,10 +552,10 @@ func (a *fileActionCopy) sourcePath(ctx context.Context, platform string) (strin
 		if err != nil {
 			return "", err
 		}
-		p, err = system.NormalizePath(dir, p, platform, false)
-		if err != nil {
-			return "", errors.Wrap(err, "normalizing source path")
-		}
+	}
+	p, err = system.NormalizePath(dir, p, platform, false)
+	if err != nil {
+		return "", errors.Wrap(err, "normalizing source path")
 	}
 	return p, nil
 }

@@ -997,8 +997,15 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bo
 		return errors.Wrap(err, "normalizing workdir")
 	}
 
-	d.state = d.state.Dir(wd)
+	// NormalizeWorkdir returns paths with platform specific separators. For Windows
+	// this will be of the form: \some\path, which is needed later when we pass it to
+	// HCS.
 	d.image.Config.WorkingDir = wd
+
+	// From this point forward, we can use UNIX style paths.
+	wd = filepath.ToSlash(wd)
+	d.state = d.state.Dir(wd)
+
 	if commit {
 		withLayer := false
 		if wd != "/" {
@@ -1027,11 +1034,10 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bo
 }
 
 func dispatchCopy(d *dispatchState, cfg copyConfig) error {
-	pp, err := pathRelativeToWorkingDir(d.state, cfg.params.DestPath, *d.platform)
+	dest, err := pathRelativeToWorkingDir(d.state, cfg.params.DestPath, *d.platform)
 	if err != nil {
 		return err
 	}
-	dest := filepath.Join("/", pp)
 
 	if cfg.params.DestPath == "." || cfg.params.DestPath == "" || cfg.params.DestPath[len(cfg.params.DestPath)-1] == filepath.Separator {
 		dest += string(filepath.Separator)
@@ -1136,7 +1142,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 				a = a.Copy(st, f, dest, opts...)
 			}
 		} else {
-			src, err = system.CheckSystemDriveAndRemoveDriveLetter(src, d.platform.OS)
+			src, err = system.NormalizePath("/", src, d.platform.OS, false)
 			if err != nil {
 				return errors.Wrap(err, "removing drive letter")
 			}
@@ -1152,9 +1158,9 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 			}}, copyOpt...)
 
 			if a == nil {
-				a = llb.Copy(cfg.source, filepath.Join("/", src), dest, opts...)
+				a = llb.Copy(cfg.source, src, dest, opts...)
 			} else {
-				a = a.Copy(cfg.source, filepath.Join("/", src), dest, opts...)
+				a = a.Copy(cfg.source, src, dest, opts...)
 			}
 		}
 	}
@@ -1178,15 +1184,10 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 			CreateDestPath: true,
 		}}, copyOpt...)
 
-		dest, err = system.CheckSystemDriveAndRemoveDriveLetter(dest, d.platform.OS)
-		if err != nil {
-			return errors.Wrap(err, "removing drive letter")
-		}
-
 		if a == nil {
-			a = llb.Copy(st, f, dest, opts...)
+			a = llb.Copy(st, filepath.ToSlash(f), dest, opts...)
 		} else {
-			a = a.Copy(st, f, dest, opts...)
+			a = a.Copy(st, filepath.ToSlash(f), dest, opts...)
 		}
 	}
 
