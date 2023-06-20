@@ -38,7 +38,7 @@ service LLBBridge {
 	rpc ExecProcess(stream ExecMessage) returns (stream ExecMessage);
 
 	// apicaps:CapGatewayWarnings
-	rpc Warn(WarnRequest) returns (WarnResponse); 
+	rpc Warn(WarnRequest) returns (WarnResponse);
 }
 
 message Result {
@@ -138,7 +138,7 @@ message SolveRequest {
 	// 4 was removed in BuildKit v0.11.0.
 	bool allowResultReturn = 5;
 	bool allowResultArrayRef = 6;
-	
+
 	// apicaps.CapSolveInlineReturn deprecated
 	bool Final = 10;
 	bytes ExporterAttr = 11;
@@ -165,7 +165,7 @@ message SolveResponse {
 	string ref = 1; // can be used by readfile request
 	// deprecated
 /*	bytes ExporterAttr = 2;*/
-	
+
 	// these fields are returned when allowMapReturn was set
 	Result result = 3;
 }
@@ -256,7 +256,7 @@ message ExecMessage {
 		// InitMessage sent from client to server will start a new process in a
 		// container
 		InitMessage Init = 2;
-		// FdMessage used from client to server for input (stdin) and 
+		// FdMessage used from client to server for input (stdin) and
 		// from server to client for output (stdout, stderr)
 		FdMessage File = 3;
 		// ResizeMessage used from client to server for terminal resize events
@@ -281,6 +281,7 @@ message InitMessage{
 	repeated uint32 Fds = 3;
 	bool Tty = 4;
 	pb.SecurityMode Security = 5;
+	repeated pb.SecretEnv secretenv = 6;
 }
 
 message ExitMessage {

@@ -824,14 +824,14 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 	init := &pb.InitMessage{
 		ContainerID: ctr.id,
 		Meta: &opspb.Meta{
-			Args:      req.Args,
-			Env:       req.Env,
-			Cwd:       req.Cwd,
-			User:      req.User,
-			Secretenv: req.SecretEnv,
+			Args: req.Args,
+			Env:  req.Env,
+			Cwd:  req.Cwd,
+			User: req.User,
 		},
-		Tty:      req.Tty,
-		Security: req.SecurityMode,
+		Tty:       req.Tty,
+		Security:  req.SecurityMode,
+		Secretenv: req.SecretEnv,
 	}
 	init.Meta.RemoveMountStubsRecursive = req.RemoveMountStubsRecursive
 	if req.Stdin != nil {

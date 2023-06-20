@@ -64,7 +64,6 @@ message Meta {
 	repeated Ulimit ulimit = 9;
 	string cgroupParent = 10;
 	bool removeMountStubsRecursive = 11;
-	repeated SecretEnv secretenv = 12;
 }
 
 message HostIP {

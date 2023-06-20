@@ -1300,7 +1300,7 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 				proc, err := ctr.Start(initCtx, gwclient.StartRequest{
 					Args:                      init.Meta.Args,
 					Env:                       init.Meta.Env,
-					SecretEnv:                 init.Meta.Secretenv,
+					SecretEnv:                 init.Secretenv,
 					User:                      init.Meta.User,
 					Cwd:                       init.Meta.Cwd,
 					Tty:                       init.Tty,
