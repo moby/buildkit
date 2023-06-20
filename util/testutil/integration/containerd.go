@@ -230,6 +230,10 @@ disabled_plugins = ["cri"]
 	}, cl, nil
 }
 
+func (c *Containerd) Close() error {
+	return nil
+}
+
 func formatLogs(m map[string]*bytes.Buffer) string {
 	var ss []string
 	for k, b := range m {
