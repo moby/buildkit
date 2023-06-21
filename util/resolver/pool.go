@@ -84,10 +84,20 @@ func (p *Pool) GetResolver(hosts docker.RegistryHosts, ref, scope string, sm *se
 		name = named.Name()
 	}
 
-	// Index the authHandlerNS cache by session id(s) as well to prevent tokens
-	// from leaking between client sessions. The key will end up looking
-	// something like 'wujskoey891qc5cv1edd3yj3p::repository:foo/bar::pull,push'
-	key := fmt.Sprintf("%s::%s::%s", strings.Join(session.AllSessionIDs(g), ":"), name, scope)
+	var key string
+	if strings.Contains(scope, "push") {
+		// When scope includes "push", index the authHandlerNS cache by session
+		// id(s) as well to prevent tokens with potential write access to third
+		// party registries from leaking between client sessions. The key will end
+		// up looking something like:
+		// 'wujskoey891qc5cv1edd3yj3p::repository:foo/bar::pull,push'
+		key = fmt.Sprintf("%s::%s::%s", strings.Join(session.AllSessionIDs(g), ":"), name, scope)
+	} else {
+		// The authHandlerNS is not isolated for pull-only scopes since LLB
+		// verticies from pulls all end up in the cache anyway and all
+		// requests/clients have access to the same cache
+		key = fmt.Sprintf("%s::%s", name, scope)
+	}
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
