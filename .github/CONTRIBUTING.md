@@ -18,7 +18,6 @@ We also like to send gifts&mdash;if you're into schwag, make sure to let
 us know. We currently do not offer a paid security bounty program, but are not
 ruling it out in the future.
 
-
 ## Reporting other issues
 
 A great way to contribute to the project is to send a detailed report when you
@@ -52,7 +51,6 @@ Dependencies:
 - [runc](https://github.com/opencontainers/runc)
 - [containerd](https://github.com/containerd/containerd) (if you want to use containerd worker)
 
-
 The following command installs `buildkitd` and `buildctl` to `/usr/local/bin`:
 
 ```bash
@@ -62,6 +60,72 @@ make && sudo make install
 To build containerized `moby/buildkit:local` and `moby/buildkit:local-rootless` images:
 ```bash
 make images
+```
+
+### Run BuildKit
+
+You can launch the backend BuildKit daemon either in a container, or directly:
+
+```bash
+# run the daemon in a container
+$ docker run --rm -d --name buildkitd --privileged moby/buildkit:local
+$ export BUILDKIT_HOST=docker-container://buildkitd
+$ buildctl debug info
+BuildKit: github.com/moby/buildkit v0.11.0-rc3-623-g2ff0d2a2f.m 2ff0d2a2f53663aae917980fa27eada7950ff69c.m
+```
+
+```bash
+# run the daemon directly (only on linux)
+$ sudo buildkitd
+$ export BUILDKIT_HOST=unix:///run/buildkit/buildkitd.sock
+$ sudo buildctl debug info
+BuildKit: github.com/moby/buildkit v0.11.0-rc3-506-g539bab193.m 539bab193c28d3ce731e6013f471ba24848f5c41.m
+```
+
+You can also connect buildx to the BuildKit daemon using the [`remote` driver](https://docs.docker.com/build/drivers/remote/):
+
+```bash
+$ docker buildx create --driver=remote --name=dev $BUILDKIT_HOST
+$ docker buildx --builder=dev inspect
+Name:          dev
+Driver:        remote
+Last Activity: 2023-06-06 14:15:52 +0000 UTC
+
+Nodes:
+Name:      dev0
+Endpoint:  tcp://localhost:1234
+Status:    running
+Buildkit:  v0.11.0-rc3-506-g539bab193.m
+Platforms: linux/amd64, linux/amd64/v2, linux/amd64/v3, linux/386
+```
+
+### Run BuildKit using Buildx
+
+You can also have buildx run and manage the custom BuildKit daemon itself using
+the [`docker-container` driver](https://docs.docker.com/build/drivers/remote/).
+
+This is usually the easiest way to get started with a custom BuildKit daemon
+for development or debugging.
+    
+```bash
+$ docker buildx rm dev || true # remove previous dev builder if exists
+$ docker buildx create --driver=docker-container --name=dev --driver-opt image=moby/buildkit:local --bootstrap
+[+] Building 0.3s (1/1) FINISHED                                                                                                                           
+ => [internal] booting buildkit
+ => => starting container buildx_buildkit_dev0
+dev
+$ docker buildx --builder=dev inspect
+Name:          dev
+Driver:        docker-container
+Last Activity: 2023-06-06 14:15:52 +0000 UTC
+
+Nodes:
+Name:           dev0
+Endpoint:       desktop-linux
+Driver Options: image="moby/buildkit:local"
+Status:         running
+Buildkit:       v0.11.0-rc3-623-g2ff0d2a2f.m
+Platforms:      linux/amd64, linux/amd64/v2, linux/amd64/v3, linux/arm64, linux/riscv64, linux/ppc64le, linux/s390x, linux/386, linux/mips64le, linux/mips64, linux/arm/v7, linux/arm/v6
 ```
 
 ### Run the unit- and integration-tests
@@ -101,20 +165,25 @@ If you are working behind a proxy, you can set some of or all
 `HTTP_PROXY=http://ip:port`, `HTTPS_PROXY=http://ip:port`, `NO_PROXY=http://ip:port` for the test framework
 to specify the proxy build args.
 
-Updating vendored dependencies:
+### Run the helper commands
+
+To validate PRs before submitting them you should run:
 
 ```bash
-# update vendor.conf
-make vendor
+$ make validate-all
 ```
 
-Validating your updates before submission:
+To generate new vendored files with go modules run:
 
 ```bash
-make validate-all
+$ make vendor
 ```
 
+To generate new versions of automatically generated files run:
 
+```bash
+$ make generated-files
+```
 
 ### Pull requests are always welcome
 
@@ -330,12 +399,10 @@ down to one.
   from the Git history.
 - See the [Coding Style](#coding-style) for further guidelines.
 
-
 ### Merge approval
 
 Project maintainers use LGTM (Looks Good To Me) in comments on the code review to
 indicate acceptance, or use the Github review approval feature.
-
 
 ## Coding Style
 
@@ -353,29 +420,29 @@ mind when nudging others to comply.
 
 The rules:
 
-1. All code should be formatted with `gofmt -s`.
-2. All code should pass the default levels of
-   [`golint`](https://github.com/golang/lint).
-3. All code should follow the guidelines covered in [Effective
-   Go](http://golang.org/doc/effective_go.html) and [Go Code Review
-   Comments](https://github.com/golang/go/wiki/CodeReviewComments).
-4. Comment the code. Tell us the why, the history and the context.
-5. Document _all_ declarations and methods, even private ones. Declare
-   expectations, caveats and anything else that may be important. If a type
-   gets exported, having the comments already there will ensure it's ready.
-6. Variable name length should be proportional to its context and no longer.
-   `noCommaALongVariableNameLikeThisIsNotMoreClearWhenASimpleCommentWouldDo`.
-   In practice, short methods will have short variable names and globals will
-   have longer names.
-7. No underscores in package names. If you need a compound name, step back,
-   and re-examine why you need a compound name. If you still think you need a
-   compound name, lose the underscore.
-8. No utils or helpers packages. If a function is not general enough to
-   warrant its own package, it has not been written generally enough to be a
-   part of a util package. Just leave it unexported and well-documented.
-9. All tests should run with `go test` and outside tooling should not be
-   required. No, we don't need another unit testing framework. Assertion
-   packages are acceptable if they provide _real_ incremental value.
+1.  All code should be formatted with `gofmt -s`.
+2.  All code should pass the default levels of
+    [`golint`](https://github.com/golang/lint).
+3.  All code should follow the guidelines covered in [Effective
+    Go](http://golang.org/doc/effective_go.html) and [Go Code Review
+    Comments](https://github.com/golang/go/wiki/CodeReviewComments).
+4.  Comment the code. Tell us the why, the history and the context.
+5.  Document _all_ declarations and methods, even private ones. Declare
+    expectations, caveats and anything else that may be important. If a type
+    gets exported, having the comments already there will ensure it's ready.
+6.  Variable name length should be proportional to its context and no longer.
+    `noCommaALongVariableNameLikeThisIsNotMoreClearWhenASimpleCommentWouldDo`.
+    In practice, short methods will have short variable names and globals will
+    have longer names.
+7.  No underscores in package names. If you need a compound name, step back,
+    and re-examine why you need a compound name. If you still think you need a
+    compound name, lose the underscore.
+8.  No utils or helpers packages. If a function is not general enough to
+    warrant its own package, it has not been written generally enough to be a
+    part of a util package. Just leave it unexported and well-documented.
+9.  All tests should run with `go test` and outside tooling should not be
+    required. No, we don't need another unit testing framework. Assertion
+    packages are acceptable if they provide _real_ incremental value.
 10. Even though we call these "rules" above, they are actually just
     guidelines. Since you've read all the rules, you now know that.
 
