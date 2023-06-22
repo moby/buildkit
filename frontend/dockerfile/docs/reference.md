@@ -588,19 +588,6 @@ guide](https://docs.docker.com/engine/userguide/eng-image/dockerfile_best-practi
 
 The cache for `RUN` instructions can be invalidated by [`ADD`](#add) and [`COPY`](#copy) instructions.
 
-### Known issues (RUN)
-
-- [Issue 783](https://github.com/docker/docker/issues/783) is about file
-  permissions problems that can occur when using the AUFS file system. You
-  might notice it during an attempt to `rm` a file, for example.
-
-  For systems that have recent aufs version (i.e., `dirperm1` mount option can
-  be set), docker will attempt to fix the issue automatically by mounting
-  the layers with `dirperm1` option. More details on `dirperm1` option can be
-  found at [`aufs` man page](https://github.com/sfjro/aufs3-linux/tree/aufs3.18/Documentation/filesystems/aufs)
-
-  If your system doesn't have support for `dirperm1`, the issue describes a workaround.
-
 ## RUN --mount
 
 > **Note**
