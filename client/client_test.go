@@ -3765,66 +3765,95 @@ func testBuildExportZstd(t *testing.T, sb integration.Sandbox) {
 
 func testPullZstdImage(t *testing.T, sb integration.Sandbox) {
 	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
-	c, err := New(sb.Context(), sb.Address())
-	require.NoError(t, err)
-	defer c.Close()
+	for _, ociMediaTypes := range []bool{true, false} {
+		ociMediaTypes := ociMediaTypes
+		t.Run(t.Name()+fmt.Sprintf("/ociMediaTypes=%t", ociMediaTypes), func(t *testing.T) {
+			c, err := New(sb.Context(), sb.Address())
+			require.NoError(t, err)
+			defer c.Close()
 
-	busybox := llb.Image("busybox:latest")
-	cmd := `sh -e -c "echo -n zstd > data"`
+			busybox := llb.Image("busybox:latest")
+			cmd := `sh -e -c "echo -n zstd > data"`
 
-	st := llb.Scratch()
-	st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+			st := llb.Scratch()
+			st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
 
-	def, err := st.Marshal(sb.Context())
-	require.NoError(t, err)
+			def, err := st.Marshal(sb.Context())
+			require.NoError(t, err)
 
-	registry, err := sb.NewRegistry()
-	if errors.Is(err, integration.ErrRequirements) {
-		t.Skip(err.Error())
-	}
-	require.NoError(t, err)
+			registry, err := sb.NewRegistry()
+			if errors.Is(err, integration.ErrRequirements) {
+				t.Skip(err.Error())
+			}
+			require.NoError(t, err)
 
-	target := registry + "/buildkit/build/exporter:zstd"
+			target := registry + "/buildkit/build/exporter:zstd"
 
-	_, err = c.Solve(sb.Context(), def, SolveOpt{
-		Exports: []ExportEntry{
-			{
-				Type: ExporterImage,
-				Attrs: map[string]string{
-					"name":        target,
-					"push":        "true",
-					"compression": "zstd",
-
-					// containerd applier supports only zstd with oci-mediatype.
-					"oci-mediatypes": "true",
+			_, err = c.Solve(sb.Context(), def, SolveOpt{
+				Exports: []ExportEntry{
+					{
+						Type: ExporterImage,
+						Attrs: map[string]string{
+							"name":           target,
+							"push":           "true",
+							"compression":    "zstd",
+							"oci-mediatypes": strconv.FormatBool(ociMediaTypes),
+						},
+					},
 				},
-			},
-		},
-	}, nil)
-	require.NoError(t, err)
+			}, nil)
+			require.NoError(t, err)
 
-	ensurePruneAll(t, c, sb)
+			ensurePruneAll(t, c, sb)
 
-	st = llb.Scratch().File(llb.Copy(llb.Image(target), "/data", "/zdata"))
+			st = llb.Image(target).File(llb.Copy(llb.Image(target), "/data", "/zdata"))
+			def, err = st.Marshal(sb.Context())
+			require.NoError(t, err)
 
-	def, err = st.Marshal(sb.Context())
-	require.NoError(t, err)
+			destDir := t.TempDir()
 
-	destDir := t.TempDir()
+			out := filepath.Join(destDir, "out.tar")
+			outW, err := os.Create(out)
+			require.NoError(t, err)
 
-	_, err = c.Solve(sb.Context(), def, SolveOpt{
-		Exports: []ExportEntry{
-			{
-				Type:      ExporterLocal,
-				OutputDir: destDir,
-			},
-		},
-	}, nil)
-	require.NoError(t, err)
+			_, err = c.Solve(sb.Context(), def, SolveOpt{
+				Exports: []ExportEntry{
+					{
+						Type:   ExporterOCI,
+						Output: fixedWriteCloser(outW),
+						Attrs: map[string]string{
+							"oci-mediatypes": strconv.FormatBool(ociMediaTypes),
+						},
+					},
+				},
+			}, nil)
+			require.NoError(t, err)
 
-	dt, err := os.ReadFile(filepath.Join(destDir, "zdata"))
-	require.NoError(t, err)
-	require.Equal(t, dt, []byte("zstd"))
+			dt, err := os.ReadFile(out)
+			require.NoError(t, err)
+
+			m, err := testutil.ReadTarToMap(dt, false)
+			require.NoError(t, err)
+
+			var index ocispecs.Index
+			err = json.Unmarshal(m["index.json"].Data, &index)
+			require.NoError(t, err)
+
+			var mfst ocispecs.Manifest
+			err = json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].Data, &mfst)
+			require.NoError(t, err)
+
+			firstLayer := mfst.Layers[0]
+			if ociMediaTypes {
+				require.Equal(t, ocispecs.MediaTypeImageLayer+"+zstd", firstLayer.MediaType)
+			} else {
+				require.Equal(t, images.MediaTypeDockerSchema2Layer+".zstd", firstLayer.MediaType)
+			}
+
+			zstdLayerDigest := firstLayer.Digest.Hex()
+			require.Equal(t, m["blobs/sha256/"+zstdLayerDigest].Data[:4], []byte{0x28, 0xb5, 0x2f, 0xfd})
+		})
+	}
 }
 func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
