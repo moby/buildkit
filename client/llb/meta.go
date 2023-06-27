@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"path"
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/google/shlex"
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/moby/buildkit/util/system"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
@@ -76,19 +76,15 @@ func dirf(value string, replace bool, v ...interface{}) StateOption {
 	}
 	return func(s State) State {
 		return s.withValue(keyDir, func(ctx context.Context, c *Constraints) (interface{}, error) {
-			platform := "linux"
-			if c != nil && c.Platform != nil {
-				platform = c.Platform.OS
-			}
-			if !system.IsAbs(value, platform) {
+			if !path.IsAbs(value) {
 				prev, err := getDir(s)(ctx, c)
 				if err != nil {
 					return nil, errors.Wrap(err, "getting dir from state")
 				}
-				value, err = system.NormalizePath(prev, value, platform, false)
-				if err != nil {
-					return nil, errors.Wrap(err, "normalizing path")
+				if prev == "" {
+					prev = "/"
 				}
+				value = path.Join(prev, value)
 			}
 			return value, nil
 		})
