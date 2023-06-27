@@ -302,8 +302,7 @@ func (s State) File(a *FileAction, opts ...ConstraintsOpt) State {
 	// No platform was set by constraint options. Set the current OS and arch.
 	if c.Platform == nil {
 		c.Platform = &ocispecs.Platform{
-			OS:           "linux",
-			Architecture: "amd64",
+			OS: "linux",
 		}
 	}
 	return s.WithOutput(NewFileOp(s, a, c).Output())
