@@ -12,6 +12,7 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/executor/resources"
 	"github.com/moby/buildkit/exporter/containerimage"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend"
@@ -357,6 +358,13 @@ func captureProvenance(ctx context.Context, res solver.CachedResultWithProvenanc
 			if pr.Network != pb.NetMode_NONE {
 				c.NetworkAccess = true
 			}
+			samples, err := op.Samples()
+			if err != nil {
+				return err
+			}
+			if samples != nil {
+				c.AddSamples(op.Digest(), samples)
+			}
 		case *ops.BuildOp:
 			c.IncompleteMaterials = true // not supported yet
 		}
@@ -371,10 +379,11 @@ func captureProvenance(ctx context.Context, res solver.CachedResultWithProvenanc
 type ProvenanceCreator struct {
 	pr        *provenance.ProvenancePredicate
 	j         *solver.Job
+	sampler   *resources.SysSampler
 	addLayers func() error
 }
 
-func NewProvenanceCreator(ctx context.Context, cp *provenance.Capture, res solver.ResultProxy, attrs map[string]string, j *solver.Job) (*ProvenanceCreator, error) {
+func NewProvenanceCreator(ctx context.Context, cp *provenance.Capture, res solver.ResultProxy, attrs map[string]string, j *solver.Job, usage *resources.SysSampler) (*ProvenanceCreator, error) {
 	var reproducible bool
 	if v, ok := attrs["reproducible"]; ok {
 		b, err := strconv.ParseBool(v)
@@ -394,6 +403,12 @@ func NewProvenanceCreator(ctx context.Context, cp *provenance.Capture, res solve
 		default:
 			return nil, errors.Errorf("invalid mode %q", v)
 		}
+	}
+
+	withUsage := false
+	if v, ok := attrs["capture-usage"]; ok {
+		b, err := strconv.ParseBool(v)
+		withUsage = err == nil && b
 	}
 
 	pr, err := provenance.NewPredicate(cp)
@@ -425,7 +440,7 @@ func NewProvenanceCreator(ctx context.Context, cp *provenance.Capture, res solve
 		pr.Invocation.Parameters.Secrets = nil
 		pr.Invocation.Parameters.SSH = nil
 	case "max":
-		dgsts, err := AddBuildConfig(ctx, pr, res)
+		dgsts, err := AddBuildConfig(ctx, pr, cp, res, withUsage)
 		if err != nil {
 			return nil, err
 		}
@@ -480,11 +495,15 @@ func NewProvenanceCreator(ctx context.Context, cp *provenance.Capture, res solve
 		return nil, errors.Errorf("invalid mode %q", mode)
 	}
 
-	return &ProvenanceCreator{
+	pc := &ProvenanceCreator{
 		pr:        pr,
 		j:         j,
 		addLayers: addLayers,
-	}, nil
+	}
+	if withUsage {
+		pc.sampler = usage
+	}
+	return pc, nil
 }
 
 func (p *ProvenanceCreator) Predicate() (*provenance.ProvenancePredicate, error) {
@@ -495,6 +514,14 @@ func (p *ProvenanceCreator) Predicate() (*provenance.ProvenancePredicate, error)
 		if err := p.addLayers(); err != nil {
 			return nil, err
 		}
+	}
+
+	if p.sampler != nil {
+		sysSamples, err := p.sampler.Close(true)
+		if err != nil {
+			return nil, err
+		}
+		p.pr.Metadata.BuildKitMetadata.SysUsage = sysSamples
 	}
 
 	return p.pr, nil
@@ -572,9 +599,9 @@ func resolveRemotes(ctx context.Context, res solver.Result) ([]*solver.Remote, e
 	return remotes, nil
 }
 
-func AddBuildConfig(ctx context.Context, p *provenance.ProvenancePredicate, rp solver.ResultProxy) (map[digest.Digest]int, error) {
+func AddBuildConfig(ctx context.Context, p *provenance.ProvenancePredicate, c *provenance.Capture, rp solver.ResultProxy, withUsage bool) (map[digest.Digest]int, error) {
 	def := rp.Definition()
-	steps, indexes, err := toBuildSteps(def)
+	steps, indexes, err := toBuildSteps(def, c, withUsage)
 	if err != nil {
 		return nil, err
 	}
@@ -589,7 +616,7 @@ func AddBuildConfig(ctx context.Context, p *provenance.ProvenancePredicate, rp s
 	if def.Source != nil {
 		sis := make([]provenance.SourceInfo, len(def.Source.Infos))
 		for i, si := range def.Source.Infos {
-			steps, indexes, err := toBuildSteps(si.Definition)
+			steps, indexes, err := toBuildSteps(si.Definition, c, withUsage)
 			if err != nil {
 				return nil, err
 			}
@@ -634,7 +661,7 @@ func digestMap(idx map[digest.Digest]int) map[digest.Digest]string {
 	return m
 }
 
-func toBuildSteps(def *pb.Definition) ([]provenance.BuildStep, map[digest.Digest]int, error) {
+func toBuildSteps(def *pb.Definition, c *provenance.Capture, withUsage bool) ([]provenance.BuildStep, map[digest.Digest]int, error) {
 	if def == nil || len(def.Def) == 0 {
 		return nil, nil, nil
 	}
@@ -694,11 +721,15 @@ func toBuildSteps(def *pb.Definition) ([]provenance.BuildStep, map[digest.Digest
 			inputs[i] = fmt.Sprintf("step%d:%d", indexes[inp.Digest], inp.Index)
 		}
 		op.Inputs = nil
-		out = append(out, provenance.BuildStep{
+		s := provenance.BuildStep{
 			ID:     fmt.Sprintf("step%d", i),
 			Inputs: inputs,
 			Op:     op,
-		})
+		}
+		if withUsage {
+			s.ResourceUsage = c.Samples[dgst]
+		}
+		out = append(out, s)
 	}
 	return out, indexes, nil
 }

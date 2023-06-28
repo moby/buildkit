@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	distreference "github.com/docker/distribution/reference"
+	resourcestypes "github.com/moby/buildkit/executor/resources/types"
 	"github.com/moby/buildkit/solver/result"
 	"github.com/moby/buildkit/util/urlutil"
 	digest "github.com/opencontainers/go-digest"
@@ -58,6 +59,7 @@ type Capture struct {
 	SSH                 []SSH
 	NetworkAccess       bool
 	IncompleteMaterials bool
+	Samples             map[digest.Digest]*resourcestypes.Samples
 }
 
 func (c *Capture) Merge(c2 *Capture) error {
@@ -213,6 +215,13 @@ func (c *Capture) AddSSH(s SSH) {
 		}
 	}
 	c.SSH = append(c.SSH, s)
+}
+
+func (c *Capture) AddSamples(dgst digest.Digest, samples *resourcestypes.Samples) {
+	if c.Samples == nil {
+		c.Samples = map[digest.Digest]*resourcestypes.Samples{}
+	}
+	c.Samples[dgst] = samples
 }
 
 func parseRefName(s string) (distreference.Named, string, error) {

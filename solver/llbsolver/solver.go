@@ -17,6 +17,8 @@ import (
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/client"
 	controlgateway "github.com/moby/buildkit/control/gateway"
+	"github.com/moby/buildkit/executor/resources"
+	resourcetypes "github.com/moby/buildkit/executor/resources/types"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend"
@@ -74,6 +76,7 @@ type Opt struct {
 	SessionManager   *session.Manager
 	WorkerController *worker.Controller
 	HistoryQueue     *HistoryQueue
+	ResourceMonitor  *resources.Monitor
 }
 
 type Solver struct {
@@ -87,11 +90,12 @@ type Solver struct {
 	sm                        *session.Manager
 	entitlements              []string
 	history                   *HistoryQueue
+	sysSampler                *resources.Sampler[*resourcetypes.SysSample]
 }
 
 // Processor defines a processing function to be applied after solving, but
 // before exporting
-type Processor func(ctx context.Context, result *Result, s *Solver, j *solver.Job) (*Result, error)
+type Processor func(ctx context.Context, result *Result, s *Solver, j *solver.Job, usage *resources.SysSampler) (*Result, error)
 
 func New(opt Opt) (*Solver, error) {
 	s := &Solver{
@@ -105,6 +109,12 @@ func New(opt Opt) (*Solver, error) {
 		entitlements:              opt.Entitlements,
 		history:                   opt.HistoryQueue,
 	}
+
+	sampler, err := resources.NewSysSampler()
+	if err != nil {
+		return nil, err
+	}
+	s.sysSampler = sampler
 
 	s.solver = solver.NewSolver(solver.SolverOpt{
 		ResolveOpFunc: s.resolver(),
@@ -139,7 +149,7 @@ func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 	return s.bridge(b)
 }
 
-func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend.SolveRequest, exp ExporterRequest, j *solver.Job) (func(*Result, exporter.DescriptorReference, error) error, error) {
+func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend.SolveRequest, exp ExporterRequest, j *solver.Job, usage *resources.SysSampler) (func(*Result, exporter.DescriptorReference, error) error, error) {
 	var stopTrace func() []tracetest.SpanStub
 
 	if s := trace.SpanFromContext(ctx); s.SpanContext().IsValid() {
@@ -194,11 +204,12 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 		var releasers []func()
 
 		attrs := map[string]string{
-			"mode": "max",
+			"mode":          "max",
+			"capture-usage": "true",
 		}
 
 		makeProvenance := func(res solver.ResultProxy, cap *provenance.Capture) (*controlapi.Descriptor, func(), error) {
-			prc, err := NewProvenanceCreator(ctx2, cap, res, attrs, j)
+			prc, err := NewProvenanceCreator(ctx2, cap, res, attrs, j, usage)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -405,6 +416,9 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 
 	defer j.Discard()
 
+	usage := s.sysSampler.Record()
+	defer usage.Close(false)
+
 	var res *frontend.Result
 	var resProv *Result
 	var descref exporter.DescriptorReference
@@ -451,7 +465,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	}
 
 	if !internal {
-		rec, err1 := s.recordBuildHistory(ctx, id, req, exp, j)
+		rec, err1 := s.recordBuildHistory(ctx, id, req, exp, j, usage)
 		if err1 != nil {
 			defer j.CloseProgress()
 			return nil, err1
@@ -508,7 +522,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	}
 
 	for _, post := range post {
-		res2, err := post(ctx, resProv, s, j)
+		res2, err := post(ctx, resProv, s, j, usage)
 		if err != nil {
 			return nil, err
 		}
@@ -735,8 +749,12 @@ func getRefProvenance(ref solver.ResultProxy, br *provenanceBridge) (*provenance
 	}
 	p := ref.Provenance()
 	if p == nil {
-		return nil, errors.Errorf("missing provenance for %s", ref.ID())
+		if br.req != nil {
+			return nil, errors.Errorf("missing provenance for %s", ref.ID())
+		}
+		return nil, nil
 	}
+
 	pr, ok := p.(*provenance.Capture)
 	if !ok {
 		return nil, errors.Errorf("invalid provenance type %T", p)

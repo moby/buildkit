@@ -18,16 +18,21 @@ var unsupportedConsoleError = errors.New("tty for runc is only supported on linu
 
 func updateRuncFieldsForHostOS(runtime *runc.Runc) {}
 
-func (w *runcExecutor) run(ctx context.Context, id, bundle string, process executor.ProcessInfo, started func()) error {
+func (w *runcExecutor) run(ctx context.Context, id, bundle string, process executor.ProcessInfo, started func(), keep bool) error {
 	if process.Meta.Tty {
 		return unsupportedConsoleError
+	}
+	extraArgs := []string{}
+	if keep {
+		extraArgs = append(extraArgs, "--keep")
 	}
 	killer := newRunProcKiller(w.runc, id)
 	return w.commonCall(ctx, id, bundle, process, started, killer, func(ctx context.Context, started chan<- int, io runc.IO, pidfile string) error {
 		_, err := w.runc.Run(ctx, id, bundle, &runc.CreateOpts{
-			NoPivot: w.noPivot,
-			Started: started,
-			IO:      io,
+			NoPivot:   w.noPivot,
+			Started:   started,
+			IO:        io,
+			ExtraArgs: extraArgs,
 		})
 		return err
 	})

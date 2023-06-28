@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/executor/resources"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/attestations/sbom"
@@ -14,7 +15,7 @@ import (
 )
 
 func SBOMProcessor(scannerRef string, useCache bool) llbsolver.Processor {
-	return func(ctx context.Context, res *llbsolver.Result, s *llbsolver.Solver, j *solver.Job) (*llbsolver.Result, error) {
+	return func(ctx context.Context, res *llbsolver.Result, s *llbsolver.Solver, j *solver.Job, usage *resources.SysSampler) (*llbsolver.Result, error) {
 		// skip sbom generation if we already have an sbom
 		if sbom.HasSBOM(res.Result) {
 			return res, nil

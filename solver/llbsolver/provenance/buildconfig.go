@@ -1,6 +1,7 @@
 package provenance
 
 import (
+	resourcestypes "github.com/moby/buildkit/executor/resources/types"
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 )
@@ -11,9 +12,10 @@ type BuildConfig struct {
 }
 
 type BuildStep struct {
-	ID     string      `json:"id,omitempty"`
-	Op     interface{} `json:"op,omitempty"`
-	Inputs []string    `json:"inputs,omitempty"`
+	ID            string                  `json:"id,omitempty"`
+	Op            interface{}             `json:"op,omitempty"`
+	Inputs        []string                `json:"inputs,omitempty"`
+	ResourceUsage *resourcestypes.Samples `json:"resourceUsage,omitempty"`
 }
 
 type Source struct {
