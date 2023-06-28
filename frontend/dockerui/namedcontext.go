@@ -58,7 +58,7 @@ func (bc *Client) namedContext(ctx context.Context, name string, nameWithPlatfor
 
 		named = reference.TagNameOnly(named)
 
-		_, data, err := bc.client.ResolveImageConfig(ctx, named.String(), llb.ResolveImageConfigOpt{
+		dgst, data, err := bc.client.ResolveImageConfig(ctx, named.String(), llb.ResolveImageConfigOpt{
 			Platform:     opt.Platform,
 			ResolveMode:  opt.ResolveMode,
 			LogName:      fmt.Sprintf("[context %s] load metadata for %s", nameWithPlatform, ref),
@@ -67,7 +67,6 @@ func (bc *Client) namedContext(ctx context.Context, name string, nameWithPlatfor
 		if err != nil {
 			return nil, nil, err
 		}
-
 		var img image.Image
 		if err := json.Unmarshal(data, &img); err != nil {
 			return nil, nil, err
@@ -78,6 +77,9 @@ func (bc *Client) namedContext(ctx context.Context, name string, nameWithPlatfor
 		st, err = st.WithImageConfig(data)
 		if err != nil {
 			return nil, nil, err
+		}
+		if opt.CaptureDigest != nil {
+			*opt.CaptureDigest = dgst
 		}
 		return &st, &img, nil
 	case "git":
@@ -119,7 +121,7 @@ func (bc *Client) namedContext(ctx context.Context, name string, nameWithPlatfor
 			return nil, nil, errors.Wrapf(err, "could not wrap %q with digest", name)
 		}
 
-		_, data, err := bc.client.ResolveImageConfig(ctx, dummyRef.String(), llb.ResolveImageConfigOpt{
+		dgst, data, err := bc.client.ResolveImageConfig(ctx, dummyRef.String(), llb.ResolveImageConfigOpt{
 			Platform:     opt.Platform,
 			ResolveMode:  opt.ResolveMode,
 			LogName:      fmt.Sprintf("[context %s] load metadata for %s", nameWithPlatform, dummyRef.String()),
@@ -152,6 +154,9 @@ func (bc *Client) namedContext(ctx context.Context, name string, nameWithPlatfor
 		st, err = st.WithImageConfig(data)
 		if err != nil {
 			return nil, nil, err
+		}
+		if opt.CaptureDigest != nil {
+			*opt.CaptureDigest = dgst
 		}
 		return &st, &img, nil
 	case "local":
