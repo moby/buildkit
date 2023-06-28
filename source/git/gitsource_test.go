@@ -21,7 +21,6 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/native"
-	"github.com/docker/docker/pkg/reexec"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
@@ -35,12 +34,6 @@ import (
 	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
 )
-
-func init() {
-	if reexec.Init() {
-		os.Exit(0)
-	}
-}
 
 func TestRepeatedFetch(t *testing.T) {
 	testRepeatedFetch(t, false)
