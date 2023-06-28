@@ -99,7 +99,9 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 
 	var scanner sbom.Scanner
 	if bc.SBOM != nil {
-		scanner, err = sbom.CreateSBOMScanner(ctx, c, bc.SBOM.Generator)
+		scanner, err = sbom.CreateSBOMScanner(ctx, c, bc.SBOM.Generator, llb.ResolveImageConfigOpt{
+			ResolveMode: opts["image-resolve-mode"],
+		})
 		if err != nil {
 			return nil, err
 		}

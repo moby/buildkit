@@ -17,6 +17,7 @@ import (
 	apitypes "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	controlgateway "github.com/moby/buildkit/control/gateway"
 	"github.com/moby/buildkit/exporter"
@@ -414,14 +415,19 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to parse sbom generator %s", src)
 		}
+		ref = reference.TagNameOnly(ref)
 
 		useCache := true
 		if v, ok := req.FrontendAttrs["no-cache"]; ok && v == "" {
 			// disable cache if cache is disabled for all stages
 			useCache = false
 		}
-		ref = reference.TagNameOnly(ref)
-		procs = append(procs, proc.SBOMProcessor(ref.String(), useCache))
+		resolveMode := llb.ResolveModeDefault.String()
+		if v, ok := req.FrontendAttrs["image-resolve-mode"]; ok {
+			resolveMode = v
+		}
+
+		procs = append(procs, proc.SBOMProcessor(ref.String(), useCache, resolveMode))
 	}
 
 	if attrs, ok := attests["provenance"]; ok {
