@@ -63,7 +63,7 @@ require (
 	github.com/sirupsen/logrus v1.9.0
 	github.com/spdx/tools-golang v0.5.1
 	github.com/stretchr/testify v1.8.3
-	github.com/tonistiigi/fsutil v0.0.0-20230407161946-9e7a6df48576
+	github.com/tonistiigi/fsutil v0.0.0-20230629203738-36ef4d8c0dbb
 	github.com/tonistiigi/go-actions-cache v0.0.0-20220404170428-0bdeb6e1eac7
 	github.com/tonistiigi/go-archvariant v1.0.0
 	github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea
