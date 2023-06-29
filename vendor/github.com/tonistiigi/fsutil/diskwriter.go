@@ -162,6 +162,10 @@ func (dw *DiskWriter) HandleChange(kind ChangeKind, p string, fi os.FileInfo, er
 	switch {
 	case fi.IsDir():
 		if err := os.Mkdir(newPath, fi.Mode()); err != nil {
+			if errors.Is(err, syscall.EEXIST) {
+				// we saw a race to create this directory, so try again
+				return dw.HandleChange(kind, p, fi, nil)
+			}
 			return errors.Wrapf(err, "failed to create dir %s", newPath)
 		}
 		dw.dirModTimes[destPath] = statCopy.ModTime
@@ -188,7 +192,6 @@ func (dw *DiskWriter) HandleChange(kind ChangeKind, p string, fi os.FileInfo, er
 				file.Close()
 				return err
 			}
-			break
 		}
 		if err := file.Close(); err != nil {
 			return errors.Wrapf(err, "failed to close %s", newPath)

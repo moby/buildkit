@@ -56,16 +56,6 @@ func Chown(p string, old *User, fn Chowner) error {
 		userSIDstring = containerAdministratorSidString
 
 	}
-	// Copy file ownership and ACL
-	// We need SeRestorePrivilege and SeTakeOwnershipPrivilege in order
-	// to restore security info on a file, especially if we're trying to
-	// apply security info which includes SIDs not necessarily present on
-	// the host.
-	privileges := []string{winio.SeRestorePrivilege, seTakeOwnershipPrivilege}
-	if err := winio.EnableProcessPrivileges(privileges); err != nil {
-		return err
-	}
-	defer winio.DisableProcessPrivileges(privileges)
 
 	sidPtr, err := syscall.UTF16PtrFromString(userSIDstring)
 	if err != nil {
@@ -92,13 +82,22 @@ func Chown(p string, old *User, fn Chowner) error {
 		return fmt.Errorf("adding acls: %w", err)
 	}
 
-	if err := windows.SetNamedSecurityInfo(
-		p, windows.SE_FILE_OBJECT,
-		windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION,
-		userSID, nil, newAcl, nil); err != nil {
+	// Copy file ownership and ACL
+	// We need SeRestorePrivilege and SeTakeOwnershipPrivilege in order
+	// to restore security info on a file, especially if we're trying to
+	// apply security info which includes SIDs not necessarily present on
+	// the host.
+	privileges := []string{winio.SeRestorePrivilege, seTakeOwnershipPrivilege}
+	err = winio.RunWithPrivileges(privileges, func() error {
+		if err := windows.SetNamedSecurityInfo(
+			p, windows.SE_FILE_OBJECT,
+			windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION,
+			userSID, nil, newAcl, nil); err != nil {
 
-		return err
-	}
+			return err
+		}
+		return nil
+	})
 
-	return nil
+	return err
 }
