@@ -17,7 +17,7 @@ ARG AZURITE_VERSION=3.18.0
 ARG GOTESTSUM_VERSION=v1.9.0
 
 ARG GO_VERSION=1.20
-ARG ALPINE_VERSION=3.17
+ARG ALPINE_VERSION=3.18
 
 # minio for s3 integration tests
 FROM minio/minio:${MINIO_VERSION} AS minio
@@ -30,7 +30,7 @@ FROM alpine:${ALPINE_VERSION} AS alpine-arm
 FROM alpine:${ALPINE_VERSION} AS alpine-arm64
 FROM alpine:${ALPINE_VERSION} AS alpine-s390x
 FROM alpine:${ALPINE_VERSION} AS alpine-ppc64le
-FROM alpine:edge@sha256:c223f84e05c23c0571ce8decefef818864869187e1a3ea47719412e205c8c64e AS alpine-riscv64
+FROM alpine:edge@sha256:2d01a16bab53a8405876cec4c27235d47455a7b72b75334c614f2fb0968b3f90 AS alpine-riscv64
 FROM alpine-$TARGETARCH AS alpinebase
 
 # xx is a helper for cross-compilation
