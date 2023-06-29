@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/google/shlex"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/bklog"
 )
 
@@ -20,11 +21,17 @@ const buildkitdConfigFile = "buildkitd.toml"
 type sandbox struct {
 	Backend
 
+	id      string
+	name    string
+	ctx     context.Context
+	home    string
 	logs    map[string]*bytes.Buffer
 	cleanup *MultiCloser
 	mv      matrixValue
-	ctx     context.Context
-	name    string
+}
+
+func (sb *sandbox) ID() string {
+	return sb.id
 }
 
 func (sb *sandbox) Name() string {
@@ -33,6 +40,10 @@ func (sb *sandbox) Name() string {
 
 func (sb *sandbox) Context() context.Context {
 	return sb.ctx
+}
+
+func (sb *sandbox) Home() string {
+	return sb.home
 }
 
 func (sb *sandbox) Logs() map[string]*bytes.Buffer {
@@ -115,13 +126,26 @@ func newSandbox(ctx context.Context, w Worker, mirror string, mv matrixValue) (s
 	}
 	deferF.Append(closer)
 
+	home, err := os.CreateTemp("", "buildkit-integration-home")
+	if err != nil {
+		return nil, nil, err
+	}
+	if err = home.Close(); err != nil {
+		return nil, nil, err
+	}
+	deferF.append(func() error {
+		return os.RemoveAll(home.Name())
+	})
+
 	return &sandbox{
 		Backend: b,
+		id:      identity.NewID(),
+		name:    w.Name(),
+		ctx:     ctx,
+		home:    home.Name(),
 		logs:    cfg.Logs,
 		cleanup: deferF,
 		mv:      mv,
-		ctx:     ctx,
-		name:    w.Name(),
 	}, cl, nil
 }
 
