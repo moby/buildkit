@@ -45,7 +45,7 @@ RUN apk add --no-cache git
 
 # gobuild is base stage for compiling go/cgo
 FROM golatest AS gobuild-base
-RUN apk add --no-cache file bash clang lld pkgconfig git make
+RUN apk add --no-cache file bash clang lld musl-dev pkgconfig git make
 COPY --link --from=xx / /
 
 # runc source
