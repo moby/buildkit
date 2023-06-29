@@ -188,6 +188,7 @@ func TestIntegration(t *testing.T) {
 		testSourceDateEpochReset,
 		testSourceDateEpochLocalExporter,
 		testSourceDateEpochTarExporter,
+		testSourceDateEpochImageExporter,
 		testAttestationBundle,
 		testSBOMScan,
 		testSBOMScanSingleRef,
@@ -2923,6 +2924,66 @@ func testSourceDateEpochTarExporter(t *testing.T, sb integration.Sandbox) {
 
 	checkAllReleasable(t, c, sb, true)
 }
+
+func testSourceDateEpochImageExporter(t *testing.T, sb integration.Sandbox) {
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
+		t.SkipNow()
+	}
+	// https://github.com/containerd/containerd/commit/133ddce7cf18a1db175150e7a69470dea1bb3132
+	integration.CheckContainerdVersion(t, cdAddress, ">= 1.7.0-beta.1")
+
+	integration.CheckFeatureCompat(t, sb, integration.FeatureSourceDateEpoch)
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+
+	run := func(cmd string) {
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+
+	run(`sh -c "echo -n first > foo"`)
+	run(`sh -c "echo -n second > bar"`)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	name := strings.ToLower(path.Base(t.Name()))
+	tm := time.Date(2015, time.October, 21, 7, 28, 0, 0, time.UTC)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:SOURCE_DATE_EPOCH": fmt.Sprintf("%d", tm.Unix()),
+		},
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": name,
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
+	client, err := newContainerd(cdAddress)
+	require.NoError(t, err)
+	defer client.Close()
+
+	img, err := client.GetImage(ctx, name)
+	require.NoError(t, err)
+	require.Equal(t, tm, img.Metadata().CreatedAt)
+
+	err = client.ImageService().Delete(ctx, name, images.SynchronousDelete())
+	require.NoError(t, err)
+
+	checkAllReleasable(t, c, sb, true)
+}
+
 func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
