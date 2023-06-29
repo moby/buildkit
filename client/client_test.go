@@ -29,6 +29,7 @@ import (
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/content/local"
+	"github.com/containerd/containerd/content/proxy"
 	ctderrdefs "github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/namespaces"
@@ -182,6 +183,7 @@ func TestIntegration(t *testing.T) {
 		testExportAnnotations,
 		testExportAnnotationsMediaTypes,
 		testExportAttestations,
+		testExportedImageLabels,
 		testAttestationDefaultSubject,
 		testSourceDateEpochLayerTimestamps,
 		testSourceDateEpochClamp,
@@ -382,6 +384,134 @@ func testHostNetworking(t *testing.T, sb integration.Sandbox) {
 	} else {
 		require.Error(t, err)
 	}
+}
+
+func testExportedImageLabels(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
+		t.Skip("only supported with containerd")
+	}
+
+	ctx := sb.Context()
+
+	def, err := llb.Image("busybox").Run(llb.Shlexf("echo foo > /foo")).Marshal(ctx)
+	require.NoError(t, err)
+
+	target := "docker.io/buildkit/build/exporter:labels"
+
+	_, err = c.Solve(ctx, def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	client, err := newContainerd(cdAddress)
+	require.NoError(t, err)
+	defer client.Close()
+
+	ctx = namespaces.WithNamespace(ctx, "buildkit")
+
+	img, err := client.GetImage(ctx, target)
+	require.NoError(t, err)
+
+	store := client.ContentStore()
+
+	info, err := store.Info(ctx, img.Target().Digest)
+	require.NoError(t, err)
+
+	dt, err := content.ReadBlob(ctx, store, img.Target())
+	require.NoError(t, err)
+
+	var mfst ocispecs.Manifest
+	err = json.Unmarshal(dt, &mfst)
+	require.NoError(t, err)
+
+	require.Equal(t, 2, len(mfst.Layers))
+
+	hasLabel := func(dgst digest.Digest) bool {
+		for k, v := range info.Labels {
+			if strings.HasPrefix(k, "containerd.io/gc.ref.content.") && v == dgst.String() {
+				return true
+			}
+		}
+		return false
+	}
+
+	// check that labels are set on all layers and config
+	for _, l := range mfst.Layers {
+		require.True(t, hasLabel(l.Digest))
+	}
+	require.True(t, hasLabel(mfst.Config.Digest))
+
+	err = c.Prune(sb.Context(), nil, PruneAll)
+	require.NoError(t, err)
+
+	// layer should not be deleted
+	_, err = store.Info(ctx, mfst.Layers[1].Digest)
+	require.NoError(t, err)
+
+	err = client.ImageService().Delete(ctx, target, images.SynchronousDelete())
+	require.NoError(t, err)
+
+	// layers should be deleted
+	_, err = store.Info(ctx, mfst.Layers[1].Digest)
+	require.Error(t, err)
+	require.True(t, errors.Is(err, ctderrdefs.ErrNotFound))
+
+	// config should be deleted
+	_, err = store.Info(ctx, mfst.Config.Digest)
+	require.Error(t, err)
+	require.True(t, errors.Is(err, ctderrdefs.ErrNotFound))
+
+	// buildkit contentstore still has the layer because it is multi-ns
+	bkstore := proxy.NewContentStore(c.ContentClient())
+
+	// layer should be deleted as not kept by history
+	_, err = bkstore.Info(ctx, mfst.Layers[1].Digest)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not found")
+
+	// config should still be there
+	_, err = bkstore.Info(ctx, img.Metadata().Target.Digest)
+	require.NoError(t, err)
+
+	_, err = bkstore.Info(ctx, mfst.Config.Digest)
+	require.NoError(t, err)
+
+	cl, err := c.ControlClient().ListenBuildHistory(sb.Context(), &controlapi.BuildHistoryRequest{
+		EarlyExit: true,
+	})
+	require.NoError(t, err)
+
+	for {
+		resp, err := cl.Recv()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+		_, err = c.ControlClient().UpdateBuildHistory(sb.Context(), &controlapi.UpdateBuildHistoryRequest{
+			Ref:    resp.Record.Ref,
+			Delete: true,
+		})
+		require.NoError(t, err)
+	}
+
+	// now everything should be deleted
+	_, err = bkstore.Info(ctx, img.Metadata().Target.Digest)
+	require.Error(t, err)
+
+	_, err = bkstore.Info(ctx, mfst.Config.Digest)
+	require.Error(t, err)
 }
 
 // #877
