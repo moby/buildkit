@@ -77,7 +77,7 @@ type Client struct {
 	client      client.Client
 	ignoreCache []string
 	bctx        *buildContext
-	g           flightcontrol.Group
+	g           flightcontrol.Group[*buildContext]
 	bopts       client.BuildOpts
 
 	dockerignore []byte
@@ -280,7 +280,7 @@ func (bc *Client) init() error {
 }
 
 func (bc *Client) buildContext(ctx context.Context) (*buildContext, error) {
-	bctx, err := bc.g.Do(ctx, "initcontext", func(ctx context.Context) (interface{}, error) {
+	return bc.g.Do(ctx, "initcontext", func(ctx context.Context) (*buildContext, error) {
 		if bc.bctx != nil {
 			return bc.bctx, nil
 		}
@@ -290,10 +290,6 @@ func (bc *Client) buildContext(ctx context.Context) (*buildContext, error) {
 		}
 		return bctx, err
 	})
-	if err != nil {
-		return nil, err
-	}
-	return bctx.(*buildContext), nil
 }
 
 func (bc *Client) ReadEntrypoint(ctx context.Context, lang string, opts ...llb.LocalOption) (*Source, error) {

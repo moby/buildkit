@@ -32,7 +32,7 @@ type Puller struct {
 	Src          reference.Spec
 	Platform     ocispecs.Platform
 
-	g           flightcontrol.Group
+	g           flightcontrol.Group[struct{}]
 	resolveErr  error
 	resolveDone bool
 	desc        ocispecs.Descriptor
@@ -54,9 +54,9 @@ type PulledManifests struct {
 }
 
 func (p *Puller) resolve(ctx context.Context, resolver remotes.Resolver) error {
-	_, err := p.g.Do(ctx, "", func(ctx context.Context) (_ interface{}, err error) {
+	_, err := p.g.Do(ctx, "", func(ctx context.Context) (_ struct{}, err error) {
 		if p.resolveErr != nil || p.resolveDone {
-			return nil, p.resolveErr
+			return struct{}{}, p.resolveErr
 		}
 		defer func() {
 			if !errors.Is(err, context.Canceled) {
@@ -68,12 +68,12 @@ func (p *Puller) resolve(ctx context.Context, resolver remotes.Resolver) error {
 		}
 		ref, desc, err := resolver.Resolve(ctx, p.Src.String())
 		if err != nil {
-			return nil, err
+			return struct{}{}, err
 		}
 		p.desc = desc
 		p.ref = ref
 		p.resolveDone = true
-		return nil, nil
+		return struct{}{}, nil
 	})
 	return err
 }

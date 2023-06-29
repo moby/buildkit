@@ -15,7 +15,7 @@ import (
 
 func TestNoCancel(t *testing.T) {
 	t.Parallel()
-	g := &Group{}
+	g := &Group[string]{}
 	eg, ctx := errgroup.WithContext(context.Background())
 	var r1, r2 string
 	var counter int64
@@ -25,7 +25,7 @@ func TestNoCancel(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		r1 = ret1.(string)
+		r1 = ret1
 		return nil
 	})
 	eg.Go(func() error {
@@ -33,7 +33,7 @@ func TestNoCancel(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		r2 = ret2.(string)
+		r2 = ret2
 		return nil
 	})
 	err := eg.Wait()
@@ -45,7 +45,7 @@ func TestNoCancel(t *testing.T) {
 
 func TestCancelOne(t *testing.T) {
 	t.Parallel()
-	g := &Group{}
+	g := &Group[string]{}
 	eg, ctx := errgroup.WithContext(context.Background())
 	var r1, r2 string
 	var counter int64
@@ -56,7 +56,7 @@ func TestCancelOne(t *testing.T) {
 		assert.Error(t, err)
 		require.Equal(t, true, errors.Is(err, context.Canceled))
 		if err == nil {
-			r1 = ret1.(string)
+			r1 = ret1
 		}
 		return nil
 	})
@@ -65,7 +65,7 @@ func TestCancelOne(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		r2 = ret2.(string)
+		r2 = ret2
 		return nil
 	})
 	eg.Go(func() error {
@@ -87,7 +87,7 @@ func TestCancelOne(t *testing.T) {
 func TestCancelRace(t *testing.T) {
 	// t.Parallel() // disabled for better timing consistency. works with parallel as well
 
-	g := &Group{}
+	g := &Group[struct{}]{}
 	ctx, cancel := context.WithCancel(context.Background())
 
 	kick := make(chan struct{})
@@ -96,11 +96,11 @@ func TestCancelRace(t *testing.T) {
 	count := 0
 
 	// first run cancels context, second returns cleanly
-	f := func(ctx context.Context) (interface{}, error) {
+	f := func(ctx context.Context) (struct{}, error) {
 		done := ctx.Done()
 		if count > 0 {
 			time.Sleep(100 * time.Millisecond)
-			return nil, nil
+			return struct{}{}, nil
 		}
 		go func() {
 			for {
@@ -118,10 +118,10 @@ func TestCancelRace(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 		select {
 		case <-done:
-			return nil, ctx.Err()
+			return struct{}{}, ctx.Err()
 		case <-time.After(200 * time.Millisecond):
 		}
-		return nil, nil
+		return struct{}{}, nil
 	}
 
 	go func() {
@@ -141,7 +141,7 @@ func TestCancelRace(t *testing.T) {
 
 func TestCancelBoth(t *testing.T) {
 	t.Parallel()
-	g := &Group{}
+	g := &Group[string]{}
 	eg, ctx := errgroup.WithContext(context.Background())
 	var r1, r2 string
 	var counter int64
@@ -153,7 +153,7 @@ func TestCancelBoth(t *testing.T) {
 		assert.Error(t, err)
 		require.Equal(t, true, errors.Is(err, context.Canceled))
 		if err == nil {
-			r1 = ret1.(string)
+			r1 = ret1
 		}
 		return nil
 	})
@@ -162,7 +162,7 @@ func TestCancelBoth(t *testing.T) {
 		assert.Error(t, err)
 		require.Equal(t, true, errors.Is(err, context.Canceled))
 		if err == nil {
-			r2 = ret2.(string)
+			r2 = ret2
 		}
 		return nil
 	})
@@ -207,13 +207,13 @@ func TestContention(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(threads)
 
-	g := &Group{}
+	g := &Group[int]{}
 
 	for i := 0; i < threads; i++ {
 		for j := 0; j < perthread; j++ {
-			_, err := g.Do(context.TODO(), "foo", func(ctx context.Context) (interface{}, error) {
+			_, err := g.Do(context.TODO(), "foo", func(ctx context.Context) (int, error) {
 				time.Sleep(time.Microsecond)
-				return nil, nil
+				return 0, nil
 			})
 			require.NoError(t, err)
 		}
@@ -223,12 +223,12 @@ func TestContention(t *testing.T) {
 	wg.Wait()
 }
 
-func testFunc(wait time.Duration, ret string, counter *int64) func(ctx context.Context) (interface{}, error) {
-	return func(ctx context.Context) (interface{}, error) {
+func testFunc(wait time.Duration, ret string, counter *int64) func(ctx context.Context) (string, error) {
+	return func(ctx context.Context) (string, error) {
 		atomic.AddInt64(counter, 1)
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return "", ctx.Err()
 		case <-time.After(wait):
 			return ret, nil
 		}

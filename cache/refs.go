@@ -90,7 +90,7 @@ type cacheRecord struct {
 
 	mountCache snapshot.Mountable
 
-	sizeG flightcontrol.Group
+	sizeG flightcontrol.Group[int64]
 
 	// these are filled if multiple refs point to same data
 	equalMutable   *mutableRef
@@ -325,7 +325,7 @@ func (cr *cacheRecord) viewSnapshotID() string {
 
 func (cr *cacheRecord) size(ctx context.Context) (int64, error) {
 	// this expects that usage() is implemented lazily
-	s, err := cr.sizeG.Do(ctx, cr.ID(), func(ctx context.Context) (interface{}, error) {
+	return cr.sizeG.Do(ctx, cr.ID(), func(ctx context.Context) (int64, error) {
 		cr.mu.Lock()
 		s := cr.getSize()
 		if s != sizeUnknown {
@@ -346,7 +346,7 @@ func (cr *cacheRecord) size(ctx context.Context) (int64, error) {
 				isDead := cr.isDead()
 				cr.mu.Unlock()
 				if isDead {
-					return int64(0), nil
+					return 0, nil
 				}
 				if !errors.Is(err, errdefs.ErrNotFound) {
 					return s, errors.Wrapf(err, "failed to get usage for %s", cr.ID())
@@ -379,10 +379,6 @@ func (cr *cacheRecord) size(ctx context.Context) (int64, error) {
 		cr.mu.Unlock()
 		return usage.Size, nil
 	})
-	if err != nil {
-		return 0, err
-	}
-	return s.(int64), nil
 }
 
 // caller must hold cr.mu
@@ -1057,7 +1053,7 @@ func (sr *immutableRef) withRemoteSnapshotLabelsStargzMode(ctx context.Context, 
 }
 
 func (sr *immutableRef) prepareRemoteSnapshotsStargzMode(ctx context.Context, s session.Group) error {
-	_, err := sr.sizeG.Do(ctx, sr.ID()+"-prepare-remote-snapshot", func(ctx context.Context) (_ interface{}, rerr error) {
+	_, err := g.Do(ctx, sr.ID()+"-prepare-remote-snapshot", func(ctx context.Context) (_ struct{}, rerr error) {
 		dhs := sr.descHandlers
 		for _, r := range sr.layerChain() {
 			r := r
@@ -1069,7 +1065,7 @@ func (sr *immutableRef) prepareRemoteSnapshotsStargzMode(ctx context.Context, s 
 			dh := dhs[digest.Digest(r.getBlob())]
 			if dh == nil {
 				// We cannot prepare remote snapshots without descHandler.
-				return nil, nil
+				return struct{}{}, nil
 			}
 
 			// tmpLabels contains dh.SnapshotLabels + session IDs. All keys contain
@@ -1121,7 +1117,7 @@ func (sr *immutableRef) prepareRemoteSnapshotsStargzMode(ctx context.Context, s 
 			break
 		}
 
-		return nil, nil
+		return struct{}{}, nil
 	})
 	return err
 }
@@ -1144,18 +1140,18 @@ func makeTmpLabelsStargzMode(labels map[string]string, s session.Group) (fields 
 }
 
 func (sr *immutableRef) unlazy(ctx context.Context, dhs DescHandlers, pg progress.Controller, s session.Group, topLevel bool) error {
-	_, err := sr.sizeG.Do(ctx, sr.ID()+"-unlazy", func(ctx context.Context) (_ interface{}, rerr error) {
+	_, err := g.Do(ctx, sr.ID()+"-unlazy", func(ctx context.Context) (_ struct{}, rerr error) {
 		if _, err := sr.cm.Snapshotter.Stat(ctx, sr.getSnapshotID()); err == nil {
-			return nil, nil
+			return struct{}{}, nil
 		}
 
 		switch sr.kind() {
 		case Merge, Diff:
-			return nil, sr.unlazyDiffMerge(ctx, dhs, pg, s, topLevel)
+			return struct{}{}, sr.unlazyDiffMerge(ctx, dhs, pg, s, topLevel)
 		case Layer, BaseLayer:
-			return nil, sr.unlazyLayer(ctx, dhs, pg, s)
+			return struct{}{}, sr.unlazyLayer(ctx, dhs, pg, s)
 		}
-		return nil, nil
+		return struct{}{}, nil
 	})
 	return err
 }
