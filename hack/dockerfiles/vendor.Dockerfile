@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile-upstream:master
 
 ARG GO_VERSION=1.20
+ARG MODOUTDATED_VERSION=v0.9.0
 
 FROM golang:${GO_VERSION}-alpine AS base
 RUN apk add --no-cache git rsync
@@ -35,3 +36,10 @@ RUN --mount=target=/context \
     exit 1
   fi
 EOT
+
+FROM psampaz/go-mod-outdated:${MODOUTDATED_VERSION} AS go-mod-outdated
+FROM base AS outdated
+RUN --mount=target=.,rw \
+  --mount=target=/go/pkg/mod,type=cache \
+  --mount=from=go-mod-outdated,source=/usr/bin/go-mod-outdated,target=/usr/bin/go-mod-outdated \
+  go list -mod=mod -u -m -json all | go-mod-outdated -update -direct

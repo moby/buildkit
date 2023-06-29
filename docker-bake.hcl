@@ -167,3 +167,11 @@ target "docs" {
   target = "update"
   output = ["./docs"]
 }
+
+target "mod-outdated" {
+  inherits = ["_common"]
+  dockerfile = "./hack/dockerfiles/vendor.Dockerfile"
+  target = "outdated"
+  no-cache-filter = ["outdated"]
+  output = ["type=cacheonly"]
+}
