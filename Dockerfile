@@ -17,7 +17,7 @@ ARG AZURITE_VERSION=3.18.0
 ARG GOTESTSUM_VERSION=v1.9.0
 
 ARG GO_VERSION=1.20
-ARG ALPINE_VERSION=3.17
+ARG ALPINE_VERSION=3.18
 
 # minio for s3 integration tests
 FROM minio/minio:${MINIO_VERSION} AS minio
@@ -30,7 +30,7 @@ FROM alpine:${ALPINE_VERSION} AS alpine-arm
 FROM alpine:${ALPINE_VERSION} AS alpine-arm64
 FROM alpine:${ALPINE_VERSION} AS alpine-s390x
 FROM alpine:${ALPINE_VERSION} AS alpine-ppc64le
-FROM alpine:edge@sha256:c223f84e05c23c0571ce8decefef818864869187e1a3ea47719412e205c8c64e AS alpine-riscv64
+FROM alpine:edge@sha256:2d01a16bab53a8405876cec4c27235d47455a7b72b75334c614f2fb0968b3f90 AS alpine-riscv64
 FROM alpine-$TARGETARCH AS alpinebase
 
 # xx is a helper for cross-compilation
@@ -45,7 +45,7 @@ RUN apk add --no-cache git
 
 # gobuild is base stage for compiling go/cgo
 FROM golatest AS gobuild-base
-RUN apk add --no-cache file bash clang lld pkgconfig git make
+RUN apk add --no-cache file bash clang lld musl-dev pkgconfig git make
 COPY --link --from=xx / /
 
 # runc source
@@ -66,15 +66,6 @@ RUN set -e; xx-apk add musl-dev gcc libseccomp-dev libseccomp-static; \
 RUN --mount=from=runc-src,src=/usr/src/runc,target=. --mount=target=/root/.cache,type=cache \
   CGO_ENABLED=1 xx-go build -mod=vendor -ldflags '-extldflags -static' -tags 'apparmor seccomp netgo cgo static_build osusergo' -o /usr/bin/runc ./ && \
   xx-verify --static /usr/bin/runc
-
-# dnsname CNI plugin for testing
-FROM gobuild-base AS dnsname
-ARG DNSNAME_VERSION
-WORKDIR /go/dnsname
-RUN git clone https://github.com/containers/dnsname.git . \
-  && git checkout -q "$DNSNAME_VERSION"
-RUN --mount=target=/root/.cache,type=cache \
-  set -e; make binaries; mv bin/dnsname /usr/bin/dnsname
 
 FROM gobuild-base AS buildkit-base
 WORKDIR /src
@@ -224,6 +215,22 @@ FROM binaries AS buildkit-darwin
 FROM binaries AS buildkit-windows
 # this is not in binaries-windows because it is not intended for release yet, just CI
 COPY --link --from=buildkitd /usr/bin/buildkitd /buildkitd.exe
+
+# dnsname source
+FROM git AS dnsname-src
+ARG DNSNAME_VERSION
+WORKDIR /usr/src
+RUN git clone https://github.com/containers/dnsname.git dnsname \
+  && cd dnsname && git checkout -q "$DNSNAME_VERSION"
+
+# build dnsname CNI plugin for testing
+FROM gobuild-base AS dnsname
+WORKDIR /go/src/github.com/containers/dnsname
+ARG TARGETPLATFORM
+RUN --mount=from=dnsname-src,src=/usr/src/dnsname,target=.,rw \
+    --mount=target=/root/.cache,type=cache \
+    CGO_ENABLED=0 xx-go build -o /usr/bin/dnsname ./plugins/meta/dnsname && \
+    xx-verify --static /usr/bin/dnsname
 
 FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS cni-plugins
 RUN apk add --no-cache curl
