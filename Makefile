@@ -92,3 +92,7 @@ doctoc:
 .PHONY: docs
 docs:
 	$(BUILDX_CMD) bake docs
+
+.PHONY: mod-outdated
+mod-outdated:
+	$(BUILDX_CMD) bake mod-outdated
