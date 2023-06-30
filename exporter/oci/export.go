@@ -205,15 +205,20 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 		return nil, nil, err
 	}
 
-	mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
+	var refs []cache.ImmutableRef
 	if src.Ref != nil {
-		remotes, err := src.Ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
+		refs = append(refs, src.Ref)
+	}
+	for _, ref := range src.Refs {
+		refs = append(refs, ref)
+	}
+	mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
+	for _, ref := range refs {
+		remotes, err := ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
 		if err != nil {
 			return nil, nil, err
 		}
 		remote := remotes[0]
-		// unlazy before tar export as the tar writer does not handle
-		// layer blobs in parallel (whereas unlazy does)
 		if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
 			if err := unlazier.Unlazy(ctx); err != nil {
 				return nil, nil, err
@@ -221,23 +226,6 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 		}
 		for _, desc := range remote.Descriptors {
 			mprovider.Add(desc.Digest, remote.Provider)
-		}
-	}
-	if len(src.Refs) > 0 {
-		for _, r := range src.Refs {
-			remotes, err := r.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
-			if err != nil {
-				return nil, nil, err
-			}
-			remote := remotes[0]
-			if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
-				if err := unlazier.Unlazy(ctx); err != nil {
-					return nil, nil, err
-				}
-			}
-			for _, desc := range remote.Descriptors {
-				mprovider.Add(desc.Digest, remote.Provider)
-			}
 		}
 	}
 

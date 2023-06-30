@@ -277,8 +277,15 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 				}
 
 				if !e.storeAllowIncomplete {
+					var refs []cache.ImmutableRef
 					if src.Ref != nil {
-						remotes, err := src.Ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
+						refs = append(refs, src.Ref)
+					}
+					for _, ref := range src.Refs {
+						refs = append(refs, ref)
+					}
+					for _, ref := range refs {
+						remotes, err := ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
 						if err != nil {
 							return nil, nil, err
 						}
@@ -286,20 +293,6 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 						if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
 							if err := unlazier.Unlazy(ctx); err != nil {
 								return nil, nil, err
-							}
-						}
-					}
-					if len(src.Refs) > 0 {
-						for _, r := range src.Refs {
-							remotes, err := r.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
-							if err != nil {
-								return nil, nil, err
-							}
-							remote := remotes[0]
-							if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
-								if err := unlazier.Unlazy(ctx); err != nil {
-									return nil, nil, err
-								}
 							}
 						}
 					}
@@ -331,10 +324,18 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 }
 
 func (e *imageExporterInstance) pushImage(ctx context.Context, src *exporter.Source, sessionID string, targetName string, dgst digest.Digest) error {
+	var refs []cache.ImmutableRef
+	if src.Ref != nil {
+		refs = append(refs, src.Ref)
+	}
+	for _, ref := range src.Refs {
+		refs = append(refs, ref)
+	}
+
 	annotations := map[digest.Digest]map[string]string{}
 	mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
-	if src.Ref != nil {
-		remotes, err := src.Ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
+	for _, ref := range refs {
+		remotes, err := ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
 		if err != nil {
 			return err
 		}
@@ -342,19 +343,6 @@ func (e *imageExporterInstance) pushImage(ctx context.Context, src *exporter.Sou
 		for _, desc := range remote.Descriptors {
 			mprovider.Add(desc.Digest, remote.Provider)
 			addAnnotations(annotations, desc)
-		}
-	}
-	if len(src.Refs) > 0 {
-		for _, r := range src.Refs {
-			remotes, err := r.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
-			if err != nil {
-				return err
-			}
-			remote := remotes[0]
-			for _, desc := range remote.Descriptors {
-				mprovider.Add(desc.Digest, remote.Provider)
-				addAnnotations(annotations, desc)
-			}
 		}
 	}
 	return push.Push(ctx, e.opt.SessionManager, sessionID, mprovider, e.opt.ImageWriter.ContentStore(), dgst, targetName, e.insecure, e.opt.RegistryHosts, e.pushByDigest, annotations)
