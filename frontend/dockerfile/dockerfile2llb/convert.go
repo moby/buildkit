@@ -1055,9 +1055,6 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		if !cfg.isAddCommand {
 			return errors.New("checksum can't be specified for COPY")
 		}
-		if !addChecksumEnabled {
-			return errors.New("instruction 'ADD --checksum=<CHECKSUM>' requires the labs channel")
-		}
 		if len(cfg.params.SourcePaths) != 1 {
 			return errors.New("checksum can't be specified for multiple sources")
 		}

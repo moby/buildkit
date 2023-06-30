@@ -1298,6 +1298,7 @@ guide – Leverage build cache](https://docs.docker.com/develop/develop-images/d
 > **Note**
 >
 > Not yet available in stable syntax, use [`docker/dockerfile:1-labs`](#syntax) version (`1.5-labs` or newer).
+> Planned to be included in `docker/dockerfile:1.6`.
 
 The checksum of a remote file can be verified with the `--checksum` flag:
 
