@@ -6556,8 +6556,8 @@ RUN rm -f /foo-2030.1
 ARG SOURCE_DATE_EPOCH
 RUN find $( ls / | grep -E -v "^(dev|mnt|proc|sys)$" ) -newermt "@${SOURCE_DATE_EPOCH}" -writable -xdev | xargs touch --date="@${SOURCE_DATE_EPOCH}" --no-dereference
 
-# Squash the entire stage for resetting the whiteout timestamps.
-# Workaround for https://github.com/moby/buildkit/issues/3168
+# Squashing is needed to apply the touched timestamps across multiple "RUN" instructions.
+# This squashing also addresses non-reproducibility of whiteout timestamps (https://github.com/moby/buildkit/issues/3168).
 FROM scratch
 COPY --from=0 / /
 `)

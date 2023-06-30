@@ -73,20 +73,12 @@ Workaround:
 # Workaround for https://github.com/moby/buildkit/issues/3180
 ARG SOURCE_DATE_EPOCH
 RUN find $( ls / | grep -E -v "^(dev|mnt|proc|sys)$" ) -newermt "@${SOURCE_DATE_EPOCH}" -writable -xdev | xargs touch --date="@${SOURCE_DATE_EPOCH}" --no-dereference
-```
 
-The `touch` command above is [not effective](https://github.com/moby/buildkit/issues/3309) for mount point directories.
-A workaround is to create mount point directories below `/dev` (tmpfs) so that the mount points will not be included in the image layer.
-
-### Timestamps of whiteouts
-Currently, the `SOURCE_DATE_EPOCH` value is not used for the timestamps of "whiteouts" that are created on removing files.
-
-Workaround:
-```dockerfile
-# Squash the entire stage for resetting the whiteout timestamps.
-# Workaround for https://github.com/moby/buildkit/issues/3168
+# Squashing is needed so that only files with the defined timestamp from the last layer are added to the image.
+# This squashing also addresses non-reproducibility of whiteout timestamps (https://github.com/moby/buildkit/issues/3168) on BuildKit prior to v0.12.
 FROM scratch
 COPY --from=0 / /
 ```
 
-The timestamps of the regular files in the original stage are maintained in the squashed stage, so you do not need to touch the files after this `COPY` instruction.
+The `touch` command above is [not effective](https://github.com/moby/buildkit/issues/3309) for mount point directories.
+A workaround is to create mount point directories below `/dev` (tmpfs) so that the mount points will not be included in the image layer.
