@@ -31,6 +31,7 @@ import (
 	"github.com/opencontainers/image-spec/identity"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -284,17 +285,25 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 					for _, ref := range src.Refs {
 						refs = append(refs, ref)
 					}
+					eg, ctx := errgroup.WithContext(ctx)
 					for _, ref := range refs {
-						remotes, err := ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
-						if err != nil {
-							return nil, nil, err
-						}
-						remote := remotes[0]
-						if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
-							if err := unlazier.Unlazy(ctx); err != nil {
-								return nil, nil, err
+						ref := ref
+						eg.Go(func() error {
+							remotes, err := ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
+							if err != nil {
+								return err
 							}
-						}
+							remote := remotes[0]
+							if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
+								if err := unlazier.Unlazy(ctx); err != nil {
+									return err
+								}
+							}
+							return nil
+						})
+					}
+					if err := eg.Wait(); err != nil {
+						return nil, nil, err
 					}
 				}
 			}
