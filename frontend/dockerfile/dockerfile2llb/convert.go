@@ -1082,9 +1082,6 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 			if !cfg.isAddCommand {
 				return errors.New("source can't be a git ref for COPY")
 			}
-			if !addGitEnabled {
-				return errors.New("instruction ADD <git ref> requires the labs channel")
-			}
 			// TODO: print a warning (not an error) if gitRef.UnencryptedTCP is true
 			commit := gitRef.Commit
 			if gitRef.SubDir != "" {
