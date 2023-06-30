@@ -293,6 +293,50 @@ COPY --from=builder /usr/src/app/testresult.xml .
 buildctl build ... --opt target=testresult --output type=local,dest=path/to/output-dir
 ```
 
+With a [multi-platform build](docs/multi-platform.md), a subfolder matching
+each target platform will be created in the destination directory:
+
+```dockerfile
+FROM busybox AS build
+ARG TARGETOS
+ARG TARGETARCH
+RUN mkdir /out && echo foo > /out/hello-$TARGETOS-$TARGETARCH
+
+FROM scratch
+COPY --from=build /out /
+```
+
+```bash
+$ buildctl build \
+  --frontend dockerfile.v0 \
+  --opt platform=linux/amd64,linux/arm64 \
+  --output type=local,dest=./bin/release
+
+$ tree ./bin
+./bin/
+└── release
+    ├── linux_amd64
+    │   └── hello-linux-amd64
+    └── linux_arm64
+        └── hello-linux-arm64
+```
+
+You can set `platform-split=false` to merge files from all platforms together
+into same directory:
+
+```bash
+$ buildctl build \
+  --frontend dockerfile.v0 \
+  --opt platform=linux/amd64,linux/arm64 \
+  --output type=local,dest=./bin/release,platform-split=false
+
+$ tree ./bin
+./bin/
+└── release
+    ├── hello-linux-amd64
+    └── hello-linux-arm64
+```
+
 Tar exporter is similar to local exporter but transfers the files through a tarball.
 
 ```bash
