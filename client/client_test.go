@@ -13,6 +13,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
@@ -1063,6 +1064,7 @@ func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
 	// create temporary directory in cgroupfs to not interfere with subsequent runs
 	command := fmt.Sprintf("mktemp -d -p %s securitytest.XXXXXX", cg)
 	st := llb.Image("busybox:latest").
+		Run(llb.Shlex("sh -c 'ls -l /sys/fs/cgroup | grep securitytest > /out || true'")).
 		Run(llb.Shlex(command), llb.Security(mode))
 
 	def, err := st.Marshal(sb.Context())
@@ -1070,7 +1072,10 @@ func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		AllowedEntitlements: allowedEntitlements,
+		Exports:             []ExportEntry{{Type: "local", OutputDir: "/tmp/out"}},
 	}, nil)
+	b, _ := ioutil.ReadFile("/tmp/out/out")
+	t.Logf("FOOBAR %s", b)
 
 	if secMode == securitySandbox {
 		require.Error(t, err)
