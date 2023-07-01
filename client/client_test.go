@@ -1055,15 +1055,15 @@ func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	cg := "/sys/fs/cgroup/cpuset/securitytest" // cgroup v1
+	cg := "/sys/fs/cgroup/cpuset" // cgroup v1
 	if _, err := os.Stat("/sys/fs/cgroup/cpuset"); errors.Is(err, os.ErrNotExist) {
-		cg = "/sys/fs/cgroup/securitytest" // cgroup v2
+		cg = "/sys/fs/cgroup" // cgroup v2
 	}
 
-	command := "mkdir " + cg
+	// create temporary directory in cgroupfs to not interfere with subsequent runs
+	command := fmt.Sprintf("mktemp -d -p %s securitytest.XXXXXX", cg)
 	st := llb.Image("busybox:latest").
-		Run(llb.Shlex(command),
-			llb.Security(mode))
+		Run(llb.Shlex(command), llb.Security(mode))
 
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
