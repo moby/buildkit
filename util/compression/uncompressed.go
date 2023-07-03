@@ -48,10 +48,6 @@ func (c uncompressedType) OnlySupportOCITypes() bool {
 	return false
 }
 
-func (c uncompressedType) NeedsForceCompression() bool {
-	return false
-}
-
 func (c uncompressedType) MediaType() string {
 	return ocispecs.MediaTypeImageLayer
 }

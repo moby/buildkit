@@ -142,10 +142,6 @@ func (c estargzType) OnlySupportOCITypes() bool {
 	return true
 }
 
-func (c estargzType) NeedsForceCompression() bool {
-	return false
-}
-
 func (c estargzType) MediaType() string {
 	return ocispecs.MediaTypeImageLayerGzip
 }

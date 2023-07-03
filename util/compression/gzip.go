@@ -47,10 +47,6 @@ func (c gzipType) OnlySupportOCITypes() bool {
 	return false
 }
 
-func (c gzipType) NeedsForceCompression() bool {
-	return false
-}
-
 func (c gzipType) MediaType() string {
 	return ocispecs.MediaTypeImageLayerGzip
 }
