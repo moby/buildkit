@@ -1003,7 +1003,7 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bo
 	d.image.Config.WorkingDir = wd
 
 	// From this point forward, we can use UNIX style paths.
-	wd = filepath.ToSlash(wd)
+	wd = system.ToSlash(wd, d.platform.OS)
 	d.state = d.state.Dir(wd)
 
 	if commit {
@@ -1421,7 +1421,6 @@ func pathRelativeToWorkingDir(s llb.State, p string, platform ocispecs.Platform)
 	if len(p) == 0 {
 		return dir, nil
 	}
-
 	p, err = system.CheckSystemDriveAndRemoveDriveLetter(p, platform.OS)
 	if err != nil {
 		return "", errors.Wrap(err, "remving drive letter")
