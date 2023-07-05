@@ -76,7 +76,7 @@ Join `#buildkit` channel on [Docker Community Slack](https://dockr.ly/comm-slack
   - [Nerdctl](#nerdctl)
   - [Kubernetes](#kubernetes)
   - [Daemonless](#daemonless)
-- [Opentracing support](#opentracing-support)
+- [OpenTelemetry support](#opentelemetry-support)
 - [Running BuildKit without root privileges](#running-buildkit-without-root-privileges)
 - [Building multi-platform images](#building-multi-platform-images)
   - [Configuring `buildctl`](#configuring-buildctl)
@@ -756,9 +756,12 @@ docker run \
         --local dockerfile=/tmp/work
 ```
 
-## Opentracing support
+## OpenTelemetry support
 
-BuildKit supports opentracing for buildkitd gRPC API and buildctl commands. To capture the trace to [Jaeger](https://github.com/jaegertracing/jaeger), set `JAEGER_TRACE` environment variable to the collection address.
+BuildKit supports [OpenTelemetry](https://opentelemetry.io/) for buildkitd gRPC
+API and buildctl commands. To capture the trace to
+[Jaeger](https://github.com/jaegertracing/jaeger), set `JAEGER_TRACE`
+environment variable to the collection address.
 
 ```bash
 docker run -d -p6831:6831/udp -p16686:16686 jaegertracing/all-in-one:latest
