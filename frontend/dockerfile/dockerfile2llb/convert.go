@@ -1159,7 +1159,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		data := src.Data
 		f := src.Path
 		st := llb.Scratch().File(
-			llb.Mkfile(f, 0664, []byte(data)),
+			llb.Mkfile(f, 0644, []byte(data)),
 			dockerui.WithInternalName("preparing inline document"),
 		)
 
