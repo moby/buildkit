@@ -156,6 +156,9 @@ TESTPKGS=./client TESTFLAGS="--run //worker=containerd -v" ./hack/test integrati
 
 # run a specific dockerfile test only on labs channel
 DOCKERFILE_RELEASES=labs TESTFLAGS="--run /TestRunGlobalNetwork/worker=oci$/ -v" ./hack/test dockerfile
+
+# enabling go data race detector
+GO_RACE_ENABLED=1 ./hack/test integration
 ```
 
 Set `TEST_KEEP_CACHE=1` for the test framework to keep external dependant images in a docker volume

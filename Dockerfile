@@ -15,6 +15,7 @@ ARG MINIO_VERSION=RELEASE.2022-05-03T20-36-08Z
 ARG MINIO_MC_VERSION=RELEASE.2022-05-04T06-07-55Z
 ARG AZURITE_VERSION=3.18.0
 ARG GOTESTSUM_VERSION=v1.9.0
+ARG GO_RACE_ENABLED=0
 
 ARG GO_VERSION=1.20
 ARG ALPINE_VERSION=3.18
@@ -94,11 +95,12 @@ FROM buildkit-base AS buildkitd
 # BUILDKITD_TAGS defines additional Go build tags for compiling buildkitd
 ARG BUILDKITD_TAGS
 ARG TARGETPLATFORM
+ARG GO_RACE_ENABLED
 RUN --mount=target=. --mount=target=/root/.cache,type=cache \
   --mount=target=/go/pkg/mod,type=cache \
   --mount=source=/tmp/.ldflags,target=/tmp/.ldflags,from=buildkit-version \
-  CGO_ENABLED=0 xx-go build -ldflags "$(cat /tmp/.ldflags) -extldflags '-static'" -tags "osusergo netgo static_build seccomp ${BUILDKITD_TAGS}" -o /usr/bin/buildkitd ./cmd/buildkitd && \
-  xx-verify --static /usr/bin/buildkitd
+  CGO_ENABLED="$GO_RACE_ENABLED" xx-go build $(if [ "$GO_RACE_ENABLED" != "0" ]; then echo -race; fi) -ldflags "$(cat /tmp/.ldflags) -extldflags '-static'" -tags "osusergo netgo static_build seccomp ${BUILDKITD_TAGS}" -o /usr/bin/buildkitd ./cmd/buildkitd && \
+  if [ "$GO_RACE_ENABLED" = "0" ]; then xx-verify --static /usr/bin/buildkitd; fi
 
 FROM scratch AS binaries-linux
 COPY --link --from=runc /usr/bin/runc /buildkit-runc
