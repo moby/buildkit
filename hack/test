@@ -13,7 +13,9 @@ set -eu -o pipefail
 : ${TEST_DOCKERD_BINARY=$(which dockerd)}
 : ${TEST_REPORT_SUFFIX=}
 : ${TEST_KEEP_CACHE=}
-: ${GO_RACE_ENABLED=}
+: ${BUILDFLAGS=}
+: ${VERIFYFLAGS=}
+: ${CGO_ENABLED=}
 : ${DOCKERFILE_RELEASES=}
 : ${BUILDKIT_WORKER_RANDOM=}
 : ${BUILDKITD_TAGS=}
@@ -61,12 +63,24 @@ testReportsVol="-v $testReportsDir:/testreports"
 gotestsumArgs="--format=standard-verbose --jsonfile=/testreports/go-test-report$TEST_REPORT_SUFFIX.json --junitfile=/testreports/junit-report$TEST_REPORT_SUFFIX.xml"
 gotestArgs="-mod=vendor -coverprofile=/testreports/coverage-report$TEST_REPORT_SUFFIX.txt -covermode=atomic"
 
+if [[ "$BUILDFLAGS" == *"-race"* ]]; then
+  if [ "$CGO_ENABLED" != "1" ]; then
+    echo>&2 "go race detector requires CGO_ENABLED=1"
+    exit 1
+  fi
+  # force buildkitd to halt on detected race conditions, which will cause the tests to fail
+  export GORACE="halt_on_error=1"
+  export VERIFYFLAGS="" # prevent -static verification
+fi
+
 buildxCmd build $cacheFromFlags \
   --build-arg BUILDKITD_TAGS \
   --build-arg HTTP_PROXY \
   --build-arg HTTPS_PROXY \
   --build-arg NO_PROXY \
-  --build-arg GO_RACE_ENABLED \
+  --build-arg BUILDFLAGS \
+  --build-arg VERIFYFLAGS \
+  --build-arg CGO_ENABLED \
   --target "integration-tests" \
   --output "type=docker,name=$iid" \
   $currentcontext
@@ -74,11 +88,6 @@ buildxCmd build $cacheFromFlags \
 cacheVolume="buildkit-test-cache"
 if ! docker container inspect "$cacheVolume" >/dev/null 2>/dev/null; then
   docker create -v /root/.cache -v /root/.cache/registry -v /go/pkg/mod --name "$cacheVolume" alpine
-fi
-
-if [ "$GO_RACE_ENABLED" = "1" ]; then
-  # force buildkitd to half on detected race conditions, which will cause the tests to fail
-  export GORACE="halt_on_error=1"
 fi
 
 if [ "$TEST_INTEGRATION" == 1 ]; then
