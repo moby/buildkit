@@ -2241,6 +2241,7 @@ func testBuildExportScratch(t *testing.T, sb integration.Sandbox) {
 				Attrs: map[string]string{
 					"name":        target,
 					"push":        "true",
+					"unpack":      "true",
 					"compression": "uncompressed",
 				},
 			},

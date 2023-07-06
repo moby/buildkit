@@ -271,7 +271,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 				}
 				tagDone(nil)
 
-				if src.Ref != nil && e.unpack {
+				if e.unpack {
 					if err := e.unpackImage(ctx, img, src, session.NewGroup(sessionID)); err != nil {
 						return nil, nil, err
 					}
@@ -375,16 +375,16 @@ func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Imag
 		return err
 	}
 
-	topLayerRef := src.Ref
-	if len(src.Refs) > 0 {
-		if r, ok := src.Refs[defaultPlatform()]; ok {
-			topLayerRef = r
-		} else {
-			return errors.Errorf("no reference for default platform %s", defaultPlatform())
-		}
+	ref, ok := src.FindRef(defaultPlatform())
+	if !ok {
+		return errors.Errorf("no reference for default platform %s", defaultPlatform())
+	}
+	if ref == nil {
+		// ref has no layers, so nothing to unpack
+		return nil
 	}
 
-	remotes, err := topLayerRef.GetRemotes(ctx, true, e.opts.RefCfg, false, s)
+	remotes, err := ref.GetRemotes(ctx, true, e.opts.RefCfg, false, s)
 	if err != nil {
 		return err
 	}
