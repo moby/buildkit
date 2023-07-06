@@ -1,5 +1,4 @@
 //go:build !windows
-// +build !windows
 
 package archive // import "github.com/docker/docker/pkg/archive"
 
@@ -83,7 +82,7 @@ func getFileUIDGID(stat interface{}) (idtools.Identity, error) {
 // handleTarTypeBlockCharFifo is an OS-specific helper function used by
 // createTarFile to handle the following types of header: Block; Char; Fifo
 func handleTarTypeBlockCharFifo(hdr *tar.Header, path string) error {
-	mode := uint32(hdr.Mode & 07777)
+	mode := uint32(hdr.Mode & 0o7777)
 	switch hdr.Typeflag {
 	case tar.TypeBlock:
 		mode |= unix.S_IFBLK

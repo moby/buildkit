@@ -20,6 +20,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/pkg/userns"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/docker/docker/pkg/ioutils"
@@ -42,7 +43,7 @@ import (
 // This value is currently implementation-defined, and not captured in any cross-runtime specification. Thus, it is
 // subject to change in Moby at any time -- image authors who require consistent or known directory permissions
 // should explicitly control them by ensuring that header entries exist for any applicable path.
-const ImpliedDirectoryMode = 0755
+const ImpliedDirectoryMode = 0o755
 
 type (
 	// Compression is the state represents if compressed or not.
@@ -70,6 +71,12 @@ type (
 		// replaced with the matching name from this map.
 		RebaseNames map[string]string
 		InUserNS    bool
+		// Allow unpacking to succeed in spite of failures to set extended
+		// attributes on the unpacked files due to the destination filesystem
+		// not supporting them or a lack of permissions. Extended attributes
+		// were probably in the archive for a reason, so set this option at
+		// your own peril.
+		BestEffortXattrs bool
 	}
 )
 
@@ -199,21 +206,21 @@ func gzDecompress(ctx context.Context, buf io.Reader) (io.ReadCloser, error) {
 	if noPigzEnv := os.Getenv("MOBY_DISABLE_PIGZ"); noPigzEnv != "" {
 		noPigz, err := strconv.ParseBool(noPigzEnv)
 		if err != nil {
-			logrus.WithError(err).Warn("invalid value in MOBY_DISABLE_PIGZ env var")
+			log.G(ctx).WithError(err).Warn("invalid value in MOBY_DISABLE_PIGZ env var")
 		}
 		if noPigz {
-			logrus.Debugf("Use of pigz is disabled due to MOBY_DISABLE_PIGZ=%s", noPigzEnv)
+			log.G(ctx).Debugf("Use of pigz is disabled due to MOBY_DISABLE_PIGZ=%s", noPigzEnv)
 			return gzip.NewReader(buf)
 		}
 	}
 
 	unpigzPath, err := exec.LookPath("unpigz")
 	if err != nil {
-		logrus.Debugf("unpigz binary not found, falling back to go gzip library")
+		log.G(ctx).Debugf("unpigz binary not found, falling back to go gzip library")
 		return gzip.NewReader(buf)
 	}
 
-	logrus.Debugf("Using %s to decompress", unpigzPath)
+	log.G(ctx).Debugf("Using %s to decompress", unpigzPath)
 
 	return cmdStream(exec.CommandContext(ctx, unpigzPath, "-d", "-c"), buf)
 }
@@ -666,7 +673,19 @@ func (ta *tarAppender) addTarFile(path, name string) error {
 	return nil
 }
 
-func createTarFile(path, extractDir string, hdr *tar.Header, reader io.Reader, Lchown bool, chownOpts *idtools.Identity, inUserns bool) error {
+func createTarFile(path, extractDir string, hdr *tar.Header, reader io.Reader, opts *TarOptions) error {
+	var (
+		Lchown                     = true
+		inUserns, bestEffortXattrs bool
+		chownOpts                  *idtools.Identity
+	)
+	if opts != nil {
+		Lchown = !opts.NoLchown
+		inUserns = opts.InUserNS
+		chownOpts = opts.ChownOpts
+		bestEffortXattrs = opts.BestEffortXattrs
+	}
+
 	// hdr.Mode is in linux format, which we can use for sycalls,
 	// but for os.Foo() calls we need the mode converted to os.FileMode,
 	// so use hdrInfo.Mode() (they differ for e.g. setuid bits)
@@ -736,7 +755,7 @@ func createTarFile(path, extractDir string, hdr *tar.Header, reader io.Reader, L
 		}
 
 	case tar.TypeXGlobalHeader:
-		logrus.Debug("PAX Global Extended Headers found and ignored")
+		log.G(context.TODO()).Debug("PAX Global Extended Headers found and ignored")
 		return nil
 
 	default:
@@ -757,26 +776,22 @@ func createTarFile(path, extractDir string, hdr *tar.Header, reader io.Reader, L
 		}
 	}
 
-	var errors []string
+	var xattrErrs []string
 	for key, value := range hdr.Xattrs {
 		if err := system.Lsetxattr(path, key, []byte(value), 0); err != nil {
-			if err == syscall.ENOTSUP || err == syscall.EPERM {
-				// We ignore errors here because not all graphdrivers support
-				// xattrs *cough* old versions of AUFS *cough*. However only
-				// ENOTSUP should be emitted in that case, otherwise we still
-				// bail.
+			if bestEffortXattrs && errors.Is(err, syscall.ENOTSUP) || errors.Is(err, syscall.EPERM) {
 				// EPERM occurs if modifying xattrs is not allowed. This can
 				// happen when running in userns with restrictions (ChromeOS).
-				errors = append(errors, err.Error())
+				xattrErrs = append(xattrErrs, err.Error())
 				continue
 			}
 			return err
 		}
 	}
 
-	if len(errors) > 0 {
-		logrus.WithFields(logrus.Fields{
-			"errors": errors,
+	if len(xattrErrs) > 0 {
+		log.G(context.TODO()).WithFields(logrus.Fields{
+			"errors": xattrErrs,
 		}).Warn("ignored xattrs in archive: underlying filesystem doesn't support them")
 	}
 
@@ -893,13 +908,13 @@ func (t *Tarballer) Do() {
 	defer func() {
 		// Make sure to check the error on Close.
 		if err := ta.TarWriter.Close(); err != nil {
-			logrus.Errorf("Can't close tar writer: %s", err)
+			log.G(context.TODO()).Errorf("Can't close tar writer: %s", err)
 		}
 		if err := t.compressWriter.Close(); err != nil {
-			logrus.Errorf("Can't close compress writer: %s", err)
+			log.G(context.TODO()).Errorf("Can't close compress writer: %s", err)
 		}
 		if err := t.pipeWriter.Close(); err != nil {
-			logrus.Errorf("Can't close pipe writer: %s", err)
+			log.G(context.TODO()).Errorf("Can't close pipe writer: %s", err)
 		}
 	}()
 
@@ -922,7 +937,7 @@ func (t *Tarballer) Do() {
 		// directory. So, we must split the source path and use the
 		// basename as the include.
 		if len(t.options.IncludeFiles) > 0 {
-			logrus.Warn("Tar: Can't archive a file with includes")
+			log.G(context.TODO()).Warn("Tar: Can't archive a file with includes")
 		}
 
 		dir, base := SplitPathDirEntry(t.srcPath)
@@ -947,7 +962,7 @@ func (t *Tarballer) Do() {
 		walkRoot := getWalkRoot(t.srcPath, include)
 		filepath.WalkDir(walkRoot, func(filePath string, f os.DirEntry, err error) error {
 			if err != nil {
-				logrus.Errorf("Tar: Can't stat file %s to tar: %s", t.srcPath, err)
+				log.G(context.TODO()).Errorf("Tar: Can't stat file %s to tar: %s", t.srcPath, err)
 				return nil
 			}
 
@@ -986,7 +1001,7 @@ func (t *Tarballer) Do() {
 					skip, matchInfo, err = t.pm.MatchesUsingParentResults(relFilePath, patternmatcher.MatchInfo{})
 				}
 				if err != nil {
-					logrus.Errorf("Error matching %s: %v", relFilePath, err)
+					log.G(context.TODO()).Errorf("Error matching %s: %v", relFilePath, err)
 					return err
 				}
 
@@ -1047,7 +1062,7 @@ func (t *Tarballer) Do() {
 			}
 
 			if err := ta.addTarFile(filePath, relFilePath); err != nil {
-				logrus.Errorf("Can't add file %s to tar: %s", filePath, err)
+				log.G(context.TODO()).Errorf("Can't add file %s to tar: %s", filePath, err)
 				// if pipe is broken, stop writing tar stream to it
 				if err == io.ErrClosedPipe {
 					return err
@@ -1084,7 +1099,7 @@ loop:
 
 		// ignore XGlobalHeader early to avoid creating parent directories for them
 		if hdr.Typeflag == tar.TypeXGlobalHeader {
-			logrus.Debugf("PAX Global Extended Headers found for %s and ignored", hdr.Name)
+			log.G(context.TODO()).Debugf("PAX Global Extended Headers found for %s and ignored", hdr.Name)
 			continue
 		}
 
@@ -1158,7 +1173,7 @@ loop:
 			}
 		}
 
-		if err := createTarFile(path, dest, hdr, trBuf, !options.NoLchown, options.ChownOpts, options.InUserNS); err != nil {
+		if err := createTarFile(path, dest, hdr, trBuf, options); err != nil {
 			return err
 		}
 
@@ -1297,7 +1312,7 @@ func (archiver *Archiver) CopyWithTar(src, dst string) error {
 	// as owner
 	rootIDs := archiver.IDMapping.RootPair()
 	// Create dst, copy src's content into it
-	if err := idtools.MkdirAllAndChownNew(dst, 0755, rootIDs); err != nil {
+	if err := idtools.MkdirAllAndChownNew(dst, 0o755, rootIDs); err != nil {
 		return err
 	}
 	return archiver.TarUntar(src, dst)
@@ -1322,7 +1337,7 @@ func (archiver *Archiver) CopyFileWithTar(src, dst string) (err error) {
 		dst = filepath.Join(dst, filepath.Base(src))
 	}
 	// Create the holding directory if necessary
-	if err := system.MkdirAll(filepath.Dir(dst), 0700); err != nil {
+	if err := system.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
 		return err
 	}
 
