@@ -27,6 +27,7 @@ import (
 	"github.com/moby/buildkit/util/progress"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 )
 
@@ -205,40 +206,36 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 		return nil, nil, err
 	}
 
-	mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
+	var refs []cache.ImmutableRef
 	if src.Ref != nil {
-		remotes, err := src.Ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
-		if err != nil {
-			return nil, nil, err
-		}
-		remote := remotes[0]
-		// unlazy before tar export as the tar writer does not handle
-		// layer blobs in parallel (whereas unlazy does)
-		if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
-			if err := unlazier.Unlazy(ctx); err != nil {
-				return nil, nil, err
-			}
-		}
-		for _, desc := range remote.Descriptors {
-			mprovider.Add(desc.Digest, remote.Provider)
-		}
+		refs = append(refs, src.Ref)
 	}
-	if len(src.Refs) > 0 {
-		for _, r := range src.Refs {
-			remotes, err := r.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
+	for _, ref := range src.Refs {
+		refs = append(refs, ref)
+	}
+	eg, egCtx := errgroup.WithContext(ctx)
+	mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
+	for _, ref := range refs {
+		ref := ref
+		eg.Go(func() error {
+			remotes, err := ref.GetRemotes(egCtx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
 			if err != nil {
-				return nil, nil, err
+				return err
 			}
 			remote := remotes[0]
 			if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
-				if err := unlazier.Unlazy(ctx); err != nil {
-					return nil, nil, err
+				if err := unlazier.Unlazy(egCtx); err != nil {
+					return err
 				}
 			}
 			for _, desc := range remote.Descriptors {
 				mprovider.Add(desc.Digest, remote.Provider)
 			}
-		}
+			return nil
+		})
+	}
+	if err := eg.Wait(); err != nil {
+		return nil, nil, err
 	}
 
 	if e.tar {
