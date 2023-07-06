@@ -1,6 +1,3 @@
-//go:build dfaddchecksum
-// +build dfaddchecksum
-
 package dockerfile
 
 import (

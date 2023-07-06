@@ -7,8 +7,6 @@ run:
 
   build-tags:
     - dfrunsecurity
-    - dfaddgit
-    - dfaddchecksum
 
 linters:
   enable:

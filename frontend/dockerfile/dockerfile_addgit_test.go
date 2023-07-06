@@ -1,6 +1,3 @@
-//go:build dfaddgit
-// +build dfaddgit
-
 package dockerfile
 
 import (

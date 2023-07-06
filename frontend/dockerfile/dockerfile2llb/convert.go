@@ -1055,9 +1055,6 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		if !cfg.isAddCommand {
 			return errors.New("checksum can't be specified for COPY")
 		}
-		if !addChecksumEnabled {
-			return errors.New("instruction 'ADD --checksum=<CHECKSUM>' requires the labs channel")
-		}
 		if len(cfg.params.SourcePaths) != 1 {
 			return errors.New("checksum can't be specified for multiple sources")
 		}
@@ -1081,9 +1078,6 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		if gitRefErr == nil && !gitRef.IndistinguishableFromLocal {
 			if !cfg.isAddCommand {
 				return errors.New("source can't be a git ref for COPY")
-			}
-			if !addGitEnabled {
-				return errors.New("instruction ADD <git ref> requires the labs channel")
 			}
 			// TODO: print a warning (not an error) if gitRef.UnencryptedTCP is true
 			commit := gitRef.Commit
