@@ -6,6 +6,7 @@ import (
 	io "io"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -26,6 +27,7 @@ const (
 	keyFollowPaths        = "followpaths"
 	keyDirName            = "dir-name"
 	keyExporterMetaPrefix = "exporter-md-"
+	keyOptsEncoded        = "opts-encoded"
 )
 
 type fsSyncProvider struct {
@@ -84,7 +86,17 @@ func (sp *fsSyncProvider) handle(method string, stream grpc.ServerStream) (retEr
 	}
 
 	opts, _ := metadata.FromIncomingContext(stream.Context()) // if no metadata continue with empty object
-	opts = decodeOpts(opts)
+
+	isDecoded := false
+	if v, ok := opts[keyOptsEncoded]; ok && len(v) > 0 {
+		if b, _ := strconv.ParseBool(v[0]); b {
+			isDecoded = true
+		}
+	}
+
+	if isDecoded {
+		opts = decodeOpts(opts)
+	}
 
 	dirName := ""
 	name, ok := opts[keyDirName]
@@ -211,6 +223,9 @@ func FSSync(ctx context.Context, c session.Caller, opt FSSendRequestOpt) error {
 	client := NewFileSyncClient(c.Conn())
 
 	var stream grpc.ClientStream
+
+	// mark that we have encoded options so older versions with raw values can be detected on client side
+	opts[keyOptsEncoded] = []string{"1"}
 
 	opts = encodeOpts(opts)
 
