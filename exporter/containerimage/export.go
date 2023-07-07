@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -358,25 +359,27 @@ func (e *imageExporterInstance) pushImage(ctx context.Context, src *exporter.Sou
 }
 
 func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Image, src *exporter.Source, s session.Group) (err0 error) {
-	p := platforms.Format(platforms.Normalize(platforms.DefaultSpec()))
+	matcher := platforms.Only(platforms.Normalize(platforms.DefaultSpec()))
 
 	ps, err := exptypes.ParsePlatforms(src.Metadata)
 	if err != nil {
 		return err
 	}
-	found := false
+	matching := []exptypes.Platform{}
 	for _, p2 := range ps.Platforms {
-		if p2.ID == p {
-			found = true
-			break
+		if matcher.Match(p2.Platform) {
+			matching = append(matching, p2)
 		}
 	}
-	if !found {
+	if len(matching) == 0 {
 		// current platform was not found, so skip unpacking
 		return nil
 	}
+	sort.SliceStable(matching, func(i, j int) bool {
+		return matcher.Less(matching[i].Platform, matching[j].Platform)
+	})
 
-	ref, _ := src.FindRef(p)
+	ref, _ := src.FindRef(matching[0].ID)
 	if ref == nil {
 		// ref has no layers, so nothing to unpack
 		return nil
