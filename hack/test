@@ -65,7 +65,7 @@ gotestArgs="-mod=vendor -coverprofile=/testreports/coverage-report$TEST_REPORT_S
 
 if [[ "$GOBUILDFLAGS" == *"-race"* ]]; then
   if [ "$CGO_ENABLED" != "1" ]; then
-    echo>&2 "go race detector requires CGO_ENABLED=1"
+    echo >&2 "go race detector requires CGO_ENABLED=1"
     exit 1
   fi
   # force buildkitd to halt on detected race conditions, which will cause the tests to fail
