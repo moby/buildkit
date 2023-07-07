@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	io "io"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/moby/buildkit/session"
 	"github.com/pkg/errors"
@@ -24,6 +27,7 @@ const (
 	keyFollowPaths        = "followpaths"
 	keyDirName            = "dir-name"
 	keyExporterMetaPrefix = "exporter-md-"
+	keyOptsEncoded        = "opts-encoded"
 )
 
 type fsSyncProvider struct {
@@ -82,6 +86,17 @@ func (sp *fsSyncProvider) handle(method string, stream grpc.ServerStream) (retEr
 	}
 
 	opts, _ := metadata.FromIncomingContext(stream.Context()) // if no metadata continue with empty object
+
+	isDecoded := false
+	if v, ok := opts[keyOptsEncoded]; ok && len(v) > 0 {
+		if b, _ := strconv.ParseBool(v[0]); b {
+			isDecoded = true
+		}
+	}
+
+	if isDecoded {
+		opts = decodeOpts(opts)
+	}
 
 	dirName := ""
 	name, ok := opts[keyDirName]
@@ -208,6 +223,11 @@ func FSSync(ctx context.Context, c session.Caller, opt FSSendRequestOpt) error {
 	client := NewFileSyncClient(c.Conn())
 
 	var stream grpc.ClientStream
+
+	// mark that we have encoded options so older versions with raw values can be detected on client side
+	opts[keyOptsEncoded] = []string{"1"}
+
+	opts = encodeOpts(opts)
 
 	ctx = metadata.NewOutgoingContext(ctx, opts)
 
@@ -336,4 +356,45 @@ func (e InvalidSessionError) Error() string {
 
 func (e InvalidSessionError) Unwrap() error {
 	return e.err
+}
+
+func encodeOpts(opts map[string][]string) map[string][]string {
+	md := make(map[string][]string, len(opts))
+	for k, v := range opts {
+		out := make([]string, len(v))
+		for i, s := range v {
+			out[i] = encodeStringForHeader(s)
+		}
+		md[k] = out
+	}
+	return md
+}
+
+func decodeOpts(opts map[string][]string) map[string][]string {
+	md := make(map[string][]string, len(opts))
+	for k, v := range opts {
+		out := make([]string, len(v))
+		for i, s := range v {
+			out[i], _ = url.QueryUnescape(s)
+		}
+		md[k] = out
+	}
+	return md
+}
+
+// encodeStringForHeader encodes a string value so it can be used in grpc header. This encoding
+// is backwards compatible and avoids encoding ASCII characters.
+func encodeStringForHeader(input string) string {
+	var output strings.Builder
+	for _, runeVal := range input {
+		// Only encode non-ASCII characters.
+		if runeVal > unicode.MaxASCII {
+			// Encode each non-ASCII character individually.
+			output.WriteString(url.QueryEscape(string(runeVal)))
+		} else {
+			// Directly append ASCII characters and '*' to the output.
+			output.WriteRune(runeVal)
+		}
+	}
+	return output.String()
 }
