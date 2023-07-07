@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/moby/buildkit/executor/resources/types"
 	"github.com/pkg/errors"
@@ -81,7 +82,7 @@ func getCgroupCPUStat(cgroupPath string) (*types.CPUStat, error) {
 func parsePressureFile(filename string) (*types.Pressure, error) {
 	content, err := os.ReadFile(filename)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) { // pressure file requires CONFIG_PSI
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ENOTSUP) { // pressure file requires CONFIG_PSI
 			return nil, nil
 		}
 		return nil, err
