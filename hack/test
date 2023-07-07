@@ -13,7 +13,7 @@ set -eu -o pipefail
 : ${TEST_DOCKERD_BINARY=$(which dockerd)}
 : ${TEST_REPORT_SUFFIX=}
 : ${TEST_KEEP_CACHE=}
-: ${BUILDFLAGS=}
+: ${GOBUILDFLAGS=}
 : ${VERIFYFLAGS=}
 : ${CGO_ENABLED=}
 : ${DOCKERFILE_RELEASES=}
@@ -63,7 +63,7 @@ testReportsVol="-v $testReportsDir:/testreports"
 gotestsumArgs="--format=standard-verbose --jsonfile=/testreports/go-test-report$TEST_REPORT_SUFFIX.json --junitfile=/testreports/junit-report$TEST_REPORT_SUFFIX.xml"
 gotestArgs="-mod=vendor -coverprofile=/testreports/coverage-report$TEST_REPORT_SUFFIX.txt -covermode=atomic"
 
-if [[ "$BUILDFLAGS" == *"-race"* ]]; then
+if [[ "$GOBUILDFLAGS" == *"-race"* ]]; then
   if [ "$CGO_ENABLED" != "1" ]; then
     echo>&2 "go race detector requires CGO_ENABLED=1"
     exit 1
@@ -78,7 +78,7 @@ buildxCmd build $cacheFromFlags \
   --build-arg HTTP_PROXY \
   --build-arg HTTPS_PROXY \
   --build-arg NO_PROXY \
-  --build-arg BUILDFLAGS \
+  --build-arg GOBUILDFLAGS \
   --build-arg VERIFYFLAGS \
   --build-arg CGO_ENABLED \
   --target "integration-tests" \

@@ -36,7 +36,7 @@ test:
 
 .PHONY: test-race
 test-race:
-	CGO_ENABLED=1 BUILDFLAGS="-race" ./hack/test integration gateway dockerfile
+	CGO_ENABLED=1 GOBUILDFLAGS="-race" ./hack/test integration gateway dockerfile
 
 .PHONY: lint
 lint:
