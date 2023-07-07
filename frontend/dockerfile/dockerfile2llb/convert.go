@@ -1274,11 +1274,12 @@ func dispatchEntrypoint(d *dispatchState, c *instructions.EntrypointCommand) err
 
 func dispatchHealthcheck(d *dispatchState, c *instructions.HealthCheckCommand) error {
 	d.image.Config.Healthcheck = &image.HealthConfig{
-		Test:        c.Health.Test,
-		Interval:    c.Health.Interval,
-		Timeout:     c.Health.Timeout,
-		StartPeriod: c.Health.StartPeriod,
-		Retries:     c.Health.Retries,
+		Test:          c.Health.Test,
+		Interval:      c.Health.Interval,
+		Timeout:       c.Health.Timeout,
+		StartPeriod:   c.Health.StartPeriod,
+		StartInterval: c.Health.StartInterval,
+		Retries:       c.Health.Retries,
 	}
 	return commitToHistory(&d.image, fmt.Sprintf("HEALTHCHECK %q", d.image.Config.Healthcheck), false, nil, d.epoch)
 }

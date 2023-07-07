@@ -544,6 +544,7 @@ func parseHealthcheck(req parseRequest) (*HealthCheckCommand, error) {
 		flInterval := req.flags.AddString("interval", "")
 		flTimeout := req.flags.AddString("timeout", "")
 		flStartPeriod := req.flags.AddString("start-period", "")
+		flStartInterval := req.flags.AddString("start-interval", "")
 		flRetries := req.flags.AddString("retries", "")
 
 		if err := req.flags.Parse(); err != nil {
@@ -583,6 +584,12 @@ func parseHealthcheck(req parseRequest) (*HealthCheckCommand, error) {
 			return nil, err
 		}
 		healthcheck.StartPeriod = startPeriod
+
+		startInterval, err := parseOptInterval(flStartInterval)
+		if err != nil {
+			return nil, err
+		}
+		healthcheck.StartInterval = startInterval
 
 		if flRetries.Value != "" {
 			retries, err := strconv.ParseInt(flRetries.Value, 10, 32)
