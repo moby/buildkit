@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -358,6 +359,32 @@ func (e *imageExporterInstance) pushImage(ctx context.Context, src *exporter.Sou
 }
 
 func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Image, src *exporter.Source, s session.Group) (err0 error) {
+	matcher := platforms.Only(platforms.Normalize(platforms.DefaultSpec()))
+
+	ps, err := exptypes.ParsePlatforms(src.Metadata)
+	if err != nil {
+		return err
+	}
+	matching := []exptypes.Platform{}
+	for _, p2 := range ps.Platforms {
+		if matcher.Match(p2.Platform) {
+			matching = append(matching, p2)
+		}
+	}
+	if len(matching) == 0 {
+		// current platform was not found, so skip unpacking
+		return nil
+	}
+	sort.SliceStable(matching, func(i, j int) bool {
+		return matcher.Less(matching[i].Platform, matching[j].Platform)
+	})
+
+	ref, _ := src.FindRef(matching[0].ID)
+	if ref == nil {
+		// ref has no layers, so nothing to unpack
+		return nil
+	}
+
 	unpackDone := progress.OneOff(ctx, "unpacking to "+img.Name)
 	defer func() {
 		unpackDone(err0)
@@ -373,15 +400,6 @@ func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Imag
 	manifest, err := images.Manifest(ctx, contentStore, img.Target, platforms.Default())
 	if err != nil {
 		return err
-	}
-
-	ref, ok := src.FindRef(defaultPlatform())
-	if !ok {
-		return errors.Errorf("no reference for default platform %s", defaultPlatform())
-	}
-	if ref == nil {
-		// ref has no layers, so nothing to unpack
-		return nil
 	}
 
 	remotes, err := ref.GetRemotes(ctx, true, e.opts.RefCfg, false, s)
@@ -455,12 +473,6 @@ func addAnnotations(m map[digest.Digest]map[string]string, desc ocispecs.Descrip
 	for k, v := range desc.Annotations {
 		a[k] = v
 	}
-}
-
-func defaultPlatform() string {
-	// Use normalized platform string to avoid the mismatch with platform options which
-	// are normalized using platforms.Normalize()
-	return platforms.Format(platforms.Normalize(platforms.DefaultSpec()))
 }
 
 func NewDescriptorReference(desc ocispecs.Descriptor, release func(context.Context) error) exporter.DescriptorReference {
