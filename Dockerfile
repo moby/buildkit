@@ -94,11 +94,14 @@ FROM buildkit-base AS buildkitd
 # BUILDKITD_TAGS defines additional Go build tags for compiling buildkitd
 ARG BUILDKITD_TAGS
 ARG TARGETPLATFORM
+ARG GOBUILDFLAGS
+ARG VERIFYFLAGS="--static"
+ARG CGO_ENABLED=0
 RUN --mount=target=. --mount=target=/root/.cache,type=cache \
   --mount=target=/go/pkg/mod,type=cache \
   --mount=source=/tmp/.ldflags,target=/tmp/.ldflags,from=buildkit-version \
-  CGO_ENABLED=0 xx-go build -ldflags "$(cat /tmp/.ldflags) -extldflags '-static'" -tags "osusergo netgo static_build seccomp ${BUILDKITD_TAGS}" -o /usr/bin/buildkitd ./cmd/buildkitd && \
-  xx-verify --static /usr/bin/buildkitd
+  xx-go build ${GOBUILDFLAGS} -ldflags "$(cat /tmp/.ldflags) -extldflags '-static'" -tags "osusergo netgo static_build seccomp ${BUILDKITD_TAGS}" -o /usr/bin/buildkitd ./cmd/buildkitd && \
+  xx-verify ${VERIFYFLAGS} /usr/bin/buildkitd
 
 FROM scratch AS binaries-linux
 COPY --link --from=runc /usr/bin/runc /buildkit-runc

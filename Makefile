@@ -34,6 +34,10 @@ clean:
 test:
 	./hack/test integration gateway dockerfile
 
+.PHONY: test-race
+test-race:
+	CGO_ENABLED=1 GOBUILDFLAGS="-race" ./hack/test integration gateway dockerfile
+
 .PHONY: lint
 lint:
 	$(BUILDX_CMD) bake lint
