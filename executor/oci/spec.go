@@ -137,6 +137,12 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 		return nil, nil, err
 	}
 
+	if cgroupNamespaceSupported() {
+		s.Linux.Namespaces = append(s.Linux.Namespaces, specs.LinuxNamespace{
+			Type: specs.CgroupNamespace,
+		})
+	}
+
 	if len(meta.Ulimit) == 0 {
 		// reset open files limit
 		s.Process.Rlimits = nil

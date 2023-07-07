@@ -6,7 +6,9 @@ package oci
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
+	"sync"
 
 	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/oci"
@@ -19,6 +21,11 @@ import (
 	selinux "github.com/opencontainers/selinux/go-selinux"
 	"github.com/opencontainers/selinux/go-selinux/label"
 	"github.com/pkg/errors"
+)
+
+var (
+	cgroupNSOnce     sync.Once
+	supportsCgroupNS bool
 )
 
 const (
@@ -138,4 +145,13 @@ func getTracingSocketMount(socket string) specs.Mount {
 
 func getTracingSocket() string {
 	return fmt.Sprintf("unix://%s", tracingSocketPath)
+}
+
+func cgroupNamespaceSupported() bool {
+	cgroupNSOnce.Do(func() {
+		if _, err := os.Stat("/proc/self/ns/cgroup"); !os.IsNotExist(err) {
+			supportsCgroupNS = true
+		}
+	})
+	return supportsCgroupNS
 }
