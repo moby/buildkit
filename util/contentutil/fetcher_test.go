@@ -3,7 +3,9 @@ package contentutil
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"io"
+	"math/big"
 	"testing"
 	"time"
 
@@ -101,5 +103,98 @@ func (sb *slowBuffer) Read(b []byte) (int, error) {
 }
 
 func (sb *slowBuffer) Close() error {
+	return nil
+}
+
+func TestFetchNoSeek(t *testing.T) {
+	t.Parallel()
+	ctx := context.TODO()
+
+	f := &dummyFetcherNoSeek{
+		content: []byte("foobar"),
+	}
+	p := FromFetcher(f)
+
+	rdr, err := p.ReaderAt(ctx, ocispecs.Descriptor{Digest: digest.FromBytes([]byte("foobar"))})
+	require.NoError(t, err)
+
+	buf := make([]byte, 2)
+
+	n, err := rdr.ReadAt(buf, 2)
+	require.NoError(t, err)
+	require.Equal(t, "ob", string(buf[:n]))
+
+	n, err = rdr.ReadAt(buf, 5)
+	require.Error(t, err)
+	require.Equal(t, err, io.EOF)
+	require.Equal(t, "r", string(buf[:n]))
+
+	n, err = rdr.ReadAt(buf, 1)
+	require.NoError(t, err)
+	require.Equal(t, "oo", string(buf[:n]))
+}
+
+func TestFetchNoSeekBigBlock(t *testing.T) {
+	t.Parallel()
+	ctx := context.TODO()
+
+	const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	s := make([]byte, 3000)
+	for i := range s {
+		x, err := rand.Int(rand.Reader, big.NewInt(int64(len(letterBytes))))
+		require.NoError(t, err)
+		s[i] = letterBytes[x.Int64()]
+	}
+
+	f := &dummyFetcherNoSeek{
+		content: s,
+	}
+	p := FromFetcher(f)
+
+	rdr, err := p.ReaderAt(ctx, ocispecs.Descriptor{Digest: digest.FromBytes(s)})
+	require.NoError(t, err)
+
+	buf := make([]byte, 4)
+
+	n, err := rdr.ReadAt(buf, 2)
+	require.NoError(t, err)
+	require.Equal(t, string(s[2:6]), string(buf[:n]))
+
+	n, err = rdr.ReadAt(buf, 2090)
+	require.NoError(t, err)
+	require.Equal(t, string(s[2090:2094]), string(buf[:n]))
+
+	n, err = rdr.ReadAt(buf, 1040)
+	require.NoError(t, err)
+	require.Equal(t, string(s[1040:1044]), string(buf[:n]))
+}
+
+type dummyFetcherNoSeek struct {
+	content []byte
+}
+
+func (f *dummyFetcherNoSeek) Fetch(ctx context.Context, desc ocispecs.Descriptor) (io.ReadCloser, error) {
+	return newBufferNoSeek(f.content), nil
+}
+
+func newBufferNoSeek(dt []byte) io.ReadCloser {
+	return &bufferNoSeek{dt: dt}
+}
+
+type bufferNoSeek struct {
+	dt  []byte
+	off int
+}
+
+func (bns *bufferNoSeek) Read(b []byte) (int, error) {
+	if bns.off >= len(bns.dt) {
+		return 0, io.EOF
+	}
+	b[0] = bns.dt[bns.off]
+	bns.off++
+	return 1, nil
+}
+
+func (bns *bufferNoSeek) Close() error {
 	return nil
 }
