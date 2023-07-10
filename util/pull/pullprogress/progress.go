@@ -93,10 +93,10 @@ func trackProgress(ctx context.Context, desc ocispecs.Descriptor, manager PullMa
 
 	ticker := time.NewTicker(150 * time.Millisecond)
 	defer ticker.Stop()
-	go func() {
+	go func(ctx context.Context) {
 		<-ctx.Done()
 		ticker.Stop()
-	}()
+	}(ctx)
 
 	pw, _, _ := progress.NewFromContext(ctx)
 	defer pw.Close()
