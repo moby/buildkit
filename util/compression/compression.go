@@ -78,7 +78,6 @@ func (c Config) SetLevel(l int) Config {
 
 const (
 	mediaTypeDockerSchema2LayerZstd = images.MediaTypeDockerSchema2Layer + ".zstd"
-	mediaTypeImageLayerZstd         = ocispecs.MediaTypeImageLayer + "+zstd" // unreleased image-spec#790
 )
 
 var Default = Gzip
@@ -104,7 +103,7 @@ func fromMediaType(mediaType string) (Type, error) {
 		return Uncompressed, nil
 	case ocispecs.MediaTypeImageLayerGzip, ocispecs.MediaTypeImageLayerNonDistributableGzip: //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
 		return Gzip, nil
-	case mediaTypeImageLayerZstd, ocispecs.MediaTypeImageLayerNonDistributableZstd: //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
+	case ocispecs.MediaTypeImageLayerZstd, ocispecs.MediaTypeImageLayerNonDistributableZstd: //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
 		return Zstd, nil
 	default:
 		return nil, errors.Errorf("unsupported media type %s", mediaType)
@@ -193,7 +192,7 @@ var toDockerLayerType = map[string]string{
 	images.MediaTypeDockerSchema2LayerForeignGzip:    images.MediaTypeDockerSchema2LayerForeignGzip,
 	ocispecs.MediaTypeImageLayerNonDistributable:     images.MediaTypeDockerSchema2LayerForeign,     //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
 	ocispecs.MediaTypeImageLayerNonDistributableGzip: images.MediaTypeDockerSchema2LayerForeignGzip, //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
-	mediaTypeImageLayerZstd:                          mediaTypeDockerSchema2LayerZstd,
+	ocispecs.MediaTypeImageLayerZstd:                 mediaTypeDockerSchema2LayerZstd,
 	mediaTypeDockerSchema2LayerZstd:                  mediaTypeDockerSchema2LayerZstd,
 }
 
@@ -207,8 +206,8 @@ var toOCILayerType = map[string]string{
 	images.MediaTypeDockerSchema2LayerGzip:           ocispecs.MediaTypeImageLayerGzip,
 	images.MediaTypeDockerSchema2LayerForeign:        ocispecs.MediaTypeImageLayerNonDistributable,     //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
 	images.MediaTypeDockerSchema2LayerForeignGzip:    ocispecs.MediaTypeImageLayerNonDistributableGzip, //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
-	mediaTypeImageLayerZstd:                          mediaTypeImageLayerZstd,
-	mediaTypeDockerSchema2LayerZstd:                  mediaTypeImageLayerZstd,
+	ocispecs.MediaTypeImageLayerZstd:                 ocispecs.MediaTypeImageLayerZstd,
+	mediaTypeDockerSchema2LayerZstd:                  ocispecs.MediaTypeImageLayerZstd,
 }
 
 func convertLayerMediaType(ctx context.Context, mediaType string, oci bool) string {
