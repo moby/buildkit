@@ -11,6 +11,7 @@ import "github.com/tonistiigi/fsutil/types/stat.proto";
 import "github.com/moby/buildkit/sourcepolicy/pb/policy.proto";
 
 
+
 option (gogoproto.sizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
@@ -124,11 +125,13 @@ message ResolveImageConfigRequest {
 	int32 ResolverType = 5;
 	string SessionID = 6;
 	string StoreID = 7;
+	repeated moby.buildkit.v1.sourcepolicy.Policy SourcePolicies = 8;
 }
 
 message ResolveImageConfigResponse {
 	string Digest = 1 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
 	bytes Config = 2;
+	string Ref = 3;
 }
 
 message SolveRequest {
