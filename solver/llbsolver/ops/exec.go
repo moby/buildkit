@@ -492,10 +492,10 @@ func (e *ExecOp) loadNetworkConfig(ctx context.Context, g session.Group) (*netwo
 	if id == "" {
 		return nil, nil
 	}
-	cfg := &networks.Config{}
+	var cfg *networks.Config
 	err := e.sm.Any(ctx, g, func(ctx context.Context, _ string, caller session.Caller) error {
 		var err error
-		cfg, err = networks.MergeConfig(ctx, caller, cfg, id)
+		cfg, err = networks.LoadConfig(ctx, caller, id)
 		return err
 	})
 	if err != nil {

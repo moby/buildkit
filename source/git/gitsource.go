@@ -305,16 +305,8 @@ func (gs *gitSourceHandler) mountKnownHosts(ctx context.Context) (string, func()
 }
 
 func (gs *gitSourceHandler) networkConfig(ctx context.Context, g session.Group) (*networks.Config, error) {
-	netConfig := &networks.Config{}
-
-	if gs.dns != nil {
-		// base network config inherits from system-wide config
-		netConfig.Dns = &networks.DNSConfig{
-			Nameservers:   gs.dns.Nameservers,
-			Options:       gs.dns.Options,
-			SearchDomains: gs.dns.SearchDomains,
-		}
-	}
+	// base network config inherits from system-wide config
+	netConfig := networks.FromDNSConfig(gs.dns)
 
 	if gs.src.NetworkConfigID != "" {
 		err := gs.sm.Any(ctx, g, func(ctx context.Context, _ string, caller session.Caller) error {

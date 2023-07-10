@@ -4,6 +4,7 @@ import (
 	context "context"
 	strings "strings"
 
+	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/session"
 )
 
@@ -15,21 +16,44 @@ func (config *Config) ExtraHosts() string {
 	return out
 }
 
-func MergeConfig(ctx context.Context, c session.Caller, base *Config, id string) (*Config, error) {
+func FromDNSConfig(dns *executor.DNSConfig) *Config {
+	if dns == nil {
+		return &Config{}
+	}
+
+	return &Config{
+		Dns: &DNSConfig{
+			Nameservers:   dns.Nameservers,
+			Options:       dns.Options,
+			SearchDomains: dns.SearchDomains,
+		},
+	}
+}
+
+func LoadConfig(ctx context.Context, c session.Caller, id string) (*Config, error) {
 	nw, err := NewNetworksClient(c.Conn()).GetNetwork(ctx, &GetNetworkRequest{ID: id})
 	if err != nil {
 		return nil, err
 	}
 
-	if nw.Config == nil {
+	return nw.Config, nil
+}
+
+func MergeConfig(ctx context.Context, c session.Caller, base *Config, id string) (*Config, error) {
+	custom, err := LoadConfig(ctx, c, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if custom == nil {
 		return base, nil
 	}
 
 	cp := *base
 
-	cp.IpHosts = append(nw.Config.IpHosts, cp.IpHosts...)
+	cp.IpHosts = append(custom.IpHosts, cp.IpHosts...)
 
-	dns := nw.Config.Dns
+	dns := custom.Dns
 	if dns != nil {
 		var dnsCp DNSConfig
 		if cp.Dns != nil {
@@ -38,15 +62,14 @@ func MergeConfig(ctx context.Context, c session.Caller, base *Config, id string)
 
 		cp.Dns = &dnsCp
 
-		// override individual fields
-		// TODO append? should match behavior with git source
-
 		if len(dns.Nameservers) > 0 {
 			cp.Dns.Nameservers = dns.Nameservers
 		}
+
 		if len(dns.Options) > 0 {
 			cp.Dns.Options = dns.Options
 		}
+
 		if len(dns.SearchDomains) > 0 {
 			cp.Dns.SearchDomains = dns.SearchDomains
 		}

@@ -83,16 +83,8 @@ func (hs *httpSource) Resolve(ctx context.Context, id source.Identifier, sm *ses
 }
 
 func (hs *httpSourceHandler) client(ctx context.Context, g session.Group) (*http.Client, error) {
-	netConfig := &networks.Config{}
-
-	if hs.dns != nil {
-		// base network config inherits from system-wide config
-		netConfig.Dns = &networks.DNSConfig{
-			Nameservers:   hs.dns.Nameservers,
-			Options:       hs.dns.Options,
-			SearchDomains: hs.dns.SearchDomains,
-		}
-	}
+	// base network config inherits from system-wide config
+	netConfig := networks.FromDNSConfig(hs.dns)
 
 	if hs.src.NetworkConfigID != "" {
 		err := hs.sm.Any(ctx, g, func(ctx context.Context, _ string, caller session.Caller) error {
