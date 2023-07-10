@@ -7,12 +7,13 @@ import (
 	"testing"
 
 	"github.com/moby/buildkit/util/testutil/integration"
+	"github.com/moby/buildkit/util/testutil/workers"
 	"github.com/stretchr/testify/require"
 )
 
 func init() {
-	integration.InitOCIWorker()
-	integration.InitContainerdWorker()
+	workers.InitOCIWorker()
+	workers.InitContainerdWorker()
 }
 
 func TestCLIIntegration(t *testing.T) {

@@ -11,6 +11,7 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/util/testutil/integration"
+	"github.com/moby/buildkit/util/testutil/workers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tonistiigi/fsutil"
@@ -18,11 +19,11 @@ import (
 )
 
 func init() {
-	if integration.IsTestDockerd() {
-		integration.InitDockerdWorker()
+	if workers.IsTestDockerd() {
+		workers.InitDockerdWorker()
 	} else {
-		integration.InitOCIWorker()
-		integration.InitContainerdWorker()
+		workers.InitOCIWorker()
+		workers.InitContainerdWorker()
 	}
 }
 

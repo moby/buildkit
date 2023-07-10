@@ -12,6 +12,7 @@ import (
 	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/testutil/echoserver"
 	"github.com/moby/buildkit/util/testutil/integration"
+	"github.com/moby/buildkit/util/testutil/workers"
 	"github.com/stretchr/testify/require"
 )
 
@@ -138,7 +139,7 @@ RUN --network=host nc 127.0.0.1 %s | grep foo
 	case networkHostGranted:
 		require.NoError(t, err)
 	case networkHostDenied:
-		if !integration.IsTestDockerd() {
+		if !workers.IsTestDockerd() {
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "entitlement network.host is not allowed")
 		} else {
@@ -188,7 +189,7 @@ RUN --network=none ! nc -z 127.0.0.1 %s
 	case networkHostGranted:
 		require.NoError(t, err)
 	case networkHostDenied:
-		if !integration.IsTestDockerd() {
+		if !workers.IsTestDockerd() {
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "entitlement network.host is not allowed")
 		} else {

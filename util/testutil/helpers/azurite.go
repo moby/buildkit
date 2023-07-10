@@ -1,4 +1,4 @@
-package integration
+package helpers
 
 import (
 	"fmt"
@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/pkg/errors"
 )
 
@@ -21,14 +22,14 @@ type AzuriteOpts struct {
 	AccountKey  string
 }
 
-func NewAzuriteServer(t *testing.T, sb Sandbox, opts AzuriteOpts) (address string, cl func() error, err error) {
+func NewAzuriteServer(t *testing.T, sb integration.Sandbox, opts AzuriteOpts) (address string, cl func() error, err error) {
 	t.Helper()
 
 	if _, err := exec.LookPath(azuriteBin); err != nil {
 		return "", nil, errors.Wrapf(err, "failed to lookup %s binary", azuriteBin)
 	}
 
-	deferF := &multiCloser{}
+	deferF := &integration.MultiCloser{}
 	cl = deferF.F()
 
 	defer func() {
@@ -58,15 +59,15 @@ func NewAzuriteServer(t *testing.T, sb Sandbox, opts AzuriteOpts) (address strin
 	cmd.Env = append(os.Environ(), []string{
 		"AZURITE_ACCOUNTS=" + opts.AccountName + ":" + opts.AccountKey,
 	}...)
-	azuriteStop, err := startCmd(cmd, sb.Logs())
+	azuriteStop, err := integration.StartCmd(cmd, sb.Logs())
 	if err != nil {
 		return "", nil, err
 	}
 	if err = waitAzurite(address, 15*time.Second); err != nil {
 		azuriteStop()
-		return "", nil, errors.Wrapf(err, "azurite did not start up: %s", formatLogs(sb.Logs()))
+		return "", nil, errors.Wrapf(err, "azurite did not start up: %s", integration.FormatLogs(sb.Logs()))
 	}
-	deferF.append(azuriteStop)
+	deferF.Append(azuriteStop)
 
 	return
 }

@@ -1,7 +1,6 @@
-package integration
+package workers
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"log"
@@ -14,11 +13,12 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/pkg/errors"
 )
 
 func InitContainerdWorker() {
-	Register(&Containerd{
+	integration.Register(&Containerd{
 		ID:         "containerd",
 		Containerd: "containerd",
 	})
@@ -32,7 +32,7 @@ func InitContainerdWorker() {
 				panic(errors.Errorf("unexpected BUILDKIT_INTEGRATION_CONTAINERD_EXTRA: %q", s))
 			}
 			name, bin := pair[0], pair[1]
-			Register(&Containerd{
+			integration.Register(&Containerd{
 				ID:         name,
 				Containerd: filepath.Join(bin, "containerd"),
 				// override PATH to make sure that the expected version of the shim binary is used
@@ -47,8 +47,8 @@ func InitContainerdWorker() {
 		if _, err := fmt.Sscanf(s, "%d:%d", &uid, &gid); err != nil {
 			bklog.L.Fatalf("unexpected BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR: %q", s)
 		}
-		if rootlessSupported(uid) {
-			Register(&Containerd{
+		if integration.RootlessSupported(uid) {
+			integration.Register(&Containerd{
 				ID:          "containerd-rootless",
 				Containerd:  "containerd",
 				UID:         uid,
@@ -59,7 +59,7 @@ func InitContainerdWorker() {
 	}
 
 	if s := os.Getenv("BUILDKIT_INTEGRATION_SNAPSHOTTER"); s != "" {
-		Register(&Containerd{
+		integration.Register(&Containerd{
 			ID:          fmt.Sprintf("containerd-snapshotter-%s", s),
 			Containerd:  "containerd",
 			Snapshotter: s,
@@ -84,18 +84,18 @@ func (c *Containerd) Rootless() bool {
 	return c.UID != 0
 }
 
-func (c *Containerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func() error, err error) {
-	if err := lookupBinary(c.Containerd); err != nil {
+func (c *Containerd) New(ctx context.Context, cfg *integration.BackendConfig) (b integration.Backend, cl func() error, err error) {
+	if err := integration.LookupBinary(c.Containerd); err != nil {
 		return nil, nil, err
 	}
-	if err := lookupBinary("buildkitd"); err != nil {
+	if err := integration.LookupBinary("buildkitd"); err != nil {
 		return nil, nil, err
 	}
 	if err := requireRoot(); err != nil {
 		return nil, nil, err
 	}
 
-	deferF := &multiCloser{}
+	deferF := &integration.MultiCloser{}
 	cl = deferF.F()
 
 	defer func() {
@@ -123,7 +123,7 @@ func (c *Containerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl
 		}
 	}
 
-	deferF.append(func() error { return os.RemoveAll(tmpdir) })
+	deferF.Append(func() error { return os.RemoveAll(tmpdir) })
 
 	address := filepath.Join(tmpdir, "containerd.sock")
 	config := fmt.Sprintf(`root = %q
@@ -149,7 +149,7 @@ disabled_plugins = ["cri"]
 			if err != nil {
 				return nil, nil, err
 			}
-			deferF.append(snCl)
+			deferF.Append(snCl)
 			config = fmt.Sprintf(`%s
 
 [proxy_plugins]
@@ -181,15 +181,15 @@ disabled_plugins = ["cri"]
 	cmd := exec.Command(containerdArgs[0], containerdArgs[1:]...) //nolint:gosec // test utility
 	cmd.Env = append(os.Environ(), c.ExtraEnv...)
 
-	ctdStop, err := startCmd(cmd, cfg.Logs)
+	ctdStop, err := integration.StartCmd(cmd, cfg.Logs)
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := waitUnix(address, 10*time.Second, cmd); err != nil {
+	if err := integration.WaitUnix(address, 10*time.Second, cmd); err != nil {
 		ctdStop()
-		return nil, nil, errors.Wrapf(err, "containerd did not start up: %s", formatLogs(cfg.Logs))
+		return nil, nil, errors.Wrapf(err, "containerd did not start up: %s", integration.FormatLogs(cfg.Logs))
 	}
-	deferF.append(ctdStop)
+	deferF.Append(ctdStop)
 
 	buildkitdArgs := append([]string{"buildkitd",
 		"--oci-worker=false",
@@ -217,10 +217,10 @@ disabled_plugins = ["cri"]
 	}
 	buildkitdSock, stop, err := runBuildkitd(ctx, cfg, buildkitdArgs, cfg.Logs, c.UID, c.GID, c.ExtraEnv)
 	if err != nil {
-		printLogs(cfg.Logs, log.Println)
+		integration.PrintLogs(cfg.Logs, log.Println)
 		return nil, nil, err
 	}
-	deferF.append(stop)
+	deferF.Append(stop)
 
 	return backend{
 		address:           buildkitdSock,
@@ -234,12 +234,43 @@ func (c *Containerd) Close() error {
 	return nil
 }
 
-func formatLogs(m map[string]*bytes.Buffer) string {
-	var ss []string
-	for k, b := range m {
-		if b != nil {
-			ss = append(ss, fmt.Sprintf("%q:%q", k, b.String()))
-		}
+func runStargzSnapshotter(cfg *integration.BackendConfig) (address string, cl func() error, err error) {
+	binary := "containerd-stargz-grpc"
+	if err := integration.LookupBinary(binary); err != nil {
+		return "", nil, err
 	}
-	return strings.Join(ss, ",")
+
+	deferF := &integration.MultiCloser{}
+	cl = deferF.F()
+
+	defer func() {
+		if err != nil {
+			deferF.F()()
+			cl = nil
+		}
+	}()
+
+	tmpStargzDir, err := os.MkdirTemp("", "bktest_containerd_stargz_grpc")
+	if err != nil {
+		return "", nil, err
+	}
+	deferF.Append(func() error { return os.RemoveAll(tmpStargzDir) })
+
+	address = filepath.Join(tmpStargzDir, "containerd-stargz-grpc.sock")
+	stargzRootDir := filepath.Join(tmpStargzDir, "root")
+	cmd := exec.Command(binary,
+		"--log-level", "debug",
+		"--address", address,
+		"--root", stargzRootDir)
+	snStop, err := integration.StartCmd(cmd, cfg.Logs)
+	if err != nil {
+		return "", nil, err
+	}
+	if err = integration.WaitUnix(address, 10*time.Second, cmd); err != nil {
+		snStop()
+		return "", nil, errors.Wrapf(err, "containerd-stargz-grpc did not start up: %s", integration.FormatLogs(cfg.Logs))
+	}
+	deferF.Append(snStop)
+
+	return
 }

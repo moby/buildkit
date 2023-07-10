@@ -1,4 +1,4 @@
-package integration
+package workers
 
 import (
 	"context"
@@ -13,13 +13,14 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/util/testutil/dockerd"
+	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
 // InitDockerdWorker registers a dockerd worker with the global registry.
 func InitDockerdWorker() {
-	Register(&Moby{
+	integration.Register(&Moby{
 		ID:         "dockerd",
 		IsRootless: false,
 		Unsupported: []string{
@@ -42,7 +43,7 @@ func InitDockerdWorker() {
 			FeatureCNINetwork,
 		},
 	})
-	Register(&Moby{
+	integration.Register(&Moby{
 		ID:                    "dockerd-containerd",
 		IsRootless:            false,
 		ContainerdSnapshotter: true,
@@ -70,7 +71,7 @@ func (c Moby) Rootless() bool {
 	return c.IsRootless
 }
 
-func (c Moby) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func() error, err error) {
+func (c Moby) New(ctx context.Context, cfg *integration.BackendConfig) (b integration.Backend, cl func() error, err error) {
 	if err := requireRoot(); err != nil {
 		return nil, nil, err
 	}
@@ -106,7 +107,7 @@ func (c Moby) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func()
 		return nil, nil, errors.Wrapf(err, "failed to marshal dockerd config")
 	}
 
-	deferF := &multiCloser{}
+	deferF := &integration.MultiCloser{}
 	cl = deferF.F()
 
 	defer func() {
@@ -117,7 +118,7 @@ func (c Moby) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func()
 	}()
 
 	var proxyGroup errgroup.Group
-	deferF.append(proxyGroup.Wait)
+	deferF.Append(proxyGroup.Wait)
 
 	workDir, err := os.MkdirTemp("", "integration")
 	if err != nil {
@@ -126,7 +127,7 @@ func (c Moby) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func()
 
 	d, err := dockerd.NewDaemon(workDir)
 	if err != nil {
-		return nil, nil, errors.Errorf("new daemon error: %q, %s", err, formatLogs(cfg.Logs))
+		return nil, nil, errors.Errorf("new daemon error: %q, %s", err, integration.FormatLogs(cfg.Logs))
 	}
 
 	dockerdConfigFile := filepath.Join(workDir, "daemon.json")
@@ -148,21 +149,21 @@ func (c Moby) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func()
 	if err != nil {
 		return nil, nil, err
 	}
-	deferF.append(d.StopWithError)
+	deferF.Append(d.StopWithError)
 
-	if err := waitUnix(d.Sock(), 5*time.Second, nil); err != nil {
-		return nil, nil, errors.Errorf("dockerd did not start up: %q, %s", err, formatLogs(cfg.Logs))
+	if err := integration.WaitUnix(d.Sock(), 5*time.Second, nil); err != nil {
+		return nil, nil, errors.Errorf("dockerd did not start up: %q, %s", err, integration.FormatLogs(cfg.Logs))
 	}
 
 	dockerAPI, err := client.NewClientWithOpts(client.WithHost(d.Sock()))
 	if err != nil {
 		return nil, nil, err
 	}
-	deferF.append(dockerAPI.Close)
+	deferF.Append(dockerAPI.Close)
 
 	err = waitForAPI(ctx, dockerAPI, 5*time.Second)
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "dockerd client api timed out: %s", formatLogs(cfg.Logs))
+		return nil, nil, errors.Wrapf(err, "dockerd client api timed out: %s", integration.FormatLogs(cfg.Logs))
 	}
 
 	// Create a file descriptor to be used as a Unix domain socket.
@@ -178,9 +179,9 @@ func (c Moby) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func()
 
 	listener, err := net.Listen("unix", localPath)
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "dockerd listener error: %s", formatLogs(cfg.Logs))
+		return nil, nil, errors.Wrapf(err, "dockerd listener error: %s", integration.FormatLogs(cfg.Logs))
 	}
-	deferF.append(listener.Close)
+	deferF.Append(listener.Close)
 
 	proxyGroup.Go(func() error {
 		for {
@@ -244,10 +245,6 @@ func IsTestDockerd() bool {
 	return os.Getenv("TEST_DOCKERD") == "1"
 }
 
-func IsTestDockerdMoby(sb Sandbox) bool {
-	b, err := getBackend(sb)
-	if err != nil {
-		return false
-	}
-	return b.isDockerd && sb.Name() == "dockerd"
+func IsTestDockerdMoby(sb integration.Sandbox) bool {
+	return sb.DockerAddress() != "" && sb.Name() == "dockerd"
 }

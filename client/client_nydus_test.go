@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/testutil/integration"
+	"github.com/moby/buildkit/util/testutil/workers"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -28,7 +29,7 @@ func TestNydusIntegration(t *testing.T) {
 }
 
 func testBuildExportNydusWithHybrid(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	requiresLinux(t)
 
 	cdAddress := sb.ContainerdAddress()

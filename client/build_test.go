@@ -26,6 +26,7 @@ import (
 	utilsystem "github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/util/testutil/echoserver"
 	"github.com/moby/buildkit/util/testutil/integration"
+	"github.com/moby/buildkit/util/testutil/workers"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -1839,7 +1840,7 @@ func testClientGatewayExecFileActionError(t *testing.T, sb integration.Sandbox) 
 // testClientGatewayContainerSecurityMode ensures that the correct security mode
 // is propagated to the gateway container
 func testClientGatewayContainerSecurityMode(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureSecurityMode)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureSecurityMode)
 	requiresLinux(t)
 
 	ctx := sb.Context()
@@ -2215,7 +2216,7 @@ func testClientGatewayContainerSignal(t *testing.T, sb integration.Sandbox) {
 }
 
 func testClientGatewayNilResult(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureMergeDiff)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureMergeDiff)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2250,7 +2251,7 @@ func testClientGatewayNilResult(t *testing.T, sb integration.Sandbox) {
 }
 
 func testClientGatewayEmptyImageExec(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
