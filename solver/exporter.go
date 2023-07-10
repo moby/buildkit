@@ -2,14 +2,16 @@ package solver
 
 import (
 	"context"
+	"sync"
 
 	digest "github.com/opencontainers/go-digest"
 )
 
 type exporter struct {
-	k       *CacheKey
-	records []*CacheRecord
-	record  *CacheRecord
+	k        *CacheKey
+	records  []*CacheRecord
+	recordMu sync.RWMutex
+	record   *CacheRecord
 
 	edge     *edge // for secondaryExporters
 	override *bool
@@ -101,12 +103,14 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		exportRecord = true
 	}
 
+	e.recordMu.Lock()
 	if e.record == nil && exportRecord {
 		e.record = getBestResult(e.records)
 	}
 
 	var remote *Remote
 	if v := e.record; v != nil && exportRecord && addRecord {
+		e.recordMu.Unlock()
 		var variants []CacheExporterRecord
 
 		cm := v.cacheManager
@@ -159,6 +163,8 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 			}
 		}
 		allRec = append(allRec, variants...)
+	} else {
+		e.recordMu.Unlock()
 	}
 
 	if remote != nil && opt.Mode == CacheExportModeMin {
@@ -198,13 +204,16 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 			}
 		}
 
+		e.k.mu.RLock()
 		for cm, id := range e.k.ids {
 			if _, err := addBacklinks(t, rec, cm, id, bkm); err != nil {
 				return nil, err
 			}
 		}
+		e.k.mu.RUnlock()
 	}
 
+	e.recordMu.RLock()
 	if v := e.record; v != nil && len(deps) == 0 {
 		cm := v.cacheManager
 		key := cm.getID(v.key)
@@ -218,6 +227,7 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 			return nil, err
 		}
 	}
+	e.recordMu.RUnlock()
 
 	res[e] = allRec
 

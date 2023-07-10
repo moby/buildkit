@@ -551,7 +551,9 @@ func (j *Job) walkProvenance(ctx context.Context, e Edge, f func(ProvenanceProvi
 		return nil
 	}
 	visited[e.Vertex.Digest()] = struct{}{}
+	j.list.mu.RLock()
 	if st, ok := j.list.actives[e.Vertex.Digest()]; ok {
+		j.list.mu.RUnlock()
 		st.mu.Lock()
 		if wp, ok := st.op.op.(ProvenanceProvider); ok {
 			if err := f(wp); err != nil {
@@ -560,6 +562,8 @@ func (j *Job) walkProvenance(ctx context.Context, e Edge, f func(ProvenanceProvi
 			}
 		}
 		st.mu.Unlock()
+	} else {
+		j.list.mu.RUnlock()
 	}
 	for _, inp := range e.Vertex.Inputs() {
 		if err := j.walkProvenance(ctx, inp, f, visited); err != nil {

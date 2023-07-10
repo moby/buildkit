@@ -62,8 +62,10 @@ func (ck *CacheKey) clone() *CacheKey {
 		output: ck.output,
 		ids:    map[*cacheManager]string{},
 	}
+	ck.mu.RLock()
 	for cm, id := range ck.ids {
 		nk.ids[cm] = id
 	}
+	ck.mu.RUnlock()
 	return nk
 }

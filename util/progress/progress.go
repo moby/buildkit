@@ -95,6 +95,7 @@ type Progress struct {
 	ID        string
 	Timestamp time.Time
 	Sys       interface{}
+	metaMu    sync.RWMutex
 	meta      map[string]interface{}
 }
 
@@ -237,9 +238,9 @@ func (pw *progressWriter) Write(id string, v interface{}) error {
 }
 
 func (pw *progressWriter) WriteRawProgress(p *Progress) error {
-	meta := p.meta
 	if len(pw.meta) > 0 {
-		meta = map[string]interface{}{}
+		meta := map[string]interface{}{}
+		p.metaMu.Lock()
 		for k, v := range p.meta {
 			meta[k] = v
 		}
@@ -248,8 +249,9 @@ func (pw *progressWriter) WriteRawProgress(p *Progress) error {
 				meta[k] = v
 			}
 		}
+		p.meta = meta
+		p.metaMu.Unlock()
 	}
-	p.meta = meta
 	return pw.writeRawProgress(p)
 }
 
@@ -271,7 +273,9 @@ func (pw *progressWriter) Close() error {
 }
 
 func (p *Progress) Meta(key string) (interface{}, bool) {
+	p.metaMu.RLock()
 	v, ok := p.meta[key]
+	p.metaMu.RUnlock()
 	return v, ok
 }
 
