@@ -12,6 +12,7 @@ import (
 
 	"github.com/moby/buildkit/session/secrets"
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/system"
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/executor"
@@ -92,7 +93,7 @@ func NewContainer(ctx context.Context, w worker.Worker, sm *session.Manager, g s
 			cm = refs[m.Input].Worker.CacheManager()
 		}
 		return cm.New(ctx, ref, g)
-	})
+	}, platform.OS)
 	if err != nil {
 		for i := len(p.Actives) - 1; i >= 0; i-- { // call in LIFO order
 			p.Actives[i].Ref.Release(context.TODO())
@@ -142,7 +143,7 @@ type MountMutableRef struct {
 
 type MakeMutable func(m *opspb.Mount, ref cache.ImmutableRef) (cache.MutableRef, error)
 
-func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manager, g session.Group, cwd string, mnts []*opspb.Mount, refs []*worker.WorkerRef, makeMutable MakeMutable) (p PreparedMounts, err error) {
+func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manager, g session.Group, cwd string, mnts []*opspb.Mount, refs []*worker.WorkerRef, makeMutable MakeMutable, platform string) (p PreparedMounts, err error) {
 	// loop over all mounts, fill in mounts, root and outputs
 	for i, m := range mnts {
 		var (
@@ -265,7 +266,7 @@ func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manage
 		} else {
 			mws := MountWithSession(mountable, g)
 			dest := m.Dest
-			if !filepath.IsAbs(filepath.Clean(dest)) {
+			if !system.IsAbs(filepath.Clean(dest), platform) {
 				dest = filepath.Join("/", cwd, dest)
 			}
 			mws.Dest = dest

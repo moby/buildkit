@@ -145,6 +145,7 @@ func Mkdir(p string, m os.FileMode, opt ...MkdirOption) *FileAction {
 	for _, o := range opt {
 		o.SetMkdirOption(&mi)
 	}
+
 	return &FileAction{
 		action: &fileActionMkdir{
 			file: p,
@@ -447,7 +448,6 @@ func Copy(input CopyInput, src, dest string, opts ...CopyOption) *FileAction {
 	for _, o := range opts {
 		o.SetCopyOption(&mi)
 	}
-
 	return &FileAction{
 		action: &fileActionCopy{
 			state: state,
@@ -523,22 +523,19 @@ func (a *fileActionCopy) toProtoAction(ctx context.Context, parent string, base 
 
 func (a *fileActionCopy) sourcePath(ctx context.Context) (string, error) {
 	p := path.Clean(a.src)
+	dir := "/"
+	var err error
 	if !path.IsAbs(p) {
 		if a.state != nil {
-			dir, err := a.state.GetDir(ctx)
-			if err != nil {
-				return "", err
-			}
-			p = path.Join("/", dir, p)
+			dir, err = a.state.GetDir(ctx)
 		} else if a.fas != nil {
-			dir, err := a.fas.state.GetDir(ctx)
-			if err != nil {
-				return "", err
-			}
-			p = path.Join("/", dir, p)
+			dir, err = a.fas.state.GetDir(ctx)
+		}
+		if err != nil {
+			return "", err
 		}
 	}
-	return p, nil
+	return path.Join(dir, p), nil
 }
 
 func (a *fileActionCopy) addCaps(f *FileOp) {

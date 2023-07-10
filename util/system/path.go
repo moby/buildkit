@@ -37,8 +37,8 @@ func NormalizePath(parent, newPath, inputOS string, keepSlash bool) (string, err
 		inputOS = "linux"
 	}
 
-	newPath = toSlash(newPath, inputOS)
-	parent = toSlash(parent, inputOS)
+	newPath = ToSlash(newPath, inputOS)
+	parent = ToSlash(parent, inputOS)
 	origPath := newPath
 
 	if parent == "" {
@@ -82,18 +82,17 @@ func NormalizePath(parent, newPath, inputOS string, keepSlash bool) (string, err
 		}
 	}
 
-	return toSlash(newPath, inputOS), nil
+	return ToSlash(newPath, inputOS), nil
 }
 
-func toSlash(inputPath, inputOS string) string {
-	separator := "/"
-	if inputOS == "windows" {
-		separator = "\\"
+func ToSlash(inputPath, inputOS string) string {
+	if inputOS != "windows" {
+		return inputPath
 	}
-	return strings.Replace(inputPath, separator, "/", -1)
+	return strings.Replace(inputPath, "\\", "/", -1)
 }
 
-func fromSlash(inputPath, inputOS string) string {
+func FromSlash(inputPath, inputOS string) string {
 	separator := "/"
 	if inputOS == "windows" {
 		separator = "\\"
@@ -119,7 +118,7 @@ func NormalizeWorkdir(current, wd string, inputOS string) (string, error) {
 
 	// Make sure we use the platform specific path separator. HCS does not like forward
 	// slashes in CWD.
-	return fromSlash(wd, inputOS), nil
+	return FromSlash(wd, inputOS), nil
 }
 
 // IsAbs returns a boolean value indicating whether or not the path
@@ -142,7 +141,7 @@ func IsAbs(pth, inputOS string) bool {
 	if err != nil {
 		return false
 	}
-	cleanedPath = toSlash(cleanedPath, inputOS)
+	cleanedPath = ToSlash(cleanedPath, inputOS)
 	// We stripped any potential drive letter and converted any backslashes to
 	// forward slashes. We can safely use path.IsAbs() for both Windows and Linux.
 	return path.IsAbs(cleanedPath)
@@ -189,14 +188,14 @@ func CheckSystemDriveAndRemoveDriveLetter(path string, inputOS string) (string, 
 	}
 
 	// UNC paths should error out
-	if len(path) >= 2 && toSlash(path[:2], inputOS) == "//" {
+	if len(path) >= 2 && ToSlash(path[:2], inputOS) == "//" {
 		return "", errors.Errorf("UNC paths are not supported")
 	}
 
 	parts := strings.SplitN(path, ":", 2)
 	// Path does not have a drive letter. Just return it.
 	if len(parts) < 2 {
-		return toSlash(filepath.Clean(path), inputOS), nil
+		return ToSlash(filepath.Clean(path), inputOS), nil
 	}
 
 	// We expect all paths to be in C:
@@ -221,5 +220,5 @@ func CheckSystemDriveAndRemoveDriveLetter(path string, inputOS string) (string, 
 	//
 	// We must return the second element of the split path, as is, without attempting to convert
 	// it to an absolute path. We have no knowledge of the CWD; that is treated elsewhere.
-	return toSlash(filepath.Clean(parts[1]), inputOS), nil
+	return ToSlash(filepath.Clean(parts[1]), inputOS), nil
 }
