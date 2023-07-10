@@ -1185,7 +1185,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		}}, copyOpt...)
 
 		if a == nil {
-			a = llb.Copy(st, filepath.ToSlash(f), dest, opts...)
+			a = llb.Copy(st, system.ToSlash(f, d.platform.OS), dest, opts...)
 		} else {
 			a = a.Copy(st, filepath.ToSlash(f), dest, opts...)
 		}
@@ -1423,11 +1423,11 @@ func pathRelativeToWorkingDir(s llb.State, p string, platform ocispecs.Platform)
 	}
 	p, err = system.CheckSystemDriveAndRemoveDriveLetter(p, platform.OS)
 	if err != nil {
-		return "", errors.Wrap(err, "remving drive letter")
+		return "", errors.Wrap(err, "removing drive letter")
 	}
 
 	if system.IsAbs(p, platform.OS) {
-		return p, nil
+		return system.NormalizePath("/", p, platform.OS, false)
 	}
 	return system.NormalizePath(dir, p, platform.OS, false)
 }

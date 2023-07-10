@@ -5,7 +5,6 @@ import (
 	_ "crypto/sha256" // for opencontainers/go-digest
 	"os"
 	"path"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -523,9 +522,7 @@ func (a *fileActionCopy) toProtoAction(ctx context.Context, parent string, base 
 }
 
 func (a *fileActionCopy) sourcePath(ctx context.Context) (string, error) {
-	// filepath.Clean() also does a filepath.FromSlash(). Explicitly convert back to UNIX path
-	// separators.
-	p := filepath.ToSlash(filepath.Clean(a.src))
+	p := path.Clean(a.src)
 	dir := "/"
 	var err error
 	if !path.IsAbs(p) {

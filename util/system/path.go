@@ -86,11 +86,10 @@ func NormalizePath(parent, newPath, inputOS string, keepSlash bool) (string, err
 }
 
 func ToSlash(inputPath, inputOS string) string {
-	separator := "/"
-	if inputOS == "windows" {
-		separator = "\\"
+	if inputOS != "windows" {
+		return inputPath
 	}
-	return strings.Replace(inputPath, separator, "/", -1)
+	return strings.Replace(inputPath, "\\", "/", -1)
 }
 
 func FromSlash(inputPath, inputOS string) string {
