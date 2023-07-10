@@ -853,6 +853,10 @@ func testCgroupParent(t *testing.T, sb integration.Sandbox) {
 		t.SkipNow()
 	}
 
+	if _, err := os.Lstat("/sys/fs/cgroup/cgroup.subtree_control"); os.IsNotExist(err) {
+		t.Skipf("test requires cgroup v2")
+	}
+
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -864,8 +868,21 @@ func testCgroupParent(t *testing.T, sb integration.Sandbox) {
 		st = img.Run(append(ro, llb.Shlex(cmd), llb.Dir("/wd"))...).AddMount("/wd", st)
 	}
 
-	run(`sh -c "cat /proc/self/cgroup > first"`, llb.WithCgroupParent("foocgroup"))
-	run(`sh -c "cat /proc/self/cgroup > second"`)
+	cgroupName := "test." + identity.NewID()
+
+	err = os.MkdirAll(filepath.Join("/sys/fs/cgroup", cgroupName), 0755)
+	require.NoError(t, err)
+
+	defer func() {
+		err := os.RemoveAll(filepath.Join("/sys/fs/cgroup", cgroupName))
+		require.NoError(t, err)
+	}()
+
+	err = os.WriteFile(filepath.Join("/sys/fs/cgroup", cgroupName, "pids.max"), []byte("10"), 0644)
+	require.NoError(t, err)
+
+	run(`sh -c "(for i in $(seq 1 10); do sleep 1 & done 2>first.error); cat /proc/self/cgroup >> first"`, llb.WithCgroupParent(cgroupName))
+	run(`sh -c "(for i in $(seq 1 10); do sleep 1 & done 2>second.error); cat /proc/self/cgroup >> second"`)
 
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -882,13 +899,22 @@ func testCgroupParent(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
+	// neither process leaks parent cgroup name inside container
 	dt, err := os.ReadFile(filepath.Join(destDir, "first"))
 	require.NoError(t, err)
-	require.Contains(t, strings.TrimSpace(string(dt)), `/foocgroup/buildkit/`)
+	require.NotContains(t, strings.TrimSpace(string(dt)), cgroupName)
 
 	dt2, err := os.ReadFile(filepath.Join(destDir, "second"))
 	require.NoError(t, err)
-	require.NotContains(t, strings.TrimSpace(string(dt2)), `/foocgroup/buildkit/`)
+	require.NotContains(t, strings.TrimSpace(string(dt2)), cgroupName)
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "first.error"))
+	require.NoError(t, err)
+	require.Contains(t, strings.TrimSpace(string(dt)), "Resource temporarily unavailable")
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "second.error"))
+	require.NoError(t, err)
+	require.Equal(t, strings.TrimSpace(string(dt)), "")
 }
 
 func testNetworkMode(t *testing.T, sb integration.Sandbox) {
