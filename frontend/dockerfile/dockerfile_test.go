@@ -5193,10 +5193,27 @@ func testCgroupParent(t *testing.T, sb integration.Sandbox) {
 		t.SkipNow()
 	}
 
+	if _, err := os.Lstat("/sys/fs/cgroup/cgroup.subtree_control"); os.IsNotExist(err) {
+		t.Skipf("test requires cgroup v2")
+	}
+
+	cgroupName := "test." + identity.NewID()
+
+	err := os.MkdirAll(filepath.Join("/sys/fs/cgroup", cgroupName), 0755)
+	require.NoError(t, err)
+
+	defer func() {
+		err := os.RemoveAll(filepath.Join("/sys/fs/cgroup", cgroupName))
+		require.NoError(t, err)
+	}()
+
+	err = os.WriteFile(filepath.Join("/sys/fs/cgroup", cgroupName, "pids.max"), []byte("10"), 0644)
+	require.NoError(t, err)
+
 	f := getFrontend(t, sb)
 	dockerfile := []byte(`
 FROM alpine AS base
-RUN cat /proc/self/cgroup > /out
+RUN mkdir /out; (for i in $(seq 1 10); do sleep 1 & done 2>/out/error); cat /proc/self/cgroup > /out/cgroup
 FROM scratch
 COPY --from=base /out /
 `)
@@ -5215,7 +5232,7 @@ COPY --from=base /out /
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
-			"cgroup-parent": "foocgroup",
+			"cgroup-parent": cgroupName,
 		},
 		LocalDirs: map[string]string{
 			dockerui.DefaultLocalNameDockerfile: dir,
@@ -5230,9 +5247,14 @@ COPY --from=base /out /
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "cgroup"))
 	require.NoError(t, err)
-	require.Contains(t, strings.TrimSpace(string(dt)), `/foocgroup/buildkit/`)
+	// cgroupns does not leak the parent cgroup name
+	require.NotContains(t, strings.TrimSpace(string(dt)), `foocgroup`)
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "error"))
+	require.NoError(t, err)
+	require.Contains(t, strings.TrimSpace(string(dt)), `Resource temporarily unavailable`)
 }
 
 func testNamedImageContext(t *testing.T, sb integration.Sandbox) {
