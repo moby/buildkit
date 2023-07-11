@@ -6766,12 +6766,16 @@ func testCopyUnicodePath(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
 FROM alpine
 COPY test-äöü.txt /
+COPY test-%C3%A4%C3%B6%C3%BC.txt /
+COPY test+aou.txt /
 `)
 
 	dir, err := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
-		fstest.CreateFile("test-äöü.txt", []byte("test"), 0644),
+		fstest.CreateFile("test-äöü.txt", []byte("foo"), 0644),
+		fstest.CreateFile("test-%C3%A4%C3%B6%C3%BC.txt", []byte("bar"), 0644),
+		fstest.CreateFile("test+aou.txt", []byte("baz"), 0644),
 	)
 	require.NoError(t, err)
 
@@ -6794,7 +6798,15 @@ COPY test-äöü.txt /
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "test-äöü.txt"))
 	require.NoError(t, err)
-	require.Equal(t, "test", string(dt))
+	require.Equal(t, "foo", string(dt))
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "test-%C3%A4%C3%B6%C3%BC.txt"))
+	require.NoError(t, err)
+	require.Equal(t, "bar", string(dt))
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "test+aou.txt"))
+	require.NoError(t, err)
+	require.Equal(t, "baz", string(dt))
 }
 
 func runShell(dir string, cmds ...string) error {

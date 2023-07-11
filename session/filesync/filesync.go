@@ -387,8 +387,9 @@ func decodeOpts(opts map[string][]string) map[string][]string {
 func encodeStringForHeader(input string) string {
 	var output strings.Builder
 	for _, runeVal := range input {
-		// Only encode non-ASCII characters.
-		if runeVal > unicode.MaxASCII {
+		// Only encode non-ASCII characters, and characters that have special
+		// meaning during decoding.
+		if runeVal > unicode.MaxASCII || runeVal == '%' || runeVal == '+' {
 			// Encode each non-ASCII character individually.
 			output.WriteString(url.QueryEscape(string(runeVal)))
 		} else {
