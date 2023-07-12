@@ -3,6 +3,7 @@
 . $(dirname $0)/util
 set -eu -o pipefail
 
+: ${GO_VERSION=}
 : ${TEST_INTEGRATION=}
 : ${TEST_GATEWAY=}
 : ${TEST_DOCKERFILE=}
@@ -61,6 +62,7 @@ if [ "$TEST_COVERAGE" = "1" ]; then
 fi
 
 buildxCmd build $cacheFromFlags \
+  --build-arg GO_VERSION \
   --build-arg "BUILDKITD_TAGS=$BUILDKITD_TAGS" \
   --target "integration-tests" \
   --output "type=docker,name=$iid" \
