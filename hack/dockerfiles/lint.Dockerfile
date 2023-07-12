@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile-upstream:master
 
-ARG GO_VERSION=1.20
+ARG GO_VERSION=1.20.5
 
 FROM golang:${GO_VERSION}-alpine
 ENV GOFLAGS="-buildvcs=false"
