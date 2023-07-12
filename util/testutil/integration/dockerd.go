@@ -137,6 +137,7 @@ func (c Moby) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func()
 	dockerdFlags := []string{
 		"--config-file", dockerdConfigFile,
 		"--userland-proxy=false",
+		"--tls=false",
 		"--debug",
 	}
 	if s := os.Getenv("BUILDKIT_INTEGRATION_DOCKERD_FLAGS"); s != "" {
