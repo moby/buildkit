@@ -1,26 +1,20 @@
 #!/usr/bin/env sh
 
 : "${BUILDX_CMD=docker buildx}"
+: "${BUILDX_BUILDER=}"
 
-: "${CI=}"
 : "${GITHUB_ACTIONS=}"
 : "${GITHUB_REPOSITORY=}"
 : "${GITHUB_RUN_ID=}"
-: "${BUILDX_BUILDER=}"
 
 : "${CONTEXT=}"
 : "${CACHE_FROM=}"
 : "${CACHE_TO=}"
 
-progressFlag=""
-if [ "$CI" = "true" ]; then
-  progressFlag="--progress=plain"
-fi
-
 buildxCmd() {
   (
     set -x
-    BUILDX_NO_DEFAULT_LOAD=true BUILDX_BUILDER="${BUILDX_BUILDER}" ${BUILDX_CMD} "$@" $progressFlag
+    BUILDX_NO_DEFAULT_LOAD=true BUILDX_BUILDER="${BUILDX_BUILDER}" ${BUILDX_CMD} "$@"
   )
 }
 
