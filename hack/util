@@ -1,5 +1,7 @@
 #!/usr/bin/env sh
 
+: "${BUILDX_CMD=docker buildx}"
+
 : "${CI=}"
 : "${GITHUB_ACTIONS=}"
 : "${GITHUB_REPOSITORY=}"
@@ -15,32 +17,15 @@ if [ "$CI" = "true" ]; then
   progressFlag="--progress=plain"
 fi
 
-buildxBin=""
-builderName=""
-if docker buildx version >/dev/null 2>&1; then
-  buildxBin="docker buildx"
-elif buildx version >/dev/null 2>&1; then
-  buildxBin="buildx"
-else
-  topdir="$(realpath $(dirname "$0")/..)"
-  if [ ! -x "${topdir}/bin/buildx" ]; then
-    set -x
-    "${topdir}/hack/install-buildx"
-  fi
-  buildxBin="${topdir}/bin/buildx"
-  builderName="moby-buildkit"
-  "${topdir}/hack/bootstrap-buildx" "${builderName}"
-fi
-
 buildxCmd() {
   (
     set -x
-    BUILDX_NO_DEFAULT_LOAD=true BUILDX_BUILDER="${builderName:-${BUILDX_BUILDER}}" $buildxBin "$@" $progressFlag
+    BUILDX_NO_DEFAULT_LOAD=true BUILDX_BUILDER="${BUILDX_BUILDER}" ${BUILDX_CMD} "$@" $progressFlag
   )
 }
 
 buildAttestFlags() {
-  if $buildxBin build --help 2>&1 | grep -- '--attest' >/dev/null; then
+  if ${BUILDX_CMD} build --help 2>&1 | grep -- '--attest' >/dev/null; then
     prvattrs="mode=max"
     if [ "$GITHUB_ACTIONS" = "true" ]; then
       prvattrs="$prvattrs,builder-id=https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"

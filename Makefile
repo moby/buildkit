@@ -1,6 +1,14 @@
 prefix=/usr/local
 bindir=$(prefix)/bin
 
+ifneq (, $(BUILDX_BIN))
+	export BUILDX_CMD = $(BUILDX_BIN)
+else ifneq (, $(shell docker buildx version))
+	export BUILDX_CMD = docker buildx
+else ifneq (, $(shell command -v buildx))
+	export BUILDX_CMD = $(command -v buildx)
+endif
+
 export BUILDX_CMD ?= docker buildx
 
 .PHONY: binaries
