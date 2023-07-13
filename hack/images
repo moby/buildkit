@@ -7,9 +7,9 @@ PUSH=$3
 . $(dirname $0)/util
 set -eu -o pipefail
 
-: ${RELEASE=false}
-: ${PLATFORMS=}
-: ${TARGET=}
+: "${RELEASE=false}"
+: "${PLATFORMS=}"
+: "${TARGET=}"
 
 versionTag=$(git describe --always --tags --match "v[0-9]*")
 
