@@ -3,23 +3,25 @@
 . $(dirname $0)/util
 set -eu -o pipefail
 
-: ${GO_VERSION=}
-: ${HTTP_PROXY=}
-: ${HTTPS_PROXY=}
-: ${NO_PROXY=}
-: ${TEST_INTEGRATION=}
-: ${TEST_GATEWAY=}
-: ${TEST_DOCKERFILE=}
-: ${TEST_DOCKERD=}
-: ${TEST_DOCKERD_BINARY=$(which dockerd)}
-: ${TEST_REPORT_SUFFIX=}
-: ${TEST_KEEP_CACHE=}
-: ${GOBUILDFLAGS=}
-: ${VERIFYFLAGS=}
-: ${CGO_ENABLED=}
-: ${DOCKERFILE_RELEASES=}
-: ${BUILDKIT_WORKER_RANDOM=}
-: ${BUILDKITD_TAGS=}
+: "${GO_VERSION=}"
+: "${HTTP_PROXY=}"
+: "${HTTPS_PROXY=}"
+: "${NO_PROXY=}"
+
+: "${TEST_INTEGRATION=}"
+: "${TEST_GATEWAY=}"
+: "${TEST_DOCKERFILE=}"
+: "${TEST_DOCKERD=}"
+: "${TEST_DOCKERD_BINARY=$(which dockerd)}"
+: "${TEST_REPORT_SUFFIX=}"
+: "${TEST_KEEP_CACHE=}"
+
+: "${GOBUILDFLAGS=}"
+: "${VERIFYFLAGS=}"
+: "${CGO_ENABLED=}"
+: "${DOCKERFILE_RELEASES=}"
+: "${BUILDKIT_WORKER_RANDOM=}"
+: "${BUILDKITD_TAGS=}"
 
 if [ "$TEST_DOCKERD" == "1" ]; then
   if [ ! -f "$TEST_DOCKERD_BINARY" ]; then
