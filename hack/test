@@ -4,9 +4,13 @@
 set -eu -o pipefail
 
 : "${GO_VERSION=}"
+: "${BUILDKITD_TAGS=}"
 : "${HTTP_PROXY=}"
 : "${HTTPS_PROXY=}"
 : "${NO_PROXY=}"
+: "${GOBUILDFLAGS=}"
+: "${VERIFYFLAGS=}"
+: "${CGO_ENABLED=}"
 
 : "${TEST_IMAGE_BUILD=1}"
 : "${TEST_IMAGE_ID=buildkit-tests}"
@@ -18,12 +22,8 @@ set -eu -o pipefail
 : "${TEST_REPORT_SUFFIX=}"
 : "${TEST_KEEP_CACHE=}"
 
-: "${GOBUILDFLAGS=}"
-: "${VERIFYFLAGS=}"
-: "${CGO_ENABLED=}"
 : "${DOCKERFILE_RELEASES=}"
 : "${BUILDKIT_WORKER_RANDOM=}"
-: "${BUILDKITD_TAGS=}"
 
 if [ "$TEST_DOCKERD" == "1" ]; then
   if [ ! -f "$TEST_DOCKERD_BINARY" ]; then
