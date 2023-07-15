@@ -384,7 +384,7 @@ github.com/docker/cli/cli/connhelper/commandconn
 ## explicit
 github.com/docker/distribution/digestset
 github.com/docker/distribution/reference
-# github.com/docker/docker v23.0.6+incompatible
+# github.com/docker/docker v23.0.7-0.20230720050051-0cae31c7dd6e+incompatible
 ## explicit
 github.com/docker/docker/api
 github.com/docker/docker/api/types
