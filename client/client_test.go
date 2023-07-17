@@ -57,6 +57,7 @@ import (
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/testutil"
+	containerdutil "github.com/moby/buildkit/util/testutil/containerd"
 	"github.com/moby/buildkit/util/testutil/echoserver"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
@@ -3090,7 +3091,7 @@ func testSourceDateEpochImageExporter(t *testing.T, sb integration.Sandbox) {
 		t.SkipNow()
 	}
 	// https://github.com/containerd/containerd/commit/133ddce7cf18a1db175150e7a69470dea1bb3132
-	integration.CheckContainerdVersion(t, cdAddress, ">= 1.7.0-beta.1")
+	containerdutil.CheckVersion(t, cdAddress, ">= 1.7.0-beta.1")
 
 	integration.CheckFeatureCompat(t, sb, integration.FeatureSourceDateEpoch)
 	requiresLinux(t)
@@ -6260,7 +6261,7 @@ func testSourceMapFromRef(t *testing.T, sb integration.Sandbox) {
 
 	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 		st := llb.Scratch().File(
-			llb.Mkdir("foo/bar", 0600), //fails because /foo doesn't exist
+			llb.Mkdir("foo/bar", 0600), // fails because /foo doesn't exist
 			sm.Location([]*pb.Range{{Start: pb.Position{Line: 3, Character: 1}}}),
 		)
 
