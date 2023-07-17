@@ -8,19 +8,14 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type Stream interface {
-	SendMsg(m interface{}) error
-	RecvMsg(m interface{}) error
-}
-
-func Copy(ctx context.Context, conn io.ReadWriteCloser, stream Stream, closeStream func() error) error {
-	defer conn.Close()
+func Copy(ctx context.Context, conn io.ReadWriteCloser, stream grpc.Stream) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() (retErr error) {
 		p := &BytesMessage{}
 		for {
 			if err := stream.RecvMsg(p); err != nil {
+				conn.Close()
 				if err == io.EOF {
 					// indicates client performed CloseSend, but they may still be
 					// reading data
@@ -33,7 +28,6 @@ func Copy(ctx context.Context, conn io.ReadWriteCloser, stream Stream, closeStre
 					}
 					return nil
 				}
-				conn.Close()
 				return errors.WithStack(err)
 			}
 			select {

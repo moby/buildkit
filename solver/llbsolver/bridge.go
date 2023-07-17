@@ -96,9 +96,16 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 		}
 		b.cmsMu.Lock()
 		var cm solver.CacheManager
-		if prevCm, ok := b.cms[cmID]; !ok {
-			func(cmID string, im gw.CacheOptionsEntry) {
-				cm = newLazyCacheManager(cmID, func() (solver.CacheManager, error) {
+		cmId := identity.NewID()
+		if im.Type == "registry" {
+			// For compatibility with < v0.4.0
+			if ref := im.Attrs["ref"]; ref != "" {
+				cmId = ref
+			}
+		}
+		if prevCm, ok := b.cms[cmId]; !ok {
+			func(cmId string) {
+				cm = newLazyCacheManager(cmId, func() (solver.CacheManager, error) {
 					var cmNew solver.CacheManager
 					if err := inBuilderContext(context.TODO(), b.builder, "importing cache manifest from "+cmID, "", func(ctx context.Context, g session.Group) error {
 						resolveCI, ok := b.resolveCacheImporterFuncs[im.Type]
@@ -117,8 +124,8 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 					}
 					return cmNew, nil
 				})
-			}(cmID, im)
-			b.cms[cmID] = cm
+			}(cmId)
+			b.cms[cmId] = cm
 		} else {
 			cm = prevCm
 		}

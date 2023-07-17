@@ -89,6 +89,8 @@ func (ce *exporter) ExportForLayers(ctx context.Context, layers []digest.Digest)
 		return nil, nil
 	}
 
+	cache := map[digest.Digest]int{}
+
 	// reorder layers based on the order in the image
 	blobIndexes := make(map[digest.Digest]int, len(layers))
 	for i, blob := range layerBlobDigests {
@@ -151,16 +153,14 @@ func (ce *exporter) ExportForLayers(ctx context.Context, layers []digest.Digest)
 	return dt, nil
 }
 
-func layerToBlobs(idx int, layers []v1.CacheLayer) []digest.Digest {
-	var ds []digest.Digest
-	for idx != -1 {
-		layer := layers[idx]
-		ds = append(ds, layer.Blob)
-		idx = layer.ParentIndex
+func getSortedLayerIndex(idx int, layers []v1.CacheLayer, cache map[digest.Digest]int) int {
+	if idx == -1 {
+		return -1
 	}
-	// reverse so they go lowest to highest
-	for i, j := 0, len(ds)-1; i < j; i, j = i+1, j-1 {
-		ds[i], ds[j] = ds[j], ds[i]
+	l := layers[idx]
+	if i, ok := cache[l.Blob]; ok {
+		return i
 	}
-	return ds
+	cache[l.Blob] = getSortedLayerIndex(l.ParentIndex, layers, cache) + 1
+	return cache[l.Blob]
 }

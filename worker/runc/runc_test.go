@@ -38,7 +38,7 @@ func newWorkerOpt(t *testing.T, processMode oci.ProcessMode) base.WorkerOpt {
 		},
 	}
 	rootless := false
-	workerOpt, err := NewWorkerOpt(tmpdir, snFactory, rootless, processMode, nil, nil, netproviders.Opt{Mode: "host"}, nil, "", "", false, nil, "", "")
+	workerOpt, err := NewWorkerOpt(tmpdir, snFactory, rootless, processMode, nil, nil, netproviders.Opt{Mode: "host"}, nil)
 	require.NoError(t, err)
 
 	return workerOpt

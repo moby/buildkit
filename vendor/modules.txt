@@ -339,14 +339,13 @@ github.com/containerd/containerd/snapshots/overlay
 github.com/containerd/containerd/snapshots/overlay/overlayutils
 github.com/containerd/containerd/snapshots/proxy
 github.com/containerd/containerd/snapshots/storage
-github.com/containerd/containerd/sys
-github.com/containerd/containerd/tracing
-github.com/containerd/containerd/version
-# github.com/containerd/continuity v0.4.1
-## explicit; go 1.19
-github.com/containerd/continuity
-github.com/containerd/continuity/devices
-github.com/containerd/continuity/driver
+github.com/containerd/containerd/gc
+github.com/containerd/containerd/identifiers
+github.com/containerd/containerd/metadata/boltutil
+github.com/containerd/containerd/api/types/task
+github.com/containerd/containerd/events/exchange
+# github.com/containerd/continuity v0.0.0-20190426062206-aaeac12a7ffc
+github.com/containerd/continuity/sysx
 github.com/containerd/continuity/fs
 github.com/containerd/continuity/fs/fstest
 github.com/containerd/continuity/pathdriver
@@ -361,8 +360,7 @@ github.com/containerd/fuse-overlayfs-snapshotter
 # github.com/containerd/go-cni v1.1.9
 ## explicit; go 1.19
 github.com/containerd/go-cni
-# github.com/containerd/go-runc v1.1.0
-## explicit; go 1.18
+# github.com/containerd/go-runc v0.0.0-20180907222934-5a6d9f37cfa3
 github.com/containerd/go-runc
 # github.com/containerd/nydus-snapshotter v0.8.2
 ## explicit; go 1.19
@@ -663,23 +661,13 @@ github.com/opencontainers/runc/libcontainer/user
 # github.com/opencontainers/runtime-spec v1.1.0-rc.2
 ## explicit
 github.com/opencontainers/runtime-spec/specs-go
-github.com/opencontainers/runtime-spec/specs-go/features
-# github.com/opencontainers/selinux v1.11.0
-## explicit; go 1.19
-github.com/opencontainers/selinux/go-selinux
-github.com/opencontainers/selinux/go-selinux/label
-github.com/opencontainers/selinux/pkg/pwalkdir
-# github.com/package-url/packageurl-go v0.1.1-0.20220428063043-89078438f170
-## explicit; go 1.17
-github.com/package-url/packageurl-go
-# github.com/pelletier/go-toml v1.9.5
-## explicit; go 1.12
-github.com/pelletier/go-toml
-# github.com/pkg/browser v0.0.0-20210115035449-ce105d075bb4
-## explicit; go 1.14
-github.com/pkg/browser
-# github.com/pkg/errors v0.9.1
-## explicit
+# github.com/opentracing-contrib/go-stdlib v0.0.0-20171029140428-b1a47cfbdd75
+github.com/opentracing-contrib/go-stdlib/nethttp
+# github.com/opentracing/opentracing-go v0.0.0-20171003133519-1361b9cd60be
+github.com/opentracing/opentracing-go
+github.com/opentracing/opentracing-go/ext
+github.com/opentracing/opentracing-go/log
+# github.com/pkg/errors v0.8.1
 github.com/pkg/errors
 # github.com/pkg/profile v1.5.0
 ## explicit; go 1.13
@@ -735,8 +723,10 @@ github.com/spdx/tools-golang/spdx/v2/v2_3
 ## explicit; go 1.20
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
-# github.com/tonistiigi/fsutil v0.0.0-20230629203738-36ef4d8c0dbb
-## explicit; go 1.19
+github.com/stretchr/testify/assert
+# github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2
+github.com/syndtr/gocapability/capability
+# github.com/tonistiigi/fsutil v0.0.0-20190327153851-3bbb99cdbd76
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy
 github.com/tonistiigi/fsutil/types

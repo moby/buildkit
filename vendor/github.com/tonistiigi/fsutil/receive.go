@@ -143,7 +143,7 @@ func (r *receiver) run(ctx context.Context) error {
 		if !r.merge {
 			destWalker = getWalkerFn(r.dest)
 		}
-		err := doubleWalkDiff(ctx, dw.HandleChange, destWalker, w.fill, r.filter, r.differ)
+		err := doubleWalkDiff(ctx, dw.HandleChange, destWalker, w.fill)
 		if err != nil {
 			return err
 		}

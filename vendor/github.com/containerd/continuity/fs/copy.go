@@ -95,7 +95,7 @@ func copyDirectory(dst, src string, inodes map[uint64]string, o *copyDirOpts) er
 		return fmt.Errorf("failed to stat %s: %w", src, err)
 	}
 	if !stat.IsDir() {
-		return fmt.Errorf("source %s is not directory", src)
+		return errors.Errorf("source is not directory")
 	}
 
 	if st, err := os.Stat(dst); err != nil {

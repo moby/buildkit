@@ -71,25 +71,6 @@ type OCIConfig struct {
 	// UserRemapUnsupported is unsupported key for testing. The feature is
 	// incomplete and the intention is to make it default without config.
 	UserRemapUnsupported string `toml:"userRemapUnsupported"`
-	// For use in storing the OCI worker binary name that will replace buildkit-runc
-	Binary               string `toml:"binary"`
-	ProxySnapshotterPath string `toml:"proxySnapshotterPath"`
-	DefaultCgroupParent  string `toml:"defaultCgroupParent"`
-
-	// StargzSnapshotterConfig is configuration for stargz snapshotter.
-	// We use a generic map[string]interface{} in order to remove the dependency
-	// on stargz snapshotter's config pkg from our config.
-	StargzSnapshotterConfig map[string]interface{} `toml:"stargzSnapshotter"`
-
-	// ApparmorProfile is the name of the apparmor profile that should be used to constrain build containers.
-	// The profile should already be loaded (by a higher level system) before creating a worker.
-	ApparmorProfile string `toml:"apparmor-profile"`
-
-	// SELinux enables applying SELinux labels.
-	SELinux bool `toml:"selinux"`
-
-	// MaxParallelism is the maximum number of parallel build steps that can be run at the same time.
-	MaxParallelism int `toml:"max-parallelism"`
 }
 
 type ContainerdConfig struct {
@@ -100,18 +81,6 @@ type ContainerdConfig struct {
 	Namespace string            `toml:"namespace"`
 	GCConfig
 	NetworkConfig
-	Snapshotter string `toml:"snapshotter"`
-
-	// ApparmorProfile is the name of the apparmor profile that should be used to constrain build containers.
-	// The profile should already be loaded (by a higher level system) before creating a worker.
-	ApparmorProfile string `toml:"apparmor-profile"`
-
-	// SELinux enables applying SELinux labels.
-	SELinux bool `toml:"selinux"`
-
-	MaxParallelism int `toml:"max-parallelism"`
-
-	Rootless bool `toml:"rootless"`
 }
 
 type GCPolicy struct {

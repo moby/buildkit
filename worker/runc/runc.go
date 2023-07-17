@@ -36,7 +36,7 @@ type SnapshotterFactory struct {
 }
 
 // NewWorkerOpt creates a WorkerOpt.
-func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, processMode oci.ProcessMode, labels map[string]string, idmap *idtools.IdentityMapping, nopt netproviders.Opt, dns *oci.DNSConfig, binary, apparmorProfile string, selinux bool, parallelismSem *semaphore.Weighted, traceSocket, defaultCgroupParent string) (base.WorkerOpt, error) {
+func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, processMode oci.ProcessMode, labels map[string]string, idmap *idtools.IdentityMapping, nopt netproviders.Opt, dns *oci.DNSConfig) (base.WorkerOpt, error) {
 	var opt base.WorkerOpt
 	name := "runc-" + snFactory.Name
 	root = filepath.Join(root, name)
@@ -67,15 +67,10 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		// Otherwise, a nil array will be sent and the default OCI worker binary will be used
 		CommandCandidates: cmds,
 		// without root privileges
-		Rootless:            rootless,
-		ProcessMode:         processMode,
-		IdentityMapping:     idmap,
-		DNS:                 dns,
-		ApparmorProfile:     apparmorProfile,
-		SELinux:             selinux,
-		TracingSocket:       traceSocket,
-		DefaultCgroupParent: defaultCgroupParent,
-		ResourceMonitor:     rm,
+		Rootless:        rootless,
+		ProcessMode:     processMode,
+		IdentityMapping: idmap,
+		DNS:             dns,
 	}, np)
 	if err != nil {
 		return opt, err

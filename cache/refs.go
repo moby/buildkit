@@ -379,6 +379,7 @@ func (cr *cacheRecord) size(ctx context.Context) (int64, error) {
 		cr.mu.Unlock()
 		return usage.Size, nil
 	})
+	return s.(int64), err
 }
 
 // caller must hold cr.mu
@@ -832,26 +833,18 @@ func getBlobWithCompression(ctx context.Context, cs content.Store, desc ocispecs
 	return *target, nil
 }
 
-func walkBlob(ctx context.Context, cs content.Store, desc ocispecs.Descriptor, f func(ocispecs.Descriptor) bool) error {
-	if !f(desc) {
-		return nil
+// call when holding the manager lock
+func (cr *cacheRecord) remove(ctx context.Context, removeSnapshot bool) error {
+	delete(cr.cm.records, cr.ID())
+	if cr.parent != nil {
+		if err := cr.parent.release(ctx); err != nil {
+			return err
+		}
 	}
-	if _, err := walkBlobVariantsOnly(ctx, cs, desc.Digest, func(desc ocispecs.Descriptor) bool { return f(desc) }, nil); err != nil {
-		return err
-	}
-	return nil
-}
-
-func walkBlobVariantsOnly(ctx context.Context, cs content.Store, dgst digest.Digest, f func(ocispecs.Descriptor) bool, visited map[digest.Digest]struct{}) (bool, error) {
-	if visited == nil {
-		visited = make(map[digest.Digest]struct{})
-	}
-	visited[dgst] = struct{}{}
-	info, err := cs.Info(ctx, dgst)
-	if errors.Is(err, errdefs.ErrNotFound) {
-		return true, nil
-	} else if err != nil {
-		return false, err
+	if removeSnapshot {
+		if err := cr.cm.Snapshotter.Remove(ctx, cr.ID()); err != nil {
+			return errors.Wrapf(err, "failed to remove %s", cr.ID())
+		}
 	}
 	var children []digest.Digest
 	for k, dgstS := range info.Labels {

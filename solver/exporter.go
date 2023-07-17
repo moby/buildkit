@@ -219,7 +219,8 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		}
 	}
 
-	res[e] = allRec
+	e.res = allRec
+	t.Visit(e)
 
 	return allRec, nil
 }

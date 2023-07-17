@@ -102,24 +102,6 @@ func init() {
 			Usage: "path of cni binary files",
 			Value: defaultConf.Workers.OCI.NetworkConfig.CNIBinaryPath,
 		},
-		cli.IntFlag{
-			Name:  "oci-cni-pool-size",
-			Usage: "size of cni network namespace pool",
-			Value: defaultConf.Workers.OCI.NetworkConfig.CNIPoolSize,
-		},
-		cli.StringFlag{
-			Name:  "oci-worker-binary",
-			Usage: "name of specified oci worker binary",
-			Value: defaultConf.Workers.OCI.Binary,
-		},
-		cli.StringFlag{
-			Name:  "oci-worker-apparmor-profile",
-			Usage: "set the name of the apparmor profile applied to containers",
-		},
-		cli.BoolFlag{
-			Name:  "oci-worker-selinux",
-			Usage: "apply SELinux labels",
-		},
 	}
 	n := "oci-worker-rootless"
 	u := "enable rootless mode"
@@ -234,22 +216,6 @@ func applyOCIFlags(c *cli.Context, cfg *config.Config) error {
 	if c.GlobalIsSet("oci-cni-binary-dir") {
 		cfg.Workers.OCI.NetworkConfig.CNIBinaryPath = c.GlobalString("oci-cni-binary-dir")
 	}
-	if c.GlobalIsSet("oci-cni-pool-size") {
-		cfg.Workers.OCI.NetworkConfig.CNIPoolSize = c.GlobalInt("oci-cni-pool-size")
-	}
-	if c.GlobalIsSet("oci-worker-binary") {
-		cfg.Workers.OCI.Binary = c.GlobalString("oci-worker-binary")
-	}
-	if c.GlobalIsSet("oci-worker-proxy-snapshotter-path") {
-		cfg.Workers.OCI.ProxySnapshotterPath = c.GlobalString("oci-worker-proxy-snapshotter-path")
-	}
-	if c.GlobalIsSet("oci-worker-apparmor-profile") {
-		cfg.Workers.OCI.ApparmorProfile = c.GlobalString("oci-worker-apparmor-profile")
-	}
-	if c.GlobalIsSet("oci-worker-selinux") {
-		cfg.Workers.OCI.SELinux = c.GlobalBool("oci-worker-selinux")
-	}
-
 	return nil
 }
 
@@ -304,12 +270,7 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 		},
 	}
 
-	var parallelismSem *semaphore.Weighted
-	if cfg.MaxParallelism > 0 {
-		parallelismSem = semaphore.NewWeighted(int64(cfg.MaxParallelism))
-	}
-
-	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping, nc, dns, cfg.Binary, cfg.ApparmorProfile, cfg.SELinux, parallelismSem, common.traceSocket, cfg.DefaultCgroupParent)
+	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping, nc, dns)
 	if err != nil {
 		return nil, err
 	}

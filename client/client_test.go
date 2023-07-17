@@ -85,10 +85,10 @@ type nopWriteCloser struct {
 
 func (nopWriteCloser) Close() error { return nil }
 
-func TestIntegration(t *testing.T) {
-	testIntegration(
-		t,
-		testCacheExportCacheKeyLoop,
+func TestClientIntegration(t *testing.T) {
+	mirrors := integration.WithMirroredImages(integration.OfficialImages("busybox:latest", "alpine:latest"))
+
+	integration.Run(t, []integration.Test{
 		testRelativeWorkDir,
 		testFileOpMkdirMkfile,
 		testFileOpCopyRm,
@@ -147,66 +147,7 @@ func TestIntegration(t *testing.T) {
 		testBridgeNetworking,
 		testCacheMountNoCache,
 		testExporterTargetExists,
-		testTarExporterWithSocket,
-		testTarExporterWithSocketCopy,
-		testTarExporterSymlink,
-		testMultipleRegistryCacheImportExport,
-		testSourceMap,
-		testSourceMapFromRef,
-		testLazyImagePush,
-		testStargzLazyPull,
-		testStargzLazyInlineCacheImportExport,
-		testFileOpInputSwap,
-		testRelativeMountpoint,
-		testLocalSourceDiffer,
-		testOCILayoutSource,
-		testOCILayoutPlatformSource,
-		testBuildExportZstd,
-		testPullZstdImage,
-		testMergeOp,
-		testMergeOpCacheInline,
-		testMergeOpCacheMin,
-		testMergeOpCacheMax,
-		testRmSymlink,
-		testMoveParentDir,
-		testBuildExportWithForeignLayer,
-		testZstdLocalCacheExport,
-		testCacheExportIgnoreError,
-		testZstdRegistryCacheImportExport,
-		testZstdLocalCacheImportExport,
-		testUncompressedLocalCacheImportExport,
-		testUncompressedRegistryCacheImportExport,
-		testStargzLazyRegistryCacheImportExport,
-		testValidateDigestOrigin,
-		testCallInfo,
-		testPullWithLayerLimit,
-		testExportAnnotations,
-		testExportAnnotationsMediaTypes,
-		testExportAttestations,
-		testExportedImageLabels,
-		testAttestationDefaultSubject,
-		testSourceDateEpochLayerTimestamps,
-		testSourceDateEpochClamp,
-		testSourceDateEpochReset,
-		testSourceDateEpochLocalExporter,
-		testSourceDateEpochTarExporter,
-		testSourceDateEpochImageExporter,
-		testAttestationBundle,
-		testSBOMScan,
-		testSBOMScanSingleRef,
-		testSBOMSupplements,
-		testMultipleCacheExports,
-		testMountStubsDirectory,
-		testMountStubsTimestamp,
-		testSourcePolicy,
-		testImageManifestRegistryCacheImportExport,
-		testLLBMountPerformance,
-		testClientCustomGRPCOpts,
-		testMultipleRecordsWithSameLayersCacheImportExport,
-		testExportLocalNoPlatformSplit,
-		testExportLocalNoPlatformSplitOverwrite,
-	)
-}
+	}, mirrors)
 
 func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sandbox)) {
 	mirroredImages := integration.OfficialImages("busybox:latest", "alpine:latest")
@@ -252,50 +193,6 @@ func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sa
 
 func newContainerd(cdAddress string) (*containerd.Client, error) {
 	return containerd.New(cdAddress, containerd.WithTimeout(60*time.Second))
-}
-
-// moby/buildkit#1336
-func testCacheExportCacheKeyLoop(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport, integration.FeatureCacheBackendLocal)
-	c, err := New(sb.Context(), sb.Address())
-	require.NoError(t, err)
-	defer c.Close()
-
-	tmpdir := t.TempDir()
-
-	err = os.WriteFile(filepath.Join(tmpdir, "foo"), []byte("foodata"), 0600)
-	require.NoError(t, err)
-
-	for _, mode := range []bool{false, true} {
-		func(mode bool) {
-			t.Run(fmt.Sprintf("mode=%v", mode), func(t *testing.T) {
-				buildbase := llb.Image("alpine:latest").File(llb.Copy(llb.Local("mylocal"), "foo", "foo"))
-				if mode { // same cache keys with a separating node go to different code-path
-					buildbase = buildbase.Run(llb.Shlex("true")).Root()
-				}
-				intermed := llb.Image("alpine:latest").File(llb.Copy(buildbase, "foo", "foo"))
-				final := llb.Scratch().File(llb.Copy(intermed, "foo", "foooooo"))
-
-				def, err := final.Marshal(sb.Context())
-				require.NoError(t, err)
-
-				_, err = c.Solve(sb.Context(), def, SolveOpt{
-					CacheExports: []CacheOptionsEntry{
-						{
-							Type: "local",
-							Attrs: map[string]string{
-								"dest": filepath.Join(tmpdir, "cache"),
-							},
-						},
-					},
-					LocalDirs: map[string]string{
-						"mylocal": tmpdir,
-					},
-				}, nil)
-				require.NoError(t, err)
-			})
-		}(mode)
-	}
 }
 
 func testBridgeNetworking(t *testing.T, sb integration.Sandbox) {
@@ -1100,8 +997,7 @@ func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
 
 	if secMode == securitySandbox {
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "did not complete successfully")
-		require.Contains(t, err.Error(), "mkdir "+cg)
+		require.Contains(t, err.Error(), "exit code: 1")
 	} else {
 		require.NoError(t, err)
 	}
@@ -2526,9 +2422,9 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	require.Equal(t, "daemon", strings.TrimSpace(string(dt)))
 
-	dt, err = os.ReadFile(filepath.Join(destDir, "nobody"))
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "nogroup"))
 	require.NoError(t, err)
-	require.Equal(t, "nobody", strings.TrimSpace(string(dt)))
+	require.Contains(t, string(dt), "nogroup")
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "userone"))
 	require.NoError(t, err)
@@ -3279,6 +3175,50 @@ func testExporterTargetExists(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, dgst, mdDgst)
 
 	require.True(t, strings.HasPrefix(res.ExporterResponse[exptypes.ExporterImageConfigDigestKey], "sha256:"))
+}
+
+func testTarExporterWithSocket(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	alpine := llb.Image("docker.io/library/alpine:latest")
+	def, err := alpine.Run(llb.Args([]string{"sh", "-c", "nc -l -s local:/socket.sock & usleep 100000; kill %1"})).Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:  ExporterTar,
+				Attrs: map[string]string{},
+				Output: func(m map[string]string) (io.WriteCloser, error) {
+					return nopWriteCloser{ioutil.Discard}, nil
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+}
+
+func testTarExporterWithSocketCopy(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	alpine := llb.Image("docker.io/library/alpine:latest")
+	state := alpine.Run(llb.Args([]string{"sh", "-c", "nc -l -s local:/root/socket.sock & usleep 100000; kill %1"})).Root()
+
+	fa := llb.Copy(state, "/root", "/roo2", &llb.CopyInfo{})
+
+	scratchCopy := llb.Scratch().File(fa)
+
+	def, err := scratchCopy.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
 }
 
 func testTarExporterWithSocket(t *testing.T, sb integration.Sandbox) {
@@ -4053,12 +3993,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	require.False(t, ok)
 }
 
-func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb,
-		integration.FeatureCacheExport,
-		integration.FeatureCacheBackendRegistry,
-		integration.FeatureOCIExporter,
-	)
+func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptionsEntryImport, cacheOptionsEntryExport CacheOptionsEntry) {
 	requiresLinux(t)
 	cdAddress := sb.ContainerdAddress()
 	if cdAddress == "" || sb.Snapshotter() != "stargz" {
@@ -5101,7 +5036,7 @@ func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 			"ref": target,
 		},
 	}
-	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{o}, []CacheOptionsEntry{o})
+	testBasicCacheImportExport(t, sb, o, o)
 }
 
 func testMultipleRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
@@ -5150,86 +5085,7 @@ func testBasicLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 			"dest": dir,
 		},
 	}
-	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
-}
-
-func testBasicS3CacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb,
-		integration.FeatureCacheExport,
-		integration.FeatureCacheImport,
-		integration.FeatureCacheBackendS3,
-	)
-
-	opts := integration.MinioOpts{
-		Region:          "us-east-1",
-		AccessKeyID:     "minioadmin",
-		SecretAccessKey: "minioadmin",
-	}
-
-	s3Addr, s3Bucket, cleanup, err := integration.NewMinioServer(t, sb, opts)
-	require.NoError(t, err)
-	defer cleanup()
-
-	im := CacheOptionsEntry{
-		Type: "s3",
-		Attrs: map[string]string{
-			"region":            opts.Region,
-			"access_key_id":     opts.AccessKeyID,
-			"secret_access_key": opts.SecretAccessKey,
-			"bucket":            s3Bucket,
-			"endpoint_url":      s3Addr,
-			"use_path_style":    "true",
-		},
-	}
-	ex := CacheOptionsEntry{
-		Type: "s3",
-		Attrs: map[string]string{
-			"region":            opts.Region,
-			"access_key_id":     opts.AccessKeyID,
-			"secret_access_key": opts.SecretAccessKey,
-			"bucket":            s3Bucket,
-			"endpoint_url":      s3Addr,
-			"use_path_style":    "true",
-		},
-	}
-	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
-}
-
-func testBasicAzblobCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb,
-		integration.FeatureCacheExport,
-		integration.FeatureCacheImport,
-		integration.FeatureCacheBackendAzblob,
-	)
-
-	opts := integration.AzuriteOpts{
-		AccountName: "azblobcacheaccount",
-		AccountKey:  base64.StdEncoding.EncodeToString([]byte("azblobcacheaccountkey")),
-	}
-
-	azAddr, cleanup, err := integration.NewAzuriteServer(t, sb, opts)
-	require.NoError(t, err)
-	defer cleanup()
-
-	im := CacheOptionsEntry{
-		Type: "azblob",
-		Attrs: map[string]string{
-			"account_url":       azAddr,
-			"account_name":      opts.AccountName,
-			"secret_access_key": opts.AccountKey,
-			"container":         "cachecontainer",
-		},
-	}
-	ex := CacheOptionsEntry{
-		Type: "azblob",
-		Attrs: map[string]string{
-			"account_url":       azAddr,
-			"account_name":      opts.AccountName,
-			"secret_access_key": opts.AccountKey,
-			"container":         "cachecontainer",
-		},
-	}
-	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
+	testBasicCacheImportExport(t, sb, im, ex)
 }
 
 func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {

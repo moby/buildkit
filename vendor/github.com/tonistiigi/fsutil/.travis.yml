@@ -1,0 +1,23 @@
+dist: trusty
+sudo: required
+
+services:
+  - docker
+
+language: go
+
+go: 
+ - "1.12.x"
+
+install:
+ - export GO111MODULE=on
+
+script:
+ - go build ./...
+ - go test -c -o test ./
+ - sudo ./test -test.v
+ - go test -c -o test ./copy
+ - sudo ./test -test.v
+ - GOOS=darwin go build ./...
+ - GOOS=windows go build ./...
+ - GOARCH=arm GOARM=7 go build ./...

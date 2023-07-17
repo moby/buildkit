@@ -141,12 +141,7 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, inde
 		return "", "", nil, false, err
 	}
 	req = req.WithContext(ctx)
-	m := map[string]cacheRefMetadata{}
-
-	// If we request a single ETag in 'If-None-Match', some servers omit the
-	// unambiguous ETag in their response.
-	// See: https://github.com/moby/buildkit/issues/905
-	var onlyETag string
+	m := map[string]*metadata.StorageItem{}
 
 	if len(mds) > 0 {
 		for _, md := range mds {
@@ -184,14 +179,8 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, inde
 		resp, err := client.Do(req)
 		if err == nil {
 			if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNotModified {
-				respETag := etagValue(resp.Header.Get("ETag"))
-
-				// If a 304 is returned without an ETag and we had only sent one ETag,
-				// the response refers to the ETag we asked about.
-				if respETag == "" && onlyETag != "" && resp.StatusCode == http.StatusNotModified {
-					respETag = onlyETag
-				}
-				md, ok := m[respETag]
+				respETag := resp.Header.Get("ETag")
+				si, ok := m[respETag]
 				if ok {
 					hs.refID = md.ID()
 					dgst := md.getHTTPChecksum()
@@ -219,15 +208,8 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, inde
 		return "", "", nil, false, errors.Errorf("invalid response status %d", resp.StatusCode)
 	}
 	if resp.StatusCode == http.StatusNotModified {
-		respETag := etagValue(resp.Header.Get("ETag"))
-		if respETag == "" && onlyETag != "" {
-			respETag = onlyETag
-
-			// Set the missing ETag header on the response so that it's available
-			// to .save()
-			resp.Header.Set("ETag", onlyETag)
-		}
-		md, ok := m[respETag]
+		respETag := resp.Header.Get("ETag")
+		si, ok := m[respETag]
 		if !ok {
 			return "", "", nil, false, errors.Errorf("invalid not-modified ETag: %v", respETag)
 		}

@@ -59,7 +59,7 @@ type currentPath struct {
 }
 
 // doubleWalkDiff walks both directories to create a diff
-func doubleWalkDiff(ctx context.Context, changeFn ChangeFunc, a, b walkerFn, filter FilterFunc, differ DiffType) (err error) {
+func doubleWalkDiff(ctx context.Context, changeFn ChangeFunc, a, b walkerFn) (err error) {
 	g, ctx := errgroup.WithContext(ctx)
 
 	var (
@@ -133,7 +133,7 @@ func doubleWalkDiff(ctx context.Context, changeFn ChangeFunc, a, b walkerFn, fil
 				}
 				f1 = nil
 			case ChangeKindModify:
-				same, err := sameFile(f1, f2copy, differ)
+				same, err := sameFile(f1, f2)
 				if err != nil {
 					return err
 				}
@@ -197,43 +197,16 @@ func sameFile(f1, f2 *currentPath, differ DiffType) (same bool, retErr error) {
 		}
 	}
 
-	same, err := compareStat(f1.stat, f2.stat)
-	if err != nil || !same || differ == DiffMetadata {
-		return same, err
+	ls1, ok := f1.f.Sys().(*types.Stat)
+	if !ok {
+		return false, nil
 	}
-	return compareFileContent(f1.path, f2.path)
-}
+	ls2, ok := f2.f.Sys().(*types.Stat)
+	if !ok {
+		return false, nil
+	}
 
-func compareFileContent(p1, p2 string) (bool, error) {
-	f1, err := os.Open(p1)
-	if err != nil {
-		return false, err
-	}
-	defer f1.Close()
-	f2, err := os.Open(p2)
-	if err != nil {
-		return false, err
-	}
-	defer f2.Close()
-
-	b1 := make([]byte, compareChunkSize)
-	b2 := make([]byte, compareChunkSize)
-	for {
-		n1, err1 := f1.Read(b1)
-		if err1 != nil && err1 != io.EOF {
-			return false, err1
-		}
-		n2, err2 := f2.Read(b2)
-		if err2 != nil && err2 != io.EOF {
-			return false, err2
-		}
-		if n1 != n2 || !bytes.Equal(b1[:n1], b2[:n2]) {
-			return false, nil
-		}
-		if err1 == io.EOF && err2 == io.EOF {
-			return true, nil
-		}
-	}
+	return compareStat(ls1, ls2)
 }
 
 // compareStat returns whether the stats are equivalent,

@@ -527,8 +527,8 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			sourceMap:         opt.SourceMap,
 		}
 
-		if err = dispatchOnBuildTriggers(d, d.image.Config.OnBuild, opt); err != nil {
-			return nil, parser.WithLocation(err, d.stage.Location)
+		if err = dispatchOnBuild(d, d.image.Config.OnBuild, opt); err != nil {
+			return nil, nil, err
 		}
 		d.image.Config.OnBuild = nil
 

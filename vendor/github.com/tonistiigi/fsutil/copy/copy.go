@@ -151,9 +151,8 @@ func (c *copier) prepareTargetDir(srcFollowed, src, destPath string, copyDirCont
 	return destPath, nil
 }
 
-type User struct {
-	UID, GID int
-	SID      string
+type ChownOpt struct {
+	Uid, Gid int
 }
 
 type Chowner func(*User) (*User, error)
@@ -185,9 +184,7 @@ func WithCopyInfo(ci CopyInfo) func(*CopyInfo) {
 
 func WithChown(uid, gid int) Opt {
 	return func(ci *CopyInfo) {
-		ci.Chown = func(*User) (*User, error) {
-			return &User{UID: uid, GID: gid}, nil
-		}
+		ci.Chown = &ChownOpt{Uid: uid, Gid: gid}
 	}
 }
 
@@ -227,25 +224,14 @@ func WithChangeNotifier(fn fsutil.ChangeFunc) Opt {
 }
 
 type copier struct {
-	chown                 Chowner
-	utime                 *time.Time
-	mode                  *int
-	inodes                map[uint64]string
-	xattrErrorHandler     XAttrErrorHandler
-	includePatternMatcher *patternmatcher.PatternMatcher
-	excludePatternMatcher *patternmatcher.PatternMatcher
-	parentDirs            []parentDir
-	changefn              fsutil.ChangeFunc
-	root                  string
+	chown             *ChownOpt
+	utime             *time.Time
+	mode              *int
+	inodes            map[uint64]string
+	xattrErrorHandler XAttrErrorHandler
 }
 
-type parentDir struct {
-	srcPath string
-	dstPath string
-	copied  bool
-}
-
-func newCopier(root string, chown Chowner, tm *time.Time, mode *int, xeh XAttrErrorHandler, includePatterns, excludePatterns []string, changeFunc fsutil.ChangeFunc) (*copier, error) {
+func newCopier(chown *ChownOpt, tm *time.Time, mode *int, xeh XAttrErrorHandler) *copier {
 	if xeh == nil {
 		xeh = func(dst, src, key string, err error) error {
 			return err

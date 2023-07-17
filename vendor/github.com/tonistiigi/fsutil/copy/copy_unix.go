@@ -18,8 +18,6 @@ func getUIDGID(fi os.FileInfo) (uid, gid int) {
 
 func (c *copier) copyFileInfo(fi os.FileInfo, src, name string) error {
 	chown := c.chown
-	uid, gid := getUIDGID(fi)
-	old := &User{UID: uid, GID: gid}
 	if chown == nil {
 		chown = func(u *User) (*User, error) {
 			return u, nil
@@ -39,16 +37,26 @@ func (c *copier) copyFileInfo(fi os.FileInfo, src, name string) error {
 		}
 	}
 
-	if err := c.copyFileTimestamp(fi, name); err != nil {
-		return err
+	if c.utime != nil {
+		if err := Utimes(name, c.utime); err != nil {
+			return err
+		}
+	} else {
+		timespec := []unix.Timespec{unix.Timespec(sys.StatAtime(st)), unix.Timespec(sys.StatMtime(st))}
+		if err := unix.UtimesNanoAt(unix.AT_FDCWD, name, timespec, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+			return errors.Wrapf(err, "failed to utime %s", name)
+		}
 	}
 	return nil
 }
 
-func (c *copier) copyFileTimestamp(fi os.FileInfo, name string) error {
-	if c.utime != nil {
-		return Utimes(name, c.utime)
-	}
+func copyFileContent(dst, src *os.File) error {
+	buf := bufferPool.Get().(*[]byte)
+	_, err := io.CopyBuffer(dst, src, *buf)
+	bufferPool.Put(buf)
+
+	return err
+}
 
 	st := fi.Sys().(*syscall.Stat_t)
 	timespec := []unix.Timespec{unix.Timespec(StatAtime(st)), unix.Timespec(StatMtime(st))}

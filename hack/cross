@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+. $(dirname $0)/util
+
+: ${PLATFORMS=linux/arm}
+
+set -ex
+
+buildctl build --progress=plain --frontend=dockerfile.v0 --local context=. --local dockerfile=. --opt filename=./hack/dockerfiles/test.buildkit.Dockerfile --opt platform=$PLATFORMS
+buildctl build --progress=plain --frontend=dockerfile.v0 --local context=. --local dockerfile=. --opt filename=./hack/dockerfiles/test.buildkit.Dockerfile --opt target=buildkit-buildkitd --opt platform=windows/amd64

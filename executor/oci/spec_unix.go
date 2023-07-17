@@ -18,8 +18,6 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/entitlements/security"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
-	selinux "github.com/opencontainers/selinux/go-selinux"
-	"github.com/opencontainers/selinux/go-selinux/label"
 	"github.com/pkg/errors"
 )
 
@@ -28,9 +26,21 @@ var (
 	supportsCgroupNS bool
 )
 
-const (
-	tracingSocketPath = "/dev/otel-grpc.sock"
-)
+// GenerateSpec generates spec using containerd functionality.
+// opts are ignored for s.Process, s.Hostname, and s.Mounts .
+func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mount, id, resolvConf, hostsFile string, namespace network.Namespace, processMode ProcessMode, idmap *idtools.IdentityMapping, opts ...oci.SpecOpts) (*specs.Spec, func(), error) {
+	c := &containers.Container{
+		ID: id,
+	}
+	_, ok := namespaces.Namespace(ctx)
+	if !ok {
+		ctx = namespaces.WithNamespace(ctx, "buildkit")
+	}
+	if meta.SecurityMode == pb.SecurityMode_INSECURE {
+		opts = append(opts, entitlements.WithInsecureSpec())
+	} else if system.SeccompSupported() && meta.SecurityMode == pb.SecurityMode_SANDBOX {
+		opts = append(opts, seccomp.WithDefaultProfile())
+	}
 
 func generateMountOpts(resolvConf, hostsFile string) ([]oci.SpecOpts, error) {
 	return []oci.SpecOpts{
@@ -68,10 +78,28 @@ func generateSecurityOpts(mode pb.SecurityMode, apparmorProfile string, selinuxB
 		if apparmorProfile != "" {
 			opts = append(opts, oci.WithApparmorProfile(apparmorProfile))
 		}
-		opts = append(opts, func(_ context.Context, _ oci.Client, _ *containers.Container, s *oci.Spec) error {
-			var err error
-			if selinuxB {
-				s.Process.SelinuxLabel, s.Linux.MountLabel, err = label.InitLabels(nil)
+	}
+
+	for _, m := range mounts {
+		if m.Src == nil {
+			return nil, nil, errors.Errorf("mount %s has no source", m.Dest)
+		}
+		mountable, err := m.Src.Mount(ctx, m.Readonly)
+		if err != nil {
+			releaseAll()
+			return nil, nil, errors.Wrapf(err, "failed to mount %s", m.Dest)
+		}
+		mounts, release, err := mountable.Mount()
+		if err != nil {
+			releaseAll()
+			return nil, nil, errors.WithStack(err)
+		}
+		releasers = append(releasers, release)
+		for _, mount := range mounts {
+			mount, err = sm.subMount(mount, m.Selector)
+			if err != nil {
+				releaseAll()
+				return nil, nil, err
 			}
 			return err
 		})
@@ -80,16 +108,13 @@ func generateSecurityOpts(mode pb.SecurityMode, apparmorProfile string, selinuxB
 	return nil, nil
 }
 
-// generateProcessModeOpts may affect mounts, so must be called after generateMountOpts
-func generateProcessModeOpts(mode ProcessMode) ([]oci.SpecOpts, error) {
-	if mode == NoProcessSandbox {
-		return []oci.SpecOpts{
-			oci.WithHostNamespace(specs.PIDNamespace),
-			withBoundProc(),
-		}, nil
-		// TODO(AkihiroSuda): Configure seccomp to disable ptrace (and prctl?) explicitly
-	}
-	return nil, nil
+type mountRef struct {
+	mount   mount.Mount
+	unmount func() error
+}
+
+type submounts struct {
+	m map[uint64]mountRef
 }
 
 func generateIDmapOpts(idmap *idtools.IdentityMapping) ([]oci.SpecOpts, error) {

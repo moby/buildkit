@@ -47,13 +47,9 @@ type Opt struct {
 	ProcessMode     oci.ProcessMode
 	IdentityMapping *idtools.IdentityMapping
 	// runc run --no-pivot (unrecommended)
-	NoPivot         bool
-	DNS             *oci.DNSConfig
-	OOMScoreAdj     *int
-	ApparmorProfile string
-	SELinux         bool
-	TracingSocket   string
-	ResourceMonitor *resources.Monitor
+	NoPivot     bool
+	DNS         *oci.DNSConfig
+	OOMScoreAdj *int
 }
 
 var defaultCommandCandidates = []string{"buildkit-runc", "runc"}
@@ -69,12 +65,6 @@ type runcExecutor struct {
 	noPivot          bool
 	dns              *oci.DNSConfig
 	oomScoreAdj      *int
-	running          map[string]chan error
-	mu               sync.Mutex
-	apparmorProfile  string
-	selinux          bool
-	tracingSocket    string
-	resmon           *resources.Monitor
 }
 
 func New(opt Opt, networkProviders map[pb.NetMode]network.Provider) (executor.Executor, error) {
@@ -136,11 +126,6 @@ func New(opt Opt, networkProviders map[pb.NetMode]network.Provider) (executor.Ex
 		noPivot:          opt.NoPivot,
 		dns:              opt.DNS,
 		oomScoreAdj:      opt.OOMScoreAdj,
-		running:          make(map[string]chan error),
-		apparmorProfile:  opt.ApparmorProfile,
-		selinux:          opt.SELinux,
-		tracingSocket:    opt.TracingSocket,
-		resmon:           opt.ResourceMonitor,
 	}
 	return w, nil
 }
@@ -265,7 +250,17 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 		}
 	}
 
-	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, namespace, w.cgroupParent, w.processMode, w.idmap, w.apparmorProfile, w.selinux, w.tracingSocket, opts...)
+	if w.cgroupParent != "" {
+		var cgroupsPath string
+		lastSeparator := w.cgroupParent[len(w.cgroupParent)-1:]
+		if strings.Contains(w.cgroupParent, ".slice") && lastSeparator == ":" {
+			cgroupsPath = w.cgroupParent + id
+		} else {
+			cgroupsPath = filepath.Join("/", w.cgroupParent, "buildkit", id)
+		}
+		opts = append(opts, containerdoci.WithCgroup(cgroupsPath))
+	}
+	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, namespace, w.processMode, w.idmap, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -329,41 +324,20 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 		if err == nil {
 			err = err1
 		}
+	}()
+
+	logrus.Debugf("> creating %s %v", id, meta.Args)
+	status, err := w.runc.Run(runCtx, id, bundle, &runc.CreateOpts{
+		IO:      &forwardIO{stdin: stdin, stdout: stdout, stderr: stderr},
+		NoPivot: w.noPivot,
+	})
+	close(done)
+	if err != nil {
 		return err
 	}
-	doReleaseNetwork = false
 
-	err = exitError(ctx, err)
-	if err != nil {
-		releaseContainer(context.TODO())
-		return nil, err
-	}
-
-	if rec == nil {
-		return nil, releaseContainer(context.TODO())
-	}
-
-	return rec, rec.CloseAsync(releaseContainer)
-}
-
-func exitError(ctx context.Context, err error) error {
-	if err != nil {
-		exitErr := &gatewayapi.ExitError{
-			ExitCode: gatewayapi.UnknownExitStatus,
-			Err:      err,
-		}
-		var runcExitError *runc.ExitError
-		if errors.As(err, &runcExitError) && runcExitError.Status >= 0 {
-			exitErr = &gatewayapi.ExitError{
-				ExitCode: uint32(runcExitError.Status),
-			}
-		}
-		trace.SpanFromContext(ctx).AddEvent(
-			"Container exited",
-			trace.WithAttributes(
-				attribute.Int("exit.code", int(exitErr.ExitCode)),
-			),
-		)
+	if status != 0 {
+		err := errors.Errorf("exit code: %d", status)
 		select {
 		case <-ctx.Done():
 			exitErr.Err = errors.Wrapf(ctx.Err(), exitErr.Error())

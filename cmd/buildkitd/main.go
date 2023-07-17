@@ -67,7 +67,7 @@ import (
 	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/reflection"
+	"google.golang.org/grpc/credentials"
 )
 
 func init() {
@@ -236,18 +236,14 @@ func main() {
 				return err
 			}
 		}
-
-		tp, err := detect.TracerProvider()
+		opts := []grpc.ServerOption{unaryInterceptor(ctx), grpc.StreamInterceptor(otgrpc.OpenTracingStreamServerInterceptor(tracer))}
+		creds, err := serverCredentials(cfg.GRPC.TLS)
 		if err != nil {
 			return err
 		}
-
-		streamTracer := otelgrpc.StreamServerInterceptor(otelgrpc.WithTracerProvider(tp), otelgrpc.WithPropagators(propagators))
-
-		unary := grpc_middleware.ChainUnaryServer(unaryInterceptor(ctx, tp), grpcerrors.UnaryServerInterceptor)
-		stream := grpc_middleware.ChainStreamServer(streamTracer, grpcerrors.StreamServerInterceptor)
-
-		opts := []grpc.ServerOption{grpc.UnaryInterceptor(unary), grpc.StreamInterceptor(stream)}
+		if creds != nil {
+			opts = append(opts, creds)
+		}
 		server := grpc.NewServer(opts...)
 
 		// relative path does not work with nightlyone/lockfile
@@ -360,7 +356,7 @@ func serveGRPC(cfg config.GRPCConfig, server *grpc.Server, errCh chan error) err
 	eg, _ := errgroup.WithContext(context.Background())
 	listeners := make([]net.Listener, 0, len(addrs))
 	for _, addr := range addrs {
-		l, err := getListener(addr, *cfg.UID, *cfg.GID, tlsConfig)
+		l, err := getListener(cfg, addr)
 		if err != nil {
 			for _, l := range listeners {
 				l.Close()
@@ -559,24 +555,11 @@ func getListener(addr string, uid, gid int, tlsConfig *tls.Config) (net.Listener
 	listenAddr := addrSlice[1]
 	switch proto {
 	case "unix", "npipe":
-		if tlsConfig != nil {
-			bklog.L.Warnf("TLS is disabled for %s", addr)
-		}
-		return sys.GetLocalListener(listenAddr, uid, gid)
-	case "fd":
-		return listenFD(listenAddr, tlsConfig)
+		return sys.GetLocalListener(listenAddr, cfg.UID, cfg.GID)
 	case "tcp":
-		l, err := net.Listen("tcp", listenAddr)
-		if err != nil {
-			return nil, err
-		}
-
-		if tlsConfig == nil {
-			bklog.L.Warnf("TLS is not enabled for %s. enabling mutual TLS authentication is highly recommended", addr)
-			return l, nil
-		}
-		return tls.NewListener(l, tlsConfig), nil
+		return sockets.NewTCPSocket(listenAddr, nil)
 	default:
+		// TODO: support npipe (with TLS?)
 		return nil, errors.Errorf("addr %s not supported", addr)
 	}
 }
