@@ -13,8 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Masterminds/semver/v3"
-	containerdpkg "github.com/containerd/containerd"
 	"github.com/google/shlex"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/pkg/errors"
@@ -367,33 +365,5 @@ func CheckFeatureCompat(t *testing.T, sb Sandbox, reason ...string) {
 	}
 	if len(ereasons) > 0 {
 		t.Skipf("%s worker can not currently run this test due to missing features (%s)", sb.Name(), strings.Join(ereasons, ", "))
-	}
-}
-
-func CheckContainerdVersion(t *testing.T, cdAddress, constraint string) {
-	t.Helper()
-	constraintSemVer, err := semver.NewConstraint(constraint)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cdClient, err := containerdpkg.New(cdAddress, containerdpkg.WithTimeout(60*time.Second))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer cdClient.Close()
-	ctx := context.TODO()
-	cdVersion, err := cdClient.Version(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cdVersionSemVer, err := semver.NewVersion(cdVersion.Version)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if !constraintSemVer.Check(cdVersionSemVer) {
-		t.Skipf("containerd version %q does not satisfy the constraint %q", cdVersion.Version, constraint)
 	}
 }
