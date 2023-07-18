@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	resourcestypes "github.com/moby/buildkit/executor/resources/types"
+	"github.com/moby/buildkit/session/networks"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/pb"
 )
@@ -20,19 +21,13 @@ type Meta struct {
 	Tty            bool
 	ReadonlyRootFS bool
 	ExtraHosts     []HostIP
-	DNS            *DNSConfig
+	DNS            *networks.DNSConfig
 	Ulimit         []*pb.Ulimit
 	CgroupParent   string
 	NetMode        pb.NetMode
 	SecurityMode   pb.SecurityMode
 
 	RemoveMountStubsRecursive bool
-}
-
-type DNSConfig struct {
-	Nameservers   []string
-	Options       []string
-	SearchDomains []string
 }
 
 type Mountable interface {

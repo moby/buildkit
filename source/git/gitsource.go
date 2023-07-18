@@ -16,7 +16,6 @@ import (
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client"
-	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/networks"
@@ -39,13 +38,13 @@ var defaultBranch = regexp.MustCompile(`refs/heads/(\S+)`)
 
 type Opt struct {
 	CacheAccessor cache.Accessor
-	DNSConfig     *executor.DNSConfig
+	DNSConfig     *networks.DNSConfig
 }
 
 type gitSource struct {
 	cache  cache.Accessor
 	locker *locker.Locker
-	dns    *executor.DNSConfig
+	dns    *networks.DNSConfig
 }
 
 // Supported returns nil if the system supports Git source

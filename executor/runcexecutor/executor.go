@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/moby/buildkit/session/networks"
 	"github.com/moby/buildkit/util/bklog"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -48,7 +49,7 @@ type Opt struct {
 	IdentityMapping *idtools.IdentityMapping
 	// runc run --no-pivot (unrecommended)
 	NoPivot         bool
-	DNS             *executor.DNSConfig
+	DNS             *networks.DNSConfig
 	OOMScoreAdj     *int
 	ApparmorProfile string
 	SELinux         bool
@@ -67,7 +68,7 @@ type runcExecutor struct {
 	processMode      oci.ProcessMode
 	idmap            *idtools.IdentityMapping
 	noPivot          bool
-	dns              *executor.DNSConfig
+	dns              *networks.DNSConfig
 	oomScoreAdj      *int
 	running          map[string]chan error
 	mu               sync.Mutex

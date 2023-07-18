@@ -4,7 +4,6 @@ import (
 	context "context"
 	strings "strings"
 
-	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/session"
 )
 
@@ -16,7 +15,7 @@ func (config *Config) ExtraHosts() string {
 	return out
 }
 
-func FromDNSConfig(dns *executor.DNSConfig) *Config {
+func FromDNSConfig(dns *DNSConfig) *Config {
 	if dns == nil {
 		return &Config{}
 	}

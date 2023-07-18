@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/moby/buildkit/session/networks"
 	"github.com/moby/buildkit/util/bklog"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -37,7 +38,7 @@ type containerdExecutor struct {
 	root             string
 	networkProviders map[pb.NetMode]network.Provider
 	cgroupParent     string
-	dnsConfig        *executor.DNSConfig
+	dnsConfig        *networks.DNSConfig
 	running          map[string]chan error
 	mu               sync.Mutex
 	apparmorProfile  string
@@ -60,7 +61,7 @@ type OnCreateRuntimer interface {
 }
 
 // New creates a new executor backed by connection to containerd API
-func New(client *containerd.Client, root, cgroup string, networkProviders map[pb.NetMode]network.Provider, dnsConfig *executor.DNSConfig, apparmorProfile string, selinux bool, traceSocket string, rootless bool) executor.Executor {
+func New(client *containerd.Client, root, cgroup string, networkProviders map[pb.NetMode]network.Provider, dnsConfig *networks.DNSConfig, apparmorProfile string, selinux bool, traceSocket string, rootless bool) executor.Executor {
 	// clean up old hosts/resolv.conf file. ignore errors
 	os.RemoveAll(filepath.Join(root, "hosts"))
 	os.RemoveAll(filepath.Join(root, "resolv.conf"))

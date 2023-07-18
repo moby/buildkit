@@ -17,7 +17,6 @@ import (
 
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache"
-	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/networks"
 	"github.com/moby/buildkit/snapshot"
@@ -33,14 +32,14 @@ import (
 type Opt struct {
 	CacheAccessor cache.Accessor
 	Transport     http.RoundTripper
-	DNSConfig     *executor.DNSConfig
+	DNSConfig     *networks.DNSConfig
 }
 
 type httpSource struct {
 	cache     cache.Accessor
 	locker    *locker.Locker
 	transport http.RoundTripper
-	dns       *executor.DNSConfig
+	dns       *networks.DNSConfig
 }
 
 func NewSource(opt Opt) (source.Source, error) {

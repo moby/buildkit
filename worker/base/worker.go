@@ -29,6 +29,7 @@ import (
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/networks"
 	"github.com/moby/buildkit/snapshot"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/snapshot/imagerefchecker"
@@ -67,7 +68,7 @@ type WorkerOpt struct {
 	GCPolicy         []client.PruneInfo
 	BuildkitVersion  client.BuildkitVersion
 	NetworkProviders map[pb.NetMode]network.Provider
-	DNSConfig        *executor.DNSConfig
+	DNSConfig        *networks.DNSConfig
 	Executor         executor.Executor
 	Snapshotter      snapshot.Snapshotter
 	ContentStore     *containerdsnapshot.Store

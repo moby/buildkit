@@ -362,7 +362,7 @@ func (gwCtr *gatewayContainer) Start(ctx context.Context, req client.StartReques
 			}
 		}
 		if netCfg.Dns != nil {
-			procInfo.Meta.DNS = &executor.DNSConfig{
+			procInfo.Meta.DNS = &networks.DNSConfig{
 				Nameservers:   netCfg.Dns.Nameservers,
 				SearchDomains: netCfg.Dns.SearchDomains,
 				Options:       netCfg.Dns.Options,

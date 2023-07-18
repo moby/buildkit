@@ -367,7 +367,7 @@ func (e *ExecOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 			}
 		}
 		if netCfg.Dns != nil {
-			meta.DNS = &executor.DNSConfig{
+			meta.DNS = &networks.DNSConfig{
 				Nameservers:   netCfg.Dns.Nameservers,
 				SearchDomains: netCfg.Dns.SearchDomains,
 				Options:       netCfg.Dns.Options,

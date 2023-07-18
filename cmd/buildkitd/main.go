@@ -32,12 +32,12 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/control"
-	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/frontend"
 	dockerfile "github.com/moby/buildkit/frontend/dockerfile/builder"
 	"github.com/moby/buildkit/frontend/gateway"
 	"github.com/moby/buildkit/frontend/gateway/forwarder"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/networks"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/bboltcachestorage"
 	"github.com/moby/buildkit/util/apicaps"
@@ -820,10 +820,10 @@ func getBuildkitVersion() client.BuildkitVersion {
 	}
 }
 
-func getDNSConfig(cfg *config.DNSConfig) *executor.DNSConfig {
-	var dns *executor.DNSConfig
+func getDNSConfig(cfg *config.DNSConfig) *networks.DNSConfig {
+	var dns *networks.DNSConfig
 	if cfg != nil {
-		dns = &executor.DNSConfig{
+		dns = &networks.DNSConfig{
 			Nameservers:   cfg.Nameservers,
 			Options:       cfg.Options,
 			SearchDomains: cfg.SearchDomains,

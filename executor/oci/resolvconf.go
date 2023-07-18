@@ -7,8 +7,8 @@ import (
 
 	"github.com/docker/docker/libnetwork/resolvconf"
 	"github.com/docker/docker/pkg/idtools"
-	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/session/networks"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/pkg/errors"
 )
@@ -20,7 +20,7 @@ var lastNotEmpty bool
 // overridden by tests
 var resolvconfPath = resolvconf.Path
 
-func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.IdentityMapping, workerDNS, customDNS *executor.DNSConfig) (string, func(), error) {
+func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.IdentityMapping, workerDNS, customDNS *networks.DNSConfig) (string, func(), error) {
 	resolvPath := filepath.Join(stateDir, "resolv.conf")
 	if customDNS != nil {
 		resolvPath += "." + identity.NewID()
@@ -41,7 +41,7 @@ func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.Identity
 	return resolvPath, func() {}, nil
 }
 
-func makeResolvFile(resolvPath, stateDir string, idmap *idtools.IdentityMapping, dns *executor.DNSConfig) error {
+func makeResolvFile(resolvPath, stateDir string, idmap *idtools.IdentityMapping, dns *networks.DNSConfig) error {
 	generate := !notFirstRun
 	notFirstRun = true
 

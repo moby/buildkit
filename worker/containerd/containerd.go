@@ -13,8 +13,8 @@ import (
 	ptypes "github.com/containerd/containerd/protobuf/types"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
-	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/executor/containerdexecutor"
+	"github.com/moby/buildkit/session/networks"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/network/netproviders"
@@ -27,7 +27,7 @@ import (
 )
 
 // NewWorkerOpt creates a WorkerOpt.
-func NewWorkerOpt(root string, address, snapshotterName, ns string, rootless bool, labels map[string]string, dns *executor.DNSConfig, nopt netproviders.Opt, apparmorProfile string, selinux bool, parallelismSem *semaphore.Weighted, traceSocket string, opts ...containerd.ClientOpt) (base.WorkerOpt, error) {
+func NewWorkerOpt(root string, address, snapshotterName, ns string, rootless bool, labels map[string]string, dns *networks.DNSConfig, nopt netproviders.Opt, apparmorProfile string, selinux bool, parallelismSem *semaphore.Weighted, traceSocket string, opts ...containerd.ClientOpt) (base.WorkerOpt, error) {
 	opts = append(opts, containerd.WithDefaultNamespace(ns))
 	client, err := containerd.New(address, opts...)
 	if err != nil {
@@ -36,7 +36,7 @@ func NewWorkerOpt(root string, address, snapshotterName, ns string, rootless boo
 	return newContainerd(root, client, snapshotterName, ns, rootless, labels, dns, nopt, apparmorProfile, selinux, parallelismSem, traceSocket)
 }
 
-func newContainerd(root string, client *containerd.Client, snapshotterName, ns string, rootless bool, labels map[string]string, dns *executor.DNSConfig, nopt netproviders.Opt, apparmorProfile string, selinux bool, parallelismSem *semaphore.Weighted, traceSocket string) (base.WorkerOpt, error) {
+func newContainerd(root string, client *containerd.Client, snapshotterName, ns string, rootless bool, labels map[string]string, dns *networks.DNSConfig, nopt netproviders.Opt, apparmorProfile string, selinux bool, parallelismSem *semaphore.Weighted, traceSocket string) (base.WorkerOpt, error) {
 	if strings.Contains(snapshotterName, "/") {
 		return base.WorkerOpt{}, errors.Errorf("bad snapshotter name: %q", snapshotterName)
 	}

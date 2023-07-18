@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/moby/buildkit/executor"
+	"github.com/moby/buildkit/session/networks"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,7 +44,7 @@ func TestResolvConfOverrides(t *testing.T) {
 		return "no-such-file"
 	}
 
-	workerDNS := &executor.DNSConfig{
+	workerDNS := &networks.DNSConfig{
 		Nameservers: []string{"1.2.3.4"},
 	}
 
@@ -62,7 +62,7 @@ func TestResolvConfOverrides(t *testing.T) {
 	_, err = os.Stat(p)
 	require.NoError(t, err) // no custom DNS = nothing to clean up
 
-	customDNS := &executor.DNSConfig{
+	customDNS := &networks.DNSConfig{
 		SearchDomains: []string{"custom-domain"},
 	}
 
