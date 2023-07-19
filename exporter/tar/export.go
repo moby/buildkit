@@ -12,6 +12,7 @@ import (
 	"github.com/moby/buildkit/exporter/local"
 	"github.com/moby/buildkit/exporter/util/epoch"
 	"github.com/moby/buildkit/session"
+	sessionexport "github.com/moby/buildkit/session/export"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/pkg/errors"
@@ -160,5 +161,14 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 		w.Close()
 		return nil, nil, report(err)
 	}
-	return nil, nil, report(w.Close())
+	if err := w.Close(); err != nil {
+		return nil, nil, report(err)
+	}
+	report(nil)
+
+	resp, err := sessionexport.Finalize(ctx, caller, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	return resp, nil, nil
 }

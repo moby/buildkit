@@ -46,6 +46,7 @@ import (
 	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
+	sessionexport "github.com/moby/buildkit/session/export"
 	"github.com/moby/buildkit/session/secrets/secretsprovider"
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
 	"github.com/moby/buildkit/solver/errdefs"
@@ -208,6 +209,7 @@ func TestIntegration(t *testing.T) {
 		testMultipleRecordsWithSameLayersCacheImportExport,
 		testExportLocalNoPlatformSplit,
 		testExportLocalNoPlatformSplitOverwrite,
+		testSessionExportCallback,
 	)
 }
 
@@ -9646,4 +9648,33 @@ func testClientCustomGRPCOpts(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	require.Contains(t, interceptedMethods, "/moby.buildkit.v1.Control/Solve")
+}
+
+func testSessionExportCallback(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	callback := sessionexport.FinalizeExportCallback(func(resp map[string]string) (map[string]string, error) {
+		resp["image.name"] = "foobartest"
+		return resp, nil
+	})
+
+	st := llb.Image("busybox:latest")
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+	resp, err := c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": "foobar",
+				},
+			},
+		},
+		Session: []session.Attachable{callback},
+	}, nil)
+	require.NoError(t, err)
+
+	require.Equal(t, "foobartest", resp.ExporterResponse["image.name"])
 }

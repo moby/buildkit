@@ -23,6 +23,7 @@ import (
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/session"
+	sessionexport "github.com/moby/buildkit/session/export"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
@@ -330,6 +331,16 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 		return nil, nil, err
 	}
 	resp[exptypes.ExporterImageDescriptorKey] = base64.StdEncoding.EncodeToString(dtdesc)
+
+	caller, err := e.opt.SessionManager.Get(ctx, sessionID, false)
+	if err != nil {
+		return nil, nil, err
+	}
+	if resp2, err := sessionexport.Finalize(ctx, caller, resp); err != nil {
+		return nil, nil, err
+	} else if resp2 != nil {
+		resp = resp2
+	}
 
 	return resp, nil, nil
 }
