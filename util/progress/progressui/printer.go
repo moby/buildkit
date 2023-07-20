@@ -132,7 +132,11 @@ func (p *textMux) printVtx(t *trace, dgst digest.Digest) {
 			} else {
 				isOpenStatus = true
 			}
-			fmt.Fprintf(p.w, "#%d %s%s%s\n", v.index, s.ID, bytes, tm)
+			name := s.Name
+			if name == "" {
+				name = s.ID
+			}
+			fmt.Fprintf(p.w, "#%d %s%s%s\n", v.index, name, bytes, tm)
 		}
 	}
 	v.statusUpdates = map[string]struct{}{}

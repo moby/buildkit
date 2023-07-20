@@ -669,13 +669,17 @@ func (t *trace) displayInfo() (d displayInfo) {
 		j.name = v.indent + j.name
 		jobs = append(jobs, j)
 		for _, s := range v.statuses {
+			name := s.Name
+			if name == "" {
+				name = s.ID
+			}
 			j := &job{
 				intervals: []interval{{
 					start: addTime(s.Started, t.localTimeDiff),
 					stop:  addTime(s.Completed, t.localTimeDiff),
 				}},
 				isCompleted: s.Completed != nil,
-				name:        v.indent + "=> " + s.ID,
+				name:        v.indent + "=> " + name,
 			}
 			if s.Total != 0 {
 				j.status = fmt.Sprintf("%.2f / %.2f", units.Bytes(s.Current), units.Bytes(s.Total))
