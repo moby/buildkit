@@ -15,6 +15,7 @@ import (
 
 const (
 	attrSecretAccessKey = "secret_access_key"
+	attrAccountName     = "account_name"
 	attrAccountURL      = "account_url"
 	attrPrefix          = "prefix"
 	attrManifestsPrefix = "manifests_prefix"
@@ -50,7 +51,16 @@ func getConfig(attrs map[string]string) (*Config, error) {
 		return &Config{}, errors.Wrap(err, "azure storage account url provided is not a valid url")
 	}
 
-	accountName := strings.Split(accountURL.Hostname(), ".")[0]
+	accountName, ok := attrs[attrAccountName]
+	if !ok {
+		accountName, ok = os.LookupEnv("BUILDKIT_AZURE_STORAGE_ACCOUNT_NAME")
+		if !ok {
+			accountName = strings.Split(accountURL.Hostname(), ".")[0]
+		}
+	}
+	if accountName == "" {
+		return &Config{}, errors.New("unable to retrieve account name from account url or ${BUILDKIT_AZURE_STORAGE_ACCOUNT_NAME} or account_name attribute for azblob cache")
+	}
 
 	container, ok := attrs[attrContainer]
 	if !ok {
