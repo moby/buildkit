@@ -29,7 +29,6 @@ func NewSolveStatus(resp *controlapi.StatusResponse) *SolveStatus {
 		s.Statuses = append(s.Statuses, &VertexStatus{
 			ID:        v.ID,
 			Vertex:    v.Vertex,
-			Name:      v.Name,
 			Total:     v.Total,
 			Current:   v.Current,
 			Timestamp: v.Timestamp,
@@ -80,7 +79,6 @@ func (ss *SolveStatus) Marshal() (out []*controlapi.StatusResponse) {
 			sr.Statuses = append(sr.Statuses, &controlapi.VertexStatus{
 				ID:        v.ID,
 				Vertex:    v.Vertex,
-				Name:      v.Name,
 				Current:   v.Current,
 				Total:     v.Total,
 				Timestamp: v.Timestamp,

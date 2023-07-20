@@ -1206,7 +1206,7 @@ func (sr *immutableRef) unlazyDiffMerge(ctx context.Context, dhs DescHandlers, p
 		}
 		_, stopProgress := pg.Start(ctx)
 		defer stopProgress(rerr)
-		statusDone := pg.Status(progressID, action)
+		statusDone := pg.Status(progressID)
 		defer statusDone()
 	}
 
@@ -1275,7 +1275,7 @@ func (sr *immutableRef) unlazyLayer(ctx context.Context, dhs DescHandlers, pg pr
 	if pg != nil {
 		_, stopProgress := pg.Start(ctx)
 		defer stopProgress(rerr)
-		statusDone := pg.Status("extracting "+desc.Digest.String(), "extracting")
+		statusDone := pg.Status("extracting " + desc.Digest.String())
 		defer statusDone()
 	}
 

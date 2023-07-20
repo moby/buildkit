@@ -70,7 +70,7 @@ func calc(ctx context.Context, total int, name string) (int, error) {
 	defer pw.Close()
 
 	sum := 0
-	pw.Write(name, Status{Action: "starting", Total: total})
+	pw.Write(name, Status{Total: total})
 	for i := 1; i <= total; i++ {
 		select {
 		case <-ctx.Done():
@@ -78,9 +78,9 @@ func calc(ctx context.Context, total int, name string) (int, error) {
 		case <-time.After(10 * time.Millisecond):
 		}
 		if i == total {
-			pw.Write(name, Status{Action: "done", Total: total, Current: total})
+			pw.Write(name, Status{Total: total, Current: total})
 		} else {
-			pw.Write(name, Status{Action: "calculating", Total: total, Current: i})
+			pw.Write(name, Status{Total: total, Current: i})
 		}
 		sum += i
 	}
@@ -94,7 +94,7 @@ func reduceCalc(ctx context.Context, total int) (int, error) {
 	pw, _, ctx := NewFromContext(ctx)
 	defer pw.Close()
 
-	pw.Write("reduce", Status{Action: "starting"})
+	pw.Write("reduce", Status{})
 
 	// sync step
 	sum, err := calc(ctx, total, "synccalc")
