@@ -11,6 +11,7 @@ import (
 	"unicode"
 
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
@@ -317,9 +318,16 @@ func CopyFileWriter(ctx context.Context, md map[string]string, c session.Caller)
 
 	client := NewFileSendClient(c.Conn())
 
-	opts := make(map[string][]string, len(md))
+	opts, ok := metadata.FromOutgoingContext(ctx)
+	if !ok {
+		opts = make(map[string][]string, len(md))
+	}
 	for k, v := range md {
-		opts[keyExporterMetaPrefix+k] = []string{v}
+		k := keyExporterMetaPrefix + k
+		if existingVal, ok := opts[k]; ok {
+			bklog.G(ctx).Warnf("overwriting grpc metadata key %q from value %+v to %+v", k, existingVal, v)
+		}
+		opts[k] = []string{v}
 	}
 
 	ctx = metadata.NewOutgoingContext(ctx, opts)
