@@ -6565,7 +6565,7 @@ COPY --from=0 / /
 	// note that this digest differs from the one in master, due to
 	// commit a89f482dcb3428c0297f39474eebd7de15e4792a not being included
 	// in this branch.
-	const expectedDigest = "sha256:e26093cc8a7524089a1d0136457e6c09a34176e2b2efcf99ac471baa729c7dc9"
+	const expectedDigest = "sha256:aa2d0a0f9a6560c267b0c2d41c758ca60386d6001cd687adf837365236507a0a"
 
 	dir, err := integration.Tmpdir(
 		t,
