@@ -4740,7 +4740,11 @@ func testBasicLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBasicS3CacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport)
+	integration.CheckFeatureCompat(t, sb,
+		integration.FeatureCacheExport,
+		integration.FeatureCacheImport,
+		integration.FeatureCacheBackendS3,
+	)
 
 	opts := integration.MinioOpts{
 		Region:          "us-east-1",
@@ -4778,7 +4782,11 @@ func testBasicS3CacheImportExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBasicAzblobCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport)
+	integration.CheckFeatureCompat(t, sb,
+		integration.FeatureCacheExport,
+		integration.FeatureCacheImport,
+		integration.FeatureCacheBackendAzblob,
+	)
 
 	opts := integration.AzuriteOpts{
 		AccountName: "azblobcacheaccount",
