@@ -161,14 +161,15 @@ func rmPath(root, src string, allowNotFound bool) error {
 	}
 	p := filepath.Join(dir, base)
 
-	if err := os.RemoveAll(p); err != nil {
-		if errors.Is(err, os.ErrNotExist) && allowNotFound {
-			return nil
+	if !allowNotFound {
+		_, err := os.Stat(p)
+
+		if errors.Is(err, os.ErrNotExist) {
+			return err
 		}
-		return err
 	}
 
-	return nil
+	return os.RemoveAll(p)
 }
 
 func docopy(ctx context.Context, src, dest string, action pb.FileActionCopy, u *copy.User, idmap *idtools.IdentityMapping) error {
