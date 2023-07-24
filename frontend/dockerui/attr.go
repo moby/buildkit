@@ -99,6 +99,24 @@ func parseUlimits(v string) ([]pb.Ulimit, error) {
 	return out, nil
 }
 
+func parseDevices(v string) ([]pb.CDIDevice, error) {
+	if v == "" {
+		return nil, nil
+	}
+	out := make([]pb.CDIDevice, 0)
+	csvReader := csv.NewReader(strings.NewReader(v))
+	names, err := csvReader.Read()
+	if err != nil {
+		return nil, err
+	}
+	for _, name := range names {
+		out = append(out, pb.CDIDevice{
+			Name: name,
+		})
+	}
+	return out, nil
+}
+
 func parseNetMode(v string) (pb.NetMode, error) {
 	if v == "" {
 		return llb.NetModeSandbox, nil

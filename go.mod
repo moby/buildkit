@@ -15,6 +15,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.11.56
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.30.6
 	github.com/aws/smithy-go v1.13.5
+	github.com/container-orchestrated-devices/container-device-interface v0.6.0
 	github.com/containerd/console v1.0.3
 	github.com/containerd/containerd v1.7.1-0.20230724023943-6eb90a63e061 // main
 	github.com/containerd/continuity v0.4.2-0.20230616210509-1e0d26eb2381
@@ -116,7 +117,6 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
-	github.com/container-orchestrated-devices/container-device-interface v0.6.0 // indirect
 	github.com/containerd/cgroups v1.1.0 // indirect
 	github.com/containerd/fifo v1.1.0 // indirect
 	github.com/containerd/ttrpc v1.2.2 // indirect

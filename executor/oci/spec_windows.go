@@ -67,3 +67,10 @@ func getTracingSocket() string {
 func cgroupNamespaceSupported() bool {
 	return false
 }
+
+func generateCDIOpts(devices []*pb.CDIDevice) ([]oci.SpecOpts, error) {
+	if len(devices) == 0 {
+		return nil, nil
+	}
+	return nil, errors.New("no support for CDI on Windows")
+}
