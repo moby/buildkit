@@ -11,6 +11,13 @@
 : "${CACHE_FROM=}"
 : "${CACHE_TO=}"
 
+dockerCmd() {
+  (
+    set -x
+    docker "$@"
+  )
+}
+
 buildxCmd() {
   (
     set -x

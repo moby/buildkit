@@ -92,25 +92,44 @@ fi
 
 cacheVolume="buildkit-test-cache"
 if ! docker container inspect "$cacheVolume" >/dev/null 2>/dev/null; then
-  docker create -v /root/.cache -v /root/.cache/registry -v /go/pkg/mod --name "$cacheVolume" alpine
+  dockerCmd create -v /root/.cache -v /root/.cache/registry -v /go/pkg/mod --name "$cacheVolume" alpine
 fi
 if [ "$TEST_KEEP_CACHE" != "1" ]; then
   trap 'docker rm -v $cacheVolume' EXIT
 fi
 
+baseCreateFlags="--rm --privileged \
+-v /tmp $testReportsVol \
+--volumes-from=$cacheVolume \
+-e CGO_ENABLED \
+-e GITHUB_REF \
+-e ACTIONS_RUNTIME_TOKEN \
+-e ACTIONS_CACHE_URL \
+-e TEST_DOCKERD \
+-e BUILDKIT_TEST_ENABLE_FEATURES \
+-e BUILDKIT_TEST_DISABLE_FEATURES \
+-e GOTESTSUM_FORMAT \
+-e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry \
+-e BUILDKIT_INTEGRATION_DOCKERD_FLAGS \
+-e GORACE"
+
 if [ "$TEST_INTEGRATION" == 1 ]; then
-  cid=$(docker create --rm -v /tmp $testReportsVol --volumes-from=$cacheVolume -e CGO_ENABLED -e GITHUB_REF -e ACTIONS_RUNTIME_TOKEN -e ACTIONS_CACHE_URL -e TEST_DOCKERD -e SKIP_INTEGRATION_TESTS -e BUILDKIT_TEST_ENABLE_FEATURES -e BUILDKIT_TEST_DISABLE_FEATURES -e GOTESTSUM_FORMAT ${BUILDKIT_INTEGRATION_SNAPSHOTTER:+"-eBUILDKIT_INTEGRATION_SNAPSHOTTER"} -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry -e BUILDKIT_INTEGRATION_DOCKERD_FLAGS -e GORACE --privileged $TEST_IMAGE_ID gotestsum $gotestsumArgs --packages="${TESTPKGS:-./...}" -- $gotestArgs ${TESTFLAGS:--v})
+  cid=$(dockerCmd create $baseCreateFlags \
+    ${BUILDKIT_INTEGRATION_SNAPSHOTTER:+"-eBUILDKIT_INTEGRATION_SNAPSHOTTER"} \
+    -e SKIP_INTEGRATION_TESTS \
+    $TEST_IMAGE_ID \
+    gotestsum $gotestsumArgs --packages="${TESTPKGS:-./...}" -- $gotestArgs ${TESTFLAGS:--v})
   if [ "$TEST_DOCKERD" = "1" ]; then
-    docker cp "$TEST_DOCKERD_BINARY" $cid:/usr/bin/dockerd
+    dockerCmd cp "$TEST_DOCKERD_BINARY" $cid:/usr/bin/dockerd
   fi
-  docker start -a $cid
+  dockerCmd start -a $cid
 fi
 
 if [ "$TEST_GATEWAY" == 1 ]; then
   # Build-test "github.com/moby/buildkit/frontend/gateway/client", which isn't otherwise built by CI
   # It really only needs buildkit-base. We have integration-tests in $TEST_IMAGE_ID, which is a direct child of buildkit-base.
-  cid=$(docker create --rm --volumes-from=$cacheVolume --entrypoint="" $TEST_IMAGE_ID go build -v ./frontend/gateway/client)
-  docker start -a $cid
+  cid=$(dockerCmd create --rm --volumes-from=$cacheVolume --entrypoint="" $TEST_IMAGE_ID go build -v ./frontend/gateway/client)
+  dockerCmd start -a $cid
 fi
 
 DOCKERFILE_RELEASES_CUSTOM=""
@@ -139,11 +158,17 @@ if [ "$TEST_DOCKERFILE" == 1 ]; then
 
     if [ -s $tarout ]; then
       if [ "$release" = "mainline" ] || [ "$release" = "labs" ] || [ -n "$DOCKERFILE_RELEASES_CUSTOM" ] || [ "$GITHUB_ACTIONS" = "true" ]; then
-        cid=$(docker create -v /tmp $testReportsVol --rm --privileged --volumes-from=$cacheVolume -e CGO_ENABLED -e GITHUB_REF -e ACTIONS_RUNTIME_TOKEN -e ACTIONS_CACHE_URL -e TEST_DOCKERD -e BUILDKIT_TEST_ENABLE_FEATURES -e BUILDKIT_TEST_DISABLE_FEATURES -e GOTESTSUM_FORMAT -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry -e BUILDKIT_WORKER_RANDOM -e BUILDKIT_INTEGRATION_DOCKERD_FLAGS -e FRONTEND_GATEWAY_ONLY=local:/$release.tar -e EXTERNAL_DF_FRONTEND=/dockerfile-frontend -e GORACE $TEST_IMAGE_ID gotestsum $gotestsumArgs --packages=./frontend/dockerfile -- $gotestArgs --count=1 -tags "$buildtags" ${TESTFLAGS:--v})
+        cid=$(dockerCmd create $baseCreateFlags \
+          -e BUILDKIT_WORKER_RANDOM \
+          -e FRONTEND_GATEWAY_ONLY=local:/$release.tar \
+          -e EXTERNAL_DF_FRONTEND=/dockerfile-frontend \
+          $TEST_IMAGE_ID \
+          gotestsum $gotestsumArgs --packages=./frontend/dockerfile -- $gotestArgs --count=1 -tags "$buildtags" ${TESTFLAGS:--v})
+        dockerCmd cp $tarout $cid:/$release.tar
         if [ "$TEST_DOCKERD" = "1" ]; then
-          docker cp "$TEST_DOCKERD_BINARY" $cid:/usr/bin/dockerd
+          dockerCmd cp "$TEST_DOCKERD_BINARY" $cid:/usr/bin/dockerd
         fi
-        docker start -a $cid
+        dockerCmd start -a $cid
       fi
     fi
     rm $tarout
