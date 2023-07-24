@@ -169,17 +169,11 @@ func Manifest(ctx context.Context, provider content.Provider, image ocispec.Desc
 				}
 
 				if desc.Platform == nil {
-					p, err := content.ReadBlob(ctx, provider, manifest.Config)
+					imagePlatform, err := ConfigPlatform(ctx, provider, manifest.Config)
 					if err != nil {
 						return nil, err
 					}
-
-					var image ocispec.Image
-					if err := json.Unmarshal(p, &image); err != nil {
-						return nil, err
-					}
-
-					if !platform.Match(platforms.Normalize(ocispec.Platform{OS: image.OS, Architecture: image.Architecture})) {
+					if !platform.Match(imagePlatform) {
 						return nil, nil
 					}
 
@@ -274,18 +268,11 @@ func Platforms(ctx context.Context, provider content.Provider, image ocispec.Des
 
 		switch desc.MediaType {
 		case MediaTypeDockerSchema2Config, ocispec.MediaTypeImageConfig:
-			p, err := content.ReadBlob(ctx, provider, desc)
+			imagePlatform, err := ConfigPlatform(ctx, provider, desc)
 			if err != nil {
 				return nil, err
 			}
-
-			var image ocispec.Image
-			if err := json.Unmarshal(p, &image); err != nil {
-				return nil, err
-			}
-
-			platformSpecs = append(platformSpecs,
-				platforms.Normalize(ocispec.Platform{OS: image.OS, Architecture: image.Architecture}))
+			platformSpecs = append(platformSpecs, imagePlatform)
 		}
 		return nil, nil
 	}), ChildrenHandler(provider)), image)
@@ -437,4 +424,20 @@ func RootFS(ctx context.Context, provider content.Provider, configDesc ocispec.D
 		return nil, err
 	}
 	return config.RootFS.DiffIDs, nil
+}
+
+// ConfigPlatform returns a normalized platform from an image manifest config.
+func ConfigPlatform(ctx context.Context, provider content.Provider, configDesc ocispec.Descriptor) (ocispec.Platform, error) {
+	p, err := content.ReadBlob(ctx, provider, configDesc)
+	if err != nil {
+		return ocispec.Platform{}, err
+	}
+
+	// Technically, this should be ocispec.Image, but we only need the
+	// ocispec.Platform that is embedded in the image struct.
+	var imagePlatform ocispec.Platform
+	if err := json.Unmarshal(p, &imagePlatform); err != nil {
+		return ocispec.Platform{}, err
+	}
+	return platforms.Normalize(imagePlatform), nil
 }

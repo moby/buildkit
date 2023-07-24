@@ -18,11 +18,16 @@ package oci
 
 import (
 	"context"
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"runtime"
 
+	"github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/opencontainers/runtime-spec/specs-go"
 
+	"github.com/containerd/containerd/api/types"
 	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/platforms"
@@ -42,6 +47,22 @@ var (
 // Spec is a type alias to the OCI runtime spec to allow third part SpecOpts
 // to be created without the "issues" with go vendoring and package imports
 type Spec = specs.Spec
+
+const ConfigFilename = "config.json"
+
+// ReadSpec deserializes JSON into an OCI runtime Spec from a given path.
+func ReadSpec(path string) (*Spec, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	var s Spec
+	if err := json.NewDecoder(f).Decode(&s); err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
 
 // GenerateSpec will generate a default spec from the provided image
 // for use as a containerd container
@@ -219,4 +240,26 @@ func populateDefaultDarwinSpec(s *Spec) error {
 		Process: &specs.Process{Cwd: "/"},
 	}
 	return nil
+}
+
+// DescriptorFromProto converts containerds protobuf [types.Descriptor]
+// to the OCI image specs [ocispec.Descriptor].
+func DescriptorFromProto(d *types.Descriptor) ocispec.Descriptor {
+	return ocispec.Descriptor{
+		MediaType:   d.MediaType,
+		Digest:      digest.Digest(d.Digest),
+		Size:        d.Size,
+		Annotations: d.Annotations,
+	}
+}
+
+// DescriptorToProto converts the OCI image specs [ocispec.Descriptor]
+// to containerds protobuf [types.Descriptor].
+func DescriptorToProto(d ocispec.Descriptor) *types.Descriptor {
+	return &types.Descriptor{
+		MediaType:   d.MediaType,
+		Digest:      d.Digest.String(),
+		Size:        d.Size,
+		Annotations: d.Annotations,
+	}
 }

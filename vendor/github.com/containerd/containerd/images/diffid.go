@@ -20,12 +20,13 @@ import (
 	"context"
 	"io"
 
+	"github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+
 	"github.com/containerd/containerd/archive/compression"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/labels"
-	"github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/sirupsen/logrus"
+	"github.com/containerd/containerd/log"
 )
 
 // GetDiffID gets the diff ID of the layer blob descriptor.
@@ -36,7 +37,7 @@ func GetDiffID(ctx context.Context, cs content.Store, desc ocispec.Descriptor) (
 		MediaTypeDockerSchema2Layer,
 		ocispec.MediaTypeImageLayer,
 		MediaTypeDockerSchema2LayerForeign,
-		ocispec.MediaTypeImageLayerNonDistributable:
+		ocispec.MediaTypeImageLayerNonDistributable: //nolint:staticcheck // deprecated
 		return desc.Digest, nil
 	}
 	info, err := cs.Info(ctx, desc.Digest)
@@ -75,7 +76,7 @@ func GetDiffID(ctx context.Context, cs content.Store, desc ocispec.Descriptor) (
 	}
 	info.Labels[labels.LabelUncompressed] = digest.String()
 	if _, err := cs.Update(ctx, info, "labels"); err != nil {
-		logrus.WithError(err).Warnf("failed to set %s label for %s", labels.LabelUncompressed, desc.Digest)
+		log.G(ctx).WithError(err).Warnf("failed to set %s label for %s", labels.LabelUncompressed, desc.Digest)
 	}
 	return digest, nil
 }
