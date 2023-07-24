@@ -43,12 +43,10 @@ import (
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/contentutil"
-	"github.com/moby/buildkit/util/iohelper"
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/moby/buildkit/util/testutil/workers"
-	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -6549,9 +6547,16 @@ func testReproSourceDateEpoch(t *testing.T, sb integration.Sandbox) {
 	if sb.Snapshotter() == "native" {
 		t.Skip("the digest is not reproducible with the \"native\" snapshotter because hardlinks are processed in a different way: https://github.com/moby/buildkit/pull/3456#discussion_r1062650263")
 	}
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
 	f := getFrontend(t, sb)
 
-	tm := time.Date(2023, time.January, 10, 12, 34, 56, 0, time.UTC)
+	tm := time.Date(2023, time.January, 10, 12, 34, 56, 0, time.UTC) // 1673354096
 	t.Logf("SOURCE_DATE_EPOCH=%d", tm.Unix())
 
 	dockerfile := []byte(`# The base image cannot be busybox, due to https://github.com/moby/buildkit/issues/3455
@@ -6565,19 +6570,9 @@ RUN touch -d '2030-01-01 12:34:56' /foo-2030.1
 RUN rm -f /foo.1
 RUN rm -f /foo-2010.1
 RUN rm -f /foo-2030.1
-
-# Limit the timestamp upper bound to SOURCE_DATE_EPOCH.
-# Workaround for https://github.com/moby/buildkit/issues/3180
-ARG SOURCE_DATE_EPOCH
-RUN find $( ls / | grep -E -v "^(dev|mnt|proc|sys)$" ) -newermt "@${SOURCE_DATE_EPOCH}" -writable -xdev | xargs touch --date="@${SOURCE_DATE_EPOCH}" --no-dereference
-
-# Squashing is needed to apply the touched timestamps across multiple "RUN" instructions.
-# This squashing also addresses non-reproducibility of whiteout timestamps (https://github.com/moby/buildkit/issues/3168).
-FROM scratch
-COPY --from=0 / /
 `)
 
-	const expectedDigest = "sha256:d286483eccf4d57c313a3f389cdc196e668d914d319c574b15aabdf1963c5eeb"
+	const expectedDigest = "sha256:29f2980a804038b0f910af98e9ddb18bfa4d5514995ee6bb4343ddf621a4e183"
 
 	dir := integration.Tmpdir(
 		t,
@@ -6585,14 +6580,13 @@ COPY --from=0 / /
 	)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(sb.Context(), sb.Address())
+	ctx := sb.Context()
+	c, err := client.New(ctx, sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	outDigester := digest.SHA256.Digester()
-	outW := &iohelper.NopWriteCloser{Writer: outDigester.Hash()}
-
-	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+	target := registry + "/buildkit/testreprosourcedateepoch:" + fmt.Sprintf("%d", tm.Unix())
+	solveOpt := client.SolveOpt{
 		FrontendAttrs: map[string]string{
 			"build-arg:SOURCE_DATE_EPOCH": fmt.Sprintf("%d", tm.Unix()),
 			"platform":                    "linux/amd64",
@@ -6603,17 +6597,62 @@ COPY --from=0 / /
 		},
 		Exports: []client.ExportEntry{
 			{
-				Type:   client.ExporterOCI,
-				Output: fixedWriteCloser(outW),
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name":              target,
+					"push":              "true",
+					"oci-mediatypes":    "true",
+					"rewrite-timestamp": "true",
+				},
 			},
 		},
-	}, nil)
+		CacheExports: []client.CacheOptionsEntry{
+			{
+				Type: "registry",
+				Attrs: map[string]string{
+					"ref":            target + "-cache",
+					"oci-mediatypes": "true",
+					"image-manifest": "true",
+				},
+			},
+		},
+	}
+	_, err = f.Solve(ctx, c, solveOpt, nil)
 	require.NoError(t, err)
 
-	outDigest := outDigester.Digest().String()
-	t.Logf("OCI archive digest=%q", outDigest)
+	desc, manifest := readImage(t, ctx, target)
+	_, cacheManifest := readImage(t, ctx, target+"-cache")
 	t.Log("The digest may change depending on the BuildKit version, the snapshotter configuration, etc.")
-	require.Equal(t, expectedDigest, outDigest)
+	require.Equal(t, expectedDigest, desc.Digest.String())
+	// Image layers must have rewritten-timestamp
+	for _, l := range manifest.Layers {
+		require.Equal(t, fmt.Sprintf("%d", tm.Unix()), l.Annotations["buildkit/rewritten-timestamp"])
+	}
+	// Cache layers must *not* have rewritten-timestamp
+	for _, l := range cacheManifest.Layers {
+		require.Empty(t, l.Annotations["buildkit/rewritten-timestamp"])
+	}
+
+	// Build again, but without rewrite-timestamp
+	solveOpt2 := solveOpt
+	delete(solveOpt2.Exports[0].Attrs, "rewrite-timestamp")
+	_, err = f.Solve(ctx, c, solveOpt2, nil)
+	require.NoError(t, err)
+	_, manifest2 := readImage(t, ctx, target)
+	for _, l := range manifest2.Layers {
+		require.Empty(t, l.Annotations["buildkit/rewritten-timestamp"])
+	}
+}
+
+//nolint:revive // context-as-argument: context.Context should be the first parameter of a function
+func readImage(t *testing.T, ctx context.Context, ref string) (ocispecs.Descriptor, ocispecs.Manifest) {
+	desc, provider, err := contentutil.ProviderFromRef(ref)
+	require.NoError(t, err)
+	dt, err := content.ReadBlob(ctx, provider, desc)
+	require.NoError(t, err)
+	var manifest ocispecs.Manifest
+	require.NoError(t, json.Unmarshal(dt, &manifest))
+	return desc, manifest
 }
 
 func testNilContextInSolveGateway(t *testing.T, sb integration.Sandbox) {
