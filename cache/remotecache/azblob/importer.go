@@ -9,6 +9,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/labels"
 	"github.com/moby/buildkit/cache/remotecache"
 	v1 "github.com/moby/buildkit/cache/remotecache/v1"
 	"github.com/moby/buildkit/session"
@@ -147,7 +148,7 @@ func (ci *importer) makeDescriptorProviderPair(l v1.CacheLayer) (*v1.DescriptorP
 	if l.Annotations.DiffID == "" {
 		return nil, errors.Errorf("cache layer with missing diffid")
 	}
-	annotations["containerd.io/uncompressed"] = l.Annotations.DiffID.String()
+	annotations[labels.LabelUncompressed] = l.Annotations.DiffID.String()
 	if !l.Annotations.CreatedAt.IsZero() {
 		txt, err := l.Annotations.CreatedAt.MarshalText()
 		if err != nil {

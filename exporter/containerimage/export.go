@@ -12,6 +12,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/labels"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/pkg/epoch"
 	"github.com/containerd/containerd/platforms"
@@ -454,7 +455,7 @@ func getLayers(ctx context.Context, descs []ocispecs.Descriptor, manifest ocispe
 	for i, desc := range descs {
 		layers[i].Diff = ocispecs.Descriptor{
 			MediaType: ocispecs.MediaTypeImageLayer,
-			Digest:    digest.Digest(desc.Annotations["containerd.io/uncompressed"]),
+			Digest:    digest.Digest(desc.Annotations[labels.LabelUncompressed]),
 		}
 		layers[i].Blob = manifest.Layers[i]
 	}

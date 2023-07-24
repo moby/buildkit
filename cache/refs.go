@@ -12,6 +12,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/labels"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/pkg/userns"
@@ -39,7 +40,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var additionalAnnotations = append(compression.EStargzAnnotations, containerdUncompressed)
+var additionalAnnotations = append(compression.EStargzAnnotations, labels.LabelUncompressed)
 
 // Ref is a reference to cacheable objects.
 type Ref interface {
@@ -733,7 +734,7 @@ func (sr *immutableRef) ociDesc(ctx context.Context, dhs DescHandlers, preferNon
 
 	diffID := sr.getDiffID()
 	if diffID != "" {
-		desc.Annotations["containerd.io/uncompressed"] = string(diffID)
+		desc.Annotations[labels.LabelUncompressed] = string(diffID)
 	}
 
 	createdAt := sr.GetCreatedAt()
