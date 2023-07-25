@@ -18,7 +18,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type WriteToFunc func(context.Context, string, io.WriteCloser) error
+type WriteToFunc func(context.Context, string, os.FileInfo, file) error
 
 type DiskWriterOpt struct {
 	AsyncDataCb   WriteToFunc
@@ -39,6 +39,11 @@ type DiskWriter struct {
 	eg          *errgroup.Group
 	filter      FilterFunc
 	dirModTimes map[string]int64
+}
+
+type file interface {
+	io.WriteCloser
+	Truncate(size int64) error
 }
 
 func NewDiskWriter(ctx context.Context, dest string, opt DiskWriterOpt) (*DiskWriter, error) {
@@ -237,7 +242,7 @@ func (dw *DiskWriter) requestAsyncFileData(p, dest string, fi os.FileInfo, st *t
 	})
 }
 
-func (dw *DiskWriter) processChange(kind ChangeKind, p string, fi os.FileInfo, w io.WriteCloser) error {
+func (dw *DiskWriter) processChange(kind ChangeKind, p string, fi os.FileInfo, w file) error {
 	origw := w
 	var hw *hashedWriter
 	if dw.opt.NotifyCb != nil {
@@ -252,7 +257,7 @@ func (dw *DiskWriter) processChange(kind ChangeKind, p string, fi os.FileInfo, w
 		if fn == nil && dw.opt.AsyncDataCb != nil {
 			fn = dw.opt.AsyncDataCb
 		}
-		if err := fn(dw.ctx, p, w); err != nil {
+		if err := fn(dw.ctx, p, fi, w); err != nil {
 			return err
 		}
 	} else {
@@ -270,11 +275,11 @@ type hashedWriter struct {
 	os.FileInfo
 	io.Writer
 	h    hash.Hash
-	w    io.WriteCloser
+	w    file
 	dgst digest.Digest
 }
 
-func newHashWriter(ch ContentHasher, fi os.FileInfo, w io.WriteCloser) (*hashedWriter, error) {
+func newHashWriter(ch ContentHasher, fi os.FileInfo, w file) (*hashedWriter, error) {
 	stat, ok := fi.Sys().(*types.Stat)
 	if !ok {
 		return nil, errors.Errorf("invalid change without stat information")
@@ -291,6 +296,10 @@ func newHashWriter(ch ContentHasher, fi os.FileInfo, w io.WriteCloser) (*hashedW
 		w:        w,
 	}
 	return hw, nil
+}
+
+func (hw *hashedWriter) Truncate(size int64) error {
+	return hw.w.Truncate(size)
 }
 
 func (hw *hashedWriter) Close() error {
@@ -332,6 +341,13 @@ func (lfw *lazyFileWriter) Write(dt []byte) (int, error) {
 		lfw.f = file
 	}
 	return lfw.f.Write(dt)
+}
+
+func (lfw *lazyFileWriter) Truncate(size int64) error {
+	if lfw.f == nil {
+		return os.Truncate(lfw.dest, size)
+	}
+	return lfw.f.Truncate(size)
 }
 
 func (lfw *lazyFileWriter) Close() error {

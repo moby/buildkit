@@ -142,7 +142,7 @@ type progressCb func(int, bool)
 type protocol struct {
 	name   string
 	sendFn func(stream Stream, fs fsutil.FS, progress progressCb) error
-	recvFn func(stream grpc.ClientStream, destDir string, cu CacheUpdater, progress progressCb, differ fsutil.DiffType, mapFunc func(string, *fstypes.Stat) bool) error
+	recvFn func(stream grpc.ClientStream, destDir string, cu CacheUpdater, progress progressCb, differ fsutil.DiffType, mapFunc func(string, *fstypes.Stat) bool, truncate bool) error
 }
 
 var supportedProtocols = []protocol{
@@ -165,6 +165,7 @@ type FSSendRequestOpt struct {
 	ProgressCb       func(int, bool)
 	Filter           func(string, *fstypes.Stat) bool
 	Differ           fsutil.DiffType
+	Truncate         bool
 }
 
 // CacheUpdater is an object capable of sending notifications for the cache hash changes
@@ -234,7 +235,7 @@ func FSSync(ctx context.Context, c session.Caller, opt FSSendRequestOpt) error {
 		panic(fmt.Sprintf("invalid protocol: %q", pr.name))
 	}
 
-	return pr.recvFn(stream, opt.DestDir, opt.CacheUpdater, opt.ProgressCb, opt.Differ, opt.Filter)
+	return pr.recvFn(stream, opt.DestDir, opt.CacheUpdater, opt.ProgressCb, opt.Differ, opt.Filter, opt.Truncate)
 }
 
 // NewFSSyncTargetDir allows writing into a directory

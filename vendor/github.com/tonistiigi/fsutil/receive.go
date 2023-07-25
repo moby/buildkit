@@ -26,6 +26,7 @@ type ReceiveOpt struct {
 	Merge         bool
 	Filter        FilterFunc
 	Differ        DiffType
+	Truncate      bool
 }
 
 func Receive(ctx context.Context, conn Stream, dest string, opt ReceiveOpt) error {
@@ -43,6 +44,7 @@ func Receive(ctx context.Context, conn Stream, dest string, opt ReceiveOpt) erro
 		merge:         opt.Merge,
 		filter:        opt.Filter,
 		differ:        opt.Differ,
+		truncate:      opt.Truncate,
 	}
 	return r.run(ctx)
 }
@@ -58,6 +60,7 @@ type receiver struct {
 	merge      bool
 	filter     FilterFunc
 	differ     DiffType
+	truncate   bool
 
 	notifyHashed   ChangeFunc
 	contentHasher  ContentHasher
@@ -232,7 +235,7 @@ func (r *receiver) run(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (r *receiver) asyncDataFunc(ctx context.Context, p string, wc io.WriteCloser) error {
+func (r *receiver) asyncDataFunc(ctx context.Context, p string, fi os.FileInfo, wc file) error {
 	r.mu.Lock()
 	id, ok := r.files[p]
 	if !ok {
@@ -241,6 +244,10 @@ func (r *receiver) asyncDataFunc(ctx context.Context, p string, wc io.WriteClose
 	}
 	delete(r.files, p)
 	r.mu.Unlock()
+
+	if r.truncate {
+		return wc.Truncate(fi.Size())
+	}
 
 	wwc := newWrappedWriteCloser(wc)
 	r.muPipes.Lock()

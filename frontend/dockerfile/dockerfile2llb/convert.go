@@ -61,6 +61,7 @@ type ConvertOpt struct {
 	MetaResolver   llb.ImageMetaResolver
 	LLBCaps        *apicaps.CapSet
 	Warn           func(short, url string, detail [][]byte, location *parser.Range)
+	ContextOpts    []llb.LocalOption
 }
 
 type SBOMTargets struct {
@@ -133,6 +134,14 @@ func ListTargets(ctx context.Context, dt []byte) (*targets.List, error) {
 		l.Targets = append(l.Targets, t)
 	}
 	return l, nil
+}
+
+func BuildContext(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, error) {
+	ds, err := toDispatchState(ctx, dt, opt)
+	if err != nil {
+		return nil, err
+	}
+	return &ds.opt.buildContext, nil
 }
 
 func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchState, error) {
@@ -563,7 +572,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		target.image.Config.Labels[k] = v
 	}
 
-	opts := []llb.LocalOption{}
+	opts := append([]llb.LocalOption{}, opt.ContextOpts...)
 	if includePatterns := normalizeContextPaths(ctxPaths); includePatterns != nil {
 		opts = append(opts, llb.FollowPaths(includePatterns))
 	}

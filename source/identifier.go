@@ -158,6 +158,10 @@ func FromLLB(op *pb.Op_Source, platform *pb.Platform) (Identifier, error) {
 				case pb.AttrLocalDifferNone:
 					id.Differ = fsutil.DiffNone
 				}
+			case pb.AttrLocalTruncate:
+				if v == "true" {
+					id.Truncate = true
+				}
 			}
 		}
 	}
@@ -256,6 +260,7 @@ type LocalIdentifier struct {
 	FollowPaths     []string
 	SharedKeyHint   string
 	Differ          fsutil.DiffType
+	Truncate        bool
 }
 
 func NewLocalIdentifier(str string) (*LocalIdentifier, error) {
