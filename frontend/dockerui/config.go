@@ -80,7 +80,8 @@ type Client struct {
 	g           flightcontrol.Group[*buildContext]
 	bopts       client.BuildOpts
 
-	dockerignore []byte
+	dockerignore     []byte
+	dockerignoreName string
 }
 
 type SBOM struct {
@@ -375,6 +376,7 @@ func (bc *Client) ReadEntrypoint(ctx context.Context, lang string, opts ...llb.L
 	})
 	if err == nil {
 		bc.dockerignore = dt
+		bc.dockerignoreName = bctx.filename + ".dockerignore"
 	}
 
 	return &Source{
@@ -435,13 +437,14 @@ func (bc *Client) MainContext(ctx context.Context, opts ...llb.LocalOption) (*ll
 			dt = []byte{}
 		}
 		bc.dockerignore = dt
+		bc.dockerignoreName = DefaultDockerignoreName
 	}
 
 	var excludes []string
 	if len(bc.dockerignore) != 0 {
 		excludes, err = dockerignore.ReadAll(bytes.NewBuffer(bc.dockerignore))
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to parse dockerignore")
+			return nil, errors.Wrapf(err, "failed parsing %s", bc.dockerignoreName)
 		}
 	}
 

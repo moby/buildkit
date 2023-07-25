@@ -6,8 +6,6 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
-
-	"github.com/pkg/errors"
 )
 
 // ReadAll reads an ignore file from a reader and returns the list of file
@@ -69,7 +67,7 @@ func ReadAll(reader io.Reader) ([]string, error) {
 		excludes = append(excludes, pattern)
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, errors.Wrap(err, "error reading .dockerignore")
+		return nil, err
 	}
 	return excludes, nil
 }
