@@ -10,19 +10,29 @@ import (
 	"github.com/pkg/errors"
 )
 
-// ReadAll reads a .dockerignore file and returns the list of file patterns
-// to ignore. Note this will trim whitespace from each line as well
-// as use GO's "clean" func to get the shortest/cleanest path for each.
+// ReadAll reads an ignore file from a reader and returns the list of file
+// patterns to ignore, applying the following rules:
+//
+//   - An UTF8 BOM header (if present) is stripped.
+//   - Lines starting with "#" are considered comments and are skipped.
+//
+// For remaining lines:
+//
+//   - Leading and trailing whitespace is removed from each ignore pattern.
+//   - It uses [filepath.Clean] to get the shortest/cleanest path for
+//     ignore patterns.
+//   - Leading forward-slashes ("/") are removed from ignore patterns,
+//     so "/some/path" and "some/path" are considered equivalent.
 func ReadAll(reader io.Reader) ([]string, error) {
 	if reader == nil {
 		return nil, nil
 	}
 
-	scanner := bufio.NewScanner(reader)
 	var excludes []string
 	currentLine := 0
-
 	utf8bom := []byte{0xEF, 0xBB, 0xBF}
+
+	scanner := bufio.NewScanner(reader)
 	for scanner.Scan() {
 		scannedBytes := scanner.Bytes()
 		// We trim UTF8 BOM
