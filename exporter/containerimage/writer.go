@@ -12,6 +12,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/labels"
 	"github.com/containerd/containerd/platforms"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/moby/buildkit/cache"
@@ -443,8 +444,8 @@ func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *Ima
 			Digest:    digest,
 			Size:      int64(len(data)),
 			Annotations: map[string]string{
-				"containerd.io/uncompressed": digest.String(),
-				"in-toto.io/predicate-type":  statement.PredicateType,
+				labels.LabelUncompressed:    digest.String(),
+				"in-toto.io/predicate-type": statement.PredicateType,
 			},
 		}
 
@@ -552,7 +553,7 @@ func attestationsConfig(layers []ocispecs.Descriptor) ([]byte, error) {
 	img.Variant = intotoPlatform.Variant
 	img.RootFS.Type = "layers"
 	for _, layer := range layers {
-		img.RootFS.DiffIDs = append(img.RootFS.DiffIDs, digest.Digest(layer.Annotations["containerd.io/uncompressed"]))
+		img.RootFS.DiffIDs = append(img.RootFS.DiffIDs, digest.Digest(layer.Annotations[labels.LabelUncompressed]))
 	}
 	dt, err := json.Marshal(img)
 	return dt, errors.Wrap(err, "failed to create attestations image config")
@@ -577,7 +578,7 @@ func patchImageConfig(dt []byte, descs []ocispecs.Descriptor, history []ocispecs
 	var rootFS ocispecs.RootFS
 	rootFS.Type = "layers"
 	for _, desc := range descs {
-		rootFS.DiffIDs = append(rootFS.DiffIDs, digest.Digest(desc.Annotations["containerd.io/uncompressed"]))
+		rootFS.DiffIDs = append(rootFS.DiffIDs, digest.Digest(desc.Annotations[labels.LabelUncompressed]))
 	}
 	dt, err := json.Marshal(rootFS)
 	if err != nil {
@@ -735,7 +736,7 @@ func RemoveInternalLayerAnnotations(in map[string]string, oci bool) map[string]s
 	for k, v := range in {
 		// oci supports annotations but don't export internal annotations
 		switch k {
-		case "containerd.io/uncompressed", "buildkit/createdat":
+		case labels.LabelUncompressed, "buildkit/createdat":
 			continue
 		default:
 			if strings.HasPrefix(k, "containerd.io/distribution.source.") {

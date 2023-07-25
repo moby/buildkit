@@ -10,6 +10,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/labels"
 	"github.com/moby/buildkit/cache/remotecache"
 	v1 "github.com/moby/buildkit/cache/remotecache/v1"
 	"github.com/moby/buildkit/session"
@@ -72,7 +73,7 @@ func (ce *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 			return nil, errors.Errorf("invalid descriptor without annotations")
 		}
 		var diffID digest.Digest
-		v, ok := dgstPair.Descriptor.Annotations["containerd.io/uncompressed"]
+		v, ok := dgstPair.Descriptor.Annotations[labels.LabelUncompressed]
 		if !ok {
 			return nil, errors.Errorf("invalid descriptor without uncompressed annotation")
 		}

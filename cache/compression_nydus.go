@@ -109,7 +109,7 @@ func MergeNydus(ctx context.Context, ref ImmutableRef, comp compression.Config, 
 
 	compressedDgst := cw.Digest()
 	if err := cw.Commit(ctx, 0, compressedDgst, content.WithLabels(map[string]string{
-		containerdUncompressed: uncompressedDgst.Digest().String(),
+		labels.LabelUncompressed: uncompressedDgst.Digest().String(),
 	})); err != nil {
 		if !errdefs.IsAlreadyExists(err) {
 			return nil, errors.Wrap(err, "commit to content store")
@@ -129,7 +129,7 @@ func MergeNydus(ctx context.Context, ref ImmutableRef, comp compression.Config, 
 		Size:      info.Size,
 		MediaType: ocispecs.MediaTypeImageLayerGzip,
 		Annotations: map[string]string{
-			containerdUncompressed: uncompressedDgst.Digest().String(),
+			labels.LabelUncompressed: uncompressedDgst.Digest().String(),
 			// Use this annotation to identify nydus bootstrap layer.
 			converter.LayerAnnotationNydusBootstrap: "true",
 		},

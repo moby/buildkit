@@ -25,6 +25,7 @@ import (
 	"github.com/containerd/containerd/diff/apply"
 	"github.com/containerd/containerd/diff/walking"
 	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/labels"
 	"github.com/containerd/containerd/leases"
 	ctdmetadata "github.com/containerd/containerd/metadata"
 	"github.com/containerd/containerd/mount"
@@ -731,7 +732,7 @@ func TestSetBlob(t *testing.T) {
 	err = snap.(*immutableRef).setBlob(ctx, ocispecs.Descriptor{
 		Digest: digest.FromBytes([]byte("foobar")),
 		Annotations: map[string]string{
-			"containerd.io/uncompressed": digest.FromBytes([]byte("foobar2")).String(),
+			labels.LabelUncompressed: digest.FromBytes([]byte("foobar2")).String(),
 		},
 	})
 	require.Error(t, err)
@@ -742,7 +743,7 @@ func TestSetBlob(t *testing.T) {
 	require.NoError(t, err)
 
 	snapRef = snap.(*immutableRef)
-	require.Equal(t, desc.Annotations["containerd.io/uncompressed"], string(snapRef.getDiffID()))
+	require.Equal(t, desc.Annotations[labels.LabelUncompressed], string(snapRef.getDiffID()))
 	require.Equal(t, desc.Digest, snapRef.getBlob())
 	require.Equal(t, desc.MediaType, snapRef.getMediaType())
 	require.Equal(t, snapRef.getDiffID(), snapRef.getChainID())
@@ -768,7 +769,7 @@ func TestSetBlob(t *testing.T) {
 	require.NoError(t, err)
 
 	snapRef2 := snap2.(*immutableRef)
-	require.Equal(t, desc2.Annotations["containerd.io/uncompressed"], string(snapRef2.getDiffID()))
+	require.Equal(t, desc2.Annotations[labels.LabelUncompressed], string(snapRef2.getDiffID()))
 	require.Equal(t, desc2.Digest, snapRef2.getBlob())
 	require.Equal(t, desc2.MediaType, snapRef2.getMediaType())
 	require.Equal(t, digest.FromBytes([]byte(snapRef.getChainID()+" "+snapRef2.getDiffID())), snapRef2.getChainID())
@@ -786,7 +787,7 @@ func TestSetBlob(t *testing.T) {
 	require.NoError(t, err)
 
 	snapRef3 := snap3.(*immutableRef)
-	require.Equal(t, desc3.Annotations["containerd.io/uncompressed"], string(snapRef3.getDiffID()))
+	require.Equal(t, desc3.Annotations[labels.LabelUncompressed], string(snapRef3.getDiffID()))
 	require.Equal(t, desc3.Digest, snapRef3.getBlob())
 	require.Equal(t, desc3.MediaType, snapRef3.getMediaType())
 	require.Equal(t, digest.FromBytes([]byte(snapRef.getChainID()+" "+snapRef3.getDiffID())), snapRef3.getChainID())
@@ -804,7 +805,7 @@ func TestSetBlob(t *testing.T) {
 	b5, desc5, err := mapToBlob(map[string]string{"foo5": "bar5"}, true)
 	require.NoError(t, err)
 
-	desc5.Annotations["containerd.io/uncompressed"] = snapRef2.getDiffID().String()
+	desc5.Annotations[labels.LabelUncompressed] = snapRef2.getDiffID().String()
 
 	err = content.WriteBlob(ctx, co.cs, "ref5", bytes.NewBuffer(b5), desc5)
 	require.NoError(t, err)
@@ -833,7 +834,7 @@ func TestSetBlob(t *testing.T) {
 	require.NoError(t, err)
 
 	snapRef6 := snap6.(*immutableRef)
-	require.Equal(t, desc6.Annotations["containerd.io/uncompressed"], string(snapRef6.getDiffID()))
+	require.Equal(t, desc6.Annotations[labels.LabelUncompressed], string(snapRef6.getDiffID()))
 	require.Equal(t, desc6.Digest, snapRef6.getBlob())
 	require.Equal(t, digest.FromBytes([]byte(snapRef3.getChainID()+" "+snapRef6.getDiffID())), snapRef6.getChainID())
 	require.Equal(t, digest.FromBytes([]byte(snapRef3.getBlobChainID()+" "+digest.FromBytes([]byte(snapRef6.getBlob()+" "+snapRef6.getDiffID())))), snapRef6.getBlobChainID())
@@ -843,7 +844,7 @@ func TestSetBlob(t *testing.T) {
 	_, err = cm.GetByBlob(ctx, ocispecs.Descriptor{
 		Digest: digest.FromBytes([]byte("notexist")),
 		Annotations: map[string]string{
-			"containerd.io/uncompressed": digest.FromBytes([]byte("notexist")).String(),
+			labels.LabelUncompressed: digest.FromBytes([]byte("notexist")).String(),
 		},
 	}, snap3)
 	require.Error(t, err)
@@ -1584,7 +1585,7 @@ func TestConversion(t *testing.T) {
 					}
 					require.Equal(t, recreatedDesc.Digest, orgDesc.Digest, testName)
 					require.NotNil(t, recreatedDesc.Annotations)
-					require.Equal(t, recreatedDesc.Annotations["containerd.io/uncompressed"], orgDesc.Digest.String(), testName)
+					require.Equal(t, recreatedDesc.Annotations[labels.LabelUncompressed], orgDesc.Digest.String(), testName)
 					return nil
 				})
 			}
@@ -1965,7 +1966,7 @@ func checkInfo(ctx context.Context, t *testing.T, cs content.Store, info content
 	if info.Labels == nil {
 		return
 	}
-	uncompressedDgst, ok := info.Labels[containerdUncompressed]
+	uncompressedDgst, ok := info.Labels[labels.LabelUncompressed]
 	if !ok {
 		return
 	}
@@ -1987,7 +1988,7 @@ func checkDescriptor(ctx context.Context, t *testing.T, cs content.Store, desc o
 	}
 
 	// Check annotations exist
-	uncompressedDgst, ok := desc.Annotations[containerdUncompressed]
+	uncompressedDgst, ok := desc.Annotations[labels.LabelUncompressed]
 	require.True(t, ok, "uncompressed digest annotation not found: %q", desc.Digest)
 	var uncompressedSize int64
 	if compressionType == compression.EStargz {
@@ -2579,7 +2580,7 @@ func mapToBlobWithCompression(m map[string]string, compress func(io.Writer) (io.
 		MediaType: mediaType,
 		Size:      int64(buf.Len()),
 		Annotations: map[string]string{
-			"containerd.io/uncompressed": sha.Digest().String(),
+			labels.LabelUncompressed: sha.Digest().String(),
 		},
 	}, nil
 }
@@ -2631,7 +2632,7 @@ func fileToBlob(file *os.File, compress bool) ([]byte, ocispecs.Descriptor, erro
 		MediaType: mediaType,
 		Size:      int64(buf.Len()),
 		Annotations: map[string]string{
-			"containerd.io/uncompressed": sha.Digest().String(),
+			labels.LabelUncompressed: sha.Digest().String(),
 		},
 	}, nil
 }
@@ -2688,7 +2689,7 @@ func mapToSystemTarBlob(t *testing.T, m map[string]string) ([]byte, ocispecs.Des
 		MediaType: ocispecs.MediaTypeImageLayer,
 		Size:      int64(len(tarout)),
 		Annotations: map[string]string{
-			"containerd.io/uncompressed": digest.FromBytes(tarout).String(),
+			labels.LabelUncompressed: digest.FromBytes(tarout).String(),
 		},
 	}, nil
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/diff/walking"
+	"github.com/containerd/containerd/labels"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/mount"
 	"github.com/moby/buildkit/session"
@@ -24,8 +25,6 @@ import (
 
 var g flightcontrol.Group[struct{}]
 var gFileList flightcontrol.Group[[]string]
-
-const containerdUncompressed = "containerd.io/uncompressed"
 
 var ErrNoBlobs = errors.Errorf("no blobs for snapshot")
 
@@ -231,10 +230,10 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 					return struct{}{}, err
 				}
 
-				if diffID, ok := info.Labels[containerdUncompressed]; ok {
-					desc.Annotations[containerdUncompressed] = diffID
+				if diffID, ok := info.Labels[labels.LabelUncompressed]; ok {
+					desc.Annotations[labels.LabelUncompressed] = diffID
 				} else if mediaType == ocispecs.MediaTypeImageLayer {
-					desc.Annotations[containerdUncompressed] = desc.Digest.String()
+					desc.Annotations[labels.LabelUncompressed] = desc.Digest.String()
 				} else {
 					return struct{}{}, errors.Errorf("unknown layer compression type")
 				}

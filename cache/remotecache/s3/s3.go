@@ -17,6 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/smithy-go"
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/labels"
 	"github.com/moby/buildkit/cache/remotecache"
 	v1 "github.com/moby/buildkit/cache/remotecache/v1"
 	"github.com/moby/buildkit/session"
@@ -185,7 +186,7 @@ func (e *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 		if dgstPair.Descriptor.Annotations == nil {
 			return nil, errors.Errorf("invalid descriptor without annotations")
 		}
-		v, ok := dgstPair.Descriptor.Annotations["containerd.io/uncompressed"]
+		v, ok := dgstPair.Descriptor.Annotations[labels.LabelUncompressed]
 		if !ok {
 			return nil, errors.Errorf("invalid descriptor without uncompressed annotation")
 		}
@@ -274,7 +275,7 @@ func (i *importer) makeDescriptorProviderPair(l v1.CacheLayer) (*v1.DescriptorPr
 		return nil, errors.Errorf("cache layer with missing diffid")
 	}
 	annotations := map[string]string{}
-	annotations["containerd.io/uncompressed"] = l.Annotations.DiffID.String()
+	annotations[labels.LabelUncompressed] = l.Annotations.DiffID.String()
 	if !l.Annotations.CreatedAt.IsZero() {
 		txt, err := l.Annotations.CreatedAt.MarshalText()
 		if err != nil {
