@@ -166,6 +166,7 @@ func (dsl *withDistributionSourceLabel) SnapshotLabels(descs []ocispecs.Descript
 	for k, v := range estargz.SnapshotLabels(dsl.ref, descs, index) {
 		labels[k] = v
 	}
+	labels["containerd.io/snapshot/image-ref"] = dsl.ref
 	return labels
 }
 

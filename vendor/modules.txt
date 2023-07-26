@@ -238,6 +238,10 @@ github.com/cenkalti/backoff/v4
 # github.com/cespare/xxhash/v2 v2.2.0
 ## explicit; go 1.11
 github.com/cespare/xxhash/v2
+# github.com/containerd/accelerated-container-image v0.6.5
+## explicit; go 1.19
+github.com/containerd/accelerated-container-image/pkg/label
+github.com/containerd/accelerated-container-image/pkg/utils
 # github.com/containerd/cgroups v1.1.0
 ## explicit; go 1.17
 github.com/containerd/cgroups/stats/v1
