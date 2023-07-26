@@ -245,7 +245,7 @@ func main() {
 		streamTracer := otelgrpc.StreamServerInterceptor(otelgrpc.WithTracerProvider(tp), otelgrpc.WithPropagators(propagators))
 
 		unary := grpc_middleware.ChainUnaryServer(ctxUnaryInterceptor(ctx), traceUnaryInterceptor(tp), grpcerrors.UnaryServerInterceptor)
-		stream := grpc_middleware.ChainStreamServer(streamTracer, grpcerrors.StreamServerInterceptor)
+		stream := grpc_middleware.ChainStreamServer(ctxStreamInterceptor(ctx), streamTracer, grpcerrors.StreamServerInterceptor)
 
 		opts := []grpc.ServerOption{grpc.UnaryInterceptor(unary), grpc.StreamInterceptor(stream)}
 		server := grpc.NewServer(opts...)
@@ -596,6 +596,32 @@ func ctxUnaryInterceptor(globalCtx context.Context) grpc.UnaryServerInterceptor 
 
 		return handler(ctx, req)
 	}
+}
+
+func ctxStreamInterceptor(globalCtx context.Context) grpc.StreamServerInterceptor {
+	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		ctx, cancel := context.WithCancel(ss.Context())
+		defer cancel()
+
+		go func() {
+			select {
+			case <-ctx.Done():
+			case <-globalCtx.Done():
+				cancel()
+			}
+		}()
+
+		return handler(srv, &streamServerWithContext{ss, ctx})
+	}
+}
+
+type streamServerWithContext struct {
+	grpc.ServerStream
+	ctx context.Context
+}
+
+func (s *streamServerWithContext) Context() context.Context {
+	return s.ctx
 }
 
 func traceUnaryInterceptor(tp trace.TracerProvider) grpc.UnaryServerInterceptor {
