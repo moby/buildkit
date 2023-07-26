@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/containerd/containerd/content"
@@ -57,7 +58,7 @@ type Image interface {
 	Usage(context.Context, ...UsageOpt) (int64, error)
 	// Config descriptor for the image.
 	Config(ctx context.Context) (ocispec.Descriptor, error)
-	// IsUnpacked returns whether or not an image is unpacked.
+	// IsUnpacked returns whether an image is unpacked.
 	IsUnpacked(context.Context, string) (bool, error)
 	// ContentStore provides a content store which contains image blob data
 	ContentStore() content.Store
@@ -137,6 +138,9 @@ type image struct {
 
 	i        images.Image
 	platform platforms.MatchComparer
+	diffIDs  []digest.Digest
+
+	mu sync.Mutex
 }
 
 func (i *image) Metadata() images.Image {
@@ -156,8 +160,19 @@ func (i *image) Labels() map[string]string {
 }
 
 func (i *image) RootFS(ctx context.Context) ([]digest.Digest, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if i.diffIDs != nil {
+		return i.diffIDs, nil
+	}
+
 	provider := i.client.ContentStore()
-	return i.i.RootFS(ctx, provider, i.platform)
+	diffIDs, err := i.i.RootFS(ctx, provider, i.platform)
+	if err != nil {
+		return nil, err
+	}
+	i.diffIDs = diffIDs
+	return diffIDs, nil
 }
 
 func (i *image) Size(ctx context.Context) (int64, error) {
@@ -264,22 +279,20 @@ func (i *image) IsUnpacked(ctx context.Context, snapshotterName string) (bool, e
 	if err != nil {
 		return false, err
 	}
-	cs := i.client.ContentStore()
 
-	diffs, err := i.i.RootFS(ctx, cs, i.platform)
+	diffs, err := i.RootFS(ctx)
 	if err != nil {
 		return false, err
 	}
 
-	chainID := identity.ChainID(diffs)
-	_, err = sn.Stat(ctx, chainID.String())
-	if err == nil {
-		return true, nil
-	} else if !errdefs.IsNotFound(err) {
+	if _, err := sn.Stat(ctx, identity.ChainID(diffs).String()); err != nil {
+		if errdefs.IsNotFound(err) {
+			return false, nil
+		}
 		return false, err
 	}
 
-	return false, nil
+	return true, nil
 }
 
 func (i *image) Spec(ctx context.Context) (ocispec.Image, error) {
@@ -355,7 +368,7 @@ func (i *image) Unpack(ctx context.Context, snapshotterName string, opts ...Unpa
 		return err
 	}
 
-	layers, err := i.getLayers(ctx, i.platform, manifest)
+	layers, err := i.getLayers(ctx, manifest)
 	if err != nil {
 		return err
 	}
@@ -409,12 +422,12 @@ func (i *image) Unpack(ctx context.Context, snapshotterName string, opts ...Unpa
 		return err
 	}
 
-	rootfs := identity.ChainID(chain).String()
+	rootFS := identity.ChainID(chain).String()
 
 	cinfo := content.Info{
 		Digest: desc.Digest,
 		Labels: map[string]string{
-			fmt.Sprintf("containerd.io/gc.ref.snapshot.%s", snapshotterName): rootfs,
+			fmt.Sprintf("containerd.io/gc.ref.snapshot.%s", snapshotterName): rootFS,
 		},
 	}
 
@@ -431,9 +444,8 @@ func (i *image) getManifest(ctx context.Context, platform platforms.MatchCompare
 	return manifest, nil
 }
 
-func (i *image) getLayers(ctx context.Context, platform platforms.MatchComparer, manifest ocispec.Manifest) ([]rootfs.Layer, error) {
-	cs := i.ContentStore()
-	diffIDs, err := i.i.RootFS(ctx, cs, platform)
+func (i *image) getLayers(ctx context.Context, manifest ocispec.Manifest) ([]rootfs.Layer, error) {
+	diffIDs, err := i.RootFS(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve rootfs: %w", err)
 	}
@@ -452,27 +464,13 @@ func (i *image) getLayers(ctx context.Context, platform platforms.MatchComparer,
 	return layers, nil
 }
 
-func (i *image) getManifestPlatform(ctx context.Context, manifest ocispec.Manifest) (ocispec.Platform, error) {
-	cs := i.ContentStore()
-	p, err := content.ReadBlob(ctx, cs, manifest.Config)
-	if err != nil {
-		return ocispec.Platform{}, err
-	}
-
-	var image ocispec.Image
-	if err := json.Unmarshal(p, &image); err != nil {
-		return ocispec.Platform{}, err
-	}
-	return platforms.Normalize(ocispec.Platform{OS: image.OS, Architecture: image.Architecture}), nil
-}
-
 func (i *image) checkSnapshotterSupport(ctx context.Context, snapshotterName string, manifest ocispec.Manifest) error {
 	snapshotterPlatformMatcher, err := i.client.GetSnapshotterSupportedPlatforms(ctx, snapshotterName)
 	if err != nil {
 		return err
 	}
 
-	manifestPlatform, err := i.getManifestPlatform(ctx, manifest)
+	manifestPlatform, err := images.ConfigPlatform(ctx, i.ContentStore(), manifest.Config)
 	if err != nil {
 		return err
 	}

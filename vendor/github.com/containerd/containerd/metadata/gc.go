@@ -72,7 +72,7 @@ var (
 // function and optimize other functions for running fast during garbage
 // collection write locks.
 type CollectionContext interface {
-	// Sends all known resources
+	// All sends all known resources
 	All(func(gc.Node))
 
 	// Active sends all active resources
@@ -260,6 +260,7 @@ func (c *gcContext) scanRoots(ctx context.Context, tx *bolt.Tx, nc chan<- gc.Nod
 							log.G(ctx).WithError(err).WithField("lease", string(k)).Infof("ignoring invalid expiration value %q", string(expV))
 						} else if expThreshold.After(exp) {
 							// lease has expired, skip
+							log.G(ctx).WithField("lease", string(k)).Debug("expired lease")
 							return nil
 						}
 					}

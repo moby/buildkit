@@ -10,12 +10,14 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/container-orchestrated-devices/container-device-interface/pkg/cdi"
 	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/oci"
 	cdseccomp "github.com/containerd/containerd/pkg/seccomp"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/docker/docker/profiles/seccomp"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/entitlements/security"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	selinux "github.com/opencontainers/selinux/go-selinux"
@@ -154,4 +156,42 @@ func cgroupNamespaceSupported() bool {
 		}
 	})
 	return supportsCgroupNS
+}
+
+// genereateCDIOptions creates the OCI runtime spec options for injecting CDI
+// devices. Two options are returned: The first ensures that the CDI registry
+// is initialized with refresh disabled, and the second injects the devices
+// into the container.
+func generateCDIOpts(devices []*pb.CDIDevice) ([]oci.SpecOpts, error) {
+	if len(devices) == 0 {
+		return nil, nil
+	}
+	var dd []string
+	for _, d := range devices {
+		if d == nil {
+			continue
+		}
+		dd = append(dd, d.Name)
+	}
+
+	// Inits the CDI registry and disables auto-refresh.
+	withStaticCDIRegistry := func() oci.SpecOpts {
+		return func(ctx context.Context, _ oci.Client, _ *containers.Container, s *oci.Spec) error {
+			registry := cdi.GetRegistry(cdi.WithAutoRefresh(false))
+			if err := registry.Refresh(); err != nil {
+				// We don't consider registry refresh failure a fatal error.
+				// For instance, a dynamically generated invalid CDI Spec file for
+				// any particular vendor shouldn't prevent injection of devices of
+				// different vendors. CDI itself knows better, and it will fail the
+				// injection if necessary.
+				bklog.G(ctx).Warnf("CDI registry refresh failed: %v", err)
+			}
+			return nil
+		}
+	}
+
+	return []oci.SpecOpts{
+		withStaticCDIRegistry(),
+		oci.WithCDIDevices(dd...),
+	}, nil
 }

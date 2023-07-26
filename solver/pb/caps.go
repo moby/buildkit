@@ -47,6 +47,7 @@ const (
 	CapExecMetaSecurityDeviceWhitelistV1 apicaps.CapID = "exec.meta.security.devices.v1"
 	CapExecMetaSetsDefaultPath           apicaps.CapID = "exec.meta.setsdefaultpath"
 	CapExecMetaUlimit                    apicaps.CapID = "exec.meta.ulimit"
+	CapExecCDIDevice                     apicaps.CapID = "exec.cdi-device"
 	CapExecMetaRemoveMountStubsRecursive apicaps.CapID = "exec.meta.removemountstubs.recursive"
 	CapExecMountBind                     apicaps.CapID = "exec.mount.bind"
 	CapExecMountBindReadWriteNoOutput    apicaps.CapID = "exec.mount.bind.readwrite-nooutput"
@@ -277,6 +278,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapExecMetaUlimit,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapExecCDIDevice,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

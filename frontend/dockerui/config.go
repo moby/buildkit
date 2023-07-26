@@ -39,6 +39,7 @@ const (
 	keyShmSize          = "shm-size"
 	keyTargetPlatform   = "platform"
 	keyUlimit           = "ulimit"
+	keyDevice           = "device"
 	keyCacheFrom        = "cache-from"    // for registry only. deprecated in favor of keyCacheImports
 	keyCacheImports     = "cache-imports" // JSON representation of []CacheOptionsEntry
 
@@ -64,6 +65,7 @@ type Config struct {
 	ShmSize          int64
 	Target           string
 	Ulimits          []pb.Ulimit
+	CDIDevices       []pb.CDIDevice
 
 	CacheImports           []client.CacheOptionsEntry
 	TargetPlatforms        []ocispecs.Platform // nil means default
@@ -181,6 +183,12 @@ func (bc *Client) init() error {
 		return errors.Wrap(err, "failed to parse ulimit")
 	}
 	bc.Ulimits = ulimits
+
+	devices, err := parseDevices(opts[keyDevice])
+	if err != nil {
+		return errors.Wrap(err, "failed to parse device")
+	}
+	bc.CDIDevices = devices
 
 	defaultNetMode, err := parseNetMode(opts[keyForceNetwork])
 	if err != nil {

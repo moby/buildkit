@@ -63,9 +63,6 @@ func (m *Mount) mount(target string) (err error) {
 	}
 
 	flags, data, losetup := parseMountOptions(options)
-	if len(data) > pagesize {
-		return errors.New("mount options is too long")
-	}
 
 	// propagation types.
 	const ptypes = unix.MS_SHARED | unix.MS_PRIVATE | unix.MS_SLAVE | unix.MS_UNBINDABLE
@@ -73,15 +70,27 @@ func (m *Mount) mount(target string) (err error) {
 	// Ensure propagation type change flags aren't included in other calls.
 	oflags := flags &^ ptypes
 
+	var loopParams LoopParams
+	if losetup {
+		loopParams = LoopParams{
+			Readonly:  oflags&unix.MS_RDONLY == unix.MS_RDONLY,
+			Autoclear: true,
+		}
+		loopParams.Direct, data = hasDirectIO(data)
+	}
+
+	dataInStr := strings.Join(data, ",")
+	if len(dataInStr) > pagesize {
+		return errors.New("mount options is too long")
+	}
+
 	// In the case of remounting with changed data (data != ""), need to call mount (moby/moby#34077).
-	if flags&unix.MS_REMOUNT == 0 || data != "" {
+	if flags&unix.MS_REMOUNT == 0 || dataInStr != "" {
 		// Initial call applying all non-propagation flags for mount
 		// or remount with changed data
 		source := m.Source
 		if losetup {
-			loFile, err := setupLoop(m.Source, LoopParams{
-				Readonly:  oflags&unix.MS_RDONLY == unix.MS_RDONLY,
-				Autoclear: true})
+			loFile, err := setupLoop(m.Source, loopParams)
 			if err != nil {
 				return err
 			}
@@ -90,7 +99,7 @@ func (m *Mount) mount(target string) (err error) {
 			// Mount the loop device instead
 			source = loFile.Name()
 		}
-		if err := mountAt(chdir, source, target, m.Type, uintptr(oflags), data); err != nil {
+		if err := mountAt(chdir, source, target, m.Type, uintptr(oflags), dataInStr); err != nil {
 			return err
 		}
 	}
@@ -199,7 +208,7 @@ func UnmountAll(mount string, flags int) error {
 
 // parseMountOptions takes fstab style mount options and parses them for
 // use with a standard mount() syscall
-func parseMountOptions(options []string) (int, string, bool) {
+func parseMountOptions(options []string) (int, []string, bool) {
 	var (
 		flag    int
 		losetup bool
@@ -252,7 +261,16 @@ func parseMountOptions(options []string) (int, string, bool) {
 			data = append(data, o)
 		}
 	}
-	return flag, strings.Join(data, ","), losetup
+	return flag, data, losetup
+}
+
+func hasDirectIO(opts []string) (bool, []string) {
+	for idx, opt := range opts {
+		if opt == "direct-io" {
+			return true, append(opts[:idx], opts[idx+1:]...)
+		}
+	}
+	return false, opts
 }
 
 // compactLowerdirOption updates overlay lowdir option and returns the common
@@ -274,13 +292,16 @@ func compactLowerdirOption(opts []string) (string, []string) {
 	// in order to avoid to get snapshots/x, should be back to parent dir.
 	// however, there is assumption that the common dir is ${root}/io.containerd.v1.overlayfs/snapshots.
 	commondir = path.Dir(commondir)
-	if commondir == "/" {
+	if commondir == "/" || commondir == "." {
 		return "", opts
 	}
 	commondir = commondir + "/"
 
 	newdirs := make([]string, 0, len(dirs))
 	for _, dir := range dirs {
+		if len(dir) <= len(commondir) {
+			return "", opts
+		}
 		newdirs = append(newdirs, dir[len(commondir):])
 	}
 
@@ -428,5 +449,5 @@ func (m *Mount) mountWithHelper(helperBinary, typePrefix, target string) error {
 			_ = unmount(target, 0)
 		}
 	}
-	return fmt.Errorf("mount helper [%s %v] failed with ECHILD (retired %d times)", helperBinary, args, retriesOnECHILD)
+	return fmt.Errorf("mount helper [%s %v] failed with ECHILD (retried %d times)", helperBinary, args, retriesOnECHILD)
 }

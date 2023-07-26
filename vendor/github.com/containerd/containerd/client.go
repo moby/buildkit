@@ -185,7 +185,7 @@ func NewWithConn(conn *grpc.ClientConn, opts ...ClientOpt) (*Client, error) {
 	c := &Client{
 		defaultns: copts.defaultns,
 		conn:      conn,
-		runtime:   fmt.Sprintf("%s.%s", plugin.RuntimePlugin, runtime.GOOS),
+		runtime:   plugin.RuntimePlugin.String() + "." + runtime.GOOS,
 	}
 
 	if copts.defaultPlatform != nil {
@@ -403,13 +403,9 @@ func (c *Client) Fetch(ctx context.Context, ref string, opts ...RemoteOpt) (imag
 		if len(fetchCtx.Platforms) == 0 {
 			fetchCtx.PlatformMatcher = platforms.All
 		} else {
-			var ps []ocispec.Platform
-			for _, s := range fetchCtx.Platforms {
-				p, err := platforms.Parse(s)
-				if err != nil {
-					return images.Image{}, fmt.Errorf("invalid platform %s: %w", s, err)
-				}
-				ps = append(ps, p)
+			ps, err := platforms.ParseAll(fetchCtx.Platforms)
+			if err != nil {
+				return images.Image{}, err
 			}
 
 			fetchCtx.PlatformMatcher = platforms.Any(ps...)
@@ -439,13 +435,9 @@ func (c *Client) Push(ctx context.Context, ref string, desc ocispec.Descriptor, 
 	}
 	if pushCtx.PlatformMatcher == nil {
 		if len(pushCtx.Platforms) > 0 {
-			var ps []ocispec.Platform
-			for _, platform := range pushCtx.Platforms {
-				p, err := platforms.Parse(platform)
-				if err != nil {
-					return fmt.Errorf("invalid platform %s: %w", platform, err)
-				}
-				ps = append(ps, p)
+			ps, err := platforms.ParseAll(pushCtx.Platforms)
+			if err != nil {
+				return err
 			}
 			pushCtx.PlatformMatcher = platforms.Any(ps...)
 		} else {
@@ -544,6 +536,19 @@ func writeIndex(ctx context.Context, index *ocispec.Index, client *Client, ref s
 		return ocispec.Descriptor{}, err
 	}
 	return writeContent(ctx, client.ContentStore(), ocispec.MediaTypeImageIndex, ref, bytes.NewReader(data), content.WithLabels(labels))
+}
+
+func decodeIndex(ctx context.Context, store content.Provider, desc ocispec.Descriptor) (*ocispec.Index, error) {
+	var index ocispec.Index
+	p, err := content.ReadBlob(ctx, store, desc)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(p, &index); err != nil {
+		return nil, err
+	}
+
+	return &index, nil
 }
 
 // GetLabel gets a label value from namespace store
@@ -816,23 +821,6 @@ func (c *Client) getSnapshotter(ctx context.Context, name string) (snapshots.Sna
 	}
 
 	return s, nil
-}
-
-// CheckRuntime returns true if the current runtime matches the expected
-// runtime. Providing various parts of the runtime schema will match those
-// parts of the expected runtime
-func CheckRuntime(current, expected string) bool {
-	cp := strings.Split(current, ".")
-	l := len(cp)
-	for i, p := range strings.Split(expected, ".") {
-		if i > l {
-			return false
-		}
-		if p != cp[i] {
-			return false
-		}
-	}
-	return true
 }
 
 // GetSnapshotterSupportedPlatforms returns a platform matchers which represents the

@@ -116,6 +116,7 @@ import (
 
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 
+	"github.com/containerd/containerd/api/types"
 	"github.com/containerd/containerd/errdefs"
 )
 
@@ -156,6 +157,19 @@ func (m *matcher) Match(platform specs.Platform) bool {
 
 func (m *matcher) String() string {
 	return Format(m.Platform)
+}
+
+// ParseAll parses a list of platform specifiers into a list of platform.
+func ParseAll(specifiers []string) ([]specs.Platform, error) {
+	platforms := make([]specs.Platform, len(specifiers))
+	for i, s := range specifiers {
+		p, err := Parse(s)
+		if err != nil {
+			return nil, fmt.Errorf("invalid platform %s: %w", s, err)
+		}
+		platforms[i] = p
+	}
+	return platforms, nil
 }
 
 // Parse parses the platform specifier syntax into a platform declaration.
@@ -261,4 +275,31 @@ func Normalize(platform specs.Platform) specs.Platform {
 	platform.Architecture, platform.Variant = normalizeArch(platform.Architecture, platform.Variant)
 
 	return platform
+}
+
+// ToProto converts from a slice of [Platform] to a slice of
+// the protobuf definition [types.Platform].
+func ToProto(platforms []Platform) []*types.Platform {
+	ap := make([]*types.Platform, len(platforms))
+	for i := range platforms {
+		p := types.Platform{
+			OS:           platforms[i].OS,
+			Architecture: platforms[i].Architecture,
+			Variant:      platforms[i].Variant,
+		}
+		ap[i] = &p
+	}
+	return ap
+}
+
+// FromProto converts a slice of the protobuf definition [types.Platform]
+// to a slice of [Platform].
+func FromProto(platforms []*types.Platform) []Platform {
+	op := make([]Platform, len(platforms))
+	for i := range platforms {
+		op[i].OS = platforms[i].OS
+		op[i].Architecture = platforms[i].Architecture
+		op[i].Variant = platforms[i].Variant
+	}
+	return op
 }
