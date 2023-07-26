@@ -1,5 +1,5 @@
-//go:build linux && !no_oci_worker
-// +build linux,!no_oci_worker
+//go:build linux
+// +build linux
 
 package main
 

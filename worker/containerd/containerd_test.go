@@ -1,5 +1,5 @@
-//go:build linux && !no_containerd_worker
-// +build linux,!no_containerd_worker
+//go:build linux
+// +build linux
 
 package containerd
 
