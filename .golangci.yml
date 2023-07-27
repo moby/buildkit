@@ -5,9 +5,6 @@ run:
 
   modules-download-mode: vendor
 
-  build-tags:
-    - dfrunsecurity
-
 linters:
   enable:
     - depguard
