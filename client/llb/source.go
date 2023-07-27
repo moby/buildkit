@@ -240,18 +240,7 @@ type ImageInfo struct {
 func Git(remote, ref string, opts ...GitOption) State {
 	url := strings.Split(remote, "#")[0]
 
-	var protocolType int
-	remote, protocolType = gitutil.ParseProtocol(remote)
-
-	var sshHost string
-	if protocolType == gitutil.SSHProtocol {
-		parts := strings.SplitN(remote, ":", 2)
-		if len(parts) == 2 {
-			sshHost = parts[0]
-			// keep remote consistent with http(s) version
-			remote = parts[0] + "/" + parts[1]
-		}
-	}
+	protocolType, sshHost, remote := parseGitRemote(remote)
 	if protocolType == gitutil.UnknownProtocol {
 		url = "https://" + url
 	}
@@ -314,6 +303,52 @@ func Git(remote, ref string, opts ...GitOption) State {
 
 	source := NewSource("git://"+id, attrs, gi.Constraints)
 	return NewState(source.Output())
+}
+
+func parseGitRemote(remote string) (int, string, string) {
+	var protocolType int
+	remote, protocolType = gitutil.ParseProtocol(remote)
+
+	if protocolType != gitutil.SSHProtocol {
+		return protocolType, "", remote
+	}
+	sshHost := remote
+	path := ""
+	parts := strings.SplitN(remote, "/", 2)
+	if len(parts) == 2 {
+		sshHost = parts[0]
+		path = parts[1]
+	}
+
+	hostParts := strings.SplitN(sshHost, ":", 2)
+	if len(hostParts) == 2 {
+		// check for a possible port number after the host
+		if !isNumeric(hostParts[1]) {
+			sshHost = hostParts[0]
+			if path != "" {
+				path = hostParts[1] + "/" + path
+			} else {
+				path = hostParts[1]
+			}
+		}
+	}
+	remote = sshHost
+	if path != "" {
+		remote += "/" + path
+	}
+	return protocolType, sshHost, remote
+}
+
+func isNumeric(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 type GitOption interface {
