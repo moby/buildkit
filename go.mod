@@ -26,7 +26,7 @@ require (
 	github.com/containerd/stargz-snapshotter/estargz v0.14.3
 	github.com/containerd/typeurl/v2 v2.1.1
 	github.com/coreos/go-systemd/v22 v22.5.0
-	github.com/docker/cli v24.0.4+incompatible
+	github.com/docker/cli v24.0.5+incompatible
 	github.com/docker/distribution v2.8.2+incompatible
 	github.com/docker/docker v24.0.0-rc.2.0.20230723142919-afd4805278b4+incompatible // master (v25.0.0-dev)
 	github.com/docker/go-connections v0.4.0
@@ -60,7 +60,7 @@ require (
 	github.com/pkg/profile v1.5.0
 	github.com/prometheus/procfs v0.9.0
 	github.com/serialx/hashring v0.0.0-20190422032157-8b2912629002
-	github.com/sirupsen/logrus v1.9.0
+	github.com/sirupsen/logrus v1.9.3
 	github.com/spdx/tools-golang v0.5.1
 	github.com/stretchr/testify v1.8.3
 	github.com/tonistiigi/fsutil v0.0.0-20230629203738-36ef4d8c0dbb
@@ -82,9 +82,9 @@ require (
 	go.opentelemetry.io/otel/trace v1.14.0
 	go.opentelemetry.io/proto/otlp v0.19.0
 	golang.org/x/crypto v0.2.0
-	golang.org/x/net v0.8.0
+	golang.org/x/net v0.10.0
 	golang.org/x/sync v0.1.0
-	golang.org/x/sys v0.7.0
+	golang.org/x/sys v0.8.0
 	golang.org/x/time v0.3.0
 	google.golang.org/genproto v0.0.0-20230306155012-7f2fa6fef1f4
 	google.golang.org/grpc v1.53.0
@@ -156,7 +156,7 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.14.0 // indirect
 	go.opentelemetry.io/otel/metric v0.37.0 // indirect
 	golang.org/x/mod v0.9.0 // indirect
-	golang.org/x/text v0.8.0 // indirect
+	golang.org/x/text v0.9.0 // indirect
 	golang.org/x/tools v0.7.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	kernel.org/pub/linux/libs/security/libcap/psx v1.2.67 // indirect
