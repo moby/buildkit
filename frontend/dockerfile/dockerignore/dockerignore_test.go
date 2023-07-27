@@ -1,61 +1,54 @@
 package dockerignore
 
 import (
-	"os"
-	"path/filepath"
+	"strings"
 	"testing"
 )
 
 func TestReadAll(t *testing.T) {
-	di, err := ReadAll(nil)
+	actual, err := ReadAll(nil)
 	if err != nil {
-		t.Fatalf("Expected not to have error, got %v", err)
+		t.Errorf("Expected no error, got %v", err)
+	}
+	if entries := len(actual); entries != 0 {
+		t.Fatalf("Expected to have zero entries, got %d", entries)
 	}
 
-	if diLen := len(di); diLen != 0 {
-		t.Fatalf("Expected to have zero dockerignore entry, got %d", diLen)
+	const content = `test1
+/test2
+/a/file/here
+
+lastfile
+# this is a comment
+! /inverted/abs/path
+!
+! `
+
+	expected := []string{
+		"test1",
+		"test2",       // according to https://docs.docker.com/engine/reference/builder/#dockerignore-file, /foo/bar should be treated as foo/bar
+		"a/file/here", // according to https://docs.docker.com/engine/reference/builder/#dockerignore-file, /foo/bar should be treated as foo/bar
+		"lastfile",
+		"!inverted/abs/path",
+		"!",
+		"!",
 	}
 
-	diName := filepath.Join(t.TempDir(), ".dockerignore")
-	content := "test1\n/test2\n/a/file/here\n\nlastfile\n# this is a comment\n! /inverted/abs/path\n!\n! \n"
-	err = os.WriteFile(diName, []byte(content), 0600)
+	actual, err = ReadAll(strings.NewReader(content))
 	if err != nil {
-		t.Fatal(err)
+		t.Error(err)
 	}
 
-	diFd, err := os.Open(diName)
-	if err != nil {
-		t.Fatal(err)
+	if len(actual) != len(expected) {
+		t.Errorf("Expected %d entries, got %v", len(expected), len(actual))
 	}
-	defer diFd.Close()
-
-	di, err = ReadAll(diFd)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if len(di) != 7 {
-		t.Fatalf("Expected 7 entries, got %v", len(di))
-	}
-	if di[0] != "test1" {
-		t.Fatal("First element is not test1")
-	}
-	if di[1] != "test2" { // according to https://docs.docker.com/engine/reference/builder/#dockerignore-file, /foo/bar should be treated as foo/bar
-		t.Fatal("Second element is not test2")
-	}
-	if di[2] != "a/file/here" { // according to https://docs.docker.com/engine/reference/builder/#dockerignore-file, /foo/bar should be treated as foo/bar
-		t.Fatal("Third element is not a/file/here")
-	}
-	if di[3] != "lastfile" {
-		t.Fatal("Fourth element is not lastfile")
-	}
-	if di[4] != "!inverted/abs/path" {
-		t.Fatal("Fifth element is not !inverted/abs/path")
-	}
-	if di[5] != "!" {
-		t.Fatalf("Sixth element is not !, but %s", di[5])
-	}
-	if di[6] != "!" {
-		t.Fatalf("Seventh element is not !, but %s", di[6])
+	for i, expectedLine := range expected {
+		if i >= len(actual) {
+			t.Errorf(`missing line %d: expected: "%s", got none`, i+1, expectedLine)
+			continue
+		}
+		if actual[i] != expectedLine {
+			t.Errorf(`line %d: expected: "%s", got: "%s"`, i+1, expectedLine, actual[i])
+		}
 	}
 }

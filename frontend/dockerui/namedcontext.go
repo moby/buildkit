@@ -208,7 +208,7 @@ func (bc *Client) namedContextRecursive(ctx context.Context, name string, nameWi
 			if len(dt) != 0 {
 				excludes, err = dockerignore.ReadAll(bytes.NewBuffer(dt))
 				if err != nil {
-					return nil, nil, err
+					return nil, nil, errors.Wrapf(err, "failed parsing %s", DefaultDockerignoreName)
 				}
 			}
 		}
