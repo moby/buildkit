@@ -79,9 +79,22 @@ group "validate" {
 }
 
 target "lint" {
+  name = "lint-${buildtags.name}"
   inherits = ["_common"]
   dockerfile = "./hack/dockerfiles/lint.Dockerfile"
   output = ["type=cacheonly"]
+  target = buildtags.target
+  args = {
+    BUILDTAGS = buildtags.tags
+  }
+  matrix = {
+    buildtags = [
+      { name = "default", tags = "", target = "golangci-lint" },
+      { name = "labs", tags = "dfrunsecurity", target = "golangci-lint" },
+      { name = "nydus", tags = "nydus", target = "golangci-lint" },
+      { name = "yaml", tags = "", target = "yamllint" },
+    ]
+  }
 }
 
 target "validate-vendor" {
