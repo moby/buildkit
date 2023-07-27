@@ -67,23 +67,22 @@ func containerd(version string) llb.State {
 func buildkit(opt buildOpt) llb.State {
 	run := goRepo(goBuildBase(), "github.com/moby/buildkit", "master")
 
-	buildkitdOCIWorkerOnly := run(llb.Shlex("go build -o ./bin/buildkitd.oci_only -tags no_containerd_worker ./cmd/buildkitd"))
-
 	buildkitd := run(llb.Shlex("go build -o ./bin/buildkitd ./cmd/buildkitd"))
 
 	buildctl := run(llb.Shlex("go build -o ./bin/buildctl ./cmd/buildctl"))
 
 	r := llb.Image("docker.io/library/alpine:latest").With(
 		copyAll(buildctl, "/bin"),
+		copyAll(buildkitd, "/bin"),
 		copyAll(runc(opt.runc), "/bin"),
 	)
 
 	if opt.withContainerd {
-		return r.With(
+		r = r.With(
 			copyAll(containerd(opt.containerd), "/bin"),
-			copyAll(buildkitd, "/bin"))
+		)
 	}
-	return r.With(copyAll(buildkitdOCIWorkerOnly, "/bin"))
+	return r
 }
 
 func copyAll(src llb.State, destPath string) llb.StateOption {

@@ -86,21 +86,14 @@ func buildkit(opt buildOpt) llb.State {
 	}
 	run := goRepo(goBuildBase(), repo, src)
 
-	buildkitdOCIWorkerOnly := prefixed(
-		run(llb.Shlex("go build -o /out/buildkitd.oci_only -tags no_containerd_worker ./cmd/buildkitd")),
-		opt.installPrefix,
-	)
-
 	buildkitd := prefixed(run(llb.Shlex("go build -o /out/buildkitd ./cmd/buildkitd")), opt.installPrefix)
 
 	buildctl := prefixed(run(llb.Shlex("go build -o /out/buildctl ./cmd/buildctl")), opt.installPrefix)
 
-	inputs := []llb.State{buildctl, prefixed(runc(opt.runc), opt.installPrefix)}
+	inputs := []llb.State{buildctl, buildkitd, prefixed(runc(opt.runc), opt.installPrefix)}
 
 	if opt.withContainerd {
 		inputs = append(inputs, prefixed(containerd(opt.containerd), opt.installPrefix), buildkitd)
-	} else {
-		inputs = append(inputs, buildkitdOCIWorkerOnly)
 	}
 	return llb.Merge(inputs)
 }

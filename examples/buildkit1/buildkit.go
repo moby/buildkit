@@ -58,9 +58,6 @@ func containerd(version string) llb.State {
 func buildkit(opt buildOpt) llb.State {
 	src := goBuildBase().With(goFromGit("github.com/moby/buildkit", "master"))
 
-	buildkitdOCIWorkerOnly := src.
-		Run(llb.Shlex("go build -o /bin/buildkitd.oci_only -tags no_containerd_worker ./cmd/buildkitd")).Root()
-
 	buildkitd := src.
 		Run(llb.Shlex("go build -o /bin/buildkitd ./cmd/buildkitd")).Root()
 
@@ -69,15 +66,16 @@ func buildkit(opt buildOpt) llb.State {
 
 	r := llb.Image("docker.io/library/alpine:latest").With(
 		copyFrom(buildctl, "/bin/buildctl", "/bin/"),
+		copyFrom(buildkitd, "/bin/buildkitd", "/bin/"),
 		copyFrom(runc(opt.runc), "/usr/bin/runc", "/bin/"),
 	)
 
 	if opt.withContainerd {
-		return r.With(
+		r = r.With(
 			copyFrom(containerd(opt.containerd), "/go/src/github.com/containerd/containerd/bin/containerd", "/bin/"),
-			copyFrom(buildkitd, "/bin/buildkitd", "/bin/"))
+		)
 	}
-	return r.With(copyFrom(buildkitdOCIWorkerOnly, "/bin/buildkitd.oci_only", "/bin/"))
+	return r
 }
 
 // goFromGit is a helper for cloning a git repo, checking out a tag and copying
