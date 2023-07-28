@@ -115,6 +115,10 @@ Run `sysctl -w user.max_user_namespaces=N` (N=positive integer, like 63359) on t
 
 See [`../examples/kubernetes/sysctl-userns.privileged.yaml`](../examples/kubernetes/sysctl-userns.privileged.yaml).
 
+### Error `mount proc:/proc (via /proc/self/fd/6), flags: 0xe: operation not permitted`
+This error is known to happen when BuildKit is executed in a container without the `--oci-worker-no-sandbox` flag.
+Make sure that `--oci-worker-no-process-sandbox` is specified (See [below](#docker)).
+
 ## Containerized deployment
 
 ### Kubernetes
