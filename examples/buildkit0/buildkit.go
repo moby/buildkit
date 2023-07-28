@@ -18,8 +18,8 @@ type buildOpt struct {
 func main() {
 	var opt buildOpt
 	flag.BoolVar(&opt.withContainerd, "with-containerd", true, "enable containerd worker")
-	flag.StringVar(&opt.containerd, "containerd", "v1.2.9", "containerd version")
-	flag.StringVar(&opt.runc, "runc", "v1.0.0-rc8", "runc version")
+	flag.StringVar(&opt.containerd, "containerd", "v1.7.2", "containerd version")
+	flag.StringVar(&opt.runc, "runc", "v1.1.7", "runc version")
 	flag.Parse()
 
 	bk := buildkit(opt)
@@ -63,9 +63,6 @@ func buildkit(opt buildOpt) llb.State {
 		Run(llb.Shlex("git clone https://github.com/moby/buildkit.git /go/src/github.com/moby/buildkit")).
 		Dir("/go/src/github.com/moby/buildkit")
 
-	buildkitdOCIWorkerOnly := src.
-		Run(llb.Shlex("go build -o /bin/buildkitd.oci_only -tags no_containerd_worker ./cmd/buildkitd"))
-
 	buildkitd := src.
 		Run(llb.Shlex("go build -o /bin/buildkitd ./cmd/buildkitd"))
 
@@ -75,11 +72,9 @@ func buildkit(opt buildOpt) llb.State {
 	r := llb.Image("docker.io/library/alpine:latest")
 	r = copy(buildctl.Root(), "/bin/buildctl", r, "/bin/")
 	r = copy(runc(opt.runc), "/usr/bin/runc", r, "/bin/")
+	r = copy(buildkitd.Root(), "/bin/buildkitd", r, "/bin/")
 	if opt.withContainerd {
 		r = copy(containerd(opt.containerd), "/go/src/github.com/containerd/containerd/bin/containerd", r, "/bin/")
-		r = copy(buildkitd.Root(), "/bin/buildkitd", r, "/bin/")
-	} else {
-		r = copy(buildkitdOCIWorkerOnly.Root(), "/bin/buildkitd.oci_only", r, "/bin/")
 	}
 	return r
 }
