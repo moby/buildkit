@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile-upstream:master
 
 ARG GO_VERSION="1.20"
-ARG PROTOC_VERSION="3.11.4"
+ARG PROTOC_VERSION="21.9"
 
 # protoc is dynamically linked to glibc so can't use alpine base
 FROM golang:${GO_VERSION}-buster AS base
