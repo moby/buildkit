@@ -35,6 +35,19 @@ const (
 	//
 	// When both bootstrap FileName and FileContent are set, FileName is used.
 	XDSBootstrapFileContentEnv = "GRPC_XDS_BOOTSTRAP_CONFIG"
+<<<<<<< HEAD
+=======
+
+	ringHashSupportEnv           = "GRPC_XDS_EXPERIMENTAL_ENABLE_RING_HASH"
+	clientSideSecuritySupportEnv = "GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT"
+	aggregateAndDNSSupportEnv    = "GRPC_XDS_EXPERIMENTAL_ENABLE_AGGREGATE_AND_LOGICAL_DNS_CLUSTER"
+	rbacSupportEnv               = "GRPC_XDS_EXPERIMENTAL_RBAC"
+	outlierDetectionSupportEnv   = "GRPC_EXPERIMENTAL_ENABLE_OUTLIER_DETECTION"
+	federationEnv                = "GRPC_EXPERIMENTAL_XDS_FEDERATION"
+	rlsInXDSEnv                  = "GRPC_EXPERIMENTAL_XDS_RLS_LB"
+
+	c2pResolverTestOnlyTrafficDirectorURIEnv = "GRPC_TEST_ONLY_GOOGLE_C2P_RESOLVER_TRAFFIC_DIRECTOR_URI"
+>>>>>>> origin/v0.10
 )
 
 var (
@@ -71,6 +84,7 @@ var (
 	// XDSRBAC indicates whether xDS configured RBAC HTTP Filter is enabled,
 	// which can be disabled by setting the environment variable
 	// "GRPC_XDS_EXPERIMENTAL_RBAC" to "false".
+<<<<<<< HEAD
 	XDSRBAC = boolFromEnv("GRPC_XDS_EXPERIMENTAL_RBAC", true)
 	// XDSOutlierDetection indicates whether outlier detection support is
 	// enabled, which can be disabled by setting the environment variable
@@ -80,6 +94,15 @@ var (
 	// be enabled by setting the environment variable
 	// "GRPC_EXPERIMENTAL_XDS_FEDERATION" to "true".
 	XDSFederation = boolFromEnv("GRPC_EXPERIMENTAL_XDS_FEDERATION", false)
+=======
+	XDSRBAC = !strings.EqualFold(os.Getenv(rbacSupportEnv), "false")
+	// XDSOutlierDetection indicates whether outlier detection support is
+	// enabled, which can be enabled by setting the environment variable
+	// "GRPC_EXPERIMENTAL_ENABLE_OUTLIER_DETECTION" to "true".
+	XDSOutlierDetection = strings.EqualFold(os.Getenv(outlierDetectionSupportEnv), "true")
+	// XDSFederation indicates whether federation support is enabled.
+	XDSFederation = strings.EqualFold(os.Getenv(federationEnv), "true")
+>>>>>>> origin/v0.10
 
 	// XDSRLS indicates whether processing of Cluster Specifier plugins and
 	// support for the RLS CLuster Specifier is enabled, which can be enabled by

@@ -73,10 +73,16 @@ func (c *Controller) WorkerInfos() []client.WorkerInfo {
 	out := make([]client.WorkerInfo, 0, len(c.workers))
 	for _, w := range c.workers {
 		out = append(out, client.WorkerInfo{
+<<<<<<< HEAD
 			ID:              w.ID(),
 			Labels:          w.Labels(),
 			Platforms:       w.Platforms(false),
 			BuildkitVersion: w.BuildkitVersion(),
+=======
+			ID:        w.ID(),
+			Labels:    w.Labels(),
+			Platforms: w.Platforms(false),
+>>>>>>> origin/v0.10
 		})
 	}
 	return out

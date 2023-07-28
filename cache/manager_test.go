@@ -2398,6 +2398,7 @@ func TestLoadBrokenParents(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
+<<<<<<< HEAD
 	tmpdir := t.TempDir()
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
@@ -2407,12 +2408,26 @@ func TestLoadBrokenParents(t *testing.T) {
 	})
 
 	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
+=======
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+
+	co, cleanup, err := newCacheManager(ctx, cmOpt{
+>>>>>>> origin/v0.10
 		tmpdir:          tmpdir,
 		snapshotter:     snapshotter,
 		snapshotterName: "native",
 	})
 	require.NoError(t, err)
+<<<<<<< HEAD
 	t.Cleanup(cleanup)
+=======
+	defer cleanup()
+>>>>>>> origin/v0.10
 	cm := co.manager.(*cacheManager)
 
 	mutRef, err := cm.New(ctx, nil, nil)
@@ -2433,15 +2448,25 @@ func TestLoadBrokenParents(t *testing.T) {
 	require.NoError(t, refB.(*immutableRef).queueDeleted())
 	require.NoError(t, refB.(*immutableRef).commitMetadata())
 	require.NoError(t, cm.Close())
+<<<<<<< HEAD
 	cleanup()
 
 	co, cleanup, err = newCacheManager(ctx, t, cmOpt{
+=======
+	require.NoError(t, cleanup())
+
+	co, cleanup, err = newCacheManager(ctx, cmOpt{
+>>>>>>> origin/v0.10
 		tmpdir:          tmpdir,
 		snapshotter:     snapshotter,
 		snapshotterName: "native",
 	})
 	require.NoError(t, err)
+<<<<<<< HEAD
 	t.Cleanup(cleanup)
+=======
+	defer cleanup()
+>>>>>>> origin/v0.10
 	cm = co.manager.(*cacheManager)
 
 	checkDiskUsage(ctx, t, cm, 0, 1)

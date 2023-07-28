@@ -23,6 +23,7 @@ An example `policy.json`:
       }
     },
     {
+<<<<<<< HEAD
       "action": "CONVERT",
       "selector": {
         "identifier": "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md"
@@ -30,6 +31,21 @@ An example `policy.json`:
       "updates": {
         "attrs": {"http.checksum": "sha256:6e4b94fc270e708e1068be28bd3551dc6917a4fc5a61293d51bb36e6b75c4b53"}
       }
+=======
+      "type": "docker-image",
+      "ref": "docker.io/library/alpine:3.13",
+      "pin": "sha256:1d30d1ba3cb90962067e9b29491fbd56997979d54376f23f01448b5c5cd8b462"
+    },
+    {
+      "type": "git",
+      "ref": "https://github.com/crazy-max/buildkit-buildsources-test.git#master",
+      "pin": "259a5aa5aa5bb3562d12cc631fe399f4788642c1"
+    },
+    {
+      "type": "http",
+      "ref": "https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md",
+      "pin": "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c"
+>>>>>>> origin/v0.10
     }
   ]
 }

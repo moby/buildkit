@@ -39,6 +39,9 @@ const zstdMinMatch = 3
 // fcsUnknown is used for unknown frame content size.
 const fcsUnknown = math.MaxUint64
 
+// fcsUnknown is used for unknown frame content size.
+const fcsUnknown = math.MaxUint64
+
 var (
 	// ErrReservedBlockType is returned when a reserved block type is found.
 	// Typically this indicates wrong or corrupted input.

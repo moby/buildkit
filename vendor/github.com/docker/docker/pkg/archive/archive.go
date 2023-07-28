@@ -876,6 +876,7 @@ func NewTarballer(srcPath string, options *TarOptions) (*Tarballer, error) {
 		return nil, err
 	}
 
+<<<<<<< HEAD
 	return &Tarballer{
 		// Fix the source path to work with long path names. This is a no-op
 		// on platforms other than Windows.
@@ -888,6 +889,15 @@ func NewTarballer(srcPath string, options *TarOptions) (*Tarballer, error) {
 		whiteoutConverter: whiteoutConverter,
 	}, nil
 }
+=======
+	go func() {
+		ta := newTarAppender(
+			options.IDMap,
+			compressWriter,
+			options.ChownOpts,
+		)
+		ta.WhiteoutConverter = whiteoutConverter
+>>>>>>> origin/v0.10
 
 // Reader returns the reader for the created archive.
 func (t *Tarballer) Reader() io.ReadCloser {
@@ -1080,6 +1090,10 @@ func Unpack(decompressedArchive io.Reader, dest string, options *TarOptions) err
 	defer pools.BufioReader32KPool.Put(trBuf)
 
 	var dirs []*tar.Header
+<<<<<<< HEAD
+=======
+	rootIDs := options.IDMap.RootPair()
+>>>>>>> origin/v0.10
 	whiteoutConverter, err := getWhiteoutConverter(options.WhiteoutFormat, options.InUserNS)
 	if err != nil {
 		return err

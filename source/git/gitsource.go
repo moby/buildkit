@@ -671,7 +671,10 @@ func git(ctx context.Context, dir, sshAuthSock, knownHosts string, args ...strin
 			//	"GIT_TRACE=1",
 			"GIT_CONFIG_NOSYSTEM=1", // Disable reading from system gitconfig.
 			"HOME=/dev/null",        // Disable reading from user gitconfig.
+<<<<<<< HEAD
 			"LC_ALL=C",              // Ensure consistent output.
+=======
+>>>>>>> origin/v0.10
 		}
 		if sshAuthSock != "" {
 			cmd.Env = append(cmd.Env, "SSH_AUTH_SOCK="+sshAuthSock)

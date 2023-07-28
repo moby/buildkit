@@ -3,6 +3,10 @@ package git
 import (
 	"bytes"
 	"context"
+<<<<<<< HEAD
+=======
+	"io/ioutil"
+>>>>>>> origin/v0.10
 	"net/http"
 	"net/http/cgi"
 	"net/http/httptest"
@@ -50,11 +54,19 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	t.Parallel()
 	ctx := logProgressStreams(context.Background(), t)
 
+<<<<<<< HEAD
 	gs := setupGitSource(t, t.TempDir())
 
 	repo := setupGitRepo(t)
 
 	id := &source.GitIdentifier{Remote: repo.mainURL, KeepGitDir: keepGitDir}
+=======
+	repo := setupGitRepo(t)
+
+	id := &source.GitIdentifier{Remote: repo.mainURL, KeepGitDir: keepGitDir}
+
+	gs := setupGitSource(t, t.TempDir())
+>>>>>>> origin/v0.10
 
 	g, err := gs.Resolve(ctx, id, nil, nil)
 	require.NoError(t, err)
@@ -161,8 +173,11 @@ func testFetchBySHA(t *testing.T, keepGitDir bool) {
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 	ctx = logProgressStreams(ctx, t)
 
+<<<<<<< HEAD
 	gs := setupGitSource(t, t.TempDir())
 
+=======
+>>>>>>> origin/v0.10
 	repo := setupGitRepo(t)
 
 	cmd := exec.Command("git", "rev-parse", "feature")
@@ -175,6 +190,11 @@ func testFetchBySHA(t *testing.T, keepGitDir bool) {
 	require.Equal(t, 40, len(sha))
 
 	id := &source.GitIdentifier{Remote: repo.mainURL, Ref: sha, KeepGitDir: keepGitDir}
+<<<<<<< HEAD
+=======
+
+	gs := setupGitSource(t, t.TempDir())
+>>>>>>> origin/v0.10
 
 	g, err := gs.Resolve(ctx, id, nil, nil)
 	require.NoError(t, err)
@@ -239,11 +259,19 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 	ctx = logProgressStreams(ctx, t)
 
+<<<<<<< HEAD
 	gs := setupGitSource(t, t.TempDir())
 
 	repo := setupGitRepo(t)
 
 	id := &source.GitIdentifier{Remote: repo.mainURL, Ref: tag, KeepGitDir: keepGitDir}
+=======
+	repo := setupGitRepo(t)
+
+	id := &source.GitIdentifier{Remote: repo.mainURL, Ref: tag, KeepGitDir: keepGitDir}
+
+	gs := setupGitSource(t, t.TempDir())
+>>>>>>> origin/v0.10
 
 	g, err := gs.Resolve(ctx, id, nil, nil)
 	require.NoError(t, err)
@@ -329,7 +357,13 @@ func testMultipleRepos(t *testing.T, keepGitDir bool) {
 
 	repo := setupGitRepo(t)
 
+<<<<<<< HEAD
 	repodir2 := t.TempDir()
+=======
+	repodir2, err := ioutil.TempDir("", "buildkit-gitsource")
+	require.NoError(t, err)
+	defer os.RemoveAll(repodir2)
+>>>>>>> origin/v0.10
 
 	runShell(t, repodir2,
 		"git -c init.defaultBranch=master init",
@@ -343,6 +377,11 @@ func testMultipleRepos(t *testing.T, keepGitDir bool) {
 
 	id := &source.GitIdentifier{Remote: repo.mainURL, KeepGitDir: keepGitDir}
 	id2 := &source.GitIdentifier{Remote: repoURL2, KeepGitDir: keepGitDir}
+<<<<<<< HEAD
+=======
+
+	gs := setupGitSource(t, t.TempDir())
+>>>>>>> origin/v0.10
 
 	g, err := gs.Resolve(ctx, id, nil, nil)
 	require.NoError(t, err)

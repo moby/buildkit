@@ -113,6 +113,18 @@ func getContentStore(ctx context.Context, sm *session.Manager, g session.Group, 
 		return nil, err
 	}
 	return &unlazyProvider{sessioncontent.NewCallerStore(caller, storeID), g}, nil
+<<<<<<< HEAD
+=======
+}
+
+type unlazyProvider struct {
+	content.Store
+	s session.Group
+}
+
+func (p *unlazyProvider) UnlazySession(desc ocispecs.Descriptor) session.Group {
+	return p.s
+>>>>>>> origin/v0.10
 }
 
 type unlazyProvider struct {

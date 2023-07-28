@@ -112,6 +112,7 @@ type Info struct {
 
 // Resolver resolves the layer location and provieds the handler of that layer.
 type Resolver struct {
+<<<<<<< HEAD
 	rootDir                 string
 	resolver                *remote.Resolver
 	prefetchTimeout         time.Duration
@@ -129,6 +130,24 @@ type Resolver struct {
 
 // NewResolver returns a new layer resolver.
 func NewResolver(root string, backgroundTaskManager *task.BackgroundTaskManager, cfg config.Config, resolveHandlers map[string]remote.Handler, metadataStore metadata.Store, overlayOpaqueType OverlayOpaqueType, additionalDecompressors func(context.Context, source.RegistryHosts, reference.Spec, ocispec.Descriptor) []metadata.Decompressor) (*Resolver, error) {
+=======
+	rootDir               string
+	resolver              *remote.Resolver
+	prefetchTimeout       time.Duration
+	layerCache            *cacheutil.TTLCache
+	layerCacheMu          sync.Mutex
+	blobCache             *cacheutil.TTLCache
+	blobCacheMu           sync.Mutex
+	backgroundTaskManager *task.BackgroundTaskManager
+	resolveLock           *namedmutex.NamedMutex
+	config                config.Config
+	metadataStore         metadata.Store
+	overlayOpaqueType     OverlayOpaqueType
+}
+
+// NewResolver returns a new layer resolver.
+func NewResolver(root string, backgroundTaskManager *task.BackgroundTaskManager, cfg config.Config, resolveHandlers map[string]remote.Handler, metadataStore metadata.Store, overlayOpaqueType OverlayOpaqueType) (*Resolver, error) {
+>>>>>>> origin/v0.10
 	resolveResultEntryTTL := time.Duration(cfg.ResolveResultEntryTTLSec) * time.Second
 	if resolveResultEntryTTL == 0 {
 		resolveResultEntryTTL = defaultResolveResultEntryTTLSec * time.Second
@@ -166,6 +185,7 @@ func NewResolver(root string, backgroundTaskManager *task.BackgroundTaskManager,
 	}
 
 	return &Resolver{
+<<<<<<< HEAD
 		rootDir:                 root,
 		resolver:                remote.NewResolver(cfg.BlobConfig, resolveHandlers),
 		layerCache:              layerCache,
@@ -177,6 +197,18 @@ func NewResolver(root string, backgroundTaskManager *task.BackgroundTaskManager,
 		metadataStore:           metadataStore,
 		overlayOpaqueType:       overlayOpaqueType,
 		additionalDecompressors: additionalDecompressors,
+=======
+		rootDir:               root,
+		resolver:              remote.NewResolver(cfg.BlobConfig, resolveHandlers),
+		layerCache:            layerCache,
+		blobCache:             blobCache,
+		prefetchTimeout:       prefetchTimeout,
+		backgroundTaskManager: backgroundTaskManager,
+		config:                cfg,
+		resolveLock:           new(namedmutex.NamedMutex),
+		metadataStore:         metadataStore,
+		overlayOpaqueType:     overlayOpaqueType,
+>>>>>>> origin/v0.10
 	}, nil
 }
 

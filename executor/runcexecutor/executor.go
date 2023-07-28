@@ -47,9 +47,18 @@ type Opt struct {
 	ProcessMode     oci.ProcessMode
 	IdentityMapping *idtools.IdentityMapping
 	// runc run --no-pivot (unrecommended)
+<<<<<<< HEAD
 	NoPivot     bool
 	DNS         *oci.DNSConfig
 	OOMScoreAdj *int
+=======
+	NoPivot         bool
+	DNS             *oci.DNSConfig
+	OOMScoreAdj     *int
+	ApparmorProfile string
+	SELinux         bool
+	TracingSocket   string
+>>>>>>> origin/v0.10
 }
 
 var defaultCommandCandidates = []string{"buildkit-runc", "runc"}
@@ -65,6 +74,14 @@ type runcExecutor struct {
 	noPivot          bool
 	dns              *oci.DNSConfig
 	oomScoreAdj      *int
+<<<<<<< HEAD
+=======
+	running          map[string]chan error
+	mu               sync.Mutex
+	apparmorProfile  string
+	selinux          bool
+	tracingSocket    string
+>>>>>>> origin/v0.10
 }
 
 func New(opt Opt, networkProviders map[pb.NetMode]network.Provider) (executor.Executor, error) {
@@ -126,6 +143,13 @@ func New(opt Opt, networkProviders map[pb.NetMode]network.Provider) (executor.Ex
 		noPivot:          opt.NoPivot,
 		dns:              opt.DNS,
 		oomScoreAdj:      opt.OOMScoreAdj,
+<<<<<<< HEAD
+=======
+		running:          make(map[string]chan error),
+		apparmorProfile:  opt.ApparmorProfile,
+		selinux:          opt.SELinux,
+		tracingSocket:    opt.TracingSocket,
+>>>>>>> origin/v0.10
 	}
 	return w, nil
 }
@@ -250,6 +274,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 		}
 	}
 
+<<<<<<< HEAD
 	if w.cgroupParent != "" {
 		var cgroupsPath string
 		lastSeparator := w.cgroupParent[len(w.cgroupParent)-1:]
@@ -261,6 +286,9 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 		opts = append(opts, containerdoci.WithCgroup(cgroupsPath))
 	}
 	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, namespace, w.processMode, w.idmap, opts...)
+=======
+	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, namespace, w.cgroupParent, w.processMode, w.idmap, w.apparmorProfile, w.selinux, w.tracingSocket, opts...)
+>>>>>>> origin/v0.10
 	if err != nil {
 		return nil, err
 	}

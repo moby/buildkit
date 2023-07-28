@@ -132,6 +132,13 @@ func load(configDir string) (*configfile.ConfigFile, bool, error) {
 	filename = filepath.Join(getHomeDir(), oldConfigfile)
 	if _, err := os.Stat(filename); err == nil {
 		printLegacyFileWarning = true
+<<<<<<< HEAD
+=======
+		defer file.Close()
+		if err := configFile.LegacyLoadFromReader(file); err != nil {
+			return configFile, printLegacyFileWarning, errors.Wrap(err, filename)
+		}
+>>>>>>> origin/v0.10
 	}
 	return configFile, printLegacyFileWarning, nil
 }

@@ -77,12 +77,20 @@ var fusermountBin = []string{"fusermount", "fusermount3"}
 type Option func(*options)
 
 type options struct {
+<<<<<<< HEAD
 	getSources              source.GetSources
 	resolveHandlers         map[string]remote.Handler
 	metadataStore           metadata.Store
 	metricsLogLevel         *logrus.Level
 	overlayOpaqueType       layer.OverlayOpaqueType
 	additionalDecompressors func(context.Context, source.RegistryHosts, reference.Spec, ocispec.Descriptor) []metadata.Decompressor
+=======
+	getSources        source.GetSources
+	resolveHandlers   map[string]remote.Handler
+	metadataStore     metadata.Store
+	metricsLogLevel   *logrus.Level
+	overlayOpaqueType layer.OverlayOpaqueType
+>>>>>>> origin/v0.10
 }
 
 func WithGetSources(s source.GetSources) Option {
@@ -118,12 +126,15 @@ func WithOverlayOpaqueType(overlayOpaqueType layer.OverlayOpaqueType) Option {
 	}
 }
 
+<<<<<<< HEAD
 func WithAdditionalDecompressors(d func(context.Context, source.RegistryHosts, reference.Spec, ocispec.Descriptor) []metadata.Decompressor) Option {
 	return func(opts *options) {
 		opts.additionalDecompressors = d
 	}
 }
 
+=======
+>>>>>>> origin/v0.10
 func NewFilesystem(root string, cfg config.Config, opts ...Option) (_ snapshot.FileSystem, err error) {
 	var fsOpts options
 	for _, o := range opts {
@@ -156,7 +167,11 @@ func NewFilesystem(root string, cfg config.Config, opts ...Option) (_ snapshot.F
 		})
 	}
 	tm := task.NewBackgroundTaskManager(maxConcurrency, 5*time.Second)
+<<<<<<< HEAD
 	r, err := layer.NewResolver(root, tm, cfg, fsOpts.resolveHandlers, metadataStore, fsOpts.overlayOpaqueType, fsOpts.additionalDecompressors)
+=======
+	r, err := layer.NewResolver(root, tm, cfg, fsOpts.resolveHandlers, metadataStore, fsOpts.overlayOpaqueType)
+>>>>>>> origin/v0.10
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup resolver: %w", err)
 	}

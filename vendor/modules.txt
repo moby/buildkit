@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # github.com/AdaLogics/go-fuzz-headers v0.0.0-20230106234847-43070de90fa1
 ## explicit; go 1.18
 github.com/AdaLogics/go-fuzz-headers
@@ -58,6 +59,9 @@ github.com/AzureAD/microsoft-authentication-library-for-go/apps/internal/shared
 github.com/AzureAD/microsoft-authentication-library-for-go/apps/internal/version
 github.com/AzureAD/microsoft-authentication-library-for-go/apps/public
 # github.com/Masterminds/semver/v3 v3.1.0
+=======
+# github.com/Microsoft/go-winio v0.5.1
+>>>>>>> origin/v0.10
 ## explicit; go 1.12
 github.com/Masterminds/semver/v3
 # github.com/Microsoft/go-winio v0.6.1
@@ -244,8 +248,13 @@ github.com/containerd/cgroups/stats/v1
 # github.com/containerd/console v1.0.3
 ## explicit; go 1.13
 github.com/containerd/console
+<<<<<<< HEAD
 # github.com/containerd/containerd v1.7.2
 ## explicit; go 1.19
+=======
+# github.com/containerd/containerd v1.6.3-0.20220401172941-5ff8fce1fcc6
+## explicit; go 1.17
+>>>>>>> origin/v0.10
 github.com/containerd/containerd
 github.com/containerd/containerd/api/events
 github.com/containerd/containerd/api/runtime/sandbox/v1
@@ -339,6 +348,7 @@ github.com/containerd/containerd/snapshots/overlay
 github.com/containerd/containerd/snapshots/overlay/overlayutils
 github.com/containerd/containerd/snapshots/proxy
 github.com/containerd/containerd/snapshots/storage
+<<<<<<< HEAD
 github.com/containerd/containerd/gc
 github.com/containerd/containerd/identifiers
 github.com/containerd/containerd/metadata/boltutil
@@ -346,6 +356,15 @@ github.com/containerd/containerd/api/types/task
 github.com/containerd/containerd/events/exchange
 # github.com/containerd/continuity v0.0.0-20190426062206-aaeac12a7ffc
 github.com/containerd/continuity/sysx
+=======
+github.com/containerd/containerd/sys
+github.com/containerd/containerd/version
+# github.com/containerd/continuity v0.2.3-0.20220330195504-d132b287edc8
+## explicit; go 1.13
+github.com/containerd/continuity
+github.com/containerd/continuity/devices
+github.com/containerd/continuity/driver
+>>>>>>> origin/v0.10
 github.com/containerd/continuity/fs
 github.com/containerd/continuity/fs/fstest
 github.com/containerd/continuity/pathdriver
@@ -357,11 +376,17 @@ github.com/containerd/fifo
 # github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
 ## explicit; go 1.16
 github.com/containerd/fuse-overlayfs-snapshotter
+<<<<<<< HEAD
 # github.com/containerd/go-cni v1.1.9
 ## explicit; go 1.19
+=======
+# github.com/containerd/go-cni v1.1.4
+## explicit; go 1.13
+>>>>>>> origin/v0.10
 github.com/containerd/go-cni
 # github.com/containerd/go-runc v0.0.0-20180907222934-5a6d9f37cfa3
 github.com/containerd/go-runc
+<<<<<<< HEAD
 # github.com/containerd/nydus-snapshotter v0.8.2
 ## explicit; go 1.19
 github.com/containerd/nydus-snapshotter/pkg/converter
@@ -370,6 +395,10 @@ github.com/containerd/nydus-snapshotter/pkg/errdefs
 github.com/containerd/nydus-snapshotter/pkg/label
 # github.com/containerd/stargz-snapshotter v0.14.3
 ## explicit; go 1.19
+=======
+# github.com/containerd/stargz-snapshotter v0.11.3
+## explicit; go 1.16
+>>>>>>> origin/v0.10
 github.com/containerd/stargz-snapshotter/cache
 github.com/containerd/stargz-snapshotter/fs
 github.com/containerd/stargz-snapshotter/fs/config
@@ -386,8 +415,13 @@ github.com/containerd/stargz-snapshotter/task
 github.com/containerd/stargz-snapshotter/util/cacheutil
 github.com/containerd/stargz-snapshotter/util/namedmutex
 github.com/containerd/stargz-snapshotter/util/testutil
+<<<<<<< HEAD
 # github.com/containerd/stargz-snapshotter/estargz v0.14.3
 ## explicit; go 1.19
+=======
+# github.com/containerd/stargz-snapshotter/estargz v0.11.3
+## explicit; go 1.16
+>>>>>>> origin/v0.10
 github.com/containerd/stargz-snapshotter/estargz
 github.com/containerd/stargz-snapshotter/estargz/errorutil
 github.com/containerd/stargz-snapshotter/estargz/externaltoc
@@ -426,18 +460,30 @@ github.com/davecgh/go-spew/spew
 # github.com/dimchansky/utfbom v1.1.1
 ## explicit
 github.com/dimchansky/utfbom
+<<<<<<< HEAD
 # github.com/docker/cli v24.0.2+incompatible
+=======
+# github.com/docker/cli v20.10.13+incompatible
+>>>>>>> origin/v0.10
 ## explicit
 github.com/docker/cli/cli/config
 github.com/docker/cli/cli/config/configfile
 github.com/docker/cli/cli/config/credentials
 github.com/docker/cli/cli/config/types
 github.com/docker/cli/cli/connhelper/commandconn
+<<<<<<< HEAD
 # github.com/docker/distribution v2.8.2+incompatible
 ## explicit
 github.com/docker/distribution/digestset
 github.com/docker/distribution/reference
 # github.com/docker/docker v24.0.0-rc.2.0.20230706181717-98d3da79ef9c+incompatible
+=======
+# github.com/docker/distribution v2.8.1+incompatible
+## explicit
+github.com/docker/distribution/digestset
+github.com/docker/distribution/reference
+# github.com/docker/docker v20.10.7+incompatible => github.com/docker/docker v20.10.3-0.20220414164044-61404de7df1a+incompatible
+>>>>>>> origin/v0.10
 ## explicit
 github.com/docker/docker/api
 github.com/docker/docker/api/types
@@ -460,6 +506,10 @@ github.com/docker/docker/errdefs
 github.com/docker/docker/internal/mounttree
 github.com/docker/docker/internal/unshare
 github.com/docker/docker/libnetwork/resolvconf
+<<<<<<< HEAD
+=======
+github.com/docker/docker/opts
+>>>>>>> origin/v0.10
 github.com/docker/docker/pkg/archive
 github.com/docker/docker/pkg/chrootarchive
 github.com/docker/docker/pkg/homedir
@@ -470,8 +520,13 @@ github.com/docker/docker/pkg/pools
 github.com/docker/docker/pkg/reexec
 github.com/docker/docker/pkg/system
 github.com/docker/docker/profiles/seccomp
+<<<<<<< HEAD
 # github.com/docker/docker-credential-helpers v0.7.0
 ## explicit; go 1.18
+=======
+# github.com/docker/docker-credential-helpers v0.6.4
+## explicit; go 1.13
+>>>>>>> origin/v0.10
 github.com/docker/docker-credential-helpers/client
 github.com/docker/docker-credential-helpers/credentials
 # github.com/docker/go-connections v0.4.0
@@ -598,6 +653,7 @@ github.com/hashicorp/go-retryablehttp
 # github.com/hashicorp/golang-lru v0.5.4
 ## explicit; go 1.12
 github.com/hashicorp/golang-lru/simplelru
+<<<<<<< HEAD
 # github.com/in-toto/in-toto-golang v0.5.0
 ## explicit; go 1.17
 github.com/in-toto/in-toto-golang/in_toto
@@ -609,6 +665,10 @@ github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2
 github.com/jmespath/go-jmespath
 # github.com/klauspost/compress v1.16.3
 ## explicit; go 1.18
+=======
+# github.com/klauspost/compress v1.15.1
+## explicit; go 1.15
+>>>>>>> origin/v0.10
 github.com/klauspost/compress
 github.com/klauspost/compress/fse
 github.com/klauspost/compress/huff0
@@ -644,12 +704,18 @@ github.com/moby/sys/sequential
 # github.com/moby/sys/signal v0.7.0
 ## explicit; go 1.16
 github.com/moby/sys/signal
+<<<<<<< HEAD
+=======
+# github.com/moby/term v0.0.0-20210619224110-3f7ff695adc6
+## explicit; go 1.13
+>>>>>>> origin/v0.10
 # github.com/morikuni/aec v1.0.0
 ## explicit
 github.com/morikuni/aec
 # github.com/opencontainers/go-digest v1.0.0
 ## explicit; go 1.13
 github.com/opencontainers/go-digest
+<<<<<<< HEAD
 # github.com/opencontainers/image-spec v1.1.0-rc3
 ## explicit; go 1.18
 github.com/opencontainers/image-spec/identity
@@ -657,6 +723,15 @@ github.com/opencontainers/image-spec/specs-go
 github.com/opencontainers/image-spec/specs-go/v1
 # github.com/opencontainers/runc v1.1.7
 ## explicit; go 1.17
+=======
+# github.com/opencontainers/image-spec v1.0.3-0.20211202183452-c5a74bcca799
+## explicit
+github.com/opencontainers/image-spec/identity
+github.com/opencontainers/image-spec/specs-go
+github.com/opencontainers/image-spec/specs-go/v1
+# github.com/opencontainers/runc v1.1.1
+## explicit; go 1.16
+>>>>>>> origin/v0.10
 github.com/opencontainers/runc/libcontainer/user
 # github.com/opencontainers/runtime-spec v1.1.0-rc.2
 ## explicit
@@ -723,10 +798,15 @@ github.com/spdx/tools-golang/spdx/v2/v2_3
 ## explicit; go 1.20
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
+<<<<<<< HEAD
 github.com/stretchr/testify/assert
 # github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2
 github.com/syndtr/gocapability/capability
 # github.com/tonistiigi/fsutil v0.0.0-20190327153851-3bbb99cdbd76
+=======
+# github.com/tonistiigi/fsutil v0.0.0-20220315205639-9ed612626da3
+## explicit; go 1.13
+>>>>>>> origin/v0.10
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy
 github.com/tonistiigi/fsutil/types
@@ -906,8 +986,13 @@ google.golang.org/genproto/googleapis/rpc/code
 google.golang.org/genproto/googleapis/rpc/errdetails
 google.golang.org/genproto/googleapis/rpc/status
 google.golang.org/genproto/protobuf/field_mask
+<<<<<<< HEAD
 # google.golang.org/grpc v1.53.0
 ## explicit; go 1.17
+=======
+# google.golang.org/grpc v1.45.0
+## explicit; go 1.14
+>>>>>>> origin/v0.10
 google.golang.org/grpc
 google.golang.org/grpc/attributes
 google.golang.org/grpc/backoff
@@ -1005,6 +1090,7 @@ google.golang.org/protobuf/types/known/fieldmaskpb
 google.golang.org/protobuf/types/known/structpb
 google.golang.org/protobuf/types/known/timestamppb
 google.golang.org/protobuf/types/known/wrapperspb
+<<<<<<< HEAD
 google.golang.org/protobuf/types/pluginpb
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
@@ -1015,3 +1101,9 @@ kernel.org/pub/linux/libs/security/libcap/cap
 # kernel.org/pub/linux/libs/security/libcap/psx v1.2.67
 ## explicit; go 1.11
 kernel.org/pub/linux/libs/security/libcap/psx
+=======
+# gopkg.in/yaml.v3 v3.0.0
+## explicit
+gopkg.in/yaml.v3
+# github.com/docker/docker => github.com/docker/docker v20.10.3-0.20220414164044-61404de7df1a+incompatible
+>>>>>>> origin/v0.10

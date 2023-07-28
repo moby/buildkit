@@ -470,7 +470,11 @@ func makeNodeReader(t *testing.T, contents []byte, chunkSize int, factory metada
 	if err != nil {
 		t.Fatalf("failed to create reader: %v", err)
 	}
+<<<<<<< HEAD
 	rootNode := getRootNode(t, r, OverlayOpaqueAll, tocDgst, cache.NewMemoryCache())
+=======
+	rootNode := getRootNode(t, r, OverlayOpaqueAll)
+>>>>>>> origin/v0.10
 	var eo fuse.EntryOut
 	inode, errno := rootNode.Lookup(context.Background(), testName, &eo)
 	if errno != 0 {
@@ -485,6 +489,7 @@ func makeNodeReader(t *testing.T, contents []byte, chunkSize int, factory metada
 	return f.(*file), r.Close
 }
 
+<<<<<<< HEAD
 func testNodes(t *testing.T, factory metadata.Store) {
 	for _, o := range []OverlayOpaqueType{OverlayOpaqueAll, OverlayOpaqueTrusted, OverlayOpaqueUser} {
 		testNodesWithOpaque(t, factory, o)
@@ -497,6 +502,19 @@ func testNodesWithOpaque(t *testing.T, factory metadata.Store, opaque OverlayOpa
 		return func(t *testing.T, root *node, cc cache.BlobCache, cr *calledReaderAt) {
 			for _, k := range opaqueXattrs[opaque] {
 				hasNodeXattrs(entry, k, opaqueXattrValue)(t, root, cc, cr)
+=======
+func testExistence(t *testing.T, factory metadata.Store) {
+	for _, o := range []OverlayOpaqueType{OverlayOpaqueAll, OverlayOpaqueTrusted, OverlayOpaqueUser} {
+		testExistenceWithOpaque(t, factory, o)
+	}
+}
+
+func testExistenceWithOpaque(t *testing.T, factory metadata.Store, opaque OverlayOpaqueType) {
+	hasOpaque := func(entry string) check {
+		return func(t *testing.T, root *node) {
+			for _, k := range opaqueXattrs[opaque] {
+				hasNodeXattrs(entry, k, opaqueXattrValue)(t, root)
+>>>>>>> origin/v0.10
 			}
 		}
 	}
@@ -715,6 +733,7 @@ func testNodesWithOpaque(t *testing.T, factory metadata.Store, opaque OverlayOpa
 					t.Fatalf("failed to build sample eStargz: %v", err)
 				}
 
+<<<<<<< HEAD
 				testR := &calledReaderAt{sgz, nil}
 				r, err := factory(io.NewSectionReader(testR, 0, sgz.Size()), metadata.WithDecompressors(cl))
 				if err != nil {
@@ -741,6 +760,23 @@ func getRootNode(t *testing.T, r metadata.Reader, opaque OverlayOpaqueType, tocD
 		t.Fatalf("failed to verify reader: %v", err)
 	}
 	rootNode, err := newNode(testStateLayerDigest, rr, &testBlobState{10, 5}, 100, opaque)
+=======
+			r, err := factory(sgz)
+			if err != nil {
+				t.Fatalf("failed to create reader: %v", err)
+			}
+			defer r.Close()
+			rootNode := getRootNode(t, r, opaque)
+			for _, want := range tt.want {
+				want(t, rootNode)
+			}
+		})
+	}
+}
+
+func getRootNode(t *testing.T, r metadata.Reader, opaque OverlayOpaqueType) *node {
+	rootNode, err := newNode(testStateLayerDigest, &testReader{r}, &testBlobState{10, 5}, 100, opaque)
+>>>>>>> origin/v0.10
 	if err != nil {
 		t.Fatalf("failed to get root node: %v", err)
 	}

@@ -349,6 +349,7 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 			}
 			return dst, ErrWindowSizeExceeded
 		}
+<<<<<<< HEAD
 		if frame.FrameContentSize != fcsUnknown {
 			if frame.FrameContentSize > d.o.maxDecodedSize-uint64(len(dst)-initialSize) {
 				if debugDecoder {
@@ -362,6 +363,14 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 				}
 				return dst, ErrDecoderSizeExceeded
 			}
+=======
+
+		if frame.FrameContentSize != fcsUnknown && frame.FrameContentSize > d.o.maxDecodedSize-uint64(len(dst)) {
+			return dst, ErrDecoderSizeExceeded
+		}
+		if frame.FrameContentSize < 1<<30 {
+			// Never preallocate more than 1 GB up front.
+>>>>>>> origin/v0.10
 			if cap(dst)-len(dst) < int(frame.FrameContentSize) {
 				dst2 := make([]byte, len(dst), len(dst)+int(frame.FrameContentSize)+compressedBlockOverAlloc)
 				copy(dst2, dst)

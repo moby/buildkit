@@ -228,10 +228,30 @@ func setPermissions(p string, mode os.FileMode, owner Identity, stat os.FileInfo
 // LoadIdentityMapping takes a requested username and
 // using the data from /etc/sub{uid,gid} ranges, creates the
 // proper uid and gid remapping ranges for that user/group pair
+<<<<<<< HEAD
 func LoadIdentityMapping(name string) (IdentityMapping, error) {
 	usr, err := LookupUser(name)
 	if err != nil {
 		return IdentityMapping{}, fmt.Errorf("could not get user for username %s: %v", name, err)
+=======
+//
+// Deprecated: Use LoadIdentityMapping.
+func NewIdentityMapping(name string) (*IdentityMapping, error) {
+	m, err := LoadIdentityMapping(name)
+	if err != nil {
+		return nil, err
+	}
+	return &m, err
+}
+
+// LoadIdentityMapping takes a requested username and
+// using the data from /etc/sub{uid,gid} ranges, creates the
+// proper uid and gid remapping ranges for that user/group pair
+func LoadIdentityMapping(name string) (IdentityMapping, error) {
+	usr, err := LookupUser(name)
+	if err != nil {
+		return IdentityMapping{}, fmt.Errorf("Could not get user for username %s: %v", name, err)
+>>>>>>> origin/v0.10
 	}
 
 	subuidRanges, err := lookupSubUIDRanges(usr)

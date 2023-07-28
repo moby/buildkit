@@ -140,10 +140,37 @@ func (o *snapshotter) Mounts(ctx context.Context, key string) (_ []mount.Mount, 
 }
 
 func (o *snapshotter) Commit(ctx context.Context, name, key string, opts ...snapshots.Opt) error {
+<<<<<<< HEAD
 	return o.ms.WithTransaction(ctx, true, func(ctx context.Context) error {
 		id, _, _, err := storage.GetInfo(ctx, key)
 		if err != nil {
 			return err
+=======
+	ctx, t, err := o.ms.TransactionContext(ctx, true)
+	if err != nil {
+		return err
+	}
+
+	id, _, _, err := storage.GetInfo(ctx, key)
+	if err != nil {
+		if rerr := t.Rollback(); rerr != nil {
+			log.G(ctx).WithError(rerr).Warn("failed to rollback transaction")
+		}
+		return err
+	}
+
+	usage, err := fs.DiskUsage(ctx, o.getSnapshotDir(id))
+	if err != nil {
+		if rerr := t.Rollback(); rerr != nil {
+			log.G(ctx).WithError(rerr).Warn("failed to rollback transaction")
+		}
+		return err
+	}
+
+	if _, err := storage.CommitActive(ctx, key, name, snapshots.Usage(usage), opts...); err != nil {
+		if rerr := t.Rollback(); rerr != nil {
+			log.G(ctx).WithError(rerr).Warn("failed to rollback transaction")
+>>>>>>> origin/v0.10
 		}
 
 		usage, err := fs.DiskUsage(ctx, o.getSnapshotDir(id))
@@ -276,6 +303,50 @@ func (o *snapshotter) createSnapshot(ctx context.Context, kind snapshots.Kind, k
 		return nil, err
 	}
 
+<<<<<<< HEAD
+=======
+	s, err := storage.CreateSnapshot(ctx, kind, key, parent, opts...)
+	if err != nil {
+		if rerr := t.Rollback(); rerr != nil {
+			log.G(ctx).WithError(rerr).Warn("failed to rollback transaction")
+		}
+		return nil, fmt.Errorf("failed to create snapshot: %w", err)
+	}
+
+	if td != "" {
+		if len(s.ParentIDs) > 0 {
+			parent := o.getSnapshotDir(s.ParentIDs[0])
+			xattrErrorHandler := func(dst, src, xattrKey string, copyErr error) error {
+				// security.* xattr cannot be copied in most cases (moby/buildkit#1189)
+				log.G(ctx).WithError(copyErr).Debugf("failed to copy xattr %q", xattrKey)
+				return nil
+			}
+			copyDirOpts := []fs.CopyDirOpt{
+				fs.WithXAttrErrorHandler(xattrErrorHandler),
+			}
+			if err := fs.CopyDir(td, parent, copyDirOpts...); err != nil {
+				if rerr := t.Rollback(); rerr != nil {
+					log.G(ctx).WithError(rerr).Warn("failed to rollback transaction")
+				}
+				return nil, fmt.Errorf("copying of parent failed: %w", err)
+			}
+		}
+
+		path = o.getSnapshotDir(s.ID)
+		if err := os.Rename(td, path); err != nil {
+			if rerr := t.Rollback(); rerr != nil {
+				log.G(ctx).WithError(rerr).Warn("failed to rollback transaction")
+			}
+			return nil, fmt.Errorf("failed to rename: %w", err)
+		}
+		td = ""
+	}
+
+	if err := t.Commit(); err != nil {
+		return nil, fmt.Errorf("commit failed: %w", err)
+	}
+
+>>>>>>> origin/v0.10
 	return o.mounts(s), nil
 }
 

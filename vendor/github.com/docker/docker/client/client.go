@@ -119,6 +119,7 @@ func CheckRedirect(req *http.Request, via []*http.Request) error {
 // NewClientWithOpts initializes a new API client with a default HTTPClient, and
 // default API host and version. It also initializes the custom HTTP headers to
 // add to each request.
+<<<<<<< HEAD
 //
 // It takes an optional list of Opt functional arguments, which are applied in
 // the order they're provided, which allows modifying the defaults when creating
@@ -130,6 +131,21 @@ func CheckRedirect(req *http.Request, via []*http.Request) error {
 //		client.FromEnv,
 //		client.WithAPIVersionNegotiation(),
 //	)
+=======
+//
+// It takes an optional list of Opt functional arguments, which are applied in
+// the order they're provided, which allows modifying the defaults when creating
+// the client. For example, the following initializes a client that configures
+// itself with values from environment variables (client.FromEnv), and has
+// automatic API version negotiation enabled (client.WithAPIVersionNegotiation()).
+//
+//
+//	cli, err := client.NewClientWithOpts(
+//		client.FromEnv,
+//		client.WithAPIVersionNegotiation(),
+//	)
+//
+>>>>>>> origin/v0.10
 func NewClientWithOpts(ops ...Opt) (*Client, error) {
 	hostURL, err := ParseHostURL(DefaultDockerHost)
 	if err != nil {
@@ -171,12 +187,22 @@ func NewClientWithOpts(ops ...Opt) (*Client, error) {
 	return c, nil
 }
 
+<<<<<<< HEAD
 func defaultHTTPClient(hostURL *url.URL) (*http.Client, error) {
 	transport := &http.Transport{}
 	err := sockets.ConfigureTransport(transport, hostURL.Scheme, hostURL.Host)
 	if err != nil {
 		return nil, err
 	}
+=======
+func defaultHTTPClient(host string) (*http.Client, error) {
+	hostURL, err := ParseHostURL(host)
+	if err != nil {
+		return nil, err
+	}
+	transport := &http.Transport{}
+	_ = sockets.ConfigureTransport(transport, hostURL.Scheme, hostURL.Host)
+>>>>>>> origin/v0.10
 	return &http.Client{
 		Transport:     transport,
 		CheckRedirect: CheckRedirect,
@@ -292,8 +318,13 @@ func (cli *Client) HTTPClient() *http.Client {
 // ParseHostURL parses a url string, validates the string is a host url, and
 // returns the parsed URL
 func ParseHostURL(host string) (*url.URL, error) {
+<<<<<<< HEAD
 	proto, addr, ok := strings.Cut(host, "://")
 	if !ok || addr == "" {
+=======
+	protoAddrParts := strings.SplitN(host, "://", 2)
+	if len(protoAddrParts) == 1 {
+>>>>>>> origin/v0.10
 		return nil, errors.Errorf("unable to parse docker host `%s`", host)
 	}
 

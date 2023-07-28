@@ -23,6 +23,7 @@ import (
 const buildkitdConfigFile = "buildkitd.toml"
 
 type backend struct {
+<<<<<<< HEAD
 	address             string
 	dockerAddress       string
 	containerdAddress   string
@@ -30,6 +31,13 @@ type backend struct {
 	snapshotter         string
 	unsupportedFeatures []string
 	isDockerd           bool
+=======
+	address           string
+	containerdAddress string
+	rootless          bool
+	snapshotter       string
+	isDockerd         bool
+>>>>>>> origin/v0.10
 }
 
 func (b backend) Address() string {

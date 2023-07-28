@@ -25,7 +25,10 @@ package channelz
 
 import (
 	"context"
+<<<<<<< HEAD
 	"errors"
+=======
+>>>>>>> origin/v0.10
 	"fmt"
 	"sort"
 	"sync"

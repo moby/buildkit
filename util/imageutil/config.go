@@ -15,11 +15,14 @@ import (
 	"github.com/containerd/containerd/reference"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
+<<<<<<< HEAD
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/moby/buildkit/solver/pb"
 	srctypes "github.com/moby/buildkit/source/types"
 	"github.com/moby/buildkit/sourcepolicy"
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
+=======
+>>>>>>> origin/v0.10
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/resolver/limited"
@@ -159,7 +162,11 @@ func Config(ctx context.Context, str string, resolver remotes.Resolver, cache Co
 
 	dslHandler, err := docker.AppendDistributionSourceLabel(cache, ref.String())
 	if err != nil {
+<<<<<<< HEAD
 		return "", "", nil, err
+=======
+		return "", nil, err
+>>>>>>> origin/v0.10
 	}
 
 	handlers := []images.Handler{

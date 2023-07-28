@@ -10,7 +10,10 @@ import (
 	"runtime"
 	"strings"
 
+<<<<<<< HEAD
 	"github.com/containerd/containerd/log"
+=======
+>>>>>>> origin/v0.10
 	"github.com/docker/docker/pkg/pools"
 	"github.com/docker/docker/pkg/system"
 )

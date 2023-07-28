@@ -158,6 +158,7 @@ func copyDirectory(dst, src string, inodes map[uint64]string, o *copyDirOpts) er
 			if err := os.Symlink(link, target); err != nil {
 				return fmt.Errorf("failed to create symlink: %s: %w", target, err)
 			}
+<<<<<<< HEAD
 		case (fileInfo.Mode() & os.ModeDevice) == os.ModeDevice,
 			(fileInfo.Mode() & os.ModeNamedPipe) == os.ModeNamedPipe,
 			(fileInfo.Mode() & os.ModeSocket) == os.ModeSocket:
@@ -166,6 +167,16 @@ func copyDirectory(dst, src string, inodes map[uint64]string, o *copyDirOpts) er
 			}
 		default:
 			logrus.Warnf("unsupported mode: %s: %s", source, fileInfo.Mode())
+=======
+		case (fi.Mode() & os.ModeDevice) == os.ModeDevice,
+			(fi.Mode() & os.ModeNamedPipe) == os.ModeNamedPipe,
+			(fi.Mode() & os.ModeSocket) == os.ModeSocket:
+			if err := copyIrregular(target, fi); err != nil {
+				return fmt.Errorf("failed to create irregular file: %w", err)
+			}
+		default:
+			logrus.Warnf("unsupported mode: %s: %s", source, fi.Mode())
+>>>>>>> origin/v0.10
 			continue
 		}
 

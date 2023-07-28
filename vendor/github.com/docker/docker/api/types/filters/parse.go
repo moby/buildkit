@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/docker/docker/api/types/versions"
+	"github.com/pkg/errors"
 )
 
 // Args stores a mapping of keys to a set of multiple values.
@@ -98,7 +99,11 @@ func FromJSON(p string) (Args, error) {
 	// Fallback to parsing arguments in the legacy slice format
 	deprecated := map[string][]string{}
 	if legacyErr := json.Unmarshal(raw, &deprecated); legacyErr != nil {
+<<<<<<< HEAD
 		return args, invalidFilter{}
+=======
+		return args, invalidFilter{errors.Wrap(err, "invalid filter")}
+>>>>>>> origin/v0.10
 	}
 
 	args.fields = deprecatedArgs(deprecated)
@@ -277,12 +282,27 @@ func (args Args) Contains(field string) bool {
 	return ok
 }
 
+<<<<<<< HEAD
+=======
+type invalidFilter struct{ error }
+
+func (e invalidFilter) Error() string {
+	return e.error.Error()
+}
+
+func (invalidFilter) InvalidParameter() {}
+
+>>>>>>> origin/v0.10
 // Validate compared the set of accepted keys against the keys in the mapping.
 // An error is returned if any mapping keys are not in the accepted set.
 func (args Args) Validate(accepted map[string]bool) error {
 	for name := range args.fields {
 		if !accepted[name] {
+<<<<<<< HEAD
 			return invalidFilter{name, nil}
+=======
+			return invalidFilter{errors.New("invalid filter '" + name + "'")}
+>>>>>>> origin/v0.10
 		}
 	}
 	return nil

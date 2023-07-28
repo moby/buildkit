@@ -36,6 +36,11 @@ func (m NeedsRemoteProviderError) Error() string {
 	return fmt.Sprintf("missing descriptor handlers for lazy blobs %+v", []digest.Digest(m))
 }
 
+<<<<<<< HEAD
+=======
+type ProgressKey struct{}
+
+>>>>>>> origin/v0.10
 type Unlazy session.Group
 
 func unlazySessionOf(opts ...RefOption) session.Group {

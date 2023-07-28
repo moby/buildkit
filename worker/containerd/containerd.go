@@ -27,16 +27,27 @@ import (
 )
 
 // NewWorkerOpt creates a WorkerOpt.
+<<<<<<< HEAD
 func NewWorkerOpt(root string, address, snapshotterName, ns string, labels map[string]string, dns *oci.DNSConfig, nopt netproviders.Opt, opts ...containerd.ClientOpt) (base.WorkerOpt, error) {
+=======
+func NewWorkerOpt(root string, address, snapshotterName, ns string, rootless bool, labels map[string]string, dns *oci.DNSConfig, nopt netproviders.Opt, apparmorProfile string, selinux bool, parallelismSem *semaphore.Weighted, traceSocket string, opts ...containerd.ClientOpt) (base.WorkerOpt, error) {
+>>>>>>> origin/v0.10
 	opts = append(opts, containerd.WithDefaultNamespace(ns))
 	client, err := containerd.New(address, opts...)
 	if err != nil {
 		return base.WorkerOpt{}, errors.Wrapf(err, "failed to connect client to %q . make sure containerd is running", address)
 	}
+<<<<<<< HEAD
 	return newContainerd(root, client, snapshotterName, ns, labels, dns, nopt)
 }
 
 func newContainerd(root string, client *containerd.Client, snapshotterName, ns string, labels map[string]string, dns *oci.DNSConfig, nopt netproviders.Opt) (base.WorkerOpt, error) {
+=======
+	return newContainerd(root, client, snapshotterName, ns, rootless, labels, dns, nopt, apparmorProfile, selinux, parallelismSem, traceSocket)
+}
+
+func newContainerd(root string, client *containerd.Client, snapshotterName, ns string, rootless bool, labels map[string]string, dns *oci.DNSConfig, nopt netproviders.Opt, apparmorProfile string, selinux bool, parallelismSem *semaphore.Weighted, traceSocket string) (base.WorkerOpt, error) {
+>>>>>>> origin/v0.10
 	if strings.Contains(snapshotterName, "/") {
 		return base.WorkerOpt{}, errors.Errorf("bad snapshotter name: %q", snapshotterName)
 	}
@@ -133,6 +144,7 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 	}
 
 	opt := base.WorkerOpt{
+<<<<<<< HEAD
 		ID:            id,
 		Labels:        xlabels,
 		MetadataStore: md,
@@ -144,6 +156,22 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		ImageStore:    client.ImageService(),
 		Platforms:     platforms,
 		LeaseManager:  leaseutil.WithNamespace(client.LeasesService(), ns),
+=======
+		ID:             id,
+		Labels:         xlabels,
+		MetadataStore:  md,
+		Executor:       containerdexecutor.New(client, root, "", np, dns, apparmorProfile, selinux, traceSocket, rootless),
+		Snapshotter:    snap,
+		ContentStore:   cs,
+		Applier:        winlayers.NewFileSystemApplierWithWindows(cs, df),
+		Differ:         winlayers.NewWalkingDiffWithWindows(cs, df),
+		ImageStore:     client.ImageService(),
+		Platforms:      platforms,
+		LeaseManager:   lm,
+		GarbageCollect: gc,
+		ParallelismSem: parallelismSem,
+		MountPoolRoot:  filepath.Join(root, "cachemounts"),
+>>>>>>> origin/v0.10
 	}
 	return opt, nil
 }

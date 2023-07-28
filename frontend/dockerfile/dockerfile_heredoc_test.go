@@ -600,7 +600,11 @@ COPY --from=build /dest /
 }
 
 func testOnBuildHeredoc(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
+=======
+	integration.SkipIfDockerd(t, sb, "image export")
+>>>>>>> origin/v0.10
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()

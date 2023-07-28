@@ -1,10 +1,21 @@
 #!/usr/bin/env sh
 
+<<<<<<< HEAD
 : "${CI=}"
 : "${GITHUB_ACTIONS=}"
 : "${GITHUB_REPOSITORY=}"
 : "${GITHUB_RUN_ID=}"
 : "${BUILDX_BUILDER=}"
+=======
+: ${PREFER_BUILDCTL=}
+: ${PREFER_LEGACY=}
+: ${CI=}
+: ${GITHUB_ACTIONS=}
+
+: ${CONTEXT=}
+: ${CACHE_FROM=}
+: ${CACHE_TO=}
+>>>>>>> origin/v0.10
 
 : "${CONTEXT=}"
 : "${CACHE_FROM=}"

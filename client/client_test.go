@@ -147,6 +147,7 @@ func TestClientIntegration(t *testing.T) {
 		testBridgeNetworking,
 		testCacheMountNoCache,
 		testExporterTargetExists,
+<<<<<<< HEAD
 	}, mirrors)
 
 func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sandbox)) {
@@ -156,6 +157,40 @@ func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sa
 	mirrors := integration.WithMirroredImages(mirroredImages)
 
 	tests := integration.TestFuncs(funcs...)
+=======
+		testTarExporterWithSocket,
+		testTarExporterWithSocketCopy,
+		testTarExporterSymlink,
+		testMultipleRegistryCacheImportExport,
+		testSourceMap,
+		testSourceMapFromRef,
+		testLazyImagePush,
+		testStargzLazyPull,
+		testStargzLazyInlineCacheImportExport,
+		testFileOpInputSwap,
+		testRelativeMountpoint,
+		testLocalSourceDiffer,
+		testBuildExportZstd,
+		testPullZstdImage,
+		testMergeOp,
+		testMergeOpCacheInline,
+		testMergeOpCacheMin,
+		testMergeOpCacheMax,
+		testRmSymlink,
+		testMoveParentDir,
+		testBuildExportWithForeignLayer,
+		testBuildInfoExporter,
+		testBuildInfoInline,
+		testBuildInfoNoExport,
+		testZstdLocalCacheExport,
+		testZstdRegistryCacheImportExport,
+		testZstdLocalCacheImportExport,
+		testUncompressedLocalCacheImportExport,
+		testUncompressedRegistryCacheImportExport,
+		testStargzLazyRegistryCacheImportExport,
+		testValidateDigestOrigin,
+	)
+>>>>>>> origin/v0.10
 	tests = append(tests, diffOpTestCases()...)
 	integration.Run(t, tests, mirrors)
 
@@ -195,6 +230,55 @@ func newContainerd(cdAddress string) (*containerd.Client, error) {
 	return containerd.New(cdAddress, containerd.WithTimeout(60*time.Second))
 }
 
+<<<<<<< HEAD
+=======
+// moby/buildkit#1336
+func testCacheExportCacheKeyLoop(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "remote cache export")
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	tmpdir, err := ioutil.TempDir("", "buildkit-buildctl")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	err = ioutil.WriteFile(filepath.Join(tmpdir, "foo"), []byte("foodata"), 0600)
+	require.NoError(t, err)
+
+	for _, mode := range []bool{false, true} {
+		func(mode bool) {
+			t.Run(fmt.Sprintf("mode=%v", mode), func(t *testing.T) {
+				buildbase := llb.Image("alpine:latest").File(llb.Copy(llb.Local("mylocal"), "foo", "foo"))
+				if mode { // same cache keys with a separating node go to different code-path
+					buildbase = buildbase.Run(llb.Shlex("true")).Root()
+				}
+				intermed := llb.Image("alpine:latest").File(llb.Copy(buildbase, "foo", "foo"))
+				final := llb.Scratch().File(llb.Copy(intermed, "foo", "foooooo"))
+
+				def, err := final.Marshal(sb.Context())
+				require.NoError(t, err)
+
+				_, err = c.Solve(sb.Context(), def, SolveOpt{
+					CacheExports: []CacheOptionsEntry{
+						{
+							Type: "local",
+							Attrs: map[string]string{
+								"dest": filepath.Join(tmpdir, "cache"),
+							},
+						},
+					},
+					LocalDirs: map[string]string{
+						"mylocal": tmpdir,
+					},
+				}, nil)
+				require.NoError(t, err)
+			})
+		}(mode)
+	}
+}
+
+>>>>>>> origin/v0.10
 func testBridgeNetworking(t *testing.T, sb integration.Sandbox) {
 	if os.Getenv("BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS") == "" {
 		t.SkipNow()
@@ -843,7 +927,11 @@ func testNetworkMode(t *testing.T, sb integration.Sandbox) {
 }
 
 func testPushByDigest(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
+=======
+	integration.SkipIfDockerd(t, sb, "direct push")
+>>>>>>> origin/v0.10
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -905,6 +993,10 @@ func testSecurityMode(t *testing.T, sb integration.Sandbox) {
 		}
 		allowedEntitlements = []entitlements.Entitlement{}
 	} else {
+<<<<<<< HEAD
+=======
+		integration.SkipIfDockerd(t, sb)
+>>>>>>> origin/v0.10
 		assertCaps = func(caps uint64) {
 			/*
 				$ capsh --decode=0000003fffffffff
@@ -970,6 +1062,10 @@ func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
 	if secMode == securitySandbox {
 		allowedEntitlements = []entitlements.Entitlement{}
 	} else {
+<<<<<<< HEAD
+=======
+		integration.SkipIfDockerd(t, sb)
+>>>>>>> origin/v0.10
 		mode = llb.SecurityModeInsecure
 		allowedEntitlements = []entitlements.Entitlement{entitlements.EntitlementSecurityInsecure}
 	}
@@ -997,7 +1093,12 @@ func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
 
 	if secMode == securitySandbox {
 		require.Error(t, err)
+<<<<<<< HEAD
 		require.Contains(t, err.Error(), "exit code: 1")
+=======
+		require.Contains(t, err.Error(), "did not complete successfully")
+		require.Contains(t, err.Error(), "mkdir "+cg)
+>>>>>>> origin/v0.10
 	} else {
 		require.NoError(t, err)
 	}
@@ -1035,6 +1136,10 @@ func testSecurityModeErrors(t *testing.T, sb integration.Sandbox) {
 }
 
 func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
+=======
+	integration.SkipIfDockerd(t, sb, "oci exporter", "direct push")
+>>>>>>> origin/v0.10
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2447,7 +2552,11 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 }
 
 func testOCIExporter(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter)
+=======
+	integration.SkipIfDockerd(t, sb, "oci exporter")
+>>>>>>> origin/v0.10
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -3054,7 +3163,11 @@ func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
 	}
 
 	var exports []ExportEntry
+<<<<<<< HEAD
 	if integration.IsTestDockerdMoby(sb) {
+=======
+	if integration.IsTestDockerd() {
+>>>>>>> origin/v0.10
 		exports = []ExportEntry{{
 			Type: "moby",
 			Attrs: map[string]string{
@@ -3145,7 +3258,11 @@ func testFrontendUseSolveResults(t *testing.T, sb integration.Sandbox) {
 }
 
 func testExporterTargetExists(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter)
+=======
+	integration.SkipIfDockerd(t, sb, "oci exporter")
+>>>>>>> origin/v0.10
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -3178,6 +3295,7 @@ func testExporterTargetExists(t *testing.T, sb integration.Sandbox) {
 }
 
 func testTarExporterWithSocket(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	requiresLinux(t)
 	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
@@ -3222,6 +3340,8 @@ func testTarExporterWithSocketCopy(t *testing.T, sb integration.Sandbox) {
 }
 
 func testTarExporterWithSocket(t *testing.T, sb integration.Sandbox) {
+=======
+>>>>>>> origin/v0.10
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -3310,7 +3430,12 @@ func testTarExporterSymlink(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildExportWithForeignLayer(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureImageExporter)
+=======
+	integration.SkipIfDockerd(t, sb, "image exporter")
+
+>>>>>>> origin/v0.10
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -3417,7 +3542,12 @@ func testBuildExportWithForeignLayer(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureImageExporter)
+=======
+	integration.SkipIfDockerd(t, sb, "image exporter")
+
+>>>>>>> origin/v0.10
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -3608,7 +3738,11 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildExportZstd(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter)
+=======
+	integration.SkipIfDockerd(t, sb, "oci export")
+>>>>>>> origin/v0.10
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -3704,6 +3838,7 @@ func testBuildExportZstd(t *testing.T, sb integration.Sandbox) {
 }
 
 func testPullZstdImage(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
 	for _, ociMediaTypes := range []bool{true, false} {
 		ociMediaTypes := ociMediaTypes
@@ -3711,6 +3846,12 @@ func testPullZstdImage(t *testing.T, sb integration.Sandbox) {
 			c, err := New(sb.Context(), sb.Address())
 			require.NoError(t, err)
 			defer c.Close()
+=======
+	integration.SkipIfDockerd(t, sb, "direct push")
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+>>>>>>> origin/v0.10
 
 			busybox := llb.Image("busybox:latest")
 			cmd := `sh -e -c "echo -n zstd > data"`
@@ -3796,7 +3937,11 @@ func testPullZstdImage(t *testing.T, sb integration.Sandbox) {
 	}
 }
 func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
+=======
+	integration.SkipIfDockerd(t, sb, "direct push")
+>>>>>>> origin/v0.10
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -3993,7 +4138,12 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	require.False(t, ok)
 }
 
+<<<<<<< HEAD
 func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptionsEntryImport, cacheOptionsEntryExport CacheOptionsEntry) {
+=======
+func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "remote cache export")
+>>>>>>> origin/v0.10
 	requiresLinux(t)
 	cdAddress := sb.ContainerdAddress()
 	if cdAddress == "" || sb.Snapshotter() != "stargz" {
@@ -4192,12 +4342,16 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 }
 
 func testStargzLazyInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb,
 		integration.FeatureCacheExport,
 		integration.FeatureCacheImport,
 		integration.FeatureCacheBackendInline,
 		integration.FeatureCacheBackendRegistry,
 	)
+=======
+	integration.SkipIfDockerd(t, sb, "remote cache export")
+>>>>>>> origin/v0.10
 	requiresLinux(t)
 	cdAddress := sb.ContainerdAddress()
 	if cdAddress == "" || sb.Snapshotter() != "stargz" {
@@ -4505,7 +4659,11 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 }
 
 func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
+=======
+	integration.SkipIfDockerd(t, sb, "direct push")
+>>>>>>> origin/v0.10
 	requiresLinux(t)
 	cdAddress := sb.ContainerdAddress()
 	if cdAddress == "" {
@@ -4644,7 +4802,11 @@ func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
 }
 
 func testZstdLocalCacheExport(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport, integration.FeatureCacheBackendLocal)
+=======
+	integration.SkipIfDockerd(t, sb, "remote cache export")
+>>>>>>> origin/v0.10
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -4702,9 +4864,15 @@ func testZstdLocalCacheExport(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, dt[:4], []byte{0x28, 0xb5, 0x2f, 0xfd})
 }
 
+<<<<<<< HEAD
 func testCacheExportIgnoreError(t *testing.T, sb integration.Sandbox) {
 	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport)
 	c, err := New(sb.Context(), sb.Address())
+=======
+func testUncompressedLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "remote cache export")
+	dir, err := ioutil.TempDir("", "buildkit")
+>>>>>>> origin/v0.10
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -4843,11 +5011,15 @@ func testUncompressedLocalCacheImportExport(t *testing.T, sb integration.Sandbox
 }
 
 func testUncompressedRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb,
 		integration.FeatureCacheExport,
 		integration.FeatureCacheImport,
 		integration.FeatureCacheBackendRegistry,
 	)
+=======
+	integration.SkipIfDockerd(t, sb, "remote cache export")
+>>>>>>> origin/v0.10
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
@@ -4872,12 +5044,23 @@ func testUncompressedRegistryCacheImportExport(t *testing.T, sb integration.Sand
 }
 
 func testZstdLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb,
 		integration.FeatureCacheExport,
 		integration.FeatureCacheImport,
 		integration.FeatureCacheBackendLocal,
 	)
 	dir := t.TempDir()
+=======
+	integration.SkipIfDockerd(t, sb, "remote cache export")
+	if sb.Name() == "containerd-1.4" {
+		// containerd 1.4 doesn't support zstd compression
+		return
+	}
+	dir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+>>>>>>> origin/v0.10
 	im := CacheOptionsEntry{
 		Type: "local",
 		Attrs: map[string]string{
@@ -4896,6 +5079,7 @@ func testZstdLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
 }
 
+<<<<<<< HEAD
 func testImageManifestRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	integration.CheckFeatureCompat(t, sb,
 		integration.FeatureCacheExport,
@@ -4905,6 +5089,13 @@ func testImageManifestRegistryCacheImportExport(t *testing.T, sb integration.San
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
+=======
+func testZstdRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "remote cache export")
+	if sb.Name() == "containerd-1.4" {
+		// containerd 1.4 doesn't support zstd compression
+		return
+>>>>>>> origin/v0.10
 	}
 	require.NoError(t, err)
 	target := registry + "/buildkit/testexport:latest"
@@ -5019,11 +5210,15 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 }
 
 func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb,
 		integration.FeatureCacheExport,
 		integration.FeatureCacheImport,
 		integration.FeatureCacheBackendRegistry,
 	)
+=======
+	integration.SkipIfDockerd(t, sb, "remote cache export")
+>>>>>>> origin/v0.10
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
@@ -5040,11 +5235,15 @@ func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testMultipleRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb,
 		integration.FeatureCacheExport,
 		integration.FeatureCacheImport,
 		integration.FeatureCacheBackendRegistry,
 	)
+=======
+	integration.SkipIfDockerd(t, sb, "remote cache export")
+>>>>>>> origin/v0.10
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
@@ -5067,12 +5266,19 @@ func testMultipleRegistryCacheImportExport(t *testing.T, sb integration.Sandbox)
 }
 
 func testBasicLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb,
 		integration.FeatureCacheExport,
 		integration.FeatureCacheImport,
 		integration.FeatureCacheBackendLocal,
 	)
 	dir := t.TempDir()
+=======
+	integration.SkipIfDockerd(t, sb, "remote cache export")
+	dir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+>>>>>>> origin/v0.10
 	im := CacheOptionsEntry{
 		Type: "local",
 		Attrs: map[string]string{
@@ -5089,11 +5295,15 @@ func testBasicLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb,
 		integration.FeatureDirectPush,
 		integration.FeatureCacheExport,
 		integration.FeatureCacheBackendInline,
 	)
+=======
+	integration.SkipIfDockerd(t, sb, "direct push")
+>>>>>>> origin/v0.10
 	requiresLinux(t)
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
@@ -5778,7 +5988,11 @@ func testCopyFromEmptyImage(t *testing.T, sb integration.Sandbox) {
 
 // containerd/containerd#2119
 func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter)
+=======
+	integration.SkipIfDockerd(t, sb, "oci exporter")
+>>>>>>> origin/v0.10
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -5848,7 +6062,11 @@ func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
 
 // #276
 func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter)
+=======
+	integration.SkipIfDockerd(t, sb, "oci exporter")
+>>>>>>> origin/v0.10
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -5913,7 +6131,11 @@ func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
 
 // #2490
 func testMoveParentDir(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter)
+=======
+	integration.SkipIfDockerd(t, sb, "oci export")
+>>>>>>> origin/v0.10
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -6282,7 +6504,11 @@ func testMergeOp(t *testing.T, sb integration.Sandbox) {
 	}
 
 	var imageTarget string
+<<<<<<< HEAD
 	if integration.IsTestDockerdMoby(sb) {
+=======
+	if integration.IsTestDockerd() {
+>>>>>>> origin/v0.10
 		// do image export but use a fake url as the image should just end up in moby's
 		// local store
 		imageTarget = "fake.invalid:33333/buildkit/testmergeop:latest"
@@ -6381,7 +6607,11 @@ func testMergeOpCacheMax(t *testing.T, sb integration.Sandbox) {
 
 func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 	t.Helper()
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush, integration.FeatureMergeDiff)
+=======
+	integration.SkipIfDockerd(t, sb, "direct push")
+>>>>>>> origin/v0.10
 	requiresLinux(t)
 
 	cdAddress := sb.ContainerdAddress()
@@ -6774,7 +7004,11 @@ func requireContents(ctx context.Context, t *testing.T, c *Client, sb integratio
 
 	if imageTarget != "" {
 		var exports []ExportEntry
+<<<<<<< HEAD
 		if integration.IsTestDockerdMoby(sb) {
+=======
+		if integration.IsTestDockerd() {
+>>>>>>> origin/v0.10
 			exports = []ExportEntry{{
 				Type: "moby",
 				Attrs: map[string]string{
@@ -7156,6 +7390,56 @@ func testPullWithLayerLimit(t *testing.T, sb integration.Sandbox) {
 		File(llb.Mkfile("/second", 0644, []byte("second"))).
 		File(llb.Mkfile("/third", 0644, []byte("third")))
 
+<<<<<<< HEAD
+=======
+	var exports []ExportEntry
+	if integration.IsTestDockerd() {
+		exports = []ExportEntry{{
+			Type: "moby",
+			Attrs: map[string]string{
+				"name": "reg.dummy:5000/buildkit/test:latest",
+			},
+		}}
+	} else {
+		exports = []ExportEntry{{
+			Type:   ExporterOCI,
+			Attrs:  map[string]string{},
+			Output: fixedWriteCloser(nopWriteCloser{io.Discard}),
+		}}
+	}
+
+	res, err := c.Build(sb.Context(), SolveOpt{
+		Exports: exports,
+	}, "", frontend, nil)
+	require.NoError(t, err)
+
+	require.Contains(t, res.ExporterResponse, exptypes.ExporterBuildInfo)
+	decbi, err := base64.StdEncoding.DecodeString(res.ExporterResponse[exptypes.ExporterBuildInfo])
+	require.NoError(t, err)
+
+	var exbi binfotypes.BuildInfo
+	err = json.Unmarshal(decbi, &exbi)
+	require.NoError(t, err)
+
+	attrval := "bar"
+	require.Equal(t, exbi.Attrs, map[string]*string{"build-arg:foo": &attrval})
+	require.Equal(t, len(exbi.Sources), 1)
+	require.Equal(t, exbi.Sources[0].Type, binfotypes.SourceTypeDockerImage)
+	require.Equal(t, exbi.Sources[0].Ref, "docker.io/library/busybox:latest")
+}
+
+// moby/buildkit#2476
+func testBuildInfoInline(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "direct push")
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("busybox:latest").Run(
+		llb.Args([]string{"/bin/sh", "-c", `echo hello`}),
+	)
+>>>>>>> origin/v0.10
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
@@ -7443,6 +7727,7 @@ func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	require.Equal(t, 2, len(imgs.Images))
 
+<<<<<<< HEAD
 	require.Equal(t, "generic index", imgs.Index.Annotations["gi"])
 	require.Equal(t, "generic index opt", imgs.Index.Annotations["gio"])
 	require.Equal(t, created, imgs.Index.Annotations[ocispecs.AnnotationCreated])
@@ -7458,6 +7743,100 @@ func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 			require.Equal(t, "arm64 manifest descriptor opt", desc.Annotations["mdo"])
 		default:
 			require.Fail(t, "unrecognized platform")
+=======
+	attrval := "bar"
+	require.Equal(t, exbi.Attrs, map[string]*string{"build-arg:foo": &attrval})
+	require.Equal(t, len(exbi.Sources), 1)
+	require.Equal(t, exbi.Sources[0].Type, binfotypes.SourceTypeDockerImage)
+	require.Equal(t, exbi.Sources[0].Ref, "docker.io/library/busybox:latest")
+}
+
+func testValidateDigestOrigin(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "direct push")
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("busybox:latest").Run(llb.Shlex("touch foo"), llb.Dir("/wd")).AddMount("/wd", llb.Scratch())
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	target := registry + "/buildkit/testdigest:latest"
+
+	resp, err := c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dgst, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
+	require.True(t, ok)
+
+	err = c.Prune(sb.Context(), nil, PruneAll)
+	require.NoError(t, err)
+
+	st = llb.Image(target + "@" + dgst)
+
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+
+	// accessing the digest from invalid names should fail
+	st = llb.Image("example.invalid/nosuchrepo@" + dgst)
+
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.Error(t, err)
+
+	// also check repo that does exists but not digest
+	st = llb.Image("docker.io/library/ubuntu@" + dgst)
+
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.Error(t, err)
+}
+
+func tmpdir(appliers ...fstest.Applier) (string, error) {
+	tmpdir, err := ioutil.TempDir("", "buildkit-client")
+	if err != nil {
+		return "", err
+	}
+	if err := fstest.Apply(appliers...).Apply(tmpdir); err != nil {
+		return "", err
+	}
+	return tmpdir, nil
+}
+
+func makeSSHAgentSock(agent agent.Agent) (p string, cleanup func() error, err error) {
+	tmpDir, err := ioutil.TempDir("", "buildkit")
+	if err != nil {
+		return "", nil, err
+	}
+	defer func() {
+		if err != nil {
+			os.RemoveAll(tmpDir)
+>>>>>>> origin/v0.10
 		}
 	}
 

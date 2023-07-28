@@ -18,6 +18,11 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/entitlements/security"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
+<<<<<<< HEAD
+=======
+	selinux "github.com/opencontainers/selinux/go-selinux"
+	"github.com/opencontainers/selinux/go-selinux/label"
+>>>>>>> origin/v0.10
 	"github.com/pkg/errors"
 )
 
@@ -78,6 +83,7 @@ func generateSecurityOpts(mode pb.SecurityMode, apparmorProfile string, selinuxB
 		if apparmorProfile != "" {
 			opts = append(opts, oci.WithApparmorProfile(apparmorProfile))
 		}
+<<<<<<< HEAD
 	}
 
 	for _, m := range mounts {
@@ -100,6 +106,12 @@ func generateSecurityOpts(mode pb.SecurityMode, apparmorProfile string, selinuxB
 			if err != nil {
 				releaseAll()
 				return nil, nil, err
+=======
+		opts = append(opts, func(_ context.Context, _ oci.Client, _ *containers.Container, s *oci.Spec) error {
+			var err error
+			if selinuxB {
+				s.Process.SelinuxLabel, s.Linux.MountLabel, err = label.InitLabels(nil)
+>>>>>>> origin/v0.10
 			}
 			return err
 		})

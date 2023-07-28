@@ -2,6 +2,11 @@ package errdefs // import "github.com/docker/docker/errdefs"
 
 import (
 	"net/http"
+<<<<<<< HEAD
+=======
+
+	"github.com/sirupsen/logrus"
+>>>>>>> origin/v0.10
 )
 
 // FromStatusCode creates an errdef error, based on the provided HTTP status-code

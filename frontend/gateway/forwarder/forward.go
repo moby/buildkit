@@ -26,8 +26,13 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+<<<<<<< HEAD
 func LLBBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string, inputs map[string]*opspb.Definition, w worker.Infos, sid string, sm *session.Manager) (*BridgeClient, error) {
 	bc := &BridgeClient{
+=======
+func llbBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string, inputs map[string]*opspb.Definition, w worker.Infos, sid string, sm *session.Manager) (*bridgeClient, error) {
+	bc := &bridgeClient{
+>>>>>>> origin/v0.10
 		opts:              opts,
 		inputs:            inputs,
 		FrontendLLBBridge: llbBridge,
@@ -91,7 +96,11 @@ func (c *BridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*cli
 
 	return cRes, nil
 }
+<<<<<<< HEAD
 func (c *BridgeClient) loadBuildOpts() client.BuildOpts {
+=======
+func (c *bridgeClient) loadBuildOpts() client.BuildOpts {
+>>>>>>> origin/v0.10
 	wis := c.workers.WorkerInfos()
 	workers := make([]client.WorkerInfo, len(wis))
 	for i, w := range wis {
@@ -112,11 +121,19 @@ func (c *BridgeClient) loadBuildOpts() client.BuildOpts {
 	}
 }
 
+<<<<<<< HEAD
 func (c *BridgeClient) BuildOpts() client.BuildOpts {
 	return c.buildOpts
 }
 
 func (c *BridgeClient) Inputs(ctx context.Context) (map[string]llb.State, error) {
+=======
+func (c *bridgeClient) BuildOpts() client.BuildOpts {
+	return c.buildOpts
+}
+
+func (c *bridgeClient) Inputs(ctx context.Context) (map[string]llb.State, error) {
+>>>>>>> origin/v0.10
 	inputs := make(map[string]llb.State)
 	for key, def := range c.inputs {
 		defop, err := llb.NewDefinitionOp(def)
@@ -206,7 +223,11 @@ func (c *BridgeClient) toFrontendResult(r *client.Result) (*frontend.Result, err
 	return res, nil
 }
 
+<<<<<<< HEAD
 func (c *BridgeClient) discard(err error) {
+=======
+func (c *bridgeClient) discard(err error) {
+>>>>>>> origin/v0.10
 	for _, ctr := range c.ctrs {
 		ctr.Release(context.TODO())
 	}

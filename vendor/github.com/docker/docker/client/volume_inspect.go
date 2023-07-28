@@ -25,7 +25,11 @@ func (cli *Client) VolumeInspectWithRaw(ctx context.Context, volumeID string) (v
 	resp, err := cli.get(ctx, "/volumes/"+volumeID, nil, nil)
 	defer ensureReaderClosed(resp)
 	if err != nil {
+<<<<<<< HEAD
 		return vol, nil, err
+=======
+		return volume, nil, err
+>>>>>>> origin/v0.10
 	}
 
 	body, err := io.ReadAll(resp.body)

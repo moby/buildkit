@@ -37,7 +37,11 @@ type RootFS struct {
 type ImageInspect struct {
 	// ID is the content-addressable ID of an image.
 	//
+<<<<<<< HEAD
 	// This identifier is a content-addressable digest calculated from the
+=======
+	// This identified is a content-addressable digest calculated from the
+>>>>>>> origin/v0.10
 	// image's configuration (which includes the digests of layers used by
 	// the image).
 	//
@@ -48,7 +52,11 @@ type ImageInspect struct {
 	// RepoTags is a list of image names/tags in the local image cache that
 	// reference this image.
 	//
+<<<<<<< HEAD
 	// Multiple image tags can refer to the same image, and this list may be
+=======
+	// Multiple image tags can refer to the same imagem and this list may be
+>>>>>>> origin/v0.10
 	// empty if no tags reference the image, in which case the image is
 	// "untagged", in which case it can still be referenced by its ID.
 	RepoTags []string
@@ -82,11 +90,16 @@ type ImageInspect struct {
 	// Depending on how the image was created, this field may be empty.
 	Container string
 
+<<<<<<< HEAD
 	// ContainerConfig is an optional field containing the configuration of the
 	// container that was last committed when creating the image.
 	//
 	// Previous versions of Docker builder used this field to store build cache,
 	// and it is not in active use anymore.
+=======
+	// ContainerConfig is the configuration of the container that was committed
+	// into the image.
+>>>>>>> origin/v0.10
 	ContainerConfig *container.Config
 
 	// DockerVersion is the version of Docker that was used to build the image.
@@ -118,8 +131,19 @@ type ImageInspect struct {
 	// VirtualSize is the total size of the image including all layers it is
 	// composed of.
 	//
+<<<<<<< HEAD
 	// Deprecated: this field is omitted in API v1.44, but kept for backward compatibility. Use Size instead.
 	VirtualSize int64 `json:"VirtualSize,omitempty"`
+=======
+	// In versions of Docker before v1.10, this field was calculated from
+	// the image itself and all of its parent images. Docker v1.10 and up
+	// store images self-contained, and no longer use a parent-chain, making
+	// this field an equivalent of the Size field.
+	//
+	// This field is kept for backward compatibility, but may be removed in
+	// a future version of the API.
+	VirtualSize int64 // TODO(thaJeztah): deprecate this field
+>>>>>>> origin/v0.10
 
 	// GraphDriver holds information about the storage driver used to store the
 	// container's and image's filesystem.

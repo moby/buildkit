@@ -160,6 +160,23 @@ func (i IdentityMapping) ToContainer(pair Identity) (int, int, error) {
 // Empty returns true if there are no id mappings
 func (i IdentityMapping) Empty() bool {
 	return len(i.UIDMaps) == 0 && len(i.GIDMaps) == 0
+<<<<<<< HEAD
+=======
+}
+
+// UIDs returns the mapping for UID.
+//
+// Deprecated: reference the UIDMaps field directly.
+func (i IdentityMapping) UIDs() []IDMap {
+	return i.UIDMaps
+}
+
+// GIDs returns the mapping for GID.
+//
+// Deprecated: reference the GIDMaps field directly.
+func (i IdentityMapping) GIDs() []IDMap {
+	return i.GIDMaps
+>>>>>>> origin/v0.10
 }
 
 func createIDMap(subidRanges ranges) []IDMap {

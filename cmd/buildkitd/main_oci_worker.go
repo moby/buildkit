@@ -102,6 +102,22 @@ func init() {
 			Usage: "path of cni binary files",
 			Value: defaultConf.Workers.OCI.NetworkConfig.CNIBinaryPath,
 		},
+<<<<<<< HEAD
+=======
+		cli.StringFlag{
+			Name:  "oci-worker-binary",
+			Usage: "name of specified oci worker binary",
+			Value: defaultConf.Workers.OCI.Binary,
+		},
+		cli.StringFlag{
+			Name:  "oci-worker-apparmor-profile",
+			Usage: "set the name of the apparmor profile applied to containers",
+		},
+		cli.BoolFlag{
+			Name:  "oci-worker-selinux",
+			Usage: "apply SELinux labels",
+		},
+>>>>>>> origin/v0.10
 	}
 	n := "oci-worker-rootless"
 	u := "enable rootless mode"
@@ -216,6 +232,22 @@ func applyOCIFlags(c *cli.Context, cfg *config.Config) error {
 	if c.GlobalIsSet("oci-cni-binary-dir") {
 		cfg.Workers.OCI.NetworkConfig.CNIBinaryPath = c.GlobalString("oci-cni-binary-dir")
 	}
+<<<<<<< HEAD
+=======
+	if c.GlobalIsSet("oci-worker-binary") {
+		cfg.Workers.OCI.Binary = c.GlobalString("oci-worker-binary")
+	}
+	if c.GlobalIsSet("oci-worker-proxy-snapshotter-path") {
+		cfg.Workers.OCI.ProxySnapshotterPath = c.GlobalString("oci-worker-proxy-snapshotter-path")
+	}
+	if c.GlobalIsSet("oci-worker-apparmor-profile") {
+		cfg.Workers.OCI.ApparmorProfile = c.GlobalString("oci-worker-apparmor-profile")
+	}
+	if c.GlobalIsSet("oci-worker-selinux") {
+		cfg.Workers.OCI.SELinux = c.GlobalBool("oci-worker-selinux")
+	}
+
+>>>>>>> origin/v0.10
 	return nil
 }
 
@@ -270,7 +302,16 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 		},
 	}
 
+<<<<<<< HEAD
 	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping, nc, dns)
+=======
+	var parallelismSem *semaphore.Weighted
+	if cfg.MaxParallelism > 0 {
+		parallelismSem = semaphore.NewWeighted(int64(cfg.MaxParallelism))
+	}
+
+	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping, nc, dns, cfg.Binary, cfg.ApparmorProfile, cfg.SELinux, parallelismSem, common.traceSocket, cfg.DefaultCgroupParent)
+>>>>>>> origin/v0.10
 	if err != nil {
 		return nil, err
 	}
@@ -375,7 +416,11 @@ func snapshotterFactory(commonRoot string, cfg config.OCIConfig, sm *session.Man
 		snFactory.New = func(root string) (ctdsnapshot.Snapshotter, error) {
 			userxattr, err := overlayutils.NeedsUserXAttr(root)
 			if err != nil {
+<<<<<<< HEAD
 				bklog.L.WithError(err).Warnf("cannot detect whether \"userxattr\" option needs to be used, assuming to be %v", userxattr)
+=======
+				logrus.WithError(err).Warnf("cannot detect whether \"userxattr\" option needs to be used, assuming to be %v", userxattr)
+>>>>>>> origin/v0.10
 			}
 			opq := sgzlayer.OverlayOpaqueTrusted
 			if userxattr {

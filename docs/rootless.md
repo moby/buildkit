@@ -24,12 +24,15 @@ spec:
 
 See also the [example manifests](#Kubernetes).
 
+<<<<<<< HEAD
 ### Bottlerocket OS
 
 Needs to run `sysctl -w user.max_user_namespaces=N` (N=positive integer, like 63359) on the host nodes.
 
 See [`../examples/kubernetes/sysctl-userns.privileged.yaml`](../examples/kubernetes/sysctl-userns.privileged.yaml).
 
+=======
+>>>>>>> origin/v0.10
 <details>
 <summary>Old distributions</summary>
 
@@ -110,11 +113,14 @@ See https://rootlesscontaine.rs/getting-started/common/subuid/
 ### Error `Options:[rbind ro]}]: operation not permitted`
 Make sure to mount an `emptyDir` volume on `/home/user/.local/share/buildkit` .
 
+<<<<<<< HEAD
 ### Error `fork/exec /proc/self/exe: no space left on device` with `level=warning msg="/proc/sys/user/max_user_namespaces needs to be set to non-zero."`
 Run `sysctl -w user.max_user_namespaces=N` (N=positive integer, like 63359) on the host nodes.
 
 See [`../examples/kubernetes/sysctl-userns.privileged.yaml`](../examples/kubernetes/sysctl-userns.privileged.yaml).
 
+=======
+>>>>>>> origin/v0.10
 ## Containerized deployment
 
 ### Kubernetes

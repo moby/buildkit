@@ -147,10 +147,16 @@ func Walk(ctx context.Context, p string, opt *WalkOpt, fn filepath.WalkFunc) err
 		var (
 			dir   visitedDir
 			isDir bool
+<<<<<<< HEAD
 			fi    gofs.FileInfo
 		)
 		if dirEntry != nil {
 			isDir = dirEntry.IsDir()
+=======
+		)
+		if fi != nil {
+			isDir = fi.IsDir()
+>>>>>>> origin/v0.10
 		}
 
 		if includeMatcher != nil || excludeMatcher != nil {
@@ -163,11 +169,14 @@ func Walk(ctx context.Context, p string, opt *WalkOpt, fn filepath.WalkFunc) err
 			}
 
 			if isDir {
+<<<<<<< HEAD
 				fi, err = dirEntry.Info()
 				if err != nil {
 					return err
 				}
 
+=======
+>>>>>>> origin/v0.10
 				dir = visitedDir{
 					fi:          fi,
 					path:        path,

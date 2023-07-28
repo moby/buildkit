@@ -16,6 +16,7 @@ This package provides various compression algorithms.
 
 # changelog
 
+<<<<<<< HEAD
 * Mar 13, 2023 - [v1.16.1](https://github.com/klauspost/compress/releases/tag/v1.16.1)
 	* zstd: Speed up + improve best encoder by @greatroar in https://github.com/klauspost/compress/pull/776
 	* gzhttp: Add optional [BREACH mitigation](https://github.com/klauspost/compress/tree/master/gzhttp#breach-mitigation). https://github.com/klauspost/compress/pull/762 https://github.com/klauspost/compress/pull/768 https://github.com/klauspost/compress/pull/769 https://github.com/klauspost/compress/pull/770 https://github.com/klauspost/compress/pull/767
@@ -143,6 +144,8 @@ This package provides various compression algorithms.
 	* zstd: Handle zero sized frame content size stricter in [#521](https://github.com/klauspost/compress/pull/521)
 	* zstd: Add stricter block size checks in [#523](https://github.com/klauspost/compress/pull/523)
 
+=======
+>>>>>>> origin/v0.10
 * Mar 3, 2022 (v1.15.0)
 	* zstd: Refactor decoder by @klauspost in [#498](https://github.com/klauspost/compress/pull/498)
 	* zstd: Add stream encoding without goroutines by @klauspost in [#505](https://github.com/klauspost/compress/pull/505)
@@ -151,15 +154,25 @@ This package provides various compression algorithms.
 	* gzhttp: Add zstd to transport by @klauspost in [#400](https://github.com/klauspost/compress/pull/400)
 	* gzhttp: Make content-type optional by @klauspost in [#510](https://github.com/klauspost/compress/pull/510)
 
+<<<<<<< HEAD
+=======
+<details>
+	<summary>See  Details</summary>
+>>>>>>> origin/v0.10
 Both compression and decompression now supports "synchronous" stream operations. This means that whenever "concurrency" is set to 1, they will operate without spawning goroutines.
 
 Stream decompression is now faster on asynchronous, since the goroutine allocation much more effectively splits the workload. On typical streams this will typically use 2 cores fully for decompression. When a stream has finished decoding no goroutines will be left over, so decoders can now safely be pooled and still be garbage collected.
 
 While the release has been extensively tested, it is recommended to testing when upgrading.
+<<<<<<< HEAD
 
 <details>
 	<summary>See changes to v1.14.x</summary>
 	
+=======
+</details>
+
+>>>>>>> origin/v0.10
 * Feb 22, 2022 (v1.14.4)
 	* flate: Fix rare huffman only (-2) corruption. [#503](https://github.com/klauspost/compress/pull/503)
 	* zip: Update deprecated CreateHeaderRaw to correctly call CreateRaw by @saracen in [#502](https://github.com/klauspost/compress/pull/502)

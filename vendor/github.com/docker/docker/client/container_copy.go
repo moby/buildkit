@@ -48,6 +48,14 @@ func (cli *Client) CopyToContainer(ctx context.Context, containerID, dstPath str
 	defer ensureReaderClosed(response)
 	if err != nil {
 		return err
+<<<<<<< HEAD
+=======
+	}
+
+	// TODO this code converts non-error status-codes (e.g., "204 No Content") into an error; verify if this is the desired behavior
+	if response.statusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code from daemon: %d", response.statusCode)
+>>>>>>> origin/v0.10
 	}
 
 	return nil
@@ -63,6 +71,14 @@ func (cli *Client) CopyFromContainer(ctx context.Context, containerID, srcPath s
 	response, err := cli.get(ctx, apiPath, query, nil)
 	if err != nil {
 		return nil, types.ContainerPathStat{}, err
+<<<<<<< HEAD
+=======
+	}
+
+	// TODO this code converts non-error status-codes (e.g., "204 No Content") into an error; verify if this is the desired behavior
+	if response.statusCode != http.StatusOK {
+		return nil, types.ContainerPathStat{}, fmt.Errorf("unexpected status code from daemon: %d", response.statusCode)
+>>>>>>> origin/v0.10
 	}
 
 	// In order to get the copy behavior right, we need to know information

@@ -3,7 +3,11 @@ package contentutil
 import (
 	"bytes"
 	"context"
+<<<<<<< HEAD
 	"io"
+=======
+	"io/ioutil"
+>>>>>>> origin/v0.10
 	"strings"
 	"sync"
 	"time"

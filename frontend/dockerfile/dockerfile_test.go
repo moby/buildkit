@@ -107,7 +107,32 @@ var allTests = integration.TestFuncs(
 	testDefaultEnvWithArgs,
 	testEnvEmptyFormatting,
 	testCacheMultiPlatformImportExport,
+<<<<<<< HEAD
 }
+=======
+	testOnBuildCleared,
+	testFrontendUseForwardedSolveResults,
+	testFrontendInputs,
+	testErrorsSourceMap,
+	testMultiArgs,
+	testFrontendSubrequests,
+	testDockefileCheckHostname,
+	testDefaultShellAndPath,
+	testDockerfileLowercase,
+	testExportCacheLoop,
+	testWildcardRenameCache,
+	testDockerfileInvalidInstruction,
+	testShmSize,
+	testUlimit,
+	testCgroupParent,
+	testNamedImageContext,
+	testNamedImageContextPlatform,
+	testNamedImageContextTimestamps,
+	testNamedLocalContext,
+	testNamedInputContext,
+	testNamedMultiplatformInputContext,
+)
+>>>>>>> origin/v0.10
 
 var fileOpTests = []integration.Test{
 	testEmptyDestDir,
@@ -391,7 +416,11 @@ RUN [ "$(cat testfile)" == "contents0" ]
 }
 
 func testExportCacheLoop(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport, integration.FeatureCacheImport, integration.FeatureCacheBackendLocal)
+=======
+	integration.SkipIfDockerd(t, sb, "cache export")
+>>>>>>> origin/v0.10
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -1205,7 +1234,11 @@ COPY --from=build /out .
 }
 
 func testDefaultShellAndPath(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter)
+=======
+	integration.SkipIfDockerd(t, sb, "oci exporter")
+>>>>>>> origin/v0.10
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -1293,7 +1326,11 @@ COPY Dockerfile .
 }
 
 func testExportMultiPlatform(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter, integration.FeatureMultiPlatform)
+=======
+	integration.SkipIfDockerd(t, sb, "oci exporter", "multi-platform")
+>>>>>>> origin/v0.10
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -2470,7 +2507,11 @@ ENV foo=bar
 }
 
 func testExposeExpansion(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureImageExporter)
+=======
+	integration.SkipIfDockerd(t, sb, "image export")
+>>>>>>> origin/v0.10
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -2708,7 +2749,11 @@ RUN ["ls"]
 	args, trace := f.DFCmdArgs(dir, dir)
 	defer os.RemoveAll(trace)
 
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureImageExporter)
+=======
+	integration.SkipIfDockerd(t, sb, "image export")
+>>>>>>> origin/v0.10
 
 	target := "example.com/moby/dockerfilescratch:test"
 	cmd := sb.Cmd(args + " --output type=image,name=" + target)
@@ -2762,7 +2807,11 @@ RUN ["ls"]
 }
 
 func testUser(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureImageExporter)
+=======
+	integration.SkipIfDockerd(t, sb, "image export")
+>>>>>>> origin/v0.10
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -2922,8 +2971,12 @@ USER daemon
 RUN [ "$(id)" = "uid=1(daemon) gid=1(daemon) groups=1(daemon)" ]
 `)
 
+<<<<<<< HEAD
 	dir, err := integration.Tmpdir(
 		t,
+=======
+	dir, err := tmpdir(
+>>>>>>> origin/v0.10
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
@@ -2934,8 +2987,13 @@ RUN [ "$(id)" = "uid=1(daemon) gid=1(daemon) groups=1(daemon)" ]
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
+<<<<<<< HEAD
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
+=======
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+>>>>>>> origin/v0.10
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -3570,7 +3628,11 @@ COPY --from=stage1 baz bax
 }
 
 func testLabels(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureImageExporter)
+=======
+	integration.SkipIfDockerd(t, sb, "image export")
+>>>>>>> origin/v0.10
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -3640,6 +3702,7 @@ LABEL foo=bar
 	require.Equal(t, "baz", v)
 }
 
+<<<<<<< HEAD
 func testCacheMultiPlatformImportExport(t *testing.T, sb integration.Sandbox) {
 	integration.CheckFeatureCompat(t, sb,
 		integration.FeatureDirectPush,
@@ -3647,6 +3710,163 @@ func testCacheMultiPlatformImportExport(t *testing.T, sb integration.Sandbox) {
 		integration.FeatureCacheBackendInline,
 		integration.FeatureCacheBackendRegistry,
 	)
+=======
+// #2008
+func testWildcardRenameCache(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM alpine
+COPY file* /files/
+RUN ls /files/file1
+`)
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("file1", []byte("foo"), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	err = os.Rename(filepath.Join(dir, "file1"), filepath.Join(dir, "file2"))
+	require.NoError(t, err)
+
+	// cache should be invalidated and build should fail
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.Error(t, err)
+}
+
+func testOnBuildCleared(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "direct push")
+	f := getFrontend(t, sb)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	dockerfile := []byte(`
+FROM busybox
+ONBUILD RUN mkdir -p /out && echo -n 11 >> /out/foo
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	target := registry + "/buildkit/testonbuild:base"
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"push": "true",
+					"name": target,
+				},
+			},
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dockerfile = []byte(fmt.Sprintf(`
+	FROM %s 
+	`, target))
+
+	dir, err = tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	target2 := registry + "/buildkit/testonbuild:child"
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"push": "true",
+					"name": target2,
+				},
+			},
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dockerfile = []byte(fmt.Sprintf(`
+	FROM %s AS base
+	FROM scratch
+	COPY --from=base /out /
+	`, target2))
+
+	dir, err = tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, "11", string(dt))
+}
+
+func testCacheMultiPlatformImportExport(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "direct push")
+>>>>>>> origin/v0.10
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()
@@ -3768,8 +3988,13 @@ COPY --from=base arch /
 	}
 }
 
+<<<<<<< HEAD
 func testImageManifestCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport, integration.FeatureCacheBackendLocal)
+=======
+func testCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "remote cache export")
+>>>>>>> origin/v0.10
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()
@@ -3964,7 +4189,11 @@ COPY --from=base unique /
 }
 
 func testReproducibleIDs(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureImageExporter)
+=======
+	integration.SkipIfDockerd(t, sb, "image export")
+>>>>>>> origin/v0.10
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -4986,7 +5215,11 @@ COPY --from=base /out /
 	require.NoError(t, err)
 	require.True(t, len(dt) > 0)
 
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
+=======
+	integration.SkipIfDockerd(t, sb, "direct push")
+>>>>>>> origin/v0.10
 
 	// Now test with an image with custom envs
 	dockerfile = []byte(`
@@ -4995,11 +5228,19 @@ ENV PATH=/foobar:$PATH
 ENV FOOBAR=foobar
 `)
 
+<<<<<<< HEAD
 	dir, err = integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
+=======
+	dir, err = tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+>>>>>>> origin/v0.10
 
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
@@ -5010,8 +5251,13 @@ ENV FOOBAR=foobar
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
+<<<<<<< HEAD
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
+=======
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+>>>>>>> origin/v0.10
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -5036,6 +5282,7 @@ COPY --from=base /env_path /
 COPY --from=base /env_foobar /
 	`)
 
+<<<<<<< HEAD
 	dir, err = integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
@@ -5045,14 +5292,32 @@ COPY --from=base /env_foobar /
 	f = getFrontend(t, sb)
 
 	destDir = t.TempDir()
+=======
+	dir, err = tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	f = getFrontend(t, sb)
+
+	destDir, err = os.MkdirTemp("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+>>>>>>> origin/v0.10
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
 			"context:busybox": "docker-image://" + target,
 		},
 		LocalDirs: map[string]string{
+<<<<<<< HEAD
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
+=======
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+>>>>>>> origin/v0.10
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -5077,7 +5342,11 @@ COPY --from=base /env_foobar /
 }
 
 func testNamedImageContextPlatform(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
+=======
+	integration.SkipIfDockerd(t, sb, "direct push")
+>>>>>>> origin/v0.10
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -5094,8 +5363,12 @@ func testNamedImageContextPlatform(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`FROM --platform=$BUILDPLATFORM alpine:latest`)
 	target := registry + "/buildkit/testnamedimagecontextplatform:latest"
 
+<<<<<<< HEAD
 	dir, err := integration.Tmpdir(
 		t,
+=======
+	dir, err := tmpdir(
+>>>>>>> origin/v0.10
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
@@ -5107,8 +5380,13 @@ func testNamedImageContextPlatform(t *testing.T, sb integration.Sandbox) {
 			"build-arg:BUILDKIT_MULTI_PLATFORM": "true",
 		},
 		LocalDirs: map[string]string{
+<<<<<<< HEAD
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
+=======
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+>>>>>>> origin/v0.10
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -5127,8 +5405,12 @@ FROM --platform=$BUILDPLATFORM busybox AS target
 RUN echo hello
 `)
 
+<<<<<<< HEAD
 	dir, err = integration.Tmpdir(
 		t,
+=======
+	dir, err = tmpdir(
+>>>>>>> origin/v0.10
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
@@ -5143,15 +5425,24 @@ RUN echo hello
 			"platform": "darwin/ppc64le",
 		},
 		LocalDirs: map[string]string{
+<<<<<<< HEAD
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
+=======
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+>>>>>>> origin/v0.10
 		},
 	}, nil)
 	require.NoError(t, err)
 }
 
 func testNamedImageContextTimestamps(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
+=======
+	integration.SkipIfDockerd(t, sb, "direct push")
+>>>>>>> origin/v0.10
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -5170,17 +5461,30 @@ func testNamedImageContextTimestamps(t *testing.T, sb integration.Sandbox) {
 FROM alpine
 RUN echo foo >> /test
 `)
+<<<<<<< HEAD
 	dir, err := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
+=======
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+>>>>>>> origin/v0.10
 
 	target := registry + "/buildkit/testnamedimagecontexttimestamps:latest"
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
+<<<<<<< HEAD
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
+=======
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+>>>>>>> origin/v0.10
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -5196,6 +5500,7 @@ RUN echo foo >> /test
 
 	desc, provider, err := contentutil.ProviderFromRef(target)
 	require.NoError(t, err)
+<<<<<<< HEAD
 	img, err := testutil.ReadImage(sb.Context(), provider, desc)
 	require.NoError(t, err)
 
@@ -5204,6 +5509,16 @@ RUN echo foo >> /test
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
+=======
+	img, err := readImage(sb.Context(), provider, desc)
+	require.NoError(t, err)
+
+	dirDerived, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dirDerived)
+>>>>>>> origin/v0.10
 
 	targetDerived := registry + "/buildkit/testnamedimagecontexttimestampsderived:latest"
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
@@ -5211,8 +5526,13 @@ RUN echo foo >> /test
 			"context:alpine": "docker-image://" + target,
 		},
 		LocalDirs: map[string]string{
+<<<<<<< HEAD
 			dockerui.DefaultLocalNameDockerfile: dirDerived,
 			dockerui.DefaultLocalNameContext:    dirDerived,
+=======
+			builder.DefaultLocalNameDockerfile: dirDerived,
+			builder.DefaultLocalNameContext:    dirDerived,
+>>>>>>> origin/v0.10
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -5228,6 +5548,7 @@ RUN echo foo >> /test
 
 	desc, provider, err = contentutil.ProviderFromRef(targetDerived)
 	require.NoError(t, err)
+<<<<<<< HEAD
 	imgDerived, err := testutil.ReadImage(sb.Context(), provider, desc)
 	require.NoError(t, err)
 
@@ -5286,6 +5607,15 @@ EOF
 	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
 	require.Equal(t, "hello world!\n", string(dt))
+=======
+	imgDerived, err := readImage(sb.Context(), provider, desc)
+	require.NoError(t, err)
+
+	require.NotEqual(t, img.img.Created, imgDerived.img.Created)
+	diff := imgDerived.img.Created.Sub(*img.img.Created)
+	require.Greater(t, diff, time.Duration(0))
+	require.Less(t, diff, 10*time.Minute)
+>>>>>>> origin/v0.10
 }
 
 func testNamedLocalContext(t *testing.T, sb integration.Sandbox) {
@@ -5709,7 +6039,11 @@ COPY --from=build /foo /out /
 }
 
 func testNamedMultiplatformInputContext(t *testing.T, sb integration.Sandbox) {
+<<<<<<< HEAD
 	integration.CheckFeatureCompat(t, sb, integration.FeatureMultiPlatform)
+=======
+	integration.SkipIfDockerd(t, sb, "multiplatform")
+>>>>>>> origin/v0.10
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -6752,3 +7086,67 @@ func fixedWriteCloser(wc io.WriteCloser) func(map[string]string) (io.WriteCloser
 		return wc, nil
 	}
 }
+<<<<<<< HEAD
+=======
+
+type imageInfo struct {
+	desc   ocispecs.Descriptor
+	img    ocispecs.Image
+	layers []map[string]*testutil.TarItem
+}
+
+func readIndex(ctx context.Context, p content.Provider, desc ocispecs.Descriptor) (map[string]*imageInfo, error) {
+	dt, err := content.ReadBlob(ctx, p, desc)
+	if err != nil {
+		return nil, err
+	}
+	var idx ocispecs.Index
+	if err := json.Unmarshal(dt, &idx); err != nil {
+		return nil, err
+	}
+
+	mi := map[string]*imageInfo{}
+
+	for _, m := range idx.Manifests {
+		img, err := readImage(ctx, p, m)
+		if err != nil {
+			return nil, err
+		}
+		mi[platforms.Format(*m.Platform)] = img
+	}
+	return mi, nil
+}
+func readImage(ctx context.Context, p content.Provider, desc ocispecs.Descriptor) (*imageInfo, error) {
+	ii := &imageInfo{desc: desc}
+
+	dt, err := content.ReadBlob(ctx, p, desc)
+	if err != nil {
+		return nil, err
+	}
+	var mfst ocispecs.Manifest
+	if err := json.Unmarshal(dt, &mfst); err != nil {
+		return nil, err
+	}
+
+	dt, err = content.ReadBlob(ctx, p, mfst.Config)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(dt, &ii.img); err != nil {
+		return nil, err
+	}
+
+	for _, l := range mfst.Layers {
+		dt, err := content.ReadBlob(ctx, p, l)
+		if err != nil {
+			return nil, err
+		}
+		m, err := testutil.ReadTarToMap(dt, true)
+		if err != nil {
+			return nil, err
+		}
+		ii.layers = append(ii.layers, m)
+	}
+	return ii, nil
+}
+>>>>>>> origin/v0.10

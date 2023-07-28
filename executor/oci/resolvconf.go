@@ -69,7 +69,18 @@ func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.Identity
 		tmpPath := p + ".tmp"
 		if dns != nil {
 			var (
+<<<<<<< HEAD
 				dnsNameservers   = dns.Nameservers
+=======
+				dnsNameservers   = resolvconf.GetNameservers(dt, resolvconf.IP)
+				dnsSearchDomains = resolvconf.GetSearchDomains(dt)
+				dnsOptions       = resolvconf.GetOptions(dt)
+			)
+			if len(dns.Nameservers) > 0 {
+				dnsNameservers = dns.Nameservers
+			}
+			if len(dns.SearchDomains) > 0 {
+>>>>>>> origin/v0.10
 				dnsSearchDomains = dns.SearchDomains
 				dnsOptions       = dns.Options
 			)

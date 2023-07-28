@@ -1,40 +1,17 @@
 # syntax=docker/dockerfile-upstream:master
 
-ARG RUNC_VERSION=v1.1.7
-ARG CONTAINERD_VERSION=v1.7.2
-# containerd v1.6 for integration tests
-ARG CONTAINERD_ALT_VERSION_16=v1.6.21
+ARG RUNC_VERSION=v1.0.2
+ARG CONTAINERD_VERSION=v1.6.1
+# containerd v1.5 for integration tests
+ARG CONTAINERD_ALT_VERSION_15=v1.5.10
+# containerd v1.4 for integration tests
+ARG CONTAINERD_ALT_VERSION_14=v1.4.13
+# available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
+ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=2.8.0
-ARG ROOTLESSKIT_VERSION=v1.0.1
-ARG CNI_VERSION=v1.2.0
-ARG STARGZ_SNAPSHOTTER_VERSION=v0.14.3
-ARG NERDCTL_VERSION=v1.4.0
-ARG DNSNAME_VERSION=v1.3.1
-ARG NYDUS_VERSION=v2.1.6
-ARG MINIO_VERSION=RELEASE.2022-05-03T20-36-08Z
-ARG MINIO_MC_VERSION=RELEASE.2022-05-04T06-07-55Z
-ARG AZURITE_VERSION=3.18.0
-ARG GOTESTSUM_VERSION=v1.9.0
-
-ARG GO_VERSION=1.20
-ARG ALPINE_VERSION=3.18
-
-# minio for s3 integration tests
-FROM minio/minio:${MINIO_VERSION} AS minio
-FROM minio/mc:${MINIO_MC_VERSION} AS minio-mc
-
-# alpine base for buildkit image
-# TODO: remove this when alpine image supports riscv64
-FROM alpine:${ALPINE_VERSION} AS alpine-amd64
-FROM alpine:${ALPINE_VERSION} AS alpine-arm
-FROM alpine:${ALPINE_VERSION} AS alpine-arm64
-FROM alpine:${ALPINE_VERSION} AS alpine-s390x
-FROM alpine:${ALPINE_VERSION} AS alpine-ppc64le
-FROM alpine:edge@sha256:2d01a16bab53a8405876cec4c27235d47455a7b72b75334c614f2fb0968b3f90 AS alpine-riscv64
-FROM alpine-$TARGETARCH AS alpinebase
-
-# xx is a helper for cross-compilation
-FROM --platform=$BUILDPLATFORM tonistiigi/xx:1.2.1 AS xx
+ARG ROOTLESSKIT_VERSION=v0.14.6
+ARG CNI_VERSION=v1.1.0
+ARG STARGZ_SNAPSHOTTER_VERSION=v0.11.2
 
 # go base image
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS golatest
@@ -42,6 +19,11 @@ FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS g
 # git stage is used for checking out remote repository sources
 FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS git
 RUN apk add --no-cache git
+
+# xx is a helper for cross-compilation
+FROM --platform=$BUILDPLATFORM tonistiigi/xx@sha256:1e96844fadaa2f9aea021b2b05299bc02fe4c39a92d8e735b93e8e2b15610128 AS xx
+
+FROM --platform=$BUILDPLATFORM golang:1.17-alpine AS golatest
 
 # gobuild is base stage for compiling go/cgo
 FROM golatest AS gobuild-base
@@ -246,7 +228,7 @@ COPY --link --from=dnsname /usr/bin/dnsname /opt/cni/bin/
 
 FROM buildkit-base AS integration-tests-base
 ENV BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR="1000:1000"
-RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables ip6tables dnsmasq fuse curl git-daemon openssh-client \
+RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables fuse \
   && useradd --create-home --home-dir /home/user --uid 1000 -s /bin/sh user \
   && echo "XDG_RUNTIME_DIR=/run/user/1000; export XDG_RUNTIME_DIR" >> /home/user/.profile \
   && mkdir -m 0700 -p /run/user/1000 \

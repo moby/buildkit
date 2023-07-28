@@ -18,6 +18,7 @@ const ZipMethodWinZip = 93
 // See https://pkware.cachefly.net/webdocs/APPNOTE/APPNOTE-6.3.9.TXT
 const ZipMethodPKWare = 20
 
+<<<<<<< HEAD
 // zipReaderPool is the default reader pool.
 var zipReaderPool = sync.Pool{New: func() interface{} {
 	z, err := NewReader(nil, WithDecoderLowmem(true), WithDecoderMaxWindow(128<<20), WithDecoderConcurrency(1))
@@ -49,6 +50,21 @@ func newZipReader(opts ...DOption) func(r io.Reader) io.ReadCloser {
 			dec = d
 		}
 		return &pooledZipReader{dec: dec, pool: pool}
+=======
+var zipReaderPool sync.Pool
+
+// newZipReader creates a pooled zip decompressor.
+func newZipReader(r io.Reader) io.ReadCloser {
+	dec, ok := zipReaderPool.Get().(*Decoder)
+	if ok {
+		dec.Reset(r)
+	} else {
+		d, err := NewReader(r, WithDecoderConcurrency(1), WithDecoderLowmem(true))
+		if err != nil {
+			panic(err)
+		}
+		dec = d
+>>>>>>> origin/v0.10
 	}
 }
 
@@ -66,8 +82,13 @@ func (r *pooledZipReader) Read(p []byte) (n int, err error) {
 	}
 	dec, err := r.dec.Read(p)
 	if err == io.EOF {
+<<<<<<< HEAD
 		r.dec.Reset(nil)
 		r.pool.Put(r.dec)
+=======
+		err = r.dec.Reset(nil)
+		zipReaderPool.Put(r.dec)
+>>>>>>> origin/v0.10
 		r.dec = nil
 	}
 	return dec, err
@@ -133,9 +154,14 @@ func ZipCompressor(opts ...EOption) func(w io.Writer) (io.WriteCloser, error) {
 
 // ZipDecompressor returns a decompressor that can be registered with zip libraries.
 // See ZipCompressor for example.
+<<<<<<< HEAD
 // Options can be specified. WithDecoderConcurrency(1) is forced,
 // and by default a 128MB maximum decompression window is specified.
 // The window size can be overridden if required.
 func ZipDecompressor(opts ...DOption) func(r io.Reader) io.ReadCloser {
 	return newZipReader(opts...)
+=======
+func ZipDecompressor() func(r io.Reader) io.ReadCloser {
+	return newZipReader
+>>>>>>> origin/v0.10
 }

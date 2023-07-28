@@ -38,10 +38,23 @@ type containerdExecutor struct {
 	networkProviders map[pb.NetMode]network.Provider
 	cgroupParent     string
 	dnsConfig        *oci.DNSConfig
+<<<<<<< HEAD
 }
 
 // New creates a new executor backed by connection to containerd API
 func New(client *containerd.Client, root, cgroup string, networkProviders map[pb.NetMode]network.Provider, dnsConfig *oci.DNSConfig) executor.Executor {
+=======
+	running          map[string]chan error
+	mu               sync.Mutex
+	apparmorProfile  string
+	selinux          bool
+	traceSocket      string
+	rootless         bool
+}
+
+// New creates a new executor backed by connection to containerd API
+func New(client *containerd.Client, root, cgroup string, networkProviders map[pb.NetMode]network.Provider, dnsConfig *oci.DNSConfig, apparmorProfile string, selinux bool, traceSocket string, rootless bool) executor.Executor {
+>>>>>>> origin/v0.10
 	// clean up old hosts/resolv.conf file. ignore errors
 	os.RemoveAll(filepath.Join(root, "hosts"))
 	os.RemoveAll(filepath.Join(root, "resolv.conf"))
@@ -52,6 +65,14 @@ func New(client *containerd.Client, root, cgroup string, networkProviders map[pb
 		networkProviders: networkProviders,
 		cgroupParent:     cgroup,
 		dnsConfig:        dnsConfig,
+<<<<<<< HEAD
+=======
+		running:          make(map[string]chan error),
+		apparmorProfile:  apparmorProfile,
+		selinux:          selinux,
+		traceSocket:      traceSocket,
+		rootless:         rootless,
+>>>>>>> origin/v0.10
 	}
 }
 
@@ -154,7 +175,11 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 	}
 
 	processMode := oci.ProcessSandbox // FIXME(AkihiroSuda)
+<<<<<<< HEAD
 	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, namespace, processMode, nil, opts...)
+=======
+	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, namespace, w.cgroupParent, processMode, nil, w.apparmorProfile, w.selinux, w.traceSocket, opts...)
+>>>>>>> origin/v0.10
 	if err != nil {
 		return nil, err
 	}

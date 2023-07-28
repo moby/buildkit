@@ -48,6 +48,65 @@ func (e objectNotFoundError) Error() string {
 	return fmt.Sprintf("Error: No such %s: %s", e.object, e.id)
 }
 
+<<<<<<< HEAD
+=======
+// unauthorizedError represents an authorization error in a remote registry.
+type unauthorizedError struct {
+	cause error
+}
+
+// Error returns a string representation of an unauthorizedError
+func (u unauthorizedError) Error() string {
+	return u.cause.Error()
+}
+
+// IsErrUnauthorized returns true if the error is caused
+// when a remote registry authentication fails
+func IsErrUnauthorized(err error) bool {
+	if _, ok := err.(unauthorizedError); ok {
+		return ok
+	}
+	return errdefs.IsUnauthorized(err)
+}
+
+type pluginPermissionDenied struct {
+	name string
+}
+
+func (e pluginPermissionDenied) Error() string {
+	return "Permission denied while installing plugin " + e.name
+}
+
+// IsErrPluginPermissionDenied returns true if the error is caused
+// when a user denies a plugin's permissions
+func IsErrPluginPermissionDenied(err error) bool {
+	_, ok := err.(pluginPermissionDenied)
+	return ok
+}
+
+type notImplementedError struct {
+	message string
+}
+
+func (e notImplementedError) Error() string {
+	return e.message
+}
+
+func (e notImplementedError) NotImplemented() bool {
+	return true
+}
+
+// IsErrNotImplemented returns true if the error is a NotImplemented error.
+// This is returned by the API when a requested feature has not been
+// implemented.
+func IsErrNotImplemented(err error) bool {
+	if _, ok := err.(notImplementedError); ok {
+		return ok
+	}
+	return errdefs.IsNotImplemented(err)
+}
+
+>>>>>>> origin/v0.10
 // NewVersionError returns an error if the APIVersion required
 // if less than the current supported version
 func (cli *Client) NewVersionError(APIrequired, feature string) error {

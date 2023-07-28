@@ -881,11 +881,19 @@ func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result,
 		return nil, nil, err
 	}
 	flightControlKey := "exec"
+<<<<<<< HEAD
 	res, err := s.gExecRes.Do(ctx, flightControlKey, func(ctx context.Context) (ret *execRes, retErr error) {
 		if s.execDone {
 			if s.execErr != nil {
 				return nil, s.execErr
 			}
+=======
+	res, err := s.g.Do(ctx, flightControlKey, func(ctx context.Context) (ret interface{}, retErr error) {
+		if s.execErr != nil {
+			return nil, s.execErr
+		}
+		if s.execRes != nil {
+>>>>>>> origin/v0.10
 			return s.execRes, nil
 		}
 		release, err := op.Acquire(ctx)

@@ -48,6 +48,7 @@ const (
 	sbomScanStage   = "BUILDKIT_SBOM_SCAN_STAGE"
 )
 
+<<<<<<< HEAD
 var nonEnvArgs = map[string]struct{}{
 	sbomScanContext: {},
 	sbomScanStage:   {},
@@ -91,6 +92,61 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			sbom.Extras[dsi.stageName] = dsi.state
 			if dsi.ignoreCache {
 				sbom.IgnoreCache = true
+=======
+type ConvertOpt struct {
+	Target       string
+	MetaResolver llb.ImageMetaResolver
+	BuildArgs    map[string]string
+	Labels       map[string]string
+	SessionID    string
+	BuildContext *llb.State
+	Excludes     []string
+	// IgnoreCache contains names of the stages that should not use build cache.
+	// Empty slice means ignore cache for all stages. Nil doesn't disable cache.
+	IgnoreCache []string
+	// CacheIDNamespace scopes the IDs for different cache mounts
+	CacheIDNamespace  string
+	ImageResolveMode  llb.ResolveMode
+	TargetPlatform    *ocispecs.Platform
+	BuildPlatforms    []ocispecs.Platform
+	PrefixPlatform    bool
+	ExtraHosts        []llb.HostIP
+	ShmSize           int64
+	Ulimit            []pb.Ulimit
+	CgroupParent      string
+	ForceNetMode      pb.NetMode
+	OverrideCopyImage string
+	LLBCaps           *apicaps.CapSet
+	ContextLocalName  string
+	SourceMap         *llb.SourceMap
+	Hostname          string
+	Warn              func(short, url string, detail [][]byte, location *parser.Range)
+	ContextByName     func(ctx context.Context, name, resolveMode string, p *ocispecs.Platform) (*llb.State, *Image, *binfotypes.BuildInfo, error)
+}
+
+func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, *binfotypes.BuildInfo, error) {
+	buildInfo := &binfotypes.BuildInfo{}
+	contextByName := opt.ContextByName
+	opt.ContextByName = func(ctx context.Context, name, resolveMode string, p *ocispecs.Platform) (*llb.State, *Image, *binfotypes.BuildInfo, error) {
+		if !strings.EqualFold(name, "scratch") && !strings.EqualFold(name, "context") {
+			if contextByName != nil {
+				if p == nil {
+					p = opt.TargetPlatform
+				}
+				st, img, bi, err := contextByName(ctx, name, resolveMode, p)
+				if err != nil {
+					return nil, nil, nil, err
+				}
+				if bi != nil && bi.Deps != nil {
+					for k := range bi.Deps {
+						if buildInfo.Deps == nil {
+							buildInfo.Deps = make(map[string]binfotypes.BuildInfo)
+						}
+						buildInfo.Deps[k] = bi.Deps[k]
+					}
+				}
+				return st, img, bi, nil
+>>>>>>> origin/v0.10
 			}
 		}
 	}
@@ -254,16 +310,40 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			ds.platform = &p
 		}
 
+<<<<<<< HEAD
 		if st.Name != "" {
 			s, img, err := namedContext(ctx, st.Name, dockerui.ContextOpt{Platform: ds.platform, ResolveMode: opt.ImageResolveMode.String()})
 			if err != nil {
 				return nil, err
+=======
+		if v := st.Platform; v != "" {
+			v, err := shlex.ProcessWordWithMap(v, metaArgsToMap(optMetaArgs))
+			if err != nil {
+				return nil, nil, nil, parser.WithLocation(errors.Wrapf(err, "failed to process arguments for platform %s", v), st.Location)
+			}
+
+			p, err := platforms.Parse(v)
+			if err != nil {
+				return nil, nil, nil, parser.WithLocation(errors.Wrapf(err, "failed to parse platform %s", v), st.Location)
+			}
+			ds.platform = &p
+		}
+
+		if st.Name != "" {
+			s, img, bi, err := opt.ContextByName(ctx, st.Name, opt.ImageResolveMode.String(), ds.platform)
+			if err != nil {
+				return nil, nil, nil, err
+>>>>>>> origin/v0.10
 			}
 			if s != nil {
 				ds.noinit = true
 				ds.state = *s
 				if img != nil {
+<<<<<<< HEAD
 					ds.image = clampTimes(*img, opt.Epoch)
+=======
+					ds.image = *img
+>>>>>>> origin/v0.10
 					if img.Architecture != "" && img.OS != "" {
 						ds.platform = &ocispecs.Platform{
 							OS:           img.OS,
@@ -272,6 +352,12 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 						}
 					}
 				}
+<<<<<<< HEAD
+=======
+				if bi != nil {
+					ds.buildInfo = *bi
+				}
+>>>>>>> origin/v0.10
 				allDispatchStates.addState(ds)
 				continue
 			}
@@ -382,7 +468,11 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 					d.stage.BaseName = reference.TagNameOnly(ref).String()
 
 					var isScratch bool
+<<<<<<< HEAD
 					st, img, err := namedContext(ctx, d.stage.BaseName, dockerui.ContextOpt{ResolveMode: opt.ImageResolveMode.String(), Platform: platform})
+=======
+					st, img, bi, err := opt.ContextByName(ctx, d.stage.BaseName, opt.ImageResolveMode.String(), platform)
+>>>>>>> origin/v0.10
 					if err != nil {
 						return err
 					}
@@ -392,6 +482,12 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 						} else {
 							d.image = emptyImage(platformOpt.targetPlatform)
 						}
+<<<<<<< HEAD
+=======
+						if bi != nil {
+							d.buildInfo = *bi
+						}
+>>>>>>> origin/v0.10
 						d.state = st.Platform(*platform)
 						d.platform = platform
 						return nil

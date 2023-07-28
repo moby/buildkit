@@ -402,7 +402,20 @@ func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Imag
 		return err
 	}
 
+<<<<<<< HEAD
 	remotes, err := ref.GetRemotes(ctx, true, e.opts.RefCfg, false, s)
+=======
+	topLayerRef := src.Ref
+	if len(src.Refs) > 0 {
+		if r, ok := src.Refs[defaultPlatform()]; ok {
+			topLayerRef = r
+		} else {
+			return errors.Errorf("no reference for default platform %s", defaultPlatform())
+		}
+	}
+
+	remotes, err := topLayerRef.GetRemotes(ctx, true, e.refCfg(), false, s)
+>>>>>>> origin/v0.10
 	if err != nil {
 		return err
 	}
@@ -475,6 +488,7 @@ func addAnnotations(m map[digest.Digest]map[string]string, desc ocispecs.Descrip
 	}
 }
 
+<<<<<<< HEAD
 func NewDescriptorReference(desc ocispecs.Descriptor, release func(context.Context) error) exporter.DescriptorReference {
 	return &descriptorReference{
 		desc:    desc,
@@ -493,4 +507,10 @@ func (d *descriptorReference) Descriptor() ocispecs.Descriptor {
 
 func (d *descriptorReference) Release() error {
 	return d.release(context.TODO())
+=======
+func defaultPlatform() string {
+	// Use normalized platform string to avoid the mismatch with platform options which
+	// are normalized using platforms.Normalize()
+	return platforms.Format(platforms.Normalize(platforms.DefaultSpec()))
+>>>>>>> origin/v0.10
 }

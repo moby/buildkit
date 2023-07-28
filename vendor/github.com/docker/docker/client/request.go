@@ -265,6 +265,7 @@ func (cli *Client) addHeaders(req *http.Request, headers headers) *http.Request 
 
 	for k, v := range headers {
 		req.Header[http.CanonicalHeaderKey(k)] = v
+<<<<<<< HEAD
 	}
 
 	if cli.userAgent != nil {
@@ -273,6 +274,8 @@ func (cli *Client) addHeaders(req *http.Request, headers headers) *http.Request 
 		} else {
 			req.Header.Set("User-Agent", *cli.userAgent)
 		}
+=======
+>>>>>>> origin/v0.10
 	}
 	return req
 }
