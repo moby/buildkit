@@ -7,7 +7,6 @@ import (
 	"crypto/tls"
 	"net"
 	"os"
-	"path/filepath"
 	"syscall"
 
 	"github.com/containerd/containerd/sys"
@@ -45,10 +44,6 @@ func listenFD(addr string, tlsConfig *tls.Config) (net.Listener, error) {
 
 	//TODO: systemd fd selection (default is 3)
 	return nil, errors.New("not supported yet")
-}
-
-func traceSocketPath(root string) string {
-	return filepath.Join(root, "otel-grpc.sock")
 }
 
 func getLocalListener(listenerPath string) (net.Listener, error) {

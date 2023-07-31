@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -181,14 +180,6 @@ func newSandbox(ctx context.Context, w Worker, mirror string, mv matrixValue) (s
 	}, cl, nil
 }
 
-func getBuildkitdAddr(tmpdir string) string {
-	address := "unix://" + filepath.Join(tmpdir, "buildkitd.sock")
-	if runtime.GOOS == "windows" {
-		address = "//./pipe/buildkitd-" + filepath.Base(tmpdir)
-	}
-	return address
-}
-
 func runBuildkitd(ctx context.Context, conf *BackendConfig, args []string, logs map[string]*bytes.Buffer, uid, gid int, extraEnv []string) (address string, cl func() error, err error) {
 	deferF := &multiCloser{}
 	cl = deferF.F()
@@ -224,7 +215,7 @@ func runBuildkitd(ctx context.Context, conf *BackendConfig, args []string, logs 
 
 	args = append(args, "--root", tmpdir, "--addr", address, "--debug")
 	cmd := exec.Command(args[0], args[1:]...) //nolint:gosec // test utility
-	cmd.Env = append(os.Environ(), "BUILDKIT_DEBUG_EXEC_OUTPUT=1", "BUILDKIT_DEBUG_PANIC_ON_ERROR=1", "TMPDIR="+filepath.Join(tmpdir, "tmp"))
+	cmd.Env = append(os.Environ(), "BUILDKIT_DEBUG_EXEC_OUTPUT=1", "BUILDKIT_DEBUG_PANIC_ON_ERROR=1", "BUILDKIT_TRACE_SOCKET="+getTraceSocketPath(tmpdir), "TMPDIR="+filepath.Join(tmpdir, "tmp"))
 	cmd.Env = append(cmd.Env, extraEnv...)
 	cmd.SysProcAttr = getSysProcAttr()
 

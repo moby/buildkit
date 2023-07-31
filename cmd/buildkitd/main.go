@@ -661,7 +661,11 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 
 	var traceSocket string
 	if tc != nil {
-		traceSocket = traceSocketPath(cfg.Root)
+		if v, ok := os.LookupEnv("BUILDKIT_TRACE_SOCKET"); ok {
+			traceSocket = v
+		} else {
+			traceSocket = appdefaults.TraceSocketPath(userns.RunningInUserNS())
+		}
 		if err := runTraceController(traceSocket, tc); err != nil {
 			return nil, err
 		}

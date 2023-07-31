@@ -13,16 +13,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-const (
-	defaultTraceSocketPath = `\\.\pipe\buildkit-otel-grpc`
-)
-
 func listenFD(addr string, tlsConfig *tls.Config) (net.Listener, error) {
 	return nil, errors.New("listening server on fd not supported on windows")
-}
-
-func traceSocketPath(root string) string {
-	return defaultTraceSocketPath
 }
 
 func getLocalListener(listenerPath string) (net.Listener, error) {
