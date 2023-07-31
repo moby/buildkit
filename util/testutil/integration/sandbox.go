@@ -260,7 +260,7 @@ func getBackend(sb Sandbox) (*backend, error) {
 }
 
 func rootlessSupported(uid int) bool {
-	cmd := exec.Command("sudo", "-u", fmt.Sprintf("#%d", uid), "-i", "--", "exec", "unshare", "-U", "true") //nolint:gosec // test utility
+	cmd := exec.Command("sudo", "-E", "-u", fmt.Sprintf("#%d", uid), "-i", "--", "exec", "unshare", "-U", "true") //nolint:gosec // test utility
 	b, err := cmd.CombinedOutput()
 	if err != nil {
 		bklog.L.Warnf("rootless mode is not supported on this host: %v (%s)", err, string(b))
