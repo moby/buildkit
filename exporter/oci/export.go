@@ -117,20 +117,21 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	return e.ExportImage(ctx, src, exptypes.InlineCache{}, sessionID)
 }
 
-func (e *imageExporterInstance) ExportImage(ctx context.Context, inp *exporter.Source, inlineCache exptypes.InlineCache, sessionID string) (_ map[string]string, descref exporter.DescriptorReference, err error) {
-	if e.opt.Variant == VariantDocker && len(inp.Refs) > 0 {
+func (e *imageExporterInstance) ExportImage(ctx context.Context, src *exporter.Source, inlineCache exptypes.InlineCache, sessionID string) (_ map[string]string, descref exporter.DescriptorReference, err error) {
+	if e.opt.Variant == VariantDocker && len(src.Refs) > 0 {
 		return nil, nil, errors.Errorf("docker exporter does not currently support exporting manifest lists")
 	}
 
 	meta := make(map[string][]byte)
-	for k, v := range inp.Metadata {
+	for k, v := range src.Metadata {
 		meta[k] = v
 	}
 	for k, v := range e.meta {
 		meta[k] = v
 	}
-	src := *inp
-	src.Metadata = meta
+	inp := *src
+	inp.Metadata = meta
+	src = &inp
 
 	opts := e.opts
 	as, _, err := containerimage.ParseAnnotations(meta)
@@ -138,11 +139,6 @@ func (e *imageExporterInstance) ExportImage(ctx context.Context, inp *exporter.S
 		return nil, nil, err
 	}
 	opts.Annotations = opts.Annotations.Merge(as)
-
-	if err != nil {
-		return nil, nil, err
-	}
-	opts.Annotations = as.Merge(opts.Annotations)
 	opts.InlineCache = inlineCache
 
 	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager, leaseutil.MakeTemporary)
@@ -155,7 +151,7 @@ func (e *imageExporterInstance) ExportImage(ctx context.Context, inp *exporter.S
 		}
 	}()
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, &src, sessionID, &opts)
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, sessionID, &opts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -190,7 +186,7 @@ func (e *imageExporterInstance) ExportImage(ctx context.Context, inp *exporter.S
 	}
 	resp[exptypes.ExporterImageDescriptorKey] = base64.StdEncoding.EncodeToString(dtdesc)
 
-	if n, ok := meta["image.name"]; e.opts.ImageName == "*" && ok {
+	if n, ok := src.Metadata["image.name"]; e.opts.ImageName == "*" && ok {
 		e.opts.ImageName = string(n)
 	}
 

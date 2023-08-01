@@ -228,11 +228,8 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			s.Allow(sessioncontent.NewAttachable(contentStores))
 		}
 
-		if len(exporterConfig.outputDirs) > 0 {
-			s.Allow(filesync.NewFSSyncTargetDir(exporterConfig.outputDirs))
-		}
-		if len(exporterConfig.outputs) > 0 {
-			s.Allow(filesync.NewFSSyncTarget(exporterConfig.outputs))
+		if len(exporterConfig.outputDirs) > 0 || len(exporterConfig.outputs) > 0 {
+			s.Allow(filesync.NewFSSyncTarget(exporterConfig.outputs, exporterConfig.outputDirs))
 		}
 
 		eg.Go(func() error {

@@ -12,10 +12,6 @@ service FileSync{
   rpc TarStream(stream fsutil.types.Packet) returns (stream fsutil.types.Packet);
 }
 
-service FSSend{
-  rpc DiffCopy(stream fsutil.types.Packet) returns (stream fsutil.types.Packet);
-}
-
 service FileSend{
   rpc DiffCopy(stream BytesMessage) returns (stream BytesMessage);
 }

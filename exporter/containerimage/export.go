@@ -191,16 +191,17 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	return e.ExportImage(ctx, src, exptypes.InlineCache{}, sessionID)
 }
 
-func (e *imageExporterInstance) ExportImage(ctx context.Context, inp *exporter.Source, inlineCache exptypes.InlineCache, sessionID string) (_ map[string]string, descref exporter.DescriptorReference, err error) {
+func (e *imageExporterInstance) ExportImage(ctx context.Context, src *exporter.Source, inlineCache exptypes.InlineCache, sessionID string) (_ map[string]string, descref exporter.DescriptorReference, err error) {
 	meta := make(map[string][]byte)
-	for k, v := range inp.Metadata {
+	for k, v := range src.Metadata {
 		meta[k] = v
 	}
 	for k, v := range e.meta {
 		meta[k] = v
 	}
-	src := *inp
-	src.Metadata = meta
+	inp := *src
+	inp.Metadata = meta
+	src = &inp
 
 	opts := e.opts
 	as, _, err := ParseAnnotations(meta)
@@ -220,7 +221,7 @@ func (e *imageExporterInstance) ExportImage(ctx context.Context, inp *exporter.S
 		}
 	}()
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, &src, sessionID, &opts)
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, sessionID, &opts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -282,7 +283,7 @@ func (e *imageExporterInstance) ExportImage(ctx context.Context, inp *exporter.S
 				tagDone(nil)
 
 				if e.unpack {
-					if err := e.unpackImage(ctx, img, &src, session.NewGroup(sessionID)); err != nil {
+					if err := e.unpackImage(ctx, img, src, session.NewGroup(sessionID)); err != nil {
 						return nil, nil, err
 					}
 				}
@@ -318,7 +319,7 @@ func (e *imageExporterInstance) ExportImage(ctx context.Context, inp *exporter.S
 				}
 			}
 			if e.push {
-				err := e.pushImage(ctx, &src, sessionID, targetName, desc.Digest)
+				err := e.pushImage(ctx, src, sessionID, targetName, desc.Digest)
 				if err != nil {
 					return nil, nil, errors.Wrapf(err, "failed to push %v", targetName)
 				}

@@ -24,6 +24,7 @@ const (
 	keyExcludePatterns    = "exclude-patterns"
 	keyFollowPaths        = "followpaths"
 	keyDirName            = "dir-name"
+	keyDirSync            = "dir-sync"
 	keyExporterMetaPrefix = "exporter-md-"
 )
 
@@ -67,6 +68,7 @@ func (sp *fsSyncProvider) Register(server *grpc.Server) {
 func (sp *fsSyncProvider) DiffCopy(stream FileSync_DiffCopyServer) error {
 	return sp.handle("diffcopy", stream)
 }
+
 func (sp *fsSyncProvider) TarStream(stream FileSync_TarStreamServer) error {
 	return sp.handle("tarstream", stream)
 }
@@ -229,37 +231,20 @@ func FSSync(ctx context.Context, c session.Caller, opt FSSendRequestOpt) error {
 	return pr.recvFn(stream, opt.DestDir, opt.CacheUpdater, opt.ProgressCb, opt.Differ, opt.Filter)
 }
 
-// NewFSSyncTargetDir allows writing into a directory
-func NewFSSyncTargetDir(outdirs []string) session.Attachable {
-	p := &fsSyncTargetDir{
-		outdirs: outdirs,
-	}
-	return p
-}
-
-type fsSyncTargetDir struct {
-	outdirs []string
-}
-
-func (sp *fsSyncTargetDir) Register(server *grpc.Server) {
-	RegisterFSSendServer(server, sp)
-}
-
-func (sp *fsSyncTargetDir) DiffCopy(stream FSSend_DiffCopyServer) (err error) {
-	return syncTargetDiffCopy(stream, sp.outdirs)
-}
-
 // NewFSSyncTarget allows writing into an io.WriteCloser
-func NewFSSyncTarget(fs map[string]FileOutputFunc) session.Attachable {
+// or stream a file system to the client
+func NewFSSyncTarget(fs map[string]FileOutputFunc, outdirs []string) session.Attachable {
 	p := &fsSyncTarget{
-		fs: fs,
+		fs:      fs,
+		outdirs: outdirs,
 	}
 	return p
 }
 
 type fsSyncTarget struct {
 	// fs maps exporter ID -> output func
-	fs map[string]FileOutputFunc
+	fs      map[string]FileOutputFunc
+	outdirs []string
 }
 
 func (sp *fsSyncTarget) Register(server *grpc.Server) {
@@ -267,38 +252,31 @@ func (sp *fsSyncTarget) Register(server *grpc.Server) {
 }
 
 func (sp *fsSyncTarget) DiffCopy(stream FileSend_DiffCopyServer) (err error) {
-	if len(sp.fs) == 0 {
-		return errors.New("empty outfile and outdir")
+	if len(sp.fs) == 0 && len(sp.outdirs) == 0 {
+		return errors.New("empty outfile and outdirs")
 	}
 	opts, _ := metadata.FromIncomingContext(stream.Context()) // if no metadata continue with empty object
+
+	if _, ok := opts[keyDirSync]; ok {
+		return syncTargetDiffCopy(stream, sp.outdirs)
+	}
 
 	return writeTargetFile(stream, sp.fs, opts)
 }
 
 func CopyToCaller(ctx context.Context, fs fsutil.FS, c session.Caller, progress func(int, bool)) error {
-	method := session.MethodURL(_FSSend_serviceDesc.ServiceName, "diffcopy")
-	if !c.Supports(method) {
-		return copyToCallerLegacy(ctx, fs, c, progress)
-	}
-
-	client := NewFSSendClient(c.Conn())
-
-	cc, err := client.DiffCopy(ctx)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return sendDiffCopy(cc, fs, progress)
-}
-
-func copyToCallerLegacy(ctx context.Context, fs fsutil.FS, c session.Caller, progress func(int, bool)) error {
 	method := session.MethodURL(_FileSend_serviceDesc.ServiceName, "diffcopy")
 	if !c.Supports(method) {
 		return errors.Errorf("method %s not supported by the client", method)
 	}
 
-	client := NewFileSendClient(c.Conn())
+	opts := map[string][]string{
+		keyDirSync: {"true"},
+	}
 
+	ctx = metadata.NewOutgoingContext(ctx, opts)
+
+	client := NewFileSendClient(c.Conn())
 	cc, err := client.DiffCopy(ctx)
 	if err != nil {
 		return errors.WithStack(err)
@@ -358,13 +336,13 @@ func decodeOpts(opts map[string][]string) map[string][]string {
 	md := make(map[string][]string, len(opts))
 	for k, v := range opts {
 		out := make([]string, len(v))
-		var isDecoded bool
+		var isEncoded bool
 		if v, ok := opts[k+"-encoded"]; ok && len(v) > 0 {
 			if b, _ := strconv.ParseBool(v[0]); b {
-				isDecoded = true
+				isEncoded = true
 			}
 		}
-		if isDecoded {
+		if isEncoded {
 			for i, s := range v {
 				out[i], _ = url.QueryUnescape(s)
 			}
@@ -380,13 +358,14 @@ func decodeOpts(opts map[string][]string) map[string][]string {
 // is backwards compatible and avoids encoding ASCII characters.
 func encodeStringForHeader(inputs []string) ([]string, bool) {
 	var encode bool
+L:
 	for _, input := range inputs {
 		for _, runeVal := range input {
 			// Only encode non-ASCII characters, and characters that have special
 			// meaning during decoding.
 			if runeVal > unicode.MaxASCII {
 				encode = true
-				break
+				break L
 			}
 		}
 	}
