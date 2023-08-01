@@ -186,15 +186,14 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, caller session.Calle
 	}
 
 	opt := filesync.FSSendRequestOpt{
-		Name:             ls.src.Name,
-		IncludePatterns:  ls.src.IncludePatterns,
-		ExcludePatterns:  ls.src.ExcludePatterns,
-		FollowPaths:      ls.src.FollowPaths,
-		OverrideExcludes: false,
-		DestDir:          dest,
-		CacheUpdater:     &cacheUpdater{cc, mount.IdentityMapping()},
-		ProgressCb:       newProgressHandler(ctx, "transferring "+ls.src.Name+":"),
-		Differ:           ls.src.Differ,
+		Name:            ls.src.Name,
+		IncludePatterns: ls.src.IncludePatterns,
+		ExcludePatterns: ls.src.ExcludePatterns,
+		FollowPaths:     ls.src.FollowPaths,
+		DestDir:         dest,
+		CacheUpdater:    &cacheUpdater{cc, mount.IdentityMapping()},
+		ProgressCb:      newProgressHandler(ctx, "transferring "+ls.src.Name+":"),
+		Differ:          ls.src.Differ,
 	}
 
 	if idmap := mount.IdentityMapping(); idmap != nil {

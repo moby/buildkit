@@ -21,7 +21,6 @@ import (
 )
 
 const (
-	keyOverrideExcludes   = "override-excludes"
 	keyIncludePatterns    = "include-patterns"
 	keyExcludePatterns    = "exclude-patterns"
 	keyFollowPaths        = "followpaths"
@@ -36,9 +35,8 @@ type fsSyncProvider struct {
 }
 
 type SyncedDir struct {
-	Dir      string
-	Excludes []string
-	Map      func(string, *fstypes.Stat) fsutil.MapResult
+	Dir string
+	Map func(string, *fstypes.Stat) fsutil.MapResult
 }
 
 type DirSource interface {
@@ -99,9 +97,6 @@ func (sp *fsSyncProvider) handle(method string, stream grpc.ServerStream) (retEr
 	}
 
 	excludes := opts[keyExcludePatterns]
-	if len(dir.Excludes) != 0 && (len(opts[keyOverrideExcludes]) == 0 || opts[keyOverrideExcludes][0] != "true") {
-		excludes = dir.Excludes
-	}
 	includes := opts[keyIncludePatterns]
 
 	followPaths := opts[keyFollowPaths]
@@ -155,16 +150,15 @@ var supportedProtocols = []protocol{
 
 // FSSendRequestOpt defines options for FSSend request
 type FSSendRequestOpt struct {
-	Name             string
-	IncludePatterns  []string
-	ExcludePatterns  []string
-	FollowPaths      []string
-	OverrideExcludes bool // deprecated: this is used by docker/cli for automatically loading .dockerignore from the directory
-	DestDir          string
-	CacheUpdater     CacheUpdater
-	ProgressCb       func(int, bool)
-	Filter           func(string, *fstypes.Stat) bool
-	Differ           fsutil.DiffType
+	Name            string
+	IncludePatterns []string
+	ExcludePatterns []string
+	FollowPaths     []string
+	DestDir         string
+	CacheUpdater    CacheUpdater
+	ProgressCb      func(int, bool)
+	Filter          func(string, *fstypes.Stat) bool
+	Differ          fsutil.DiffType
 }
 
 // CacheUpdater is an object capable of sending notifications for the cache hash changes
@@ -188,9 +182,6 @@ func FSSync(ctx context.Context, c session.Caller, opt FSSendRequestOpt) error {
 	}
 
 	opts := make(map[string][]string)
-	if opt.OverrideExcludes {
-		opts[keyOverrideExcludes] = []string{"true"}
-	}
 
 	if opt.IncludePatterns != nil {
 		opts[keyIncludePatterns] = opt.IncludePatterns
