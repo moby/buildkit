@@ -56,6 +56,10 @@ func (r *cgroupRecord) Start() {
 	r.closeSampler = s.Close
 }
 
+func (r *cgroupRecord) Close() {
+	r.close()
+}
+
 func (r *cgroupRecord) CloseAsync(next func(context.Context) error) error {
 	go func() {
 		r.close()
@@ -158,6 +162,9 @@ func (r *nopRecord) Wait() error {
 
 func (r *nopRecord) Samples() (*types.Samples, error) {
 	return nil, nil
+}
+
+func (r *nopRecord) Close() {
 }
 
 func (r *nopRecord) CloseAsync(next func(context.Context) error) error {

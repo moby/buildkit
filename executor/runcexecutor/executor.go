@@ -335,6 +335,9 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 
 	err = exitError(ctx, err)
 	if err != nil {
+		if rec != nil {
+			rec.Close()
+		}
 		releaseContainer(context.TODO())
 		return nil, err
 	}
