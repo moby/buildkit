@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerui"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	gwpb "github.com/moby/buildkit/frontend/gateway/pb"
+	contextreq "github.com/moby/buildkit/frontend/subrequests/context"
 	"github.com/moby/buildkit/frontend/subrequests/outline"
 	"github.com/moby/buildkit/frontend/subrequests/targets"
 	"github.com/moby/buildkit/solver/errdefs"
@@ -22,6 +23,7 @@ import (
 	"github.com/moby/buildkit/solver/result"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	fstypes "github.com/tonistiigi/fsutil/types"
 )
 
 const (
@@ -83,6 +85,49 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 		},
 		ListTargets: func(ctx context.Context) (*targets.List, error) {
 			return dockerfile2llb.ListTargets(ctx, src.Data)
+		},
+		Context: func(ctx context.Context) (*contextreq.Context, error) {
+			convertOpt.ContextOpts = []llb.LocalOption{llb.Truncate()}
+			st, err := dockerfile2llb.BuildContext(ctx, src.Data, convertOpt)
+			if err != nil {
+				return nil, err
+			}
+
+			def, err := st.Marshal(ctx)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to marshal LLB definition")
+			}
+			r, err := c.Solve(ctx, client.SolveRequest{
+				Definition: def.ToPB(),
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			ref, err := r.SingleRef()
+			if err != nil {
+				return nil, err
+			}
+
+			cresp := contextreq.Context{}
+			err = client.Walk(ctx, ref, func(path string, st *fstypes.Stat, err error) error {
+				if err != nil {
+					return err
+				}
+				if st.IsDir() {
+					path += "/"
+				}
+				cresp.Files = append(cresp.Files, contextreq.File{
+					Name: path,
+					Size: st.Size_,
+				})
+				return nil
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			return &cresp, nil
 		},
 	}); err != nil {
 		return nil, err

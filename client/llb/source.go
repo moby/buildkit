@@ -407,6 +407,10 @@ func Local(name string, opts ...LocalOption) State {
 			addCap(&gi.Constraints, pb.CapSourceLocalDiffer)
 		}
 	}
+	if gi.Truncate {
+		attrs[pb.AttrLocalTruncate] = "true"
+		addCap(&gi.Constraints, pb.CapSourceLocalTruncate)
+	}
 
 	addCap(&gi.Constraints, pb.CapSourceLocal)
 
@@ -475,6 +479,12 @@ func Differ(t DiffType, required bool) LocalOption {
 			Type:     t,
 			Required: required,
 		}
+	})
+}
+
+func Truncate() LocalOption {
+	return localOptionFunc(func(li *LocalInfo) {
+		li.Truncate = true
 	})
 }
 
@@ -556,6 +566,7 @@ type LocalInfo struct {
 	FollowPaths     string
 	SharedKeyHint   string
 	Differ          DifferInfo
+	Truncate        bool
 }
 
 func HTTP(url string, opts ...HTTPOption) State {

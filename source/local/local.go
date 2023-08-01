@@ -126,6 +126,9 @@ func (ls *localSourceHandler) snapshotWithAnySession(ctx context.Context, g sess
 
 func (ls *localSourceHandler) snapshot(ctx context.Context, caller session.Caller) (out cache.ImmutableRef, retErr error) {
 	sharedKey := ls.src.Name + ":" + ls.src.SharedKeyHint + ":" + caller.SharedKey() // TODO: replace caller.SharedKey() with source based hint from client(absolute-path+nodeid)
+	if ls.src.Truncate {
+		sharedKey += ":truncate"
+	}
 
 	var mutable cache.MutableRef
 	sis, err := searchSharedKey(ctx, ls.cm, sharedKey)
@@ -195,6 +198,7 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, caller session.Calle
 		CacheUpdater:     &cacheUpdater{cc, mount.IdentityMapping()},
 		ProgressCb:       newProgressHandler(ctx, "transferring "+ls.src.Name+":"),
 		Differ:           ls.src.Differ,
+		Truncate:         ls.src.Truncate,
 	}
 
 	if idmap := mount.IdentityMapping(); idmap != nil {

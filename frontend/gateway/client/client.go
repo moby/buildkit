@@ -3,6 +3,8 @@ package client
 import (
 	"context"
 	"io"
+	"io/fs"
+	"path/filepath"
 	"syscall"
 
 	"github.com/moby/buildkit/client/llb"
@@ -102,6 +104,41 @@ type Reference interface {
 	ReadFile(ctx context.Context, req ReadRequest) ([]byte, error)
 	StatFile(ctx context.Context, req StatRequest) (*fstypes.Stat, error)
 	ReadDir(ctx context.Context, req ReadDirRequest) ([]*fstypes.Stat, error)
+}
+
+func Walk(ctx context.Context, ref Reference, cb func(string, *fstypes.Stat, error) error) error {
+	st, err := ref.StatFile(ctx, StatRequest{
+		Path: "/",
+	})
+	if err != nil {
+		return cb("/", nil, err)
+	}
+
+	if fs.FileMode(st.Mode).IsDir() {
+		return walkDir(ctx, ref, "/", cb)
+	}
+	return nil
+}
+
+func walkDir(ctx context.Context, ref Reference, base string, cb func(string, *fstypes.Stat, error) error) error {
+	lst, err := ref.ReadDir(ctx, ReadDirRequest{
+		Path: base,
+	})
+	if err != nil {
+		return cb(base, nil, err)
+	}
+	for _, f := range lst {
+		path := filepath.Join(base, f.Path)
+		if fs.FileMode(f.Mode).IsDir() {
+			if err := walkDir(ctx, ref, path, cb); err != nil {
+				return err
+			}
+		}
+		if err := cb(path, f, nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type ReadRequest struct {

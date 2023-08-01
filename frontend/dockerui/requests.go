@@ -7,6 +7,7 @@ import (
 
 	"github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/frontend/subrequests"
+	contextreq "github.com/moby/buildkit/frontend/subrequests/context"
 	"github.com/moby/buildkit/frontend/subrequests/outline"
 	"github.com/moby/buildkit/frontend/subrequests/targets"
 	"github.com/moby/buildkit/solver/errdefs"
@@ -19,6 +20,7 @@ const (
 type RequestHandler struct {
 	Outline     func(context.Context) (*outline.Outline, error)
 	ListTargets func(context.Context) (*targets.List, error)
+	Context     func(context.Context) (*contextreq.Context, error)
 	AllowOther  bool
 }
 
@@ -55,6 +57,18 @@ func (bc *Client) HandleSubrequest(ctx context.Context, h RequestHandler) (*clie
 			res, err := targets.ToResult()
 			return res, true, err
 		}
+	case contextreq.SubrequestsContextDefinition.Name:
+		if f := h.Context; f != nil {
+			context, err := f(ctx)
+			if err != nil {
+				return nil, false, err
+			}
+			if context == nil {
+				return nil, true, nil
+			}
+			res, err := context.ToResult()
+			return res, true, err
+		}
 	}
 	if h.AllowOther {
 		return nil, false, nil
@@ -69,6 +83,9 @@ func describe(h RequestHandler) (*client.Result, error) {
 	}
 	if h.ListTargets != nil {
 		all = append(all, targets.SubrequestsTargetsDefinition)
+	}
+	if h.Context != nil {
+		all = append(all, contextreq.SubrequestsContextDefinition)
 	}
 	all = append(all, subrequests.SubrequestsDescribeDefinition)
 	dt, err := json.MarshalIndent(all, "", "  ")

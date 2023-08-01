@@ -71,7 +71,7 @@ func (wc *streamWriterCloser) Close() error {
 	return nil
 }
 
-func recvDiffCopy(ds grpc.ClientStream, dest string, cu CacheUpdater, progress progressCb, differ fsutil.DiffType, filter func(string, *fstypes.Stat) bool) (err error) {
+func recvDiffCopy(ds grpc.ClientStream, dest string, cu CacheUpdater, progress progressCb, differ fsutil.DiffType, filter func(string, *fstypes.Stat) bool, truncate bool) (err error) {
 	st := time.Now()
 	defer func() {
 		bklog.G(ds.Context()).Debugf("diffcopy took: %v", time.Since(st))
@@ -95,6 +95,7 @@ func recvDiffCopy(ds grpc.ClientStream, dest string, cu CacheUpdater, progress p
 		ProgressCb:    progress,
 		Filter:        fsutil.FilterFunc(filter),
 		Differ:        differ,
+		Truncate:      truncate,
 	}))
 }
 

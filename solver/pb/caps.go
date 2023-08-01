@@ -21,6 +21,7 @@ const (
 	CapSourceLocalExcludePatterns apicaps.CapID = "source.local.excludepatterns"
 	CapSourceLocalSharedKeyHint   apicaps.CapID = "source.local.sharedkeyhint"
 	CapSourceLocalDiffer          apicaps.CapID = "source.local.differ"
+	CapSourceLocalTruncate        apicaps.CapID = "source.local.truncate"
 
 	CapSourceGit              apicaps.CapID = "source.git"
 	CapSourceGitKeepDir       apicaps.CapID = "source.git.keepgitdir"
