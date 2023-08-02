@@ -1,17 +1,20 @@
 package fsutil
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
 	strings "strings"
+	"syscall"
 
 	"github.com/pkg/errors"
+	"github.com/tonistiigi/fsutil/types"
 )
 
-func FollowLinks(root string, paths []string) ([]string, error) {
-	r := &symlinkResolver{root: root, resolved: map[string]struct{}{}}
+func FollowLinks(fs FS, paths []string) ([]string, error) {
+	r := &symlinkResolver{fs: fs, resolved: map[string]struct{}{}, cache: make(map[string][]os.DirEntry)}
 	for _, p := range paths {
 		if err := r.append(p); err != nil {
 			return nil, err
@@ -26,8 +29,9 @@ func FollowLinks(root string, paths []string) ([]string, error) {
 }
 
 type symlinkResolver struct {
-	root     string
+	fs       FS
 	resolved map[string]struct{}
+	cache    map[string][]os.DirEntry
 }
 
 func (r *symlinkResolver) append(p string) error {
@@ -76,10 +80,9 @@ func (r *symlinkResolver) append(p string) error {
 }
 
 func (r *symlinkResolver) readSymlink(p string, allowWildcard bool) ([]string, error) {
-	realPath := filepath.Join(r.root, p)
 	base := filepath.Base(p)
 	if allowWildcard && containsWildcards(base) {
-		fis, err := os.ReadDir(filepath.Dir(realPath))
+		fis, err := r.readDir(filepath.Dir(p))
 		if err != nil {
 			if isNotFound(err) {
 				return nil, nil
@@ -99,27 +102,72 @@ func (r *symlinkResolver) readSymlink(p string, allowWildcard bool) ([]string, e
 		return out, nil
 	}
 
-	fi, err := os.Lstat(realPath)
+	entry, err := r.readFile(p)
 	if err != nil {
 		if isNotFound(err) {
 			return nil, nil
 		}
 		return nil, errors.WithStack(err)
 	}
-	if fi.Mode()&os.ModeSymlink == 0 {
+	if entry.Type()&os.ModeSymlink == 0 {
 		return nil, nil
 	}
-	link, err := os.Readlink(realPath)
+
+	fi, err := entry.Info()
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	link = filepath.Clean(link)
+	stat, ok := fi.Sys().(*types.Stat)
+	if !ok {
+		return nil, errors.WithStack(&os.PathError{Path: p, Err: syscall.EBADMSG, Op: "fileinfo without stat info"})
+	}
+
+	link := filepath.Clean(stat.Linkname)
 	if filepath.IsAbs(link) {
 		return []string{link}, nil
 	}
 	return []string{
 		filepath.Join(string(filepath.Separator), filepath.Join(filepath.Dir(p), link)),
 	}, nil
+}
+
+func (r *symlinkResolver) readFile(root string) (os.DirEntry, error) {
+	out, err := r.readDir(filepath.Dir(root))
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range out {
+		if f.Name() == filepath.Base(root) {
+			return f, nil
+		}
+	}
+	return nil, os.ErrNotExist
+}
+
+func (r *symlinkResolver) readDir(root string) ([]os.DirEntry, error) {
+	if entries, ok := r.cache[root]; ok {
+		return entries, nil
+	}
+
+	var out []os.DirEntry
+	err := r.fs.Walk(context.TODO(), root, func(p string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if rel, err := filepath.Rel(root, p); err != nil || rel == "." {
+			return err
+		}
+		out = append(out, entry)
+		if entry.IsDir() {
+			return filepath.SkipDir
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	r.cache[root] = out
+	return out, nil
 }
 
 func containsWildcards(name string) bool {

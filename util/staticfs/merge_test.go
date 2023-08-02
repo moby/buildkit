@@ -38,7 +38,9 @@ func TestMerge(t *testing.T) {
 	require.Equal(t, []byte("barbarbar"), data)
 
 	var files []string
-	err = fs.Walk(context.TODO(), func(path string, info iofs.FileInfo, err error) error {
+	err = fs.Walk(context.TODO(), "", func(path string, entry iofs.DirEntry, err error) error {
+		require.NoError(t, err)
+		info, err := entry.Info()
 		require.NoError(t, err)
 		switch path {
 		case "foo":
@@ -87,7 +89,7 @@ func TestMerge(t *testing.T) {
 	require.True(t, os.IsNotExist(err))
 
 	files = nil
-	err = fs.Walk(context.TODO(), func(path string, info iofs.FileInfo, err error) error {
+	err = fs.Walk(context.TODO(), "", func(path string, entry iofs.DirEntry, err error) error {
 		require.NoError(t, err)
 		files = append(files, path)
 		return nil

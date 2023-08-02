@@ -10,6 +10,7 @@ import (
 	"github.com/moby/buildkit/session/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tonistiigi/fsutil"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -32,7 +33,7 @@ func TestFileSyncIncludePatterns(t *testing.T) {
 	m, err := session.NewManager()
 	require.NoError(t, err)
 
-	fs := NewFSSyncProvider(StaticDirSource{"test0": {Dir: tmpDir}})
+	fs := NewFSSyncProvider(StaticDirSource{"test0": fsutil.NewFS(tmpDir)})
 	s.Allow(fs)
 
 	dialer := session.Dialer(testutil.TestStream(testutil.Handler(m.HandleConn)))

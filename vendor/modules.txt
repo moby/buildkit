@@ -736,7 +736,7 @@ github.com/spdx/tools-golang/spdx/v2/v2_3
 ## explicit; go 1.20
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
-# github.com/tonistiigi/fsutil v0.0.0-20230629203738-36ef4d8c0dbb
+# github.com/tonistiigi/fsutil v0.0.0-20230629203738-36ef4d8c0dbb => github.com/jedevc/fsutil v0.0.0-20230802094558-d8c88f5fe5c2
 ## explicit; go 1.19
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy
@@ -1026,3 +1026,4 @@ kernel.org/pub/linux/libs/security/libcap/cap
 # kernel.org/pub/linux/libs/security/libcap/psx v1.2.67
 ## explicit; go 1.11
 kernel.org/pub/linux/libs/security/libcap/psx
+# github.com/tonistiigi/fsutil => github.com/jedevc/fsutil v0.0.0-20230802094558-d8c88f5fe5c2

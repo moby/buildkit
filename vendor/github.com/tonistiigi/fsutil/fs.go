@@ -3,36 +3,85 @@ package fsutil
 import (
 	"context"
 	"io"
+	gofs "io/fs"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil/types"
 )
 
 type FS interface {
-	Walk(context.Context, filepath.WalkFunc) error
+	Walk(context.Context, string, gofs.WalkDirFunc) error
 	Open(string) (io.ReadCloser, error)
 }
 
-func NewFS(root string, opt *WalkOpt) FS {
+func NewFS(root string) FS {
 	return &fs{
 		root: root,
-		opt:  opt,
 	}
 }
 
 type fs struct {
 	root string
-	opt  *WalkOpt
 }
 
-func (fs *fs) Walk(ctx context.Context, fn filepath.WalkFunc) error {
-	return Walk(ctx, fs.root, fs.opt, fn)
+func (fs *fs) Walk(ctx context.Context, target string, fn gofs.WalkDirFunc) error {
+	root, err := filepath.EvalSymlinks(fs.root)
+	if err != nil {
+		return errors.WithStack(&os.PathError{Op: "resolve", Path: root, Err: err})
+	}
+	rootFI, err := os.Stat(root)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if !rootFI.IsDir() {
+		return errors.WithStack(&os.PathError{Op: "walk", Path: root, Err: syscall.ENOTDIR})
+	}
+
+	seenFiles := make(map[uint64]string)
+	return filepath.WalkDir(filepath.Join(root, target), func(path string, dirEntry gofs.DirEntry, walkErr error) (retErr error) {
+		defer func() {
+			if retErr != nil && isNotExist(retErr) {
+				retErr = filepath.SkipDir
+			}
+		}()
+
+		origpath := path
+		path, err = filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		// Skip root
+		if path == "." {
+			return nil
+		}
+
+		var entry gofs.DirEntry
+		if dirEntry != nil {
+			entry = &DirEntryInfo{
+				path:      path,
+				origpath:  origpath,
+				entry:     dirEntry,
+				seenFiles: seenFiles,
+			}
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			if err := fn(path, entry, walkErr); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (fs *fs) Open(p string) (io.ReadCloser, error) {
@@ -67,16 +116,31 @@ type subDirFS struct {
 	dirs []Dir
 }
 
-func (fs *subDirFS) Walk(ctx context.Context, fn filepath.WalkFunc) error {
+func (fs *subDirFS) Walk(ctx context.Context, target string, fn gofs.WalkDirFunc) error {
+	first, rest, _ := strings.Cut(target, string(filepath.Separator))
+
 	for _, d := range fs.dirs {
-		fi := &StatInfo{Stat: &d.Stat}
+		if first != "" && first != d.Stat.Path {
+			continue
+		}
+
+		fi := &StatInfo{&d.Stat}
 		if !fi.IsDir() {
 			return errors.WithStack(&os.PathError{Path: d.Stat.Path, Err: syscall.ENOTDIR, Op: "walk subdir"})
 		}
-		if err := fn(d.Stat.Path, fi, nil); err != nil {
+		dStat := d.Stat
+		if err := fn(d.Stat.Path, &DirEntryInfo{Stat: &dStat}, nil); err != nil {
 			return err
 		}
-		if err := d.FS.Walk(ctx, func(p string, fi os.FileInfo, err error) error {
+		if err := d.FS.Walk(ctx, rest, func(p string, entry gofs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+
+			fi, err := entry.Info()
+			if err != nil {
+				return err
+			}
 			stat, ok := fi.Sys().(*types.Stat)
 			if !ok {
 				return errors.WithStack(&os.PathError{Path: d.Stat.Path, Err: syscall.EBADMSG, Op: "fileinfo without stat info"})
@@ -91,7 +155,7 @@ func (fs *subDirFS) Walk(ctx context.Context, fn filepath.WalkFunc) error {
 					stat.Linkname = path.Join(d.Stat.Path, stat.Linkname)
 				}
 			}
-			return fn(filepath.Join(d.Stat.Path, p), &StatInfo{stat}, nil)
+			return fn(filepath.Join(d.Stat.Path, p), &DirEntryInfo{Stat: stat}, nil)
 		}); err != nil {
 			return err
 		}
@@ -116,4 +180,71 @@ type emptyReader struct {
 
 func (*emptyReader) Read([]byte) (int, error) {
 	return 0, io.EOF
+}
+
+type StatInfo struct {
+	*types.Stat
+}
+
+func (s *StatInfo) Name() string {
+	return filepath.Base(s.Stat.Path)
+}
+func (s *StatInfo) Size() int64 {
+	return s.Stat.Size_
+}
+func (s *StatInfo) Mode() os.FileMode {
+	return os.FileMode(s.Stat.Mode)
+}
+func (s *StatInfo) ModTime() time.Time {
+	return time.Unix(s.Stat.ModTime/1e9, s.Stat.ModTime%1e9)
+}
+func (s *StatInfo) IsDir() bool {
+	return s.Mode().IsDir()
+}
+func (s *StatInfo) Sys() interface{} {
+	return s.Stat
+}
+
+type DirEntryInfo struct {
+	*types.Stat
+
+	entry     gofs.DirEntry
+	path      string
+	origpath  string
+	seenFiles map[uint64]string
+}
+
+func (s *DirEntryInfo) Name() string {
+	if s.Stat != nil {
+		return filepath.Base(s.Stat.Path)
+	}
+	return s.entry.Name()
+}
+func (s *DirEntryInfo) IsDir() bool {
+	if s.Stat != nil {
+		return s.Stat.IsDir()
+	}
+	return s.entry.IsDir()
+}
+func (s *DirEntryInfo) Type() gofs.FileMode {
+	if s.Stat != nil {
+		return gofs.FileMode(s.Stat.Mode)
+	}
+	return s.entry.Type()
+}
+func (s *DirEntryInfo) Info() (gofs.FileInfo, error) {
+	if s.Stat == nil {
+		fi, err := s.entry.Info()
+		if err != nil {
+			return nil, err
+		}
+		stat, err := mkstat(s.origpath, s.path, fi, s.seenFiles)
+		if err != nil {
+			return nil, err
+		}
+		s.Stat = stat
+	}
+
+	st := *s.Stat
+	return &StatInfo{&st}, nil
 }

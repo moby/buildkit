@@ -380,7 +380,9 @@ func prepareSyncedDirs(def *llb.Definition, localDirs map[string]string) (filesy
 	dirs := make(filesync.StaticDirSource, len(localDirs))
 	if def == nil {
 		for name, d := range localDirs {
-			dirs[name] = filesync.SyncedDir{Dir: d, Map: resetUIDAndGID}
+			dirs[name] = fsutil.NewFilterFS(fsutil.NewFS(d), &fsutil.FilterOpt{
+				Map: resetUIDAndGID,
+			})
 		}
 	} else {
 		for _, dt := range def.Def {
@@ -395,7 +397,9 @@ func prepareSyncedDirs(def *llb.Definition, localDirs map[string]string) (filesy
 					if !ok {
 						return nil, errors.Errorf("local directory %s not enabled", name)
 					}
-					dirs[name] = filesync.SyncedDir{Dir: d, Map: resetUIDAndGID}
+					dirs[name] = fsutil.NewFilterFS(fsutil.NewFS(d), &fsutil.FilterOpt{
+						Map: resetUIDAndGID,
+					})
 				}
 			}
 		}

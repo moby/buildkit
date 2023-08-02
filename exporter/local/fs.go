@@ -98,7 +98,7 @@ func CreateFS(ctx context.Context, sessionID string, k string, ref cache.Immutab
 		cleanup = lm.Unmount
 	}
 
-	walkOpt := &fsutil.WalkOpt{}
+	filterOpt := &fsutil.FilterOpt{}
 	var idMapFunc func(p string, st *fstypes.Stat) fsutil.MapResult
 
 	if idmap != nil {
@@ -116,7 +116,7 @@ func CreateFS(ctx context.Context, sessionID string, k string, ref cache.Immutab
 		}
 	}
 
-	walkOpt.Map = func(p string, st *fstypes.Stat) fsutil.MapResult {
+	filterOpt.Map = func(p string, st *fstypes.Stat) fsutil.MapResult {
 		res := fsutil.MapResultKeep
 		if idMapFunc != nil {
 			res = idMapFunc(p, st)
@@ -127,7 +127,7 @@ func CreateFS(ctx context.Context, sessionID string, k string, ref cache.Immutab
 		return res
 	}
 
-	outputFS := fsutil.NewFS(src, walkOpt)
+	outputFS := fsutil.NewFilterFS(fsutil.NewFS(src), filterOpt)
 	attestations = attestation.Filter(attestations, nil, map[string][]byte{
 		result.AttestationInlineOnlyKey: []byte(strconv.FormatBool(true)),
 	})
@@ -137,11 +137,11 @@ func CreateFS(ctx context.Context, sessionID string, k string, ref cache.Immutab
 	}
 	if len(attestations) > 0 {
 		subjects := []intoto.Subject{}
-		err = outputFS.Walk(ctx, func(path string, info fs.FileInfo, err error) error {
+		err = outputFS.Walk(ctx, "", func(path string, entry fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
-			if !info.Mode().IsRegular() {
+			if !entry.Type().IsRegular() {
 				return nil
 			}
 			f, err := outputFS.Open(path)
