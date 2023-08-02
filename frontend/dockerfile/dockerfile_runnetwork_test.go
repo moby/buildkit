@@ -41,11 +41,10 @@ FROM busybox
 RUN ip link show eth0
 `)
 
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
-	require.NoError(t, err)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -77,11 +76,10 @@ RUN --network=none ! ip link show eth0
 		dockerfile += "RUN ip link show eth0"
 	}
 
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
 	)
-	require.NoError(t, err)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -118,11 +116,10 @@ RUN --network=host nc 127.0.0.1 %s | grep foo
 		dockerfile += fmt.Sprintf(`RUN ! nc 127.0.0.1 %s | grep foo`, port)
 	}
 
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
 	)
-	require.NoError(t, err)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -166,11 +163,10 @@ RUN nc 127.0.0.1 %s | grep foo
 RUN --network=none ! nc -z 127.0.0.1 %s
 `, port, port)
 
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
 	)
-	require.NoError(t, err)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)

@@ -80,11 +80,9 @@ RUN cd /buildkit-chowned && \
 	require.NoError(t, err)
 	t.Logf("dockerfile=%s", dockerfile)
 
-	dir, err := integration.Tmpdir(t,
+	dir := integration.Tmpdir(t,
 		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
 	)
-	require.NoError(t, err)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)

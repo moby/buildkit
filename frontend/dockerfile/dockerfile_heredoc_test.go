@@ -67,11 +67,10 @@ FROM scratch
 COPY --from=build /dest /
 `)
 
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
 	)
-	require.NoError(t, err)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -138,11 +137,10 @@ COPY <<"EOF" rawslashfile3
 EOF
 `)
 
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
 	)
-	require.NoError(t, err)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -208,11 +206,10 @@ FROM scratch
 COPY --from=build /dest /dest
 `)
 
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
 	)
-	require.NoError(t, err)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -256,11 +253,10 @@ FROM scratch
 COPY --from=build /dest /dest
 `)
 
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
 	)
-	require.NoError(t, err)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -305,11 +301,10 @@ FROM scratch
 COPY --from=build /dest /dest
 `)
 
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
 	)
-	require.NoError(t, err)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -368,11 +363,10 @@ FROM scratch
 COPY --from=build /dest /
 `)
 
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
 	)
-	require.NoError(t, err)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -458,11 +452,10 @@ FROM scratch
 COPY --from=build /dest /
 `)
 
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
 	)
-	require.NoError(t, err)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -552,11 +545,10 @@ FROM scratch
 COPY --from=build /dest /
 `)
 
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
 	)
-	require.NoError(t, err)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -616,11 +608,10 @@ echo "hello world" >> /dest
 EOF
 `)
 
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
-	require.NoError(t, err)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -650,11 +641,10 @@ EOF
 	COPY --from=base /dest /dest
 	`, target))
 
-	dir, err = integration.Tmpdir(
+	dir = integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
-	require.NoError(t, err)
 
 	destDir := t.TempDir()
 

@@ -54,11 +54,10 @@ func testProvenanceAttestation(t *testing.T, sb integration.Sandbox) {
 FROM busybox:latest
 RUN echo "ok" > /foo
 `)
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
-	require.NoError(t, err)
 
 	for _, mode := range []string{"", "min", "max"} {
 		t.Run(mode, func(t *testing.T) {
@@ -246,11 +245,10 @@ FROM busybox:latest
 RUN --network=none echo "git" > /foo
 COPY myapp.Dockerfile /
 `)
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("myapp.Dockerfile", dockerfile, 0600),
 	)
-	require.NoError(t, err)
 
 	err = runShell(dir,
 		"git init",
@@ -394,11 +392,10 @@ FROM busybox:latest
 ARG TARGETARCH
 RUN echo "ok-$TARGETARCH" > /foo
 `)
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
-	require.NoError(t, err)
 
 	target := registry + "/buildkit/testmultiprovenance:latest"
 
@@ -523,11 +520,10 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 	FROM busybox:latest AS armtarget
 	RUN --network=none echo "bbox" > /foo
 	`)
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
-	require.NoError(t, err)
 
 	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 		st := llb.HTTP("https://raw.githubusercontent.com/moby/moby/v20.10.21/README.md")
@@ -818,11 +814,10 @@ func testSecretSSHProvenance(t *testing.T, sb integration.Sandbox) {
 FROM busybox:latest
 RUN --mount=type=secret,id=mysecret --mount=type=secret,id=othersecret --mount=type=ssh echo "ok" > /foo
 `)
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
-	require.NoError(t, err)
 
 	target := registry + "/buildkit/testsecretprovenance:latest"
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
@@ -901,11 +896,10 @@ COPY <<EOF /foo
 foo
 EOF
 	`)
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", ociDockerfile, 0600),
 	)
-	require.NoError(t, err)
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
@@ -942,11 +936,10 @@ COPY <<EOF /bar
 bar
 EOF
 `)
-	dir, err = integration.Tmpdir(
+	dir = integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
-	require.NoError(t, err)
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
@@ -1025,11 +1018,10 @@ func testNilProvenance(t *testing.T, sb integration.Sandbox) {
 FROM scratch
 ENV FOO=bar
 `)
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
-	require.NoError(t, err)
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
@@ -1060,11 +1052,10 @@ func testDuplicatePlatformProvenance(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`FROM alpine`)
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
-	require.NoError(t, err)
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
@@ -1087,13 +1078,11 @@ func testDockerIgnoreMissingProvenance(t *testing.T, sb integration.Sandbox) {
 	defer c.Close()
 
 	dockerfile := []byte(`FROM alpine`)
-	dirDockerfile, err := integration.Tmpdir(
+	dirDockerfile := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
-	require.NoError(t, err)
-	dirContext, err := integration.Tmpdir(t)
-	require.NoError(t, err)
+	dirContext := integration.Tmpdir(t)
 
 	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 		// remove the directory to simulate the case where the context
