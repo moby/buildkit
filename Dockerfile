@@ -116,6 +116,10 @@ COPY --link --from=buildctl /usr/bin/buildctl /
 FROM scratch AS binaries-windows
 COPY --link --from=buildctl /usr/bin/buildctl /buildctl.exe
 
+FROM scratch AS binaries-freebsd
+COPY --link --from=buildkitd /usr/bin/buildkitd /
+COPY --link --from=buildctl /usr/bin/buildctl /
+
 FROM binaries-$TARGETOS AS binaries
 # enable scanning for this stage
 ARG BUILDKIT_SBOM_SCAN_STAGE=true
@@ -214,6 +218,9 @@ ENV BUILDKIT_SETUP_CGROUPV2_ROOT=1
 ENTRYPOINT ["buildkitd"]
 
 FROM binaries AS buildkit-darwin
+
+FROM binaries AS buildkit-freebsd
+ENTRYPOINT ["/buildkitd"]
 
 FROM binaries AS buildkit-windows
 # this is not in binaries-windows because it is not intended for release yet, just CI

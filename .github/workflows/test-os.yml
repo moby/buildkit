@@ -85,3 +85,28 @@ jobs:
         with:
           name: test-reports
           path: ./bin/testreports
+
+  test-freebsd-amd64:
+    runs-on: macos-12
+    env:
+      VAGRANT_VAGRANTFILE: hack/Vagrantfile.freebsd13
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Cache Vagrant boxes
+        uses: actions/cache@v2
+        with:
+          path: ~/.vagrant.d/boxes
+          key: ${{ runner.os }}-vagrant-${{ hashFiles('hack/Vagrantfile.freebsd13') }}
+          restore-keys: |
+            ${{ runner.os }}-vagrant-
+      -
+        name: Set up vagrant
+        run: vagrant up
+      -
+        name: Integration smoke test
+        run: |
+          vagrant ssh -- "cp /vagrant/hack/dockerfiles/freebsd-smoke.Dockerfile /vagrant/cmd/buildctl/Dockerfile"
+          vagrant ssh -- "cd /vagrant/cmd/buildctl; go run . build --frontend dockerfile.v0 --local context=. --local dockerfile=."
