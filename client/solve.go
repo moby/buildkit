@@ -35,7 +35,8 @@ import (
 
 type SolveOpt struct {
 	Exports               []ExportEntry
-	LocalDirs             map[string]string
+	LocalDirs             map[string]string // Deprecated: use LocalMounts
+	LocalMounts           map[string]fsutil.FS
 	OCIStores             map[string]content.Store
 	SharedKey             string
 	Frontend              string
@@ -90,7 +91,20 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		return nil, errors.New("invalid with def and cb")
 	}
 
-	syncedDirs, err := prepareSyncedFiles(def, opt.LocalDirs)
+	// merge local mounts and fallback local directories together
+	mounts := make(map[string]fsutil.FS)
+	for k, mount := range opt.LocalMounts {
+		mounts[k] = mount
+	}
+	for k, dir := range opt.LocalDirs {
+		mount, err := fsutil.NewFS(dir)
+		if err != nil {
+			return nil, err
+		}
+		mounts[k] = mount
+	}
+
+	syncedDirs, err := prepareSyncedFiles(def, mounts)
 	if err != nil {
 		return nil, err
 	}
@@ -361,32 +375,23 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	return res, nil
 }
 
-func prepareSyncedFiles(def *llb.Definition, localDirs map[string]string) (filesync.StaticDirSource, error) {
-	localFiles := make(map[string]fsutil.FS)
-	for name, d := range localDirs {
-		fs, err := fsutil.NewFS(d)
-		if err != nil {
-			return nil, err
-		}
-		localFiles[name] = fs
-	}
-
+func prepareSyncedFiles(def *llb.Definition, localMounts map[string]fsutil.FS) (filesync.StaticDirSource, error) {
 	resetUIDAndGID := func(p string, st *fstypes.Stat) fsutil.MapResult {
 		st.Uid = 0
 		st.Gid = 0
 		return fsutil.MapResultKeep
 	}
 
-	result := make(filesync.StaticDirSource, len(localFiles))
+	result := make(filesync.StaticDirSource, len(localMounts))
 	if def == nil {
-		for name, fs := range localFiles {
-			fs, err := fsutil.NewFilterFS(fs, &fsutil.FilterOpt{
+		for name, mount := range localMounts {
+			mount, err := fsutil.NewFilterFS(mount, &fsutil.FilterOpt{
 				Map: resetUIDAndGID,
 			})
 			if err != nil {
 				return nil, err
 			}
-			result[name] = fs
+			result[name] = mount
 		}
 	} else {
 		for _, dt := range def.Def {
@@ -397,17 +402,17 @@ func prepareSyncedFiles(def *llb.Definition, localDirs map[string]string) (files
 			if src := op.GetSource(); src != nil {
 				if strings.HasPrefix(src.Identifier, "local://") {
 					name := strings.TrimPrefix(src.Identifier, "local://")
-					fs, ok := localFiles[name]
+					mount, ok := localMounts[name]
 					if !ok {
 						return nil, errors.Errorf("local directory %s not enabled", name)
 					}
-					fs, err := fsutil.NewFilterFS(fs, &fsutil.FilterOpt{
+					mount, err := fsutil.NewFilterFS(mount, &fsutil.FilterOpt{
 						Map: resetUIDAndGID,
 					})
 					if err != nil {
 						return nil, err
 					}
-					result[name] = fs
+					result[name] = mount
 				}
 			}
 		}
