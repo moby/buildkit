@@ -1,3 +1,3 @@
-FROM dougrabson/freebsd-minimal:13.1
+FROM dougrabson/freebsd-minimal:13
 
 RUN echo "Hello, buildkit!"

@@ -32,14 +32,15 @@ Vagrant.configure("2") do |config|
     pkg install -y go git containerd runj wait_on
 
     mkdir -p /vagrant/coverage
-    daemon -o /var/log/containerd.log containerd
+    mkdir -p /vagrant/run-logs
+    daemon -o /vagrant/run-logs/containerd containerd
 
     mkdir -p /run/buildkit
     cd /vagrant/cmd/buildkitd
     go build -buildvcs=false .
     echo "launching buildkitd..."
     mkdir -p /run/buildkit
-    daemon ./buildkitd
+    daemon -o /vagrant/run-logs/buildkitd ./buildkitd
     wait_on -t 5 /run/buildkit
     echo "launched buildkitd"
   SHELL
