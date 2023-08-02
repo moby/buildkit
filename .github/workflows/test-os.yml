@@ -93,10 +93,10 @@ jobs:
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       -
         name: Cache Vagrant boxes
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ~/.vagrant.d/boxes
           key: ${{ runner.os }}-vagrant-${{ hashFiles('hack/Vagrantfile.freebsd13') }}
@@ -110,7 +110,7 @@ jobs:
         run: |
           vagrant ssh -- "cp /vagrant/hack/dockerfiles/freebsd-smoke.Dockerfile /vagrant/cmd/buildctl/Dockerfile"
           vagrant ssh -- "cd /vagrant/cmd/buildctl; go run . build --frontend dockerfile.v0 --local context=. --local dockerfile=."
-
-      - name: Print BuildKit logs
+      -
+        name: Print BuildKit logs
         if: always()
         run: vagrant ssh -- "sudo cat /vagrant/run-logs/buildkitd"
