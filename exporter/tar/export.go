@@ -58,7 +58,7 @@ func (e *localExporterInstance) Config() *exporter.Config {
 	return exporter.NewConfig()
 }
 
-func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source, sessionID string) (map[string]string, exporter.DescriptorReference, error) {
+func (e *localExporterInstance) Export(ctx context.Context, inp exporter.Source, sessionID string) (map[string]string, exporter.DescriptorReference, error) {
 	var defers []func() error
 
 	defer func() {
@@ -68,7 +68,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 	}()
 
 	if e.opts.Epoch == nil {
-		if tm, ok, err := epoch.ParseSource(inp); err != nil {
+		if tm, ok, err := epoch.ParseSource(&inp); err != nil {
 			return nil, nil, err
 		} else if ok {
 			e.opts.Epoch = tm

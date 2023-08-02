@@ -1,6 +1,8 @@
 package result
 
 import (
+	"sync"
+
 	"github.com/pkg/errors"
 )
 
@@ -77,6 +79,33 @@ func (r *Result[T]) EachRef(fn func(T) error) (err error) {
 		for _, a := range as {
 			if a.Ref != zero {
 				if err1 := fn(a.Ref); err1 != nil && err == nil {
+					err = err1
+				}
+			}
+		}
+	}
+	return err
+}
+
+// EachPlatformRef iterates through all underlying refs and invokes
+// the given handler with the platform ID corresponding to the ref.
+// For the single ref case, the platform ID is an empty string.
+func (r *Result[T]) EachPlatformRef(fn func(string, T) error) (err error) {
+	var zero T
+	if r.Ref != zero {
+		err = fn("", r.Ref)
+	}
+	for p, r := range r.Refs {
+		if r != zero {
+			if err1 := fn(p, r); err1 != nil && err == nil {
+				err = err1
+			}
+		}
+	}
+	for p, as := range r.Attestations {
+		for _, a := range as {
+			if a.Ref != zero {
+				if err1 := fn(p, a.Ref); err1 != nil && err == nil {
 					err = err1
 				}
 			}
@@ -169,4 +198,36 @@ func ConvertResult[U comparable, V comparable](r *Result[U], fn func(U) (V, erro
 	r2.Metadata = r.Metadata
 
 	return r2, nil
+}
+
+// Result returns the underlying Result value
+func (r *MutableResult[T]) Result() *Result[T] {
+	return &r.res
+}
+
+// AddMeta adds the metadata specified with the given key/value pair
+func (r *MutableResult[T]) AddMeta(k string, v []byte) {
+	r.mu.Lock()
+	r.res.AddMeta(k, v)
+	r.mu.Unlock()
+}
+
+// AddRef adds the specified reference for the platform given with k
+func (r *MutableResult[T]) AddRef(k string, ref T) {
+	r.mu.Lock()
+	r.res.AddRef(k, ref)
+	r.mu.Unlock()
+}
+
+// SetRef sets the specified reference as the single reference
+func (r *MutableResult[T]) SetRef(ref T) {
+	r.mu.Lock()
+	r.res.SetRef(ref)
+	r.mu.Unlock()
+}
+
+// MutableResult is a thread-safe version of Result
+type MutableResult[T comparable] struct {
+	mu  sync.Mutex
+	res Result[T]
 }

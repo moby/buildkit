@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync"
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
@@ -18,7 +17,7 @@ import (
 type BuildFunc func(ctx context.Context, platform *ocispecs.Platform, idx int) (client.Reference, *image.Image, error)
 
 func (bc *Client) Build(ctx context.Context, fn BuildFunc) (*ResultBuilder, error) {
-	res := &mutableResult{res: client.NewResult()}
+	res := client.NewMutableResult()
 
 	targets := make([]*ocispecs.Platform, 0, len(bc.TargetPlatforms))
 	for _, p := range bc.TargetPlatforms {
@@ -66,11 +65,11 @@ func (bc *Client) Build(ctx context.Context, fn BuildFunc) (*ResultBuilder, erro
 			k := platforms.Format(p)
 
 			if bc.MultiPlatformRequested {
-				res.addRef(k, ref)
-				res.addMeta(fmt.Sprintf("%s/%s", exptypes.ExporterImageConfigKey, k), config)
+				res.AddRef(k, ref)
+				res.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterImageConfigKey, k), config)
 			} else {
-				res.setRef(ref)
-				res.addMeta(exptypes.ExporterImageConfigKey, config)
+				res.SetRef(ref)
+				res.AddMeta(exptypes.ExporterImageConfigKey, config)
 			}
 			expPlatforms.Platforms[i] = exptypes.Platform{
 				ID:       k,
@@ -83,7 +82,7 @@ func (bc *Client) Build(ctx context.Context, fn BuildFunc) (*ResultBuilder, erro
 		return nil, err
 	}
 	return &ResultBuilder{
-		Result:       res.res,
+		Result:       res.Result(),
 		expPlatforms: expPlatforms,
 	}, nil
 }
@@ -112,27 +111,4 @@ func (rb *ResultBuilder) EachPlatform(ctx context.Context, fn func(ctx context.C
 		})
 	}
 	return eg.Wait()
-}
-
-func (r *mutableResult) addMeta(k string, v []byte) {
-	r.mu.Lock()
-	r.res.AddMeta(k, v)
-	r.mu.Unlock()
-}
-
-func (r *mutableResult) addRef(k string, ref client.Reference) {
-	r.mu.Lock()
-	r.res.AddRef(k, ref)
-	r.mu.Unlock()
-}
-
-func (r *mutableResult) setRef(ref client.Reference) {
-	r.mu.Lock()
-	r.res.SetRef(ref)
-	r.mu.Unlock()
-}
-
-type mutableResult struct {
-	mu  sync.Mutex
-	res *client.Result
 }

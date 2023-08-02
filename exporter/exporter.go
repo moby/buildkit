@@ -20,7 +20,7 @@ type Exporter interface {
 type ExporterInstance interface {
 	Name() string
 	Config() *Config
-	Export(ctx context.Context, src *Source, sessionID string) (map[string]string, DescriptorReference, error)
+	Export(ctx context.Context, src Source, sessionID string) (map[string]string, DescriptorReference, error)
 }
 
 type DescriptorReference interface {

@@ -16,6 +16,7 @@ import (
 )
 
 type Result = result.Result[Reference]
+type MutableResult = result.MutableResult[Reference]
 
 type Attestation = result.Attestation[Reference]
 
@@ -23,6 +24,10 @@ type BuildFunc func(context.Context, Client) (*Result, error)
 
 func NewResult() *Result {
 	return &Result{}
+}
+
+func NewMutableResult() *MutableResult {
+	return &MutableResult{}
 }
 
 type Client interface {

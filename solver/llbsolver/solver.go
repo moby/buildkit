@@ -552,12 +552,12 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 
 	cacheExporters, inlineCacheExporter := splitCacheExporters(exp.CacheExporters)
 	var exporterResponse map[string]string
-	exporterResponse, descref, err = s.runExporters(ctx, exp.Exporters, inlineCacheExporter, j, cached, inp)
+	exporterResponse, descref, err = s.runExporters(ctx, exp.Exporters, inlineCacheExporter, j, *cached, *inp)
 	if err != nil {
 		return nil, err
 	}
 
-	cacheExporterResponse, err := runCacheExporters(ctx, cacheExporters, j, cached, inp)
+	cacheExporterResponse, err := runCacheExporters(ctx, cacheExporters, j, *cached, *inp)
 	if err != nil {
 		return nil, err
 	}
@@ -582,7 +582,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	}, nil
 }
 
-func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult], inp *result.Result[cache.ImmutableRef]) (map[string]string, error) {
+func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *solver.Job, cached result.Result[solver.CachedResult], inp result.Result[cache.ImmutableRef]) (map[string]string, error) {
 	eg, ctx := errgroup.WithContext(ctx)
 	g := session.NewGroup(j.SessionID)
 	var cacheExporterResponse map[string]string
@@ -593,7 +593,7 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 				id := fmt.Sprint(j.SessionID, "-cache-", i)
 				err = inBuilderContext(ctx, j, exp.Exporter.Name(), id, func(ctx context.Context, _ session.Group) error {
 					prepareDone := progress.OneOff(ctx, "preparing build cache for export")
-					if err := result.EachRef(cached, inp, func(res solver.CachedResult, ref cache.ImmutableRef) error {
+					if err := result.EachRef(&cached, &inp, func(res solver.CachedResult, ref cache.ImmutableRef) error {
 						ctx = withDescHandlerCacheOpts(ctx, ref)
 
 						// Configure compression
@@ -634,7 +634,7 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 	return cacheExporterResponse, nil
 }
 
-func runInlineCacheExporter(ctx context.Context, e exporter.ExporterInstance, inlineExporter inlineCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult]) (result *exptypes.InlineCache, err error) {
+func runInlineCacheExporter(ctx context.Context, e exporter.ExporterInstance, inlineExporter inlineCacheExporter, j *solver.Job, cached result.Result[solver.CachedResult]) (result *exptypes.InlineCache, err error) {
 	result = &exptypes.InlineCache{
 		Platforms: make(map[string][]byte),
 	}
@@ -642,32 +642,29 @@ func runInlineCacheExporter(ctx context.Context, e exporter.ExporterInstance, in
 		return result, nil
 	}
 	if err := inBuilderContext(ctx, j, "preparing layers for inline cache", j.SessionID+"-cache-inline", func(ctx context.Context, _ session.Group) error {
-		if res := cached.Ref; res != nil {
+		err := cached.EachPlatformRef(func(platformID string, res solver.CachedResult) error {
 			dtic, err := inlineCache(ctx, inlineExporter, res, e.Config().Compression(), session.NewGroup(j.SessionID))
 			if err != nil {
 				return err
 			}
-			if dtic != nil {
+			if dtic == nil {
+				return nil
+			}
+			if platformID == "" {
 				result.Cache = dtic
+			} else {
+				result.Platforms[platformID] = dtic
 			}
-		}
-		for k, res := range cached.Refs {
-			dtic, err := inlineCache(ctx, inlineExporter, res, e.Config().Compression(), session.NewGroup(j.SessionID))
-			if err != nil {
-				return err
-			}
-			if dtic != nil {
-				result.Platforms[k] = dtic
-			}
-		}
-		return nil
+			return nil
+		})
+		return err
 	}); err != nil {
 		return nil, err
 	}
 	return result, nil
 }
 
-func (s *Solver) runExporters(ctx context.Context, exporters []exporter.ExporterInstance, inlineCacheExporter inlineCacheExporter, job *solver.Job, cached *result.Result[solver.CachedResult], inp *result.Result[cache.ImmutableRef]) (exporterResponse map[string]string, descref exporter.DescriptorReference, err error) {
+func (s *Solver) runExporters(ctx context.Context, exporters []exporter.ExporterInstance, inlineCacheExporter inlineCacheExporter, job *solver.Job, cached result.Result[solver.CachedResult], inp result.Result[cache.ImmutableRef]) (exporterResponse map[string]string, descref exporter.DescriptorReference, err error) {
 	eg, ctx := errgroup.WithContext(ctx)
 	sessionID := job.SessionID
 	resps := make([]map[string]string, len(exporters))
@@ -863,7 +860,7 @@ func getProvenance(ref solver.ResultProxy, br *provenanceBridge, id string, reqs
 
 type imageExporterInstance interface {
 	exporter.ExporterInstance
-	ExportImage(ctx context.Context, src *exporter.Source, cache exptypes.InlineCache, sessionID string) (map[string]string, exporter.DescriptorReference, error)
+	ExportImage(ctx context.Context, src exporter.Source, cache exptypes.InlineCache, sessionID string) (map[string]string, exporter.DescriptorReference, error)
 }
 
 func asImageExporter(e exporter.ExporterInstance) (imageExporterInstance, bool) {

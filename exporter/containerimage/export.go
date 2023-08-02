@@ -187,11 +187,11 @@ func (e *imageExporterInstance) Config() *exporter.Config {
 	return exporter.NewConfigWithCompression(e.opts.RefCfg.Compression)
 }
 
-func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source, sessionID string) (map[string]string, exporter.DescriptorReference, error) {
+func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source, sessionID string) (map[string]string, exporter.DescriptorReference, error) {
 	return e.ExportImage(ctx, src, exptypes.InlineCache{}, sessionID)
 }
 
-func (e *imageExporterInstance) ExportImage(ctx context.Context, src *exporter.Source, inlineCache exptypes.InlineCache, sessionID string) (_ map[string]string, descref exporter.DescriptorReference, err error) {
+func (e *imageExporterInstance) ExportImage(ctx context.Context, src exporter.Source, inlineCache exptypes.InlineCache, sessionID string) (_ map[string]string, descref exporter.DescriptorReference, err error) {
 	meta := make(map[string][]byte)
 	for k, v := range src.Metadata {
 		meta[k] = v
@@ -199,9 +199,7 @@ func (e *imageExporterInstance) ExportImage(ctx context.Context, src *exporter.S
 	for k, v := range e.meta {
 		meta[k] = v
 	}
-	inp := *src
-	inp.Metadata = meta
-	src = &inp
+	src.Metadata = meta
 
 	opts := e.opts
 	as, _, err := ParseAnnotations(meta)
@@ -221,7 +219,7 @@ func (e *imageExporterInstance) ExportImage(ctx context.Context, src *exporter.S
 		}
 	}()
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, sessionID, &opts)
+	desc, err := e.opt.ImageWriter.Commit(ctx, &src, sessionID, &opts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -283,7 +281,7 @@ func (e *imageExporterInstance) ExportImage(ctx context.Context, src *exporter.S
 				tagDone(nil)
 
 				if e.unpack {
-					if err := e.unpackImage(ctx, img, src, session.NewGroup(sessionID)); err != nil {
+					if err := e.unpackImage(ctx, img, &src, session.NewGroup(sessionID)); err != nil {
 						return nil, nil, err
 					}
 				}
@@ -319,7 +317,7 @@ func (e *imageExporterInstance) ExportImage(ctx context.Context, src *exporter.S
 				}
 			}
 			if e.push {
-				err := e.pushImage(ctx, src, sessionID, targetName, desc.Digest)
+				err := e.pushImage(ctx, &src, sessionID, targetName, desc.Digest)
 				if err != nil {
 					return nil, nil, errors.Wrapf(err, "failed to push %v", targetName)
 				}
