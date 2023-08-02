@@ -9,6 +9,7 @@ import (
 
 type Recorder interface {
 	Start()
+	Close()
 	CloseAsync(func(context.Context) error) error
 	Wait() error
 	Samples() (*Samples, error)
