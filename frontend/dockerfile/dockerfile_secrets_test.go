@@ -30,11 +30,10 @@ RUN --mount=type=secret,required=false,mode=741,uid=100,gid=102,target=/mysecret
 RUN [ ! -f /mysecret ] # check no stub left behind
 `)
 
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
-	require.NoError(t, err)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -60,11 +59,10 @@ FROM busybox
 RUN --mount=type=secret,required,id=mysecret foo
 `)
 
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
-	require.NoError(t, err)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)

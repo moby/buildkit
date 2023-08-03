@@ -44,12 +44,11 @@ func testAddChecksum(t *testing.T, sb integration.Sandbox) {
 FROM scratch
 ADD --checksum=%s %s /tmp/foo
 `, digest.FromBytes(resp.Content).String(), server.URL+"/foo"))
-		dir, err := integration.Tmpdir(
+		dir := integration.Tmpdir(
 			t,
 			fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		)
-		require.NoError(t, err)
-		_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		_, err := f.Solve(sb.Context(), c, client.SolveOpt{
 			LocalDirs: map[string]string{
 				dockerui.DefaultLocalNameDockerfile: dir,
 				dockerui.DefaultLocalNameContext:    dir,
@@ -64,12 +63,11 @@ ENV DIGEST=%s
 ENV LINK=%s
 ADD --checksum=${DIGEST} ${LINK} /tmp/foo
 `, digest.FromBytes(resp.Content).String(), server.URL+"/foo"))
-		dir, err := integration.Tmpdir(
+		dir := integration.Tmpdir(
 			t,
 			fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		)
-		require.NoError(t, err)
-		_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		_, err := f.Solve(sb.Context(), c, client.SolveOpt{
 			LocalDirs: map[string]string{
 				dockerui.DefaultLocalNameDockerfile: dir,
 				dockerui.DefaultLocalNameContext:    dir,
@@ -82,12 +80,11 @@ ADD --checksum=${DIGEST} ${LINK} /tmp/foo
 FROM scratch
 ADD --checksum=%s %s /tmp/foo
 `, digest.FromBytes(nil).String(), server.URL+"/foo"))
-		dir, err := integration.Tmpdir(
+		dir := integration.Tmpdir(
 			t,
 			fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		)
-		require.NoError(t, err)
-		_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		_, err := f.Solve(sb.Context(), c, client.SolveOpt{
 			LocalDirs: map[string]string{
 				dockerui.DefaultLocalNameDockerfile: dir,
 				dockerui.DefaultLocalNameContext:    dir,
@@ -100,12 +97,11 @@ ADD --checksum=%s %s /tmp/foo
 FROM scratch
 ADD --checksum=md5:7e55db001d319a94b0b713529a756623 %s /tmp/foo
 `, server.URL+"/foo"))
-		dir, err := integration.Tmpdir(
+		dir := integration.Tmpdir(
 			t,
 			fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		)
-		require.NoError(t, err)
-		_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		_, err := f.Solve(sb.Context(), c, client.SolveOpt{
 			LocalDirs: map[string]string{
 				dockerui.DefaultLocalNameDockerfile: dir,
 				dockerui.DefaultLocalNameContext:    dir,
@@ -118,12 +114,11 @@ ADD --checksum=md5:7e55db001d319a94b0b713529a756623 %s /tmp/foo
 FROM scratch
 ADD --checksum=unknown:%s %s /tmp/foo
 `, digest.FromBytes(resp.Content).Encoded(), server.URL+"/foo"))
-		dir, err := integration.Tmpdir(
+		dir := integration.Tmpdir(
 			t,
 			fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		)
-		require.NoError(t, err)
-		_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		_, err := f.Solve(sb.Context(), c, client.SolveOpt{
 			LocalDirs: map[string]string{
 				dockerui.DefaultLocalNameDockerfile: dir,
 				dockerui.DefaultLocalNameContext:    dir,
@@ -136,12 +131,11 @@ ADD --checksum=unknown:%s %s /tmp/foo
 FROM scratch
 ADD --checksum=%s %s /tmp/foo
 `, digest.FromBytes(resp.Content).Encoded(), server.URL+"/foo"))
-		dir, err := integration.Tmpdir(
+		dir := integration.Tmpdir(
 			t,
 			fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		)
-		require.NoError(t, err)
-		_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		_, err := f.Solve(sb.Context(), c, client.SolveOpt{
 			LocalDirs: map[string]string{
 				dockerui.DefaultLocalNameDockerfile: dir,
 				dockerui.DefaultLocalNameContext:    dir,
@@ -155,13 +149,12 @@ ADD --checksum=%s %s /tmp/foo
 FROM scratch
 ADD --checksum=%s foo /tmp/foo
 `, digest.FromBytes(foo).String()))
-		dir, err := integration.Tmpdir(
+		dir := integration.Tmpdir(
 			t,
 			fstest.CreateFile("foo", foo, 0600),
 			fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		)
-		require.NoError(t, err)
-		_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		_, err := f.Solve(sb.Context(), c, client.SolveOpt{
 			LocalDirs: map[string]string{
 				dockerui.DefaultLocalNameDockerfile: dir,
 				dockerui.DefaultLocalNameContext:    dir,

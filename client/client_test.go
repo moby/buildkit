@@ -1459,7 +1459,7 @@ func testLocalSymlinkEscape(t *testing.T, sb integration.Sandbox) {
 [[ $(readlink /mount/sub/bar) == "../../../etc/group" ]]
 `)
 
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		// point to absolute path that is not part of dir
 		fstest.Symlink("/etc/passwd", "foo"),
@@ -1477,7 +1477,6 @@ func testLocalSymlinkEscape(t *testing.T, sb integration.Sandbox) {
 		fstest.CreateFile("baz", []byte{}, 0600),
 		fstest.CreateFile("test.sh", test, 0700),
 	)
-	require.NoError(t, err)
 
 	local := llb.Local("mylocal", llb.FollowPaths([]string{
 		"test.sh", "foo", "sub/bar", "bax", "sub/sub2/file",
@@ -1568,20 +1567,17 @@ func testFileOpCopyRm(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("myfile", []byte("data0"), 0600),
 		fstest.CreateDir("sub", 0700),
 		fstest.CreateFile("sub/foo", []byte("foo0"), 0600),
 		fstest.CreateFile("sub/bar", []byte("bar0"), 0600),
 	)
-	require.NoError(t, err)
-
-	dir2, err := integration.Tmpdir(
+	dir2 := integration.Tmpdir(
 		t,
 		fstest.CreateFile("file2", []byte("file2"), 0600),
 	)
-	require.NoError(t, err)
 
 	st := llb.Scratch().
 		File(
@@ -1694,14 +1690,13 @@ func testFileOpCopyIncludeExclude(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("myfile", []byte("data0"), 0600),
 		fstest.CreateDir("sub", 0700),
 		fstest.CreateFile("sub/foo", []byte("foo0"), 0600),
 		fstest.CreateFile("sub/bar", []byte("bar0"), 0600),
 	)
-	require.NoError(t, err)
 
 	st := llb.Scratch().File(
 		llb.Copy(
@@ -1833,11 +1828,10 @@ func testLocalSourceWithDiffer(t *testing.T, sb integration.Sandbox, d llb.DiffT
 	require.NoError(t, err)
 	defer c.Close()
 
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("foo", []byte("foo"), 0600),
 	)
-	require.NoError(t, err)
 
 	tv := syscall.NsecToTimespec(time.Now().UnixNano())
 
@@ -2164,7 +2158,7 @@ func testFileOpRmWildcard(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	dir, err := integration.Tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateDir("foo", 0700),
 		fstest.CreateDir("bar", 0700),
@@ -2172,7 +2166,6 @@ func testFileOpRmWildcard(t *testing.T, sb integration.Sandbox) {
 		fstest.CreateFile("bar/target", []byte("bar0"), 0600),
 		fstest.CreateFile("bar/remaining", []byte("bar1"), 0600),
 	)
-	require.NoError(t, err)
 
 	st := llb.Scratch().File(
 		llb.Copy(llb.Local("mylocal"), "foo", "foo").
@@ -7216,11 +7209,10 @@ func testParallelLocalBuilds(t *testing.T, sb integration.Sandbox) {
 		func(i int) {
 			eg.Go(func() error {
 				fn := fmt.Sprintf("test%d", i)
-				srcDir, err := integration.Tmpdir(
+				srcDir := integration.Tmpdir(
 					t,
 					fstest.CreateFile(fn, []byte("contents"), 0600),
 				)
-				require.NoError(t, err)
 
 				def, err := llb.Local("source").Marshal(sb.Context())
 				require.NoError(t, err)
@@ -9282,11 +9274,7 @@ func ensureFileContents(t *testing.T, path, expectedContents string) {
 }
 
 func makeSSHAgentSock(t *testing.T, agent agent.Agent) (p string, err error) {
-	tmpDir, err := integration.Tmpdir(t)
-	if err != nil {
-		return "", err
-	}
-
+	tmpDir := integration.Tmpdir(t)
 	sockPath := filepath.Join(tmpDir, "ssh_auth_sock")
 
 	l, err := net.Listen("unix", sockPath)

@@ -165,24 +165,24 @@ func (w *lockingWriter) Write(dt []byte) (int, error) {
 	return n, err
 }
 
-func Tmpdir(t *testing.T, appliers ...fstest.Applier) (string, error) {
+func Tmpdir(t *testing.T, appliers ...fstest.Applier) string {
+	t.Helper()
+
 	// We cannot use t.TempDir() to create a temporary directory here because
 	// appliers might contain fstest.CreateSocket. If the test name is too long,
 	// t.TempDir() could return a path that is longer than 108 characters. This
 	// would result in "bind: invalid argument" when we listen on the socket.
 	tmpdir, err := os.MkdirTemp("", "buildkit")
-	if err != nil {
-		return "", err
-	}
+	require.NoError(t, err)
 
 	t.Cleanup(func() {
 		require.NoError(t, os.RemoveAll(tmpdir))
 	})
 
-	if err := fstest.Apply(appliers...).Apply(tmpdir); err != nil {
-		return "", err
-	}
-	return tmpdir, nil
+	err = fstest.Apply(appliers...).Apply(tmpdir)
+	require.NoError(t, err)
+
+	return tmpdir
 }
 
 func randomString(n int) string {
