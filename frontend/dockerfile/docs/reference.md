@@ -1295,10 +1295,6 @@ guide – Leverage build cache](https://docs.docker.com/develop/develop-images/d
   in its path.
 
 ### Verifying a remote file checksum `ADD --checksum=<checksum> <http src> <dest>`
-> **Note**
->
-> Not yet available in stable syntax, use [`docker/dockerfile:1-labs`](#syntax) version (`1.5-labs` or newer).
-> Planned to be included in `docker/dockerfile:1.6`.
 
 The checksum of a remote file can be verified with the `--checksum` flag:
 
@@ -1310,18 +1306,13 @@ The `--checksum` flag only supports HTTP sources currently.
 
 ### Adding a git repository `ADD <git ref> <dir>`
 
-> **Note**
->
-> Not yet available in stable syntax, use [`docker/dockerfile:1-labs`](#syntax) version (`1.5-labs` or newer).
-> Planned to be included in `docker/dockerfile:1.6`.
-
 This form allows adding a git repository to an image directly, without using the `git` command inside the image:
 ```
 ADD [--keep-git-dir=<boolean>] <git ref> <dir>
 ```
 
 ```dockerfile
-# syntax=docker/dockerfile:1-labs
+# syntax=docker/dockerfile:1
 FROM alpine
 ADD --keep-git-dir=true https://github.com/moby/buildkit.git#v0.10.1 /buildkit
 ```
@@ -1333,7 +1324,7 @@ The `--keep-git-dir=true` flag adds the `.git` directory. This flag defaults to 
 To add a private repo via SSH, create a Dockerfile with the following form:
 
 ```dockerfile
-# syntax=docker/dockerfile:1-labs
+# syntax=docker/dockerfile:1
 FROM alpine
 ADD git@git.example.com:foo/bar.git /bar
 ```
