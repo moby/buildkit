@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/moby/buildkit/client"
@@ -233,11 +234,12 @@ type Job struct {
 	list          *Solver
 	pr            *progress.MultiReader
 	pw            progress.Writer
-	span          trace.Span
+	span          atomic.Pointer[trace.Span]
 	values        sync.Map
 	id            string
 	startedTime   time.Time
 	completedTime time.Time
+	completeOnce  sync.Once
 
 	progressCloser func()
 	SessionID      string
@@ -425,13 +427,19 @@ func (jl *Solver) loadUnlocked(v, parent Vertex, j *Job, cache map[Vertex]Vertex
 
 func (jl *Solver) connectProgressFromState(target, src *state) {
 	for j := range src.jobs {
-		if _, ok := target.allPw[j.pw]; !ok {
-			target.mpw.Add(j.pw)
-			target.allPw[j.pw] = struct{}{}
-			j.pw.Write(identity.NewID(), target.clientVertex)
-			if j.span != nil && j.span.SpanContext().IsValid() {
-				target.mspan.Add(j.span)
-			}
+		if _, ok := target.allPw[j.pw]; ok {
+			continue
+		}
+		target.mpw.Add(j.pw)
+		target.allPw[j.pw] = struct{}{}
+		j.pw.Write(identity.NewID(), target.clientVertex)
+		spanPtr := j.span.Load()
+		if spanPtr == nil {
+			continue
+		}
+		span := *spanPtr
+		if span != nil && span.SpanContext().IsValid() {
+			target.mspan.Add(span)
 		}
 	}
 	for p := range src.parents {
@@ -456,11 +464,11 @@ func (jl *Solver) NewJob(id string) (*Job, error) {
 		pr:             progress.NewMultiReader(pr),
 		pw:             pw,
 		progressCloser: progressCloser,
-		span:           span,
 		id:             id,
 		startedTime:    time.Now(),
 		uniqueID:       identity.NewID(),
 	}
+	j.span.Store(&span)
 	jl.jobs[id] = j
 
 	jl.updateCond.Broadcast()
@@ -511,7 +519,8 @@ func (jl *Solver) deleteIfUnreferenced(k digest.Digest, st *state) {
 
 func (j *Job) Build(ctx context.Context, e Edge) (CachedResultWithProvenance, error) {
 	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
-		j.span = span
+		// CompareAndSwap ensures we store the first span and ignore updates.
+		j.span.CompareAndSwap(nil, &span)
 	}
 
 	v, err := j.list.load(e.Vertex, nil, j)
@@ -605,9 +614,9 @@ func (j *Job) StartedTime() time.Time {
 }
 
 func (j *Job) RegisterCompleteTime() time.Time {
-	if j.completedTime.IsZero() {
+	j.completeOnce.Do(func() {
 		j.completedTime = time.Now()
-	}
+	})
 	return j.completedTime
 }
 
