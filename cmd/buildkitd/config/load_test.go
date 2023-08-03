@@ -18,13 +18,15 @@ insecure-entitlements = ["security.insecure"]
 [gc]
 enabled=true
 
-
 [grpc]
 address=["buildkit.sock"]
 debugAddress="debug.sock"
 gid=1234
 [grpc.tls]
 cert="mycert.pem"
+
+[otel]
+socketPath="/tmp/otel-grpc.sock"
 
 [worker.oci]
 enabled=true
@@ -82,6 +84,8 @@ searchDomains=["example.com"]
 	require.NotNil(t, cfg.GRPC.GID)
 	require.Equal(t, 1234, *cfg.GRPC.GID)
 	require.Equal(t, "mycert.pem", cfg.GRPC.TLS.Cert)
+
+	require.Equal(t, "/tmp/otel-grpc.sock", cfg.OTEL.SocketPath)
 
 	require.NotNil(t, cfg.Workers.OCI.Enabled)
 	require.Equal(t, int64(123456789), cfg.Workers.OCI.GCKeepStorage.Bytes)

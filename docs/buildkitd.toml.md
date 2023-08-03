@@ -29,6 +29,10 @@ insecure-entitlements = [ "network.host", "security.insecure" ]
     key = "/etc/buildkit/tls.key"
     ca = "/etc/buildkit/tlsca.crt"
 
+[otel]
+  # OTEL collector trace socket path
+  socketPath = "/run/buildkit/otel-grpc.sock"
+
 # config for build history API that stores information about completed build commands
 [history]
   # maxAge is the maximum age of history entries to keep, in seconds.
