@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/shlex"
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/pkg/errors"
 )
 
 const buildkitdConfigFile = "buildkitd.toml"
@@ -157,6 +158,13 @@ func FormatLogs(m map[string]*bytes.Buffer) string {
 
 func CheckFeatureCompat(t *testing.T, sb Sandbox, features map[string]struct{}, reason ...string) {
 	t.Helper()
+	if err := HasFeatureCompat(t, sb, features, reason...); err != nil {
+		t.Skipf(err.Error())
+	}
+}
+
+func HasFeatureCompat(t *testing.T, sb Sandbox, features map[string]struct{}, reason ...string) error {
+	t.Helper()
 	if len(reason) == 0 {
 		t.Fatal("no reason provided")
 	}
@@ -172,6 +180,7 @@ func CheckFeatureCompat(t *testing.T, sb Sandbox, features map[string]struct{}, 
 		}
 	}
 	if len(ereasons) > 0 {
-		t.Skipf("%s worker can not currently run this test due to missing features (%s)", sb.Name(), strings.Join(ereasons, ", "))
+		return errors.Errorf("%s worker can not currently run this test due to missing features (%s)", sb.Name(), strings.Join(ereasons, ", "))
 	}
+	return nil
 }
