@@ -3,6 +3,7 @@ package git
 import (
 	"bytes"
 	"context"
+	"io"
 	"net/http"
 	"net/http/cgi"
 	"net/http/httptest"
@@ -27,8 +28,10 @@ import (
 	"github.com/moby/buildkit/snapshot"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/source"
+	"github.com/moby/buildkit/util/gitutil"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
+	"github.com/moby/buildkit/util/progress/logs"
 	"github.com/moby/buildkit/util/winlayers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -285,26 +288,34 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 	}
 
 	if keepGitDir {
+		git := gitutil.NewGitCLI(
+			gitutil.WithExec(runWithStandardUmask),
+			gitutil.WithStreams(func(ctx context.Context) (stdout, stderr io.WriteCloser, flush func()) {
+				return logs.NewLogStreams(ctx, false)
+			}),
+			gitutil.WithWorkTree(dir),
+		)
+
 		if isAnnotatedTag {
 			// get commit sha that the annotated tag points to
-			annotatedTagCommit, err := git(ctx, dir, "", "", "rev-list", "-n", "1", tag)
+			annotatedTagCommit, err := git.Run(ctx, "rev-list", "-n", "1", tag)
 			require.NoError(t, err)
 
 			// get current commit sha
-			headCommit, err := git(ctx, dir, "", "", "rev-parse", "HEAD")
+			headCommit, err := git.Run(ctx, "rev-parse", "HEAD")
 			require.NoError(t, err)
 
 			// HEAD should match the actual commit sha (and not the sha of the annotated tag,
 			// since it's not possible to checkout a non-commit object)
-			require.Equal(t, annotatedTagCommit.String(), headCommit.String())
+			require.Equal(t, string(annotatedTagCommit), string(headCommit))
 		}
 
 		// test that we checked out the correct commit
 		// (in the case of an annotated tag, this message is of the commit the annotated tag points to
 		// and not the message of the tag)
-		gitLogOutput, err := git(ctx, dir, "", "", "log", "-n", "1", "--format=%s")
+		gitLogOutput, err := git.Run(ctx, "log", "-n", "1", "--format=%s")
 		require.NoError(t, err)
-		require.True(t, strings.Contains(strings.TrimSpace(gitLogOutput.String()), expectedCommitSubject))
+		require.Contains(t, strings.TrimSpace(string(gitLogOutput)), expectedCommitSubject)
 	}
 }
 
