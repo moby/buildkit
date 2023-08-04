@@ -54,9 +54,9 @@ func runBuildkitd(ctx context.Context, conf *integration.BackendConfig, args []s
 
 	address = getBuildkitdAddr(tmpdir)
 
-	args = append(args, "--root", tmpdir, "--addr", address, "--debug")
+	args = append(args, "--root", tmpdir, "--addr", address, "--otel-socket-path", getTraceSocketPath(tmpdir), "--debug")
 	cmd := exec.Command(args[0], args[1:]...) //nolint:gosec // test utility
-	cmd.Env = append(os.Environ(), "BUILDKIT_DEBUG_EXEC_OUTPUT=1", "BUILDKIT_DEBUG_PANIC_ON_ERROR=1", "BUILDKIT_TRACE_SOCKET="+getTraceSocketPath(tmpdir), "TMPDIR="+filepath.Join(tmpdir, "tmp"))
+	cmd.Env = append(os.Environ(), "BUILDKIT_DEBUG_EXEC_OUTPUT=1", "BUILDKIT_DEBUG_PANIC_ON_ERROR=1", "TMPDIR="+filepath.Join(tmpdir, "tmp"))
 	cmd.Env = append(cmd.Env, extraEnv...)
 	cmd.SysProcAttr = getSysProcAttr()
 

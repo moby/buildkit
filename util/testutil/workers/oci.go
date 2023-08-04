@@ -66,7 +66,7 @@ func (s *OCI) New(ctx context.Context, cfg *integration.BackendConfig) (integrat
 			return nil, nil, errors.Errorf("unsupported id pair: uid=%d, gid=%d", s.UID, s.GID)
 		}
 		// TODO: make sure the user exists and subuid/subgid are configured.
-		buildkitdArgs = append([]string{"sudo", "-E", "-u", fmt.Sprintf("#%d", s.UID), "-i", "--", "exec", "rootlesskit"}, buildkitdArgs...)
+		buildkitdArgs = append([]string{"sudo", "-u", fmt.Sprintf("#%d", s.UID), "-i", "--", "exec", "rootlesskit"}, buildkitdArgs...)
 	}
 
 	var extraEnv []string
