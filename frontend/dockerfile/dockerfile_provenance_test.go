@@ -29,13 +29,14 @@ import (
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/integration"
+	"github.com/moby/buildkit/util/testutil/workers"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
 func testProvenanceAttestation(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush, integration.FeatureProvenance)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -225,7 +226,7 @@ RUN echo "ok" > /foo
 }
 
 func testGitProvenanceAttestation(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush, integration.FeatureProvenance)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -372,7 +373,7 @@ COPY myapp.Dockerfile /
 }
 
 func testMultiPlatformProvenance(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush, integration.FeatureMultiPlatform, integration.FeatureProvenance)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureMultiPlatform, workers.FeatureProvenance)
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -487,7 +488,7 @@ RUN echo "ok-$TARGETARCH" > /foo
 }
 
 func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush, integration.FeatureProvenance)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
 	// Building with client frontend does not capture frontend provenance
 	// because frontend runs in client, not in BuildKit.
 	// This test builds Dockerfile inside a client frontend ensuring that
@@ -681,7 +682,7 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 }
 
 func testClientLLBProvenance(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush, integration.FeatureProvenance)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -795,7 +796,7 @@ func testClientLLBProvenance(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSecretSSHProvenance(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush, integration.FeatureProvenance)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -872,7 +873,7 @@ RUN --mount=type=secret,id=mysecret --mount=type=secret,id=othersecret --mount=t
 }
 
 func testOCILayoutProvenance(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureProvenance)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureProvenance)
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -1005,7 +1006,7 @@ EOF
 }
 
 func testNilProvenance(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureProvenance)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureProvenance)
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -1042,7 +1043,7 @@ ENV FOO=bar
 
 // https://github.com/moby/buildkit/issues/3562
 func testDuplicatePlatformProvenance(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureProvenance)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureProvenance)
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -1072,7 +1073,7 @@ func testDuplicatePlatformProvenance(t *testing.T, sb integration.Sandbox) {
 
 // https://github.com/moby/buildkit/issues/3928
 func testDockerIgnoreMissingProvenance(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureProvenance)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureProvenance)
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()

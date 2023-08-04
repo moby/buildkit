@@ -10,73 +10,18 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/shlex"
 	"github.com/moby/buildkit/util/bklog"
-	"github.com/pkg/errors"
 )
 
 const buildkitdConfigFile = "buildkitd.toml"
-
-type backend struct {
-	address             string
-	dockerAddress       string
-	containerdAddress   string
-	rootless            bool
-	snapshotter         string
-	unsupportedFeatures []string
-	isDockerd           bool
-}
-
-func (b backend) Address() string {
-	return b.address
-}
-
-func (b backend) DockerAddress() string {
-	return b.dockerAddress
-}
-
-func (b backend) ContainerdAddress() string {
-	return b.containerdAddress
-}
-
-func (b backend) Rootless() bool {
-	return b.rootless
-}
-
-func (b backend) Snapshotter() string {
-	return b.snapshotter
-}
-
-func (b backend) isUnsupportedFeature(feature string) bool {
-	if enabledFeatures := os.Getenv("BUILDKIT_TEST_ENABLE_FEATURES"); enabledFeatures != "" {
-		for _, enabledFeature := range strings.Split(enabledFeatures, ",") {
-			if feature == enabledFeature {
-				return false
-			}
-		}
-	}
-	if disabledFeatures := os.Getenv("BUILDKIT_TEST_DISABLE_FEATURES"); disabledFeatures != "" {
-		for _, disabledFeature := range strings.Split(disabledFeatures, ",") {
-			if feature == disabledFeature {
-				return true
-			}
-		}
-	}
-	for _, unsupportedFeature := range b.unsupportedFeatures {
-		if feature == unsupportedFeature {
-			return true
-		}
-	}
-	return false
-}
 
 type sandbox struct {
 	Backend
 
 	logs    map[string]*bytes.Buffer
-	cleanup *multiCloser
+	cleanup *MultiCloser
 	mv      matrixValue
 	ctx     context.Context
 	name    string
@@ -95,7 +40,7 @@ func (sb *sandbox) Logs() map[string]*bytes.Buffer {
 }
 
 func (sb *sandbox) PrintLogs(t *testing.T) {
-	printLogs(sb.logs, t.Log)
+	PrintLogs(sb.logs, t.Log)
 }
 
 func (sb *sandbox) ClearLogs() {
@@ -107,7 +52,7 @@ func (sb *sandbox) NewRegistry() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	sb.cleanup.append(cl)
+	sb.cleanup.Append(cl)
 	return url, nil
 }
 
@@ -143,7 +88,7 @@ func newSandbox(ctx context.Context, w Worker, mirror string, mv matrixValue) (s
 		upt = append(upt, withMirrorConfig(mirror))
 	}
 
-	deferF := &multiCloser{}
+	deferF := &MultiCloser{}
 	cl = deferF.F()
 
 	defer func() {
@@ -158,7 +103,7 @@ func newSandbox(ctx context.Context, w Worker, mirror string, mv matrixValue) (s
 		if err != nil {
 			return nil, nil, err
 		}
-		deferF.append(func() error {
+		deferF.Append(func() error {
 			return os.RemoveAll(dir)
 		})
 		cfg.ConfigFile = filepath.Join(dir, buildkitdConfigFile)
@@ -168,7 +113,7 @@ func newSandbox(ctx context.Context, w Worker, mirror string, mv matrixValue) (s
 	if err != nil {
 		return nil, nil, err
 	}
-	deferF.append(closer)
+	deferF.Append(closer)
 
 	return &sandbox{
 		Backend: b,
@@ -180,86 +125,7 @@ func newSandbox(ctx context.Context, w Worker, mirror string, mv matrixValue) (s
 	}, cl, nil
 }
 
-func runBuildkitd(ctx context.Context, conf *BackendConfig, args []string, logs map[string]*bytes.Buffer, uid, gid int, extraEnv []string) (address string, cl func() error, err error) {
-	deferF := &multiCloser{}
-	cl = deferF.F()
-
-	defer func() {
-		if err != nil {
-			deferF.F()()
-			cl = nil
-		}
-	}()
-
-	if conf.ConfigFile != "" {
-		args = append(args, "--config="+conf.ConfigFile)
-	}
-
-	tmpdir, err := os.MkdirTemp("", "bktest_buildkitd")
-	if err != nil {
-		return "", nil, err
-	}
-	if err := os.Chown(tmpdir, uid, gid); err != nil {
-		return "", nil, err
-	}
-	if err := os.MkdirAll(filepath.Join(tmpdir, "tmp"), 0711); err != nil {
-		return "", nil, err
-	}
-	if err := os.Chown(filepath.Join(tmpdir, "tmp"), uid, gid); err != nil {
-		return "", nil, err
-	}
-
-	deferF.append(func() error { return os.RemoveAll(tmpdir) })
-
-	address = getBuildkitdAddr(tmpdir)
-
-	args = append(args, "--root", tmpdir, "--addr", address, "--debug")
-	cmd := exec.Command(args[0], args[1:]...) //nolint:gosec // test utility
-	cmd.Env = append(os.Environ(), "BUILDKIT_DEBUG_EXEC_OUTPUT=1", "BUILDKIT_DEBUG_PANIC_ON_ERROR=1", "BUILDKIT_TRACE_SOCKET="+getTraceSocketPath(tmpdir), "TMPDIR="+filepath.Join(tmpdir, "tmp"))
-	cmd.Env = append(cmd.Env, extraEnv...)
-	cmd.SysProcAttr = getSysProcAttr()
-
-	stop, err := startCmd(cmd, logs)
-	if err != nil {
-		return "", nil, err
-	}
-	deferF.append(stop)
-
-	if err := waitUnix(address, 15*time.Second, cmd); err != nil {
-		return "", nil, err
-	}
-
-	deferF.append(func() error {
-		f, err := os.Open("/proc/self/mountinfo")
-		if err != nil {
-			return errors.Wrap(err, "failed to open mountinfo")
-		}
-		defer f.Close()
-		s := bufio.NewScanner(f)
-		for s.Scan() {
-			if strings.Contains(s.Text(), tmpdir) {
-				return errors.Errorf("leaked mountpoint for %s", tmpdir)
-			}
-		}
-		return s.Err()
-	})
-
-	return address, cl, err
-}
-
-func getBackend(sb Sandbox) (*backend, error) {
-	sbx, ok := sb.(*sandbox)
-	if !ok {
-		return nil, errors.Errorf("invalid sandbox type %T", sb)
-	}
-	b, ok := sbx.Backend.(backend)
-	if !ok {
-		return nil, errors.Errorf("invalid backend type %T", b)
-	}
-	return &b, nil
-}
-
-func rootlessSupported(uid int) bool {
+func RootlessSupported(uid int) bool {
 	cmd := exec.Command("sudo", "-E", "-u", fmt.Sprintf("#%d", uid), "-i", "--", "exec", "unshare", "-U", "true") //nolint:gosec // test utility
 	b, err := cmd.CombinedOutput()
 	if err != nil {
@@ -269,7 +135,7 @@ func rootlessSupported(uid int) bool {
 	return true
 }
 
-func printLogs(logs map[string]*bytes.Buffer, f func(args ...interface{})) {
+func PrintLogs(logs map[string]*bytes.Buffer, f func(args ...interface{})) {
 	for name, l := range logs {
 		f(name)
 		s := bufio.NewScanner(l)
@@ -279,74 +145,25 @@ func printLogs(logs map[string]*bytes.Buffer, f func(args ...interface{})) {
 	}
 }
 
-const (
-	FeatureCacheExport          = "cache_export"
-	FeatureCacheImport          = "cache_import"
-	FeatureCacheBackendAzblob   = "cache_backend_azblob"
-	FeatureCacheBackendGha      = "cache_backend_gha"
-	FeatureCacheBackendInline   = "cache_backend_inline"
-	FeatureCacheBackendLocal    = "cache_backend_local"
-	FeatureCacheBackendRegistry = "cache_backend_registry"
-	FeatureCacheBackendS3       = "cache_backend_s3"
-	FeatureDirectPush           = "direct_push"
-	FeatureFrontendOutline      = "frontend_outline"
-	FeatureFrontendTargets      = "frontend_targets"
-	FeatureImageExporter        = "image_exporter"
-	FeatureInfo                 = "info"
-	FeatureMergeDiff            = "merge_diff"
-	FeatureMultiCacheExport     = "multi_cache_export"
-	FeatureMultiPlatform        = "multi_platform"
-	FeatureOCIExporter          = "oci_exporter"
-	FeatureOCILayout            = "oci_layout"
-	FeatureProvenance           = "provenance"
-	FeatureSBOM                 = "sbom"
-	FeatureSecurityMode         = "security_mode"
-	FeatureSourceDateEpoch      = "source_date_epoch"
-	FeatureCNINetwork           = "cni_network"
-)
-
-var features = map[string]struct{}{
-	FeatureCacheExport:          {},
-	FeatureCacheImport:          {},
-	FeatureCacheBackendAzblob:   {},
-	FeatureCacheBackendGha:      {},
-	FeatureCacheBackendInline:   {},
-	FeatureCacheBackendLocal:    {},
-	FeatureCacheBackendRegistry: {},
-	FeatureCacheBackendS3:       {},
-	FeatureDirectPush:           {},
-	FeatureFrontendOutline:      {},
-	FeatureFrontendTargets:      {},
-	FeatureImageExporter:        {},
-	FeatureInfo:                 {},
-	FeatureMergeDiff:            {},
-	FeatureMultiCacheExport:     {},
-	FeatureMultiPlatform:        {},
-	FeatureOCIExporter:          {},
-	FeatureOCILayout:            {},
-	FeatureProvenance:           {},
-	FeatureSBOM:                 {},
-	FeatureSecurityMode:         {},
-	FeatureSourceDateEpoch:      {},
-	FeatureCNINetwork:           {},
+func FormatLogs(m map[string]*bytes.Buffer) string {
+	var ss []string
+	for k, b := range m {
+		if b != nil {
+			ss = append(ss, fmt.Sprintf("%q:%q", k, b.String()))
+		}
+	}
+	return strings.Join(ss, ",")
 }
 
-func CheckFeatureCompat(t *testing.T, sb Sandbox, reason ...string) {
+func CheckFeatureCompat(t *testing.T, sb Sandbox, features map[string]struct{}, reason ...string) {
 	t.Helper()
 	if len(reason) == 0 {
 		t.Fatal("no reason provided")
 	}
-	b, err := getBackend(sb)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(b.unsupportedFeatures) == 0 {
-		return
-	}
 	var ereasons []string
 	for _, r := range reason {
 		if _, ok := features[r]; ok {
-			if b.isUnsupportedFeature(r) {
+			if !sb.Supports(r) {
 				ereasons = append(ereasons, r)
 			}
 		} else {

@@ -10,13 +10,14 @@ import (
 
 	"github.com/moby/buildkit/util/network/netproviders"
 	"github.com/moby/buildkit/util/testutil/integration"
+	"github.com/moby/buildkit/util/testutil/workers"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/tests"
 	"github.com/stretchr/testify/require"
 )
 
 func init() {
-	integration.InitContainerdWorker()
+	workers.InitContainerdWorker()
 }
 
 func TestContainerdWorkerIntegration(t *testing.T) {

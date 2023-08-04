@@ -47,6 +47,7 @@ import (
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
+	"github.com/moby/buildkit/util/testutil/workers"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -54,11 +55,11 @@ import (
 )
 
 func init() {
-	if integration.IsTestDockerd() {
-		integration.InitDockerdWorker()
+	if workers.IsTestDockerd() {
+		workers.InitDockerdWorker()
 	} else {
-		integration.InitOCIWorker()
-		integration.InitContainerdWorker()
+		workers.InitOCIWorker()
+		workers.InitContainerdWorker()
 	}
 }
 
@@ -426,7 +427,7 @@ RUN [ "$(cat testfile)" == "contents0" ]
 }
 
 func testExportCacheLoop(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport, integration.FeatureCacheImport, integration.FeatureCacheBackendLocal)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport, workers.FeatureCacheImport, workers.FeatureCacheBackendLocal)
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -1263,7 +1264,7 @@ COPY --from=build /out .
 }
 
 func testDefaultShellAndPath(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter)
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -1350,7 +1351,7 @@ COPY Dockerfile .
 }
 
 func testExportMultiPlatform(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter, integration.FeatureMultiPlatform)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureMultiPlatform)
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -2531,7 +2532,7 @@ ENV foo=bar
 }
 
 func testExposeExpansion(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureImageExporter)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureImageExporter)
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -2764,7 +2765,7 @@ RUN ["ls"]
 	args, trace := f.DFCmdArgs(dir, dir)
 	defer os.RemoveAll(trace)
 
-	integration.CheckFeatureCompat(t, sb, integration.FeatureImageExporter)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureImageExporter)
 
 	target := "example.com/moby/dockerfilescratch:test"
 	cmd := sb.Cmd(args + " --output type=image,name=" + target)
@@ -2818,7 +2819,7 @@ RUN ["ls"]
 }
 
 func testUser(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureImageExporter)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureImageExporter)
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -3671,7 +3672,7 @@ COPY --from=stage1 baz bax
 }
 
 func testLabels(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureImageExporter)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureImageExporter)
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -3781,7 +3782,7 @@ RUN ls /files/file1
 }
 
 func testOnBuildCleared(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()
@@ -3883,11 +3884,11 @@ ONBUILD RUN mkdir -p /out && echo -n 11 >> /out/foo
 }
 
 func testCacheMultiPlatformImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb,
-		integration.FeatureDirectPush,
-		integration.FeatureCacheExport,
-		integration.FeatureCacheBackendInline,
-		integration.FeatureCacheBackendRegistry,
+	workers.CheckFeatureCompat(t, sb,
+		workers.FeatureDirectPush,
+		workers.FeatureCacheExport,
+		workers.FeatureCacheBackendInline,
+		workers.FeatureCacheBackendRegistry,
 	)
 	f := getFrontend(t, sb)
 
@@ -4010,7 +4011,7 @@ COPY --from=base arch /
 }
 
 func testImageManifestCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport, integration.FeatureCacheBackendLocal)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport, workers.FeatureCacheBackendLocal)
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()
@@ -4112,7 +4113,7 @@ COPY --from=base unique /
 	require.Equal(t, string(dt), string(dt2))
 }
 func testCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureCacheExport, integration.FeatureCacheBackendLocal)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport, workers.FeatureCacheBackendLocal)
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()
@@ -4203,7 +4204,7 @@ COPY --from=base unique /
 }
 
 func testReproducibleIDs(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureImageExporter)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureImageExporter)
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -5210,7 +5211,7 @@ COPY --from=base /out /
 	require.NoError(t, err)
 	require.True(t, len(dt) > 0)
 
-	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 
 	// Now test with an image with custom envs
 	dockerfile = []byte(`
@@ -5299,7 +5300,7 @@ COPY --from=base /env_foobar /
 }
 
 func testNamedImageContextPlatform(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -5371,7 +5372,7 @@ RUN echo hello
 }
 
 func testNamedImageContextTimestamps(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -5565,7 +5566,7 @@ COPY --from=base /o* /
 }
 
 func testNamedOCILayoutContext(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter, integration.FeatureOCILayout)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureOCILayout)
 	// how this test works:
 	// 1- we use a regular builder with a dockerfile to create an image two files: "out" with content "first", "out2" with content "second"
 	// 2- we save the output to an OCI layout dir
@@ -5701,7 +5702,7 @@ COPY --from=imported /test/outfoo /
 }
 
 func testNamedOCILayoutContextExport(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter, integration.FeatureOCILayout)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureOCILayout)
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -5918,7 +5919,7 @@ COPY --from=build /foo /out /
 }
 
 func testNamedMultiplatformInputContext(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureMultiPlatform)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureMultiPlatform)
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -6064,7 +6065,7 @@ COPY --from=build /foo /out /
 }
 
 func testSourceDateEpochWithoutExporter(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter, integration.FeatureSourceDateEpoch)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -6138,7 +6139,7 @@ COPY Dockerfile .
 }
 
 func testSBOMScannerImage(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush, integration.FeatureSBOM)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureSBOM)
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -6242,7 +6243,7 @@ EOF
 }
 
 func testSBOMScannerArgs(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush, integration.FeatureSBOM)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureSBOM)
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -6543,7 +6544,7 @@ COPY Dockerfile \
 }
 
 func testReproSourceDateEpoch(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter, integration.FeatureSourceDateEpoch)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
 	if sb.Snapshotter() == "native" {
 		t.Skip("the digest is not reproducible with the \"native\" snapshotter because hardlinks are processed in a different way: https://github.com/moby/buildkit/pull/3456#discussion_r1062650263")
 	}

@@ -23,11 +23,10 @@ import (
 )
 
 func testBuildWithLocalFiles(t *testing.T, sb integration.Sandbox) {
-	dir, err := tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("foo", []byte("bar"), 0600),
 	)
-	require.NoError(t, err)
 
 	st := llb.Image("busybox").
 		Run(llb.Shlex("sh -c 'echo -n bar > foo2'")).
@@ -184,12 +183,4 @@ func marshal(ctx context.Context, st llb.State) (io.Reader, error) {
 		return nil, err
 	}
 	return bytes.NewBuffer(dt), nil
-}
-
-func tmpdir(t *testing.T, appliers ...fstest.Applier) (string, error) {
-	tmpdir := t.TempDir()
-	if err := fstest.Apply(appliers...).Apply(tmpdir); err != nil {
-		return "", err
-	}
-	return tmpdir, nil
 }

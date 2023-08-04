@@ -15,11 +15,11 @@ import (
 )
 
 func NewRegistry(dir string) (url string, cl func() error, err error) {
-	if err := lookupBinary("registry"); err != nil {
+	if err := LookupBinary("registry"); err != nil {
 		return "", nil, err
 	}
 
-	deferF := &multiCloser{}
+	deferF := &MultiCloser{}
 	cl = deferF.F()
 
 	defer func() {
@@ -34,7 +34,7 @@ func NewRegistry(dir string) (url string, cl func() error, err error) {
 		if err != nil {
 			return "", nil, err
 		}
-		deferF.append(func() error { return os.RemoveAll(tmpdir) })
+		deferF.Append(func() error { return os.RemoveAll(tmpdir) })
 		dir = tmpdir
 	}
 
@@ -61,11 +61,11 @@ http:
 	if err != nil {
 		return "", nil, err
 	}
-	stop, err := startCmd(cmd, nil)
+	stop, err := StartCmd(cmd, nil)
 	if err != nil {
 		return "", nil, err
 	}
-	deferF.append(stop)
+	deferF.Append(stop)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

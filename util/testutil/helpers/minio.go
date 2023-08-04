@@ -1,6 +1,7 @@
-package integration
+package helpers
 
 import (
+	"crypto/rand"
 	"fmt"
 	"net"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/pkg/errors"
 )
 
@@ -23,7 +25,7 @@ type MinioOpts struct {
 	SecretAccessKey string
 }
 
-func NewMinioServer(t *testing.T, sb Sandbox, opts MinioOpts) (address string, bucket string, cl func() error, err error) {
+func NewMinioServer(t *testing.T, sb integration.Sandbox, opts MinioOpts) (address string, bucket string, cl func() error, err error) {
 	t.Helper()
 	bucket = randomString(10)
 
@@ -34,7 +36,7 @@ func NewMinioServer(t *testing.T, sb Sandbox, opts MinioOpts) (address string, b
 		return "", "", nil, errors.Wrapf(err, "failed to lookup %s binary", mcBin)
 	}
 
-	deferF := &multiCloser{}
+	deferF := &integration.MultiCloser{}
 	cl = deferF.F()
 
 	defer func() {
@@ -61,39 +63,39 @@ func NewMinioServer(t *testing.T, sb Sandbox, opts MinioOpts) (address string, b
 		"MINIO_ROOT_USER=" + opts.AccessKeyID,
 		"MINIO_ROOT_PASSWORD=" + opts.SecretAccessKey,
 	}...)
-	minioStop, err := startCmd(cmd, sb.Logs())
+	minioStop, err := integration.StartCmd(cmd, sb.Logs())
 	if err != nil {
 		return "", "", nil, err
 	}
 	if err = waitMinio(address, 15*time.Second); err != nil {
 		minioStop()
-		return "", "", nil, errors.Wrapf(err, "minio did not start up: %s", formatLogs(sb.Logs()))
+		return "", "", nil, errors.Wrapf(err, "minio did not start up: %s", integration.FormatLogs(sb.Logs()))
 	}
-	deferF.append(minioStop)
+	deferF.Append(minioStop)
 
 	// create alias config
 	alias := randomString(10)
 	cmd = exec.Command(mcBin, "alias", "set", alias, address, opts.AccessKeyID, opts.SecretAccessKey)
-	if err := runCmd(cmd, sb.Logs()); err != nil {
+	if err := integration.RunCmd(cmd, sb.Logs()); err != nil {
 		return "", "", nil, err
 	}
-	deferF.append(func() error {
+	deferF.Append(func() error {
 		return exec.Command(mcBin, "alias", "rm", alias).Run()
 	})
 
 	// create bucket
 	cmd = exec.Command(mcBin, "mb", "--region", opts.Region, fmt.Sprintf("%s/%s", alias, bucket)) // #nosec G204
-	if err := runCmd(cmd, sb.Logs()); err != nil {
+	if err := integration.RunCmd(cmd, sb.Logs()); err != nil {
 		return "", "", nil, err
 	}
 
 	// trace
 	cmd = exec.Command(mcBin, "admin", "trace", "--json", alias)
-	traceStop, err := startCmd(cmd, sb.Logs())
+	traceStop, err := integration.StartCmd(cmd, sb.Logs())
 	if err != nil {
 		return "", "", nil, err
 	}
-	deferF.append(traceStop)
+	deferF.Append(traceStop)
 
 	return
 }
@@ -113,4 +115,14 @@ func waitMinio(address string, d time.Duration) error {
 		time.Sleep(step)
 	}
 	return nil
+}
+
+func randomString(n int) string {
+	chars := "abcdefghijklmnopqrstuvwxyz"
+	var b = make([]byte, n)
+	_, _ = rand.Read(b)
+	for k, v := range b {
+		b[k] = chars[v%byte(len(chars))]
+	}
+	return string(b)
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/moby/buildkit/frontend/subrequests"
 	"github.com/moby/buildkit/frontend/subrequests/targets"
 	"github.com/moby/buildkit/util/testutil/integration"
+	"github.com/moby/buildkit/util/testutil/workers"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -23,7 +24,7 @@ var targetsTests = integration.TestFuncs(
 )
 
 func testTargetsList(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureFrontendTargets)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureFrontendTargets)
 	f := getFrontend(t, sb)
 	if _, ok := f.(*clientFrontend); !ok {
 		t.Skip("only test with client frontend")
@@ -122,7 +123,7 @@ FROM second AS binary
 }
 
 func testTargetsDescribeDefinition(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureFrontendTargets)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureFrontendTargets)
 	f := getFrontend(t, sb)
 	if _, ok := f.(*clientFrontend); !ok {
 		t.Skip("only test with client frontend")

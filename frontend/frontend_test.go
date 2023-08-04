@@ -11,6 +11,7 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/util/testutil/integration"
+	"github.com/moby/buildkit/util/testutil/workers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tonistiigi/fsutil"
@@ -18,11 +19,11 @@ import (
 )
 
 func init() {
-	if integration.IsTestDockerd() {
-		integration.InitDockerdWorker()
+	if workers.IsTestDockerd() {
+		workers.InitDockerdWorker()
 	} else {
-		integration.InitOCIWorker()
-		integration.InitContainerdWorker()
+		workers.InitOCIWorker()
+		workers.InitContainerdWorker()
 	}
 }
 
@@ -67,11 +68,10 @@ func testRefReadFile(t *testing.T, sb integration.Sandbox) {
 
 	testcontent := []byte(`foobar`)
 
-	dir, err := tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("test", testcontent, 0666),
 	)
-	require.NoError(t, err)
 
 	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 		def, err := llb.Local("mylocal").Marshal(ctx)
@@ -130,7 +130,7 @@ func testRefReadDir(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	dir, err := tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateDir("somedir", 0777),
 		fstest.CreateFile("somedir/foo1.txt", []byte(`foo1`), 0666),
@@ -139,7 +139,6 @@ func testRefReadDir(t *testing.T, sb integration.Sandbox) {
 		fstest.Symlink("bar.log", "somedir/link.log"),
 		fstest.CreateDir("somedir/baz.dir", 0777),
 	)
-	require.NoError(t, err)
 
 	expMap := make(map[string]*fstypes.Stat)
 
@@ -248,11 +247,10 @@ func testRefStatFile(t *testing.T, sb integration.Sandbox) {
 
 	testcontent := []byte(`foobar`)
 
-	dir, err := tmpdir(
+	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("test", testcontent, 0666),
 	)
-	require.NoError(t, err)
 
 	exp, err := fsutil.Stat(filepath.Join(dir, "test"))
 	require.NoError(t, err)
@@ -339,12 +337,4 @@ func testRefEvaluate(t *testing.T, sb integration.Sandbox) {
 
 	_, err = c.Build(ctx, client.SolveOpt{}, "", frontend, nil)
 	require.NoError(t, err)
-}
-
-func tmpdir(t *testing.T, appliers ...fstest.Applier) (string, error) {
-	tmpdir := t.TempDir()
-	if err := fstest.Apply(appliers...).Apply(tmpdir); err != nil {
-		return "", err
-	}
-	return tmpdir, nil
 }

@@ -1,7 +1,7 @@
 //go:build !windows
 // +build !windows
 
-package integration
+package workers
 
 import (
 	"path/filepath"

@@ -10,6 +10,7 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/frontend/dockerui"
 	"github.com/moby/buildkit/util/testutil/integration"
+	"github.com/moby/buildkit/util/testutil/workers"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -592,7 +593,7 @@ COPY --from=build /dest /
 }
 
 func testOnBuildHeredoc(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureDirectPush)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()

@@ -12,6 +12,7 @@ import (
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/util/testutil/integration"
+	"github.com/moby/buildkit/util/testutil/workers"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -1187,14 +1188,14 @@ func (tc verifyContents) Name() string {
 }
 
 func (tc verifyContents) Run(t *testing.T, sb integration.Sandbox) {
-	integration.CheckFeatureCompat(t, sb, integration.FeatureMergeDiff)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureMergeDiff)
 	if tc.skipOnRootless && sb.Rootless() {
 		t.Skip("rootless")
 	}
 
 	switch tc.name {
 	case "TestDiffUpperScratch":
-		if integration.IsTestDockerdMoby(sb) {
+		if workers.IsTestDockerdMoby(sb) {
 			t.Skip("failed to handle changes: lstat ... no such file or directory: https://github.com/moby/buildkit/pull/2726#issuecomment-1070978499")
 		}
 	}
@@ -1225,7 +1226,7 @@ func (tc verifyContents) Run(t *testing.T, sb integration.Sandbox) {
 	var exportInlineCacheOpts []CacheOptionsEntry
 	var importRegistryCacheOpts []CacheOptionsEntry
 	var exportRegistryCacheOpts []CacheOptionsEntry
-	if !integration.IsTestDockerd() {
+	if !workers.IsTestDockerd() {
 		importInlineCacheOpts = []CacheOptionsEntry{{
 			Type: "registry",
 			Attrs: map[string]string{
@@ -1252,7 +1253,7 @@ func (tc verifyContents) Run(t *testing.T, sb integration.Sandbox) {
 	resetState(t, c, sb)
 	requireContents(ctx, t, c, sb, tc.state, nil, exportInlineCacheOpts, imageTarget, tc.contents(sb))
 
-	if integration.IsTestDockerd() {
+	if workers.IsTestDockerd() {
 		return
 	}
 
