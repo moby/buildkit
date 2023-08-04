@@ -444,7 +444,7 @@ func (cr *cacheRecord) remove(ctx context.Context, removeSnapshot bool) (rerr er
 			"id":             cr.ID(),
 			"refCount":       len(cr.refs),
 			"removeSnapshot": removeSnapshot,
-			"stack":          bklog.LazyStackTrace{},
+			"stack":          bklog.TraceLevelOnlyStack(),
 		})
 		if rerr != nil {
 			l = l.WithError(rerr)
@@ -488,7 +488,7 @@ func (sr *immutableRef) traceLogFields() logrus.Fields {
 		"refID":       fmt.Sprintf("%p", sr),
 		"newRefCount": len(sr.refs),
 		"mutable":     false,
-		"stack":       bklog.LazyStackTrace{},
+		"stack":       bklog.TraceLevelOnlyStack(),
 	}
 	if sr.equalMutable != nil {
 		m["equalMutableID"] = sr.equalMutable.ID()
@@ -628,7 +628,7 @@ func (sr *mutableRef) traceLogFields() logrus.Fields {
 		"refID":       fmt.Sprintf("%p", sr),
 		"newRefCount": len(sr.refs),
 		"mutable":     true,
-		"stack":       bklog.LazyStackTrace{},
+		"stack":       bklog.TraceLevelOnlyStack(),
 	}
 	if sr.equalMutable != nil {
 		m["equalMutableID"] = sr.equalMutable.ID()
