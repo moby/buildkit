@@ -1,4 +1,4 @@
-package cache
+package converter
 
 import (
 	"bufio"
@@ -20,9 +20,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-// getConverter returns converter function according to the specified compression type.
+// New returns converter function according to the specified compression type.
 // If no conversion is needed, this returns nil without error.
-func getConverter(ctx context.Context, cs content.Store, desc ocispecs.Descriptor, comp compression.Config) (converter.ConvertFunc, error) {
+func New(ctx context.Context, cs content.Store, desc ocispecs.Descriptor, comp compression.Config) (converter.ConvertFunc, error) {
 	if needs, err := comp.Type.NeedsConversion(ctx, cs, desc); err != nil {
 		return nil, errors.Wrapf(err, "failed to determine conversion needs")
 	} else if !needs {
