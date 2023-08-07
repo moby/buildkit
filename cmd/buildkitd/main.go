@@ -171,6 +171,12 @@ func main() {
 			Usage: "listening address (socket or tcp)",
 			Value: &cli.StringSlice{defaultConf.GRPC.Address[0]},
 		},
+		// Add format flag to control log formatter
+		cli.StringFlag{
+			Name:  "log-format",
+			Usage: "log formatter: json or text",
+			Value: "text",
+		},
 		cli.StringFlag{
 			Name:  "group",
 			Usage: "group (name or gid) which will own all Unix socket listening addresses",
@@ -227,7 +233,16 @@ func main() {
 			return err
 		}
 
-		logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
+		logFormat := cfg.Log.Format
+		switch logFormat {
+		case "json":
+			logrus.SetFormatter(&logrus.JSONFormatter{})
+		case "text", "":
+			logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
+		default:
+			return errors.Errorf("unsupported log type %q", logFormat)
+		}
+
 		if cfg.Debug {
 			logrus.SetLevel(logrus.DebugLevel)
 		}
@@ -478,7 +493,9 @@ func applyMainFlags(c *cli.Context, cfg *config.Config) error {
 	if c.IsSet("root") {
 		cfg.Root = c.String("root")
 	}
-
+	if c.IsSet("log-format") {
+		cfg.Log.Format = c.String("log-format")
+	}
 	if c.IsSet("addr") || len(cfg.GRPC.Address) == 0 {
 		cfg.GRPC.Address = c.StringSlice("addr")
 	}

@@ -24,6 +24,7 @@ COMMANDS:
 GLOBAL OPTIONS:
    --debug                enable debug output in logs
    --addr value           buildkitd address (default: "unix:///run/buildkit/buildkitd.sock")
+   --log-format value     log formatter: json or text (default: "text")
    --tlsservername value  buildkitd server name for certificate validation
    --tlscacert value      CA certificate for validation
    --tlscert value        client certificate
