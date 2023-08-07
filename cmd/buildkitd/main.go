@@ -200,6 +200,10 @@ func main() {
 			Name:  "allow-insecure-entitlement",
 			Usage: "allows insecure entitlements e.g. network.host, security.insecure",
 		},
+		cli.StringFlag{
+			Name:  "otel-socket-path",
+			Usage: "OTEL collector trace socket path",
+		},
 	)
 	app.Flags = append(app.Flags, appFlags...)
 	app.Flags = append(app.Flags, serviceFlags()...)
@@ -458,6 +462,10 @@ func setDefaultConfig(cfg *config.Config) {
 			appdefaults.EnsureUserAddressDir()
 		}
 	}
+
+	if cfg.OTEL.SocketPath == "" {
+		cfg.OTEL.SocketPath = appdefaults.TraceSocketPath(userns.RunningInUserNS())
+	}
 }
 
 func applyMainFlags(c *cli.Context, cfg *config.Config) error {
@@ -511,6 +519,11 @@ func applyMainFlags(c *cli.Context, cfg *config.Config) error {
 	if tlsca := c.String("tlscacert"); tlsca != "" {
 		cfg.GRPC.TLS.CA = tlsca
 	}
+
+	if c.IsSet("otel-socket-path") {
+		cfg.OTEL.SocketPath = c.String("otel-socket-path")
+	}
+
 	applyPlatformFlags(c)
 
 	return nil
@@ -661,11 +674,7 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 
 	var traceSocket string
 	if tc != nil {
-		if v, ok := os.LookupEnv("BUILDKIT_TRACE_SOCKET"); ok {
-			traceSocket = v
-		} else {
-			traceSocket = appdefaults.TraceSocketPath(userns.RunningInUserNS())
-		}
+		traceSocket = cfg.OTEL.SocketPath
 		if err := runTraceController(traceSocket, tc); err != nil {
 			return nil, err
 		}

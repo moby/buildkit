@@ -17,6 +17,8 @@ type Config struct {
 	// GRPC configuration settings
 	GRPC GRPCConfig `toml:"grpc"`
 
+	OTEL OTELConfig `toml:"otel"`
+
 	Workers struct {
 		OCI        OCIConfig        `toml:"oci"`
 		Containerd ContainerdConfig `toml:"containerd"`
@@ -44,6 +46,10 @@ type TLSConfig struct {
 	Cert string `toml:"cert"`
 	Key  string `toml:"key"`
 	CA   string `toml:"ca"`
+}
+
+type OTELConfig struct {
+	SocketPath string `toml:"socketPath"`
 }
 
 type GCConfig struct {
