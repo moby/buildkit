@@ -392,7 +392,9 @@ uses this mechanism:
 !README.md
 ```
 
-All markdown files *except* `README.md` are excluded from the context.
+All markdown files right under the context directory *except* `README.md`
+are excluded from the context. Note that markdown files under subdirectories
+are still included.
 
 The placement of `!` exception rules influences the behavior: the last
 line of the `.dockerignore` that matches a particular file determines
