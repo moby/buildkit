@@ -137,17 +137,36 @@ calculate a cache key for a vertex and another how to execute it.
 `CacheMap` is a description for calculating the cache key. It contains a digest
 that is combined with the cache keys of the inputs to determine the stable
 checksum that can be used to cache the operation result. For the vertexes that
-don't have inputs(roots), it is important that this digest is a stable secure
+don't have inputs (roots), it is important that this digest is a stable secure
 checksum. For example, in LLB this digest is a manifest digest for container
 images or a commit SHA for git sources.
 
 `CacheMap` may also define optional selectors or content-based cache functions
-for its inputs. A selector is combined with the input cache key and useful for
-describing when different parts of an input are being used, and inputs cache
-key needs to be customized. Content-based cache function allows computing a new
-cache key for an input after it has completed. In LLB this is used for
-calculating cache key based on the checksum of file contents of the input
-snapshots.
+for its inputs.
+
+- A selector is combined with the cache key of an input, to create a modified
+  version of that key. In LLB this is used for describing when different
+  files of an input snapshot are being used.
+- A content-based cache function allows computing a new cache key for an input
+  after it has completed. In LLB this is used for calculating a cache key based
+  on the checksum of file contents of the input snapshots.
+  
+> **Note**
+>
+> For example, in the case of LLB, if a vertex is a FileOp that copies a file
+> from one snapshot to another, the selector can be set to the path of the
+> source file in the input snapshot, while the content-based cache function can
+> be used to calculate the checksum of the file contents.
+> 
+> If the source path changes, we need to invalidate the cache (which we do by
+> changing the selector). However, if we do a content-based cache lookup for
+> the input, then the file content may not have changed (which we can detect by
+> hashing the file contents). In this case, we can reuse the cache result even
+> when the source path has changed.
+>
+> This abstraction allows the [scheduler](#scheduler) to determine whether to
+> perform a quick selector-based cache lookup or a slower content-based cache
+> lookup.
 
 `Exec` executes the operation defined by a vertex by passing in the results of
 the inputs.
