@@ -26,6 +26,7 @@ linters:
     - nolintlint
     - gosec
     - forbidigo
+    - nilerr
   disable-all: true
 
 linters-settings:
