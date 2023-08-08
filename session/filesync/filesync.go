@@ -277,7 +277,7 @@ func (sp *fsSyncTarget) DiffCopy(stream FileSend_DiffCopyServer) (err error) {
 	}
 	defer func() {
 		err1 := wc.Close()
-		if err != nil {
+		if err == nil {
 			err = err1
 		}
 	}()
