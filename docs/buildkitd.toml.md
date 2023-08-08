@@ -72,7 +72,7 @@ insecure-entitlements = [ "network.host", "security.insecure" ]
 
   [[worker.oci.gcpolicy]]
     # keepBytes can be an integer number of bytes (e.g. 512000000), a string
-    # with a unit (e.g. "512MB"), or a string percentage of available disk
+    # with a unit (e.g. "512MB"), or a string percentage of the total disk
     # space (e.g. "10%")
     keepBytes = "512MB"
     # keepDuration can be an integer number of seconds (e.g. 172800), or a
