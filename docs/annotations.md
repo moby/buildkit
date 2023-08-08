@@ -43,13 +43,12 @@ write to the following `<type>`s:
 - The `manifest` (the default, as above)
 - The `manifest-descriptor`
     - This adds the annotation into the image index's descriptor for the manifest
-    - (discarded if the output does not contain an image index)
 - The `index`
     - This adds the annotation into the image index root
-    - (discarded if the output does not contain an image index)
+    - If the exporter does not produce an image index, the build will fail.
 - The `index-descriptor`
     - This adds the annotation into the OCI layout's descriptor for the index
-    - (discarded if the output does not contain an OCI layout)
+    - If the exporter does not produce an image index, the build will fail.
 
 For example, if you want to add the annotation at the image index level, so
 that the annotation is shared between all architectures, you can instead:
