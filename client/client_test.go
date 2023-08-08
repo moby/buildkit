@@ -3912,7 +3912,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	dt, err := content.ReadBlob(ctx, img.ContentStore(), img.Target())
 	require.NoError(t, err)
 
-	var mfst = struct {
+	mfst := struct {
 		MediaType string `json:"mediaType,omitempty"`
 		ocispecs.Manifest
 	}{}
@@ -4181,6 +4181,7 @@ func testPullZstdImage(t *testing.T, sb integration.Sandbox) {
 		})
 	}
 }
+
 func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	requiresLinux(t)
@@ -4319,7 +4320,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	dt, err = content.ReadBlob(ctx, img.ContentStore(), img.Target())
 	require.NoError(t, err)
 
-	var mfst = struct {
+	mfst := struct {
 		MediaType string `json:"mediaType,omitempty"`
 		ocispecs.Manifest
 	}{}
@@ -5397,7 +5398,8 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 			{
 				Type:      ExporterLocal,
 				OutputDir: destDir,
-			}},
+			},
+		},
 		CacheImports: cacheOptionsEntryImport,
 	}, nil)
 	require.NoError(t, err)
@@ -5860,10 +5862,12 @@ func testMultipleRecordsWithSameLayersCacheImportExport(t *testing.T, sb integra
 
 	base := llb.Image("busybox:latest")
 	// layerA and layerB create identical layers with different LLB
-	layerA := base.Run(llb.Args([]string{"sh", "-c",
+	layerA := base.Run(llb.Args([]string{
+		"sh", "-c",
 		`echo $(( 1 + 2 )) > /result && touch -d "1970-01-01 00:00:00" /result`,
 	})).Root()
-	layerB := base.Run(llb.Args([]string{"sh", "-c",
+	layerB := base.Run(llb.Args([]string{
+		"sh", "-c",
 		`echo $(( 2 + 1 )) > /result && touch -d "1970-01-01 00:00:00" /result`,
 	})).Root()
 
@@ -9757,7 +9761,8 @@ func testMountStubsTimestamp(t *testing.T, sb integration.Sandbox) {
 
 	const sourceDateEpoch = int64(1234567890) // Fri Feb 13 11:31:30 PM UTC 2009
 	st := llb.Image("busybox:latest").Run(
-		llb.Args([]string{"/bin/touch", fmt.Sprintf("--date=@%d", sourceDateEpoch),
+		llb.Args([]string{
+			"/bin/touch", fmt.Sprintf("--date=@%d", sourceDateEpoch),
 			"/bin",
 			"/etc",
 			"/var",
@@ -9928,8 +9933,10 @@ func (*secModeInsecure) UpdateConfigFile(in string) string {
 	return in + "\n\ninsecure-entitlements = [\"security.insecure\"]\n"
 }
 
-var securitySandbox integration.ConfigUpdater = &secModeSandbox{}
-var securityInsecure integration.ConfigUpdater = &secModeInsecure{}
+var (
+	securitySandbox  integration.ConfigUpdater = &secModeSandbox{}
+	securityInsecure integration.ConfigUpdater = &secModeInsecure{}
+)
 
 type netModeHost struct{}
 
@@ -9961,9 +9968,11 @@ nameservers = ["10.11.0.1"]
 `
 }
 
-var hostNetwork integration.ConfigUpdater = &netModeHost{}
-var defaultNetwork integration.ConfigUpdater = &netModeDefault{}
-var bridgeDNSNetwork integration.ConfigUpdater = &netModeBridgeDNS{}
+var (
+	hostNetwork      integration.ConfigUpdater = &netModeHost{}
+	defaultNetwork   integration.ConfigUpdater = &netModeDefault{}
+	bridgeDNSNetwork integration.ConfigUpdater = &netModeBridgeDNS{}
+)
 
 func fixedWriteCloser(wc io.WriteCloser) filesync.FileOutputFunc {
 	return func(map[string]string) (io.WriteCloser, error) {
