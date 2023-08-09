@@ -35,8 +35,9 @@ func New(opt Opt) (exporter.Exporter, error) {
 	return le, nil
 }
 
-func (e *localExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
+func (e *localExporter) Resolve(ctx context.Context, id string, opt map[string]string) (exporter.ExporterInstance, error) {
 	i := &localExporterInstance{
+		id:            id,
 		localExporter: e,
 	}
 	_, err := i.opts.Load(opt)
@@ -49,7 +50,13 @@ func (e *localExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 
 type localExporterInstance struct {
 	*localExporter
+	id string
+
 	opts CreateFSOpts
+}
+
+func (e *localExporterInstance) ID() string {
+	return e.id
 }
 
 func (e *localExporterInstance) Name() string {
@@ -148,7 +155,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 			}
 
 			progress := NewProgressHandler(ctx, lbl)
-			if err := filesync.CopyToCaller(ctx, outputFS, "", caller, progress); err != nil {
+			if err := filesync.CopyToCaller(ctx, outputFS, e.id, caller, progress); err != nil {
 				return err
 			}
 			return nil

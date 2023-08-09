@@ -358,7 +358,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		if err != nil {
 			return nil, err
 		}
-		expi, err = exp.Resolve(ctx, req.ExporterAttrs)
+		expi, err = exp.Resolve(ctx, "", req.ExporterAttrs)
 		if err != nil {
 			return nil, err
 		}

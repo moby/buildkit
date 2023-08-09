@@ -58,9 +58,10 @@ func New(opt Opt) (exporter.Exporter, error) {
 	return im, nil
 }
 
-func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
+func (e *imageExporter) Resolve(ctx context.Context, id string, opt map[string]string) (exporter.ExporterInstance, error) {
 	i := &imageExporterInstance{
 		imageExporter: e,
+		id:            id,
 		tar:           true,
 		opts: containerimage.ImageCommitOpts{
 			RefCfg: cacheconfig.RefConfig{
@@ -99,9 +100,15 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 
 type imageExporterInstance struct {
 	*imageExporter
+	id string
+
 	opts containerimage.ImageCommitOpts
 	tar  bool
 	meta map[string][]byte
+}
+
+func (e *imageExporterInstance) ID() string {
+	return e.id
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -241,7 +248,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	}
 
 	if e.tar {
-		w, err := filesync.CopyFileWriter(ctx, resp, "", caller)
+		w, err := filesync.CopyFileWriter(ctx, resp, e.id, caller)
 		if err != nil {
 			return nil, nil, err
 		}

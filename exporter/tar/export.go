@@ -33,8 +33,11 @@ func New(opt Opt) (exporter.Exporter, error) {
 	return le, nil
 }
 
-func (e *localExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
-	li := &localExporterInstance{localExporter: e}
+func (e *localExporter) Resolve(ctx context.Context, id string, opt map[string]string) (exporter.ExporterInstance, error) {
+	li := &localExporterInstance{
+		localExporter: e,
+		id:            id,
+	}
 	_, err := li.opts.Load(opt)
 	if err != nil {
 		return nil, err
@@ -46,7 +49,13 @@ func (e *localExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 
 type localExporterInstance struct {
 	*localExporter
+	id string
+
 	opts local.CreateFSOpts
+}
+
+func (e *localExporterInstance) ID() string {
+	return e.id
 }
 
 func (e *localExporterInstance) Name() string {
@@ -152,7 +161,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 		return nil, nil, err
 	}
 
-	w, err := filesync.CopyFileWriter(ctx, nil, "", caller)
+	w, err := filesync.CopyFileWriter(ctx, nil, e.id, caller)
 	if err != nil {
 		return nil, nil, err
 	}
