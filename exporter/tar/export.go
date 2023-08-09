@@ -57,7 +57,7 @@ func (e *localExporterInstance) Config() *exporter.Config {
 	return exporter.NewConfig()
 }
 
-func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source, sessionID string) (map[string]string, exporter.DescriptorReference, error) {
+func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source, _ exptypes.InlineCache, sessionID string) (map[string]string, exporter.DescriptorReference, error) {
 	var defers []func() error
 
 	defer func() {

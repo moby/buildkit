@@ -554,21 +554,9 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	cacheExporters, inlineCacheExporter := splitCacheExporters(exp.CacheExporters)
 
 	var exporterResponse map[string]string
-	if e := exp.Exporter; e != nil {
-		meta, err := runInlineCacheExporter(ctx, e, inlineCacheExporter, j, cached)
-		if err != nil {
-			return nil, err
-		}
-		for k, v := range meta {
-			inp.AddMeta(k, v)
-		}
-
-		if err := inBuilderContext(ctx, j, e.Name(), j.SessionID+"-export", func(ctx context.Context, _ session.Group) error {
-			exporterResponse, descref, err = e.Export(ctx, inp, j.SessionID)
-			return err
-		}); err != nil {
-			return nil, err
-		}
+	exporterResponse, descref, err = s.runExporter(ctx, exp.Exporter, inlineCacheExporter, j, cached, inp)
+	if err != nil {
+		return nil, err
 	}
 
 	cacheExporterResponse, err := runCacheExporters(ctx, cacheExporters, j, cached, inp)
@@ -647,42 +635,59 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 	return cacheExporterResponse, nil
 }
 
-func runInlineCacheExporter(ctx context.Context, e exporter.ExporterInstance, inlineExporter *RemoteCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult]) (map[string][]byte, error) {
-	meta := map[string][]byte{}
+func runInlineCacheExporter(ctx context.Context, e exporter.ExporterInstance, inlineExporter inlineCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult]) (*result.Result[*exptypes.InlineCacheEntry], error) {
 	if inlineExporter == nil {
 		return nil, nil
 	}
+
+	var res *result.Result[*exptypes.InlineCacheEntry]
 	if err := inBuilderContext(ctx, j, "preparing layers for inline cache", j.SessionID+"-cache-inline", func(ctx context.Context, _ session.Group) error {
-		if res := cached.Ref; res != nil {
-			dtic, err := inlineCache(ctx, inlineExporter.Exporter, res, e.Config().Compression(), session.NewGroup(j.SessionID))
+		var err error
+		res, err = result.ConvertResult(cached, func(res solver.CachedResult) (*exptypes.InlineCacheEntry, error) {
+			dtic, err := inlineCache(ctx, inlineExporter, res, e.Config().Compression(), session.NewGroup(j.SessionID))
 			if err != nil {
-				return err
+				return nil, err
 			}
-			if dtic != nil {
-				meta[exptypes.ExporterInlineCache] = dtic
+			if dtic == nil {
+				return nil, nil
 			}
-		}
-		for k, res := range cached.Refs {
-			dtic, err := inlineCache(ctx, inlineExporter.Exporter, res, e.Config().Compression(), session.NewGroup(j.SessionID))
-			if err != nil {
-				return err
-			}
-			if dtic != nil {
-				meta[fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, k)] = dtic
-			}
-		}
-		return nil
+			return &exptypes.InlineCacheEntry{Data: dtic}, nil
+		})
+		return err
 	}); err != nil {
 		return nil, err
 	}
-	return meta, nil
+	return res, nil
 }
 
-func splitCacheExporters(exporters []RemoteCacheExporter) (rest []RemoteCacheExporter, inline *RemoteCacheExporter) {
+func (s *Solver) runExporter(ctx context.Context, exp exporter.ExporterInstance, inlineCacheExporter inlineCacheExporter, job *solver.Job, cached *result.Result[solver.CachedResult], inp *result.Result[cache.ImmutableRef]) (exporterResponse map[string]string, descref exporter.DescriptorReference, err error) {
+	sessionID := job.SessionID
+	inlineCache := exptypes.InlineCache(func(ctx context.Context) (*result.Result[*exptypes.InlineCacheEntry], error) {
+		return runInlineCacheExporter(ctx, exp, inlineCacheExporter, job, cached)
+	})
+
+	err = inBuilderContext(ctx, job, exp.Name(), job.SessionID+"-export", func(ctx context.Context, _ session.Group) error {
+		var dref exporter.DescriptorReference
+		exporterResponse, dref, err = exp.Export(ctx, inp, inlineCache, sessionID)
+		if err != nil {
+			return err
+		}
+		if dref != nil {
+			descref = dref
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return exporterResponse, descref, nil
+}
+
+func splitCacheExporters(exporters []RemoteCacheExporter) (rest []RemoteCacheExporter, inline inlineCacheExporter) {
 	rest = make([]RemoteCacheExporter, 0, len(exporters))
-	for i, exp := range exporters {
-		if _, ok := asInlineCache(exp.Exporter); ok {
-			inline = &exporters[i]
+	for _, exp := range exporters {
+		if ic, ok := asInlineCache(exp.Exporter); ok {
+			inline = ic
 			continue
 		}
 		rest = append(rest, exp)
@@ -820,6 +825,7 @@ func getProvenance(ref solver.ResultProxy, br *provenanceBridge, id string, reqs
 }
 
 type inlineCacheExporter interface {
+	solver.CacheExporterTarget
 	ExportForLayers(context.Context, []digest.Digest) ([]byte, error)
 }
 
@@ -828,11 +834,7 @@ func asInlineCache(e remotecache.Exporter) (inlineCacheExporter, bool) {
 	return ie, ok
 }
 
-func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedResult, compressionopt compression.Config, g session.Group) ([]byte, error) {
-	ie, ok := asInlineCache(e)
-	if !ok {
-		return nil, nil
-	}
+func inlineCache(ctx context.Context, ie inlineCacheExporter, res solver.CachedResult, compressionopt compression.Config, g session.Group) ([]byte, error) {
 	workerRef, ok := res.Sys().(*worker.WorkerRef)
 	if !ok {
 		return nil, errors.Errorf("invalid reference: %T", res.Sys())
@@ -851,7 +853,7 @@ func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedR
 
 	ctx = withDescHandlerCacheOpts(ctx, workerRef.ImmutableRef)
 	refCfg := cacheconfig.RefConfig{Compression: compressionopt}
-	if _, err := res.CacheKeys()[0].Exporter.ExportTo(ctx, e, solver.CacheExportOpt{
+	if _, err := res.CacheKeys()[0].Exporter.ExportTo(ctx, ie, solver.CacheExportOpt{
 		ResolveRemotes: workerRefResolver(refCfg, true, g), // load as many compression blobs as possible
 		Mode:           solver.CacheExportModeMin,
 		Session:        g,
