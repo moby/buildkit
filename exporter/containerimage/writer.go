@@ -114,9 +114,9 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		}
 
 		var ref cache.ImmutableRef
-		var p exptypes.Platform
+		var p *exptypes.Platform
 		if len(ps.Platforms) > 0 {
-			p = ps.Platforms[0]
+			p = &ps.Platforms[0]
 			if r, ok := inp.FindRef(p.ID); ok {
 				ref = r
 			}
@@ -199,8 +199,8 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		if !ok {
 			return nil, errors.Errorf("failed to find ref for ID %s", p.ID)
 		}
-		config := exptypes.ParseKey(inp.Metadata, exptypes.ExporterImageConfigKey, p)
-		inlineCache := exptypes.ParseKey(inp.Metadata, exptypes.ExporterInlineCache, p)
+		config := exptypes.ParseKey(inp.Metadata, exptypes.ExporterImageConfigKey, &p)
+		inlineCache := exptypes.ParseKey(inp.Metadata, exptypes.ExporterInlineCache, &p)
 
 		remote := &remotes[remotesMap[p.ID]]
 		if remote == nil {
