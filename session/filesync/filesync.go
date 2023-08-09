@@ -35,6 +35,13 @@ type fsSyncProvider struct {
 	doneCh chan error
 }
 
+type FileOutputFunc func(map[string]string) (io.WriteCloser, error)
+
+type SyncedDir struct {
+	Dir string
+	Map func(string, *fstypes.Stat) fsutil.MapResult
+}
+
 type DirSource interface {
 	LookupDir(string) (fsutil.FS, bool)
 }
@@ -235,7 +242,7 @@ func NewFSSyncTargetDir(outdir string) session.Attachable {
 }
 
 // NewFSSyncTarget allows writing into an io.WriteCloser
-func NewFSSyncTarget(f func(map[string]string) (io.WriteCloser, error)) session.Attachable {
+func NewFSSyncTarget(f FileOutputFunc) session.Attachable {
 	p := &fsSyncTarget{
 		f: f,
 	}
@@ -244,7 +251,7 @@ func NewFSSyncTarget(f func(map[string]string) (io.WriteCloser, error)) session.
 
 type fsSyncTarget struct {
 	outdir string
-	f      func(map[string]string) (io.WriteCloser, error)
+	f      FileOutputFunc
 }
 
 func (sp *fsSyncTarget) Register(server *grpc.Server) {

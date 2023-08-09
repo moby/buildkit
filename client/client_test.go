@@ -46,6 +46,7 @@ import (
 	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/session/secrets/secretsprovider"
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
 	"github.com/moby/buildkit/solver/errdefs"
@@ -9659,7 +9660,7 @@ var hostNetwork integration.ConfigUpdater = &netModeHost{}
 var defaultNetwork integration.ConfigUpdater = &netModeDefault{}
 var bridgeDNSNetwork integration.ConfigUpdater = &netModeBridgeDNS{}
 
-func fixedWriteCloser(wc io.WriteCloser) func(map[string]string) (io.WriteCloser, error) {
+func fixedWriteCloser(wc io.WriteCloser) filesync.FileOutputFunc {
 	return func(map[string]string) (io.WriteCloser, error) {
 		return wc, nil
 	}
