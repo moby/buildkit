@@ -153,6 +153,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testTarExporterWithSocketCopy,
 	testTarExporterSymlink,
 	testMultipleRegistryCacheImportExport,
+	testMultipleExporters,
 	testSourceMap,
 	testSourceMapFromRef,
 	testLazyImagePush,
@@ -2568,6 +2569,78 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, "0", strings.TrimSpace(string(dt)))
 
 	checkAllReleasable(t, c, sb, true)
+}
+
+func testMultipleExporters(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	def, err := llb.Scratch().File(llb.Mkfile("foo.txt", 0o755, nil)).Marshal(context.TODO())
+	require.NoError(t, err)
+
+	destDir, destDir2 := t.TempDir(), t.TempDir()
+	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+	defer outW.Close()
+
+	out2 := filepath.Join(destDir, "out2.tar")
+	outW2, err := os.Create(out2)
+	require.NoError(t, err)
+	defer outW2.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	target1, target2 := registry+"/buildkit/build/exporter:image",
+		registry+"/buildkit/build/alternative:image"
+
+	imageExporter := ExporterImage
+	if workers.IsTestDockerd() {
+		imageExporter = "moby"
+	}
+
+	resp, err := c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			// Ensure that multiple local exporter destinations are written properly
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir2,
+			},
+			// Ensure that multiple instances of the same exporter are possible
+			{
+				Type:   ExporterTar,
+				Output: fixedWriteCloser(outW),
+			},
+			{
+				Type:   ExporterTar,
+				Output: fixedWriteCloser(outW2),
+			},
+			{
+				Type: imageExporter,
+				Attrs: map[string]string{
+					"name": strings.Join([]string{target1, target2}, ","),
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	require.Equal(t, resp.ExporterResponse["image.name"], target1+","+target2)
+	require.FileExists(t, filepath.Join(destDir, "out.tar"))
+	require.FileExists(t, filepath.Join(destDir, "out2.tar"))
+	require.FileExists(t, filepath.Join(destDir, "foo.txt"))
+	require.FileExists(t, filepath.Join(destDir2, "foo.txt"))
 }
 
 func testOCIExporter(t *testing.T, sb integration.Sandbox) {
@@ -6980,7 +7053,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 
 	for i, layer := range manifest.Layers {
 		_, err = contentStore.Info(ctx, layer.Digest)
-		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v for index %d", err, i)
+		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v for index %d (%s)", err, i, layer.Digest)
 	}
 
 	// re-run the build with a change only to input1 using the remote cache
