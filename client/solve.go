@@ -187,7 +187,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			if ex.Output == nil {
 				return nil, errors.Errorf("output file writer is required for %s exporter", ex.Type)
 			}
-			s.Allow(filesync.NewFSSyncTarget(ex.Output))
+			s.Allow(filesync.NewFSSyncTarget(filesync.WithFSSync("", ex.Output)))
 		}
 		if supportDir {
 			if ex.OutputDir == "" {
@@ -205,7 +205,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 				contentStores["export"] = cs
 				storesToUpdate = append(storesToUpdate, ex.OutputDir)
 			default:
-				s.Allow(filesync.NewFSSyncTargetDir(ex.OutputDir))
+				s.Allow(filesync.NewFSSyncTarget(filesync.WithFSSyncDir("", ex.OutputDir)))
 			}
 		}
 

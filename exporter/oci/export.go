@@ -241,7 +241,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	}
 
 	if e.tar {
-		w, err := filesync.CopyFileWriter(ctx, resp, caller)
+		w, err := filesync.CopyFileWriter(ctx, resp, "", caller)
 		if err != nil {
 			return nil, nil, err
 		}
