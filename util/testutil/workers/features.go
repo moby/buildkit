@@ -61,3 +61,7 @@ var features = map[string]struct{}{
 func CheckFeatureCompat(t *testing.T, sb integration.Sandbox, reason ...string) {
 	integration.CheckFeatureCompat(t, sb, features, reason...)
 }
+
+func HasFeatureCompat(t *testing.T, sb integration.Sandbox, reason ...string) error {
+	return integration.HasFeatureCompat(t, sb, features, reason...)
+}
