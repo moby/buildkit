@@ -602,37 +602,36 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 	var cacheExporterResponse map[string]string
 	resps := make([]map[string]string, len(exporters))
 	for i, exp := range exporters {
-		func(exp RemoteCacheExporter, i int) {
-			eg.Go(func() (err error) {
-				id := fmt.Sprint(j.SessionID, "-cache-", i)
-				err = inBuilderContext(ctx, j, exp.Exporter.Name(), id, func(ctx context.Context, _ session.Group) error {
-					prepareDone := progress.OneOff(ctx, "preparing build cache for export")
-					if err := result.EachRef(cached, inp, func(res solver.CachedResult, ref cache.ImmutableRef) error {
-						ctx = withDescHandlerCacheOpts(ctx, ref)
+		i, exp := i, exp
+		eg.Go(func() (err error) {
+			id := fmt.Sprint(j.SessionID, "-cache-", i)
+			err = inBuilderContext(ctx, j, exp.Exporter.Name(), id, func(ctx context.Context, _ session.Group) error {
+				prepareDone := progress.OneOff(ctx, "preparing build cache for export")
+				if err := result.EachRef(cached, inp, func(res solver.CachedResult, ref cache.ImmutableRef) error {
+					ctx = withDescHandlerCacheOpts(ctx, ref)
 
-						// Configure compression
-						compressionConfig := exp.Config().Compression
+					// Configure compression
+					compressionConfig := exp.Config().Compression
 
-						// all keys have same export chain so exporting others is not needed
-						_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, exp, solver.CacheExportOpt{
-							ResolveRemotes: workerRefResolver(cacheconfig.RefConfig{Compression: compressionConfig}, false, g),
-							Mode:           exp.CacheExportMode,
-							Session:        g,
-							CompressionOpt: &compressionConfig,
-						})
-						return err
-					}); err != nil {
-						return prepareDone(err)
-					}
-					resps[i], err = exp.Finalize(ctx)
+					// all keys have same export chain so exporting others is not needed
+					_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, exp, solver.CacheExportOpt{
+						ResolveRemotes: workerRefResolver(cacheconfig.RefConfig{Compression: compressionConfig}, false, g),
+						Mode:           exp.CacheExportMode,
+						Session:        g,
+						CompressionOpt: &compressionConfig,
+					})
+					return err
+				}); err != nil {
 					return prepareDone(err)
-				})
-				if exp.IgnoreError {
-					err = nil
 				}
-				return err
+				resps[i], err = exp.Finalize(ctx)
+				return prepareDone(err)
 			})
-		}(exp, i)
+			if exp.IgnoreError {
+				err = nil
+			}
+			return err
+		})
 	}
 	if err := eg.Wait(); err != nil {
 		return nil, err
