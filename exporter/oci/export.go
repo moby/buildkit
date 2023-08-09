@@ -117,6 +117,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 		return nil, nil, errors.Errorf("docker exporter does not currently support exporting manifest lists")
 	}
 
+	src = src.Clone()
 	if src.Metadata == nil {
 		src.Metadata = make(map[string][]byte)
 	}

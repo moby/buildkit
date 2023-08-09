@@ -188,6 +188,7 @@ func (e *imageExporterInstance) Config() *exporter.Config {
 }
 
 func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source, sessionID string) (_ map[string]string, descref exporter.DescriptorReference, err error) {
+	src = src.Clone()
 	if src.Metadata == nil {
 		src.Metadata = make(map[string][]byte)
 	}

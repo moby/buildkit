@@ -1,6 +1,7 @@
 package result
 
 import (
+	"maps"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -12,6 +13,15 @@ type Result[T comparable] struct {
 	Refs         map[string]T
 	Metadata     map[string][]byte
 	Attestations map[string][]Attestation[T]
+}
+
+func (r *Result[T]) Clone() *Result[T] {
+	return &Result[T]{
+		Ref:          r.Ref,
+		Refs:         maps.Clone(r.Refs),
+		Metadata:     maps.Clone(r.Metadata),
+		Attestations: maps.Clone(r.Attestations),
+	}
 }
 
 func (r *Result[T]) AddMeta(k string, v []byte) {
