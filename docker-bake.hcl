@@ -93,6 +93,7 @@ target "lint" {
       { name = "labs", tags = "dfrunsecurity", target = "golangci-lint" },
       { name = "nydus", tags = "nydus", target = "golangci-lint" },
       { name = "yaml", tags = "", target = "yamllint" },
+      { name = "proto", tags = "", target = "protolint" },
     ]
   }
 }
