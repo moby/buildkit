@@ -44,8 +44,10 @@ func TestParseProtocol(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		remote, protocol := ParseProtocol(test.url)
-		require.Equal(t, remote, test.remote)
-		require.Equal(t, protocol, test.protocol)
+		t.Run(test.url, func(t *testing.T) {
+			protocol, remote, path := ParseProtocol(test.url)
+			require.Equal(t, test.protocol, protocol)
+			require.Equal(t, test.remote, remote)
+		})
 	}
 }

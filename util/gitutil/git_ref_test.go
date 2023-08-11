@@ -1,8 +1,9 @@
 package gitutil
 
 import (
-	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseGitRef(t *testing.T) {
@@ -124,16 +125,10 @@ func TestParseGitRef(t *testing.T) {
 		t.Run(tt.ref, func(t *testing.T) {
 			got, err := ParseGitRef(tt.ref)
 			if tt.expected == nil {
-				if err == nil {
-					t.Errorf("expected an error for ParseGitRef(%q)", tt.ref)
-				}
+				require.Error(t, err)
 			} else {
-				if err != nil {
-					t.Errorf("got an unexpected error: ParseGitRef(%q): %v", tt.ref, err)
-				}
-				if !reflect.DeepEqual(got, tt.expected) {
-					t.Errorf("expected ParseGitRef(%q) to return %#v, got %#v", tt.ref, tt.expected, got)
-				}
+				require.NoError(t, err)
+				require.Equal(t, tt.expected, got)
 			}
 		})
 	}
