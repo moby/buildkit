@@ -112,6 +112,7 @@ type ContainerdConfig struct {
 	Labels    map[string]string `toml:"labels"`
 	Platforms []string          `toml:"platforms"`
 	Namespace string            `toml:"namespace"`
+	Runtime   ContainerdRuntime `toml:"runtime"`
 	GCConfig
 	NetworkConfig
 	Snapshotter string `toml:"snapshotter"`
@@ -126,6 +127,11 @@ type ContainerdConfig struct {
 	MaxParallelism int `toml:"max-parallelism"`
 
 	Rootless bool `toml:"rootless"`
+}
+
+type ContainerdRuntime struct {
+	Name    string                 `toml:"name"`
+	Options map[string]interface{} `toml:"options"`
 }
 
 type GCPolicy struct {

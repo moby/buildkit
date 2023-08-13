@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 
@@ -27,21 +26,20 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
+type RuntimeInfo = containerdexecutor.RuntimeInfo
+
 // NewWorkerOpt creates a WorkerOpt.
-func NewWorkerOpt(root string, address, snapshotterName, ns string, rootless bool, labels map[string]string, dns *oci.DNSConfig, nopt netproviders.Opt, apparmorProfile string, selinux bool, parallelismSem *semaphore.Weighted, traceSocket string, opts ...containerd.ClientOpt) (base.WorkerOpt, error) {
+func NewWorkerOpt(root string, address, snapshotterName, ns string, rootless bool, labels map[string]string, dns *oci.DNSConfig, nopt netproviders.Opt, apparmorProfile string, selinux bool, parallelismSem *semaphore.Weighted, traceSocket string, runtime *RuntimeInfo, opts ...containerd.ClientOpt) (base.WorkerOpt, error) {
 	opts = append(opts, containerd.WithDefaultNamespace(ns))
-	if runtime.GOOS == "freebsd" {
-		opts = append(opts, containerd.WithDefaultRuntime("wtf.sbk.runj.v1"))
-	}
 
 	client, err := containerd.New(address, opts...)
 	if err != nil {
 		return base.WorkerOpt{}, errors.Wrapf(err, "failed to connect client to %q . make sure containerd is running", address)
 	}
-	return newContainerd(root, client, snapshotterName, ns, rootless, labels, dns, nopt, apparmorProfile, selinux, parallelismSem, traceSocket)
+	return newContainerd(root, client, snapshotterName, ns, rootless, labels, dns, nopt, apparmorProfile, selinux, parallelismSem, traceSocket, runtime)
 }
 
-func newContainerd(root string, client *containerd.Client, snapshotterName, ns string, rootless bool, labels map[string]string, dns *oci.DNSConfig, nopt netproviders.Opt, apparmorProfile string, selinux bool, parallelismSem *semaphore.Weighted, traceSocket string) (base.WorkerOpt, error) {
+func newContainerd(root string, client *containerd.Client, snapshotterName, ns string, rootless bool, labels map[string]string, dns *oci.DNSConfig, nopt netproviders.Opt, apparmorProfile string, selinux bool, parallelismSem *semaphore.Weighted, traceSocket string, runtime *RuntimeInfo) (base.WorkerOpt, error) {
 	if strings.Contains(snapshotterName, "/") {
 		return base.WorkerOpt{}, errors.Errorf("bad snapshotter name: %q", snapshotterName)
 	}
@@ -142,7 +140,7 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		Labels:           xlabels,
 		MetadataStore:    md,
 		NetworkProviders: np,
-		Executor:         containerdexecutor.New(client, root, "", np, dns, apparmorProfile, selinux, traceSocket, rootless),
+		Executor:         containerdexecutor.New(client, root, "", np, dns, apparmorProfile, selinux, traceSocket, rootless, runtime),
 		Snapshotter:      snap,
 		ContentStore:     cs,
 		Applier:          winlayers.NewFileSystemApplierWithWindows(cs, df),

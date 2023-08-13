@@ -6,12 +6,17 @@ package main
 import (
 	"context"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
 	ctd "github.com/containerd/containerd"
+	"github.com/containerd/containerd/defaults"
+	runtimeoptions "github.com/containerd/containerd/pkg/runtimeoptions/v1"
 	"github.com/containerd/containerd/pkg/userns"
+	"github.com/containerd/containerd/plugin"
+	runcoptions "github.com/containerd/containerd/runtime/v2/runc/options"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/network/cniprovider"
@@ -19,6 +24,7 @@ import (
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/containerd"
+	"github.com/pelletier/go-toml"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 	"golang.org/x/sync/semaphore"
@@ -44,6 +50,14 @@ func init() {
 
 	if defaultConf.Workers.Containerd.Namespace == "" {
 		defaultConf.Workers.Containerd.Namespace = defaultContainerdNamespace
+	}
+
+	if defaultConf.Workers.Containerd.Runtime.Name == "" {
+		if runtime.GOOS == "freebsd" {
+			defaultConf.Workers.Containerd.Runtime.Name = "wtf.sbk.runj.v1"
+		} else {
+			defaultConf.Workers.Containerd.Runtime.Name = defaults.DefaultRuntime
+		}
 	}
 
 	flags := []cli.Flag{
@@ -72,6 +86,12 @@ func init() {
 			Name:   "containerd-worker-namespace",
 			Usage:  "override containerd namespace",
 			Value:  defaultConf.Workers.Containerd.Namespace,
+			Hidden: true,
+		},
+		cli.StringFlag{
+			Name:   "containerd-worker-runtime",
+			Usage:  "override containerd runtime",
+			Value:  defaultConf.Workers.Containerd.Runtime.Name,
 			Hidden: true,
 		},
 		cli.StringFlag{
@@ -202,6 +222,12 @@ func applyContainerdFlags(c *cli.Context, cfg *config.Config) error {
 		cfg.Workers.Containerd.Namespace = c.GlobalString("containerd-worker-namespace")
 	}
 
+	if c.GlobalIsSet("containerd-worker-runtime") || cfg.Workers.Containerd.Runtime.Name == "" {
+		cfg.Workers.Containerd.Runtime = config.ContainerdRuntime{
+			Name: c.GlobalString("containerd-worker-runtime"),
+		}
+	}
+
 	if c.GlobalIsSet("containerd-worker-gc") {
 		v := c.GlobalBool("containerd-worker-gc")
 		cfg.Workers.Containerd.GC = &v
@@ -275,7 +301,26 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 	if cfg.Snapshotter != "" {
 		snapshotter = cfg.Snapshotter
 	}
-	opt, err := containerd.NewWorkerOpt(common.config.Root, cfg.Address, snapshotter, cfg.Namespace, cfg.Rootless, cfg.Labels, dns, nc, common.config.Workers.Containerd.ApparmorProfile, common.config.Workers.Containerd.SELinux, parallelismSem, common.traceSocket, ctd.WithTimeout(60*time.Second))
+
+	var runtime *containerd.RuntimeInfo
+	if cfg.Runtime.Name != "" {
+		opts := getRuntimeOptionsType(cfg.Runtime.Name)
+
+		t, err := toml.TreeFromMap(cfg.Runtime.Options)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to parse runtime options config")
+		}
+		err = t.Unmarshal(opts)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to parse runtime options config")
+		}
+
+		runtime = &containerd.RuntimeInfo{
+			Name:    cfg.Runtime.Name,
+			Options: opts,
+		}
+	}
+	opt, err := containerd.NewWorkerOpt(common.config.Root, cfg.Address, snapshotter, cfg.Namespace, cfg.Rootless, cfg.Labels, dns, nc, common.config.Workers.Containerd.ApparmorProfile, common.config.Workers.Containerd.SELinux, parallelismSem, common.traceSocket, runtime, ctd.WithTimeout(60*time.Second))
 	if err != nil {
 		return nil, err
 	}
@@ -319,4 +364,14 @@ func validContainerdSocket(cfg config.ContainerdConfig) bool {
 		return false
 	}
 	return true
+}
+
+// getRuntimeOptionsType gets empty runtime options by the runtime type name.
+func getRuntimeOptionsType(t string) interface{} {
+	switch t {
+	case plugin.RuntimeRuncV2:
+		return &runcoptions.Options{}
+	default:
+		return &runtimeoptions.Options{}
+	}
 }
