@@ -40,6 +40,7 @@ foo="bar"
 
 [worker.containerd]
 namespace="non-default"
+runtime="exotic"
 platforms=["linux/amd64"]
 address="containerd.sock"
 [[worker.containerd.gcpolicy]]
@@ -103,6 +104,7 @@ searchDomains=["example.com"]
 
 	require.Equal(t, 0, len(cfg.Workers.OCI.GCPolicy))
 	require.Equal(t, "non-default", cfg.Workers.Containerd.Namespace)
+	require.Equal(t, "exotic", cfg.Workers.Containerd.Runtime)
 	require.Equal(t, 3, len(cfg.Workers.Containerd.GCPolicy))
 
 	require.Nil(t, cfg.Workers.Containerd.GC)

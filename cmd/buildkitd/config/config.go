@@ -112,6 +112,7 @@ type ContainerdConfig struct {
 	Labels    map[string]string `toml:"labels"`
 	Platforms []string          `toml:"platforms"`
 	Namespace string            `toml:"namespace"`
+	Runtime   string            `toml:"runtime"`
 	GCConfig
 	NetworkConfig
 	Snapshotter string `toml:"snapshotter"`

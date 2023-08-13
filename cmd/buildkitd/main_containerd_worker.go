@@ -6,11 +6,13 @@ package main
 import (
 	"context"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
 	ctd "github.com/containerd/containerd"
+	"github.com/containerd/containerd/defaults"
 	"github.com/containerd/containerd/pkg/userns"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/util/bklog"
@@ -46,6 +48,14 @@ func init() {
 		defaultConf.Workers.Containerd.Namespace = defaultContainerdNamespace
 	}
 
+	if defaultConf.Workers.Containerd.Runtime == "" {
+		if runtime.GOOS == "freebsd" {
+			defaultConf.Workers.Containerd.Runtime = "wtf.sbk.runj.v1"
+		} else {
+			defaultConf.Workers.Containerd.Runtime = defaults.DefaultRuntime
+		}
+	}
+
 	flags := []cli.Flag{
 		cli.StringFlag{
 			Name:  "containerd-worker",
@@ -72,6 +82,12 @@ func init() {
 			Name:   "containerd-worker-namespace",
 			Usage:  "override containerd namespace",
 			Value:  defaultConf.Workers.Containerd.Namespace,
+			Hidden: true,
+		},
+		cli.StringFlag{
+			Name:   "containerd-worker-runtime",
+			Usage:  "override containerd runtime",
+			Value:  defaultConf.Workers.Containerd.Runtime,
 			Hidden: true,
 		},
 		cli.StringFlag{
@@ -202,6 +218,10 @@ func applyContainerdFlags(c *cli.Context, cfg *config.Config) error {
 		cfg.Workers.Containerd.Namespace = c.GlobalString("containerd-worker-namespace")
 	}
 
+	if c.GlobalIsSet("containerd-worker-runtime") || cfg.Workers.Containerd.Runtime == "" {
+		cfg.Workers.Containerd.Runtime = c.GlobalString("containerd-worker-runtime")
+	}
+
 	if c.GlobalIsSet("containerd-worker-gc") {
 		v := c.GlobalBool("containerd-worker-gc")
 		cfg.Workers.Containerd.GC = &v
@@ -275,7 +295,7 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 	if cfg.Snapshotter != "" {
 		snapshotter = cfg.Snapshotter
 	}
-	opt, err := containerd.NewWorkerOpt(common.config.Root, cfg.Address, snapshotter, cfg.Namespace, cfg.Rootless, cfg.Labels, dns, nc, common.config.Workers.Containerd.ApparmorProfile, common.config.Workers.Containerd.SELinux, parallelismSem, common.traceSocket, ctd.WithTimeout(60*time.Second))
+	opt, err := containerd.NewWorkerOpt(common.config.Root, cfg.Address, snapshotter, cfg.Namespace, cfg.Rootless, cfg.Labels, dns, nc, common.config.Workers.Containerd.ApparmorProfile, common.config.Workers.Containerd.SELinux, parallelismSem, common.traceSocket, ctd.WithTimeout(60*time.Second), ctd.WithDefaultRuntime(cfg.Runtime))
 	if err != nil {
 		return nil, err
 	}

@@ -93,6 +93,7 @@ insecure-entitlements = [ "network.host", "security.insecure" ]
   enabled = true
   platforms = [ "linux/amd64", "linux/arm64" ]
   namespace = "buildkit"
+  runtime = "io.containerd.runc.v2"
   gc = true
   # gckeepstorage sets storage limit for default gc profile, in MB.
   gckeepstorage = 9000

@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 
@@ -30,9 +29,6 @@ import (
 // NewWorkerOpt creates a WorkerOpt.
 func NewWorkerOpt(root string, address, snapshotterName, ns string, rootless bool, labels map[string]string, dns *oci.DNSConfig, nopt netproviders.Opt, apparmorProfile string, selinux bool, parallelismSem *semaphore.Weighted, traceSocket string, opts ...containerd.ClientOpt) (base.WorkerOpt, error) {
 	opts = append(opts, containerd.WithDefaultNamespace(ns))
-	if runtime.GOOS == "freebsd" {
-		opts = append(opts, containerd.WithDefaultRuntime("wtf.sbk.runj.v1"))
-	}
 
 	client, err := containerd.New(address, opts...)
 	if err != nil {
