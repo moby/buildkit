@@ -226,7 +226,7 @@ type ImageInfo struct {
 // Git returns a state that represents a git repository.
 // Example:
 //
-//	st := llb.Git("https://github.com/moby/buildkit.git#v0.11.6")
+//	st := llb.Git("https://github.com/moby/buildkit.git", "v0.11.6")
 //
 // The example fetches the v0.11.6 tag of the buildkit repository.
 // You can also use a commit hash or a branch name.
