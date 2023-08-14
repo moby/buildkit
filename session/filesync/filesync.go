@@ -351,13 +351,13 @@ func decodeOpts(opts map[string][]string) map[string][]string {
 	md := make(map[string][]string, len(opts))
 	for k, v := range opts {
 		out := make([]string, len(v))
-		var isDecoded bool
+		var isEncoded bool
 		if v, ok := opts[k+"-encoded"]; ok && len(v) > 0 {
 			if b, _ := strconv.ParseBool(v[0]); b {
-				isDecoded = true
+				isEncoded = true
 			}
 		}
-		if isDecoded {
+		if isEncoded {
 			for i, s := range v {
 				out[i], _ = url.QueryUnescape(s)
 			}
@@ -373,13 +373,14 @@ func decodeOpts(opts map[string][]string) map[string][]string {
 // is backwards compatible and avoids encoding ASCII characters.
 func encodeStringForHeader(inputs []string) ([]string, bool) {
 	var encode bool
+loop:
 	for _, input := range inputs {
 		for _, runeVal := range input {
 			// Only encode non-ASCII characters, and characters that have special
 			// meaning during decoding.
 			if runeVal > unicode.MaxASCII {
 				encode = true
-				break
+				break loop
 			}
 		}
 	}
