@@ -5,6 +5,7 @@ import (
 	"syscall"
 
 	"github.com/containerd/continuity/fs"
+	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/llbsolver/ops/fileoptypes"
 	"github.com/moby/buildkit/solver/pb"
@@ -13,7 +14,7 @@ import (
 	copy "github.com/tonistiigi/fsutil/copy"
 )
 
-func readUser(chopt *pb.ChownOpt, mu, mg fileoptypes.Mount) (*copy.User, error) {
+func readUser(chopt *pb.ChownOpt, mu, mg fileoptypes.Mount, exec executor.Executor) (*copy.User, error) {
 	if chopt == nil {
 		return nil, nil
 	}

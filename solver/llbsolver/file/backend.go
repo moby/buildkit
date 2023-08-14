@@ -11,6 +11,7 @@ import (
 
 	"github.com/containerd/continuity/fs"
 	"github.com/docker/docker/pkg/idtools"
+	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/llbsolver/ops/fileoptypes"
 	"github.com/moby/buildkit/solver/pb"
@@ -25,46 +26,6 @@ func timestampToTime(ts int64) *time.Time {
 	}
 	tm := time.Unix(ts/1e9, ts%1e9)
 	return &tm
-}
-
-func mapUserToChowner(user *copy.User, idmap *idtools.IdentityMapping) (copy.Chowner, error) {
-	if user == nil {
-		return func(old *copy.User) (*copy.User, error) {
-			if old == nil {
-				if idmap == nil {
-					return nil, nil
-				}
-				old = &copy.User{} // root
-				// non-nil old is already mapped
-				if idmap != nil {
-					identity, err := idmap.ToHost(idtools.Identity{
-						UID: old.UID,
-						GID: old.GID,
-					})
-					if err != nil {
-						return nil, err
-					}
-					return &copy.User{UID: identity.UID, GID: identity.GID}, nil
-				}
-			}
-			return old, nil
-		}, nil
-	}
-	u := *user
-	if idmap != nil {
-		identity, err := idmap.ToHost(idtools.Identity{
-			UID: user.UID,
-			GID: user.GID,
-		})
-		if err != nil {
-			return nil, err
-		}
-		u.UID = identity.UID
-		u.GID = identity.GID
-	}
-	return func(*copy.User) (*copy.User, error) {
-		return &u, nil
-	}, nil
 }
 
 func mkdir(ctx context.Context, d string, action pb.FileActionMkDir, user *copy.User, idmap *idtools.IdentityMapping) error {
@@ -251,6 +212,7 @@ func docopy(ctx context.Context, src, dest string, action pb.FileActionCopy, u *
 }
 
 type Backend struct {
+	Executor executor.Executor
 }
 
 func (fb *Backend) Mkdir(ctx context.Context, m, user, group fileoptypes.Mount, action pb.FileActionMkDir) error {
@@ -266,7 +228,7 @@ func (fb *Backend) Mkdir(ctx context.Context, m, user, group fileoptypes.Mount, 
 	}
 	defer lm.Unmount()
 
-	u, err := readUser(action.Owner, user, group)
+	u, err := readUser(action.Owner, user, group, fb.Executor)
 	if err != nil {
 		return err
 	}
@@ -287,7 +249,7 @@ func (fb *Backend) Mkfile(ctx context.Context, m, user, group fileoptypes.Mount,
 	}
 	defer lm.Unmount()
 
-	u, err := readUser(action.Owner, user, group)
+	u, err := readUser(action.Owner, user, group, fb.Executor)
 	if err != nil {
 		return err
 	}
@@ -335,7 +297,7 @@ func (fb *Backend) Copy(ctx context.Context, m1, m2, user, group fileoptypes.Mou
 	}
 	defer lm2.Unmount()
 
-	u, err := readUser(action.Owner, user, group)
+	u, err := readUser(action.Owner, user, group, fb.Executor)
 	if err != nil {
 		return err
 	}
