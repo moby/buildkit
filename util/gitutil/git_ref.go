@@ -2,7 +2,6 @@ package gitutil
 
 import (
 	"net/url"
-	"regexp"
 	"strings"
 
 	"github.com/containerd/containerd/errdefs"
@@ -82,8 +81,7 @@ func ParseGitRef(ref string) (*GitRef, error) {
 		switch remote.Scheme {
 		// An HTTP(S) URL is considered to be a valid git ref only when it has the ".git[...]" suffix.
 		case HTTPProtocol, HTTPSProtocol:
-			var gitURLPathWithFragmentSuffix = regexp.MustCompile(`\.git(?:#.+)?$`)
-			if !gitURLPathWithFragmentSuffix.MatchString(ref) {
+			if !strings.HasSuffix(remote.Path, ".git") {
 				return nil, errdefs.ErrInvalidArgument
 			}
 		}
