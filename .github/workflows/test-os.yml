@@ -85,6 +85,10 @@ jobs:
         with:
           name: test-reports
           path: ./bin/testreports
+      -
+        name: Dump context
+        if: failure()
+        uses: crazy-max/ghaction-dump-context@v2
 
   test-freebsd-amd64:
     runs-on: macos-12
@@ -120,3 +124,7 @@ jobs:
         if: always()
         run: |
           vagrant ssh -- "sudo cat /vagrant/.tmp/logs/containerd"
+      -
+        name: Dump context
+        if: failure()
+        uses: crazy-max/ghaction-dump-context@v2
