@@ -1,47 +1,74 @@
-# This code is taken from the Vagrantfile from libjail-rs
-# https://github.com/fubarnetes/libjail-rs/blob/727353bd6565c5e7a9be2664258d0197a1c8bb35/Vagrantfile
-# licensed under BSD-3 Clause License:
-# BSD 3-Clause License
-
-# Copyright (c) 2018, Fabian Freyer <fabian.freyer@physik.tu-berlin.de> All rights reserved.
-
-# Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
-
-# * Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
-
-# * Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
-
-# * Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
-
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
 
 Vagrant.configure("2") do |config|
-  # Stable version
-  #
   config.vm.define "fbsd_13_2" do |fbsd_13_2|
     fbsd_13_2.vm.box = "freebsd/FreeBSD-13.2-RELEASE"
   end
 
-  config.vm.synced_folder ".", "/vagrant", type: "rsync", rsync__auto: true
+  config.vm.synced_folder ".", "/vagrant", type: "rsync"
 
-  config.vm.provision "shell", inline: <<-SHELL
-    kldload nullfs
-    echo 'FreeBSD: { url: "pkg+http://pkg.FreeBSD.org/${ABI}/latest" }' > /usr/local/etc/pkg/repos/FreeBSD.conf
+  config.vm.provision "init", type: "shell", run: "once" do |sh|
+    sh.inline = <<~SHELL
+      #!/usr/bin/env bash
+      set -eux -o pipefail
+      kldload nullfs
+      pkg install -y go git containerd runj
+      mkdir -p /vagrant/coverage /vagrant/.tmp/logs
+    SHELL
+  end
 
-    pkg bootstrap
-    pkg install -y go git containerd runj wait_on
+  config.vm.provision "install-buildkitd", type: "shell", run: "once" do |sh|
+    sh.inline = <<~SHELL
+      #!/usr/bin/env bash
+      set -eux -o pipefail
+      cd /vagrant
+      go build -o /usr/bin/buildkitd ./cmd/buildkitd
+      type /usr/bin/buildkitd
+      buildkitd --version
+    SHELL
+  end
 
-    mkdir -p /vagrant/coverage
-    mkdir -p /vagrant/run-logs
-    daemon -o /vagrant/run-logs/containerd containerd
+  config.vm.provision "install-buildctl", type: "shell", run: "once" do |sh|
+    sh.inline = <<~SHELL
+      #!/usr/bin/env bash
+      set -eux -o pipefail
+      cd /vagrant
+      go build -o /usr/bin/buildctl ./cmd/buildctl
+      type /usr/bin/buildctl
+    SHELL
+  end
 
-    mkdir -p /run/buildkit
-    cd /vagrant/cmd/buildkitd
-    go build -buildvcs=false .
-    echo "launching buildkitd..."
-    mkdir -p /run/buildkit
-    daemon -o /vagrant/run-logs/buildkitd ./buildkitd
-    wait_on -t 5 /run/buildkit
-    echo "launched buildkitd"
-  SHELL
+  config.vm.provision "run-containerd", type: "shell", run: "once" do |sh|
+    sh.inline = <<~SHELL
+      #!/usr/bin/env bash
+      set -eux -o pipefail
+      containerd --version
+      daemon -o /vagrant/.tmp/logs/containerd containerd
+    SHELL
+  end
+
+  config.vm.provision "run-buildkitd", type: "shell", run: "once" do |sh|
+    sh.inline = <<~SHELL
+      #!/usr/bin/env bash
+      set -eux -o pipefail
+      mkdir -p /run/buildkit
+      daemon -o /vagrant/.tmp/logs/buildkitd /usr/bin/buildkitd --addr=unix:///run/buildkit/buildkitd.sock
+      sleep 3
+    SHELL
+  end
+
+  config.vm.provision "test-smoke", type: "shell", run: "never" do |sh|
+    sh.inline = <<~SHELL
+      #!/usr/bin/env bash
+      set -eux -o pipefail
+      mkdir -p /vagrant/.tmp/freebsd-smoke
+      cd /vagrant/.tmp/freebsd-smoke
+      cat > Dockerfile <<EOF
+FROM dougrabson/freebsd-minimal:13
+RUN echo "Hello, buildkit!"
+EOF
+      buildctl build --frontend dockerfile.v0 --local context=. --local dockerfile=.
+    SHELL
+  end
 end

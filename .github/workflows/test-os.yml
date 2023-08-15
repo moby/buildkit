@@ -104,13 +104,19 @@ jobs:
             ${{ runner.os }}-vagrant-
       -
         name: Set up vagrant
-        run: vagrant up
-      -
-        name: Integration smoke test
         run: |
-          vagrant ssh -- "cp /vagrant/hack/dockerfiles/freebsd-smoke.Dockerfile /vagrant/cmd/buildctl/Dockerfile"
-          vagrant ssh -- "cd /vagrant/cmd/buildctl; go run . build --frontend dockerfile.v0 --local context=. --local dockerfile=."
+          vagrant up --no-tty
       -
-        name: Print BuildKit logs
+        name: Smoke test
+        run: |
+          vagrant up --provision-with=test-smoke
+      -
+        name: BuildKit logs
         if: always()
-        run: vagrant ssh -- "sudo cat /vagrant/run-logs/buildkitd"
+        run: |
+          vagrant ssh -- "sudo cat /vagrant/.tmp/logs/buildkitd"
+      -
+        name: Containerd logs
+        if: always()
+        run: |
+          vagrant ssh -- "sudo cat /vagrant/.tmp/logs/containerd"
