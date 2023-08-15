@@ -67,6 +67,13 @@ func TestParseGitRef(t *testing.T) {
 			},
 		},
 		{
+			ref: "custom.xyz/moby/buildkit.git",
+			expected: &GitRef{
+				Remote:    "https://custom.xyz/moby/buildkit.git",
+				ShortName: "buildkit",
+			},
+		},
+		{
 			ref:      "https://github.com/moby/buildkit",
 			expected: nil,
 		},
@@ -78,23 +85,30 @@ func TestParseGitRef(t *testing.T) {
 			},
 		},
 		{
+			ref: "https://foo:bar@github.com/moby/buildkit.git",
+			expected: &GitRef{
+				Remote:    "https://foo:bar@github.com/moby/buildkit.git",
+				ShortName: "buildkit",
+			},
+		},
+		{
 			ref: "git@github.com:moby/buildkit",
 			expected: &GitRef{
-				Remote:    "git@github.com:moby/buildkit",
+				Remote:    "ssh://git@github.com/moby/buildkit",
 				ShortName: "buildkit",
 			},
 		},
 		{
 			ref: "git@github.com:moby/buildkit.git",
 			expected: &GitRef{
-				Remote:    "git@github.com:moby/buildkit.git",
+				Remote:    "ssh://git@github.com/moby/buildkit.git",
 				ShortName: "buildkit",
 			},
 		},
 		{
 			ref: "git@bitbucket.org:atlassianlabs/atlassian-docker.git",
 			expected: &GitRef{
-				Remote:    "git@bitbucket.org:atlassianlabs/atlassian-docker.git",
+				Remote:    "ssh://git@bitbucket.org/atlassianlabs/atlassian-docker.git",
 				ShortName: "atlassian-docker",
 			},
 		},

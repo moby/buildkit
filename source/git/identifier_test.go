@@ -27,7 +27,7 @@ func TestNewGitIdentifier(t *testing.T) {
 		{
 			url: "git@github.com:moby/buildkit.git",
 			expected: GitIdentifier{
-				Remote: "git@github.com:moby/buildkit.git",
+				Remote: "ssh://git@github.com/moby/buildkit.git",
 			},
 		},
 		{
@@ -75,13 +75,13 @@ func TestNewGitIdentifier(t *testing.T) {
 		{
 			url: "git@github.com:user/repo.git",
 			expected: GitIdentifier{
-				Remote: "git@github.com:user/repo.git",
+				Remote: "ssh://git@github.com/user/repo.git",
 			},
 		},
 		{
 			url: "git@github.com:user/repo.git#mybranch:mydir/mysubdir/",
 			expected: GitIdentifier{
-				Remote: "git@github.com:user/repo.git",
+				Remote: "ssh://git@github.com/user/repo.git",
 				Ref:    "mybranch",
 				Subdir: "mydir/mysubdir/",
 			},
