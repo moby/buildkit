@@ -244,7 +244,7 @@ func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sa
 	)
 
 	integration.Run(t, integration.TestFuncs(
-		testBridgeNetworkingDNSNoRootless,
+		testBridgeNetworkingDNS,
 	),
 		mirrors,
 		integration.WithMatrix("netmode", map[string]interface{}{
@@ -323,11 +323,14 @@ func testBridgeNetworking(t *testing.T, sb integration.Sandbox) {
 	require.Error(t, err)
 }
 
-func testBridgeNetworkingDNSNoRootless(t *testing.T, sb integration.Sandbox) {
-	workers.CheckFeatureCompat(t, sb, workers.FeatureCNINetwork)
+func testBridgeNetworkingDNS(t *testing.T, sb integration.Sandbox) {
 	if os.Getenv("BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS") == "" {
 		t.SkipNow()
 	}
+	if sb.Rootless() {
+		t.SkipNow()
+	}
+	workers.CheckFeatureCompat(t, sb, workers.FeatureCNINetwork)
 
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
