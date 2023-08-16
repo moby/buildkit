@@ -23,6 +23,7 @@ import (
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/entitlements"
+	"github.com/moby/buildkit/util/grpcerrors"
 	utilsystem "github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/util/testutil/echoserver"
 	"github.com/moby/buildkit/util/testutil/integration"
@@ -31,6 +32,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/ssh/agent"
+	"google.golang.org/grpc/codes"
 )
 
 func TestClientGatewayIntegration(t *testing.T) {
@@ -334,6 +336,7 @@ func testUnknownBuildID(t *testing.T, sb integration.Sandbox) {
 	_, err = g.Ping(ctx, &gatewayapi.PingRequest{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no such job")
+	require.Equal(t, grpcerrors.Code(err), codes.NotFound)
 }
 
 // testClientGatewayContainerCancelOnRelease is testing that all running
