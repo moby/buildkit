@@ -8,12 +8,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -21,6 +23,7 @@ import (
 	"time"
 
 	v1 "github.com/moby/buildkit/cache/remotecache/v1"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/content"
@@ -130,6 +133,7 @@ var allTests = integration.TestFuncs(
 	testNamedOCILayoutContextExport,
 	testNamedInputContext,
 	testNamedMultiplatformInputContext,
+	testNamedFilteredContext,
 	testEmptyDestDir,
 	testCopyChownCreateDest,
 	testCopyThroughSymlinkContext,
@@ -6061,6 +6065,114 @@ COPY --from=build /foo /out /
 	dt, err = os.ReadFile(filepath.Join(destDir, "linux_arm64/foo"))
 	require.NoError(t, err)
 	require.Equal(t, "foo is bar-arm64\n", string(dt))
+}
+
+func testNamedFilteredContext(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	fooDir := integration.Tmpdir(t,
+		// small file
+		fstest.CreateFile("foo", []byte(`foo`), 0600),
+		// blank file that's just large
+		fstest.CreateFile("bar", make([]byte, 4096*1000), 0600),
+	)
+
+	f := getFrontend(t, sb)
+
+	runTest := func(t *testing.T, dockerfile []byte, target string, min, max int64) {
+		t.Run(target, func(t *testing.T) {
+			dir := integration.Tmpdir(
+				t,
+				fstest.CreateFile(dockerui.DefaultDockerfileName, dockerfile, 0600),
+			)
+
+			ch := make(chan *client.SolveStatus)
+
+			eg, ctx := errgroup.WithContext(sb.Context())
+			eg.Go(func() error {
+				_, err := f.Solve(ctx, c, client.SolveOpt{
+					FrontendAttrs: map[string]string{
+						"context:foo": "local:foo",
+						"target":      target,
+					},
+					LocalDirs: map[string]string{
+						dockerui.DefaultLocalNameDockerfile: dir,
+						dockerui.DefaultLocalNameContext:    dir,
+						"foo":                               fooDir,
+					},
+				}, ch)
+				return err
+			})
+
+			eg.Go(func() error {
+				transferred := make(map[string]int64)
+				re := regexp.MustCompile(`transferring (.+):`)
+				for ss := range ch {
+					for _, status := range ss.Statuses {
+						m := re.FindStringSubmatch(status.ID)
+						if m == nil {
+							continue
+						}
+
+						ctxName := m[1]
+						transferred[ctxName] = status.Current
+					}
+				}
+
+				if foo := transferred["foo"]; foo < min {
+					return errors.Errorf("not enough data was transferred, %d < %d", foo, min)
+				} else if foo > max {
+					return errors.Errorf("too much data was transferred, %d > %d", foo, max)
+				}
+				return nil
+			})
+
+			err := eg.Wait()
+			require.NoError(t, err)
+		})
+	}
+
+	dockerfileBase := []byte(`
+FROM scratch AS copy_from
+COPY --from=foo /foo /
+
+FROM alpine AS run_mount
+RUN --mount=from=foo,src=/foo,target=/in/foo cp /in/foo /foo
+
+FROM foo AS image_source
+COPY --from=alpine / /
+RUN cat /foo > /bar
+
+FROM scratch AS all
+COPY --link --from=copy_from /foo /foo.b
+COPY --link --from=run_mount /foo /foo.c
+COPY --link --from=image_source /bar /foo.d
+`)
+
+	t.Run("new", func(t *testing.T) {
+		runTest(t, dockerfileBase, "run_mount", 1, 1024)
+		runTest(t, dockerfileBase, "copy_from", 1, 1024)
+		runTest(t, dockerfileBase, "image_source", 4096*1000, math.MaxInt64)
+		runTest(t, dockerfileBase, "all", 4096*1000, math.MaxInt64)
+	})
+
+	dockerfileFull := append([]byte(`
+FROM scratch AS foo
+COPY <<EOF /foo
+test
+EOF
+`), dockerfileBase...)
+
+	t.Run("replace", func(t *testing.T) {
+		runTest(t, dockerfileFull, "run_mount", 1, 1024)
+		runTest(t, dockerfileFull, "copy_from", 1, 1024)
+		runTest(t, dockerfileFull, "image_source", 4096*1000, math.MaxInt64)
+		runTest(t, dockerfileFull, "all", 4096*1000, math.MaxInt64)
+	})
 }
 
 func testSourceDateEpochWithoutExporter(t *testing.T, sb integration.Sandbox) {

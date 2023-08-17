@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/distribution/reference"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/exporter/containerimage/image"
 	"github.com/moby/buildkit/frontend/gateway/client"
+	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/patternmatcher/ignorefile"
 	"github.com/pkg/errors"
@@ -212,12 +214,15 @@ func (bc *Client) namedContextRecursive(ctx context.Context, name string, nameWi
 				}
 			}
 		}
-		st = llb.Local(vv[1],
-			llb.WithCustomName("[context "+nameWithPlatform+"] load from client"),
-			llb.SessionID(bc.bopts.SessionID),
-			llb.SharedKeyHint("context:"+nameWithPlatform),
-			llb.ExcludePatterns(excludes),
-		)
+
+		localOutput := &asyncLocalOutput{
+			name:             vv[1],
+			nameWithPlatform: nameWithPlatform,
+			sessionID:        bc.bopts.SessionID,
+			excludes:         excludes,
+			extraOpts:        opt.AsyncLocalOpts,
+		}
+		st = llb.NewState(localOutput)
 		return &st, nil, nil
 	case "input":
 		inputs, err := bc.client.Inputs(ctx)
@@ -250,4 +255,42 @@ func (bc *Client) namedContextRecursive(ctx context.Context, name string, nameWi
 	default:
 		return nil, nil, errors.Errorf("unsupported context source %s for %s", vv[0], nameWithPlatform)
 	}
+}
+
+// asyncLocalOutput is an llb.Output that computes an llb.Local
+// on-demand instead of at the time of initialization.
+type asyncLocalOutput struct {
+	llb.Output
+	name             string
+	nameWithPlatform string
+	sessionID        string
+	excludes         []string
+	extraOpts        func() []llb.LocalOption
+	once             sync.Once
+}
+
+func (a *asyncLocalOutput) ToInput(ctx context.Context, constraints *llb.Constraints) (*pb.Input, error) {
+	a.once.Do(a.do)
+	return a.Output.ToInput(ctx, constraints)
+}
+
+func (a *asyncLocalOutput) Vertex(ctx context.Context, constraints *llb.Constraints) llb.Vertex {
+	a.once.Do(a.do)
+	return a.Output.Vertex(ctx, constraints)
+}
+
+func (a *asyncLocalOutput) do() {
+	var extraOpts []llb.LocalOption
+	if a.extraOpts != nil {
+		extraOpts = a.extraOpts()
+	}
+	opts := append([]llb.LocalOption{
+		llb.WithCustomName("[context " + a.nameWithPlatform + "] load from client"),
+		llb.SessionID(a.sessionID),
+		llb.SharedKeyHint("context:" + a.nameWithPlatform),
+		llb.ExcludePatterns(a.excludes),
+	}, extraOpts...)
+
+	st := llb.Local(a.name, opts...)
+	a.Output = st.Output()
 }
