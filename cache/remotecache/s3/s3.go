@@ -15,7 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/smithy-go"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/labels"
 	"github.com/moby/buildkit/cache/remotecache"
@@ -472,6 +472,7 @@ func (s3Client *s3Client) blobKey(dgst digest.Digest) string {
 }
 
 func isNotFound(err error) bool {
-	var errapi smithy.APIError
-	return errors.As(err, &errapi) && (errapi.ErrorCode() == "NoSuchKey" || errapi.ErrorCode() == "NotFound")
+	var nf *s3types.NotFound
+	var nsk *s3types.NoSuchKey
+	return errors.As(err, &nf) || errors.As(err, &nsk)
 }
