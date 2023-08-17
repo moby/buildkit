@@ -3315,6 +3315,17 @@ func TestInputRequestDeadlock(t *testing.T) {
 	j2 = nil
 }
 
+func TestUnknownBuildID(t *testing.T) {
+	s := NewSolver(SolverOpt{
+		ResolveOpFunc: testOpResolver,
+	})
+	defer s.Close()
+
+	_, err := s.Get(identity.NewID())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no such job")
+}
+
 func generateSubGraph(nodes int) (Edge, int) {
 	if nodes == 1 {
 		value := rand.Int() % 500 //nolint:gosec
