@@ -93,7 +93,7 @@ if ! docker container inspect "$cacheVolume" >/dev/null 2>/dev/null; then
 fi
 
 if [ "$TEST_INTEGRATION" == 1 ]; then
-  cid=$(docker create --rm -v /tmp $testReportsVol --volumes-from=$cacheVolume -e GITHUB_REF -e ACTIONS_RUNTIME_TOKEN -e ACTIONS_CACHE_URL -e TEST_DOCKERD -e SKIP_INTEGRATION_TESTS -e BUILDKIT_TEST_ENABLE_FEATURES -e BUILDKIT_TEST_DISABLE_FEATURES -e GOTESTSUM_FORMAT ${BUILDKIT_INTEGRATION_SNAPSHOTTER:+"-eBUILDKIT_INTEGRATION_SNAPSHOTTER"} -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry -e BUILDKIT_INTEGRATION_DOCKERD_FLAGS -e GORACE --privileged $iid gotestsum $gotestsumArgs --packages="${TESTPKGS:-./...}" -- $gotestArgs ${TESTFLAGS:--v})
+  cid=$(docker create --rm -v /tmp $testReportsVol --volumes-from=$cacheVolume -e CGO_ENABLED -e GITHUB_REF -e ACTIONS_RUNTIME_TOKEN -e ACTIONS_CACHE_URL -e TEST_DOCKERD -e SKIP_INTEGRATION_TESTS -e BUILDKIT_TEST_ENABLE_FEATURES -e BUILDKIT_TEST_DISABLE_FEATURES -e GOTESTSUM_FORMAT ${BUILDKIT_INTEGRATION_SNAPSHOTTER:+"-eBUILDKIT_INTEGRATION_SNAPSHOTTER"} -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry -e BUILDKIT_INTEGRATION_DOCKERD_FLAGS -e GORACE --privileged $iid gotestsum $gotestsumArgs --packages="${TESTPKGS:-./...}" -- $gotestArgs ${TESTFLAGS:--v})
   if [ "$TEST_DOCKERD" = "1" ]; then
     docker cp "$TEST_DOCKERD_BINARY" $cid:/usr/bin/dockerd
   fi
@@ -133,7 +133,7 @@ if [ "$TEST_DOCKERFILE" == 1 ]; then
 
     if [ -s $tarout ]; then
       if [ "$release" = "mainline" ] || [ "$release" = "labs" ] || [ -n "$DOCKERFILE_RELEASES_CUSTOM" ] || [ "$GITHUB_ACTIONS" = "true" ]; then
-        cid=$(docker create -v /tmp $testReportsVol --rm --privileged --volumes-from=$cacheVolume -e GITHUB_REF -e ACTIONS_RUNTIME_TOKEN -e ACTIONS_CACHE_URL -e TEST_DOCKERD -e BUILDKIT_TEST_ENABLE_FEATURES -e BUILDKIT_TEST_DISABLE_FEATURES -e GOTESTSUM_FORMAT -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry -e BUILDKIT_WORKER_RANDOM -e BUILDKIT_INTEGRATION_DOCKERD_FLAGS -e FRONTEND_GATEWAY_ONLY=local:/$release.tar -e EXTERNAL_DF_FRONTEND=/dockerfile-frontend -e GORACE $iid gotestsum $gotestsumArgs --packages=./frontend/dockerfile -- $gotestArgs --count=1 -tags "$buildtags" ${TESTFLAGS:--v})
+        cid=$(docker create -v /tmp $testReportsVol --rm --privileged --volumes-from=$cacheVolume -e CGO_ENABLED -e GITHUB_REF -e ACTIONS_RUNTIME_TOKEN -e ACTIONS_CACHE_URL -e TEST_DOCKERD -e BUILDKIT_TEST_ENABLE_FEATURES -e BUILDKIT_TEST_DISABLE_FEATURES -e GOTESTSUM_FORMAT -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry -e BUILDKIT_WORKER_RANDOM -e BUILDKIT_INTEGRATION_DOCKERD_FLAGS -e FRONTEND_GATEWAY_ONLY=local:/$release.tar -e EXTERNAL_DF_FRONTEND=/dockerfile-frontend -e GORACE $iid gotestsum $gotestsumArgs --packages=./frontend/dockerfile -- $gotestArgs --count=1 -tags "$buildtags" ${TESTFLAGS:--v})
         docker cp $tarout $cid:/$release.tar
         if [ "$TEST_DOCKERD" = "1" ]; then
           docker cp "$TEST_DOCKERD_BINARY" $cid:/usr/bin/dockerd
