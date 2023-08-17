@@ -46,6 +46,7 @@ func (j *Job) Status(ctx context.Context, ch chan *client.SolveStatus) error {
 				vs := &client.VertexStatus{
 					ID:        p.ID,
 					Vertex:    vtx.(digest.Digest),
+					Name:      v.Name,
 					Total:     int64(v.Total),
 					Current:   int64(v.Current),
 					Timestamp: p.Timestamp,

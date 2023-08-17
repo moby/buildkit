@@ -129,6 +129,7 @@ message Vertex {
 message VertexStatus {
 	string ID = 1;
 	string vertex = 2 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
+	string name = 9;
 	int64 current = 4;
 	int64 total = 5;
 	google.protobuf.Timestamp timestamp = 6 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];

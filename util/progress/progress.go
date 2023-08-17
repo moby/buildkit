@@ -99,6 +99,7 @@ type Progress struct {
 }
 
 type Status struct {
+	Name      string
 	Current   int
 	Total     int
 	Started   *time.Time
