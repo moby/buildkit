@@ -62,22 +62,23 @@ USAGE:
   
 
 OPTIONS:
-   --output value, -o value    Define exports for build result, e.g. --output type=image,name=docker.io/username/image,push=true
-   --progress value            Set type of progress (auto, plain, tty, rawjson). Use plain to show container output (default: "auto")
-   --trace value               Path to trace file. Defaults to no tracing.
-   --local value               Allow build access to the local directory
-   --oci-layout value          Allow build access to the local OCI layout
-   --frontend value            Define frontend used for build
-   --opt value                 Define custom options for frontend, e.g. --opt target=foo --opt build-arg:foo=bar
-   --no-cache                  Disable cache for all the vertices
-   --export-cache value        Export build cache, e.g. --export-cache type=registry,ref=example.com/foo/bar, or --export-cache type=local,dest=path/to/dir
-   --import-cache value        Import build cache, e.g. --import-cache type=registry,ref=example.com/foo/bar, or --import-cache type=local,src=path/to/dir
-   --secret value              Secret value exposed to the build. Format id=secretname,src=filepath
-   --allow value               Allow extra privileged entitlement, e.g. network.host, security.insecure
-   --ssh value                 Allow forwarding SSH agent to the builder. Format default|<id>[=<socket>|<key>[,<key>]]
-   --metadata-file value       Output build metadata (e.g., image digest) to a file as JSON
-   --source-policy-file value  Read source policy file from a JSON file
-   --ref-file value            Write build ref to a file
+   --output value, -o value          Define exports for build result, e.g. --output type=image,name=docker.io/username/image,push=true
+   --progress value                  Set type of progress (auto, plain, tty, rawjson). Use plain to show container output (default: "auto")
+   --trace value                     Path to trace file. Defaults to no tracing.
+   --local value                     Allow build access to the local directory
+   --oci-layout value                Allow build access to the local OCI layout
+   --frontend value                  Define frontend used for build
+   --opt value                       Define custom options for frontend, e.g. --opt target=foo --opt build-arg:foo=bar
+   --no-cache                        Disable cache for all the vertices
+   --export-cache value              Export build cache, e.g. --export-cache type=registry,ref=example.com/foo/bar, or --export-cache type=local,dest=path/to/dir
+   --import-cache value              Import build cache, e.g. --import-cache type=registry,ref=example.com/foo/bar, or --import-cache type=local,src=path/to/dir
+   --secret value                    Secret value exposed to the build. Format id=secretname,src=filepath
+   --allow value                     Allow extra privileged entitlement, e.g. network.host, security.insecure
+   --ssh value                       Allow forwarding SSH agent to the builder. Format default|<id>[=<socket>|<key>[,<key>]]
+   --metadata-file value             Output build metadata (e.g., image digest) to a file as JSON
+   --source-policy-file value        Read source policy file from a JSON file
+   --ref-file value                  Write build ref to a file
+   --registry-auth-tlscontext value  Overwrite TLS configuration when authenticating with registries, e.g. --registry-auth-tlscontext host=https://myserver:2376,ca=/path/to/my/ca.crt,cert=/path/to/my/cert.crt,key=/path/to/my/key.crt
    
 ```
 <!---GENERATE_END-->

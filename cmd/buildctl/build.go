@@ -105,6 +105,10 @@ var buildCommand = cli.Command{
 			Name:  "ref-file",
 			Usage: "Write build ref to a file",
 		},
+		cli.StringSliceFlag{
+			Name:  "registry-auth-tlscontext",
+			Usage: "Overwrite TLS configuration when authenticating with registries, e.g. --registry-auth-tlscontext host=https://myserver:2376,ca=/path/to/my/ca.crt,cert=/path/to/my/cert.crt,key=/path/to/my/key.crt",
+		},
 	},
 }
 
@@ -158,7 +162,11 @@ func buildAction(clicontext *cli.Context) error {
 	}
 
 	dockerConfig := config.LoadDefaultConfigFile(os.Stderr)
-	attachable := []session.Attachable{authprovider.NewDockerAuthProvider(dockerConfig)}
+	tlsConfigs, err := build.ParseRegistryAuthTLSContext(clicontext.StringSlice("registry-auth-tlscontext"))
+	if err != nil {
+		return err
+	}
+	attachable := []session.Attachable{authprovider.NewDockerAuthProvider(dockerConfig, tlsConfigs)}
 
 	if ssh := clicontext.StringSlice("ssh"); len(ssh) > 0 {
 		configs, err := build.ParseSSH(ssh)
