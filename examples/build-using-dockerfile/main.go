@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/containerd/console"
 	"github.com/moby/buildkit/client"
 	dockerfile "github.com/moby/buildkit/frontend/dockerfile/builder"
 	"github.com/moby/buildkit/util/appcontext"
@@ -102,12 +101,14 @@ func action(clicontext *cli.Context) error {
 		return err
 	})
 	eg.Go(func() error {
-		var c console.Console
-		if cn, err := console.ConsoleFromFile(os.Stderr); err == nil {
-			c = cn
+		d, err := progressui.NewDisplay(os.Stderr, progressui.TtyMode)
+		if err != nil {
+			// If an error occurs while attempting to create the tty display,
+			// fallback to using plain mode on stdout (in contrast to stderr).
+			d, _ = progressui.NewDisplay(os.Stdout, progressui.PlainMode)
 		}
 		// not using shared context to not disrupt display but let is finish reporting errors
-		_, err = progressui.DisplaySolveStatus(context.TODO(), c, os.Stdout, ch)
+		_, err = d.UpdateFrom(context.TODO(), ch)
 		return err
 	})
 	eg.Go(func() error {

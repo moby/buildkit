@@ -46,7 +46,7 @@ var buildCommand = cli.Command{
 		},
 		cli.StringFlag{
 			Name:  "progress",
-			Usage: "Set type of progress (auto, plain, tty). Use plain to show container output",
+			Usage: "Set type of progress (auto, plain, tty, rawjson). Use plain to show container output",
 			Value: "auto",
 		},
 		cli.StringFlag{
