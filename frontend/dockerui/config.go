@@ -15,10 +15,10 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/image"
 	"github.com/moby/buildkit/frontend/attestations"
-	"github.com/moby/buildkit/frontend/dockerfile/dockerignore"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/flightcontrol"
+	"github.com/moby/patternmatcher/ignorefile"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -442,7 +442,7 @@ func (bc *Client) MainContext(ctx context.Context, opts ...llb.LocalOption) (*ll
 
 	var excludes []string
 	if len(bc.dockerignore) != 0 {
-		excludes, err = dockerignore.ReadAll(bytes.NewBuffer(bc.dockerignore))
+		excludes, err = ignorefile.ReadAll(bytes.NewBuffer(bc.dockerignore))
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed parsing %s", bc.dockerignoreName)
 		}
