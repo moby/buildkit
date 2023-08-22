@@ -589,7 +589,7 @@ func setupGitRepo(t *testing.T) gitRepoFixture {
 		"echo sbb > foo13",
 		"git add foo13",
 		"git commit -m third",
-		"git tag lightweight-tag",
+		"git tag --no-sign lightweight-tag",
 		"git checkout -B feature",
 		"echo baz > ghi",
 		"git add ghi",
