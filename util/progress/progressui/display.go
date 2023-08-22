@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"sort"
 	"strconv"
@@ -132,6 +133,13 @@ const (
 	// PlainMode is the human-readable plain text output. This mode is not meant to be read
 	// by machines.
 	PlainMode DisplayMode = "plain"
+	// JSONMode is a buffered JSON output for the build results.
+	// This output will wait until a vertex has been completed before sending the detailed
+	// build information about it. This is useful for machine consumption in scripting or
+	// IDE tooling.
+	//
+	// For the raw stream in interactive applications, see RawJSONMode.
+	JSONMode DisplayMode = "json"
 	// RawJSONMode is the raw JSON text output. It will marshal the various solve status events
 	// to JSON to be read by an external program.
 	RawJSONMode DisplayMode = "rawjson"
@@ -154,6 +162,8 @@ func NewDisplay(out io.Writer, mode DisplayMode, opts ...DisplayOpt) (Display, e
 		fallthrough
 	case PlainMode:
 		return newPlainDisplay(out, opts...), nil
+	case JSONMode:
+		return newJSONDisplay(out, opts...), nil
 	case RawJSONMode:
 		return newRawJSONDisplay(out, opts...), nil
 	case QuietMode:
@@ -274,6 +284,145 @@ func (d *plainDisplay) done() {
 	d.refresh()
 	// Print error logs.
 	d.t.printErrorLogs(d.t.w)
+}
+
+type jsonDisplay struct {
+	t    *trace
+	logs *logsByDigest
+	enc  *json.Encoder
+}
+
+// newJSONDisplay creates a new SolveStatusDisplay that outputs the completed vertex
+// progress indicator for each vertex in JSON format.
+func newJSONDisplay(w io.Writer, opts ...DisplayOpt) Display {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return Display{
+		disp: &jsonDisplay{
+			t: newTrace(w, false),
+			logs: &logsByDigest{
+				byDigest: make(map[digest.Digest]*logMux),
+			},
+			enc: enc,
+		},
+	}
+}
+
+func (d *jsonDisplay) init(displayLimiter *rate.Limiter) {
+	// Display limiter is ignored for the JSON display.
+}
+
+func (d *jsonDisplay) update(ss *client.SolveStatus) {
+	d.t.update(ss, 80)
+
+	// JSON format keeps the logs separated into their streams
+	// and takes the aggregated result. The trace does not do that
+	// so we use and update logMux for log messages by digest/stream.
+	for _, l := range ss.Logs {
+		d.logs.accept(l)
+	}
+
+	// Only look at the digests that have updates.
+	// If a digest doesn't have an update, it can't
+	// have been completed.
+	for dgst := range d.t.updates {
+		v, ok := d.t.byDigest[dgst]
+		if !ok {
+			continue
+		}
+
+		if v.isCompleted() {
+			d.printVtx(v)
+		}
+	}
+}
+
+func (d *jsonDisplay) printVtx(v *vertex) {
+	statuses := make([]VertexStatus, len(v.statuses))
+	for i, status := range v.statuses {
+		statuses[i] = VertexStatus{
+			ID:   status.ID,
+			Name: status.Name,
+			// Original structure has these values suitable for
+			// streaming. In those circumstances, we don't know
+			// the total. But, in this circumstance, we're printing
+			// this after the operation is complete so total = current.
+			Total:   status.Current,
+			Started: status.Started,
+			// Convert the completed time to a duration for readability.
+			Duration: duration(status.Started, status.Completed),
+		}
+	}
+
+	var warnings []VertexWarning
+	if len(v.warnings) > 0 {
+		warnings = make([]VertexWarning, len(v.warnings))
+		for i, warning := range v.warnings {
+			warnings[i] = VertexWarning{
+				Level:  warning.Level,
+				Short:  string(warning.Short),
+				Detail: byteArrayToStringArray(warning.Detail),
+				URL:    warning.URL,
+			}
+		}
+	}
+
+	var logsByStream map[string][]VertexLog
+	if mux, ok := d.logs.byDigest[v.Digest]; ok {
+		logsByStream = make(map[string][]VertexLog)
+		for stream, entries := range mux.streams {
+			var name string
+			switch stream {
+			case 1:
+				name = "stdout"
+			case 2:
+				name = "stderr"
+			default:
+				name = strconv.Itoa(stream)
+			}
+
+			logs := make([]VertexLog, 0, len(entries))
+			for _, entry := range entries {
+				var dt time.Duration
+				if v.Started != nil {
+					dt = entry.ts.Sub(*v.Started)
+				}
+				logs = append(logs, VertexLog{
+					Timestamp: seconds(dt, time.Millisecond),
+					Message:   string(entry.message),
+				})
+			}
+			logsByStream[name] = logs
+		}
+	}
+
+	vtx := Vertex{
+		Digest:   v.Digest,
+		Inputs:   v.Inputs,
+		Name:     v.Name,
+		Started:  v.Started,
+		Duration: duration(v.Started, v.Completed),
+		Cached:   v.Cached,
+		Error:    v.Error,
+		Statuses: statuses,
+		Logs:     logsByStream,
+		Warnings: warnings,
+	}
+	_ = d.enc.Encode(&vtx)
+
+	// Remove the state associated with this vertex.
+	// Vertexes can complete multiple times and we don't want to duplicate
+	// the information.
+	delete(d.t.byDigest, v.Digest)
+	delete(d.logs.byDigest, v.Digest)
+}
+
+func (d *jsonDisplay) refresh() {
+	// Does nothing.
+}
+
+func (d *jsonDisplay) done() {
+	// Does nothing.
 }
 
 type rawJSONDisplay struct {
@@ -1122,4 +1271,97 @@ func wrapHeight(j []*job, limit int) []*job {
 		}
 	}
 	return wrapped
+}
+
+func byteArrayToStringArray(in [][]byte) []string {
+	if len(in) == 0 {
+		return nil
+	}
+
+	out := make([]string, len(in))
+	for i, b := range in {
+		out[i] = string(b)
+	}
+	return out
+}
+
+// logsByDigest holds logs for each digest.Digest.
+type logsByDigest struct {
+	byDigest map[digest.Digest]*logMux
+}
+
+func (logs *logsByDigest) accept(l *client.VertexLog) {
+	mux, ok := logs.byDigest[l.Vertex]
+	if !ok {
+		mux = &logMux{
+			streams: make(map[int][]*logEntry),
+		}
+		logs.byDigest[l.Vertex] = mux
+	}
+	mux.accept(l)
+}
+
+// logMux keeps track of logs for each independent stream.
+type logMux struct {
+	streams map[int][]*logEntry
+}
+
+func (mux *logMux) accept(l *client.VertexLog) {
+	entries := mux.streams[l.Stream]
+
+	var last *logEntry
+	if len(entries) > 0 {
+		last = entries[len(entries)-1]
+	}
+	complete := split(l.Data, byte('\n'), func(dt []byte) {
+		// If the last entry was not complete,
+		// append the data to the message.
+		if last != nil && last.partial {
+			last.message = append(last.message, dt...)
+			// Assume we are complete until the check at the
+			// end of update.
+			last.partial = false
+			return
+		}
+
+		// New entry for a new log line.
+		last = &logEntry{
+			ts:      l.Timestamp,
+			message: dt,
+		}
+		entries = append(entries, last)
+	})
+
+	// Check if the last log entry we recorded was complete.
+	if last != nil {
+		last.partial = !complete
+	}
+
+	// Store the updated slice.
+	mux.streams[l.Stream] = entries
+}
+
+type logEntry struct {
+	ts      time.Time
+	message []byte
+	partial bool
+}
+
+// seconds returns the number of seconds inside of the dt duration as a float64
+// while rounding the decimal to the specified precision in prec.
+func seconds(dt time.Duration, prec time.Duration) float64 {
+	mult := float64(time.Second / prec)
+	return math.Round(dt.Seconds()*mult) / mult
+}
+
+// duration calculates the number of seconds between two time intervals as a float.
+// If either of the time intervals are nil, the result is nil.
+//
+// The value is rounded to the nearest millisecond.
+func duration(started, completed *time.Time) *float64 {
+	if started == nil || completed == nil {
+		return nil
+	}
+	dt := seconds(completed.Sub(*started), time.Millisecond)
+	return &dt
 }
