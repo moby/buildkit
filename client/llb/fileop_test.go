@@ -536,6 +536,57 @@ func TestFileOwner(t *testing.T) {
 	require.Nil(t, mkdir.Owner.Group)
 }
 
+func TestFileOwnerRoot(t *testing.T) {
+	t.Parallel()
+
+	st := Image("foo").File(Mkdir("bar/baz", 0701, WithUser("root:root")))
+	def, err := st.Marshal(context.TODO())
+
+	require.NoError(t, err)
+
+	_, arr := parseDef(t, def.Def)
+
+	action := arr[1].Op.(*pb.Op_File).File.Actions[0]
+	mkdir := action.Action.(*pb.FileAction_Mkdir).Mkdir
+
+	require.Equal(t, 0, int(mkdir.Owner.User.User.(*pb.UserOpt_ByID).ByID))
+	require.Equal(t, 0, int(mkdir.Owner.Group.User.(*pb.UserOpt_ByID).ByID))
+}
+
+func TestFileOwnerWithGroup(t *testing.T) {
+	t.Parallel()
+
+	st := Image("foo").File(Mkdir("bar/baz", 0701, WithUser("foo:bar")))
+	def, err := st.Marshal(context.TODO())
+
+	require.NoError(t, err)
+
+	_, arr := parseDef(t, def.Def)
+
+	action := arr[1].Op.(*pb.Op_File).File.Actions[0]
+	mkdir := action.Action.(*pb.FileAction_Mkdir).Mkdir
+
+	require.Equal(t, "foo", mkdir.Owner.User.User.(*pb.UserOpt_ByName).ByName.Name)
+	require.Equal(t, "bar", mkdir.Owner.Group.User.(*pb.UserOpt_ByName).ByName.Name)
+}
+
+func TestFileOwnerWithUIDAndGID(t *testing.T) {
+	t.Parallel()
+
+	st := Image("foo").File(Mkdir("bar/baz", 0701, WithUser("1000:1001")))
+	def, err := st.Marshal(context.TODO())
+
+	require.NoError(t, err)
+
+	_, arr := parseDef(t, def.Def)
+
+	action := arr[1].Op.(*pb.Op_File).File.Actions[0]
+	mkdir := action.Action.(*pb.FileAction_Mkdir).Mkdir
+
+	require.Equal(t, 1000, int(mkdir.Owner.User.User.(*pb.UserOpt_ByID).ByID))
+	require.Equal(t, 1001, int(mkdir.Owner.Group.User.(*pb.UserOpt_ByID).ByID))
+}
+
 func TestFileCopyOwner(t *testing.T) {
 	t.Parallel()
 
