@@ -1,4 +1,4 @@
-package dockerignore
+package ignorefile
 
 import (
 	"bufio"
