@@ -11,9 +11,9 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/exporter/containerimage/image"
-	"github.com/moby/buildkit/frontend/dockerfile/dockerignore"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/util/imageutil"
+	"github.com/moby/patternmatcher/ignorefile"
 	"github.com/pkg/errors"
 )
 
@@ -206,7 +206,7 @@ func (bc *Client) namedContextRecursive(ctx context.Context, name string, nameWi
 			}) // error ignored
 
 			if len(dt) != 0 {
-				excludes, err = dockerignore.ReadAll(bytes.NewBuffer(dt))
+				excludes, err = ignorefile.ReadAll(bytes.NewBuffer(dt))
 				if err != nil {
 					return nil, nil, errors.Wrapf(err, "failed parsing %s", DefaultDockerignoreName)
 				}
