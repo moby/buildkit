@@ -28,6 +28,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 type Client struct {
@@ -80,6 +81,30 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 		}
 		if sd, ok := o.(*withSessionDialer); ok {
 			sessionDialer = sd.dialer
+		}
+		if opt, ok := o.(*withOutgoingMeta); ok {
+			gopts = append(gopts,
+				grpc.WithChainUnaryInterceptor(func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+					md, ok := metadata.FromOutgoingContext(ctx)
+					if !ok {
+						md = opt.meta
+					} else {
+						md = metadata.Join(opt.meta, md) // latest is first in this list
+					}
+					ctx = metadata.NewOutgoingContext(ctx, md)
+					return invoker(ctx, method, req, reply, cc, opts...)
+				}),
+				grpc.WithChainStreamInterceptor(func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+					md, ok := metadata.FromOutgoingContext(ctx)
+					if !ok {
+						md = opt.meta
+					} else {
+						md = metadata.Join(opt.meta, md) // latest is first in this list
+					}
+					ctx = metadata.NewOutgoingContext(ctx, md)
+					return streamer(ctx, desc, cc, method, opts...)
+				}),
+			)
 		}
 		if opt, ok := o.(*withGRPCDialOption); ok {
 			customDialOptions = append(customDialOptions, opt.opt)
@@ -383,6 +408,16 @@ func filterInterceptor(intercept grpc.UnaryClientInterceptor) grpc.UnaryClientIn
 		}
 		return intercept(ctx, method, req, reply, cc, invoker, opts...)
 	}
+}
+
+type withOutgoingMeta struct {
+	meta map[string][]string
+}
+
+func (*withOutgoingMeta) isClientOpt() {}
+
+func WithOutgoingMeta(meta map[string][]string) ClientOpt {
+	return &withOutgoingMeta{meta}
 }
 
 type withGRPCDialOption struct {
