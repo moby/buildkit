@@ -94,10 +94,25 @@ jobs:
     runs-on: macos-12
     env:
       VAGRANT_VAGRANTFILE: hack/Vagrantfile.freebsd13
+      GOOS: freebsd
     steps:
       -
         name: Checkout
         uses: actions/checkout@v3
+      -
+        name: Set up Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: "${{ env.GO_VERSION }}"
+          cache: true
+
+      - name: Build buildkitd binary
+        run: |
+          go build ./cmd/buildkitd
+
+      - name: Build buildctl binary
+        run: |
+          go build ./cmd/buildctl
       -
         name: Cache Vagrant boxes
         uses: actions/cache@v3
