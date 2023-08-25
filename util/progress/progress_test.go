@@ -25,8 +25,8 @@ func TestProgress(t *testing.T) {
 		return saveProgress(ctx, pr, &trace)
 	})
 
-	pw, _, ctx := NewFromContext(ctx, WithMetadata("tag", "foo"))
-	s, err = calc(ctx, 5, "calc")
+	pw, _, ctx2 := NewFromContext(ctx, WithMetadata("tag", "foo"))
+	s, err = calc(ctx2, 5, "calc")
 	pw.Close()
 	assert.NoError(t, err)
 	assert.Equal(t, 15, s)
