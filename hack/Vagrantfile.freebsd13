@@ -13,7 +13,7 @@ Vagrant.configure("2") do |config|
       #!/usr/bin/env bash
       set -eux -o pipefail
       kldload nullfs
-      pkg install -y go git containerd runj
+      pkg install -y git containerd runj
       mkdir -p /vagrant/coverage /vagrant/.tmp/logs
     SHELL
   end
@@ -23,8 +23,8 @@ Vagrant.configure("2") do |config|
       #!/usr/bin/env bash
       set -eux -o pipefail
       cd /vagrant
-      go build -o /usr/bin/buildkitd ./cmd/buildkitd
-      type /usr/bin/buildkitd
+      install -m 755 buildkitd /usr/local/bin/buildkitd
+      type /usr/local/bin/buildkitd
       buildkitd --version
     SHELL
   end
@@ -34,8 +34,8 @@ Vagrant.configure("2") do |config|
       #!/usr/bin/env bash
       set -eux -o pipefail
       cd /vagrant
-      go build -o /usr/bin/buildctl ./cmd/buildctl
-      type /usr/bin/buildctl
+      install -m 755 buildctl /usr/local/bin/buildctl
+      type /usr/local/bin/buildctl
     SHELL
   end
 
@@ -53,7 +53,7 @@ Vagrant.configure("2") do |config|
       #!/usr/bin/env bash
       set -eux -o pipefail
       mkdir -p /run/buildkit
-      daemon -o /vagrant/.tmp/logs/buildkitd /usr/bin/buildkitd --addr=unix:///run/buildkit/buildkitd.sock
+      daemon -o /vagrant/.tmp/logs/buildkitd /usr/local/bin/buildkitd --addr=unix:///run/buildkit/buildkitd.sock
       sleep 3
     SHELL
   end
