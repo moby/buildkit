@@ -63,7 +63,7 @@ USAGE:
 
 OPTIONS:
    --output value, -o value    Define exports for build result, e.g. --output type=image,name=docker.io/username/image,push=true
-   --progress value            Set type of progress (auto, plain, tty). Use plain to show container output (default: "auto")
+   --progress value            Set type of progress (auto, plain, tty, rawjson). Use plain to show container output (default: "auto")
    --trace value               Path to trace file. Defaults to no tracing.
    --local value               Allow build access to the local directory
    --oci-layout value          Allow build access to the local OCI layout
