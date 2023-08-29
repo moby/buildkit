@@ -124,11 +124,13 @@ message ResolveImageConfigRequest {
 	int32 ResolverType = 5;
 	string SessionID = 6;
 	string StoreID = 7;
+	repeated moby.buildkit.v1.sourcepolicy.Policy SourcePolicies = 8;
 }
 
 message ResolveImageConfigResponse {
 	string Digest = 1 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
 	bytes Config = 2;
+	string Ref = 3;
 }
 
 message SolveRequest {

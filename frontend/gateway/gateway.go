@@ -142,10 +142,16 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 			return nil, err
 		}
 
-		dgst, config, err := llbBridge.ResolveImageConfig(ctx, reference.TagNameOnly(sourceRef).String(), llb.ResolveImageConfigOpt{})
+		ref, dgst, config, err := llbBridge.ResolveImageConfig(ctx, reference.TagNameOnly(sourceRef).String(), llb.ResolveImageConfigOpt{})
 		if err != nil {
 			return nil, err
 		}
+
+		sourceRef, err = reference.ParseNormalizedNamed(ref)
+		if err != nil {
+			return nil, err
+		}
+
 		mfstDigest = dgst
 
 		if err := json.Unmarshal(config, &img); err != nil {
@@ -540,7 +546,7 @@ func (lbf *llbBridgeForwarder) ResolveImageConfig(ctx context.Context, req *pb.R
 			OSFeatures:   p.OSFeatures,
 		}
 	}
-	dgst, dt, err := lbf.llbBridge.ResolveImageConfig(ctx, req.Ref, llb.ResolveImageConfigOpt{
+	ref, dgst, dt, err := lbf.llbBridge.ResolveImageConfig(ctx, req.Ref, llb.ResolveImageConfigOpt{
 		ResolverType: llb.ResolverType(req.ResolverType),
 		Platform:     platform,
 		ResolveMode:  req.ResolveMode,
@@ -549,11 +555,13 @@ func (lbf *llbBridgeForwarder) ResolveImageConfig(ctx context.Context, req *pb.R
 			SessionID: req.SessionID,
 			StoreID:   req.StoreID,
 		},
+		SourcePolicies: req.SourcePolicies,
 	})
 	if err != nil {
 		return nil, err
 	}
 	return &pb.ResolveImageConfigResponse{
+		Ref:    ref,
 		Digest: dgst,
 		Config: dt,
 	}, nil

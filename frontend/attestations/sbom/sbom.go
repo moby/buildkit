@@ -38,7 +38,7 @@ func CreateSBOMScanner(ctx context.Context, resolver llb.ImageMetaResolver, scan
 		return nil, nil
 	}
 
-	_, dt, err := resolver.ResolveImageConfig(ctx, scanner, llb.ResolveImageConfigOpt{})
+	scanner, _, dt, err := resolver.ResolveImageConfig(ctx, scanner, llb.ResolveImageConfigOpt{})
 	if err != nil {
 		return nil, err
 	}

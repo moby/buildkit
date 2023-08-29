@@ -478,7 +478,7 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (res *
 	return res, nil
 }
 
-func (c *grpcClient) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt) (digest.Digest, []byte, error) {
+func (c *grpcClient) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt) (string, digest.Digest, []byte, error) {
 	var p *opspb.Platform
 	if platform := opt.Platform; platform != nil {
 		p = &opspb.Platform{
@@ -490,18 +490,25 @@ func (c *grpcClient) ResolveImageConfig(ctx context.Context, ref string, opt llb
 		}
 	}
 	resp, err := c.client.ResolveImageConfig(ctx, &pb.ResolveImageConfigRequest{
-		ResolverType: int32(opt.ResolverType),
-		Ref:          ref,
-		Platform:     p,
-		ResolveMode:  opt.ResolveMode,
-		LogName:      opt.LogName,
-		SessionID:    opt.Store.SessionID,
-		StoreID:      opt.Store.StoreID,
+		ResolverType:   int32(opt.ResolverType),
+		Ref:            ref,
+		Platform:       p,
+		ResolveMode:    opt.ResolveMode,
+		LogName:        opt.LogName,
+		SessionID:      opt.Store.SessionID,
+		StoreID:        opt.Store.StoreID,
+		SourcePolicies: opt.SourcePolicies,
 	})
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
-	return resp.Digest, resp.Config, nil
+	newRef := resp.Ref
+	if newRef == "" {
+		// No ref returned, use the original one.
+		// This could occur if the version of buildkitd is too old.
+		newRef = ref
+	}
+	return newRef, resp.Digest, resp.Config, nil
 }
 
 func (c *grpcClient) BuildOpts() client.BuildOpts {

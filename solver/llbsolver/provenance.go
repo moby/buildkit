@@ -130,10 +130,10 @@ func (b *provenanceBridge) findByResult(rp solver.ResultProxy) (*resultWithBridg
 	return nil, false
 }
 
-func (b *provenanceBridge) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt) (dgst digest.Digest, config []byte, err error) {
-	dgst, config, err = b.llbBridge.ResolveImageConfig(ctx, ref, opt)
+func (b *provenanceBridge) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt) (resolvedRef string, dgst digest.Digest, config []byte, err error) {
+	ref, dgst, config, err = b.llbBridge.ResolveImageConfig(ctx, ref, opt)
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
 
 	b.images = append(b.images, provenance.ImageSource{
@@ -141,7 +141,7 @@ func (b *provenanceBridge) ResolveImageConfig(ctx context.Context, ref string, o
 		Platform: opt.Platform,
 		Digest:   dgst,
 	})
-	return dgst, config, nil
+	return ref, dgst, config, nil
 }
 
 func (b *provenanceBridge) Solve(ctx context.Context, req frontend.SolveRequest, sid string) (res *frontend.Result, err error) {

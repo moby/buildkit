@@ -430,14 +430,21 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 							prefix += platforms.Format(*platform) + " "
 						}
 						prefix += "internal]"
-						dgst, dt, err := metaResolver.ResolveImageConfig(ctx, d.stage.BaseName, llb.ResolveImageConfigOpt{
-							Platform:     platform,
-							ResolveMode:  opt.ImageResolveMode.String(),
-							LogName:      fmt.Sprintf("%s load metadata for %s", prefix, d.stage.BaseName),
-							ResolverType: llb.ResolverTypeRegistry,
+						mutRef, dgst, dt, err := metaResolver.ResolveImageConfig(ctx, d.stage.BaseName, llb.ResolveImageConfigOpt{
+							Platform:       platform,
+							ResolveMode:    opt.ImageResolveMode.String(),
+							LogName:        fmt.Sprintf("%s load metadata for %s", prefix, d.stage.BaseName),
+							ResolverType:   llb.ResolverTypeRegistry,
+							SourcePolicies: nil,
 						})
 						if err != nil {
 							return suggest.WrapError(errors.Wrap(err, origName), origName, append(allStageNames, commonImageNames()...), true)
+						}
+						if ref.String() != mutRef {
+							ref, err = reference.ParseNormalizedNamed(mutRef)
+							if err != nil {
+								return errors.Wrapf(err, "failed to parse ref %q", mutRef)
+							}
 						}
 						var img Image
 						if err := json.Unmarshal(dt, &img); err != nil {

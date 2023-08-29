@@ -82,8 +82,9 @@ func (is *Source) ID() string {
 	return srctypes.DockerImageScheme
 }
 
-func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt, sm *session.Manager, g session.Group) (digest.Digest, []byte, error) {
+func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt, sm *session.Manager, g session.Group) (string, digest.Digest, []byte, error) {
 	type t struct {
+		ref  string
 		dgst digest.Digest
 		dt   []byte
 	}
@@ -102,7 +103,7 @@ func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt llb.Re
 	case ResolverTypeRegistry:
 		rm, err = source.ParseImageResolveMode(opt.ResolveMode)
 		if err != nil {
-			return "", nil, err
+			return "", "", nil, err
 		}
 		rslvr = resolver.DefaultPool.GetResolver(is.RegistryHosts, ref, "pull", sm, g).WithImageStore(is.ImageStore, rm)
 	case ResolverTypeOCILayout:
@@ -111,17 +112,17 @@ func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt llb.Re
 	}
 	key += rm.String()
 	res, err := is.g.Do(ctx, key, func(ctx context.Context) (interface{}, error) {
-		dgst, dt, err := imageutil.Config(ctx, ref, rslvr, is.ContentStore, is.LeaseManager, opt.Platform)
+		newRef, dgst, dt, err := imageutil.Config(ctx, ref, rslvr, is.ContentStore, is.LeaseManager, opt.Platform, opt.SourcePolicies)
 		if err != nil {
 			return nil, err
 		}
-		return &t{dgst: dgst, dt: dt}, nil
+		return &t{dgst: dgst, dt: dt, ref: newRef}, nil
 	})
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
 	typed = res.(*t)
-	return typed.dgst, typed.dt, nil
+	return typed.ref, typed.dgst, typed.dt, nil
 }
 
 func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager, vtx solver.Vertex) (source.SourceInstance, error) {
