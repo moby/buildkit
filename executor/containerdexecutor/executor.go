@@ -5,8 +5,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -34,7 +32,7 @@ type containerdExecutor struct {
 	networkProviders map[pb.NetMode]network.Provider
 	cgroupParent     string
 	dnsConfig        *oci.DNSConfig
-	running          map[string]*jobDetails
+	running          map[string]*containerState
 	mu               sync.Mutex
 	apparmorProfile  string
 	selinux          bool
@@ -67,7 +65,7 @@ func New(client *containerd.Client, root, cgroup string, networkProviders map[pb
 		networkProviders: networkProviders,
 		cgroupParent:     cgroup,
 		dnsConfig:        dnsConfig,
-		running:          make(map[string]*jobDetails),
+		running:          make(map[string]*containerState),
 		apparmorProfile:  apparmorProfile,
 		selinux:          selinux,
 		traceSocket:      traceSocket,
@@ -75,7 +73,7 @@ func New(client *containerd.Client, root, cgroup string, networkProviders map[pb
 	}
 }
 
-type jobDetails struct {
+type containerState struct {
 	done chan error
 	// On linux the rootfsPath is used to ensure the CWD exists, to fetch user information
 	// and as a bind mount for the root FS of the container.
@@ -92,7 +90,7 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 
 	startedOnce := sync.Once{}
 	done := make(chan error, 1)
-	details := &jobDetails{
+	details := &containerState{
 		done: done,
 	}
 	w.mu.Lock()
@@ -112,12 +110,14 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 	}()
 
 	meta := process.Meta
-	releasers, resolvConf, hostsFile, err := w.prepareExecutionEnv(ctx, root, mounts, meta, details)
+	resolvConf, hostsFile, releasers, err := w.prepareExecutionEnv(ctx, root, mounts, meta, details)
 	if err != nil {
-		releasers()
 		return nil, err
 	}
-	defer releasers()
+
+	if releasers != nil {
+		defer releasers()
+	}
 
 	if err := w.ensureCWD(ctx, details, meta); err != nil {
 		return nil, err
@@ -137,12 +137,13 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 		bklog.G(ctx).Info("enabling HostNetworking")
 	}
 
-	spec, specReleasers, err := w.getOCISpec(ctx, id, resolvConf, hostsFile, namespace, mounts, meta, details)
+	spec, releaseSpec, err := w.createOCISpec(ctx, id, resolvConf, hostsFile, namespace, mounts, meta, details)
 	if err != nil {
-		specReleasers()
 		return nil, err
 	}
-	defer specReleasers()
+	if releaseSpec != nil {
+		defer releaseSpec()
+	}
 
 	container, err := w.client.NewContainer(ctx, id,
 		containerd.WithSpec(spec),
@@ -163,7 +164,7 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 		cioOpts = append(cioOpts, cio.WithTerminal)
 	}
 
-	taskOpts, err := w.getTaskOpts(ctx, details)
+	taskOpts, err := details.getTaskOpts()
 	if err != nil {
 		return nil, err
 	}
@@ -254,14 +255,10 @@ func (w *containerdExecutor) Exec(ctx context.Context, id string, process execut
 	}
 
 	proc.Terminal = meta.Tty
-
-	if runtime.GOOS == "windows" {
-		// On Windows passing in Args will lead to double escaping by hcsshim, which leads to errors.
-		// The recommendation is to use CommandLine.
-		proc.CommandLine = strings.Join(meta.Args, " ")
-	} else {
-		proc.Args = meta.Args
-	}
+	// setArgs will set the proper command line arguments for this process.
+	// On Windows, this will set the CommandLine field. On Linux it will set the
+	// Args field.
+	setArgs(proc, meta.Args)
 
 	if meta.Cwd != "" {
 		spec.Process.Cwd = meta.Cwd

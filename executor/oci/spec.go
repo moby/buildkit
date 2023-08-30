@@ -2,6 +2,7 @@ package oci
 
 import (
 	"context"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -224,7 +225,7 @@ type submounts struct {
 }
 
 func (s *submounts) subMount(m mount.Mount, subPath string) (mount.Mount, error) {
-	if filepath.ToSlash(filepath.Join("/", subPath)) == "/" {
+	if path.Join("/", subPath) == "/" {
 		return m, nil
 	}
 	if s.m == nil {

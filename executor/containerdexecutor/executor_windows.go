@@ -3,6 +3,7 @@ package containerdexecutor
 import (
 	"context"
 	"os"
+	"strings"
 
 	"github.com/containerd/containerd"
 	containerdoci "github.com/containerd/containerd/oci"
@@ -23,7 +24,7 @@ func getUserSpec(user, rootfsPath string) (specs.User, error) {
 	}, nil
 }
 
-func (w *containerdExecutor) prepareExecutionEnv(ctx context.Context, rootMount executor.Mount, mounts []executor.Mount, meta executor.Meta, details *jobDetails) (func(), string, string, error) {
+func (w *containerdExecutor) prepareExecutionEnv(ctx context.Context, rootMount executor.Mount, mounts []executor.Mount, meta executor.Meta, details *containerState) (string, string, func(), error) {
 	var releasers []func() error
 	releaseAll := func() {
 		for _, release := range releasers {
@@ -33,24 +34,20 @@ func (w *containerdExecutor) prepareExecutionEnv(ctx context.Context, rootMount 
 
 	mountable, err := rootMount.Src.Mount(ctx, false)
 	if err != nil {
-		return releaseAll, "", "", err
+		return "", "", releaseAll, err
 	}
 
 	rootMounts, release, err := mountable.Mount()
 	if err != nil {
-		return releaseAll, "", "", err
+		return "", "", releaseAll, err
 	}
 	details.rootMounts = rootMounts
 	releasers = append(releasers, release)
 
-	return releaseAll, "", "", nil
+	return "", "", releaseAll, nil
 }
 
-func (w *containerdExecutor) getTaskOpts(ctx context.Context, details *jobDetails) (containerd.NewTaskOpts, error) {
-	return containerd.WithRootFS(details.rootMounts), nil
-}
-
-func (w *containerdExecutor) ensureCWD(ctx context.Context, details *jobDetails, meta executor.Meta) (err error) {
+func (w *containerdExecutor) ensureCWD(ctx context.Context, details *containerState, meta executor.Meta) (err error) {
 	// TODO(gabriel-samfira): Use a snapshot?
 	identity, err := windows.ResolveUsernameToSID(ctx, w, details.rootMounts, meta.User)
 	if err != nil {
@@ -77,7 +74,7 @@ func (w *containerdExecutor) ensureCWD(ctx context.Context, details *jobDetails,
 	return nil
 }
 
-func (w *containerdExecutor) getOCISpec(ctx context.Context, id, resolvConf, hostsFile string, namespace network.Namespace, mounts []executor.Mount, meta executor.Meta, details *jobDetails) (*specs.Spec, func(), error) {
+func (w *containerdExecutor) createOCISpec(ctx context.Context, id, resolvConf, hostsFile string, namespace network.Namespace, mounts []executor.Mount, meta executor.Meta, details *containerState) (*specs.Spec, func(), error) {
 	var releasers []func()
 	releaseAll := func() {
 		for _, release := range releasers {
@@ -92,8 +89,17 @@ func (w *containerdExecutor) getOCISpec(ctx context.Context, id, resolvConf, hos
 	processMode := oci.ProcessSandbox // FIXME(AkihiroSuda)
 	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, "", "", namespace, "", processMode, nil, "", false, w.traceSocket, opts...)
 	if err != nil {
-		return nil, releaseAll, err
+		releaseAll()
+		return nil, nil, err
 	}
 	releasers = append(releasers, cleanup)
 	return spec, releaseAll, nil
+}
+
+func (d *containerState) getTaskOpts() (containerd.NewTaskOpts, error) {
+	return containerd.WithRootFS(d.rootMounts), nil
+}
+
+func setArgs(spec *specs.Process, args []string) {
+	spec.CommandLine = strings.Join(args, " ")
 }
