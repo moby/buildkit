@@ -29,6 +29,10 @@ const (
 	tracingSocketPath = "/dev/otel-grpc.sock"
 )
 
+func withProcessArgs(args ...string) oci.SpecOpts {
+	return oci.WithProcessArgs(args...)
+}
+
 func generateMountOpts(resolvConf, hostsFile string) ([]oci.SpecOpts, error) {
 	return []oci.SpecOpts{
 		// https://github.com/moby/buildkit/issues/429

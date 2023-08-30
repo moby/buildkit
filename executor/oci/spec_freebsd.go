@@ -8,6 +8,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+func withProcessArgs(args ...string) oci.SpecOpts {
+	return oci.WithProcessArgs(args...)
+}
+
 func generateMountOpts(resolvConf, hostsFile string) ([]oci.SpecOpts, error) {
 	return nil, nil
 }
