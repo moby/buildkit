@@ -428,6 +428,9 @@ github.com/davecgh/go-spew/spew
 # github.com/dimchansky/utfbom v1.1.1
 ## explicit
 github.com/dimchansky/utfbom
+# github.com/distribution/reference v0.5.0
+## explicit; go 1.20
+github.com/distribution/reference
 # github.com/docker/cli v24.0.5+incompatible
 ## explicit
 github.com/docker/cli/cli/config
@@ -435,15 +438,12 @@ github.com/docker/cli/cli/config/configfile
 github.com/docker/cli/cli/config/credentials
 github.com/docker/cli/cli/config/types
 github.com/docker/cli/cli/connhelper/commandconn
-# github.com/docker/distribution v2.8.2+incompatible
-## explicit
-github.com/docker/distribution/digestset
-github.com/docker/distribution/reference
-# github.com/docker/docker v24.0.0-rc.2.0.20230723142919-afd4805278b4+incompatible
+# github.com/docker/docker v24.0.0-rc.2.0.20230905130451-032797ea4bcb+incompatible
 ## explicit
 github.com/docker/docker/api
 github.com/docker/docker/api/types
 github.com/docker/docker/api/types/blkiodev
+github.com/docker/docker/api/types/checkpoint
 github.com/docker/docker/api/types/container
 github.com/docker/docker/api/types/events
 github.com/docker/docker/api/types/filters
@@ -460,7 +460,9 @@ github.com/docker/docker/api/types/versions
 github.com/docker/docker/api/types/volume
 github.com/docker/docker/client
 github.com/docker/docker/errdefs
+github.com/docker/docker/image/spec/specs-go/v1
 github.com/docker/docker/internal/mounttree
+github.com/docker/docker/internal/multierror
 github.com/docker/docker/internal/unshare
 github.com/docker/docker/libnetwork/resolvconf
 github.com/docker/docker/pkg/archive
