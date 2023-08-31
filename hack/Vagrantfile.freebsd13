@@ -23,7 +23,7 @@ Vagrant.configure("2") do |config|
       #!/usr/bin/env bash
       set -eux -o pipefail
       cd /vagrant
-      install -m 755 buildkitd /usr/local/bin/buildkitd
+      install -m 755 bin/buildkitd /usr/local/bin/buildkitd
       type /usr/local/bin/buildkitd
       buildkitd --version
     SHELL
@@ -34,7 +34,7 @@ Vagrant.configure("2") do |config|
       #!/usr/bin/env bash
       set -eux -o pipefail
       cd /vagrant
-      install -m 755 buildctl /usr/local/bin/buildctl
+      install -m 755 bin/buildctl /usr/local/bin/buildctl
       type /usr/local/bin/buildctl
     SHELL
   end
