@@ -211,8 +211,16 @@ func docopy(ctx context.Context, src, dest string, action pb.FileActionCopy, u *
 	return nil
 }
 
+// NewFileOpBackend returns a new file operation backend. The executor is currently only used for Windows,
+// and it is used to construct the readUserFn field set in the returned Backend.
+func NewFileOpBackend(exec executor.Executor) *Backend {
+	return &Backend{
+		readUserFn: getReadUserFn(exec),
+	}
+}
+
 type Backend struct {
-	Executor executor.Executor
+	readUserFn func(chopt *pb.ChownOpt, mu, mg fileoptypes.Mount) (*copy.User, error)
 }
 
 func (fb *Backend) Mkdir(ctx context.Context, m, user, group fileoptypes.Mount, action pb.FileActionMkDir) error {
@@ -228,7 +236,8 @@ func (fb *Backend) Mkdir(ctx context.Context, m, user, group fileoptypes.Mount, 
 	}
 	defer lm.Unmount()
 
-	u, err := readUser(action.Owner, user, group, fb.Executor)
+	// u, err := readUser(action.Owner, user, group, fb.Executor)
+	u, err := fb.readUserFn(action.Owner, user, group)
 	if err != nil {
 		return err
 	}
@@ -249,7 +258,7 @@ func (fb *Backend) Mkfile(ctx context.Context, m, user, group fileoptypes.Mount,
 	}
 	defer lm.Unmount()
 
-	u, err := readUser(action.Owner, user, group, fb.Executor)
+	u, err := fb.readUserFn(action.Owner, user, group)
 	if err != nil {
 		return err
 	}
@@ -297,7 +306,7 @@ func (fb *Backend) Copy(ctx context.Context, m1, m2, user, group fileoptypes.Mou
 	}
 	defer lm2.Unmount()
 
-	u, err := readUser(action.Owner, user, group, fb.Executor)
+	u, err := fb.readUserFn(action.Owner, user, group)
 	if err != nil {
 		return err
 	}

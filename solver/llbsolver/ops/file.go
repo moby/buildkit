@@ -167,7 +167,9 @@ func (f *fileOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 		inpRefs = append(inpRefs, workerRef.ImmutableRef)
 	}
 
-	fs := NewFileOpSolver(f.w, &file.Backend{Executor: f.w.Executor()}, f.refManager)
+	backend := file.NewFileOpBackend(f.w.Executor())
+
+	fs := NewFileOpSolver(f.w, backend, f.refManager)
 	outs, err := fs.Solve(ctx, inpRefs, f.op.Actions, g)
 	if err != nil {
 		return nil, err

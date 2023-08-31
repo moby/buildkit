@@ -14,7 +14,11 @@ import (
 	copy "github.com/tonistiigi/fsutil/copy"
 )
 
-func readUser(chopt *pb.ChownOpt, mu, mg fileoptypes.Mount, exec executor.Executor) (*copy.User, error) {
+func getReadUserFn(exec executor.Executor) func(chopt *pb.ChownOpt, mu, mg fileoptypes.Mount) (*copy.User, error) {
+	return readUser
+}
+
+func readUser(chopt *pb.ChownOpt, mu, mg fileoptypes.Mount) (*copy.User, error) {
 	if chopt == nil {
 		return nil, nil
 	}
