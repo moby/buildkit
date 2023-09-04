@@ -90,7 +90,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		return nil, errors.New("invalid with def and cb")
 	}
 
-	syncedDirs, err := prepareSyncedDirs(def, opt.LocalDirs)
+	syncedDirs, err := prepareSyncedFiles(def, opt.LocalDirs)
 	if err != nil {
 		return nil, err
 	}
@@ -361,26 +361,32 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	return res, nil
 }
 
-func prepareSyncedDirs(def *llb.Definition, localDirs map[string]string) (filesync.StaticDirSource, error) {
-	for _, d := range localDirs {
-		fi, err := os.Stat(d)
+func prepareSyncedFiles(def *llb.Definition, localDirs map[string]string) (filesync.StaticDirSource, error) {
+	localFiles := make(map[string]fsutil.FS)
+	for name, d := range localDirs {
+		fs, err := fsutil.NewFS(d)
 		if err != nil {
-			return nil, errors.Wrapf(err, "could not find %s", d)
+			return nil, err
 		}
-		if !fi.IsDir() {
-			return nil, errors.Errorf("%s not a directory", d)
-		}
+		localFiles[name] = fs
 	}
+
 	resetUIDAndGID := func(p string, st *fstypes.Stat) fsutil.MapResult {
 		st.Uid = 0
 		st.Gid = 0
 		return fsutil.MapResultKeep
 	}
 
-	dirs := make(filesync.StaticDirSource, len(localDirs))
+	result := make(filesync.StaticDirSource, len(localFiles))
 	if def == nil {
-		for name, d := range localDirs {
-			dirs[name] = filesync.SyncedDir{Dir: d, Map: resetUIDAndGID}
+		for name, fs := range localFiles {
+			fs, err := fsutil.NewFilterFS(fs, &fsutil.FilterOpt{
+				Map: resetUIDAndGID,
+			})
+			if err != nil {
+				return nil, err
+			}
+			result[name] = fs
 		}
 	} else {
 		for _, dt := range def.Def {
@@ -391,16 +397,22 @@ func prepareSyncedDirs(def *llb.Definition, localDirs map[string]string) (filesy
 			if src := op.GetSource(); src != nil {
 				if strings.HasPrefix(src.Identifier, "local://") {
 					name := strings.TrimPrefix(src.Identifier, "local://")
-					d, ok := localDirs[name]
+					fs, ok := localFiles[name]
 					if !ok {
 						return nil, errors.Errorf("local directory %s not enabled", name)
 					}
-					dirs[name] = filesync.SyncedDir{Dir: d, Map: resetUIDAndGID}
+					fs, err := fsutil.NewFilterFS(fs, &fsutil.FilterOpt{
+						Map: resetUIDAndGID,
+					})
+					if err != nil {
+						return nil, err
+					}
+					result[name] = fs
 				}
 			}
 		}
 	}
-	return dirs, nil
+	return result, nil
 }
 
 func defaultSessionName() string {
