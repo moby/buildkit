@@ -92,15 +92,27 @@ func (sp *fsSyncProvider) handle(method string, stream grpc.ServerStream) (retEr
 		dirName = name[0]
 	}
 
+	excludes := opts[keyExcludePatterns]
+	includes := opts[keyIncludePatterns]
+	followPaths := opts[keyFollowPaths]
+
 	dir, ok := sp.dirs.LookupDir(dirName)
 	if !ok {
 		return InvalidSessionError{status.Errorf(codes.NotFound, "no access allowed to dir %q", dirName)}
 	}
-
-	excludes := opts[keyExcludePatterns]
-	includes := opts[keyIncludePatterns]
-
-	followPaths := opts[keyFollowPaths]
+	fs, err := fsutil.NewFS(dir.Dir)
+	if err != nil {
+		return err
+	}
+	fs, err = fsutil.NewFilterFS(fs, &fsutil.FilterOpt{
+		ExcludePatterns: excludes,
+		IncludePatterns: includes,
+		FollowPaths:     followPaths,
+		Map:             dir.Map,
+	})
+	if err != nil {
+		return err
+	}
 
 	var progress progressCb
 	if sp.p != nil {
@@ -113,12 +125,7 @@ func (sp *fsSyncProvider) handle(method string, stream grpc.ServerStream) (retEr
 		doneCh = sp.doneCh
 		sp.doneCh = nil
 	}
-	err := pr.sendFn(stream, fsutil.NewFS(dir.Dir, &fsutil.WalkOpt{
-		ExcludePatterns: excludes,
-		IncludePatterns: includes,
-		FollowPaths:     followPaths,
-		Map:             dir.Map,
-	}), progress)
+	err = pr.sendFn(stream, fs, progress)
 	if doneCh != nil {
 		if err != nil {
 			doneCh <- err
