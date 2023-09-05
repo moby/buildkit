@@ -44,7 +44,7 @@ jobs:
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         name: Expose GitHub Runtime
         uses: crazy-max/ghaction-github-runtime@v2
@@ -91,7 +91,7 @@ jobs:
             });
       -
         name: Build
-        uses: docker/bake-action@v2
+        uses: docker/bake-action@v3
         with:
           targets: integration-tests-base
           set: |
@@ -126,7 +126,7 @@ jobs:
           done
       -
         name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         name: Expose GitHub Runtime
         uses: crazy-max/ghaction-github-runtime@v2

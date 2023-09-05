@@ -27,7 +27,7 @@ jobs:
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         name: Matrix
         id: targets
@@ -45,7 +45,7 @@ jobs:
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -55,6 +55,6 @@ jobs:
           buildkitd-flags: --debug
       -
         name: Validate
-        uses: docker/bake-action@v2
+        uses: docker/bake-action@v3
         with:
           targets: ${{ matrix.target }}
