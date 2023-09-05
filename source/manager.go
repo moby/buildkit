@@ -32,7 +32,7 @@ type SourceInstance interface {
 	// CacheKey returns the cache key for the instance.
 	CacheKey(ctx context.Context, g session.Group, index int) (key, pin string, opts solver.CacheOpts, done bool, err error)
 
-	// Snapshot creates a cache ref for the instance.
+	// Snapshot creates a cache ref for the instance. May return a nil ref if source points to empty content, e.g. image without any layers.
 	Snapshot(ctx context.Context, g session.Group) (cache.ImmutableRef, error)
 }
 
