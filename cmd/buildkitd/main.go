@@ -285,7 +285,7 @@ func main() {
 		// Stop if we are registering or unregistering against Windows SCM.
 		stop, err := registerUnregisterService(cfg.Root)
 		if err != nil {
-			logrus.Fatal(err)
+			bklog.L.Fatal(err)
 		}
 		if stop {
 			return nil
@@ -332,7 +332,7 @@ func main() {
 
 		// Launch as a Windows Service if necessary
 		if err := launchService(server); err != nil {
-			logrus.Fatal(err)
+			bklog.L.Fatal(err)
 		}
 
 		errCh := make(chan error, 1)
