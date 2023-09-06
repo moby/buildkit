@@ -1,10 +1,11 @@
-package file
+package ops
 
 import (
 	"context"
 
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/executor"
+	"github.com/moby/buildkit/solver/llbsolver/file"
 	"github.com/moby/buildkit/solver/llbsolver/ops/fileoptypes"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/windows"
@@ -29,11 +30,16 @@ func readUser(chopt *pb.ChownOpt, mu, mg fileoptypes.Mount, exec executor.Execut
 			if mu == nil {
 				return nil, errors.Errorf("invalid missing user mount")
 			}
-			mmu, ok := mu.(*Mount)
+			mmu, ok := mu.(*file.Mount)
 			if !ok {
 				return nil, errors.Errorf("invalid mount type %T", mu)
 			}
-			rootMounts, release, err := mmu.m.Mount()
+			mountable := mmu.Mountable()
+			if mountable == nil {
+				return nil, errors.Errorf("invalid mountable")
+			}
+
+			rootMounts, release, err := mountable.Mount()
 			if err != nil {
 				return nil, err
 			}

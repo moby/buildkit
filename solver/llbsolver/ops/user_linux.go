@@ -1,4 +1,4 @@
-package file
+package ops
 
 import (
 	"os"
@@ -7,6 +7,7 @@ import (
 	"github.com/containerd/continuity/fs"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/snapshot"
+	"github.com/moby/buildkit/solver/llbsolver/file"
 	"github.com/moby/buildkit/solver/llbsolver/ops/fileoptypes"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/opencontainers/runc/libcontainer/user"
@@ -29,11 +30,16 @@ func readUser(chopt *pb.ChownOpt, mu, mg fileoptypes.Mount) (*copy.User, error) 
 			if mu == nil {
 				return nil, errors.Errorf("invalid missing user mount")
 			}
-			mmu, ok := mu.(*Mount)
+			mmu, ok := mu.(*file.Mount)
 			if !ok {
 				return nil, errors.Errorf("invalid mount type %T", mu)
 			}
-			lm := snapshot.LocalMounter(mmu.m)
+			mountable := mmu.Mountable()
+			if mountable == nil {
+				return nil, errors.Errorf("invalid mountable")
+			}
+
+			lm := snapshot.LocalMounter(mountable)
 			dir, err := lm.Mount()
 			if err != nil {
 				return nil, err
@@ -83,11 +89,16 @@ func readUser(chopt *pb.ChownOpt, mu, mg fileoptypes.Mount) (*copy.User, error) 
 			if mg == nil {
 				return nil, errors.Errorf("invalid missing group mount")
 			}
-			mmg, ok := mg.(*Mount)
+			mmg, ok := mg.(*file.Mount)
 			if !ok {
 				return nil, errors.Errorf("invalid mount type %T", mg)
 			}
-			lm := snapshot.LocalMounter(mmg.m)
+			mountable := mmg.Mountable()
+			if mountable == nil {
+				return nil, errors.Errorf("invalid mountable")
+			}
+
+			lm := snapshot.LocalMounter(mountable)
 			dir, err := lm.Mount()
 			if err != nil {
 				return nil, err

@@ -1,7 +1,7 @@
 //go:build !linux && !windows
 // +build !linux,!windows
 
-package file
+package ops
 
 import (
 	"github.com/moby/buildkit/executor"

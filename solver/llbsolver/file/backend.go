@@ -11,7 +11,6 @@ import (
 
 	"github.com/containerd/continuity/fs"
 	"github.com/docker/docker/pkg/idtools"
-	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/llbsolver/ops/fileoptypes"
 	"github.com/moby/buildkit/solver/pb"
@@ -213,14 +212,16 @@ func docopy(ctx context.Context, src, dest string, action pb.FileActionCopy, u *
 
 // NewFileOpBackend returns a new file operation backend. The executor is currently only used for Windows,
 // and it is used to construct the readUserFn field set in the returned Backend.
-func NewFileOpBackend(exec executor.Executor) *Backend {
+func NewFileOpBackend(readUserFn ReadUserCallback) *Backend {
 	return &Backend{
-		readUserFn: getReadUserFn(exec),
+		readUserFn: readUserFn,
 	}
 }
 
+type ReadUserCallback func(chopt *pb.ChownOpt, mu, mg fileoptypes.Mount) (*copy.User, error)
+
 type Backend struct {
-	readUserFn func(chopt *pb.ChownOpt, mu, mg fileoptypes.Mount) (*copy.User, error)
+	readUserFn ReadUserCallback
 }
 
 func (fb *Backend) Mkdir(ctx context.Context, m, user, group fileoptypes.Mount, action pb.FileActionMkDir) error {
