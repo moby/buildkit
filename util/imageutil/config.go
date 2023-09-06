@@ -94,12 +94,14 @@ func Config(ctx context.Context, str string, resolver remotes.Resolver, cache Co
 			t  string
 			ok bool
 		)
-		t, newRef, ok := strings.Cut(op.GetSource().GetIdentifier(), "://")
+
+		sid := op.GetSource().GetIdentifier()
+		t, newRef, ok := strings.Cut(sid, "://")
 		if !ok {
-			return "", "", nil, errors.Errorf("could not parse ref: %s", op.GetSource().GetIdentifier())
+			return "", "", nil, errors.Errorf("could not parse ref: %s", sid)
 		}
 		if ok && t != srctypes.DockerImageScheme {
-			return "", "", nil, &ResolveToNonImageError{Ref: str, Updated: newRef}
+			return "", "", nil, &ResolveToNonImageError{Ref: str, Updated: sid}
 		}
 		ref, err = reference.Parse(newRef)
 		if err != nil {

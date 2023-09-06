@@ -31,7 +31,8 @@ func (bc *Client) namedContext(ctx context.Context, name string, nameWithPlatfor
 
 func (bc *Client) namedContextRecursive(ctx context.Context, name string, nameWithPlatform string, opt ContextOpt, count int) (*llb.State, *image.Image, error) {
 	opts := bc.bopts.Opts
-	v, ok := opts[contextPrefix+nameWithPlatform]
+	contextKey := contextPrefix + nameWithPlatform
+	v, ok := opts[contextKey]
 	if !ok {
 		return nil, nil, nil
 	}
@@ -80,7 +81,13 @@ func (bc *Client) namedContextRecursive(ctx context.Context, name string, nameWi
 		if err != nil {
 			e := &imageutil.ResolveToNonImageError{}
 			if errors.As(err, &e) {
-				return bc.namedContextRecursive(ctx, e.Updated, name, opt, count+1)
+				before, after, ok := strings.Cut(e.Updated, "://")
+				if !ok {
+					return nil, nil, errors.Errorf("could not parse ref: %s", e.Updated)
+				}
+
+				bc.bopts.Opts[contextKey] = before + ":" + after
+				return bc.namedContextRecursive(ctx, name, nameWithPlatform, opt, count+1)
 			}
 			return nil, nil, err
 		}
