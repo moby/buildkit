@@ -47,6 +47,7 @@ import (
 	"github.com/moby/buildkit/session/upload/uploadprovider"
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
+	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/httpserver"
@@ -178,6 +179,7 @@ var allTests = integration.TestFuncs(
 	testCopyUnicodePath,
 	testFrontendDeduplicateSources,
 	testDuplicateLayersProvenance,
+	testSourcePolicyWithNamedContext,
 )
 
 // Tests that depend on the `security.*` entitlements
@@ -7018,6 +7020,56 @@ COPY test+aou.txt /
 	dt, err = os.ReadFile(filepath.Join(destDir.Name, "test+aou.txt"))
 	require.NoError(t, err)
 	require.Equal(t, "baz", string(dt))
+}
+
+func testSourcePolicyWithNamedContext(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dockerfile := []byte(`
+	FROM scratch AS replace
+
+	FROM scratch
+	COPY --from=replace /foo /
+	`)
+
+	replaceContext := integration.Tmpdir(t, fstest.CreateFile("foo", []byte("foo"), 0644))
+	mainContext := integration.Tmpdir(t, fstest.CreateFile("Dockerfile", dockerfile, 0600))
+
+	out := t.TempDir()
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{Type: client.ExporterLocal, OutputDir: out},
+		},
+		FrontendAttrs: map[string]string{
+			"context:replace": "docker-image:docker.io/library/alpine:latest",
+		},
+		LocalDirs: map[string]string{
+			dockerui.DefaultLocalNameDockerfile: mainContext,
+			dockerui.DefaultLocalNameContext:    mainContext,
+			"test":                              replaceContext,
+		},
+		SourcePolicy: &spb.Policy{
+			Rules: []*spb.Rule{
+				{
+					Action: spb.PolicyAction_CONVERT,
+					Selector: &spb.Selector{
+						Identifier: "docker-image://docker.io/library/alpine:latest",
+					},
+					Updates: &spb.Update{
+						Identifier: "local://test",
+					},
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(out, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, "foo", string(dt))
 }
 
 func runShell(dir string, cmds ...string) error {
