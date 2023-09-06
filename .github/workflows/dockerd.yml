@@ -42,7 +42,7 @@ jobs:
       -
         name: Build
         if: ${{ env.DOCKER_BUILD == 'true' }}
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v4
         with:
           context: ${{ env.DOCKER_VERSION }}
           target: binary
@@ -93,7 +93,7 @@ jobs:
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         name: Expose GitHub Runtime
         uses: crazy-max/ghaction-github-runtime@v2
