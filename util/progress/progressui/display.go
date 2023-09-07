@@ -125,6 +125,8 @@ const (
 	// AutoMode will choose TtyMode or PlainMode depending on if the output is
 	// a tty.
 	AutoMode DisplayMode = "auto"
+	// QuietMode discards all output.
+	QuietMode DisplayMode = "quiet"
 	// TtyMode enforces the output is a tty and will otherwise cause an error if it isn't.
 	TtyMode DisplayMode = "tty"
 	// PlainMode is the human-readable plain text output. This mode is not meant to be read
@@ -152,10 +154,23 @@ func NewDisplay(out console.File, mode DisplayMode, opts ...DisplayOpt) (Display
 		return newPlainDisplay(out, opts...), nil
 	case RawJSONMode:
 		return newRawJSONDisplay(out, opts...), nil
+	case QuietMode:
+		return newDiscardDisplay(), nil
 	default:
 		return Display{}, errors.Errorf("invalid progress mode %s", mode)
 	}
 }
+
+type discardDisplay struct{}
+
+func newDiscardDisplay() Display {
+	return Display{disp: &discardDisplay{}}
+}
+
+func (d *discardDisplay) init(displayLimiter *rate.Limiter) {}
+func (d *discardDisplay) update(ss *client.SolveStatus)     {}
+func (d *discardDisplay) refresh()                          {}
+func (d *discardDisplay) done()                             {}
 
 type consoleDisplay struct {
 	t              *trace
