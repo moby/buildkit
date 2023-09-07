@@ -22,6 +22,11 @@ insecure-entitlements = [ "network.host", "security.insecure" ]
   # log formatter: json or text
   format = "text"
 
+[dns]
+  nameservers=["1.1.1.1","8.8.8.8"]
+  options=["edns0"]
+  searchDomains=["example.com"]
+
 [grpc]
   address = [ "tcp://0.0.0.0:1234" ]
   # debugAddress is address for attaching go profiles and debuggers.
