@@ -16,8 +16,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 	"go.opentelemetry.io/otel/trace"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/backoff"
 )
 
 // ResolveClient resolves a client from CLI args
@@ -68,12 +66,6 @@ func ResolveClient(c *cli.Context) (*client.Client, error) {
 	}
 
 	opts := []client.ClientOpt{client.WithFailFast()}
-
-	backoffConfig := backoff.DefaultConfig
-	backoffConfig.MaxDelay = 1 * time.Second
-	opts = append(opts, client.WithGRPCDialOption(
-		grpc.WithConnectParams(grpc.ConnectParams{Backoff: backoffConfig}),
-	))
 
 	ctx := CommandContext(c)
 
