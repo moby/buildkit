@@ -1152,7 +1152,12 @@ func makeTmpLabelsStargzMode(labels map[string]string, s session.Group) (fields 
 func (sr *immutableRef) unlazy(ctx context.Context, dhs DescHandlers, pg progress.Controller, s session.Group, topLevel bool) error {
 	_, err := g.Do(ctx, sr.ID()+"-unlazy", func(ctx context.Context) (_ struct{}, rerr error) {
 		if _, err := sr.cm.Snapshotter.Stat(ctx, sr.getSnapshotID()); err == nil {
-			return struct{}{}, nil
+			if blob := sr.getBlob(); blob == "" {
+				return struct{}{}, nil
+			}
+			if _, err := sr.cm.ContentStore.Info(ctx, sr.getBlob()); err == nil {
+				return struct{}{}, nil
+			}
 		}
 
 		switch sr.kind() {
