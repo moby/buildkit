@@ -178,6 +178,7 @@ Currently, the following high-level languages has been implemented for LLB:
 -   [envd (starlark)](https://github.com/tensorchord/envd/)
 -   [Blubber](https://gitlab.wikimedia.org/repos/releng/blubber)
 -   [Bass](https://github.com/vito/bass)
+-   [kraft.yaml (Unikraft)](https://github.com/unikraft/kraftkit/tree/staging/tools/dockerfile-llb-frontend)
 -   (open a PR to add your own language)
 
 ### Exploring Dockerfiles
