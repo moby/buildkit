@@ -152,7 +152,7 @@ func (ap *authProvider) Credentials(ctx context.Context, req *auth.CredentialsRe
 		defer ap.mu.Unlock()
 		_, ok := ap.loggerCache[req.Host]
 		ap.loggerCache[req.Host] = struct{}{}
-		if !ok {
+		if !ok && ap.logger != nil {
 			return resp, progresswriter.Wrap(fmt.Sprintf("[auth] sharing credentials for %s", req.Host), ap.logger, func(progresswriter.SubLogger) error {
 				return err
 			})
