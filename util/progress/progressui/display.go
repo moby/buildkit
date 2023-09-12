@@ -137,14 +137,16 @@ const (
 	RawJSONMode DisplayMode = "rawjson"
 )
 
-// NewDisplay constructs a Display that outputs to the given console.File with the given DisplayMode.
+// NewDisplay constructs a Display that outputs to the given io.Writer with the given DisplayMode.
 //
-// This method will return an error when the DisplayMode is invalid or if TtyMode is used but the console.File
+// This method will return an error when the DisplayMode is invalid or if TtyMode is used but the io.Writer
 // does not refer to a tty. AutoMode will choose TtyMode or PlainMode depending on if the output is a tty or not.
-func NewDisplay(out console.File, mode DisplayMode, opts ...DisplayOpt) (Display, error) {
+//
+// For TtyMode to work, the io.Writer should also implement console.File.
+func NewDisplay(out io.Writer, mode DisplayMode, opts ...DisplayOpt) (Display, error) {
 	switch mode {
 	case AutoMode, TtyMode, DefaultMode:
-		if c, err := console.ConsoleFromFile(out); err == nil {
+		if c, err := consoleFromWriter(out); err == nil {
 			return newConsoleDisplay(c, opts...), nil
 		} else if mode == "tty" {
 			return Display{}, errors.Wrap(err, "failed to get console")
@@ -159,6 +161,15 @@ func NewDisplay(out console.File, mode DisplayMode, opts ...DisplayOpt) (Display
 	default:
 		return Display{}, errors.Errorf("invalid progress mode %s", mode)
 	}
+}
+
+// consoleFromWriter retrieves a console.Console from an io.Writer.
+func consoleFromWriter(out io.Writer) (console.Console, error) {
+	f, ok := out.(console.File)
+	if !ok {
+		return nil, errors.New("output is not a file")
+	}
+	return console.ConsoleFromFile(f)
 }
 
 type discardDisplay struct{}
