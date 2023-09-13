@@ -233,7 +233,7 @@ message Descriptor {
 message BuildResultInfo {
 	Descriptor ResultDeprecated = 1;
 	repeated Descriptor Attestations = 2;
-	map<string, Descriptor> Results = 3;
+	map<int64, Descriptor> Results = 3;
 }
 
 // Exporter describes the output exporter
@@ -242,6 +242,4 @@ message Exporter {
 	string Type = 1;
 	// Attrs specifies exporter configuration
 	map<string, string> Attrs = 2;
-	// ID identifies the exporter in the wire protocol
-	string id = 3 [(gogoproto.customname) = "ID"];
 }

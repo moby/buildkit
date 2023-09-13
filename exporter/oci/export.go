@@ -58,7 +58,7 @@ func New(opt Opt) (exporter.Exporter, error) {
 	return im, nil
 }
 
-func (e *imageExporter) Resolve(ctx context.Context, id string, opt map[string]string) (exporter.ExporterInstance, error) {
+func (e *imageExporter) Resolve(ctx context.Context, id int, opt map[string]string) (exporter.ExporterInstance, error) {
 	i := &imageExporterInstance{
 		imageExporter: e,
 		id:            id,
@@ -100,14 +100,14 @@ func (e *imageExporter) Resolve(ctx context.Context, id string, opt map[string]s
 
 type imageExporterInstance struct {
 	*imageExporter
-	id string
+	id int
 
 	opts containerimage.ImageCommitOpts
 	tar  bool
 	meta map[string][]byte
 }
 
-func (e *imageExporterInstance) ID() string {
+func (e *imageExporterInstance) ID() int {
 	return e.id
 }
 

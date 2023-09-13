@@ -2606,8 +2606,23 @@ func testMultipleExporters(t *testing.T, sb integration.Sandbox) {
 		imageExporter = "moby"
 	}
 
+	ref := identity.NewID()
 	resp, err := c.Solve(sb.Context(), def, SolveOpt{
+		Ref: ref,
 		Exports: []ExportEntry{
+			{
+				Type: imageExporter,
+				Attrs: map[string]string{
+					"name": target1,
+				},
+			},
+			{
+				Type: imageExporter,
+				Attrs: map[string]string{
+					"name":           target2,
+					"oci-mediatypes": "true",
+				},
+			},
 			// Ensure that multiple local exporter destinations are written properly
 			{
 				Type:      ExporterLocal,
@@ -2626,21 +2641,34 @@ func testMultipleExporters(t *testing.T, sb integration.Sandbox) {
 				Type:   ExporterTar,
 				Output: fixedWriteCloser(outW2),
 			},
-			{
-				Type: imageExporter,
-				Attrs: map[string]string{
-					"name": strings.Join([]string{target1, target2}, ","),
-				},
-			},
 		},
 	}, nil)
 	require.NoError(t, err)
 
-	require.Equal(t, resp.ExporterResponse["image.name"], target1+","+target2)
+	require.Equal(t, resp.ExporterResponse["image.name"], target2)
 	require.FileExists(t, filepath.Join(destDir, "out.tar"))
 	require.FileExists(t, filepath.Join(destDir, "out2.tar"))
 	require.FileExists(t, filepath.Join(destDir, "foo.txt"))
 	require.FileExists(t, filepath.Join(destDir2, "foo.txt"))
+
+	history, err := c.ControlClient().ListenBuildHistory(sb.Context(), &controlapi.BuildHistoryRequest{
+		Ref:       ref,
+		EarlyExit: true,
+	})
+	require.NoError(t, err)
+	for {
+		ev, err := history.Recv()
+		if err != nil {
+			require.Equal(t, io.EOF, err)
+			break
+		}
+		require.Equal(t, ref, ev.Record.Ref)
+
+		require.Len(t, ev.Record.Result.Results, 2)
+		require.Equal(t, images.MediaTypeDockerSchema2Manifest, ev.Record.Result.Results[0].MediaType)
+		require.Equal(t, ocispecs.MediaTypeImageManifest, ev.Record.Result.Results[1].MediaType)
+		require.Equal(t, ev.Record.Result.Results[0], ev.Record.Result.ResultDeprecated)
+	}
 }
 
 func testOCIExporter(t *testing.T, sb integration.Sandbox) {

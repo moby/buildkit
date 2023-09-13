@@ -15,11 +15,11 @@ type Source = result.Result[cache.ImmutableRef]
 type Attestation = result.Attestation[cache.ImmutableRef]
 
 type Exporter interface {
-	Resolve(context.Context, string, map[string]string) (ExporterInstance, error)
+	Resolve(context.Context, int, map[string]string) (ExporterInstance, error)
 }
 
 type ExporterInstance interface {
-	ID() string
+	ID() int
 	Name() string
 	Config() *Config
 	Export(ctx context.Context, src *Source, inlineCache exptypes.InlineCache, sessionID string) (map[string]string, DescriptorReference, error)

@@ -149,7 +149,7 @@ func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 	return s.bridge(b)
 }
 
-func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend.SolveRequest, exp ExporterRequest, j *solver.Job, usage *resources.SysSampler) (func(*Result, map[string]exporter.DescriptorReference, error) error, error) {
+func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend.SolveRequest, exp ExporterRequest, j *solver.Job, usage *resources.SysSampler) (func(*Result, []exporter.DescriptorReference, error) error, error) {
 	var stopTrace func() []tracetest.SpanStub
 
 	if s := trace.SpanFromContext(ctx); s.SpanContext().IsValid() {
@@ -182,7 +182,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 		return nil, err
 	}
 
-	return func(res *Result, descrefs map[string]exporter.DescriptorReference, err error) error {
+	return func(res *Result, descrefs []exporter.DescriptorReference, err error) error {
 		en := time.Now()
 		rec.CompletedAt = &en
 
@@ -314,16 +314,16 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 			return j.Status(ctx2, ch)
 		})
 
-		for k, descref := range descrefs {
-			k, descref := k, descref
+		setDeprecated := true
+		for i, descref := range descrefs {
+			i, descref := i, descref
+			if descref == nil {
+				continue
+			}
+			deprecate := setDeprecated
+			setDeprecated = false
 			eg.Go(func() error {
 				mu.Lock()
-				if rec.Result == nil {
-					rec.Result = &controlapi.BuildResultInfo{}
-				}
-				if rec.Result.Results == nil {
-					rec.Result.Results = make(map[string]*controlapi.Descriptor)
-				}
 				desc := descref.Descriptor()
 				controlDesc := &controlapi.Descriptor{
 					Digest:      desc.Digest,
@@ -331,15 +331,22 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 					MediaType:   desc.MediaType,
 					Annotations: desc.Annotations,
 				}
-				if rec.Result.ResultDeprecated == nil {
+				if rec.Result == nil {
+					rec.Result = &controlapi.BuildResultInfo{}
+				}
+				if rec.Result.Results == nil {
+					rec.Result.Results = make(map[int64]*controlapi.Descriptor)
+				}
+				if deprecate {
+					// write the first available descriptor to the deprecated
+					// field for legacy clients
 					rec.Result.ResultDeprecated = controlDesc
 				}
-				rec.Result.Results[k] = controlDesc
+				rec.Result.Results[int64(i)] = controlDesc
 				mu.Unlock()
 				return nil
 			})
 		}
-
 		if err1 := eg.Wait(); err == nil {
 			err = err1
 		}
@@ -433,7 +440,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 
 	var res *frontend.Result
 	var resProv *Result
-	var descrefs map[string]exporter.DescriptorReference
+	var descrefs []exporter.DescriptorReference
 
 	var releasers []func()
 	defer func() {
@@ -441,7 +448,9 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 			f()
 		}
 		for _, descref := range descrefs {
-			descref.Release()
+			if descref != nil {
+				descref.Release()
+			}
 		}
 	}()
 
@@ -665,7 +674,7 @@ func runInlineCacheExporter(ctx context.Context, e exporter.ExporterInstance, in
 	return res, done(err)
 }
 
-func (s *Solver) runExporters(ctx context.Context, exporters []exporter.ExporterInstance, inlineCacheExporter inlineCacheExporter, job *solver.Job, cached *result.Result[solver.CachedResult], inp *result.Result[cache.ImmutableRef]) (exporterResponse map[string]string, descrefs map[string]exporter.DescriptorReference, err error) {
+func (s *Solver) runExporters(ctx context.Context, exporters []exporter.ExporterInstance, inlineCacheExporter inlineCacheExporter, job *solver.Job, cached *result.Result[solver.CachedResult], inp *result.Result[cache.ImmutableRef]) (exporterResponse map[string]string, descrefs []exporter.DescriptorReference, err error) {
 	eg, ctx := errgroup.WithContext(ctx)
 	resps := make([]map[string]string, len(exporters))
 	descs := make([]exporter.DescriptorReference, len(exporters))
@@ -701,17 +710,7 @@ func (s *Solver) runExporters(ctx context.Context, exporters []exporter.Exporter
 		}
 	}
 
-	for i, desc := range descs {
-		if desc == nil {
-			continue
-		}
-		if descrefs == nil {
-			descrefs = make(map[string]exporter.DescriptorReference)
-		}
-		descrefs[exporters[i].ID()] = desc
-	}
-
-	return exporterResponse, descrefs, nil
+	return exporterResponse, descs, nil
 }
 
 func splitCacheExporters(exporters []RemoteCacheExporter) (rest []RemoteCacheExporter, inline inlineCacheExporter) {
