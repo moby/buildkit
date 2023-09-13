@@ -1,6 +1,7 @@
 package dockerfile2llb
 
 import (
+	"context"
 	"testing"
 
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
@@ -83,6 +84,20 @@ COPY --from=0 f2 /
 	df = `FROM ${BLANK} AS foo`
 	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.Error(t, err)
+}
+
+func TestDockerfileParsingMarshal(t *testing.T) {
+	t.Parallel()
+	df := `FROM scratch
+ENV FOO bar
+COPY f1 f2 /sub/
+RUN ls -l
+`
+	state, _, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	assert.NoError(t, err)
+
+	_, err = state.Marshal(context.TODO())
+	assert.NoError(t, err)
 }
 
 func TestAddEnv(t *testing.T) {

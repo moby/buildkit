@@ -573,6 +573,9 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			return nil, err
 		}
 		buildContext.Output = bctx.Output()
+	} else {
+		bctx := dockerui.DefaultMainContext(opts...)
+		buildContext.Output = bctx.Output()
 	}
 
 	defaults := []llb.ConstraintsOpt{
