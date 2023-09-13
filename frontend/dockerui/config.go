@@ -494,6 +494,15 @@ func (bc *Client) IsNoCache(name string) bool {
 	return false
 }
 
+func DefaultMainContext(opts ...llb.LocalOption) *llb.State {
+	opts = append([]llb.LocalOption{
+		llb.SharedKeyHint(DefaultLocalNameContext),
+		WithInternalName("load build context"),
+	}, opts...)
+	st := llb.Local(DefaultLocalNameContext, opts...)
+	return &st
+}
+
 func WithInternalName(name string) llb.ConstraintsOpt {
 	return llb.WithCustomName("[internal] " + name)
 }
