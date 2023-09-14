@@ -47,8 +47,10 @@ Minimal support is also available on older BuildKit when using Dockerfile 1.5 fr
 buildctl build --frontend dockerfile.v0 --opt build-arg:SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct) ...
 ```
 
-The `buildctl` CLI does not automatically propagate the `$SOURCE_DATE_EPOCH` environment value from the client host to the `SOURCE_DATE_EPOCH` build arg.
-However, higher level build tools, such as Docker Buildx (>= 0.10), may automatically capture the environment value.
+The `buildctl` CLI (<= 0.12) does not automatically propagate the `$SOURCE_DATE_EPOCH` environment value from the client host to the `SOURCE_DATE_EPOCH` build arg.
+<!-- TODO: s/master/v0.13/ -->
+In the `master` branch of BuildKit, the `buildctl` CLI is updated to automatically capture the environment value.
+Docker Buildx (>= 0.10) automatically captures the environment value too.
 
 The build arg value is used for:
 - the `created` timestamp in the [OCI Image Config](https://github.com/opencontainers/image-spec/blob/main/config.md#properties)
