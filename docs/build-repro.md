@@ -57,26 +57,14 @@ The build arg value is used for:
 - the timestamp of the files exported with the `local` exporter
 - the timestamp of the files exported with the `tar` exporter
 
-The build arg value is not used for the timestamps of the files inside the image currently ([Caveats](#caveats)).
-
-See also the [documentation](/frontend/dockerfile/docs/reference.md#buildkit-built-in-build-args) of the Dockerfile frontend.
-
-## Caveats
-### Timestamps of the files inside the image
-Currently, the `SOURCE_DATE_EPOCH` value is not used for the timestamps of the files inside the image.
-
-Workaround:
-```dockerfile
-# Limit the timestamp upper bound to SOURCE_DATE_EPOCH.
-# Workaround for https://github.com/moby/buildkit/issues/3180
-ARG SOURCE_DATE_EPOCH
-RUN find $( ls / | grep -E -v "^(dev|mnt|proc|sys)$" ) -newermt "@${SOURCE_DATE_EPOCH}" -writable -xdev | xargs touch --date="@${SOURCE_DATE_EPOCH}" --no-dereference
-
-# Squashing is needed so that only files with the defined timestamp from the last layer are added to the image.
-# This squashing also addresses non-reproducibility of whiteout timestamps (https://github.com/moby/buildkit/issues/3168) on BuildKit prior to v0.12.
-FROM scratch
-COPY --from=0 / /
+To apply the build arg value to the timestamps of the files inside the image, specify `rewrite-timestamp=true` as an image exporter option:
+```
+--output type=image,name=docker.io/username/image,push=true,rewrite-timestamp=true
 ```
 
-The `touch` command above is [not effective](https://github.com/moby/buildkit/issues/3309) for mount point directories.
-A workaround is to create mount point directories below `/dev` (tmpfs) so that the mount points will not be included in the image layer.
+<!-- TODO: s/master/v0.13/ -->
+The `rewrite-timestamp` option is only available in the `master` branch of BuildKit.
+See [v0.12 documentation](https://github.com/moby/buildkit/blob/v0.12/docs/build-repro.md#caveats) for dealing with timestamps
+in BuildKit v0.12 and v0.11.
+
+See also the [documentation](/frontend/dockerfile/docs/reference.md#buildkit-built-in-build-args) of the Dockerfile frontend.

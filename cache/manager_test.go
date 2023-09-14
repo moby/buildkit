@@ -44,6 +44,7 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
+	"github.com/moby/buildkit/util/converter"
 	"github.com/moby/buildkit/util/iohelper"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/overlay"
@@ -1423,7 +1424,7 @@ func testSharingCompressionVariant(ctx context.Context, t *testing.T, co *cmOut,
 			require.NoError(t, err, "compression: %v", c)
 			uDgst := bDesc.Digest
 			if c != compression.Uncompressed {
-				convertFunc, err := getConverter(ctx, co.cs, bDesc, compression.New(compression.Uncompressed))
+				convertFunc, err := converter.New(ctx, co.cs, bDesc, compression.New(compression.Uncompressed))
 				require.NoError(t, err, "compression: %v", c)
 				uDesc, err := convertFunc(ctx, co.cs, bDesc)
 				require.NoError(t, err, "compression: %v", c)
@@ -1558,7 +1559,7 @@ func TestConversion(t *testing.T) {
 					testName := fmt.Sprintf("%s=>%s", i, j)
 
 					// Prepare the source compression type
-					convertFunc, err := getConverter(egctx, store, orgDesc, compSrc)
+					convertFunc, err := converter.New(egctx, store, orgDesc, compSrc)
 					require.NoError(t, err, testName)
 					srcDesc := &orgDesc
 					if convertFunc != nil {
@@ -1567,7 +1568,7 @@ func TestConversion(t *testing.T) {
 					}
 
 					// Convert the blob
-					convertFunc, err = getConverter(egctx, store, *srcDesc, compDest)
+					convertFunc, err = converter.New(egctx, store, *srcDesc, compDest)
 					require.NoError(t, err, testName)
 					resDesc := srcDesc
 					if convertFunc != nil {
@@ -1576,7 +1577,7 @@ func TestConversion(t *testing.T) {
 					}
 
 					// Check the uncompressed digest is the same as the original
-					convertFunc, err = getConverter(egctx, store, *resDesc, compression.New(compression.Uncompressed))
+					convertFunc, err = converter.New(egctx, store, *resDesc, compression.New(compression.Uncompressed))
 					require.NoError(t, err, testName)
 					recreatedDesc := resDesc
 					if convertFunc != nil {

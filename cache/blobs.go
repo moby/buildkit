@@ -14,6 +14,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
+	"github.com/moby/buildkit/util/converter"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/winlayers"
 	digest "github.com/opencontainers/go-digest"
@@ -422,7 +423,7 @@ func ensureCompression(ctx context.Context, ref *immutableRef, comp compression.
 		}
 
 		// Resolve converters
-		layerConvertFunc, err := getConverter(ctx, ref.cm.ContentStore, desc, comp)
+		layerConvertFunc, err := converter.New(ctx, ref.cm.ContentStore, desc, comp)
 		if err != nil {
 			return struct{}{}, err
 		} else if layerConvertFunc == nil {
