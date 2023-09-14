@@ -1099,8 +1099,17 @@ func (sr *immutableRef) prepareRemoteSnapshotsStargzMode(ctx context.Context, s 
 					if err == nil { // usable as remote snapshot without unlazying.
 						defer func() {
 							// Remove tmp labels appended in this func
-							for k := range tmpLabels {
-								info.Labels[k] = ""
+							if info.Labels != nil {
+								for k := range tmpLabels {
+									info.Labels[k] = ""
+								}
+							} else {
+								// We are logging here to track to try to debug when and why labels are nil.
+								// Log can be removed when not happening anymore.
+								bklog.G(ctx).
+									WithField("snapshotID", snapshotID).
+									WithField("name", info.Name).
+									Debug("snapshots exist but labels are nil")
 							}
 							if _, err := r.cm.Snapshotter.Update(ctx, info, tmpFields...); err != nil {
 								bklog.G(ctx).Warn(errors.Wrapf(err,
