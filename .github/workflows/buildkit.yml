@@ -146,6 +146,7 @@ jobs:
         target-stage:
           - ''
           - rootless
+          - alpine-cache
     steps:
       -
         name: Checkout

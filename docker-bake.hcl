@@ -2,6 +2,10 @@ variable "ALPINE_VERSION" {
   default = null
 }
 
+variable "ALPINE_CACHE" {
+  default = null
+}
+
 variable "GO_VERSION" {
   default = null
 }
@@ -26,6 +30,7 @@ function "bindir" {
 target "_common" {
   args = {
     ALPINE_VERSION = ALPINE_VERSION
+    ALPINE_CACHE = ALPINE_CACHE
     GO_VERSION = GO_VERSION
     NODE_VERSION = NODE_VERSION
     BUILDKIT_CONTEXT_KEEP_GIT_DIR = 1

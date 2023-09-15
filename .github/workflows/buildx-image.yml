@@ -42,6 +42,7 @@ jobs:
         flavor:
           - ''
           - 'rootless'
+          - 'alpine-cache'
     steps:
       -
         name: Set up Docker Buildx
