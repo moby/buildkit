@@ -6,6 +6,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/util/bklog"
 )
 
 // loadGithubEnv verify that url and token attributes exists in the
@@ -30,4 +31,18 @@ func loadGithubEnv(cache client.CacheOptionsEntry) (client.CacheOptionsEntry, er
 		cache.Attrs["token"] = token
 	}
 	return cache, nil
+}
+
+// loadOptEnv loads opt values from the environment.
+// The returned map is always non-nil.
+func loadOptEnv() map[string]string {
+	m := make(map[string]string)
+	propagatableEnvs := []string{"SOURCE_DATE_EPOCH"}
+	for _, env := range propagatableEnvs {
+		if v, ok := os.LookupEnv(env); ok {
+			bklog.L.Debugf("Propagating %s from the client env to the build arg", env)
+			m["build-arg:"+env] = v
+		}
+	}
+	return m
 }
