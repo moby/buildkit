@@ -47,13 +47,13 @@ jobs:
         uses: actions/checkout@v4
       -
         name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v2
+        uses: crazy-max/ghaction-github-runtime@v3
       -
         name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
+        uses: docker/setup-qemu-action@v3
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
         with:
           version: ${{ env.SETUP_BUILDX_VERSION }}
           driver-opts: image=${{ env.SETUP_BUILDKIT_IMAGE }}
@@ -91,7 +91,7 @@ jobs:
             });
       -
         name: Build
-        uses: docker/bake-action@v3
+        uses: docker/bake-action@v4
         with:
           targets: integration-tests-base
           set: |
@@ -129,13 +129,13 @@ jobs:
         uses: actions/checkout@v4
       -
         name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v2
+        uses: crazy-max/ghaction-github-runtime@v3
       -
         name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
+        uses: docker/setup-qemu-action@v3
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
         with:
           version: ${{ env.SETUP_BUILDX_VERSION }}
           driver-opts: image=${{ env.SETUP_BUILDKIT_IMAGE }}
