@@ -110,7 +110,11 @@ func dispatchRunMounts(d *dispatchState, c *instructions.RunCommand, sources []*
 			if mount.CacheID == "" {
 				mount.CacheID = path.Clean(mount.Target)
 			}
-			mountOpts = append(mountOpts, llb.AsPersistentCacheDir(opt.cacheIDNamespace+"/"+mount.CacheID, sharing))
+			cacheID := mount.CacheID
+			if opt.cacheIDNamespace != "" {
+				cacheID = path.Join(opt.cacheIDNamespace, mount.CacheID)
+			}
+			mountOpts = append(mountOpts, llb.AsPersistentCacheDir(cacheID, sharing))
 		}
 		target := mount.Target
 		if !filepath.IsAbs(filepath.Clean(mount.Target)) {
