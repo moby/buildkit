@@ -5,9 +5,11 @@ import (
 	"crypto/ed25519"
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
-	"net/http"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,6 +20,7 @@ import (
 	"github.com/docker/cli/cli/config"
 	"github.com/docker/cli/cli/config/configfile"
 	"github.com/docker/cli/cli/config/types"
+	http "github.com/hashicorp/go-cleanhttp"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth"
 	"github.com/moby/buildkit/util/progress/progresswriter"
@@ -32,12 +35,13 @@ const defaultExpiration = 60
 const dockerHubConfigfileKey = "https://index.docker.io/v1/"
 const dockerHubRegistryHost = "registry-1.docker.io"
 
-func NewDockerAuthProvider(cfg *configfile.ConfigFile) session.Attachable {
+func NewDockerAuthProvider(cfg *configfile.ConfigFile, tlsConfigs map[string]*AuthTLSConfig) session.Attachable {
 	return &authProvider{
 		authConfigCache: map[string]*types.AuthConfig{},
 		config:          cfg,
 		seeds:           &tokenSeeds{dir: config.Dir()},
 		loggerCache:     map[string]struct{}{},
+		tlsConfigs:      tlsConfigs,
 	}
 }
 
@@ -47,6 +51,7 @@ type authProvider struct {
 	seeds           *tokenSeeds
 	logger          progresswriter.Logger
 	loggerCache     map[string]struct{}
+	tlsConfigs      map[string]*AuthTLSConfig
 
 	// The need for this mutex is not well understood.
 	// Without it, the docker cli on OS X hangs when
@@ -89,6 +94,13 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 		Secret:   creds.Secret,
 	}
 
+	var httpClient = http.DefaultClient()
+	if tc, err := ap.tlsConfig(req.Host); err == nil && tc != nil {
+		transport := http.DefaultTransport()
+		transport.TLSClientConfig = tc
+		httpClient.Transport = transport
+	}
+
 	if creds.Secret != "" {
 		done := func(progresswriter.SubLogger) error {
 			return err
@@ -103,7 +115,7 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 		}
 		ap.mu.Unlock()
 		// credential information is provided, use oauth POST endpoint
-		resp, err := authutil.FetchTokenWithOAuth(ctx, http.DefaultClient, nil, "buildkit-client", to)
+		resp, err := authutil.FetchTokenWithOAuth(ctx, httpClient, nil, "buildkit-client", to)
 		if err != nil {
 			var errStatus remoteserrors.ErrUnexpectedStatus
 			if errors.As(err, &errStatus) {
@@ -111,7 +123,7 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 				// As of September 2017, GCR is known to return 404.
 				// As of February 2018, JFrog Artifactory is known to return 401.
 				if (errStatus.StatusCode == 405 && to.Username != "") || errStatus.StatusCode == 404 || errStatus.StatusCode == 401 {
-					resp, err := authutil.FetchToken(ctx, http.DefaultClient, nil, to)
+					resp, err := authutil.FetchToken(ctx, httpClient, nil, to)
 					if err != nil {
 						return nil, err
 					}
@@ -123,11 +135,50 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 		return toTokenResponse(resp.AccessToken, resp.IssuedAt, resp.ExpiresIn), nil
 	}
 	// do request anonymously
-	resp, err := authutil.FetchToken(ctx, http.DefaultClient, nil, to)
+	resp, err := authutil.FetchToken(ctx, httpClient, nil, to)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch anonymous token")
 	}
 	return toTokenResponse(resp.Token, resp.IssuedAt, resp.ExpiresIn), nil
+}
+
+func (ap *authProvider) tlsConfig(host string) (*tls.Config, error) {
+	if ap.tlsConfigs == nil {
+		return nil, nil
+	}
+	c, ok := ap.tlsConfigs[host]
+	if !ok {
+		return nil, nil
+	}
+	tc := &tls.Config{}
+	if len(c.RootCAs) > 0 {
+		systemPool, err := x509.SystemCertPool()
+		if err != nil {
+			if runtime.GOOS == "windows" {
+				systemPool = x509.NewCertPool()
+			} else {
+				return nil, errors.Wrapf(err, "unable to get system cert pool")
+			}
+		}
+		tc.RootCAs = systemPool
+	}
+
+	for _, p := range c.RootCAs {
+		dt, err := os.ReadFile(p)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to read %s", p)
+		}
+		tc.RootCAs.AppendCertsFromPEM(dt)
+	}
+
+	for _, kp := range c.KeyPairs {
+		cert, err := tls.LoadX509KeyPair(kp.Certificate, kp.Key)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to load keypair for %s", kp.Certificate)
+		}
+		tc.Certificates = append(tc.Certificates, cert)
+	}
+	return tc, nil
 }
 
 func (ap *authProvider) credentials(host string) (*auth.CredentialsResponse, error) {

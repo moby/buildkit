@@ -17,7 +17,7 @@ func TestFetchTokenCaching(t *testing.T) {
 			dockerHubConfigfileKey: {Username: "user", RegistryToken: "hunter2"},
 		},
 	}
-	p := NewDockerAuthProvider(cfg).(*authProvider)
+	p := NewDockerAuthProvider(cfg, nil).(*authProvider)
 	res, err := p.FetchToken(context.Background(), &auth.FetchTokenRequest{Host: dockerHubRegistryHost})
 	require.NoError(t, err)
 	assert.Equal(t, "hunter2", res.Token)
