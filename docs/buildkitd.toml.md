@@ -94,7 +94,7 @@ insecure-entitlements = [ "network.host", "security.insecure" ]
   platforms = [ "linux/amd64", "linux/arm64" ]
   namespace = "buildkit"
   gc = true
-  # gckeepstorage sets storage limit for default gc profile, in MB.
+  # gckeepstorage sets storage limit for default gc profile, in bytes.
   gckeepstorage = 9000
   # maintain a pool of reusable CNI network namespaces to amortize the overhead
   # of allocating and releasing the namespaces
