@@ -10,12 +10,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-func mknod(path string, mode os.FileMode, maj, min uint32) fstest.Applier {
-	return applyFn(func(string) error {
-		return errors.New("mknod applier not implemented yet on this platform")
-	})
-}
-
 func mkfifo(path string, mode os.FileMode) fstest.Applier {
 	return applyFn(func(string) error {
 		return errors.New("mkfifo applier not implemented yet on this platform")
