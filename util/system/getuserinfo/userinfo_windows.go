@@ -35,10 +35,10 @@ func userInfoMain() {
 		SID: sid.String(),
 	}
 
-	asJson, err := json.Marshal(ident)
+	asJSON, err := json.Marshal(ident)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(5)
 	}
-	fmt.Fprintf(os.Stdout, "%s", string(asJson))
+	fmt.Fprintf(os.Stdout, "%s", string(asJSON))
 }
