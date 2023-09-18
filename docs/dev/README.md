@@ -51,3 +51,7 @@ We also have a number of more specific guides:
 
 - [MergeOp and DiffOp](./merge-diff.md) - learn how MergeOp and DiffOp are
   implemented, and how to program with them in LLB.
+
+There are also guides on specific ways of working on the buildkit repository:
+
+- [Remote Debugging Guide](./remote-debugging.md) - learn how to utilize the debugger when running buildkit in docker.
