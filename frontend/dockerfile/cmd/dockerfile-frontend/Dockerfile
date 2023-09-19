@@ -35,18 +35,4 @@ LABEL moby.buildkit.frontend.caps="moby.buildkit.frontend.inputs,moby.buildkit.f
 COPY --from=build /dockerfile-frontend /bin/dockerfile-frontend
 ENTRYPOINT ["/bin/dockerfile-frontend"]
 
-
-FROM base AS buildid-check
-RUN apt-get update && apt-get --no-install-recommends install -y jq
-COPY /frontend/dockerfile/cmd/dockerfile-frontend/hack/check-daily-outdated .
-COPY --from=r.j3ss.co/reg /usr/bin/reg /bin
-COPY --from=build /dockerfile-frontend .
-ARG CHANNEL
-ARG REPO
-ARG DATE
-RUN ./check-daily-outdated $CHANNEL $REPO $DATE /out
-
-FROM scratch AS buildid
-COPY --from=buildid-check /out/ /
-
 FROM release

@@ -5,10 +5,9 @@ set -eu
 
 : "${RELEASE=false}"
 : "${PLATFORMS=}"
-: "${DAILY_TARGETS=}"
 
 usage() {
-  echo "$0 (master|tag|daily) (tag|channel) <repo> [push]"
+  echo "$0 (master|tag) (tag|channel) <repo> [push]"
   exit 1
 }
 
@@ -113,51 +112,5 @@ case $TYP in
     --output "type=image,\"name=$publishedNames\",$pushFlag" \
     --file "./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile" \
     $currentcontext
-  ;;
-"daily")
-  # if [ -z $DAILY_TARGETS ]; then
-  #   DAILY_TARGETS=""
-  # fi
-
-  for TAG in $DAILY_TARGETS; do
-
-    tagf=./frontend/dockerfile/release/$TAG/tags
-    if [ ! -f $tagf ]; then
-      echo "invalid release $TAG"
-      exit 1
-    fi
-    buildTags=$(cat $tagf)
-
-    # find the buildID of the last pushed image
-    # returns a BuildID if rebuild needed
-
-    tmp=$(mktemp -d -t buildid.XXXXXXXXXX)
-    dt=$(date +%Y%m%d)
-    buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags $nocacheFilterFlag \
-      --target "buildid" \
-      --build-arg "CHANNEL=$TAG" \
-      --build-arg "BUILDTAGS=$buildTags" \
-      --build-arg "REPO=$REPO" \
-      --build-arg "DATE=$dt" \
-      --output "type=local,dest=$tmp" \
-      --file "./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile" \
-      $currentcontext
-
-    if [ -f $tmp/buildid ]; then
-      buildid=$(cat $tmp/buildid)
-      echo "buildid: $buildid"
-
-      buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags $nocacheFilterFlag $(buildAttestFlags) \
-        --build-arg "CHANNEL=$TAG" \
-        --build-arg "BUILDTAGS=$buildTags" \
-        --output "type=image,name=$REPO:$dt-$TAG,$pushFlag" \
-        --file "./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile" \
-        $currentcontext
-      rm $tmp/buildid
-    fi
-    rm -r $tmp
-
-  done
-  
   ;;
 esac

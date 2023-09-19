@@ -30,8 +30,6 @@ env:
   GO_VERSION: "1.20"
   SETUP_BUILDX_VERSION: "latest"
   SETUP_BUILDKIT_IMAGE: "moby/buildkit:latest"
-  TESTFLAGS: "-v --parallel=6 --timeout=30m"
-  GOTESTSUM_FORMAT: "standard-verbose"
 
 jobs:
   prepare:
@@ -102,6 +100,11 @@ jobs:
     runs-on: ubuntu-22.04
     needs:
       - prepare
+    env:
+      TESTFLAGS: "-v --parallel=6 --timeout=30m"
+      GOTESTSUM_FORMAT: "standard-verbose"
+      TEST_IMAGE_BUILD: "0"
+      TEST_IMAGE_ID: "buildkit-tests"
     strategy:
       fail-fast: false
       matrix:
@@ -140,6 +143,14 @@ jobs:
           version: ${{ env.SETUP_BUILDX_VERSION }}
           driver-opts: image=${{ env.SETUP_BUILDKIT_IMAGE }}
           buildkitd-flags: --debug
+      -
+        name: Build test image
+        uses: docker/bake-action@v4
+        with:
+          targets: integration-tests
+          set: |
+            *.cache-from=type=gha,scope=${{ inputs.cache_scope }}
+            *.output=type=docker,name=${{ env.TEST_IMAGE_ID }}
       -
         name: Test
         continue-on-error: ${{ matrix.tags == 'nydus' }}
