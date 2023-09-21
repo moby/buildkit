@@ -97,6 +97,67 @@ func (s *SourceOp) Inputs() []Output {
 	return nil
 }
 
+type ImageBlobInfo struct {
+	constraintsWrapper
+	fileinfoWrapper
+}
+
+type ImageBlobOption interface {
+	SetImageBlobOption(*ImageBlobInfo)
+}
+
+type FileInfoOption interface {
+	HTTPOption
+	ImageBlobOption
+}
+
+func ImageBlob(ref string, opts ...ImageBlobOption) State {
+	bi := &ImageBlobInfo{}
+	for _, o := range opts {
+		o.SetImageBlobOption(bi)
+	}
+	attrs := map[string]string{}
+
+	if bi.Filename != "" {
+		attrs[pb.AttrHTTPFilename] = bi.Filename
+	}
+	if bi.Perm != 0 {
+		attrs[pb.AttrHTTPPerm] = "0" + strconv.FormatInt(int64(bi.Perm), 8)
+	}
+	if bi.UID != 0 {
+		attrs[pb.AttrHTTPUID] = strconv.Itoa(bi.UID)
+	}
+	if bi.GID != 0 {
+		attrs[pb.AttrHTTPGID] = strconv.Itoa(bi.GID)
+	}
+
+	addCap(&bi.Constraints, pb.CapSourceImageBlob)
+
+	var digested reference.Digested
+
+	r, err := reference.ParseNormalizedNamed(ref)
+	if err == nil {
+		if _, tagged := r.(reference.Tagged); tagged {
+			err = errors.Errorf("tagged image reference not allowed for blob reference")
+		} else if ref, ok := r.(reference.Digested); !ok {
+			err = errors.Errorf("checksum required in blob reference")
+		} else {
+			digested = ref
+		}
+	}
+
+	repoName := "invalid"
+	if digested != nil {
+		repoName = digested.String()
+	}
+
+	source := NewSource("docker-image-blob://"+repoName, attrs, bi.Constraints)
+	if err != nil {
+		source.err = err
+	}
+	return NewState(source.Output())
+}
+
 // Image returns a state that represents a docker image in a registry.
 // Example:
 //
@@ -721,6 +782,27 @@ func HTTP(url string, opts ...HTTPOption) State {
 	return NewState(source.Output())
 }
 
+type fileInfo struct {
+	Filename string
+	Perm     int
+	UID      int
+	GID      int
+}
+
+type fileinfoWrapper struct {
+	fileInfo
+}
+
+type fileInfoOptFunc func(f *fileInfo)
+
+func (fn fileInfoOptFunc) SetHTTPOption(hi *HTTPInfo) {
+	fn(&hi.fileInfo)
+}
+
+func (fn fileInfoOptFunc) SetImageBlobOption(ib *ImageBlobInfo) {
+	fn(&ib.fileInfo)
+}
+
 // HTTPSignatureInfo configures detached-signature verification for HTTP
 // sources. The current implementation uses inline armored signatures.
 type HTTPSignatureInfo struct {
@@ -732,11 +814,8 @@ type HTTPSignatureInfo struct {
 
 type HTTPInfo struct {
 	constraintsWrapper
+	fileinfoWrapper
 	Checksum         digest.Digest
-	Filename         string
-	Perm             int
-	UID              int
-	GID              int
 	AuthHeaderSecret string
 	Header           *HTTPHeader
 	Signature        *HTTPSignatureInfo
@@ -758,22 +837,22 @@ func Checksum(dgst digest.Digest) HTTPOption {
 	})
 }
 
-func Chmod(perm os.FileMode) HTTPOption {
-	return httpOptionFunc(func(hi *HTTPInfo) {
-		hi.Perm = int(perm) & 0777
+func Chmod(perm os.FileMode) FileInfoOption {
+	return fileInfoOptFunc(func(fi *fileInfo) {
+		fi.Perm = int(perm) & 0777
 	})
 }
 
-func Filename(name string) HTTPOption {
-	return httpOptionFunc(func(hi *HTTPInfo) {
-		hi.Filename = name
+func Filename(name string) FileInfoOption {
+	return fileInfoOptFunc(func(fi *fileInfo) {
+		fi.Filename = name
 	})
 }
 
-func Chown(uid, gid int) HTTPOption {
-	return httpOptionFunc(func(hi *HTTPInfo) {
-		hi.UID = uid
-		hi.GID = gid
+func Chown(uid, gid int) FileInfoOption {
+	return fileInfoOptFunc(func(fi *fileInfo) {
+		fi.UID = uid
+		fi.GID = gid
 	})
 }
 

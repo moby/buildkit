@@ -66,6 +66,7 @@ import (
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/gitutil/gitobject"
+	"github.com/moby/buildkit/util/purl"
 	"github.com/moby/buildkit/util/testutil"
 	containerdutil "github.com/moby/buildkit/util/testutil/containerd"
 	"github.com/moby/buildkit/util/testutil/echoserver"
@@ -234,6 +235,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testMultipleRecordsWithSameLayersCacheImportExport,
 	testRegistryEmptyCacheExport,
 	testSnapshotWithMultipleBlobs,
+	testImageBlobSource,
 	testExportLocalNoPlatformSplit,
 	testExportLocalNoPlatformSplitOverwrite,
 	testExportLocalForcePlatformSplit,
@@ -11512,6 +11514,109 @@ func testMountStubsTimestamp(t *testing.T, sb integration.Sandbox) {
 		require.NotNil(t, hd, name)
 		require.Equal(t, sourceDateEpoch, hd.ModTime.Unix(), name)
 	}
+}
+
+func testImageBlobSource(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	st := llb.Image("alpine")
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	name := registry + "/foo/blobtest:img"
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: "image",
+				Attrs: map[string]string{
+					"name": name,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	desc, provider, err := contentutil.ProviderFromRef(name)
+	require.NoError(t, err)
+
+	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, len(imgs.Images))
+	mfst := imgs.Images[0].Manifest
+	require.GreaterOrEqual(t, len(mfst.Layers), 1)
+
+	l := mfst.Layers[0]
+
+	blob := llb.ImageBlob(registry+"/foo/blobtest@"+l.Digest.String(), llb.Filename("layer.tar.gz"), llb.Chown(123, 456))
+	st = llb.Image("alpine").Run(llb.Shlex(`sh -c 'sha256sum /layers/layer.tar.gz | cut -d" " -f0 > /out/checksum && stat -c "%u-%g-%s" /layers/layer.tar.gz > /out/stat'`), llb.AddMount("/layers", blob, llb.Readonly)).AddMount("/out", llb.Scratch())
+
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		FrontendAttrs: map[string]string{
+			"attest:provenance": "",
+		},
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "stat"))
+	require.NoError(t, err)
+
+	require.Equal(t, "123-456-"+strconv.FormatInt(l.Size, 10), strings.TrimSpace(string(dt)))
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "checksum"))
+	require.NoError(t, err)
+
+	require.Equal(t, l.Digest.Hex(), strings.TrimSpace(string(dt)))
+
+	provDt, err := os.ReadFile(filepath.Join(destDir, "provenance.json"))
+	require.NoError(t, err)
+
+	var stmt struct {
+		Predicate struct {
+			Materials []struct {
+				URI    string            `json:"uri"`
+				Digest map[string]string `json:"digest"`
+			} `json:"materials"`
+		} `json:"predicate"`
+	}
+	require.NoError(t, json.Unmarshal(provDt, &stmt))
+
+	expectedName, err := purl.RefToPURL("docker-blob", registry+"/foo/blobtest@"+l.Digest.String(), nil)
+	require.NoError(t, err)
+
+	found := false
+	for _, m := range stmt.Predicate.Materials {
+		if m.URI == expectedName {
+			found = true
+			require.Equal(t, l.Digest.Hex(), m.Digest["sha256"])
+			break
+		}
+	}
+	require.True(t, found, "expected to find %q in %+v", expectedName, stmt.Predicate.Materials)
 }
 
 func testFrontendVerifyPlatforms(t *testing.T, sb integration.Sandbox) {

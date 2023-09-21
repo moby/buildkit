@@ -15,7 +15,7 @@ import (
 )
 
 func slsaMaterials(srcs provenancetypes.Sources) ([]slsa.ProvenanceMaterial, error) {
-	count := len(srcs.Images) + len(srcs.Git) + len(srcs.HTTP)
+	count := len(srcs.Images) + len(srcs.ImageBlobs) + len(srcs.Git) + len(srcs.HTTP)
 	out := make([]slsa.ProvenanceMaterial, 0, count)
 
 	for _, s := range srcs.Images {
@@ -26,6 +26,22 @@ func slsaMaterials(srcs provenancetypes.Sources) ([]slsa.ProvenanceMaterial, err
 		} else {
 			uri, err = purl.RefToPURL(packageurl.TypeDocker, s.Ref, s.Platform)
 		}
+		if err != nil {
+			return nil, err
+		}
+		material := slsa.ProvenanceMaterial{
+			URI: uri,
+		}
+		if s.Digest != "" {
+			material.Digest = slsa.DigestSet{
+				s.Digest.Algorithm().String(): s.Digest.Hex(),
+			}
+		}
+		out = append(out, material)
+	}
+
+	for _, s := range srcs.ImageBlobs {
+		uri, err := purl.RefToPURL("docker-blob", s.Ref, nil)
 		if err != nil {
 			return nil, err
 		}
