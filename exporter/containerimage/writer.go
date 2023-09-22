@@ -14,6 +14,7 @@ import (
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/labels"
 	"github.com/containerd/containerd/platforms"
+	intotov1 "github.com/in-toto/attestation/go/v1"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/moby/buildkit/cache"
 	cacheconfig "github.com/moby/buildkit/cache/config"
@@ -248,7 +249,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 				return nil, err
 			}
 
-			var defaultSubjects []intoto.Subject
+			var defaultSubjects []*intotov1.ResourceDescriptor
 			for _, name := range strings.Split(opts.ImageName, ",") {
 				if name == "" {
 					continue
@@ -257,7 +258,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 				if err != nil {
 					return nil, err
 				}
-				defaultSubjects = append(defaultSubjects, intoto.Subject{
+				defaultSubjects = append(defaultSubjects, &intotov1.ResourceDescriptor{
 					Name:   pl,
 					Digest: result.ToDigestMap(desc.Digest),
 				})
@@ -482,7 +483,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *Ima
 	}, &configDesc, nil
 }
 
-func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *ImageCommitOpts, p exptypes.Platform, target string, statements []intoto.Statement) (*ocispecs.Descriptor, error) {
+func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *ImageCommitOpts, p exptypes.Platform, target string, statements []*intotov1.Statement) (*ocispecs.Descriptor, error) {
 	var (
 		manifestType = ocispecs.MediaTypeImageManifest
 		configType   = ocispecs.MediaTypeImageConfig

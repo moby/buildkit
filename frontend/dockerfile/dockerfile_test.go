@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	intotov1 "github.com/in-toto/attestation/go/v1"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -6234,7 +6235,7 @@ EOF
 
 	att := imgs.Find("unknown/unknown")
 	require.Equal(t, 1, len(att.LayersRaw))
-	var attest intoto.Statement
+	var attest intotov1.Statement
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
@@ -6353,7 +6354,7 @@ FROM base
 
 	att := imgs.Find("unknown/unknown")
 	require.Equal(t, 1, len(att.LayersRaw))
-	var attest intoto.Statement
+	var attest intotov1.Statement
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Subset(t, attest.Predicate, map[string]interface{}{"name": "core"})
 
@@ -6418,9 +6419,9 @@ ARG BUILDKIT_SBOM_SCAN_STAGE=true
 	require.Equal(t, 4, len(att.LayersRaw))
 	extraCount := 0
 	for _, l := range att.LayersRaw {
-		var attest intoto.Statement
+		var attest intotov1.Statement
 		require.NoError(t, json.Unmarshal(l, &attest))
-		att := attest.Predicate.(map[string]interface{})
+		att := attest.Predicate.AsMap()
 		switch att["name"] {
 		case "core":
 		case "extra":

@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/docker/docker/pkg/idtools"
-	intoto "github.com/in-toto/in-toto-golang/in_toto"
+	intotov1 "github.com/in-toto/attestation/go/v1"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/attestation"
@@ -145,7 +145,7 @@ func CreateFS(ctx context.Context, sessionID string, k string, ref cache.Immutab
 		return nil, nil, err
 	}
 	if len(attestations) > 0 {
-		subjects := []intoto.Subject{}
+		subjects := []*intotov1.ResourceDescriptor{}
 		err = outputFS.Walk(ctx, "", func(path string, entry fs.DirEntry, err error) error {
 			if err != nil {
 				return err
@@ -162,7 +162,7 @@ func CreateFS(ctx context.Context, sessionID string, k string, ref cache.Immutab
 			if _, err := io.Copy(d.Hash(), f); err != nil {
 				return err
 			}
-			subjects = append(subjects, intoto.Subject{
+			subjects = append(subjects, &intotov1.ResourceDescriptor{
 				Name:   path,
 				Digest: result.ToDigestMap(d.Digest()),
 			})

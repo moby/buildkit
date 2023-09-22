@@ -606,12 +606,16 @@ github.com/hashicorp/go-retryablehttp
 # github.com/hashicorp/golang-lru v0.5.4
 ## explicit; go 1.12
 github.com/hashicorp/golang-lru/simplelru
-# github.com/in-toto/in-toto-golang v0.5.0
-## explicit; go 1.17
+# github.com/in-toto/attestation v0.1.1-0.20230828220013-11b7a1a4ca51
+## explicit; go 1.20
+github.com/in-toto/attestation/go/v1
+# github.com/in-toto/in-toto-golang v0.9.1-0.20230919171745-f55a6fe48c49
+## explicit; go 1.20
 github.com/in-toto/in-toto-golang/in_toto
 github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/common
 github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.1
 github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2
+github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v1
 # github.com/jmespath/go-jmespath v0.4.0
 ## explicit; go 1.14
 github.com/jmespath/go-jmespath
@@ -718,10 +722,11 @@ github.com/prometheus/procfs/internal/util
 # github.com/russross/blackfriday/v2 v2.1.0
 ## explicit
 github.com/russross/blackfriday/v2
-# github.com/secure-systems-lab/go-securesystemslib v0.4.0
-## explicit; go 1.17
+# github.com/secure-systems-lab/go-securesystemslib v0.7.0
+## explicit; go 1.20
 github.com/secure-systems-lab/go-securesystemslib/cjson
 github.com/secure-systems-lab/go-securesystemslib/dsse
+github.com/secure-systems-lab/go-securesystemslib/signerverifier
 # github.com/serialx/hashring v0.0.0-20190422032157-8b2912629002
 ## explicit
 github.com/serialx/hashring

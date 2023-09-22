@@ -20,7 +20,7 @@ import (
 	"github.com/containerd/containerd/content/proxy"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/continuity/fs/fstest"
-	intoto "github.com/in-toto/in-toto-golang/in_toto"
+	intotov1 "github.com/in-toto/attestation/go/v1"
 	provenanceCommon "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/common"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client"
@@ -118,9 +118,9 @@ RUN echo "ok" > /foo
 			require.NotNil(t, att)
 			require.Equal(t, att.Desc.Annotations["vnd.docker.reference.digest"], string(img.Desc.Digest))
 			require.Equal(t, att.Desc.Annotations["vnd.docker.reference.type"], "attestation-manifest")
-			var attest intoto.Statement
+			var attest intotov1.Statement
 			require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
-			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+			require.Equal(t, "https://in-toto.io/Statement/v1", attest.Type)
 			require.Equal(t, "https://slsa.dev/provenance/v0.2", attest.PredicateType) // intentionally not const
 
 			type stmtT struct {
@@ -314,9 +314,9 @@ COPY myapp.Dockerfile /
 	require.NotNil(t, att)
 	require.Equal(t, att.Desc.Annotations["vnd.docker.reference.digest"], string(img.Desc.Digest))
 	require.Equal(t, att.Desc.Annotations["vnd.docker.reference.type"], "attestation-manifest")
-	var attest intoto.Statement
+	var attest intotov1.Statement
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
-	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+	require.Equal(t, "https://in-toto.io/Statement/v1", attest.Type)
 	require.Equal(t, "https://slsa.dev/provenance/v0.2", attest.PredicateType) // intentionally not const
 
 	type stmtT struct {
@@ -449,9 +449,9 @@ RUN echo "ok-$TARGETARCH" > /foo
 		att := imgs.FindAttestation(p)
 		require.NotNil(t, att)
 		require.Equal(t, att.Desc.Annotations["vnd.docker.reference.type"], "attestation-manifest")
-		var attest intoto.Statement
+		var attest intotov1.Statement
 		require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
-		require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+		require.Equal(t, "https://in-toto.io/Statement/v1", attest.Type)
 		require.Equal(t, "https://slsa.dev/provenance/v0.2", attest.PredicateType) // intentionally not const
 
 		type stmtT struct {
@@ -630,9 +630,9 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 	att := imgs.FindAttestation("linux/arm64")
 	require.NotNil(t, att)
 	require.Equal(t, att.Desc.Annotations["vnd.docker.reference.type"], "attestation-manifest")
-	var attest intoto.Statement
+	var attest intotov1.Statement
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
-	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+	require.Equal(t, "https://in-toto.io/Statement/v1", attest.Type)
 	require.Equal(t, "https://slsa.dev/provenance/v0.2", attest.PredicateType) // intentionally not const
 
 	type stmtT struct {
@@ -663,9 +663,9 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 	att = imgs.FindAttestation("linux/amd64")
 	require.NotNil(t, att)
 	require.Equal(t, att.Desc.Annotations["vnd.docker.reference.type"], "attestation-manifest")
-	attest = intoto.Statement{}
+	attest = intotov1.Statement{}
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
-	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+	require.Equal(t, "https://in-toto.io/Statement/v1", attest.Type)
 	require.Equal(t, "https://slsa.dev/provenance/v0.2", attest.PredicateType) // intentionally not const
 
 	stmt = stmtT{}
@@ -775,9 +775,9 @@ func testClientLLBProvenance(t *testing.T, sb integration.Sandbox) {
 	att := imgs.FindAttestation(nativePlatform)
 	require.NotNil(t, att)
 	require.Equal(t, att.Desc.Annotations["vnd.docker.reference.type"], "attestation-manifest")
-	var attest intoto.Statement
+	var attest intotov1.Statement
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
-	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+	require.Equal(t, "https://in-toto.io/Statement/v1", attest.Type)
 	require.Equal(t, "https://slsa.dev/provenance/v0.2", attest.PredicateType) // intentionally not const
 
 	type stmtT struct {

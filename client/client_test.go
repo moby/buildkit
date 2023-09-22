@@ -38,6 +38,7 @@ import (
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/distribution/reference"
+	intotov1 "github.com/in-toto/attestation/go/v1"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
@@ -71,6 +72,7 @@ import (
 	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 func init() {
@@ -8171,7 +8173,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 			require.Equal(t, len(att.Layers), len(att.Img.RootFS.DiffIDs))
 			require.Equal(t, len(att.Img.History), 0)
 
-			var attest intoto.Statement
+			var attest intotov1.Statement
 			require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 
 			purls := map[string]string{}
@@ -8190,7 +8192,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 			require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
 			require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
-			subjects := []intoto.Subject{
+			subjects := []intotov1.ResourceDescriptor{
 				{
 					Name: purls[targets[0]],
 					Digest: map[string]string{
@@ -8206,13 +8208,13 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 			}
 			require.Equal(t, subjects, attest.Subject)
 
-			var attest2 intoto.Statement
+			var attest2 intotov1.Statement
 			require.NoError(t, json.Unmarshal(att.LayersRaw[1], &attest2))
 
 			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest2.Type)
 			require.Equal(t, "https://example.com/attestations2/v1.0", attest2.PredicateType)
 			require.Nil(t, attest2.Predicate)
-			subjects = []intoto.Subject{{
+			subjects = []intotov1.ResourceDescriptor{{
 				Name: "/attestation.json",
 				Digest: map[string]string{
 					"sha256": successDigest.Encoded(),
@@ -8253,7 +8255,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 		require.NoError(t, err)
 
 		for _, p := range ps {
-			var attest intoto.Statement
+			var attest intotov1.Statement
 			dt, err := os.ReadFile(path.Join(dir, strings.ReplaceAll(platforms.Format(p), "/", "_"), "test.attestation.json"))
 			require.NoError(t, err)
 			require.NoError(t, json.Unmarshal(dt, &attest))
@@ -8262,12 +8264,12 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 			require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
 			require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
 
-			require.Equal(t, []intoto.Subject{{
+			require.Equal(t, []intotov1.ResourceDescriptor{{
 				Name:   "greeting",
 				Digest: result.ToDigestMap(digest.Canonical.FromString("hello " + platforms.Format(p) + "!")),
 			}}, attest.Subject)
 
-			var attest2 intoto.Statement
+			var attest2 intotov1.Statement
 			dt, err = os.ReadFile(path.Join(dir, strings.ReplaceAll(platforms.Format(p), "/", "_"), "test.attestation2.json"))
 			require.NoError(t, err)
 			require.NoError(t, json.Unmarshal(dt, &attest2))
@@ -8275,7 +8277,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest2.Type)
 			require.Equal(t, "https://example.com/attestations2/v1.0", attest2.PredicateType)
 			require.Nil(t, attest2.Predicate)
-			subjects := []intoto.Subject{{
+			subjects := []intotov1.ResourceDescriptor{{
 				Name: "/attestation.json",
 				Digest: map[string]string{
 					"sha256": successDigest.Encoded(),
@@ -8311,7 +8313,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 		require.NoError(t, err)
 
 		for _, p := range ps {
-			var attest intoto.Statement
+			var attest intotov1.Statement
 			item := m[path.Join(strings.ReplaceAll(platforms.Format(p), "/", "_"), "test.attestation.json")]
 			require.NotNil(t, item)
 			require.NoError(t, json.Unmarshal(item.Data, &attest))
@@ -8320,12 +8322,12 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 			require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
 			require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
 
-			require.Equal(t, []intoto.Subject{{
+			require.Equal(t, []intotov1.ResourceDescriptor{{
 				Name:   "greeting",
 				Digest: result.ToDigestMap(digest.Canonical.FromString("hello " + platforms.Format(p) + "!")),
 			}}, attest.Subject)
 
-			var attest2 intoto.Statement
+			var attest2 intotov1.Statement
 			item = m[path.Join(strings.ReplaceAll(platforms.Format(p), "/", "_"), "test.attestation2.json")]
 			require.NotNil(t, item)
 			require.NoError(t, json.Unmarshal(item.Data, &attest2))
@@ -8333,7 +8335,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest2.Type)
 			require.Equal(t, "https://example.com/attestations2/v1.0", attest2.PredicateType)
 			require.Nil(t, attest2.Predicate)
-			subjects := []intoto.Subject{{
+			subjects := []intotov1.ResourceDescriptor{{
 				Name: "/attestation.json",
 				Digest: map[string]string{
 					"sha256": successDigest.Encoded(),
@@ -8464,7 +8466,7 @@ func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
 	atts := imgs.Filter("unknown/unknown")
 	require.Equal(t, len(ps), len(atts.Images))
 	for i, att := range atts.Images {
-		var attest intoto.Statement
+		var attest intotov1.Statement
 		require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 
 		require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
@@ -8472,7 +8474,7 @@ func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
 		require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
 
 		name := fmt.Sprintf("pkg:docker/%s/buildkit/testattestationsemptysubject@latest?platform=%s", url.QueryEscape(registry), url.QueryEscape(platforms.Format(ps[i])))
-		subjects := []intoto.Subject{{
+		subjects := []intotov1.ResourceDescriptor{{
 			Name: name,
 			Digest: map[string]string{
 				"sha256": bases[i].Desc.Digest.Encoded(),
@@ -8531,14 +8533,13 @@ func testAttestationBundle(t *testing.T, sb integration.Sandbox) {
 			}
 			res.AddRef(pk, ref)
 
-			stmt := intoto.Statement{
-				StatementHeader: intoto.StatementHeader{
-					Type:          intoto.StatementInTotoV01,
-					PredicateType: "https://example.com/attestations/v1.0",
-				},
-				Predicate: map[string]interface{}{
-					"foo": "1",
-				},
+			pred, _ := structpb.NewStruct(map[string]interface{}{
+				"foo": "1",
+			})
+			stmt := &intotov1.Statement{
+				Type:          intotov1.StatementTypeUri,
+				PredicateType: "https://example.com/attestations/v1.0",
+				Predicate:     pred,
 			}
 			buff := bytes.NewBuffer(nil)
 			enc := json.NewEncoder(buff)
@@ -8617,13 +8618,13 @@ func testAttestationBundle(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, len(ps)*1, len(atts.Images))
 	for i, att := range atts.Images {
 		require.Equal(t, 1, len(att.LayersRaw))
-		var attest intoto.Statement
+		var attest intotov1.Statement
 		require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 
 		require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
 		require.Equal(t, map[string]interface{}{"foo": "1"}, attest.Predicate)
 		name := fmt.Sprintf("pkg:docker/%s/buildkit/testattestationsbundle@latest?platform=%s", url.QueryEscape(registry), url.QueryEscape(platforms.Format(ps[i])))
-		subjects := []intoto.Subject{{
+		subjects := []intotov1.ResourceDescriptor{{
 			Name: name,
 			Digest: map[string]string{
 				"sha256": bases[i].Desc.Digest.Encoded(),
@@ -8840,7 +8841,7 @@ EOF
 	require.Equal(t, 2, len(imgs.Images))
 
 	att := imgs.Find("unknown/unknown")
-	attest := intoto.Statement{}
+	attest := intotov1.Statement{}
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
@@ -8872,7 +8873,7 @@ EOF
 	require.Equal(t, 2, len(imgs.Images))
 
 	att = imgs.Find("unknown/unknown")
-	attest = intoto.Statement{}
+	attest = intotov1.Statement{}
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
@@ -8904,7 +8905,7 @@ EOF
 	require.Equal(t, 2, len(imgs.Images))
 
 	att = imgs.Find("unknown/unknown")
-	attest = intoto.Statement{}
+	attest = intotov1.Statement{}
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
@@ -9070,7 +9071,7 @@ EOF
 
 	att := imgs.Find("unknown/unknown")
 	require.NotNil(t, att)
-	attest := intoto.Statement{}
+	attest := intotov1.Statement{}
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
@@ -9213,7 +9214,7 @@ func testSBOMSupplements(t *testing.T, sb integration.Sandbox) {
 
 	att := imgs.Find("unknown/unknown")
 	attest := struct {
-		intoto.StatementHeader
+		intotov1.Statement
 		Predicate spdx.Document
 	}{}
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))

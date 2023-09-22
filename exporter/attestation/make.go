@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/containerd/continuity/fs"
-	intoto "github.com/in-toto/in-toto-golang/in_toto"
+	intotov1 "github.com/in-toto/attestation/go/v1"
 	"github.com/moby/buildkit/exporter"
 	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/session"
@@ -14,6 +14,7 @@ import (
 	"github.com/moby/buildkit/solver/result"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // ReadAll reads the content of an attestation.
@@ -56,9 +57,9 @@ func ReadAll(ctx context.Context, s session.Group, att exporter.Attestation) ([]
 
 // MakeInTotoStatements iterates over all provided result attestations and
 // generates intoto attestation statements.
-func MakeInTotoStatements(ctx context.Context, s session.Group, attestations []exporter.Attestation, defaultSubjects []intoto.Subject) ([]intoto.Statement, error) {
+func MakeInTotoStatements(ctx context.Context, s session.Group, attestations []exporter.Attestation, defaultSubjects []*intotov1.ResourceDescriptor) ([]*intotov1.Statement, error) {
 	eg, ctx := errgroup.WithContext(ctx)
-	statements := make([]intoto.Statement, len(attestations))
+	statements := make([]*intotov1.Statement, len(attestations))
 
 	for i, att := range attestations {
 		i, att := i, att
@@ -74,7 +75,7 @@ func MakeInTotoStatements(ctx context.Context, s session.Group, attestations []e
 				if err != nil {
 					return err
 				}
-				statements[i] = *stmt
+				statements[i] = stmt
 			case gatewaypb.AttestationKindBundle:
 				return errors.New("bundle attestation kind must be un-bundled first")
 			}
@@ -87,13 +88,13 @@ func MakeInTotoStatements(ctx context.Context, s session.Group, attestations []e
 	return statements, nil
 }
 
-func makeInTotoStatement(ctx context.Context, content []byte, attestation exporter.Attestation, defaultSubjects []intoto.Subject) (*intoto.Statement, error) {
+func makeInTotoStatement(ctx context.Context, content []byte, attestation exporter.Attestation, defaultSubjects []*intotov1.ResourceDescriptor) (*intotov1.Statement, error) {
 	if len(attestation.InToto.Subjects) == 0 {
 		attestation.InToto.Subjects = []result.InTotoSubject{{
 			Kind: gatewaypb.InTotoSubjectKindSelf,
 		}}
 	}
-	subjects := []intoto.Subject{}
+	subjects := []*intotov1.ResourceDescriptor{}
 	for _, subject := range attestation.InToto.Subjects {
 		subjectName := "_"
 		if subject.Name != "" {
@@ -110,14 +111,14 @@ func makeInTotoStatement(ctx context.Context, content []byte, attestation export
 				}
 
 				for _, name := range subjectNames {
-					subjects = append(subjects, intoto.Subject{
+					subjects = append(subjects, &intotov1.ResourceDescriptor{
 						Name:   name,
 						Digest: defaultSubject.Digest,
 					})
 				}
 			}
 		case gatewaypb.InTotoSubjectKindRaw:
-			subjects = append(subjects, intoto.Subject{
+			subjects = append(subjects, &intotov1.ResourceDescriptor{
 				Name:   subjectName,
 				Digest: result.ToDigestMap(subject.Digest...),
 			})
@@ -126,13 +127,21 @@ func makeInTotoStatement(ctx context.Context, content []byte, attestation export
 		}
 	}
 
-	stmt := intoto.Statement{
-		StatementHeader: intoto.StatementHeader{
-			Type:          intoto.StatementInTotoV01,
-			PredicateType: attestation.InToto.PredicateType,
-			Subject:       subjects,
-		},
-		Predicate: json.RawMessage(content),
+	var pred map[string]interface{}
+	err := json.Unmarshal(content, &pred)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal attestation predicate")
+	}
+	predicate, err := structpb.NewStruct(pred)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to convert attestation predicate to struct")
+	}
+
+	stmt := intotov1.Statement{
+		Type:          intotov1.StatementTypeUri,
+		Subject:       subjects,
+		PredicateType: attestation.InToto.PredicateType,
+		Predicate:     predicate,
 	}
 	return &stmt, nil
 }

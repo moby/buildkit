@@ -60,7 +60,7 @@ The contents of each layer will be a blob dependent on its `mediaType`.
 
   ```json
   {
-    "_type": "https://in-toto.io/Statement/v0.1",
+    "_type": "https://in-toto.io/Statement/v1",
     "subject": [
       {
         "name": "<NAME>",
@@ -198,7 +198,7 @@ Attestation body containing the SBOM data listing the packages used during the b
 
 ```json
 {
-  "_type": "https://in-toto.io/Statement/v0.1",
+  "_type": "https://in-toto.io/Statement/v1",
   "predicateType": "https://spdx.dev/Document",
   "subject": [
     {

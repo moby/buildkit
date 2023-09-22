@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/containerd/continuity/fs"
-	intoto "github.com/in-toto/in-toto-golang/in_toto"
+	intotov1 "github.com/in-toto/attestation/go/v1"
 	"github.com/moby/buildkit/exporter"
 	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/session"
@@ -137,7 +137,7 @@ func unbundle(ctx context.Context, root string, bundle exporter.Attestation) ([]
 			return nil, err
 		}
 		dec := json.NewDecoder(f)
-		var stmt intoto.Statement
+		var stmt intotov1.Statement
 		if err := dec.Decode(&stmt); err != nil {
 			return nil, errors.Wrap(err, "cannot decode in-toto statement")
 		}
