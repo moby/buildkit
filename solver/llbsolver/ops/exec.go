@@ -227,14 +227,26 @@ func (e *ExecOp) getMountDeps() ([]dep, error) {
 			return nil, errors.Errorf("invalid mountinput %v", m)
 		}
 
-		sel := m.Selector
-		if sel != "" {
-			sel = path.Join("/", sel)
-			deps[m.Input].Selectors = append(deps[m.Input].Selectors, sel)
-		}
+		// Mark the selector path as used. In this section, we need to
+		// record root selectors so the selection criteria isn't narrowed
+		// erroneously.
+		sel := path.Join("/", m.Selector)
+		deps[m.Input].Selectors = append(deps[m.Input].Selectors, sel)
 
 		if (!m.Readonly || m.Dest == pb.RootMount) && m.Output != -1 { // exclude read-only rootfs && read-write mounts
 			deps[m.Input].NoContentBasedHash = true
+		}
+	}
+
+	// Remove extraneous selectors that may have been generated from above.
+	for i, dep := range deps {
+		for _, sel := range dep.Selectors {
+			// If the root path is included in the list of selectors,
+			// this is the same as if no selector was used. Zero out this field.
+			if sel == "/" {
+				deps[i].Selectors = nil
+				break
+			}
 		}
 	}
 	return deps, nil
