@@ -34,7 +34,7 @@ func (c zstdType) NeedsConversion(ctx context.Context, cs content.Store, desc oc
 	return true, nil
 }
 
-func (c zstdType) NeedsComputeDiffBySelf() bool {
+func (c zstdType) NeedsComputeDiffBySelf(comp Config) bool {
 	return true
 }
 
