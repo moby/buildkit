@@ -59,6 +59,9 @@ insecure-entitlements = [ "network.host", "security.insecure" ]
   # running rootless buildkit inside a container.
   noProcessSandbox = false
   gc = true
+  # gckeepstorage can be an integer number of bytes (e.g. 512000000), a string
+  # with a unit (e.g. "512MB"), or a string percentage of the total disk
+  # space (e.g. "10%")
   gckeepstorage = 9000
   # alternate OCI worker binary name(example 'crun'), by default either 
   # buildkit-runc or runc binary is used
