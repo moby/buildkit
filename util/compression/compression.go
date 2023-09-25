@@ -26,7 +26,7 @@ type Type interface {
 	Compress(ctx context.Context, comp Config) (compressorFunc Compressor, finalize Finalizer)
 	Decompress(ctx context.Context, cs content.Store, desc ocispecs.Descriptor) (io.ReadCloser, error)
 	NeedsConversion(ctx context.Context, cs content.Store, desc ocispecs.Descriptor) (bool, error)
-	NeedsComputeDiffBySelf() bool
+	NeedsComputeDiffBySelf(comp Config) bool
 	OnlySupportOCITypes() bool
 	NeedsForceCompression() bool
 	MediaType() string

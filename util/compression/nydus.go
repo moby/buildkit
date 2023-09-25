@@ -104,7 +104,7 @@ func (c nydusType) NeedsConversion(ctx context.Context, cs content.Store, desc o
 	return true, nil
 }
 
-func (c nydusType) NeedsComputeDiffBySelf() bool {
+func (c nydusType) NeedsComputeDiffBySelf(comp Config) bool {
 	return true
 }
 

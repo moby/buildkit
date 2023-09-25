@@ -134,7 +134,7 @@ func (c estargzType) NeedsConversion(ctx context.Context, cs content.Store, desc
 	return true, nil
 }
 
-func (c estargzType) NeedsComputeDiffBySelf() bool {
+func (c estargzType) NeedsComputeDiffBySelf(comp Config) bool {
 	return true
 }
 

@@ -189,7 +189,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 					}
 				}
 
-				if desc.Digest == "" && !isTypeWindows(sr) && comp.Type.NeedsComputeDiffBySelf() {
+				if desc.Digest == "" && !isTypeWindows(sr) && comp.Type.NeedsComputeDiffBySelf(comp) {
 					// These compression types aren't supported by containerd differ. So try to compute diff on buildkit side.
 					// This case can be happen on containerd worker + non-overlayfs snapshotter (e.g. native).
 					// See also: https://github.com/containerd/containerd/issues/4263
