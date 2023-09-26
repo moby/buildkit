@@ -187,6 +187,12 @@ func (e *ExecOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 }
 
 func dedupePaths(inp []string) []string {
+	// If there's one or fewer inputs, then dedupe won't do anything.
+	// Skip the allocations and logic of this function in that case.
+	if len(inp) <= 1 {
+		return inp
+	}
+
 	old := make(map[string]struct{}, len(inp))
 	for _, p := range inp {
 		old[p] = struct{}{}
@@ -195,7 +201,10 @@ func dedupePaths(inp []string) []string {
 	for p1 := range old {
 		var skip bool
 		for p2 := range old {
-			if p1 != p2 && strings.HasPrefix(p1, p2+"/") {
+			// Check if p2 is a prefix of p1. Ensure that p2 ends in a slash
+			// so that we know p2 is a parent directory of p1. We don't want
+			// /foo to be a parent of /foobar.
+			if p1 != p2 && strings.HasPrefix(p1, forceTrailingSlash(p2)) {
 				skip = true
 				break
 			}
@@ -210,9 +219,21 @@ func dedupePaths(inp []string) []string {
 	return paths
 }
 
+// forceTrailingSlash ensures that the path always ends with a path separator.
+// If the path already ends with a /, this method returns the same string.
+func forceTrailingSlash(s string) string {
+	if strings.HasSuffix(s, "/") {
+		return s
+	}
+	return s + "/"
+}
+
 func toSelectors(p []string) []opsutils.Selector {
 	sel := make([]opsutils.Selector, 0, len(p))
 	for _, p := range p {
+		if p == "" || p == "/" {
+			return nil
+		}
 		sel = append(sel, opsutils.Selector{Path: p, FollowLinks: true})
 	}
 	return sel
@@ -233,26 +254,11 @@ func (e *ExecOp) getMountDeps() ([]dep, error) {
 			return nil, errors.Errorf("invalid mountinput %v", m)
 		}
 
-		// Mark the selector path as used. In this section, we need to
-		// record root selectors so the selection criteria isn't narrowed
-		// erroneously.
 		sel := path.Join("/", m.Selector)
 		deps[m.Input].Selectors = append(deps[m.Input].Selectors, sel)
 
 		if (!m.Readonly || m.Dest == pb.RootMount) && m.Output != -1 { // exclude read-only rootfs && read-write mounts
 			deps[m.Input].NoContentBasedHash = true
-		}
-	}
-
-	// Remove extraneous selectors that may have been generated from above.
-	for i, dep := range deps {
-		for _, sel := range dep.Selectors {
-			// If the root path is included in the list of selectors,
-			// this is the same as if no selector was used. Zero out this field.
-			if sel == "/" {
-				deps[i].Selectors = nil
-				break
-			}
 		}
 	}
 	return deps, nil

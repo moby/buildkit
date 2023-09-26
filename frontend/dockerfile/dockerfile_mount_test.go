@@ -1,6 +1,7 @@
 package dockerfile
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,6 +25,7 @@ var mountTests = integration.TestFuncs(
 	testMountFromError,
 	testMountInvalid,
 	testMountTmpfsSize,
+	testMountDuplicate,
 	testCacheMountUser,
 )
 
@@ -467,4 +469,56 @@ COPY --from=base /tmpfssize /
 	dt, err := os.ReadFile(filepath.Join(destDir, "tmpfssize"))
 	require.NoError(t, err)
 	require.Contains(t, string(dt), `size=131072k`)
+}
+
+// moby/buildkit#4123
+func testMountDuplicate(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox AS base
+RUN --mount=source=.,target=/tmp/test \
+  --mount=source=b.txt,target=/tmp/b.txt \
+  cat /tmp/test/a.txt /tmp/b.txt > /combined.txt
+FROM scratch
+COPY --from=base /combined.txt /
+`)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir := t.TempDir()
+
+	// Run this dockerfile a few times. It should update the context
+	// for a.txt properly and update the output.
+	test := func(text string) {
+		dir := integration.Tmpdir(
+			t,
+			fstest.CreateFile("Dockerfile", dockerfile, 0600),
+			fstest.CreateFile("a.txt", []byte(text), 0600),
+			fstest.CreateFile("b.txt", []byte("bar\n"), 0600),
+		)
+
+		_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+			Exports: []client.ExportEntry{
+				{
+					Type:      client.ExporterLocal,
+					OutputDir: destDir,
+				},
+			},
+			LocalDirs: map[string]string{
+				dockerui.DefaultLocalNameDockerfile: dir,
+				dockerui.DefaultLocalNameContext:    dir,
+			},
+		}, nil)
+		require.NoError(t, err)
+
+		dt, err := os.ReadFile(filepath.Join(destDir, "combined.txt"))
+		require.NoError(t, err)
+		require.Equal(t, fmt.Sprintf("%sbar\n", text), string(dt))
+	}
+
+	test("foo\n")
+	test("updated\n")
 }
