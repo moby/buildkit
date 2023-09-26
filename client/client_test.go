@@ -206,6 +206,7 @@ func TestIntegration(t *testing.T) {
 		testLLBMountPerformance,
 		testClientCustomGRPCOpts,
 		testMultipleRecordsWithSameLayersCacheImportExport,
+		testSnapshotWithMultipleBlobs,
 		testExportLocalNoPlatformSplit,
 		testExportLocalNoPlatformSplitOverwrite,
 	)
@@ -5492,6 +5493,148 @@ func testMultipleRecordsWithSameLayersCacheImportExport(t *testing.T, sb integra
 	// and only was used, all the cache refs are released
 	// More context: https://github.com/moby/buildkit/pull/3815
 	ensurePruneAll(t, c, sb)
+}
+
+// moby/buildkit#3809
+func testSnapshotWithMultipleBlobs(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	// build two images with same layer but different compressed blobs
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	now := time.Now()
+
+	st := llb.Scratch().File(llb.Copy(llb.Image("alpine"), "/", "/alpine/", llb.WithCreatedTime(now)))
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	name1 := registry + "/multiblobtest1/image:latest"
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: "image",
+				Attrs: map[string]string{
+					"name":              name1,
+					"push":              "true",
+					"compression-level": "0",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	ensurePruneAll(t, c, sb)
+
+	st = st.File(llb.Mkfile("test", 0600, []byte("test"))) // extra layer so we don't get a cache match based on image config rootfs only
+
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	name2 := registry + "/multiblobtest2/image:latest"
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: "image",
+				Attrs: map[string]string{
+					"name":              name2,
+					"push":              "true",
+					"compression-level": "9",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	ensurePruneAll(t, c, sb)
+
+	// first build with first image
+	destDir := t.TempDir()
+
+	out1 := filepath.Join(destDir, "out1.tar")
+	outW1, err := os.Create(out1)
+	require.NoError(t, err)
+
+	st = llb.Image(name1).File(llb.Mkfile("test", 0600, []byte("test1")))
+
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterOCI, // make sure to export so blobs need to be loaded
+				Output: fixedWriteCloser(outW1),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// make sure second image does not cause any errors
+	out2 := filepath.Join(destDir, "out2.tar")
+	outW2, err := os.Create(out2)
+	require.NoError(t, err)
+
+	st = llb.Image(name2).File(llb.Mkfile("test", 0600, []byte("test2")))
+
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		FrontendAttrs: map[string]string{
+			"attest:sbom": "",
+		},
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterOCI, // make sure to export so blobs need to be loaded
+				Output: fixedWriteCloser(outW2),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// extra validation that we did get different layer blobs
+	dt, err := os.ReadFile(out1)
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(dt, false)
+	require.NoError(t, err)
+
+	var index ocispecs.Index
+	err = json.Unmarshal(m["index.json"].Data, &index)
+	require.NoError(t, err)
+
+	var mfst ocispecs.Manifest
+	err = json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].Data, &mfst)
+	require.NoError(t, err)
+
+	dt, err = os.ReadFile(out2)
+	require.NoError(t, err)
+
+	m, err = testutil.ReadTarToMap(dt, false)
+	require.NoError(t, err)
+
+	err = json.Unmarshal(m["index.json"].Data, &index)
+	require.NoError(t, err)
+
+	err = json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].Data, &index)
+	require.NoError(t, err)
+
+	var mfst2 ocispecs.Manifest
+	err = json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].Data, &mfst2)
+	require.NoError(t, err)
+
+	require.NotEqual(t, mfst.Layers[0].Digest, mfst2.Layers[0].Digest)
 }
 
 func testExportLocalNoPlatformSplit(t *testing.T, sb integration.Sandbox) {
