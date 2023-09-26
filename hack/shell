@@ -6,8 +6,13 @@ function clean() {
   docker rmi $(cat $iidfile)
 }
 
+build_args=
+if [ "$BUILDKIT_DEBUG" -ne 0 ]; then
+  build_args="--build-arg BUILDKIT_DEBUG=1"
+fi
+
 iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
-DOCKER_BUILDKIT=1 docker build --iidfile $iidfile --target dev-env .
+DOCKER_BUILDKIT=1 docker build --iidfile $iidfile $build_args --target dev-env .
 
 trap clean EXIT
 SSH=

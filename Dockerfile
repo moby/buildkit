@@ -15,9 +15,11 @@ ARG MINIO_VERSION=RELEASE.2022-05-03T20-36-08Z
 ARG MINIO_MC_VERSION=RELEASE.2022-05-04T06-07-55Z
 ARG AZURITE_VERSION=3.18.0
 ARG GOTESTSUM_VERSION=v1.9.0
+ARG DELVE_VERSION=v1.21.0
 
 ARG GO_VERSION=1.20
 ARG ALPINE_VERSION=3.18
+ARG BUILDKIT_DEBUG
 
 # minio for s3 integration tests
 FROM minio/minio:${MINIO_VERSION} AS minio
@@ -47,6 +49,13 @@ RUN apk add --no-cache git
 FROM golatest AS gobuild-base
 RUN apk add --no-cache file bash clang lld musl-dev pkgconfig git make
 COPY --link --from=xx / /
+
+# delve for debug variant
+FROM gobuild-base AS dlv
+ARG DELVE_VERSION
+RUN --mount=target=/root/.cache,type=cache \
+  --mount=target=/go/pkg/mod,type=cache \
+  GOBIN=/usr/bin go install github.com/go-delve/delve/cmd/dlv@${DELVE_VERSION}
 
 # runc source
 FROM git AS runc-src
@@ -97,10 +106,12 @@ ARG TARGETPLATFORM
 ARG GOBUILDFLAGS
 ARG VERIFYFLAGS="--static"
 ARG CGO_ENABLED=0
+ARG BUILDKIT_DEBUG
+ARG GOGCFLAGS=${BUILDKIT_DEBUG:+"all=-N -l"}
 RUN --mount=target=. --mount=target=/root/.cache,type=cache \
   --mount=target=/go/pkg/mod,type=cache \
   --mount=source=/tmp/.ldflags,target=/tmp/.ldflags,from=buildkit-version \
-  xx-go build ${GOBUILDFLAGS} -ldflags "$(cat /tmp/.ldflags) -extldflags '-static'" -tags "osusergo netgo static_build seccomp ${BUILDKITD_TAGS}" -o /usr/bin/buildkitd ./cmd/buildkitd && \
+  xx-go build ${GOBUILDFLAGS} -gcflags="${GOGCFLAGS}" -ldflags "$(cat /tmp/.ldflags) -extldflags '-static'" -tags "osusergo netgo static_build seccomp ${BUILDKITD_TAGS}" -o /usr/bin/buildkitd ./cmd/buildkitd && \
   xx-verify ${VERIFYFLAGS} /usr/bin/buildkitd
 
 FROM scratch AS binaries-linux
@@ -217,6 +228,21 @@ COPY --link --from=binaries / /usr/bin/
 ENV BUILDKIT_SETUP_CGROUPV2_ROOT=1
 ENTRYPOINT ["buildkitd"]
 
+FROM buildkit-linux AS buildkit-linux-debug
+COPY --link --from=dlv /usr/bin/dlv /usr/bin/dlv
+COPY --link --chmod=755 <<EOF /docker-entrypoint.sh
+#!/bin/sh
+exec dlv exec /usr/bin/buildkitd \\
+  --api-version=2 \\
+  -l 0.0.0.0:\${DELVE_PORT:-5000} \\
+  --headless=true \\
+  --accept-multiclient \\
+  --continue \\
+  -- "\$@"
+EOF
+ENV DELVE_PORT 5000
+ENTRYPOINT ["/docker-entrypoint.sh"]
+
 FROM binaries AS buildkit-darwin
 
 FROM binaries AS buildkit-freebsd
@@ -320,4 +346,4 @@ VOLUME /home/user/.local/share/buildkit
 ENTRYPOINT ["rootlesskit", "buildkitd"]
 
 # buildkit builds the buildkit container image
-FROM buildkit-$TARGETOS AS buildkit
+FROM buildkit-$TARGETOS${BUILDKIT_DEBUG:+-debug} AS buildkit
