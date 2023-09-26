@@ -38,6 +38,7 @@ type containerdExecutor struct {
 	selinux          bool
 	traceSocket      string
 	rootless         bool
+	runtime          *RuntimeInfo
 }
 
 // OnCreateRuntimer provides an alternative to OCI hooks for applying network
@@ -53,8 +54,13 @@ type OnCreateRuntimer interface {
 	OnCreateRuntime(pid uint32) error
 }
 
+type RuntimeInfo struct {
+	Name    string
+	Options any
+}
+
 // New creates a new executor backed by connection to containerd API
-func New(client *containerd.Client, root, cgroup string, networkProviders map[pb.NetMode]network.Provider, dnsConfig *oci.DNSConfig, apparmorProfile string, selinux bool, traceSocket string, rootless bool) executor.Executor {
+func New(client *containerd.Client, root, cgroup string, networkProviders map[pb.NetMode]network.Provider, dnsConfig *oci.DNSConfig, apparmorProfile string, selinux bool, traceSocket string, rootless bool, runtime *RuntimeInfo) executor.Executor {
 	// clean up old hosts/resolv.conf file. ignore errors
 	os.RemoveAll(filepath.Join(root, "hosts"))
 	os.RemoveAll(filepath.Join(root, "resolv.conf"))
@@ -70,6 +76,7 @@ func New(client *containerd.Client, root, cgroup string, networkProviders map[pb
 		selinux:          selinux,
 		traceSocket:      traceSocket,
 		rootless:         rootless,
+		runtime:          runtime,
 	}
 }
 
@@ -145,9 +152,13 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 		defer releaseSpec()
 	}
 
-	container, err := w.client.NewContainer(ctx, id,
+	opts := []containerd.NewContainerOpts{
 		containerd.WithSpec(spec),
-	)
+	}
+	if w.runtime != nil {
+		opts = append(opts, containerd.WithRuntime(w.runtime.Name, w.runtime.Options))
+	}
+	container, err := w.client.NewContainer(ctx, id, opts...)
 	if err != nil {
 		return nil, err
 	}
