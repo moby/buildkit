@@ -54,6 +54,7 @@ func init() {
 
 	if defaultConf.Workers.Containerd.Runtime.Name == "" {
 		if runtime.GOOS == "freebsd" {
+			// TODO: this can be removed once containerd/containerd#8964 is included
 			defaultConf.Workers.Containerd.Runtime.Name = "wtf.sbk.runj.v1"
 		} else {
 			defaultConf.Workers.Containerd.Runtime.Name = defaults.DefaultRuntime
