@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -32,10 +33,6 @@ func runBuildkitd(ctx context.Context, conf *integration.BackendConfig, args []s
 		}
 	}()
 
-	if conf.ConfigFile != "" {
-		args = append(args, "--config="+conf.ConfigFile)
-	}
-
 	tmpdir, err := os.MkdirTemp("", "bktest_buildkitd")
 	if err != nil {
 		return "", nil, err
@@ -49,12 +46,20 @@ func runBuildkitd(ctx context.Context, conf *integration.BackendConfig, args []s
 	if err := os.Chown(filepath.Join(tmpdir, "tmp"), uid, gid); err != nil {
 		return "", nil, err
 	}
-
 	deferF.Append(func() error { return os.RemoveAll(tmpdir) })
+
+	cfgfile, err := integration.WriteConfig(append(conf.DaemonConfig, withOTELSocketPath(getTraceSocketPath(tmpdir))))
+	if err != nil {
+		return "", nil, err
+	}
+	deferF.Append(func() error {
+		return os.RemoveAll(filepath.Dir(cfgfile))
+	})
+	args = append(args, "--config="+cfgfile)
 
 	address = getBuildkitdAddr(tmpdir)
 
-	args = append(args, "--root", tmpdir, "--addr", address, "--otel-socket-path", getTraceSocketPath(tmpdir), "--debug")
+	args = append(args, "--root", tmpdir, "--addr", address, "--debug")
 	cmd := exec.Command(args[0], args[1:]...) //nolint:gosec // test utility
 	cmd.Env = append(os.Environ(), "BUILDKIT_DEBUG_EXEC_OUTPUT=1", "BUILDKIT_DEBUG_PANIC_ON_ERROR=1", "TMPDIR="+filepath.Join(tmpdir, "tmp"))
 	cmd.Env = append(cmd.Env, extraEnv...)
@@ -86,4 +91,18 @@ func runBuildkitd(ctx context.Context, conf *integration.BackendConfig, args []s
 	})
 
 	return address, cl, err
+}
+
+func withOTELSocketPath(socketPath string) integration.ConfigUpdater {
+	return otelSocketPath(socketPath)
+}
+
+type otelSocketPath string
+
+func (osp otelSocketPath) UpdateConfigFile(in string) string {
+	return fmt.Sprintf(`%s
+
+[otel]
+  socketPath = %q
+`, in, osp)
 }
