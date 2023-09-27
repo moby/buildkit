@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -78,15 +77,14 @@ func newSandbox(ctx context.Context, w Worker, mirror string, mv matrixValue) (s
 		Logs: make(map[string]*bytes.Buffer),
 	}
 
-	var upt []ConfigUpdater
 	for _, v := range mv.values {
 		if u, ok := v.value.(ConfigUpdater); ok {
-			upt = append(upt, u)
+			cfg.DaemonConfig = append(cfg.DaemonConfig, u)
 		}
 	}
 
 	if mirror != "" {
-		upt = append(upt, withMirrorConfig(mirror))
+		cfg.DaemonConfig = append(cfg.DaemonConfig, withMirrorConfig(mirror))
 	}
 
 	deferF := &MultiCloser{}
@@ -98,17 +96,6 @@ func newSandbox(ctx context.Context, w Worker, mirror string, mv matrixValue) (s
 			cl = nil
 		}
 	}()
-
-	if len(upt) > 0 {
-		dir, err := writeConfig(upt)
-		if err != nil {
-			return nil, nil, err
-		}
-		deferF.Append(func() error {
-			return os.RemoveAll(dir)
-		})
-		cfg.ConfigFile = filepath.Join(dir, buildkitdConfigFile)
-	}
 
 	b, closer, err := w.New(ctx, cfg)
 	if err != nil {

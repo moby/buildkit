@@ -76,9 +76,27 @@ func (c Moby) New(ctx context.Context, cfg *integration.BackendConfig) (b integr
 		return nil, nil, err
 	}
 
-	bkcfg, err := config.LoadFile(cfg.ConfigFile)
+	deferF := &integration.MultiCloser{}
+	cl = deferF.F()
+
+	defer func() {
+		if err != nil {
+			deferF.F()()
+			cl = nil
+		}
+	}()
+
+	cfgFile, err := integration.WriteConfig(cfg.DaemonConfig)
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "failed to load buildkit config file %s", cfg.ConfigFile)
+		return nil, nil, err
+	}
+	deferF.Append(func() error {
+		return os.RemoveAll(filepath.Dir(cfgFile))
+	})
+
+	bkcfg, err := config.LoadFile(cfgFile)
+	if err != nil {
+		return nil, nil, errors.Wrapf(err, "failed to load buildkit config file %s", cfgFile)
 	}
 
 	dcfg := dockerd.Config{
@@ -106,16 +124,6 @@ func (c Moby) New(ctx context.Context, cfg *integration.BackendConfig) (b integr
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "failed to marshal dockerd config")
 	}
-
-	deferF := &integration.MultiCloser{}
-	cl = deferF.F()
-
-	defer func() {
-		if err != nil {
-			deferF.F()()
-			cl = nil
-		}
-	}()
 
 	var proxyGroup errgroup.Group
 	deferF.Append(proxyGroup.Wait)
