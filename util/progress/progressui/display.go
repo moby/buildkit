@@ -310,7 +310,6 @@ func (d *rawJSONDisplay) done() {
 	// No actions needed.
 }
 
-const termHeight = 6
 const termPad = 10
 
 type displayInfo struct {
