@@ -247,18 +247,20 @@ func testDefaultEnvWithArgs(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
-FROM busybox AS build
+ARG image=idlebox
+FROM busy${image#idle} AS build
 ARG my_arg
 ENV my_arg "my_arg=${my_arg:-def_val}"
+ENV my_trimmed_arg "${my_arg%%e*}"
 COPY myscript.sh myscript.sh
-RUN ./myscript.sh $my_arg
+RUN ./myscript.sh $my_arg $my_trimmed_arg
 FROM scratch
 COPY --from=build /out /out
 `)
 
 	script := []byte(`
 #!/usr/bin/env sh
-echo -n $my_arg $1 > /out
+echo -n $my_arg $* > /out
 `)
 
 	dir := integration.Tmpdir(
@@ -278,9 +280,9 @@ echo -n $my_arg $1 > /out
 		frontendAttrs map[string]string
 		expected      string
 	}{
-		{"nil", nil, "my_arg=def_val my_arg=def_val"},
-		{"empty", map[string]string{"build-arg:my_arg": ""}, "my_arg=def_val my_arg=def_val"},
-		{"override", map[string]string{"build-arg:my_arg": "override"}, "my_arg=override my_arg=override"},
+		{"nil", nil, "my_arg=def_val my_arg=def_val my_arg=d"},
+		{"empty", map[string]string{"build-arg:my_arg": ""}, "my_arg=def_val my_arg=def_val my_arg=d"},
+		{"override", map[string]string{"build-arg:my_arg": "override"}, "my_arg=override my_arg=override my_arg=ov"},
 	} {
 		t.Run(x.name, func(t *testing.T) {
 			_, err = f.Solve(sb.Context(), c, client.SolveOpt{
