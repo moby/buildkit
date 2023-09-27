@@ -70,11 +70,6 @@ if [[ "$versionTag" == "$TAG" ]]; then
   fi
 fi
 
-debugFlags=""
-if [ -n "$BUILDKIT_DEBUG" ]; then
-  debugFlags="--build-arg BUILDKIT_DEBUG=$BUILDKIT_DEBUG"
-fi
-
 importCacheFlags=""
 for tagName in $tagNames; do
   importCacheFlags="$importCacheFlags--cache-from=type=registry,ref=$tagName "
@@ -103,5 +98,5 @@ if [[ "$RELEASE" = "true" ]] && [[ "$GITHUB_ACTIONS" = "true" ]]; then
   nocacheFilterFlag="--no-cache-filter=git,buildkit-export,gobuild-base"
 fi
 
-buildxCmd build $platformFlag $targetFlag $importCacheFlags $exportCacheFlags $tagFlags $debugFlags $outputFlag $nocacheFilterFlag $attestFlags \
+buildxCmd build --build-arg BUILDKIT_DEBUG $platformFlag $targetFlag $importCacheFlags $exportCacheFlags $tagFlags $outputFlag $nocacheFilterFlag $attestFlags \
   $currentcontext
