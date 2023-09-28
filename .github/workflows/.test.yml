@@ -151,6 +151,8 @@ jobs:
           set: |
             *.cache-from=type=gha,scope=${{ inputs.cache_scope }}
             *.output=type=docker,name=${{ env.TEST_IMAGE_ID }}
+        env:
+          BUILDKITD_TAGS: ${{ matrix.tags }}
       -
         name: Test
         continue-on-error: ${{ matrix.tags == 'nydus' }}
@@ -158,7 +160,6 @@ jobs:
           export TEST_REPORT_SUFFIX=-${{ github.job }}-$(echo "${{ matrix.pkg }}-${{ matrix.skip-integration-tests }}-${{ matrix.kind }}-${{ matrix.worker }}-${{ matrix.tags }}" | tr -dc '[:alnum:]-\n\r' | tr '[:upper:]' '[:lower:]')
           if [ -n "${{ matrix.tags }}" ]; then
             TESTFLAGS="${TESTFLAGS} --tags=${{ matrix.tags }}"
-            export BUILDKITD_TAGS="${{ matrix.tags }}"
           fi
           if [ -n "${{ matrix.worker }}" ]; then
             export TESTFLAGS="${TESTFLAGS} --run=//worker=${{ matrix.worker }}$"
