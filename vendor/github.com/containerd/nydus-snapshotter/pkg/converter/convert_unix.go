@@ -122,7 +122,7 @@ func unpackOciTar(ctx context.Context, dst string, reader io.Reader) error {
 // unpackNydusBlob unpacks a Nydus formatted tar stream into a directory.
 // unpackBlob indicates whether to unpack blob data.
 func unpackNydusBlob(bootDst, blobDst string, ra content.ReaderAt, unpackBlob bool) error {
-	boot, err := os.OpenFile(bootDst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	boot, err := os.OpenFile(bootDst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0640)
 	if err != nil {
 		return errors.Wrapf(err, "write to bootstrap %s", bootDst)
 	}
@@ -133,7 +133,7 @@ func unpackNydusBlob(bootDst, blobDst string, ra content.ReaderAt, unpackBlob bo
 	}
 
 	if unpackBlob {
-		blob, err := os.OpenFile(blobDst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		blob, err := os.OpenFile(blobDst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0640)
 		if err != nil {
 			return errors.Wrapf(err, "write to blob %s", blobDst)
 		}
@@ -152,7 +152,7 @@ func unpackNydusBlob(bootDst, blobDst string, ra content.ReaderAt, unpackBlob bo
 	return nil
 }
 
-func seekFileByTarHeader(ra content.ReaderAt, targetName string, handle func(io.Reader, *tar.Header) error) error {
+func seekFileByTarHeader(ra content.ReaderAt, targetName string, maxSize *int64, handle func(io.Reader, *tar.Header) error) error {
 	const headerSize = 512
 
 	if headerSize > ra.Size() {
@@ -183,6 +183,10 @@ func seekFileByTarHeader(ra content.ReaderAt, targetName string, handle func(io.
 		}
 
 		if hdr.Name == targetName {
+			if maxSize != nil && hdr.Size > *maxSize {
+				return fmt.Errorf("invalid nydus tar size %d", ra.Size())
+			}
+
 			// Try to seek the part of tar data.
 			_, err = reader.Seek(cur-hdr.Size, io.SeekStart)
 			if err != nil {
@@ -208,9 +212,10 @@ func seekFileByTarHeader(ra content.ReaderAt, targetName string, handle func(io.
 
 func seekFileByTOC(ra content.ReaderAt, targetName string, handle func(io.Reader, *tar.Header) error) (*TOCEntry, error) {
 	entrySize := 128
+	maxSize := int64(1 << 20)
 	var tocEntry *TOCEntry
 
-	err := seekFileByTarHeader(ra, EntryTOC, func(tocEntryDataReader io.Reader, _ *tar.Header) error {
+	err := seekFileByTarHeader(ra, EntryTOC, &maxSize, func(tocEntryDataReader io.Reader, _ *tar.Header) error {
 		entryData, err := io.ReadAll(tocEntryDataReader)
 		if err != nil {
 			return errors.Wrap(err, "read toc entries")
@@ -296,7 +301,7 @@ func seekFile(ra content.ReaderAt, targetName string, handle func(io.Reader, *ta
 	}
 
 	// Seek target data by tar header, ensure compatible with old rafs blob format.
-	return nil, seekFileByTarHeader(ra, targetName, handle)
+	return nil, seekFileByTarHeader(ra, targetName, nil, handle)
 }
 
 // Pack converts an OCI tar stream to nydus formatted stream with a tar-like
@@ -316,7 +321,20 @@ func Pack(ctx context.Context, dest io.Writer, opt PackOption) (io.WriteCloser, 
 	}
 
 	builderPath := getBuilder(opt.BuilderPath)
-	opt.features = tool.DetectFeatures(builderPath, []tool.Feature{tool.FeatureTar2Rafs})
+
+	requiredFeatures := tool.NewFeatures(tool.FeatureTar2Rafs)
+	if opt.BatchSize != "" && opt.BatchSize != "0" {
+		requiredFeatures.Add(tool.FeatureBatchSize)
+	}
+	if opt.Encrypt {
+		requiredFeatures.Add(tool.FeatureEncrypt)
+	}
+
+	detectedFeatures, err := tool.DetectFeatures(builderPath, requiredFeatures, tool.GetHelp)
+	if err != nil {
+		return nil, err
+	}
+	opt.features = detectedFeatures
 
 	if opt.OCIRef {
 		if opt.FsVersion == "6" {
@@ -325,10 +343,18 @@ func Pack(ctx context.Context, dest io.Writer, opt PackOption) (io.WriteCloser, 
 		return nil, fmt.Errorf("oci ref can only be supported by fs version 6")
 	}
 
+	if opt.features.Contains(tool.FeatureBatchSize) && opt.FsVersion != "6" {
+		return nil, fmt.Errorf("'--batch-size' can only be supported by fs version 6")
+	}
+
 	if opt.features.Contains(tool.FeatureTar2Rafs) {
 		return packFromTar(ctx, dest, opt)
 	}
 
+	return packFromDirectory(ctx, dest, opt, builderPath)
+}
+
+func packFromDirectory(ctx context.Context, dest io.Writer, opt PackOption, builderPath string) (io.WriteCloser, error) {
 	workDir, err := ensureWorkDir(opt.WorkDir)
 	if err != nil {
 		return nil, errors.Wrap(err, "ensure work directory")
@@ -365,7 +391,7 @@ func Pack(ctx context.Context, dest io.Writer, opt PackOption) (io.WriteCloser, 
 		<-unpackDone
 
 		blobPath := filepath.Join(workDir, "blob")
-		blobFifo, err := fifo.OpenFifo(ctx, blobPath, syscall.O_CREAT|syscall.O_RDONLY|syscall.O_NONBLOCK, 0644)
+		blobFifo, err := fifo.OpenFifo(ctx, blobPath, syscall.O_CREAT|syscall.O_RDONLY|syscall.O_NONBLOCK, 0640)
 		if err != nil {
 			return errors.Wrapf(err, "create fifo file")
 		}
@@ -384,6 +410,7 @@ func Pack(ctx context.Context, dest io.Writer, opt PackOption) (io.WriteCloser, 
 				ChunkSize:        opt.ChunkSize,
 				Compressor:       opt.Compressor,
 				Timeout:          opt.Timeout,
+				Encrypt:          opt.Encrypt,
 
 				Features: opt.features,
 			})
@@ -417,13 +444,13 @@ func packFromTar(ctx context.Context, dest io.Writer, opt PackOption) (io.WriteC
 	}()
 
 	rafsBlobPath := filepath.Join(workDir, "blob.rafs")
-	rafsBlobFifo, err := fifo.OpenFifo(ctx, rafsBlobPath, syscall.O_CREAT|syscall.O_RDONLY|syscall.O_NONBLOCK, 0644)
+	rafsBlobFifo, err := fifo.OpenFifo(ctx, rafsBlobPath, syscall.O_CREAT|syscall.O_RDONLY|syscall.O_NONBLOCK, 0640)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create fifo file")
 	}
 
 	tarBlobPath := filepath.Join(workDir, "blob.targz")
-	tarBlobFifo, err := fifo.OpenFifo(ctx, tarBlobPath, syscall.O_CREAT|syscall.O_WRONLY|syscall.O_NONBLOCK, 0644)
+	tarBlobFifo, err := fifo.OpenFifo(ctx, tarBlobPath, syscall.O_CREAT|syscall.O_WRONLY|syscall.O_NONBLOCK, 0640)
 	if err != nil {
 		defer rafsBlobFifo.Close()
 		return nil, errors.Wrapf(err, "create fifo file")
@@ -487,6 +514,7 @@ func packFromTar(ctx context.Context, dest io.Writer, opt PackOption) (io.WriteC
 				BatchSize:        opt.BatchSize,
 				Compressor:       opt.Compressor,
 				Timeout:          opt.Timeout,
+				Encrypt:          opt.Encrypt,
 
 				Features: opt.features,
 			})
@@ -503,8 +531,9 @@ func packFromTar(ctx context.Context, dest io.Writer, opt PackOption) (io.WriteC
 }
 
 func calcBlobTOCDigest(ra content.ReaderAt) (*digest.Digest, error) {
+	maxSize := int64(1 << 20)
 	digester := digest.Canonical.Digester()
-	if err := seekFileByTarHeader(ra, EntryTOC, func(tocData io.Reader, _ *tar.Header) error {
+	if err := seekFileByTarHeader(ra, EntryTOC, &maxSize, func(tocData io.Reader, _ *tar.Header) error {
 		if _, err := io.Copy(digester.Hash(), tocData); err != nil {
 			return errors.Wrap(err, "calc toc data and header digest")
 		}
@@ -543,13 +572,13 @@ func Merge(ctx context.Context, layers []Layer, dest io.Writer, opt MergeOption)
 	for idx := range layers {
 		sourceBootstrapPaths = append(sourceBootstrapPaths, getBootstrapPath(idx))
 		if layers[idx].OriginalDigest != nil {
-			rafsBlobDigests = append(rafsBlobDigests, layers[idx].Digest.Hex())
-			rafsBlobSizes = append(rafsBlobSizes, layers[idx].ReaderAt.Size())
 			rafsBlobTOCDigest, err := calcBlobTOCDigest(layers[idx].ReaderAt)
 			if err != nil {
 				return nil, errors.Wrapf(err, "calc blob toc digest for layer %s", layers[idx].Digest)
 			}
 			rafsBlobTOCDigests = append(rafsBlobTOCDigests, rafsBlobTOCDigest.Hex())
+			rafsBlobDigests = append(rafsBlobDigests, layers[idx].Digest.Hex())
+			rafsBlobSizes = append(rafsBlobSizes, layers[idx].ReaderAt.Size())
 		}
 		eg.Go(func(idx int) func() error {
 			return func() error {
@@ -632,7 +661,7 @@ func Unpack(ctx context.Context, ra content.ReaderAt, dest io.Writer, opt Unpack
 	}
 
 	tarPath := filepath.Join(workDir, "oci.tar")
-	blobFifo, err := fifo.OpenFifo(ctx, tarPath, syscall.O_CREAT|syscall.O_RDONLY|syscall.O_NONBLOCK, 0644)
+	blobFifo, err := fifo.OpenFifo(ctx, tarPath, syscall.O_CREAT|syscall.O_RDONLY|syscall.O_NONBLOCK, 0640)
 	if err != nil {
 		return errors.Wrapf(err, "create fifo file")
 	}
@@ -656,7 +685,7 @@ func Unpack(ctx context.Context, ra content.ReaderAt, dest io.Writer, opt Unpack
 		// generate backend config file
 		backendConfigStr := fmt.Sprintf(`{"version":2,"backend":{"type":"http-proxy","http-proxy":{"addr":"%s"}}}`, proxy.socketPath)
 		backendConfigPath := filepath.Join(workDir, "backend-config.json")
-		if err := os.WriteFile(backendConfigPath, []byte(backendConfigStr), 0644); err != nil {
+		if err := os.WriteFile(backendConfigPath, []byte(backendConfigStr), 0640); err != nil {
 			return errors.Wrap(err, "write backend config")
 		}
 		unpackOpt.BlobPath = ""
@@ -716,6 +745,19 @@ func IsNydusBootstrap(desc ocispec.Descriptor) bool {
 	return hasAnno
 }
 
+// isNydusImage checks if the last layer is nydus bootstrap,
+// so that we can ensure it is a nydus image.
+func isNydusImage(manifest *ocispec.Manifest) bool {
+	layers := manifest.Layers
+	if len(layers) != 0 {
+		desc := layers[len(layers)-1]
+		if IsNydusBootstrap(desc) {
+			return true
+		}
+	}
+	return false
+}
+
 // LayerConvertFunc returns a function which converts an OCI image layer to
 // a nydus blob layer, and set the media type to "application/vnd.oci.image.layer.nydus.blob.v1".
 func LayerConvertFunc(opt PackOption) converter.ConvertFunc {
@@ -727,6 +769,28 @@ func LayerConvertFunc(opt PackOption) converter.ConvertFunc {
 		// Skip the conversion of nydus layer.
 		if IsNydusBlob(desc) || IsNydusBootstrap(desc) {
 			return nil, nil
+		}
+
+		// Use remote cache to avoid unnecessary conversion
+		info, err := cs.Info(ctx, desc.Digest)
+		if err != nil {
+			return nil, errors.Wrapf(err, "get blob info %s", desc.Digest)
+		}
+		if info.Labels[LayerAnnotationNydusTargetDigest] != "" {
+			targetInfo, err := cs.Info(ctx, digest.Digest(info.Labels[LayerAnnotationNydusTargetDigest]))
+			if err != nil {
+				return nil, errors.Wrapf(err, "get blob info %s", desc.Digest)
+			}
+			targetDesc := ocispec.Descriptor{
+				Digest:    targetInfo.Digest,
+				Size:      targetInfo.Size,
+				MediaType: MediaTypeNydusBlob,
+				Annotations: map[string]string{
+					LayerAnnotationUncompressed: targetInfo.Digest.String(),
+					LayerAnnotationNydusBlob:    "true",
+				},
+			}
+			return &targetDesc, nil
 		}
 
 		ra, err := cs.ReaderAt(ctx, desc)
@@ -783,7 +847,7 @@ func LayerConvertFunc(opt PackOption) converter.ConvertFunc {
 		}
 
 		blobDigest := digester.Digest()
-		info, err := cs.Info(ctx, blobDigest)
+		info, err = cs.Info(ctx, blobDigest)
 		if err != nil {
 			return nil, errors.Wrapf(err, "get blob info %s", blobDigest)
 		}
@@ -813,6 +877,10 @@ func LayerConvertFunc(opt PackOption) converter.ConvertFunc {
 
 		if opt.OCIRef {
 			newDesc.Annotations[label.NydusRefLayer] = desc.Digest.String()
+		}
+
+		if opt.Encrypt {
+			newDesc.Annotations[LayerAnnotationNydusEncryptedBlob] = "true"
 		}
 
 		if opt.Backend != nil {
@@ -890,19 +958,6 @@ func convertIndex(ctx context.Context, cs content.Store, orgDesc ocispec.Descrip
 	return newIndexDesc, nil
 }
 
-// isNydusImage checks if the last layer is nydus bootstrap,
-// so that we can ensure it is a nydus image.
-func isNydusImage(manifest *ocispec.Manifest) bool {
-	layers := manifest.Layers
-	if len(layers) != 0 {
-		desc := layers[len(layers)-1]
-		if IsNydusBootstrap(desc) {
-			return true
-		}
-	}
-	return false
-}
-
 // convertManifest merges all the nydus blob layers into a
 // nydus bootstrap layer, update the image config,
 // and modify the image manifest.
@@ -927,7 +982,7 @@ func convertManifest(ctx context.Context, cs content.Store, oldDesc ocispec.Desc
 		opt.OCI = true
 	}
 
-	// Append bootstrap layer to manifest.
+	// Append bootstrap layer to manifest, encrypt bootstrap layer if needed.
 	bootstrapDesc, blobDescs, err := MergeLayers(ctx, cs, manifest.Layers, opt)
 	if err != nil {
 		return nil, errors.Wrap(err, "merge nydus layers")
@@ -985,10 +1040,12 @@ func convertManifest(ctx context.Context, cs content.Store, oldDesc ocispec.Desc
 	// Update the config gc label
 	manifestLabels[configGCLabelKey] = newConfigDesc.Digest.String()
 
-	// Associate a reference to the original OCI manifest.
-	// See the `subject` field description in
-	// https://github.com/opencontainers/image-spec/blob/main/manifest.md#image-manifest-property-descriptions
-	manifest.Subject = &oldDesc
+	if opt.WithReferrer {
+		// Associate a reference to the original OCI manifest.
+		// See the `subject` field description in
+		// https://github.com/opencontainers/image-spec/blob/main/manifest.md#image-manifest-property-descriptions
+		manifest.Subject = &oldDesc
+	}
 
 	// Update image manifest in content store.
 	newManifestDesc, err := writeJSON(ctx, cs, manifest, manifestDesc, manifestLabels)
@@ -1110,6 +1167,11 @@ func MergeLayers(ctx context.Context, cs content.Store, descs []ocispec.Descript
 		if opt.OCIRef {
 			blobDesc.Annotations[label.NydusRefLayer] = layers[idx].OriginalDigest.String()
 		}
+
+		if opt.Encrypt != nil {
+			blobDesc.Annotations[LayerAnnotationNydusEncryptedBlob] = "true"
+		}
+
 		blobDescs = append(blobDescs, blobDesc)
 	}
 
@@ -1133,5 +1195,12 @@ func MergeLayers(ctx context.Context, cs content.Store, descs []ocispec.Descript
 		},
 	}
 
+	if opt.Encrypt != nil {
+		// Encrypt the Nydus bootstrap layer.
+		bootstrapDesc, err = opt.Encrypt(ctx, cs, bootstrapDesc)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "encrypt bootstrap layer")
+		}
+	}
 	return &bootstrapDesc, blobDescs, nil
 }
