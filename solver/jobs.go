@@ -141,6 +141,9 @@ func (s *state) getEdge(index Index) *edge {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if e, ok := s.edges[index]; ok {
+		for e.owner != nil {
+			e = e.owner
+		}
 		return e
 	}
 
@@ -153,19 +156,22 @@ func (s *state) getEdge(index Index) *edge {
 	return e
 }
 
-func (s *state) setEdge(index Index, newEdge *edge) {
+func (s *state) setEdge(index Index, targetEdge *edge) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	e, ok := s.edges[index]
 	if ok {
-		if e == newEdge {
+		for e.owner != nil {
+			e = e.owner
+		}
+		if e == targetEdge {
 			return
 		}
-		e.release()
+	} else {
+		e = newEdge(Edge{Index: index, Vertex: s.vtx}, s.op, s.index)
+		s.edges[index] = e
 	}
-
-	newEdge.incrementReferenceCount()
-	s.edges[index] = newEdge
+	targetEdge.takeOwnership(e)
 }
 
 func (s *state) combinedCacheManager() CacheManager {
@@ -186,6 +192,9 @@ func (s *state) combinedCacheManager() CacheManager {
 
 func (s *state) Release() {
 	for _, e := range s.edges {
+		for e.owner != nil {
+			e = e.owner
+		}
 		e.release()
 	}
 	if s.op != nil {

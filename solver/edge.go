@@ -64,6 +64,7 @@ type edge struct {
 	hasActiveOutgoing         bool
 
 	releaserCount int
+	owner         *edge
 	keysDidChange bool
 	index         *edgeIndex
 
@@ -116,10 +117,12 @@ type edgeRequest struct {
 	currentKeys  int
 }
 
-// incrementReferenceCount increases the number of times release needs to be
+// takeOwnership increases the number of times release needs to be
 // called to release the edge. Called on merging edges.
-func (e *edge) incrementReferenceCount() {
-	e.releaserCount++
+func (e *edge) takeOwnership(old *edge) {
+	e.releaserCount += old.releaserCount + 1
+	old.owner = e
+	old.releaseResult()
 }
 
 // release releases the edge resources
@@ -128,6 +131,10 @@ func (e *edge) release() {
 		e.releaserCount--
 		return
 	}
+	e.releaseResult()
+}
+
+func (e *edge) releaseResult() {
 	e.index.Release(e)
 	if e.result != nil {
 		go e.result.Release(context.TODO())
