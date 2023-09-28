@@ -108,7 +108,7 @@ insecure-entitlements = [ "network.host", "security.insecure" ]
 
   # configure the containerd runtime
   [worker.containerd.runtime]
-    runtime = "io.containerd.runc.v2"
+    name = "io.containerd.runc.v2"
     options = { BinaryName = "runc" }
 
   [[worker.containerd.gcpolicy]]
