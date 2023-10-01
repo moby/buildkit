@@ -98,9 +98,14 @@ func CreateFS(ctx context.Context, sessionID string, k string, ref cache.Immutab
 		cleanup = lm.Unmount
 	}
 
+	outputFS, err := fsutil.NewFS(src)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// wrap the output filesystem, applying appropriate filters
 	filterOpt := &fsutil.FilterOpt{}
 	var idMapFunc func(p string, st *fstypes.Stat) fsutil.MapResult
-
 	if idmap != nil {
 		idMapFunc = func(p string, st *fstypes.Stat) fsutil.MapResult {
 			uid, gid, err := idmap.ToContainer(idtools.Identity{
@@ -115,26 +120,23 @@ func CreateFS(ctx context.Context, sessionID string, k string, ref cache.Immutab
 			return fsutil.MapResultKeep
 		}
 	}
-
 	filterOpt.Map = func(p string, st *fstypes.Stat) fsutil.MapResult {
 		res := fsutil.MapResultKeep
 		if idMapFunc != nil {
+			// apply host uid/gid
 			res = idMapFunc(p, st)
 		}
 		if opt.Epoch != nil {
+			// apply used-specified epoch time
 			st.ModTime = opt.Epoch.UnixNano()
 		}
 		return res
-	}
-
-	outputFS, err := fsutil.NewFS(src)
-	if err != nil {
-		return nil, nil, err
 	}
 	outputFS, err = fsutil.NewFilterFS(outputFS, filterOpt)
 	if err != nil {
 		return nil, nil, err
 	}
+
 	attestations = attestation.Filter(attestations, nil, map[string][]byte{
 		result.AttestationInlineOnlyKey: []byte(strconv.FormatBool(true)),
 	})
