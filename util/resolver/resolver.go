@@ -22,9 +22,7 @@ const (
 	defaultPath = "/v2"
 )
 
-func fillInsecureOpts(host string, c config.RegistryConfig, h docker.RegistryHost) ([]docker.RegistryHost, error) {
-	var hosts []docker.RegistryHost
-
+func fillInsecureOpts(host string, c config.RegistryConfig, h docker.RegistryHost) (*docker.RegistryHost, error) {
 	tc, err := loadTLSConfig(c)
 	if err != nil {
 		return nil, err
@@ -54,24 +52,17 @@ func fillInsecureOpts(host string, c config.RegistryConfig, h docker.RegistryHos
 			Transport: tracing.NewTransport(transport),
 		}
 		tc.InsecureSkipVerify = true
-		hosts = append(hosts, h2)
+		return &h2, nil
 	} else if isHTTP {
 		h2 := h
 		h2.Scheme = "http"
-		hosts = append(hosts, h2)
+		return &h2, nil
 	}
 
-	if len(hosts) == 0 {
-		transport := newDefaultTransport()
-		transport.TLSClientConfig = tc
-
-		h.Client = &http.Client{
-			Transport: tracing.NewTransport(transport),
-		}
-		hosts = append(hosts, h)
+	h.Client = &http.Client{
+		Transport: tracing.NewTransport(httpsTransport),
 	}
-
-	return hosts, nil
+	return &h, nil
 }
 
 func loadTLSConfig(c config.RegistryConfig) (*tls.Config, error) {
@@ -138,12 +129,12 @@ func NewRegistryConfig(m map[string]config.RegistryConfig) docker.RegistryHosts 
 			for _, rawMirror := range c.Mirrors {
 				h := newMirrorRegistryHost(rawMirror)
 				mirrorHost := h.Host
-				hosts, err := fillInsecureOpts(mirrorHost, m[mirrorHost], h)
+				host, err := fillInsecureOpts(mirrorHost, m[mirrorHost], h)
 				if err != nil {
 					return nil, err
 				}
 
-				out = append(out, hosts...)
+				out = append(out, *host)
 			}
 
 			if host == "docker.io" {
@@ -163,7 +154,8 @@ func NewRegistryConfig(m map[string]config.RegistryConfig) docker.RegistryHosts 
 				return nil, err
 			}
 
-			out = append(out, hosts...)
+			out = append(out, *hosts)
+
 			return out, nil
 		},
 		docker.ConfigureDefaultRegistries(
