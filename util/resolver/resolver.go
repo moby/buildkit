@@ -40,19 +40,24 @@ func fillInsecureOpts(host string, c config.RegistryConfig, h docker.RegistryHos
 		}
 	}
 
-	if isHTTP {
-		h2 := h
-		h2.Scheme = "http"
-		hosts = append(hosts, h2)
-	}
+	httpsTransport := newDefaultTransport()
+	httpsTransport.TLSClientConfig = tc
+
 	if c.Insecure != nil && *c.Insecure {
 		h2 := h
-		transport := newDefaultTransport()
-		transport.TLSClientConfig = tc
+
+		var transport http.RoundTripper = httpsTransport
+		if isHTTP {
+			transport = &httpFallback{super: transport}
+		}
 		h2.Client = &http.Client{
 			Transport: tracing.NewTransport(transport),
 		}
 		tc.InsecureSkipVerify = true
+		hosts = append(hosts, h2)
+	} else if isHTTP {
+		h2 := h
+		h2.Scheme = "http"
 		hosts = append(hosts, h2)
 	}
 
@@ -209,4 +214,30 @@ func newDefaultTransport() *http.Transport {
 		ExpectContinueTimeout: 5 * time.Second,
 		TLSNextProto:          make(map[string]func(authority string, c *tls.Conn) http.RoundTripper),
 	}
+}
+
+type httpFallback struct {
+	super    http.RoundTripper
+	fallback bool
+}
+
+func (f *httpFallback) RoundTrip(r *http.Request) (*http.Response, error) {
+	if !f.fallback {
+		resp, err := f.super.RoundTrip(r)
+		var tlsErr tls.RecordHeaderError
+		if errors.As(err, &tlsErr) && string(tlsErr.RecordHeader[:]) == "HTTP/" {
+			// Server gave HTTP response to HTTPS client
+			f.fallback = true
+		} else {
+			return resp, err
+		}
+	}
+
+	plainHTTPUrl := *r.URL
+	plainHTTPUrl.Scheme = "http"
+
+	plainHTTPRequest := *r
+	plainHTTPRequest.URL = &plainHTTPUrl
+
+	return f.super.RoundTrip(&plainHTTPRequest)
 }
