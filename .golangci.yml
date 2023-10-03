@@ -30,12 +30,13 @@ linters:
 
 linters-settings:
   depguard:
-    list-type: blacklist
-    include-go-root: true
-    packages:
-      # The io/ioutil package has been deprecated.
-      # https://go.dev/doc/go1.16#ioutil
-      - io/ioutil
+    rules:
+      main:
+        deny:
+          # The io/ioutil package has been deprecated.
+          # https://go.dev/doc/go1.16#ioutil
+          - pkg: "io/ioutil"
+            desc: The io/ioutil package has been deprecated.
   forbidigo:
     forbid:
       - '^fmt\.Errorf(# use errors\.Errorf instead)?$'
