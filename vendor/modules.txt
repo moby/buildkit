@@ -1,7 +1,7 @@
-# github.com/AdaLogics/go-fuzz-headers v0.0.0-20230106234847-43070de90fa1
-## explicit; go 1.18
+# github.com/AdaLogics/go-fuzz-headers v0.0.0-20230811130428-ced1acdcaa24
+## explicit; go 1.20
 github.com/AdaLogics/go-fuzz-headers
-# github.com/AdamKorcz/go-118-fuzz-build v0.0.0-20221215162035-5330a85ea652
+# github.com/AdamKorcz/go-118-fuzz-build v0.0.0-20230306123547-8075edf89bb0
 ## explicit; go 1.18
 github.com/AdamKorcz/go-118-fuzz-build/testing
 # github.com/Azure/azure-sdk-for-go/sdk/azcore v1.1.0
@@ -71,7 +71,7 @@ github.com/Microsoft/go-winio/pkg/bindfilter
 github.com/Microsoft/go-winio/pkg/guid
 github.com/Microsoft/go-winio/tools/mkwinsyscall
 github.com/Microsoft/go-winio/vhd
-# github.com/Microsoft/hcsshim v0.10.0-rc.8
+# github.com/Microsoft/hcsshim v0.11.0
 ## explicit; go 1.18
 github.com/Microsoft/hcsshim
 github.com/Microsoft/hcsshim/computestorage
@@ -244,7 +244,7 @@ github.com/containerd/cgroups/stats/v1
 # github.com/containerd/console v1.0.3
 ## explicit; go 1.13
 github.com/containerd/console
-# github.com/containerd/containerd v1.7.2
+# github.com/containerd/containerd v1.7.6
 ## explicit; go 1.19
 github.com/containerd/containerd
 github.com/containerd/containerd/api/events
@@ -278,6 +278,7 @@ github.com/containerd/containerd/contrib/seccomp/kernelversion
 github.com/containerd/containerd/defaults
 github.com/containerd/containerd/diff
 github.com/containerd/containerd/diff/apply
+github.com/containerd/containerd/diff/proxy
 github.com/containerd/containerd/diff/walking
 github.com/containerd/containerd/errdefs
 github.com/containerd/containerd/events
@@ -343,7 +344,7 @@ github.com/containerd/containerd/snapshots/storage
 github.com/containerd/containerd/sys
 github.com/containerd/containerd/tracing
 github.com/containerd/containerd/version
-# github.com/containerd/continuity v0.4.1
+# github.com/containerd/continuity v0.4.2
 ## explicit; go 1.19
 github.com/containerd/continuity
 github.com/containerd/continuity/devices
@@ -420,9 +421,6 @@ github.com/coreos/go-systemd/v22/daemon
 # github.com/cpuguy83/go-md2man/v2 v2.0.2
 ## explicit; go 1.11
 github.com/cpuguy83/go-md2man/v2/md2man
-# github.com/cyphar/filepath-securejoin v0.2.3
-## explicit; go 1.13
-github.com/cyphar/filepath-securejoin
 # github.com/davecgh/go-spew v1.1.1
 ## explicit
 github.com/davecgh/go-spew/spew
