@@ -149,9 +149,13 @@ func getTracingSocket() string {
 
 func cgroupNamespaceSupported() bool {
 	cgroupNSOnce.Do(func() {
-		if _, err := os.Stat("/proc/self/ns/cgroup"); !os.IsNotExist(err) {
-			supportsCgroupNS = true
+		if _, err := os.Stat("/proc/self/ns/cgroup"); os.IsNotExist(err) {
+			return
 		}
+		if _, err := os.Stat("/sys/fs/cgroup/cgroup.subtree_control"); os.IsNotExist(err) {
+			return
+		}
+		supportsCgroupNS = true
 	})
 	return supportsCgroupNS
 }
