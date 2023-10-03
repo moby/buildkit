@@ -81,6 +81,7 @@ Join `#buildkit` channel on [Docker Community Slack](https://dockr.ly/comm-slack
 - [Building multi-platform images](#building-multi-platform-images)
   - [Configuring `buildctl`](#configuring-buildctl)
     - [Color Output Controls](#color-output-controls)
+    - [Number of log lines (for active steps in tty mode)](#number-of-log-lines-for-active-steps-in-tty-mode)
 - [Contributing](#contributing)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
@@ -790,6 +791,9 @@ Please refer to [`docs/multi-platform.md`](docs/multi-platform.md).
 Parsing errors will be reported but ignored. This will result in default color values being used where needed.
 
 - [The list of pre-defined colors](https://github.com/moby/buildkit/blob/master/util/progress/progressui/colors.go).
+
+#### Number of log lines (for active steps in tty mode)
+You can change how many log lines are visible for active steps in tty mode by setting `BUILDKIT_TTY_LOG_LINES` to a number (default: 6).
 
 ## Contributing
 
