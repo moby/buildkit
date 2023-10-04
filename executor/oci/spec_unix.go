@@ -147,7 +147,11 @@ func getTracingSocket() string {
 	return fmt.Sprintf("unix://%s", tracingSocketPath)
 }
 
-func cgroupNamespaceSupported() bool {
+func cgroupV2NamespaceSupported() bool {
+	// Check if cgroups v2 namespaces are supported.  Trying to do cgroup
+	// namespaces with cgroups v1 results in EINVAL when we encounter a
+	// non-standard hierarchy.
+	// See https://github.com/moby/buildkit/issues/4108
 	cgroupNSOnce.Do(func() {
 		if _, err := os.Stat("/proc/self/ns/cgroup"); os.IsNotExist(err) {
 			return
