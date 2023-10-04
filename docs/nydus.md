@@ -24,7 +24,7 @@ env NYDUS_BUILDER=/path/to/nydus-image buildkitd ...
 
 Note: some nydus intermediate files will be created in the working directory during the build process, which will be cleaned up automatically after the build is completed. Use the `NYDUS_WORKDIR` environment variable to change this working directory.
 
-On buildctl side, export nydus image as the one of compression types by specifying `compression=nydus` option:
+On buildctl side, export nydus image as one of the compression types by specifying `compression=nydus` option:
 
 ```
 buildctl build ... \
