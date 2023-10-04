@@ -91,7 +91,10 @@ func TestRefToPURL(t *testing.T) {
 func TestPURLToRef(t *testing.T) {
 	testDgst := digest.FromBytes([]byte("test")).String()
 	p := platforms.Normalize(platforms.DefaultSpec())
-	p.OSVersion = "" // OSVersion is not supported in PURL
+	// OSVersion of containerd >= 1.7.6 on Windows contains the underlying OS's version information.
+	if p.OS != "windows" {
+		p.OSVersion = "" // OSVersion is not supported in PURL
+	}
 	testPlatform := &p
 
 	encPlatform := url.QueryEscape(platforms.Format(platforms.Normalize(p)))
