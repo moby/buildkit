@@ -212,19 +212,22 @@ func docopy(ctx context.Context, src, dest string, action pb.FileActionCopy, u *
 
 // NewFileOpBackend returns a new file operation backend. The executor is currently only used for Windows,
 // and it is used to construct the readUserFn field set in the returned Backend.
-func NewFileOpBackend(readUserFn ReadUserCallback) *Backend {
-	return &Backend{
-		readUserFn: readUserFn,
+func NewFileOpBackend(readUser ReadUserCallback) (*backend, error) {
+	if readUser == nil {
+		return nil, errors.New("readUser callback must be provided")
 	}
+	return &backend{
+		readUser: readUser,
+	}, nil
 }
 
-type ReadUserCallback func(chopt *pb.ChownOpt, mu, mg fileoptypes.Mount) (*copy.User, error)
+type ReadUserCallback func(chopt *pb.ChownOpt, mu, mg snapshot.Mountable) (*copy.User, error)
 
-type Backend struct {
-	readUserFn ReadUserCallback
+type backend struct {
+	readUser ReadUserCallback
 }
 
-func (fb *Backend) Mkdir(ctx context.Context, m, user, group fileoptypes.Mount, action pb.FileActionMkDir) error {
+func (fb *backend) Mkdir(ctx context.Context, m, user, group fileoptypes.Mount, action pb.FileActionMkDir) error {
 	mnt, ok := m.(*Mount)
 	if !ok {
 		return errors.Errorf("invalid mount type %T", m)
@@ -237,8 +240,7 @@ func (fb *Backend) Mkdir(ctx context.Context, m, user, group fileoptypes.Mount, 
 	}
 	defer lm.Unmount()
 
-	// u, err := readUser(action.Owner, user, group, fb.Executor)
-	u, err := fb.readUserFn(action.Owner, user, group)
+	u, err := fb.readUserWrapper(action.Owner, user, group)
 	if err != nil {
 		return err
 	}
@@ -246,7 +248,7 @@ func (fb *Backend) Mkdir(ctx context.Context, m, user, group fileoptypes.Mount, 
 	return mkdir(ctx, dir, action, u, mnt.m.IdentityMapping())
 }
 
-func (fb *Backend) Mkfile(ctx context.Context, m, user, group fileoptypes.Mount, action pb.FileActionMkFile) error {
+func (fb *backend) Mkfile(ctx context.Context, m, user, group fileoptypes.Mount, action pb.FileActionMkFile) error {
 	mnt, ok := m.(*Mount)
 	if !ok {
 		return errors.Errorf("invalid mount type %T", m)
@@ -259,7 +261,7 @@ func (fb *Backend) Mkfile(ctx context.Context, m, user, group fileoptypes.Mount,
 	}
 	defer lm.Unmount()
 
-	u, err := fb.readUserFn(action.Owner, user, group)
+	u, err := fb.readUserWrapper(action.Owner, user, group)
 	if err != nil {
 		return err
 	}
@@ -267,7 +269,7 @@ func (fb *Backend) Mkfile(ctx context.Context, m, user, group fileoptypes.Mount,
 	return mkfile(ctx, dir, action, u, mnt.m.IdentityMapping())
 }
 
-func (fb *Backend) Rm(ctx context.Context, m fileoptypes.Mount, action pb.FileActionRm) error {
+func (fb *backend) Rm(ctx context.Context, m fileoptypes.Mount, action pb.FileActionRm) error {
 	mnt, ok := m.(*Mount)
 	if !ok {
 		return errors.Errorf("invalid mount type %T", m)
@@ -283,7 +285,7 @@ func (fb *Backend) Rm(ctx context.Context, m fileoptypes.Mount, action pb.FileAc
 	return rm(ctx, dir, action)
 }
 
-func (fb *Backend) Copy(ctx context.Context, m1, m2, user, group fileoptypes.Mount, action pb.FileActionCopy) error {
+func (fb *backend) Copy(ctx context.Context, m1, m2, user, group fileoptypes.Mount, action pb.FileActionCopy) error {
 	mnt1, ok := m1.(*Mount)
 	if !ok {
 		return errors.Errorf("invalid mount type %T", m1)
@@ -307,12 +309,39 @@ func (fb *Backend) Copy(ctx context.Context, m1, m2, user, group fileoptypes.Mou
 	}
 	defer lm2.Unmount()
 
-	u, err := fb.readUserFn(action.Owner, user, group)
+	u, err := fb.readUserWrapper(action.Owner, user, group)
 	if err != nil {
 		return err
 	}
 
 	return docopy(ctx, src, dest, action, u, mnt2.m.IdentityMapping())
+}
+
+func (fb *backend) readUserWrapper(owner *pb.ChownOpt, user, group fileoptypes.Mount) (*copy.User, error) {
+	var userMountable, groupMountable snapshot.Mountable
+	if user != nil {
+		usr, ok := user.(*Mount)
+		if !ok {
+			return nil, errors.Errorf("invalid mount type %T", user)
+		}
+		userMountable = usr.Mountable()
+	}
+
+	if group != nil {
+		grp, ok := group.(*Mount)
+		if !ok {
+			return nil, errors.Errorf("invalid mount type %T", group)
+		}
+		groupMountable = grp.Mountable()
+	}
+
+	// We don't check the mountables for nil here. Depending on the ChownOpt value,
+	// one of them may be nil. Allow the readUser function to handle this.
+	u, err := fb.readUser(owner, userMountable, groupMountable)
+	if err != nil {
+		return nil, err
+	}
+	return u, nil
 }
 
 func cleanPath(s string) (string, error) {
