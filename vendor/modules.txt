@@ -736,7 +736,7 @@ github.com/spdx/tools-golang/spdx/v2/common
 github.com/spdx/tools-golang/spdx/v2/v2_1
 github.com/spdx/tools-golang/spdx/v2/v2_2
 github.com/spdx/tools-golang/spdx/v2/v2_3
-# github.com/stretchr/testify v1.8.3
+# github.com/stretchr/testify v1.8.4
 ## explicit; go 1.20
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require

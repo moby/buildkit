@@ -63,7 +63,7 @@ require (
 	github.com/serialx/hashring v0.0.0-20190422032157-8b2912629002
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spdx/tools-golang v0.5.1
-	github.com/stretchr/testify v1.8.3
+	github.com/stretchr/testify v1.8.4
 	github.com/tonistiigi/fsutil v0.0.0-20230629203738-36ef4d8c0dbb
 	github.com/tonistiigi/go-actions-cache v0.0.0-20220404170428-0bdeb6e1eac7
 	github.com/tonistiigi/go-archvariant v1.0.0
