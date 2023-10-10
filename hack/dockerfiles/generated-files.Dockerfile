@@ -1,10 +1,10 @@
 # syntax=docker/dockerfile-upstream:master
 
-ARG GO_VERSION="1.20"
+ARG GO_VERSION="1.21"
 ARG PROTOC_VERSION="3.11.4"
 
 # protoc is dynamically linked to glibc so can't use alpine base
-FROM golang:${GO_VERSION}-buster AS base
+FROM golang:${GO_VERSION}-bookworm AS base
 RUN apt-get update && apt-get --no-install-recommends install -y git unzip
 ARG PROTOC_VERSION
 ARG TARGETOS
