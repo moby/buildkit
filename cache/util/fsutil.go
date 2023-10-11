@@ -128,6 +128,16 @@ func StatFile(ctx context.Context, mount snapshot.Mountable, path string) (*fsty
 			return errors.WithStack(err)
 		}
 		if st, err = fsutil.Stat(fp); err != nil {
+			// The filename here is internal to the mount, so we can restore
+			// the request base path for error reporting.
+			// See os.DirFS.Open for details.
+			err1 := err
+			if err := errors.Cause(err); err != nil {
+				err1 = err
+			}
+			if pe, ok := err1.(*os.PathError); ok {
+				pe.Path = path
+			}
 			return errors.WithStack(err)
 		}
 		return nil
