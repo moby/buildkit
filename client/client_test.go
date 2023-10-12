@@ -206,6 +206,7 @@ func TestIntegration(t *testing.T) {
 		testLLBMountPerformance,
 		testClientCustomGRPCOpts,
 		testMultipleRecordsWithSameLayersCacheImportExport,
+		testRegistryEmptyCacheImportExport,
 		testSnapshotWithMultipleBlobs,
 		testExportLocalNoPlatformSplit,
 		testExportLocalNoPlatformSplitOverwrite,
@@ -5435,6 +5436,99 @@ func testBasicGhaCacheImportExport(t *testing.T, sb integration.Sandbox) {
 		},
 	}
 	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
+}
+
+func testRegistryEmptyCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+
+	workers.CheckFeatureCompat(t, sb,
+		workers.FeatureCacheExport,
+		workers.FeatureCacheImport,
+		workers.FeatureCacheBackendRegistry,
+	)
+
+	for _, ociMediaTypes := range []bool{true, false} {
+		ociMediaTypes := ociMediaTypes
+		for _, imageManifest := range []bool{true, false} {
+			imageManifest := imageManifest
+			if imageManifest && !ociMediaTypes {
+				// invalid configuration for remote cache
+				continue
+			}
+
+			t.Run(t.Name()+fmt.Sprintf("/ociMediaTypes=%t/imageManifest=%t", ociMediaTypes, imageManifest), func(t *testing.T) {
+				c, err := New(sb.Context(), sb.Address())
+				require.NoError(t, err)
+				defer c.Close()
+
+				st := llb.Scratch()
+				def, err := st.Marshal(sb.Context())
+				require.NoError(t, err)
+
+				registry, err := sb.NewRegistry()
+				if errors.Is(err, integration.ErrRequirements) {
+					t.Skip(err.Error())
+				}
+				require.NoError(t, err)
+
+				cacheTarget := registry + "/buildkit/testregistryemptycache:latest"
+
+				cacheOptionsEntry := CacheOptionsEntry{
+					Type: "registry",
+					Attrs: map[string]string{
+						"ref":            cacheTarget,
+						"image-manifest": strconv.FormatBool(imageManifest),
+						"oci-mediatypes": strconv.FormatBool(ociMediaTypes),
+					},
+				}
+
+				_, err = c.Solve(sb.Context(), def, SolveOpt{
+					CacheExports: []CacheOptionsEntry{cacheOptionsEntry},
+				}, nil)
+				require.NoError(t, err)
+
+				_, err = c.Solve(sb.Context(), def, SolveOpt{
+					CacheImports: []CacheOptionsEntry{cacheOptionsEntry},
+				}, nil)
+				require.NoError(t, err)
+
+				ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
+				cdAddress := sb.ContainerdAddress()
+				var client *containerd.Client
+				if cdAddress != "" {
+					client, err = newContainerd(cdAddress)
+					require.NoError(t, err)
+					defer client.Close()
+
+					_, err := client.Fetch(ctx, cacheTarget)
+					require.NoError(t, err)
+					img, err := client.GetImage(ctx, cacheTarget)
+					require.NoError(t, err)
+					children, err := images.Children(ctx, client.ContentStore(), img.Target())
+					require.NoError(t, err)
+
+					// Can't import cache/remotecache/v1 as it causes an import loop
+					const CacheConfigMediaTypeV0 = "application/vnd.buildkit.cacheconfig.v0"
+
+					if imageManifest {
+						// Children are (Config, Layers...)
+						// The layers list SHOULD be non-empty, per OCI Image Spec 1.1,
+						// even though we generated no layers.
+						require.Equal(t, 2, len(children))
+						require.Equal(t, CacheConfigMediaTypeV0, children[0].MediaType)
+						require.Equal(t, ocispecs.DescriptorEmptyJSON, children[1])
+					} else {
+						// Children are (Manifests...); the last manifest is the config
+						// No other manifest entries are expected, as no layers were generated.
+						require.Equal(t, 1, len(children))
+						require.Equal(t, CacheConfigMediaTypeV0, children[len(children)-1].MediaType)
+					}
+					err = client.ImageService().Delete(ctx, cacheTarget, images.SynchronousDelete())
+					require.NoError(t, err)
+				}
+			})
+		}
+	}
 }
 
 func testMultipleRecordsWithSameLayersCacheImportExport(t *testing.T, sb integration.Sandbox) {

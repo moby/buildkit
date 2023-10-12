@@ -138,6 +138,9 @@ func (ec *ExportableCache) AddCacheBlob(blob ocispecs.Descriptor) {
 func (ec *ExportableCache) FinalizeCache(ctx context.Context) {
 	if ec.CacheType == ManifestList {
 		ec.ExportedIndex.Manifests = compression.ConvertAllLayerMediaTypes(ctx, ec.OCI, ec.ExportedIndex.Manifests...)
+	} else if ec.OCI && len(ec.ExportedManifest.Layers) == 0 {
+		// OCI Image Spec 1.1 suggests that if layers are not needed in an image, the array SHOULD contain the EmptyDescriptor
+		ec.ExportedManifest.Layers = append(ec.ExportedManifest.Layers, ocispecs.DescriptorEmptyJSON)
 	} else {
 		ec.ExportedManifest.Layers = compression.ConvertAllLayerMediaTypes(ctx, ec.OCI, ec.ExportedManifest.Layers...)
 	}
