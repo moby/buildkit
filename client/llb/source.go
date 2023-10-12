@@ -245,8 +245,7 @@ func Git(url, ref string, opts ...GitOption) State {
 		remote, err = gitutil.ParseURL(url)
 	}
 	if remote != nil {
-		remote.Fragment = ""
-		url = remote.String()
+		url = remote.Remote
 	}
 
 	var id string

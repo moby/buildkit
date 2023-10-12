@@ -53,17 +53,17 @@ func ParseGitRef(ref string) (*GitRef, error) {
 	res := &GitRef{}
 
 	var (
-		remote *url.URL
+		remote *GitURL
 		err    error
 	)
 
 	if strings.HasPrefix(ref, "github.com/") {
 		res.IndistinguishableFromLocal = true // Deprecated
-		remote = &url.URL{
+		remote = fromURL(&url.URL{
 			Scheme: "https",
 			Host:   "github.com",
 			Path:   strings.TrimPrefix(ref, "github.com/"),
-		}
+		})
 	} else {
 		remote, err = ParseURL(ref)
 		if errors.Is(err, ErrUnknownProtocol) {
@@ -87,12 +87,12 @@ func ParseGitRef(ref string) (*GitRef, error) {
 		}
 	}
 
-	res.Commit, res.SubDir = SplitGitFragment(remote.Fragment)
-	remote.Fragment = ""
-
-	res.Remote = remote.String()
+	res.Remote = remote.Remote
 	if res.IndistinguishableFromLocal {
 		_, res.Remote, _ = strings.Cut(res.Remote, "://")
+	}
+	if remote.Fragment != nil {
+		res.Commit, res.SubDir = remote.Fragment.Ref, remote.Fragment.Subdir
 	}
 
 	repoSplitBySlash := strings.Split(res.Remote, "/")

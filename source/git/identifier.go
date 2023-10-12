@@ -31,11 +31,11 @@ func NewGitIdentifier(remoteURL string) (*GitIdentifier, error) {
 		return nil, err
 	}
 
-	repo := GitIdentifier{}
-	repo.Ref, repo.Subdir = gitutil.SplitGitFragment(u.Fragment)
-	u.Fragment = ""
-	repo.Remote = u.String()
-
+	repo := GitIdentifier{Remote: u.Remote}
+	if u.Fragment != nil {
+		repo.Ref = u.Fragment.Ref
+		repo.Subdir = u.Fragment.Subdir
+	}
 	if sd := path.Clean(repo.Subdir); sd == "/" || sd == "." {
 		repo.Subdir = ""
 	}
