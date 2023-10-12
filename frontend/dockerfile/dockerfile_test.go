@@ -1311,13 +1311,13 @@ COPY Dockerfile .
 	require.NoError(t, err)
 
 	var idx ocispecs.Index
-	err = json.Unmarshal(m["index.json"].Data, &idx)
+	err = json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &idx)
 	require.NoError(t, err)
 
 	mlistHex := idx.Manifests[0].Digest.Hex()
 
 	idx = ocispecs.Index{}
-	err = json.Unmarshal(m["blobs/sha256/"+mlistHex].Data, &idx)
+	err = json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+mlistHex].Data, &idx)
 	require.NoError(t, err)
 
 	require.Equal(t, 2, len(idx.Manifests))
@@ -1334,13 +1334,13 @@ COPY Dockerfile .
 			require.Equal(t, exp.p, platforms.Format(*idx.Manifests[i].Platform))
 
 			var mfst ocispecs.Manifest
-			err = json.Unmarshal(m["blobs/sha256/"+idx.Manifests[i].Digest.Hex()].Data, &mfst)
+			err = json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+idx.Manifests[i].Digest.Hex()].Data, &mfst)
 			require.NoError(t, err)
 
 			require.Equal(t, 1, len(mfst.Layers))
 
 			var img ocispecs.Image
-			err = json.Unmarshal(m["blobs/sha256/"+mfst.Config.Digest.Hex()].Data, &img)
+			err = json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+mfst.Config.Digest.Hex()].Data, &img)
 			require.NoError(t, err)
 
 			require.Equal(t, exp.entrypoint, img.Config.Entrypoint)
@@ -1437,13 +1437,13 @@ COPY arch-$TARGETARCH whoami
 	require.NoError(t, err)
 
 	var idx ocispecs.Index
-	err = json.Unmarshal(m["index.json"].Data, &idx)
+	err = json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &idx)
 	require.NoError(t, err)
 
 	mlistHex := idx.Manifests[0].Digest.Hex()
 
 	idx = ocispecs.Index{}
-	err = json.Unmarshal(m["blobs/sha256/"+mlistHex].Data, &idx)
+	err = json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+mlistHex].Data, &idx)
 	require.NoError(t, err)
 
 	require.Equal(t, 3, len(idx.Manifests))
@@ -1462,17 +1462,17 @@ COPY arch-$TARGETARCH whoami
 			require.Equal(t, exp.p, platforms.Format(*idx.Manifests[i].Platform))
 
 			var mfst ocispecs.Manifest
-			err = json.Unmarshal(m["blobs/sha256/"+idx.Manifests[i].Digest.Hex()].Data, &mfst)
+			err = json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+idx.Manifests[i].Digest.Hex()].Data, &mfst)
 			require.NoError(t, err)
 
 			require.Equal(t, 1, len(mfst.Layers))
 
-			m2, err := testutil.ReadTarToMap(m["blobs/sha256/"+mfst.Layers[0].Digest.Hex()].Data, true)
+			m2, err := testutil.ReadTarToMap(m[ocispecs.ImageBlobsDir+"/sha256/"+mfst.Layers[0].Digest.Hex()].Data, true)
 			require.NoError(t, err)
 			require.Equal(t, exp.dt, string(m2["whoami"].Data))
 
 			var img ocispecs.Image
-			err = json.Unmarshal(m["blobs/sha256/"+mfst.Config.Digest.Hex()].Data, &img)
+			err = json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+mfst.Config.Digest.Hex()].Data, &img)
 			require.NoError(t, err)
 
 			require.Equal(t, exp.os, img.OS)
@@ -5628,7 +5628,7 @@ func testNamedOCILayoutContext(t *testing.T, sb integration.Sandbox) {
 	}
 
 	var index ocispecs.Index
-	err = json.Unmarshal(m["index.json"].Data, &index)
+	err = json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &index)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(index.Manifests))
 	digest := index.Manifests[0].Digest.Hex()
@@ -5752,7 +5752,7 @@ ENV foo=bar
 	}
 
 	var index ocispecs.Index
-	err = json.Unmarshal(m["index.json"].Data, &index)
+	err = json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &index)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(index.Manifests))
 	digest := index.Manifests[0].Digest.Hex()
@@ -5794,17 +5794,17 @@ FROM nonexistent AS base
 	m, err = testutil.ReadTarToMap(outW.Bytes(), false)
 	require.NoError(t, err)
 
-	err = json.Unmarshal(m["index.json"].Data, &index)
+	err = json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &index)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(index.Manifests))
 	digest = index.Manifests[0].Digest.Hex()
 
 	var mfst ocispecs.Manifest
-	require.NoError(t, json.Unmarshal(m["blobs/sha256/"+digest].Data, &mfst))
+	require.NoError(t, json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+digest].Data, &mfst))
 	digest = mfst.Config.Digest.Hex()
 
 	var cfg ocispecs.Image
-	require.NoError(t, json.Unmarshal(m["blobs/sha256/"+digest].Data, &cfg))
+	require.NoError(t, json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+digest].Data, &cfg))
 
 	require.Equal(t, "/test", cfg.Config.WorkingDir)
 	require.Contains(t, cfg.Config.Env, "foo=bar")
@@ -6118,17 +6118,17 @@ COPY Dockerfile .
 	require.NoError(t, err)
 
 	var idx ocispecs.Index
-	err = json.Unmarshal(m["index.json"].Data, &idx)
+	err = json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &idx)
 	require.NoError(t, err)
 
 	mlistHex := idx.Manifests[0].Digest.Hex()
 
 	var mfst ocispecs.Manifest
-	err = json.Unmarshal(m["blobs/sha256/"+mlistHex].Data, &mfst)
+	err = json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+mlistHex].Data, &mfst)
 	require.NoError(t, err)
 
 	var img ocispecs.Image
-	err = json.Unmarshal(m["blobs/sha256/"+mfst.Config.Digest.Hex()].Data, &img)
+	err = json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+mfst.Config.Digest.Hex()].Data, &img)
 	require.NoError(t, err)
 
 	require.Equal(t, tm.Unix(), img.Created.Unix())
