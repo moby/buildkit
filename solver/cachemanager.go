@@ -176,7 +176,11 @@ func (c *cacheManager) Load(ctx context.Context, rec *CacheRecord) (rres Result,
 		"stack":         bklog.TraceLevelOnlyStack(),
 	})
 	defer func() {
-		lg.WithError(rerr).WithField("return_result", rres.ID()).Trace("cache manager")
+		rresID := "<nil>"
+		if rres != nil {
+			rresID = rres.ID()
+		}
+		lg.WithError(rerr).WithField("return_result", rresID).Trace("cache manager")
 	}()
 
 	c.mu.RLock()
