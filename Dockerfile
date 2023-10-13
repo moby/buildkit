@@ -379,5 +379,18 @@ ENV BUILDKIT_HOST=unix:///run/user/1000/buildkit/buildkitd.sock
 VOLUME /home/user/.local/share/buildkit
 ENTRYPOINT ["rootlesskit", "buildkitd"]
 
+# smoke tests
+FROM --platform=$TARGETPLATFORM buildkit-export AS binaries-smoketest
+WORKDIR /usr/local/bin
+COPY --from=binaries / .
+RUN apk add --no-cache file
+RUN <<EOT
+  set -ex
+  file buildkitd
+  buildkitd --version
+  file buildkit-runc
+  buildkit-runc --version
+EOT
+
 # buildkit builds the buildkit container image
 FROM buildkit-$TARGETOS${BUILDKIT_DEBUG:+-debug} AS buildkit

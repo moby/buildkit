@@ -90,6 +90,20 @@ target "binaries-cross" {
   ]
 }
 
+target "binaries-smoketest" {
+  inherits = ["_common"]
+  target = "binaries-smoketest"
+  output = ["type=cacheonly"]
+  platforms = [
+    "linux/amd64",
+    "linux/arm/v7",
+    "linux/arm64",
+    "linux/s390x",
+    "linux/ppc64le",
+    "linux/riscv64"
+  ]
+}
+
 target "release" {
   inherits = ["binaries-cross"]
   target = "release"
