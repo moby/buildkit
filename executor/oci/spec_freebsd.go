@@ -56,6 +56,6 @@ func getTracingSocket() string {
 	return ""
 }
 
-func cgroupNamespaceSupported() bool {
+func cgroupV2NamespaceSupported() bool {
 	return false
 }
