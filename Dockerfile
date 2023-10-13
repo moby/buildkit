@@ -19,7 +19,14 @@ ARG DELVE_VERSION=v1.21.0
 
 ARG GO_VERSION=1.20
 ARG ALPINE_VERSION=3.18
+ARG XX_VERSION=1.2.1
 ARG BUILDKIT_DEBUG
+
+# xx is a helper for cross-compilation
+FROM --platform=$BUILDPLATFORM tonistiigi/xx:${XX_VERSION} AS xx
+
+# go base image to retrieve /usr/local/go for ubuntu gobuild base
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION} AS golang-debian
 
 # minio for s3 integration tests
 FROM minio/minio:${MINIO_VERSION} AS minio
@@ -35,20 +42,32 @@ FROM alpine:${ALPINE_VERSION} AS alpine-ppc64le
 FROM alpine:edge@sha256:2d01a16bab53a8405876cec4c27235d47455a7b72b75334c614f2fb0968b3f90 AS alpine-riscv64
 FROM alpine-$TARGETARCH AS alpinebase
 
-# xx is a helper for cross-compilation
-FROM --platform=$BUILDPLATFORM tonistiigi/xx:1.2.1 AS xx
+# gobuild is base stage for compiling go/cgo
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS gobuild-base-alpine
+COPY --from=xx / /
+RUN apk add --no-cache file bash clang lld musl-dev pkgconfig git make
 
-# go base image
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS golatest
+FROM --platform=$BUILDPLATFORM ubuntu:22.04 AS gobuild-base-ubuntu
+COPY --from=xx / /
+RUN apt-get update && apt-get install --no-install-recommends -y ca-certificates file bash clang lld llvm pkg-config git make
+COPY --from=golang-debian /usr/local/go /usr/local/go
+ENV GOROOT="/usr/local/go"
+ENV GOPATH="/go"
+ENV PATH="$GOPATH/bin:/usr/local/go/bin:$PATH"
+RUN mkdir -p "$GOPATH/src" "$GOPATH/bin" && chmod -R 777 "$GOPATH"
+
+# TODO: remove once go cgo build for riscv64 is properly fixed: https://github.com/moby/buildkit/issues/4316
+FROM gobuild-base-alpine AS gobuild-base-amd64
+FROM gobuild-base-alpine AS gobuild-base-arm
+FROM gobuild-base-alpine AS gobuild-base-arm64
+FROM gobuild-base-alpine AS gobuild-base-s390x
+FROM gobuild-base-alpine AS gobuild-base-ppc64le
+FROM gobuild-base-ubuntu AS gobuild-base-riscv64
+FROM gobuild-base-$TARGETARCH AS gobuild-base
 
 # git stage is used for checking out remote repository sources
-FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS git
+FROM --platform=$BUILDPLATFORM alpinebase AS git
 RUN apk add --no-cache git
-
-# gobuild is base stage for compiling go/cgo
-FROM golatest AS gobuild-base
-RUN apk add --no-cache file bash clang lld musl-dev pkgconfig git make
-COPY --link --from=xx / /
 
 # delve for debug variant
 FROM gobuild-base AS dlv
@@ -65,13 +84,28 @@ RUN git clone https://github.com/opencontainers/runc.git runc \
   && cd runc && git checkout -q "$RUNC_VERSION"
 
 # build runc binary
-FROM gobuild-base AS runc
+FROM gobuild-base AS runc-base-alpine
 WORKDIR $GOPATH/src/github.com/opencontainers/runc
 ARG TARGETPLATFORM
 # gcc is only installed for libgcc
 # lld has issues building static binaries for ppc so prefer ld for it
 RUN set -e; xx-apk add musl-dev gcc libseccomp-dev libseccomp-static; \
   [ "$(xx-info arch)" != "ppc64le" ] || XX_CC_PREFER_LINKER=ld xx-clang --setup-target-triple
+
+FROM gobuild-base AS runc-base-ubuntu
+WORKDIR $GOPATH/src/github.com/opencontainers/runc
+ARG TARGETPLATFORM
+RUN xx-apt-get install --no-install-recommends -y dpkg-dev gcc libc6-dev libseccomp-dev
+
+FROM runc-base-alpine AS runc-base-amd64
+FROM runc-base-alpine AS runc-base-arm
+FROM runc-base-alpine AS runc-base-arm64
+FROM runc-base-alpine AS runc-base-s390x
+FROM runc-base-alpine AS runc-base-ppc64le
+FROM runc-base-ubuntu AS runc-base-riscv64
+FROM runc-base-$TARGETARCH AS runc-base
+
+FROM runc-base AS runc
 RUN --mount=from=runc-src,src=/usr/src/runc,target=. --mount=target=/root/.cache,type=cache \
   CGO_ENABLED=1 xx-go build -mod=vendor -ldflags '-extldflags -static' -tags 'apparmor seccomp netgo cgo static_build osusergo' -o /usr/bin/runc ./ && \
   xx-verify --static /usr/bin/runc
