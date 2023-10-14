@@ -206,6 +206,7 @@ func TestIntegration(t *testing.T) {
 		testLLBMountPerformance,
 		testClientCustomGRPCOpts,
 		testMultipleRecordsWithSameLayersCacheImportExport,
+		testRegistryEmptyCacheExport,
 		testSnapshotWithMultipleBlobs,
 		testExportLocalNoPlatformSplit,
 		testExportLocalNoPlatformSplitOverwrite,
@@ -5435,6 +5436,70 @@ func testBasicGhaCacheImportExport(t *testing.T, sb integration.Sandbox) {
 		},
 	}
 	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
+}
+
+func testRegistryEmptyCacheExport(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+
+	workers.CheckFeatureCompat(t, sb,
+		workers.FeatureCacheExport,
+		workers.FeatureCacheBackendRegistry,
+	)
+
+	for _, ociMediaTypes := range []bool{true, false} {
+		ociMediaTypes := ociMediaTypes
+		for _, imageManifest := range []bool{true, false} {
+			imageManifest := imageManifest
+			if imageManifest && !ociMediaTypes {
+				// invalid configuration for remote cache
+				continue
+			}
+
+			t.Run(t.Name()+fmt.Sprintf("/ociMediaTypes=%t/imageManifest=%t", ociMediaTypes, imageManifest), func(t *testing.T) {
+				c, err := New(sb.Context(), sb.Address())
+				require.NoError(t, err)
+				defer c.Close()
+
+				st := llb.Scratch()
+				def, err := st.Marshal(sb.Context())
+				require.NoError(t, err)
+
+				registry, err := sb.NewRegistry()
+				if errors.Is(err, integration.ErrRequirements) {
+					t.Skip(err.Error())
+				}
+				require.NoError(t, err)
+
+				cacheTarget := registry + "/buildkit/testregistryemptycache:latest"
+
+				cacheOptionsEntry := CacheOptionsEntry{
+					Type: "registry",
+					Attrs: map[string]string{
+						"ref":            cacheTarget,
+						"image-manifest": strconv.FormatBool(imageManifest),
+						"oci-mediatypes": strconv.FormatBool(ociMediaTypes),
+					},
+				}
+
+				_, err = c.Solve(sb.Context(), def, SolveOpt{
+					CacheExports: []CacheOptionsEntry{cacheOptionsEntry},
+				}, nil)
+				require.NoError(t, err)
+
+				ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
+				cdAddress := sb.ContainerdAddress()
+				var client *containerd.Client
+				if cdAddress != "" {
+					client, err = newContainerd(cdAddress)
+					require.NoError(t, err)
+					defer client.Close()
+
+					_, err := client.Fetch(ctx, cacheTarget)
+					require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v", err)
+				}
+			})
+		}
+	}
 }
 
 func testMultipleRecordsWithSameLayersCacheImportExport(t *testing.T, sb integration.Sandbox) {
