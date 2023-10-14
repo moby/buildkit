@@ -108,6 +108,7 @@ BuildKit is used by the following projects:
 -   [envd](https://github.com/tensorchord/envd/)
 -   [Depot](https://depot.dev)
 -   [Namespace](https://namespace.so)
+-   [Unikraft](https://unikraft.org)
 
 ## Quick start
 
