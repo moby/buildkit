@@ -37,7 +37,7 @@ Join `#buildkit` channel on [Docker Community Slack](https://dockr.ly/comm-slack
 
 > **Note**
 >
-> [BuildKit has been integrated to `docker build` since Docker 18.09](https://docs.docker.com/develop/develop-images/build_enhancements/).
+> `docker build` [uses Buildx and BuildKit by default](https://docs.docker.com/build/architecture/) since Docker Engine 23.0.
 > You don't need to read this document unless you want to use the full-featured
 > standalone version of BuildKit.
 
