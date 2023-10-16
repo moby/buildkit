@@ -32,4 +32,4 @@ jobs:
   validate:
     uses: docker/docs/.github/workflows/validate-upstream.yml@main
     with:
-      repo: https://github.com/${{ github.repository }}
+      module-name: moby/buildkit
