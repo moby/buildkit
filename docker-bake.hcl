@@ -84,7 +84,8 @@ target "binaries-cross" {
     "linux/arm64",
     "linux/s390x",
     "linux/ppc64le",
-    "linux/riscv64",
+    # TODO: enable back once https://github.com/moby/buildkit/issues/4316 is fixed
+    // "linux/riscv64",
     "windows/amd64",
     "windows/arm64"
   ]
