@@ -94,21 +94,21 @@ func TestParseGitRef(t *testing.T) {
 		{
 			ref: "git@github.com:moby/buildkit",
 			expected: &GitRef{
-				Remote:    "ssh://git@github.com/moby/buildkit",
+				Remote:    "git@github.com:moby/buildkit",
 				ShortName: "buildkit",
 			},
 		},
 		{
 			ref: "git@github.com:moby/buildkit.git",
 			expected: &GitRef{
-				Remote:    "ssh://git@github.com/moby/buildkit.git",
+				Remote:    "git@github.com:moby/buildkit.git",
 				ShortName: "buildkit",
 			},
 		},
 		{
 			ref: "git@bitbucket.org:atlassianlabs/atlassian-docker.git",
 			expected: &GitRef{
-				Remote:    "ssh://git@bitbucket.org/atlassianlabs/atlassian-docker.git",
+				Remote:    "git@bitbucket.org:atlassianlabs/atlassian-docker.git",
 				ShortName: "atlassian-docker",
 			},
 		},
