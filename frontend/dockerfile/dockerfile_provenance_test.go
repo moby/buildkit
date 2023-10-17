@@ -925,7 +925,7 @@ EOF
 	require.NoError(t, err)
 
 	var index ocispecs.Index
-	dt, err := os.ReadFile(filepath.Join(ocidir, "index.json"))
+	dt, err := os.ReadFile(filepath.Join(ocidir, ocispecs.ImageIndexFile))
 	require.NoError(t, err)
 	err = json.Unmarshal(dt, &index)
 	require.NoError(t, err)
