@@ -85,7 +85,7 @@ type dep struct {
 	err               error
 }
 
-// expDep holds secorndary exporter info for dependency
+// expDep holds secondary exporter info for dependency
 type expDep struct {
 	index    int
 	cacheKey CacheKeyWithSelector
@@ -361,7 +361,7 @@ func (e *edge) unpark(incoming []pipe.Sender, updates, allPipes []pipe.Receiver,
 
 	if e.execReq == nil {
 		if added := e.createInputRequests(desiredState, f, false); !added && !e.hasActiveOutgoing && !cacheMapReq {
-			bklog.G(context.TODO()).Errorf("buildkit scheluding error: leaving incoming open. forcing solve. Please report this with BUILDKIT_SCHEDULER_DEBUG=1")
+			bklog.G(context.TODO()).Errorf("buildkit scheduling error: leaving incoming open. forcing solve. Please report this with BUILDKIT_SCHEDULER_DEBUG=1")
 			debugSchedulerPreUnpark(e, incoming, updates, allPipes)
 			e.createInputRequests(desiredState, f, true)
 		}
