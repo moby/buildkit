@@ -19,6 +19,7 @@ ARG DELVE_VERSION=v1.21.0
 
 ARG GO_VERSION=1.21
 ARG ALPINE_VERSION=3.18
+ARG XX_VERSION=1.3.0
 ARG BUILDKIT_DEBUG
 
 # minio for s3 integration tests
@@ -36,7 +37,7 @@ FROM alpine:edge@sha256:2d01a16bab53a8405876cec4c27235d47455a7b72b75334c614f2fb0
 FROM alpine-$TARGETARCH AS alpinebase
 
 # xx is a helper for cross-compilation
-FROM --platform=$BUILDPLATFORM tonistiigi/xx:1.2.1 AS xx
+FROM --platform=$BUILDPLATFORM tonistiigi/xx:${XX_VERSION} AS xx
 
 # go base image
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS golatest
