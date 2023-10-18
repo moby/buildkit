@@ -156,7 +156,7 @@ func (s *state) getEdge(index Index) *edge {
 	return e
 }
 
-func (s *state) setEdge(index Index, targetEdge *edge) {
+func (s *state) setEdge(index Index, targetEdge *edge, targetState *state) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	e, ok := s.edges[index]
@@ -172,6 +172,13 @@ func (s *state) setEdge(index Index, targetEdge *edge) {
 		s.edges[index] = e
 	}
 	targetEdge.takeOwnership(e)
+
+	if targetState != nil {
+		if _, ok := targetState.allPw[s.mpw]; !ok {
+			targetState.mpw.Add(s.mpw)
+			targetState.allPw[s.mpw] = struct{}{}
+		}
+	}
 }
 
 func (s *state) combinedCacheManager() CacheManager {
@@ -273,7 +280,7 @@ func NewSolver(opts SolverOpt) *Solver {
 	return jl
 }
 
-func (jl *Solver) setEdge(e Edge, newEdge *edge) {
+func (jl *Solver) setEdge(e Edge, targetEdge *edge) {
 	jl.mu.RLock()
 	defer jl.mu.RUnlock()
 
@@ -282,7 +289,10 @@ func (jl *Solver) setEdge(e Edge, newEdge *edge) {
 		return
 	}
 
-	st.setEdge(e.Index, newEdge)
+	// potentially passing nil targetSt is intentional and handled in st.setEdge
+	targetSt := jl.actives[targetEdge.edge.Vertex.Digest()]
+
+	st.setEdge(e.Index, targetEdge, targetSt)
 }
 
 func (jl *Solver) getState(e Edge) *state {
