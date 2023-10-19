@@ -453,6 +453,12 @@ func setDefaultNetworkConfig(nc config.NetworkConfig) config.NetworkConfig {
 	if nc.CNIBinaryPath == "" {
 		nc.CNIBinaryPath = appdefaults.DefaultCNIBinDir
 	}
+	if nc.BridgeName == "" {
+		nc.BridgeName = "buildkit0"
+	}
+	if nc.BridgeSubnet == "" {
+		nc.BridgeSubnet = "10.10.0.0/16"
+	}
 	return nc
 }
 

@@ -148,10 +148,49 @@ RUN --mount=target=. --mount=target=/root/.cache,type=cache \
   fi
 EOT
 
+# dnsname source
+FROM git AS dnsname-src
+ARG DNSNAME_VERSION
+WORKDIR /usr/src
+RUN git clone https://github.com/containers/dnsname.git dnsname \
+  && cd dnsname && git checkout -q "$DNSNAME_VERSION"
+
+# build dnsname CNI plugin for testing
+FROM gobuild-base AS dnsname
+WORKDIR /go/src/github.com/containers/dnsname
+ARG TARGETPLATFORM
+RUN --mount=from=dnsname-src,src=/usr/src/dnsname,target=.,rw \
+    --mount=target=/root/.cache,type=cache \
+    CGO_ENABLED=0 xx-go build -o /usr/bin/dnsname ./plugins/meta/dnsname && \
+    xx-verify --static /usr/bin/dnsname
+
+FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS cni-plugins
+RUN apk add --no-cache curl
+COPY --from=xx / /
+ARG CNI_VERSION
+ARG TARGETOS
+ARG TARGETARCH
+ARG TARGETPLATFORM
+WORKDIR /opt/cni/bin
+RUN curl -Ls https://github.com/containernetworking/plugins/releases/download/${CNI_VERSION}/cni-plugins-${TARGETOS}-${TARGETARCH}-${CNI_VERSION}.tgz | tar xzv
+RUN xx-verify --static bridge loopback host-local
+COPY --link --from=dnsname /usr/bin/dnsname /opt/cni/bin/
+
+FROM scratch AS cni-plugins-export
+COPY --link --from=cni-plugins /opt/cni/bin/bridge /buildkit-cni-bridge
+COPY --link --from=cni-plugins /opt/cni/bin/loopback /buildkit-cni-loopback
+COPY --link --from=cni-plugins /opt/cni/bin/host-local /buildkit-cni-host-local
+COPY --link --from=cni-plugins /opt/cni/bin/firewall /buildkit-cni-firewall
+
+FROM scratch AS cni-plugins-export-squashed
+COPY --from=cni-plugins-export / /
+
+
 FROM scratch AS binaries-linux
 COPY --link --from=runc /usr/bin/runc /buildkit-runc
 # built from https://github.com/tonistiigi/binfmt/releases/tag/buildkit%2Fv7.1.0-30
 COPY --link --from=tonistiigi/binfmt:buildkit-v7.1.0-30@sha256:45dd57b4ba2f24e2354f71f1e4e51f073cb7a28fd848ce6f5f2a7701142a6bf0 / /
+COPY --link --from=cni-plugins-export-squashed / /
 COPY --link --from=buildctl /usr/bin/buildctl /
 COPY --link --from=buildkitd /usr/bin/buildkitd /
 
@@ -285,31 +324,6 @@ ENTRYPOINT ["/buildkitd"]
 FROM binaries AS buildkit-windows
 # this is not in binaries-windows because it is not intended for release yet, just CI
 COPY --link --from=buildkitd /usr/bin/buildkitd /buildkitd.exe
-
-# dnsname source
-FROM git AS dnsname-src
-ARG DNSNAME_VERSION
-WORKDIR /usr/src
-RUN git clone https://github.com/containers/dnsname.git dnsname \
-  && cd dnsname && git checkout -q "$DNSNAME_VERSION"
-
-# build dnsname CNI plugin for testing
-FROM gobuild-base AS dnsname
-WORKDIR /go/src/github.com/containers/dnsname
-ARG TARGETPLATFORM
-RUN --mount=from=dnsname-src,src=/usr/src/dnsname,target=.,rw \
-    --mount=target=/root/.cache,type=cache \
-    CGO_ENABLED=0 xx-go build -o /usr/bin/dnsname ./plugins/meta/dnsname && \
-    xx-verify --static /usr/bin/dnsname
-
-FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS cni-plugins
-RUN apk add --no-cache curl
-ARG CNI_VERSION
-ARG TARGETOS
-ARG TARGETARCH
-WORKDIR /opt/cni/bin
-RUN curl -Ls https://github.com/containernetworking/plugins/releases/download/$CNI_VERSION/cni-plugins-$TARGETOS-$TARGETARCH-$CNI_VERSION.tgz | tar xzv
-COPY --link --from=dnsname /usr/bin/dnsname /opt/cni/bin/
 
 FROM buildkit-base AS integration-tests-base
 ENV BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR="1000:1000"

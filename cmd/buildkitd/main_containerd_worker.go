@@ -290,10 +290,12 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 	nc := netproviders.Opt{
 		Mode: common.config.Workers.Containerd.NetworkConfig.Mode,
 		CNI: cniprovider.Opt{
-			Root:       common.config.Root,
-			ConfigPath: common.config.Workers.Containerd.CNIConfigPath,
-			BinaryDir:  common.config.Workers.Containerd.CNIBinaryPath,
-			PoolSize:   common.config.Workers.Containerd.CNIPoolSize,
+			Root:         common.config.Root,
+			ConfigPath:   common.config.Workers.Containerd.CNIConfigPath,
+			BinaryDir:    common.config.Workers.Containerd.CNIBinaryPath,
+			PoolSize:     common.config.Workers.Containerd.CNIPoolSize,
+			BridgeName:   common.config.Workers.Containerd.BridgeName,
+			BridgeSubnet: common.config.Workers.Containerd.BridgeSubnet,
 		},
 	}
 
