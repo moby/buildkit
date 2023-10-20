@@ -43,6 +43,10 @@ func setupDebugHandlers(addr string) error {
 		ReadHeaderTimeout: time.Minute,
 	}
 	bklog.L.Debugf("debug handlers listening at %s", addr)
-	go server.ListenAndServe()
+	go func() {
+		if err := server.Serve(l); err != nil {
+			bklog.L.Errorf("failed to serve debug handlers: %v", err)
+		}
+	}()
 	return nil
 }
