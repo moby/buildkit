@@ -322,6 +322,7 @@ func (cm *cacheManager) init(ctx context.Context) error {
 			bklog.G(ctx).Debugf("could not load snapshot %s: %+v", si.ID(), err)
 			cm.MetadataStore.Clear(si.ID())
 			cm.LeaseManager.Delete(ctx, leases.Lease{ID: si.ID()})
+			cm.LeaseManager.Delete(ctx, leases.Lease{ID: si.ID() + "-variants"})
 		}
 	}
 	return nil
