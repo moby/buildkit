@@ -27,46 +27,6 @@ func timestampToTime(ts int64) *time.Time {
 	return &tm
 }
 
-func mapUserToChowner(user *copy.User, idmap *idtools.IdentityMapping) (copy.Chowner, error) {
-	if user == nil {
-		return func(old *copy.User) (*copy.User, error) {
-			if old == nil {
-				if idmap == nil {
-					return nil, nil
-				}
-				old = &copy.User{} // root
-				// non-nil old is already mapped
-				if idmap != nil {
-					identity, err := idmap.ToHost(idtools.Identity{
-						UID: old.UID,
-						GID: old.GID,
-					})
-					if err != nil {
-						return nil, err
-					}
-					return &copy.User{UID: identity.UID, GID: identity.GID}, nil
-				}
-			}
-			return old, nil
-		}, nil
-	}
-	u := *user
-	if idmap != nil {
-		identity, err := idmap.ToHost(idtools.Identity{
-			UID: user.UID,
-			GID: user.GID,
-		})
-		if err != nil {
-			return nil, err
-		}
-		u.UID = identity.UID
-		u.GID = identity.GID
-	}
-	return func(*copy.User) (*copy.User, error) {
-		return &u, nil
-	}, nil
-}
-
 func mkdir(ctx context.Context, d string, action pb.FileActionMkDir, user *copy.User, idmap *idtools.IdentityMapping) error {
 	p, err := fs.RootPath(d, action.Path)
 	if err != nil {
@@ -250,7 +210,21 @@ func docopy(ctx context.Context, src, dest string, action pb.FileActionCopy, u *
 	return nil
 }
 
+// NewFileOpBackend returns a new file operation backend. The executor is currently only used for Windows,
+// and it is used to construct the readUserFn field set in the returned Backend.
+func NewFileOpBackend(readUser ReadUserCallback) (*Backend, error) {
+	if readUser == nil {
+		return nil, errors.New("readUser callback must be provided")
+	}
+	return &Backend{
+		readUser: readUser,
+	}, nil
+}
+
+type ReadUserCallback func(chopt *pb.ChownOpt, mu, mg snapshot.Mountable) (*copy.User, error)
+
 type Backend struct {
+	readUser ReadUserCallback
 }
 
 func (fb *Backend) Mkdir(ctx context.Context, m, user, group fileoptypes.Mount, action pb.FileActionMkDir) error {
@@ -266,7 +240,7 @@ func (fb *Backend) Mkdir(ctx context.Context, m, user, group fileoptypes.Mount, 
 	}
 	defer lm.Unmount()
 
-	u, err := readUser(action.Owner, user, group)
+	u, err := fb.readUserWrapper(action.Owner, user, group)
 	if err != nil {
 		return err
 	}
@@ -287,7 +261,7 @@ func (fb *Backend) Mkfile(ctx context.Context, m, user, group fileoptypes.Mount,
 	}
 	defer lm.Unmount()
 
-	u, err := readUser(action.Owner, user, group)
+	u, err := fb.readUserWrapper(action.Owner, user, group)
 	if err != nil {
 		return err
 	}
@@ -335,12 +309,39 @@ func (fb *Backend) Copy(ctx context.Context, m1, m2, user, group fileoptypes.Mou
 	}
 	defer lm2.Unmount()
 
-	u, err := readUser(action.Owner, user, group)
+	u, err := fb.readUserWrapper(action.Owner, user, group)
 	if err != nil {
 		return err
 	}
 
 	return docopy(ctx, src, dest, action, u, mnt2.m.IdentityMapping())
+}
+
+func (fb *Backend) readUserWrapper(owner *pb.ChownOpt, user, group fileoptypes.Mount) (*copy.User, error) {
+	var userMountable, groupMountable snapshot.Mountable
+	if user != nil {
+		usr, ok := user.(*Mount)
+		if !ok {
+			return nil, errors.Errorf("invalid mount type %T", user)
+		}
+		userMountable = usr.Mountable()
+	}
+
+	if group != nil {
+		grp, ok := group.(*Mount)
+		if !ok {
+			return nil, errors.Errorf("invalid mount type %T", group)
+		}
+		groupMountable = grp.Mountable()
+	}
+
+	// We don't check the mountables for nil here. Depending on the ChownOpt value,
+	// one of them may be nil. Allow the readUser function to handle this.
+	u, err := fb.readUser(owner, userMountable, groupMountable)
+	if err != nil {
+		return nil, err
+	}
+	return u, nil
 }
 
 func cleanPath(s string) (string, error) {

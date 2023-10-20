@@ -1,4 +1,4 @@
-package file
+package ops
 
 import (
 	"os"
@@ -6,14 +6,18 @@ import (
 
 	"github.com/containerd/continuity/fs"
 	"github.com/moby/buildkit/snapshot"
-	"github.com/moby/buildkit/solver/llbsolver/ops/fileoptypes"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/worker"
 	"github.com/opencontainers/runc/libcontainer/user"
 	"github.com/pkg/errors"
 	copy "github.com/tonistiigi/fsutil/copy"
 )
 
-func readUser(chopt *pb.ChownOpt, mu, mg fileoptypes.Mount) (*copy.User, error) {
+func getReadUserFn(worker worker.Worker) func(chopt *pb.ChownOpt, mu, mg snapshot.Mountable) (*copy.User, error) {
+	return readUser
+}
+
+func readUser(chopt *pb.ChownOpt, mu, mg snapshot.Mountable) (*copy.User, error) {
 	if chopt == nil {
 		return nil, nil
 	}
@@ -24,11 +28,8 @@ func readUser(chopt *pb.ChownOpt, mu, mg fileoptypes.Mount) (*copy.User, error) 
 			if mu == nil {
 				return nil, errors.Errorf("invalid missing user mount")
 			}
-			mmu, ok := mu.(*Mount)
-			if !ok {
-				return nil, errors.Errorf("invalid mount type %T", mu)
-			}
-			lm := snapshot.LocalMounter(mmu.m)
+
+			lm := snapshot.LocalMounter(mu)
 			dir, err := lm.Mount()
 			if err != nil {
 				return nil, err
@@ -78,11 +79,8 @@ func readUser(chopt *pb.ChownOpt, mu, mg fileoptypes.Mount) (*copy.User, error) 
 			if mg == nil {
 				return nil, errors.Errorf("invalid missing group mount")
 			}
-			mmg, ok := mg.(*Mount)
-			if !ok {
-				return nil, errors.Errorf("invalid mount type %T", mg)
-			}
-			lm := snapshot.LocalMounter(mmg.m)
+
+			lm := snapshot.LocalMounter(mg)
 			dir, err := lm.Mount()
 			if err != nil {
 				return nil, err
