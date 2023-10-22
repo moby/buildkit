@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	runhcsoptions "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	ctd "github.com/containerd/containerd"
 	"github.com/containerd/containerd/defaults"
 	runtimeoptions "github.com/containerd/containerd/pkg/runtimeoptions/v1"
@@ -32,6 +33,9 @@ import (
 
 const (
 	defaultContainerdNamespace = "buildkit"
+
+	// runtimeRunhcsV1 is the runtime type for runhcs.
+	runtimeRunhcsV1 = "io.containerd.runhcs.v1"
 )
 
 func init() {
@@ -372,6 +376,8 @@ func getRuntimeOptionsType(t string) interface{} {
 	switch t {
 	case plugin.RuntimeRuncV2:
 		return &runcoptions.Options{}
+	case runtimeRunhcsV1:
+		return &runhcsoptions.Options{}
 	default:
 		return &runtimeoptions.Options{}
 	}
