@@ -321,7 +321,13 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 			Options: opts,
 		}
 	}
-	opt, err := containerd.NewWorkerOpt(common.config.Root, cfg.Address, snapshotter, cfg.Namespace, cfg.Rootless, cfg.Labels, dns, nc, common.config.Workers.Containerd.ApparmorProfile, common.config.Workers.Containerd.SELinux, parallelismSem, common.traceSocket, runtime, ctd.WithTimeout(60*time.Second))
+
+	client, err := ctd.New(cfg.Address, ctd.WithTimeout(60*time.Second), ctd.WithDefaultNamespace(cfg.Namespace))
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to connect client to %q . make sure containerd is running", cfg.Address)
+	}
+
+	opt, err := containerd.NewWorkerOpt(common.config.Root, client, snapshotter, cfg.Rootless, cfg.Labels, dns, nc, common.config.Workers.Containerd.ApparmorProfile, common.config.Workers.Containerd.SELinux, parallelismSem, common.traceSocket, runtime)
 	if err != nil {
 		return nil, err
 	}

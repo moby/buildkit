@@ -8,6 +8,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/containerd/containerd"
 	"github.com/moby/buildkit/util/network/netproviders"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/moby/buildkit/util/testutil/workers"
@@ -31,8 +32,10 @@ func TestContainerdWorkerIntegration(t *testing.T) {
 
 func newWorkerOpt(t *testing.T, addr string) base.WorkerOpt {
 	tmpdir := t.TempDir()
+	client, err := containerd.New(addr, containerd.WithDefaultNamespace("buildkit-test"))
+	require.NoError(t, err)
 	rootless := false
-	workerOpt, err := NewWorkerOpt(tmpdir, addr, "overlayfs", "buildkit-test", rootless, nil, nil, netproviders.Opt{Mode: "host"}, "", false, nil, "", nil)
+	workerOpt, err := NewWorkerOpt(tmpdir, client, "overlayfs", rootless, nil, nil, netproviders.Opt{Mode: "host"}, "", false, nil, "", nil)
 	require.NoError(t, err)
 	return workerOpt
 }
