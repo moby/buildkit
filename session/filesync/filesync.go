@@ -35,20 +35,15 @@ type fsSyncProvider struct {
 	doneCh chan error
 }
 
-type SyncedDir struct {
-	Dir string
-	Map func(string, *fstypes.Stat) fsutil.MapResult
-}
-
 type DirSource interface {
-	LookupDir(string) (SyncedDir, bool)
+	LookupDir(string) (fsutil.FS, bool)
 }
 
-type StaticDirSource map[string]SyncedDir
+type StaticDirSource map[string]fsutil.FS
 
 var _ DirSource = StaticDirSource{}
 
-func (dirs StaticDirSource) LookupDir(name string) (SyncedDir, bool) {
+func (dirs StaticDirSource) LookupDir(name string) (fsutil.FS, bool) {
 	dir, found := dirs[name]
 	return dir, found
 }
@@ -92,15 +87,22 @@ func (sp *fsSyncProvider) handle(method string, stream grpc.ServerStream) (retEr
 		dirName = name[0]
 	}
 
+	excludes := opts[keyExcludePatterns]
+	includes := opts[keyIncludePatterns]
+	followPaths := opts[keyFollowPaths]
+
 	dir, ok := sp.dirs.LookupDir(dirName)
 	if !ok {
 		return InvalidSessionError{status.Errorf(codes.NotFound, "no access allowed to dir %q", dirName)}
 	}
-
-	excludes := opts[keyExcludePatterns]
-	includes := opts[keyIncludePatterns]
-
-	followPaths := opts[keyFollowPaths]
+	dir, err := fsutil.NewFilterFS(dir, &fsutil.FilterOpt{
+		ExcludePatterns: excludes,
+		IncludePatterns: includes,
+		FollowPaths:     followPaths,
+	})
+	if err != nil {
+		return err
+	}
 
 	var progress progressCb
 	if sp.p != nil {
@@ -113,12 +115,7 @@ func (sp *fsSyncProvider) handle(method string, stream grpc.ServerStream) (retEr
 		doneCh = sp.doneCh
 		sp.doneCh = nil
 	}
-	err := pr.sendFn(stream, fsutil.NewFS(dir.Dir, &fsutil.WalkOpt{
-		ExcludePatterns: excludes,
-		IncludePatterns: includes,
-		FollowPaths:     followPaths,
-		Map:             dir.Map,
-	}), progress)
+	err = pr.sendFn(stream, dir, progress)
 	if doneCh != nil {
 		if err != nil {
 			doneCh <- err
