@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/containerd/containerd/pkg/seed" //nolint:staticcheck // SA1019 deprecated
 	"github.com/containerd/containerd/pkg/userns"
@@ -412,7 +413,7 @@ func serveGRPC(cfg config.GRPCConfig, server *grpc.Server, errCh chan error) err
 }
 
 func defaultConfigPath() string {
-	if userns.RunningInUserNS() {
+	if isRootlessConfig() {
 		return filepath.Join(appdefaults.UserConfigDir(), "buildkitd.toml")
 	}
 	return filepath.Join(appdefaults.ConfigDir, "buildkitd.toml")
@@ -466,24 +467,39 @@ func setDefaultConfig(cfg *config.Config) {
 	cfg.Workers.OCI.NetworkConfig = setDefaultNetworkConfig(cfg.Workers.OCI.NetworkConfig)
 	cfg.Workers.Containerd.NetworkConfig = setDefaultNetworkConfig(cfg.Workers.Containerd.NetworkConfig)
 
-	if userns.RunningInUserNS() {
-		// if buildkitd is being executed as the mapped-root (not only EUID==0 but also $USER==root)
-		// in a user namespace, we need to enable the rootless mode but
-		// we don't want to honor $HOME for setting up default paths.
-		if u := os.Getenv("USER"); u != "" && u != "root" {
-			if orig.Root == "" {
-				cfg.Root = appdefaults.UserRoot()
-			}
-			if len(orig.GRPC.Address) == 0 {
-				cfg.GRPC.Address = []string{appdefaults.UserAddress()}
-			}
-			appdefaults.EnsureUserAddressDir()
+	if isRootlessConfig() {
+		if orig.Root == "" {
+			cfg.Root = appdefaults.UserRoot()
 		}
+		if len(orig.GRPC.Address) == 0 {
+			cfg.GRPC.Address = []string{appdefaults.UserAddress()}
+		}
+		appdefaults.EnsureUserAddressDir()
 	}
 
 	if cfg.OTEL.SocketPath == "" {
-		cfg.OTEL.SocketPath = appdefaults.TraceSocketPath(userns.RunningInUserNS())
+		cfg.OTEL.SocketPath = appdefaults.TraceSocketPath(isRootlessConfig())
 	}
+}
+
+var isRootlessConfigOnce sync.Once
+var isRootlessConfigValue bool
+
+// isRootlessConfig is true if we should be using the rootless config
+// defaults instead of the normal defaults.
+func isRootlessConfig() bool {
+	isRootlessConfigOnce.Do(func() {
+		if !userns.RunningInUserNS() {
+			// Default value is false so keep it that way.
+			return
+		}
+		// if buildkitd is being executed as the mapped-root (not only EUID==0 but also $USER==root)
+		// in a user namespace, we don't want to load the rootless changes in the
+		// configuration.
+		u := os.Getenv("USER")
+		isRootlessConfigValue = u != "" && u != "root"
+	})
+	return isRootlessConfigValue
 }
 
 func applyMainFlags(c *cli.Context, cfg *config.Config) error {
