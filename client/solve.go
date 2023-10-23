@@ -91,19 +91,10 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		return nil, errors.New("invalid with def and cb")
 	}
 
-	// merge local mounts and fallback local directories together
-	mounts := make(map[string]fsutil.FS)
-	for k, mount := range opt.LocalMounts {
-		mounts[k] = mount
+	mounts, err := prepareMounts(&opt)
+	if err != nil {
+		return nil, err
 	}
-	for k, dir := range opt.LocalDirs {
-		mount, err := fsutil.NewFS(dir)
-		if err != nil {
-			return nil, err
-		}
-		mounts[k] = mount
-	}
-
 	syncedDirs, err := prepareSyncedFiles(def, mounts)
 	if err != nil {
 		return nil, err
@@ -539,4 +530,23 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 		frontendAttrs:  frontendAttrs,
 	}
 	return &res, nil
+}
+
+func prepareMounts(opt *SolveOpt) (map[string]fsutil.FS, error) {
+	// merge local mounts and fallback local directories together
+	mounts := make(map[string]fsutil.FS)
+	for k, mount := range opt.LocalMounts {
+		mounts[k] = mount
+	}
+	for k, dir := range opt.LocalDirs {
+		mount, err := fsutil.NewFS(dir)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := mounts[k]; ok {
+			return nil, errors.Errorf("local mount %s already exists", k)
+		}
+		mounts[k] = mount
+	}
+	return mounts, nil
 }
