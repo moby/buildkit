@@ -111,11 +111,10 @@ func resolveExporterDest(exporter, dest string, attrs map[string]string) (func(m
 			return nil, "", errors.Errorf("output file is required for %s exporter. refusing to write to console", exporter)
 		}
 		return wrapWriter(os.Stdout), "", nil
-	} else {
-		// e.g. client.ExporterImage
-		if dest != "" {
-			return nil, "", errors.Errorf("output %s is not supported by %s exporter", dest, exporter)
-		}
-		return nil, "", nil
 	}
+	// e.g. client.ExporterImage
+	if dest != "" {
+		return nil, "", errors.Errorf("output %s is not supported by %s exporter", dest, exporter)
+	}
+	return nil, "", nil
 }
