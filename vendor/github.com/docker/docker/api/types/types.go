@@ -7,6 +7,7 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/api/types/swarm"
@@ -128,13 +129,7 @@ type ImageInspect struct {
 	// Metadata of the image in the local cache.
 	//
 	// This information is local to the daemon, and not part of the image itself.
-	Metadata ImageMetadata
-}
-
-// ImageMetadata contains engine-local data about the image
-type ImageMetadata struct {
-	// LastTagTime is the date and time at which the image was last tagged.
-	LastTagTime time.Time `json:",omitempty"`
+	Metadata image.Metadata
 }
 
 // Container contains response of Engine API:
@@ -443,14 +438,9 @@ type EndpointResource struct {
 
 // NetworkCreate is the expected body of the "create network" http request message
 type NetworkCreate struct {
-	// Check for networks with duplicate names.
-	// Network is primarily keyed based on a random ID and not on the name.
-	// Network name is strictly a user-friendly alias to the network
-	// which is uniquely identified using ID.
-	// And there is no guaranteed way to check for duplicates.
-	// Option CheckDuplicate is there to provide a best effort checking of any networks
-	// which has the same name but it is not guaranteed to catch all name collisions.
-	CheckDuplicate bool
+	// Deprecated: CheckDuplicate is deprecated since API v1.44, but it defaults to true when sent by the client
+	// package to older daemons.
+	CheckDuplicate bool `json:",omitempty"`
 	Driver         string
 	Scope          string
 	EnableIPv6     bool
@@ -519,7 +509,7 @@ type DiskUsageOptions struct {
 // GET "/system/df"
 type DiskUsage struct {
 	LayersSize  int64
-	Images      []*ImageSummary
+	Images      []*image.Summary
 	Containers  []*Container
 	Volumes     []*volume.Volume
 	BuildCache  []*BuildCache
@@ -543,7 +533,7 @@ type VolumesPruneReport struct {
 // ImagesPruneReport contains the response for Engine API:
 // POST "/images/prune"
 type ImagesPruneReport struct {
-	ImagesDeleted  []ImageDeleteResponseItem
+	ImagesDeleted  []image.DeleteResponse
 	SpaceReclaimed uint64
 }
 
