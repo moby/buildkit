@@ -2316,6 +2316,7 @@ However, if a health check succeeds during the start period, the container is co
 started and all consecutive failures will be counted towards the maximum number of retries.
 
 **start interval** is the time between health checks during the start period.
+This option requires Docker Engine version 25.0 or later.
 
 There can only be one `HEALTHCHECK` instruction in a Dockerfile. If you list
 more than one then only the last `HEALTHCHECK` will take effect.
