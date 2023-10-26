@@ -10,6 +10,7 @@ option (gogoproto.stable_marshaler_all) = true;
 
 // Op represents a vertex of the LLB DAG.
 message Op {
+	// changes to this structure must be represented in json.go.
 	// inputs is a set of input edges.
 	repeated Input inputs = 1;
 	oneof op {
@@ -288,6 +289,7 @@ message FileOp {
 }
 
 message FileAction {
+	// changes to this structure must be represented in json.go.
 	int64 input = 1 [(gogoproto.customtype) = "InputIndex", (gogoproto.nullable) = false]; // could be real input or target (target index + max input index)
 	int64 secondaryInput = 2 [(gogoproto.customtype) = "InputIndex", (gogoproto.nullable) = false]; // --//--
 	int64 output = 3 [(gogoproto.customtype) = "OutputIndex", (gogoproto.nullable) = false];
@@ -373,6 +375,7 @@ message ChownOpt {
 }
 
 message UserOpt {
+	// changes to this structure must be represented in json.go.
 	oneof user {
 		NamedUserOpt byName = 1;
 		uint32 byID = 2;
