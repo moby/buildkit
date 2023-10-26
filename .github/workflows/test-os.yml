@@ -116,7 +116,7 @@ jobs:
           retention-days: 1
 
   test-freebsd-amd64:
-    runs-on: macos-12
+    runs-on: macos-13
     needs:
       - build-freebsd-amd64
     env:
@@ -140,6 +140,19 @@ jobs:
           key: ${{ runner.os }}-vagrant-${{ hashFiles('hack/Vagrantfile.freebsd13') }}
           restore-keys: |
             ${{ runner.os }}-vagrant-
+      -
+        name: Install vagrant and VirtualBox
+        run: |
+          set -x
+          brew tap hashicorp/tap
+          brew install hashicorp/tap/hashicorp-vagrant
+          brew install --cask virtualbox
+      -
+        name: Check versions
+        run: |
+          set -x
+          vagrant --version
+          VBoxManage -v
       -
         name: Set up vagrant
         run: |
