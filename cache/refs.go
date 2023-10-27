@@ -1712,7 +1712,8 @@ func (sm *sharableMountable) Mount() (_ []mount.Mount, _ func() error, retErr er
 		}()
 		var isOverlay bool
 		for _, m := range mounts {
-			if overlay.IsOverlayMountType(m) {
+			// fuse-overlayfs also need the bind mount for the same reason as overlayfs.
+			if overlay.IsOverlayMountType(m) || m.Type == "fuse3.fuse-overlayfs" {
 				isOverlay = true
 				break
 			}

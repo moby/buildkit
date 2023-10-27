@@ -200,6 +200,7 @@ func TestIntegration(t *testing.T) {
 		testSBOMSupplements,
 		testMultipleCacheExports,
 		testMountStubsDirectory,
+		testImmutableMountFromOtherImageCheckOCISpec,
 		testMountStubsTimestamp,
 		testSourcePolicy,
 		testImageManifestRegistryCacheImportExport,
@@ -9400,6 +9401,41 @@ func testMountStubsDirectory(t *testing.T, sb integration.Sandbox) {
 		"baz/keep",
 		"qux/",
 	}, keys)
+}
+
+func testImmutableMountFromOtherImageCheckOCISpec(t *testing.T, sb integration.Sandbox) {
+	// This test ensure fuse mounts are correctly handled when passed to runc via an OCI spec.
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	stage1 := llb.Image("busybox:latest").
+		Run(llb.Args([]string{"mkdir", "/test/"})).
+		Root()
+
+	stage2 := llb.Image("busybox:latest").
+		Run(llb.Args([]string{"mkdir", "/test2/"})).
+		Run(llb.Args([]string{"mkdir", "/bin/test_bin/"})).
+		Root()
+
+	st := llb.Image("busybox:latest").
+		Run(
+			llb.Args([]string{"sh", "-c", "[ -d /test/test ] && [ -d /test_mirror_use_same_bind_mount/test ] && [ -d /test2/test2 ] && [ -d /test2_subpath/test_bin ]"}),
+			// Check we can mount immutable overlayfs directory from another image
+			llb.AddMount("/test", stage1, llb.SourcePath("/"), llb.Readonly),
+			// This duplicate mount to a different directory will trigger mount cache in submounts.m
+			llb.AddMount("/test_mirror_use_same_bind_mount", stage1, llb.SourcePath("/"), llb.Readonly),
+			// Try another different mutable mount
+			llb.AddMount("/test2", stage2, llb.SourcePath("/")),
+			// Try mount a subdirectory instead of the root directory
+			llb.AddMount("/test2_subpath", stage2, llb.SourcePath("/bin"), llb.Readonly),
+		).Root()
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
 }
 
 // https://github.com/moby/buildkit/issues/3148
