@@ -29,7 +29,7 @@ message Platform {
 	string Architecture = 1;
 	string OS = 2;
 	string Variant = 3;
-	string OSVersion = 4; // unused
+	string OSVersion = 4;
 	repeated string OSFeatures = 5; // unused
 }
 

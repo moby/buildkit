@@ -57,7 +57,7 @@ func (bc *Client) Build(ctx context.Context, fn BuildFunc) (*ResultBuilder, erro
 					p.OSVersion = img.OSVersion
 				}
 				if p.OSFeatures == nil && len(img.OSFeatures) > 0 {
-					p.OSFeatures = img.OSFeatures
+					p.OSFeatures = append([]string{}, img.OSFeatures...)
 				}
 			}
 

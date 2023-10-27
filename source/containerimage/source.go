@@ -202,7 +202,9 @@ func (is *Source) registryIdentifier(ref string, attrs map[string]string, platfo
 			Architecture: platform.Architecture,
 			Variant:      platform.Variant,
 			OSVersion:    platform.OSVersion,
-			OSFeatures:   platform.OSFeatures,
+		}
+		if platform.OSFeatures != nil {
+			id.Platform.OSFeatures = append([]string{}, platform.OSFeatures...)
 		}
 	}
 
@@ -247,7 +249,9 @@ func (is *Source) ociIdentifier(ref string, attrs map[string]string, platform *p
 			Architecture: platform.Architecture,
 			Variant:      platform.Variant,
 			OSVersion:    platform.OSVersion,
-			OSFeatures:   platform.OSFeatures,
+		}
+		if platform.OSFeatures != nil {
+			id.Platform.OSFeatures = append([]string{}, platform.OSFeatures...)
 		}
 	}
 

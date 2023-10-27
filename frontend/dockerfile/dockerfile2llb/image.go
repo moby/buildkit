@@ -19,6 +19,10 @@ func emptyImage(platform ocispecs.Platform) image.Image {
 	img := image.Image{}
 	img.Architecture = platform.Architecture
 	img.OS = platform.OS
+	img.OSVersion = platform.OSVersion
+	if platform.OSFeatures != nil {
+		img.OSFeatures = append([]string{}, platform.OSFeatures...)
+	}
 	img.Variant = platform.Variant
 	img.RootFS.Type = "layers"
 	img.Config.WorkingDir = "/"

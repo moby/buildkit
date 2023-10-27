@@ -79,17 +79,29 @@ func NormalizeRuntimePlatforms() LoadOpt {
 					OS:           p.OS,
 					Architecture: p.Architecture,
 					Variant:      p.Variant,
+					OSVersion:    p.OSVersion,
+					OSFeatures:   p.OSFeatures,
 				}
 			}
 			op.Platform = defaultPlatform
 		}
-		platform := ocispecs.Platform{OS: op.Platform.OS, Architecture: op.Platform.Architecture, Variant: op.Platform.Variant}
+		platform := ocispecs.Platform{
+			OS:           op.Platform.OS,
+			Architecture: op.Platform.Architecture,
+			Variant:      op.Platform.Variant,
+			OSVersion:    op.Platform.OSVersion,
+			OSFeatures:   op.Platform.OSFeatures,
+		}
 		normalizedPlatform := platforms.Normalize(platform)
 
 		op.Platform = &pb.Platform{
 			OS:           normalizedPlatform.OS,
 			Architecture: normalizedPlatform.Architecture,
 			Variant:      normalizedPlatform.Variant,
+			OSVersion:    normalizedPlatform.OSVersion,
+		}
+		if normalizedPlatform.OSFeatures != nil {
+			op.Platform.OSFeatures = append([]string{}, normalizedPlatform.OSFeatures...)
 		}
 
 		return nil

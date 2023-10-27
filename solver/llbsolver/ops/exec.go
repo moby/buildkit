@@ -113,6 +113,8 @@ func (e *ExecOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 			OS:           e.platform.OS,
 			Architecture: e.platform.Architecture,
 			Variant:      e.platform.Variant,
+			OSVersion:    e.platform.OSVersion,
+			OSFeatures:   e.platform.OSFeatures,
 		}
 	}
 
@@ -133,17 +135,21 @@ func (e *ExecOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 	}
 
 	dt, err := json.Marshal(struct {
-		Type    string
-		Exec    *pb.ExecOp
-		OS      string
-		Arch    string
-		Variant string `json:",omitempty"`
+		Type       string
+		Exec       *pb.ExecOp
+		OS         string
+		Arch       string
+		Variant    string   `json:",omitempty"`
+		OSVersion  string   `json:",omitempty"`
+		OSFeatures []string `json:",omitempty"`
 	}{
-		Type:    execCacheType,
-		Exec:    &op,
-		OS:      p.OS,
-		Arch:    p.Architecture,
-		Variant: p.Variant,
+		Type:       execCacheType,
+		Exec:       &op,
+		OS:         p.OS,
+		Arch:       p.Architecture,
+		Variant:    p.Variant,
+		OSVersion:  p.OSVersion,
+		OSFeatures: p.OSFeatures,
 	})
 	if err != nil {
 		return nil, false, err
