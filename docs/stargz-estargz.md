@@ -264,5 +264,5 @@ You can also create any stargz/eStargz image using the variety of tools includin
 - [`ctr-remote`](https://github.com/containerd/stargz-snapshotter/blob/v0.13.0/docs/ctr-remote.md): containerd CLI developed in stargz snapshotter project. This supports converting an OCI/Docker image into eStargz and [optimizing](https://github.com/containerd/stargz-snapshotter/blob/v0.13.0/docs/estargz.md#example-use-case-of-prioritized-files-workload-based-image-optimization-in-stargz-snapshotter) it.
 - [`stargzify`](https://github.com/google/crfs/tree/master/stargz/stargzify): CLI tool to convert an OCI/Docker image to stargz. This is developed in CRFS project. Creating eStargz is unsupported.
 
-There also other tools including Kaniko, ko, builpacks.io that support eStargz creation.
+There are also other tools including Kaniko, ko, builpacks.io that support eStargz creation.
 For more details, please refer to [`Creating eStargz images with tools in the community` section in the introductory post](https://medium.com/nttlabs/lazy-pulling-estargz-ef35812d73de).
