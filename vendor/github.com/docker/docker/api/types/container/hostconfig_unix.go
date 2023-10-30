@@ -1,4 +1,5 @@
 //go:build !windows
+// +build !windows
 
 package container // import "github.com/docker/docker/api/types/container"
 

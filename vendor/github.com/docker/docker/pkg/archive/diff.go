@@ -2,7 +2,6 @@ package archive // import "github.com/docker/docker/pkg/archive"
 
 import (
 	"archive/tar"
-	"context"
 	"fmt"
 	"io"
 	"os"
@@ -10,9 +9,9 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/containerd/containerd/log"
 	"github.com/docker/docker/pkg/pools"
 	"github.com/docker/docker/pkg/system"
+	"github.com/sirupsen/logrus"
 )
 
 // UnpackLayer unpack `layer` to a `dest`. The stream `layer` can be
@@ -68,7 +67,7 @@ func UnpackLayer(dest string, layer io.Reader, options *TarOptions) (size int64,
 		// image but have it tagged as Windows inadvertently.
 		if runtime.GOOS == "windows" {
 			if strings.Contains(hdr.Name, ":") {
-				log.G(context.TODO()).Warnf("Windows: Ignoring %s (is this a Linux image?)", hdr.Name)
+				logrus.Warnf("Windows: Ignoring %s (is this a Linux image?)", hdr.Name)
 				continue
 			}
 		}
@@ -93,7 +92,7 @@ func UnpackLayer(dest string, layer io.Reader, options *TarOptions) (size int64,
 					}
 					defer os.RemoveAll(aufsTempdir)
 				}
-				if err := createTarFile(filepath.Join(aufsTempdir, basename), dest, hdr, tr, options); err != nil {
+				if err := createTarFile(filepath.Join(aufsTempdir, basename), dest, hdr, tr, true, nil, options.InUserNS); err != nil {
 					return 0, err
 				}
 			}
@@ -184,7 +183,7 @@ func UnpackLayer(dest string, layer io.Reader, options *TarOptions) (size int64,
 				return 0, err
 			}
 
-			if err := createTarFile(path, dest, srcHdr, srcData, options); err != nil {
+			if err := createTarFile(path, dest, srcHdr, srcData, !options.NoLchown, nil, options.InUserNS); err != nil {
 				return 0, err
 			}
 

@@ -3,7 +3,6 @@ package archive // import "github.com/docker/docker/pkg/archive"
 import (
 	"archive/tar"
 	"bytes"
-	"context"
 	"fmt"
 	"io"
 	"os"
@@ -13,10 +12,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/containerd/containerd/log"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/docker/docker/pkg/pools"
 	"github.com/docker/docker/pkg/system"
+	"github.com/sirupsen/logrus"
 )
 
 // ChangeType represents the change type.
@@ -108,10 +107,8 @@ func aufsDeletedFile(root, path string, fi os.FileInfo) (string, error) {
 	return "", nil
 }
 
-type (
-	skipChange   func(string) (bool, error)
-	deleteChange func(string, string, os.FileInfo) (string, error)
-)
+type skipChange func(string) (bool, error)
+type deleteChange func(string, string, os.FileInfo) (string, error)
 
 func changes(layers []string, rw string, dc deleteChange, sc skipChange) ([]Change, error) {
 	var (
@@ -344,7 +341,9 @@ func newRootFileInfo() *FileInfo {
 // ChangesDirs compares two directories and generates an array of Change objects describing the changes.
 // If oldDir is "", then all files in newDir will be Add-Changes.
 func ChangesDirs(newDir, oldDir string) ([]Change, error) {
-	var oldRoot, newRoot *FileInfo
+	var (
+		oldRoot, newRoot *FileInfo
+	)
 	if oldDir == "" {
 		emptyDir, err := os.MkdirTemp("", "empty")
 		if err != nil {
@@ -372,7 +371,7 @@ func ChangesSize(newDir string, changes []Change) int64 {
 			file := filepath.Join(newDir, change.Path)
 			fileInfo, err := os.Lstat(file)
 			if err != nil {
-				log.G(context.TODO()).Errorf("Can not stat %q: %s", file, err)
+				logrus.Errorf("Can not stat %q: %s", file, err)
 				continue
 			}
 
@@ -421,22 +420,22 @@ func ExportChanges(dir string, changes []Change, idMap idtools.IdentityMapping) 
 					ChangeTime: timestamp,
 				}
 				if err := ta.TarWriter.WriteHeader(hdr); err != nil {
-					log.G(context.TODO()).Debugf("Can't write whiteout header: %s", err)
+					logrus.Debugf("Can't write whiteout header: %s", err)
 				}
 			} else {
 				path := filepath.Join(dir, change.Path)
 				if err := ta.addTarFile(path, change.Path[1:]); err != nil {
-					log.G(context.TODO()).Debugf("Can't add file %s to tar: %s", path, err)
+					logrus.Debugf("Can't add file %s to tar: %s", path, err)
 				}
 			}
 		}
 
 		// Make sure to check the error on Close.
 		if err := ta.TarWriter.Close(); err != nil {
-			log.G(context.TODO()).Debugf("Can't close layer: %s", err)
+			logrus.Debugf("Can't close layer: %s", err)
 		}
 		if err := writer.Close(); err != nil {
-			log.G(context.TODO()).Debugf("failed close Changes writer: %s", err)
+			logrus.Debugf("failed close Changes writer: %s", err)
 		}
 	}()
 	return reader, nil

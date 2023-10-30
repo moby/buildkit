@@ -2,15 +2,14 @@ package archive // import "github.com/docker/docker/pkg/archive"
 
 import (
 	"archive/tar"
-	"context"
 	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/containerd/containerd/log"
 	"github.com/docker/docker/pkg/system"
+	"github.com/sirupsen/logrus"
 )
 
 // Errors used or returned by this file.
@@ -108,7 +107,7 @@ func TarResourceRebase(sourcePath, rebaseName string) (content io.ReadCloser, er
 	sourceDir, sourceBase := SplitPathDirEntry(sourcePath)
 	opts := TarResourceRebaseOpts(sourceBase, rebaseName)
 
-	log.G(context.TODO()).Debugf("copying %q from %q", sourceBase, sourceDir)
+	logrus.Debugf("copying %q from %q", sourceBase, sourceDir)
 	return TarWithOptions(sourceDir, opts)
 }
 

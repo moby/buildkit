@@ -29,9 +29,6 @@ func (cli *Client) ContainerCreate(ctx context.Context, config *container.Config
 	if err := cli.NewVersionError("1.41", "specify container image platform"); platform != nil && err != nil {
 		return response, err
 	}
-	if err := cli.NewVersionError("1.44", "specify health-check start interval"); config != nil && config.Healthcheck != nil && config.Healthcheck.StartInterval != 0 && err != nil {
-		return response, err
-	}
 
 	if hostConfig != nil {
 		if versions.LessThan(cli.ClientVersion(), "1.25") {

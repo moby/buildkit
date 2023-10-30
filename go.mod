@@ -28,7 +28,7 @@ require (
 	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/distribution/reference v0.5.0
 	github.com/docker/cli v24.0.5+incompatible
-	github.com/docker/docker v24.0.0-rc.2.0.20230905130451-032797ea4bcb+incompatible // master (v25.0.0-dev)
+	github.com/docker/docker v24.0.7+incompatible // master (v25.0.0-dev)
 	github.com/docker/go-connections v0.4.0
 	github.com/docker/go-units v0.5.0
 	github.com/gofrs/flock v0.8.1
@@ -161,3 +161,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	kernel.org/pub/linux/libs/security/libcap/psx v1.2.67 // indirect
 )
+
+require github.com/docker/distribution v2.8.1+incompatible // indirect

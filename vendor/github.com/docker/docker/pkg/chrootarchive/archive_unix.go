@@ -1,4 +1,5 @@
 //go:build !windows
+// +build !windows
 
 package chrootarchive // import "github.com/docker/docker/pkg/chrootarchive"
 
@@ -26,7 +27,12 @@ func invokeUnpack(decompressedArchive io.Reader, dest string, options *archive.T
 		return err
 	}
 
-	return doUnpack(decompressedArchive, relDest, root, options)
+	done := make(chan error)
+	err = goInChroot(root, func() { done <- archive.Unpack(decompressedArchive, relDest, options) })
+	if err != nil {
+		return err
+	}
+	return <-done
 }
 
 func invokePack(srcPath string, options *archive.TarOptions, root string) (io.ReadCloser, error) {
@@ -40,7 +46,15 @@ func invokePack(srcPath string, options *archive.TarOptions, root string) (io.Re
 		relSrc += "/"
 	}
 
-	return doPack(relSrc, root, options)
+	tb, err := archive.NewTarballer(relSrc, options)
+	if err != nil {
+		return nil, errors.Wrap(err, "error processing tar file")
+	}
+	err = goInChroot(root, tb.Do)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not chroot")
+	}
+	return tb.Reader(), nil
 }
 
 // resolvePathInChroot returns the equivalent to path inside a chroot rooted at root.

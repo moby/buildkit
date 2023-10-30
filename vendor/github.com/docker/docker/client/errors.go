@@ -31,10 +31,20 @@ func ErrorConnectionFailed(host string) error {
 	return errConnectionFailed{host: host}
 }
 
+// Deprecated: use the errdefs.NotFound() interface instead. Kept for backward compatibility
+type notFound interface {
+	error
+	NotFound() bool
+}
+
 // IsErrNotFound returns true if the error is a NotFound error, which is returned
-// by the API when some object is not found. It is an alias for [errdefs.IsNotFound].
+// by the API when some object is not found.
 func IsErrNotFound(err error) bool {
-	return errdefs.IsNotFound(err)
+	if errdefs.IsNotFound(err) {
+		return true
+	}
+	var e notFound
+	return errors.As(err, &e)
 }
 
 type objectNotFoundError struct {

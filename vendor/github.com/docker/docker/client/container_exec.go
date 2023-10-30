@@ -3,7 +3,6 @@ package client // import "github.com/docker/docker/client"
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/versions"
@@ -47,9 +46,10 @@ func (cli *Client) ContainerExecAttach(ctx context.Context, execID string, confi
 	if versions.LessThan(cli.ClientVersion(), "1.42") {
 		config.ConsoleSize = nil
 	}
-	return cli.postHijacked(ctx, "/exec/"+execID+"/start", nil, config, http.Header{
+	headers := map[string][]string{
 		"Content-Type": {"application/json"},
-	})
+	}
+	return cli.postHijacked(ctx, "/exec/"+execID+"/start", nil, config, headers)
 }
 
 // ContainerExecInspect returns information about a specific exec process on the docker host.

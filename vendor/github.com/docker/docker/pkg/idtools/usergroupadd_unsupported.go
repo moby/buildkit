@@ -1,4 +1,5 @@
 //go:build !linux
+// +build !linux
 
 package idtools // import "github.com/docker/docker/pkg/idtools"
 

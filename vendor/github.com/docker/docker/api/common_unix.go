@@ -1,4 +1,5 @@
 //go:build !windows
+// +build !windows
 
 package api // import "github.com/docker/docker/api"
 
