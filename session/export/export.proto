@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package moby.buildkit.export.v1;
+
+option go_package = "export";
+
+service ExportCallback {
+	rpc Finalize(FinalizeRequest) returns (FinalizeResponse);
+}
+
+message FinalizeRequest {
+	map<string, string> ExporterResponse = 1;
+}
+
+message FinalizeResponse {
+	map<string, string> ExporterResponse = 1;
+}
+
