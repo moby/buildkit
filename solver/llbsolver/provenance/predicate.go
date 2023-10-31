@@ -83,6 +83,22 @@ func slsaMaterials(srcs Sources) ([]slsa.ProvenanceMaterial, error) {
 		out = append(out, material)
 	}
 
+	for _, s := range srcs.ImageBlobs {
+		uri, err := purl.RefToPURL("docker-blob", s.Ref, nil)
+		if err != nil {
+			return nil, err
+		}
+		material := slsa.ProvenanceMaterial{
+			URI: uri,
+		}
+		if s.Digest != "" {
+			material.Digest = slsa.DigestSet{
+				s.Digest.Algorithm().String(): s.Digest.Hex(),
+			}
+		}
+		out = append(out, material)
+	}
+
 	for _, s := range srcs.Git {
 		out = append(out, slsa.ProvenanceMaterial{
 			URI: s.URL,

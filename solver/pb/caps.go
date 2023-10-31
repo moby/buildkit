@@ -35,6 +35,8 @@ const (
 	CapSourceHTTPPerm     apicaps.CapID = "source.http.perm"
 	CapSourceHTTPUIDGID   apicaps.CapID = "soruce.http.uidgid"
 
+	CapSourceImageBlob apicaps.CapID = "source.imageblob"
+
 	CapSourceOCILayout apicaps.CapID = "source.ocilayout"
 
 	CapBuildOpLLBFileName apicaps.CapID = "source.buildop.llbfilename"
@@ -223,6 +225,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapSourceHTTPUIDGID,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapSourceImageBlob,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

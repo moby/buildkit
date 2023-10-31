@@ -20,6 +20,11 @@ type ImageSource struct {
 	Local    bool
 }
 
+type ImageBlobSource struct {
+	Ref    string
+	Digest digest.Digest
+}
+
 type GitSource struct {
 	URL    string
 	Commit string
@@ -45,10 +50,11 @@ type SSH struct {
 }
 
 type Sources struct {
-	Images []ImageSource
-	Git    []GitSource
-	HTTP   []HTTPSource
-	Local  []LocalSource
+	Images     []ImageSource
+	ImageBlobs []ImageBlobSource
+	Git        []GitSource
+	HTTP       []HTTPSource
+	Local      []LocalSource
 }
 
 type Capture struct {
@@ -96,6 +102,9 @@ func (c *Capture) Merge(c2 *Capture) error {
 func (c *Capture) Sort() {
 	sort.Slice(c.Sources.Images, func(i, j int) bool {
 		return c.Sources.Images[i].Ref < c.Sources.Images[j].Ref
+	})
+	sort.Slice(c.Sources.ImageBlobs, func(i, j int) bool {
+		return c.Sources.ImageBlobs[i].Ref < c.Sources.ImageBlobs[j].Ref
 	})
 	sort.Slice(c.Sources.Local, func(i, j int) bool {
 		return c.Sources.Local[i].Name < c.Sources.Local[j].Name
@@ -159,6 +168,15 @@ func (c *Capture) AddImage(i ImageSource) {
 		}
 	}
 	c.Sources.Images = append(c.Sources.Images, i)
+}
+
+func (c *Capture) AddImageBlob(i ImageBlobSource) {
+	for _, v := range c.Sources.ImageBlobs {
+		if v.Ref == i.Ref {
+			return
+		}
+	}
+	c.Sources.ImageBlobs = append(c.Sources.ImageBlobs, i)
 }
 
 func (c *Capture) AddLocal(l LocalSource) {
