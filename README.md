@@ -165,7 +165,7 @@ BuildKit builds are based on a binary intermediate format called LLB that is use
 
 See [`solver/pb/ops.proto`](./solver/pb/ops.proto) for the format definition, and see [`./examples/README.md`](./examples/README.md) for example LLB applications.
 
-Currently, the following high-level languages has been implemented for LLB:
+Currently, the following high-level languages have been implemented for LLB:
 
 -   Dockerfile (See [Exploring Dockerfiles](#exploring-dockerfiles))
 -   [Buildpacks](https://github.com/tonistiigi/buildkit-pack)
@@ -536,7 +536,7 @@ S3 configuration:
 AWS Authentication:
 
 The simplest way is to use an IAM Instance profile.
-Others options are:
+Other options are:
 
 * Any system using environment variables / config files supported by the [AWS Go SDK](https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html). The configuration must be available for the buildkit daemon, not for the client.
 * Using the following attributes:
