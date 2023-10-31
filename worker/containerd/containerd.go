@@ -10,6 +10,7 @@ import (
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/gc"
 	"github.com/containerd/containerd/leases"
+	"github.com/containerd/containerd/platforms"
 	ptypes "github.com/containerd/containerd/protobuf/types"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
@@ -106,14 +107,15 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		return base.WorkerOpt{}, errors.New("failed to find any runtime plugins")
 	}
 
-	var platforms []ocispecs.Platform
+	var platformSpecs []ocispecs.Platform
 	for _, plugin := range resp.Plugins {
 		for _, p := range plugin.Platforms {
-			platforms = append(platforms, ocispecs.Platform{
+			// containerd can return platforms that are not normalized
+			platformSpecs = append(platformSpecs, platforms.Normalize(ocispecs.Platform{
 				OS:           p.OS,
 				Architecture: p.Architecture,
 				Variant:      p.Variant,
-			})
+			}))
 		}
 	}
 
@@ -146,7 +148,7 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		Applier:          winlayers.NewFileSystemApplierWithWindows(cs, df),
 		Differ:           winlayers.NewWalkingDiffWithWindows(cs, df),
 		ImageStore:       client.ImageService(),
-		Platforms:        platforms,
+		Platforms:        platformSpecs,
 		LeaseManager:     lm,
 		GarbageCollect:   gc,
 		ParallelismSem:   parallelismSem,
