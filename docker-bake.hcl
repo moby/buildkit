@@ -123,7 +123,7 @@ target "lint" {
   matrix = {
     buildtags = [
       { name = "default", tags = "", target = "golangci-lint" },
-      { name = "labs", tags = "dfrunsecurity", target = "golangci-lint" },
+      { name = "labs", tags = "dfrunsecurity dfparents", target = "golangci-lint" },
       { name = "nydus", tags = "nydus", target = "golangci-lint" },
       { name = "yaml", tags = "", target = "yamllint" },
       { name = "proto", tags = "", target = "protolint" },

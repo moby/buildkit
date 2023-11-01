@@ -761,6 +761,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 			chown:        c.Chown,
 			chmod:        c.Chmod,
 			link:         c.Link,
+			parents:      c.Parents,
 			location:     c.Location(),
 			opt:          opt,
 		})
@@ -1167,6 +1168,14 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 				AllowEmptyWildcard:  true,
 			}}, copyOpt...)
 
+			if cfg.parents {
+				path := strings.TrimPrefix(src, "/")
+				opts = append(opts, &llb.CopyInfo{
+					IncludePatterns: []string{path},
+				})
+				src = "/"
+			}
+
 			if a == nil {
 				a = llb.Copy(cfg.source, src, dest, opts...)
 			} else {
@@ -1257,6 +1266,7 @@ type copyConfig struct {
 	link         bool
 	keepGitDir   bool
 	checksum     digest.Digest
+	parents      bool
 	location     []parser.Range
 	opt          dispatchOpt
 }
