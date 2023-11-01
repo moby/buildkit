@@ -68,10 +68,6 @@ func (c *ImageCommitOpts) Load(ctx context.Context, opt map[string]string) (map[
 		c.EnableOCITypes(ctx, c.RefCfg.Compression.Type.String())
 	}
 
-	if c.RefCfg.Compression.Type.NeedsForceCompression() {
-		c.EnableForceCompression(ctx, c.RefCfg.Compression.Type.String())
-	}
-
 	c.Annotations = c.Annotations.Merge(as)
 
 	return rest, nil

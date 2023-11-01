@@ -28,7 +28,6 @@ type Type interface {
 	NeedsConversion(ctx context.Context, cs content.Store, desc ocispecs.Descriptor) (bool, error)
 	NeedsComputeDiffBySelf(comp Config) bool
 	OnlySupportOCITypes() bool
-	NeedsForceCompression() bool
 	MediaType() string
 	String() string
 }

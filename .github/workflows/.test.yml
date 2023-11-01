@@ -155,7 +155,6 @@ jobs:
           BUILDKITD_TAGS: ${{ matrix.tags }}
       -
         name: Test
-        continue-on-error: ${{ matrix.tags == 'nydus' }}
         run: |
           export TEST_REPORT_SUFFIX=-${{ github.job }}-$(echo "${{ matrix.pkg }}-${{ matrix.skip-integration-tests }}-${{ matrix.kind }}-${{ matrix.worker }}-${{ matrix.tags }}" | tr -dc '[:alnum:]-\n\r' | tr '[:upper:]' '[:lower:]')
           if [ -n "${{ matrix.tags }}" ]; then

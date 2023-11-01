@@ -42,10 +42,6 @@ func (c zstdType) OnlySupportOCITypes() bool {
 	return false
 }
 
-func (c zstdType) NeedsForceCompression() bool {
-	return false
-}
-
 func (c zstdType) MediaType() string {
 	return ocispecs.MediaTypeImageLayerZstd
 }
