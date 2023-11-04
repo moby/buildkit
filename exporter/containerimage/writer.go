@@ -598,6 +598,8 @@ func defaultImageConfig() ([]byte, error) {
 	img := ocispecs.Image{}
 	img.Architecture = pl.Architecture
 	img.OS = pl.OS
+	img.OSVersion = pl.OSVersion
+	img.OSFeatures = pl.OSFeatures
 	img.Variant = pl.Variant
 	img.RootFS.Type = "layers"
 	img.Config.WorkingDir = "/"

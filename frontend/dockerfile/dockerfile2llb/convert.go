@@ -274,6 +274,10 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 							OS:           img.OS,
 							Architecture: img.Architecture,
 							Variant:      img.Variant,
+							OSVersion:    img.OSVersion,
+						}
+						if img.OSFeatures != nil {
+							ds.platform.OSFeatures = append([]string{}, img.OSFeatures...)
 						}
 					}
 				}
@@ -595,6 +599,10 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		target.image.OS = platformOpt.targetPlatform.OS
 		target.image.Architecture = platformOpt.targetPlatform.Architecture
 		target.image.Variant = platformOpt.targetPlatform.Variant
+		target.image.OSVersion = platformOpt.targetPlatform.OSVersion
+		if platformOpt.targetPlatform.OSFeatures != nil {
+			target.image.OSFeatures = append([]string{}, platformOpt.targetPlatform.OSFeatures...)
+		}
 	}
 
 	return target, nil
