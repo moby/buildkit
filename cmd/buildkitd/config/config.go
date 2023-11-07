@@ -131,6 +131,7 @@ type ContainerdConfig struct {
 
 type ContainerdRuntime struct {
 	Name    string                 `toml:"name"`
+	Path    string                 `toml:"path"`
 	Options map[string]interface{} `toml:"options"`
 }
 

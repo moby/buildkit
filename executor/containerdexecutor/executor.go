@@ -56,6 +56,7 @@ type OnCreateRuntimer interface {
 
 type RuntimeInfo struct {
 	Name    string
+	Path    string
 	Options any
 }
 
@@ -178,6 +179,9 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 	taskOpts, err := details.getTaskOpts()
 	if err != nil {
 		return nil, err
+	}
+	if w.runtime != nil && w.runtime.Path != "" {
+		taskOpts = append(taskOpts, containerd.WithRuntimePath(w.runtime.Path))
 	}
 	task, err := container.NewTask(ctx, cio.NewCreator(cioOpts...), taskOpts...)
 	if err != nil {
