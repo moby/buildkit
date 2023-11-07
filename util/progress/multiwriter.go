@@ -18,6 +18,8 @@ type MultiWriter struct {
 	meta    map[string]interface{}
 }
 
+var _ rawProgressWriter = &MultiWriter{}
+
 func NewMultiWriter(opts ...WriterOption) *MultiWriter {
 	mw := &MultiWriter{
 		writers: map[rawProgressWriter]struct{}{},
