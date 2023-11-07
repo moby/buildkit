@@ -179,8 +179,7 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 	if err != nil {
 		return nil, err
 	}
-
-	task, err := container.NewTask(ctx, cio.NewCreator(cioOpts...), taskOpts)
+	task, err := container.NewTask(ctx, cio.NewCreator(cioOpts...), taskOpts...)
 	if err != nil {
 		return nil, err
 	}

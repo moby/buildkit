@@ -161,7 +161,7 @@ func (w *containerdExecutor) createOCISpec(ctx context.Context, id, resolvConf, 
 	return spec, releaseAll, nil
 }
 
-func (d *containerState) getTaskOpts() (containerd.NewTaskOpts, error) {
+func (d *containerState) getTaskOpts() ([]containerd.NewTaskOpts, error) {
 	rootfs := containerd.WithRootFS([]mount.Mount{{
 		Source:  d.rootfsPath,
 		Type:    "bind",
@@ -174,7 +174,7 @@ func (d *containerState) getTaskOpts() (containerd.NewTaskOpts, error) {
 			Options: []string{},
 		}})
 	}
-	return rootfs, nil
+	return []containerd.NewTaskOpts{rootfs}, nil
 }
 
 func setArgs(spec *specs.Process, args []string) {
