@@ -131,7 +131,7 @@ Similarly:
 buildctl build --oci-layout foo=/var/lib/oci
 ```
 
-lets `buildkitd` access OCI images under `/var/lib/oci` (relative to wherever `buildctl` is running), referenced via the name `test1`.
+lets `buildkitd` access OCI images under `/var/lib/oci` (relative to wherever `buildctl` is running), referenced via the name `foo`.
 
 These "named references" are used by the frontend, either directly or with explicit options.
 
