@@ -8,6 +8,7 @@ Vagrant.configure("2") do |config|
 
   config.vm.boot_timeout = 900
   config.vm.synced_folder ".", "/vagrant", type: "rsync"
+  config.ssh.keep_alive = true
 
   config.vm.provision "init", type: "shell", run: "once" do |sh|
     sh.inline = <<~SHELL
