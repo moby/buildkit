@@ -32,7 +32,7 @@ jobs:
         name: Matrix
         id: targets
         run: |
-          echo "matrix=$(docker buildx bake validate --print | jq -cr '.group.validate.targets')" >> $GITHUB_OUTPUT
+          echo "matrix=$(docker buildx bake validate --print | jq -cr '.target | keys')" >> $GITHUB_OUTPUT
 
   validate:
     runs-on: ubuntu-22.04
