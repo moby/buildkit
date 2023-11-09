@@ -37,6 +37,8 @@ var (
 	errInvalid  = errors.New("invalid")
 )
 
+const maxPruneBatch = 10 // maximum number of refs to prune while holding the manager lock
+
 type ManagerOpt struct {
 	Snapshotter     snapshot.Snapshotter
 	ContentStore    content.Store
@@ -1057,7 +1059,7 @@ func (cm *cacheManager) pruneOnce(ctx context.Context, ch chan client.UsageInfo,
 	})
 }
 
-func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt pruneOpt) error {
+func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt pruneOpt) (err error) {
 	var toDelete []*deleteRecord
 
 	if opt.keepBytes != 0 && opt.totalSize < opt.keepBytes {
@@ -1130,48 +1132,49 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt
 					lastUsedAt:  c.LastUsedAt,
 					usageCount:  c.UsageCount,
 				})
-				if !gcMode {
-					cr.dead = true
-
-					// mark metadata as deleted in case we crash before cleanup finished
-					if err := cr.queueDeleted(); err != nil {
-						cr.mu.Unlock()
-						cm.mu.Unlock()
-						return err
-					}
-					if err := cr.commitMetadata(); err != nil {
-						cr.mu.Unlock()
-						cm.mu.Unlock()
-						return err
-					}
-				} else {
-					locked[cr.mu] = struct{}{}
-					continue // leave the record locked
-				}
+				locked[cr.mu] = struct{}{}
+				continue // leave the record locked
 			}
 		}
 		cr.mu.Unlock()
 	}
 
+	batchSize := len(toDelete)
 	if gcMode && len(toDelete) > 0 {
+		batchSize = 1
 		sortDeleteRecords(toDelete)
-		var err error
-		for i, cr := range toDelete {
-			// only remove single record at a time
-			if i == 0 {
-				cr.dead = true
-				err = cr.queueDeleted()
-				if err == nil {
-					err = cr.commitMetadata()
-				}
-			}
-			cr.mu.Unlock()
-		}
-		if err != nil {
-			return err
-		}
-		toDelete = toDelete[:1]
+	} else if batchSize > maxPruneBatch {
+		batchSize = maxPruneBatch
 	}
+
+	releaseLocks := func() {
+		for _, cr := range toDelete {
+			if !cr.released {
+				cr.released = true
+				cr.mu.Unlock()
+			}
+		}
+		cm.mu.Unlock()
+	}
+
+	for i, cr := range toDelete {
+		// only remove single record at a time
+		if i < batchSize {
+			cr.dead = true
+			// mark metadata as deleted in case we crash before cleanup finished
+			if err := cr.queueDeleted(); err != nil {
+				releaseLocks()
+				return err
+			}
+			if err := cr.commitMetadata(); err != nil {
+				releaseLocks()
+				return err
+			}
+		}
+		cr.mu.Unlock()
+		cr.released = true
+	}
+	toDelete = toDelete[:batchSize]
 
 	cm.mu.Unlock()
 
@@ -1195,7 +1198,6 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt
 	}
 
 	cm.mu.Lock()
-	var err error
 	for _, cr := range toDelete {
 		cr.mu.Lock()
 
@@ -1613,6 +1615,7 @@ type deleteRecord struct {
 	usageCount      int
 	lastUsedAtIndex int
 	usageCountIndex int
+	released        bool
 }
 
 func sortDeleteRecords(toDelete []*deleteRecord) {
