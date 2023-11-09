@@ -73,9 +73,13 @@ ARG TARGETPLATFORM
 # lld has issues building static binaries for ppc so prefer ld for it
 RUN set -e; xx-apk add musl-dev gcc libseccomp-dev libseccomp-static; \
   [ "$(xx-info arch)" != "ppc64le" ] || XX_CC_PREFER_LINKER=ld xx-clang --setup-target-triple
-RUN --mount=from=runc-src,src=/usr/src/runc,target=. --mount=target=/root/.cache,type=cache \
-  CGO_ENABLED=1 xx-go build -mod=vendor -ldflags '-extldflags -static' -tags 'apparmor seccomp netgo cgo static_build osusergo' -o /usr/bin/runc ./ && \
+RUN --mount=from=runc-src,src=/usr/src/runc,target=. \
+  --mount=target=/root/.cache,type=cache <<EOT
+  set -ex
+  CGO_ENABLED=1 xx-go build -mod=vendor -ldflags '-extldflags -static' -tags 'apparmor seccomp netgo cgo static_build osusergo' -o /usr/bin/runc ./
   xx-verify --static /usr/bin/runc
+  if [ "$(xx-info os)" = "linux" ]; then /usr/bin/runc --version; fi
+EOT
 
 FROM gobuild-base AS buildkit-base
 WORKDIR /src
@@ -95,9 +99,12 @@ ENV CGO_ENABLED=0
 ARG TARGETPLATFORM
 RUN --mount=target=. --mount=target=/root/.cache,type=cache \
   --mount=target=/go/pkg/mod,type=cache \
-  --mount=source=/tmp/.ldflags,target=/tmp/.ldflags,from=buildkit-version \
-  xx-go build -ldflags "$(cat /tmp/.ldflags)" -o /usr/bin/buildctl ./cmd/buildctl && \
+  --mount=source=/tmp/.ldflags,target=/tmp/.ldflags,from=buildkit-version <<EOT
+  set -ex
+  xx-go build -ldflags "$(cat /tmp/.ldflags)" -o /usr/bin/buildctl ./cmd/buildctl
   xx-verify --static /usr/bin/buildctl
+  if [ "$(xx-info os)" = "linux" ]; then /usr/bin/buildctl --version; fi
+EOT
 
 # build buildkitd binary
 FROM buildkit-base AS buildkitd
@@ -111,9 +118,12 @@ ARG BUILDKIT_DEBUG
 ARG GOGCFLAGS=${BUILDKIT_DEBUG:+"all=-N -l"}
 RUN --mount=target=. --mount=target=/root/.cache,type=cache \
   --mount=target=/go/pkg/mod,type=cache \
-  --mount=source=/tmp/.ldflags,target=/tmp/.ldflags,from=buildkit-version \
-  xx-go build ${GOBUILDFLAGS} -gcflags="${GOGCFLAGS}" -ldflags "$(cat /tmp/.ldflags) -extldflags '-static'" -tags "osusergo netgo static_build seccomp ${BUILDKITD_TAGS}" -o /usr/bin/buildkitd ./cmd/buildkitd && \
+  --mount=source=/tmp/.ldflags,target=/tmp/.ldflags,from=buildkit-version <<EOT
+  set -ex
+  xx-go build ${GOBUILDFLAGS} -gcflags="${GOGCFLAGS}" -ldflags "$(cat /tmp/.ldflags) -extldflags '-static'" -tags "osusergo netgo static_build seccomp ${BUILDKITD_TAGS}" -o /usr/bin/buildkitd ./cmd/buildkitd
   xx-verify ${VERIFYFLAGS} /usr/bin/buildkitd
+  if [ "$(xx-info os)" = "linux" ]; then /usr/bin/buildkitd --version; fi
+EOT
 
 FROM scratch AS binaries-linux
 COPY --link --from=runc /usr/bin/runc /buildkit-runc
