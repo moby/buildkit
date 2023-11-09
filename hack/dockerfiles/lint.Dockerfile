@@ -18,8 +18,10 @@ WORKDIR /go/src/github.com/moby/buildkit
 FROM base as golangci-lint
 ARG BUILDTAGS
 RUN --mount=target=/go/src/github.com/moby/buildkit --mount=target=/root/.cache,type=cache,sharing=locked \
-  GOARCH=amd64 golangci-lint run --build-tags "${BUILDTAGS}" && \
-  GOARCH=arm64 golangci-lint run --build-tags "${BUILDTAGS}" && \
+  GOOS=linux GOARCH=amd64 golangci-lint run --build-tags "${BUILDTAGS}" && \
+  GOOS=windows GOARCH=amd64 golangci-lint run --build-tags "${BUILDTAGS}" && \
+  GOOS=freebsd GOARCH=amd64 golangci-lint run --build-tags "${BUILDTAGS}" && \
+  GOOS=linux GOARCH=arm64 golangci-lint run --build-tags "${BUILDTAGS}" && \
   touch /golangci-lint.done
 
 FROM base as yamllint

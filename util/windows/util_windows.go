@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"syscall"
 
@@ -76,7 +75,7 @@ func GetUserIdentFromContainer(ctx context.Context, exec executor.Executor, root
 	var ident idtools.Identity
 
 	if len(rootMounts) > 1 {
-		return ident, fmt.Errorf("unexpected number of root mounts: %d", len(rootMounts))
+		return ident, errors.Errorf("unexpected number of root mounts: %d", len(rootMounts))
 	}
 
 	stdout := &bytesReadWriteCloser{
@@ -118,7 +117,7 @@ type bytesReadWriteCloser struct {
 
 func (b *bytesReadWriteCloser) Write(p []byte) (int, error) {
 	if b.bw == nil {
-		return 0, fmt.Errorf("invalid bytes buffer")
+		return 0, errors.Errorf("invalid bytes buffer")
 	}
 	return b.bw.Write(p)
 }

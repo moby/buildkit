@@ -302,15 +302,3 @@ func sub(m mount.Mount, subPath string) (mount.Mount, error) {
 	m.Source = src
 	return m, nil
 }
-
-func specMapping(s []idtools.IDMap) []specs.LinuxIDMapping {
-	var ids []specs.LinuxIDMapping
-	for _, item := range s {
-		ids = append(ids, specs.LinuxIDMapping{
-			HostID:      uint32(item.HostID),
-			ContainerID: uint32(item.ContainerID),
-			Size:        uint32(item.Size),
-		})
-	}
-	return ids
-}

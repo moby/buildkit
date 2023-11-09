@@ -1,13 +1,13 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"time"
 	"unsafe"
 
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"golang.org/x/sys/windows"
@@ -181,7 +181,7 @@ type handler struct {
 func registerUnregisterService(root string) (bool, error) {
 	if unregisterServiceFlag {
 		if registerServiceFlag {
-			return true, fmt.Errorf("--register-service and --unregister-service cannot be used together")
+			return true, errors.Errorf("--register-service and --unregister-service cannot be used together")
 		}
 		return true, unregisterService()
 	}
@@ -224,7 +224,7 @@ func registerUnregisterService(root string) (bool, error) {
 		if logFileFlag != "" {
 			f, err = os.OpenFile(logFileFlag, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			if err != nil {
-				return true, fmt.Errorf("open log file %q: %w", logFileFlag, err)
+				return true, errors.Wrapf(err, "open log file %q", logFileFlag)
 			}
 		} else {
 			// Windows services start with NULL stdio handles, and thus os.Stderr and friends will be
@@ -245,7 +245,6 @@ func registerUnregisterService(root string) (bool, error) {
 		// dependencies.
 		log.SetOutput(f)
 		logrus.SetOutput(f)
-
 	}
 	return false, nil
 }
