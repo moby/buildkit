@@ -38,6 +38,8 @@ jobs:
     runs-on: ubuntu-22.04
     needs:
       - prepare
+    env:
+      GOLANGCI_LINT_MULTIPLATFORM: 1
     strategy:
       fail-fast: false
       matrix:
