@@ -13,7 +13,6 @@ import (
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/archutil"
-	"github.com/moby/buildkit/util/bklog"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	copy "github.com/tonistiigi/fsutil/copy"
@@ -120,8 +119,8 @@ func getEmulator(ctx context.Context, p *pb.Platform, idmap *idtools.IdentityMap
 
 	fn, err := exec.LookPath("buildkit-qemu-" + a)
 	if err != nil {
-		bklog.G(ctx).Warn(err.Error()) // TODO: remove this with pull support
-		return nil, nil                // no emulator available
+		// Pass this FileNotFound" error back up the stack as emulation will not be possible
+		return nil, err
 	}
 
 	return &emulator{path: fn}, nil
