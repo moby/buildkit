@@ -707,7 +707,7 @@ The command is run in the host's network environment (similar to
 > which needs to be enabled when starting the buildkitd daemon with
 > `--allow-insecure-entitlement network.host` flag or in [buildkitd config](https://github.com/moby/buildkit/blob/master/docs/buildkitd.toml.md),
 > and for a build request with [`--allow network.host` flag](https://docs.docker.com/engine/reference/commandline/buildx_build/#allow).
-{:.warning}
+{ .warning }
 
 ## RUN --security
 
@@ -727,7 +727,7 @@ This is equivalent to running `docker run --privileged`.
 > enabled when starting the buildkitd daemon with
 > `--allow-insecure-entitlement security.insecure` flag or in [buildkitd config](https://github.com/moby/buildkit/blob/master/docs/buildkitd.toml.md),
 > and for a build request with [`--allow security.insecure` flag](https://docs.docker.com/engine/reference/commandline/buildx_build/#allow).
-{:.warning}
+{ .warning }
 
 #### Example: check entitlements
 
@@ -1958,7 +1958,7 @@ ARG buildno
 > 
 > Refer to the [`RUN --mount=type=secret`](#run---mounttypesecret) section to
 > learn about secure ways to use secrets when building images.
-{:.warning}
+{ .warning }
 
 ### Default values
 
