@@ -59,6 +59,20 @@ type writer struct {
 }
 
 func (w *writer) Write(dt []byte) (int, error) {
+	// avoid sending too big messages on grpc stream
+	const maxChunkSize = 3 * 1024 * 1024
+	if len(dt) > maxChunkSize {
+		n1, err := w.Write(dt[:maxChunkSize])
+		if err != nil {
+			return n1, err
+		}
+		dt = dt[maxChunkSize:]
+		var n2 int
+		if n2, err := w.Write(dt); err != nil {
+			return n1 + n2, err
+		}
+		return n1 + n2, nil
+	}
 	if err := w.SendMsg(&upload.BytesMessage{Data: dt}); err != nil {
 		return 0, err
 	}
