@@ -1313,7 +1313,10 @@ definitions:
         type: "boolean"
         x-nullable: true
       MacAddress:
-        description: "MAC address of the container."
+        description: |
+          MAC address of the container.
+
+          Deprecated: this field is deprecated in API v1.44 and up. Use EndpointSettings.MacAddress instead.
         type: "string"
         x-nullable: true
       OnBuild:
@@ -1363,16 +1366,16 @@ definitions:
       EndpointsConfig:
         description: |
           A mapping of network name to endpoint configuration for that network.
+          The endpoint configuration can be left empty to connect to that
+          network with no particular endpoint configuration.
         type: "object"
         additionalProperties:
           $ref: "#/definitions/EndpointSettings"
     example:
       # putting an example here, instead of using the example values from
-      # /definitions/EndpointSettings, because containers/create currently
-      # does not support attaching to multiple networks, so the example request
-      # would be confusing if it showed that multiple networks can be contained
-      # in the EndpointsConfig.
-      # TODO remove once we support multiple networks on container create (see https://github.com/moby/moby/blob/07e6b843594e061f82baa5fa23c2ff7d536c2a05/daemon/create.go#L323)
+      # /definitions/EndpointSettings, because EndpointSettings contains
+      # operational data returned when inspecting a container that we don't
+      # accept here.
       EndpointsConfig:
         isolated_nw:
           IPAMConfig:
@@ -1381,12 +1384,14 @@ definitions:
             LinkLocalIPs:
               - "169.254.34.68"
               - "fe80::3468"
+          MacAddress: "02:42:ac:12:05:02"
           Links:
             - "container_1"
             - "container_2"
           Aliases:
             - "server_x"
             - "server_y"
+        database_nw: {}
 
   NetworkSettings:
     description: "NetworkSettings exposes the network settings in the API"
@@ -1839,6 +1844,7 @@ definitions:
             x-nullable: true
   ImageSummary:
     type: "object"
+    x-go-name: "Summary"
     required:
       - Id
       - ParentId
@@ -2453,6 +2459,11 @@ definitions:
         example:
           - "container_1"
           - "container_2"
+      MacAddress:
+        description: |
+          MAC address for the endpoint on this network. The network driver might ignore this parameter.
+        type: "string"
+        example: "02:42:ac:11:00:04"
       Aliases:
         type: "array"
         items:
@@ -2503,11 +2514,6 @@ definitions:
         type: "integer"
         format: "int64"
         example: 64
-      MacAddress:
-        description: |
-          MAC address for the endpoint on this network.
-        type: "string"
-        example: "02:42:ac:11:00:04"
       DriverOpts:
         description: |
           DriverOpts is a mapping of driver options and values. These options
@@ -3552,6 +3558,32 @@ definitions:
                   Level:
                     type: "string"
                     description: "SELinux level label"
+              Seccomp:
+                type: "object"
+                description: "Options for configuring seccomp on the container"
+                properties:
+                  Mode:
+                    type: "string"
+                    enum:
+                      - "default"
+                      - "unconfined"
+                      - "custom"
+                  Profile:
+                    description: "The custom seccomp profile as a json object"
+                    type: "string"
+              AppArmor:
+                type: "object"
+                description: "Options for configuring AppArmor on the container"
+                properties:
+                  Mode:
+                    type: "string"
+                    enum:
+                      - "default"
+                      - "disabled"
+              NoNewPrivileges:
+                type: "boolean"
+                description: "Configuration of the no_new_privs bit in the container"
+
           TTY:
             description: "Whether a pseudo-TTY should be allocated."
             type: "boolean"
@@ -4450,6 +4482,7 @@ definitions:
 
   ImageDeleteResponseItem:
     type: "object"
+    x-go-name: "DeleteResponse"
     properties:
       Untagged:
         description: "The image ID of an image that was untagged"
@@ -4457,6 +4490,29 @@ definitions:
       Deleted:
         description: "The image ID of an image that was deleted"
         type: "string"
+
+  ServiceCreateResponse:
+    type: "object"
+    description: |
+      contains the information returned to a client on the
+      creation of a new service.
+    properties:
+      ID:
+        description: "The ID of the created service."
+        type: "string"
+        x-nullable: false
+        example: "ak7w3gjqoa3kuz8xcpnyy0pvl"
+      Warnings:
+        description: |
+          Optional warning message.
+
+          FIXME(thaJeztah): this should have "omitempty" in the generated type.
+        type: "array"
+        x-nullable: true
+        items:
+          type: "string"
+        example:
+          - "unable to pin image doesnotexist:latest to digest: image library/doesnotexist:latest not found"
 
   ServiceUpdateResponse:
     type: "object"
@@ -4467,7 +4523,8 @@ definitions:
         items:
           type: "string"
     example:
-      Warning: "unable to pin image doesnotexist:latest to digest: image library/doesnotexist:latest not found"
+      Warnings:
+        - "unable to pin image doesnotexist:latest to digest: image library/doesnotexist:latest not found"
 
   ContainerSummary:
     type: "object"
@@ -6439,6 +6496,7 @@ paths:
                     Aliases:
                       - "server_x"
                       - "server_y"
+                  database_nw: {}
 
           required: true
       responses:
@@ -8017,6 +8075,7 @@ paths:
             - `label=key` or `label="key=value"` of an image label
             - `reference`=(`<image-name>[:<tag>]`)
             - `since`=(`<image-name>[:<tag>]`,  `<image id>` or `<image@digest>`)
+            - `until=<timestamp>`
           type: "string"
         - name: "shared-size"
           in: "query"
@@ -9962,13 +10021,7 @@ paths:
                 type: "string"
               CheckDuplicate:
                 description: |
-                  Check for networks with duplicate names. Since Network is
-                  primarily keyed based on a random ID and not on the name, and
-                  network name is strictly a user-friendly alias to the network
-                  which is uniquely identified using ID, there is no guaranteed
-                  way to check for duplicates. CheckDuplicate is there to provide
-                  a best effort checking of any networks which has the same name
-                  but it is not guaranteed to catch all name collisions.
+                  Deprecated: CheckDuplicate is now always enabled.
                 type: "boolean"
               Driver:
                 description: "Name of the network driver plugin to use."
@@ -10036,14 +10089,19 @@ paths:
   /networks/{id}/connect:
     post:
       summary: "Connect a container to a network"
+      description: "The network must be either a local-scoped network or a swarm-scoped network with the `attachable` option set. A network cannot be re-attached to a running container"
       operationId: "NetworkConnect"
       consumes:
         - "application/json"
       responses:
         200:
           description: "No error"
+        400:
+          description: "bad parameter"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
         403:
-          description: "Operation not supported for swarm scoped networks"
+          description: "Operation forbidden"
           schema:
             $ref: "#/definitions/ErrorResponse"
         404:
@@ -10078,6 +10136,7 @@ paths:
                 IPAMConfig:
                   IPv4Address: "172.24.56.89"
                   IPv6Address: "2001:db8::5689"
+                MacAddress: "02:42:ac:12:05:02"
       tags: ["Network"]
 
   /networks/{id}/disconnect:
@@ -11071,18 +11130,7 @@ paths:
         201:
           description: "no error"
           schema:
-            type: "object"
-            title: "ServiceCreateResponse"
-            properties:
-              ID:
-                description: "The ID of the created service."
-                type: "string"
-              Warning:
-                description: "Optional warning message"
-                type: "string"
-            example:
-              ID: "ak7w3gjqoa3kuz8xcpnyy0pvl"
-              Warning: "unable to pin image doesnotexist:latest to digest: image library/doesnotexist:latest not found"
+            $ref: "#/definitions/ServiceCreateResponse"
         400:
           description: "bad parameter"
           schema:
