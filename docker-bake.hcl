@@ -38,6 +38,10 @@ variable "CGO_ENABLED" {
   default = null
 }
 
+variable "GOLANGCI_LINT_MULTIPLATFORM" {
+  default = null
+}
+
 # Defines the output folder
 variable "DESTDIR" {
   default = ""
@@ -120,6 +124,16 @@ target "lint" {
   args = {
     BUILDTAGS = buildtags.tags
   }
+  platforms = buildtags.target == "golangci-lint" && GOLANGCI_LINT_MULTIPLATFORM != null ? [
+    "freebsd/amd64",
+    "linux/amd64",
+    "linux/arm64",
+    "linux/s390x",
+    "linux/ppc64le",
+    "linux/riscv64",
+    "windows/amd64",
+    "windows/arm64"
+  ] : []
   matrix = {
     buildtags = [
       { name = "default", tags = "", target = "golangci-lint" },

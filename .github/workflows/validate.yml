@@ -32,12 +32,14 @@ jobs:
         name: Matrix
         id: targets
         run: |
-          echo "matrix=$(docker buildx bake validate --print | jq -cr '.group.validate.targets')" >> $GITHUB_OUTPUT
+          echo "matrix=$(docker buildx bake validate --print | jq -cr '.target | keys')" >> $GITHUB_OUTPUT
 
   validate:
     runs-on: ubuntu-22.04
     needs:
       - prepare
+    env:
+      GOLANGCI_LINT_MULTIPLATFORM: 1
     strategy:
       fail-fast: false
       matrix:
