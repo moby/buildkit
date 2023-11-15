@@ -44,6 +44,7 @@ platforms=["linux/amd64"]
 address="containerd.sock"
 [worker.containerd.runtime]
 name="exotic"
+path="/usr/bin/exotic"
 options.foo="bar"
 [[worker.containerd.gcpolicy]]
 all=true
@@ -107,6 +108,7 @@ searchDomains=["example.com"]
 	require.Equal(t, 0, len(cfg.Workers.OCI.GCPolicy))
 	require.Equal(t, "non-default", cfg.Workers.Containerd.Namespace)
 	require.Equal(t, "exotic", cfg.Workers.Containerd.Runtime.Name)
+	require.Equal(t, "/usr/bin/exotic", cfg.Workers.Containerd.Runtime.Path)
 	require.Equal(t, "bar", cfg.Workers.Containerd.Runtime.Options["foo"])
 	require.Equal(t, 3, len(cfg.Workers.Containerd.GCPolicy))
 

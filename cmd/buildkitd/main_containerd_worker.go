@@ -322,6 +322,7 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 
 		runtime = &containerd.RuntimeInfo{
 			Name:    cfg.Runtime.Name,
+			Path:    cfg.Runtime.Path,
 			Options: opts,
 		}
 	}
