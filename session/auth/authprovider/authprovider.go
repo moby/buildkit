@@ -178,6 +178,9 @@ func (ap *authProvider) tlsConfig(host string) (*tls.Config, error) {
 		}
 		tc.Certificates = append(tc.Certificates, cert)
 	}
+	if c.Insecure {
+		tc.InsecureSkipVerify = true
+	}
 	return tc, nil
 }
 
