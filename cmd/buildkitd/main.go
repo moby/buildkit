@@ -746,19 +746,21 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 	}
 
 	remoteCacheExporterFuncs := map[string]remotecache.ResolveCacheExporterFunc{
-		"registry": registryremotecache.ResolveCacheExporterFunc(sessionManager, resolverFn),
-		"local":    localremotecache.ResolveCacheExporterFunc(sessionManager),
-		"inline":   inlineremotecache.ResolveCacheExporterFunc(),
-		"gha":      gha.ResolveCacheExporterFunc(),
-		"s3":       s3remotecache.ResolveCacheExporterFunc(),
-		"azblob":   azblob.ResolveCacheExporterFunc(),
+		"registry":  registryremotecache.ResolveCacheExporterFunc(sessionManager, resolverFn),
+		"local":     localremotecache.ResolveCacheExporterFunc(sessionManager),
+		"inline":    inlineremotecache.ResolveCacheExporterFunc(),
+		"gha":       gha.ResolveCacheExporterFunc(),
+		"s3":        s3remotecache.ResolveCacheExporterFunc(),
+		"s3_global": s3remotecache.ResolveGlobalCacheExporterFunc(),
+		"azblob":    azblob.ResolveCacheExporterFunc(),
 	}
 	remoteCacheImporterFuncs := map[string]remotecache.ResolveCacheImporterFunc{
-		"registry": registryremotecache.ResolveCacheImporterFunc(sessionManager, w.ContentStore(), resolverFn),
-		"local":    localremotecache.ResolveCacheImporterFunc(sessionManager),
-		"gha":      gha.ResolveCacheImporterFunc(),
-		"s3":       s3remotecache.ResolveCacheImporterFunc(),
-		"azblob":   azblob.ResolveCacheImporterFunc(),
+		"registry":  registryremotecache.ResolveCacheImporterFunc(sessionManager, w.ContentStore(), resolverFn),
+		"local":     localremotecache.ResolveCacheImporterFunc(sessionManager),
+		"gha":       gha.ResolveCacheImporterFunc(),
+		"s3":        s3remotecache.ResolveCacheImporterFunc(),
+		"s3_global": s3remotecache.ResolveGlobalCacheImporterFunc(),
+		"azblob":    azblob.ResolveCacheImporterFunc(),
 	}
 	return control.NewController(control.Opt{
 		SessionManager:            sessionManager,
