@@ -288,10 +288,46 @@ modifiers as specified below:
 - `${variable:+word}` indicates that if `variable` is set then `word` will be
   the result, otherwise the result is the empty string.
 
+The following variable replacements are supported in a pre-release version of
+Dockerfile syntax, when using the `# syntax=docker/dockerfile-upstream:master` syntax
+directive in your Dockerfile:
+
+- `${variable#pattern}` removes the shortest match of `pattern` from `variable`,
+  seeking from the start of the string.
+  
+  ```bash
+  str=foobarbaz echo ${str#f*b}     # arbaz
+  ```
+  
+- `${variable##pattern}` removes the longest match of `pattern` from `variable`,
+  seeking from the start of the string.
+
+  ```bash
+  str=foobarbaz echo ${str##f*b}    # az
+  ```
+
+- `${variable%pattern}` removes the shortest match of `pattern` from `variable`,
+  seeking backwards from the end of the string.
+
+  ```bash
+  string=foobarbaz echo ${string%b*}    # foobar
+  ```
+
+- `${variable%%pattern}` removes the longest match of `pattern` from `variable`,
+  seeking backwards from the end of the string.
+
+  ```bash
+  string=foobarbaz echo ${string%%b*}   # foo
+  ```
+
 In all cases, `word` can be any string, including additional environment
 variables.
 
-Escaping is possible by adding a `\` before the variable: `\$foo` or `\${foo}`,
+`pattern` is a glob pattern where `?` matches any single character
+and `*` any number of characters (including zero). To match literal `?` and `*`,
+use a backslash escape: `\?` and `\*`.
+
+You can escape whole variable names by adding a `\` before the variable: `\$foo` or `\${foo}`,
 for example, will translate to `$foo` and `${foo}` literals respectively.
 
 Example (parsed representation is displayed after the `#`):
