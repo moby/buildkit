@@ -489,3 +489,30 @@ func isNotFound(err error) bool {
 	var errapi smithy.APIError
 	return errors.As(err, &errapi) && (errapi.ErrorCode() == "NoSuchKey" || errapi.ErrorCode() == "NotFound")
 }
+
+func (s3Client *s3Client) ListAllOjectsV2Prefix(ctx context.Context, prefix string, fn func(*s3.ListObjectsV2Output) (bool, error)) error {
+	q := &s3.ListObjectsV2Input{
+		Bucket: &s3Client.bucket,
+		Prefix: &prefix,
+	}
+
+	for {
+		out, err := s3Client.ListObjectsV2(ctx, q)
+		if err != nil {
+			return err
+		}
+		conti, err := fn(out)
+		if err != nil {
+			return err
+		}
+		if conti == false {
+			break
+		}
+		if out.ContinuationToken != nil {
+			q.ContinuationToken = out.ContinuationToken
+			continue
+		}
+		break
+	}
+	return nil
+}
