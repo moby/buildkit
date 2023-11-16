@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/moby/buildkit/util/tracing/detect"
+	//nolint:staticcheck // Jaeger still supported for compatibility
 	"go.opentelemetry.io/otel/exporters/jaeger"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
