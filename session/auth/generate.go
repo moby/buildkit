@@ -1,3 +1,3 @@
 package auth
 
-//go:generate protoc --gogoslick_out=plugins=grpc:. auth.proto
+//go:generate protoc --go_out=paths=source_relative:. --go-grpc_out=paths=source_relative:. auth.proto

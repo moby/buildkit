@@ -4,6 +4,8 @@ package errdefs;
 
 import "github.com/moby/buildkit/solver/pb/ops.proto";
 
+option go_package = "github.com/moby/buildkit/solver/errdefs";
+
 message Vertex {
 	string digest = 1;
 }
