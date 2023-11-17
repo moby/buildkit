@@ -2,6 +2,7 @@ package authprovider
 
 type AuthTLSConfig struct {
 	RootCAs  []string
+	Insecure bool
 	KeyPairs []TLSKeyPair
 }
 
