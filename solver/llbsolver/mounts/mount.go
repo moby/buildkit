@@ -416,8 +416,8 @@ func (m *tmpfsMount) Mount() ([]mount.Mount, func() error, error) {
 		opt = append(opt, "ro")
 	}
 	if m.opt != nil {
-		if m.opt.Size_ > 0 {
-			opt = append(opt, fmt.Sprintf("size=%d", m.opt.Size_))
+		if m.opt.Size > 0 {
+			opt = append(opt, fmt.Sprintf("size=%d", m.opt.Size))
 		}
 	}
 	return []mount.Mount{{

@@ -32,7 +32,7 @@ func NewFS() *FS {
 
 func (fs *FS) Add(p string, stat types.Stat, data []byte) {
 	p = strings.TrimPrefix(p, "/")
-	stat.Size_ = int64(len(data))
+	stat.Size = int64(len(data))
 	if stat.Mode == 0 {
 		stat.Mode = 0644
 	}

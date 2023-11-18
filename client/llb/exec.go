@@ -369,7 +369,7 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		if m.tmpfs {
 			pm.MountType = pb.MountType_TMPFS
 			pm.TmpfsOpt = &pb.TmpfsOpt{
-				Size_: m.tmpfsOpt.Size,
+				Size: m.tmpfsOpt.Size,
 			}
 		}
 		peo.Mounts = append(peo.Mounts, pm)

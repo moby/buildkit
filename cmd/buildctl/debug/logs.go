@@ -67,7 +67,7 @@ func logs(clicontext *cli.Context) error {
 		store := proxy.NewContentStore(c.ContentClient())
 		ra, err := store.ReaderAt(ctx, ocispecs.Descriptor{
 			Digest:    he.Record.Trace.Digest,
-			Size:      he.Record.Trace.Size_,
+			Size:      he.Record.Trace.Size,
 			MediaType: he.Record.Trace.MediaType,
 		})
 		if err != nil {

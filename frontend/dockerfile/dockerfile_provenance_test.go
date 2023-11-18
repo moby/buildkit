@@ -1259,7 +1259,7 @@ COPY bar bar2
 			provDt, err = content.ReadBlob(ctx, store, ocispecs.Descriptor{
 				MediaType: prov.MediaType,
 				Digest:    prov.Digest,
-				Size:      prov.Size_,
+				Size:      prov.Size,
 			})
 			require.NoError(t, err)
 		}

@@ -41,7 +41,7 @@ func (c *Client) Prune(ctx context.Context, ch chan UsageInfo, opts ...PruneOpti
 				ID:          d.ID,
 				Mutable:     d.Mutable,
 				InUse:       d.InUse,
-				Size:        d.Size_,
+				Size:        d.Size,
 				Parents:     d.Parents,
 				CreatedAt:   d.CreatedAt,
 				Description: d.Description,

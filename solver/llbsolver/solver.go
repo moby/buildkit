@@ -241,7 +241,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 			w = nil
 			return &controlapi.Descriptor{
 				Digest:    desc.Digest,
-				Size_:     desc.Size,
+				Size:      desc.Size,
 				MediaType: desc.MediaType,
 				Annotations: map[string]string{
 					"in-toto.io/predicate-type": slsa02.PredicateSLSAProvenance,
@@ -304,7 +304,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 			releasers = append(releasers, releaseStatus)
 			rec.Logs = &controlapi.Descriptor{
 				Digest:    st.Descriptor.Digest,
-				Size_:     st.Descriptor.Size,
+				Size:      st.Descriptor.Size,
 				MediaType: st.Descriptor.MediaType,
 			}
 			rec.NumCachedSteps = int32(st.NumCachedSteps)
@@ -330,7 +330,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 				desc := descref.Descriptor()
 				controlDesc := &controlapi.Descriptor{
 					Digest:      desc.Digest,
-					Size_:       desc.Size,
+					Size:        desc.Size,
 					MediaType:   desc.MediaType,
 					Annotations: desc.Annotations,
 				}
@@ -411,7 +411,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 					rec.Trace = &controlapi.Descriptor{
 						Digest:    desc.Digest,
 						MediaType: desc.MediaType,
-						Size_:     desc.Size,
+						Size:      desc.Size,
 					}
 					return nil
 				}); err != nil {

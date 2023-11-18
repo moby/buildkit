@@ -454,7 +454,7 @@ func (h *HistoryQueue) Status(ctx context.Context, ref string, st chan<- *client
 
 	ra, err := h.hContentStore.ReaderAt(ctx, ocispecs.Descriptor{
 		Digest:    br.Logs.Digest,
-		Size:      br.Logs.Size_,
+		Size:      br.Logs.Size,
 		MediaType: br.Logs.MediaType,
 	})
 	if err != nil {
