@@ -131,7 +131,7 @@ func TestFallbackPath(t *testing.T) {
 	require.NoError(t, err)
 	e, err := llbsolver.Load(context.TODO(), def.ToPB(), nil)
 	require.NoError(t, err)
-	require.False(t, def.Metadata[e.Vertex.Digest()].Caps[pb.CapExecMetaSetsDefaultPath])
+	require.False(t, def.Metadata[e.Vertex.Digest()].Caps[string(pb.CapExecMetaSetsDefaultPath)])
 	_, ok := getenv(e, "PATH")
 	require.False(t, ok)
 
@@ -143,7 +143,7 @@ func TestFallbackPath(t *testing.T) {
 	require.NoError(t, err)
 	e, err = llbsolver.Load(context.TODO(), def.ToPB(), nil)
 	require.NoError(t, err)
-	require.False(t, def.Metadata[e.Vertex.Digest()].Caps[pb.CapExecMetaSetsDefaultPath])
+	require.False(t, def.Metadata[e.Vertex.Digest()].Caps[string(pb.CapExecMetaSetsDefaultPath)])
 	v, ok := getenv(e, "PATH")
 	require.True(t, ok)
 	require.Equal(t, system.DefaultPathEnvUnix, v)
@@ -157,7 +157,7 @@ func TestFallbackPath(t *testing.T) {
 	require.NoError(t, err)
 	e, err = llbsolver.Load(context.TODO(), def.ToPB(), nil)
 	require.NoError(t, err)
-	require.True(t, def.Metadata[e.Vertex.Digest()].Caps[pb.CapExecMetaSetsDefaultPath])
+	require.True(t, def.Metadata[e.Vertex.Digest()].Caps[string(pb.CapExecMetaSetsDefaultPath)])
 	_, ok = getenv(e, "PATH")
 	require.False(t, ok)
 

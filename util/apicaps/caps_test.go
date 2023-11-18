@@ -22,7 +22,7 @@ func TestDisabledCap(t *testing.T) {
 		Status:  CapStatusExperimental,
 	})
 
-	cs := cl.CapSet([]pb.APICap{
+	cs := cl.CapSet([]*pb.APICap{
 		{ID: "cap1", Enabled: true},
 		{ID: "cap2", Enabled: true},
 	})
@@ -31,7 +31,7 @@ func TestDisabledCap(t *testing.T) {
 	err = cs.Supports("cap2")
 	assert.NoError(t, err)
 
-	cs = cl.CapSet([]pb.APICap{
+	cs = cl.CapSet([]*pb.APICap{
 		{ID: "cap1", Enabled: true},
 		{ID: "cap2", Enabled: false},
 	})
@@ -40,7 +40,7 @@ func TestDisabledCap(t *testing.T) {
 	err = cs.Supports("cap2")
 	assert.EqualError(t, err, "requested experimental feature cap2 (a second test cap) has been disabled on the build server")
 
-	cs = cl.CapSet([]pb.APICap{
+	cs = cl.CapSet([]*pb.APICap{
 		{ID: "cap1", Enabled: false},
 		{ID: "cap2", Enabled: true},
 	})
@@ -49,7 +49,7 @@ func TestDisabledCap(t *testing.T) {
 	err = cs.Supports("cap2")
 	assert.NoError(t, err)
 
-	cs = cl.CapSet([]pb.APICap{
+	cs = cl.CapSet([]*pb.APICap{
 		{ID: "cap1", Enabled: false},
 		{ID: "cap2", Enabled: false},
 	})

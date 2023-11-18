@@ -35,6 +35,7 @@ import (
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/moby/buildkit/util/testutil/workers"
+	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -1258,7 +1259,7 @@ COPY bar bar2
 
 			provDt, err = content.ReadBlob(ctx, store, ocispecs.Descriptor{
 				MediaType: prov.MediaType,
-				Digest:    prov.Digest,
+				Digest:    digest.Digest(prov.Digest),
 				Size:      prov.Size,
 			})
 			require.NoError(t, err)

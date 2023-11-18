@@ -6629,9 +6629,9 @@ func testSourceMap(t *testing.T, sb integration.Sandbox) {
 
 	st := llb.Scratch().Run(
 		llb.Shlex("not-exist"),
-		sm1.Location([]*pb.Range{{Start: pb.Position{Line: 7}}}),
-		sm2.Location([]*pb.Range{{Start: pb.Position{Line: 8}}}),
-		sm1.Location([]*pb.Range{{Start: pb.Position{Line: 9}}}),
+		sm1.Location([]*pb.Range{{Start: &pb.Position{Line: 7}}}),
+		sm2.Location([]*pb.Range{{Start: &pb.Position{Line: 8}}}),
+		sm1.Location([]*pb.Range{{Start: &pb.Position{Line: 9}}}),
 	)
 
 	def, err := st.Marshal(sb.Context())
@@ -6684,7 +6684,7 @@ func testSourceMapFromRef(t *testing.T, sb integration.Sandbox) {
 	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 		st := llb.Scratch().File(
 			llb.Mkdir("foo/bar", 0600), // fails because /foo doesn't exist
-			sm.Location([]*pb.Range{{Start: pb.Position{Line: 3, Character: 1}}}),
+			sm.Location([]*pb.Range{{Start: &pb.Position{Line: 3, Character: 1}}}),
 		)
 
 		def, err := st.Marshal(sb.Context())

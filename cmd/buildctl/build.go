@@ -132,11 +132,11 @@ func read(r io.Reader, clicontext *cli.Context) (*llb.Definition, error) {
 			dgst := digest.FromBytes(dt)
 			opMetadata, ok := def.Metadata[dgst]
 			if !ok {
-				opMetadata = pb.OpMetadata{}
+				opMetadata = &pb.OpMetadata{}
 			}
-			c := llb.Constraints{Metadata: opMetadata}
+			c := llb.Constraints{Metadata: *opMetadata}
 			llb.IgnoreCache(&c)
-			def.Metadata[dgst] = c.Metadata
+			def.Metadata[dgst] = &c.Metadata
 		}
 	}
 	return def, nil

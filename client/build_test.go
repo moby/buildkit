@@ -198,7 +198,7 @@ func testWarnings(t *testing.T, sb integration.Sandbox) {
 				Data:     []byte("filedata"),
 			},
 			Range: []*pb.Range{
-				{Start: pb.Position{Line: 2}, End: pb.Position{Line: 4}},
+				{Start: &pb.Position{Line: 2}, End: &pb.Position{Line: 4}},
 			},
 			Detail: [][]byte{[]byte("this is detail"), []byte("and more detail")},
 			URL:    "https://example.com",

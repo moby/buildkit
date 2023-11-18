@@ -63,9 +63,9 @@ func TestStateSourceMapMarshal(t *testing.T) {
 
 	s := Image(
 		"myimage",
-		sm1.Location([]*pb.Range{{Start: pb.Position{Line: 7}}}),
-		sm2.Location([]*pb.Range{{Start: pb.Position{Line: 8}}}),
-		sm1.Location([]*pb.Range{{Start: pb.Position{Line: 9}}}),
+		sm1.Location([]*pb.Range{{Start: &pb.Position{Line: 7}}}),
+		sm2.Location([]*pb.Range{{Start: &pb.Position{Line: 8}}}),
+		sm1.Location([]*pb.Range{{Start: &pb.Position{Line: 9}}}),
 	)
 
 	def, err := s.Marshal(context.TODO())
@@ -103,7 +103,7 @@ func TestStateSourceMapMarshal(t *testing.T) {
 	require.Equal(t, int32(9), def.Source.Locations[dgst.String()].Locations[2].Ranges[0].Start.Line)
 
 	s = Merge([]State{s, Image("myimage",
-		sm1.Location([]*pb.Range{{Start: pb.Position{Line: 10}}}),
+		sm1.Location([]*pb.Range{{Start: &pb.Position{Line: 10}}}),
 	)})
 	def, err = s.Marshal(context.TODO())
 	require.NoError(t, err)
@@ -168,7 +168,7 @@ func TestPlatformFromImage(t *testing.T) {
 	require.Equal(t, true, ok)
 	require.Equal(t, "ppc64le", vtx.Platform.Architecture)
 
-	vtx, ok = m[vtx.Inputs[0].Digest]
+	vtx, ok = m[digest.Digest(vtx.Inputs[0].Digest)]
 	require.Equal(t, true, ok)
 
 	f, ok := vtx.Op.(*pb.Op_File)
@@ -177,7 +177,7 @@ func TestPlatformFromImage(t *testing.T) {
 	require.Nil(t, vtx.Platform)
 
 	mainVtx := vtx
-	vtx, ok = m[vtx.Inputs[0].Digest]
+	vtx, ok = m[digest.Digest(vtx.Inputs[0].Digest)]
 	require.Equal(t, true, ok)
 
 	src, ok := vtx.Op.(*pb.Op_Source)
@@ -185,14 +185,14 @@ func TestPlatformFromImage(t *testing.T) {
 	require.Equal(t, "docker-image://docker.io/library/destimage:latest", src.Source.Identifier)
 	require.Equal(t, "ppc64le", vtx.Platform.Architecture)
 
-	vtx, ok = m[mainVtx.Inputs[1].Digest]
+	vtx, ok = m[digest.Digest(mainVtx.Inputs[1].Digest)]
 	require.Equal(t, true, ok)
 
 	_, ok = vtx.Op.(*pb.Op_Exec)
 	require.Equal(t, true, ok)
 	require.Equal(t, "s390x", vtx.Platform.Architecture)
 
-	vtx, ok = m[vtx.Inputs[0].Digest]
+	vtx, ok = m[digest.Digest(vtx.Inputs[0].Digest)]
 	require.Equal(t, true, ok)
 
 	f, ok = vtx.Op.(*pb.Op_File)
@@ -200,14 +200,14 @@ func TestPlatformFromImage(t *testing.T) {
 	require.Equal(t, 2, len(f.File.Actions))
 	require.Nil(t, vtx.Platform)
 
-	vtx, ok = m[vtx.Inputs[0].Digest]
+	vtx, ok = m[digest.Digest(vtx.Inputs[0].Digest)]
 	require.Equal(t, true, ok)
 
 	_, ok = vtx.Op.(*pb.Op_Exec)
 	require.Equal(t, true, ok)
 	require.Equal(t, "s390x", vtx.Platform.Architecture)
 
-	vtx, ok = m[vtx.Inputs[0].Digest]
+	vtx, ok = m[digest.Digest(vtx.Inputs[0].Digest)]
 	require.Equal(t, true, ok)
 
 	src, ok = vtx.Op.(*pb.Op_Source)
@@ -242,7 +242,7 @@ func TestPlatformFromImageWithMerge(t *testing.T) {
 	require.Equal(t, true, ok)
 	require.Equal(t, "s390x", vtx.Platform.Architecture)
 
-	vtx, ok = m[vtx.Inputs[0].Digest]
+	vtx, ok = m[digest.Digest(vtx.Inputs[0].Digest)]
 	require.Equal(t, true, ok)
 
 	_, ok = vtx.Op.(*pb.Op_Merge)
@@ -250,7 +250,7 @@ func TestPlatformFromImageWithMerge(t *testing.T) {
 	require.Nil(t, vtx.Platform)
 
 	mainVtx := vtx
-	vtx, ok = m[vtx.Inputs[0].Digest]
+	vtx, ok = m[digest.Digest(vtx.Inputs[0].Digest)]
 	require.Equal(t, true, ok)
 
 	src, ok := vtx.Op.(*pb.Op_Source)
@@ -258,7 +258,7 @@ func TestPlatformFromImageWithMerge(t *testing.T) {
 	require.Equal(t, "docker-image://docker.io/library/srcimage:latest", src.Source.Identifier)
 	require.Equal(t, "s390x", vtx.Platform.Architecture)
 
-	vtx, ok = m[mainVtx.Inputs[1].Digest]
+	vtx, ok = m[digest.Digest(mainVtx.Inputs[1].Digest)]
 	require.Equal(t, true, ok)
 
 	f, ok := vtx.Op.(*pb.Op_File)

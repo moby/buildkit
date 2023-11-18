@@ -134,7 +134,7 @@ func (s State) SetMarshalDefaults(co ...ConstraintsOpt) State {
 func (s State) Marshal(ctx context.Context, co ...ConstraintsOpt) (*Definition, error) {
 	c := NewConstraints(append(s.opts, co...)...)
 	def := &Definition{
-		Metadata:    make(map[digest.Digest]pb.OpMetadata, 0),
+		Metadata:    make(map[digest.Digest]*pb.OpMetadata, 0),
 		Constraints: c,
 	}
 
@@ -160,6 +160,9 @@ func (s State) Marshal(ctx context.Context, co ...ConstraintsOpt) (*Definition, 
 
 	dgst := digest.FromBytes(dt)
 	md := def.Metadata[dgst]
+	if md == nil {
+		md = &pb.OpMetadata{}
+	}
 	md.Caps = map[string]bool{
 		string(pb.CapConstraints): true,
 		string(pb.CapPlatform):    true,
@@ -205,7 +208,11 @@ func marshal(ctx context.Context, v Vertex, def *Definition, s *sourceMapCollect
 	}
 	vertexCache[v] = struct{}{}
 	if opMeta != nil {
-		def.Metadata[dgst] = mergeMetadata(def.Metadata[dgst], *opMeta)
+		md := def.Metadata[dgst]
+		if md == nil {
+			md = &pb.OpMetadata{}
+		}
+		def.Metadata[dgst] = mergeMetadata(md, opMeta)
 	}
 	s.Add(dgst, sls)
 	if _, ok := cache[dgst]; ok {
@@ -559,7 +566,7 @@ func (fn constraintsOptFunc) SetGitOption(gi *GitInfo) {
 	gi.applyConstraints(fn)
 }
 
-func mergeMetadata(m1, m2 pb.OpMetadata) pb.OpMetadata {
+func mergeMetadata(m1, m2 *pb.OpMetadata) *pb.OpMetadata {
 	if m2.IgnoreCache {
 		m1.IgnoreCache = true
 	}

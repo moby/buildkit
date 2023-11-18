@@ -5,7 +5,6 @@ import (
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/moby/buildkit/util"
 	digest "github.com/opencontainers/go-digest"
 	"google.golang.org/protobuf/proto"
 )
@@ -14,29 +13,29 @@ import (
 // Corresponds to the Definition structure defined in solver/pb.Definition.
 type Definition struct {
 	Def         [][]byte
-	Metadata    map[digest.Digest]pb.OpMetadata
+	Metadata    map[digest.Digest]*pb.OpMetadata
 	Source      *pb.Source
 	Constraints *Constraints
 }
 
 func (def *Definition) ToPB() *pb.Definition {
-	md := make(map[digest.Digest]pb.OpMetadata, len(def.Metadata))
+	md := make(map[string]*pb.OpMetadata, len(def.Metadata))
 	for k, v := range def.Metadata {
-		md[k] = v
+		md[string(k)] = v
 	}
 	return &pb.Definition{
 		Def:      def.Def,
 		Source:   def.Source,
-		Metadata: util.ToPointerMap(md),
+		Metadata: md,
 	}
 }
 
 func (def *Definition) FromPB(x *pb.Definition) {
 	def.Def = x.Def
 	def.Source = x.Source
-	def.Metadata = make(map[digest.Digest]pb.OpMetadata)
+	def.Metadata = make(map[digest.Digest]*pb.OpMetadata)
 	for k, v := range x.Metadata {
-		def.Metadata[digest.Digest(k)] = *v
+		def.Metadata[digest.Digest(k)] = v
 	}
 }
 
@@ -90,7 +89,8 @@ func MarshalConstraints(base, override *Constraints) (*pb.Op, *pb.OpMetadata) {
 	}
 
 	c.WorkerConstraints = append(c.WorkerConstraints, override.WorkerConstraints...)
-	c.Metadata = mergeMetadata(c.Metadata, override.Metadata)
+	md := mergeMetadata(&c.Metadata, &override.Metadata)
+	c.Metadata = *md
 
 	if c.Platform == nil {
 		defaultPlatform := platforms.Normalize(platforms.DefaultSpec())
