@@ -26,6 +26,7 @@ import (
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -275,7 +276,7 @@ func (h *HistoryQueue) gc() error {
 		}
 		return b.ForEach(func(key, dt []byte) error {
 			var br controlapi.BuildHistoryRecord
-			if err := br.Unmarshal(dt); err != nil {
+			if err := proto.Unmarshal(dt, &br); err != nil {
 				return errors.Wrapf(err, "failed to unmarshal build record %s", key)
 			}
 			if br.Pinned {
@@ -295,7 +296,7 @@ func (h *HistoryQueue) gc() error {
 
 	// sort array by newest records first
 	sort.Slice(records, func(i, j int) bool {
-		return records[i].CompletedAt.After(*records[j].CompletedAt)
+		return records[i].CompletedAt.AsTime().After(records[j].CompletedAt.AsTime())
 	})
 
 	h.mu.Lock()
@@ -303,7 +304,7 @@ func (h *HistoryQueue) gc() error {
 
 	now := time.Now()
 	for _, r := range records[h.opt.CleanConfig.MaxEntries:] {
-		if now.Add(-h.opt.CleanConfig.MaxAge.Duration).After(*r.CompletedAt) {
+		if now.Add(-h.opt.CleanConfig.MaxAge.Duration).After(r.CompletedAt.AsTime()) {
 			if err := h.delete(r.Ref, false); err != nil {
 				return err
 			}
@@ -363,7 +364,7 @@ func (h *HistoryQueue) addResource(ctx context.Context, l leases.Lease, desc *co
 	if desc == nil {
 		return nil
 	}
-	if _, err := h.hContentStore.Info(ctx, desc.Digest); err != nil {
+	if _, err := h.hContentStore.Info(ctx, digest.Digest(desc.Digest)); err != nil {
 		if errdefs.IsNotFound(err) {
 			ctx, release, err := leaseutil.WithLease(ctx, h.hLeaseManager, leases.WithID("history_migration_"+identity.NewID()), leaseutil.MakeTemporary)
 			if err != nil {
@@ -400,7 +401,7 @@ func (h *HistoryQueue) UpdateRef(ctx context.Context, ref string, upt func(r *co
 			return os.ErrNotExist
 		}
 
-		if err := br.Unmarshal(dt); err != nil {
+		if err := proto.Unmarshal(dt, &br); err != nil {
 			return errors.Wrapf(err, "failed to unmarshal build record %s", ref)
 		}
 		return nil
@@ -440,7 +441,7 @@ func (h *HistoryQueue) Status(ctx context.Context, ref string, st chan<- *client
 			return os.ErrNotExist
 		}
 
-		if err := br.Unmarshal(dt); err != nil {
+		if err := proto.Unmarshal(dt, &br); err != nil {
 			return errors.Wrapf(err, "failed to unmarshal build record %s", ref)
 		}
 		return nil
@@ -453,7 +454,7 @@ func (h *HistoryQueue) Status(ctx context.Context, ref string, st chan<- *client
 	}
 
 	ra, err := h.hContentStore.ReaderAt(ctx, ocispecs.Descriptor{
-		Digest:    br.Logs.Digest,
+		Digest:    digest.Digest(br.Logs.Digest),
 		Size:      br.Logs.Size,
 		MediaType: br.Logs.MediaType,
 	})
@@ -483,7 +484,7 @@ func (h *HistoryQueue) Status(ctx context.Context, ref string, st chan<- *client
 			return err
 		}
 		var sr controlapi.StatusResponse
-		if err := sr.Unmarshal(buf[:sz]); err != nil {
+		if err := proto.Unmarshal(buf[:sz], &sr); err != nil {
 			return err
 		}
 		st <- client.NewSolveStatus(&sr)
@@ -498,7 +499,7 @@ func (h *HistoryQueue) update(ctx context.Context, rec controlapi.BuildHistoryRe
 		if b == nil {
 			return nil
 		}
-		dt, err := rec.Marshal()
+		dt, err := proto.Marshal(&rec)
 		if err != nil {
 			return err
 		}
@@ -701,19 +702,19 @@ func (h *HistoryQueue) ImportStatus(ctx context.Context, ch chan *client.SolveSt
 
 		hdr := make([]byte, 4)
 		for _, pst := range st.Marshal() {
-			sz := pst.Size()
+			sz := proto.Size(pst)
 			if len(buf) < sz {
 				buf = make([]byte, sz)
 			}
-			n, err := pst.MarshalTo(buf)
+			b, err := proto.Marshal(pst)
 			if err != nil {
 				return nil, nil, err
 			}
-			binary.LittleEndian.PutUint32(hdr, uint32(n))
+			binary.LittleEndian.PutUint32(hdr, uint32(len(b)))
 			if _, err := bufW.Write(hdr); err != nil {
 				return nil, nil, err
 			}
-			if _, err := bufW.Write(buf[:n]); err != nil {
+			if _, err := bufW.Write(b); err != nil {
 				return nil, nil, err
 			}
 		}
@@ -808,7 +809,7 @@ func (h *HistoryQueue) Listen(ctx context.Context, req *controlapi.BuildHistoryR
 					return nil
 				}
 				var br controlapi.BuildHistoryRecord
-				if err := br.Unmarshal(dt); err != nil {
+				if err := proto.Unmarshal(dt, &br); err != nil {
 					return errors.Wrapf(err, "failed to unmarshal build record %s", key)
 				}
 				events = append(events, &controlapi.BuildHistoryEvent{

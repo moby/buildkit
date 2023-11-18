@@ -19,6 +19,8 @@ func New() *Uploader {
 type Uploader struct {
 	mu sync.Mutex
 	m  map[string]io.Reader
+
+	upload.UnimplementedUploadServer
 }
 
 func (hp *Uploader) Add(r io.Reader) string {

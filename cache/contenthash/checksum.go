@@ -22,6 +22,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
+	"google.golang.org/protobuf/proto"
 )
 
 var errNotFound = errors.Errorf("not found")
@@ -241,7 +242,7 @@ func (cc *cacheContext) load() error {
 	}
 
 	var l CacheRecords
-	if err := l.Unmarshal(dt); err != nil {
+	if err := proto.Unmarshal(dt, &l); err != nil {
 		return err
 	}
 
@@ -271,7 +272,7 @@ func (cc *cacheContext) save() error {
 		return false
 	})
 
-	dt, err := l.Marshal()
+	dt, err := proto.Marshal(&l)
 	if err != nil {
 		return err
 	}
@@ -311,7 +312,7 @@ func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.Fil
 		if _, ok := cc.node.Get([]byte{0}); !ok {
 			cc.txn.Insert([]byte{0}, &CacheRecord{
 				Type:   CacheRecordTypeDirHeader,
-				Digest: digest.FromBytes(nil),
+				Digest: digest.FromBytes(nil).String(),
 			})
 			cc.txn.Insert([]byte(""), &CacheRecord{
 				Type: CacheRecordTypeDir,
@@ -363,7 +364,7 @@ func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.Fil
 		k = append(k, 0)
 		p += "/"
 	}
-	cr.Digest = h.Digest()
+	cr.Digest = h.Digest().String()
 
 	// if we receive a hardlink just use the digest of the source
 	// note that the source may be called later because data writing is async
@@ -422,7 +423,7 @@ func (cc *cacheContext) Checksum(ctx context.Context, mountable cache.Mountable,
 				if err != nil {
 					return "", err
 				}
-				includedPaths[i].record = &CacheRecord{Digest: dgst}
+				includedPaths[i].record = &CacheRecord{Digest: dgst.String()}
 			}
 		}
 	}
@@ -431,7 +432,7 @@ func (cc *cacheContext) Checksum(ctx context.Context, mountable cache.Mountable,
 	}
 
 	if len(includedPaths) == 1 && path.Base(p) == path.Base(includedPaths[0].path) {
-		return includedPaths[0].record.Digest, nil
+		return digest.Digest(includedPaths[0].record.Digest), nil
 	}
 
 	digester := digest.Canonical.Digester()
@@ -464,7 +465,7 @@ func (cc *cacheContext) checksumFollow(ctx context.Context, m *mount, p string, 
 			i++
 			p = link
 		} else {
-			return cr.Digest, nil
+			return digest.Digest(cr.Digest), nil
 		}
 	}
 }
@@ -957,7 +958,7 @@ func (cc *cacheContext) checksum(ctx context.Context, root *iradix.Node, txn *ir
 	}
 
 	cr2 := &CacheRecord{
-		Digest:   dgst,
+		Digest:   dgst.String(),
 		Type:     cr.Type,
 		Linkname: cr.Linkname,
 	}

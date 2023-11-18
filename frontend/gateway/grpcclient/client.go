@@ -12,7 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gogo/googleapis/google/rpc"
 	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/moby/buildkit/client/llb"
@@ -20,6 +19,7 @@ import (
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	opspb "github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/grpcerrors"
@@ -33,6 +33,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 const frontendPrefix = "BUILDKIT_FRONTEND_OPT_"
@@ -52,11 +53,11 @@ func New(ctx context.Context, opts map[string]string, session, product string, c
 	}
 
 	if resp.FrontendAPICaps == nil {
-		resp.FrontendAPICaps = defaultCaps()
+		resp.FrontendAPICaps = util.PointerSlice(defaultCaps())
 	}
 
 	if resp.LLBCaps == nil {
-		resp.LLBCaps = defaultLLBCaps()
+		resp.LLBCaps = util.PointerSlice(defaultLLBCaps())
 	}
 
 	return &grpcClient{
@@ -193,10 +194,10 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 			if retError != nil {
 				st, _ := status.FromError(grpcerrors.ToGRPC(ctx, retError))
 				stp := st.Proto()
-				req.Error = &rpc.Status{
+				req.Error = &spb.Status{
 					Code:    stp.Code,
 					Message: stp.Message,
-					Details: convertToGogoAny(stp.Details),
+					Details: stp.Details,
 				}
 			}
 			if _, err := c.client.Return(ctx, req); err != nil && retError == nil {
@@ -328,7 +329,7 @@ func (c *grpcClient) requestForRef(ref client.Reference) (*pb.SolveRequest, erro
 
 func (c *grpcClient) Warn(ctx context.Context, dgst digest.Digest, msg string, opts client.WarnOpts) error {
 	_, err := c.client.Warn(ctx, &pb.WarnRequest{
-		Digest: dgst,
+		Digest: dgst.String(),
 		Level:  int64(opts.Level),
 		Short:  []byte(msg),
 		Info:   opts.SourceInfo,
@@ -343,7 +344,7 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (res *
 	if creq.Definition != nil {
 		for _, md := range creq.Definition.Metadata {
 			for cap := range md.Caps {
-				if err := c.llbCaps.Supports(cap); err != nil {
+				if err := c.llbCaps.Supports(apicaps.CapID(cap)); err != nil {
 					return nil, err
 				}
 			}
@@ -510,7 +511,7 @@ func (c *grpcClient) ResolveImageConfig(ctx context.Context, ref string, opt llb
 		// This could occur if the version of buildkitd is too old.
 		newRef = ref
 	}
-	return newRef, resp.Digest, resp.Config, nil
+	return newRef, digest.Digest(resp.Digest), resp.Config, nil
 }
 
 func (c *grpcClient) BuildOpts() client.BuildOpts {
@@ -534,7 +535,7 @@ func (c *grpcClient) CurrentFrontend() (*llb.State, error) {
 		return nil, err
 	}
 	var def opspb.Definition
-	if err := def.Unmarshal(dt); err != nil {
+	if err := proto.Unmarshal(dt, &def); err != nil {
 		return nil, err
 	}
 	op, err := llb.NewDefinitionOp(&def)
@@ -983,7 +984,7 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 				exitError = grpcerrors.FromGRPC(status.ErrorProto(&spb.Status{
 					Code:    exit.Error.Code,
 					Message: exit.Error.Message,
-					Details: convertGogoAny(exit.Error.Details),
+					Details: exit.Error.Details,
 				}))
 				if exit.Code != pb.UnknownExitStatus {
 					exitError = &pb.ExitError{ExitCode: exit.Code, Err: exitError}

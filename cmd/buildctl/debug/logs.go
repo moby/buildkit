@@ -11,6 +11,7 @@ import (
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/progress/progresswriter"
+	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
@@ -66,7 +67,7 @@ func logs(clicontext *cli.Context) error {
 		}
 		store := proxy.NewContentStore(c.ContentClient())
 		ra, err := store.ReaderAt(ctx, ocispecs.Descriptor{
-			Digest:    he.Record.Trace.Digest,
+			Digest:    digest.Digest(he.Record.Trace.Digest),
 			Size:      he.Record.Trace.Size,
 			MediaType: he.Record.Trace.MediaType,
 		})

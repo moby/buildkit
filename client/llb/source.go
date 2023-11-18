@@ -16,6 +16,7 @@ import (
 	"github.com/moby/buildkit/util/sshutil"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
+	protobuf "google.golang.org/protobuf/proto"
 )
 
 type SourceOp struct {
@@ -75,7 +76,7 @@ func (s *SourceOp) Marshal(ctx context.Context, constraints *Constraints) (diges
 		proto.Platform = nil
 	}
 
-	dt, err := proto.Marshal()
+	dt, err := protobuf.Marshal(proto)
 	if err != nil {
 		return "", nil, nil, nil, err
 	}
@@ -640,7 +641,7 @@ func platformSpecificSource(id string) bool {
 
 func addCap(c *Constraints, id apicaps.CapID) {
 	if c.Metadata.Caps == nil {
-		c.Metadata.Caps = make(map[apicaps.CapID]bool)
+		c.Metadata.Caps = make(map[string]bool)
 	}
-	c.Metadata.Caps[id] = true
+	c.Metadata.Caps[string(id)] = true
 }

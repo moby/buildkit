@@ -79,9 +79,9 @@ func NewContainer(ctx context.Context, w worker.Worker, sm *session.Manager, g s
 		mnts = append(mnts, m.Mount)
 		if m.WorkerRef != nil {
 			refs = append(refs, m.WorkerRef)
-			m.Mount.Input = opspb.InputIndex(len(refs) - 1)
+			m.Mount.Input = int64(len(refs) - 1)
 		} else {
-			m.Mount.Input = opspb.Empty
+			m.Mount.Input = int64(opspb.Empty)
 		}
 	}
 
@@ -89,7 +89,7 @@ func NewContainer(ctx context.Context, w worker.Worker, sm *session.Manager, g s
 	mm := mounts.NewMountManager(name, w.CacheManager(), sm)
 	p, err := PrepareMounts(ctx, mm, w.CacheManager(), g, "", mnts, refs, func(m *opspb.Mount, ref cache.ImmutableRef) (cache.MutableRef, error) {
 		cm := w.CacheManager()
-		if m.Input != opspb.Empty {
+		if m.Input != int64(opspb.Empty) {
 			cm = refs[m.Input].Worker.CacheManager()
 		}
 		return cm.New(ctx, ref, g)
@@ -156,7 +156,7 @@ func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manage
 		}
 
 		// if mount is based on input validate and load it
-		if m.Input != opspb.Empty {
+		if m.Input != int64(opspb.Empty) {
 			if int(m.Input) >= len(refs) {
 				return p, errors.Errorf("missing input %d", m.Input)
 			}
@@ -167,7 +167,7 @@ func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manage
 		switch m.MountType {
 		case opspb.MountType_BIND:
 			// if mount creates an output
-			if m.Output != opspb.SkipOutput {
+			if m.Output != int64(opspb.SkipOutput) {
 				// if it is readonly and not root then output is the input
 				if m.Readonly && ref != nil && m.Dest != opspb.RootMount {
 					p.OutputRefs = append(p.OutputRefs, MountRef{
@@ -210,7 +210,7 @@ func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manage
 				Ref:        active,
 				NoCommit:   true,
 			})
-			if m.Output != opspb.SkipOutput && ref != nil {
+			if m.Output != int64(opspb.SkipOutput) && ref != nil {
 				p.OutputRefs = append(p.OutputRefs, MountRef{
 					MountIndex: i,
 					Ref:        ref.Clone(),
@@ -251,7 +251,7 @@ func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manage
 		if m.Dest == opspb.RootMount {
 			root := mountable
 			p.ReadonlyRootFS = m.Readonly
-			if m.Output == opspb.SkipOutput && p.ReadonlyRootFS {
+			if m.Output == int64(opspb.SkipOutput) && p.ReadonlyRootFS {
 				active, err := makeMutable(m, ref)
 				if err != nil {
 					return p, err

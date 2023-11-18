@@ -12,6 +12,7 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
+	"google.golang.org/protobuf/proto"
 )
 
 // Examples:
@@ -288,7 +289,7 @@ func (up *UserOpt) marshal(base pb.InputIndex) *pb.UserOpt {
 	}
 	if up.Name != "" {
 		return &pb.UserOpt{User: &pb.UserOpt_ByName{ByName: &pb.NamedUserOpt{
-			Name: up.Name, Input: base}}}
+			Name: up.Name, Input: int64(base)}}}
 	}
 	return &pb.UserOpt{User: &pb.UserOpt_ByID{ByID: uint32(up.UID)}}
 }
@@ -620,7 +621,7 @@ func (ms *marshalState) addInput(st *fileActionState, c *Constraints, o Output) 
 		return 0, err
 	}
 	for i, inp2 := range ms.inputs {
-		if *inp == *inp2 {
+		if proto.Equal(inp, inp2) {
 			return pb.InputIndex(i), nil
 		}
 	}
@@ -756,14 +757,14 @@ func (f *FileOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		}
 
 		pfo.Actions = append(pfo.Actions, &pb.FileAction{
-			Input:          getIndex(st.input, len(state.inputs), st.inputRelative),
-			SecondaryInput: getIndex(st.input2, len(state.inputs), st.input2Relative),
-			Output:         output,
+			Input:          int64(getIndex(st.input, len(state.inputs), st.inputRelative)),
+			SecondaryInput: int64(getIndex(st.input2, len(state.inputs), st.input2Relative)),
+			Output:         int64(output),
 			Action:         action,
 		})
 	}
 
-	dt, err := pop.Marshal()
+	dt, err := proto.Marshal(pop)
 	if err != nil {
 		return "", nil, nil, nil, err
 	}

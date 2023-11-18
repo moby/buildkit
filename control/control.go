@@ -34,7 +34,9 @@ import (
 	"github.com/moby/buildkit/solver/llbsolver"
 	"github.com/moby/buildkit/solver/llbsolver/proc"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util"
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/throttle"
@@ -51,6 +53,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type Opt struct {
@@ -80,6 +83,7 @@ type Controller struct { // TODO: ControlService
 	throttledGC      func()
 	gcmu             sync.Mutex
 	*tracev1.UnimplementedTraceServiceServer
+	controlapi.UnimplementedControlServer
 }
 
 func NewController(opt Opt) (*Controller, error) {
@@ -171,8 +175,8 @@ func (c *Controller) DiskUsage(ctx context.Context, r *controlapi.DiskUsageReque
 				Parents:     r.Parents,
 				UsageCount:  int64(r.UsageCount),
 				Description: r.Description,
-				CreatedAt:   r.CreatedAt,
-				LastUsedAt:  r.LastUsedAt,
+				CreatedAt:   timestamppb.New(r.CreatedAt),
+				LastUsedAt:  util.TimestampOrNil(r.LastUsedAt),
 				RecordType:  string(r.RecordType),
 				Shared:      r.Shared,
 			})
@@ -244,8 +248,8 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 				Parents:     r.Parents,
 				UsageCount:  int64(r.UsageCount),
 				Description: r.Description,
-				CreatedAt:   r.CreatedAt,
-				LastUsedAt:  r.LastUsedAt,
+				CreatedAt:   timestamppb.New(r.CreatedAt),
+				LastUsedAt:  util.TimestampOrNil(r.LastUsedAt),
 				RecordType:  string(r.RecordType),
 				Shared:      r.Shared,
 			}); err != nil {
@@ -469,7 +473,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	}, llbsolver.ExporterRequest{
 		Exporters:      expis,
 		CacheExporters: cacheExporters,
-	}, req.Entitlements, procs, req.Internal, req.SourcePolicy)
+	}, util.FromStringSlice[entitlements.Entitlement](req.Entitlements), procs, req.Internal, req.SourcePolicy)
 	if err != nil {
 		return nil, err
 	}
@@ -538,7 +542,7 @@ func (c *Controller) ListWorkers(ctx context.Context, r *controlapi.ListWorkersR
 		resp.Record = append(resp.Record, &apitypes.WorkerRecord{
 			ID:              w.ID(),
 			Labels:          w.Labels(),
-			Platforms:       pb.PlatformsFromSpec(w.Platforms(true)),
+			Platforms:       util.PointerSlice(pb.PlatformsFromSpec(w.Platforms(true))),
 			GCPolicy:        toPBGCPolicy(w.GCPolicy()),
 			BuildkitVersion: toPBBuildkitVersion(w.BuildkitVersion()),
 		})

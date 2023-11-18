@@ -13,6 +13,7 @@ import (
 	"github.com/moby/buildkit/util/apicaps"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
+	protobuf "google.golang.org/protobuf/proto"
 )
 
 type StateOption func(State) State
@@ -151,7 +152,7 @@ func (s State) Marshal(ctx context.Context, co ...ConstraintsOpt) (*Definition, 
 		return def, err
 	}
 	proto := &pb.Op{Inputs: []*pb.Input{inp}}
-	dt, err := proto.Marshal()
+	dt, err := protobuf.Marshal(proto)
 	if err != nil {
 		return def, err
 	}
@@ -159,20 +160,20 @@ func (s State) Marshal(ctx context.Context, co ...ConstraintsOpt) (*Definition, 
 
 	dgst := digest.FromBytes(dt)
 	md := def.Metadata[dgst]
-	md.Caps = map[apicaps.CapID]bool{
-		pb.CapConstraints: true,
-		pb.CapPlatform:    true,
+	md.Caps = map[string]bool{
+		string(pb.CapConstraints): true,
+		string(pb.CapPlatform):    true,
 	}
 
 	for _, m := range def.Metadata {
 		if m.IgnoreCache {
-			md.Caps[pb.CapMetaIgnoreCache] = true
+			md.Caps[string(pb.CapMetaIgnoreCache)] = true
 		}
 		if m.Description != nil {
-			md.Caps[pb.CapMetaDescription] = true
+			md.Caps[string(pb.CapMetaDescription)] = true
 		}
 		if m.ExportCache != nil {
-			md.Caps[pb.CapMetaExportCache] = true
+			md.Caps[string(pb.CapMetaExportCache)] = true
 		}
 	}
 
@@ -507,7 +508,7 @@ func (o *output) ToInput(ctx context.Context, c *Constraints) (*pb.Input, error)
 	if err != nil {
 		return nil, err
 	}
-	return &pb.Input{Digest: dgst, Index: index}, nil
+	return &pb.Input{Digest: dgst.String(), Index: int64(index)}, nil
 }
 
 func (o *output) Vertex(context.Context, *Constraints) Vertex {
@@ -576,7 +577,7 @@ func mergeMetadata(m1, m2 pb.OpMetadata) pb.OpMetadata {
 
 	for k := range m2.Caps {
 		if m1.Caps == nil {
-			m1.Caps = make(map[apicaps.CapID]bool, len(m2.Caps))
+			m1.Caps = make(map[string]bool, len(m2.Caps))
 		}
 		m1.Caps[k] = true
 	}

@@ -247,7 +247,7 @@ type dep struct {
 func (e *ExecOp) getMountDeps() ([]dep, error) {
 	deps := make([]dep, e.numInputs)
 	for _, m := range e.op.Mounts {
-		if m.Input == pb.Empty {
+		if m.Input == int64(pb.Empty) {
 			continue
 		}
 		if int(m.Input) >= len(deps) {

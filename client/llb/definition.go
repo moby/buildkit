@@ -5,9 +5,11 @@ import (
 	"sync"
 
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"google.golang.org/protobuf/proto"
 )
 
 // DefinitionOp implements llb.Vertex using a marshalled definition.
@@ -40,7 +42,7 @@ func NewDefinitionOp(def *pb.Definition) (*DefinitionOp, error) {
 	var dgst digest.Digest
 	for _, dt := range def.Def {
 		var op pb.Op
-		if err := (&op).Unmarshal(dt); err != nil {
+		if err := proto.Unmarshal(dt, &op); err != nil {
 			return nil, errors.Wrap(err, "failed to parse llb proto op")
 		}
 		dgst = digest.FromBytes(dt)
@@ -89,14 +91,14 @@ func NewDefinitionOp(def *pb.Definition) (*DefinitionOp, error) {
 
 	var index pb.OutputIndex
 	if dgst != "" {
-		index = ops[dgst].Inputs[0].Index
-		dgst = ops[dgst].Inputs[0].Digest
+		index = pb.OutputIndex(ops[dgst].Inputs[0].Index)
+		dgst = digest.Digest(ops[dgst].Inputs[0].Digest)
 	}
 
 	return &DefinitionOp{
 		ops:        ops,
 		defs:       defs,
-		metas:      def.Metadata,
+		metas:      util.FromPointerMap[digest.Digest](def.Metadata),
 		sources:    srcs,
 		platforms:  platforms,
 		dgst:       dgst,
@@ -207,7 +209,8 @@ func (d *DefinitionOp) Inputs() []Output {
 	for _, input := range op.Inputs {
 		var vtx *DefinitionOp
 		d.mu.Lock()
-		if existingIndexes, ok := d.loadInputCache(input.Digest); ok {
+		inputDigest := digest.Digest(input.Digest)
+		if existingIndexes, ok := d.loadInputCache(inputDigest); ok {
 			if int(input.Index) < len(existingIndexes) && existingIndexes[input.Index] != nil {
 				vtx = existingIndexes[input.Index]
 			}
@@ -218,19 +221,19 @@ func (d *DefinitionOp) Inputs() []Output {
 				defs:       d.defs,
 				metas:      d.metas,
 				platforms:  d.platforms,
-				dgst:       input.Digest,
-				index:      input.Index,
+				dgst:       inputDigest,
+				index:      pb.OutputIndex(input.Index),
 				inputCache: d.inputCache,
 				sources:    d.sources,
 			}
-			existingIndexes, _ := d.loadInputCache(input.Digest)
+			existingIndexes, _ := d.loadInputCache(inputDigest)
 			indexDiff := int(input.Index) - len(existingIndexes)
 			if indexDiff >= 0 {
 				// make room in the slice for the new index being set
 				existingIndexes = append(existingIndexes, make([]*DefinitionOp, indexDiff+1)...)
 			}
 			existingIndexes[input.Index] = vtx
-			d.storeInputCache(input.Digest, existingIndexes)
+			d.storeInputCache(inputDigest, existingIndexes)
 		}
 		d.mu.Unlock()
 

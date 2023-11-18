@@ -29,6 +29,7 @@ import (
 	"github.com/moby/buildkit/solver/llbsolver/provenance"
 	"github.com/moby/buildkit/solver/result"
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
+	"github.com/moby/buildkit/util"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/entitlements"
@@ -43,6 +44,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -165,7 +167,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 		Ref:           id,
 		Frontend:      req.Frontend,
 		FrontendAttrs: req.FrontendOpt,
-		CreatedAt:     &st,
+		CreatedAt:     timestamppb.New(st),
 	}
 
 	if exp.Type != "" {
@@ -184,7 +186,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 
 	return func(res *Result, descrefs []exporter.DescriptorReference, err error) error {
 		en := time.Now()
-		rec.CompletedAt = &en
+		rec.CompletedAt = util.TimestampOrNil(&en)
 
 		j.CloseProgress()
 
@@ -240,7 +242,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 			}
 			w = nil
 			return &controlapi.Descriptor{
-				Digest:    desc.Digest,
+				Digest:    desc.Digest.String(),
 				Size:      desc.Size,
 				MediaType: desc.MediaType,
 				Annotations: map[string]string{
@@ -303,7 +305,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 			mu.Lock()
 			releasers = append(releasers, releaseStatus)
 			rec.Logs = &controlapi.Descriptor{
-				Digest:    st.Descriptor.Digest,
+				Digest:    st.Descriptor.Digest.String(),
 				Size:      st.Descriptor.Size,
 				MediaType: st.Descriptor.MediaType,
 			}
@@ -329,7 +331,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 				mu.Lock()
 				desc := descref.Descriptor()
 				controlDesc := &controlapi.Descriptor{
-					Digest:      desc.Digest,
+					Digest:      desc.Digest.String(),
 					Size:        desc.Size,
 					MediaType:   desc.MediaType,
 					Annotations: desc.Annotations,
@@ -365,7 +367,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 			if !ok {
 				st = status.New(codes.Unknown, err.Error())
 			}
-			rec.Error = grpcerrors.ToRPCStatus(st.Proto())
+			rec.Error = st.Proto()
 		}
 		if err1 := s.history.Update(ctx, &controlapi.BuildHistoryEvent{
 			Type:   controlapi.BuildHistoryEventType_COMPLETE,
@@ -409,7 +411,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 
 				if err := s.history.UpdateRef(context.TODO(), id, func(rec *controlapi.BuildHistoryRecord) error {
 					rec.Trace = &controlapi.Descriptor{
-						Digest:    desc.Digest,
+						Digest:    desc.Digest.String(),
 						MediaType: desc.MediaType,
 						Size:      desc.Size,
 					}

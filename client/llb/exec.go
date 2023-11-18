@@ -11,6 +11,7 @@ import (
 	"github.com/moby/buildkit/util/system"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
+	"google.golang.org/protobuf/proto"
 )
 
 func NewExecOp(base State, proxyEnv *ProxyEnv, readOnly bool, c Constraints) *ExecOp {
@@ -325,7 +326,7 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 			newInput := true
 
 			for i, inp2 := range pop.Inputs {
-				if *inp == *inp2 {
+				if proto.Equal(inp, inp2) {
 					inputIndex = pb.InputIndex(i)
 					newInput = false
 					break
@@ -346,10 +347,10 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		}
 
 		pm := &pb.Mount{
-			Input:    inputIndex,
+			Input:    int64(inputIndex),
 			Dest:     m.target,
 			Readonly: m.readonly,
-			Output:   outputIndex,
+			Output:   int64(outputIndex),
 			Selector: m.selector,
 		}
 		if m.cacheID != "" {
@@ -413,7 +414,7 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		peo.Mounts = append(peo.Mounts, pm)
 	}
 
-	dt, err := pop.Marshal()
+	dt, err := proto.Marshal(pop)
 	if err != nil {
 		return "", nil, nil, nil, err
 	}

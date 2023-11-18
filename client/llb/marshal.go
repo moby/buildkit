@@ -5,7 +5,9 @@ import (
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util"
 	digest "github.com/opencontainers/go-digest"
+	"google.golang.org/protobuf/proto"
 )
 
 // Definition is the LLB definition structure with per-vertex metadata entries
@@ -25,7 +27,7 @@ func (def *Definition) ToPB() *pb.Definition {
 	return &pb.Definition{
 		Def:      def.Def,
 		Source:   def.Source,
-		Metadata: md,
+		Metadata: util.ToPointerMap(md),
 	}
 }
 
@@ -34,7 +36,7 @@ func (def *Definition) FromPB(x *pb.Definition) {
 	def.Source = x.Source
 	def.Metadata = make(map[digest.Digest]pb.OpMetadata)
 	for k, v := range x.Metadata {
-		def.Metadata[k] = v
+		def.Metadata[digest.Digest(k)] = *v
 	}
 }
 
@@ -46,18 +48,18 @@ func (def *Definition) Head() (digest.Digest, error) {
 	last := def.Def[len(def.Def)-1]
 
 	var pop pb.Op
-	if err := (&pop).Unmarshal(last); err != nil {
+	if err := proto.Unmarshal(last, &pop); err != nil {
 		return "", err
 	}
 	if len(pop.Inputs) == 0 {
 		return "", nil
 	}
 
-	return pop.Inputs[0].Digest, nil
+	return digest.Digest(pop.Inputs[0].Digest), nil
 }
 
 func WriteTo(def *Definition, w io.Writer) error {
-	b, err := def.ToPB().Marshal()
+	b, err := proto.Marshal(def.ToPB())
 	if err != nil {
 		return err
 	}
@@ -71,7 +73,7 @@ func ReadFrom(r io.Reader) (*Definition, error) {
 		return nil, err
 	}
 	var pbDef pb.Definition
-	if err := pbDef.Unmarshal(b); err != nil {
+	if err := proto.Unmarshal(b, &pbDef); err != nil {
 		return nil, err
 	}
 	var def Definition

@@ -147,7 +147,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 					if e.opts.Epoch != nil {
 						st.ModTime = e.opts.Epoch.UnixNano()
 					}
-					outputFS, err = fsutil.SubDirFS([]fsutil.Dir{{FS: outputFS, Stat: st}})
+					outputFS, err = fsutil.SubDirFS([]fsutil.Dir{{FS: outputFS, Stat: &st}})
 					if err != nil {
 						return err
 					}

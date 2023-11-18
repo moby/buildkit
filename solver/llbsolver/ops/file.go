@@ -70,7 +70,7 @@ func (f *fileOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 		switch a := action.Action.(type) {
 		case *pb.FileAction_Mkdir:
 			p := *a.Mkdir
-			markInvalid(action.Input)
+			markInvalid(pb.InputIndex(action.Input))
 			processOwner(p.Owner, selectors)
 			dt, err = json.Marshal(p)
 			if err != nil {
@@ -78,7 +78,7 @@ func (f *fileOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 			}
 		case *pb.FileAction_Mkfile:
 			p := *a.Mkfile
-			markInvalid(action.Input)
+			markInvalid(pb.InputIndex(action.Input))
 			processOwner(p.Owner, selectors)
 			dt, err = json.Marshal(p)
 			if err != nil {
@@ -86,14 +86,14 @@ func (f *fileOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 			}
 		case *pb.FileAction_Rm:
 			p := *a.Rm
-			markInvalid(action.Input)
+			markInvalid(pb.InputIndex(action.Input))
 			dt, err = json.Marshal(p)
 			if err != nil {
 				return nil, false, err
 			}
 		case *pb.FileAction_Copy:
 			p := *a.Copy
-			markInvalid(action.Input)
+			markInvalid(pb.InputIndex(action.Input))
 			processOwner(p.Owner, selectors)
 			if action.SecondaryInput != -1 && int(action.SecondaryInput) < f.numInputs {
 				addSelector(selectors, int(action.SecondaryInput), p.Src, p.AllowWildcard, p.FollowSymlink, p.IncludePatterns, p.ExcludePatterns)

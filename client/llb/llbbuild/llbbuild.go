@@ -5,8 +5,8 @@ import (
 
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/moby/buildkit/util/apicaps"
 	digest "github.com/opencontainers/go-digest"
+	"google.golang.org/protobuf/proto"
 )
 
 func Build(opt ...BuildOption) llb.StateOption {
@@ -35,7 +35,7 @@ func (b *build) ToInput(ctx context.Context, c *llb.Constraints) (*pb.Input, err
 	if err != nil {
 		return nil, err
 	}
-	return &pb.Input{Digest: dgst, Index: pb.OutputIndex(0)}, nil
+	return &pb.Input{Digest: dgst.String(), Index: 0}, nil
 }
 
 func (b *build) Vertex(context.Context, *llb.Constraints) llb.Vertex {
@@ -51,9 +51,9 @@ func (b *build) Marshal(ctx context.Context, c *llb.Constraints) (digest.Digest,
 		return b.Load()
 	}
 	pbo := &pb.BuildOp{
-		Builder: pb.LLBBuilder,
+		Builder: int64(pb.LLBBuilder),
 		Inputs: map[string]*pb.BuildInput{
-			pb.LLBDefinitionInput: {Input: pb.InputIndex(0)}},
+			pb.LLBDefinitionInput: {Input: 0}},
 	}
 
 	pbo.Attrs = map[string]string{}
@@ -63,9 +63,9 @@ func (b *build) Marshal(ctx context.Context, c *llb.Constraints) (digest.Digest,
 	}
 
 	if b.constraints.Metadata.Caps == nil {
-		b.constraints.Metadata.Caps = make(map[apicaps.CapID]bool)
+		b.constraints.Metadata.Caps = make(map[string]bool)
 	}
-	b.constraints.Metadata.Caps[pb.CapBuildOpLLBFileName] = true
+	b.constraints.Metadata.Caps[string(pb.CapBuildOpLLBFileName)] = true
 
 	pop, md := llb.MarshalConstraints(c, &b.constraints)
 	pop.Op = &pb.Op_Build{
@@ -79,7 +79,7 @@ func (b *build) Marshal(ctx context.Context, c *llb.Constraints) (digest.Digest,
 
 	pop.Inputs = append(pop.Inputs, inp)
 
-	dt, err := pop.Marshal()
+	dt, err := proto.Marshal(pop)
 	if err != nil {
 		return "", nil, nil, nil, err
 	}

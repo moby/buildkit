@@ -6,6 +6,7 @@ import (
 	"time"
 
 	controlapi "github.com/moby/buildkit/api/services/control"
+	"github.com/moby/buildkit/util"
 	"github.com/pkg/errors"
 )
 
@@ -45,10 +46,10 @@ func (c *Client) DiskUsage(ctx context.Context, opts ...DiskUsageOption) ([]*Usa
 			InUse:       d.InUse,
 			Size:        d.Size,
 			Parents:     d.Parents,
-			CreatedAt:   d.CreatedAt,
+			CreatedAt:   d.CreatedAt.AsTime(),
 			Description: d.Description,
 			UsageCount:  int(d.UsageCount),
-			LastUsedAt:  d.LastUsedAt,
+			LastUsedAt:  util.TimeOrNil(d.LastUsedAt),
 			RecordType:  UsageRecordType(d.RecordType),
 			Shared:      d.Shared,
 		})

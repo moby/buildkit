@@ -6,6 +6,7 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
+	"google.golang.org/protobuf/proto"
 )
 
 type MergeOp struct {
@@ -44,7 +45,7 @@ func (m *MergeOp) Marshal(ctx context.Context, constraints *Constraints) (digest
 
 	op := &pb.MergeOp{}
 	for _, input := range m.inputs {
-		op.Inputs = append(op.Inputs, &pb.MergeInput{Input: pb.InputIndex(len(pop.Inputs))})
+		op.Inputs = append(op.Inputs, &pb.MergeInput{Input: int64(len(pop.Inputs))})
 		pbInput, err := input.ToInput(ctx, constraints)
 		if err != nil {
 			return "", nil, nil, nil, err
@@ -53,7 +54,7 @@ func (m *MergeOp) Marshal(ctx context.Context, constraints *Constraints) (digest
 	}
 	pop.Op = &pb.Op_Merge{Merge: op}
 
-	dt, err := pop.Marshal()
+	dt, err := proto.Marshal(pop)
 	if err != nil {
 		return "", nil, nil, nil, err
 	}

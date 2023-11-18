@@ -58,6 +58,8 @@ type authProvider struct {
 	// reading credentials from docker-credential-osxkeychain.
 	// See issue https://github.com/docker/cli/issues/1862
 	mu sync.Mutex
+
+	auth.UnimplementedAuthServer
 }
 
 func (ap *authProvider) SetLogger(l progresswriter.Logger) {

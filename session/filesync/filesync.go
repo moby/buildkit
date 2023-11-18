@@ -35,6 +35,8 @@ type fsSyncProvider struct {
 	dirs   DirSource
 	p      progressCb
 	doneCh chan error
+
+	UnimplementedFileSyncServer
 }
 
 type FileOutputFunc func(map[string]string) (io.WriteCloser, error)
@@ -179,7 +181,7 @@ type CacheUpdater interface {
 func FSSync(ctx context.Context, c session.Caller, opt FSSendRequestOpt) error {
 	var pr *protocol
 	for _, p := range supportedProtocols {
-		if c.Supports(session.MethodURL(_FileSync_serviceDesc.ServiceName, p.name)) {
+		if c.Supports(session.MethodURL(FileSync_ServiceDesc.ServiceName, p.name)) {
 			pr = &p
 			break
 		}
@@ -284,6 +286,8 @@ func NewFSSyncTarget(targets ...FSSyncTarget) session.Attachable {
 type fsSyncAttachable struct {
 	fs      map[int]FileOutputFunc
 	outdirs map[int]string
+
+	UnimplementedFileSendServer
 }
 
 func (sp *fsSyncAttachable) Register(server *grpc.Server) {
@@ -340,7 +344,7 @@ func (sp *fsSyncAttachable) DiffCopy(stream FileSend_DiffCopyServer) (err error)
 }
 
 func CopyToCaller(ctx context.Context, fs fsutil.FS, id int, c session.Caller, progress func(int, bool)) error {
-	method := session.MethodURL(_FileSend_serviceDesc.ServiceName, "diffcopy")
+	method := session.MethodURL(FileSend_ServiceDesc.ServiceName, "diffcopy")
 	if !c.Supports(method) {
 		return errors.Errorf("method %s not supported by the client", method)
 	}
@@ -366,7 +370,7 @@ func CopyToCaller(ctx context.Context, fs fsutil.FS, id int, c session.Caller, p
 }
 
 func CopyFileWriter(ctx context.Context, md map[string]string, id int, c session.Caller) (io.WriteCloser, error) {
-	method := session.MethodURL(_FileSend_serviceDesc.ServiceName, "diffcopy")
+	method := session.MethodURL(FileSend_ServiceDesc.ServiceName, "diffcopy")
 	if !c.Supports(method) {
 		return nil, errors.Errorf("method %s not supported by the client", method)
 	}

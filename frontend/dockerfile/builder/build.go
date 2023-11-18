@@ -238,11 +238,11 @@ func warnOpts(r *parser.Range, detail [][]byte, url string) client.WarnOpts {
 		return opts
 	}
 	opts.Range = []*pb.Range{{
-		Start: pb.Position{
+		Start: &pb.Position{
 			Line:      int32(r.Start.Line),
 			Character: int32(r.Start.Character),
 		},
-		End: pb.Position{
+		End: &pb.Position{
 			Line:      int32(r.End.Line),
 			Character: int32(r.End.Character),
 		},
@@ -265,11 +265,11 @@ func wrapSource(err error, sm *llb.SourceMap, ranges []parser.Range) error {
 	}
 	for _, r := range ranges {
 		s.Ranges = append(s.Ranges, &pb.Range{
-			Start: pb.Position{
+			Start: &pb.Position{
 				Line:      int32(r.Start.Line),
 				Character: int32(r.Start.Character),
 			},
-			End: pb.Position{
+			End: &pb.Position{
 				Line:      int32(r.End.Line),
 				Character: int32(r.End.Character),
 			},

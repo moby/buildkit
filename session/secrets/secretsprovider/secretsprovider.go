@@ -22,6 +22,8 @@ func NewSecretProvider(store secrets.SecretStore) session.Attachable {
 
 type secretProvider struct {
 	store secrets.SecretStore
+
+	secrets.UnimplementedSecretsServer
 }
 
 func (sp *secretProvider) Register(server *grpc.Server) {
