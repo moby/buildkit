@@ -419,6 +419,45 @@ func (sw *shellWord) processDollar() (string, error) {
 		default:
 			return "", errors.Errorf("unsupported modifier (%s) in substitution", chs)
 		}
+	case '/':
+		replaceAll := sw.scanner.Peek() == '/'
+		if replaceAll {
+			sw.scanner.Next()
+		}
+
+		pattern, _, err := sw.processStopOn('/', true)
+		if err != nil {
+			if sw.scanner.Peek() == scanner.EOF {
+				return "", errors.New("syntax error: missing '/' in ${}")
+			}
+			return "", err
+		}
+
+		replacement, _, err := sw.processStopOn('}', true)
+		if err != nil {
+			if sw.scanner.Peek() == scanner.EOF {
+				return "", errors.New("syntax error: missing '}'")
+			}
+			return "", err
+		}
+
+		value, set := sw.getEnv(name)
+		if sw.skipUnsetEnv && !set {
+			return fmt.Sprintf("${%s/%s/%s}", name, pattern, replacement), nil
+		}
+
+		re, err := convertShellPatternToRegex(pattern, true, false)
+		if err != nil {
+			return "", errors.Errorf("invalid pattern (%s) in substitution: %s", pattern, err)
+		}
+		if replaceAll {
+			value = re.ReplaceAllString(value, replacement)
+		} else {
+			if idx := re.FindStringIndex(value); idx != nil {
+				value = value[0:idx[0]] + replacement + value[idx[1]:]
+			}
+		}
+		return value, nil
 	default:
 		return "", errors.Errorf("unsupported modifier (%s) in substitution", chs)
 	}
@@ -502,14 +541,16 @@ func BuildEnvs(env []string) map[string]string {
 // Based on
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_13
 // but without the bracket expressions (`[]`)
-func convertShellPatternToRegex(pattern string, greedy bool) (*regexp.Regexp, error) {
+func convertShellPatternToRegex(pattern string, greedy bool, anchored bool) (*regexp.Regexp, error) {
 	var s scanner.Scanner
 	s.Init(strings.NewReader(pattern))
 	var out strings.Builder
 	out.Grow(len(pattern) + 4)
 
 	// match only at the beginning of the string
-	out.WriteByte('^')
+	if anchored {
+		out.WriteByte('^')
+	}
 
 	// default: non-greedy wildcards
 	starPattern := ".*?"
@@ -526,9 +567,9 @@ func convertShellPatternToRegex(pattern string, greedy bool) (*regexp.Regexp, er
 			out.WriteByte('.')
 			continue
 		case '\\':
-			// } as part of ${} needs to be escaped, but the escape isn't part
+			// } and / as part of ${} need to be escaped, but the escape isn't part
 			// of the pattern
-			if s.Peek() == '}' {
+			if s.Peek() == '}' || s.Peek() == '/' {
 				continue
 			}
 			out.WriteRune('\\')
@@ -547,7 +588,7 @@ func convertShellPatternToRegex(pattern string, greedy bool) (*regexp.Regexp, er
 }
 
 func trimPrefix(word, value string, greedy bool) (string, error) {
-	re, err := convertShellPatternToRegex(word, greedy)
+	re, err := convertShellPatternToRegex(word, greedy, true)
 	if err != nil {
 		return "", errors.Errorf("invalid pattern (%s) in substitution: %s", word, err)
 	}
