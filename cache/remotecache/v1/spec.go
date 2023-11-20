@@ -20,10 +20,11 @@ type CacheLayer struct {
 }
 
 type LayerAnnotations struct {
-	MediaType string        `json:"mediaType,omitempty"`
-	DiffID    digest.Digest `json:"diffID,omitempty"`
-	Size      int64         `json:"size,omitempty"`
-	CreatedAt time.Time     `json:"createdAt,omitempty"`
+	MediaType  string            `json:"mediaType,omitempty"`
+	DiffID     digest.Digest     `json:"diffID,omitempty"`
+	Size       int64             `json:"size,omitempty"`
+	CreatedAt  time.Time         `json:"createdAt,omitempty"`
+	Additional map[string]string `json:"additional,omitempty"`
 }
 
 type CacheRecord struct {

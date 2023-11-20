@@ -220,16 +220,21 @@ func (e *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 		}
 
 		la := &v1.LayerAnnotations{
-			DiffID:    diffID,
-			Size:      dgstPair.Descriptor.Size,
-			MediaType: dgstPair.Descriptor.MediaType,
+			DiffID:     diffID,
+			Size:       dgstPair.Descriptor.Size,
+			MediaType:  dgstPair.Descriptor.MediaType,
+			Additional: map[string]string{},
 		}
-		if v, ok := dgstPair.Descriptor.Annotations["buildkit/createdat"]; ok {
-			var t time.Time
-			if err := (&t).UnmarshalText([]byte(v)); err != nil {
-				return nil, err
+		for k, v := range dgstPair.Descriptor.Annotations {
+			if k == "buildkit/createdat" {
+				var t time.Time
+				if err := (&t).UnmarshalText([]byte(v)); err != nil {
+					return nil, err
+				}
+				la.CreatedAt = t.UTC()
+			} else {
+				la.Additional[k] = v
 			}
-			la.CreatedAt = t.UTC()
 		}
 		cacheConfig.Layers[i].Annotations = la
 	}
@@ -282,6 +287,9 @@ func (i *importer) makeDescriptorProviderPair(l v1.CacheLayer) (*v1.DescriptorPr
 			return nil, err
 		}
 		annotations["buildkit/createdat"] = string(txt)
+	}
+	for k, v := range l.Annotations.Additional {
+		annotations[k] = v
 	}
 	return &v1.DescriptorProviderPair{
 		Provider: i.s3Client,
