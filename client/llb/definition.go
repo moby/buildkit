@@ -31,7 +31,10 @@ type DefinitionOp struct {
 
 // NewDefinitionOp returns a new operation from a marshalled definition.
 func NewDefinitionOp(def *pb.Definition) (*DefinitionOp, error) {
-	if def == nil {
+	// In  google.golang.org/protobuf (APIv2), nil and an empty message are interchangeable.
+	// Checking def.Metadata allows us to distinguish them. It may be too subtle though.
+	// https://github.com/golang/protobuf/issues/965
+	if def == nil || def.Metadata == nil {
 		return nil, errors.New("invalid nil input definition to definition op")
 	}
 
