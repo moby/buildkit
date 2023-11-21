@@ -1,11 +1,10 @@
-//go:build linux
-// +build linux
+//go:build !windows
+// +build !windows
 
 package containerd
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/moby/buildkit/util/network/netproviders"
@@ -35,12 +34,6 @@ func newWorkerOpt(t *testing.T, addr string) base.WorkerOpt {
 	workerOpt, err := NewWorkerOpt(tmpdir, addr, "overlayfs", "buildkit-test", rootless, nil, nil, netproviders.Opt{Mode: "host"}, "", false, nil, "", nil)
 	require.NoError(t, err)
 	return workerOpt
-}
-
-func checkRequirement(t *testing.T) {
-	if os.Getuid() != 0 {
-		t.Skip("requires root")
-	}
 }
 
 func testContainerdWorkerExec(t *testing.T, sb integration.Sandbox) {

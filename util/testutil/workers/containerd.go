@@ -88,9 +88,11 @@ func (c *Containerd) New(ctx context.Context, cfg *integration.BackendConfig) (b
 	if err := integration.LookupBinary(c.Containerd); err != nil {
 		return nil, nil, err
 	}
+
 	if err := integration.LookupBinary("buildkitd"); err != nil {
 		return nil, nil, err
 	}
+
 	if err := requireRoot(); err != nil {
 		return nil, nil, err
 	}
@@ -106,7 +108,7 @@ func (c *Containerd) New(ctx context.Context, cfg *integration.BackendConfig) (b
 	}()
 
 	rootless := false
-	if c.UID != 0 {
+	if runtime.GOOS != "windows" && c.UID != 0 {
 		if c.GID == 0 {
 			return nil, nil, errors.Errorf("unsupported id pair: uid=%d, gid=%d", c.UID, c.GID)
 		}
@@ -117,6 +119,7 @@ func (c *Containerd) New(ctx context.Context, cfg *integration.BackendConfig) (b
 	if err != nil {
 		return nil, nil, err
 	}
+
 	if rootless {
 		if err := os.Chown(tmpdir, c.UID, c.GID); err != nil {
 			return nil, nil, err
@@ -125,7 +128,7 @@ func (c *Containerd) New(ctx context.Context, cfg *integration.BackendConfig) (b
 
 	deferF.Append(func() error { return os.RemoveAll(tmpdir) })
 
-	address := filepath.Join(tmpdir, "containerd.sock")
+	address := getContainerdSock(tmpdir)
 	config := fmt.Sprintf(`root = %q
 state = %q
 # CRI plugins listens on 10010/tcp for stream server.
@@ -137,8 +140,11 @@ disabled_plugins = ["cri"]
 
 [debug]
   level = "debug"
-  address = %q
-`, filepath.Join(tmpdir, "root"), filepath.Join(tmpdir, "state"), address, filepath.Join(tmpdir, "debug.sock"))
+  address = %q`,
+		filepath.Join(tmpdir, "root"),
+		filepath.Join(tmpdir, "state"),
+		address, getContainerdDebugSock(tmpdir),
+	)
 
 	var snBuildkitdArgs []string
 	if c.Snapshotter != "" {
@@ -185,19 +191,13 @@ disabled_plugins = ["cri"]
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := integration.WaitUnix(address, 10*time.Second, cmd); err != nil {
+	if err := integration.WaitSocket(address, 10*time.Second, cmd); err != nil {
 		ctdStop()
 		return nil, nil, errors.Wrapf(err, "containerd did not start up: %s", integration.FormatLogs(cfg.Logs))
 	}
 	deferF.Append(ctdStop)
 
-	buildkitdArgs := append([]string{"buildkitd",
-		"--oci-worker=false",
-		"--containerd-worker-gc=false",
-		"--containerd-worker=true",
-		"--containerd-worker-addr", address,
-		"--containerd-worker-labels=org.mobyproject.buildkit.worker.sandbox=true", // Include use of --containerd-worker-labels to trigger https://github.com/moby/buildkit/pull/603
-	}, snBuildkitdArgs...)
+	buildkitdArgs := append(getBuildkitdArgs(address), snBuildkitdArgs...)
 
 	if runtime.GOOS != "windows" && c.Snapshotter != "native" {
 		c.ExtraEnv = append(c.ExtraEnv, "BUILDKIT_DEBUG_FORCE_OVERLAY_DIFF=true")
@@ -266,9 +266,13 @@ func runStargzSnapshotter(cfg *integration.BackendConfig) (address string, cl fu
 	if err != nil {
 		return "", nil, err
 	}
-	if err = integration.WaitUnix(address, 10*time.Second, cmd); err != nil {
+	if err = integration.WaitSocket(address, 10*time.Second, cmd); err != nil {
 		snStop()
-		return "", nil, errors.Wrapf(err, "containerd-stargz-grpc did not start up: %s", integration.FormatLogs(cfg.Logs))
+		errMsg := fmt.Sprintf(
+			"containerd-stargz-grpc did not start up: %s",
+			integration.FormatLogs(cfg.Logs),
+		)
+		return "", nil, errors.Wrapf(err, errMsg)
 	}
 	deferF.Append(snStop)
 

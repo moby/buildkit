@@ -354,7 +354,7 @@ func validContainerdSocket(cfg config.ContainerdConfig) bool {
 		// FIXME(AkihiroSuda): prohibit tcp?
 		return true
 	}
-	socketPath := strings.TrimPrefix(socket, "unix://")
+	socketPath := strings.TrimPrefix(socket, socketScheme)
 	if _, err := os.Stat(socketPath); errors.Is(err, os.ErrNotExist) {
 		// FIXME(AkihiroSuda): add more conditions
 		bklog.L.Warnf("skipping containerd worker, as %q does not exist", socketPath)

@@ -159,7 +159,7 @@ func (c Moby) New(ctx context.Context, cfg *integration.BackendConfig) (b integr
 	}
 	deferF.Append(d.StopWithError)
 
-	if err := integration.WaitUnix(d.Sock(), 5*time.Second, nil); err != nil {
+	if err := integration.WaitSocket(d.Sock(), 5*time.Second, nil); err != nil {
 		return nil, nil, errors.Errorf("dockerd did not start up: %q, %s", err, integration.FormatLogs(cfg.Logs))
 	}
 
