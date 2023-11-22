@@ -2,7 +2,9 @@ package solver
 
 import (
 	"context"
+	"encoding/csv"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/moby/buildkit/solver/internal/pipe"
@@ -12,6 +14,8 @@ import (
 )
 
 var debugScheduler = false // TODO: replace with logs in build trace
+var debugSchedulerSteps []string
+var debugSchedulerStepsParseOnce sync.Once
 
 func init() {
 	if os.Getenv("BUILDKIT_SCHEDULER_DEBUG") == "1" {
@@ -68,6 +72,16 @@ func (s *scheduler) Stop() {
 }
 
 func (s *scheduler) loop() {
+	debugSchedulerStepsParseOnce.Do(func() {
+		if s := os.Getenv("BUILDKIT_SCHEDULER_DEBUG_STEPS"); s != "" {
+			fields, err := csv.NewReader(strings.NewReader(s)).Read()
+			if err != nil {
+				return
+			}
+			debugSchedulerSteps = fields
+		}
+	})
+
 	defer func() {
 		close(s.closed)
 	}()
@@ -130,11 +144,11 @@ func (s *scheduler) dispatch(e *edge) {
 	pf := &pipeFactory{s: s, e: e}
 
 	// unpark the edge
-	if debugScheduler {
+	if e.debug {
 		debugSchedulerPreUnpark(e, inc, updates, out)
 	}
 	e.unpark(inc, updates, out, pf)
-	if debugScheduler {
+	if e.debug {
 		debugSchedulerPostUnpark(e, inc)
 	}
 
@@ -352,7 +366,7 @@ func (pf *pipeFactory) NewInputRequest(ee Edge, req *edgeRequest) pipe.Receiver 
 		})
 	}
 	p := pf.s.newPipe(target, pf.e, pipe.Request{Payload: req})
-	if debugScheduler {
+	if pf.e.debug {
 		bklog.G(context.TODO()).Debugf("> newPipe %s %p desiredState=%s", ee.Vertex.Name(), p, req.desiredState)
 	}
 	return p.Receiver
@@ -360,7 +374,7 @@ func (pf *pipeFactory) NewInputRequest(ee Edge, req *edgeRequest) pipe.Receiver 
 
 func (pf *pipeFactory) NewFuncRequest(f func(context.Context) (interface{}, error)) pipe.Receiver {
 	p := pf.s.newRequestWithFunc(pf.e, f)
-	if debugScheduler {
+	if pf.e.debug {
 		bklog.G(context.TODO()).Debugf("> newFunc %p", p)
 	}
 	return p
