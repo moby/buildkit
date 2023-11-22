@@ -1268,3 +1268,84 @@ COPY bar bar2
 	require.Equal(t, dockerfile, sources[0].Data)
 	require.NotEqual(t, 0, len(sources[0].Definition))
 }
+
+func testDuplicateLayersProvenance(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	f := getFrontend(t, sb)
+
+	// Create a triangle shape with the layers.
+	// This will trigger the provenance attestation to attempt to add the base
+	// layer multiple times.
+	dockerfile := []byte(`
+FROM busybox:latest AS base
+
+FROM base AS a
+RUN date +%s > /a.txt
+
+FROM base AS b
+COPY --from=a /a.txt /
+RUN date +%s > /b.txt
+`)
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	target := registry + "/buildkit/testwithprovenance:dup"
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"attest:provenance": "mode=max",
+			"filename":          "Dockerfile",
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	desc, provider, err := contentutil.ProviderFromRef(target)
+	require.NoError(t, err)
+	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(imgs.Images))
+
+	att := imgs.Find("unknown/unknown")
+	require.NotNil(t, att)
+
+	var stmt struct {
+		Predicate provenance.ProvenancePredicate `json:"predicate"`
+	}
+	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
+	pred := stmt.Predicate
+
+	// Search for the layer list for step0.
+	metadata := pred.Metadata
+	require.NotNil(t, metadata)
+
+	layers := metadata.BuildKitMetadata.Layers["step0:0"]
+	require.NotNil(t, layers)
+	require.Len(t, layers, 1)
+}

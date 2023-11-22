@@ -169,6 +169,7 @@ var allTests = integration.TestFuncs(
 	testNilContextInSolveGateway,
 	testCopyUnicodePath,
 	testFrontendDeduplicateSources,
+	testDuplicateLayersProvenance,
 )
 
 // Tests that depend on the `security.*` entitlements
