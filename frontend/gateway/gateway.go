@@ -17,8 +17,6 @@ import (
 	"github.com/containerd/containerd/mount"
 	"github.com/distribution/reference"
 	"github.com/docker/docker/pkg/idtools"
-	gogotypes "github.com/gogo/protobuf/types"
-	"github.com/golang/protobuf/ptypes/any"
 	apitypes "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/cache"
 	cacheutil "github.com/moby/buildkit/cache/util"
@@ -1514,22 +1512,6 @@ type markTypeFrontend struct{}
 
 func (*markTypeFrontend) SetImageOption(ii *llb.ImageInfo) {
 	ii.RecordType = string(client.UsageRecordTypeFrontend)
-}
-
-func convertGogoAny(in []*gogotypes.Any) []*any.Any {
-	out := make([]*any.Any, len(in))
-	for i := range in {
-		out[i] = &any.Any{TypeUrl: in[i].TypeUrl, Value: in[i].Value}
-	}
-	return out
-}
-
-func convertToGogoAny(in []*any.Any) []*gogotypes.Any {
-	out := make([]*gogotypes.Any, len(in))
-	for i := range in {
-		out[i] = &gogotypes.Any{TypeUrl: in[i].TypeUrl, Value: in[i].Value}
-	}
-	return out
 }
 
 func getCaps(label string) map[string]struct{} {
