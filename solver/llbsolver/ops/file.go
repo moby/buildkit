@@ -24,6 +24,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
+	"google.golang.org/protobuf/proto"
 )
 
 const fileCacheType = "buildkit.file.v0"
@@ -69,7 +70,7 @@ func (f *fileOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 		var err error
 		switch a := action.Action.(type) {
 		case *pb.FileAction_Mkdir:
-			p := *a.Mkdir
+			p := a.Mkdir
 			markInvalid(pb.InputIndex(action.Input))
 			processOwner(p.Owner, selectors)
 			dt, err = json.Marshal(p)
@@ -77,7 +78,7 @@ func (f *fileOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 				return nil, false, err
 			}
 		case *pb.FileAction_Mkfile:
-			p := *a.Mkfile
+			p := a.Mkfile
 			markInvalid(pb.InputIndex(action.Input))
 			processOwner(p.Owner, selectors)
 			dt, err = json.Marshal(p)
@@ -85,19 +86,18 @@ func (f *fileOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 				return nil, false, err
 			}
 		case *pb.FileAction_Rm:
-			p := *a.Rm
 			markInvalid(pb.InputIndex(action.Input))
-			dt, err = json.Marshal(p)
+			dt, err = json.Marshal(a.Rm)
 			if err != nil {
 				return nil, false, err
 			}
 		case *pb.FileAction_Copy:
-			p := *a.Copy
+			p := proto.Clone(a.Copy).(*pb.FileActionCopy)
 			markInvalid(pb.InputIndex(action.Input))
 			processOwner(p.Owner, selectors)
 			if action.SecondaryInput != -1 && int(action.SecondaryInput) < f.numInputs {
 				addSelector(selectors, int(action.SecondaryInput), p.Src, p.AllowWildcard, p.FollowSymlink, p.IncludePatterns, p.ExcludePatterns)
-				p.Src = path.Base(p.Src)
+				p.Src = path.Base(p.Src) // p must be copied because of this
 			}
 			dt, err = json.Marshal(p)
 			if err != nil {
@@ -260,6 +260,7 @@ func dedupeSelectors(m []opsutils.Selector) []opsutils.Selector {
 	return selectors
 }
 
+// processOwner processes the ChownOpt to update selectors.
 func processOwner(chopt *pb.ChownOpt, selectors map[int][]opsutils.Selector) error {
 	if chopt == nil {
 		return nil
@@ -581,7 +582,7 @@ func (s *FileOpSolver) getInput(ctx context.Context, idx int, inputs []fileoptyp
 			if err != nil {
 				return input{}, err
 			}
-			if err := s.b.Mkdir(ctx, inpMount, user, group, *a.Mkdir); err != nil {
+			if err := s.b.Mkdir(ctx, inpMount, user, group, a.Mkdir); err != nil {
 				return input{}, err
 			}
 		case *pb.FileAction_Mkfile:
@@ -589,11 +590,11 @@ func (s *FileOpSolver) getInput(ctx context.Context, idx int, inputs []fileoptyp
 			if err != nil {
 				return input{}, err
 			}
-			if err := s.b.Mkfile(ctx, inpMount, user, group, *a.Mkfile); err != nil {
+			if err := s.b.Mkfile(ctx, inpMount, user, group, a.Mkfile); err != nil {
 				return input{}, err
 			}
 		case *pb.FileAction_Rm:
-			if err := s.b.Rm(ctx, inpMount, *a.Rm); err != nil {
+			if err := s.b.Rm(ctx, inpMount, a.Rm); err != nil {
 				return input{}, err
 			}
 		case *pb.FileAction_Copy:
@@ -608,7 +609,7 @@ func (s *FileOpSolver) getInput(ctx context.Context, idx int, inputs []fileoptyp
 			if err != nil {
 				return input{}, err
 			}
-			if err := s.b.Copy(ctx, inpMountSecondary, inpMount, user, group, *a.Copy); err != nil {
+			if err := s.b.Copy(ctx, inpMountSecondary, inpMount, user, group, a.Copy); err != nil {
 				return input{}, err
 			}
 		default:

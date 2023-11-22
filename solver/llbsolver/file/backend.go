@@ -27,7 +27,7 @@ func timestampToTime(ts int64) *time.Time {
 	return &tm
 }
 
-func mkdir(ctx context.Context, d string, action pb.FileActionMkDir, user *copy.User, idmap *idtools.IdentityMapping) error {
+func mkdir(ctx context.Context, d string, action *pb.FileActionMkDir, user *copy.User, idmap *idtools.IdentityMapping) error {
 	p, err := fs.RootPath(d, action.Path)
 	if err != nil {
 		return err
@@ -60,7 +60,7 @@ func mkdir(ctx context.Context, d string, action pb.FileActionMkDir, user *copy.
 	return nil
 }
 
-func mkfile(ctx context.Context, d string, action pb.FileActionMkFile, user *copy.User, idmap *idtools.IdentityMapping) error {
+func mkfile(ctx context.Context, d string, action *pb.FileActionMkFile, user *copy.User, idmap *idtools.IdentityMapping) error {
 	p, err := fs.RootPath(d, filepath.Join("/", action.Path))
 	if err != nil {
 		return err
@@ -86,7 +86,7 @@ func mkfile(ctx context.Context, d string, action pb.FileActionMkFile, user *cop
 	return nil
 }
 
-func rm(ctx context.Context, d string, action pb.FileActionRm) error {
+func rm(ctx context.Context, d string, action *pb.FileActionRm) error {
 	if action.AllowWildcard {
 		src, err := cleanPath(action.Path)
 		if err != nil {
@@ -132,7 +132,7 @@ func rmPath(root, src string, allowNotFound bool) error {
 	return os.RemoveAll(p)
 }
 
-func docopy(ctx context.Context, src, dest string, action pb.FileActionCopy, u *copy.User, idmap *idtools.IdentityMapping) error {
+func docopy(ctx context.Context, src, dest string, action *pb.FileActionCopy, u *copy.User, idmap *idtools.IdentityMapping) error {
 	srcPath, err := cleanPath(action.Src)
 	if err != nil {
 		return errors.Wrap(err, "cleaning source path")
@@ -227,7 +227,7 @@ type Backend struct {
 	readUser ReadUserCallback
 }
 
-func (fb *Backend) Mkdir(ctx context.Context, m, user, group fileoptypes.Mount, action pb.FileActionMkDir) error {
+func (fb *Backend) Mkdir(ctx context.Context, m, user, group fileoptypes.Mount, action *pb.FileActionMkDir) error {
 	mnt, ok := m.(*Mount)
 	if !ok {
 		return errors.Errorf("invalid mount type %T", m)
@@ -248,7 +248,7 @@ func (fb *Backend) Mkdir(ctx context.Context, m, user, group fileoptypes.Mount, 
 	return mkdir(ctx, dir, action, u, mnt.m.IdentityMapping())
 }
 
-func (fb *Backend) Mkfile(ctx context.Context, m, user, group fileoptypes.Mount, action pb.FileActionMkFile) error {
+func (fb *Backend) Mkfile(ctx context.Context, m, user, group fileoptypes.Mount, action *pb.FileActionMkFile) error {
 	mnt, ok := m.(*Mount)
 	if !ok {
 		return errors.Errorf("invalid mount type %T", m)
@@ -269,7 +269,7 @@ func (fb *Backend) Mkfile(ctx context.Context, m, user, group fileoptypes.Mount,
 	return mkfile(ctx, dir, action, u, mnt.m.IdentityMapping())
 }
 
-func (fb *Backend) Rm(ctx context.Context, m fileoptypes.Mount, action pb.FileActionRm) error {
+func (fb *Backend) Rm(ctx context.Context, m fileoptypes.Mount, action *pb.FileActionRm) error {
 	mnt, ok := m.(*Mount)
 	if !ok {
 		return errors.Errorf("invalid mount type %T", m)
@@ -285,7 +285,7 @@ func (fb *Backend) Rm(ctx context.Context, m fileoptypes.Mount, action pb.FileAc
 	return rm(ctx, dir, action)
 }
 
-func (fb *Backend) Copy(ctx context.Context, m1, m2, user, group fileoptypes.Mount, action pb.FileActionCopy) error {
+func (fb *Backend) Copy(ctx context.Context, m1, m2, user, group fileoptypes.Mount, action *pb.FileActionCopy) error {
 	mnt1, ok := m1.(*Mount)
 	if !ok {
 		return errors.Errorf("invalid mount type %T", m1)

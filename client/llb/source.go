@@ -640,6 +640,9 @@ func platformSpecificSource(id string) bool {
 }
 
 func addCap(c *Constraints, id apicaps.CapID) {
+	if c.Metadata == nil {
+		c.Metadata = &pb.OpMetadata{}
+	}
 	if c.Metadata.Caps == nil {
 		c.Metadata.Caps = make(map[string]bool)
 	}

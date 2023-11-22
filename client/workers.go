@@ -7,7 +7,6 @@ import (
 	controlapi "github.com/moby/buildkit/api/services/control"
 	apitypes "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/moby/buildkit/util"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
@@ -40,7 +39,7 @@ func (c *Client) ListWorkers(ctx context.Context, opts ...ListWorkersOption) ([]
 		wi = append(wi, &WorkerInfo{
 			ID:              w.ID,
 			Labels:          w.Labels,
-			Platforms:       pb.ToSpecPlatforms(util.FromPointerSlice(w.Platforms)),
+			Platforms:       pb.ToSpecPlatforms(w.Platforms),
 			GCPolicy:        fromAPIGCPolicy(w.GCPolicy),
 			BuildkitVersion: fromAPIBuildkitVersion(w.BuildkitVersion),
 		})

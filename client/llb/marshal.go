@@ -89,8 +89,8 @@ func MarshalConstraints(base, override *Constraints) (*pb.Op, *pb.OpMetadata) {
 	}
 
 	c.WorkerConstraints = append(c.WorkerConstraints, override.WorkerConstraints...)
-	md := mergeMetadata(&c.Metadata, &override.Metadata)
-	c.Metadata = *md
+	md := mergeMetadata(c.Metadata, override.Metadata)
+	c.Metadata = md
 
 	if c.Platform == nil {
 		defaultPlatform := platforms.Normalize(platforms.DefaultSpec())
@@ -112,7 +112,7 @@ func MarshalConstraints(base, override *Constraints) (*pb.Op, *pb.OpMetadata) {
 		Constraints: &pb.WorkerConstraints{
 			Filter: c.WorkerConstraints,
 		},
-	}, &c.Metadata
+	}, c.Metadata
 }
 
 type MarshalCache struct {

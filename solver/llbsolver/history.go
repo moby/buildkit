@@ -418,7 +418,7 @@ func (h *HistoryQueue) UpdateRef(ctx context.Context, ref string, upt func(r *co
 		return errors.Errorf("invalid ref change")
 	}
 
-	if err := h.update(ctx, br); err != nil {
+	if err := h.update(ctx, &br); err != nil {
 		return err
 	}
 	h.ps.Send(&controlapi.BuildHistoryEvent{
@@ -493,13 +493,13 @@ func (h *HistoryQueue) Status(ctx context.Context, ref string, st chan<- *client
 	return nil
 }
 
-func (h *HistoryQueue) update(ctx context.Context, rec controlapi.BuildHistoryRecord) error {
+func (h *HistoryQueue) update(ctx context.Context, rec *controlapi.BuildHistoryRecord) error {
 	return h.opt.DB.Update(func(tx *bolt.Tx) (err error) {
 		b := tx.Bucket([]byte(recordsBucket))
 		if b == nil {
 			return nil
 		}
-		dt, err := proto.Marshal(&rec)
+		dt, err := proto.Marshal(rec)
 		if err != nil {
 			return err
 		}
@@ -573,7 +573,7 @@ func (h *HistoryQueue) Update(ctx context.Context, e *controlapi.BuildHistoryEve
 
 	if e.Type == controlapi.BuildHistoryEventType_COMPLETE {
 		delete(h.active, e.Record.Ref)
-		if err := h.update(ctx, *e.Record); err != nil {
+		if err := h.update(ctx, e.Record); err != nil {
 			return err
 		}
 		h.ps.Send(e)

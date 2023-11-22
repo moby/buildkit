@@ -275,5 +275,5 @@ func wrapSource(err error, sm *llb.SourceMap, ranges []parser.Range) error {
 			},
 		})
 	}
-	return errdefs.WithSource(err, s)
+	return errdefs.WithSource(err, &s)
 }

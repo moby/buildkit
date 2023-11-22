@@ -62,6 +62,9 @@ func (b *build) Marshal(ctx context.Context, c *llb.Constraints) (digest.Digest,
 		pbo.Attrs[pb.AttrLLBDefinitionFilename] = b.info.DefinitionFilename
 	}
 
+	if b.constraints.Metadata == nil {
+		b.constraints.Metadata = &pb.OpMetadata{}
+	}
 	if b.constraints.Metadata.Caps == nil {
 		b.constraints.Metadata.Caps = make(map[string]bool)
 	}

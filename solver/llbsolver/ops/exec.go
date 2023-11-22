@@ -31,6 +31,7 @@ import (
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/semaphore"
+	"google.golang.org/protobuf/proto"
 )
 
 const execCacheType = "buildkit.exec.v0"
@@ -78,20 +79,8 @@ func (e *ExecOp) Proto() *pb.ExecOp {
 	return e.op
 }
 
-func cloneExecOp(old *pb.ExecOp) pb.ExecOp {
-	n := *old
-	meta := *n.Meta
-	meta.ExtraHosts = nil
-	for i := range n.Meta.ExtraHosts {
-		h := *n.Meta.ExtraHosts[i]
-		meta.ExtraHosts = append(meta.ExtraHosts, &h)
-	}
-	n.Meta = &meta
-	n.Mounts = nil
-	for i := range old.Mounts {
-		m := *old.Mounts[i]
-		n.Mounts = append(n.Mounts, &m)
-	}
+func cloneExecOp(old *pb.ExecOp) *pb.ExecOp {
+	n, _ := proto.Clone(old).(*pb.ExecOp)
 	return n
 }
 
@@ -144,7 +133,7 @@ func (e *ExecOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 		OSFeatures []string `json:",omitempty"`
 	}{
 		Type:       execCacheType,
-		Exec:       &op,
+		Exec:       op,
 		OS:         p.OS,
 		Arch:       p.Architecture,
 		Variant:    p.Variant,

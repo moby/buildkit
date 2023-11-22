@@ -372,8 +372,12 @@ func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.Fil
 		ln := path.Join("/", filepath.ToSlash(stat.Linkname))
 		v, ok := cc.txn.Get(convertPathToKey([]byte(ln)))
 		if ok {
-			cp := *v.(*CacheRecord)
-			cr = &cp
+			cp := v.(*CacheRecord)
+			cr = &CacheRecord{
+				Digest:   cp.Digest,
+				Type:     cp.Type,
+				Linkname: cp.Linkname,
+			}
 		}
 		cc.linkMap[ln] = append(cc.linkMap[ln], k)
 	}

@@ -61,6 +61,14 @@ func FromPointerMap[K ~string, V any](from map[string]*V) map[K]V {
 	return result
 }
 
+func FromStringMap[K ~string, V any](from map[string]V) map[K]V {
+	result := make(map[K]V)
+	for k, v := range from {
+		result[K(k)] = v
+	}
+	return result
+}
+
 func ToPointerMap[K ~string, V any](from map[K]V) map[string]*V {
 	result := make(map[string]*V)
 	for k, v := range from {

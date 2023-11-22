@@ -215,7 +215,7 @@ func (rp *resultProxy) wrapError(err error) error {
 			locs, ok := rp.req.Definition.Source.Locations[string(ve.Digest)]
 			if ok {
 				for _, loc := range locs.Locations {
-					err = errdefs.WithSource(err, errdefs.Source{
+					err = errdefs.WithSource(err, &errdefs.Source{
 						Info:   rp.req.Definition.Source.Infos[loc.SourceIndex],
 						Ranges: loc.Ranges,
 					})

@@ -659,7 +659,7 @@ func toBuildSteps(def *pb.Definition, c *provenance.Capture, withUsage bool) ([]
 
 	out := make([]provenance.BuildStep, 0, len(dgsts))
 	for i, dgst := range dgsts {
-		op := *ops[dgst]
+		op := ops[dgst]
 		inputs := make([]string, len(op.Inputs))
 		for i, inp := range op.Inputs {
 			inputs[i] = fmt.Sprintf("step%d:%d", indexes[digest.Digest(inp.Digest)], inp.Index)

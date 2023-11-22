@@ -21,7 +21,7 @@ type DefinitionOp struct {
 	mu         sync.Mutex
 	ops        map[digest.Digest]*pb.Op
 	defs       map[digest.Digest][]byte
-	metas      map[digest.Digest]pb.OpMetadata
+	metas      map[digest.Digest]*pb.OpMetadata
 	sources    map[digest.Digest][]*SourceLocation
 	platforms  map[digest.Digest]*ocispecs.Platform
 	dgst       digest.Digest
@@ -101,7 +101,7 @@ func NewDefinitionOp(def *pb.Definition) (*DefinitionOp, error) {
 	return &DefinitionOp{
 		ops:        ops,
 		defs:       defs,
-		metas:      util.FromPointerMap[digest.Digest](def.Metadata),
+		metas:      util.FromStringMap[digest.Digest](def.Metadata),
 		sources:    srcs,
 		platforms:  platforms,
 		dgst:       dgst,
@@ -168,7 +168,7 @@ func (d *DefinitionOp) Marshal(ctx context.Context, c *Constraints) (digest.Dige
 	defer d.mu.Unlock()
 
 	meta := d.metas[d.dgst]
-	return d.dgst, d.defs[d.dgst], &meta, d.sources[d.dgst], nil
+	return d.dgst, d.defs[d.dgst], meta, d.sources[d.dgst], nil
 }
 
 func (d *DefinitionOp) Output() Output {

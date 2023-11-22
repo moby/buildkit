@@ -567,6 +567,12 @@ func (fn constraintsOptFunc) SetGitOption(gi *GitInfo) {
 }
 
 func mergeMetadata(m1, m2 *pb.OpMetadata) *pb.OpMetadata {
+	if m1 == nil {
+		m1 = &pb.OpMetadata{}
+	}
+	if m2 == nil {
+		m2 = &pb.OpMetadata{}
+	}
 	if m2.IgnoreCache {
 		m1.IgnoreCache = true
 	}
@@ -597,11 +603,17 @@ func mergeMetadata(m1, m2 *pb.OpMetadata) *pb.OpMetadata {
 }
 
 var IgnoreCache = constraintsOptFunc(func(c *Constraints) {
+	if c.Metadata == nil {
+		c.Metadata = &pb.OpMetadata{}
+	}
 	c.Metadata.IgnoreCache = true
 })
 
 func WithDescription(m map[string]string) ConstraintsOpt {
 	return constraintsOptFunc(func(c *Constraints) {
+		if c.Metadata == nil {
+			c.Metadata = &pb.OpMetadata{}
+		}
 		if c.Metadata.Description == nil {
 			c.Metadata.Description = map[string]string{}
 		}
@@ -624,6 +636,9 @@ func WithCustomNamef(name string, a ...interface{}) ConstraintsOpt {
 // WithExportCache forces results for this vertex to be exported with the cache
 func WithExportCache() ConstraintsOpt {
 	return constraintsOptFunc(func(c *Constraints) {
+		if c.Metadata == nil {
+			c.Metadata = &pb.OpMetadata{}
+		}
 		c.Metadata.ExportCache = &pb.ExportCache{Value: true}
 	})
 }
@@ -632,6 +647,9 @@ func WithExportCache() ConstraintsOpt {
 // the cache
 func WithoutExportCache() ConstraintsOpt {
 	return constraintsOptFunc(func(c *Constraints) {
+		if c.Metadata == nil {
+			c.Metadata = &pb.OpMetadata{}
+		}
 		// ExportCache with value false means to disable exporting
 		c.Metadata.ExportCache = &pb.ExportCache{Value: false}
 	})
@@ -641,6 +659,9 @@ func WithoutExportCache() ConstraintsOpt {
 // the default defined by the build configuration.
 func WithoutDefaultExportCache() ConstraintsOpt {
 	return constraintsOptFunc(func(c *Constraints) {
+		if c.Metadata == nil {
+			c.Metadata = &pb.OpMetadata{}
+		}
 		// nil means no vertex based config has been set
 		c.Metadata.ExportCache = nil
 	})
@@ -664,7 +685,7 @@ func (cw *constraintsWrapper) applyConstraints(f func(c *Constraints)) {
 type Constraints struct {
 	Platform          *ocispecs.Platform
 	WorkerConstraints []string
-	Metadata          pb.OpMetadata
+	Metadata          *pb.OpMetadata
 	LocalUniqueID     string
 	Caps              *apicaps.CapSet
 	SourceLocations   []*SourceLocation
@@ -684,6 +705,9 @@ func LocalUniqueID(v string) ConstraintsOpt {
 
 func ProgressGroup(id, name string, weak bool) ConstraintsOpt {
 	return constraintsOptFunc(func(c *Constraints) {
+		if c.Metadata == nil {
+			c.Metadata = &pb.OpMetadata{}
+		}
 		c.Metadata.ProgressGroup = &pb.ProgressGroup{Id: id, Name: name, Weak: weak}
 	})
 }

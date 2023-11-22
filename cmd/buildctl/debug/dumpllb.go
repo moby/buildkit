@@ -58,9 +58,9 @@ func dumpLLB(clicontext *cli.Context) error {
 }
 
 type llbOp struct {
-	Op         pb.Op
+	Op         *pb.Op
 	Digest     digest.Digest
-	OpMetadata pb.OpMetadata
+	OpMetadata *pb.OpMetadata
 }
 
 func loadLLB(r io.Reader) ([]llbOp, error) {
@@ -75,7 +75,7 @@ func loadLLB(r io.Reader) ([]llbOp, error) {
 			return nil, errors.Wrap(err, "failed to parse op")
 		}
 		dgst := digest.FromBytes(dt)
-		ent := llbOp{Op: op, Digest: dgst, OpMetadata: *def.Metadata[dgst]}
+		ent := llbOp{Op: &op, Digest: dgst, OpMetadata: def.Metadata[dgst]}
 		ops = append(ops, ent)
 	}
 	return ops, nil
@@ -104,7 +104,7 @@ func writeDot(ops []llbOp, w io.Writer) {
 	}
 }
 
-func attr(dgst digest.Digest, op pb.Op) (string, string) {
+func attr(dgst digest.Digest, op *pb.Op) (string, string) {
 	switch op := op.Op.(type) {
 	case *pb.Op_Source:
 		return op.Source.Identifier, "ellipse"

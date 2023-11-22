@@ -682,7 +682,7 @@ type dispatchOpt struct {
 	buildPlatforms    []ocispecs.Platform
 	extraHosts        []llb.HostIP
 	shmSize           int64
-	ulimit            []pb.Ulimit
+	ulimit            []*pb.Ulimit
 	cgroupParent      string
 	llbCaps           *apicaps.CapSet
 	sourceMap         *llb.SourceMap

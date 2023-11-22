@@ -542,7 +542,7 @@ func (c *Controller) ListWorkers(ctx context.Context, r *controlapi.ListWorkersR
 		resp.Record = append(resp.Record, &apitypes.WorkerRecord{
 			ID:              w.ID(),
 			Labels:          w.Labels(),
-			Platforms:       util.PointerSlice(pb.PlatformsFromSpec(w.Platforms(true))),
+			Platforms:       pb.PlatformsFromSpec(w.Platforms(true)),
 			GCPolicy:        toPBGCPolicy(w.GCPolicy()),
 			BuildkitVersion: toPBBuildkitVersion(w.BuildkitVersion()),
 		})
@@ -646,7 +646,7 @@ func findDuplicateCacheOptions(cacheOpts []*controlapi.CacheOptionsEntry) ([]*co
 	seen := map[string]*controlapi.CacheOptionsEntry{}
 	duplicate := map[string]struct{}{}
 	for _, opt := range cacheOpts {
-		k, err := cacheOptKey(*opt)
+		k, err := cacheOptKey(opt)
 		if err != nil {
 			return nil, err
 		}
@@ -663,7 +663,7 @@ func findDuplicateCacheOptions(cacheOpts []*controlapi.CacheOptionsEntry) ([]*co
 	return duplicates, nil
 }
 
-func cacheOptKey(opt controlapi.CacheOptionsEntry) (string, error) {
+func cacheOptKey(opt *controlapi.CacheOptionsEntry) (string, error) {
 	if opt.Type == "registry" && opt.Attrs["ref"] != "" {
 		return opt.Attrs["ref"], nil
 	}

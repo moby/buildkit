@@ -38,7 +38,6 @@ import (
 	"github.com/moby/buildkit/solver/errdefs"
 	llberrdefs "github.com/moby/buildkit/solver/llbsolver/errdefs"
 	opspb "github.com/moby/buildkit/solver/pb"
-	"github.com/moby/buildkit/util"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/grpcerrors"
@@ -901,7 +900,7 @@ func (lbf *llbBridgeForwarder) Ping(context.Context, *pb.PingRequest) (*pb.PongR
 		pbWorkers = append(pbWorkers, &apitypes.WorkerRecord{
 			ID:        w.ID,
 			Labels:    w.Labels,
-			Platforms: util.PointerSlice(opspb.PlatformsFromSpec(w.Platforms)),
+			Platforms: opspb.PlatformsFromSpec(w.Platforms),
 		})
 	}
 

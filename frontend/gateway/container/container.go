@@ -50,12 +50,12 @@ type Mount struct {
 func NewContainer(ctx context.Context, w worker.Worker, sm *session.Manager, g session.Group, req NewContainerRequest) (client.Container, error) {
 	ctx, cancel := context.WithCancelCause(ctx)
 	eg, ctx := errgroup.WithContext(ctx)
-	platform := opspb.Platform{
+	platform := &opspb.Platform{
 		OS:           runtime.GOOS,
 		Architecture: runtime.GOARCH,
 	}
 	if req.Platform != nil {
-		platform = *req.Platform
+		platform = req.Platform
 	}
 	ctr := &gatewayContainer{
 		id:         req.ContainerID,
@@ -289,7 +289,7 @@ type gatewayContainer struct {
 	netMode    opspb.NetMode
 	hostname   string
 	extraHosts []executor.HostIP
-	platform   opspb.Platform
+	platform   *opspb.Platform
 	rootFS     executor.Mount
 	mounts     []executor.Mount
 	executor   executor.Executor

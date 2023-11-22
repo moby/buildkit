@@ -625,36 +625,36 @@ func (tm *testMount) Readonly() bool {
 type testFileBackend struct {
 }
 
-func (b *testFileBackend) Mkdir(_ context.Context, m, user, group fileoptypes.Mount, a pb.FileActionMkDir) error {
+func (b *testFileBackend) Mkdir(_ context.Context, m, user, group fileoptypes.Mount, a *pb.FileActionMkDir) error {
 	mm := m.(*testMount)
 	if mm.callback != nil {
 		mm.callback()
 	}
 	mm.id += "-mkdir"
 	mm.addUser(user, group)
-	mm.chain = append(mm.chain, mod{mkdir: &a})
+	mm.chain = append(mm.chain, mod{mkdir: a})
 	return nil
 }
 
-func (b *testFileBackend) Mkfile(_ context.Context, m, user, group fileoptypes.Mount, a pb.FileActionMkFile) error {
+func (b *testFileBackend) Mkfile(_ context.Context, m, user, group fileoptypes.Mount, a *pb.FileActionMkFile) error {
 	mm := m.(*testMount)
 	mm.id += "-mkfile"
 	mm.addUser(user, group)
-	mm.chain = append(mm.chain, mod{mkfile: &a})
+	mm.chain = append(mm.chain, mod{mkfile: a})
 	return nil
 }
-func (b *testFileBackend) Rm(_ context.Context, m fileoptypes.Mount, a pb.FileActionRm) error {
+func (b *testFileBackend) Rm(_ context.Context, m fileoptypes.Mount, a *pb.FileActionRm) error {
 	mm := m.(*testMount)
 	mm.id += "-rm"
-	mm.chain = append(mm.chain, mod{rm: &a})
+	mm.chain = append(mm.chain, mod{rm: a})
 	return nil
 }
-func (b *testFileBackend) Copy(_ context.Context, m1, m, user, group fileoptypes.Mount, a pb.FileActionCopy) error {
+func (b *testFileBackend) Copy(_ context.Context, m1, m, user, group fileoptypes.Mount, a *pb.FileActionCopy) error {
 	mm := m.(*testMount)
 	mm1 := m1.(*testMount)
 	mm.id += "-copy(" + mm1.id + ")"
 	mm.addUser(user, group)
-	mm.chain = append(mm.chain, mod{copy: &a, copySrc: mm1.chain})
+	mm.chain = append(mm.chain, mod{copy: a, copySrc: mm1.chain})
 	return nil
 }
 

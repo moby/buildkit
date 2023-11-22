@@ -44,6 +44,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -470,7 +471,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	j.SetValue(keyEntitlements, set)
 
 	if srcPol != nil {
-		j.SetValue(keySourcePolicy, *srcPol)
+		j.SetValue(keySourcePolicy, srcPol)
 	}
 
 	j.SessionID = sessionID
@@ -1026,13 +1027,13 @@ func loadEntitlements(b solver.Builder) (entitlements.Set, error) {
 func loadSourcePolicy(b solver.Builder) (*spb.Policy, error) {
 	var srcPol spb.Policy
 	err := b.EachValue(context.TODO(), keySourcePolicy, func(v interface{}) error {
-		x, ok := v.(spb.Policy)
+		x, ok := v.(*spb.Policy)
 		if !ok {
 			return errors.Errorf("invalid source policy %T", v)
 		}
 		for _, f := range x.Rules {
-			r := *f
-			srcPol.Rules = append(srcPol.Rules, &r)
+			r := proto.Clone(f).(*spb.Rule)
+			srcPol.Rules = append(srcPol.Rules, r)
 		}
 		srcPol.Version = x.Version
 		return nil

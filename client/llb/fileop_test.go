@@ -693,24 +693,24 @@ func TestFileCreatedTime(t *testing.T) {
 	require.Equal(t, dt3.UnixNano(), copy.Timestamp)
 }
 
-func parseDef(t *testing.T, def [][]byte) (map[digest.Digest]pb.Op, []pb.Op) {
-	m := map[digest.Digest]pb.Op{}
-	arr := make([]pb.Op, 0, len(def))
+func parseDef(t *testing.T, def [][]byte) (map[digest.Digest]*pb.Op, []*pb.Op) {
+	m := map[digest.Digest]*pb.Op{}
+	arr := make([]*pb.Op, 0, len(def))
 
 	for _, dt := range def {
 		var op pb.Op
 		err := proto.Unmarshal(dt, &op)
 		require.NoError(t, err)
 		dgst := digest.FromBytes(dt)
-		m[dgst] = op
-		arr = append(arr, op)
+		m[dgst] = &op
+		arr = append(arr, &op)
 		// fmt.Printf(":: %T %+v\n", op.Op, op)
 	}
 
 	return m, arr
 }
 
-func last(t *testing.T, arr []pb.Op) (digest.Digest, int) {
+func last(t *testing.T, arr []*pb.Op) (digest.Digest, int) {
 	require.True(t, len(arr) > 1)
 
 	op := arr[len(arr)-1]
