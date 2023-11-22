@@ -213,3 +213,9 @@ Attestation body containing the SBOM data listing the packages used during the b
     "spdxVersion": "SPDX-2.2",
     ...
 ```
+
+## Tips
+### Preventing attaching attestation manifests
+
+To prevent attaching an attestation manifest to the built image, specify an image exporter option `attestation-inline=false`.
+This option is expected to be used as a workaround for compatibility issue with third party registry implementations that do not properly implement the OCI Distribution Spec.

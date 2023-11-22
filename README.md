@@ -273,6 +273,8 @@ Keys supported by image output:
   * `<type>` specifies what object to attach to, and can be any of `manifest` (the default), `manifest-descriptor`, `index` and `index-descriptor`
   * `<platform>` specifies which objects to attach to (by default, all), and is the same key passed into the `platform` opt, see [`docs/multi-platform.md`](docs/multi-platform.md).
   * See [`docs/annotations.md`](docs/annotations.md) for more details.
+* `attestation-inline=false`: Prevent attaching an [attestation manifest](./docs/attestations/) to the built image.
+  This option is expected to be used as a workaround for compatibility issue with third party registry implementations that do not properly implement the OCI Distribution Spec.
 
 If credentials are required, `buildctl` will attempt to read Docker configuration file `$DOCKER_CONFIG/config.json`.
 `$DOCKER_CONFIG` defaults to `~/.docker`.
