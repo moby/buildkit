@@ -30,17 +30,7 @@ import (
 type RuntimeInfo = containerdexecutor.RuntimeInfo
 
 // NewWorkerOpt creates a WorkerOpt.
-func NewWorkerOpt(root string, address, snapshotterName, ns string, rootless bool, labels map[string]string, dns *oci.DNSConfig, nopt netproviders.Opt, apparmorProfile string, selinux bool, parallelismSem *semaphore.Weighted, traceSocket string, runtime *RuntimeInfo, opts ...containerd.ClientOpt) (base.WorkerOpt, error) {
-	opts = append(opts, containerd.WithDefaultNamespace(ns))
-
-	client, err := containerd.New(address, opts...)
-	if err != nil {
-		return base.WorkerOpt{}, errors.Wrapf(err, "failed to connect client to %q . make sure containerd is running", address)
-	}
-	return newContainerd(root, client, snapshotterName, ns, rootless, labels, dns, nopt, apparmorProfile, selinux, parallelismSem, traceSocket, runtime)
-}
-
-func newContainerd(root string, client *containerd.Client, snapshotterName, ns string, rootless bool, labels map[string]string, dns *oci.DNSConfig, nopt netproviders.Opt, apparmorProfile string, selinux bool, parallelismSem *semaphore.Weighted, traceSocket string, runtime *RuntimeInfo) (base.WorkerOpt, error) {
+func NewWorkerOpt(root string, client *containerd.Client, snapshotterName string, rootless bool, labels map[string]string, dns *oci.DNSConfig, nopt netproviders.Opt, apparmorProfile string, selinux bool, parallelismSem *semaphore.Weighted, traceSocket string, runtime *RuntimeInfo) (base.WorkerOpt, error) {
 	if strings.Contains(snapshotterName, "/") {
 		return base.WorkerOpt{}, errors.Errorf("bad snapshotter name: %q", snapshotterName)
 	}
@@ -81,13 +71,13 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 	if apparmorProfile != "" {
 		xlabels[wlabel.ApparmorProfile] = apparmorProfile
 	}
-	xlabels[wlabel.ContainerdNamespace] = ns
+	xlabels[wlabel.ContainerdNamespace] = client.DefaultNamespace()
 	xlabels[wlabel.ContainerdUUID] = serverInfo.UUID
 	for k, v := range labels {
 		xlabels[k] = v
 	}
 
-	lm := leaseutil.WithNamespace(client.LeasesService(), ns)
+	lm := leaseutil.WithNamespace(client.LeasesService(), client.DefaultNamespace())
 
 	gc := func(ctx context.Context) (gc.Stats, error) {
 		l, err := lm.Create(ctx)
@@ -97,7 +87,7 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		return nil, lm.Delete(ctx, leases.Lease{ID: l.ID}, leases.SynchronousDelete)
 	}
 
-	cs := containerdsnapshot.NewContentStore(client.ContentStore(), ns)
+	cs := containerdsnapshot.NewContentStore(client.ContentStore(), client.DefaultNamespace())
 
 	resp, err := client.IntrospectionService().Plugins(context.TODO(), []string{"type==io.containerd.runtime.v1", "type==io.containerd.runtime.v2"})
 	if err != nil {
@@ -119,7 +109,7 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		}
 	}
 
-	snap := containerdsnapshot.NewSnapshotter(snapshotterName, client.SnapshotService(snapshotterName), ns, nil)
+	snap := containerdsnapshot.NewSnapshotter(snapshotterName, client.SnapshotService(snapshotterName), client.DefaultNamespace(), nil)
 
 	if err := cache.MigrateV2(
 		context.TODO(),
