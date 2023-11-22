@@ -107,25 +107,13 @@ func (h *middleware) createMeasures() {
 	h.counters = make(map[string]metric.Int64Counter)
 	h.valueRecorders = make(map[string]metric.Float64Histogram)
 
-	requestBytesCounter, err := h.meter.Int64Counter(
-		RequestContentLength,
-		metric.WithUnit("By"),
-		metric.WithDescription("Measures the size of HTTP request content length (uncompressed)"),
-	)
+	requestBytesCounter, err := h.meter.Int64Counter(RequestContentLength)
 	handleErr(err)
 
-	responseBytesCounter, err := h.meter.Int64Counter(
-		ResponseContentLength,
-		metric.WithUnit("By"),
-		metric.WithDescription("Measures the size of HTTP response content length (uncompressed)"),
-	)
+	responseBytesCounter, err := h.meter.Int64Counter(ResponseContentLength)
 	handleErr(err)
 
-	serverLatencyMeasure, err := h.meter.Float64Histogram(
-		ServerLatency,
-		metric.WithUnit("ms"),
-		metric.WithDescription("Measures the duration of HTTP request handling"),
-	)
+	serverLatencyMeasure, err := h.meter.Float64Histogram(ServerLatency)
 	handleErr(err)
 
 	h.counters[RequestContentLength] = requestBytesCounter

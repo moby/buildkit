@@ -25,8 +25,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// ScopeName is the instrumentation scope name.
-const ScopeName = "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+const (
+	instrumentationName = "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+)
 
 // config represents the configuration options available for the http.Handler
 // and http.Transport types.
@@ -75,7 +76,7 @@ func newConfig(opts ...Option) *config {
 	}
 
 	c.Meter = c.MeterProvider.Meter(
-		ScopeName,
+		instrumentationName,
 		metric.WithInstrumentationVersion(Version()),
 	)
 
