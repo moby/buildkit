@@ -15,6 +15,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.11.56
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.30.6
 	github.com/aws/smithy-go v1.13.5
+	github.com/containerd/accelerated-container-image v0.6.5
 	github.com/containerd/console v1.0.3
 	github.com/containerd/containerd v1.7.8
 	github.com/containerd/continuity v0.4.2

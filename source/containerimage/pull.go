@@ -153,6 +153,7 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 				for k, v := range estargz.SnapshotLabels(p.manifest.Ref, p.manifest.Descriptors, i) {
 					labels[k] = v
 				}
+				labels["containerd.io/snapshot/image-ref"] = p.manifest.Ref
 				p.descHandlers[desc.Digest] = &cache.DescHandler{
 					Provider:       p.manifest.Provider,
 					Progress:       progressController,
