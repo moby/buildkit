@@ -39,7 +39,7 @@ RUN ls -l
 	df = `FROM scratch AS foo
 ENV FOO bar
 FROM foo
-COPY --from=foo f1 /
+COPY --from=foo --exclude='.config' --exclude='src/*.py' f1 /
 COPY --from=0 f2 /
 	`
 	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
@@ -207,4 +207,15 @@ COPY --from=stage1 f2 /sub/
 `
 	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.EqualError(t, err, "circular dependency detected on stage: stage0")
+}
+
+func TestDockerfileCopyExcludePatterns(t *testing.T) {
+	df := `FROM scratch
+COPY --exclude=src/*.go --exclude=tmp/*.txt dir /sub/
+`
+	state, _, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	assert.NoError(t, err)
+
+	_, err = state.Marshal(context.TODO())
+	assert.NoError(t, err)
 }

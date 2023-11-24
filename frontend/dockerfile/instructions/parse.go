@@ -284,6 +284,8 @@ func parseAdd(req parseRequest) (*AddCommand, error) {
 	if len(req.args) < 2 {
 		return nil, errNoDestinationArgument("ADD")
 	}
+
+	flExcludes := req.flags.AddStrings("exclude")
 	flChown := req.flags.AddString("chown", "")
 	flChmod := req.flags.AddString("chmod", "")
 	flLink := req.flags.AddBool("link", false)
@@ -306,6 +308,7 @@ func parseAdd(req parseRequest) (*AddCommand, error) {
 		Link:            flLink.Value == "true",
 		KeepGitDir:      flKeepGitDir.Value == "true",
 		Checksum:        flChecksum.Value,
+		ExcludePatterns: flExcludes.StringValues,
 	}, nil
 }
 
@@ -313,6 +316,8 @@ func parseCopy(req parseRequest) (*CopyCommand, error) {
 	if len(req.args) < 2 {
 		return nil, errNoDestinationArgument("COPY")
 	}
+
+	flExcludes := req.flags.AddStrings("exclude")
 	flChown := req.flags.AddString("chown", "")
 	flFrom := req.flags.AddString("from", "")
 	flChmod := req.flags.AddString("chmod", "")
@@ -335,6 +340,7 @@ func parseCopy(req parseRequest) (*CopyCommand, error) {
 		Chmod:           flChmod.Value,
 		Link:            flLink.Value == "true",
 		Parents:         (flParents.Value == "true") && parentsEnabled, // silently ignore if not -labs
+		ExcludePatterns: flExcludes.StringValues,
 	}, nil
 }
 
