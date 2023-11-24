@@ -744,17 +744,18 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 		}
 		if err == nil {
 			err = dispatchCopy(d, copyConfig{
-				params:       c.SourcesAndDest,
-				source:       opt.buildContext,
-				isAddCommand: true,
-				cmdToPrint:   c,
-				chown:        c.Chown,
-				chmod:        c.Chmod,
-				link:         c.Link,
-				keepGitDir:   c.KeepGitDir,
-				checksum:     checksum,
-				location:     c.Location(),
-				opt:          opt,
+				params:          c.SourcesAndDest,
+				excludePatterns: c.ExcludePatterns,
+				source:          opt.buildContext,
+				isAddCommand:    true,
+				cmdToPrint:      c,
+				chown:           c.Chown,
+				chmod:           c.Chmod,
+				link:            c.Link,
+				keepGitDir:      c.KeepGitDir,
+				checksum:        checksum,
+				location:        c.Location(),
+				opt:             opt,
 			})
 		}
 		if err == nil {
@@ -796,16 +797,17 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 			l = src.state
 		}
 		err = dispatchCopy(d, copyConfig{
-			params:       c.SourcesAndDest,
-			source:       l,
-			isAddCommand: false,
-			cmdToPrint:   c,
-			chown:        c.Chown,
-			chmod:        c.Chmod,
-			link:         c.Link,
-			parents:      c.Parents,
-			location:     c.Location(),
-			opt:          opt,
+			params:          c.SourcesAndDest,
+			excludePatterns: c.ExcludePatterns,
+			source:          l,
+			isAddCommand:    false,
+			cmdToPrint:      c,
+			chown:           c.Chown,
+			chmod:           c.Chmod,
+			link:            c.Link,
+			parents:         c.Parents,
+			location:        c.Location(),
+			opt:             opt,
 		})
 		if err == nil {
 			if len(cmd.sources) == 0 {
@@ -1112,6 +1114,14 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bo
 	return nil
 }
 
+type excludeOnCopy struct {
+	patterns []string
+}
+
+func (e *excludeOnCopy) SetCopyOption(i *llb.CopyInfo) {
+	i.ExcludePatterns = append(i.ExcludePatterns, e.patterns...)
+}
+
 func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 	dest, err := pathRelativeToWorkingDir(d.state, cfg.params.DestPath, *d.platform)
 	if err != nil {
@@ -1127,6 +1137,8 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 	if cfg.chown != "" {
 		copyOpt = append(copyOpt, llb.WithUser(cfg.chown))
 	}
+
+	copyOpt = append(copyOpt, &excludeOnCopy{cfg.excludePatterns})
 
 	var mode *os.FileMode
 	if cfg.chmod != "" {
@@ -1329,18 +1341,19 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 }
 
 type copyConfig struct {
-	params       instructions.SourcesAndDest
-	source       llb.State
-	isAddCommand bool
-	cmdToPrint   fmt.Stringer
-	chown        string
-	chmod        string
-	link         bool
-	keepGitDir   bool
-	checksum     digest.Digest
-	parents      bool
-	location     []parser.Range
-	opt          dispatchOpt
+	params          instructions.SourcesAndDest
+	excludePatterns []string
+	source          llb.State
+	isAddCommand    bool
+	cmdToPrint      fmt.Stringer
+	chown           string
+	chmod           string
+	link            bool
+	keepGitDir      bool
+	checksum        digest.Digest
+	parents         bool
+	location        []parser.Range
+	opt             dispatchOpt
 }
 
 func dispatchMaintainer(d *dispatchState, c *instructions.MaintainerCommand) error {
