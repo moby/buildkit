@@ -68,5 +68,5 @@ SBOM results for any other filesystems.
 
 ## Further reading
 
-See [frontend/attest/sbom.go](https://github.com/moby/buildkit/blob/master/frontend/attest/sbom.go)
+See [frontend/attestations/sbom/sbom.go](https://github.com/moby/buildkit/blob/master/frontend/attestations/sbom/sbom.go)
 for the code that invokes the user-specified generator.
