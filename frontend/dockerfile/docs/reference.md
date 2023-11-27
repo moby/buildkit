@@ -5,6 +5,31 @@ Docker can build images automatically by reading the instructions from a
 user could call on the command line to assemble an image. This page describes
 the commands you can use in a `Dockerfile`.
 
+## Overview
+
+The Dockerfile supports the following instructions:
+
+| Instruction                            | Description                                                 |
+| :------------------------------------- | :---------------------------------------------------------- |
+| [`ADD`](#add)                          | Add local or remote files and directories.                  |
+| [`ARG`](#arg)                          | Use build-time variables.                                   |
+| [`CMD`](#cmd)                          | Specify default commands.                                   |
+| [`COPY`](#copy)                        | Copy files and directories.                                 |
+| [`ENTRYPOINT`](#entrypoint)            | Specify default executable.                                 |
+| [`ENV`](#env)                          | Set environment variables.                                  |
+| [`EXPOSE`](#expose)                    | Describe which ports your application is listening on.      |
+| [`FROM`](#from)                        | Create a new build stage from a base image.                 |
+| [`HEALTHCHECK`](#healthcheck)          | Check a container's health on startup.                      |
+| [`LABEL`](#label)                      | Add metadata to an image.                                   |
+| [`MAINTAINER`](#maintainer-deprecated) | Specify the author of an image.                             |
+| [`ONBUILD`](#onbuild)                  | Specify instructions for when the image is used in a build. |
+| [`RUN`](#run)                          | Execute build commands.                                     |
+| [`SHELL`](#shell)                      | Set the default shell of an image.                          |
+| [`STOPSIGNAL`](#stopsignal)            | Specify the system call signal for exiting a container.     |
+| [`USER`](#user)                        | Set user and group ID.                                      |
+| [`VOLUME`](#volume)                    | Create volume mounts.                                       |
+| [`WORKDIR`](#workdir)                  | Change working directory.                                   |
+
 ## Format
 
 Here is the format of the `Dockerfile`:
