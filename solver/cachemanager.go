@@ -33,12 +33,20 @@ func NewCacheManager(ctx context.Context, id string, storage CacheKeyStorage, re
 	return cm
 }
 
+type cacheKeyWithTime struct {
+	c *CacheKey
+	t time.Time
+}
+
 type cacheManager struct {
 	mu sync.RWMutex
 	id string
 
 	backend CacheKeyStorage
 	results CacheResultStorage
+
+	keys   map[string]cacheKeyWithTime
+	keysMu sync.Mutex
 }
 
 func (c *cacheManager) ReleaseUnreferenced(ctx context.Context) error {
@@ -50,6 +58,25 @@ func (c *cacheManager) ReleaseUnreferenced(ctx context.Context) error {
 			return nil
 		})
 	})
+}
+
+func (c *cacheManager) pruneKeyMap(ctx context.Context) {
+	tick := time.NewTicker(time.Minute)
+	defer tick.Stop()
+	for range tick.C {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			c.keysMu.Lock()
+			for k, v := range c.keys {
+				if v.t.Before(time.Now().Add(-5 * time.Minute)) {
+					delete(c.keys, k)
+				}
+			}
+			c.keysMu.Unlock()
+		}
+	}
 }
 
 func (c *cacheManager) ID() string {
@@ -342,11 +369,21 @@ func newKey() *CacheKey {
 }
 
 func (c *cacheManager) newKeyWithID(id string, dgst digest.Digest, output Index) *CacheKey {
+	c.keysMu.Lock()
+	defer c.keysMu.Unlock()
+
+	if e, ok := c.keys[id]; ok {
+		return e.c
+	}
+
 	k := newKey()
 	k.digest = dgst
 	k.output = output
 	k.ID = id
 	k.ids[c] = id
+
+	c.keys[id] = cacheKeyWithTime{c: k, t: time.Now()}
+
 	return k
 }
 
