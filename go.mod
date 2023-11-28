@@ -7,7 +7,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.4.1
 	github.com/Masterminds/semver/v3 v3.1.0
 	github.com/Microsoft/go-winio v0.6.1
-	github.com/Microsoft/hcsshim v0.11.1
+	github.com/Microsoft/hcsshim v0.11.4
 	github.com/agext/levenshtein v1.2.3
 	github.com/armon/circbuf v0.0.0-20190214190532-5111143e8da2
 	github.com/aws/aws-sdk-go-v2/config v1.18.16
@@ -16,7 +16,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.30.6
 	github.com/aws/smithy-go v1.13.5
 	github.com/containerd/console v1.0.3
-	github.com/containerd/containerd v1.7.8
+	github.com/containerd/containerd v1.7.9
 	github.com/containerd/continuity v0.4.2
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
 	github.com/containerd/go-cni v1.1.9

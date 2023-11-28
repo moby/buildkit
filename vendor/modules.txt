@@ -69,9 +69,8 @@ github.com/Microsoft/go-winio/internal/socket
 github.com/Microsoft/go-winio/internal/stringbuffer
 github.com/Microsoft/go-winio/pkg/bindfilter
 github.com/Microsoft/go-winio/pkg/guid
-github.com/Microsoft/go-winio/tools/mkwinsyscall
 github.com/Microsoft/go-winio/vhd
-# github.com/Microsoft/hcsshim v0.11.1
+# github.com/Microsoft/hcsshim v0.11.4
 ## explicit; go 1.18
 github.com/Microsoft/hcsshim
 github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options
@@ -245,7 +244,7 @@ github.com/containerd/cgroups/stats/v1
 # github.com/containerd/console v1.0.3
 ## explicit; go 1.13
 github.com/containerd/console
-# github.com/containerd/containerd v1.7.8
+# github.com/containerd/containerd v1.7.9
 ## explicit; go 1.19
 github.com/containerd/containerd
 github.com/containerd/containerd/api/events
@@ -301,6 +300,7 @@ github.com/containerd/containerd/namespaces
 github.com/containerd/containerd/oci
 github.com/containerd/containerd/pkg/cap
 github.com/containerd/containerd/pkg/cleanup
+github.com/containerd/containerd/pkg/deprecation
 github.com/containerd/containerd/pkg/dialer
 github.com/containerd/containerd/pkg/epoch
 github.com/containerd/containerd/pkg/kmutex
@@ -336,6 +336,7 @@ github.com/containerd/containerd/sandbox/proxy
 github.com/containerd/containerd/services
 github.com/containerd/containerd/services/content/contentserver
 github.com/containerd/containerd/services/introspection
+github.com/containerd/containerd/services/warning
 github.com/containerd/containerd/snapshots
 github.com/containerd/containerd/snapshots/native
 github.com/containerd/containerd/snapshots/overlay
