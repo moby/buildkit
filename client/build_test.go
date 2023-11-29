@@ -1390,17 +1390,15 @@ func testClientGatewayContainerPlatformPATH(t *testing.T, sb integration.Sandbox
 			Platform *pb.Platform
 			Expected string
 		}{{
-			"default path",
-			nil,
-			utilsystem.DefaultPathEnvUnix,
+			Name:     "default path",
+			Expected: utilsystem.DefaultPathEnvUnix,
 		}, {
-			"linux path",
-			&pb.Platform{OS: "linux"},
-			utilsystem.DefaultPathEnvUnix,
+			Name:     "linux path",
+			Platform: &pb.Platform{OS: "linux"},
+			Expected: utilsystem.DefaultPathEnvUnix,
 		}, {
-			"windows path",
-			&pb.Platform{OS: "windows"},
-			utilsystem.DefaultPathEnvWindows,
+			Name:     "windows path",
+			Platform: &pb.Platform{OS: "windows"},
 		}}
 
 		for _, tt := range tests {
