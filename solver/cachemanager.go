@@ -30,6 +30,8 @@ func NewCacheManager(ctx context.Context, id string, storage CacheKeyStorage, re
 		bklog.G(ctx).Errorf("failed to release unreferenced cache metadata: %+v", err)
 	}
 
+	go cm.pruneKeyMap(ctx)
+
 	return cm
 }
 
