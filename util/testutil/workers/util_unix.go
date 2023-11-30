@@ -5,17 +5,18 @@ package workers
 
 import (
 	"bufio"
-	"bytes"
-	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
+	"syscall"
 
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/pkg/errors"
 )
+
+func applyBuildkitdPlatformFlags(args []string) []string {
+	return append(args, "--oci-worker=false")
+}
 
 func requireRoot() error {
 	if os.Getuid() != 0 {
@@ -24,88 +25,50 @@ func requireRoot() error {
 	return nil
 }
 
-func runBuildkitd(
-	ctx context.Context,
-	conf *integration.BackendConfig,
-	args []string,
-	logs map[string]*bytes.Buffer,
-	uid, gid int,
-	extraEnv []string,
-) (address string, cl func() error, err error) {
-	deferF := &integration.MultiCloser{}
-	cl = deferF.F()
+func getSysProcAttr() *syscall.SysProcAttr {
+	return &syscall.SysProcAttr{
+		Setsid: true, // stretch sudo needs this for sigterm
+	}
+}
 
-	defer func() {
-		if err != nil {
-			deferF.F()()
-			cl = nil
-		}
-	}()
+func getBuildkitdAddr(tmpdir string) string {
+	return "unix://" + filepath.Join(tmpdir, "buildkitd.sock")
+}
 
-	tmpdir, err := os.MkdirTemp("", "bktest_buildkitd")
+func getTraceSocketPath(tmpdir string) string {
+	return filepath.Join(tmpdir, "otel-grpc.sock")
+}
+
+func getContainerdSock(tmpdir string) string {
+	return filepath.Join(tmpdir, "containerd.sock")
+}
+
+func getContainerdDebugSock(tmpdir string) string {
+	return filepath.Join(tmpdir, "debug.sock")
+}
+
+func mountInfo(tmpdir string) error {
+	f, err := os.Open("/proc/self/mountinfo")
 	if err != nil {
-		return "", nil, err
+		return errors.Wrap(err, "failed to open mountinfo")
 	}
-
-	if err := os.Chown(tmpdir, uid, gid); err != nil {
-		return "", nil, err
-	}
-
-	if err := os.MkdirAll(filepath.Join(tmpdir, "tmp"), 0711); err != nil {
-		return "", nil, err
-	}
-
-	if err := os.Chown(filepath.Join(tmpdir, "tmp"), uid, gid); err != nil {
-		return "", nil, err
-	}
-	deferF.Append(func() error { return os.RemoveAll(tmpdir) })
-
-	cfgfile, err := integration.WriteConfig(
-		append(conf.DaemonConfig, withOTELSocketPath(getTraceSocketPath(tmpdir))))
-	if err != nil {
-		return "", nil, err
-	}
-	deferF.Append(func() error {
-		return os.RemoveAll(filepath.Dir(cfgfile))
-	})
-
-	args = append(args, "--config="+cfgfile)
-	address = getBuildkitdAddr(tmpdir)
-
-	args = append(args, "--root", tmpdir, "--addr", address, "--debug")
-	cmd := exec.Command(args[0], args[1:]...) //nolint:gosec // test utility
-	cmd.Env = append(
-		os.Environ(),
-		"BUILDKIT_DEBUG_EXEC_OUTPUT=1",
-		"BUILDKIT_DEBUG_PANIC_ON_ERROR=1",
-		"TMPDIR="+filepath.Join(tmpdir, "tmp"))
-	cmd.Env = append(cmd.Env, extraEnv...)
-	cmd.SysProcAttr = getSysProcAttr()
-
-	stop, err := integration.StartCmd(cmd, logs)
-	if err != nil {
-		return "", nil, err
-	}
-	deferF.Append(stop)
-
-	if err := integration.WaitSocket(address, 15*time.Second, cmd); err != nil {
-		return "", nil, err
-	}
-
-	deferF.Append(func() error {
-		f, err := os.Open("/proc/self/mountinfo")
-		if err != nil {
-			return errors.Wrap(err, "failed to open mountinfo")
+	defer f.Close()
+	s := bufio.NewScanner(f)
+	for s.Scan() {
+		if strings.Contains(s.Text(), tmpdir) {
+			return errors.Errorf("leaked mountpoint for %s", tmpdir)
 		}
-		defer f.Close()
-		s := bufio.NewScanner(f)
-		for s.Scan() {
-			if strings.Contains(s.Text(), tmpdir) {
-				return errors.Errorf("leaked mountpoint for %s", tmpdir)
-			}
-		}
-		return s.Err()
-	})
+	}
+	return s.Err()
+}
 
-	return address, cl, err
+// moved here since os.Chown is not supported on Windows.
+// see no-op counterpart in util_windows.go
+func chown(name string, uid, gid int) error {
+	return os.Chown(name, uid, gid)
+}
+
+func normalizeAddress(address string) string {
+	// for parity with windows, no effect for unix
+	return address
 }

@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
@@ -102,7 +103,25 @@ func StartCmd(cmd *exec.Cmd, logs map[string]*bytes.Buffer) (func() error, error
 // On Linux this socket is typically a Unix socket,
 // while on Windows this will be a named pipe.
 func WaitSocket(address string, d time.Duration, cmd *exec.Cmd) error {
-	return waitSocket(address, d, cmd)
+	address = strings.TrimPrefix(address, socketScheme)
+	step := 50 * time.Millisecond
+	i := 0
+	for {
+		if cmd != nil && cmd.ProcessState != nil {
+			return errors.Errorf("process exited: %s", cmd.String())
+		}
+
+		if conn, err := dialPipe(address); err == nil {
+			conn.Close()
+			break
+		}
+		i++
+		if time.Duration(i)*step > d {
+			return errors.Errorf("failed dialing: %s", address)
+		}
+		time.Sleep(step)
+	}
+	return nil
 }
 
 func LookupBinary(name string) error {

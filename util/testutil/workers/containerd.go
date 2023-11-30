@@ -108,7 +108,7 @@ func (c *Containerd) New(ctx context.Context, cfg *integration.BackendConfig) (b
 	}()
 
 	rootless := false
-	if runtime.GOOS != "windows" && c.UID != 0 {
+	if c.UID != 0 {
 		if c.GID == 0 {
 			return nil, nil, errors.Errorf("unsupported id pair: uid=%d, gid=%d", c.UID, c.GID)
 		}
@@ -197,7 +197,17 @@ disabled_plugins = ["cri"]
 	}
 	deferF.Append(ctdStop)
 
-	buildkitdArgs := append(getBuildkitdArgs(address), snBuildkitdArgs...)
+	// handles only windows case, no effect on unix
+	address = normalizeAddress(address)
+	buildkitdArgs := []string{
+		"buildkitd",
+		"--containerd-worker-gc=false",
+		"--containerd-worker=true",
+		"--containerd-worker-addr", address,
+		"--containerd-worker-labels=org.mobyproject.buildkit.worker.sandbox=true", // Include use of --containerd-worker-labels to trigger https://github.com/moby/buildkit/pull/603
+	}
+	buildkitdArgs = applyBuildkitdPlatformFlags(buildkitdArgs)
+	buildkitdArgs = append(buildkitdArgs, snBuildkitdArgs...)
 
 	if runtime.GOOS != "windows" && c.Snapshotter != "native" {
 		c.ExtraEnv = append(c.ExtraEnv, "BUILDKIT_DEBUG_FORCE_OVERLAY_DIFF=true")
@@ -268,11 +278,7 @@ func runStargzSnapshotter(cfg *integration.BackendConfig) (address string, cl fu
 	}
 	if err = integration.WaitSocket(address, 10*time.Second, cmd); err != nil {
 		snStop()
-		errMsg := fmt.Sprintf(
-			"containerd-stargz-grpc did not start up: %s",
-			integration.FormatLogs(cfg.Logs),
-		)
-		return "", nil, errors.Wrapf(err, errMsg)
+		return "", nil, errors.Wrapf(err, "containerd-stargz-grpc did not start up: %s", integration.FormatLogs(cfg.Logs))
 	}
 	deferF.Append(snStop)
 

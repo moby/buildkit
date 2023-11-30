@@ -1,79 +1,53 @@
 package workers
 
 import (
-	"bytes"
-	"context"
-	"os"
-	"os/exec"
 	"path/filepath"
-	"time"
-
-	"github.com/moby/buildkit/util/testutil/integration"
+	"strings"
+	"syscall"
 )
+
+func applyBuildkitdPlatformFlags(args []string) []string {
+	return args
+}
 
 func requireRoot() error {
 	return nil
 }
 
-func runBuildkitd(
-	ctx context.Context,
-	conf *integration.BackendConfig,
-	args []string,
-	logs map[string]*bytes.Buffer,
-	uid, gid int,
-	extraEnv []string,
-) (address string, cl func() error, err error) {
-	deferF := &integration.MultiCloser{}
-	cl = deferF.F()
+func getSysProcAttr() *syscall.SysProcAttr {
+	return &syscall.SysProcAttr{}
+}
 
-	defer func() {
-		if err != nil {
-			deferF.F()()
-			cl = nil
-		}
-	}()
+func getBuildkitdAddr(tmpdir string) string {
+	return "npipe:////./pipe/buildkitd-" + filepath.Base(tmpdir)
+}
 
-	tmpdir, err := os.MkdirTemp("", "bktest_buildkitd")
-	if err != nil {
-		return "", nil, err
+func getTraceSocketPath(tmpdir string) string {
+	return `\\.\pipe\buildkit-otel-grpc-` + filepath.Base(tmpdir)
+}
+
+func getContainerdSock(tmpdir string) string {
+	return `\\.\pipe\containerd-` + filepath.Base(tmpdir)
+}
+
+func getContainerdDebugSock(tmpdir string) string {
+	return `\\.\pipe\containerd-` + filepath.Base(tmpdir) + `debug`
+}
+
+// no-op for parity with unix
+func mountInfo(tmpdir string) error {
+	return nil
+}
+
+func chown(name string, uid, gid int) error {
+	// Chown not supported on Windows
+	return nil
+}
+
+func normalizeAddress(address string) string {
+	address = filepath.ToSlash(address)
+	if !strings.HasPrefix(address, "npipe://") {
+		address = "npipe://" + address
 	}
-
-	if err := os.MkdirAll(filepath.Join(tmpdir, "tmp"), 0711); err != nil {
-		return "", nil, err
-	}
-	deferF.Append(func() error { return os.RemoveAll(tmpdir) })
-
-	cfgfile, err := integration.WriteConfig(
-		append(conf.DaemonConfig, withOTELSocketPath(getTraceSocketPath(tmpdir))))
-	if err != nil {
-		return "", nil, err
-	}
-	deferF.Append(func() error {
-		return os.RemoveAll(filepath.Dir(cfgfile))
-	})
-
-	args = append(args, "--config="+cfgfile)
-	address = getBuildkitdAddr(tmpdir)
-
-	args = append(args, "--root", tmpdir, "--addr", address, "--debug")
-	cmd := exec.Command(args[0], args[1:]...) //nolint:gosec // test utility
-	cmd.Env = append(
-		os.Environ(),
-		"BUILDKIT_DEBUG_EXEC_OUTPUT=1",
-		"BUILDKIT_DEBUG_PANIC_ON_ERROR=1",
-		"TMPDIR="+filepath.Join(tmpdir, "tmp"))
-	cmd.Env = append(cmd.Env, extraEnv...)
-	cmd.SysProcAttr = getSysProcAttr()
-
-	stop, err := integration.StartCmd(cmd, logs)
-	if err != nil {
-		return "", nil, err
-	}
-	deferF.Append(stop)
-
-	if err := integration.WaitSocket(address, 15*time.Second, cmd); err != nil {
-		return "", nil, err
-	}
-
-	return address, cl, err
+	return address
 }
