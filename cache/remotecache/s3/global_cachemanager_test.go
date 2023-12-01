@@ -1,6 +1,8 @@
 package s3
 
 import (
+	_ "embed"
+	"encoding/json"
 	"sort"
 	"strconv"
 	"strings"
@@ -13,9 +15,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+//go:embed testdata/big_manifest.json
+var bigManifest string
+
+func loadBigManifest(config *v1.CacheConfig) error {
+	return json.NewDecoder(strings.NewReader(bigManifest)).Decode(config)
+}
+
 func TestMarshal(t *testing.T) {
 	var v1cfg v1.CacheConfig
-	require.NoError(t, loadMegaManifest(&v1cfg))
+	require.NoError(t, loadBigManifest(&v1cfg))
 
 	files, err := MarshallSplitManifests(&v1cfg)
 	require.NoError(t, err)
