@@ -98,6 +98,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testFileOpMkdirMkfile,
 	testFileOpCopyRm,
 	testFileOpCopyIncludeExclude,
+	testFileOpCopyAlwaysReplaceExistingDestPaths,
 	testFileOpRmWildcard,
 	testFileOpCopyUIDCache,
 	testCallDiskUsage,
@@ -1858,6 +1859,80 @@ func testFileOpCopyIncludeExclude(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	require.Equal(t, randBytes, randBytes2)
+}
+
+func testFileOpCopyAlwaysReplaceExistingDestPaths(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDirHostPath := integration.Tmpdir(t,
+		fstest.CreateDir("root", 0755),
+		fstest.CreateDir("root/overwritedir", 0755),
+		fstest.CreateFile("root/overwritedir/subfile", nil, 0755),
+		fstest.CreateFile("root/overwritefile", nil, 0755),
+		fstest.Symlink("dir", "root/overwritesymlink"),
+		fstest.CreateDir("root/dir", 0755),
+		fstest.CreateFile("root/dir/dirfile1", nil, 0755),
+		fstest.CreateDir("root/dir/overwritesubdir", 0755),
+		fstest.CreateFile("root/dir/overwritesubfile", nil, 0755),
+		fstest.Symlink("dirfile1", "root/dir/overwritesymlink"),
+	)
+	destDir := llb.Local("destDir")
+
+	srcDirHostPath := integration.Tmpdir(t,
+		fstest.CreateDir("root", 0755),
+		fstest.CreateFile("root/overwritedir", nil, 0755),
+		fstest.CreateDir("root/overwritefile", 0755),
+		fstest.CreateFile("root/overwritefile/foo", nil, 0755),
+		fstest.CreateDir("root/overwritesymlink", 0755),
+		fstest.CreateDir("root/dir", 0755),
+		fstest.CreateFile("root/dir/dirfile2", nil, 0755),
+		fstest.CreateFile("root/dir/overwritesubdir", nil, 0755),
+		fstest.CreateDir("root/dir/overwritesubfile", 0755),
+		fstest.CreateDir("root/dir/overwritesymlink", 0755),
+	)
+	srcDir := llb.Local("srcDir")
+
+	resultDir := destDir.File(llb.Copy(srcDir, "/", "/", &llb.CopyInfo{
+		CopyDirContentsOnly:            true,
+		AlwaysReplaceExistingDestPaths: true,
+	}))
+
+	def, err := resultDir.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	resultDirHostPath := t.TempDir()
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: resultDirHostPath,
+			},
+		},
+		LocalDirs: map[string]string{
+			"destDir": destDirHostPath.Name,
+			"srcDir":  srcDirHostPath.Name,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	err = fstest.CheckDirectoryEqualWithApplier(resultDirHostPath, fstest.Apply(
+		fstest.CreateDir("root", 0755),
+		fstest.CreateFile("root/overwritedir", nil, 0755),
+		fstest.CreateDir("root/overwritefile", 0755),
+		fstest.CreateFile("root/overwritefile/foo", nil, 0755),
+		fstest.CreateDir("root/overwritesymlink", 0755),
+		fstest.CreateDir("root/dir", 0755),
+		fstest.CreateFile("root/dir/dirfile1", nil, 0755),
+		fstest.CreateFile("root/dir/dirfile2", nil, 0755),
+		fstest.CreateFile("root/dir/overwritesubdir", nil, 0755),
+		fstest.CreateDir("root/dir/overwritesubfile", 0755),
+		fstest.CreateDir("root/dir/overwritesymlink", 0755),
+	))
+	require.NoError(t, err)
 }
 
 // testFileOpInputSwap is a regression test that cache is invalidated when subset of fileop is built
