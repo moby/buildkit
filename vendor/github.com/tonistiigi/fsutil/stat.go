@@ -27,7 +27,7 @@ func mkstat(path, relpath string, fi os.FileInfo, inodemap map[uint64]string) (*
 	setUnixOpt(fi, stat, relpath, inodemap)
 
 	if !fi.IsDir() {
-		stat.Size_ = fi.Size()
+		stat.Size = fi.Size()
 		if fi.Mode()&os.ModeSymlink != 0 {
 			link, err := os.Readlink(path)
 			if err != nil {
@@ -61,4 +61,23 @@ func Stat(path string) (*types.Stat, error) {
 		return nil, errors.WithStack(err)
 	}
 	return mkstat(path, filepath.Base(path), fi, nil)
+}
+
+func cloneStat(from *types.Stat) *types.Stat {
+	clone := &types.Stat{
+		Path:     from.Path,
+		Mode:     from.Mode,
+		Uid:      from.Uid,
+		Gid:      from.Gid,
+		Size:     from.Size,
+		ModTime:  from.ModTime,
+		Linkname: from.Linkname,
+		Devmajor: from.Devmajor,
+		Devminor: from.Devminor,
+		Xattrs:   make(map[string][]byte, len(from.Xattrs)),
+	}
+	for k, v := range from.Xattrs {
+		clone.Xattrs[k] = v
+	}
+	return clone
 }
