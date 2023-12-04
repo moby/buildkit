@@ -835,7 +835,7 @@ func (h *HistoryQueue) Listen(ctx context.Context, req *controlapi.BuildHistoryR
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return context.Cause(ctx)
 		case e := <-sub.ch:
 			if req.Ref != "" && req.Ref != e.Record.Ref {
 				continue

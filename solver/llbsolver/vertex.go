@@ -206,8 +206,10 @@ func recomputeDigests(ctx context.Context, all map[digest.Digest]*pb.Op, visited
 
 	var mutated bool
 	for _, input := range op.Inputs {
-		if ctx.Err() != nil {
-			return "", ctx.Err()
+		select {
+		case <-ctx.Done():
+			return "", context.Cause(ctx)
+		default:
 		}
 
 		iDgst, err := recomputeDigests(ctx, all, visited, input.Digest)

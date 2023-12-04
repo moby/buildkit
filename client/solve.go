@@ -106,8 +106,8 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	}
 	eg, ctx := errgroup.WithContext(ctx)
 
-	statusContext, cancelStatus := context.WithCancel(context.Background())
-	defer cancelStatus()
+	statusContext, cancelStatus := context.WithCancelCause(context.Background())
+	defer cancelStatus(errors.WithStack(context.Canceled))
 
 	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
 		statusContext = trace.ContextWithSpan(statusContext, span)
@@ -230,16 +230,16 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		frontendAttrs[k] = v
 	}
 
-	solveCtx, cancelSolve := context.WithCancel(ctx)
+	solveCtx, cancelSolve := context.WithCancelCause(ctx)
 	var res *SolveResponse
 	eg.Go(func() error {
 		ctx := solveCtx
-		defer cancelSolve()
+		defer cancelSolve(errors.WithStack(context.Canceled))
 
 		defer func() { // make sure the Status ends cleanly on build errors
 			go func() {
 				<-time.After(3 * time.Second)
-				cancelStatus()
+				cancelStatus(errors.WithStack(context.Canceled))
 			}()
 			if !opt.SessionPreInitialized {
 				bklog.G(ctx).Debugf("stopping session")
@@ -298,7 +298,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			select {
 			case <-solveCtx.Done():
 			case <-time.After(5 * time.Second):
-				cancelSolve()
+				cancelSolve(errors.WithStack(context.Canceled))
 			}
 
 			return err

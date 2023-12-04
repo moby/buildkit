@@ -70,7 +70,7 @@ func (c *client) UploadTraces(ctx context.Context, protoSpans []*tracepb.Resourc
 	}
 
 	ctx, cancel := c.connection.ContextWithStop(ctx)
-	defer cancel()
+	defer cancel(errors.WithStack(context.Canceled))
 	ctx, tCancel := context.WithTimeout(ctx, 30*time.Second)
 	defer tCancel()
 

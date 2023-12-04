@@ -369,7 +369,7 @@ func exitError(ctx context.Context, err error) error {
 		)
 		select {
 		case <-ctx.Done():
-			exitErr.Err = errors.Wrapf(ctx.Err(), exitErr.Error())
+			exitErr.Err = errors.Wrapf(context.Cause(ctx), exitErr.Error())
 			return exitErr
 		default:
 			return stack.Enable(exitErr)
@@ -402,7 +402,7 @@ func (w *runcExecutor) Exec(ctx context.Context, id string, process executor.Pro
 		}
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return context.Cause(ctx)
 		case err, ok := <-done:
 			if !ok || err == nil {
 				return errors.Errorf("container %s has stopped", id)
@@ -580,7 +580,7 @@ type procHandle struct {
 	monitorProcess *os.Process
 	ready          chan struct{}
 	ended          chan struct{}
-	shutdown       func()
+	shutdown       func(error)
 	// this this only used when the request context is canceled and we need
 	// to kill the in-container process.
 	killer procKiller
@@ -594,7 +594,7 @@ type procHandle struct {
 // The goal is to allow for runc to gracefully shutdown when the request context
 // is cancelled.
 func runcProcessHandle(ctx context.Context, killer procKiller) (*procHandle, context.Context) {
-	runcCtx, cancel := context.WithCancel(context.Background())
+	runcCtx, cancel := context.WithCancelCause(context.Background())
 	p := &procHandle{
 		ready:    make(chan struct{}),
 		ended:    make(chan struct{}),
@@ -620,7 +620,7 @@ func runcProcessHandle(ctx context.Context, killer procKiller) (*procHandle, con
 					select {
 					case <-killCtx.Done():
 						timeout()
-						cancel()
+						cancel(errors.WithStack(context.Cause(ctx)))
 						return
 					default:
 					}
@@ -653,7 +653,7 @@ func (p *procHandle) Release() {
 // goroutines.
 func (p *procHandle) Shutdown() {
 	if p.shutdown != nil {
-		p.shutdown()
+		p.shutdown(errors.WithStack(context.Canceled))
 	}
 }
 
@@ -663,7 +663,7 @@ func (p *procHandle) Shutdown() {
 func (p *procHandle) WaitForReady(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return context.Cause(ctx)
 	case <-p.ready:
 		return nil
 	}

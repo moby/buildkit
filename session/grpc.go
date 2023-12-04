@@ -74,14 +74,14 @@ func grpcClientConn(ctx context.Context, conn net.Conn) (context.Context, *grpc.
 		return nil, nil, errors.Wrap(err, "failed to create grpc client")
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancelCause(ctx)
 	go monitorHealth(ctx, cc, cancel)
 
 	return ctx, cc, nil
 }
 
-func monitorHealth(ctx context.Context, cc *grpc.ClientConn, cancelConn func()) {
-	defer cancelConn()
+func monitorHealth(ctx context.Context, cc *grpc.ClientConn, cancelConn func(error)) {
+	defer cancelConn(errors.WithStack(context.Canceled))
 	defer cc.Close()
 
 	ticker := time.NewTicker(5 * time.Second)

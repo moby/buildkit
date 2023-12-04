@@ -1266,8 +1266,8 @@ func testClientGatewayContainerCancelExecTty(t *testing.T, sb integration.Sandbo
 		defer pid1.Wait()
 		defer ctr.Release(ctx)
 
-		execCtx, cancel := context.WithCancel(ctx)
-		defer cancel()
+		execCtx, cancel := context.WithCancelCause(ctx)
+		defer cancel(errors.WithStack(context.Canceled))
 
 		prompt := newTestPrompt(execCtx, t, inputW, output)
 		pid2, err := ctr.Start(execCtx, client.StartRequest{
@@ -1281,7 +1281,7 @@ func testClientGatewayContainerCancelExecTty(t *testing.T, sb integration.Sandbo
 		require.NoError(t, err)
 
 		prompt.SendExpect("echo hi", "hi")
-		cancel()
+		cancel(errors.WithStack(context.Canceled))
 
 		err = pid2.Wait()
 		require.ErrorIs(t, err, context.Canceled)

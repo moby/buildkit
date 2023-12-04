@@ -456,7 +456,7 @@ func newBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridg
 }
 
 func serveLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers worker.Infos, inputs map[string]*opspb.Definition, sid string, sm *session.Manager) (*llbBridgeForwarder, context.Context, error) {
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancelCause(ctx)
 	lbf := newBridgeForwarder(ctx, llbBridge, workers, inputs, sid, sm)
 	server := grpc.NewServer(grpc.UnaryInterceptor(grpcerrors.UnaryServerInterceptor), grpc.StreamInterceptor(grpcerrors.StreamServerInterceptor))
 	grpc_health_v1.RegisterHealthServer(server, health.NewServer())
@@ -469,7 +469,7 @@ func serveLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLB
 		default:
 			lbf.isErrServerClosed = true
 		}
-		cancel()
+		cancel(errors.WithStack(context.Canceled))
 	}()
 
 	return lbf, ctx, nil
@@ -1322,8 +1322,8 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 					return stack.Enable(status.Errorf(codes.NotFound, "container %q previously released or not created", id))
 				}
 
-				initCtx, initCancel := context.WithCancel(context.Background())
-				defer initCancel()
+				initCtx, initCancel := context.WithCancelCause(context.Background())
+				defer initCancel(errors.WithStack(context.Canceled))
 
 				pio := newProcessIO(pid, init.Fds)
 				pios[pid] = pio

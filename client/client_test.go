@@ -7407,8 +7407,8 @@ func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
 
 // moby/buildkit#492
 func testParallelLocalBuilds(t *testing.T, sb integration.Sandbox) {
-	ctx, cancel := context.WithCancel(sb.Context())
-	defer cancel()
+	ctx, cancel := context.WithCancelCause(sb.Context())
+	defer cancel(errors.WithStack(context.Canceled))
 
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)

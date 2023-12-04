@@ -33,6 +33,7 @@ import (
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/progress/logs"
 	"github.com/moby/buildkit/util/winlayers"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
@@ -663,7 +664,7 @@ func logProgressStreams(ctx context.Context, t *testing.T) context.Context {
 	pr, ctx, cancel := progress.NewContext(ctx)
 	done := make(chan struct{})
 	t.Cleanup(func() {
-		cancel()
+		cancel(errors.WithStack(context.Canceled))
 		<-done
 	})
 	go func() {

@@ -243,7 +243,7 @@ func (w *containerdExecutor) Exec(ctx context.Context, id string, process execut
 		}
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return context.Cause(ctx)
 		case err, ok := <-details.done:
 			if !ok || err == nil {
 				return errors.Errorf("container %s has stopped", id)
@@ -336,8 +336,8 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Proces
 
 	// handle signals (and resize) in separate go loop so it does not
 	// potentially block the container cancel/exit status loop below.
-	eventCtx, eventCancel := context.WithCancel(ctx)
-	defer eventCancel()
+	eventCtx, eventCancel := context.WithCancelCause(ctx)
+	defer eventCancel(errors.WithStack(context.Canceled))
 	go func() {
 		for {
 			select {
@@ -403,7 +403,7 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Proces
 				}
 				select {
 				case <-ctx.Done():
-					exitErr.Err = errors.Wrap(ctx.Err(), exitErr.Error())
+					exitErr.Err = errors.Wrap(context.Cause(ctx), exitErr.Error())
 				default:
 				}
 				return exitErr

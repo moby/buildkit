@@ -223,8 +223,8 @@ func main() {
 		if os.Geteuid() > 0 {
 			return errors.New("rootless mode requires to be executed as the mapped root in a user namespace; you may use RootlessKit for setting up the namespace")
 		}
-		ctx, cancel := context.WithCancel(appcontext.Context())
-		defer cancel()
+		ctx, cancel := context.WithCancelCause(appcontext.Context())
+		defer cancel(errors.WithStack(context.Canceled))
 
 		cfg, err := config.LoadFile(c.GlobalString("config"))
 		if err != nil {
@@ -344,9 +344,9 @@ func main() {
 		select {
 		case serverErr := <-errCh:
 			err = serverErr
-			cancel()
+			cancel(err)
 		case <-ctx.Done():
-			err = ctx.Err()
+			err = context.Cause(ctx)
 		}
 
 		bklog.G(ctx).Infof("stopping server")
@@ -634,14 +634,14 @@ func unaryInterceptor(globalCtx context.Context, tp trace.TracerProvider) grpc.U
 	withTrace := otelgrpc.UnaryServerInterceptor(otelgrpc.WithTracerProvider(tp), otelgrpc.WithPropagators(propagators))
 
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
-		ctx, cancel := context.WithCancel(ctx)
-		defer cancel()
+		ctx, cancel := context.WithCancelCause(ctx)
+		defer cancel(errors.WithStack(context.Canceled))
 
 		go func() {
 			select {
 			case <-ctx.Done():
 			case <-globalCtx.Done():
-				cancel()
+				cancel(context.Cause(globalCtx))
 			}
 		}()
 

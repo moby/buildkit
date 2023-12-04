@@ -205,7 +205,7 @@ func (c *Client) Wait(ctx context.Context) error {
 
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return context.Cause(ctx)
 		case <-time.After(time.Second):
 		}
 		c.conn.ResetConnectBackoff()

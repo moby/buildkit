@@ -14,7 +14,7 @@ func TestPipe(t *testing.T) {
 	f := func(ctx context.Context) (interface{}, error) {
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, context.Cause(ctx)
 		case <-runCh:
 			return "res0", nil
 		}
@@ -56,7 +56,7 @@ func TestPipeCancel(t *testing.T) {
 	f := func(ctx context.Context) (interface{}, error) {
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, context.Cause(ctx)
 		case <-runCh:
 			return "res0", nil
 		}
@@ -88,5 +88,5 @@ func TestPipeCancel(t *testing.T) {
 	require.Equal(t, st.Completed, true)
 	require.Equal(t, st.Canceled, true)
 	require.Error(t, st.Err)
-	require.Equal(t, st.Err, context.Canceled)
+	require.ErrorIs(t, st.Err, context.Canceled)
 }
