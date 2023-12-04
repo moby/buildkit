@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/containerd/console"
+	"github.com/mattn/go-runewidth"
 	"github.com/moby/buildkit/client"
 	"github.com/morikuni/aec"
 	digest "github.com/opencontainers/go-digest"
@@ -1027,12 +1028,8 @@ func (disp *ttyDisplay) print(d displayInfo, width, height int, all bool) {
 		if left < 12 { // too small screen to show progress
 			continue
 		}
-		name := j.name
-		if len(name) > left {
-			name = name[:left]
-		}
 
-		out := pfx + name
+		out := pfx + j.name
 		if showStatus {
 			out += " " + status
 		}
@@ -1088,7 +1085,10 @@ func isEmpty(l []rune) bool {
 }
 
 func align(l, r string, w int) string {
-	return fmt.Sprintf("%-[2]*[1]s %[3]s", l, w-len(r)-1, r)
+	leftWidth := w - 1 - runewidth.StringWidth(r)
+	l = runewidth.FillRight(runewidth.Truncate(l, leftWidth, ""), leftWidth)
+
+	return l + " " + r
 }
 
 func wrapHeight(j []*job, limit int) []*job {
