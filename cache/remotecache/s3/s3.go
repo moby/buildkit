@@ -28,6 +28,7 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -188,63 +189,80 @@ func (e *exporter) FinalizeWithChain(ctx context.Context, cacheConfig *v1.CacheC
 }
 
 func (e *exporter) finalizeBlobs(ctx context.Context, cacheConfig *v1.CacheConfig, descs v1.DescriptorProvider) error {
-	for i, l := range cacheConfig.Layers {
-		dgstPair, ok := descs[l.Blob]
-		if !ok {
-			return errors.Errorf("missing blob %s", l.Blob)
+	g, ctx := errgroup.WithContext(ctx)
+	parallelism := 5
+	tasks := make(chan int, parallelism)
+	go func() {
+		for i := range cacheConfig.Layers {
+			tasks <- i
 		}
-		if dgstPair.Descriptor.Annotations == nil {
-			return errors.Errorf("invalid descriptor without annotations")
-		}
-		v, ok := dgstPair.Descriptor.Annotations[labels.LabelUncompressed]
-		if !ok {
-			return errors.Errorf("invalid descriptor without uncompressed annotation")
-		}
-		diffID, err := digest.Parse(v)
-		if err != nil {
-			return errors.Wrapf(err, "failed to parse uncompressed annotation")
-		}
+		close(tasks)
+	}()
 
-		key := e.s3Client.blobKey(dgstPair.Descriptor.Digest)
-		exists, err := e.s3Client.exists(ctx, key)
-		if err != nil {
-			return errors.Wrapf(err, "failed to check file presence in cache")
-		}
+	for i := 0; i < parallelism; i++ {
+		g.Go(func() error {
+			for l := range tasks {
 
-		if exists != nil {
-			if time.Since(*exists) > e.config.TouchRefresh {
-				err = e.s3Client.touch(ctx, key)
-				if err != nil {
-					return errors.Wrapf(err, "failed to touch file")
+				dgstPair, ok := descs[l.Blob]
+				if !ok {
+					return errors.Errorf("missing blob %s", l.Blob)
 				}
-			}
-		} else {
-			layerDone := progress.OneOff(ctx, fmt.Sprintf("writing layer %s", l.Blob))
-			dt, err := content.ReadBlob(ctx, dgstPair.Provider, dgstPair.Descriptor)
-			if err != nil {
-				return layerDone(err)
-			}
-			if err := e.s3Client.saveMutable(ctx, key, dt); err != nil {
-				return layerDone(errors.Wrap(err, "error writing layer blob"))
-			}
-			layerDone(nil)
-		}
+				if dgstPair.Descriptor.Annotations == nil {
+					return errors.Errorf("invalid descriptor without annotations")
+				}
+				v, ok := dgstPair.Descriptor.Annotations[labels.LabelUncompressed]
+				if !ok {
+					return errors.Errorf("invalid descriptor without uncompressed annotation")
+				}
+				diffID, err := digest.Parse(v)
+				if err != nil {
+					return errors.Wrapf(err, "failed to parse uncompressed annotation")
+				}
 
-		la := &v1.LayerAnnotations{
-			DiffID:    diffID,
-			Size:      dgstPair.Descriptor.Size,
-			MediaType: dgstPair.Descriptor.MediaType,
-		}
-		if v, ok := dgstPair.Descriptor.Annotations["buildkit/createdat"]; ok {
-			var t time.Time
-			if err := (&t).UnmarshalText([]byte(v)); err != nil {
-				return err
+				key := e.s3Client.blobKey(dgstPair.Descriptor.Digest)
+				exists, err := e.s3Client.exists(ctx, key)
+				if err != nil {
+					return errors.Wrapf(err, "failed to check file presence in cache")
+				}
+
+				if exists != nil {
+					if time.Since(*exists) > e.config.TouchRefresh {
+						err = e.s3Client.touch(ctx, key)
+						if err != nil {
+							return errors.Wrapf(err, "failed to touch file")
+						}
+					}
+				} else {
+					layerDone := progress.OneOff(ctx, fmt.Sprintf("writing layer %s", l.Blob))
+					dt, err := content.ReadBlob(ctx, dgstPair.Provider, dgstPair.Descriptor)
+					if err != nil {
+						return layerDone(err)
+					}
+					if err := e.s3Client.saveMutable(ctx, key, dt); err != nil {
+						return layerDone(errors.Wrap(err, "error writing layer blob"))
+					}
+					layerDone(nil)
+				}
+
+				la := &v1.LayerAnnotations{
+					DiffID:    diffID,
+					Size:      dgstPair.Descriptor.Size,
+					MediaType: dgstPair.Descriptor.MediaType,
+				}
+				if v, ok := dgstPair.Descriptor.Annotations["buildkit/createdat"]; ok {
+					var t time.Time
+					if err := (&t).UnmarshalText([]byte(v)); err != nil {
+						return err
+					}
+					la.CreatedAt = t.UTC()
+				}
+				cacheConfig.Layers[i].Annotations = la
+				return nil
 			}
-			la.CreatedAt = t.UTC()
-		}
-		cacheConfig.Layers[i].Annotations = la
+		})
 	}
-	return nil
+
+	return g.Wait()
 }
 
 func (e *exporter) finalizeManifest(ctx context.Context, cacheConfig *v1.CacheConfig) error {
