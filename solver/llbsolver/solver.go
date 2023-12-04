@@ -153,7 +153,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 	var stopTrace func() []tracetest.SpanStub
 
 	if s := trace.SpanFromContext(ctx); s.SpanContext().IsValid() {
-		if exp, err := detect.Exporter(); err == nil {
+		if exp, _, err := detect.Exporter(); err == nil {
 			if rec, ok := exp.(*detect.TraceRecorder); ok {
 				stopTrace = rec.Record(s.SpanContext().TraceID())
 			}

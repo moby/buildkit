@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/net/trace"
 )
 
@@ -27,6 +28,8 @@ func setupDebugHandlers(addr string) error {
 		runtime.GC()
 		bklog.G(req.Context()).Debugf("triggered GC from debug endpoint")
 	}))
+
+	m.Handle("/metrics", promhttp.Handler())
 
 	// setting debugaddr is opt-in. permission is defined by listener address
 	trace.AuthRequest = func(_ *http.Request) (bool, bool) {
