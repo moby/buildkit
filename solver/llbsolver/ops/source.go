@@ -90,7 +90,7 @@ func (s *SourceOp) CacheMap(ctx context.Context, g session.Group, index int) (*s
 
 	dgst := digest.FromBytes([]byte(sourceCacheType + ":" + k))
 	if strings.HasPrefix(k, "session:") {
-		dgst = digest.Digest("random:" + strings.TrimPrefix(dgst.String(), dgst.Algorithm().String()+":"))
+		dgst = digest.Digest("random:" + dgst.Encoded())
 	}
 
 	return &solver.CacheMap{
