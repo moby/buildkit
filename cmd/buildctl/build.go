@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/containerd/continuity"
 	"github.com/docker/cli/cli/config"
@@ -109,6 +110,10 @@ var buildCommand = cli.Command{
 			Name:  "registry-auth-tlscontext",
 			Usage: "Overwrite TLS configuration when authenticating with registries, e.g. --registry-auth-tlscontext host=https://myserver:2376,insecure=false,ca=/path/to/my/ca.crt,cert=/path/to/my/cert.crt,key=/path/to/my/key.crt",
 		},
+		cli.StringFlag{
+			Name:  "json-cache-metrics",
+			Usage: "Where to output json cache metrics, use 'stdout' or 'stderr' for standard (error) output.",
+		},
 	},
 }
 
@@ -143,7 +148,21 @@ func openTraceFile(clicontext *cli.Context) (*os.File, error) {
 	return nil, nil
 }
 
+func openCacheMetricsFile(clicontext *cli.Context) (*os.File, error) {
+	switch out := clicontext.String("json-cache-metrics"); out {
+	case "stdout":
+		return os.Stdout, nil
+	case "stderr":
+		return os.Stderr, nil
+	case "":
+		return nil, nil
+	default:
+		return os.OpenFile(out, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0600)
+	}
+}
+
 func buildAction(clicontext *cli.Context) error {
+	startTime := time.Now()
 	c, err := bccommon.ResolveClient(clicontext)
 	if err != nil {
 		return err
@@ -153,6 +172,11 @@ func buildAction(clicontext *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	cacheMetricsFile, err := openCacheMetricsFile(clicontext)
+	if err != nil {
+		return err
+	}
+
 	var traceEnc *json.Encoder
 	if traceFile != nil {
 		defer traceFile.Close()
@@ -296,6 +320,23 @@ func buildAction(clicontext *cli.Context) error {
 			return nil
 		})
 	}
+	meg, ctx := errgroup.WithContext(bccommon.CommandContext(clicontext))
+	if cacheMetricsFile != nil {
+		bklog.L.Infof("writing JSON cache metrics to %s", cacheMetricsFile.Name())
+		metricsCh := make(chan *client.SolveStatus)
+		pw = progresswriter.Tee(pw, metricsCh)
+		meg.Go(func() error {
+			vtxMap := tailVTXInfo(ctx, pw, metricsCh)
+			if cacheMetricsFile == os.Stdout || cacheMetricsFile == os.Stdin {
+				// make sure everything was printed out to get it as the last line.
+				eg.Wait()
+			} else {
+				defer cacheMetricsFile.Close()
+			}
+			outputCacheMetrics(cacheMetricsFile, startTime, vtxMap)
+			return nil
+		})
+	}
 	mw := progresswriter.NewMultiWriter(pw)
 
 	var writers []progresswriter.Writer
@@ -378,6 +419,9 @@ func buildAction(clicontext *cli.Context) error {
 			}
 		}
 	}
+
+	meg.Wait()
+
 	return nil
 }
 
