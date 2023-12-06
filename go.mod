@@ -1,6 +1,8 @@
 module github.com/moby/buildkit
 
-go 1.21
+go 1.21.3
+
+toolchain go1.21.4
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0
@@ -162,4 +164,9 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20230711160842-782d3b101e98 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	kernel.org/pub/linux/libs/security/libcap/psx v1.2.67 // indirect
+)
+
+require (
+	github.com/azr/codenam v1.0.1 // indirect
+	github.com/emicklei/dot v1.6.0 // indirect
 )
