@@ -371,7 +371,7 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Proces
 		}
 	}()
 
-	var cancel func()
+	var cancel func(error)
 	var killCtxDone <-chan struct{}
 	ctxDone := ctx.Done()
 	for {
@@ -379,13 +379,14 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Proces
 		case <-ctxDone:
 			ctxDone = nil
 			var killCtx context.Context
-			killCtx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
+			killCtx, cancel = context.WithCancelCause(context.Background())
+			killCtx, _ = context.WithTimeoutCause(killCtx, 10*time.Second, errors.WithStack(context.DeadlineExceeded))
 			killCtxDone = killCtx.Done()
 			p.Kill(killCtx, syscall.SIGKILL)
 			io.Cancel()
 		case status := <-statusCh:
 			if cancel != nil {
-				cancel()
+				cancel(errors.WithStack(context.Canceled))
 			}
 			trace.SpanFromContext(ctx).AddEvent(
 				"Container exited",
@@ -411,7 +412,7 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Proces
 			return nil
 		case <-killCtxDone:
 			if cancel != nil {
-				cancel()
+				cancel(errors.WithStack(context.Canceled))
 			}
 			io.Cancel()
 			return errors.Errorf("failed to kill process on cancel")

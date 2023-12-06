@@ -532,8 +532,9 @@ func (k procKiller) Kill(ctx context.Context) (err error) {
 
 	// this timeout is generally a no-op, the Kill ctx should already have a
 	// shorter timeout but here as a fail-safe for future refactoring.
-	ctx, timeout := context.WithTimeout(ctx, 10*time.Second)
-	defer timeout()
+	ctx, cancel := context.WithCancelCause(ctx)
+	ctx, _ = context.WithTimeoutCause(ctx, 10*time.Second, errors.WithStack(context.DeadlineExceeded))
+	defer cancel(errors.WithStack(context.Canceled))
 
 	if k.pidfile == "" {
 		// for `runc run` process we use `runc kill` to terminate the process
@@ -615,17 +616,17 @@ func runcProcessHandle(ctx context.Context, killer procKiller) (*procHandle, con
 		for {
 			select {
 			case <-ctx.Done():
-				killCtx, timeout := context.WithTimeout(context.Background(), 7*time.Second)
+				killCtx, timeout := context.WithCancelCause(context.Background())
+				killCtx, _ = context.WithTimeoutCause(killCtx, 7*time.Second, errors.WithStack(context.DeadlineExceeded))
 				if err := p.killer.Kill(killCtx); err != nil {
 					select {
 					case <-killCtx.Done():
-						timeout()
 						cancel(errors.WithStack(context.Cause(ctx)))
 						return
 					default:
 					}
 				}
-				timeout()
+				timeout(errors.WithStack(context.Canceled))
 				select {
 				case <-time.After(50 * time.Millisecond):
 				case <-p.ended:
@@ -673,10 +674,11 @@ func (p *procHandle) WaitForReady(ctx context.Context) error {
 // We wait for up to 10s for the runc pid to be reported.  If the started
 // callback is non-nil it will be called after receiving the pid.
 func (p *procHandle) WaitForStart(ctx context.Context, startedCh <-chan int, started func()) error {
-	startedCtx, timeout := context.WithTimeout(ctx, 10*time.Second)
-	defer timeout()
+	ctx, cancel := context.WithCancelCause(ctx)
+	ctx, _ = context.WithTimeoutCause(ctx, 10*time.Second, errors.WithStack(context.DeadlineExceeded))
+	defer cancel(errors.WithStack(context.Canceled))
 	select {
-	case <-startedCtx.Done():
+	case <-ctx.Done():
 		return errors.New("go-runc started message never received")
 	case runcPid, ok := <-startedCh:
 		if !ok {

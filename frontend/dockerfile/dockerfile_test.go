@@ -2692,8 +2692,9 @@ COPY . .
 		fstest.CreateFile(".dockerignore", []byte("!\n"), 0600),
 	)
 
-	ctx, cancel := context.WithTimeout(sb.Context(), 15*time.Second)
-	defer cancel()
+	ctx, cancel := context.WithCancelCause(sb.Context())
+	ctx, _ = context.WithTimeoutCause(ctx, 15*time.Second, errors.WithStack(context.DeadlineExceeded))
+	defer cancel(errors.WithStack(context.Canceled))
 
 	c, err := client.New(ctx, sb.Address())
 	require.NoError(t, err)

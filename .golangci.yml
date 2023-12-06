@@ -42,6 +42,8 @@ linters-settings:
       - '^fmt\.Errorf(# use errors\.Errorf instead)?$'
       - '^logrus\.(Trace|Debug|Info|Warn|Warning|Error|Fatal)(f|ln)?(# use bklog\.G or bklog\.L instead of logrus directly)?$'
       - '^context\.WithCancel(# use context\.WithCancelCause instead)?$'
+      - '^context\.WithTimeout(# use context\.WithTimeoutCause instead)?$'
+      - '^context\.WithDeadline(# use context\.WithDeadline instead)?$'
       - '^ctx\.Err(# use context\.Cause instead)?$'
   importas:
     alias:

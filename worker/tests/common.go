@@ -49,7 +49,7 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 	id := identity.NewID()
 
 	// verify pid1 exits when stdin sees EOF
-	ctxTimeout, cancelTimeout := context.WithTimeout(ctx, 5*time.Second)
+	ctxTimeout, cancelTimeout := context.WithTimeoutCause(ctx, 5*time.Second, nil)
 	started := make(chan struct{})
 	pipeR, pipeW := io.Pipe()
 	go func() {

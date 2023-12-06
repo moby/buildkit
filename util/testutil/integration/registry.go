@@ -67,8 +67,9 @@ http:
 	}
 	deferF.Append(stop)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	ctx, cancel := context.WithCancelCause(context.Background())
+	ctx, _ = context.WithTimeoutCause(ctx, 5*time.Second, errors.WithStack(context.DeadlineExceeded))
+	defer cancel(errors.WithStack(context.Canceled))
 	url, err = detectPort(ctx, rc)
 	if err != nil {
 		return "", nil, err

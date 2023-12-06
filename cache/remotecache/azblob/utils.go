@@ -133,8 +133,9 @@ func createContainerClient(ctx context.Context, config *Config) (*azblob.Contain
 		}
 	}
 
-	ctx, cnclFn := context.WithTimeout(ctx, time.Second*60)
-	defer cnclFn()
+	ctx, cnclFn := context.WithCancelCause(ctx)
+	ctx, _ = context.WithTimeoutCause(ctx, time.Second*60, errors.WithStack(context.DeadlineExceeded))
+	defer cnclFn(errors.WithStack(context.Canceled))
 
 	containerClient, err := serviceClient.NewContainerClient(config.Container)
 	if err != nil {
@@ -148,8 +149,9 @@ func createContainerClient(ctx context.Context, config *Config) (*azblob.Contain
 
 	var se *azblob.StorageError
 	if errors.As(err, &se) && se.ErrorCode == azblob.StorageErrorCodeContainerNotFound {
-		ctx, cnclFn := context.WithTimeout(ctx, time.Minute*5)
-		defer cnclFn()
+		ctx, cnclFn := context.WithCancelCause(ctx)
+		ctx, _ = context.WithTimeoutCause(ctx, time.Minute*5, errors.WithStack(context.DeadlineExceeded))
+		defer cnclFn(errors.WithStack(context.Canceled))
 		_, err := containerClient.Create(ctx, &azblob.ContainerCreateOptions{})
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to create cache container %s", config.Container)
@@ -177,8 +179,9 @@ func blobExists(ctx context.Context, containerClient *azblob.ContainerClient, bl
 		return false, errors.Wrap(err, "error creating blob client")
 	}
 
-	ctx, cnclFn := context.WithTimeout(ctx, time.Second*60)
-	defer cnclFn()
+	ctx, cnclFn := context.WithCancelCause(ctx)
+	ctx, _ = context.WithTimeoutCause(ctx, time.Second*60, errors.WithStack(context.DeadlineExceeded))
+	defer cnclFn(errors.WithStack(context.Canceled))
 	_, err = blobClient.GetProperties(ctx, &azblob.BlobGetPropertiesOptions{})
 	if err == nil {
 		return true, nil
