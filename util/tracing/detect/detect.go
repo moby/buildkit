@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/tracing/tracelogger"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -85,6 +85,9 @@ func getExporter() (sdktrace.SpanExporter, error) {
 	if Recorder != nil {
 		Recorder.SpanExporter = exp
 		exp = Recorder
+
+		// enable log with traceID when a valid exporter was detected.
+		tracelogger.Enable(true)
 	}
 	return exp, nil
 }
@@ -96,9 +99,6 @@ func detect() error {
 	if err != nil || exp == nil {
 		return err
 	}
-
-	// enable log with traceID when valid exporter
-	bklog.EnableLogWithTraceID(true)
 
 	res, err := resource.Detect(context.Background(), serviceNameDetector{})
 	if err != nil {
