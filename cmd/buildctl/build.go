@@ -111,7 +111,7 @@ var buildCommand = cli.Command{
 			Usage: "Overwrite TLS configuration when authenticating with registries, e.g. --registry-auth-tlscontext host=https://myserver:2376,insecure=false,ca=/path/to/my/ca.crt,cert=/path/to/my/cert.crt,key=/path/to/my/key.crt",
 		},
 		cli.StringFlag{
-			Name:  "json-cache-metrics",
+			Name:  "debug-json-cache-metrics",
 			Usage: "Where to output json cache metrics, use 'stdout' or 'stderr' for standard (error) output.",
 		},
 	},
@@ -149,7 +149,7 @@ func openTraceFile(clicontext *cli.Context) (*os.File, error) {
 }
 
 func openCacheMetricsFile(clicontext *cli.Context) (*os.File, error) {
-	switch out := clicontext.String("json-cache-metrics"); out {
+	switch out := clicontext.String("debug-json-cache-metrics"); out {
 	case "stdout":
 		return os.Stdout, nil
 	case "stderr":
