@@ -2,7 +2,6 @@ package cacheimport
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
 
@@ -22,10 +21,12 @@ type CacheChains struct {
 }
 
 func (c *CacheChains) Add(dgst digest.Digest) solver.CacheExporterRecord {
-	if strings.HasPrefix(dgst.String(), "random:") {
-		return &nopRecord{}
+	it := &item{
+		c:           c,
+		dgst:        dgst,
+		backlinks:   map[*item]struct{}{},
+		skipContent: dgst.Algorithm() == "random",
 	}
-	it := &item{c: c, dgst: dgst, backlinks: map[*item]struct{}{}}
 	c.items = append(c.items, it)
 	return it
 }
@@ -120,6 +121,7 @@ type item struct {
 	backlinksMu sync.Mutex
 	backlinks   map[*item]struct{}
 	invalid     bool
+	skipContent bool
 }
 
 type link struct {
@@ -147,6 +149,9 @@ func (c *item) removeLink(src *item) bool {
 }
 
 func (c *item) AddResult(_ digest.Digest, _ int, createdAt time.Time, result *solver.Remote) {
+	if c.skipContent {
+		return
+	}
 	c.resultTime = createdAt
 	c.result = result
 }
@@ -209,15 +214,6 @@ func (c *item) walkAllResults(fn func(i *item) error, visited map[*item]struct{}
 		}
 	}
 	return nil
-}
-
-type nopRecord struct {
-}
-
-func (c *nopRecord) AddResult(_ digest.Digest, _ int, createdAt time.Time, result *solver.Remote) {
-}
-
-func (c *nopRecord) LinkFrom(rec solver.CacheExporterRecord, index int, selector string) {
 }
 
 var _ solver.CacheExporterTarget = &CacheChains{}

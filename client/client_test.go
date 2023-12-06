@@ -56,6 +56,7 @@ import (
 	"github.com/moby/buildkit/util/attestation"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/entitlements"
+	"github.com/moby/buildkit/util/staticfs"
 	"github.com/moby/buildkit/util/testutil"
 	containerdutil "github.com/moby/buildkit/util/testutil/containerd"
 	"github.com/moby/buildkit/util/testutil/echoserver"
@@ -68,6 +69,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spdx/tools-golang/spdx"
 	"github.com/stretchr/testify/require"
+	"github.com/tonistiigi/fsutil"
+	"github.com/tonistiigi/fsutil/types"
 	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -208,6 +211,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testSnapshotWithMultipleBlobs,
 	testExportLocalNoPlatformSplit,
 	testExportLocalNoPlatformSplitOverwrite,
+	testExportStableLocalCache,
 }
 
 func TestIntegration(t *testing.T) {
@@ -9470,6 +9474,111 @@ func testMountStubsTimestamp(t *testing.T, sb integration.Sandbox) {
 		require.NotNil(t, hd, name)
 		require.Equal(t, sourceDateEpoch, hd.ModTime.Unix(), name)
 	}
+}
+
+func testExportStableLocalCache(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	workers.CheckFeatureCompat(t, sb,
+		workers.FeatureCacheExport,
+		workers.FeatureCacheImport,
+		workers.FeatureCacheBackendRegistry,
+	)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+	target := registry + "/buildkit/testrandomcache:latest"
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	sessionID := make(chan string)
+	done := make(chan struct{})
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		sessionID <- c.BuildOpts().SessionID
+		<-done
+		return nil, nil
+	}
+	defer close(done)
+	mylocal := staticfs.NewFS()
+	mylocal.Add("foo", types.Stat{Mode: 0644}, []byte("bar"))
+	go c.Build(sb.Context(), SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			"mylocal": mylocal,
+		},
+	}, "", frontend, nil)
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Local("mylocal", llb.SessionID(<-sessionID))
+
+	run := func(cmd string) {
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+
+	run(`sh -c "cat /wd/foo > const"`)
+	run(`sh -c "cat /dev/urandom | head -c 100 | sha256sum > unique"`)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		CacheExports: []CacheOptionsEntry{{
+			Type: "registry",
+			Attrs: map[string]string{
+				"ref": target,
+			},
+		}},
+		LocalMounts: map[string]fsutil.FS{
+			"mylocal": mylocal,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "const"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "bar")
+	dt, err = os.ReadFile(filepath.Join(destDir, "unique"))
+	require.NoError(t, err)
+
+	ensurePruneAll(t, c, sb)
+
+	destDir = t.TempDir()
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			}},
+		CacheImports: []CacheOptionsEntry{{
+			Type: "registry",
+			Attrs: map[string]string{
+				"ref": target,
+			},
+		}},
+		LocalMounts: map[string]fsutil.FS{
+			"mylocal": mylocal,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt2, err := os.ReadFile(filepath.Join(destDir, "const"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt2), "bar")
+	dt2, err = os.ReadFile(filepath.Join(destDir, "unique"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), string(dt2))
 }
 
 func ensureFile(t *testing.T, path string) {
