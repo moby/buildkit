@@ -26,7 +26,10 @@ type detector struct {
 var ServiceName string
 var Recorder *TraceRecorder
 
-var detectors map[string]detector
+var detectors = map[string]detector{
+	"otlp": {f: otlpExporter, priority: 10},
+}
+
 var once sync.Once
 var tp trace.TracerProvider
 var exporter sdktrace.SpanExporter
