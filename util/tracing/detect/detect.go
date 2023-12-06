@@ -31,7 +31,7 @@ var once sync.Once
 var tp trace.TracerProvider
 var exporter sdktrace.SpanExporter
 var closers []func(context.Context) error
-var err error
+var errDetect error
 
 func Register(name string, exp ExporterDetector, priority int) {
 	if detectors == nil {
@@ -122,13 +122,13 @@ func detect() error {
 
 func TracerProvider() (trace.TracerProvider, error) {
 	once.Do(func() {
-		if err1 := detect(); err1 != nil {
-			err = err1
+		if err := detect(); err != nil {
+			errDetect = err
 		}
 	})
 	b, _ := strconv.ParseBool(os.Getenv("OTEL_IGNORE_ERROR"))
-	if err != nil && !b {
-		return nil, err
+	if errDetect != nil && !b {
+		return nil, errDetect
 	}
 	return tp, nil
 }
