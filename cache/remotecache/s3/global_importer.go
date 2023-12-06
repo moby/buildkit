@@ -40,7 +40,10 @@ func ResolveGlobalCacheImporterFunc() remotecache.ResolveCacheImporterFunc {
 				worker:   w,
 				getByID:  map[string]item{},
 			}
-			gki := &globalKeyImporter{gi}
+			gki := &globalKeyImporter{
+				gi,
+				make(map[string]map[nlink][]string),
+			}
 			gri := &globalResultImporter{gi}
 
 			return solver.NewCacheManager(ctx, id, gki, gri), nil
@@ -73,6 +76,8 @@ type item struct {
 
 type globalKeyImporter struct {
 	*globalImporter
+
+	cacheStore map[string]map[nlink][]string
 }
 
 func (gki *globalKeyImporter) AddLink(id string, link solver.CacheInfoLink, target string) error {
@@ -148,24 +153,117 @@ func (gki *globalKeyImporter) WalkBacklinks(id string, fn func(id string, link s
 	})
 }
 
+type nlink struct {
+	dgst     digest.Digest
+	input    int
+	selector string
+}
+
 func (gki *globalKeyImporter) WalkLinks(id string, link solver.CacheInfoLink, fn func(id string) error) error {
 	if !isCachableKey(id) {
 		return nil
 	}
-	recordKey := outputKey(link.Digest, link.Output)
-	prefix := vertexPrefix(id, recordKey, int(link.Input), link.Selector)
-	prefixKey := gki.s3Client.prefix + links + prefix + separator
+	// bklog.G(gki.ctx).Infof("WalkLinks %s", codenam.Ize(id))
 
-	return gki.s3Client.ListAllOjectsV2Prefix(gki.ctx, prefixKey, func(out *s3.ListObjectsV2Output) (cont bool, err error) {
-		for _, obj := range out.Contents {
-			id := strings.TrimPrefix(*obj.Key, prefixKey)
-			err := fn(id)
-			if err != nil {
-				return false, err
-			}
+	var ids []string
+	if store, found := gki.cacheStore[id]; found {
+		if children, found := store[nlink{
+			dgst:     link.Digest,
+			input:    int(link.Input),
+			selector: string(link.Selector),
+		}]; found {
+			ids = children
 		}
-		return true, nil
-	})
+	}
+	if ids == nil {
+		recordKey := outputKey(link.Digest, link.Output)
+		prefix := vertexPrefix(id, recordKey, int(link.Input), link.Selector)
+		prefixKey := gki.s3Client.prefix + links + prefix + separator
+
+		err := gki.s3Client.ListAllOjectsV2Prefix(gki.ctx, prefixKey, func(out *s3.ListObjectsV2Output) (cont bool, err error) {
+			for _, obj := range out.Contents {
+				id := strings.TrimPrefix(*obj.Key, prefixKey)
+				ids = append(ids, id)
+			}
+			return true, nil
+		})
+		if err != nil {
+			return err
+		}
+
+		gki.cacheItem(id, nlink{
+			dgst:     link.Digest,
+			input:    int(link.Input),
+			selector: string(link.Selector),
+		}, ids...)
+	}
+
+	// predict possible children of found children
+	gki.PredictLinks(ids, 500, 2)
+
+	for _, id := range ids {
+		if err := fn(id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (gki *globalKeyImporter) cacheItem(id string, link nlink, ids ...string) {
+	if store, found := gki.cacheStore[id]; !found {
+		gki.cacheStore[id] = map[nlink][]string{link: ids}
+	} else {
+		store[link] = ids
+	}
+}
+
+func (gki *globalKeyImporter) PredictLinks(ids []string, pageSize, maxDepth int) error {
+	if maxDepth <= 0 || len(ids) == 0 {
+		return nil
+	}
+	// bklog.G(gki.ctx).Infof("PredictLinks %s", codenam.IzeSlice(ids))
+
+	children := []string{}
+	for i := 0; i < len(ids); i++ {
+		id := ids[i]
+		if store, found := gki.cacheStore[id]; found && len(store) > 0 {
+			// bklog.G(gki.ctx).Infof("PredictLinks for %s already have something", codenam.IzeDebug(id))
+			for _, ids := range store {
+				gki.PredictLinks(ids, pageSize, maxDepth-1)
+			}
+			continue
+		}
+		prefix := gki.s3Client.prefix + links + id + separator
+		err := gki.s3Client.ListAllOjectsV2Prefix(gki.ctx, prefix, func(out *s3.ListObjectsV2Output) (cont bool, err error) {
+			for _, ctt := range out.Contents {
+				key := strings.TrimPrefix(*ctt.Key, prefix)
+				parts := strings.Split(key, separator)
+				if len(parts) != 4 {
+					continue
+				}
+				input, err := strconv.Atoi(parts[1])
+				if err != nil {
+					// the rest might work
+					continue
+				}
+				// `dgst::inputIdx::selector::ID`
+				gki.cacheItem(id, nlink{
+					dgst:     digest.Digest(parts[0]),
+					input:    input,
+					selector: parts[2],
+				}, parts[3])
+				children = append(children, parts[3])
+			}
+			return false, nil
+		},
+			PageSize(pageSize),
+		)
+		if err != nil {
+			return err
+		}
+	}
+	gki.PredictLinks(children, pageSize, maxDepth-1)
+	return nil
 }
 
 func (gki *globalKeyImporter) WalkResults(id string, fn func(solver.CacheResult) error) error {

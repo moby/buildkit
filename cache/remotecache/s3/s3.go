@@ -508,7 +508,20 @@ func isNotFound(err error) bool {
 	return errors.As(err, &errapi) && (errapi.ErrorCode() == "NoSuchKey" || errapi.ErrorCode() == "NotFound")
 }
 
-func (s3Client *s3Client) ListAllOjectsV2Prefix(ctx context.Context, prefix string, fn func(*s3.ListObjectsV2Output) (bool, error)) error {
+type listAllObjectOption func(*s3.ListObjectsV2Input)
+
+func PageSize(size int) func(*s3.ListObjectsV2Input) {
+	return func(lovo *s3.ListObjectsV2Input) {
+		lovo.MaxKeys = int32(size)
+	}
+}
+
+func (s3Client *s3Client) ListAllOjectsV2Prefix(
+	ctx context.Context,
+	prefix string,
+	fn func(*s3.ListObjectsV2Output) (bool, error),
+	opts ...listAllObjectOption,
+) error {
 	q := &s3.ListObjectsV2Input{
 		Bucket: &s3Client.bucket,
 		Prefix: &prefix,
