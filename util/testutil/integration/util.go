@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"os/exec"
 	"strings"
@@ -100,13 +99,11 @@ func StartCmd(cmd *exec.Cmd, logs map[string]*bytes.Buffer) (func() error, error
 	}, nil
 }
 
-func WaitUnix(address string, d time.Duration, cmd *exec.Cmd) error {
-	address = strings.TrimPrefix(address, "unix://")
-	addr, err := net.ResolveUnixAddr("unix", address)
-	if err != nil {
-		return errors.Wrapf(err, "failed resolving unix addr: %s", address)
-	}
-
+// WaitSocket will dial a socket opened by a command passed in as cmd.
+// On Linux this socket is typically a Unix socket,
+// while on Windows this will be a named pipe.
+func WaitSocket(address string, d time.Duration, cmd *exec.Cmd) error {
+	address = strings.TrimPrefix(address, socketScheme)
 	step := 50 * time.Millisecond
 	i := 0
 	for {
@@ -114,7 +111,7 @@ func WaitUnix(address string, d time.Duration, cmd *exec.Cmd) error {
 			return errors.Errorf("process exited: %s", cmd.String())
 		}
 
-		if conn, err := net.DialUnix("unix", nil, addr); err == nil {
+		if conn, err := dialPipe(address); err == nil {
 			conn.Close()
 			break
 		}

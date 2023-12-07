@@ -99,7 +99,7 @@ func newSandbox(ctx context.Context, w Worker, mirror string, mv matrixValue) (s
 
 	b, closer, err := w.New(ctx, cfg)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "creating worker")
 	}
 	deferF.Append(closer)
 

@@ -13,6 +13,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+const socketScheme = "npipe://"
+
 func listenFD(addr string, tlsConfig *tls.Config) (net.Listener, error) {
 	return nil, errors.New("listening server on fd not supported on windows")
 }
