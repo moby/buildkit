@@ -29,6 +29,8 @@ type detector struct {
 var ServiceName string
 var Recorder *TraceRecorder
 
+var Resource *resource.Resource
+
 var detectors map[string]detector
 var once sync.Once
 var tp trace.TracerProvider
@@ -112,13 +114,16 @@ func detect() error {
 		return err
 	}
 
-	res, err := resource.Detect(context.Background(), serviceNameDetector{})
-	if err != nil {
-		return err
-	}
-	res, err = resource.Merge(resource.Default(), res)
-	if err != nil {
-		return err
+	if Resource == nil {
+		res, err := resource.Detect(context.Background(), serviceNameDetector{})
+		if err != nil {
+			return err
+		}
+		res, err = resource.Merge(resource.Default(), res)
+		if err != nil {
+			return err
+		}
+		Resource = res
 	}
 
 	// enable log with traceID when valid exporter
@@ -131,7 +136,10 @@ func detect() error {
 			Recorder.flush = sp.ForceFlush
 		}
 
-		sdktp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sp), sdktrace.WithResource(res))
+		sdktp := sdktrace.NewTracerProvider(
+			sdktrace.WithSpanProcessor(sp),
+			sdktrace.WithResource(Resource),
+		)
 		closers = append(closers, sdktp.Shutdown)
 
 		exporter.SpanExporter = texp
@@ -156,7 +164,7 @@ func detect() error {
 
 	if len(readers) > 0 {
 		opts := make([]sdkmetric.Option, 0, len(readers)+1)
-		opts = append(opts, sdkmetric.WithResource(res))
+		opts = append(opts, sdkmetric.WithResource(Resource))
 		for _, r := range readers {
 			opts = append(opts, sdkmetric.WithReader(r))
 		}
