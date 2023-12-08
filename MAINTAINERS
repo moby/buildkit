@@ -153,6 +153,7 @@ made through a pull request.
 			"akihirosuda",
 			"coryb",
 			"crazy-max",
+			"gabriel-samfira",
 			"hinshun",
 			"ijc",
 			"jedevc",
@@ -198,6 +199,11 @@ made through a pull request.
 	Name = "Kevin Alvarez"
 	Email = "contact@crazymax.dev"
 	GitHub = "crazy-max"
+
+	[people.gabriel-samfira]
+	Name = "Gabriel Adrian Samfira"
+	Email = "gsamfira@cloudbasesolutions.com"
+	GitHub = "gabriel-samfira"
 
 	[people.hinshun]
 	Name = "Edgar Lee"
