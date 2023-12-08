@@ -50,6 +50,7 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 )
@@ -81,6 +82,7 @@ type WorkerOpt struct {
 	MetadataStore    *metadata.Store
 	MountPoolRoot    string
 	ResourceMonitor  *resources.Monitor
+	MeterProvider    metric.MeterProvider
 }
 
 // Worker is a local worker instance with dedicated snapshotter, cache, and so on.
@@ -111,6 +113,7 @@ func NewWorker(ctx context.Context, opt WorkerOpt) (*Worker, error) {
 		Differ:          opt.Differ,
 		MetadataStore:   opt.MetadataStore,
 		MountPoolRoot:   opt.MountPoolRoot,
+		MeterProvider:   opt.MeterProvider,
 	})
 	if err != nil {
 		return nil, err

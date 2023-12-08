@@ -62,6 +62,7 @@ import (
 	"github.com/urfave/cli"
 	"go.etcd.io/bbolt"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -86,6 +87,9 @@ func init() {
 
 	// enable in memory recording for buildkitd traces
 	detect.Recorder = detect.NewTraceRecorder()
+
+	// register alternative handler for otel
+	otel.SetErrorHandler(bklog.OTELErrorHandler{})
 }
 
 var propagators = propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
@@ -94,6 +98,7 @@ type workerInitializerOpt struct {
 	config         *config.Config
 	sessionManager *session.Manager
 	traceSocket    string
+	meterProvider  metric.MeterProvider
 }
 
 type workerInitializer struct {
@@ -316,7 +321,7 @@ func main() {
 			os.RemoveAll(lockPath)
 		}()
 
-		controller, err := newController(c, &cfg)
+		controller, err := newController(c, &cfg, mp)
 		if err != nil {
 			return err
 		}
@@ -711,7 +716,7 @@ func serverCredentials(cfg config.TLSConfig) (*tls.Config, error) {
 	return tlsConf, nil
 }
 
-func newController(c *cli.Context, cfg *config.Config) (*control.Controller, error) {
+func newController(c *cli.Context, cfg *config.Config, mp metric.MeterProvider) (*control.Controller, error) {
 	sessionManager, err := session.NewManager()
 	if err != nil {
 		return nil, err
@@ -734,6 +739,7 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 		config:         cfg,
 		sessionManager: sessionManager,
 		traceSocket:    traceSocket,
+		meterProvider:  mp,
 	})
 	if err != nil {
 		return nil, err
@@ -922,8 +928,7 @@ type traceCollector struct {
 }
 
 func (t *traceCollector) Export(ctx context.Context, req *tracev1.ExportTraceServiceRequest) (*tracev1.ExportTraceServiceResponse, error) {
-	err := t.exporter.ExportSpans(ctx, transform.Spans(req.GetResourceSpans()))
-	if err != nil {
+	if err := t.exporter.ExportSpans(ctx, transform.Spans(req.GetResourceSpans())); err != nil {
 		return nil, err
 	}
 	return &tracev1.ExportTraceServiceResponse{}, nil

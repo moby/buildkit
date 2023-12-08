@@ -333,6 +333,7 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 	opt.GCPolicy = getGCPolicy(cfg.GCConfig, common.config.Root)
 	opt.BuildkitVersion = getBuildkitVersion()
 	opt.RegistryHosts = resolverFunc(common.config)
+	opt.MeterProvider = common.meterProvider
 
 	if platformsStr := cfg.Platforms; len(platformsStr) != 0 {
 		platforms, err := parsePlatforms(platformsStr)

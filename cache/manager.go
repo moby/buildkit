@@ -28,6 +28,8 @@ import (
 	imagespecidentity "github.com/opencontainers/image-spec/identity"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/noop"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -49,6 +51,7 @@ type ManagerOpt struct {
 	Differ          diff.Comparer
 	MetadataStore   *metadata.Store
 	MountPoolRoot   string
+	MeterProvider   metric.MeterProvider
 }
 
 type Accessor interface {
@@ -97,6 +100,7 @@ type cacheManager struct {
 
 	muPrune sync.Mutex // make sure parallel prune is not allowed so there will not be inconsistent results
 	unlazyG flightcontrol.Group[struct{}]
+	metrics *metrics
 }
 
 func NewManager(opt ManagerOpt) (Manager, error) {
@@ -123,6 +127,12 @@ func NewManager(opt ManagerOpt) (Manager, error) {
 	cm.mountPool = p
 
 	// cm.scheduleGC(5 * time.Minute)
+
+	mp := opt.MeterProvider
+	if mp == nil {
+		mp = noop.NewMeterProvider()
+	}
+	cm.metrics = newMetrics(cm, mp)
 
 	return cm, nil
 }
@@ -339,6 +349,7 @@ func (cm *cacheManager) IdentityMapping() *idtools.IdentityMapping {
 // method should be called after Close.
 func (cm *cacheManager) Close() error {
 	// TODO: allocate internal context and cancel it here
+	_ = cm.metrics.Close()
 	return cm.MetadataStore.Close()
 }
 
@@ -1000,16 +1011,23 @@ func (cm *cacheManager) createDiffRef(ctx context.Context, parents parentRefs, d
 }
 
 func (cm *cacheManager) Prune(ctx context.Context, ch chan client.UsageInfo, opts ...client.PruneInfo) error {
-	cm.muPrune.Lock()
+	if err := func() error {
+		record := cm.metrics.MeasurePrune()
+		defer record(ctx)
 
-	for _, opt := range opts {
-		if err := cm.pruneOnce(ctx, ch, opt); err != nil {
-			cm.muPrune.Unlock()
-			return err
+		cm.muPrune.Lock()
+		defer cm.muPrune.Unlock()
+
+		for _, opt := range opts {
+			if err := cm.pruneOnce(ctx, ch, opt); err != nil {
+				cm.muPrune.Unlock()
+				return err
+			}
 		}
+		return nil
+	}(); err != nil {
+		return err
 	}
-
-	cm.muPrune.Unlock()
 
 	if cm.GarbageCollect != nil {
 		if _, err := cm.GarbageCollect(ctx); err != nil {

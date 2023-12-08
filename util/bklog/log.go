@@ -73,3 +73,9 @@ func TraceLevelOnlyStack() string {
 	}
 	return ""
 }
+
+type OTELErrorHandler struct{}
+
+func (o OTELErrorHandler) Handle(err error) {
+	G(context.Background()).Error(err)
+}
