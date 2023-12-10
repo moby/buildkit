@@ -5,7 +5,7 @@
 * [Reproducible test case](#reproducible-test-case)
 * [Describe your environment](#describe-your-environment)
 * [Reporting deadlock](#reporting-deadlock)
-* [Reporting panics/error returns](#reporting-panics-error-returns)
+* [Reporting panics/error returns](#reporting-panicserror-returns)
 * [Gathering more debugging data](#gathering-more-debugging-data)
 * [Regressions](#regressions)
 * [Debugging issues that only reproduce in the live environment](#debugging-issues-that-only-reproduce-in-the-live-environment)
@@ -247,7 +247,7 @@ We can not provide you any guarantees of when the issue you have reported will b
 - If you provided a reproducible test case then the issue should be marked as “confirmed”, signaling that maintainers have verified/accepted it and anyone could start working on it.
 - If issue requires more data from original reporter (or anyone else how can reproduce) it should be marked as “needs-more-info”.
 - If an issue is a regression from the previous release it should automatically be high priority and added to the next patch release milestone.
-- If the issue looks critical enough ask it to be included in the next milestone or next patch release milestone. In addition to regressions these would usually need to be issues in the critical/common path, panics etc. We will work on defining this more clearly.
+- If the issue looks critical enough ask it to be included in the next milestone or next patch release milestone. In addition to regressions these would usually need to be issues in the critical/common path, panics etc. We will work on defining this more clearly. Our guidelines for issue prioritization can be found in [here](/PROJECT.md#issue-categorization-guidelines).
 
 If you notice that a specific maintainer has worked on the feature your report is about before you may mention them directly on your issue. You can also ping specific people when you think it has been unreasonably long time since the last answer.
 
@@ -263,6 +263,8 @@ You can also ask to be assigned on the issue to avoid any possible duplicate wor
 
 ## Additional reading
 
-[Code of conduct](https://github.com/moby/buildkit/blob/master/.github/CODE_OF_CONDUCT.md)
+[BuildKit project process guide](/PROJECT.md)
+
+[Code of conduct](/.github/CODE_OF_CONDUCT.md)
 
 [Open Source Etiquette](https://opensource.how/etiquette/)
