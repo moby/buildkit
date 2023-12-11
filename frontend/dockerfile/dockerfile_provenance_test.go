@@ -41,6 +41,7 @@ import (
 )
 
 func testProvenanceAttestation(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
 	ctx := sb.Context()
 
@@ -231,6 +232,7 @@ RUN echo "ok" > /foo
 }
 
 func testGitProvenanceAttestation(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
 	ctx := sb.Context()
 
@@ -378,6 +380,7 @@ COPY myapp.Dockerfile /
 }
 
 func testMultiPlatformProvenance(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureMultiPlatform, workers.FeatureProvenance)
 	ctx := sb.Context()
 
@@ -493,6 +496,7 @@ RUN echo "ok-$TARGETARCH" > /foo
 }
 
 func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
 	// Building with client frontend does not capture frontend provenance
 	// because frontend runs in client, not in BuildKit.
@@ -687,6 +691,7 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 }
 
 func testClientLLBProvenance(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
 	ctx := sb.Context()
 
@@ -801,6 +806,7 @@ func testClientLLBProvenance(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSecretSSHProvenance(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
 	ctx := sb.Context()
 
@@ -878,6 +884,7 @@ RUN --mount=type=secret,id=mysecret --mount=type=secret,id=othersecret --mount=t
 }
 
 func testOCILayoutProvenance(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureProvenance)
 	ctx := sb.Context()
 
@@ -1011,6 +1018,7 @@ EOF
 }
 
 func testNilProvenance(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureProvenance)
 	ctx := sb.Context()
 
@@ -1048,6 +1056,7 @@ ENV FOO=bar
 
 // https://github.com/moby/buildkit/issues/3562
 func testDuplicatePlatformProvenance(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureProvenance)
 	ctx := sb.Context()
 
@@ -1078,6 +1087,7 @@ func testDuplicatePlatformProvenance(t *testing.T, sb integration.Sandbox) {
 
 // https://github.com/moby/buildkit/issues/3928
 func testDockerIgnoreMissingProvenance(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureProvenance)
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -1120,6 +1130,7 @@ func testDockerIgnoreMissingProvenance(t *testing.T, sb integration.Sandbox) {
 }
 
 func testFrontendDeduplicateSources(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -1270,6 +1281,7 @@ COPY bar bar2
 }
 
 func testDuplicateLayersProvenance(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
 	ctx := sb.Context()
 

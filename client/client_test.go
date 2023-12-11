@@ -246,14 +246,16 @@ func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sa
 		}),
 	)
 
-	integration.Run(t, integration.TestFuncs(
-		testBridgeNetworkingDNSNoRootless,
-	),
-		mirrors,
-		integration.WithMatrix("netmode", map[string]interface{}{
-			"dns": bridgeDNSNetwork,
-		}),
-	)
+	if runtime.GOOS != "windows" {
+		integration.Run(
+			t,
+			integration.TestFuncs(testBridgeNetworkingDNSNoRootless),
+			mirrors,
+			integration.WithMatrix("netmode", map[string]interface{}{
+				"dns": bridgeDNSNetwork,
+			}),
+		)
+	}
 }
 
 func newContainerd(cdAddress string) (*containerd.Client, error) {
@@ -262,6 +264,7 @@ func newContainerd(cdAddress string) (*containerd.Client, error) {
 
 // moby/buildkit#1336
 func testCacheExportCacheKeyLoop(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport, workers.FeatureCacheBackendLocal)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -327,6 +330,7 @@ func testBridgeNetworking(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBridgeNetworkingDNSNoRootless(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureCNINetwork)
 	if os.Getenv("BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS") == "" {
 		t.SkipNow()
@@ -396,6 +400,7 @@ func testHostNetworking(t *testing.T, sb integration.Sandbox) {
 }
 
 func testExportedImageLabels(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -525,6 +530,7 @@ func testExportedImageLabels(t *testing.T, sb integration.Sandbox) {
 
 // #877
 func testExportBusyboxLocal(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -554,6 +560,7 @@ func testExportBusyboxLocal(t *testing.T, sb integration.Sandbox) {
 }
 
 func testHostnameLookup(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	if sb.Rootless() {
 		t.SkipNow()
 	}
@@ -573,6 +580,7 @@ func testHostnameLookup(t *testing.T, sb integration.Sandbox) {
 
 // moby/buildkit#1301
 func testHostnameSpecifying(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	if sb.Rootless() {
 		t.SkipNow()
 	}
@@ -597,6 +605,7 @@ func testHostnameSpecifying(t *testing.T, sb integration.Sandbox) {
 
 // moby/buildkit#614
 func testStdinClosed(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -611,6 +620,7 @@ func testStdinClosed(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSSHMount(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -770,6 +780,7 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 }
 
 func testExtraHosts(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -785,6 +796,7 @@ func testExtraHosts(t *testing.T, sb integration.Sandbox) {
 }
 
 func testShmSize(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -816,6 +828,7 @@ func testShmSize(t *testing.T, sb integration.Sandbox) {
 }
 
 func testUlimit(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -924,6 +937,7 @@ func testCgroupParent(t *testing.T, sb integration.Sandbox) {
 }
 
 func testNetworkMode(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -997,6 +1011,7 @@ func testPushByDigest(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSecurityMode(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureSecurityMode)
 	command := `sh -c 'cat /proc/self/status | grep CapEff | cut -f 2 > /out'`
 	mode := llb.SecurityModeSandbox
@@ -1068,6 +1083,7 @@ func testSecurityMode(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureSecurityMode)
 	if sb.Rootless() {
 		t.SkipNow()
@@ -1114,6 +1130,7 @@ func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSecurityModeErrors(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -1294,6 +1311,7 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSecretMounts(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -1367,6 +1385,7 @@ func testSecretMounts(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSecretEnv(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -2293,6 +2312,7 @@ func testBuildExportScratch(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -3084,6 +3104,7 @@ func testSourceDateEpochTarExporter(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSourceDateEpochImageExporter(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	cdAddress := sb.ContainerdAddress()
 	if cdAddress == "" {
 		t.SkipNow()
@@ -3369,6 +3390,7 @@ func testTarExporterSymlink(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildExportWithForeignLayer(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureImageExporter)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -3667,6 +3689,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildExportZstd(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -3763,6 +3786,7 @@ func testBuildExportZstd(t *testing.T, sb integration.Sandbox) {
 }
 
 func testPullZstdImage(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	for _, ociMediaTypes := range []bool{true, false} {
 		ociMediaTypes := ociMediaTypes
@@ -4708,6 +4732,7 @@ func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
 }
 
 func testZstdLocalCacheExport(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport, workers.FeatureCacheBackendLocal)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -4767,6 +4792,7 @@ func testZstdLocalCacheExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testCacheExportIgnoreError(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -5153,6 +5179,7 @@ func testBasicLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBasicS3CacheImportExport(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureCacheExport,
 		workers.FeatureCacheImport,
@@ -5195,6 +5222,7 @@ func testBasicS3CacheImportExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBasicAzblobCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureCacheExport,
 		workers.FeatureCacheImport,
@@ -5563,6 +5591,7 @@ func testMultipleRecordsWithSameLayersCacheImportExport(t *testing.T, sb integra
 
 // moby/buildkit#3809
 func testSnapshotWithMultipleBlobs(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -5704,6 +5733,7 @@ func testSnapshotWithMultipleBlobs(t *testing.T, sb integration.Sandbox) {
 }
 
 func testExportLocalNoPlatformSplit(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureMultiPlatform)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -6262,6 +6292,7 @@ func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
 
 // #2490
 func testMoveParentDir(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -6329,6 +6360,7 @@ func testMoveParentDir(t *testing.T, sb integration.Sandbox) {
 
 // #296
 func testSchema1Image(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -6346,6 +6378,7 @@ func testSchema1Image(t *testing.T, sb integration.Sandbox) {
 
 // #319
 func testMountWithNoSource(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -6375,6 +6408,7 @@ func testMountWithNoSource(t *testing.T, sb integration.Sandbox) {
 
 // #324
 func testReadonlyRootFS(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -6522,6 +6556,7 @@ func testSourceMapFromRef(t *testing.T, sb integration.Sandbox) {
 }
 
 func testRmSymlink(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -6555,6 +6590,7 @@ func testRmSymlink(t *testing.T, sb integration.Sandbox) {
 }
 
 func testProxyEnv(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -7407,6 +7443,7 @@ func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
 
 // moby/buildkit#492
 func testParallelLocalBuilds(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	ctx, cancel := context.WithCancelCause(sb.Context())
 	defer cancel(errors.WithStack(context.Canceled))
 
@@ -9229,6 +9266,7 @@ func testSBOMSupplements(t *testing.T, sb integration.Sandbox) {
 }
 
 func testMultipleCacheExports(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureMultiCacheExport)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -9346,6 +9384,7 @@ func testMultipleCacheExports(t *testing.T, sb integration.Sandbox) {
 }
 
 func testMountStubsDirectory(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -9405,6 +9444,7 @@ func testMountStubsDirectory(t *testing.T, sb integration.Sandbox) {
 
 // https://github.com/moby/buildkit/issues/3148
 func testMountStubsTimestamp(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -9811,6 +9851,7 @@ func testSourcePolicy(t *testing.T, sb integration.Sandbox) {
 }
 
 func testLLBMountPerformance(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()

@@ -20,7 +20,7 @@ on:
 
 env:
   GO_VERSION: "1.21"
-  TESTFLAGS: "-v --parallel=6 --timeout=30m"
+  TESTFLAGS: "-v --parallel=6 --timeout=60m"
   GOTESTSUM_VERSION: "v1.9.0"  # same as one in Dockerfile
   GOTESTSUM_FORMAT: "standard-verbose"
   DESTDIR: "./bin"
@@ -49,10 +49,36 @@ jobs:
         run: |
           go install gotest.tools/gotestsum@${{ env.GOTESTSUM_VERSION }}
       -
+        name: Install buildkitd.exe binary
+        run: |
+          go install .\cmd\buildkitd
+      -
+        name: Install containerd.exe binary
+        run: |
+          $goModFileContent = Get-Content go.mod -Raw
+          $pattern = '(?<=github\.com/containerd/containerd v)[\d\.]+'
+          $version = [regex]::Match($goModFileContent, $pattern).Value
+          mkdir -p .\bin\installs -f
+          cd .\bin\installs
+          git clone https://github.com/containerd/containerd.git
+          cd containerd
+          git checkout tags/v$version
+          go install .\cmd\...
+          cd ..\..\..
+      -
+        name: Install registry.exe (distribution/distribution) binary
+        run: |
+          mkdir -p .\bin\installs -f
+          cd .\bin\installs
+          git clone https://github.com/distribution/distribution.git
+          cd distribution
+          go install .\cmd\...
+          cd ..\..\..
+      -
         name: Test
         env:
           TMPDIR: ${{ runner.temp }}
-          SKIP_INTEGRATION_TESTS: 1
+          # SKIP_INTEGRATION_TESTS: 1
         run: |
           mkdir -p ./bin/testreports
           gotestsum \

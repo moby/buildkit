@@ -23,6 +23,7 @@ import (
 )
 
 func testBuildWithLocalFiles(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("foo", []byte("bar"), 0600),
@@ -45,6 +46,7 @@ func testBuildWithLocalFiles(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildLocalExporter(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	st := llb.Image("busybox").
 		Run(llb.Shlex("sh -c 'echo -n bar > /out/foo'"))
 
@@ -67,6 +69,7 @@ func testBuildLocalExporter(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildContainerdExporter(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	cdAddress := sb.ContainerdAddress()
 	if cdAddress == "" {
 		t.Skip("test is only for containerd worker")
@@ -110,6 +113,7 @@ func testBuildContainerdExporter(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildMetadataFile(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	st := llb.Image("busybox").
 		Run(llb.Shlex("sh -c 'echo -n bar > /foo'"))
 

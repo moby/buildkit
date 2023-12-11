@@ -423,3 +423,10 @@ func prepareValueMatrix(tc testConf) []matrixValue {
 	}
 	return m
 }
+
+// Skips tests on Windows
+func SkipOnPlatform(t *testing.T, goos string) {
+	if runtime.GOOS == goos {
+		t.Skipf("Skipped on %s", goos)
+	}
+}

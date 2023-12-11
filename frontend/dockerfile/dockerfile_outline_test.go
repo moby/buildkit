@@ -25,6 +25,7 @@ var outlineTests = integration.TestFuncs(
 )
 
 func testOutlineArgs(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureFrontendOutline)
 	f := getFrontend(t, sb)
 	if _, ok := f.(*clientFrontend); !ok {
@@ -138,6 +139,7 @@ FROM second
 }
 
 func testOutlineSecrets(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureFrontendOutline)
 	f := getFrontend(t, sb)
 	if _, ok := f.(*clientFrontend); !ok {
@@ -237,6 +239,7 @@ FROM second
 }
 
 func testOutlineDescribeDefinition(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureFrontendOutline)
 	f := getFrontend(t, sb)
 	if _, ok := f.(*clientFrontend); !ok {

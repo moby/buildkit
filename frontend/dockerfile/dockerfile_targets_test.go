@@ -24,6 +24,7 @@ var targetsTests = integration.TestFuncs(
 )
 
 func testTargetsList(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureFrontendTargets)
 	f := getFrontend(t, sb)
 	if _, ok := f.(*clientFrontend); !ok {
@@ -123,6 +124,7 @@ FROM second AS binary
 }
 
 func testTargetsDescribeDefinition(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureFrontendTargets)
 	f := getFrontend(t, sb)
 	if _, ok := f.(*clientFrontend); !ok {

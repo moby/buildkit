@@ -31,6 +31,7 @@ func TestJobsIntegration(t *testing.T) {
 }
 
 func testParallelism(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())

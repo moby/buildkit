@@ -22,6 +22,7 @@ func init() {
 }
 
 func testSecretFileParams(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -52,6 +53,7 @@ RUN [ ! -f /mysecret ] # check no stub left behind
 }
 
 func testSecretRequiredWithoutValue(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`

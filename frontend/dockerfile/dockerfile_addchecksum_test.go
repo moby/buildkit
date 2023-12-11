@@ -23,6 +23,7 @@ func init() {
 }
 
 func testAddChecksum(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
