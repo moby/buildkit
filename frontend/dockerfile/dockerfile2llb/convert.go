@@ -153,11 +153,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			if copt.Platform == nil {
 				copt.Platform = opt.TargetPlatform
 			}
-			st, img, err := opt.Client.NamedContext(ctx, name, copt)
-			if err != nil {
-				return nil, nil, err
-			}
-			return st, img, nil
+			return opt.Client.NamedContext(ctx, name, copt)
 		}
 		return nil, nil, nil
 	}
@@ -237,6 +233,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			stage:          st,
 			deps:           make(map[*dispatchState]struct{}),
 			ctxPaths:       make(map[string]struct{}),
+			paths:          make(map[string]struct{}),
 			stageName:      st.Name,
 			prefixPlatform: opt.MultiPlatformRequested,
 			outline:        outline.clone(),
@@ -260,7 +257,11 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		}
 
 		if st.Name != "" {
-			s, img, err := namedContext(ctx, st.Name, dockerui.ContextOpt{Platform: ds.platform, ResolveMode: opt.ImageResolveMode.String()})
+			s, img, err := namedContext(ctx, st.Name, dockerui.ContextOpt{
+				Platform:       ds.platform,
+				ResolveMode:    opt.ImageResolveMode.String(),
+				AsyncLocalOpts: ds.asyncLocalOpts,
+			})
 			if err != nil {
 				return nil, err
 			}
@@ -391,7 +392,11 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 					d.stage.BaseName = reference.TagNameOnly(ref).String()
 
 					var isScratch bool
-					st, img, err := namedContext(ctx, d.stage.BaseName, dockerui.ContextOpt{ResolveMode: opt.ImageResolveMode.String(), Platform: platform})
+					st, img, err := namedContext(ctx, d.stage.BaseName, dockerui.ContextOpt{
+						ResolveMode:    opt.ImageResolveMode.String(),
+						Platform:       platform,
+						AsyncLocalOpts: d.asyncLocalOpts,
+					})
 					if err != nil {
 						return err
 					}
@@ -492,11 +497,23 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			d.state = d.base.state
 			d.platform = d.base.platform
 			d.image = clone(d.base.image)
+			// Utilize the same path index as our base image so we propagate
+			// the paths we use back to the base image.
+			d.paths = d.base.paths
+		}
+
+		// Ensure platform is set.
+		if d.platform == nil {
+			d.platform = &d.opt.targetPlatform
 		}
 
 		// make sure that PATH is always set
 		if _, ok := shell.BuildEnvs(d.image.Config.Env)["PATH"]; !ok {
-			d.image.Config.Env = append(d.image.Config.Env, "PATH="+system.DefaultPathEnv(d.platform.OS))
+			var osName string
+			if d.platform != nil {
+				osName = d.platform.OS
+			}
+			d.image.Config.Env = append(d.image.Config.Env, "PATH="+system.DefaultPathEnv(osName))
 		}
 
 		// initialize base metadata from image conf
@@ -565,6 +582,11 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		}
 	}
 
+	// Ensure the entirety of the target state is marked as used.
+	// This is done after we've already evaluated every stage to ensure
+	// the paths attribute is set correctly.
+	target.paths["/"] = struct{}{}
+
 	if len(opt.Labels) != 0 && target.image.Config.Labels == nil {
 		target.image.Config.Labels = make(map[string]string, len(opt.Labels))
 	}
@@ -572,10 +594,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		target.image.Config.Labels[k] = v
 	}
 
-	opts := []llb.LocalOption{}
-	if includePatterns := normalizeContextPaths(ctxPaths); includePatterns != nil {
-		opts = append(opts, llb.FollowPaths(includePatterns))
-	}
+	opts := filterPaths(ctxPaths)
 	bctx := opt.MainContext
 	if opt.Client != nil {
 		bctx, err = opt.Client.MainContext(ctx, opts...)
@@ -630,6 +649,7 @@ func toCommand(ic instructions.Command, allDispatchStates *dispatchStates) (comm
 					stn = &dispatchState{
 						stage:        instructions.Stage{BaseName: c.From, Location: ic.Location()},
 						deps:         make(map[*dispatchState]struct{}),
+						paths:        make(map[string]struct{}),
 						unregistered: true,
 					}
 				}
@@ -773,9 +793,19 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 			location:     c.Location(),
 			opt:          opt,
 		})
-		if err == nil && len(cmd.sources) == 0 {
-			for _, src := range c.SourcePaths {
-				d.ctxPaths[path.Join("/", filepath.ToSlash(src))] = struct{}{}
+		if err == nil {
+			if len(cmd.sources) == 0 {
+				for _, src := range c.SourcePaths {
+					d.ctxPaths[path.Join("/", filepath.ToSlash(src))] = struct{}{}
+				}
+			} else {
+				source := cmd.sources[0]
+				if source.paths == nil {
+					source.paths = make(map[string]struct{})
+				}
+				for _, src := range c.SourcePaths {
+					source.paths[path.Join("/", filepath.ToSlash(src))] = struct{}{}
+				}
 			}
 		}
 	default:
@@ -784,17 +814,20 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 }
 
 type dispatchState struct {
-	opt            dispatchOpt
-	state          llb.State
-	image          image.Image
-	platform       *ocispecs.Platform
-	stage          instructions.Stage
-	base           *dispatchState
-	noinit         bool
-	deps           map[*dispatchState]struct{}
-	buildArgs      []instructions.KeyValuePairOptional
-	commands       []command
-	ctxPaths       map[string]struct{}
+	opt       dispatchOpt
+	state     llb.State
+	image     image.Image
+	platform  *ocispecs.Platform
+	stage     instructions.Stage
+	base      *dispatchState
+	noinit    bool
+	deps      map[*dispatchState]struct{}
+	buildArgs []instructions.KeyValuePairOptional
+	commands  []command
+	// ctxPaths marks the paths this dispatchState uses from the build context.
+	ctxPaths map[string]struct{}
+	// paths marks the paths that are used by this dispatchState.
+	paths          map[string]struct{}
 	ignoreCache    bool
 	cmdSet         bool
 	unregistered   bool
@@ -806,6 +839,10 @@ type dispatchState struct {
 	epoch          *time.Time
 	scanStage      bool
 	scanContext    bool
+}
+
+func (ds *dispatchState) asyncLocalOpts() []llb.LocalOption {
+	return filterPaths(ds.paths)
 }
 
 type dispatchStates struct {
@@ -889,6 +926,9 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 	var opt []llb.RunOption
 
 	customname := c.String()
+
+	// Run command can potentially access any file. Mark the full filesystem as used.
+	d.paths["/"] = struct{}{}
 
 	var args []string = c.CmdLine
 	if len(c.Files) > 0 {
@@ -1603,6 +1643,11 @@ func hasCircularDependency(states []*dispatchState) (bool, *dispatchState) {
 }
 
 func normalizeContextPaths(paths map[string]struct{}) []string {
+	// Avoid a useless allocation if the set of paths is empty.
+	if len(paths) == 0 {
+		return nil
+	}
+
 	pathSlice := make([]string, 0, len(paths))
 	for p := range paths {
 		if p == "/" {
@@ -1615,6 +1660,15 @@ func normalizeContextPaths(paths map[string]struct{}) []string {
 		return pathSlice[i] < pathSlice[j]
 	})
 	return pathSlice
+}
+
+// filterPaths returns the local options required to filter an llb.Local
+// to only the required paths.
+func filterPaths(paths map[string]struct{}) []llb.LocalOption {
+	if includePaths := normalizeContextPaths(paths); len(includePaths) > 0 {
+		return []llb.LocalOption{llb.FollowPaths(includePaths)}
+	}
+	return nil
 }
 
 func proxyEnvFromBuildArgs(args map[string]string) *llb.ProxyEnv {

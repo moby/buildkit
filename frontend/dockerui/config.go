@@ -95,7 +95,7 @@ type Source struct {
 
 type ContextOpt struct {
 	NoDockerignore bool
-	LocalOpts      []llb.LocalOption
+	AsyncLocalOpts func() []llb.LocalOption
 	Platform       *ocispecs.Platform
 	ResolveMode    string
 	CaptureDigest  *digest.Digest
@@ -473,11 +473,8 @@ func (bc *Client) NamedContext(ctx context.Context, name string, opt ContextOpt)
 	}
 	pname := name + "::" + platforms.Format(platforms.Normalize(pp))
 	st, img, err := bc.namedContext(ctx, name, pname, opt)
-	if err != nil {
-		return nil, nil, err
-	}
-	if st != nil {
-		return st, img, nil
+	if err != nil || st != nil {
+		return st, img, err
 	}
 	return bc.namedContext(ctx, name, name, opt)
 }

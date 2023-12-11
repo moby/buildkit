@@ -31,6 +31,7 @@ func detectRunMount(cmd *command, allDispatchStates *dispatchStates) bool {
 				stn = &dispatchState{
 					stage:        instructions.Stage{BaseName: from},
 					deps:         make(map[*dispatchState]struct{}),
+					paths:        make(map[string]struct{}),
 					unregistered: true,
 				}
 			}
@@ -136,6 +137,9 @@ func dispatchRunMounts(d *dispatchState, c *instructions.RunCommand, sources []*
 
 		if mount.From == "" {
 			d.ctxPaths[path.Join("/", filepath.ToSlash(mount.Source))] = struct{}{}
+		} else {
+			source := sources[i]
+			source.paths[path.Join("/", filepath.ToSlash(mount.Source))] = struct{}{}
 		}
 	}
 	return out, nil
