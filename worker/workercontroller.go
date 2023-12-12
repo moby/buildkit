@@ -2,6 +2,7 @@ package worker
 
 import (
 	"github.com/containerd/containerd/filters"
+	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client"
 	"github.com/pkg/errors"
 )
@@ -68,4 +69,26 @@ func (c *Controller) WorkerInfos() []client.WorkerInfo {
 		})
 	}
 	return out
+}
+
+func (c *Controller) Infos() Infos {
+	return &infosController{c: c}
+}
+
+type infosController struct {
+	c *Controller
+}
+
+var _ Infos = &infosController{}
+
+func (c *infosController) DefaultCacheManager() (cache.Manager, error) {
+	w, err := c.c.GetDefault()
+	if err != nil {
+		return nil, err
+	}
+	return w.CacheManager(), nil
+}
+
+func (c *infosController) WorkerInfos() []client.WorkerInfo {
+	return c.c.WorkerInfos()
 }

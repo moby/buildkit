@@ -11,6 +11,7 @@ import (
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend"
 	gw "github.com/moby/buildkit/frontend/gateway/client"
@@ -38,6 +39,10 @@ type llbBridge struct {
 	cms                       map[string]solver.CacheManager
 	cmsMu                     sync.Mutex
 	sm                        *session.Manager
+
+	executorOnce sync.Once
+	executorErr  error
+	executor     executor.Executor
 }
 
 func (b *llbBridge) Warn(ctx context.Context, dgst digest.Digest, msg string, opts frontend.WarnOpts) error {
@@ -150,7 +155,7 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest, sid st
 		if !ok {
 			return nil, errors.Errorf("invalid frontend: %s", req.Frontend)
 		}
-		res, err = f.Solve(ctx, b, req.FrontendOpt, req.FrontendInputs, sid, b.sm)
+		res, err = f.Solve(ctx, b, b, req.FrontendOpt, req.FrontendInputs, sid, b.sm)
 		if err != nil {
 			return nil, err
 		}
@@ -185,6 +190,32 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest, sid st
 	}
 
 	return
+}
+
+func (b *llbBridge) Run(ctx context.Context, id string, rootfs executor.Mount, mounts []executor.Mount, process executor.ProcessInfo, started chan<- struct{}) error {
+	if err := b.loadExecutor(); err != nil {
+		return err
+	}
+	return b.executor.Run(ctx, id, rootfs, mounts, process, started)
+}
+
+func (b *llbBridge) Exec(ctx context.Context, id string, process executor.ProcessInfo) error {
+	if err := b.loadExecutor(); err != nil {
+		return err
+	}
+	return b.executor.Exec(ctx, id, process)
+}
+
+func (b *llbBridge) loadExecutor() error {
+	b.executorOnce.Do(func() {
+		w, err := b.resolveWorker()
+		if err != nil {
+			b.executorErr = err
+			return
+		}
+		b.executor = w.Executor()
+	})
+	return b.executorErr
 }
 
 type resultProxy struct {

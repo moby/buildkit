@@ -6,7 +6,8 @@ import (
 	"net"
 	"syscall"
 
-	"github.com/moby/buildkit/snapshot"
+	"github.com/containerd/containerd/mount"
+	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/solver/pb"
 )
 
@@ -25,8 +26,13 @@ type Meta struct {
 	SecurityMode   pb.SecurityMode
 }
 
+type MountableRef interface {
+	Mount() ([]mount.Mount, func() error, error)
+	IdentityMapping() *idtools.IdentityMapping
+}
+
 type Mountable interface {
-	Mount(ctx context.Context, readonly bool) (snapshot.Mountable, error)
+	Mount(ctx context.Context, readonly bool) (MountableRef, error)
 }
 
 type Mount struct {

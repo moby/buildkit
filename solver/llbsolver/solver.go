@@ -81,7 +81,7 @@ func (s *Solver) resolver() solver.ResolveOpFunc {
 	}
 }
 
-func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
+func (s *Solver) bridge(b solver.Builder) *llbBridge {
 	return &llbBridge{
 		builder:                   b,
 		frontends:                 s.frontends,
@@ -91,6 +91,10 @@ func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 		cms:                       map[string]solver.CacheManager{},
 		sm:                        s.sm,
 	}
+}
+
+func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
+	return s.bridge(b)
 }
 
 func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement) (*client.SolveResponse, error) {
@@ -109,9 +113,10 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 
 	j.SessionID = sessionID
 
+	br := s.bridge(j)
 	var res *frontend.Result
 	if s.gatewayForwarder != nil && req.Definition == nil && req.Frontend == "" {
-		fwd := gateway.NewBridgeForwarder(ctx, s.Bridge(j), s.workerController, req.FrontendInputs, sessionID, s.sm)
+		fwd := gateway.NewBridgeForwarder(ctx, br, br, s.workerController.Infos(), req.FrontendInputs, sessionID, s.sm)
 		defer fwd.Discard()
 		if err := s.gatewayForwarder.RegisterBuild(ctx, id, fwd); err != nil {
 			return nil, err
