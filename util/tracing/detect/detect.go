@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/tracing/tracelogger"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -26,12 +26,15 @@ type detector struct {
 var ServiceName string
 var Recorder *TraceRecorder
 
-var detectors map[string]detector
+var detectors = map[string]detector{
+	"otlp": {f: otlpExporter, priority: 10},
+}
+
 var once sync.Once
 var tp trace.TracerProvider
 var exporter sdktrace.SpanExporter
 var closers []func(context.Context) error
-var err error
+var errDetect error
 
 func Register(name string, exp ExporterDetector, priority int) {
 	if detectors == nil {
@@ -82,6 +85,9 @@ func getExporter() (sdktrace.SpanExporter, error) {
 	if Recorder != nil {
 		Recorder.SpanExporter = exp
 		exp = Recorder
+
+		// enable log with traceID when a valid exporter was detected.
+		tracelogger.Enable(true)
 	}
 	return exp, nil
 }
@@ -93,9 +99,6 @@ func detect() error {
 	if err != nil || exp == nil {
 		return err
 	}
-
-	// enable log with traceID when valid exporter
-	bklog.EnableLogWithTraceID(true)
 
 	res, err := resource.Detect(context.Background(), serviceNameDetector{})
 	if err != nil {
@@ -122,13 +125,13 @@ func detect() error {
 
 func TracerProvider() (trace.TracerProvider, error) {
 	once.Do(func() {
-		if err1 := detect(); err1 != nil {
-			err = err1
+		if err := detect(); err != nil {
+			errDetect = err
 		}
 	})
 	b, _ := strconv.ParseBool(os.Getenv("OTEL_IGNORE_ERROR"))
-	if err != nil && !b {
-		return nil, err
+	if errDetect != nil && !b {
+		return nil, errDetect
 	}
 	return tp, nil
 }

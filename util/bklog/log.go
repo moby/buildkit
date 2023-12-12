@@ -5,8 +5,8 @@ import (
 	"runtime/debug"
 
 	"github.com/containerd/log"
+	"github.com/moby/buildkit/util/tracing/tracelogger"
 	"github.com/sirupsen/logrus"
-	"go.opentelemetry.io/otel/trace"
 )
 
 func init() {
@@ -19,14 +19,6 @@ var (
 	G = GetLogger
 	L = logrus.NewEntry(logrus.StandardLogger())
 )
-
-var (
-	logWithTraceID = false
-)
-
-func EnableLogWithTraceID(b bool) {
-	logWithTraceID = b
-}
 
 type (
 	loggerKey struct{}
@@ -51,16 +43,8 @@ func GetLogger(ctx context.Context) (l *logrus.Entry) {
 		l = L
 	}
 
-	if logWithTraceID {
-		if spanContext := trace.SpanFromContext(ctx).SpanContext(); spanContext.IsValid() {
-			return l.WithFields(logrus.Fields{
-				"traceID": spanContext.TraceID(),
-				"spanID":  spanContext.SpanID(),
-			})
-		}
-	}
-
-	return l
+	// Add trace-ID and span-ID if tracing is enabled.
+	return tracelogger.Get(ctx, l)
 }
 
 // TraceLevelOnlyStack returns a stack trace for the current goroutine only if
