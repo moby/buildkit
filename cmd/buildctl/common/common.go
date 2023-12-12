@@ -72,7 +72,7 @@ func ResolveClient(c *cli.Context) (*client.Client, error) {
 	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
 		opts = append(opts, client.WithTracerProvider(span.TracerProvider()))
 
-		exp, err := detect.Exporter()
+		exp, _, err := detect.Exporter()
 		if err != nil {
 			return nil, err
 		}

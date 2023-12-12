@@ -10,7 +10,7 @@ import (
 )
 
 func TestDetectPreservesDelegateInterface(t *testing.T) {
-	exp, err := detect.Exporter()
+	exp, _, err := detect.Exporter()
 	require.NoError(t, err)
 
 	_, ok := exp.(client.TracerDelegate)

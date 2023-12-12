@@ -10,6 +10,7 @@ import (
 	"github.com/moby/buildkit/util/tracing/detect"
 	//nolint:staticcheck // Jaeger still supported for compatibility
 	"go.opentelemetry.io/otel/exporters/jaeger"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
@@ -17,10 +18,10 @@ func init() {
 	detect.Register("jaeger", jaegerExporter, 11)
 }
 
-func jaegerExporter() (sdktrace.SpanExporter, error) {
+func jaegerExporter() (sdktrace.SpanExporter, sdkmetric.Exporter, error) {
 	set := os.Getenv("OTEL_TRACES_EXPORTER") == "jaeger" || os.Getenv("JAEGER_TRACE") != "" || os.Getenv("OTEL_EXPORTER_JAEGER_AGENT_HOST") != "" || os.Getenv("OTEL_EXPORTER_JAEGER_ENDPOINT") != ""
 	if !set {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	endpoint := envOr("OTEL_EXPORTER_JAEGER_ENDPOINT", "http://localhost:14250")
@@ -36,7 +37,7 @@ func jaegerExporter() (sdktrace.SpanExporter, error) {
 		} else {
 			h, p, err := net.SplitHostPort(v)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			host = h
 			port = p
@@ -53,12 +54,12 @@ func jaegerExporter() (sdktrace.SpanExporter, error) {
 
 	exp, err := jaeger.New(epo)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	return &threadSafeExporterWrapper{
 		exporter: exp,
-	}, nil
+	}, nil, nil
 }
 
 func envOr(key, defaultValue string) string {

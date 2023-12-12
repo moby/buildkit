@@ -62,6 +62,7 @@ import (
 	"github.com/urfave/cli"
 	"go.etcd.io/bbolt"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
@@ -264,9 +265,18 @@ func main() {
 			return err
 		}
 
-		streamTracer := otelgrpc.StreamServerInterceptor(otelgrpc.WithTracerProvider(tp), otelgrpc.WithPropagators(propagators))
+		mp, err := detect.MeterProvider()
+		if err != nil {
+			return err
+		}
 
-		unary := grpc_middleware.ChainUnaryServer(unaryInterceptor(ctx, tp), grpcerrors.UnaryServerInterceptor)
+		streamTracer := otelgrpc.StreamServerInterceptor(
+			otelgrpc.WithTracerProvider(tp),
+			otelgrpc.WithMeterProvider(mp),
+			otelgrpc.WithPropagators(propagators),
+		)
+
+		unary := grpc_middleware.ChainUnaryServer(unaryInterceptor(ctx, tp, mp), grpcerrors.UnaryServerInterceptor)
 		stream := grpc_middleware.ChainStreamServer(streamTracer, grpcerrors.StreamServerInterceptor)
 
 		opts := []grpc.ServerOption{grpc.UnaryInterceptor(unary), grpc.StreamInterceptor(stream)}
@@ -630,8 +640,12 @@ func getListener(addr string, uid, gid int, tlsConfig *tls.Config) (net.Listener
 	}
 }
 
-func unaryInterceptor(globalCtx context.Context, tp trace.TracerProvider) grpc.UnaryServerInterceptor {
-	withTrace := otelgrpc.UnaryServerInterceptor(otelgrpc.WithTracerProvider(tp), otelgrpc.WithPropagators(propagators))
+func unaryInterceptor(globalCtx context.Context, tp trace.TracerProvider, mp metric.MeterProvider) grpc.UnaryServerInterceptor {
+	withTrace := otelgrpc.UnaryServerInterceptor(
+		otelgrpc.WithTracerProvider(tp),
+		otelgrpc.WithMeterProvider(mp),
+		otelgrpc.WithPropagators(propagators),
+	)
 
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 		ctx, cancel := context.WithCancelCause(ctx)
@@ -703,7 +717,7 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 		return nil, err
 	}
 
-	tc, err := detect.Exporter()
+	tc, _, err := detect.Exporter()
 	if err != nil {
 		return nil, err
 	}
@@ -903,7 +917,7 @@ func runTraceController(p string, exp sdktrace.SpanExporter) error {
 }
 
 type traceCollector struct {
-	*tracev1.UnimplementedTraceServiceServer
+	tracev1.UnimplementedTraceServiceServer
 	exporter sdktrace.SpanExporter
 }
 
