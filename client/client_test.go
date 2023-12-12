@@ -7407,8 +7407,8 @@ func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
 
 // moby/buildkit#492
 func testParallelLocalBuilds(t *testing.T, sb integration.Sandbox) {
-	ctx, cancel := context.WithCancel(sb.Context())
-	defer cancel()
+	ctx, cancel := context.WithCancelCause(sb.Context())
+	defer cancel(errors.WithStack(context.Canceled))
 
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -9832,7 +9832,7 @@ func testLLBMountPerformance(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	timeoutCtx, cancel := context.WithTimeout(sb.Context(), time.Minute)
+	timeoutCtx, cancel := context.WithTimeoutCause(sb.Context(), time.Minute, nil)
 	defer cancel()
 	_, err = c.Solve(timeoutCtx, def, SolveOpt{}, nil)
 	require.NoError(t, err)

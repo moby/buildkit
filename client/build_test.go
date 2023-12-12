@@ -933,7 +933,7 @@ func testClientGatewayContainerPID1Tty(t *testing.T, sb integration.Sandbox) {
 	output := bytes.NewBuffer(nil)
 
 	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
-		ctx, timeout := context.WithTimeout(ctx, 10*time.Second)
+		ctx, timeout := context.WithTimeoutCause(ctx, 10*time.Second, nil)
 		defer timeout()
 
 		st := llb.Image("busybox:latest")
@@ -1015,7 +1015,7 @@ func testClientGatewayContainerCancelPID1Tty(t *testing.T, sb integration.Sandbo
 	output := bytes.NewBuffer(nil)
 
 	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
-		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		ctx, cancel := context.WithTimeoutCause(ctx, 10*time.Second, nil)
 		defer cancel()
 
 		st := llb.Image("busybox:latest")
@@ -1141,7 +1141,7 @@ func testClientGatewayContainerExecTty(t *testing.T, sb integration.Sandbox) {
 	inputR, inputW := io.Pipe()
 	output := bytes.NewBuffer(nil)
 	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
-		ctx, timeout := context.WithTimeout(ctx, 10*time.Second)
+		ctx, timeout := context.WithTimeoutCause(ctx, 10*time.Second, nil)
 		defer timeout()
 		st := llb.Image("busybox:latest")
 
@@ -1233,7 +1233,7 @@ func testClientGatewayContainerCancelExecTty(t *testing.T, sb integration.Sandbo
 	inputR, inputW := io.Pipe()
 	output := bytes.NewBuffer(nil)
 	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
-		ctx, timeout := context.WithTimeout(ctx, 10*time.Second)
+		ctx, timeout := context.WithTimeoutCause(ctx, 10*time.Second, nil)
 		defer timeout()
 		st := llb.Image("busybox:latest")
 
@@ -1266,8 +1266,8 @@ func testClientGatewayContainerCancelExecTty(t *testing.T, sb integration.Sandbo
 		defer pid1.Wait()
 		defer ctr.Release(ctx)
 
-		execCtx, cancel := context.WithCancel(ctx)
-		defer cancel()
+		execCtx, cancel := context.WithCancelCause(ctx)
+		defer cancel(errors.WithStack(context.Canceled))
 
 		prompt := newTestPrompt(execCtx, t, inputW, output)
 		pid2, err := ctr.Start(execCtx, client.StartRequest{
@@ -1281,7 +1281,7 @@ func testClientGatewayContainerCancelExecTty(t *testing.T, sb integration.Sandbo
 		require.NoError(t, err)
 
 		prompt.SendExpect("echo hi", "hi")
-		cancel()
+		cancel(errors.WithStack(context.Canceled))
 
 		err = pid2.Wait()
 		require.ErrorIs(t, err, context.Canceled)
@@ -2132,7 +2132,7 @@ func testClientGatewayContainerSignal(t *testing.T, sb integration.Sandbox) {
 	product := "buildkit_test"
 
 	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
-		ctx, timeout := context.WithTimeout(ctx, 10*time.Second)
+		ctx, timeout := context.WithTimeoutCause(ctx, 10*time.Second, nil)
 		defer timeout()
 
 		st := llb.Image("busybox:latest")

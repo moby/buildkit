@@ -123,8 +123,9 @@ func (r *ociLayoutResolver) info(ctx context.Context, ref reference.Spec) (conte
 
 func (r *ociLayoutResolver) withCaller(ctx context.Context, f func(context.Context, session.Caller) error) error {
 	if r.store.SessionID != "" {
-		timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
+		timeoutCtx, cancel := context.WithCancelCause(ctx)
+		timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, errors.WithStack(context.DeadlineExceeded))
+		defer cancel(errors.WithStack(context.Canceled))
 
 		caller, err := r.sm.Get(timeoutCtx, r.store.SessionID, false)
 		if err != nil {

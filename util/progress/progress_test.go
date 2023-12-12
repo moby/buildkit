@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/sync/errgroup"
 )
@@ -31,7 +32,7 @@ func TestProgress(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 15, s)
 
-	cancelProgress()
+	cancelProgress(errors.WithStack(context.Canceled))
 	err = eg.Wait()
 	assert.NoError(t, err)
 
@@ -56,7 +57,7 @@ func TestProgressNested(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 6, s)
 
-	cancelProgress()
+	cancelProgress(errors.WithStack(context.Canceled))
 
 	err = eg.Wait()
 	assert.NoError(t, err)
@@ -74,7 +75,7 @@ func calc(ctx context.Context, total int, name string) (int, error) {
 	for i := 1; i <= total; i++ {
 		select {
 		case <-ctx.Done():
-			return 0, ctx.Err()
+			return 0, context.Cause(ctx)
 		case <-time.After(10 * time.Millisecond):
 		}
 		if i == total {

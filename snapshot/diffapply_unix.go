@@ -600,8 +600,10 @@ func (d *differ) doubleWalkingChanges(ctx context.Context, handle func(context.C
 		if prevErr != nil {
 			return prevErr
 		}
-		if ctx.Err() != nil {
-			return ctx.Err()
+		select {
+		case <-ctx.Done():
+			return context.Cause(ctx)
+		default:
 		}
 
 		if kind == fs.ChangeKindUnmodified {
@@ -689,8 +691,11 @@ func (d *differ) overlayChanges(ctx context.Context, handle func(context.Context
 		if prevErr != nil {
 			return prevErr
 		}
-		if ctx.Err() != nil {
-			return ctx.Err()
+
+		select {
+		case <-ctx.Done():
+			return context.Cause(ctx)
+		default:
 		}
 
 		if kind == fs.ChangeKindUnmodified {

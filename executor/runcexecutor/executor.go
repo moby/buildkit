@@ -369,7 +369,7 @@ func exitError(ctx context.Context, err error) error {
 		)
 		select {
 		case <-ctx.Done():
-			exitErr.Err = errors.Wrapf(ctx.Err(), exitErr.Error())
+			exitErr.Err = errors.Wrapf(context.Cause(ctx), exitErr.Error())
 			return exitErr
 		default:
 			return stack.Enable(exitErr)
@@ -402,7 +402,7 @@ func (w *runcExecutor) Exec(ctx context.Context, id string, process executor.Pro
 		}
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return context.Cause(ctx)
 		case err, ok := <-done:
 			if !ok || err == nil {
 				return errors.Errorf("container %s has stopped", id)
@@ -532,8 +532,9 @@ func (k procKiller) Kill(ctx context.Context) (err error) {
 
 	// this timeout is generally a no-op, the Kill ctx should already have a
 	// shorter timeout but here as a fail-safe for future refactoring.
-	ctx, timeout := context.WithTimeout(ctx, 10*time.Second)
-	defer timeout()
+	ctx, cancel := context.WithCancelCause(ctx)
+	ctx, _ = context.WithTimeoutCause(ctx, 10*time.Second, errors.WithStack(context.DeadlineExceeded))
+	defer cancel(errors.WithStack(context.Canceled))
 
 	if k.pidfile == "" {
 		// for `runc run` process we use `runc kill` to terminate the process
@@ -580,7 +581,7 @@ type procHandle struct {
 	monitorProcess *os.Process
 	ready          chan struct{}
 	ended          chan struct{}
-	shutdown       func()
+	shutdown       func(error)
 	// this this only used when the request context is canceled and we need
 	// to kill the in-container process.
 	killer procKiller
@@ -594,7 +595,7 @@ type procHandle struct {
 // The goal is to allow for runc to gracefully shutdown when the request context
 // is cancelled.
 func runcProcessHandle(ctx context.Context, killer procKiller) (*procHandle, context.Context) {
-	runcCtx, cancel := context.WithCancel(context.Background())
+	runcCtx, cancel := context.WithCancelCause(context.Background())
 	p := &procHandle{
 		ready:    make(chan struct{}),
 		ended:    make(chan struct{}),
@@ -615,17 +616,17 @@ func runcProcessHandle(ctx context.Context, killer procKiller) (*procHandle, con
 		for {
 			select {
 			case <-ctx.Done():
-				killCtx, timeout := context.WithTimeout(context.Background(), 7*time.Second)
+				killCtx, timeout := context.WithCancelCause(context.Background())
+				killCtx, _ = context.WithTimeoutCause(killCtx, 7*time.Second, errors.WithStack(context.DeadlineExceeded))
 				if err := p.killer.Kill(killCtx); err != nil {
 					select {
 					case <-killCtx.Done():
-						timeout()
-						cancel()
+						cancel(errors.WithStack(context.Cause(ctx)))
 						return
 					default:
 					}
 				}
-				timeout()
+				timeout(errors.WithStack(context.Canceled))
 				select {
 				case <-time.After(50 * time.Millisecond):
 				case <-p.ended:
@@ -653,7 +654,7 @@ func (p *procHandle) Release() {
 // goroutines.
 func (p *procHandle) Shutdown() {
 	if p.shutdown != nil {
-		p.shutdown()
+		p.shutdown(errors.WithStack(context.Canceled))
 	}
 }
 
@@ -663,7 +664,7 @@ func (p *procHandle) Shutdown() {
 func (p *procHandle) WaitForReady(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return context.Cause(ctx)
 	case <-p.ready:
 		return nil
 	}
@@ -673,10 +674,11 @@ func (p *procHandle) WaitForReady(ctx context.Context) error {
 // We wait for up to 10s for the runc pid to be reported.  If the started
 // callback is non-nil it will be called after receiving the pid.
 func (p *procHandle) WaitForStart(ctx context.Context, startedCh <-chan int, started func()) error {
-	startedCtx, timeout := context.WithTimeout(ctx, 10*time.Second)
-	defer timeout()
+	ctx, cancel := context.WithCancelCause(ctx)
+	ctx, _ = context.WithTimeoutCause(ctx, 10*time.Second, errors.WithStack(context.DeadlineExceeded))
+	defer cancel(errors.WithStack(context.Canceled))
 	select {
-	case <-startedCtx.Done():
+	case <-ctx.Done():
 		return errors.New("go-runc started message never received")
 	case runcPid, ok := <-startedCh:
 		if !ok {

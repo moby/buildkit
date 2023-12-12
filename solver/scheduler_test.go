@@ -488,13 +488,13 @@ func TestSingleCancelCache(t *testing.T) {
 		}
 	}()
 
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancelCause(ctx)
 
 	g0 := Edge{
 		Vertex: vtx(vtxOpt{
 			name: "v0",
 			cachePreFunc: func(ctx context.Context) error {
-				cancel()
+				cancel(errors.WithStack(context.Canceled))
 				<-ctx.Done()
 				return nil // error should still come from context
 			},
@@ -530,13 +530,13 @@ func TestSingleCancelExec(t *testing.T) {
 		}
 	}()
 
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancelCause(ctx)
 
 	g1 := Edge{
 		Vertex: vtx(vtxOpt{
 			name: "v2",
 			execPreFunc: func(ctx context.Context) error {
-				cancel()
+				cancel(errors.WithStack(context.Canceled))
 				<-ctx.Done()
 				return nil // error should still come from context
 			},
@@ -580,8 +580,8 @@ func TestSingleCancelParallel(t *testing.T) {
 			}
 		}()
 
-		ctx, cancel := context.WithCancel(ctx)
-		defer cancel()
+		ctx, cancel := context.WithCancelCause(ctx)
+		defer cancel(errors.WithStack(context.Canceled))
 
 		g := Edge{
 			Vertex: vtx(vtxOpt{
@@ -590,7 +590,7 @@ func TestSingleCancelParallel(t *testing.T) {
 				cachePreFunc: func(ctx context.Context) error {
 					close(firstReady)
 					time.Sleep(200 * time.Millisecond)
-					cancel()
+					cancel(errors.WithStack(context.Canceled))
 					<-firstErrored
 					return nil
 				},
@@ -3452,13 +3452,13 @@ func (v *vertex) cacheMap(ctx context.Context) error {
 	}
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return context.Cause(ctx)
 	default:
 	}
 	select {
 	case <-time.After(v.opt.cacheDelay):
 	case <-ctx.Done():
-		return ctx.Err()
+		return context.Cause(ctx)
 	}
 	return nil
 }
@@ -3489,13 +3489,13 @@ func (v *vertex) exec(ctx context.Context, inputs []Result) error {
 	}
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return context.Cause(ctx)
 	default:
 	}
 	select {
 	case <-time.After(v.opt.execDelay):
 	case <-ctx.Done():
-		return ctx.Err()
+		return context.Cause(ctx)
 	}
 	return nil
 }

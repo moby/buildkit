@@ -50,7 +50,7 @@ func TestCancelOne(t *testing.T) {
 	var r1, r2 string
 	var counter int64
 	f := testFunc(100*time.Millisecond, "bar", &counter)
-	ctx2, cancel := context.WithCancel(ctx)
+	ctx2, cancel := context.WithCancelCause(ctx)
 	eg.Go(func() error {
 		ret1, err := g.Do(ctx2, "foo", f)
 		assert.Error(t, err)
@@ -71,9 +71,9 @@ func TestCancelOne(t *testing.T) {
 	eg.Go(func() error {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return context.Cause(ctx)
 		case <-time.After(30 * time.Millisecond):
-			cancel()
+			cancel(errors.WithStack(context.Canceled))
 			return nil
 		}
 	})
@@ -88,7 +88,7 @@ func TestCancelRace(t *testing.T) {
 	// t.Parallel() // disabled for better timing consistency. works with parallel as well
 
 	g := &Group[struct{}]{}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancelCause(context.Background())
 
 	kick := make(chan struct{})
 	wait := make(chan struct{})
@@ -118,7 +118,7 @@ func TestCancelRace(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 		select {
 		case <-done:
-			return struct{}{}, ctx.Err()
+			return struct{}{}, context.Cause(ctx)
 		case <-time.After(200 * time.Millisecond):
 		}
 		return struct{}{}, nil
@@ -127,7 +127,7 @@ func TestCancelRace(t *testing.T) {
 	go func() {
 		defer close(wait)
 		<-kick
-		cancel()
+		cancel(errors.WithStack(context.Canceled))
 		time.Sleep(5 * time.Millisecond)
 		_, err := g.Do(context.Background(), "foo", f)
 		require.NoError(t, err)
@@ -146,8 +146,8 @@ func TestCancelBoth(t *testing.T) {
 	var r1, r2 string
 	var counter int64
 	f := testFunc(200*time.Millisecond, "bar", &counter)
-	ctx2, cancel2 := context.WithCancel(ctx)
-	ctx3, cancel3 := context.WithCancel(ctx)
+	ctx2, cancel2 := context.WithCancelCause(ctx)
+	ctx3, cancel3 := context.WithCancelCause(ctx)
 	eg.Go(func() error {
 		ret1, err := g.Do(ctx2, "foo", f)
 		assert.Error(t, err)
@@ -169,18 +169,18 @@ func TestCancelBoth(t *testing.T) {
 	eg.Go(func() error {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return context.Cause(ctx)
 		case <-time.After(20 * time.Millisecond):
-			cancel2()
+			cancel2(errors.WithStack(context.Canceled))
 			return nil
 		}
 	})
 	eg.Go(func() error {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return context.Cause(ctx)
 		case <-time.After(50 * time.Millisecond):
-			cancel3()
+			cancel3(errors.WithStack(context.Canceled))
 			return nil
 		}
 	})
@@ -228,7 +228,7 @@ func testFunc(wait time.Duration, ret string, counter *int64) func(ctx context.C
 		atomic.AddInt64(counter, 1)
 		select {
 		case <-ctx.Done():
-			return "", ctx.Err()
+			return "", context.Cause(ctx)
 		case <-time.After(wait):
 			return ret, nil
 		}

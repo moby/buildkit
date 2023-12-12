@@ -99,7 +99,7 @@ func (d Display) UpdateFrom(ctx context.Context, ch chan *client.SolveStatus) ([
 	for {
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, context.Cause(ctx)
 		case <-ticker.C:
 			d.disp.refresh()
 		case ss, ok := <-ch:
