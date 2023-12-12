@@ -482,7 +482,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	br := s.bridge(j)
 	var fwd gateway.LLBBridgeForwarder
 	if s.gatewayForwarder != nil && req.Definition == nil && req.Frontend == "" {
-		fwd = gateway.NewBridgeForwarder(ctx, br, s.workerController, req.FrontendInputs, sessionID, s.sm)
+		fwd = gateway.NewBridgeForwarder(ctx, br, br, s.workerController.Infos(), req.FrontendInputs, sessionID, s.sm)
 		defer fwd.Discard()
 		// Register build before calling s.recordBuildHistory, because
 		// s.recordBuildHistory can block for several seconds on
