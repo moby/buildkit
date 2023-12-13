@@ -12,7 +12,6 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/executor"
-	resourcestypes "github.com/moby/buildkit/executor/resources/types"
 	"github.com/moby/buildkit/frontend"
 	gw "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/identity"
@@ -25,6 +24,7 @@ import (
 	"github.com/moby/buildkit/sourcepolicy"
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
@@ -157,14 +157,34 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 	return res, nil
 }
 
-func (b *llbBridge) Run(ctx context.Context, id string, rootfs executor.Mount, mounts []executor.Mount, process executor.ProcessInfo, started chan<- struct{}) (resourcestypes.Recorder, error) {
+func (b *llbBridge) validateEntitlements(p executor.ProcessInfo) error {
+	ent, err := loadEntitlements(b.builder)
+	if err != nil {
+		return err
+	}
+	v := entitlements.Values{
+		NetworkHost:      p.Meta.NetMode == pb.NetMode_HOST,
+		SecurityInsecure: p.Meta.SecurityMode == pb.SecurityMode_INSECURE,
+	}
+	return ent.Check(v)
+}
+
+func (b *llbBridge) Run(ctx context.Context, id string, rootfs executor.Mount, mounts []executor.Mount, process executor.ProcessInfo, started chan<- struct{}) error {
+	if err := b.validateEntitlements(process); err != nil {
+		return err
+	}
+
 	if err := b.loadExecutor(); err != nil {
-		return nil, err
+		return err
 	}
 	return b.executor.Run(ctx, id, rootfs, mounts, process, started)
 }
 
 func (b *llbBridge) Exec(ctx context.Context, id string, process executor.ProcessInfo) error {
+	if err := b.validateEntitlements(process); err != nil {
+		return err
+	}
+
 	if err := b.loadExecutor(); err != nil {
 		return err
 	}
