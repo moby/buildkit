@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/containerd/continuity/fs"
@@ -38,6 +39,11 @@ func MountStubsCleaner(dir string, mounts []Mount) func() {
 
 	return func() {
 		for _, p := range paths {
+			p, err := fs.RootPath(dir, strings.TrimPrefix(p, dir))
+			if err != nil {
+				continue
+			}
+
 			st, err := os.Lstat(p)
 			if err != nil {
 				continue
@@ -56,8 +62,12 @@ func MountStubsCleaner(dir string, mounts []Mount) func() {
 
 			// Back up the timestamps of the dir for reproducible builds
 			// https://github.com/moby/buildkit/issues/3148
-			dir := filepath.Dir(p)
-			dirSt, err := os.Stat(dir)
+			parent := filepath.Dir(p)
+			if realPath, err := fs.RootPath(dir, strings.TrimPrefix(parent, dir)); err != nil || realPath != parent {
+				continue
+			}
+
+			dirSt, err := os.Stat(parent)
 			if err != nil {
 				logrus.WithError(err).Warnf("Failed to stat %q (parent of mount stub %q)", dir, p)
 				continue
@@ -74,7 +84,7 @@ func MountStubsCleaner(dir string, mounts []Mount) func() {
 			}
 
 			// Restore the timestamps of the dir
-			if err := os.Chtimes(dir, atime, mtime); err != nil {
+			if err := os.Chtimes(parent, atime, mtime); err != nil {
 				logrus.WithError(err).Warnf("Failed to restore time time mount stub timestamp (os.Chtimes(%q, %v, %v))", dir, atime, mtime)
 			}
 		}
