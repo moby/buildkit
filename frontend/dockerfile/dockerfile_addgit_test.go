@@ -25,6 +25,7 @@ func init() {
 }
 
 func testAddGit(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	gitDir, err := os.MkdirTemp("", "buildkit")

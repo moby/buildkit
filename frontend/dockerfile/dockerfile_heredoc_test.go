@@ -32,6 +32,7 @@ func init() {
 }
 
 func testCopyHeredoc(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -108,6 +109,7 @@ COPY --from=build /dest /
 }
 
 func testCopyHeredocSpecialSymbols(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -193,6 +195,7 @@ EOF
 }
 
 func testRunBasicHeredoc(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -238,6 +241,7 @@ COPY --from=build /dest /dest
 }
 
 func testRunFakeHeredoc(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -285,6 +289,7 @@ COPY --from=build /dest /dest
 }
 
 func testRunShebangHeredoc(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -333,6 +338,7 @@ COPY --from=build /dest /dest
 }
 
 func testRunComplexHeredoc(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -404,6 +410,7 @@ COPY --from=build /dest /
 }
 
 func testHeredocIndent(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -497,6 +504,7 @@ COPY --from=build /dest /
 }
 
 func testHeredocVarSubstitution(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -593,6 +601,7 @@ COPY --from=build /dest /
 }
 
 func testOnBuildHeredoc(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	f := getFrontend(t, sb)
 

@@ -2254,6 +2254,7 @@ func testClientGatewayNilResult(t *testing.T, sb integration.Sandbox) {
 }
 
 func testClientGatewayEmptyImageExec(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)

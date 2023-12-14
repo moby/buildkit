@@ -4,31 +4,18 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"runtime"
 
-	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/pkg/errors"
 )
 
+// InitOCIWorker registers an integration test worker, which enables the --oci-worker
+// flag in the test buildkitd instance and disables the --containerd-worker flag. This
+// integration test worker is not supported on Windows.
 func InitOCIWorker() {
-	integration.Register(&OCI{ID: "oci"})
-
-	// the rootless uid is defined in Dockerfile
-	if s := os.Getenv("BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR"); s != "" {
-		var uid, gid int
-		if _, err := fmt.Sscanf(s, "%d:%d", &uid, &gid); err != nil {
-			bklog.L.Fatalf("unexpected BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR: %q", s)
-		}
-		if integration.RootlessSupported(uid) {
-			integration.Register(&OCI{ID: "oci-rootless", UID: uid, GID: gid})
-		}
-	}
-
-	if s := os.Getenv("BUILDKIT_INTEGRATION_SNAPSHOTTER"); s != "" {
-		integration.Register(&OCI{ID: "oci-snapshotter-" + s, Snapshotter: s})
-	}
+	// calling platform specific
+	initOCIWorker()
 }
 
 type OCI struct {

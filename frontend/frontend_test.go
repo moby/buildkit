@@ -60,6 +60,7 @@ func testReturnNil(t *testing.T, sb integration.Sandbox) {
 }
 
 func testRefReadFile(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -124,6 +125,7 @@ func testRefReadFile(t *testing.T, sb integration.Sandbox) {
 }
 
 func testRefReadDir(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -148,7 +150,7 @@ func testRefReadDir(t *testing.T, sb integration.Sandbox) {
 		require.True(t, ok)
 		stat.ModTime = 0                     // this will inevitably differ, we clear it during the tests below too
 		stat.Path = filepath.Base(stat.Path) // we are only testing reading a single directory here
-		expMap[path] = stat
+		expMap[filepath.ToSlash(path)] = stat
 		return nil
 	})
 
@@ -239,6 +241,7 @@ func testRefReadDir(t *testing.T, sb integration.Sandbox) {
 }
 
 func testRefStatFile(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -291,6 +294,7 @@ func testRefStatFile(t *testing.T, sb integration.Sandbox) {
 }
 
 func testRefEvaluate(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())

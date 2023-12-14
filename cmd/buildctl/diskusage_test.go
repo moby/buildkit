@@ -8,6 +8,7 @@ import (
 )
 
 func testDiskUsage(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	cmd := sb.Cmd("du")
 	err := cmd.Run()
 	assert.NoError(t, err)

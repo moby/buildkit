@@ -34,6 +34,7 @@ func init() {
 }
 
 func testMountContext(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -61,6 +62,7 @@ RUN --mount=target=/context [ "$(cat /context/testfile)" == "contents0" ]
 }
 
 func testMountTmpfs(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -88,6 +90,7 @@ RUN [ ! -f /mytmp/foo ]
 }
 
 func testMountInvalid(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -156,6 +159,7 @@ RUN --mont=target=/mytmp,type=tmpfs /bin/true
 }
 
 func testMountRWCache(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -228,6 +232,7 @@ COPY --from=second /unique /unique
 }
 
 func testCacheMountUser(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -254,6 +259,7 @@ RUN --mount=type=cache,target=/mycache,uid=1001,gid=1002,mode=0751 [ "$(stat -c 
 }
 
 func testCacheMountDefaultID(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -282,6 +288,7 @@ RUN --mount=type=cache,target=/mycache [ -f /mycache/foo ]
 }
 
 func testMountEnvVar(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -310,6 +317,7 @@ RUN --mount=type=cache,target=$SOME_PATH [ -f $SOME_PATH/foo ]
 }
 
 func testMountArg(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -338,6 +346,7 @@ RUN --mount=type=cache,target=/mycache2 [ -f /mycache2/foo ]
 }
 
 func testMountEnvAcrossStages(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -371,6 +380,7 @@ RUN --mount=type=$MNT_TYPE2,id=$MNT_ID,target=/whatever [ -f /whatever/foo ]
 }
 
 func testMountMetaArg(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -401,6 +411,7 @@ RUN --mount=type=cache,id=mycache,target=$META_PATH [ -f /tmp/meta/foo ]
 }
 
 func testMountFromError(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -432,6 +443,7 @@ RUN --mount=from=$ttt,type=cache,target=/tmp ls
 }
 
 func testMountTmpfsSize(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -473,6 +485,7 @@ COPY --from=base /tmpfssize /
 
 // moby/buildkit#4123
 func testMountDuplicate(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`

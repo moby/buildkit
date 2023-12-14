@@ -31,6 +31,7 @@ func TestCLIIntegration(t *testing.T) {
 }
 
 func testUsage(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	require.NoError(t, sb.Cmd().Run())
 
 	require.NoError(t, sb.Cmd("--help").Run())

@@ -151,6 +151,7 @@ RUN --network=host nc 127.0.0.1 %s | grep foo
 }
 
 func testRunGlobalNetwork(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	s, err := echoserver.NewTestServer("foo")
