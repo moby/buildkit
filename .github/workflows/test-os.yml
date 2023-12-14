@@ -159,8 +159,12 @@ jobs:
           vagrant up --no-tty
       -
         name: Smoke test
-        run: |
-          vagrant up --provision-with=test-smoke
+        uses: nick-fields/retry@14672906e672a08bd6eeb15720e9ed3ce869cdd4  # v2.9.0
+        with:
+          timeout_minutes: 20
+          max_attempts: 5
+          command: |
+            vagrant up --provision-with=test-smoke
       -
         name: BuildKit logs
         if: always()
