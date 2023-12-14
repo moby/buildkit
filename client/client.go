@@ -59,9 +59,6 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 	var creds *withCredentials
 
 	for _, o := range opts {
-		if _, ok := o.(*withFailFast); ok {
-			gopts = append(gopts, grpc.FailOnNonTempDialError(true))
-		}
 		if credInfo, ok := o.(*withCredentials); ok {
 			if creds == nil {
 				creds = &withCredentials{}
@@ -214,14 +211,6 @@ func (c *Client) Wait(ctx context.Context) error {
 
 func (c *Client) Close() error {
 	return c.conn.Close()
-}
-
-type withFailFast struct{}
-
-func (*withFailFast) isClientOpt() {}
-
-func WithFailFast() ClientOpt {
-	return &withFailFast{}
 }
 
 type withDialer struct {

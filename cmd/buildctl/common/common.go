@@ -65,10 +65,8 @@ func ResolveClient(c *cli.Context) (*client.Client, error) {
 		key = c.GlobalString("tlskey")
 	}
 
-	opts := []client.ClientOpt{client.WithFailFast()}
-
 	ctx := CommandContext(c)
-
+	var opts []client.ClientOpt
 	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
 		opts = append(opts, client.WithTracerProvider(span.TracerProvider()))
 
