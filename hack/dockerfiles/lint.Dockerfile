@@ -19,10 +19,11 @@ COPY --link --from=xx / /
 WORKDIR /go/src/github.com/moby/buildkit
 
 FROM base as golangci-lint
+ARG TARGETNAME
 ARG BUILDTAGS
 ARG TARGETPLATFORM
 RUN --mount=target=/go/src/github.com/moby/buildkit \
-    --mount=target=/root/.cache,type=cache,id=lint-cache-$TARGETPLATFORM \
+    --mount=target=/root/.cache,type=cache,id=lint-cache-${TARGETNAME}-${TARGETPLATFORM} \
   xx-go --wrap && \
   golangci-lint run --build-tags "${BUILDTAGS}" && \
   touch /golangci-lint.done

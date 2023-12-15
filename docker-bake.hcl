@@ -122,6 +122,7 @@ target "lint" {
   output = ["type=cacheonly"]
   target = buildtags.target
   args = {
+    TARGETNAME = buildtags.name
     BUILDTAGS = buildtags.tags
   }
   platforms = buildtags.target == "golangci-lint" && GOLANGCI_LINT_MULTIPLATFORM != null ? [
