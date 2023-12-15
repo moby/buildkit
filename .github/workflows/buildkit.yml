@@ -27,6 +27,7 @@ env:
   IMAGE_NAME: "moby/buildkit"
   PLATFORMS: "linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le,linux/riscv64"
   DESTDIR: "./bin"
+  BUILD_TIMEOUT: "900"  # 15 minutes
 
 jobs:
   prepare:
@@ -160,6 +161,7 @@ jobs:
         uses: docker/setup-qemu-action@v3
       -
         name: Set up Docker Buildx
+        id: buildx
         uses: docker/setup-buildx-action@v3
         with:
           version: ${{ env.SETUP_BUILDX_VERSION }}
@@ -175,8 +177,14 @@ jobs:
       -
         name: Build ${{ needs.prepare.outputs.tag }}
         run: |
-          ./hack/images "${{ needs.prepare.outputs.tag }}" "$IMAGE_NAME" "${{ needs.prepare.outputs.push }}"
+          timeout ${BUILD_TIMEOUT} ./hack/images "${{ needs.prepare.outputs.tag }}" "$IMAGE_NAME" "${{ needs.prepare.outputs.push }}"
+          if [ $? -eq 124 ]; then
+            echo "::error::Build timed out after ${BUILD_TIMEOUT} seconds"
+            docker kill --signal=SIGQUIT buildx_buildkit_${{ steps.buildx.outputs.name }}
+            exit 1
+          fi
         env:
+          BUILDX_CMD: docker --debug buildx
           RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
           TARGET: ${{ matrix.target-stage }}
           CACHE_FROM: type=gha,scope=image${{ matrix.target-stage }}
