@@ -165,7 +165,10 @@ jobs:
         uses: docker/setup-buildx-action@v3
         with:
           version: ${{ env.SETUP_BUILDX_VERSION }}
-          driver-opts: image=${{ env.SETUP_BUILDKIT_IMAGE }}
+          driver-opts: |
+            image=${{ env.SETUP_BUILDKIT_IMAGE }}
+            env.BUILDKIT_STEP_LOG_MAX_SIZE=10485760
+            env.BUILDKIT_STEP_LOG_MAX_SPEED=10485760
           buildkitd-flags: --debug
       -
         name: Login to DockerHub
