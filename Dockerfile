@@ -122,7 +122,7 @@ RUN --mount=target=. --mount=target=/root/.cache,type=cache \
   set -ex
   xx-go build ${GOBUILDFLAGS} -gcflags="${GOGCFLAGS}" -ldflags "$(cat /tmp/.ldflags) -extldflags '-static'" -tags "osusergo netgo static_build seccomp ${BUILDKITD_TAGS}" -o /usr/bin/buildkitd ./cmd/buildkitd
   xx-verify ${VERIFYFLAGS} /usr/bin/buildkitd
-  if [ "$(xx-info os)" = "linux" ]; then /usr/bin/buildkitd --version; fi
+  if [ "$(xx-info os)" = "linux" ]; then QEMU_STRACE=1 /usr/bin/buildkitd --version; fi
 EOT
 
 FROM scratch AS binaries-linux
