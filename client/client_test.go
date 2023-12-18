@@ -213,7 +213,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 }
 
 func TestIntegration(t *testing.T) {
-	testIntegration(t, allTests...)
+	testIntegration(t, append(allTests, validationTests...)...)
 }
 
 func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sandbox)) {
