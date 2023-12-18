@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/containerd/containerd/content/local"
@@ -28,10 +27,6 @@ import (
 )
 
 func TestHTTPSource(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
-	}
-
 	t.Parallel()
 	ctx := context.TODO()
 
@@ -147,10 +142,6 @@ func TestHTTPSource(t *testing.T) {
 }
 
 func TestHTTPDefaultName(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
-	}
-
 	t.Parallel()
 	ctx := context.TODO()
 
@@ -217,10 +208,6 @@ func TestHTTPInvalidURL(t *testing.T) {
 }
 
 func TestHTTPChecksum(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
-	}
-
 	t.Parallel()
 	ctx := context.TODO()
 
