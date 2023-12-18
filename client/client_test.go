@@ -208,6 +208,8 @@ func TestIntegration(t *testing.T) {
 		testExportLocalNoPlatformSplitOverwrite,
 		testValidateNullConfig,
 		testValidateInvalidConfig,
+		testValidatePlatformsEmpty,
+		testValidatePlatformsInvalid,
 	)
 }
 
