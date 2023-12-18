@@ -17,6 +17,7 @@ import (
 
 func testValidateNullConfig(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter)
 
 	ctx := sb.Context()
 
@@ -55,6 +56,7 @@ func testValidateNullConfig(t *testing.T, sb integration.Sandbox) {
 
 func testValidateInvalidConfig(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter)
 
 	ctx := sb.Context()
 
@@ -96,11 +98,12 @@ func testValidateInvalidConfig(t *testing.T, sb integration.Sandbox) {
 		},
 	}, "", b, nil)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid image config for export: missing os")
+	require.Contains(t, err.Error(), "invalid image config: os and architecture must be specified together")
 }
 
 func testValidatePlatformsEmpty(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter)
 
 	ctx := sb.Context()
 
@@ -139,6 +142,7 @@ func testValidatePlatformsEmpty(t *testing.T, sb integration.Sandbox) {
 
 func testValidatePlatformsInvalid(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
+	integration.CheckFeatureCompat(t, sb, integration.FeatureOCIExporter)
 
 	ctx := sb.Context()
 
@@ -271,7 +275,6 @@ func testValidateSourcePolicy(t *testing.T, sb integration.Sandbox) {
 
 	for _, tc := range tcases {
 		t.Run(tc.name, func(t *testing.T) {
-
 			var viaFrontend bool
 
 			b := func(ctx context.Context, c client.Client) (*client.Result, error) {
@@ -302,7 +305,6 @@ func testValidateSourcePolicy(t *testing.T, sb integration.Sandbox) {
 			_, err = c.Build(ctx, SolveOpt{}, "", b, nil)
 			require.Error(t, err)
 			require.Contains(t, err.Error(), tc.exp)
-
 		})
 	}
 }
