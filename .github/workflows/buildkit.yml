@@ -27,6 +27,7 @@ env:
   IMAGE_NAME: "moby/buildkit"
   PLATFORMS: "linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le,linux/riscv64"
   DESTDIR: "./bin"
+  BINFMT_IMAGE: "tonistiigi/binfmt:qemu-v8.0.4"
   IMAGE_BUILD_TIMEOUT: "900"  # 15 minutes
 
 jobs:
@@ -88,6 +89,8 @@ jobs:
       -
         name: Set up QEMU
         uses: docker/setup-qemu-action@v3
+        with:
+          image: ${{ env.BINFMT_IMAGE }}
       -
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -159,6 +162,8 @@ jobs:
       -
         name: Set up QEMU
         uses: docker/setup-qemu-action@v3
+        with:
+          image: ${{ env.BINFMT_IMAGE }}
       -
         name: Set up Docker Buildx
         id: buildx
