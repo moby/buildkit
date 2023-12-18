@@ -474,6 +474,9 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	j.SetValue(keyEntitlements, set)
 
 	if srcPol != nil {
+		if err := validateSourcePolicy(*srcPol); err != nil {
+			return nil, err
+		}
 		j.SetValue(keySourcePolicy, *srcPol)
 	}
 
@@ -608,6 +611,23 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	return &client.SolveResponse{
 		ExporterResponse: exporterResponse,
 	}, nil
+}
+
+func validateSourcePolicy(pol spb.Policy) error {
+	for _, r := range pol.Rules {
+		if r == nil {
+			return errors.New("invalid nil rule in policy")
+		}
+		if r.Selector == nil {
+			return errors.New("invalid nil selector in policy")
+		}
+		for _, c := range r.Selector.Constraints {
+			if c == nil {
+				return errors.New("invalid nil constraint in policy")
+			}
+		}
+	}
+	return nil
 }
 
 func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult], inp *result.Result[cache.ImmutableRef]) (map[string]string, error) {
@@ -1035,6 +1055,9 @@ func loadSourcePolicy(b solver.Builder) (*spb.Policy, error) {
 			return errors.Errorf("invalid source policy %T", v)
 		}
 		for _, f := range x.Rules {
+			if f == nil {
+				return errors.Errorf("invalid nil policy rule")
+			}
 			r := *f
 			srcPol.Rules = append(srcPol.Rules, &r)
 		}
