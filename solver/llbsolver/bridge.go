@@ -79,6 +79,14 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 	}
 	var polEngine SourcePolicyEvaluator
 	if srcPol != nil || len(pol) > 0 {
+		for _, p := range pol {
+			if p == nil {
+				return nil, errors.Errorf("invalid nil policy")
+			}
+			if err := validateSourcePolicy(*p); err != nil {
+				return nil, err
+			}
+		}
 		if srcPol != nil {
 			pol = append([]*spb.Policy{srcPol}, pol...)
 		}

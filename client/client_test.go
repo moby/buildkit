@@ -210,6 +210,7 @@ func TestIntegration(t *testing.T) {
 		testValidateInvalidConfig,
 		testValidatePlatformsEmpty,
 		testValidatePlatformsInvalid,
+		testValidateSourcePolicy,
 	)
 }
 
