@@ -206,6 +206,7 @@ func TestIntegration(t *testing.T) {
 		testMultipleRecordsWithSameLayersCacheImportExport,
 		testExportLocalNoPlatformSplit,
 		testExportLocalNoPlatformSplitOverwrite,
+		testValidateNullConfig,
 	)
 }
 
