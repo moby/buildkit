@@ -583,6 +583,13 @@ func patchImageConfig(dt []byte, descs []ocispecs.Descriptor, history []ocispecs
 		return nil, errors.Errorf("invalid null image config for export")
 	}
 
+	if img.OS == "" {
+		return nil, errors.Errorf("invalid image config for export: missing os")
+	}
+	if img.Architecture == "" {
+		return nil, errors.Errorf("invalid image config for export: missing architecture")
+	}
+
 	var rootFS ocispecs.RootFS
 	rootFS.Type = "layers"
 	for _, desc := range descs {
