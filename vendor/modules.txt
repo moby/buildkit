@@ -106,6 +106,9 @@ github.com/Microsoft/hcsshim/pkg/ociwclayer
 # github.com/agext/levenshtein v1.2.3
 ## explicit
 github.com/agext/levenshtein
+# github.com/aliyun/aliyun-oss-go-sdk v3.0.1+incompatible
+## explicit
+github.com/aliyun/aliyun-oss-go-sdk/oss
 # github.com/anchore/go-struct-converter v0.0.0-20221118182256-c68fdcfa2092
 ## explicit; go 1.18
 github.com/anchore/go-struct-converter

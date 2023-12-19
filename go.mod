@@ -9,6 +9,7 @@ require (
 	github.com/Microsoft/go-winio v0.6.1
 	github.com/Microsoft/hcsshim v0.11.4
 	github.com/agext/levenshtein v1.2.3
+	github.com/aliyun/aliyun-oss-go-sdk v3.0.1+incompatible
 	github.com/armon/circbuf v0.0.0-20190214190532-5111143e8da2
 	github.com/aws/aws-sdk-go-v2/config v1.18.16
 	github.com/aws/aws-sdk-go-v2/credentials v1.13.16

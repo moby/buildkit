@@ -67,6 +67,7 @@ Join `#buildkit` channel on [Docker Community Slack](https://dockr.ly/comm-slack
     - [GitHub Actions cache (experimental)](#github-actions-cache-experimental)
     - [S3 cache (experimental)](#s3-cache-experimental)
     - [Azure Blob Storage cache (experimental)](#azure-blob-storage-cache-experimental)
+    - [Alibaba Cloud OSS cache (experimental)](#alibaba-cloud-oss-cache-experimental)
   - [Consistent hashing](#consistent-hashing)
 - [Metadata](#metadata)
 - [Systemd socket activation](#systemd-socket-activation)
@@ -611,6 +612,54 @@ There are 2 options supported for Azure Blob Storage authentication:
 * `blobs_prefix=<prefix>`: set global prefix to store / read blobs on the Azure Blob Storage container (`<container>`) (default: `blobs/`)
 * `manifests_prefix=<prefix>`: set global prefix to store / read manifests on the Azure Blob Storage container (`<container>`) (default: `manifests/`)
 * `name=<manifest>`: name of the manifest to use (default: `buildkit`)
+
+#### Alibaba Cloud OSS cache (experimental)
+
+```bash
+buildctl build ... \
+  --output type=image,name=docker.io/username/image,push=true \
+  --export-cache type=oss,endpoint_url=https://oss-cn-hangzhou.aliyuncs.com,bucket=my_bucket,name=my_image \
+  --import-cache type=oss,endpoint_url=https://oss-cn-hangzhou.aliyuncs.com,bucket=my_bucket,name=my_image
+```
+
+The following attributes are required:
+* `bucket`: Alibaba Cloud OSS bucket (default: `$ALIBABA_CLOUD_OSS_BUCKET`)
+* `endpoint_url`: specify a specific OSS endpoint (default: empty)
+
+Storage locations:
+* blobs: `oss://<bucket>/<prefix><blobs_prefix>/<sha256>`, default: `oss://<bucket>/blobs/<sha256>`
+* manifests: `oss://<bucket>/<prefix><manifests_prefix>/<name>`, default: `oss://<bucket>/manifests/<name>`
+
+S3 configuration:
+* `blobs_prefix`: global prefix to store / read blobs on OSS (default: `blobs/`)
+* `manifests_prefix`: global prefix to store / read manifests on OSS (default: `manifests/`)
+
+Alibaba Cloud Authentication:
+
+The simplest way is to use a pair of AK/SK:
+
+* Any system using environment variables / config files supported by the [Alibaba Cloud OSS Go SDK](https://www.alibabacloud.com/help/en/oss/developer-reference/go/). The configuration must be available for the buildkit daemon, not for the client.
+* Using the following attributes:
+  * `access_key_id`: Access Key ID
+  * `secret_access_key`: Secret Access Key
+  * `secret_access_key`: Security Token (optional)
+
+`--export-cache` options:
+* `type=oss`
+* `mode=<min|max>`: specify cache layers to export (default: `min`)
+  * `min`: only export layers for the resulting image
+  * `max`: export all the layers of all intermediate steps
+* `prefix=<prefix>`: set global prefix to store / read files on OSS (default: empty)
+* `name=<manifest>`: specify name of the manifest to use (default `buildkit`)
+  * Multiple manifest names can be specified at the same time, separated by `;`. The standard use case is to use the git sha1 as name, and the branch name as duplicate, and load both with 2 `import-cache` commands.
+* `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
+
+`--import-cache` options:
+* `type=oss`
+* `prefix=<prefix>`: set global prefix to store / read files on OSS (default: empty)
+* `blobs_prefix=<prefix>`: set global prefix to store / read blobs on OSS (default: `blobs/`)
+* `manifests_prefix=<prefix>`: set global prefix to store / read manifests on OSS (default: `manifests/`)
+* `name=<manifest>`: name of the manifest to use (default `buildkit`)
 
 ### Consistent hashing
 
