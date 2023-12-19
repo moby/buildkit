@@ -12,7 +12,10 @@ note some configuration is only good for edge cases, please take care of it
 carefully.
 
 ```toml
+# debug enables additional debug logging
 debug = true
+# trace enables additional trace logging (very verbose, with potential performance impacts)
+trace = true
 # root is where all buildkit state is stored.
 root = "/var/lib/buildkit"
 # insecure-entitlements allows insecure entitlements, disabled by default.
