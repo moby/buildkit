@@ -122,7 +122,30 @@ RUN --mount=target=. --mount=target=/root/.cache,type=cache \
   set -ex
   xx-go build ${GOBUILDFLAGS} -gcflags="${GOGCFLAGS}" -ldflags "$(cat /tmp/.ldflags) -extldflags '-static'" -tags "osusergo netgo static_build seccomp ${BUILDKITD_TAGS}" -o /usr/bin/buildkitd ./cmd/buildkitd
   xx-verify ${VERIFYFLAGS} /usr/bin/buildkitd
-  if [ "$(xx-info os)" = "linux" ]; then /usr/bin/buildkitd --version; fi
+
+  # buildkitd --version can be flaky when running through emulation related to
+  # https://github.com/moby/buildkit/pull/4491. Retry a few times as a workaround.
+  set +ex
+  if [ "$(xx-info os)" = "linux" ]; then
+    max_retries=5
+    for attempt in $(seq "$max_retries"); do
+      timeout 3 /usr/bin/buildkitd --version
+      exitcode=$?
+      if ! xx-info is-cross; then
+        exit $exitcode
+      elif [ $exitcode -eq 0 ]; then
+        break
+      elif [ $exitcode -eq 124 ] || [ $exitcode -eq 143 ]; then
+        echo "WARN: buildkitd --version timed out ($attempt/$max_retries)"
+        if [ "$attempt" -eq "$max_retries" ]; then
+          exit $exitcode
+        fi
+      else
+        echo "ERROR: buildkitd --version failed with exit code $exitcode"
+      fi
+      sleep 1
+    done
+  fi
 EOT
 
 FROM scratch AS binaries-linux
