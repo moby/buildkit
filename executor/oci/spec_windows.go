@@ -4,7 +4,9 @@
 package oci
 
 import (
+	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/oci"
+	"github.com/containerd/continuity/fs"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/pkg/errors"
@@ -42,4 +44,13 @@ func generateRlimitOpts(ulimits []*pb.Ulimit) ([]oci.SpecOpts, error) {
 		return nil, nil
 	}
 	return nil, errors.New("no support for POSIXRlimit on Windows")
+}
+
+func sub(m mount.Mount, subPath string) (mount.Mount, func() error, error) {
+	src, err := fs.RootPath(m.Source, subPath)
+	if err != nil {
+		return mount.Mount{}, nil, err
+	}
+	m.Source = src
+	return m, func() error { return nil }, nil
 }
