@@ -1744,10 +1744,15 @@ definitions:
           The ID of the container that was used to create the image.
 
           Depending on how the image was created, this field may be empty.
+
+          **Deprecated**: this field is kept for backward compatibility, but
+          will be removed in API v1.45.
         type: "string"
-        x-nullable: false
         example: "65974bc86f1770ae4bff79f651ebdbce166ae9aada632ee3fa9af3a264911735"
       ContainerConfig:
+        description: |
+          **Deprecated**: this field is kept for backward compatibility, but
+          will be removed in API v1.45.
         $ref: "#/definitions/ContainerConfig"
       DockerVersion:
         description: |
@@ -2525,6 +2530,21 @@ definitions:
         example:
           com.example.some-label: "some-value"
           com.example.some-other-label: "some-other-value"
+      DNSNames:
+        description: |
+          List of all DNS names an endpoint has on a specific network. This
+          list is based on the container name, network aliases, container short
+          ID, and hostname.
+
+          These DNS names are non-fully qualified but can contain several dots.
+          You can get fully qualified DNS names by appending `.<network-name>`.
+          For instance, if container name is `my.ctr` and the network is named
+          `testnet`, `DNSNames` will contain `my.ctr` and the FQDN will be
+          `my.ctr.testnet`.
+        type: array
+        items:
+          type: string
+        example: ["foobar", "server_x", "server_y", "my.ctr"]
 
   EndpointIPAMConfig:
     description: |
@@ -3022,8 +3042,6 @@ definitions:
             Name: "journald"
           - Type: "Log"
             Name: "json-file"
-          - Type: "Log"
-            Name: "logentries"
           - Type: "Log"
             Name: "splunk"
           - Type: "Log"
@@ -3978,6 +3996,44 @@ definitions:
       - "remove"
       - "orphaned"
 
+  ContainerStatus:
+    type: "object"
+    description: "represents the status of a container."
+    properties:
+      ContainerID:
+        type: "string"
+      PID:
+        type: "integer"
+      ExitCode:
+        type: "integer"
+
+  PortStatus:
+    type: "object"
+    description: "represents the port status of a task's host ports whose service has published host ports"
+    properties:
+      Ports:
+        type: "array"
+        items:
+          $ref: "#/definitions/EndpointPortConfig"
+
+  TaskStatus:
+    type: "object"
+    description: "represents the status of a task."
+    properties:
+      Timestamp:
+        type: "string"
+        format: "dateTime"
+      State:
+        $ref: "#/definitions/TaskState"
+      Message:
+        type: "string"
+      Err:
+        type: "string"
+      ContainerStatus:
+        $ref: "#/definitions/ContainerStatus"
+      PortStatus:
+        $ref: "#/definitions/PortStatus"
+
   Task:
     type: "object"
     properties:
@@ -4013,26 +4069,7 @@ definitions:
       AssignedGenericResources:
         $ref: "#/definitions/GenericResources"
       Status:
-        type: "object"
-        properties:
-          Timestamp:
-            type: "string"
-            format: "dateTime"
-          State:
-            $ref: "#/definitions/TaskState"
-          Message:
-            type: "string"
-          Err:
-            type: "string"
-          ContainerStatus:
-            type: "object"
-            properties:
-              ContainerID:
-                type: "string"
-              PID:
-                type: "integer"
-              ExitCode:
-                type: "integer"
+        $ref: "#/definitions/TaskStatus"
       DesiredState:
         $ref: "#/definitions/TaskState"
       JobIteration:
@@ -4248,7 +4285,10 @@ definitions:
               - "stop-first"
               - "start-first"
       Networks:
-        description: "Specifies which networks the service should attach to."
+        description: |
+          Specifies which networks the service should attach to.
+
+          Deprecated: This field is deprecated since v1.44. The Networks field in TaskSpec should be used instead.
         type: "array"
         items:
           $ref: "#/definitions/NetworkAttachmentConfig"
@@ -5414,7 +5454,7 @@ definitions:
         type: "array"
         items:
           type: "string"
-        example: ["awslogs", "fluentd", "gcplogs", "gelf", "journald", "json-file", "logentries", "splunk", "syslog"]
+        example: ["awslogs", "fluentd", "gcplogs", "gelf", "journald", "json-file", "splunk", "syslog"]
 
 
   RegistryServiceConfig:
@@ -5612,6 +5652,28 @@ definitions:
         items:
           type: "string"
         example: ["--debug", "--systemd-cgroup=false"]
+      status:
+        description: |
+          Information specific to the runtime.
+
+          While this API specification does not define data provided by runtimes,
+          the following well-known properties may be provided by runtimes:
+
+          `org.opencontainers.runtime-spec.features`: features structure as defined
+          in the [OCI Runtime Specification](https://github.com/opencontainers/runtime-spec/blob/main/features.md),
+          in a JSON string representation.
+
+          <p><br /></p>
+
+          > **Note**: The information returned in this field, including the
+          > formatting of values and labels, should not be considered stable,
+          > and may change without notice.
+        type: "object"
+        x-nullable: true
+        additionalProperties:
+          type: "string"
+        example:
+          "org.opencontainers.runtime-spec.features": "{\"ociVersionMin\":\"1.0.0\",\"ociVersionMax\":\"1.1.0\",\"...\":\"...\"}"
 
   Commit:
     description: |
