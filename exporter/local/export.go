@@ -181,7 +181,6 @@ func NewProgressHandler(ctx context.Context, id string) func(int, bool) {
 	now := time.Now()
 	st := progress.Status{
 		Started: &now,
-		Action:  "transferring",
 	}
 	pw.Write(id, st)
 	return func(s int, last bool) {

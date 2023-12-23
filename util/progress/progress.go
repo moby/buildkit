@@ -79,7 +79,7 @@ func WithMetadata(key string, val interface{}) WriterOption {
 
 type Controller interface {
 	Start(context.Context) (context.Context, func(error))
-	Status(id string, action string) func()
+	Status(id string) func()
 }
 
 type Writer interface {
@@ -99,7 +99,7 @@ type Progress struct {
 }
 
 type Status struct {
-	Action    string
+	Name      string
 	Current   int
 	Total     int
 	Started   *time.Time
