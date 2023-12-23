@@ -45,14 +45,16 @@ type Backend interface {
 type Sandbox interface {
 	Backend
 
+	ID() string
+	Name() string
 	Context() context.Context
+	Home() string
 	Cmd(...string) *exec.Cmd
 	Logs() map[string]*bytes.Buffer
 	PrintLogs(*testing.T)
 	ClearLogs()
 	NewRegistry() (string, error)
 	Value(string) interface{} // chosen matrix value
-	Name() string
 }
 
 // BackendConfig is used to configure backends created by a worker.
