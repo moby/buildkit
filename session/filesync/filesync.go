@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/moby/buildkit/session"
@@ -15,6 +16,10 @@ import (
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/noop"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -27,12 +32,18 @@ const (
 	keyFollowPaths        = "followpaths"
 	keyDirName            = "dir-name"
 	keyExporterMetaPrefix = "exporter-md-"
+	meterName             = "github.com/moby/buildkit/session/filesync"
 )
 
 type fsSyncProvider struct {
-	dirs   DirSource
-	p      progressCb
-	doneCh chan error
+	dirs    DirSource
+	p       progressCb
+	doneCh  chan error
+	metrics *fsSyncProviderMetrics
+}
+
+type FSSyncProviderOption interface {
+	apply(sp *fsSyncProvider)
 }
 
 type DirSource interface {
@@ -49,10 +60,15 @@ func (dirs StaticDirSource) LookupDir(name string) (fsutil.FS, bool) {
 }
 
 // NewFSSyncProvider creates a new provider for sending files from client
-func NewFSSyncProvider(dirs DirSource) session.Attachable {
-	return &fsSyncProvider{
-		dirs: dirs,
+func NewFSSyncProvider(dirs DirSource, opts ...FSSyncProviderOption) session.Attachable {
+	sp := &fsSyncProvider{
+		dirs:    dirs,
+		metrics: newFSSyncProviderMetrics(noop.NewMeterProvider()),
 	}
+	for _, opt := range opts {
+		opt.apply(sp)
+	}
+	return sp
 }
 
 func (sp *fsSyncProvider) Register(server *grpc.Server) {
@@ -67,6 +83,16 @@ func (sp *fsSyncProvider) TarStream(stream FileSync_TarStreamServer) error {
 }
 
 func (sp *fsSyncProvider) handle(method string, stream grpc.ServerStream) (retErr error) {
+	defer func(start time.Time) {
+		dur := int64(time.Since(start) / time.Millisecond)
+		sp.metrics.Duration.Record(stream.Context(), dur,
+			metric.WithAttributes(
+				attribute.String("method", method),
+				attribute.Bool("error", retErr != nil),
+			),
+		)
+	}(time.Now())
+
 	var pr *protocol
 	for _, p := range supportedProtocols {
 		if method == p.name {
@@ -128,6 +154,37 @@ func (sp *fsSyncProvider) handle(method string, stream grpc.ServerStream) (retEr
 func (sp *fsSyncProvider) SetNextProgressCallback(f func(int, bool), doneCh chan error) {
 	sp.p = f
 	sp.doneCh = doneCh
+}
+
+type fsSyncProviderOptionFunc func(sp *fsSyncProvider)
+
+func (opt fsSyncProviderOptionFunc) apply(sp *fsSyncProvider) {
+	opt(sp)
+}
+
+func WithMeterProvider(mp metric.MeterProvider) FSSyncProviderOption {
+	return fsSyncProviderOptionFunc(func(sp *fsSyncProvider) {
+		sp.metrics = newFSSyncProviderMetrics(mp)
+	})
+}
+
+type fsSyncProviderMetrics struct {
+	Duration metric.Int64Histogram
+}
+
+func newFSSyncProviderMetrics(mp metric.MeterProvider) *fsSyncProviderMetrics {
+	meter := mp.Meter(meterName)
+
+	var err error
+	metrics := &fsSyncProviderMetrics{}
+	metrics.Duration, err = meter.Int64Histogram("filesync.duration",
+		metric.WithDescription("Measures the duration of filesync operations."),
+		metric.WithUnit("ms"),
+	)
+	if err != nil {
+		otel.Handle(err)
+	}
+	return metrics
 }
 
 type progressCb func(int, bool)
