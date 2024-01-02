@@ -10,6 +10,7 @@ import (
 
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -28,8 +29,6 @@ type detector struct {
 
 var ServiceName string
 var Recorder *TraceRecorder
-
-var Resource *resource.Resource
 
 var detectors map[string]detector
 var once sync.Once
@@ -114,17 +113,7 @@ func detect() error {
 		return err
 	}
 
-	if Resource == nil {
-		res, err := resource.Detect(context.Background(), serviceNameDetector{})
-		if err != nil {
-			return err
-		}
-		res, err = resource.Merge(resource.Default(), res)
-		if err != nil {
-			return err
-		}
-		Resource = res
-	}
+	res := Resource()
 
 	// enable log with traceID when valid exporter
 	if texp != nil {
@@ -138,7 +127,7 @@ func detect() error {
 
 		sdktp := sdktrace.NewTracerProvider(
 			sdktrace.WithSpanProcessor(sp),
-			sdktrace.WithResource(Resource),
+			sdktrace.WithResource(res),
 		)
 		closers = append(closers, sdktp.Shutdown)
 
@@ -164,7 +153,7 @@ func detect() error {
 
 	if len(readers) > 0 {
 		opts := make([]sdkmetric.Option, 0, len(readers)+1)
-		opts = append(opts, sdkmetric.WithResource(Resource))
+		opts = append(opts, sdkmetric.WithResource(res))
 		for _, r := range readers {
 			opts = append(opts, sdkmetric.WithReader(r))
 		}
@@ -220,6 +209,35 @@ func Shutdown(ctx context.Context) error {
 	return nil
 }
 
+var (
+	detectedResource     *resource.Resource
+	detectedResourceOnce sync.Once
+)
+
+func Resource() *resource.Resource {
+	detectedResourceOnce.Do(func() {
+		res, err := resource.New(context.Background(),
+			resource.WithDetectors(serviceNameDetector{}),
+			resource.WithFromEnv(),
+			resource.WithTelemetrySDK(),
+		)
+		if err != nil {
+			otel.Handle(err)
+		}
+		detectedResource = res
+	})
+	return detectedResource
+}
+
+// OverrideResource overrides the resource returned from Resource.
+//
+// This must be invoked before Resource is called otherwise it is a no-op.
+func OverrideResource(res *resource.Resource) {
+	detectedResourceOnce.Do(func() {
+		detectedResource = res
+	})
+}
+
 type serviceNameDetector struct{}
 
 func (serviceNameDetector) Detect(ctx context.Context) (*resource.Resource, error) {
@@ -227,9 +245,6 @@ func (serviceNameDetector) Detect(ctx context.Context) (*resource.Resource, erro
 		semconv.SchemaURL,
 		semconv.ServiceNameKey,
 		func() (string, error) {
-			if n := os.Getenv("OTEL_SERVICE_NAME"); n != "" {
-				return n, nil
-			}
 			if ServiceName != "" {
 				return ServiceName, nil
 			}
