@@ -724,7 +724,10 @@ func (d *differ) overlayChanges(ctx context.Context, handle func(context.Context
 				return errors.Errorf("unhandled stat type for %+v", srcfi)
 			}
 
-			if !srcfi.IsDir() && c.srcStat.Nlink > 1 {
+			// Changes with Delete kind may share the same inode even if they are unrelated.
+			// Skip them to avoid creating hardlinks between whiteouts as whiteouts are not
+			// always created and may leave the hardlink dangling.
+			if !srcfi.IsDir() && c.srcStat.Nlink > 1 && c.kind != fs.ChangeKindDelete {
 				if linkSubPath, ok := d.inodes[statInode(c.srcStat)]; ok {
 					c.linkSubPath = linkSubPath
 				} else {

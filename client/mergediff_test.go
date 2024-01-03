@@ -428,6 +428,33 @@ func diffOpTestCases() (tests []integration.Test) {
 			),
 		})
 
+		// Check that deleting together a file from the base and another one from a merge
+		// does not result in a crash.
+		deleteFileAfterMergeCmds := []string{
+			"rm /unmodifiedDir/deleteFile1 /unmodifiedDir/deleteFile2",
+		}
+
+		extraContent := llb.Scratch().
+			File(llb.Mkdir("/unmodifiedDir", 0755)).
+			File(llb.Mkfile("/unmodifiedDir/deleteFile2", 0644, []byte("foo")))
+
+		tests = append(tests, verifyContents{
+			name: "TestDiffDeleteFilesAfterMerge",
+			state: llb.Diff(
+				base(),
+				runShell(llb.Merge([]llb.State{
+					base(),
+					extraContent,
+				}),
+					joinCmds(
+						deleteFileAfterMergeCmds,
+					)...)),
+			contents: mergeContents(
+				apply(
+					fstest.CreateDir("/unmodifiedDir", 0755)),
+			),
+		})
+
 		// Opaque dirs should be converted to the "explicit whiteout" format, as described in the OCI image spec:
 		// https://github.com/opencontainers/image-spec/blob/main/layer.md#opaque-whiteout
 		opaqueDirCmds := []string{
