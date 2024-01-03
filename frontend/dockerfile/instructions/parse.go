@@ -289,6 +289,7 @@ func parseAdd(req parseRequest) (*AddCommand, error) {
 	flLink := req.flags.AddBool("link", false)
 	flKeepGitDir := req.flags.AddBool("keep-git-dir", false)
 	flChecksum := req.flags.AddString("checksum", "")
+	flUserAgent := req.flags.AddString("user-agent", "")
 	if err := req.flags.Parse(); err != nil {
 		return nil, err
 	}
@@ -306,6 +307,7 @@ func parseAdd(req parseRequest) (*AddCommand, error) {
 		Link:            flLink.Value == "true",
 		KeepGitDir:      flKeepGitDir.Value == "true",
 		Checksum:        flChecksum.Value,
+		UserAgent:       flUserAgent.Value,
 	}, nil
 }
 

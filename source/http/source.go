@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/moby/buildkit/version"
+
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/session"
@@ -92,6 +94,8 @@ func (hs *httpSource) Identifier(scheme, ref string, attrs map[string]string, pl
 				return nil, err
 			}
 			id.GID = int(i)
+		case pb.AttrHTTPUserAgent:
+			id.UserAgent = v
 		}
 	}
 
@@ -214,6 +218,12 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, inde
 	}
 
 	client := hs.client(g)
+
+	if hs.src.UserAgent != "" {
+		req.Header.Set("User-Agent", hs.src.UserAgent)
+	} else {
+		req.Header.Set("User-Agent", version.UserAgent())
+	}
 
 	// Some servers seem to have trouble supporting If-None-Match properly even
 	// though they return ETag-s. So first, optionally try a HEAD request with

@@ -1299,6 +1299,15 @@ ADD --checksum=sha256:24454f830cdb571e2c4ad15481119c43b3cafd48dd869a9b2945d1036d
 
 The `--checksum` flag only supports HTTP sources currently.
 
+### Specifying a custom HTTP user agent `ADD --user-agent=<user-agent>`
+The user agent used for the HTTP request can be customized with the `--user-agent` flag:
+
+```dockerfile
+ADD --user-agent=Wget/1.21.4 https://mirrors.edge.kernel.org/pub/linux/kernel/Historic/linux-0.01.tar.gz /
+```
+
+The `--user-agent` flag only supports HTTP sources currently.
+
 ### Adding a Git repository `ADD <git ref> <dir>`
 
 This form allows adding a Git repository to an image directly, without using the `git` command inside the image:

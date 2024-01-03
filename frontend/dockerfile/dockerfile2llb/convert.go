@@ -745,6 +745,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 				checksum:     checksum,
 				location:     c.Location(),
 				opt:          opt,
+				userAgent:    c.UserAgent,
 			})
 		}
 		if err == nil {
@@ -1135,6 +1136,12 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		}
 	}
 
+	if cfg.userAgent != "" {
+		if !isHTTPSource(cfg.params.SourcePaths[0]) {
+			return errors.New("user-agent can't be specified for non-HTTP sources")
+		}
+	}
+
 	commitMessage := bytes.NewBufferString("")
 	if cfg.isAddCommand {
 		commitMessage.WriteString("ADD")
@@ -1188,7 +1195,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 				}
 			}
 
-			st := llb.HTTP(src, llb.Filename(f), llb.Checksum(cfg.checksum), dfCmd(cfg.params))
+			st := llb.HTTP(src, llb.Filename(f), llb.Checksum(cfg.checksum), llb.UserAgent(cfg.userAgent), dfCmd(cfg.params))
 
 			opts := append([]llb.CopyOption{&llb.CopyInfo{
 				Mode:           mode,
@@ -1317,6 +1324,7 @@ type copyConfig struct {
 	parents      bool
 	location     []parser.Range
 	opt          dispatchOpt
+	userAgent    string
 }
 
 func dispatchMaintainer(d *dispatchState, c *instructions.MaintainerCommand) error {

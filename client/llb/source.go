@@ -584,6 +584,9 @@ func HTTP(url string, opts ...HTTPOption) State {
 		attrs[pb.AttrHTTPGID] = strconv.Itoa(hi.GID)
 		addCap(&hi.Constraints, pb.CapSourceHTTPUIDGID)
 	}
+	if hi.UserAgent != "" {
+		attrs[pb.AttrHTTPUserAgent] = hi.UserAgent
+	}
 
 	addCap(&hi.Constraints, pb.CapSourceHTTP)
 	source := NewSource(url, attrs, hi.Constraints)
@@ -592,11 +595,12 @@ func HTTP(url string, opts ...HTTPOption) State {
 
 type HTTPInfo struct {
 	constraintsWrapper
-	Checksum digest.Digest
-	Filename string
-	Perm     int
-	UID      int
-	GID      int
+	Checksum  digest.Digest
+	Filename  string
+	Perm      int
+	UID       int
+	GID       int
+	UserAgent string
 }
 
 type HTTPOption interface {
@@ -631,6 +635,12 @@ func Chown(uid, gid int) HTTPOption {
 	return httpOptionFunc(func(hi *HTTPInfo) {
 		hi.UID = uid
 		hi.GID = gid
+	})
+}
+
+func UserAgent(userAgent string) HTTPOption {
+	return httpOptionFunc(func(hi *HTTPInfo) {
+		hi.UserAgent = userAgent
 	})
 }
 

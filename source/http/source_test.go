@@ -2,9 +2,13 @@ package http
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/moby/buildkit/version"
 
 	"github.com/containerd/containerd/content/local"
 	"github.com/containerd/containerd/diff/apply"
@@ -282,6 +286,49 @@ func TestHTTPChecksum(t *testing.T) {
 
 	ref.Release(context.TODO())
 	ref = nil
+}
+
+func TestHTTPUserAgent(t *testing.T) {
+	t.Parallel()
+	ctx := context.TODO()
+
+	hs, err := newHTTPSource(t)
+	require.NoError(t, err)
+
+	var capturedUserAgent string
+
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		capturedUserAgent = r.Header.Get("User-Agent")
+		_, _ = w.Write([]byte("content"))
+	}
+
+	testServer := httptest.NewServer(http.HandlerFunc(handler))
+	defer testServer.Close()
+
+	id := &HTTPIdentifier{
+		UserAgent: "foobar/5.0",
+		URL:       testServer.URL,
+	}
+
+	h, err := hs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	_, _, _, _, err = h.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+
+	require.Equal(t, "foobar/5.0", capturedUserAgent)
+
+	id = &HTTPIdentifier{
+		URL: testServer.URL,
+	}
+
+	h, err = hs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	_, _, _, _, err = h.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+
+	require.Equal(t, version.UserAgent(), capturedUserAgent)
 }
 
 func readFile(ctx context.Context, ref cache.ImmutableRef, fp string) ([]byte, error) {

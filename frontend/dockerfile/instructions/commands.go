@@ -244,6 +244,7 @@ type AddCommand struct {
 	Link       bool
 	KeepGitDir bool // whether to keep .git dir, only meaningful for git sources
 	Checksum   string
+	UserAgent  string
 }
 
 func (c *AddCommand) Expand(expander SingleWordExpander) error {
