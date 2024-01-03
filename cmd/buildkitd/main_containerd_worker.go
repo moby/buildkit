@@ -1,6 +1,3 @@
-//go:build linux || windows || freebsd
-// +build linux windows freebsd
-
 package main
 
 import (
@@ -49,7 +46,7 @@ func init() {
 	}
 
 	if defaultConf.Workers.Containerd.Address == "" {
-		defaultConf.Workers.Containerd.Address = defaultContainerdAddress
+		defaultConf.Workers.Containerd.Address = defaults.DefaultAddress
 	}
 
 	if defaultConf.Workers.Containerd.Namespace == "" {
@@ -184,7 +181,7 @@ func init() {
 
 func applyContainerdFlags(c *cli.Context, cfg *config.Config) error {
 	if cfg.Workers.Containerd.Address == "" {
-		cfg.Workers.Containerd.Address = defaultContainerdAddress
+		cfg.Workers.Containerd.Address = defaults.DefaultAddress
 	}
 
 	if c.GlobalIsSet("containerd-worker") {

@@ -54,8 +54,7 @@ Vagrant.configure("2") do |config|
     sh.inline = <<~SHELL
       #!/usr/bin/env bash
       set -eux -o pipefail
-      mkdir -p /run/buildkit
-      daemon -o /vagrant/.tmp/logs/buildkitd /usr/local/bin/buildkitd --addr=unix:///run/buildkit/buildkitd.sock
+      daemon -o /vagrant/.tmp/logs/buildkitd /usr/local/bin/buildkitd
       sleep 3
     SHELL
   end
