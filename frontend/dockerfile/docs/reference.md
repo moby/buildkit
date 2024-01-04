@@ -188,11 +188,22 @@ The following parser directives are supported:
 
 <a name="external-implementation-features"><!-- included for deep-links to old section --></a>
 
-This feature is only available when using the [BuildKit](https://docs.docker.com/build/buildkit/)
-backend, and is ignored when using the classic builder backend.
+Use the `syntax` parser directive to declare the Dockerfile syntax version to
+use for the build. If unspecified, BuildKit uses a bundled version of the
+Dockerfile frontend. Declaring a syntax version lets you automatically use the
+latest Dockerfile version without having to upgrade BuildKit or Docker Engine,
+or even use a custom Dockerfile implementation.
 
-See [Custom Dockerfile syntax](https://docs.docker.com/build/buildkit/dockerfile-frontend/)
-page for more information.
+Most users will want to set this parser directive to `docker/dockerfile:1`,
+which causes BuildKit to pull the latest stable version of the Dockerfile
+syntax before the build.
+
+```dockerfile
+# syntax=docker/dockerfile:1
+```
+
+For more information about how the parser directive works, see
+[Custom Dockerfile syntax](https://docs.docker.com/build/buildkit/dockerfile-frontend/).
 
 ### escape
 
