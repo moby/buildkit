@@ -12,6 +12,7 @@ import (
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/snapshot"
+	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/util/windows"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -24,7 +25,7 @@ func getUserSpec(user, rootfsPath string) (specs.User, error) {
 	}, nil
 }
 
-func (w *containerdExecutor) prepareExecutionEnv(ctx context.Context, rootMount executor.Mount, mounts []executor.Mount, meta executor.Meta, details *containerState) (string, string, func(), error) {
+func (w *containerdExecutor) prepareExecutionEnv(ctx context.Context, rootMount executor.Mount, mounts []executor.Mount, meta executor.Meta, details *containerState, netMode pb.NetMode) (string, string, func(), error) {
 	var releasers []func() error
 	releaseAll := func() {
 		for _, release := range releasers {

@@ -118,7 +118,16 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 	}()
 
 	meta := process.Meta
-	resolvConf, hostsFile, releasers, err := w.prepareExecutionEnv(ctx, root, mounts, meta, details)
+	if meta.NetMode == pb.NetMode_HOST {
+		bklog.G(ctx).Info("enabling HostNetworking")
+	}
+
+	provider, ok := w.networkProviders[meta.NetMode]
+	if !ok {
+		return nil, errors.Errorf("unknown network mode %s", meta.NetMode)
+	}
+
+	resolvConf, hostsFile, releasers, err := w.prepareExecutionEnv(ctx, root, mounts, meta, details, meta.NetMode)
 	if err != nil {
 		return nil, err
 	}
@@ -131,19 +140,11 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 		return nil, err
 	}
 
-	provider, ok := w.networkProviders[meta.NetMode]
-	if !ok {
-		return nil, errors.Errorf("unknown network mode %s", meta.NetMode)
-	}
 	namespace, err := provider.New(ctx, meta.Hostname)
 	if err != nil {
 		return nil, err
 	}
 	defer namespace.Close()
-
-	if meta.NetMode == pb.NetMode_HOST {
-		bklog.G(ctx).Info("enabling HostNetworking")
-	}
 
 	spec, releaseSpec, err := w.createOCISpec(ctx, id, resolvConf, hostsFile, namespace, mounts, meta, details)
 	if err != nil {

@@ -16,6 +16,7 @@ import (
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/snapshot"
+	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/network"
 	rootlessspecconv "github.com/moby/buildkit/util/rootless/specconv"
@@ -42,7 +43,7 @@ func getUserSpec(user, rootfsPath string) (specs.User, error) {
 	}, nil
 }
 
-func (w *containerdExecutor) prepareExecutionEnv(ctx context.Context, rootMount executor.Mount, mounts []executor.Mount, meta executor.Meta, details *containerState) (string, string, func(), error) {
+func (w *containerdExecutor) prepareExecutionEnv(ctx context.Context, rootMount executor.Mount, mounts []executor.Mount, meta executor.Meta, details *containerState, netMode pb.NetMode) (string, string, func(), error) {
 	var releasers []func()
 	releaseAll := func() {
 		for i := len(releasers) - 1; i >= 0; i-- {
@@ -50,7 +51,7 @@ func (w *containerdExecutor) prepareExecutionEnv(ctx context.Context, rootMount 
 		}
 	}
 
-	resolvConf, err := oci.GetResolvConf(ctx, w.root, nil, w.dnsConfig)
+	resolvConf, err := oci.GetResolvConf(ctx, w.root, nil, w.dnsConfig, netMode)
 	if err != nil {
 		releaseAll()
 		return "", "", nil, err
