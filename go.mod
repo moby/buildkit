@@ -29,7 +29,7 @@ require (
 	github.com/distribution/reference v0.5.0
 	github.com/docker/cli v25.0.0-rc.1+incompatible
 	github.com/docker/docker v25.0.0-rc.1+incompatible
-	github.com/docker/go-connections v0.4.1-0.20231110212414-fa09c952e3ea // master (v0.5.0-dev)
+	github.com/docker/go-connections v0.5.0
 	github.com/docker/go-units v0.5.0
 	github.com/gofrs/flock v0.8.1
 	github.com/gogo/googleapis v1.4.1
