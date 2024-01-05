@@ -27,8 +27,8 @@ require (
 	github.com/containerd/typeurl/v2 v2.1.1
 	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/distribution/reference v0.5.0
-	github.com/docker/cli v25.0.0-beta.3+incompatible
-	github.com/docker/docker v25.0.0-beta.3+incompatible
+	github.com/docker/cli v25.0.0-rc.1+incompatible
+	github.com/docker/docker v25.0.0-rc.1+incompatible
 	github.com/docker/go-connections v0.4.1-0.20231110212414-fa09c952e3ea // master (v0.5.0-dev)
 	github.com/docker/go-units v0.5.0
 	github.com/gofrs/flock v0.8.1
@@ -43,7 +43,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hashicorp/golang-lru v0.5.4
 	github.com/in-toto/in-toto-golang v0.5.0
-	github.com/klauspost/compress v1.17.2
+	github.com/klauspost/compress v1.17.4
 	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/moby/locker v1.0.1
 	github.com/moby/patternmatcher v0.6.0
@@ -147,7 +147,7 @@ require (
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/moby/sys/mount v0.3.3 // indirect
 	github.com/moby/sys/sequential v0.5.0 // indirect
-	github.com/opencontainers/runc v1.1.10 // indirect
+	github.com/opencontainers/runc v1.1.11 // indirect
 	github.com/pkg/browser v0.0.0-20210115035449-ce105d075bb4 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.16.0
