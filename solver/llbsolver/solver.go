@@ -269,6 +269,9 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 			}
 
 			for k, r := range res.Refs {
+				if r == nil {
+					continue
+				}
 				k, r := k, r
 				cp := res.Provenance.Refs[k]
 				eg.Go(func() error {
@@ -719,6 +722,9 @@ func addProvenanceToResult(res *frontend.Result, br *provenanceBridge) (*Result,
 		out.Provenance.Refs = make(map[string]*provenance.Capture, len(res.Refs))
 	}
 	for k, ref := range res.Refs {
+		if ref == nil {
+			continue
+		}
 		cp, err := getProvenance(ref, reqs.refs[k].bridge, k, reqs)
 		if err != nil {
 			return nil, err

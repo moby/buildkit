@@ -292,6 +292,9 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 						refs = append(refs, src.Ref)
 					}
 					for _, ref := range src.Refs {
+						if ref == nil {
+							continue
+						}
 						refs = append(refs, ref)
 					}
 					eg, ctx := errgroup.WithContext(ctx)
@@ -358,6 +361,9 @@ func (e *imageExporterInstance) pushImage(ctx context.Context, src *exporter.Sou
 		refs = append(refs, src.Ref)
 	}
 	for _, ref := range src.Refs {
+		if ref == nil {
+			continue
+		}
 		refs = append(refs, ref)
 	}
 
