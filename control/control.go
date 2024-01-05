@@ -325,7 +325,7 @@ func translateLegacySolveRequest(req *controlapi.SolveRequest) {
 	}
 	req.Cache.ImportRefsDeprecated = nil
 
-	// translate single exporter to a slice (v0.12.0)
+	// translate single exporter to a slice (v0.13.0)
 	if len(req.Exporters) == 0 && req.ExporterDeprecated != "" {
 		req.Exporters = append(req.Exporters, &controlapi.Exporter{
 			Type:  req.ExporterDeprecated,
