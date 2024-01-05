@@ -2266,49 +2266,131 @@ func testBuildExportScratch(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	st := llb.Scratch()
-	def, err := st.Marshal(sb.Context())
-	require.NoError(t, err)
-
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
 
+	makeFrontend := func(ps []string) func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		return func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+			st := llb.Scratch()
+			def, err := st.Marshal(sb.Context())
+			require.NoError(t, err)
+
+			r, err := c.Solve(ctx, gateway.SolveRequest{
+				Definition: def.ToPB(),
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			ref, err := r.SingleRef()
+			if err != nil {
+				return nil, err
+			}
+
+			res := gateway.NewResult()
+			if ps == nil {
+				res.SetRef(ref)
+			} else {
+				for _, p := range ps {
+					res.AddRef(p, ref)
+				}
+
+				expPlatforms := &exptypes.Platforms{
+					Platforms: make([]exptypes.Platform, len(ps)),
+				}
+				for i, pk := range ps {
+					p := platforms.MustParse(pk)
+
+					img := ocispecs.Image{
+						Platform: p,
+						Config: ocispecs.ImageConfig{
+							Labels: map[string]string{
+								"foo": "i am platform " + platforms.Format(p),
+							},
+						},
+					}
+					config, err := json.Marshal(img)
+					if err != nil {
+						return nil, errors.Wrapf(err, "failed to marshal image config")
+					}
+					res.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterImageConfigKey, pk), config)
+
+					expPlatforms.Platforms[i] = exptypes.Platform{
+						ID:       pk,
+						Platform: p,
+					}
+				}
+				dt, err := json.Marshal(expPlatforms)
+				if err != nil {
+					return nil, err
+				}
+				res.AddMeta(exptypes.ExporterPlatformsKey, dt)
+			}
+
+			return res, nil
+		}
+	}
+
 	target := registry + "/buildkit/build/exporter:withnocompressed"
 
-	_, err = c.Solve(sb.Context(), def, SolveOpt{
+	_, err = c.Build(sb.Context(), SolveOpt{
 		Exports: []ExportEntry{
 			{
 				Type: ExporterImage,
 				Attrs: map[string]string{
-					"name":        target,
-					"push":        "true",
-					"unpack":      "true",
-					"compression": "uncompressed",
+					"name":              target,
+					"push":              "true",
+					"unpack":            "true",
+					"compression":       "uncompressed",
+					"attest:provenance": "mode=max",
 				},
 			},
 		},
-	}, nil)
+	}, "", makeFrontend(nil), nil)
 	require.NoError(t, err)
 
-	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
-	cdAddress := sb.ContainerdAddress()
-	var client *containerd.Client
-	if cdAddress != "" {
-		client, err = newContainerd(cdAddress)
-		require.NoError(t, err)
-		defer client.Close()
+	targetMulti := registry + "/buildkit/build/exporter-multi:withnocompressed"
+	_, err = c.Build(sb.Context(), SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":              targetMulti,
+					"push":              "true",
+					"unpack":            "true",
+					"compression":       "uncompressed",
+					"attest:provenance": "mode=max",
+				},
+			},
+		},
+	}, "", makeFrontend([]string{"linux/amd64", "linux/arm64"}), nil)
+	require.NoError(t, err)
 
-		img, err := client.GetImage(ctx, target)
-		require.NoError(t, err)
-		mfst, err := images.Manifest(ctx, client.ContentStore(), img.Target(), nil)
-		require.NoError(t, err)
-		require.Equal(t, 0, len(mfst.Layers))
-		err = client.ImageService().Delete(ctx, target, images.SynchronousDelete())
-		require.NoError(t, err)
-	}
+	desc, provider, err := contentutil.ProviderFromRef(target)
+	require.NoError(t, err)
+	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+	require.Len(t, imgs.Images, 1)
+	img := imgs.Find(platforms.DefaultString())
+	require.Empty(t, img.Layers)
+	require.Equal(t, platforms.DefaultSpec(), img.Img.Platform)
+
+	desc, provider, err = contentutil.ProviderFromRef(targetMulti)
+	require.NoError(t, err)
+	imgs, err = testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+	require.Len(t, imgs.Images, 2)
+	img = imgs.Find("linux/amd64")
+	require.Empty(t, img.Layers)
+	require.Equal(t, "linux/amd64", platforms.Format(img.Img.Platform))
+	require.Equal(t, "i am platform linux/amd64", img.Img.Config.Labels["foo"])
+	img = imgs.Find("linux/arm64")
+	require.Empty(t, img.Layers)
+	require.Equal(t, "linux/arm64", platforms.Format(img.Img.Platform))
+	require.Equal(t, "i am platform linux/arm64", img.Img.Config.Labels["foo"])
 }
 
 func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
