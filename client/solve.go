@@ -20,7 +20,6 @@ import (
 	"github.com/moby/buildkit/session"
 	sessioncontent "github.com/moby/buildkit/session/content"
 	"github.com/moby/buildkit/session/filesync"
-	"github.com/moby/buildkit/session/grpchijack"
 	"github.com/moby/buildkit/solver/pb"
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/bklog"
@@ -142,7 +141,8 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 
 	if !opt.SessionPreInitialized {
 		if len(syncedDirs) > 0 {
-			s.Allow(filesync.NewFSSyncProvider(syncedDirs))
+			s.Allow(filesync.NewFSSyncProvider(syncedDirs,
+				filesync.WithMeterProvider(c.meterProvider)))
 		}
 
 		for _, a := range opt.Session {
@@ -214,11 +214,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		}
 
 		eg.Go(func() error {
-			sd := c.sessionDialer
-			if sd == nil {
-				sd = grpchijack.Dialer(c.ControlClient())
-			}
-			return s.Run(statusContext, sd)
+			return s.Run(statusContext, c.Dialer())
 		})
 	}
 

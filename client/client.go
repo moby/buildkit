@@ -22,6 +22,8 @@ import (
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
@@ -34,6 +36,7 @@ import (
 type Client struct {
 	conn          *grpc.ClientConn
 	sessionDialer func(ctx context.Context, proto string, meta map[string][]string) (net.Conn, error)
+	meterProvider metric.MeterProvider
 }
 
 type ClientOpt interface {
@@ -51,36 +54,37 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 	var unary []grpc.UnaryClientInterceptor
 	var stream []grpc.StreamClientInterceptor
 
-	var customTracer bool // allows manually setting disabling tracing even if tracer in context
-	var tracerProvider trace.TracerProvider
-	var tracerDelegate TracerDelegate
-	var sessionDialer func(context.Context, string, map[string][]string) (net.Conn, error)
-	var customDialOptions []grpc.DialOption
-	var creds *withCredentials
+	var (
+		customTracer      bool // allows manually setting disabling tracing even if tracer in context
+		tracerProvider    trace.TracerProvider
+		tracerDelegate    TracerDelegate
+		sessionDialer     func(context.Context, string, map[string][]string) (net.Conn, error)
+		customDialOptions []grpc.DialOption
+		creds             *withCredentials
+		meterProvider     metric.MeterProvider
+	)
 
 	for _, o := range opts {
-		if credInfo, ok := o.(*withCredentials); ok {
+		switch o := o.(type) {
+		case *withCredentials:
 			if creds == nil {
 				creds = &withCredentials{}
 			}
-			creds = creds.merge(credInfo)
-		}
-		if wt, ok := o.(*withTracer); ok {
+			creds = creds.merge(o)
+		case *withTracer:
 			customTracer = true
-			tracerProvider = wt.tp
-		}
-		if wd, ok := o.(*withDialer); ok {
-			gopts = append(gopts, grpc.WithContextDialer(wd.dialer))
+			tracerProvider = o.tp
+		case *withDialer:
+			gopts = append(gopts, grpc.WithContextDialer(o.dialer))
 			needDialer = false
-		}
-		if wt, ok := o.(*withTracerDelegate); ok {
-			tracerDelegate = wt
-		}
-		if sd, ok := o.(*withSessionDialer); ok {
-			sessionDialer = sd.dialer
-		}
-		if opt, ok := o.(*withGRPCDialOption); ok {
-			customDialOptions = append(customDialOptions, opt.opt)
+		case *withTracerDelegate:
+			tracerDelegate = o
+		case *withSessionDialer:
+			sessionDialer = o.dialer
+		case *withGRPCDialOption:
+			customDialOptions = append(customDialOptions, o.opt)
+		case *withMeterProvider:
+			meterProvider = o.mp
 		}
 	}
 
@@ -150,9 +154,14 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 		return nil, errors.Wrapf(err, "failed to dial %q . make sure buildkitd is running", address)
 	}
 
+	if meterProvider == nil {
+		meterProvider = noop.NewMeterProvider()
+	}
+
 	c := &Client{
 		conn:          conn,
 		sessionDialer: sessionDialer,
+		meterProvider: meterProvider,
 	}
 
 	if tracerDelegate != nil {
@@ -180,6 +189,9 @@ func (c *Client) ContentClient() contentapi.ContentClient {
 }
 
 func (c *Client) Dialer() session.Dialer {
+	if c.sessionDialer != nil {
+		return c.sessionDialer
+	}
 	return grpchijack.Dialer(c.ControlClient())
 }
 
@@ -396,4 +408,15 @@ func (*withGRPCDialOption) isClientOpt() {}
 
 func WithGRPCDialOption(opt grpc.DialOption) ClientOpt {
 	return &withGRPCDialOption{opt}
+}
+
+type withMeterProvider struct {
+	mp metric.MeterProvider
+}
+
+func (*withMeterProvider) isClientOpt() {}
+
+// WithMeterProvider configures the MeterProvider for this client.
+func WithMeterProvider(mp metric.MeterProvider) ClientOpt {
+	return &withMeterProvider{mp}
 }
