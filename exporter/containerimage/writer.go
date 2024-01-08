@@ -59,7 +59,7 @@ type ImageWriter struct {
 	opt WriterOpt
 }
 
-func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, sessionID string, opts *ImageCommitOpts) (*ocispecs.Descriptor, error) {
+func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, sessionID string, inlineCache exptypes.InlineCache, opts *ImageCommitOpts) (*ocispecs.Descriptor, error) {
 	if _, ok := inp.Metadata[exptypes.ExporterPlatformsKey]; len(inp.Refs) > 0 && !ok {
 		return nil, errors.Errorf("unable to export multiple refs, missing platforms mapping")
 	}
@@ -114,28 +114,21 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		}
 
 		var ref cache.ImmutableRef
-		var p exptypes.Platform
+		var p *exptypes.Platform
 		if len(ps.Platforms) > 0 {
-			p = ps.Platforms[0]
+			p = &ps.Platforms[0]
 			if r, ok := inp.FindRef(p.ID); ok {
 				ref = r
 			}
 		} else {
 			ref = inp.Ref
 		}
+		config := exptypes.ParseKey(inp.Metadata, exptypes.ExporterImageConfigKey, p)
 
 		remotes, err := ic.exportLayers(ctx, opts.RefCfg, session.NewGroup(sessionID), ref)
 		if err != nil {
 			return nil, err
 		}
-
-		annotations := opts.Annotations.Platform(nil)
-		if len(annotations.Index) > 0 || len(annotations.IndexDescriptor) > 0 {
-			return nil, errors.Errorf("index annotations not supported for single platform export")
-		}
-
-		config := exptypes.ParseKey(inp.Metadata, exptypes.ExporterImageConfigKey, p)
-		inlineCache := exptypes.ParseKey(inp.Metadata, exptypes.ExporterInlineCache, p)
 		remote := &remotes[0]
 		if opts.RewriteTimestamp {
 			remote, err = ic.rewriteRemoteWithEpoch(ctx, opts, remote)
@@ -143,7 +136,28 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 				return nil, err
 			}
 		}
-		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, opts, ref, config, remote, annotations, inlineCache, opts.Epoch, session.NewGroup(sessionID))
+
+		annotations := opts.Annotations.Platform(nil)
+		if len(annotations.Index) > 0 || len(annotations.IndexDescriptor) > 0 {
+			return nil, errors.Errorf("index annotations not supported for single platform export")
+		}
+
+		var inlineCacheEntry *exptypes.InlineCacheEntry
+		if inlineCache != nil {
+			inlineCacheResult, err := inlineCache(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if inlineCacheResult != nil {
+				if p != nil {
+					inlineCacheEntry, _ = inlineCacheResult.FindRef(p.ID)
+				} else {
+					inlineCacheEntry = inlineCacheResult.Ref
+				}
+			}
+		}
+
+		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, opts, ref, config, remote, annotations, inlineCacheEntry, opts.Epoch, session.NewGroup(sessionID))
 		if err != nil {
 			return nil, err
 		}
@@ -178,6 +192,14 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		return nil, err
 	}
 
+	var inlineCacheResult *result.Result[*exptypes.InlineCacheEntry]
+	if inlineCache != nil {
+		inlineCacheResult, err = inlineCache(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	idx := ocispecs.Index{
 		MediaType:   ocispecs.MediaTypeImageIndex,
 		Annotations: opts.Annotations.Platform(nil).Index,
@@ -199,8 +221,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		if !ok {
 			return nil, errors.Errorf("failed to find ref for ID %s", p.ID)
 		}
-		config := exptypes.ParseKey(inp.Metadata, exptypes.ExporterImageConfigKey, p)
-		inlineCache := exptypes.ParseKey(inp.Metadata, exptypes.ExporterInlineCache, p)
+		config := exptypes.ParseKey(inp.Metadata, exptypes.ExporterImageConfigKey, &p)
 
 		remote := &remotes[remotesMap[p.ID]]
 		if remote == nil {
@@ -208,7 +229,6 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 				Provider: ic.opt.ContentStore,
 			}
 		}
-
 		if opts.RewriteTimestamp {
 			remote, err = ic.rewriteRemoteWithEpoch(ctx, opts, remote)
 			if err != nil {
@@ -216,7 +236,12 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 			}
 		}
 
-		desc, _, err := ic.commitDistributionManifest(ctx, opts, r, config, remote, opts.Annotations.Platform(&p.Platform), inlineCache, opts.Epoch, session.NewGroup(sessionID))
+		var inlineCacheEntry *exptypes.InlineCacheEntry
+		if inlineCacheResult != nil {
+			inlineCacheEntry, _ = inlineCacheResult.FindRef(p.ID)
+		}
+
+		desc, _, err := ic.commitDistributionManifest(ctx, opts, r, config, remote, opts.Annotations.Platform(&p.Platform), inlineCacheEntry, opts.Epoch, session.NewGroup(sessionID))
 		if err != nil {
 			return nil, err
 		}
@@ -386,7 +411,7 @@ func (ic *ImageWriter) rewriteRemoteWithEpoch(ctx context.Context, opts *ImageCo
 	}, nil
 }
 
-func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *ImageCommitOpts, ref cache.ImmutableRef, config []byte, remote *solver.Remote, annotations *Annotations, inlineCache []byte, epoch *time.Time, sg session.Group) (*ocispecs.Descriptor, *ocispecs.Descriptor, error) {
+func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *ImageCommitOpts, ref cache.ImmutableRef, config []byte, remote *solver.Remote, annotations *Annotations, inlineCache *exptypes.InlineCacheEntry, epoch *time.Time, sg session.Group) (*ocispecs.Descriptor, *ocispecs.Descriptor, error) {
 	if len(config) == 0 {
 		var err error
 		config, err = defaultImageConfig()
@@ -633,7 +658,7 @@ func parseHistoryFromConfig(dt []byte) ([]ocispecs.History, error) {
 	return config.History, nil
 }
 
-func patchImageConfig(dt []byte, descs []ocispecs.Descriptor, history []ocispecs.History, cache []byte, epoch *time.Time) ([]byte, error) {
+func patchImageConfig(dt []byte, descs []ocispecs.Descriptor, history []ocispecs.History, cache *exptypes.InlineCacheEntry, epoch *time.Time) ([]byte, error) {
 	m := map[string]json.RawMessage{}
 	if err := json.Unmarshal(dt, &m); err != nil {
 		return nil, errors.Wrap(err, "failed to parse image config for patch")
@@ -694,7 +719,7 @@ func patchImageConfig(dt []byte, descs []ocispecs.Descriptor, history []ocispecs
 	}
 
 	if cache != nil {
-		dt, err := json.Marshal(cache)
+		dt, err := json.Marshal(cache.Data)
 		if err != nil {
 			return nil, err
 		}

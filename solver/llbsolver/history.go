@@ -526,8 +526,13 @@ func (h *HistoryQueue) update(ctx context.Context, rec controlapi.BuildHistoryRe
 			return err
 		}
 		if rec.Result != nil {
-			if err := h.addResource(ctx, l, rec.Result.Result, true); err != nil {
+			if err := h.addResource(ctx, l, rec.Result.ResultDeprecated, true); err != nil {
 				return err
+			}
+			for _, res := range rec.Result.Results {
+				if err := h.addResource(ctx, l, res, true); err != nil {
+					return err
+				}
 			}
 			for _, att := range rec.Result.Attestations {
 				if err := h.addResource(ctx, l, att, false); err != nil {
@@ -536,8 +541,13 @@ func (h *HistoryQueue) update(ctx context.Context, rec controlapi.BuildHistoryRe
 			}
 		}
 		for _, r := range rec.Results {
-			if err := h.addResource(ctx, l, r.Result, true); err != nil {
+			if err := h.addResource(ctx, l, r.ResultDeprecated, true); err != nil {
 				return err
+			}
+			for _, res := range r.Results {
+				if err := h.addResource(ctx, l, res, true); err != nil {
+					return err
+				}
 			}
 			for _, att := range r.Attestations {
 				if err := h.addResource(ctx, l, att, false); err != nil {

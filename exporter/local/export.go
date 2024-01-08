@@ -35,8 +35,9 @@ func New(opt Opt) (exporter.Exporter, error) {
 	return le, nil
 }
 
-func (e *localExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
+func (e *localExporter) Resolve(ctx context.Context, id int, opt map[string]string) (exporter.ExporterInstance, error) {
 	i := &localExporterInstance{
+		id:            id,
 		localExporter: e,
 	}
 	_, err := i.opts.Load(opt)
@@ -49,7 +50,13 @@ func (e *localExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 
 type localExporterInstance struct {
 	*localExporter
+	id int
+
 	opts CreateFSOpts
+}
+
+func (e *localExporterInstance) ID() int {
+	return e.id
 }
 
 func (e *localExporterInstance) Name() string {
@@ -60,7 +67,7 @@ func (e *localExporter) Config() *exporter.Config {
 	return exporter.NewConfig()
 }
 
-func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source, sessionID string) (map[string]string, exporter.DescriptorReference, error) {
+func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source, _ exptypes.InlineCache, sessionID string) (map[string]string, exporter.DescriptorReference, error) {
 	timeoutCtx, cancel := context.WithCancelCause(ctx)
 	timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, errors.WithStack(context.DeadlineExceeded))
 	defer cancel(errors.WithStack(context.Canceled))
@@ -148,7 +155,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 			}
 
 			progress := NewProgressHandler(ctx, lbl)
-			if err := filesync.CopyToCaller(ctx, outputFS, caller, progress); err != nil {
+			if err := filesync.CopyToCaller(ctx, outputFS, e.id, caller, progress); err != nil {
 				return err
 			}
 			return nil

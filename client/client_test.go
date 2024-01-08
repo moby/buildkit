@@ -46,6 +46,7 @@ import (
 	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/session/secrets/secretsprovider"
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
 	"github.com/moby/buildkit/solver/errdefs"
@@ -152,6 +153,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testTarExporterWithSocketCopy,
 	testTarExporterSymlink,
 	testMultipleRegistryCacheImportExport,
+	testMultipleExporters,
 	testSourceMap,
 	testSourceMapFromRef,
 	testLazyImagePush,
@@ -2567,6 +2569,106 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, "0", strings.TrimSpace(string(dt)))
 
 	checkAllReleasable(t, c, sb, true)
+}
+
+func testMultipleExporters(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	def, err := llb.Scratch().File(llb.Mkfile("foo.txt", 0o755, nil)).Marshal(context.TODO())
+	require.NoError(t, err)
+
+	destDir, destDir2 := t.TempDir(), t.TempDir()
+	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+	defer outW.Close()
+
+	out2 := filepath.Join(destDir, "out2.tar")
+	outW2, err := os.Create(out2)
+	require.NoError(t, err)
+	defer outW2.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	target1, target2 := registry+"/buildkit/build/exporter:image",
+		registry+"/buildkit/build/alternative:image"
+
+	imageExporter := ExporterImage
+	if workers.IsTestDockerd() {
+		imageExporter = "moby"
+	}
+
+	ref := identity.NewID()
+	resp, err := c.Solve(sb.Context(), def, SolveOpt{
+		Ref: ref,
+		Exports: []ExportEntry{
+			{
+				Type: imageExporter,
+				Attrs: map[string]string{
+					"name": target1,
+				},
+			},
+			{
+				Type: imageExporter,
+				Attrs: map[string]string{
+					"name":           target2,
+					"oci-mediatypes": "true",
+				},
+			},
+			// Ensure that multiple local exporter destinations are written properly
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir2,
+			},
+			// Ensure that multiple instances of the same exporter are possible
+			{
+				Type:   ExporterTar,
+				Output: fixedWriteCloser(outW),
+			},
+			{
+				Type:   ExporterTar,
+				Output: fixedWriteCloser(outW2),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	require.Equal(t, resp.ExporterResponse["image.name"], target2)
+	require.FileExists(t, filepath.Join(destDir, "out.tar"))
+	require.FileExists(t, filepath.Join(destDir, "out2.tar"))
+	require.FileExists(t, filepath.Join(destDir, "foo.txt"))
+	require.FileExists(t, filepath.Join(destDir2, "foo.txt"))
+
+	history, err := c.ControlClient().ListenBuildHistory(sb.Context(), &controlapi.BuildHistoryRequest{
+		Ref:       ref,
+		EarlyExit: true,
+	})
+	require.NoError(t, err)
+	for {
+		ev, err := history.Recv()
+		if err != nil {
+			require.Equal(t, io.EOF, err)
+			break
+		}
+		require.Equal(t, ref, ev.Record.Ref)
+
+		require.Len(t, ev.Record.Result.Results, 2)
+		require.Equal(t, images.MediaTypeDockerSchema2Manifest, ev.Record.Result.Results[0].MediaType)
+		require.Equal(t, ocispecs.MediaTypeImageManifest, ev.Record.Result.Results[1].MediaType)
+		require.Equal(t, ev.Record.Result.Results[0], ev.Record.Result.ResultDeprecated)
+	}
 }
 
 func testOCIExporter(t *testing.T, sb integration.Sandbox) {
@@ -6979,7 +7081,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 
 	for i, layer := range manifest.Layers {
 		_, err = contentStore.Info(ctx, layer.Digest)
-		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v for index %d", err, i)
+		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v for index %d (%s)", err, i, layer.Digest)
 	}
 
 	// re-run the build with a change only to input1 using the remote cache
@@ -9659,7 +9761,7 @@ var hostNetwork integration.ConfigUpdater = &netModeHost{}
 var defaultNetwork integration.ConfigUpdater = &netModeDefault{}
 var bridgeDNSNetwork integration.ConfigUpdater = &netModeBridgeDNS{}
 
-func fixedWriteCloser(wc io.WriteCloser) func(map[string]string) (io.WriteCloser, error) {
+func fixedWriteCloser(wc io.WriteCloser) filesync.FileOutputFunc {
 	return func(map[string]string) (io.WriteCloser, error) {
 		return wc, nil
 	}

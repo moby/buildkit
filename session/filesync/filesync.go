@@ -27,12 +27,21 @@ const (
 	keyFollowPaths        = "followpaths"
 	keyDirName            = "dir-name"
 	keyExporterMetaPrefix = "exporter-md-"
+
+	keyExporterID = "buildkit-attachable-exporter-id"
 )
 
 type fsSyncProvider struct {
 	dirs   DirSource
 	p      progressCb
 	doneCh chan error
+}
+
+type FileOutputFunc func(map[string]string) (io.WriteCloser, error)
+
+type SyncedDir struct {
+	Dir string
+	Map func(string, *fstypes.Stat) fsutil.MapResult
 }
 
 type DirSource interface {
@@ -226,39 +235,87 @@ func FSSync(ctx context.Context, c session.Caller, opt FSSendRequestOpt) error {
 	return pr.recvFn(stream, opt.DestDir, opt.CacheUpdater, opt.ProgressCb, opt.Differ, opt.Filter)
 }
 
-// NewFSSyncTargetDir allows writing into a directory
-func NewFSSyncTargetDir(outdir string) session.Attachable {
-	p := &fsSyncTarget{
-		outdir: outdir,
-	}
-	return p
-}
-
-// NewFSSyncTarget allows writing into an io.WriteCloser
-func NewFSSyncTarget(f func(map[string]string) (io.WriteCloser, error)) session.Attachable {
-	p := &fsSyncTarget{
-		f: f,
-	}
-	return p
+type FSSyncTarget interface {
+	target() *fsSyncTarget
 }
 
 type fsSyncTarget struct {
+	id     int
 	outdir string
-	f      func(map[string]string) (io.WriteCloser, error)
+	f      FileOutputFunc
 }
 
-func (sp *fsSyncTarget) Register(server *grpc.Server) {
+func (target *fsSyncTarget) target() *fsSyncTarget {
+	return target
+}
+
+func WithFSSync(id int, f FileOutputFunc) FSSyncTarget {
+	return &fsSyncTarget{
+		id: id,
+		f:  f,
+	}
+}
+
+func WithFSSyncDir(id int, outdir string) FSSyncTarget {
+	return &fsSyncTarget{
+		id:     id,
+		outdir: outdir,
+	}
+}
+
+func NewFSSyncTarget(targets ...FSSyncTarget) session.Attachable {
+	fs := make(map[int]FileOutputFunc)
+	outdirs := make(map[int]string)
+	for _, t := range targets {
+		t := t.target()
+		if t.f != nil {
+			fs[t.id] = t.f
+		}
+		if t.outdir != "" {
+			outdirs[t.id] = t.outdir
+		}
+	}
+	return &fsSyncAttachable{
+		fs:      fs,
+		outdirs: outdirs,
+	}
+}
+
+type fsSyncAttachable struct {
+	fs      map[int]FileOutputFunc
+	outdirs map[int]string
+}
+
+func (sp *fsSyncAttachable) Register(server *grpc.Server) {
 	RegisterFileSendServer(server, sp)
 }
 
-func (sp *fsSyncTarget) DiffCopy(stream FileSend_DiffCopyServer) (err error) {
-	if sp.outdir != "" {
-		return syncTargetDiffCopy(stream, sp.outdir)
+func (sp *fsSyncAttachable) chooser(ctx context.Context) int {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return 0
+	}
+	values := md[keyExporterID]
+	if len(values) == 0 {
+		return 0
+	}
+	id, err := strconv.ParseInt(values[0], 10, 64)
+	if err != nil {
+		return 0
+	}
+	return int(id)
+}
+
+func (sp *fsSyncAttachable) DiffCopy(stream FileSend_DiffCopyServer) (err error) {
+	id := sp.chooser(stream.Context())
+	if outdir, ok := sp.outdirs[id]; ok {
+		return syncTargetDiffCopy(stream, outdir)
+	}
+	f, ok := sp.fs[id]
+	if !ok {
+		return errors.Errorf("exporter %d not found", id)
 	}
 
-	if sp.f == nil {
-		return errors.New("empty outfile and outdir")
-	}
 	opts, _ := metadata.FromIncomingContext(stream.Context()) // if no metadata continue with empty object
 	md := map[string]string{}
 	for k, v := range opts {
@@ -266,7 +323,7 @@ func (sp *fsSyncTarget) DiffCopy(stream FileSend_DiffCopyServer) (err error) {
 			md[strings.TrimPrefix(k, keyExporterMetaPrefix)] = strings.Join(v, ",")
 		}
 	}
-	wc, err := sp.f(md)
+	wc, err := f(md)
 	if err != nil {
 		return err
 	}
@@ -282,13 +339,18 @@ func (sp *fsSyncTarget) DiffCopy(stream FileSend_DiffCopyServer) (err error) {
 	return writeTargetFile(stream, wc)
 }
 
-func CopyToCaller(ctx context.Context, fs fsutil.FS, c session.Caller, progress func(int, bool)) error {
+func CopyToCaller(ctx context.Context, fs fsutil.FS, id int, c session.Caller, progress func(int, bool)) error {
 	method := session.MethodURL(_FileSend_serviceDesc.ServiceName, "diffcopy")
 	if !c.Supports(method) {
 		return errors.Errorf("method %s not supported by the client", method)
 	}
 
 	client := NewFileSendClient(c.Conn())
+
+	opts := map[string][]string{
+		keyExporterID: {fmt.Sprint(id)},
+	}
+	ctx = metadata.NewOutgoingContext(ctx, opts)
 
 	cc, err := client.DiffCopy(ctx)
 	if err != nil {
@@ -298,7 +360,7 @@ func CopyToCaller(ctx context.Context, fs fsutil.FS, c session.Caller, progress 
 	return sendDiffCopy(cc, fs, progress)
 }
 
-func CopyFileWriter(ctx context.Context, md map[string]string, c session.Caller) (io.WriteCloser, error) {
+func CopyFileWriter(ctx context.Context, md map[string]string, id int, c session.Caller) (io.WriteCloser, error) {
 	method := session.MethodURL(_FileSend_serviceDesc.ServiceName, "diffcopy")
 	if !c.Supports(method) {
 		return nil, errors.Errorf("method %s not supported by the client", method)
@@ -317,7 +379,10 @@ func CopyFileWriter(ctx context.Context, md map[string]string, c session.Caller)
 		}
 		opts[k] = []string{v}
 	}
-
+	if existingVal, ok := opts[keyExporterID]; ok {
+		bklog.G(ctx).Warnf("overwriting grpc metadata key %q from value %+v to %+v", keyExporterID, existingVal, id)
+	}
+	opts[keyExporterID] = []string{fmt.Sprint(id)}
 	ctx = metadata.NewOutgoingContext(ctx, opts)
 
 	cc, err := client.DiffCopy(ctx)

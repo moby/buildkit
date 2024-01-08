@@ -313,6 +313,7 @@ func translateLegacySolveRequest(req *controlapi.SolveRequest) {
 		req.Cache.ExportRefDeprecated = ""
 		req.Cache.ExportAttrsDeprecated = nil
 	}
+
 	// translates ImportRefs to new Imports (v0.4.0)
 	for _, legacyImportRef := range req.Cache.ImportRefsDeprecated {
 		im := &controlapi.CacheOptionsEntry{
@@ -323,6 +324,16 @@ func translateLegacySolveRequest(req *controlapi.SolveRequest) {
 		req.Cache.Imports = append(req.Cache.Imports, im)
 	}
 	req.Cache.ImportRefsDeprecated = nil
+
+	// translate single exporter to a slice (v0.13.0)
+	if len(req.Exporters) == 0 && req.ExporterDeprecated != "" {
+		req.Exporters = append(req.Exporters, &controlapi.Exporter{
+			Type:  req.ExporterDeprecated,
+			Attrs: req.ExporterAttrsDeprecated,
+		})
+		req.ExporterDeprecated = ""
+		req.ExporterAttrsDeprecated = nil
+	}
 }
 
 func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*controlapi.SolveResponse, error) {
@@ -335,7 +346,6 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		time.AfterFunc(time.Second, c.throttledGC)
 	}()
 
-	var expi exporter.ExporterInstance
 	// TODO: multiworker
 	// This is actually tricky, as the exporter should come from the worker that has the returned reference. We may need to delay this so that the solver loads this.
 	w, err := c.opt.WorkerController.GetDefault()
@@ -343,25 +353,29 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		return nil, err
 	}
 
-	// if SOURCE_DATE_EPOCH is set, enable it for the exporter
+	// if SOURCE_DATE_EPOCH is set, enable it for the exporters
 	if v, ok := epoch.ParseBuildArgs(req.FrontendAttrs); ok {
-		if _, ok := req.ExporterAttrs[string(exptypes.OptKeySourceDateEpoch)]; !ok {
-			if req.ExporterAttrs == nil {
-				req.ExporterAttrs = make(map[string]string)
+		for _, ex := range req.Exporters {
+			if _, ok := ex.Attrs[string(exptypes.OptKeySourceDateEpoch)]; !ok {
+				if ex.Attrs == nil {
+					ex.Attrs = make(map[string]string)
+				}
+				ex.Attrs[string(exptypes.OptKeySourceDateEpoch)] = v
 			}
-			req.ExporterAttrs[string(exptypes.OptKeySourceDateEpoch)] = v
 		}
 	}
 
-	if req.Exporter != "" {
-		exp, err := w.Exporter(req.Exporter, c.opt.SessionManager)
+	var expis []exporter.ExporterInstance
+	for i, ex := range req.Exporters {
+		exp, err := w.Exporter(ex.Type, c.opt.SessionManager)
 		if err != nil {
 			return nil, err
 		}
-		expi, err = exp.Resolve(ctx, req.ExporterAttrs)
+		expi, err := exp.Resolve(ctx, i, ex.Attrs)
 		if err != nil {
 			return nil, err
 		}
+		expis = append(expis, expi)
 	}
 
 	if c, err := findDuplicateCacheOptions(req.Cache.Exports); err != nil {
@@ -453,10 +467,8 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		FrontendInputs: req.FrontendInputs,
 		CacheImports:   cacheImports,
 	}, llbsolver.ExporterRequest{
-		Exporter:       expi,
+		Exporters:      expis,
 		CacheExporters: cacheExporters,
-		Type:           req.Exporter,
-		Attrs:          req.ExporterAttrs,
 	}, req.Entitlements, procs, req.Internal, req.SourcePolicy)
 	if err != nil {
 		return nil, err

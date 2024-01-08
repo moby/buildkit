@@ -85,6 +85,8 @@ const (
 	// CapSourceDateEpoch is the capability to automatically handle the date epoch
 	CapSourceDateEpoch apicaps.CapID = "exporter.sourcedateepoch"
 
+	CapMultipleExporters apicaps.CapID = "exporter.multiple"
+
 	CapSourcePolicy apicaps.CapID = "source.policy"
 )
 
@@ -450,6 +452,12 @@ func init() {
 	Caps.Init(apicaps.Cap{
 		ID:      CapSourceDateEpoch,
 		Name:    "source date epoch",
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapMultipleExporters,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

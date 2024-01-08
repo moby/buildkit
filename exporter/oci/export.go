@@ -58,9 +58,10 @@ func New(opt Opt) (exporter.Exporter, error) {
 	return im, nil
 }
 
-func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
+func (e *imageExporter) Resolve(ctx context.Context, id int, opt map[string]string) (exporter.ExporterInstance, error) {
 	i := &imageExporterInstance{
 		imageExporter: e,
+		id:            id,
 		tar:           true,
 		opts: containerimage.ImageCommitOpts{
 			RefCfg: cacheconfig.RefConfig{
@@ -99,9 +100,15 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 
 type imageExporterInstance struct {
 	*imageExporter
+	id int
+
 	opts containerimage.ImageCommitOpts
 	tar  bool
 	meta map[string][]byte
+}
+
+func (e *imageExporterInstance) ID() int {
+	return e.id
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -112,11 +119,12 @@ func (e *imageExporterInstance) Config() *exporter.Config {
 	return exporter.NewConfigWithCompression(e.opts.RefCfg.Compression)
 }
 
-func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source, sessionID string) (_ map[string]string, descref exporter.DescriptorReference, err error) {
+func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source, inlineCache exptypes.InlineCache, sessionID string) (_ map[string]string, descref exporter.DescriptorReference, err error) {
 	if e.opt.Variant == VariantDocker && len(src.Refs) > 0 {
 		return nil, nil, errors.Errorf("docker exporter does not currently support exporting manifest lists")
 	}
 
+	src = src.Clone()
 	if src.Metadata == nil {
 		src.Metadata = make(map[string][]byte)
 	}
@@ -141,7 +149,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 		}
 	}()
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, sessionID, &opts)
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, sessionID, inlineCache, &opts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -240,7 +248,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	}
 
 	if e.tar {
-		w, err := filesync.CopyFileWriter(ctx, resp, caller)
+		w, err := filesync.CopyFileWriter(ctx, resp, e.id, caller)
 		if err != nil {
 			return nil, nil, err
 		}
