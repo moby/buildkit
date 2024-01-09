@@ -80,6 +80,9 @@ func (b *provenanceBridge) requests(r *frontend.Result) (*resultRequests, error)
 	}
 
 	for k, ref := range r.Refs {
+		if ref == nil {
+			continue
+		}
 		r, ok := b.findByResult(ref)
 		if !ok {
 			return nil, errors.Errorf("could not find request for ref %s", ref.ID())

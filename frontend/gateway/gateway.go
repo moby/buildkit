@@ -682,14 +682,15 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 		ids := make(map[string]string, len(res.Refs))
 		defs := make(map[string]*opspb.Definition, len(res.Refs))
 		for k, ref := range res.Refs {
-			id := identity.NewID()
-			if ref == nil {
-				id = ""
-			} else {
+			var id string
+			var def *opspb.Definition
+			if ref != nil {
+				id = identity.NewID()
+				def = ref.Definition()
 				lbf.refs[id] = ref
 			}
 			ids[k] = id
-			defs[k] = ref.Definition()
+			defs[k] = def
 		}
 
 		if req.AllowResultArrayRef {
@@ -703,12 +704,10 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 		}
 	} else {
 		ref := res.Ref
-		id := identity.NewID()
-
+		var id string
 		var def *opspb.Definition
-		if ref == nil {
-			id = ""
-		} else {
+		if ref != nil {
+			id = identity.NewID()
 			def = ref.Definition()
 			lbf.refs[id] = ref
 		}
