@@ -11,7 +11,6 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
@@ -77,19 +76,11 @@ func otlpMetricExporter() (sdkmetric.Exporter, error) {
 
 	switch proto {
 	case "grpc":
-		return otlpmetricgrpc.New(context.Background(),
-			otlpmetricgrpc.WithTemporalitySelector(deltaTemporality),
-		)
+		return otlpmetricgrpc.New(context.Background())
 	case "http/protobuf":
-		return otlpmetrichttp.New(context.Background(),
-			otlpmetrichttp.WithTemporalitySelector(deltaTemporality),
-		)
+		return otlpmetrichttp.New(context.Background())
 	// case "http/json": // unsupported by library
 	default:
 		return nil, errors.Errorf("unsupported otlp protocol %v", proto)
 	}
-}
-
-func deltaTemporality(_ sdkmetric.InstrumentKind) metricdata.Temporality {
-	return metricdata.DeltaTemporality
 }
