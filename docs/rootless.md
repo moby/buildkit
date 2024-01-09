@@ -33,7 +33,7 @@ Needs to set the max user namespaces to a positive integer, through the [API set
 "user.max_user_namespaces" = "16384"
 ```
 
-See [`../examples/eksctl/bottlerocket.yaml`](../examples/eskctl/bottlerocket.yaml) for an example to configure a Node Group in EKS.
+See [`../examples/eksctl/bottlerocket.yaml`](../examples/eksctl/bottlerocket.yaml) for an example to configure a Node Group in EKS.
 
 <details>
 <summary>Old distributions</summary>
