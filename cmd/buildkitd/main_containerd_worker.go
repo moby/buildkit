@@ -101,7 +101,7 @@ func init() {
 		},
 		cli.StringFlag{
 			Name:  "containerd-worker-net",
-			Usage: "worker network type (auto, cni or host)",
+			Usage: "worker network type (auto, bridge, cni or host)",
 			Value: defaultConf.Workers.Containerd.NetworkConfig.Mode,
 		},
 		cli.StringFlag{

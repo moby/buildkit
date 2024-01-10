@@ -89,7 +89,7 @@ func init() {
 		},
 		cli.StringFlag{
 			Name:  "oci-worker-net",
-			Usage: "worker network type (auto, cni or host)",
+			Usage: "worker network type (auto, bridge, cni or host)",
 			Value: defaultConf.Workers.OCI.NetworkConfig.Mode,
 		},
 		cli.StringFlag{
