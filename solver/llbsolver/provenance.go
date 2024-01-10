@@ -180,7 +180,7 @@ func (b *provenanceBridge) Solve(ctx context.Context, req frontend.SolveRequest,
 	}
 	if req.Evaluate {
 		err = res.EachRef(func(ref solver.ResultProxy) error {
-			_, err := res.Ref.Result(ctx)
+			_, err := ref.Result(ctx)
 			return err
 		})
 	}

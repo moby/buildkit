@@ -112,6 +112,7 @@ var allTests = integration.TestFuncs(
 	testCacheMultiPlatformImportExport,
 	testOnBuildCleared,
 	testFrontendUseForwardedSolveResults,
+	testFrontendEvaluate,
 	testFrontendInputs,
 	testErrorsSourceMap,
 	testMultiArgs,
@@ -4900,6 +4901,47 @@ COPY foo foo2
 	dt, err := os.ReadFile(filepath.Join(destDir, "foo3"))
 	require.NoError(t, err)
 	require.Equal(t, dt, []byte("data"))
+}
+
+func testFrontendEvaluate(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dockerfile := []byte(`
+FROM scratch
+COPY badfile /
+`)
+	dir := integration.Tmpdir(t, fstest.CreateFile("Dockerfile", dockerfile, 0600))
+
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		_, err := c.Solve(ctx, gateway.SolveRequest{
+			Frontend: "dockerfile.v0",
+			Evaluate: true,
+		})
+		require.ErrorContains(t, err, `"/badfile": not found`)
+
+		_, err = c.Solve(ctx, gateway.SolveRequest{
+			Frontend: "dockerfile.v0",
+			FrontendOpt: map[string]string{
+				"platform": "linux/amd64,linux/arm64",
+			},
+			Evaluate: true,
+		})
+		require.ErrorContains(t, err, `"/badfile": not found`)
+
+		return nil, nil
+	}
+
+	_, err = c.Build(sb.Context(), client.SolveOpt{
+		Exports: []client.ExportEntry{},
+		LocalDirs: map[string]string{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, "", frontend, nil)
+	require.NoError(t, err)
 }
 
 func testFrontendInputs(t *testing.T, sb integration.Sandbox) {
