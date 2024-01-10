@@ -297,10 +297,12 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 	nc := netproviders.Opt{
 		Mode: common.config.Workers.OCI.NetworkConfig.Mode,
 		CNI: cniprovider.Opt{
-			Root:       common.config.Root,
-			ConfigPath: common.config.Workers.OCI.CNIConfigPath,
-			BinaryDir:  common.config.Workers.OCI.CNIBinaryPath,
-			PoolSize:   common.config.Workers.OCI.CNIPoolSize,
+			Root:         common.config.Root,
+			ConfigPath:   common.config.Workers.OCI.CNIConfigPath,
+			BinaryDir:    common.config.Workers.OCI.CNIBinaryPath,
+			PoolSize:     common.config.Workers.OCI.CNIPoolSize,
+			BridgeName:   common.config.Workers.OCI.BridgeName,
+			BridgeSubnet: common.config.Workers.OCI.BridgeSubnet,
 		},
 	}
 

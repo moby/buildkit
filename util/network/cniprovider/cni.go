@@ -21,10 +21,12 @@ import (
 const aboveTargetGracePeriod = 5 * time.Minute
 
 type Opt struct {
-	Root       string
-	ConfigPath string
-	BinaryDir  string
-	PoolSize   int
+	Root         string
+	ConfigPath   string
+	BinaryDir    string
+	PoolSize     int
+	BridgeName   string
+	BridgeSubnet string
 }
 
 func New(opt Opt) (network.Provider, error) {
@@ -61,7 +63,7 @@ func New(opt Opt) (network.Provider, error) {
 	cleanOldNamespaces(cp)
 
 	cp.nsPool = &cniPool{targetSize: opt.PoolSize, provider: cp}
-	if err := cp.initNetwork(); err != nil {
+	if err := cp.initNetwork(true); err != nil {
 		return nil, err
 	}
 	go cp.nsPool.fillPool(context.TODO())
@@ -70,17 +72,18 @@ func New(opt Opt) (network.Provider, error) {
 
 type cniProvider struct {
 	cni.CNI
-	root   string
-	nsPool *cniPool
+	root    string
+	nsPool  *cniPool
+	release func() error
 }
 
-func (c *cniProvider) initNetwork() error {
-	if v := os.Getenv("BUILDKIT_CNI_INIT_LOCK_PATH"); v != "" {
-		l := flock.New(v)
-		if err := l.Lock(); err != nil {
+func (c *cniProvider) initNetwork(lock bool) error {
+	if lock {
+		unlock, err := initLock()
+		if err != nil {
 			return err
 		}
-		defer l.Unlock()
+		defer unlock()
 	}
 	ns, err := c.New(context.TODO(), "")
 	if err != nil {
@@ -91,7 +94,21 @@ func (c *cniProvider) initNetwork() error {
 
 func (c *cniProvider) Close() error {
 	c.nsPool.close()
+	if c.release != nil {
+		return c.release()
+	}
 	return nil
+}
+
+func initLock() (func() error, error) {
+	if v := os.Getenv("BUILDKIT_CNI_INIT_LOCK_PATH"); v != "" {
+		l := flock.New(v)
+		if err := l.Lock(); err != nil {
+			return nil, err
+		}
+		return l.Unlock, nil
+	}
+	return func() error { return nil }, nil
 }
 
 type cniPool struct {
