@@ -51,8 +51,13 @@ func New(opt Opt) (network.Provider, error) {
 		cniOptions = append(cniOptions, cni.WithConfFile(opt.ConfigPath))
 	}
 
-	cniHandle, err := cni.New(cniOptions...)
-	if err != nil {
+	var cniHandle cni.CNI
+	fn := func(_ context.Context) error {
+		var err error
+		cniHandle, err = cni.New(cniOptions...)
+		return err
+	}
+	if err := withDetachedNetNSIfAny(context.TODO(), fn); err != nil {
 		return nil, err
 	}
 
@@ -171,7 +176,13 @@ func (pool *cniPool) get(ctx context.Context) (*cniNS, error) {
 }
 
 func (pool *cniPool) getNew(ctx context.Context) (*cniNS, error) {
-	ns, err := pool.provider.newNS(ctx, "")
+	var ns *cniNS
+	fn := func(ctx context.Context) error {
+		var err error
+		ns, err = pool.provider.newNS(ctx, "")
+		return err
+	}
+	err := withDetachedNetNSIfAny(ctx, fn)
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +244,16 @@ func (c *cniProvider) New(ctx context.Context, hostname string) (network.Namespa
 	if hostname == "" || runtime.GOOS == "windows" {
 		return c.nsPool.get(ctx)
 	}
-	return c.newNS(ctx, hostname)
+	var res network.Namespace
+	fn := func(ctx context.Context) error {
+		var err error
+		res, err = c.newNS(ctx, hostname)
+		return err
+	}
+	if err := withDetachedNetNSIfAny(ctx, fn); err != nil {
+		return nil, err
+	}
+	return res, nil
 }
 
 func (c *cniProvider) newNS(ctx context.Context, hostname string) (*cniNS, error) {
@@ -259,7 +279,13 @@ func (c *cniProvider) newNS(ctx context.Context, hostname string) (*cniNS, error
 			cni.WithArgs("IgnoreUnknown", "1"))
 	}
 
-	cniRes, err := c.CNI.Setup(context.TODO(), id, nativeID, nsOpts...)
+	var cniRes *cni.Result
+	if ctx.Value(contextKeyDetachedNetNS) == nil {
+		cniRes, err = c.CNI.Setup(context.TODO(), id, nativeID, nsOpts...)
+	} else {
+		// Parallel Setup cannot be used, apparently due to the goroutine issue with setns
+		cniRes, err = c.CNI.SetupSerially(context.TODO(), id, nativeID, nsOpts...)
+	}
 	if err != nil {
 		deleteNetNS(nativeID)
 		return nil, errors.Wrap(err, "CNI setup error")
@@ -330,7 +356,13 @@ func (ns *cniNS) Sample() (*network.Sample, error) {
 	if !ns.canSample {
 		return nil, nil
 	}
-	s, err := ns.sample()
+	var s *network.Sample
+	fn := func(_ context.Context) error {
+		var err error
+		s, err = ns.sample()
+		return err
+	}
+	err := withDetachedNetNSIfAny(context.TODO(), fn)
 	if err != nil {
 		return nil, err
 	}
@@ -361,3 +393,8 @@ func (ns *cniNS) release() error {
 	}
 	return err
 }
+
+type contextKeyT string
+
+// contextKeyDetachedNetNS is associated with a string value that denotes RootlessKit's detached-netns.
+var contextKeyDetachedNetNS = contextKeyT("buildkit/util/network/cniprovider/detached-netns")
