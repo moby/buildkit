@@ -3,17 +3,18 @@
 . $(dirname $0)/util
 set -eu -o pipefail
 
-: ${GO_VERSION=}
-: ${TEST_INTEGRATION=}
-: ${TEST_GATEWAY=}
-: ${TEST_DOCKERFILE=}
-: ${TEST_DOCKERD=}
-: ${TEST_DOCKERD_BINARY=$(which dockerd)}
-: ${TEST_COVERAGE=}
-: ${TEST_KEEP_CACHE=}
-: ${DOCKERFILE_RELEASES=}
-: ${BUILDKIT_WORKER_RANDOM=}
-: ${BUILDKITD_TAGS=}
+: "${ALPINE_VERSION=}"
+: "${GO_VERSION=}"
+: "${TEST_INTEGRATION=}"
+: "${TEST_GATEWAY=}"
+: "${TEST_DOCKERFILE=}"
+: "${TEST_DOCKERD=}"
+: "${TEST_DOCKERD_BINARY=$(which dockerd)}"
+: "${TEST_COVERAGE=}"
+: "${TEST_KEEP_CACHE=}"
+: "${DOCKERFILE_RELEASES=}"
+: "${BUILDKIT_WORKER_RANDOM=}"
+: "${BUILDKITD_TAGS=}"
 
 if [ "$TEST_DOCKERD" == "1" ]; then
   if [ ! -f "$TEST_DOCKERD_BINARY" ]; then
@@ -62,6 +63,7 @@ if [ "$TEST_COVERAGE" = "1" ]; then
 fi
 
 buildxCmd build $cacheFromFlags \
+  --build-arg ALPINE_VERSION \
   --build-arg GO_VERSION \
   --build-arg "BUILDKITD_TAGS=$BUILDKITD_TAGS" \
   --target "integration-tests" \
