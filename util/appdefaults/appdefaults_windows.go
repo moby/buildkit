@@ -16,6 +16,10 @@ var (
 	DefaultCNIConfigPath = filepath.Join(ConfigDir, "cni.json")
 )
 
+var (
+	UserCNIConfigPath = DefaultCNIConfigPath
+)
+
 func UserAddress() string {
 	return Address
 }

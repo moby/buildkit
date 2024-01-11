@@ -17,6 +17,10 @@ const (
 	DefaultCNIConfigPath = "/etc/buildkit/cni.json"
 )
 
+var (
+	UserCNIConfigPath = filepath.Join(UserConfigDir(), "cni.json")
+)
+
 // UserAddress typically returns /run/user/$UID/buildkit/buildkitd.sock
 func UserAddress() string {
 	//  pam_systemd sets XDG_RUNTIME_DIR but not other dirs.
