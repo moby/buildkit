@@ -19,10 +19,12 @@ func InitOCIWorker() {
 }
 
 type OCI struct {
-	ID          string
-	UID         int
-	GID         int
-	Snapshotter string
+	ID                     string
+	UID                    int
+	GID                    int
+	Snapshotter            string
+	RootlessKitNet         string // e.g., "slirp4netns"
+	RootlessKitDetachNetNS bool   // needs RootlessKitNet to be non-host network
 }
 
 func (s *OCI) Name() string {
@@ -31,6 +33,10 @@ func (s *OCI) Name() string {
 
 func (s *OCI) Rootless() bool {
 	return s.UID != 0
+}
+
+func (s *OCI) NetNSDetached() bool {
+	return s.Rootless() && s.RootlessKitDetachNetNS
 }
 
 func (s *OCI) New(ctx context.Context, cfg *integration.BackendConfig) (integration.Backend, func() error, error) {
@@ -52,8 +58,19 @@ func (s *OCI) New(ctx context.Context, cfg *integration.BackendConfig) (integrat
 		if s.GID == 0 {
 			return nil, nil, errors.Errorf("unsupported id pair: uid=%d, gid=%d", s.UID, s.GID)
 		}
+		var rootlessKitArgs []string
+		switch s.RootlessKitNet {
+		case "", "host":
+		// NOP
+		default:
+			// See docs/rootless.md
+			rootlessKitArgs = append(rootlessKitArgs, "--net="+s.RootlessKitNet, "--copy-up=/etc", "--disable-host-loopback")
+		}
+		if s.RootlessKitDetachNetNS {
+			rootlessKitArgs = append(rootlessKitArgs, "--detach-netns")
+		}
 		// TODO: make sure the user exists and subuid/subgid are configured.
-		buildkitdArgs = append([]string{"sudo", "-u", fmt.Sprintf("#%d", s.UID), "-i", "--", "exec", "rootlesskit"}, buildkitdArgs...)
+		buildkitdArgs = append(append([]string{"sudo", "-u", fmt.Sprintf("#%d", s.UID), "-i", "--", "exec", "rootlesskit"}, rootlessKitArgs...), buildkitdArgs...)
 	}
 
 	var extraEnv []string
@@ -67,9 +84,10 @@ func (s *OCI) New(ctx context.Context, cfg *integration.BackendConfig) (integrat
 	}
 
 	return backend{
-		address:     buildkitdSock,
-		rootless:    s.UID != 0,
-		snapshotter: s.Snapshotter,
+		address:       buildkitdSock,
+		rootless:      s.UID != 0,
+		netnsDetached: s.NetNSDetached(),
+		snapshotter:   s.Snapshotter,
 	}, stop, nil
 }
 

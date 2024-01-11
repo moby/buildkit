@@ -22,6 +22,8 @@ func initOCIWorker() {
 		}
 		if integration.RootlessSupported(uid) {
 			integration.Register(&OCI{ID: "oci-rootless", UID: uid, GID: gid})
+			integration.Register(&OCI{ID: "oci-rootless-slirp4netns-detachnetns", UID: uid, GID: gid,
+				RootlessKitNet: "slirp4netns", RootlessKitDetachNetNS: true})
 		}
 	}
 

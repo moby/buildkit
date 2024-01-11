@@ -55,6 +55,8 @@ func InitContainerdWorker() {
 				GID:         gid,
 				Snapshotter: "native", // TODO: test with fuse-overlayfs as well, or automatically determine snapshotter
 			})
+
+			// TODO: add RootlessKitDetachNetNS after updating containerd-rootless.sh to include https://github.com/containerd/nerdctl/pull/2723
 		}
 	}
 
@@ -82,6 +84,10 @@ func (c *Containerd) Name() string {
 
 func (c *Containerd) Rootless() bool {
 	return c.UID != 0
+}
+
+func (c *Containerd) NetNSDetached() bool {
+	return false
 }
 
 func (c *Containerd) New(ctx context.Context, cfg *integration.BackendConfig) (b integration.Backend, cl func() error, err error) {
@@ -236,6 +242,7 @@ disabled_plugins = ["cri"]
 		address:           buildkitdSock,
 		containerdAddress: address,
 		rootless:          rootless,
+		netnsDetached:     false,
 		snapshotter:       c.Snapshotter,
 	}, cl, nil
 }
