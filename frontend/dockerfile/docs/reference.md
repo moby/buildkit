@@ -600,7 +600,7 @@ RUN apt-get update
 RUN apt-get install -y curl
 ```
 
-You can specify `CMD` instructions using
+You can specify `RUN` instructions using
 [shell or exec forms](#shell-and-exec-form):
 
 - `RUN ["executable","param1","param2"]` (exec form)
