@@ -357,6 +357,20 @@ directive in your Dockerfile:
   string=foobarbaz echo ${string%%b*}   # foo
   ```
 
+- `${variable/pattern/replacement}` replace the first occurrence of `pattern`
+  in `variable` with `replacement`
+
+  ```bash
+  string=foobarbaz echo ${string/ba/fo}  # fooforbaz
+  ```
+
+- `${variable//pattern/replacement}` replaces all occurrences of `pattern`
+  in `variable` with `replacement`
+
+  ```bash
+  string=foobarbaz echo ${string//ba/fo}  # fooforfoz
+  ```
+
 In all cases, `word` can be any string, including additional environment
 variables.
 

@@ -18,7 +18,7 @@ func TestConvertShellPatternToRegex(t *testing.T) {
 		"(()[]{\\}^$.\\*\\?|\\\\": "^\\(\\(\\)\\[\\]\\{\\}\\^\\$\\.\\*\\?\\|\\\\",
 	}
 	for pattern, expected := range cases {
-		res, err := convertShellPatternToRegex(pattern, true)
+		res, err := convertShellPatternToRegex(pattern, true, true)
 		require.NoError(t, err)
 		require.Equal(t, expected, res.String())
 	}
@@ -26,7 +26,7 @@ func TestConvertShellPatternToRegex(t *testing.T) {
 		"\\", "\\x", "\\\\\\",
 	}
 	for _, pattern := range invalid {
-		_, err := convertShellPatternToRegex(pattern, true)
+		_, err := convertShellPatternToRegex(pattern, true, true)
 		require.Error(t, err)
 	}
 }
@@ -440,6 +440,39 @@ func TestProcessWithMatches(t *testing.T) {
 			input:    "${FOO%%\\**\\*}",
 			envs:     map[string]string{"FOO": "a***yy*"},
 			expected: "a",
+			matches:  map[string]struct{}{"FOO": {}},
+		},
+		{
+			// test: wildcards
+			input:    "${FOO/$NEEDLE/.} - ${FOO//$NEEDLE/.}",
+			envs:     map[string]string{"FOO": "/foo*/*/*.txt", "NEEDLE": "\\*/"},
+			expected: "/foo.*/*.txt - /foo..*.txt",
+			matches:  map[string]struct{}{"FOO": {}, "NEEDLE": {}},
+		},
+		{
+			// test: / in patterns
+			input:    "${FOO/$NEEDLE/} - ${FOO//$NEEDLE/}",
+			envs:     map[string]string{"FOO": "/tmp/tmp/bar.txt", "NEEDLE": "/tmp"},
+			expected: "/tmp/bar.txt - /bar.txt",
+			matches:  map[string]struct{}{"FOO": {}, "NEEDLE": {}},
+		},
+		{
+			input:    "${FOO/$NEEDLE/$REPLACEMENT} - ${FOO//$NEEDLE/$REPLACEMENT}",
+			envs:     map[string]string{"FOO": "/a/foo/b/c.txt", "NEEDLE": "/?/", "REPLACEMENT": "/"},
+			expected: "/foo/b/c.txt - /foo/c.txt",
+			matches:  map[string]struct{}{"FOO": {}, "NEEDLE": {}, "REPLACEMENT": {}},
+		},
+		{
+			input:    "${FOO/$NEEDLE/$REPLACEMENT}",
+			envs:     map[string]string{"FOO": "http://google.de", "NEEDLE": "http://", "REPLACEMENT": "https://"},
+			expected: "https://google.de",
+			matches:  map[string]struct{}{"FOO": {}, "NEEDLE": {}, "REPLACEMENT": {}},
+		},
+		{
+			// test: substitute escaped separator characters
+			input:    "${FOO//\\//\\/}",
+			envs:     map[string]string{"FOO": "/tmp/foo.txt"},
+			expected: "\\/tmp\\/foo.txt",
 			matches:  map[string]struct{}{"FOO": {}},
 		},
 	}
