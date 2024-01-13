@@ -29,7 +29,7 @@ require (
 	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/distribution/reference v0.5.0
 	github.com/docker/cli v25.0.0-rc.1+incompatible
-	github.com/docker/docker v25.0.0-rc.1+incompatible
+	github.com/docker/docker v25.0.0-rc.2+incompatible
 	github.com/docker/go-connections v0.5.0
 	github.com/docker/go-units v0.5.0
 	github.com/gofrs/flock v0.8.1
