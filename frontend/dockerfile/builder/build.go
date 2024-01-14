@@ -7,6 +7,7 @@ import (
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/exporter/containerimage/image"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/attestations/sbom"
@@ -101,8 +102,11 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 
 	var scanner sbom.Scanner
 	if bc.SBOM != nil {
-		scanner, err = sbom.CreateSBOMScanner(ctx, c, bc.SBOM.Generator, llb.ResolveImageConfigOpt{
-			ResolveMode: opts["image-resolve-mode"],
+		// TODO: scanner should pass policy
+		scanner, err = sbom.CreateSBOMScanner(ctx, c, bc.SBOM.Generator, sourceresolver.Opt{
+			ImageOpt: &sourceresolver.ResolveImageOpt{
+				ResolveMode: opts["image-resolve-mode"],
+			},
 		})
 		if err != nil {
 			return nil, err

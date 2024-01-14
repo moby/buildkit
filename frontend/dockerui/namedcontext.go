@@ -10,6 +10,7 @@ import (
 
 	"github.com/distribution/reference"
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/exporter/containerimage/image"
 	"github.com/moby/buildkit/frontend/gateway/client"
@@ -72,11 +73,12 @@ func (bc *Client) namedContextRecursive(ctx context.Context, name string, nameWi
 
 		named = reference.TagNameOnly(named)
 
-		ref, dgst, data, err := bc.client.ResolveImageConfig(ctx, named.String(), llb.ResolveImageConfigOpt{
-			Platform:     opt.Platform,
-			ResolveMode:  opt.ResolveMode,
-			LogName:      fmt.Sprintf("[context %s] load metadata for %s", nameWithPlatform, ref),
-			ResolverType: llb.ResolverTypeRegistry,
+		ref, dgst, data, err := bc.client.ResolveImageConfig(ctx, named.String(), sourceresolver.Opt{
+			LogName:  fmt.Sprintf("[context %s] load metadata for %s", nameWithPlatform, ref),
+			Platform: opt.Platform,
+			ImageOpt: &sourceresolver.ResolveImageOpt{
+				ResolveMode: opt.ResolveMode,
+			},
 		})
 		if err != nil {
 			e := &imageutil.ResolveToNonImageError{}
@@ -146,15 +148,14 @@ func (bc *Client) namedContextRecursive(ctx context.Context, name string, nameWi
 			return nil, nil, errors.Wrapf(err, "could not wrap %q with digest", name)
 		}
 
-		// TODO: How should source policy be handled here with a dummy ref?
-		_, dgst, data, err := bc.client.ResolveImageConfig(ctx, dummyRef.String(), llb.ResolveImageConfigOpt{
-			Platform:     opt.Platform,
-			ResolveMode:  opt.ResolveMode,
-			LogName:      fmt.Sprintf("[context %s] load metadata for %s", nameWithPlatform, dummyRef.String()),
-			ResolverType: llb.ResolverTypeOCILayout,
-			Store: llb.ResolveImageConfigOptStore{
-				SessionID: bc.bopts.SessionID,
-				StoreID:   named.Name(),
+		_, dgst, data, err := bc.client.ResolveImageConfig(ctx, dummyRef.String(), sourceresolver.Opt{
+			LogName:  fmt.Sprintf("[context %s] load metadata for %s", nameWithPlatform, dummyRef.String()),
+			Platform: opt.Platform,
+			OCILayoutOpt: &sourceresolver.ResolveOCILayoutOpt{
+				Store: sourceresolver.ResolveImageConfigOptStore{
+					SessionID: bc.bopts.SessionID,
+					StoreID:   named.Name(),
+				},
 			},
 		})
 		if err != nil {

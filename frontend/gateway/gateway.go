@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -25,6 +26,7 @@ import (
 	cacheutil "github.com/moby/buildkit/cache/util"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/exporter/containerimage/image"
@@ -164,7 +166,8 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 				return nil, err
 			}
 
-			ref, dgst, config, err := llbBridge.ResolveImageConfig(ctx, reference.TagNameOnly(sourceRef).String(), llb.ResolveImageConfigOpt{})
+			imr := sourceresolver.NewImageMetaResolver(llbBridge)
+			ref, dgst, config, err := imr.ResolveImageConfig(ctx, reference.TagNameOnly(sourceRef).String(), sourceresolver.Opt{})
 			if err != nil {
 				return nil, err
 			}
@@ -554,6 +557,49 @@ type llbBridgeForwarder struct {
 	ctrsMu sync.Mutex
 }
 
+func (lbf *llbBridgeForwarder) ResolveSourceMeta(ctx context.Context, req *pb.ResolveSourceMetaRequest) (*pb.ResolveSourceMetaResponse, error) {
+	if req.Source == nil {
+		return nil, status.Error(codes.InvalidArgument, "source is required")
+	}
+	log.Printf("bridge.ResolveSourceMeta: %v", req.Source)
+
+	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
+	var platform *ocispecs.Platform
+	if p := req.Platform; p != nil {
+		platform = &ocispecs.Platform{
+			OS:           p.OS,
+			Architecture: p.Architecture,
+			Variant:      p.Variant,
+			OSVersion:    p.OSVersion,
+			OSFeatures:   p.OSFeatures,
+		}
+	}
+	resolveopt := sourceresolver.Opt{
+		LogName:        req.LogName,
+		SourcePolicies: req.SourcePolicies,
+		Platform:       platform,
+	}
+	resolveopt.ImageOpt = &sourceresolver.ResolveImageOpt{
+		ResolveMode: req.ResolveMode,
+	}
+	resp, err := lbf.llbBridge.ResolveSourceMetadata(ctx, req.Source, resolveopt)
+	if err != nil {
+		return nil, err
+	}
+
+	r := &pb.ResolveSourceMetaResponse{
+		Source: resp.Op,
+	}
+
+	if resp.Image != nil {
+		r.Image = &pb.ResolveSourceImageResponse{
+			Digest: resp.Image.Digest,
+			Config: resp.Image.Config,
+		}
+	}
+	return r, nil
+}
+
 func (lbf *llbBridgeForwarder) ResolveImageConfig(ctx context.Context, req *pb.ResolveImageConfigRequest) (*pb.ResolveImageConfigResponse, error) {
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
 	var platform *ocispecs.Platform
@@ -566,17 +612,27 @@ func (lbf *llbBridgeForwarder) ResolveImageConfig(ctx context.Context, req *pb.R
 			OSFeatures:   p.OSFeatures,
 		}
 	}
-	ref, dgst, dt, err := lbf.llbBridge.ResolveImageConfig(ctx, req.Ref, llb.ResolveImageConfigOpt{
-		ResolverType: llb.ResolverType(req.ResolverType),
-		Platform:     platform,
-		ResolveMode:  req.ResolveMode,
-		LogName:      req.LogName,
-		Store: llb.ResolveImageConfigOptStore{
-			SessionID: req.SessionID,
-			StoreID:   req.StoreID,
-		},
+	log.Printf("bridge.ResolveImageConfig: %v", req.Ref)
+	imr := sourceresolver.NewImageMetaResolver(lbf.llbBridge)
+	resolveopt := sourceresolver.Opt{
+		LogName:        req.LogName,
 		SourcePolicies: req.SourcePolicies,
-	})
+		Platform:       platform,
+	}
+	if sourceresolver.ResolverType(req.ResolverType) == sourceresolver.ResolverTypeRegistry {
+		resolveopt.ImageOpt = &sourceresolver.ResolveImageOpt{
+			ResolveMode: req.ResolveMode,
+		}
+	} else if sourceresolver.ResolverType(req.ResolverType) == sourceresolver.ResolverTypeOCILayout {
+		resolveopt.OCILayoutOpt = &sourceresolver.ResolveOCILayoutOpt{
+			Store: sourceresolver.ResolveImageConfigOptStore{
+				SessionID: req.SessionID,
+				StoreID:   req.StoreID,
+			},
+		}
+	}
+
+	ref, dgst, dt, err := imr.ResolveImageConfig(ctx, req.Ref, resolveopt)
 	if err != nil {
 		return nil, err
 	}

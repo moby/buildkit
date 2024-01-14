@@ -17,6 +17,8 @@ option (gogoproto.unmarshaler_all) = true;
 service LLBBridge {
 	// apicaps:CapResolveImage
 	rpc ResolveImageConfig(ResolveImageConfigRequest) returns (ResolveImageConfigResponse);
+	// apicaps:CapSourceMetaResolver
+	rpc ResolveSourceMeta(ResolveSourceMetaRequest) returns (ResolveSourceMetaResponse);
 	// apicaps:CapSolveBase
 	rpc Solve(SolveRequest) returns (SolveResponse);
 	// apicaps:CapReadFile
@@ -130,6 +132,24 @@ message ResolveImageConfigResponse {
 	string Digest = 1 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
 	bytes Config = 2;
 	string Ref = 3;
+}
+
+message ResolveSourceMetaRequest {
+	pb.SourceOp Source = 1;
+	pb.Platform Platform = 2;
+	string LogName = 3;
+	string ResolveMode = 4;
+	repeated moby.buildkit.v1.sourcepolicy.Policy SourcePolicies = 8;
+}
+
+message ResolveSourceMetaResponse {
+	pb.SourceOp Source = 1;
+	ResolveSourceImageResponse Image = 2;
+}
+
+message ResolveSourceImageResponse {
+	string Digest = 1 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
+	bytes Config = 2;
 }
 
 message SolveRequest {

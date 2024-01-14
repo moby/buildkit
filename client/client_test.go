@@ -41,6 +41,7 @@ import (
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
@@ -3061,7 +3062,7 @@ func testSourceDateEpochClamp(t *testing.T, sb integration.Sandbox) {
 
 	var bboxConfig []byte
 	_, err = c.Build(sb.Context(), SolveOpt{}, "", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
-		_, _, bboxConfig, err = c.ResolveImageConfig(ctx, "docker.io/library/busybox:latest", llb.ResolveImageConfigOpt{})
+		_, _, bboxConfig, err = c.ResolveImageConfig(ctx, "docker.io/library/busybox:latest", sourceresolver.Opt{})
 		if err != nil {
 			return nil, err
 		}
@@ -10059,7 +10060,7 @@ func testSourcePolicy(t *testing.T, sb integration.Sandbox) {
 					},
 				}
 
-				ref, dgst, _, err := c.ResolveImageConfig(ctx, origRef, llb.ResolveImageConfigOpt{
+				ref, dgst, _, err := c.ResolveImageConfig(ctx, origRef, sourceresolver.Opt{
 					SourcePolicies: pol,
 				})
 				if err != nil {

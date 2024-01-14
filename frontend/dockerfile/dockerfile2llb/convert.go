@@ -20,6 +20,7 @@ import (
 	"github.com/docker/go-connections/nat"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/imagemetaresolver"
+	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/exporter/containerimage/image"
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
@@ -423,12 +424,12 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 							prefix += platforms.Format(*platform) + " "
 						}
 						prefix += "internal]"
-						mutRef, dgst, dt, err := metaResolver.ResolveImageConfig(ctx, d.stage.BaseName, llb.ResolveImageConfigOpt{
-							Platform:       platform,
-							ResolveMode:    opt.ImageResolveMode.String(),
-							LogName:        fmt.Sprintf("%s load metadata for %s", prefix, d.stage.BaseName),
-							ResolverType:   llb.ResolverTypeRegistry,
-							SourcePolicies: nil,
+						mutRef, dgst, dt, err := metaResolver.ResolveImageConfig(ctx, d.stage.BaseName, sourceresolver.Opt{
+							LogName:  fmt.Sprintf("%s load metadata for %s", prefix, d.stage.BaseName),
+							Platform: platform,
+							ImageOpt: &sourceresolver.ResolveImageOpt{
+								ResolveMode: opt.ImageResolveMode.String(),
+							},
 						})
 						if err != nil {
 							return suggest.WrapError(errors.Wrap(err, origName), origName, append(allStageNames, commonImageNames()...), true)

@@ -8,7 +8,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/reference"
 	"github.com/containerd/containerd/remotes"
-	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/session"
 	sessioncontent "github.com/moby/buildkit/session/content"
 	"github.com/moby/buildkit/util/imageutil"
@@ -21,7 +21,7 @@ const (
 )
 
 // getOCILayoutResolver gets a resolver to an OCI layout for a specified store from the client using the given session.
-func getOCILayoutResolver(store llb.ResolveImageConfigOptStore, sm *session.Manager, g session.Group) *ociLayoutResolver {
+func getOCILayoutResolver(store sourceresolver.ResolveImageConfigOptStore, sm *session.Manager, g session.Group) *ociLayoutResolver {
 	r := &ociLayoutResolver{
 		store: store,
 		sm:    sm,
@@ -32,7 +32,7 @@ func getOCILayoutResolver(store llb.ResolveImageConfigOptStore, sm *session.Mana
 
 type ociLayoutResolver struct {
 	remotes.Resolver
-	store llb.ResolveImageConfigOptStore
+	store sourceresolver.ResolveImageConfigOptStore
 	sm    *session.Manager
 	g     session.Group
 }

@@ -96,6 +96,15 @@ func (gwf *GatewayForwarder) ResolveImageConfig(ctx context.Context, req *gwapi.
 	return fwd.ResolveImageConfig(ctx, req)
 }
 
+func (gwf *GatewayForwarder) ResolveSourceMeta(ctx context.Context, req *gwapi.ResolveSourceMetaRequest) (*gwapi.ResolveSourceMetaResponse, error) {
+	fwd, err := gwf.lookupForwarder(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "forwarding ResolveSourceMeta")
+	}
+
+	return fwd.ResolveSourceMeta(ctx, req)
+}
+
 func (gwf *GatewayForwarder) Solve(ctx context.Context, req *gwapi.SolveRequest) (*gwapi.SolveResponse, error) {
 	fwd, err := gwf.lookupForwarder(ctx)
 	if err != nil {

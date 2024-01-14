@@ -15,7 +15,7 @@ import (
 	"github.com/containerd/containerd/snapshots"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client"
-	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/errdefs"
@@ -45,7 +45,7 @@ type puller struct {
 	layerLimit     *int
 	vtx            solver.Vertex
 	ResolverType
-	store llb.ResolveImageConfigOptStore
+	store sourceresolver.ResolveImageConfigOptStore
 
 	g                flightcontrol.Group[struct{}]
 	cacheKeyErr      error

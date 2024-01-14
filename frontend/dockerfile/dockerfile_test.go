@@ -7046,7 +7046,7 @@ func testSourcePolicyWithNamedContext(t *testing.T, sb integration.Sandbox) {
 		FrontendAttrs: map[string]string{
 			"context:replace": "docker-image:docker.io/library/alpine:latest",
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: mainContext,
 			dockerui.DefaultLocalNameContext:    mainContext,
 			"test":                              replaceContext,
