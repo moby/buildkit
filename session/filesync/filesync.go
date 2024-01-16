@@ -347,9 +347,14 @@ func CopyToCaller(ctx context.Context, fs fsutil.FS, id int, c session.Caller, p
 
 	client := NewFileSendClient(c.Conn())
 
-	opts := map[string][]string{
-		keyExporterID: {fmt.Sprint(id)},
+	opts, ok := metadata.FromOutgoingContext(ctx)
+	if !ok {
+		opts = make(map[string][]string)
 	}
+	if existingVal, ok := opts[keyExporterID]; ok {
+		bklog.G(ctx).Warnf("overwriting grpc metadata key %q from value %+v to %+v", keyExporterID, existingVal, id)
+	}
+	opts[keyExporterID] = []string{fmt.Sprint(id)}
 	ctx = metadata.NewOutgoingContext(ctx, opts)
 
 	cc, err := client.DiffCopy(ctx)
