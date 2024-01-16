@@ -2676,25 +2676,62 @@ FILE2
 
 ### Example: Creating inline files
 
-In `COPY` commands source parameters can be replaced with here-doc indicators.
+With `COPY` instructions, you can replace the source parameter with a here-doc
+indicator to write the contents of the here-document directly to a file. The
+following example creates a `greeting.txt` file containing `hello world` using
+a `COPY` instruction.
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM alpine
+COPY <<EOF greeting.txt
+hello world
+EOF
+```
+
 Regular here-doc [variable expansion and tab stripping rules](https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_07_04) apply.
+The following example shows a small Dockerfile that creates a `hello.sh` script
+file using a `COPY` instruction with a here-document.
 
 ```dockerfile
 # syntax=docker/dockerfile:1
 FROM alpine
 ARG FOO=bar
-COPY <<-EOT /app/foo
-	hello ${FOO}
+COPY <<-EOT /script.sh
+  echo "hello ${FOO}"
 EOT
+ENTRYPOINT ash /script.sh
 ```
+
+In this case, file script prints "hello bar", because the variable is expanded
+when the `COPY` instruction gets executed.
+
+```console
+$ docker build -t heredoc .
+$ docker run heredoc
+hello bar
+```
+
+If instead you were to quote any part of the here-document word `EOT`, the
+variable would not be expanded at build-time.
 
 ```dockerfile
 # syntax=docker/dockerfile:1
 FROM alpine
-COPY <<-"EOT" /app/script.sh
-	echo hello ${FOO}
+ARG FOO=bar
+COPY <<-"EOT" /script.sh
+  echo "hello ${FOO}"
 EOT
-RUN FOO=abc ash /app/script.sh
+ENTRYPOINT ash /script.sh
+```
+
+Note that `ARG FOO=bar` is excessive here, and can be removed. The variable
+gets interpreted at runtime, when the script is invoked:
+
+```console
+$ docker build -t heredoc .
+$ docker run -e FOO=world heredoc
+hello world
 ```
 
 ## Dockerfile examples
