@@ -85,6 +85,27 @@ func (mp *MultiProvider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor)
 	return mp.base.ReaderAt(ctx, desc)
 }
 
+// Info returns a content.Info
+func (mp *MultiProvider) Info(ctx context.Context, dgst digest.Digest) (content.Info, error) {
+	type info interface {
+		Info(context.Context, digest.Digest) (content.Info, error)
+	}
+
+	mp.mu.RLock()
+	if p, ok := mp.sub[dgst]; ok {
+		mp.mu.RUnlock()
+		if ci, ok := p.(info); ok {
+			return ci.Info(ctx, dgst)
+		}
+	} else {
+		mp.mu.RUnlock()
+	}
+	if ci, ok := mp.base.(info); ok {
+		return ci.Info(ctx, dgst)
+	}
+	return content.Info{}, errors.Wrapf(errdefs.ErrNotFound, "content %v", dgst)
+}
+
 // Add adds a new child provider for a specific digest
 func (mp *MultiProvider) Add(dgst digest.Digest, p content.Provider) {
 	mp.mu.Lock()
