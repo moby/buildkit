@@ -28,8 +28,8 @@ require (
 	github.com/containerd/typeurl/v2 v2.1.1
 	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/distribution/reference v0.5.0
-	github.com/docker/cli v25.0.0-rc.1+incompatible
-	github.com/docker/docker v25.0.0-rc.1+incompatible
+	github.com/docker/cli v25.0.0-rc.2+incompatible
+	github.com/docker/docker v25.0.0-rc.2+incompatible
 	github.com/docker/go-connections v0.5.0
 	github.com/docker/go-units v0.5.0
 	github.com/gofrs/flock v0.8.1
@@ -157,7 +157,7 @@ require (
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/secure-systems-lab/go-securesystemslib v0.4.0 // indirect
 	github.com/shibumi/go-pathspec v1.3.0 // indirect
-	github.com/vbatts/tar-split v0.11.3 // indirect
+	github.com/vbatts/tar-split v0.11.5 // indirect
 	github.com/vishvananda/netns v0.0.0-20210104183010-2eb08e3e575f // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric v0.42.0 // indirect
