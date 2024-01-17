@@ -169,16 +169,16 @@ with something else entirely.
 To use the build contexts, pass `--opt context:<source>=<target>`, where the `<source>` is the name in the dockerfile,
 and `<target>` is a properly formatted target. These can be the following:
 
-* `--opt context:alpine=foo1` - replace usage of `alpine` with a named context `foo1`, that already should have been loaded via `--local`.
-* `--opt context:alpine=foo2@sha256:bd04a5b26dec16579cd1d7322e949c5905c4742269663fcbc84dcb2e9f4592fb` - replace usage of `alpine` with the image or index whose sha256 hash is `bd04a5b26dec16579cd1d7322e949c5905c4742269663fcbc84dcb2e9f4592fb` from an OCI layout whose named context `foo2`, that already should have been loaded via `--oci-layout`.
+* `--opt context:alpine=local:foo1` - replace usage of `alpine` with a named context `foo1`, that already should have been loaded via `--local`.
+* `--opt context:alpine=oci-layout://foo2@sha256:bd04a5b26dec16579cd1d7322e949c5905c4742269663fcbc84dcb2e9f4592fb` - replace usage of `alpine` with the image or index whose sha256 hash is `bd04a5b26dec16579cd1d7322e949c5905c4742269663fcbc84dcb2e9f4592fb` from an OCI layout whose named context `foo2`, that already should have been loaded via `--oci-layout`.
 * `--opt context:alpine=docker-image://docker.io/library/ubuntu:latest` - replace usage of `alpine` with the docker image `docker.io/library/ubuntu:latest` from the registry.
 * `--opt context:alpine=https://example.com/foo/bar.git` - replace usage of alpine with the contents of the git repository at `https://example.com/foo/bar.git`
 
 Complete examples of using local and OCI layout:
 
 ```sh
-$ buildctl build --frontend dockerfile.v0 --local context=. --local dockerfile=. --local foo1=/home/dir/abc --opt context:alpine=foo1
-$ buildctl build --frontend dockerfile.v0 --local context=. --local dockerfile=. --oci-layout foo2=/home/dir/oci --opt context:alpine=foo2@sha256:bd04a5b26dec16579cd1d7322e949c5905c4742269663fcbc84dcb2e9f4592fb
+$ buildctl build --frontend dockerfile.v0 --local context=. --local dockerfile=. --local foo1=/home/dir/abc --opt context:alpine=local:foo1
+$ buildctl build --frontend dockerfile.v0 --local context=. --local dockerfile=. --oci-layout foo2=/home/dir/oci --opt context:alpine=oci-layout://foo2@sha256:bd04a5b26dec16579cd1d7322e949c5905c4742269663fcbc84dcb2e9f4592fb
 ```
 
 #### gateway-specific options
