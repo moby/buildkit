@@ -3560,7 +3560,7 @@ func (v *vertexConst) Acquire(ctx context.Context) (ReleaseFunc, error) {
 	return func() {}, nil
 }
 
-// vtxSum returns a vertex that ourputs sum of its inputs plus a constant
+// vtxSum returns a vertex that outputs sum of its inputs plus a constant
 func vtxSum(v int, opt vtxOpt) *vertexSum {
 	if opt.cacheKeySeed == "" {
 		opt.cacheKeySeed = fmt.Sprintf("sum-%d-%d", v, len(opt.inputs))
@@ -3601,7 +3601,7 @@ func (v *vertexSum) Acquire(ctx context.Context) (ReleaseFunc, error) {
 
 func vtxSubBuild(g Edge, opt vtxOpt) *vertexSubBuild {
 	if opt.cacheKeySeed == "" {
-		opt.cacheKeySeed = fmt.Sprintf("sum-%s", identity.NewID())
+		opt.cacheKeySeed = fmt.Sprintf("sub-%s", identity.NewID())
 	}
 	if opt.name == "" {
 		opt.name = opt.cacheKeySeed + "-" + identity.NewID()
