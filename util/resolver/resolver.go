@@ -51,6 +51,7 @@ func fillInsecureOpts(host string, c config.RegistryConfig, h docker.RegistryHos
 		h2.Client = &http.Client{
 			Transport: tracing.NewTransport(transport),
 		}
+		h2.Authorizer = docker.NewDockerAuthorizer(docker.WithAuthClient(h2.Client))
 		tc.InsecureSkipVerify = true
 		return &h2, nil
 	} else if isHTTP {
@@ -62,6 +63,7 @@ func fillInsecureOpts(host string, c config.RegistryConfig, h docker.RegistryHos
 	h.Client = &http.Client{
 		Transport: tracing.NewTransport(httpsTransport),
 	}
+	h.Authorizer = docker.NewDockerAuthorizer(docker.WithAuthClient(h.Client))
 	return &h, nil
 }
 
