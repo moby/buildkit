@@ -280,6 +280,49 @@ func NewSolver(opts SolverOpt) *Solver {
 	return jl
 }
 
+// hasOwner returns true if the provided target edge (or any of it's sibling
+// edges) has the provided owner.
+func (jl *Solver) hasOwner(target Edge, owner Edge) bool {
+	jl.mu.RLock()
+	defer jl.mu.RUnlock()
+
+	st, ok := jl.actives[target.Vertex.Digest()]
+	if !ok {
+		return false
+	}
+
+	var owners []Edge
+	for _, e := range st.edges {
+		if e.owner != nil {
+			owners = append(owners, e.owner.edge)
+		}
+	}
+	for len(owners) > 0 {
+		var owners2 []Edge
+		for _, e := range owners {
+			st, ok = jl.actives[e.Vertex.Digest()]
+			if !ok {
+				continue
+			}
+
+			if st.vtx.Digest() == owner.Vertex.Digest() {
+				return true
+			}
+
+			for _, e := range st.edges {
+				if e.owner != nil {
+					owners2 = append(owners2, e.owner.edge)
+				}
+			}
+		}
+
+		// repeat recursively, this time with the linked owners owners
+		owners = owners2
+	}
+
+	return false
+}
+
 func (jl *Solver) setEdge(e Edge, targetEdge *edge) {
 	jl.mu.RLock()
 	defer jl.mu.RUnlock()

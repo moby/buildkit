@@ -186,9 +186,14 @@ func (s *scheduler) dispatch(e *edge) {
 				if e.isDep(origEdge) || origEdge.isDep(e) {
 					bklog.G(context.TODO()).Debugf("skip merge due to dependency")
 				} else {
-					bklog.G(context.TODO()).Debugf("merging edge %s to %s\n", e.edge.Vertex.Name(), origEdge.edge.Vertex.Name())
-					if s.mergeTo(origEdge, e) {
-						s.ef.setEdge(e.edge, origEdge)
+					dest, src := origEdge, e
+					if s.ef.hasOwner(origEdge.edge, e.edge) {
+						dest, src = src, dest
+					}
+
+					bklog.G(context.TODO()).Debugf("merging edge %s[%d] to %s[%d]\n", src.edge.Vertex.Name(), src.edge.Index, dest.edge.Vertex.Name(), dest.edge.Index)
+					if s.mergeTo(dest, src) {
+						s.ef.setEdge(src.edge, dest)
 					}
 				}
 			}
@@ -351,6 +356,7 @@ func (s *scheduler) mergeTo(target, src *edge) bool {
 type edgeFactory interface {
 	getEdge(Edge) *edge
 	setEdge(Edge, *edge)
+	hasOwner(Edge, Edge) bool
 }
 
 type pipeFactory struct {
