@@ -313,7 +313,7 @@ func testBridgeNetworking(t *testing.T, sb integration.Sandbox) {
 	if os.Getenv("BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS") == "" {
 		t.SkipNow()
 	}
-	if sb.Rootless() {
+	if sb.Rootless() { // bridge is not used by default, even with detach-netns
 		t.SkipNow()
 	}
 	c, err := New(sb.Context(), sb.Address())
@@ -563,7 +563,7 @@ func testExportBusyboxLocal(t *testing.T, sb integration.Sandbox) {
 
 func testHostnameLookup(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
-	if sb.Rootless() {
+	if sb.Rootless() { // bridge is not used by default, even with detach-netns
 		t.SkipNow()
 	}
 
@@ -583,7 +583,7 @@ func testHostnameLookup(t *testing.T, sb integration.Sandbox) {
 // moby/buildkit#1301
 func testHostnameSpecifying(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
-	if sb.Rootless() {
+	if sb.Rootless() { // bridge is not used by default, even with detach-netns
 		t.SkipNow()
 	}
 

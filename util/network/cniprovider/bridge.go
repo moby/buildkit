@@ -115,7 +115,11 @@ func NewBridge(opt Opt) (network.Provider, error) {
 	defer unlock()
 
 	createBridge := true
-	if _, err := bridgeByName(opt.BridgeName); err == nil {
+	if err := withDetachedNetNSIfAny(context.TODO(),
+		func(_ context.Context) error {
+			_, err2 := bridgeByName(opt.BridgeName)
+			return err2
+		}); err == nil {
 		createBridge = false
 	}
 
@@ -130,7 +134,9 @@ func NewBridge(opt Opt) (network.Provider, error) {
 
 	if createBridge {
 		cp.release = func() error {
-			if err := removeBridge(opt.BridgeName); err != nil {
+			if err := withDetachedNetNSIfAny(context.TODO(), func(_ context.Context) error {
+				return removeBridge(opt.BridgeName)
+			}); err != nil {
 				bklog.L.Errorf("failed to remove bridge %q: %v", opt.BridgeName, err)
 			}
 			return nil

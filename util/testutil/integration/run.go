@@ -38,6 +38,7 @@ type Backend interface {
 	ContainerdAddress() string
 
 	Rootless() bool
+	NetNSDetached() bool
 	Snapshotter() string
 	Supports(feature string) bool
 }
@@ -66,6 +67,7 @@ type Worker interface {
 	Close() error
 	Name() string
 	Rootless() bool
+	NetNSDetached() bool
 }
 
 type ConfigUpdater interface {
