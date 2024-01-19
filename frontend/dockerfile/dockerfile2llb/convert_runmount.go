@@ -70,7 +70,11 @@ func dispatchRunMounts(d *dispatchState, c *instructions.RunCommand, sources []*
 		}
 		st := opt.buildContext
 		if mount.From != "" {
-			st = sources[i].state
+			src := sources[i]
+			st = src.state
+			if !src.noinit {
+				return nil, errors.Errorf("cannot mount from stage %q to %q, stage needs to be defined before current command", mount.From, mount.Target)
+			}
 		}
 		var mountOpts []llb.MountOption
 		if mount.Type == instructions.MountTypeTmpfs {

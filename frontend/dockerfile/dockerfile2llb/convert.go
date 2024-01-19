@@ -371,6 +371,9 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 				d.state = llb.Scratch()
 				d.image = emptyImage(platformOpt.targetPlatform)
 				d.platform = &platformOpt.targetPlatform
+				if d.unregistered {
+					d.noinit = true
+				}
 				continue
 			}
 			func(i int, d *dispatchState) {
@@ -378,6 +381,10 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 					defer func() {
 						if err != nil {
 							err = parser.WithLocation(err, d.stage.Location)
+						}
+						if d.unregistered {
+							// implicit stages don't need further dispatch
+							d.noinit = true
 						}
 					}()
 					origName := d.stage.BaseName
@@ -492,6 +499,8 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		if !isReachable(target, d) || d.noinit {
 			continue
 		}
+		// mark as initialized, used to determine states that have not been dispatched yet
+		d.noinit = true
 
 		if d.base != nil {
 			d.state = d.base.state
@@ -779,7 +788,11 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 	case *instructions.CopyCommand:
 		l := opt.buildContext
 		if len(cmd.sources) != 0 {
-			l = cmd.sources[0].state
+			src := cmd.sources[0]
+			if !src.noinit {
+				return errors.Errorf("cannot copy from stage %q, it needs to be defined before current stage %q", c.From, d.stageName)
+			}
+			l = src.state
 		}
 		err = dispatchCopy(d, copyConfig{
 			params:       c.SourcesAndDest,
