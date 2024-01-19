@@ -231,7 +231,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 
 		ds := &dispatchState{
 			stage:          st,
-			deps:           make(map[*dispatchState]struct{}),
+			deps:           make(map[*dispatchState]instructions.Command),
 			ctxPaths:       make(map[string]struct{}),
 			paths:          make(map[string]struct{}),
 			stageName:      st.Name,
@@ -337,7 +337,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			d.commands[i] = newCmd
 			for _, src := range newCmd.sources {
 				if src != nil {
-					d.deps[src] = struct{}{}
+					d.deps[src] = cmd
 					if src.unregistered {
 						allDispatchStates.addState(src)
 					}
@@ -346,8 +346,8 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		}
 	}
 
-	if has, state := hasCircularDependency(allDispatchStates.states); has {
-		return nil, errors.Errorf("circular dependency detected on stage: %s", state.stageName)
+	if err := validateCircularDependency(allDispatchStates.states); err != nil {
+		return nil, err
 	}
 
 	if len(allDispatchStates.states) == 1 {
@@ -648,7 +648,7 @@ func toCommand(ic instructions.Command, allDispatchStates *dispatchStates) (comm
 				if !ok {
 					stn = &dispatchState{
 						stage:        instructions.Stage{BaseName: c.From, Location: ic.Location()},
-						deps:         make(map[*dispatchState]struct{}),
+						deps:         make(map[*dispatchState]instructions.Command),
 						paths:        make(map[string]struct{}),
 						unregistered: true,
 					}
@@ -821,7 +821,7 @@ type dispatchState struct {
 	stage     instructions.Stage
 	base      *dispatchState
 	noinit    bool
-	deps      map[*dispatchState]struct{}
+	deps      map[*dispatchState]instructions.Command
 	buildArgs []instructions.KeyValuePairOptional
 	commands  []command
 	// ctxPaths marks the paths this dispatchState uses from the build context.
@@ -1607,39 +1607,43 @@ func findReachable(from *dispatchState) (ret []*dispatchState) {
 	return ret
 }
 
-func hasCircularDependency(states []*dispatchState) (bool, *dispatchState) {
-	var visit func(state *dispatchState) bool
+func validateCircularDependency(states []*dispatchState) error {
+	var visit func(*dispatchState, []instructions.Command) []instructions.Command
 	if states == nil {
-		return false, nil
+		return nil
 	}
 	visited := make(map[*dispatchState]struct{})
 	path := make(map[*dispatchState]struct{})
 
-	visit = func(state *dispatchState) bool {
+	visit = func(state *dispatchState, current []instructions.Command) []instructions.Command {
 		_, ok := visited[state]
 		if ok {
-			return false
+			return nil
 		}
 		visited[state] = struct{}{}
 		path[state] = struct{}{}
-		for dep := range state.deps {
-			_, ok = path[dep]
-			if ok {
-				return true
+		for dep, c := range state.deps {
+			next := append(current, c)
+			if _, ok := path[dep]; ok {
+				return next
 			}
-			if visit(dep) {
-				return true
+			if c := visit(dep, next); c != nil {
+				return c
 			}
 		}
 		delete(path, state)
-		return false
+		return nil
 	}
 	for _, state := range states {
-		if visit(state) {
-			return true, state
+		if cmds := visit(state, nil); cmds != nil {
+			err := errors.Errorf("circular dependency detected on stage: %s", state.stageName)
+			for _, c := range cmds {
+				err = parser.WithLocation(err, c.Location())
+			}
+			return err
 		}
 	}
-	return false, nil
+	return nil
 }
 
 func normalizeContextPaths(paths map[string]struct{}) []string {
