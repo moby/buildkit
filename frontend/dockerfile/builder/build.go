@@ -93,7 +93,9 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 	defer func() {
 		var el *parser.ErrorLocation
 		if errors.As(err, &el) {
-			err = wrapSource(err, src.SourceMap, el.Location)
+			for _, l := range el.Locations {
+				err = wrapSource(err, src.SourceMap, l)
+			}
 		}
 	}()
 

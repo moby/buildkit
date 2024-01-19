@@ -1608,14 +1608,14 @@ func findReachable(from *dispatchState) (ret []*dispatchState) {
 }
 
 func validateCircularDependency(states []*dispatchState) error {
-	var visit func(state *dispatchState) instructions.Command
+	var visit func(*dispatchState, []instructions.Command) []instructions.Command
 	if states == nil {
 		return nil
 	}
 	visited := make(map[*dispatchState]struct{})
 	path := make(map[*dispatchState]struct{})
 
-	visit = func(state *dispatchState) instructions.Command {
+	visit = func(state *dispatchState, current []instructions.Command) []instructions.Command {
 		_, ok := visited[state]
 		if ok {
 			return nil
@@ -1623,10 +1623,11 @@ func validateCircularDependency(states []*dispatchState) error {
 		visited[state] = struct{}{}
 		path[state] = struct{}{}
 		for dep, c := range state.deps {
+			next := append(current, c)
 			if _, ok := path[dep]; ok {
-				return c
+				return next
 			}
-			if c := visit(dep); c != nil {
+			if c := visit(dep, next); c != nil {
 				return c
 			}
 		}
@@ -1634,9 +1635,11 @@ func validateCircularDependency(states []*dispatchState) error {
 		return nil
 	}
 	for _, state := range states {
-		if c := visit(state); c != nil {
+		if cmds := visit(state, nil); cmds != nil {
 			err := errors.Errorf("circular dependency detected on stage: %s", state.stageName)
-			err = parser.WithLocation(err, c.Location())
+			for _, c := range cmds {
+				err = parser.WithLocation(err, c.Location())
+			}
 			return err
 		}
 	}
