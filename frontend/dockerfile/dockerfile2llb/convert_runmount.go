@@ -30,7 +30,7 @@ func detectRunMount(cmd *command, allDispatchStates *dispatchStates) bool {
 			if !ok {
 				stn = &dispatchState{
 					stage:        instructions.Stage{BaseName: from},
-					deps:         make(map[*dispatchState]struct{}),
+					deps:         make(map[*dispatchState]instructions.Command),
 					paths:        make(map[string]struct{}),
 					unregistered: true,
 				}
