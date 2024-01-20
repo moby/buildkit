@@ -1,0 +1,5 @@
+
++docker-image://docker.io/library/foo:latest
+afoo
+bbar
+cbaz
