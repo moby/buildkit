@@ -17,7 +17,6 @@ import (
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	opspb "github.com/moby/buildkit/solver/pb"
-	"github.com/moby/buildkit/util"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/grpcerrors"
@@ -51,11 +50,11 @@ func New(ctx context.Context, opts map[string]string, session, product string, c
 	}
 
 	if resp.FrontendAPICaps == nil {
-		resp.FrontendAPICaps = util.PointerSlice(defaultCaps())
+		resp.FrontendAPICaps = defaultCaps()
 	}
 
 	if resp.LLBCaps == nil {
-		resp.LLBCaps = util.PointerSlice(defaultLLBCaps())
+		resp.LLBCaps = defaultLLBCaps()
 	}
 
 	return &grpcClient{
@@ -247,8 +246,8 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 
 // defaultCaps returns the capabilities that were implemented when capabilities
 // support was added. This list is frozen and should never be changed.
-func defaultCaps() []apicaps.PBCap {
-	return []apicaps.PBCap{
+func defaultCaps() []*apicaps.PBCap {
+	return []*apicaps.PBCap{
 		{ID: string(pb.CapSolveBase), Enabled: true},
 		{ID: string(pb.CapSolveInlineReturn), Enabled: true},
 		{ID: string(pb.CapResolveImage), Enabled: true},
@@ -258,8 +257,8 @@ func defaultCaps() []apicaps.PBCap {
 
 // defaultLLBCaps returns the LLB capabilities that were implemented when capabilities
 // support was added. This list is frozen and should never be changed.
-func defaultLLBCaps() []apicaps.PBCap {
-	return []apicaps.PBCap{
+func defaultLLBCaps() []*apicaps.PBCap {
+	return []*apicaps.PBCap{
 		{ID: string(opspb.CapSourceImage), Enabled: true},
 		{ID: string(opspb.CapSourceLocal), Enabled: true},
 		{ID: string(opspb.CapSourceLocalUnique), Enabled: true},

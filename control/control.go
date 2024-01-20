@@ -34,8 +34,8 @@ import (
 	"github.com/moby/buildkit/solver/llbsolver"
 	"github.com/moby/buildkit/solver/llbsolver/proc"
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/moby/buildkit/util"
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/cast"
 	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/leaseutil"
@@ -176,7 +176,7 @@ func (c *Controller) DiskUsage(ctx context.Context, r *controlapi.DiskUsageReque
 				UsageCount:  int64(r.UsageCount),
 				Description: r.Description,
 				CreatedAt:   timestamppb.New(r.CreatedAt),
-				LastUsedAt:  util.TimestampOrNil(r.LastUsedAt),
+				LastUsedAt:  cast.TimestampOrNil(r.LastUsedAt),
 				RecordType:  string(r.RecordType),
 				Shared:      r.Shared,
 			})
@@ -249,7 +249,7 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 				UsageCount:  int64(r.UsageCount),
 				Description: r.Description,
 				CreatedAt:   timestamppb.New(r.CreatedAt),
-				LastUsedAt:  util.TimestampOrNil(r.LastUsedAt),
+				LastUsedAt:  cast.TimestampOrNil(r.LastUsedAt),
 				RecordType:  string(r.RecordType),
 				Shared:      r.Shared,
 			}); err != nil {
@@ -473,7 +473,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	}, llbsolver.ExporterRequest{
 		Exporters:      expis,
 		CacheExporters: cacheExporters,
-	}, util.FromStringSlice[entitlements.Entitlement](req.Entitlements), procs, req.Internal, req.SourcePolicy)
+	}, cast.FromStringSlice[entitlements.Entitlement](req.Entitlements), procs, req.Internal, req.SourcePolicy)
 	if err != nil {
 		return nil, err
 	}

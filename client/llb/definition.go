@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/moby/buildkit/util"
+	"github.com/moby/buildkit/util/cast"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -101,7 +101,7 @@ func NewDefinitionOp(def *pb.Definition) (*DefinitionOp, error) {
 	return &DefinitionOp{
 		ops:        ops,
 		defs:       defs,
-		metas:      util.FromStringMap[digest.Digest](def.Metadata),
+		metas:      cast.FromStringMap[digest.Digest](def.Metadata),
 		sources:    srcs,
 		platforms:  platforms,
 		dgst:       dgst,

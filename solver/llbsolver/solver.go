@@ -29,8 +29,8 @@ import (
 	"github.com/moby/buildkit/solver/llbsolver/provenance"
 	"github.com/moby/buildkit/solver/result"
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
-	"github.com/moby/buildkit/util"
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/cast"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/grpcerrors"
@@ -187,7 +187,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 
 	return func(res *Result, descrefs []exporter.DescriptorReference, err error) error {
 		en := time.Now()
-		rec.CompletedAt = util.TimestampOrNil(&en)
+		rec.CompletedAt = cast.TimestampOrNil(&en)
 
 		j.CloseProgress()
 

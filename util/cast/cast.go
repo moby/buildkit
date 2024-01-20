@@ -1,4 +1,4 @@
-package util
+package cast
 
 import (
 	"time"
@@ -20,23 +20,6 @@ func TimeOrNil(ts *timestamppb.Timestamp) *time.Time {
 	return &t
 }
 
-func PointerSlice[T any](from []T) []*T {
-	var result []*T
-	for _, x := range from {
-		x := x
-		result = append(result, &x)
-	}
-	return result
-}
-
-func FromPointerSlice[T any](from []*T) []T {
-	var result []T
-	for _, x := range from {
-		result = append(result, *x)
-	}
-	return result
-}
-
 func ToStringSlice[T ~string](from []T) []string {
 	var result []string
 	for _, x := range from {
@@ -53,27 +36,10 @@ func FromStringSlice[T ~string](from []string) []T {
 	return result
 }
 
-func FromPointerMap[K ~string, V any](from map[string]*V) map[K]V {
-	result := make(map[K]V)
-	for k, v := range from {
-		result[K(k)] = *v
-	}
-	return result
-}
-
 func FromStringMap[K ~string, V any](from map[string]V) map[K]V {
 	result := make(map[K]V)
 	for k, v := range from {
 		result[K(k)] = v
-	}
-	return result
-}
-
-func ToPointerMap[K ~string, V any](from map[K]V) map[string]*V {
-	result := make(map[string]*V)
-	for k, v := range from {
-		v := v
-		result[string(k)] = &v
 	}
 	return result
 }

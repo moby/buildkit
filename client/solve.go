@@ -23,8 +23,8 @@ import (
 	"github.com/moby/buildkit/session/grpchijack"
 	"github.com/moby/buildkit/solver/pb"
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
-	"github.com/moby/buildkit/util"
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/cast"
 	"github.com/moby/buildkit/util/entitlements"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -284,7 +284,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			FrontendAttrs:           frontendAttrs,
 			FrontendInputs:          frontendInputs,
 			Cache:                   &cacheOpt.options,
-			Entitlements:            util.ToStringSlice(opt.AllowedEntitlements),
+			Entitlements:            cast.ToStringSlice(opt.AllowedEntitlements),
 			Internal:                opt.Internal,
 			SourcePolicy:            opt.SourcePolicy,
 		})

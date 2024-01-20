@@ -3,7 +3,7 @@ package client
 import (
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/solver/result"
-	"github.com/moby/buildkit/util"
+	"github.com/moby/buildkit/util/cast"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
@@ -18,7 +18,7 @@ func AttestationToPB[T any](a *result.Attestation[T]) (*pb.Attestation, error) {
 		subjects[i] = &pb.InTotoSubject{
 			Kind:   subject.Kind,
 			Name:   subject.Name,
-			Digest: util.ToStringSlice(subject.Digest),
+			Digest: cast.ToStringSlice(subject.Digest),
 		}
 	}
 
@@ -37,7 +37,7 @@ func AttestationFromPB[T any](a *pb.Attestation) (*result.Attestation[T], error)
 		subjects[i] = result.InTotoSubject{
 			Kind:   subject.Kind,
 			Name:   subject.Name,
-			Digest: util.FromStringSlice[digest.Digest](subject.Digest),
+			Digest: cast.FromStringSlice[digest.Digest](subject.Digest),
 		}
 	}
 

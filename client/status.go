@@ -2,7 +2,7 @@ package client
 
 import (
 	controlapi "github.com/moby/buildkit/api/services/control"
-	"github.com/moby/buildkit/util"
+	"github.com/moby/buildkit/util/cast"
 	digest "github.com/opencontainers/go-digest"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -20,10 +20,10 @@ func NewSolveStatus(resp *controlapi.StatusResponse) *SolveStatus {
 	for _, v := range resp.Vertexes {
 		s.Vertexes = append(s.Vertexes, &Vertex{
 			Digest:        digest.Digest(v.Digest),
-			Inputs:        util.FromStringSlice[digest.Digest](v.Inputs),
+			Inputs:        cast.FromStringSlice[digest.Digest](v.Inputs),
 			Name:          v.Name,
-			Started:       util.TimeOrNil(v.Started),
-			Completed:     util.TimeOrNil(v.Completed),
+			Started:       cast.TimeOrNil(v.Started),
+			Completed:     cast.TimeOrNil(v.Completed),
 			Error:         v.Error,
 			Cached:        v.Cached,
 			ProgressGroup: v.ProgressGroup,
@@ -37,8 +37,8 @@ func NewSolveStatus(resp *controlapi.StatusResponse) *SolveStatus {
 			Total:     v.Total,
 			Current:   v.Current,
 			Timestamp: v.Timestamp.AsTime(),
-			Started:   util.TimeOrNil(v.Started),
-			Completed: util.TimeOrNil(v.Completed),
+			Started:   cast.TimeOrNil(v.Started),
+			Completed: cast.TimeOrNil(v.Completed),
 		})
 	}
 	for _, v := range resp.Logs {
@@ -71,10 +71,10 @@ func (ss *SolveStatus) Marshal() (out []*controlapi.StatusResponse) {
 		for _, v := range ss.Vertexes {
 			sr.Vertexes = append(sr.Vertexes, &controlapi.Vertex{
 				Digest:        v.Digest.String(),
-				Inputs:        util.ToStringSlice(v.Inputs),
+				Inputs:        cast.ToStringSlice(v.Inputs),
 				Name:          v.Name,
-				Started:       util.TimestampOrNil(v.Started),
-				Completed:     util.TimestampOrNil(v.Completed),
+				Started:       cast.TimestampOrNil(v.Started),
+				Completed:     cast.TimestampOrNil(v.Completed),
 				Error:         v.Error,
 				Cached:        v.Cached,
 				ProgressGroup: v.ProgressGroup,
@@ -88,8 +88,8 @@ func (ss *SolveStatus) Marshal() (out []*controlapi.StatusResponse) {
 				Current:   v.Current,
 				Total:     v.Total,
 				Timestamp: timestamppb.New(v.Timestamp),
-				Started:   util.TimestampOrNil(v.Started),
-				Completed: util.TimestampOrNil(v.Completed),
+				Started:   cast.TimestampOrNil(v.Started),
+				Completed: cast.TimestampOrNil(v.Completed),
 			})
 		}
 		for i, v := range ss.Logs {
