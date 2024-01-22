@@ -1154,6 +1154,17 @@ func (pio *processIO) Close() (err error) {
 	return err
 }
 
+func (pio *processIO) Discard() {
+	pio.mu.Lock()
+	defer pio.mu.Unlock()
+	pio.processReaders = nil
+	pio.processWriters = nil
+	pio.serverReaders = nil
+	pio.serverWriters = nil
+	pio.Done()
+}
+
+// hold lock before calling
 func (pio *processIO) Done() {
 	stillOpen := len(pio.processReaders) + len(pio.processWriters) + len(pio.serverReaders) + len(pio.serverWriters)
 	if stillOpen == 0 {
@@ -1263,6 +1274,7 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 		defer func() {
 			for _, pio := range pios {
 				pio.Close()
+				pio.Discard()
 			}
 		}()
 
