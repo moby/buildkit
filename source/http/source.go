@@ -25,7 +25,6 @@ import (
 	"github.com/moby/buildkit/source"
 	srctypes "github.com/moby/buildkit/source/types"
 	"github.com/moby/buildkit/util/tracing"
-	"github.com/moby/locker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
@@ -37,7 +36,6 @@ type Opt struct {
 
 type httpSource struct {
 	cache     cache.Accessor
-	locker    *locker.Locker
 	transport http.RoundTripper
 }
 
@@ -48,7 +46,6 @@ func NewSource(opt Opt) (source.Source, error) {
 	}
 	hs := &httpSource{
 		cache:     opt.CacheAccessor,
-		locker:    locker.New(),
 		transport: transport,
 	}
 	return hs, nil
