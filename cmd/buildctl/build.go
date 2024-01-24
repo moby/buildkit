@@ -250,7 +250,7 @@ func buildAction(clicontext *cli.Context) error {
 
 	solveOpt := client.SolveOpt{
 		Exports: exports,
-		// LocalDirs is set later
+		// LocalMounts is set later
 		Frontend: clicontext.String("frontend"),
 		// FrontendAttrs is set later
 		// OCILayouts is set later
@@ -267,7 +267,7 @@ func buildAction(clicontext *cli.Context) error {
 		return errors.Wrap(err, "invalid opt")
 	}
 
-	solveOpt.LocalDirs, err = build.ParseLocal(clicontext.StringSlice("local"))
+	solveOpt.LocalMounts, err = build.ParseLocal(clicontext.StringSlice("local"))
 	if err != nil {
 		return errors.Wrap(err, "invalid local")
 	}
