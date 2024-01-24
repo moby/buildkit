@@ -201,24 +201,38 @@ func (c *item) LinkFrom(rec solver.CacheExporterRecord, index int, selector stri
 // an item as invalid, we remove it from it's backlinks and check it's
 // validity again - since now this linked item may be unreachable too.
 func (c *item) validate() {
+	if c.invalid {
+		// early exit, if the item is already invalid, we've already gone
+		// through the backlinks
+		return
+	}
+
 	for _, m := range c.links {
+		// if an index has no links, there's no way to access this record, so
+		// mark it as invalid
 		if len(m) == 0 {
 			c.invalid = true
-			for bl := range c.backlinks {
-				changed := false
-				for _, m := range bl.links {
-					for l := range m {
-						if l.src == c {
-							delete(m, l)
-							changed = true
-						}
+			break
+		}
+	}
+
+	if c.invalid {
+		for bl := range c.backlinks {
+			// remove ourselves from the backlinked item
+			changed := false
+			for _, m := range bl.links {
+				for l := range m {
+					if l.src == c {
+						delete(m, l)
+						changed = true
 					}
 				}
-				if changed {
-					bl.validate()
-				}
 			}
-			return
+
+			// if we've removed ourselves, we need to check it again
+			if changed {
+				bl.validate()
+			}
 		}
 	}
 }
