@@ -229,7 +229,7 @@ func (s State) Output() Output {
 	return s.out
 }
 
-// WithOutput creats a new state with the output set to the given output.
+// WithOutput creates a new state with the output set to the given output.
 func (s State) WithOutput(o Output) State {
 	prev := s
 	s = State{
