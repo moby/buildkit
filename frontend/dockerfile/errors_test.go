@@ -10,6 +10,7 @@ import (
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/stretchr/testify/require"
+	"github.com/tonistiigi/fsutil"
 )
 
 func testErrorsSourceMap(t *testing.T, sb integration.Sandbox) {
@@ -86,7 +87,7 @@ env bar=baz`,
 			defer c.Close()
 
 			_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-				LocalDirs: map[string]string{
+				LocalMounts: map[string]fsutil.FS{
 					dockerui.DefaultLocalNameDockerfile: dir,
 					dockerui.DefaultLocalNameContext:    dir,
 				},

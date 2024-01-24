@@ -23,6 +23,7 @@ import (
 	"time"
 
 	v1 "github.com/moby/buildkit/cache/remotecache/v1"
+	"github.com/tonistiigi/fsutil"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/containerd/containerd"
@@ -302,7 +303,7 @@ echo -n $my_arg $* > /out
 						OutputDir: destDir,
 					},
 				},
-				LocalDirs: map[string]string{
+				LocalMounts: map[string]fsutil.FS{
 					dockerui.DefaultLocalNameDockerfile: dir,
 					dockerui.DefaultLocalNameContext:    dir,
 				},
@@ -344,7 +345,7 @@ RUN [ "$myenv" = 'foo%sbar' ]
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -390,7 +391,7 @@ foo
 	defer c.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -401,7 +402,7 @@ foo
 		FrontendAttrs: map[string]string{
 			"filename": "Dockerfile2",
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -431,7 +432,7 @@ RUN [ "$(cat testfile)" == "contents0" ]
 	defer c.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -473,7 +474,7 @@ COPY --from=base2 /foo /f
 	defer c.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -492,7 +493,7 @@ COPY --from=base2 /foo /f
 	require.NoError(t, err)
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -550,7 +551,7 @@ FROM stage-$TARGETOS
 				Output: fixedWriteCloser(&nopWriteCloser{buf}),
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -576,7 +577,7 @@ FROM stage-$TARGETOS
 		FrontendAttrs: map[string]string{
 			"platform": "linux/amd64,darwin/amd64",
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -623,7 +624,7 @@ WORKDIR /
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -653,7 +654,7 @@ FROM busybox
 	defer c.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -661,7 +662,7 @@ FROM busybox
 	require.NoError(t, err)
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -691,7 +692,7 @@ ENV foo bar
 	defer c.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -774,7 +775,7 @@ RUN e="300:400"; p="/file"                         ; a=` + "`" + `stat -c "%u:%g
 	defer c.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -785,7 +786,7 @@ RUN e="300:400"; p="/file"                         ; a=` + "`" + `stat -c "%u:%g
 		FrontendAttrs: map[string]string{
 			"target": "copy_from",
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -827,7 +828,7 @@ COPY --from=base unique /
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -837,7 +838,7 @@ COPY --from=base unique /
 	dt, err := os.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
 
-	err = os.WriteFile(filepath.Join(dir, "bar"), []byte("bar-data-mod"), 0600)
+	err = os.WriteFile(filepath.Join(dir.Name, "bar"), []byte("bar-data-mod"), 0600)
 	require.NoError(t, err)
 
 	destDir = t.TempDir()
@@ -849,7 +850,7 @@ COPY --from=base unique /
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -860,7 +861,7 @@ COPY --from=base unique /
 	require.NoError(t, err)
 	require.Equal(t, string(dt), string(dt2))
 
-	err = os.WriteFile(filepath.Join(dir, "foo2"), []byte("foo2-data-mod"), 0600)
+	err = os.WriteFile(filepath.Join(dir.Name, "foo2"), []byte("foo2-data-mod"), 0600)
 	require.NoError(t, err)
 
 	destDir = t.TempDir()
@@ -872,7 +873,7 @@ COPY --from=base unique /
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -912,7 +913,7 @@ COPY foo nomatch* /
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -946,7 +947,7 @@ RUN [ "$(stat -c "%U %G" /mydir)" == "user user" ]
 	defer c.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -979,7 +980,7 @@ FROM target
 		defer c.Close()
 
 		_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-			LocalDirs: map[string]string{
+			LocalMounts: map[string]fsutil.FS{
 				dockerui.DefaultLocalNameDockerfile: dir,
 				dockerui.DefaultLocalNameContext:    dir,
 			},
@@ -1013,7 +1014,7 @@ COPY --from=base Dockerfile .
 	defer c.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -1043,7 +1044,7 @@ RUN [ "$(stat -c "%U %G" /mydir)" == "user user" ]
 	defer c.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -1080,7 +1081,7 @@ RUN [ "$(stat -c "%U %G" /dest01)" == "user01 user" ]
 		FrontendAttrs: map[string]string{
 			"build-arg:group": "user",
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -1118,7 +1119,7 @@ COPY link/foo .
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -1160,7 +1161,7 @@ COPY --from=build /sub2/foo bar
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -1200,7 +1201,7 @@ COPY . /
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -1233,7 +1234,7 @@ RUN ["ls"]
 	defer c.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -1268,7 +1269,7 @@ COPY --from=build /out .
 	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -1312,7 +1313,7 @@ COPY --from=build /out .
 	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -1357,7 +1358,7 @@ COPY Dockerfile .
 	require.NoError(t, err)
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -1447,7 +1448,7 @@ COPY arch-$TARGETARCH whoami
 	destDir := t.TempDir()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -1484,7 +1485,7 @@ COPY arch-$TARGETARCH whoami
 	require.NoError(t, err)
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -1576,7 +1577,7 @@ COPY foo /
 	defer c.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -1597,7 +1598,7 @@ COPY foo /
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -1629,7 +1630,7 @@ COPY foo /
 	defer c.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -1640,7 +1641,7 @@ COPY foo /
 	require.NoError(t, err)
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -1677,7 +1678,7 @@ COPY foo/sub bar
 	defer c.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -1722,7 +1723,7 @@ COPY sub/l* alllinks/
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -1830,7 +1831,7 @@ CMD ["test"]
 				},
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -1858,7 +1859,7 @@ ENTRYPOINT my entrypoint
 				},
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -1921,7 +1922,7 @@ LABEL foo=bar
 				},
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -1950,7 +1951,7 @@ COPY foo .
 				},
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -2001,7 +2002,7 @@ COPY foo .
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -2035,7 +2036,7 @@ FROM busybox:${tag}
 		FrontendAttrs: map[string]string{
 			"build-arg:tag": "latest",
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -2064,7 +2065,7 @@ func testDockerfileDirs(t *testing.T, sb integration.Sandbox) {
 		fstest.CreateFile("foo", []byte("bar"), 0600),
 	)
 
-	args, trace := f.DFCmdArgs(dir, dir)
+	args, trace := f.DFCmdArgs(dir.Name, dir.Name)
 	defer os.RemoveAll(trace)
 
 	cmd := sb.Cmd(args)
@@ -2078,7 +2079,7 @@ func testDockerfileDirs(t *testing.T, sb integration.Sandbox) {
 	defer os.RemoveAll(trace)
 
 	cmd = sb.Cmd(args)
-	cmd.Dir = dir
+	cmd.Dir = dir.Name
 	require.NoError(t, cmd.Run())
 
 	_, err = os.Stat(trace)
@@ -2095,11 +2096,11 @@ func testDockerfileDirs(t *testing.T, sb integration.Sandbox) {
 		fstest.CreateFile("foo", []byte("bar"), 0600),
 	)
 
-	args, trace = f.DFCmdArgs(dir2, dir1)
+	args, trace = f.DFCmdArgs(dir2.Name, dir1.Name)
 	defer os.RemoveAll(trace)
 
 	cmd = sb.Cmd(args)
-	cmd.Dir = dir
+	cmd.Dir = dir.Name
 	require.NoError(t, cmd.Run())
 
 	_, err = os.Stat(trace)
@@ -2123,7 +2124,7 @@ func testDockerfileInvalidCommand(t *testing.T, sb integration.Sandbox) {
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 
-	args, trace := f.DFCmdArgs(dir, dir)
+	args, trace := f.DFCmdArgs(dir.Name, dir.Name)
 	defer os.RemoveAll(trace)
 
 	cmd := sb.Cmd(args)
@@ -2154,7 +2155,7 @@ func testDockerfileInvalidInstruction(t *testing.T, sb integration.Sandbox) {
 	defer c.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -2199,7 +2200,7 @@ ADD %s /dest/
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 
-	args, trace := f.DFCmdArgs(dir, dir)
+	args, trace := f.DFCmdArgs(dir.Name, dir.Name)
 	defer os.RemoveAll(trace)
 
 	destDir := t.TempDir()
@@ -2223,7 +2224,7 @@ ADD %s /dest/
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 
-	args, trace = f.DFCmdArgs(dir, dir)
+	args, trace = f.DFCmdArgs(dir.Name, dir.Name)
 	defer os.RemoveAll(trace)
 
 	destDir = t.TempDir()
@@ -2273,7 +2274,7 @@ ADD t.tar /
 		fstest.CreateFile("t.tar", buf.Bytes(), 0600),
 	)
 
-	args, trace := f.DFCmdArgs(dir, dir)
+	args, trace := f.DFCmdArgs(dir.Name, dir.Name)
 	defer os.RemoveAll(trace)
 
 	destDir := t.TempDir()
@@ -2304,7 +2305,7 @@ ADD t.tar.gz /
 		fstest.CreateFile("t.tar.gz", buf2.Bytes(), 0600),
 	)
 
-	args, trace = f.DFCmdArgs(dir, dir)
+	args, trace = f.DFCmdArgs(dir.Name, dir.Name)
 	defer os.RemoveAll(trace)
 
 	destDir = t.TempDir()
@@ -2328,7 +2329,7 @@ COPY t.tar.gz /
 		fstest.CreateFile("t.tar.gz", buf2.Bytes(), 0600),
 	)
 
-	args, trace = f.DFCmdArgs(dir, dir)
+	args, trace = f.DFCmdArgs(dir.Name, dir.Name)
 	defer os.RemoveAll(trace)
 
 	destDir = t.TempDir()
@@ -2361,7 +2362,7 @@ ADD %s /
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 
-	args, trace = f.DFCmdArgs(dir, dir)
+	args, trace = f.DFCmdArgs(dir.Name, dir.Name)
 	defer os.RemoveAll(trace)
 
 	destDir = t.TempDir()
@@ -2384,7 +2385,7 @@ ADD %s /newname.tar.gz
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 
-	args, trace = f.DFCmdArgs(dir, dir)
+	args, trace = f.DFCmdArgs(dir.Name, dir.Name)
 	defer os.RemoveAll(trace)
 
 	destDir = t.TempDir()
@@ -2456,7 +2457,7 @@ ADD *.tar /dest
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -2498,7 +2499,7 @@ RUN [ "$(stat -c "%u %G" /foo)" == "1000 nobody" ]
 		FrontendAttrs: map[string]string{
 			"build-arg:group": "nobody",
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -2537,7 +2538,7 @@ COPY foo /symlink/
 		fstest.CreateFile("t.tar", buf.Bytes(), 0600),
 	)
 
-	args, trace := f.DFCmdArgs(dir, dir)
+	args, trace := f.DFCmdArgs(dir.Name, dir.Name)
 	defer os.RemoveAll(trace)
 
 	destDir := t.TempDir()
@@ -2569,7 +2570,7 @@ ENV foo=bar
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 
-	args, trace := f.DFCmdArgs(dir, dir)
+	args, trace := f.DFCmdArgs(dir.Name, dir.Name)
 	defer os.RemoveAll(trace)
 
 	target := "example.com/moby/dockerfilescratch:test"
@@ -2648,7 +2649,7 @@ EXPOSE 5000
 				},
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -2732,7 +2733,7 @@ Dockerfile
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -2788,7 +2789,7 @@ COPY . .
 	defer c.Close()
 
 	_, err = f.Solve(ctx, c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -2822,7 +2823,7 @@ func testDockerfileLowercase(t *testing.T, sb integration.Sandbox) {
 	defer c.Close()
 
 	_, err = f.Solve(ctx, c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -2854,7 +2855,7 @@ RUN ["ls"]
 		fstest.CreateFile("foo", []byte("contents0"), 0600),
 	)
 
-	args, trace := f.DFCmdArgs(dir, dir)
+	args, trace := f.DFCmdArgs(dir.Name, dir.Name)
 	defer os.RemoveAll(trace)
 
 	workers.CheckFeatureCompat(t, sb, workers.FeatureImageExporter)
@@ -2993,7 +2994,7 @@ USER nobody
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -3019,7 +3020,7 @@ USER nobody
 				},
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -3082,7 +3083,7 @@ RUN [ "$(id)" = "uid=1(daemon) gid=1(daemon) groups=1(daemon)" ]
 	defer c.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -3135,7 +3136,7 @@ COPY --from=base /out /
 		FrontendAttrs: map[string]string{
 			"build-arg:group": "nobody",
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -3194,7 +3195,7 @@ COPY --from=base /out /
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -3252,7 +3253,7 @@ COPY files dest
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -3297,7 +3298,7 @@ COPY $FOO baz
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -3350,7 +3351,7 @@ COPY sub/dir1 subdest6
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -3437,7 +3438,7 @@ RUN sh -c "[ $(cat /test5/foo) = 'hello' ]"
 	defer c.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -3490,7 +3491,7 @@ COPY --from=build /dest /dest
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -3686,7 +3687,7 @@ COPY --from=busybox /etc/passwd test
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -3720,7 +3721,7 @@ COPY --from=golang /usr/bin/go go
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -3763,7 +3764,7 @@ COPY --from=stage1 baz bax
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -3809,7 +3810,7 @@ LABEL foo=bar
 				},
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -3870,19 +3871,19 @@ RUN ls /files/file1
 	defer c.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
 
-	err = os.Rename(filepath.Join(dir, "file1"), filepath.Join(dir, "file2"))
+	err = os.Rename(filepath.Join(dir.Name, "file1"), filepath.Join(dir.Name, "file2"))
 	require.NoError(t, err)
 
 	// cache should be invalidated and build should fail
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -3927,7 +3928,7 @@ ONBUILD RUN mkdir -p /out && echo -n 11 >> /out/foo
 				},
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -3955,7 +3956,7 @@ ONBUILD RUN mkdir -p /out && echo -n 11 >> /out/foo
 				},
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -3981,7 +3982,7 @@ ONBUILD RUN mkdir -p /out && echo -n 11 >> /out/foo
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -4058,7 +4059,7 @@ COPY --from=base arch /
 		FrontendAttrs: map[string]string{
 			"platform": "linux/amd64,linux/arm/v7",
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -4096,7 +4097,7 @@ COPY --from=base arch /
 				},
 			},
 			CacheExports: exportCache,
-			LocalDirs: map[string]string{
+			LocalMounts: map[string]fsutil.FS{
 				dockerui.DefaultLocalNameDockerfile: dir,
 				dockerui.DefaultLocalNameContext:    dir,
 			},
@@ -4173,7 +4174,7 @@ COPY --from=base unique /
 				},
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -4209,7 +4210,7 @@ COPY --from=base unique /
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -4272,7 +4273,7 @@ COPY --from=base unique /
 				Attrs: map[string]string{"ref": target},
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -4300,7 +4301,7 @@ COPY --from=base unique /
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -4348,7 +4349,7 @@ RUN echo bar > bar
 				},
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -4432,7 +4433,7 @@ RUN echo bar > bar
 				Attrs: map[string]string{"ref": cacheTarget},
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -4501,7 +4502,7 @@ COPY --from=s1 unique2 /
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -4582,7 +4583,7 @@ COPY foo2 bar2
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -4635,7 +4636,7 @@ COPY --from=build out .
 			"platform":           "darwin/ppc64le",
 			"build-arg:TARGETOS": "freebsd",
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -4690,7 +4691,7 @@ COPY --from=build /out /
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -4717,7 +4718,7 @@ COPY --from=build /out /
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -4744,7 +4745,7 @@ COPY --from=build /out /
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -4854,7 +4855,7 @@ COPY foo bar
 			"contextsubdir": "sub/dir",
 		},
 		Session: []session.Attachable{up},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 		},
 		Exports: []client.ExportEntry{
@@ -4928,7 +4929,7 @@ COPY foo foo2
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -4973,7 +4974,7 @@ COPY badfile /
 
 	_, err = c.Build(sb.Context(), client.SolveOpt{
 		Exports: []client.ExportEntry{},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -5028,7 +5029,7 @@ COPY foo foo2
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 		},
 		FrontendInputs: map[string]llb.State{
@@ -5112,7 +5113,7 @@ COPY Dockerfile Dockerfile
 	}
 
 	_, err = c.Build(sb.Context(), client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 		},
 	}, "", frontend, nil)
@@ -5170,7 +5171,7 @@ RUN echo $(hostname) | grep foo
 		t.Run(tt.name, func(t *testing.T) {
 			_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 				FrontendAttrs: tt.attrs,
-				LocalDirs: map[string]string{
+				LocalMounts: map[string]fsutil.FS{
 					dockerui.DefaultLocalNameDockerfile: dir,
 					dockerui.DefaultLocalNameContext:    dir,
 				},
@@ -5205,7 +5206,7 @@ COPY --from=base /shmsize /
 		FrontendAttrs: map[string]string{
 			"shm-size": "134217728",
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -5248,7 +5249,7 @@ COPY --from=base /ulimit /
 		FrontendAttrs: map[string]string{
 			"ulimit": "nofile=1062:1062",
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -5312,7 +5313,7 @@ COPY --from=base /out /
 		FrontendAttrs: map[string]string{
 			"cgroup-parent": cgroupName,
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -5364,7 +5365,7 @@ COPY --from=base /out /
 			// Make sure image resolution works as expected, do not add a tag or locator.
 			"context:busybox": "docker-image://alpine",
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -5403,7 +5404,7 @@ ENV FOOBAR=foobar
 	target := registry + "/buildkit/testnamedimagecontext:latest"
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -5443,7 +5444,7 @@ COPY --from=base /env_foobar /
 		FrontendAttrs: map[string]string{
 			"context:busybox": "docker-image://" + target,
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -5499,7 +5500,7 @@ func testNamedImageContextPlatform(t *testing.T, sb integration.Sandbox) {
 		FrontendAttrs: map[string]string{
 			"build-arg:BUILDKIT_MULTI_PLATFORM": "true",
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -5534,7 +5535,7 @@ RUN echo hello
 			// here we specifically want to make sure that the platform chosen for the image source is the one in the dockerfile not the target platform.
 			"platform": "darwin/ppc64le",
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -5570,7 +5571,7 @@ RUN echo foo >> /test
 
 	target := registry + "/buildkit/testnamedimagecontexttimestamps:latest"
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -5601,7 +5602,7 @@ RUN echo foo >> /test
 		FrontendAttrs: map[string]string{
 			"context:alpine": "docker-image://" + target,
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dirDerived,
 			dockerui.DefaultLocalNameContext:    dirDerived,
 		},
@@ -5656,7 +5657,7 @@ EOF
 		FrontendAttrs: map[string]string{
 			"context:busybox": "docker-image://scratch",
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -5716,7 +5717,7 @@ COPY --from=base /o* /
 		FrontendAttrs: map[string]string{
 			"context:base": "local:basedir",
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 			"basedir":                           dir2,
@@ -5773,7 +5774,7 @@ func testNamedOCILayoutContext(t *testing.T, sb integration.Sandbox) {
 	outW := bytes.NewBuffer(nil)
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: inDir,
 			dockerui.DefaultLocalNameContext:    inDir,
 		},
@@ -5844,7 +5845,7 @@ COPY --from=imported /test/outfoo /
 			"context:base": fmt.Sprintf("oci-layout:%s@sha256:%s", ociID, digest),
 			"context:foo":  fmt.Sprintf("oci-layout:%s@sha256:%s", ociID, digest),
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -5901,7 +5902,7 @@ ENV foo=bar
 
 	outW := bytes.NewBuffer(nil)
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -5952,7 +5953,7 @@ FROM nonexistent AS base
 		FrontendAttrs: map[string]string{
 			"context:nonexistent": fmt.Sprintf("oci-layout:%s@sha256:%s", ociID, digest),
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -6072,7 +6073,7 @@ COPY --from=build /foo /out /
 	destDir := t.TempDir()
 
 	_, err = c.Build(ctx, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile:       dir,
 			dockerui.DefaultLocalNameContext:          dir,
 			dockerui.DefaultLocalNameDockerfile + "2": dir2,
@@ -6211,7 +6212,7 @@ COPY --from=build /foo /out /
 	destDir := t.TempDir()
 
 	_, err = c.Build(ctx, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile:       dir,
 			dockerui.DefaultLocalNameContext:          dir,
 			dockerui.DefaultLocalNameDockerfile + "2": dir2,
@@ -6275,7 +6276,7 @@ func testNamedFilteredContext(t *testing.T, sb integration.Sandbox) {
 						"context:foo": "local:foo",
 						"target":      target,
 					},
-					LocalDirs: map[string]string{
+					LocalMounts: map[string]fsutil.FS{
 						dockerui.DefaultLocalNameDockerfile: dir,
 						dockerui.DefaultLocalNameContext:    dir,
 						"foo":                               fooDir,
@@ -6385,7 +6386,7 @@ COPY Dockerfile .
 		FrontendAttrs: map[string]string{
 			"build-arg:SOURCE_DATE_EPOCH": fmt.Sprintf("%d", tm.Unix()),
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -6464,7 +6465,7 @@ CMD sh /scan.sh
 
 	scannerTarget := registry + "/buildkit/testsbomscanner:latest"
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: scannerDir,
 			dockerui.DefaultLocalNameContext:    scannerDir,
 		},
@@ -6493,7 +6494,7 @@ EOF
 
 	target := registry + "/buildkit/testsbomscannertarget:latest"
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -6581,7 +6582,7 @@ CMD sh /scan.sh
 
 	scannerTarget := registry + "/buildkit/testsbomscannerargs:latest"
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: scannerDir,
 			dockerui.DefaultLocalNameContext:    scannerDir,
 		},
@@ -6612,7 +6613,7 @@ FROM base
 
 	target := registry + "/buildkit/testsbomscannerargstarget1:latest"
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -6677,7 +6678,7 @@ ARG BUILDKIT_SBOM_SCAN_STAGE=true
 	// scan an image with additional sboms
 	target = registry + "/buildkit/testsbomscannertarget2:latest"
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -6725,7 +6726,7 @@ ARG BUILDKIT_SBOM_SCAN_STAGE=true
 	// scan an image with additional sboms, but disable them
 	target = registry + "/buildkit/testsbomscannertarget3:latest"
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -6776,7 +6777,6 @@ COPY Dockerfile \
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
-	defer os.RemoveAll(dir)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -6807,7 +6807,7 @@ COPY Dockerfile \
 		FrontendAttrs: map[string]string{
 			"platform": "linux/amd64,linux/arm64",
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -6871,7 +6871,6 @@ RUN rm -f /foo-2030.1
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
-	defer os.RemoveAll(dir)
 
 	ctx := sb.Context()
 	c, err := client.New(ctx, sb.Address())
@@ -6884,7 +6883,7 @@ RUN rm -f /foo-2030.1
 			"build-arg:SOURCE_DATE_EPOCH": fmt.Sprintf("%d", tm.Unix()),
 			"platform":                    "linux/amd64",
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -6998,25 +6997,25 @@ COPY test+aou.txt /
 		Exports: []client.ExportEntry{
 			{
 				Type:      client.ExporterLocal,
-				OutputDir: destDir,
+				OutputDir: destDir.Name,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := os.ReadFile(filepath.Join(destDir, "test-äöü.txt"))
+	dt, err := os.ReadFile(filepath.Join(destDir.Name, "test-äöü.txt"))
 	require.NoError(t, err)
 	require.Equal(t, "foo", string(dt))
 
-	dt, err = os.ReadFile(filepath.Join(destDir, "test-%C3%A4%C3%B6%C3%BC.txt"))
+	dt, err = os.ReadFile(filepath.Join(destDir.Name, "test-%C3%A4%C3%B6%C3%BC.txt"))
 	require.NoError(t, err)
 	require.Equal(t, "bar", string(dt))
 
-	dt, err = os.ReadFile(filepath.Join(destDir, "test+aou.txt"))
+	dt, err = os.ReadFile(filepath.Join(destDir.Name, "test+aou.txt"))
 	require.NoError(t, err)
 	require.Equal(t, "baz", string(dt))
 }

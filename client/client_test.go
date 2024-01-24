@@ -69,6 +69,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spdx/tools-golang/spdx"
 	"github.com/stretchr/testify/require"
+	"github.com/tonistiigi/fsutil"
 	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -272,9 +273,9 @@ func testCacheExportCacheKeyLoop(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	tmpdir := t.TempDir()
+	tmpdir := integration.Tmpdir(t)
 
-	err = os.WriteFile(filepath.Join(tmpdir, "foo"), []byte("foodata"), 0600)
+	err = os.WriteFile(filepath.Join(tmpdir.Name, "foo"), []byte("foodata"), 0600)
 	require.NoError(t, err)
 
 	for _, mode := range []bool{false, true} {
@@ -295,11 +296,11 @@ func testCacheExportCacheKeyLoop(t *testing.T, sb integration.Sandbox) {
 						{
 							Type: "local",
 							Attrs: map[string]string{
-								"dest": filepath.Join(tmpdir, "cache"),
+								"dest": filepath.Join(tmpdir.Name, "cache"),
 							},
 						},
 					},
-					LocalDirs: map[string]string{
+					LocalMounts: map[string]fsutil.FS{
 						"mylocal": tmpdir,
 					},
 				}, nil)
@@ -1515,7 +1516,7 @@ func testLocalSymlinkEscape(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			"mylocal": dir,
 		},
 	}, nil)
@@ -1624,7 +1625,7 @@ func testFileOpCopyRm(t *testing.T, sb integration.Sandbox) {
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			"mylocal":  dir,
 			"mylocal2": dir2,
 		},
@@ -1751,7 +1752,7 @@ func testFileOpCopyIncludeExclude(t *testing.T, sb integration.Sandbox) {
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			"mylocal": dir,
 		},
 	}, nil)
@@ -1772,7 +1773,7 @@ func testFileOpCopyIncludeExclude(t *testing.T, sb integration.Sandbox) {
 	// Create additional file which doesn't match the include pattern, and make
 	// sure this doesn't invalidate the cache.
 
-	err = fstest.Apply(fstest.CreateFile("unmatchedfile", []byte("data1"), 0600)).Apply(dir)
+	err = fstest.Apply(fstest.CreateFile("unmatchedfile", []byte("data1"), 0600)).Apply(dir.Name)
 	require.NoError(t, err)
 
 	st = llb.Scratch().File(
@@ -1798,7 +1799,7 @@ func testFileOpCopyIncludeExclude(t *testing.T, sb integration.Sandbox) {
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			"mylocal": dir,
 		},
 	}, nil)
@@ -1861,7 +1862,7 @@ func testLocalSourceWithDiffer(t *testing.T, sb integration.Sandbox, d llb.DiffT
 
 	tv := syscall.NsecToTimespec(time.Now().UnixNano())
 
-	err = syscall.UtimesNano(filepath.Join(dir, "foo"), []syscall.Timespec{tv, tv})
+	err = syscall.UtimesNano(filepath.Join(dir.Name, "foo"), []syscall.Timespec{tv, tv})
 	require.NoError(t, err)
 
 	st := llb.Local("mylocal"+string(d), llb.Differ(d, false))
@@ -1878,7 +1879,7 @@ func testLocalSourceWithDiffer(t *testing.T, sb integration.Sandbox, d llb.DiffT
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			"mylocal" + string(d): dir,
 		},
 	}, nil)
@@ -1888,10 +1889,10 @@ func testLocalSourceWithDiffer(t *testing.T, sb integration.Sandbox, d llb.DiffT
 	require.NoError(t, err)
 	require.Equal(t, []byte("foo"), dt)
 
-	err = os.WriteFile(filepath.Join(dir, "foo"), []byte("bar"), 0600)
+	err = os.WriteFile(filepath.Join(dir.Name, "foo"), []byte("bar"), 0600)
 	require.NoError(t, err)
 
-	err = syscall.UtimesNano(filepath.Join(dir, "foo"), []syscall.Timespec{tv, tv})
+	err = syscall.UtimesNano(filepath.Join(dir.Name, "foo"), []syscall.Timespec{tv, tv})
 	require.NoError(t, err)
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
@@ -1901,7 +1902,7 @@ func testLocalSourceWithDiffer(t *testing.T, sb integration.Sandbox, d llb.DiffT
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			"mylocal" + string(d): dir,
 		},
 	}, nil)
@@ -2211,7 +2212,7 @@ func testFileOpRmWildcard(t *testing.T, sb integration.Sandbox) {
 				OutputDir: destDir,
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			"mylocal": dir,
 		},
 	}, nil)
@@ -7658,7 +7659,7 @@ func testParallelLocalBuilds(t *testing.T, sb integration.Sandbox) {
 							OutputDir: destDir,
 						},
 					},
-					LocalDirs: map[string]string{
+					LocalMounts: map[string]fsutil.FS{
 						"source": srcDir,
 					},
 				}, nil)
@@ -9710,7 +9711,7 @@ func ensureFileContents(t *testing.T, path, expectedContents string) {
 
 func makeSSHAgentSock(t *testing.T, agent agent.Agent) (p string, err error) {
 	tmpDir := integration.Tmpdir(t)
-	sockPath := filepath.Join(tmpDir, "ssh_auth_sock")
+	sockPath := filepath.Join(tmpDir.Name, "ssh_auth_sock")
 
 	l, err := net.Listen("unix", sockPath)
 	if err != nil {

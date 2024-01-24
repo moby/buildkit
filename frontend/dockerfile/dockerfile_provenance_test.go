@@ -38,6 +38,7 @@ import (
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
+	"github.com/tonistiigi/fsutil"
 )
 
 func testProvenanceAttestation(t *testing.T, sb integration.Sandbox) {
@@ -80,7 +81,7 @@ RUN echo "ok" > /foo
 				provReq = "mode=" + mode
 			}
 			_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-				LocalDirs: map[string]string{
+				LocalMounts: map[string]fsutil.FS{
 					dockerui.DefaultLocalNameDockerfile: dir,
 					dockerui.DefaultLocalNameContext:    dir,
 				},
@@ -258,7 +259,7 @@ COPY myapp.Dockerfile /
 		fstest.CreateFile("myapp.Dockerfile", dockerfile, 0600),
 	)
 
-	err = runShell(dir,
+	err = runShell(dir.Name,
 		"git init",
 		"git config --local user.email test",
 		"git config --local user.name test",
@@ -270,11 +271,11 @@ COPY myapp.Dockerfile /
 	require.NoError(t, err)
 
 	cmd := exec.Command("git", "rev-parse", "v1")
-	cmd.Dir = dir
+	cmd.Dir = dir.Name
 	expectedGitSHA, err := cmd.Output()
 	require.NoError(t, err)
 
-	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Join(dir))))
+	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Join(dir.Name))))
 	defer server.Close()
 
 	target := registry + "/buildkit/testwithprovenance:git"
@@ -409,7 +410,7 @@ RUN echo "ok-$TARGETARCH" > /foo
 	target := registry + "/buildkit/testmultiprovenance:latest"
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -614,7 +615,7 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 				},
 			},
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -761,7 +762,7 @@ func testClientLLBProvenance(t *testing.T, sb integration.Sandbox) {
 				},
 			},
 		},
-		LocalDirs: map[string]string{},
+		LocalMounts: map[string]fsutil.FS{},
 	}, "", frontend, nil)
 	require.NoError(t, err)
 
@@ -833,7 +834,7 @@ RUN --mount=type=secret,id=mysecret --mount=type=secret,id=othersecret --mount=t
 
 	target := registry + "/buildkit/testsecretprovenance:latest"
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -915,7 +916,7 @@ EOF
 	)
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -955,7 +956,7 @@ EOF
 	)
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -1038,7 +1039,7 @@ ENV FOO=bar
 	)
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -1077,7 +1078,7 @@ func testDuplicatePlatformProvenance(t *testing.T, sb integration.Sandbox) {
 			"attest:provenance": "mode=max",
 			"platform":          "linux/amd64,linux/amd64",
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -1104,7 +1105,7 @@ func testDockerIgnoreMissingProvenance(t *testing.T, sb integration.Sandbox) {
 		// remove the directory to simulate the case where the context
 		// directory does not exist, and either no validation checks were run,
 		// or they passed erroneously
-		if err := os.RemoveAll(dirContext); err != nil {
+		if err := os.RemoveAll(dirContext.Name); err != nil {
 			return nil, err
 		}
 
@@ -1121,7 +1122,7 @@ func testDockerIgnoreMissingProvenance(t *testing.T, sb integration.Sandbox) {
 		FrontendAttrs: map[string]string{
 			"attest:provenance": "mode=max",
 		},
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dirDockerfile,
 			dockerui.DefaultLocalNameContext:    dirContext,
 		},
@@ -1211,7 +1212,7 @@ COPY bar bar2
 	ref := identity.NewID()
 
 	_, err = c.Build(ctx, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
@@ -1318,7 +1319,7 @@ RUN date +%s > /b.txt
 	target := registry + "/buildkit/testwithprovenance:dup"
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},

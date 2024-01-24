@@ -16,12 +16,23 @@ import (
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
+	"github.com/tonistiigi/fsutil"
 	"golang.org/x/sync/errgroup"
 )
 
 var ErrRequirements = errors.Errorf("missing requirements")
 
-func Tmpdir(t *testing.T, appliers ...fstest.Applier) string {
+type TmpDirWithName struct {
+	fsutil.FS
+	Name string
+}
+
+// This allows TmpDirWithName to continue being used with the `%s` 'verb' on Printf.
+func (d *TmpDirWithName) String() string {
+	return d.Name
+}
+
+func Tmpdir(t *testing.T, appliers ...fstest.Applier) *TmpDirWithName {
 	t.Helper()
 
 	// We cannot use t.TempDir() to create a temporary directory here because
@@ -38,7 +49,10 @@ func Tmpdir(t *testing.T, appliers ...fstest.Applier) string {
 	err = fstest.Apply(appliers...).Apply(tmpdir)
 	require.NoError(t, err)
 
-	return tmpdir
+	mount, err := fsutil.NewFS(tmpdir)
+	require.NoError(t, err)
+
+	return &TmpDirWithName{FS: mount, Name: tmpdir}
 }
 
 func RunCmd(cmd *exec.Cmd, logs map[string]*bytes.Buffer) error {
