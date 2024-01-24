@@ -30,12 +30,12 @@ func (c *CacheChains) Add(dgst digest.Digest) solver.CacheExporterRecord {
 	return it
 }
 
-func (c *CacheChains) Visit(v interface{}) {
-	c.visited[v] = struct{}{}
+func (c *CacheChains) Visit(target any) {
+	c.visited[target] = struct{}{}
 }
 
-func (c *CacheChains) Visited(v interface{}) bool {
-	_, ok := c.visited[v]
+func (c *CacheChains) Visited(target any) bool {
+	_, ok := c.visited[target]
 	return ok
 }
 

@@ -493,12 +493,12 @@ func (ce *cacheExporter) Add(dgst digest.Digest) solver.CacheExporterRecord {
 	}
 }
 
-func (ce *cacheExporter) Visit(v interface{}) {
-	ce.m[v] = struct{}{}
+func (ce *cacheExporter) Visit(target any) {
+	ce.m[target] = struct{}{}
 }
 
-func (ce *cacheExporter) Visited(v interface{}) bool {
-	_, ok := ce.m[v]
+func (ce *cacheExporter) Visited(target any) bool {
+	_, ok := ce.m[target]
 	return ok
 }
 
