@@ -61,6 +61,9 @@ jobs:
               PUSH=push
             fi
           fi
+          if [ "$GITHUB_REPOSITORY" != "moby/buildkit" ]; then
+            PUSH=false
+          fi
           echo "typ=${TYP}" >>${GITHUB_OUTPUT}
           echo "push=${PUSH}" >>${GITHUB_OUTPUT}
           echo "tag=${TAG}" >>${GITHUB_OUTPUT}
