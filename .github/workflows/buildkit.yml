@@ -57,6 +57,9 @@ jobs:
               PUSH=push
             fi
           fi
+          if [ "$GITHUB_REPOSITORY" != "moby/buildkit" ]; then
+            PUSH=false
+          fi
           echo "tag=${TAG}" >>${GITHUB_OUTPUT}
           echo "push=${PUSH}" >>${GITHUB_OUTPUT}
           platforms=$(docker buildx bake release --print | jq -cr '.target."release".platforms')

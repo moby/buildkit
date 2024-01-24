@@ -39,7 +39,7 @@ currentref=""
 currentcontext="."
 cacheFromFlags=""
 cacheToFlags=""
-if [ "$GITHUB_ACTIONS" = "true" ]; then
+if [ "$GITHUB_ACTIONS" = "true" ] && [ "$GITHUB_REPOSITORY" = "moby/buildkit" ]; then
   currentref="https://github.com/$GITHUB_REPOSITORY.git#$GITHUB_REF"
   if [ -n "$CACHE_FROM" ]; then
     for cfrom in $CACHE_FROM; do
