@@ -156,6 +156,7 @@ var allTests = integration.TestFuncs(
 	testWorkdirUser,
 	testWorkdirExists,
 	testWorkdirCopyIgnoreRelative,
+	testOutOfOrderStage,
 	testCopyFollowAllSymlinks,
 	testDockerfileAddChownExpand,
 	testSourceDateEpochWithoutExporter,
@@ -951,6 +952,42 @@ RUN [ "$(stat -c "%U %G" /mydir)" == "user user" ]
 		},
 	}, nil)
 	require.NoError(t, err)
+}
+
+func testOutOfOrderStage(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	f := getFrontend(t, sb)
+
+	for _, src := range []string{"/", "/d2"} {
+		dockerfile := []byte(fmt.Sprintf(`
+FROM busybox AS target
+COPY --from=build %s /out
+
+FROM alpine AS build
+COPY /Dockerfile /d2
+
+FROM target
+`, src))
+
+		dir := integration.Tmpdir(
+			t,
+			fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		)
+
+		c, err := client.New(sb.Context(), sb.Address())
+		require.NoError(t, err)
+		defer c.Close()
+
+		_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+			LocalDirs: map[string]string{
+				dockerui.DefaultLocalNameDockerfile: dir,
+				dockerui.DefaultLocalNameContext:    dir,
+			},
+		}, nil)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "cannot copy from stage")
+		require.Contains(t, err.Error(), "needs to be defined before current stage")
+	}
 }
 
 func testWorkdirCopyIgnoreRelative(t *testing.T, sb integration.Sandbox) {
