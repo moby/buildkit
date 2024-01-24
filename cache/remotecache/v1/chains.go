@@ -25,7 +25,7 @@ func (c *CacheChains) Add(dgst digest.Digest) solver.CacheExporterRecord {
 	if strings.HasPrefix(dgst.String(), "random:") {
 		return &nopRecord{}
 	}
-	it := &item{c: c, dgst: dgst, backlinks: map[*item]struct{}{}}
+	it := &item{dgst: dgst, backlinks: map[*item]struct{}{}}
 	c.items = append(c.items, it)
 	return it
 }
@@ -110,7 +110,6 @@ type DescriptorProviderPair struct {
 }
 
 type item struct {
-	c    *CacheChains
 	dgst digest.Digest
 
 	result     *solver.Remote
