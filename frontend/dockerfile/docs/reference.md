@@ -1138,8 +1138,8 @@ RUN apt-get update && apt-get install -y ...
 ADD has two forms:
 
 ```dockerfile
-ADD [--chown=<user>:<group>] [--chmod=<perms>] [--checksum=<checksum>] <src>... <dest>
-ADD [--chown=<user>:<group>] [--chmod=<perms>] ["<src>",... "<dest>"]
+ADD [--chown=<user>:<group>] [--chmod=<perms> [--exclude=<exclude>]... [--checksum=<checksum>] <src>... <dest>
+ADD [--chown=<user>:<group>] [--chmod=<perms> [--exclude=<exclude>]... ["<src>",... "<dest>"]
 ```
 
 The latter form is required for paths containing whitespace.
@@ -1158,6 +1158,11 @@ The latter form is required for paths containing whitespace.
 > Only octal notation is currently supported. Non-octal support is tracked in
 > [moby/buildkit#1951](https://github.com/moby/buildkit/issues/1951).
 
+> **Note**
+>
+> The `--exclude` option can be specified multiple times and cause files matching its patterns not to be copied,
+> even if the files paths match the pattern specified in `<src>`.
+
 The `ADD` instruction copies new files, directories or remote file URLs from `<src>`
 and adds them to the filesystem of the image at the path `<dest>`.
 
@@ -1165,13 +1170,13 @@ Multiple `<src>` resources may be specified but if they are files or
 directories, their paths are interpreted as relative to the source of
 the context of the build.
 
-Each `<src>` may contain wildcards and matching will be done using Go's
+Each `<src>` and `<exclude>` may contain wildcards and matching will be done using Go's
 [filepath.Match](https://golang.org/pkg/path/filepath#Match) rules. For example:
 
-To add all files starting with "hom":
+To add all files starting with "hom", excluding all files with `.txt` and `.md` extensions:
 
 ```dockerfile
-ADD hom* /mydir/
+ADD --exclude=*.txt --exclude=*.md hom* /mydir/
 ```
 
 In the example below, `?` is replaced with any single character, e.g., "home.txt".
@@ -1366,8 +1371,8 @@ See [`COPY --link`](#copy---link).
 COPY has two forms:
 
 ```dockerfile
-COPY [--chown=<user>:<group>] [--chmod=<perms>] <src>... <dest>
-COPY [--chown=<user>:<group>] [--chmod=<perms>] ["<src>",... "<dest>"]
+COPY [--chown=<user>:<group>] [--chmod=<perms>] [--exclude=<exclude>]... <src>... <dest>
+COPY [--chown=<user>:<group>] [--chmod=<perms>] [--exclude=<exclude>]... ["<src>",... "<dest>"]
 ```
 
 This latter form is required for paths containing whitespace
@@ -1380,6 +1385,11 @@ This latter form is required for paths containing whitespace
 > translating user and group names to IDs restricts this feature to only be viable for
 > Linux OS-based containers.
 
+> **Note**
+>
+> The `--exclude` option can be specified multiple times and cause files matching its patterns not to be copied,
+> even if the files paths match the pattern specified in `<src>`.
+
 The `COPY` instruction copies new files or directories from `<src>`
 and adds them to the filesystem of the container at the path `<dest>`.
 
@@ -1390,10 +1400,10 @@ of the build.
 Each `<src>` may contain wildcards and matching will be done using Go's
 [filepath.Match](https://golang.org/pkg/path/filepath#Match) rules. For example:
 
-To add all files starting with "hom":
+To add all files starting with "hom", excluding all files with `.txt` and `.md` extensions:
 
 ```dockerfile
-COPY hom* /mydir/
+COPY --exclude=*.txt --exclude=*.md hom* /mydir/
 ```
 
 In the example below, `?` is replaced with any single character, e.g., "home.txt".
