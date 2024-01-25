@@ -1260,12 +1260,9 @@ doesn't support authentication.
 `ADD` obeys the following rules:
 
 - The `<src>` path must be inside the build context;
-  you can't use `COPY ../something /something`, because the builder can only
+  you can't use `ADD ../something /something`, because the builder can only
   access files from the context, and `../something` specifies a parent file or
   directory of the build context root.
-
-- If `<src>` is a directory, the entire contents of the directory are copied,
-  including filesystem metadata.
 
 - If `<src>` is a URL and `<dest>` does end with a trailing slash, then the
   filename is inferred from the URL and the file is downloaded to
@@ -1308,8 +1305,8 @@ doesn't support authentication.
   use of a wildcard, then `<dest>` must be a directory, and it must end with
   a slash `/`.
 
-- If `<dest>` doesn't end with a trailing slash, it will be considered a
-  regular file and the contents of `<src>` will be written at `<dest>`.
+- If `<src>` is a file, and `<dest>` doesn't end with a trailing slash,
+  the contents of `<src>` will be written as filename `<dest>`.
 
 - If `<dest>` doesn't exist, it's created, along with all missing directories
   in its path.
@@ -1487,8 +1484,8 @@ attempted to be used instead.
   use of a wildcard, then `<dest>` must be a directory, and it must end with
   a slash `/`.
 
-- If `<dest>` doesn't end with a trailing slash, it will be considered a
-  regular file and the contents of `<src>` will be written at `<dest>`.
+- If `<src>` is a file, and `<dest>` doesn't end with a trailing slash,
+  the contents of `<src>` will be written as filename `<dest>`.
 
 - If `<dest>` doesn't exist, it's created, along with all missing directories
   in its path.
