@@ -7,9 +7,8 @@ of daemon configuration.
 The file path is `/etc/buildkit/buildkitd.toml` for rootful mode,
 `~/.config/buildkit/buildkitd.toml` for rootless mode.
 
-The following is a complete `buildkitd.toml` configuration example, please
-note some configuration is only good for edge cases, please take care of it
-carefully.
+The following is a complete `buildkitd.toml` configuration example.
+Note that some configuration options are only useful in edge cases.
 
 ```toml
 # debug enables additional debug logging
