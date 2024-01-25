@@ -81,6 +81,12 @@ func (c *CacheChains) normalize(ctx context.Context) error {
 	return nil
 }
 
+// Marshal converts the cache chains structure into a cache config and a
+// collection of providers for reading the results from.
+//
+// Marshal aims to validate, normalize and sort the output to ensure a
+// consistent digest (since cache configs are typically uploaded and stored in
+// content-addressable OCI registries).
 func (c *CacheChains) Marshal(ctx context.Context) (*CacheConfig, DescriptorProvider, error) {
 	if err := c.normalize(ctx); err != nil {
 		return nil, nil, err
