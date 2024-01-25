@@ -94,6 +94,5 @@ func withDetachedNetNSIfAny(ctx context.Context, fn func(context.Context) error)
 			})
 		}
 	}
-	bklog.G(ctx).Debug("Not entering RootlessKit's detached netns")
 	return fn(ctx)
 }
