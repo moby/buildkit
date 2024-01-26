@@ -123,6 +123,12 @@ func New(opt Opt) (*Solver, error) {
 	return s, nil
 }
 
+func (s *Solver) Close() error {
+	s.solver.Close()
+	err := s.sysSampler.Close()
+	return err
+}
+
 func (s *Solver) resolver() solver.ResolveOpFunc {
 	return func(v solver.Vertex, b solver.Builder) (solver.Op, error) {
 		w, err := s.resolveWorker()
