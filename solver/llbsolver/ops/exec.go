@@ -90,20 +90,55 @@ func cloneExecOp(old *pb.ExecOp) pb.ExecOp {
 	n.Mounts = nil
 	for i := range old.Mounts {
 		m := *old.Mounts[i]
+
+		if m.CacheOpt != nil {
+			co := *m.CacheOpt
+			m.CacheOpt = &co
+		}
+
 		n.Mounts = append(n.Mounts, &m)
 	}
 	return n
 }
 
+func checkShouldClearCacheOpts(m *pb.Mount) bool {
+	if m.CacheOpt == nil {
+		return false
+	}
+
+	// This is a dockerfile default cache mount.
+	// We are treating this as a special case so we don't cause a cache miss unintentionally.
+	if m.CacheOpt.ID == m.Dest && m.CacheOpt.Sharing == 0 {
+		return false
+	}
+
+	// Check the case where a dockerfile cache-namespace may be used.
+	// This would be `<namespace>/<dest>`
+	_, trimmed, ok := strings.Cut(m.CacheOpt.ID, "/")
+	if ok && trimmed == m.Dest && m.CacheOpt.Sharing == 0 {
+		return false
+	}
+
+	return true
+}
+
 func (e *ExecOp) CacheMap(ctx context.Context, g session.Group, index int) (*solver.CacheMap, bool, error) {
 	op := cloneExecOp(e.op)
+
 	for i := range op.Meta.ExtraHosts {
 		h := op.Meta.ExtraHosts[i]
 		h.IP = ""
 		op.Meta.ExtraHosts[i] = h
 	}
+
 	for i := range op.Mounts {
-		op.Mounts[i].Selector = ""
+		m := op.Mounts[i]
+		m.Selector = ""
+
+		if checkShouldClearCacheOpts(m) {
+			m.CacheOpt.ID = ""
+			m.CacheOpt.Sharing = 0
+		}
 	}
 	op.Meta.ProxyEnv = nil
 
