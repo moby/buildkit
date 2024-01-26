@@ -130,11 +130,12 @@ func (c *Controller) Close() error {
 	if err := c.opt.WorkerController.Close(); err != nil {
 		rerr = multierror.Append(rerr, err)
 	}
-
 	if err := c.opt.CacheStore.Close(); err != nil {
 		rerr = multierror.Append(rerr, err)
 	}
-
+	if err := c.solver.Close(); err != nil {
+		rerr = multierror.Append(rerr, err)
+	}
 	return rerr
 }
 
