@@ -6,6 +6,7 @@ import (
 	"time"
 
 	controlapi "github.com/moby/buildkit/api/services/control"
+	"github.com/moby/buildkit/util/cast"
 	"github.com/pkg/errors"
 )
 
@@ -41,12 +42,12 @@ func (c *Client) Prune(ctx context.Context, ch chan UsageInfo, opts ...PruneOpti
 				ID:          d.ID,
 				Mutable:     d.Mutable,
 				InUse:       d.InUse,
-				Size:        d.Size_,
+				Size:        d.Size,
 				Parents:     d.Parents,
-				CreatedAt:   d.CreatedAt,
+				CreatedAt:   d.CreatedAt.AsTime(),
 				Description: d.Description,
 				UsageCount:  int(d.UsageCount),
-				LastUsedAt:  d.LastUsedAt,
+				LastUsedAt:  cast.TimeOrNil(d.LastUsedAt),
 				RecordType:  UsageRecordType(d.RecordType),
 				Shared:      d.Shared,
 			}

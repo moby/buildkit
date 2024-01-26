@@ -20,6 +20,7 @@ import (
 	"github.com/moby/buildkit/util/testutil/integration"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
 
 func testBuildWithLocalFiles(t *testing.T, sb integration.Sandbox) {
@@ -182,7 +183,7 @@ func marshal(ctx context.Context, st llb.State) (io.Reader, error) {
 	if err != nil {
 		return nil, err
 	}
-	dt, err := def.ToPB().Marshal()
+	dt, err := proto.Marshal(def.ToPB())
 	if err != nil {
 		return nil, err
 	}

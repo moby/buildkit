@@ -14,6 +14,14 @@ RUN <<EOT
   arch=$(echo $TARGETARCH | sed -e s/amd64/x86_64/ -e s/arm64/aarch_64/)
   wget -q https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-${TARGETOS}-${arch}.zip
   unzip protoc-${PROTOC_VERSION}-${TARGETOS}-${arch}.zip -d /usr/local
+
+  # Download status.proto. grpc repos' one seems copied from
+  # https://github.com/googleapis/googleapis/blob/master/google/rpc/status.proto,
+  # but we use grpc's since the repos has tags/releases.
+  mkdir -p /usr/local/include/google/rpc
+  curl \
+	  -L https://raw.githubusercontent.com/grpc/grpc/v1.45.2/src/proto/grpc/status/status.proto \
+	  -o /usr/local/include/google/rpc/status.proto
 EOT
 WORKDIR /go/src/github.com/moby/buildkit
 
@@ -22,10 +30,8 @@ RUN --mount=type=bind,target=.,rw \
     --mount=type=cache,target=/root/.cache \
     --mount=type=cache,target=/go/pkg/mod \
     go install \
-      github.com/gogo/protobuf/protoc-gen-gogo \
-      github.com/gogo/protobuf/protoc-gen-gogofaster \
-      github.com/gogo/protobuf/protoc-gen-gogoslick \
-      github.com/golang/protobuf/protoc-gen-go
+      github.com/golang/protobuf/protoc-gen-go \
+      google.golang.org/grpc/cmd/protoc-gen-go-grpc
 
 FROM tools AS generated
 RUN --mount=type=bind,target=.,rw <<EOT

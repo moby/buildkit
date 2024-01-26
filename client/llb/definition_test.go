@@ -108,7 +108,7 @@ func TestDefinitionInputCache(t *testing.T) {
 
 	st2 := NewState(op.Output())
 	marshalDef := &Definition{
-		Metadata: make(map[digest.Digest]pb.OpMetadata, 0),
+		Metadata: make(map[digest.Digest]*pb.OpMetadata, 0),
 	}
 	constraints := &Constraints{}
 	smc := newSourceMapCollector()

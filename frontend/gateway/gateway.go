@@ -17,9 +17,6 @@ import (
 	"github.com/containerd/containerd/mount"
 	"github.com/distribution/reference"
 	"github.com/docker/docker/pkg/idtools"
-	"github.com/gogo/googleapis/google/rpc"
-	gogotypes "github.com/gogo/protobuf/types"
-	"github.com/golang/protobuf/ptypes/any"
 	apitypes "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/cache"
 	cacheutil "github.com/moby/buildkit/cache/util"
@@ -59,6 +56,7 @@ import (
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -325,7 +323,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 }
 
 func metadataMount(def *opspb.Definition) (*executor.Mount, func(), error) {
-	dt, err := def.Marshal()
+	dt, err := proto.Marshal(def)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -555,6 +553,8 @@ type llbBridgeForwarder struct {
 	*pipe
 	ctrs   map[string]gwclient.Container
 	ctrsMu sync.Mutex
+
+	pb.UnimplementedLLBBridgeServer
 }
 
 func (lbf *llbBridgeForwarder) ResolveImageConfig(ctx context.Context, req *pb.ResolveImageConfigRequest) (*pb.ResolveImageConfigResponse, error) {
@@ -585,7 +585,7 @@ func (lbf *llbBridgeForwarder) ResolveImageConfig(ctx context.Context, req *pb.R
 	}
 	return &pb.ResolveImageConfigResponse{
 		Ref:    ref,
-		Digest: dgst,
+		Digest: dgst.String(),
 		Config: dt,
 	}, nil
 }
@@ -916,7 +916,7 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 		return lbf.setResult(nil, grpcerrors.FromGRPC(status.ErrorProto(&spb.Status{
 			Code:    in.Error.Code,
 			Message: in.Error.Message,
-			Details: convertGogoAny(in.Error.Details),
+			Details: in.Error.Details,
 		})))
 	}
 	r := &frontend.Result{
@@ -1076,7 +1076,7 @@ func (lbf *llbBridgeForwarder) ReleaseContainer(ctx context.Context, in *pb.Rele
 }
 
 func (lbf *llbBridgeForwarder) Warn(ctx context.Context, in *pb.WarnRequest) (*pb.WarnResponse, error) {
-	err := lbf.llbBridge.Warn(ctx, in.Digest, string(in.Short), frontend.WarnOpts{
+	err := lbf.llbBridge.Warn(ctx, digest.Digest(in.Digest), string(in.Short), frontend.WarnOpts{
 		Level:      int(in.Level),
 		SourceInfo: in.Info,
 		Range:      in.Ranges,
@@ -1378,15 +1378,15 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 
 					var statusCode uint32
 					var exitError *pb.ExitError
-					var statusError *rpc.Status
+					var statusError spb.Status
 					if err != nil {
 						statusCode = pb.UnknownExitStatus
 						st, _ := status.FromError(grpcerrors.ToGRPC(ctx, err))
 						stp := st.Proto()
-						statusError = &rpc.Status{
+						statusError = spb.Status{
 							Code:    stp.Code,
 							Message: stp.Message,
-							Details: convertToGogoAny(stp.Details),
+							Details: stp.Details,
 						}
 					}
 					if errors.As(err, &exitError) {
@@ -1398,7 +1398,7 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 						Input: &pb.ExecMessage_Exit{
 							Exit: &pb.ExitMessage{
 								Code:  statusCode,
-								Error: statusError,
+								Error: &statusError,
 							},
 						},
 					})
@@ -1523,22 +1523,6 @@ type markTypeFrontend struct{}
 
 func (*markTypeFrontend) SetImageOption(ii *llb.ImageInfo) {
 	ii.RecordType = string(client.UsageRecordTypeFrontend)
-}
-
-func convertGogoAny(in []*gogotypes.Any) []*any.Any {
-	out := make([]*any.Any, len(in))
-	for i := range in {
-		out[i] = &any.Any{TypeUrl: in[i].TypeUrl, Value: in[i].Value}
-	}
-	return out
-}
-
-func convertToGogoAny(in []*any.Any) []*gogotypes.Any {
-	out := make([]*gogotypes.Any, len(in))
-	for i := range in {
-		out[i] = &gogotypes.Any{TypeUrl: in[i].TypeUrl, Value: in[i].Value}
-	}
-	return out
 }
 
 func getCaps(label string) map[string]struct{} {

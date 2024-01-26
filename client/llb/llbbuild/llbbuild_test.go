@@ -8,6 +8,7 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestMarshal(t *testing.T) {
@@ -20,16 +21,16 @@ func TestMarshal(t *testing.T) {
 	require.Equal(t, dgst, digest.FromBytes(dt))
 
 	var op pb.Op
-	err = op.Unmarshal(dt)
+	err = proto.Unmarshal(dt, &op)
 	require.NoError(t, err)
 
 	buildop := op.GetBuild()
 	require.NotEqual(t, buildop, nil)
 
 	require.Equal(t, len(op.Inputs), 1)
-	require.Equal(t, buildop.Builder, pb.LLBBuilder)
+	require.Equal(t, buildop.Builder, int64(pb.LLBBuilder))
 	require.Equal(t, len(buildop.Inputs), 1)
-	require.Equal(t, buildop.Inputs[pb.LLBDefinitionInput], &pb.BuildInput{Input: pb.InputIndex(0)})
+	require.Equal(t, buildop.Inputs[pb.LLBDefinitionInput], &pb.BuildInput{Input: 0})
 
 	require.Equal(t, buildop.Attrs[pb.AttrLLBDefinitionFilename], "myfilename")
 }
@@ -45,8 +46,8 @@ type dummyOutput struct {
 
 func (d *dummyOutput) ToInput(context.Context, *llb.Constraints) (*pb.Input, error) {
 	return &pb.Input{
-		Digest: d.dgst,
-		Index:  pb.OutputIndex(7), // random constant
+		Digest: d.dgst.String(),
+		Index:  7, // random constant
 	}, nil
 }
 func (d *dummyOutput) Vertex(context.Context, *llb.Constraints) llb.Vertex {

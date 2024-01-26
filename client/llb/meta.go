@@ -261,7 +261,7 @@ func ulimit(name UlimitName, soft int64, hard int64) StateOption {
 			if err != nil {
 				return nil, err
 			}
-			return append(v, pb.Ulimit{
+			return append(v, &pb.Ulimit{
 				Name: string(name),
 				Soft: soft,
 				Hard: hard,
@@ -270,14 +270,14 @@ func ulimit(name UlimitName, soft int64, hard int64) StateOption {
 	}
 }
 
-func getUlimit(s State) func(context.Context, *Constraints) ([]pb.Ulimit, error) {
-	return func(ctx context.Context, c *Constraints) ([]pb.Ulimit, error) {
+func getUlimit(s State) func(context.Context, *Constraints) ([]*pb.Ulimit, error) {
+	return func(ctx context.Context, c *Constraints) ([]*pb.Ulimit, error) {
 		v, err := s.getValue(keyUlimit)(ctx, c)
 		if err != nil {
 			return nil, err
 		}
 		if v != nil {
-			return v.([]pb.Ulimit), nil
+			return v.([]*pb.Ulimit), nil
 		}
 		return nil, nil
 	}

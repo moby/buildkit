@@ -104,7 +104,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 
 		return &fsutil.Dir{
 			FS:   outputFS,
-			Stat: st,
+			Stat: &st,
 		}, nil
 	}
 

@@ -17,6 +17,8 @@ type GatewayForwarder struct {
 	mu         sync.RWMutex
 	updateCond *sync.Cond
 	builds     map[string]gateway.LLBBridgeForwarder
+
+	gwapi.UnimplementedLLBBridgeServer
 }
 
 func NewGatewayForwarder() *GatewayForwarder {

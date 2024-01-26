@@ -6,21 +6,22 @@ import (
 	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
+	"google.golang.org/protobuf/proto"
 )
 
 // Definition is the LLB definition structure with per-vertex metadata entries
 // Corresponds to the Definition structure defined in solver/pb.Definition.
 type Definition struct {
 	Def         [][]byte
-	Metadata    map[digest.Digest]pb.OpMetadata
+	Metadata    map[digest.Digest]*pb.OpMetadata
 	Source      *pb.Source
 	Constraints *Constraints
 }
 
 func (def *Definition) ToPB() *pb.Definition {
-	md := make(map[digest.Digest]pb.OpMetadata, len(def.Metadata))
+	md := make(map[string]*pb.OpMetadata, len(def.Metadata))
 	for k, v := range def.Metadata {
-		md[k] = v
+		md[string(k)] = v
 	}
 	return &pb.Definition{
 		Def:      def.Def,
@@ -32,9 +33,9 @@ func (def *Definition) ToPB() *pb.Definition {
 func (def *Definition) FromPB(x *pb.Definition) {
 	def.Def = x.Def
 	def.Source = x.Source
-	def.Metadata = make(map[digest.Digest]pb.OpMetadata)
+	def.Metadata = make(map[digest.Digest]*pb.OpMetadata)
 	for k, v := range x.Metadata {
-		def.Metadata[k] = v
+		def.Metadata[digest.Digest(k)] = v
 	}
 }
 
@@ -46,18 +47,18 @@ func (def *Definition) Head() (digest.Digest, error) {
 	last := def.Def[len(def.Def)-1]
 
 	var pop pb.Op
-	if err := (&pop).Unmarshal(last); err != nil {
+	if err := proto.Unmarshal(last, &pop); err != nil {
 		return "", err
 	}
 	if len(pop.Inputs) == 0 {
 		return "", nil
 	}
 
-	return pop.Inputs[0].Digest, nil
+	return digest.Digest(pop.Inputs[0].Digest), nil
 }
 
 func WriteTo(def *Definition, w io.Writer) error {
-	b, err := def.ToPB().Marshal()
+	b, err := proto.Marshal(def.ToPB())
 	if err != nil {
 		return err
 	}
@@ -71,7 +72,7 @@ func ReadFrom(r io.Reader) (*Definition, error) {
 		return nil, err
 	}
 	var pbDef pb.Definition
-	if err := pbDef.Unmarshal(b); err != nil {
+	if err := proto.Unmarshal(b, &pbDef); err != nil {
 		return nil, err
 	}
 	var def Definition
@@ -88,7 +89,8 @@ func MarshalConstraints(base, override *Constraints) (*pb.Op, *pb.OpMetadata) {
 	}
 
 	c.WorkerConstraints = append(c.WorkerConstraints, override.WorkerConstraints...)
-	c.Metadata = mergeMetadata(c.Metadata, override.Metadata)
+	md := mergeMetadata(c.Metadata, override.Metadata)
+	c.Metadata = md
 
 	if c.Platform == nil {
 		defaultPlatform := platforms.Normalize(platforms.DefaultSpec())
@@ -110,7 +112,7 @@ func MarshalConstraints(base, override *Constraints) (*pb.Op, *pb.OpMetadata) {
 		Constraints: &pb.WorkerConstraints{
 			Filter: c.WorkerConstraints,
 		},
-	}, &c.Metadata
+	}, c.Metadata
 }
 
 type MarshalCache struct {

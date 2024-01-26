@@ -30,6 +30,7 @@ import (
 	"github.com/moby/buildkit/solver/result"
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/cast"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/grpcerrors"
@@ -43,6 +44,8 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -165,7 +168,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 		Ref:           id,
 		Frontend:      req.Frontend,
 		FrontendAttrs: req.FrontendOpt,
-		CreatedAt:     &st,
+		CreatedAt:     timestamppb.New(st),
 	}
 
 	if exp.Type != "" {
@@ -184,7 +187,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 
 	return func(res *Result, descrefs []exporter.DescriptorReference, err error) error {
 		en := time.Now()
-		rec.CompletedAt = &en
+		rec.CompletedAt = cast.TimestampOrNil(&en)
 
 		j.CloseProgress()
 
@@ -240,8 +243,8 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 			}
 			w = nil
 			return &controlapi.Descriptor{
-				Digest:    desc.Digest,
-				Size_:     desc.Size,
+				Digest:    desc.Digest.String(),
+				Size:      desc.Size,
 				MediaType: desc.MediaType,
 				Annotations: map[string]string{
 					"in-toto.io/predicate-type": slsa02.PredicateSLSAProvenance,
@@ -303,8 +306,8 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 			mu.Lock()
 			releasers = append(releasers, releaseStatus)
 			rec.Logs = &controlapi.Descriptor{
-				Digest:    st.Descriptor.Digest,
-				Size_:     st.Descriptor.Size,
+				Digest:    st.Descriptor.Digest.String(),
+				Size:      st.Descriptor.Size,
 				MediaType: st.Descriptor.MediaType,
 			}
 			rec.NumCachedSteps = int32(st.NumCachedSteps)
@@ -329,8 +332,8 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 				mu.Lock()
 				desc := descref.Descriptor()
 				controlDesc := &controlapi.Descriptor{
-					Digest:      desc.Digest,
-					Size_:       desc.Size,
+					Digest:      desc.Digest.String(),
+					Size:        desc.Size,
 					MediaType:   desc.MediaType,
 					Annotations: desc.Annotations,
 				}
@@ -365,7 +368,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 			if !ok {
 				st = status.New(codes.Unknown, err.Error())
 			}
-			rec.Error = grpcerrors.ToRPCStatus(st.Proto())
+			rec.Error = st.Proto()
 		}
 		if err1 := s.history.Update(ctx, &controlapi.BuildHistoryEvent{
 			Type:   controlapi.BuildHistoryEventType_COMPLETE,
@@ -409,9 +412,9 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 
 				if err := s.history.UpdateRef(context.TODO(), id, func(rec *controlapi.BuildHistoryRecord) error {
 					rec.Trace = &controlapi.Descriptor{
-						Digest:    desc.Digest,
+						Digest:    desc.Digest.String(),
 						MediaType: desc.MediaType,
-						Size_:     desc.Size,
+						Size:      desc.Size,
 					}
 					return nil
 				}); err != nil {
@@ -468,7 +471,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	j.SetValue(keyEntitlements, set)
 
 	if srcPol != nil {
-		j.SetValue(keySourcePolicy, *srcPol)
+		j.SetValue(keySourcePolicy, srcPol)
 	}
 
 	j.SessionID = sessionID
@@ -1024,13 +1027,13 @@ func loadEntitlements(b solver.Builder) (entitlements.Set, error) {
 func loadSourcePolicy(b solver.Builder) (*spb.Policy, error) {
 	var srcPol spb.Policy
 	err := b.EachValue(context.TODO(), keySourcePolicy, func(v interface{}) error {
-		x, ok := v.(spb.Policy)
+		x, ok := v.(*spb.Policy)
 		if !ok {
 			return errors.Errorf("invalid source policy %T", v)
 		}
 		for _, f := range x.Rules {
-			r := *f
-			srcPol.Rules = append(srcPol.Rules, &r)
+			r := proto.Clone(f).(*spb.Rule)
+			srcPol.Rules = append(srcPol.Rules, r)
 		}
 		srcPol.Version = x.Version
 		return nil

@@ -8,6 +8,7 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestRecomputeDigests(t *testing.T) {
@@ -18,21 +19,21 @@ func TestRecomputeDigests(t *testing.T) {
 			},
 		},
 	}
-	oldData, err := op1.Marshal()
+	oldData, err := proto.Marshal(op1)
 	require.NoError(t, err)
 	oldDigest := digest.FromBytes(oldData)
 
 	op1.GetOp().(*pb.Op_Source).Source.Identifier = "docker-image://docker.io/library/busybox:1.31.1"
-	newData, err := op1.Marshal()
+	newData, err := proto.Marshal(op1)
 	require.NoError(t, err)
 	newDigest := digest.FromBytes(newData)
 
 	op2 := &pb.Op{
 		Inputs: []*pb.Input{
-			{Digest: oldDigest}, // Input is the old digest, this should be updated after recomputeDigests
+			{Digest: oldDigest.String()}, // Input is the old digest, this should be updated after recomputeDigests
 		},
 	}
-	op2Data, err := op2.Marshal()
+	op2Data, err := proto.Marshal(op2)
 	require.NoError(t, err)
 	op2Digest := digest.FromBytes(op2Data)
 
@@ -50,6 +51,6 @@ func TestRecomputeDigests(t *testing.T) {
 	require.Equal(t, newDigest, visited[oldDigest])
 	require.Equal(t, op1, all[newDigest])
 	assert.Equal(t, op2, all[updated])
-	require.Equal(t, newDigest, op2.Inputs[0].Digest)
+	require.Equal(t, newDigest, digest.Digest(op2.Inputs[0].Digest))
 	assert.NotEqual(t, op2Digest, updated)
 }

@@ -1269,7 +1269,7 @@ func parseChange(str string) *change {
 				st.Linkname = f[3][1:]
 			} else {
 				c.data = f[3]
-				st.Size_ = int64(len(f[3]))
+				st.Size = int64(len(f[3]))
 			}
 		}
 		st.Mode |= 0644

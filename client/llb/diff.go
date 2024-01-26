@@ -5,6 +5,7 @@ import (
 
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
+	protobuf "google.golang.org/protobuf/proto"
 )
 
 type DiffOp struct {
@@ -43,9 +44,9 @@ func (m *DiffOp) Marshal(ctx context.Context, constraints *Constraints) (digest.
 
 	op := &pb.DiffOp{}
 
-	op.Lower = &pb.LowerDiffInput{Input: pb.InputIndex(len(proto.Inputs))}
+	op.Lower = &pb.LowerDiffInput{Input: int64(len(proto.Inputs))}
 	if m.lower == nil {
-		op.Lower.Input = pb.Empty
+		op.Lower.Input = int64(pb.Empty)
 	} else {
 		pbLowerInput, err := m.lower.ToInput(ctx, constraints)
 		if err != nil {
@@ -54,9 +55,9 @@ func (m *DiffOp) Marshal(ctx context.Context, constraints *Constraints) (digest.
 		proto.Inputs = append(proto.Inputs, pbLowerInput)
 	}
 
-	op.Upper = &pb.UpperDiffInput{Input: pb.InputIndex(len(proto.Inputs))}
+	op.Upper = &pb.UpperDiffInput{Input: int64(len(proto.Inputs))}
 	if m.upper == nil {
-		op.Upper.Input = pb.Empty
+		op.Upper.Input = int64(pb.Empty)
 	} else {
 		pbUpperInput, err := m.upper.ToInput(ctx, constraints)
 		if err != nil {
@@ -67,7 +68,7 @@ func (m *DiffOp) Marshal(ctx context.Context, constraints *Constraints) (digest.
 
 	proto.Op = &pb.Op_Diff{Diff: op}
 
-	dt, err := proto.Marshal()
+	dt, err := protobuf.Marshal(proto)
 	if err != nil {
 		return "", nil, nil, nil, err
 	}

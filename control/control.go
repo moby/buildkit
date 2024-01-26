@@ -35,6 +35,8 @@ import (
 	"github.com/moby/buildkit/solver/llbsolver/proc"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/cast"
+	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/throttle"
@@ -51,6 +53,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type Opt struct {
@@ -80,6 +83,7 @@ type Controller struct { // TODO: ControlService
 	throttledGC      func()
 	gcmu             sync.Mutex
 	*tracev1.UnimplementedTraceServiceServer
+	controlapi.UnimplementedControlServer
 }
 
 func NewController(opt Opt) (*Controller, error) {
@@ -167,12 +171,12 @@ func (c *Controller) DiskUsage(ctx context.Context, r *controlapi.DiskUsageReque
 				ID:          r.ID,
 				Mutable:     r.Mutable,
 				InUse:       r.InUse,
-				Size_:       r.Size,
+				Size:        r.Size,
 				Parents:     r.Parents,
 				UsageCount:  int64(r.UsageCount),
 				Description: r.Description,
-				CreatedAt:   r.CreatedAt,
-				LastUsedAt:  r.LastUsedAt,
+				CreatedAt:   timestamppb.New(r.CreatedAt),
+				LastUsedAt:  cast.TimestampOrNil(r.LastUsedAt),
 				RecordType:  string(r.RecordType),
 				Shared:      r.Shared,
 			})
@@ -240,12 +244,12 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 				ID:          r.ID,
 				Mutable:     r.Mutable,
 				InUse:       r.InUse,
-				Size_:       r.Size,
+				Size:        r.Size,
 				Parents:     r.Parents,
 				UsageCount:  int64(r.UsageCount),
 				Description: r.Description,
-				CreatedAt:   r.CreatedAt,
-				LastUsedAt:  r.LastUsedAt,
+				CreatedAt:   timestamppb.New(r.CreatedAt),
+				LastUsedAt:  cast.TimestampOrNil(r.LastUsedAt),
 				RecordType:  string(r.RecordType),
 				Shared:      r.Shared,
 			}); err != nil {
@@ -469,7 +473,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	}, llbsolver.ExporterRequest{
 		Exporters:      expis,
 		CacheExporters: cacheExporters,
-	}, req.Entitlements, procs, req.Internal, req.SourcePolicy)
+	}, cast.FromStringSlice[entitlements.Entitlement](req.Entitlements), procs, req.Internal, req.SourcePolicy)
 	if err != nil {
 		return nil, err
 	}
@@ -642,7 +646,7 @@ func findDuplicateCacheOptions(cacheOpts []*controlapi.CacheOptionsEntry) ([]*co
 	seen := map[string]*controlapi.CacheOptionsEntry{}
 	duplicate := map[string]struct{}{}
 	for _, opt := range cacheOpts {
-		k, err := cacheOptKey(*opt)
+		k, err := cacheOptKey(opt)
 		if err != nil {
 			return nil, err
 		}
@@ -659,7 +663,7 @@ func findDuplicateCacheOptions(cacheOpts []*controlapi.CacheOptionsEntry) ([]*co
 	return duplicates, nil
 }
 
-func cacheOptKey(opt controlapi.CacheOptionsEntry) (string, error) {
+func cacheOptKey(opt *controlapi.CacheOptionsEntry) (string, error) {
 	if opt.Type == "registry" && opt.Attrs["ref"] != "" {
 		return opt.Attrs["ref"], nil
 	}

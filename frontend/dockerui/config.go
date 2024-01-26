@@ -63,7 +63,7 @@ type Config struct {
 	NetworkMode      pb.NetMode
 	ShmSize          int64
 	Target           string
-	Ulimits          []pb.Ulimit
+	Ulimits          []*pb.Ulimit
 
 	CacheImports           []client.CacheOptionsEntry
 	TargetPlatforms        []ocispecs.Platform // nil means default
@@ -218,7 +218,7 @@ func (bc *Client) init() error {
 	var cacheImports []client.CacheOptionsEntry
 	// new API
 	if cacheImportsStr := opts[keyCacheImports]; cacheImportsStr != "" {
-		var cacheImportsUM []controlapi.CacheOptionsEntry
+		var cacheImportsUM []*controlapi.CacheOptionsEntry
 		if err := json.Unmarshal([]byte(cacheImportsStr), &cacheImportsUM); err != nil {
 			return errors.Wrapf(err, "failed to unmarshal %s (%q)", keyCacheImports, cacheImportsStr)
 		}

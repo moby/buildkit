@@ -13,8 +13,8 @@ import (
 
 func TestStatic(t *testing.T) {
 	fs := NewFS()
-	fs.Add("foo", types.Stat{Mode: 0644}, []byte("foofoo"))
-	fs.Add("bar", types.Stat{Mode: 0444}, []byte("barbarbar"))
+	fs.Add("foo", &types.Stat{Mode: 0644}, []byte("foofoo"))
+	fs.Add("bar", &types.Stat{Mode: 0444}, []byte("barbarbar"))
 
 	rc, err := fs.Open("bar")
 	require.NoError(t, err)
@@ -50,7 +50,7 @@ func TestStatic(t *testing.T) {
 
 	require.Equal(t, []string{"bar", "foo"}, files)
 
-	fs.Add("abc", types.Stat{Mode: 0444}, []byte("abcabcabc"))
+	fs.Add("abc", &types.Stat{Mode: 0444}, []byte("abcabcabc"))
 
 	rc, err = fs.Open("abc")
 	require.NoError(t, err)

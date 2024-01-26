@@ -13,6 +13,7 @@ import (
 	"github.com/moby/buildkit/util/apicaps"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
+	protobuf "google.golang.org/protobuf/proto"
 )
 
 type StateOption func(State) State
@@ -133,7 +134,7 @@ func (s State) SetMarshalDefaults(co ...ConstraintsOpt) State {
 func (s State) Marshal(ctx context.Context, co ...ConstraintsOpt) (*Definition, error) {
 	c := NewConstraints(append(s.opts, co...)...)
 	def := &Definition{
-		Metadata:    make(map[digest.Digest]pb.OpMetadata, 0),
+		Metadata:    make(map[digest.Digest]*pb.OpMetadata, 0),
 		Constraints: c,
 	}
 
@@ -151,7 +152,7 @@ func (s State) Marshal(ctx context.Context, co ...ConstraintsOpt) (*Definition, 
 		return def, err
 	}
 	proto := &pb.Op{Inputs: []*pb.Input{inp}}
-	dt, err := proto.Marshal()
+	dt, err := protobuf.Marshal(proto)
 	if err != nil {
 		return def, err
 	}
@@ -159,20 +160,23 @@ func (s State) Marshal(ctx context.Context, co ...ConstraintsOpt) (*Definition, 
 
 	dgst := digest.FromBytes(dt)
 	md := def.Metadata[dgst]
-	md.Caps = map[apicaps.CapID]bool{
-		pb.CapConstraints: true,
-		pb.CapPlatform:    true,
+	if md == nil {
+		md = &pb.OpMetadata{}
+	}
+	md.Caps = map[string]bool{
+		string(pb.CapConstraints): true,
+		string(pb.CapPlatform):    true,
 	}
 
 	for _, m := range def.Metadata {
 		if m.IgnoreCache {
-			md.Caps[pb.CapMetaIgnoreCache] = true
+			md.Caps[string(pb.CapMetaIgnoreCache)] = true
 		}
 		if m.Description != nil {
-			md.Caps[pb.CapMetaDescription] = true
+			md.Caps[string(pb.CapMetaDescription)] = true
 		}
 		if m.ExportCache != nil {
-			md.Caps[pb.CapMetaExportCache] = true
+			md.Caps[string(pb.CapMetaExportCache)] = true
 		}
 	}
 
@@ -204,7 +208,11 @@ func marshal(ctx context.Context, v Vertex, def *Definition, s *sourceMapCollect
 	}
 	vertexCache[v] = struct{}{}
 	if opMeta != nil {
-		def.Metadata[dgst] = mergeMetadata(def.Metadata[dgst], *opMeta)
+		md := def.Metadata[dgst]
+		if md == nil {
+			md = &pb.OpMetadata{}
+		}
+		def.Metadata[dgst] = mergeMetadata(md, opMeta)
 	}
 	s.Add(dgst, sls)
 	if _, ok := cache[dgst]; ok {
@@ -507,7 +515,7 @@ func (o *output) ToInput(ctx context.Context, c *Constraints) (*pb.Input, error)
 	if err != nil {
 		return nil, err
 	}
-	return &pb.Input{Digest: dgst, Index: index}, nil
+	return &pb.Input{Digest: dgst.String(), Index: int64(index)}, nil
 }
 
 func (o *output) Vertex(context.Context, *Constraints) Vertex {
@@ -558,7 +566,13 @@ func (fn constraintsOptFunc) SetGitOption(gi *GitInfo) {
 	gi.applyConstraints(fn)
 }
 
-func mergeMetadata(m1, m2 pb.OpMetadata) pb.OpMetadata {
+func mergeMetadata(m1, m2 *pb.OpMetadata) *pb.OpMetadata {
+	if m1 == nil {
+		m1 = &pb.OpMetadata{}
+	}
+	if m2 == nil {
+		m2 = &pb.OpMetadata{}
+	}
 	if m2.IgnoreCache {
 		m1.IgnoreCache = true
 	}
@@ -576,7 +590,7 @@ func mergeMetadata(m1, m2 pb.OpMetadata) pb.OpMetadata {
 
 	for k := range m2.Caps {
 		if m1.Caps == nil {
-			m1.Caps = make(map[apicaps.CapID]bool, len(m2.Caps))
+			m1.Caps = make(map[string]bool, len(m2.Caps))
 		}
 		m1.Caps[k] = true
 	}
@@ -589,11 +603,17 @@ func mergeMetadata(m1, m2 pb.OpMetadata) pb.OpMetadata {
 }
 
 var IgnoreCache = constraintsOptFunc(func(c *Constraints) {
+	if c.Metadata == nil {
+		c.Metadata = &pb.OpMetadata{}
+	}
 	c.Metadata.IgnoreCache = true
 })
 
 func WithDescription(m map[string]string) ConstraintsOpt {
 	return constraintsOptFunc(func(c *Constraints) {
+		if c.Metadata == nil {
+			c.Metadata = &pb.OpMetadata{}
+		}
 		if c.Metadata.Description == nil {
 			c.Metadata.Description = map[string]string{}
 		}
@@ -616,6 +636,9 @@ func WithCustomNamef(name string, a ...interface{}) ConstraintsOpt {
 // WithExportCache forces results for this vertex to be exported with the cache
 func WithExportCache() ConstraintsOpt {
 	return constraintsOptFunc(func(c *Constraints) {
+		if c.Metadata == nil {
+			c.Metadata = &pb.OpMetadata{}
+		}
 		c.Metadata.ExportCache = &pb.ExportCache{Value: true}
 	})
 }
@@ -624,6 +647,9 @@ func WithExportCache() ConstraintsOpt {
 // the cache
 func WithoutExportCache() ConstraintsOpt {
 	return constraintsOptFunc(func(c *Constraints) {
+		if c.Metadata == nil {
+			c.Metadata = &pb.OpMetadata{}
+		}
 		// ExportCache with value false means to disable exporting
 		c.Metadata.ExportCache = &pb.ExportCache{Value: false}
 	})
@@ -633,6 +659,9 @@ func WithoutExportCache() ConstraintsOpt {
 // the default defined by the build configuration.
 func WithoutDefaultExportCache() ConstraintsOpt {
 	return constraintsOptFunc(func(c *Constraints) {
+		if c.Metadata == nil {
+			c.Metadata = &pb.OpMetadata{}
+		}
 		// nil means no vertex based config has been set
 		c.Metadata.ExportCache = nil
 	})
@@ -656,7 +685,7 @@ func (cw *constraintsWrapper) applyConstraints(f func(c *Constraints)) {
 type Constraints struct {
 	Platform          *ocispecs.Platform
 	WorkerConstraints []string
-	Metadata          pb.OpMetadata
+	Metadata          *pb.OpMetadata
 	LocalUniqueID     string
 	Caps              *apicaps.CapSet
 	SourceLocations   []*SourceLocation
@@ -676,6 +705,9 @@ func LocalUniqueID(v string) ConstraintsOpt {
 
 func ProgressGroup(id, name string, weak bool) ConstraintsOpt {
 	return constraintsOptFunc(func(c *Constraints) {
+		if c.Metadata == nil {
+			c.Metadata = &pb.OpMetadata{}
+		}
 		c.Metadata.ProgressGroup = &pb.ProgressGroup{Id: id, Name: name, Weak: weak}
 	})
 }

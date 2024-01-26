@@ -251,7 +251,7 @@ func (mm *MountManager) getSecretMountable(ctx context.Context, m *pb.Mount, g s
 	if m.SecretOpt == nil {
 		return nil, errors.Errorf("invalid secret mount options")
 	}
-	sopt := *m.SecretOpt
+	sopt := m.SecretOpt
 
 	id := sopt.ID
 	if id == "" {
@@ -416,8 +416,8 @@ func (m *tmpfsMount) Mount() ([]mount.Mount, func() error, error) {
 		opt = append(opt, "ro")
 	}
 	if m.opt != nil {
-		if m.opt.Size_ > 0 {
-			opt = append(opt, fmt.Sprintf("size=%d", m.opt.Size_))
+		if m.opt.Size > 0 {
+			opt = append(opt, fmt.Sprintf("size=%d", m.opt.Size))
 		}
 	}
 	return []mount.Mount{{

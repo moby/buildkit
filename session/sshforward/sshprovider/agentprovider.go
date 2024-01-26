@@ -77,6 +77,8 @@ func (s socketDialer) String() string {
 
 type socketProvider struct {
 	m map[string]source
+
+	sshforward.UnimplementedSSHServer
 }
 
 func (sp *socketProvider) Register(server *grpc.Server) {

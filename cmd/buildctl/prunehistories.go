@@ -105,10 +105,10 @@ func pruneHistoriesWithTableOutput(ctx context.Context, w io.Writer, controlClie
 			completedAt string
 		)
 		if r.CreatedAt != nil {
-			createdAt = r.CreatedAt.Local().Format(time.RFC3339)
+			createdAt = r.CreatedAt.AsTime().Local().Format(time.RFC3339)
 		}
 		if r.CompletedAt != nil {
-			completedAt = r.CompletedAt.Local().Format(time.RFC3339)
+			completedAt = r.CompletedAt.AsTime().Local().Format(time.RFC3339)
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\n", ev.Type, r.Ref, createdAt, completedAt, r.Generation)
 		tw.Flush()
