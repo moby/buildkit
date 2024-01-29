@@ -121,9 +121,14 @@ type CacheExporter interface {
 
 // CacheExporterTarget defines object capable of receiving exports
 type CacheExporterTarget interface {
+	// Add creates a new object record that we can then add results to and
+	// connect to other records.
 	Add(dgst digest.Digest) CacheExporterRecord
-	Visit(interface{})
-	Visited(interface{}) bool
+
+	// Visit marks a target as having been visited.
+	Visit(target any)
+	// Vistited returns true if a target has previously been marked as visited.
+	Visited(target any) bool
 }
 
 // CacheExporterRecord is a single object being exported
