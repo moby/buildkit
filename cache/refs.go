@@ -1062,7 +1062,7 @@ func (sr *immutableRef) withRemoteSnapshotLabelsStargzMode(ctx context.Context, 
 }
 
 func (sr *immutableRef) prepareRemoteSnapshotsStargzMode(ctx context.Context, s session.Group) error {
-	_, err := g.Do(ctx, sr.ID()+"-prepare-remote-snapshot", func(ctx context.Context) (_ struct{}, rerr error) {
+	_, err := g.Do(ctx, sr.ID()+"-prepare-remote-snapshot", func(ctx context.Context) (_ *leaseutil.LeaseRef, rerr error) {
 		dhs := sr.descHandlers
 		for _, r := range sr.layerChain() {
 			r := r
@@ -1074,7 +1074,7 @@ func (sr *immutableRef) prepareRemoteSnapshotsStargzMode(ctx context.Context, s 
 			dh := dhs[digest.Digest(r.getBlob())]
 			if dh == nil {
 				// We cannot prepare remote snapshots without descHandler.
-				return struct{}{}, nil
+				return nil, nil
 			}
 
 			// tmpLabels contains dh.SnapshotLabels + session IDs. All keys contain
@@ -1135,7 +1135,7 @@ func (sr *immutableRef) prepareRemoteSnapshotsStargzMode(ctx context.Context, s 
 			break
 		}
 
-		return struct{}{}, nil
+		return nil, nil
 	})
 	return err
 }
@@ -1158,28 +1158,31 @@ func makeTmpLabelsStargzMode(labels map[string]string, s session.Group) (fields 
 }
 
 func (sr *immutableRef) unlazy(ctx context.Context, dhs DescHandlers, pg progress.Controller, s session.Group, topLevel bool, ensureContentStore bool) error {
-	_, err := g.Do(ctx, sr.ID()+"-unlazy", func(ctx context.Context) (_ struct{}, rerr error) {
+	_, err := g.Do(ctx, sr.ID()+"-unlazy", func(ctx context.Context) (_ *leaseutil.LeaseRef, rerr error) {
 		if _, err := sr.cm.Snapshotter.Stat(ctx, sr.getSnapshotID()); err == nil {
 			if !ensureContentStore {
-				return struct{}{}, nil
+				return nil, nil
 			}
 			if blob := sr.getBlob(); blob == "" {
-				return struct{}{}, nil
+				return nil, nil
 			}
 			if _, err := sr.cm.ContentStore.Info(ctx, sr.getBlob()); err == nil {
-				return struct{}{}, nil
+				return nil, nil
 			}
 		}
 
 		switch sr.kind() {
 		case Merge, Diff:
-			return struct{}{}, sr.unlazyDiffMerge(ctx, dhs, pg, s, topLevel, ensureContentStore)
+			return nil, sr.unlazyDiffMerge(ctx, dhs, pg, s, topLevel, ensureContentStore)
 		case Layer, BaseLayer:
-			return struct{}{}, sr.unlazyLayer(ctx, dhs, pg, s, ensureContentStore)
+			return nil, sr.unlazyLayer(ctx, dhs, pg, s, ensureContentStore)
 		}
-		return struct{}{}, nil
+		return nil, nil
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // should be called within sizeG.Do call for this ref's ID
