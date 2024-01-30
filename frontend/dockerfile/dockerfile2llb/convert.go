@@ -1155,6 +1155,13 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		commitMessage.WriteString("COPY")
 	}
 
+	if cfg.chown != "" {
+		commitMessage.WriteString(" " + "--chown=" + cfg.chown)
+	}
+	if cfg.chmod != "" {
+		commitMessage.WriteString(" " + "--chmod=" + cfg.chmod)
+	}
+
 	var a *llb.FileAction
 
 	for _, src := range cfg.params.SourcePaths {
