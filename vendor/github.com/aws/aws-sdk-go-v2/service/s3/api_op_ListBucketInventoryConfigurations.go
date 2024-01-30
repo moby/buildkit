@@ -4,45 +4,36 @@ package s3
 
 import (
 	"context"
+	"fmt"
 	awsmiddleware "github.com/aws/aws-sdk-go-v2/aws/middleware"
 	"github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	s3cust "github.com/aws/aws-sdk-go-v2/service/s3/internal/customizations"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go/middleware"
+	"github.com/aws/smithy-go/ptr"
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 )
 
-// Returns a list of inventory configurations for the bucket. You can have up to
-// 1,000 analytics configurations per bucket. This action supports list pagination
-// and does not return more than 100 configurations at a time. Always check the
-// IsTruncated element in the response. If there are no more configurations to
-// list, IsTruncated is set to false. If there are more configurations to list,
-// IsTruncated is set to true, and there is a value in NextContinuationToken. You
+// This operation is not supported by directory buckets. Returns a list of
+// inventory configurations for the bucket. You can have up to 1,000 analytics
+// configurations per bucket. This action supports list pagination and does not
+// return more than 100 configurations at a time. Always check the IsTruncated
+// element in the response. If there are no more configurations to list,
+// IsTruncated is set to false. If there are more configurations to list,
+// IsTruncated is set to true, and there is a value in NextContinuationToken . You
 // use the NextContinuationToken value to continue the pagination of the list by
 // passing the value in continuation-token in the request to GET the next page. To
 // use this operation, you must have permissions to perform the
 // s3:GetInventoryConfiguration action. The bucket owner has this permission by
 // default. The bucket owner can grant this permission to others. For more
 // information about permissions, see Permissions Related to Bucket Subresource
-// Operations
-// (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources)
-// and Managing Access Permissions to Your Amazon S3 Resources
-// (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html).
-// For information about the Amazon S3 inventory feature, see Amazon S3 Inventory
-// (https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-inventory.html) The
-// following operations are related to ListBucketInventoryConfigurations:
-//
-// *
-// GetBucketInventoryConfiguration
-// (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketInventoryConfiguration.html)
-//
-// *
-// DeleteBucketInventoryConfiguration
-// (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketInventoryConfiguration.html)
-//
-// *
-// PutBucketInventoryConfiguration
-// (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketInventoryConfiguration.html)
+// Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources)
+// and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html)
+// . For information about the Amazon S3 inventory feature, see Amazon S3 Inventory (https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-inventory.html)
+// The following operations are related to ListBucketInventoryConfigurations :
+//   - GetBucketInventoryConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketInventoryConfiguration.html)
+//   - DeleteBucketInventoryConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketInventoryConfiguration.html)
+//   - PutBucketInventoryConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketInventoryConfiguration.html)
 func (c *Client) ListBucketInventoryConfigurations(ctx context.Context, params *ListBucketInventoryConfigurationsInput, optFns ...func(*Options)) (*ListBucketInventoryConfigurationsOutput, error) {
 	if params == nil {
 		params = &ListBucketInventoryConfigurationsInput{}
@@ -71,12 +62,17 @@ type ListBucketInventoryConfigurationsInput struct {
 	// Amazon S3 understands.
 	ContinuationToken *string
 
-	// The account ID of the expected bucket owner. If the bucket is owned by a
-	// different account, the request fails with the HTTP status code 403 Forbidden
-	// (access denied).
+	// The account ID of the expected bucket owner. If the account ID that you provide
+	// does not match the actual owner of the bucket, the request fails with the HTTP
+	// status code 403 Forbidden (access denied).
 	ExpectedBucketOwner *string
 
 	noSmithyDocumentSerde
+}
+
+func (in *ListBucketInventoryConfigurationsInput) bindEndpointParams(p *EndpointParameters) {
+	p.Bucket = in.Bucket
+	p.UseS3ExpressControlEndpoint = ptr.Bool(true)
 }
 
 type ListBucketInventoryConfigurationsOutput struct {
@@ -88,10 +84,10 @@ type ListBucketInventoryConfigurationsOutput struct {
 	// The list of inventory configurations for a bucket.
 	InventoryConfigurationList []types.InventoryConfiguration
 
-	// Tells whether the returned list of inventory configurations is complete. A value
-	// of true indicates that the list is not complete and the NextContinuationToken is
-	// provided for a subsequent request.
-	IsTruncated bool
+	// Tells whether the returned list of inventory configurations is complete. A
+	// value of true indicates that the list is not complete and the
+	// NextContinuationToken is provided for a subsequent request.
+	IsTruncated *bool
 
 	// The marker used to continue this inventory configuration listing. Use the
 	// NextContinuationToken from this response to continue the listing in a subsequent
@@ -105,12 +101,22 @@ type ListBucketInventoryConfigurationsOutput struct {
 }
 
 func (c *Client) addOperationListBucketInventoryConfigurationsMiddlewares(stack *middleware.Stack, options Options) (err error) {
+	if err := stack.Serialize.Add(&setOperationInputMiddleware{}, middleware.After); err != nil {
+		return err
+	}
 	err = stack.Serialize.Add(&awsRestxml_serializeOpListBucketInventoryConfigurations{}, middleware.After)
 	if err != nil {
 		return err
 	}
 	err = stack.Deserialize.Add(&awsRestxml_deserializeOpListBucketInventoryConfigurations{}, middleware.After)
 	if err != nil {
+		return err
+	}
+	if err := addProtocolFinalizerMiddlewares(stack, options, "ListBucketInventoryConfigurations"); err != nil {
+		return fmt.Errorf("add protocol finalizers: %v", err)
+	}
+
+	if err = addlegacyEndpointContextSetter(stack, options); err != nil {
 		return err
 	}
 	if err = addSetLoggerMiddleware(stack, options); err != nil {
@@ -131,16 +137,13 @@ func (c *Client) addOperationListBucketInventoryConfigurationsMiddlewares(stack 
 	if err = addRetryMiddlewares(stack, options); err != nil {
 		return err
 	}
-	if err = addHTTPSignerV4Middleware(stack, options); err != nil {
-		return err
-	}
 	if err = awsmiddleware.AddRawResponseToMetadata(stack); err != nil {
 		return err
 	}
 	if err = awsmiddleware.AddRecordResponseTiming(stack); err != nil {
 		return err
 	}
-	if err = addClientUserAgent(stack); err != nil {
+	if err = addClientUserAgent(stack, options); err != nil {
 		return err
 	}
 	if err = smithyhttp.AddErrorCloseResponseBodyMiddleware(stack); err != nil {
@@ -149,7 +152,10 @@ func (c *Client) addOperationListBucketInventoryConfigurationsMiddlewares(stack 
 	if err = smithyhttp.AddCloseResponseBodyMiddleware(stack); err != nil {
 		return err
 	}
-	if err = swapWithCustomHTTPSignerMiddleware(stack, options); err != nil {
+	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
+		return err
+	}
+	if err = addPutBucketContextMiddleware(stack); err != nil {
 		return err
 	}
 	if err = addOpListBucketInventoryConfigurationsValidationMiddleware(stack); err != nil {
@@ -159,6 +165,9 @@ func (c *Client) addOperationListBucketInventoryConfigurationsMiddlewares(stack 
 		return err
 	}
 	if err = addMetadataRetrieverMiddleware(stack); err != nil {
+		return err
+	}
+	if err = awsmiddleware.AddRecursionDetection(stack); err != nil {
 		return err
 	}
 	if err = addListBucketInventoryConfigurationsUpdateEndpoint(stack, options); err != nil {
@@ -176,14 +185,26 @@ func (c *Client) addOperationListBucketInventoryConfigurationsMiddlewares(stack 
 	if err = addRequestResponseLogging(stack, options); err != nil {
 		return err
 	}
+	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
+		return err
+	}
+	if err = addSerializeImmutableHostnameBucketMiddleware(stack, options); err != nil {
+		return err
+	}
 	return nil
+}
+
+func (v *ListBucketInventoryConfigurationsInput) bucket() (string, bool) {
+	if v.Bucket == nil {
+		return "", false
+	}
+	return *v.Bucket, true
 }
 
 func newServiceMetadataMiddleware_opListBucketInventoryConfigurations(region string) *awsmiddleware.RegisterServiceMetadata {
 	return &awsmiddleware.RegisterServiceMetadata{
 		Region:        region,
 		ServiceID:     ServiceID,
-		SigningName:   "s3",
 		OperationName: "ListBucketInventoryConfigurations",
 	}
 }
