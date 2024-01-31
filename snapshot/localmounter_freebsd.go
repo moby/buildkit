@@ -20,7 +20,7 @@ func (lm *localMounter) Mount() (string, error) {
 		lm.release = release
 	}
 
-	if len(lm.mounts) == 1 && lm.mounts[0].Type == "nullfs" {
+	if !lm.forceRemount && len(lm.mounts) == 1 && lm.mounts[0].Type == "nullfs" {
 		ro := false
 		for _, opt := range lm.mounts[0].Options {
 			if opt == "ro" {
