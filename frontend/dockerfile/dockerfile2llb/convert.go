@@ -1155,6 +1155,9 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		commitMessage.WriteString("COPY")
 	}
 
+	if cfg.parents {
+		commitMessage.WriteString(" " + "--parents")
+	}
 	if cfg.chown != "" {
 		commitMessage.WriteString(" " + "--chown=" + cfg.chown)
 	}
