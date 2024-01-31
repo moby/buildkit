@@ -1219,23 +1219,23 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 				return errors.Wrap(err, "removing drive letter")
 			}
 
+			var patterns []string
+			if cfg.parents {
+				path := strings.TrimPrefix(src, "/")
+				patterns = []string{path}
+				src = "/"
+			}
+
 			opts := append([]llb.CopyOption{&llb.CopyInfo{
 				Mode:                mode,
 				FollowSymlinks:      true,
 				CopyDirContentsOnly: true,
+				IncludePatterns:     patterns,
 				AttemptUnpack:       cfg.isAddCommand,
 				CreateDestPath:      true,
 				AllowWildcard:       true,
 				AllowEmptyWildcard:  true,
 			}}, copyOpt...)
-
-			if cfg.parents {
-				path := strings.TrimPrefix(src, "/")
-				opts = append(opts, &llb.CopyInfo{
-					IncludePatterns: []string{path},
-				})
-				src = "/"
-			}
 
 			if a == nil {
 				a = llb.Copy(cfg.source, src, dest, opts...)
