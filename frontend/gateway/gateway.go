@@ -643,10 +643,19 @@ func (lbf *llbBridgeForwarder) registerResultIDs(results ...solver.Result) (ids 
 func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) (*pb.SolveResponse, error) {
 	var cacheImports []frontend.CacheOptionsEntry
 	for _, e := range req.CacheImports {
+		if e == nil {
+			return nil, errors.Errorf("invalid nil cache import")
+		}
 		cacheImports = append(cacheImports, frontend.CacheOptionsEntry{
 			Type:  e.Type,
 			Attrs: e.Attrs,
 		})
+	}
+
+	for _, p := range req.SourcePolicies {
+		if p == nil {
+			return nil, errors.Errorf("invalid nil source policy")
+		}
 	}
 
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
@@ -1073,6 +1082,12 @@ func (lbf *llbBridgeForwarder) ReleaseContainer(ctx context.Context, in *pb.Rele
 }
 
 func (lbf *llbBridgeForwarder) Warn(ctx context.Context, in *pb.WarnRequest) (*pb.WarnResponse, error) {
+	// validate ranges are valid
+	for _, r := range in.Ranges {
+		if r == nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid source range")
+		}
+	}
 	err := lbf.llbBridge.Warn(ctx, in.Digest, string(in.Short), frontend.WarnOpts{
 		Level:      int(in.Level),
 		SourceInfo: in.Info,

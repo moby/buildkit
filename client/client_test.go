@@ -213,7 +213,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 }
 
 func TestIntegration(t *testing.T) {
-	testIntegration(t, allTests...)
+	testIntegration(t, append(allTests, validationTests...)...)
 }
 
 func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sandbox)) {
@@ -8913,6 +8913,7 @@ cat <<EOF > $BUILDKIT_SCAN_DESTINATION/spdx.json
 EOF
 `
 		img.Config.Cmd = []string{"/bin/sh", "-c", cmd}
+		img.Platform = p
 		config, err := json.Marshal(img)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to marshal image config")
@@ -9191,6 +9192,7 @@ cat <<EOF > $BUILDKIT_SCAN_DESTINATION/spdx.json
 EOF
 `
 		img.Config.Cmd = []string{"/bin/sh", "-c", cmd}
+		img.Platform = p
 		config, err := json.Marshal(img)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to marshal image config")
@@ -9243,6 +9245,7 @@ EOF
 
 		var img ocispecs.Image
 		img.Config.Cmd = []string{"/bin/sh", "-c", "cat /greeting"}
+		img.Platform = p
 		config, err := json.Marshal(img)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to marshal image config")
