@@ -28,15 +28,18 @@ set -eu -o pipefail
 
 if [ "$TEST_DOCKERD" == "1" ]; then
   if [ ! -f "$TEST_DOCKERD_BINARY" ]; then
-    echo "dockerd binary not found"
+    echo >&2 "dockerd binary not found"
     exit 1
   fi
   if [ ! -x "$TEST_DOCKERD_BINARY" ]; then
     chmod +x "$TEST_DOCKERD_BINARY"
   fi
   if ! file "$TEST_DOCKERD_BINARY" | grep "statically linked" >/dev/null; then
-    echo "dockerd binary needs to be statically linked"
+    echo >&2 "dockerd binary needs to be statically linked"
     exit 1
+  fi
+  if [ -z "$BUILDKIT_TEST_DISABLE_FEATURES" ]; then
+    echo >&2 "WARN: BUILDKIT_TEST_DISABLE_FEATURES not set with TEST_DOCKERD=1. This might cause tests to fail."
   fi
 fi
 
