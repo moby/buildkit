@@ -63,7 +63,7 @@ jobs:
       -
         name: Set outputs
         id: set
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
             const yaml = require('js-yaml');
