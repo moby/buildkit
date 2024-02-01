@@ -81,7 +81,7 @@ func (gs *gitSource) Identifier(scheme, ref string, attrs map[string]string, pla
 				id.KeepGitDir = true
 			}
 		case pb.AttrFullRemoteURL:
-			if !isGitTransport(v) {
+			if !gitutil.IsGitTransport(v) {
 				v = "https://" + v
 			}
 			id.Remote = v

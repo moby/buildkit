@@ -2,13 +2,11 @@ package git
 
 import (
 	"path"
-	"strings"
 
 	"github.com/moby/buildkit/solver/llbsolver/provenance"
 	"github.com/moby/buildkit/source"
 	srctypes "github.com/moby/buildkit/source/types"
 	"github.com/moby/buildkit/util/gitutil"
-	"github.com/moby/buildkit/util/sshutil"
 )
 
 type GitIdentifier struct {
@@ -23,7 +21,7 @@ type GitIdentifier struct {
 }
 
 func NewGitIdentifier(remoteURL string) (*GitIdentifier, error) {
-	if !isGitTransport(remoteURL) {
+	if !gitutil.IsGitTransport(remoteURL) {
 		remoteURL = "https://" + remoteURL
 	}
 	u, err := gitutil.ParseURL(remoteURL)
@@ -76,10 +74,4 @@ func (id *GitIdentifier) Capture(c *provenance.Capture, pin string) error {
 		})
 	}
 	return nil
-}
-
-// isGitTransport returns true if the provided str is a git transport by inspecting
-// the prefix of the string for known protocols used in git.
-func isGitTransport(str string) bool {
-	return strings.HasPrefix(str, "http://") || strings.HasPrefix(str, "https://") || strings.HasPrefix(str, "git://") || strings.HasPrefix(str, "ssh://") || sshutil.IsImplicitSSHTransport(str)
 }

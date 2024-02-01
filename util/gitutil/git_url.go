@@ -96,6 +96,15 @@ func ParseURL(remote string) (*GitURL, error) {
 	return nil, ErrUnknownProtocol
 }
 
+func IsGitTransport(remote string) bool {
+	if proto := protoRegexp.FindString(remote); proto != "" {
+		proto = strings.ToLower(strings.TrimSuffix(proto, "://"))
+		_, ok := supportedProtos[proto]
+		return ok
+	}
+	return sshutil.IsImplicitSSHTransport(remote)
+}
+
 func fromURL(url *url.URL) *GitURL {
 	withoutFragment := *url
 	withoutFragment.Fragment = ""
