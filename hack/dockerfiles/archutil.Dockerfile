@@ -4,7 +4,7 @@ ARG GO_VERSION=1.21
 ARG ALPINE_VERSION=3.19
 
 FROM debian:bullseye-slim AS base
-RUN apt-get update && apt-get --no-install-recommends install -y \
+RUN apt-get update && apt-get --no-install-recommends install -y git \
   gcc-x86-64-linux-gnu \
   binutils-arm-linux-gnueabihf \
   binutils-aarch64-linux-gnu \
@@ -91,3 +91,19 @@ EOT
 
 FROM scratch AS update
 COPY --from=generate /out /
+
+FROM base AS validate
+RUN --mount=type=bind,target=.,rw \
+    --mount=type=bind,from=generate,source=/out,target=/generated-files <<EOT
+  set -e
+  git add -A
+  if [ "$(ls -A /generated-files)" ]; then
+    cp -rf /generated-files/* ./util/archutil
+  fi
+  diff=$(git status --porcelain)
+  if [ -n "$diff" ]; then
+    echo >&2 'ERROR: The result of archutil differs. Please update with "make archutil"'
+    echo "$diff"
+    exit 1
+  fi
+EOT

@@ -70,6 +70,10 @@ validate-authors:
 validate-generated-files:
 	$(BUILDX_CMD) bake validate-generated-files
 
+.PHONY: validate-archutil
+validate-archutil:
+	$(BUILDX_CMD) bake validate-archutil
+
 .PHONY: validate-doctoc
 validate-doctoc:
 	$(BUILDX_CMD) bake validate-doctoc
@@ -79,7 +83,7 @@ validate-docs:
 	$(BUILDX_CMD) bake validate-docs
 
 .PHONY: validate-all
-validate-all: test lint validate-vendor validate-generated-files validate-doctoc validate-docs
+validate-all: test lint validate-vendor validate-generated-files validate-archutil validate-doctoc validate-docs
 
 .PHONY: vendor
 vendor:
