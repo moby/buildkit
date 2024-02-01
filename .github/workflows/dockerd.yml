@@ -7,7 +7,7 @@ on:
       version:
         description: 'Docker version'
         required: true
-        default: '23.0.1'
+        default: '25.0.2'
 
 env:
   SETUP_BUILDX_VERSION: "latest"
@@ -23,7 +23,7 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
-            const version = `${{ inputs.version }}` || '23.0.1';
+            const version = `${{ inputs.version }}` || '25.0.2';
             let build = 'true';
             try {
               new URL(version);
