@@ -93,6 +93,10 @@ vendor:
 generated-files:
 	$(BUILDX_CMD) bake generated-files
 
+.PHONY: archutil
+archutil:
+	$(BUILDX_CMD) bake archutil
+
 .PHONY: authors
 authors:
 	$(BUILDX_CMD) bake authors

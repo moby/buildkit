@@ -202,6 +202,13 @@ target "generated-files" {
   output = ["."]
 }
 
+target "archutil" {
+  inherits = ["_common"]
+  dockerfile = "./hack/dockerfiles/archutil.Dockerfile"
+  target = "update"
+  output = ["./util/archutil"]
+}
+
 target "shfmt" {
   inherits = ["_common"]
   dockerfile = "./hack/dockerfiles/shfmt.Dockerfile"

@@ -1,3 +1,8 @@
+# syntax=docker/dockerfile-upstream:master
+
+ARG GO_VERSION=1.21
+ARG ALPINE_VERSION=3.19
+
 FROM debian:bullseye-slim AS base
 RUN apt-get update && apt-get --no-install-recommends install -y \
   gcc-x86-64-linux-gnu \
@@ -11,49 +16,47 @@ RUN apt-get update && apt-get --no-install-recommends install -y \
   binutils-mips64-linux-gnuabi64
 WORKDIR /src
 
-
 FROM base AS exit-amd64
-COPY fixtures/exit.amd64.S .
+COPY util/archutil/fixtures/exit.amd64.S .
 RUN x86_64-linux-gnu-gcc -static -nostdlib -o exit exit.amd64.S
 
 FROM base AS exit-386
-COPY fixtures/exit.386.s .
+COPY util/archutil/fixtures/exit.386.s .
 RUN i686-linux-gnu-as --noexecstack -o exit.o exit.386.s && i686-linux-gnu-ld -o exit -s exit.o
 
 FROM base AS exit-arm64
-COPY fixtures/exit.arm64.s .
+COPY util/archutil/fixtures/exit.arm64.s .
 RUN aarch64-linux-gnu-as --noexecstack -o exit.o exit.arm64.s && aarch64-linux-gnu-ld -o exit -s exit.o
 
 FROM base AS exit-arm
-COPY fixtures/exit.arm.s .
+COPY util/archutil/fixtures/exit.arm.s .
 RUN arm-linux-gnueabihf-as --noexecstack -o exit.o exit.arm.s && arm-linux-gnueabihf-ld -o exit -s exit.o
 
 FROM base AS exit-riscv64
-COPY fixtures/exit.riscv64.s .
+COPY util/archutil/fixtures/exit.riscv64.s .
 RUN riscv64-linux-gnu-as --noexecstack -o exit.o exit.riscv64.s && riscv64-linux-gnu-ld -o exit -s exit.o
 
 FROM base AS exit-s390x
-COPY fixtures/exit.s390x.s .
+COPY util/archutil/fixtures/exit.s390x.s .
 RUN s390x-linux-gnu-as --noexecstack -o exit.o exit.s390x.s && s390x-linux-gnu-ld -o exit -s exit.o
 
 FROM base AS exit-ppc64
-COPY fixtures/exit.ppc64.s .
+COPY util/archutil/fixtures/exit.ppc64.s .
 RUN powerpc64le-linux-gnu-as -mbig --noexecstack -o exit.o exit.ppc64.s && powerpc64le-linux-gnu-ld -EB -o exit -s exit.o
 
 FROM base AS exit-ppc64le
-COPY fixtures/exit.ppc64le.s .
+COPY util/archutil/fixtures/exit.ppc64le.s .
 RUN powerpc64le-linux-gnu-as --noexecstack -o exit.o exit.ppc64le.s && powerpc64le-linux-gnu-ld -o exit -s exit.o
 
 FROM base AS exit-mips64le
-COPY fixtures/exit.mips64le.s .
+COPY util/archutil/fixtures/exit.mips64le.s .
 RUN mips64el-linux-gnuabi64-as --noexecstack -o exit.o exit.mips64le.s && mips64el-linux-gnuabi64-ld -o exit -s exit.o
 
 FROM base AS exit-mips64
-COPY fixtures/exit.mips64.s .
+COPY util/archutil/fixtures/exit.mips64.s .
 RUN mips64-linux-gnuabi64-as --noexecstack -o exit.o exit.mips64.s && mips64-linux-gnuabi64-ld -o exit -s exit.o
 
-FROM golang:1.21-alpine AS generate
-WORKDIR /src
+FROM scratch AS exits
 COPY --from=exit-amd64 /src/exit amd64
 COPY --from=exit-386 /src/exit 386
 COPY --from=exit-arm64 /src/exit arm64
@@ -64,10 +67,27 @@ COPY --from=exit-ppc64 /src/exit ppc64
 COPY --from=exit-ppc64le /src/exit ppc64le
 COPY --from=exit-mips64le /src/exit mips64le
 COPY --from=exit-mips64 /src/exit mips64
-COPY generate.go .
 
-RUN go run generate.go amd64 386 arm64 arm riscv64 s390x ppc64 ppc64le mips64le mips64 && ls -l
+FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS generate
+WORKDIR /go/src/github.com/moby/buildkit
+RUN --mount=type=bind,target=.,rw \
+    --mount=from=exits,target=./bin/archutil,rw <<EOT
+  set -ex
+  mkdir /out
+  go run ./util/archutil/generate.go \
+    bin/archutil/amd64 \
+    bin/archutil/386 \
+    bin/archutil/arm64 \
+    bin/archutil/arm \
+    bin/archutil/riscv64 \
+    bin/archutil/s390x \
+    bin/archutil/ppc64 \
+    bin/archutil/ppc64le \
+    bin/archutil/mips64le \
+    bin/archutil/mips64
+  tree -nh bin/archutil
+  cp bin/archutil/*_binary.go /out
+EOT
 
-
-FROM scratch
-COPY --from=generate /src/*_binary.go  /
+FROM scratch AS update
+COPY --from=generate /out /
