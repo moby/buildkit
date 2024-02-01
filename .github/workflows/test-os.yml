@@ -93,7 +93,7 @@ jobs:
       -
         name: Send to Codecov
         if: always()
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
           directory: ./bin/testreports
           env_vars: RUNNER_OS
@@ -101,15 +101,15 @@ jobs:
       -
         name: Generate annotations
         if: always()
-        uses: crazy-max/.github/.github/actions/gotest-annotations@5af0882e0496d2f7e98a53ae4048e3d86682496f
+        uses: crazy-max/.github/.github/actions/gotest-annotations@fa6141aedf23596fb8bdcceab9cce8dadaa31bd9
         with:
           directory: ./bin/testreports
       -
         name: Upload test reports
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: test-reports
+          name: test-reports-${{ matrix.os }}
           path: ./bin/testreports
       -
         name: Dump context
@@ -134,7 +134,7 @@ jobs:
             *.platform=freebsd/amd64
       -
         name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: buildkit-freebsd-amd64
           path: ${{ env.DESTDIR }}/*
@@ -154,7 +154,7 @@ jobs:
         uses: actions/checkout@v4
       -
         name: Download artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: buildkit-freebsd-amd64
           path: ${{ env.DESTDIR }}
