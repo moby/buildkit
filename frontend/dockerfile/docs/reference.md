@@ -2031,8 +2031,23 @@ ARG <name>[=<default value>]
 
 The `ARG` instruction defines a variable that users can pass at build-time to
 the builder with the `docker build` command using the `--build-arg <varname>=<value>`
-flag. If a user specifies a build argument that was not
-defined in the Dockerfile, the build outputs a warning.
+flag.
+
+> **Warning**
+>
+> It isn't recommended to use build arguments for passing secrets such as
+> user credentials, API tokens, etc. Build arguments are visible in the
+> `docker history` command and in `max` mode provenance attestations,
+> which are attached to the image by default if you use the Buildx GitHub Actions
+> and your GitHub repository is public.
+>
+> Refer to the [`RUN --mount=type=secret`](#run---mounttypesecret) section to
+> learn about secure ways to use secrets when building images.
+{ .warning }
+
+
+If you specify a build argument that wasn't defined in the Dockerfile,
+the build outputs a warning.
 
 ```console
 [Warning] One or more build-args [foo] were not consumed.
@@ -2047,16 +2062,6 @@ ARG user1
 ARG buildno
 # ...
 ```
-
-> **Warning**
->
-> It is not recommended to use build-time variables for passing secrets like
-> GitHub keys, user credentials etc. Build-time variable values are visible to
-> any user of the image with the `docker history` command.
->
-> Refer to the [`RUN --mount=type=secret`](#run---mounttypesecret) section to
-> learn about secure ways to use secrets when building images.
-{ .warning }
 
 ### Default values
 
