@@ -132,9 +132,9 @@ jobs:
           CACHE_TO: type=gha,scope=binaries-${{ env.PLATFORM_PAIR }}
       -
         name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: buildkit
+          name: buildkit-${{ env.PLATFORM_PAIR }}
           path: ${{ env.DESTDIR }}/*
           if-no-files-found: error
 
@@ -193,10 +193,11 @@ jobs:
     steps:
       -
         name: Download artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
-          name: buildkit
           path: ${{ env.DESTDIR }}
+          pattern: buildkit-*
+          merge-multiple: true
       -
         name: List artifacts
         run: |

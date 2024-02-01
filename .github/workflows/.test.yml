@@ -119,11 +119,20 @@ jobs:
         include: ${{ fromJson(needs.prepare.outputs.includes) }}
     steps:
       -
-        name: Environment variables
+        name: Prepare
         run: |
           for l in "${{ inputs.env }}"; do
             echo "${l?}" >> $GITHUB_ENV
           done
+          echo "TEST_REPORT_NAME=${{ github.job }}-$(echo "${{ matrix.pkg }}-${{ matrix.skip-integration-tests }}-${{ matrix.kind }}-${{ matrix.worker }}-${{ matrix.tags }}" | tr -dc '[:alnum:]-\n\r' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+          testFlags="${{ env.TESTFLAGS }}"
+          if [ -n "${{ matrix.tags }}" ]; then
+            testFlags="${testFlags} --tags=${{ matrix.tags }}"
+          fi
+          if [ -n "${{ matrix.worker }}" ]; then
+            testFlags="${testFlags} --run=//worker=${{ matrix.worker }}$"
+          fi
+          echo "TESTFLAGS=${testFlags}" >> $GITHUB_ENV
       -
         name: Checkout
         uses: actions/checkout@v4
@@ -144,16 +153,9 @@ jobs:
         name: Test
         continue-on-error: ${{ matrix.tags == 'nydus' }}
         run: |
-          export TEST_REPORT_SUFFIX=-${{ github.job }}-$(echo "${{ matrix.pkg }}-${{ matrix.skip-integration-tests }}-${{ matrix.kind }}-${{ matrix.worker }}-${{ matrix.tags }}" | tr -dc '[:alnum:]-\n\r' | tr '[:upper:]' '[:lower:]')
-          if [ -n "${{ matrix.tags }}" ]; then
-            TESTFLAGS="${TESTFLAGS} --tags=${{ matrix.tags }}"
-            export BUILDKITD_TAGS="${{ matrix.tags }}"
-          fi
-          if [ -n "${{ matrix.worker }}" ]; then
-            export TESTFLAGS="${TESTFLAGS} --run=//worker=${{ matrix.worker }}$"
-          fi
           ./hack/test ${{ matrix.kind }}
         env:
+          TEST_REPORT_SUFFIX: -${{ env.TEST_REPORT_NAME }}
           TEST_COVERAGE: 1
           TESTPKGS: ${{ matrix.pkg }}
           SKIP_INTEGRATION_TESTS: ${{ matrix.skip-integration-tests }}
@@ -174,7 +176,7 @@ jobs:
       -
         name: Upload test reports
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: test-reports
+          name: test-reports-${{ env.TEST_REPORT_NAME }}
           path: ./bin/testreports
