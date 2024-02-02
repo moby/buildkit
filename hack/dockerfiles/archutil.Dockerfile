@@ -2,10 +2,12 @@
 
 ARG GO_VERSION=1.21
 ARG ALPINE_VERSION=3.19
+ARG DEBIAN_VERSION=trixie
 
-FROM debian:bullseye-slim AS base
-RUN apt-get update && apt-get --no-install-recommends install -y git \
+FROM debian:${DEBIAN_VERSION}-slim AS base
+RUN apt-get update && apt-get --no-install-recommends install -y git binutils \
   gcc-x86-64-linux-gnu \
+  binutils-x86-64-linux-gnu \
   binutils-arm-linux-gnueabihf \
   binutils-aarch64-linux-gnu \
   binutils-i686-linux-gnu \
