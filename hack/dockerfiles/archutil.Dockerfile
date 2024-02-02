@@ -20,7 +20,7 @@ WORKDIR /src
 
 FROM base AS exit-amd64
 COPY util/archutil/fixtures/exit.amd64.S .
-RUN x86_64-linux-gnu-gcc -static -nostdlib -o exit exit.amd64.S
+RUN x86_64-linux-gnu-gcc -static -nostdlib -Wa,--noexecstack -o exit exit.amd64.S
 
 FROM base AS exit-386
 COPY util/archutil/fixtures/exit.386.s .
