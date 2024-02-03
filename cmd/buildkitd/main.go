@@ -316,6 +316,13 @@ func main() {
 			os.RemoveAll(lockPath)
 		}()
 
+		// listeners have to be initialized before the controller
+		// https://github.com/moby/buildkit/issues/4618
+		listeners, err := newGRPCListeners(cfg.GRPC)
+		if err != nil {
+			return err
+		}
+
 		controller, err := newController(c, &cfg)
 		if err != nil {
 			return err
@@ -347,7 +354,7 @@ func main() {
 		}
 
 		errCh := make(chan error, 1)
-		if err := serveGRPC(cfg.GRPC, server, errCh); err != nil {
+		if err := serveGRPC(server, listeners, errCh); err != nil {
 			return err
 		}
 
@@ -381,16 +388,15 @@ func main() {
 	}
 }
 
-func serveGRPC(cfg config.GRPCConfig, server *grpc.Server, errCh chan error) error {
+func newGRPCListeners(cfg config.GRPCConfig) ([]net.Listener, error) {
 	addrs := cfg.Address
 	if len(addrs) == 0 {
-		return errors.New("--addr cannot be empty")
+		return nil, errors.New("--addr cannot be empty")
 	}
 	tlsConfig, err := serverCredentials(cfg.TLS)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	eg, _ := errgroup.WithContext(context.Background())
 	listeners := make([]net.Listener, 0, len(addrs))
 	for _, addr := range addrs {
 		l, err := getListener(addr, *cfg.UID, *cfg.GID, tlsConfig)
@@ -398,15 +404,19 @@ func serveGRPC(cfg config.GRPCConfig, server *grpc.Server, errCh chan error) err
 			for _, l := range listeners {
 				l.Close()
 			}
-			return err
+			return listeners, err
 		}
 		listeners = append(listeners, l)
 	}
+	return listeners, nil
+}
 
+func serveGRPC(server *grpc.Server, listeners []net.Listener, errCh chan error) error {
 	if os.Getenv("NOTIFY_SOCKET") != "" {
 		notified, notifyErr := sddaemon.SdNotify(false, sddaemon.SdNotifyReady)
 		bklog.L.Debugf("SdNotifyReady notified=%v, err=%v", notified, notifyErr)
 	}
+	eg, _ := errgroup.WithContext(context.Background())
 	for _, l := range listeners {
 		func(l net.Listener) {
 			eg.Go(func() error {
