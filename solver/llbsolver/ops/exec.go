@@ -324,10 +324,21 @@ func (e *ExecOp) getMountDeps() ([]dep, error) {
 			contentBasedCache = true
 		}
 
-		if m.Dest == pb.RootMount {
-			// we explicitly choose to not implement it on the root mount,
-			// since this is likely very expensive (and not incredibly useful)
+		// Now apply the user-specified option.
+		switch m.ContentCache {
+		case pb.MountContentCache_OFF:
 			contentBasedCache = false
+		case pb.MountContentCache_ON:
+			if !contentBasedCache {
+				// If we can't enable cache for safety, then force-enabling it is invalid
+				return nil, errors.Errorf("invalid mount cache content %v", m)
+			}
+		case pb.MountContentCache_DEFAULT:
+			if m.Dest == pb.RootMount {
+				// we explicitly choose to not implement it on the root mount,
+				// since this is likely very expensive (and not incredibly useful)
+				contentBasedCache = false
+			}
 		}
 
 		deps[m.Input].ContentBasedHash = contentBasedCache
