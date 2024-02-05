@@ -318,6 +318,10 @@ func (e *ExecOp) getMountDeps() ([]dep, error) {
 			// if the mount is read-only, then it's also safe, since it can't
 			// be modified by the operation
 			contentBasedCache = true
+		} else if sel == pb.RootMount {
+			// if the mount mounts the entire source, then it's also safe,
+			// since there are no unselected "sneaky" files
+			contentBasedCache = true
 		}
 
 		if m.Dest == pb.RootMount {
