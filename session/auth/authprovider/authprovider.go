@@ -127,19 +127,19 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 					if err != nil {
 						return nil, err
 					}
-					return toTokenResponse(resp.Token, resp.IssuedAt, resp.ExpiresIn), nil
+					return toTokenResponse(resp.Token, resp.IssuedAt, resp.ExpiresInSeconds), nil
 				}
 			}
 			return nil, err
 		}
-		return toTokenResponse(resp.AccessToken, resp.IssuedAt, resp.ExpiresIn), nil
+		return toTokenResponse(resp.AccessToken, resp.IssuedAt, resp.ExpiresInSeconds), nil
 	}
 	// do request anonymously
 	resp, err := authutil.FetchToken(ctx, httpClient, nil, to)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch anonymous token")
 	}
-	return toTokenResponse(resp.Token, resp.IssuedAt, resp.ExpiresIn), nil
+	return toTokenResponse(resp.Token, resp.IssuedAt, resp.ExpiresInSeconds), nil
 }
 
 func (ap *authProvider) tlsConfig(host string) (*tls.Config, error) {

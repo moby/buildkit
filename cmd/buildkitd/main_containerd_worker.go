@@ -17,7 +17,7 @@ import (
 	"github.com/containerd/containerd/v2/defaults"
 	runtimeoptions "github.com/containerd/containerd/v2/pkg/runtimeoptions/v1"
 	"github.com/containerd/containerd/v2/pkg/userns"
-	"github.com/containerd/plugin"
+	"github.com/containerd/containerd/v2/plugins"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/network/cniprovider"
@@ -122,7 +122,7 @@ func init() {
 		cli.StringFlag{
 			Name:  "containerd-worker-snapshotter",
 			Usage: "snapshotter name to use",
-			Value: ctd.DefaultSnapshotter,
+			Value: defaults.DefaultSnapshotter,
 		},
 		cli.StringFlag{
 			Name:  "containerd-worker-apparmor-profile",
@@ -304,7 +304,7 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 		parallelismSem = semaphore.NewWeighted(int64(cfg.MaxParallelism))
 	}
 
-	snapshotter := ctd.DefaultSnapshotter
+	snapshotter := defaults.DefaultSnapshotter
 	if cfg.Snapshotter != "" {
 		snapshotter = cfg.Snapshotter
 	}
@@ -377,7 +377,7 @@ func validContainerdSocket(cfg config.ContainerdConfig) bool {
 // getRuntimeOptionsType gets empty runtime options by the runtime type name.
 func getRuntimeOptionsType(t string) interface{} {
 	switch t {
-	case plugin.RuntimeRuncV2:
+	case plugins.RuntimeRuncV2:
 		return &runcoptions.Options{}
 	case runtimeRunhcsV1:
 		return &runhcsoptions.Options{}

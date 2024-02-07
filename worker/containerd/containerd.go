@@ -43,7 +43,7 @@ func NewWorkerOpt(
 	parallelismSem *semaphore.Weighted,
 	traceSocket string,
 	runtime *RuntimeInfo,
-	opts ...containerd.ClientOpt,
+	opts ...containerd.Opt,
 ) (base.WorkerOpt, error) {
 	opts = append(opts, containerd.WithDefaultNamespace(ns))
 
