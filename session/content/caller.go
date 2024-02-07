@@ -3,9 +3,9 @@ package content
 import (
 	"context"
 
-	api "github.com/containerd/containerd/api/services/content/v1"
-	"github.com/containerd/containerd/content"
-	"github.com/containerd/containerd/content/proxy"
+	api "github.com/containerd/containerd/v2/api/services/content/v1"
+	"github.com/containerd/containerd/v2/core/content"
+	"github.com/containerd/containerd/v2/core/content/proxy"
 	"github.com/moby/buildkit/session"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"

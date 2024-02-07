@@ -9,9 +9,9 @@ import (
 )
 
 func init() {
-	initFlagNames[CAP_XTIMES] = "XTIMES"
-	initFlagNames[CAP_VOL_RENAME] = "VOL_RENAME"
-	initFlagNames[CAP_CASE_INSENSITIVE] = "CASE_INSENSITIVE"
+	initFlagNames.set(CAP_XTIMES, "XTIMES")
+	initFlagNames.set(CAP_VOL_RENAME, "VOL_RENAME")
+	initFlagNames.set(CAP_CASE_INSENSITIVE, "CASE_INSENSITIVE")
 }
 
 func (a *Attr) string() string {

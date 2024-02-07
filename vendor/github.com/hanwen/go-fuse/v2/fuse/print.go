@@ -12,14 +12,14 @@ import (
 )
 
 var (
-	writeFlagNames = map[int64]string{
+	writeFlagNames = newFlagNames(map[int64]string{
 		WRITE_CACHE:     "CACHE",
 		WRITE_LOCKOWNER: "LOCKOWNER",
-	}
-	readFlagNames = map[int64]string{
+	})
+	readFlagNames = newFlagNames(map[int64]string{
 		READ_LOCKOWNER: "LOCKOWNER",
-	}
-	initFlagNames = map[int64]string{
+	})
+	initFlagNames = newFlagNames(map[int64]string{
 		CAP_ASYNC_READ:          "ASYNC_READ",
 		CAP_POSIX_LOCKS:         "POSIX_LOCKS",
 		CAP_FILE_OPS:            "FILE_OPS",
@@ -46,52 +46,109 @@ var (
 		CAP_CACHE_SYMLINKS:      "CACHE_SYMLINKS",
 		CAP_NO_OPENDIR_SUPPORT:  "NO_OPENDIR_SUPPORT",
 		CAP_EXPLICIT_INVAL_DATA: "EXPLICIT_INVAL_DATA",
-	}
-	releaseFlagNames = map[int64]string{
+		CAP_MAP_ALIGNMENT:       "MAP_ALIGNMENT",
+		CAP_SUBMOUNTS:           "SUBMOUNTS",
+		CAP_HANDLE_KILLPRIV_V2:  "HANDLE_KILLPRIV_V2",
+		CAP_SETXATTR_EXT:        "SETXATTR_EXT",
+		CAP_INIT_EXT:            "INIT_EXT",
+		CAP_INIT_RESERVED:       "INIT_RESERVED",
+		CAP_SECURITY_CTX:        "SECURITY_CTX",
+		CAP_HAS_INODE_DAX:       "HAS_INODE_DAX",
+		CAP_CREATE_SUPP_GROUP:   "CREATE_SUPP_GROUP",
+		CAP_HAS_EXPIRE_ONLY:     "HAS_EXPIRE_ONLY",
+		CAP_DIRECT_IO_RELAX:     "DIRECT_IO_RELAX",
+	})
+	releaseFlagNames = newFlagNames(map[int64]string{
 		RELEASE_FLUSH: "FLUSH",
-	}
-	openFlagNames = map[int64]string{
-		int64(os.O_WRONLY):        "WRONLY",
-		int64(os.O_RDWR):          "RDWR",
-		int64(os.O_APPEND):        "APPEND",
-		int64(syscall.O_ASYNC):    "ASYNC",
-		int64(os.O_CREATE):        "CREAT",
-		int64(os.O_EXCL):          "EXCL",
-		int64(syscall.O_NOCTTY):   "NOCTTY",
-		int64(syscall.O_NONBLOCK): "NONBLOCK",
-		int64(os.O_SYNC):          "SYNC",
-		int64(os.O_TRUNC):         "TRUNC",
-
+	})
+	openFlagNames = newFlagNames(map[int64]string{
+		int64(os.O_WRONLY):         "WRONLY",
+		int64(os.O_RDWR):           "RDWR",
+		int64(os.O_APPEND):         "APPEND",
+		int64(syscall.O_ASYNC):     "ASYNC",
+		int64(os.O_CREATE):         "CREAT",
+		int64(os.O_EXCL):           "EXCL",
+		int64(syscall.O_NOCTTY):    "NOCTTY",
+		int64(syscall.O_NONBLOCK):  "NONBLOCK",
+		int64(os.O_SYNC):           "SYNC",
+		int64(os.O_TRUNC):          "TRUNC",
+		0x8000:                     "LARGEFILE",
 		int64(syscall.O_CLOEXEC):   "CLOEXEC",
 		int64(syscall.O_DIRECTORY): "DIRECTORY",
-	}
-	fuseOpenFlagNames = map[int64]string{
+	})
+	fuseOpenFlagNames = newFlagNames(map[int64]string{
 		FOPEN_DIRECT_IO:   "DIRECT",
 		FOPEN_KEEP_CACHE:  "CACHE",
 		FOPEN_NONSEEKABLE: "NONSEEK",
 		FOPEN_CACHE_DIR:   "CACHE_DIR",
 		FOPEN_STREAM:      "STREAM",
-	}
-	accessFlagName = map[int64]string{
+	})
+	accessFlagName = newFlagNames(map[int64]string{
 		X_OK: "x",
 		W_OK: "w",
 		R_OK: "r",
-	}
+	})
+	getAttrFlagNames = newFlagNames(map[int64]string{
+		FUSE_GETATTR_FH: "FH",
+	})
 )
 
-func flagString(names map[int64]string, fl int64, def string) string {
-	s := []string{}
-	for k, v := range names {
-		if fl&k != 0 {
-			s = append(s, v)
-			fl ^= k
+// flagNames associate flag bits to their names.
+type flagNames [64]flagNameEntry
+
+// flagNameEntry describes one flag value.
+//
+// Usually a flag constitues only one bit, but, for example at least O_SYNC and
+// O_TMPFILE are represented by a value with two bits set. To handle such
+// situations we map all bits of a flag to the same flagNameEntry.
+type flagNameEntry struct {
+	bits int64
+	name string
+}
+
+// newFlagNames creates flagNames from flag->name map.
+func newFlagNames(names map[int64]string) *flagNames {
+	var v flagNames
+	for flag, name := range names {
+		v.set(flag, name)
+	}
+	return &v
+}
+
+// set associates flag value with name.
+func (names *flagNames) set(flag int64, name string) {
+	entry := flagNameEntry{bits: flag, name: name}
+	for i := 0; i < 64; i++ {
+		if flag&(1<<i) != 0 {
+			if ie := names[i]; ie.bits != 0 {
+				panic(fmt.Sprintf("%s (%x) overlaps with %s (%x)", name, flag, ie.name, ie.bits))
+			}
+			names[i] = entry
 		}
 	}
-	if len(s) == 0 && def != "" {
-		s = []string{def}
+}
+
+func flagString(names *flagNames, fl int64, def string) string {
+	s := []string{}
+	// emit flags in their numeric order
+	for i := range names {
+		entry := &names[i]
+		if entry.bits == 0 {
+			continue
+		}
+		if fl&entry.bits == entry.bits {
+			s = append(s, entry.name)
+			fl ^= entry.bits
+			if fl == 0 {
+				break
+			}
+		}
 	}
 	if fl != 0 {
 		s = append(s, fmt.Sprintf("0x%x", fl))
+	}
+	if len(s) == 0 && def != "" {
+		return def
 	}
 
 	return strings.Join(s, ",")
@@ -163,7 +220,7 @@ func (in *OpenOut) string() string {
 func (in *InitIn) string() string {
 	return fmt.Sprintf("{%d.%d Ra %d %s}",
 		in.Major, in.Minor, in.MaxReadAhead,
-		flagString(initFlagNames, int64(in.Flags), ""))
+		flagString(initFlagNames, int64(in.Flags)|(int64(in.Flags2)<<32), ""))
 }
 
 func (o *InitOut) string() string {
@@ -209,7 +266,7 @@ func (o *AttrOut) string() string {
 
 // ft converts (seconds , nanoseconds) -> float(seconds)
 func ft(tsec uint64, tnsec uint32) float64 {
-	return float64(tsec) + float64(tnsec)*1E-9
+	return float64(tsec) + float64(tnsec)*1e-9
 }
 
 // Returned by LOOKUP

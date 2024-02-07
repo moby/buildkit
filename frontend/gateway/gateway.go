@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/containerd/containerd/mount"
+	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/distribution/reference"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/gogo/googleapis/google/rpc"

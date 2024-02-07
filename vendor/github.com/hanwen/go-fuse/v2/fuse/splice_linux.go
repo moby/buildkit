@@ -19,12 +19,12 @@ func (s *Server) setSplice() {
 //
 // This is a four-step process:
 //
-//	1) Splice data form fdData.Fd into the "pair1" pipe buffer --> pair1: [payload]
-//	   Now we know the actual payload length and can
+//  1. Splice data form fdData.Fd into the "pair1" pipe buffer --> pair1: [payload]
+//     Now we know the actual payload length and can
 //     construct the reply header
-//	2) Write header into the "pair2" pipe buffer               --> pair2: [header]
-//	4) Splice data from "pair1" into "pair2"                   --> pair2: [header][payload]
-//	3) Splice the data from "pair2" into /dev/fuse
+//  2. Write header into the "pair2" pipe buffer               --> pair2: [header]
+//  4. Splice data from "pair1" into "pair2"                   --> pair2: [header][payload]
+//  3. Splice the data from "pair2" into /dev/fuse
 //
 // This dance is neccessary because header and payload cannot be split across
 // two splices and we cannot seek in a pipe buffer.

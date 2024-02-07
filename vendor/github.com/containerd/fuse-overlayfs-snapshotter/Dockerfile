@@ -12,13 +12,12 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-ARG FUSEOVERLAYFS_COMMIT=master
-ARG ROOTLESSKIT_COMMIT=v0.14.0
-ARG SHADOW_COMMIT=4.8.1
+ARG FUSEOVERLAYFS_COMMIT=main
+ARG ROOTLESSKIT_COMMIT=v1.1.0
 
-ARG GO_VERSION=1.16
-ARG DEBIAN_VERSION=10
-ARG ALPINE_VERSION=3.13
+ARG GO_VERSION=1.20
+ARG DEBIAN_VERSION=11
+ARG ALPINE_VERSION=3.18
 
 FROM golang:${GO_VERSION}-alpine AS containerd-fuse-overlayfs-test
 COPY . /go/src/github.com/containerd/fuse-overlayfs-snapshotter
@@ -49,22 +48,11 @@ RUN git pull && git checkout ${ROOTLESSKIT_COMMIT}
 ENV CGO_ENABLED=0
 RUN mkdir /out && go build -o /out/rootlesskit github.com/rootless-containers/rootlesskit/cmd/rootlesskit 
 
-FROM alpine:${ALPINE_VERSION} AS idmap
-RUN apk add --no-cache autoconf automake build-base byacc gettext gettext-dev gcc git libcap-dev libtool libxslt
-RUN git clone https://github.com/shadow-maint/shadow.git
-WORKDIR shadow
-ARG SHADOW_COMMIT
-RUN git pull && git checkout ${SHADOW_COMMIT}
-RUN ./autogen.sh --disable-nls --disable-man --without-audit --without-selinux --without-acl --without-attr --without-tcb --without-nscd && \
-   make && mkdir -p /out && cp src/newuidmap src/newgidmap /out
-
 FROM alpine:${ALPINE_VERSION}
 COPY --from=containerd-fuse-overlayfs-test /out/containerd-fuse-overlayfs.test /usr/local/bin
 COPY --from=rootlesskit /out/rootlesskit /usr/local/bin
 COPY --from=fuse-overlayfs /out/fuse-overlayfs /usr/local/bin
-COPY --from=idmap /out/newuidmap /usr/bin/newuidmap
-COPY --from=idmap /out/newgidmap /usr/bin/newgidmap
-RUN apk add --no-cache fuse3 libcap && \
+RUN apk add --no-cache fuse3 libcap shadow-uidmap && \
     setcap CAP_SETUID=ep /usr/bin/newuidmap && \
     setcap CAP_SETGID=ep /usr/bin/newgidmap && \
     adduser -D -u 1000 testuser && \

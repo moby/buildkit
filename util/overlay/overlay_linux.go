@@ -15,8 +15,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/containerd/containerd/archive"
-	"github.com/containerd/containerd/mount"
+	"github.com/containerd/containerd/v2/core/mount"
+	"github.com/containerd/containerd/v2/pkg/archive"
 	"github.com/containerd/continuity/devices"
 	"github.com/containerd/continuity/fs"
 	"github.com/containerd/continuity/sysx"

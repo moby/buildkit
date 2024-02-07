@@ -1,3 +1,4 @@
+//go:build darwin
 // +build darwin
 
 // Copyright 2019 the Go-FUSE Authors. All rights reserved.
@@ -16,17 +17,25 @@ import (
 	"github.com/hanwen/go-fuse/v2/internal/utimens"
 )
 
+var _ = (NodeGetxattrer)((*LoopbackNode)(nil))
+
 func (n *LoopbackNode) Getxattr(ctx context.Context, attr string, dest []byte) (uint32, syscall.Errno) {
 	return 0, syscall.ENOSYS
 }
+
+var _ = (NodeSetxattrer)((*LoopbackNode)(nil))
 
 func (n *LoopbackNode) Setxattr(ctx context.Context, attr string, data []byte, flags uint32) syscall.Errno {
 	return syscall.ENOSYS
 }
 
+var _ = (NodeRemovexattrer)((*LoopbackNode)(nil))
+
 func (n *LoopbackNode) Removexattr(ctx context.Context, attr string) syscall.Errno {
 	return syscall.ENOSYS
 }
+
+var _ = (NodeListxattrer)((*LoopbackNode)(nil))
 
 func (n *LoopbackNode) Listxattr(ctx context.Context, dest []byte) (uint32, syscall.Errno) {
 	return 0, syscall.ENOSYS
@@ -110,6 +119,8 @@ func (f *loopbackFile) utimens(a *time.Time, m *time.Time) syscall.Errno {
 	err := syscall.Futimes(int(f.fd), tv)
 	return ToErrno(err)
 }
+
+var _ = (NodeCopyFileRanger)((*LoopbackNode)(nil))
 
 func (n *LoopbackNode) CopyFileRange(ctx context.Context, fhIn FileHandle,
 	offIn uint64, out *Inode, fhOut FileHandle, offOut uint64,

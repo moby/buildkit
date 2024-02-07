@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	contentapi "github.com/containerd/containerd/api/services/content/v1"
-	"github.com/containerd/containerd/defaults"
+	contentapi "github.com/containerd/containerd/v2/api/services/content/v1"
+	"github.com/containerd/containerd/v2/defaults"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/connhelper"
 	"github.com/moby/buildkit/session"

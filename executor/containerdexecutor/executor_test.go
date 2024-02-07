@@ -3,7 +3,7 @@ package containerdexecutor
 import (
 	"testing"
 
-	"github.com/containerd/containerd"
+	containerd "github.com/containerd/containerd/v2/client"
 	gatewayapi "github.com/moby/buildkit/frontend/gateway/pb"
 )
 
