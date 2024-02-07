@@ -109,6 +109,7 @@ message Mount {
 	SecretOpt secretOpt = 21;
 	SSHOpt SSHOpt = 22;
 	string resultID = 23;
+	MountContentCache contentCache = 24;
 }
 
 // MountType defines a type of a mount from a supported set
@@ -118,6 +119,13 @@ enum MountType {
 	SSH = 2;
 	CACHE = 3;
 	TMPFS = 4;
+}
+
+// MountContentCache ...
+enum MountContentCache {
+	DEFAULT = 0;
+	ON = 1;
+	OFF = 2;
 }
 
 // TmpfsOpt defines options describing tpmfs mounts

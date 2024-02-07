@@ -212,7 +212,7 @@ func (e *ExecOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 			}
 			cm.Deps[i].Selector = digest.FromBytes(bytes.Join(dgsts, []byte{0}))
 		}
-		if !dep.NoContentBasedHash {
+		if dep.ContentBasedHash {
 			cm.Deps[i].ComputeDigestFunc = opsutils.NewContentHashFunc(toSelectors(dedupePaths(dep.Selectors)))
 		}
 		cm.Deps[i].PreprocessFunc = unlazyResultFunc
@@ -275,8 +275,11 @@ func toSelectors(p []string) []opsutils.Selector {
 }
 
 type dep struct {
-	Selectors          []string
-	NoContentBasedHash bool
+	Selectors []string
+
+	// ContentBasedHash enables content-based caching. This is used to ensure
+	// that all caching is done safely and efficiently.
+	ContentBasedHash bool
 }
 
 func (e *ExecOp) getMountDeps() ([]dep, error) {
@@ -292,9 +295,53 @@ func (e *ExecOp) getMountDeps() ([]dep, error) {
 		sel := path.Join("/", m.Selector)
 		deps[m.Input].Selectors = append(deps[m.Input].Selectors, sel)
 
-		if (!m.Readonly || m.Dest == pb.RootMount) && m.Output != -1 { // exclude read-only rootfs && read-write mounts
-			deps[m.Input].NoContentBasedHash = true
+		// Assume that we *cannot* perform content-based caching, and then
+		// enable it selectively only for cases where we want to
+		contentBasedCache := false
+
+		// Allow content-based cached where safe - these are enforced to avoid
+		// the following case:
+		// - A "snapshot" contains "foo/a.txt" and "bar/b.txt"
+		// - "RUN --mount from=snapshot,src=bar touch bar/c.txt" creates a new
+		//   file in bar
+		// - If we run again, but this time "snapshot" contains a new
+		//   "foo/sneaky.txt", the content-based cache matches the previous
+		//   run, since we only select "bar"
+		// - But this cached result is incorrect - "foo/sneaky.txt" isn't in
+		//   our cached result, but it is in our input.
+		if m.Output == pb.SkipOutput {
+			// if the mount has no outputs, it's safe to enable content-based
+			// caching, since it's guaranteed to not be used as an input for
+			// any future steps
+			contentBasedCache = true
+		} else if m.Readonly {
+			// if the mount is read-only, then it's also safe, since it can't
+			// be modified by the operation
+			contentBasedCache = true
+		} else if sel == pb.RootMount {
+			// if the mount mounts the entire source, then it's also safe,
+			// since there are no unselected "sneaky" files
+			contentBasedCache = true
 		}
+
+		// Now apply the user-specified option.
+		switch m.ContentCache {
+		case pb.MountContentCache_OFF:
+			contentBasedCache = false
+		case pb.MountContentCache_ON:
+			if !contentBasedCache {
+				// If we can't enable cache for safety, then force-enabling it is invalid
+				return nil, errors.Errorf("invalid mount cache content %v", m)
+			}
+		case pb.MountContentCache_DEFAULT:
+			if m.Dest == pb.RootMount {
+				// we explicitly choose to not implement it on the root mount,
+				// since this is likely very expensive (and not incredibly useful)
+				contentBasedCache = false
+			}
+		}
+
+		deps[m.Input].ContentBasedHash = contentBasedCache
 	}
 	return deps, nil
 }
