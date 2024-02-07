@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 // Copyright 2019 the Go-FUSE Authors. All rights reserved.
@@ -14,20 +15,28 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+var _ = (NodeGetxattrer)((*LoopbackNode)(nil))
+
 func (n *LoopbackNode) Getxattr(ctx context.Context, attr string, dest []byte) (uint32, syscall.Errno) {
 	sz, err := unix.Lgetxattr(n.path(), attr, dest)
 	return uint32(sz), ToErrno(err)
 }
+
+var _ = (NodeSetxattrer)((*LoopbackNode)(nil))
 
 func (n *LoopbackNode) Setxattr(ctx context.Context, attr string, data []byte, flags uint32) syscall.Errno {
 	err := unix.Lsetxattr(n.path(), attr, data, int(flags))
 	return ToErrno(err)
 }
 
+var _ = (NodeRemovexattrer)((*LoopbackNode)(nil))
+
 func (n *LoopbackNode) Removexattr(ctx context.Context, attr string) syscall.Errno {
 	err := unix.Lremovexattr(n.path(), attr)
 	return ToErrno(err)
 }
+
+var _ = (NodeListxattrer)((*LoopbackNode)(nil))
 
 func (n *LoopbackNode) Listxattr(ctx context.Context, dest []byte) (uint32, syscall.Errno) {
 	sz, err := unix.Llistxattr(n.path(), dest)
@@ -68,6 +77,8 @@ func (n *LoopbackNode) renameExchange(name string, newparent InodeEmbedder, newN
 
 	return ToErrno(unix.Renameat2(fd1, name, fd2, newName, unix.RENAME_EXCHANGE))
 }
+
+var _ = (NodeCopyFileRanger)((*LoopbackNode)(nil))
 
 func (n *LoopbackNode) CopyFileRange(ctx context.Context, fhIn FileHandle,
 	offIn uint64, out *Inode, fhOut FileHandle, offOut uint64,

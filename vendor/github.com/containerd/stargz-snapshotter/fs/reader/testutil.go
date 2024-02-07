@@ -38,7 +38,6 @@ import (
 	"github.com/containerd/stargz-snapshotter/cache"
 	"github.com/containerd/stargz-snapshotter/estargz"
 	"github.com/containerd/stargz-snapshotter/metadata"
-	"github.com/containerd/stargz-snapshotter/util/testutil"
 	tutil "github.com/containerd/stargz-snapshotter/util/testutil"
 	"github.com/klauspost/compress/zstd"
 	digest "github.com/opencontainers/go-digest"
@@ -222,9 +221,9 @@ func (er *exceptFile) ChunkEntryForOffset(offset int64) (off int64, size int64, 
 
 func makeFile(t *testing.T, contents []byte, chunkSize int, factory metadata.Store, comp tutil.Compression) (*file, func() error) {
 	testName := "test"
-	sr, dgst, err := testutil.BuildEStargz([]testutil.TarEntry{
-		testutil.File(testName, string(contents)),
-	}, testutil.WithEStargzOptions(estargz.WithChunkSize(chunkSize), estargz.WithCompression(comp)))
+	sr, dgst, err := tutil.BuildEStargz([]tutil.TarEntry{
+		tutil.File(testName, string(contents)),
+	}, tutil.WithEStargzOptions(estargz.WithChunkSize(chunkSize), estargz.WithCompression(comp)))
 	if err != nil {
 		t.Fatalf("failed to build sample estargz")
 	}
@@ -269,10 +268,10 @@ func testCacheVerify(t *testing.T, factory metadata.Store) {
 					name := fmt.Sprintf("test_cache_verify_%v_%v_%v_%v",
 						skipVerify, invalidChunkBeforeVerify, invalidChunkAfterVerify, srcCompressionName)
 					t.Run(name, func(t *testing.T) {
-						sr, tocDgst, err := testutil.BuildEStargz([]testutil.TarEntry{
-							testutil.File("a", sampleData1+"a"),
-							testutil.File("b", sampleData1+"b"),
-						}, testutil.WithEStargzOptions(estargz.WithChunkSize(sampleChunkSize), estargz.WithCompression(srcCompression)))
+						sr, tocDgst, err := tutil.BuildEStargz([]tutil.TarEntry{
+							tutil.File("a", sampleData1+"a"),
+							tutil.File("b", sampleData1+"b"),
+						}, tutil.WithEStargzOptions(estargz.WithChunkSize(sampleChunkSize), estargz.WithCompression(srcCompression)))
 						if err != nil {
 							t.Fatalf("failed to build sample estargz")
 						}
@@ -304,10 +303,8 @@ func testCacheVerify(t *testing.T, factory metadata.Store) {
 						if err != nil {
 							t.Fatalf("failed to make new reader: %v", err)
 						}
-						if verifier != nil {
-							vr.verifier = verifier.verifier
-							vr.r.verifier = verifier.verifier
-						}
+						vr.verifier = verifier.verifier
+						vr.r.verifier = verifier.verifier
 
 						off2id, id2path, err := prepareMap(vr.Metadata(), vr.Metadata().RootID(), "")
 						if err != nil || off2id == nil || id2path == nil {
@@ -487,9 +484,9 @@ func testFailReader(t *testing.T, factory metadata.Store) {
 		t.Run(fmt.Sprintf("%v", srcCompressionName), func(t *testing.T) {
 			for _, rs := range []bool{true, false} {
 				for _, vs := range []bool{true, false} {
-					stargzFile, tocDigest, err := testutil.BuildEStargz([]testutil.TarEntry{
-						testutil.File(testFileName, sampleData1),
-					}, testutil.WithEStargzOptions(estargz.WithChunkSize(sampleChunkSize), estargz.WithCompression(srcCompression)))
+					stargzFile, tocDigest, err := tutil.BuildEStargz([]tutil.TarEntry{
+						tutil.File(testFileName, sampleData1),
+					}, tutil.WithEStargzOptions(estargz.WithChunkSize(sampleChunkSize), estargz.WithCompression(srcCompression)))
 					if err != nil {
 						t.Fatalf("failed to build sample estargz")
 					}

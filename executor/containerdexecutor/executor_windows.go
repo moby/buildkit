@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/containerd/containerd"
-	containerdoci "github.com/containerd/containerd/oci"
+	containerd "github.com/containerd/containerd/v2/client"
+	containerdoci "github.com/containerd/containerd/v2/pkg/oci"
 	"github.com/containerd/continuity/fs"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/executor"

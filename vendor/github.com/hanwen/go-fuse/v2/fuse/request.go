@@ -181,7 +181,12 @@ func (r *request) parse() {
 		return
 	}
 
-	if len(r.arg) < int(r.handler.InputSize) {
+	inSz := int(r.handler.InputSize)
+	if r.inHeader.Opcode == _OP_INIT && inSz > len(r.arg) {
+		// Minor version 36 extended the size of InitIn struct
+		inSz = len(r.arg)
+	}
+	if len(r.arg) < inSz {
 		log.Printf("Short read for %v: %v", operationName(r.inHeader.Opcode), r.arg)
 		r.status = EIO
 		return
@@ -189,7 +194,7 @@ func (r *request) parse() {
 
 	if r.handler.InputSize > 0 {
 		r.inData = unsafe.Pointer(&r.arg[0])
-		r.arg = r.arg[r.handler.InputSize:]
+		r.arg = r.arg[inSz:]
 	} else {
 		r.arg = r.arg[unsafe.Sizeof(InHeader{}):]
 	}

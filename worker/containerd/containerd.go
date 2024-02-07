@@ -8,11 +8,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/containerd/containerd"
-	"github.com/containerd/containerd/gc"
-	"github.com/containerd/containerd/leases"
-	"github.com/containerd/containerd/platforms"
-	ptypes "github.com/containerd/containerd/protobuf/types"
+	containerd "github.com/containerd/containerd/v2/client"
+	"github.com/containerd/containerd/v2/core/leases"
+	"github.com/containerd/containerd/v2/pkg/gc"
+	ptypes "github.com/containerd/containerd/v2/protobuf/types"
+	"github.com/containerd/platforms"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/executor/containerdexecutor"
@@ -43,7 +43,7 @@ func NewWorkerOpt(
 	parallelismSem *semaphore.Weighted,
 	traceSocket string,
 	runtime *RuntimeInfo,
-	opts ...containerd.ClientOpt,
+	opts ...containerd.Opt,
 ) (base.WorkerOpt, error) {
 	opts = append(opts, containerd.WithDefaultNamespace(ns))
 

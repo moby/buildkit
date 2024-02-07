@@ -10,10 +10,8 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"reflect"
 	"syscall"
 	"time"
-	"unsafe"
 )
 
 func (code Status) String() string {
@@ -63,15 +61,6 @@ func ToStatus(err error) Status {
 	}
 	log.Println("can't convert error type:", err)
 	return ENOSYS
-}
-
-func toSlice(dest *[]byte, ptr unsafe.Pointer, byteCount uintptr) {
-	h := (*reflect.SliceHeader)(unsafe.Pointer(dest))
-	*h = reflect.SliceHeader{
-		Data: uintptr(ptr),
-		Len:  int(byteCount),
-		Cap:  int(byteCount),
-	}
 }
 
 func CurrentOwner() *Owner {

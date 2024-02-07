@@ -13,8 +13,9 @@ import (
 )
 
 type loopbackDirStream struct {
-	buf  []byte
-	todo []byte
+	buf       []byte
+	todo      []byte
+	todoErrno syscall.Errno
 
 	// Protects fd so we can guard against double close
 	mu sync.Mutex
@@ -52,7 +53,7 @@ func (ds *loopbackDirStream) Close() {
 func (ds *loopbackDirStream) HasNext() bool {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
-	return len(ds.todo) > 0
+	return len(ds.todo) > 0 || ds.todoErrno != 0
 }
 
 // Like syscall.Dirent, but without the [256]byte name.
@@ -67,6 +68,10 @@ type dirent struct {
 func (ds *loopbackDirStream) Next() (fuse.DirEntry, syscall.Errno) {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
+
+	if ds.todoErrno != 0 {
+		return fuse.DirEntry{}, ds.todoErrno
+	}
 
 	// We can't use syscall.Dirent here, because it declares a
 	// [256]byte name, which may run beyond the end of ds.todo.
@@ -99,9 +104,10 @@ func (ds *loopbackDirStream) load() syscall.Errno {
 	}
 
 	n, err := syscall.Getdents(ds.fd, ds.buf)
-	if err != nil {
-		return ToErrno(err)
+	if n < 0 {
+		n = 0
 	}
 	ds.todo = ds.buf[:n]
+	ds.todoErrno = ToErrno(err)
 	return OK
 }

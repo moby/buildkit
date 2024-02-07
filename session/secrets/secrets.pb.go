@@ -218,7 +218,7 @@ func (this *GetSecretRequest) GoString() string {
 	s = append(s, "&secrets.GetSecretRequest{")
 	s = append(s, "ID: "+fmt.Sprintf("%#v", this.ID)+",\n")
 	keysForAnnotations := make([]string, 0, len(this.Annotations))
-	for k, _ := range this.Annotations {
+	for k := range this.Annotations {
 		keysForAnnotations = append(keysForAnnotations, k)
 	}
 	github_com_gogo_protobuf_sortkeys.Strings(keysForAnnotations)
@@ -467,7 +467,7 @@ func (this *GetSecretRequest) String() string {
 		return "nil"
 	}
 	keysForAnnotations := make([]string, 0, len(this.Annotations))
-	for k, _ := range this.Annotations {
+	for k := range this.Annotations {
 		keysForAnnotations = append(keysForAnnotations, k)
 	}
 	github_com_gogo_protobuf_sortkeys.Strings(keysForAnnotations)

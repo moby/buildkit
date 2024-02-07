@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	containerdpkg "github.com/containerd/containerd"
+	containerdpkg "github.com/containerd/containerd/v2/client"
 )
 
 func CheckVersion(t *testing.T, cdAddress, constraint string) {
