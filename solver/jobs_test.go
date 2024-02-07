@@ -9,6 +9,7 @@ import (
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/moby/buildkit/util/testutil/workers"
 	"github.com/stretchr/testify/require"
+	"github.com/tonistiigi/fsutil"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -63,7 +64,7 @@ func testParallelism(t *testing.T, sb integration.Sandbox) {
 	timeStart := time.Now()
 	eg, egCtx := errgroup.WithContext(ctx)
 	solveOpt := client.SolveOpt{
-		LocalDirs: map[string]string{"cache": t.TempDir()},
+		LocalMounts: map[string]fsutil.FS{"cache": integration.Tmpdir(t)},
 	}
 	eg.Go(func() error {
 		_, err := c.Solve(egCtx, d1, solveOpt, nil)

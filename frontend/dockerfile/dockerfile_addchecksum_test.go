@@ -12,6 +12,7 @@ import (
 	"github.com/moby/buildkit/util/testutil/integration"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
+	"github.com/tonistiigi/fsutil"
 )
 
 var addChecksumTests = integration.TestFuncs(
@@ -50,7 +51,7 @@ ADD --checksum=%s %s /tmp/foo
 			fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		)
 		_, err := f.Solve(sb.Context(), c, client.SolveOpt{
-			LocalDirs: map[string]string{
+			LocalMounts: map[string]fsutil.FS{
 				dockerui.DefaultLocalNameDockerfile: dir,
 				dockerui.DefaultLocalNameContext:    dir,
 			},
@@ -69,7 +70,7 @@ ADD --checksum=${DIGEST} ${LINK} /tmp/foo
 			fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		)
 		_, err := f.Solve(sb.Context(), c, client.SolveOpt{
-			LocalDirs: map[string]string{
+			LocalMounts: map[string]fsutil.FS{
 				dockerui.DefaultLocalNameDockerfile: dir,
 				dockerui.DefaultLocalNameContext:    dir,
 			},
@@ -86,7 +87,7 @@ ADD --checksum=%s %s /tmp/foo
 			fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		)
 		_, err := f.Solve(sb.Context(), c, client.SolveOpt{
-			LocalDirs: map[string]string{
+			LocalMounts: map[string]fsutil.FS{
 				dockerui.DefaultLocalNameDockerfile: dir,
 				dockerui.DefaultLocalNameContext:    dir,
 			},
@@ -103,7 +104,7 @@ ADD --checksum=md5:7e55db001d319a94b0b713529a756623 %s /tmp/foo
 			fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		)
 		_, err := f.Solve(sb.Context(), c, client.SolveOpt{
-			LocalDirs: map[string]string{
+			LocalMounts: map[string]fsutil.FS{
 				dockerui.DefaultLocalNameDockerfile: dir,
 				dockerui.DefaultLocalNameContext:    dir,
 			},
@@ -120,7 +121,7 @@ ADD --checksum=unknown:%s %s /tmp/foo
 			fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		)
 		_, err := f.Solve(sb.Context(), c, client.SolveOpt{
-			LocalDirs: map[string]string{
+			LocalMounts: map[string]fsutil.FS{
 				dockerui.DefaultLocalNameDockerfile: dir,
 				dockerui.DefaultLocalNameContext:    dir,
 			},
@@ -137,7 +138,7 @@ ADD --checksum=%s %s /tmp/foo
 			fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		)
 		_, err := f.Solve(sb.Context(), c, client.SolveOpt{
-			LocalDirs: map[string]string{
+			LocalMounts: map[string]fsutil.FS{
 				dockerui.DefaultLocalNameDockerfile: dir,
 				dockerui.DefaultLocalNameContext:    dir,
 			},
@@ -156,7 +157,7 @@ ADD --checksum=%s foo /tmp/foo
 			fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		)
 		_, err := f.Solve(sb.Context(), c, client.SolveOpt{
-			LocalDirs: map[string]string{
+			LocalMounts: map[string]fsutil.FS{
 				dockerui.DefaultLocalNameDockerfile: dir,
 				dockerui.DefaultLocalNameContext:    dir,
 			},

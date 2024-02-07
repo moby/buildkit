@@ -31,6 +31,7 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
+	"github.com/tonistiigi/fsutil"
 	"golang.org/x/crypto/ssh/agent"
 	"google.golang.org/grpc/codes"
 )
@@ -691,9 +692,9 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	tmpdir := t.TempDir()
+	tmpdir := integration.Tmpdir(t)
 
-	err = os.WriteFile(filepath.Join(tmpdir, "local-file"), []byte("local"), 0644)
+	err = os.WriteFile(filepath.Join(tmpdir.Name, "local-file"), []byte("local"), 0644)
 	require.NoError(t, err)
 
 	a := agent.NewKeyring()
@@ -834,7 +835,7 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 	}
 
 	_, err = c.Build(ctx, SolveOpt{
-		LocalDirs: map[string]string{
+		LocalMounts: map[string]fsutil.FS{
 			"mylocal": tmpdir,
 		},
 		Session: []session.Attachable{
