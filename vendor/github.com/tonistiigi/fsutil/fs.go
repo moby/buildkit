@@ -91,7 +91,7 @@ func (fs *fs) Open(p string) (io.ReadCloser, error) {
 }
 
 type Dir struct {
-	Stat types.Stat
+	Stat *types.Stat
 	FS   FS
 }
 
@@ -125,12 +125,12 @@ func (fs *subDirFS) Walk(ctx context.Context, target string, fn gofs.WalkDirFunc
 			continue
 		}
 
-		fi := &StatInfo{&d.Stat}
+		fi := &StatInfo{d.Stat}
 		if !fi.IsDir() {
 			return errors.WithStack(&os.PathError{Path: d.Stat.Path, Err: syscall.ENOTDIR, Op: "walk subdir"})
 		}
 		dStat := d.Stat
-		if err := fn(d.Stat.Path, &DirEntryInfo{Stat: &dStat}, nil); err != nil {
+		if err := fn(d.Stat.Path, &DirEntryInfo{Stat: dStat}, nil); err != nil {
 			return err
 		}
 		if err := d.FS.Walk(ctx, rest, func(p string, entry gofs.DirEntry, err error) error {
@@ -191,7 +191,7 @@ func (s *StatInfo) Name() string {
 	return filepath.Base(s.Stat.Path)
 }
 func (s *StatInfo) Size() int64 {
-	return s.Stat.Size_
+	return s.Stat.Size
 }
 func (s *StatInfo) Mode() os.FileMode {
 	return os.FileMode(s.Stat.Mode)
@@ -246,6 +246,5 @@ func (s *DirEntryInfo) Info() (gofs.FileInfo, error) {
 		s.Stat = stat
 	}
 
-	st := *s.Stat
-	return &StatInfo{&st}, nil
+	return &StatInfo{s.Stat}, nil
 }

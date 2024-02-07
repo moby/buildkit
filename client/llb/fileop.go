@@ -465,17 +465,18 @@ type CopyOption interface {
 }
 
 type CopyInfo struct {
-	Mode                *os.FileMode
-	FollowSymlinks      bool
-	CopyDirContentsOnly bool
-	IncludePatterns     []string
-	ExcludePatterns     []string
-	AttemptUnpack       bool
-	CreateDestPath      bool
-	AllowWildcard       bool
-	AllowEmptyWildcard  bool
-	ChownOpt            *ChownOpt
-	CreatedTime         *time.Time
+	Mode                           *os.FileMode
+	FollowSymlinks                 bool
+	CopyDirContentsOnly            bool
+	IncludePatterns                []string
+	ExcludePatterns                []string
+	AttemptUnpack                  bool
+	CreateDestPath                 bool
+	AllowWildcard                  bool
+	AllowEmptyWildcard             bool
+	ChownOpt                       *ChownOpt
+	CreatedTime                    *time.Time
+	AlwaysReplaceExistingDestPaths bool
 }
 
 func (mi *CopyInfo) SetCopyOption(mi2 *CopyInfo) {
@@ -510,6 +511,7 @@ func (a *fileActionCopy) toProtoAction(ctx context.Context, parent string, base 
 		AttemptUnpackDockerCompatibility: a.info.AttemptUnpack,
 		CreateDestPath:                   a.info.CreateDestPath,
 		Timestamp:                        marshalTime(a.info.CreatedTime),
+		AlwaysReplaceExistingDestPaths:   a.info.AlwaysReplaceExistingDestPaths,
 	}
 	if a.info.Mode != nil {
 		c.Mode = int32(*a.info.Mode)

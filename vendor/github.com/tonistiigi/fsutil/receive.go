@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil/types"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/proto"
 )
 
 type DiffType int
@@ -170,7 +171,7 @@ func (r *receiver) run(ctx context.Context) error {
 				return err
 			}
 			if r.progressCb != nil {
-				size += p.Size()
+				size += proto.Size(&p)
 				r.progressCb(size, false)
 			}
 
