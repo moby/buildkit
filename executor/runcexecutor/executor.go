@@ -146,8 +146,6 @@ func New(opt Opt, networkProviders map[pb.NetMode]network.Provider) (executor.Ex
 }
 
 func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, mounts []executor.Mount, process executor.ProcessInfo, started chan<- struct{}) (rec resourcestypes.Recorder, err error) {
-	meta := process.Meta
-
 	startedOnce := sync.Once{}
 	done := make(chan error, 1)
 	w.mu.Lock()
@@ -166,6 +164,11 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 		}
 	}()
 
+	meta := process.Meta
+	if meta.NetMode == pb.NetMode_HOST {
+		bklog.G(ctx).Info("enabling HostNetworking")
+	}
+
 	provider, ok := w.networkProviders[meta.NetMode]
 	if !ok {
 		return nil, errors.Errorf("unknown network mode %s", meta.NetMode)
@@ -181,11 +184,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 		}
 	}()
 
-	if meta.NetMode == pb.NetMode_HOST {
-		bklog.G(ctx).Info("enabling HostNetworking")
-	}
-
-	resolvConf, err := oci.GetResolvConf(ctx, w.root, w.idmap, w.dns)
+	resolvConf, err := oci.GetResolvConf(ctx, w.root, w.idmap, w.dns, meta.NetMode)
 	if err != nil {
 		return nil, err
 	}
