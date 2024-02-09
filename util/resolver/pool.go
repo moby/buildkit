@@ -15,9 +15,11 @@ import (
 	distreference "github.com/distribution/reference"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver/pb"
+	log "github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/version"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 // DefaultPool is the default shared resolver pool instance
@@ -82,15 +84,37 @@ func (p *Pool) GetResolver(hosts docker.RegistryHosts, ref, scope string, sm *se
 		name = named.Name()
 	}
 
-	key := fmt.Sprintf("%s::%s", name, scope)
+	var key string
+	if strings.Contains(scope, "push") {
+		// When scope includes "push", index the authHandlerNS cache by session
+		// id(s) as well to prevent tokens with potential write access to third
+		// party registries from leaking between client sessions. The key will end
+		// up looking something like:
+		// 'wujskoey891qc5cv1edd3yj3p::repository:foo/bar::pull,push'
+		key = fmt.Sprintf("%s::%s::%s", strings.Join(session.AllSessionIDs(g), ":"), name, scope)
+	} else {
+		// The authHandlerNS is not isolated for pull-only scopes since LLB
+		// verticies from pulls all end up in the cache anyway and all
+		// requests/clients have access to the same cache
+		key = fmt.Sprintf("%s::%s", name, scope)
+	}
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	h, ok := p.m[key]
+
 	if !ok {
 		h = newAuthHandlerNS(sm)
 		p.m[key] = h
 	}
+
+	log.G(context.TODO()).WithFields(logrus.Fields{
+		"name":   name,
+		"scope":  scope,
+		"key":    key,
+		"cached": ok,
+	}).Debugf("checked for cached auth handler namespace")
+
 	return newResolver(hosts, h, sm, g)
 }
 
