@@ -112,7 +112,7 @@ target "integration-tests" {
 }
 
 group "validate" {
-  targets = ["lint", "validate-vendor", "validate-doctoc", "validate-generated-files", "validate-shfmt", "validate-docs"]
+  targets = ["lint", "validate-vendor", "validate-doctoc", "validate-generated-files", "validate-archutil", "validate-shfmt", "validate-docs"]
 }
 
 target "lint" {
@@ -160,6 +160,13 @@ target "validate-generated-files" {
   output = ["type=cacheonly"]
 }
 
+target "validate-archutil" {
+  inherits = ["_common"]
+  dockerfile = "./hack/dockerfiles/archutil.Dockerfile"
+  target = "validate"
+  output = ["type=cacheonly"]
+}
+
 target "validate-shfmt" {
   inherits = ["_common"]
   dockerfile = "./hack/dockerfiles/shfmt.Dockerfile"
@@ -200,6 +207,13 @@ target "generated-files" {
   dockerfile = "./hack/dockerfiles/generated-files.Dockerfile"
   target = "update"
   output = ["."]
+}
+
+target "archutil" {
+  inherits = ["_common"]
+  dockerfile = "./hack/dockerfiles/archutil.Dockerfile"
+  target = "update"
+  output = ["./util/archutil"]
 }
 
 target "shfmt" {
