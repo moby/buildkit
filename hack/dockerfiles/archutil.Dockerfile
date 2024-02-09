@@ -20,43 +20,43 @@ WORKDIR /src
 
 FROM base AS exit-amd64
 COPY util/archutil/fixtures/exit.amd64.S .
-RUN x86_64-linux-gnu-gcc -static -nostdlib -Wa,--noexecstack -o exit exit.amd64.S
+RUN x86_64-linux-gnu-gcc -static -nostdlib -Wa,--noexecstack -o exit exit.amd64.S && x86_64-linux-gnu-strip --strip-unneeded exit
 
 FROM base AS exit-386
 COPY util/archutil/fixtures/exit.386.s .
-RUN i686-linux-gnu-as --noexecstack -o exit.o exit.386.s && i686-linux-gnu-ld -o exit -s exit.o
+RUN i686-linux-gnu-as --noexecstack -o exit.o exit.386.s && i686-linux-gnu-ld -o exit -s exit.o && i686-linux-gnu-strip --strip-unneeded exit
 
 FROM base AS exit-arm64
 COPY util/archutil/fixtures/exit.arm64.s .
-RUN aarch64-linux-gnu-as --noexecstack -o exit.o exit.arm64.s && aarch64-linux-gnu-ld -o exit -s exit.o
+RUN aarch64-linux-gnu-as --noexecstack -o exit.o exit.arm64.s && aarch64-linux-gnu-ld -o exit -s exit.o && aarch64-linux-gnu-strip --strip-unneeded exit
 
 FROM base AS exit-arm
 COPY util/archutil/fixtures/exit.arm.s .
-RUN arm-linux-gnueabihf-as --noexecstack -o exit.o exit.arm.s && arm-linux-gnueabihf-ld -o exit -s exit.o
+RUN arm-linux-gnueabihf-as --noexecstack -o exit.o exit.arm.s && arm-linux-gnueabihf-ld -o exit -s exit.o && arm-linux-gnueabihf-strip --strip-unneeded exit
 
 FROM base AS exit-riscv64
 COPY util/archutil/fixtures/exit.riscv64.s .
-RUN riscv64-linux-gnu-as --noexecstack -o exit.o exit.riscv64.s && riscv64-linux-gnu-ld -o exit -s exit.o
+RUN riscv64-linux-gnu-as --noexecstack -o exit.o exit.riscv64.s && riscv64-linux-gnu-ld -o exit -s exit.o && riscv64-linux-gnu-strip --strip-unneeded exit
 
 FROM base AS exit-s390x
 COPY util/archutil/fixtures/exit.s390x.s .
-RUN s390x-linux-gnu-as --noexecstack -o exit.o exit.s390x.s && s390x-linux-gnu-ld -o exit -s exit.o
+RUN s390x-linux-gnu-as --noexecstack -o exit.o exit.s390x.s && s390x-linux-gnu-ld -o exit -s exit.o && s390x-linux-gnu-strip --strip-unneeded exit
 
 FROM base AS exit-ppc64
 COPY util/archutil/fixtures/exit.ppc64.s .
-RUN powerpc64le-linux-gnu-as -mbig --noexecstack -o exit.o exit.ppc64.s && powerpc64le-linux-gnu-ld -EB -o exit -s exit.o
+RUN powerpc64le-linux-gnu-as -mbig --noexecstack -o exit.o exit.ppc64.s && powerpc64le-linux-gnu-ld -EB -o exit -s exit.o && powerpc64le-linux-gnu-strip --strip-unneeded exit
 
 FROM base AS exit-ppc64le
 COPY util/archutil/fixtures/exit.ppc64le.s .
-RUN powerpc64le-linux-gnu-as --noexecstack -o exit.o exit.ppc64le.s && powerpc64le-linux-gnu-ld -o exit -s exit.o
+RUN powerpc64le-linux-gnu-as --noexecstack -o exit.o exit.ppc64le.s && powerpc64le-linux-gnu-ld -o exit -s exit.o && powerpc64le-linux-gnu-strip --strip-unneeded exit
 
 FROM base AS exit-mips64le
 COPY util/archutil/fixtures/exit.mips64le.s .
-RUN mips64el-linux-gnuabi64-as --noexecstack -o exit.o exit.mips64le.s && mips64el-linux-gnuabi64-ld -o exit -s exit.o
+RUN mips64el-linux-gnuabi64-as --noexecstack -o exit.o exit.mips64le.s && mips64el-linux-gnuabi64-ld -o exit -s exit.o && mips64el-linux-gnuabi64-strip --strip-unneeded exit
 
 FROM base AS exit-mips64
 COPY util/archutil/fixtures/exit.mips64.s .
-RUN mips64-linux-gnuabi64-as --noexecstack -o exit.o exit.mips64.s && mips64-linux-gnuabi64-ld -o exit -s exit.o
+RUN mips64-linux-gnuabi64-as --noexecstack -o exit.o exit.mips64.s && mips64-linux-gnuabi64-ld -o exit -s exit.o && mips64-linux-gnuabi64-strip --strip-unneeded exit
 
 FROM scratch AS exits
 COPY --from=exit-amd64 /src/exit amd64
