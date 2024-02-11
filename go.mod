@@ -23,8 +23,8 @@ require (
 	github.com/containerd/go-runc v1.1.0
 	github.com/containerd/log v0.1.0
 	github.com/containerd/nydus-snapshotter v0.13.7
-	github.com/containerd/stargz-snapshotter v0.14.3
-	github.com/containerd/stargz-snapshotter/estargz v0.14.3
+	github.com/containerd/stargz-snapshotter v0.15.1
+	github.com/containerd/stargz-snapshotter/estargz v0.15.1
 	github.com/containerd/typeurl/v2 v2.1.1
 	github.com/containernetworking/plugins v1.4.0
 	github.com/coreos/go-systemd/v22 v22.5.0
