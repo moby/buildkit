@@ -408,6 +408,7 @@ func packFromDirectory(ctx context.Context, dest io.Writer, opt PackOption, buil
 				PrefetchPatterns: opt.PrefetchPatterns,
 				AlignedChunk:     opt.AlignedChunk,
 				ChunkSize:        opt.ChunkSize,
+				BatchSize:        opt.BatchSize,
 				Compressor:       opt.Compressor,
 				Timeout:          opt.Timeout,
 				Encrypt:          opt.Encrypt,
@@ -758,6 +759,47 @@ func isNydusImage(manifest *ocispec.Manifest) bool {
 	return false
 }
 
+// makeBlobDesc returns a ocispec.Descriptor by the given information.
+func makeBlobDesc(ctx context.Context, cs content.Store, opt PackOption, sourceDigest, targetDigest digest.Digest) (*ocispec.Descriptor, error) {
+	targetInfo, err := cs.Info(ctx, targetDigest)
+	if err != nil {
+		return nil, errors.Wrapf(err, "get target blob info %s", targetDigest)
+	}
+	if targetInfo.Labels == nil {
+		targetInfo.Labels = map[string]string{}
+	}
+	// Write a diff id label of layer in content store for simplifying
+	// diff id calculation to speed up the conversion.
+	// See: https://github.com/containerd/containerd/blob/e4fefea5544d259177abb85b64e428702ac49c97/images/diffid.go#L49
+	targetInfo.Labels[labels.LabelUncompressed] = targetDigest.String()
+	_, err = cs.Update(ctx, targetInfo)
+	if err != nil {
+		return nil, errors.Wrap(err, "update layer label")
+	}
+
+	targetDesc := ocispec.Descriptor{
+		Digest:    targetDigest,
+		Size:      targetInfo.Size,
+		MediaType: MediaTypeNydusBlob,
+		Annotations: map[string]string{
+			// Use `containerd.io/uncompressed` to generate DiffID of
+			// layer defined in OCI spec.
+			LayerAnnotationUncompressed: targetDigest.String(),
+			LayerAnnotationNydusBlob:    "true",
+		},
+	}
+
+	if opt.OCIRef {
+		targetDesc.Annotations[label.NydusRefLayer] = sourceDigest.String()
+	}
+
+	if opt.Encrypt {
+		targetDesc.Annotations[LayerAnnotationNydusEncryptedBlob] = "true"
+	}
+
+	return &targetDesc, nil
+}
+
 // LayerConvertFunc returns a function which converts an OCI image layer to
 // a nydus blob layer, and set the media type to "application/vnd.oci.image.layer.nydus.blob.v1".
 func LayerConvertFunc(opt PackOption) converter.ConvertFunc {
@@ -776,21 +818,8 @@ func LayerConvertFunc(opt PackOption) converter.ConvertFunc {
 		if err != nil {
 			return nil, errors.Wrapf(err, "get blob info %s", desc.Digest)
 		}
-		if info.Labels[LayerAnnotationNydusTargetDigest] != "" {
-			targetInfo, err := cs.Info(ctx, digest.Digest(info.Labels[LayerAnnotationNydusTargetDigest]))
-			if err != nil {
-				return nil, errors.Wrapf(err, "get blob info %s", desc.Digest)
-			}
-			targetDesc := ocispec.Descriptor{
-				Digest:    targetInfo.Digest,
-				Size:      targetInfo.Size,
-				MediaType: MediaTypeNydusBlob,
-				Annotations: map[string]string{
-					LayerAnnotationUncompressed: targetInfo.Digest.String(),
-					LayerAnnotationNydusBlob:    "true",
-				},
-			}
-			return &targetDesc, nil
+		if targetDigest := digest.Digest(info.Labels[LayerAnnotationNydusTargetDigest]); targetDigest.Validate() == nil {
+			return makeBlobDesc(ctx, cs, opt, desc.Digest, targetDigest)
 		}
 
 		ra, err := cs.ReaderAt(ctx, desc)
@@ -847,49 +876,18 @@ func LayerConvertFunc(opt PackOption) converter.ConvertFunc {
 		}
 
 		blobDigest := digester.Digest()
-		info, err = cs.Info(ctx, blobDigest)
+		newDesc, err := makeBlobDesc(ctx, cs, opt, desc.Digest, blobDigest)
 		if err != nil {
-			return nil, errors.Wrapf(err, "get blob info %s", blobDigest)
-		}
-		if info.Labels == nil {
-			info.Labels = map[string]string{}
-		}
-		// Write a diff id label of layer in content store for simplifying
-		// diff id calculation to speed up the conversion.
-		// See: https://github.com/containerd/containerd/blob/e4fefea5544d259177abb85b64e428702ac49c97/images/diffid.go#L49
-		info.Labels[labels.LabelUncompressed] = blobDigest.String()
-		_, err = cs.Update(ctx, info)
-		if err != nil {
-			return nil, errors.Wrap(err, "update layer label")
-		}
-
-		newDesc := ocispec.Descriptor{
-			Digest:    blobDigest,
-			Size:      info.Size,
-			MediaType: MediaTypeNydusBlob,
-			Annotations: map[string]string{
-				// Use `containerd.io/uncompressed` to generate DiffID of
-				// layer defined in OCI spec.
-				LayerAnnotationUncompressed: blobDigest.String(),
-				LayerAnnotationNydusBlob:    "true",
-			},
-		}
-
-		if opt.OCIRef {
-			newDesc.Annotations[label.NydusRefLayer] = desc.Digest.String()
-		}
-
-		if opt.Encrypt {
-			newDesc.Annotations[LayerAnnotationNydusEncryptedBlob] = "true"
+			return nil, err
 		}
 
 		if opt.Backend != nil {
-			if err := opt.Backend.Push(ctx, cs, newDesc); err != nil {
+			if err := opt.Backend.Push(ctx, cs, *newDesc); err != nil {
 				return nil, errors.Wrap(err, "push to storage backend")
 			}
 		}
 
-		return &newDesc, nil
+		return newDesc, nil
 	}
 }
 
