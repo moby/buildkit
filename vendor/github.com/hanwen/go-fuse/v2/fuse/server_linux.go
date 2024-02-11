@@ -5,7 +5,6 @@
 package fuse
 
 import (
-	"log"
 	"syscall"
 )
 
@@ -25,7 +24,7 @@ func (ms *Server) systemWrite(req *request, header []byte) Status {
 				req.readResult.Done()
 				return OK
 			}
-			log.Println("trySplice:", err)
+			ms.opts.Logger.Println("trySplice:", err)
 		}
 
 		sz := req.flatDataSize()

@@ -155,13 +155,26 @@ func (f *loopbackFile) Setattr(ctx context.Context, in *fuse.SetAttrIn, out *fus
 	return f.Getattr(ctx, out)
 }
 
-func (f *loopbackFile) setAttr(ctx context.Context, in *fuse.SetAttrIn) syscall.Errno {
+func (f *loopbackFile) fchmod(mode uint32) syscall.Errno {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	return ToErrno(syscall.Fchmod(f.fd, mode))
+}
+
+func (f *loopbackFile) fchown(uid, gid int) syscall.Errno {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return ToErrno(syscall.Fchown(f.fd, uid, gid))
+}
+
+func (f *loopbackFile) ftruncate(sz uint64) syscall.Errno {
+	return ToErrno(syscall.Ftruncate(f.fd, int64(sz)))
+}
+
+func (f *loopbackFile) setAttr(ctx context.Context, in *fuse.SetAttrIn) syscall.Errno {
 	var errno syscall.Errno
 	if mode, ok := in.GetMode(); ok {
-		errno = ToErrno(syscall.Fchmod(f.fd, mode))
-		if errno != 0 {
+		if errno := f.fchmod(mode); errno != 0 {
 			return errno
 		}
 	}
@@ -178,8 +191,7 @@ func (f *loopbackFile) setAttr(ctx context.Context, in *fuse.SetAttrIn) syscall.
 		if gOk {
 			gid = int(gid32)
 		}
-		errno = ToErrno(syscall.Fchown(f.fd, uid, gid))
-		if errno != 0 {
+		if errno := f.fchown(uid, gid); errno != 0 {
 			return errno
 		}
 	}
@@ -203,8 +215,7 @@ func (f *loopbackFile) setAttr(ctx context.Context, in *fuse.SetAttrIn) syscall.
 	}
 
 	if sz, ok := in.GetSize(); ok {
-		errno = ToErrno(syscall.Ftruncate(f.fd, int64(sz)))
-		if errno != 0 {
+		if errno := f.ftruncate(sz); errno != 0 {
 			return errno
 		}
 	}

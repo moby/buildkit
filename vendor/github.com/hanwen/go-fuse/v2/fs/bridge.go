@@ -30,9 +30,11 @@ type fileEntry struct {
 	mu sync.Mutex
 
 	// Directory
-	dirStream   DirStream
-	hasOverflow bool
-	overflow    fuse.DirEntry
+	dirStream     DirStream
+	hasOverflow   bool
+	overflow      fuse.DirEntry
+	overflowErrno syscall.Errno
+
 	// dirOffset is the current location in the directory (see `telldir(3)`).
 	// The value is equivalent to `d_off` (see `getdents(2)`) of the last
 	// directory entry sent to the kernel so far.
@@ -283,11 +285,17 @@ func NewNodeFS(root InodeEmbedder, opts *Options) fuse.RawFileSystem {
 		bridge.options.AttrTimeout = &oneSec
 	}
 
+	stableAttr := StableAttr{
+		Ino:  root.embed().StableAttr().Ino,
+		Mode: fuse.S_IFDIR,
+	}
+	if opts.RootStableAttr != nil {
+		stableAttr.Ino = opts.RootStableAttr.Ino
+		stableAttr.Gen = opts.RootStableAttr.Gen
+	}
+
 	initInode(root.embed(), root,
-		StableAttr{
-			Ino:  root.embed().StableAttr().Ino,
-			Mode: fuse.S_IFDIR,
-		},
+		stableAttr,
 		bridge,
 		false,
 		1,
@@ -540,15 +548,10 @@ func (b *rawBridge) GetAttr(cancel <-chan struct{}, input *fuse.GetAttrIn, out *
 func (b *rawBridge) getattr(ctx context.Context, n *Inode, f FileHandle, out *fuse.AttrOut) syscall.Errno {
 	var errno syscall.Errno
 
-	var fg FileGetattrer
-	if f != nil {
-		fg, _ = f.(FileGetattrer)
-	}
-
-	if fops, ok := n.ops.(NodeGetattrer); ok {
-		errno = fops.Getattr(ctx, f, out)
-	} else if fg != nil {
-		errno = fg.Getattr(ctx, out)
+	if nodeOps, ok := n.ops.(NodeGetattrer); ok {
+		errno = nodeOps.Getattr(ctx, f, out)
+	} else if fileOps, ok := f.(FileGetattrer); ok {
+		errno = fileOps.Getattr(ctx, out)
 	} else {
 		// We set Mode below, which is the minimum for success
 	}
@@ -758,12 +761,13 @@ func (b *rawBridge) registerFile(n *Inode, f FileHandle, flags uint32) uint32 {
 func (b *rawBridge) Read(cancel <-chan struct{}, input *fuse.ReadIn, buf []byte) (fuse.ReadResult, fuse.Status) {
 	n, f := b.inode(input.NodeId, input.Fh)
 
+	ctx := &fuse.Context{Caller: input.Caller, Cancel: cancel}
 	if fops, ok := n.ops.(NodeReader); ok {
-		res, errno := fops.Read(&fuse.Context{Caller: input.Caller, Cancel: cancel}, f.file, buf, int64(input.Offset))
+		res, errno := fops.Read(ctx, f.file, buf, int64(input.Offset))
 		return res, errnoToStatus(errno)
 	}
 	if fr, ok := f.file.(FileReader); ok {
-		res, errno := fr.Read(&fuse.Context{Caller: input.Caller, Cancel: cancel}, buf, int64(input.Offset))
+		res, errno := fr.Read(ctx, buf, int64(input.Offset))
 		return res, errnoToStatus(errno)
 	}
 
@@ -773,32 +777,35 @@ func (b *rawBridge) Read(cancel <-chan struct{}, input *fuse.ReadIn, buf []byte)
 func (b *rawBridge) GetLk(cancel <-chan struct{}, input *fuse.LkIn, out *fuse.LkOut) fuse.Status {
 	n, f := b.inode(input.NodeId, input.Fh)
 
+	ctx := &fuse.Context{Caller: input.Caller, Cancel: cancel}
 	if lops, ok := n.ops.(NodeGetlker); ok {
-		return errnoToStatus(lops.Getlk(&fuse.Context{Caller: input.Caller, Cancel: cancel}, f.file, input.Owner, &input.Lk, input.LkFlags, &out.Lk))
+		return errnoToStatus(lops.Getlk(ctx, f.file, input.Owner, &input.Lk, input.LkFlags, &out.Lk))
 	}
 	if gl, ok := f.file.(FileGetlker); ok {
-		return errnoToStatus(gl.Getlk(&fuse.Context{Caller: input.Caller, Cancel: cancel}, input.Owner, &input.Lk, input.LkFlags, &out.Lk))
+		return errnoToStatus(gl.Getlk(ctx, input.Owner, &input.Lk, input.LkFlags, &out.Lk))
 	}
 	return fuse.ENOTSUP
 }
 
 func (b *rawBridge) SetLk(cancel <-chan struct{}, input *fuse.LkIn) fuse.Status {
 	n, f := b.inode(input.NodeId, input.Fh)
+	ctx := &fuse.Context{Caller: input.Caller, Cancel: cancel}
 	if lops, ok := n.ops.(NodeSetlker); ok {
-		return errnoToStatus(lops.Setlk(&fuse.Context{Caller: input.Caller, Cancel: cancel}, f.file, input.Owner, &input.Lk, input.LkFlags))
+		return errnoToStatus(lops.Setlk(ctx, f.file, input.Owner, &input.Lk, input.LkFlags))
 	}
-	if sl, ok := n.ops.(FileSetlker); ok {
-		return errnoToStatus(sl.Setlk(&fuse.Context{Caller: input.Caller, Cancel: cancel}, input.Owner, &input.Lk, input.LkFlags))
+	if sl, ok := f.file.(FileSetlker); ok {
+		return errnoToStatus(sl.Setlk(ctx, input.Owner, &input.Lk, input.LkFlags))
 	}
 	return fuse.ENOTSUP
 }
 func (b *rawBridge) SetLkw(cancel <-chan struct{}, input *fuse.LkIn) fuse.Status {
 	n, f := b.inode(input.NodeId, input.Fh)
+	ctx := &fuse.Context{Caller: input.Caller, Cancel: cancel}
 	if lops, ok := n.ops.(NodeSetlkwer); ok {
-		return errnoToStatus(lops.Setlkw(&fuse.Context{Caller: input.Caller, Cancel: cancel}, f.file, input.Owner, &input.Lk, input.LkFlags))
+		return errnoToStatus(lops.Setlkw(ctx, f.file, input.Owner, &input.Lk, input.LkFlags))
 	}
-	if sl, ok := n.ops.(FileSetlkwer); ok {
-		return errnoToStatus(sl.Setlkw(&fuse.Context{Caller: input.Caller, Cancel: cancel}, input.Owner, &input.Lk, input.LkFlags))
+	if sl, ok := f.file.(FileSetlkwer); ok {
+		return errnoToStatus(sl.Setlkw(ctx, input.Owner, &input.Lk, input.LkFlags))
 	}
 	return fuse.ENOTSUP
 }
@@ -811,10 +818,11 @@ func (b *rawBridge) Release(cancel <-chan struct{}, input *fuse.ReleaseIn) {
 
 	f.wg.Wait()
 
+	ctx := &fuse.Context{Caller: input.Caller, Cancel: cancel}
 	if r, ok := n.ops.(NodeReleaser); ok {
-		r.Release(&fuse.Context{Caller: input.Caller, Cancel: cancel}, f.file)
+		r.Release(ctx, f.file)
 	} else if r, ok := f.file.(FileReleaser); ok {
-		r.Release(&fuse.Context{Caller: input.Caller, Cancel: cancel})
+		r.Release(ctx)
 	}
 
 	b.mu.Lock()
@@ -860,12 +868,13 @@ func (b *rawBridge) releaseFileEntry(nid uint64, fh uint64) (*Inode, *fileEntry)
 func (b *rawBridge) Write(cancel <-chan struct{}, input *fuse.WriteIn, data []byte) (written uint32, status fuse.Status) {
 	n, f := b.inode(input.NodeId, input.Fh)
 
+	ctx := &fuse.Context{Caller: input.Caller, Cancel: cancel}
 	if wr, ok := n.ops.(NodeWriter); ok {
-		w, errno := wr.Write(&fuse.Context{Caller: input.Caller, Cancel: cancel}, f.file, data, int64(input.Offset))
+		w, errno := wr.Write(ctx, f.file, data, int64(input.Offset))
 		return w, errnoToStatus(errno)
 	}
 	if fr, ok := f.file.(FileWriter); ok {
-		w, errno := fr.Write(&fuse.Context{Caller: input.Caller, Cancel: cancel}, data, int64(input.Offset))
+		w, errno := fr.Write(ctx, data, int64(input.Offset))
 		return w, errnoToStatus(errno)
 	}
 
@@ -874,33 +883,36 @@ func (b *rawBridge) Write(cancel <-chan struct{}, input *fuse.WriteIn, data []by
 
 func (b *rawBridge) Flush(cancel <-chan struct{}, input *fuse.FlushIn) fuse.Status {
 	n, f := b.inode(input.NodeId, input.Fh)
+	ctx := &fuse.Context{Caller: input.Caller, Cancel: cancel}
 	if fl, ok := n.ops.(NodeFlusher); ok {
-		return errnoToStatus(fl.Flush(&fuse.Context{Caller: input.Caller, Cancel: cancel}, f.file))
+		return errnoToStatus(fl.Flush(ctx, f.file))
 	}
 	if fl, ok := f.file.(FileFlusher); ok {
-		return errnoToStatus(fl.Flush(&fuse.Context{Caller: input.Caller, Cancel: cancel}))
+		return errnoToStatus(fl.Flush(ctx))
 	}
 	return 0
 }
 
 func (b *rawBridge) Fsync(cancel <-chan struct{}, input *fuse.FsyncIn) fuse.Status {
 	n, f := b.inode(input.NodeId, input.Fh)
+	ctx := &fuse.Context{Caller: input.Caller, Cancel: cancel}
 	if fs, ok := n.ops.(NodeFsyncer); ok {
-		return errnoToStatus(fs.Fsync(&fuse.Context{Caller: input.Caller, Cancel: cancel}, f.file, input.FsyncFlags))
+		return errnoToStatus(fs.Fsync(ctx, f.file, input.FsyncFlags))
 	}
 	if fs, ok := f.file.(FileFsyncer); ok {
-		return errnoToStatus(fs.Fsync(&fuse.Context{Caller: input.Caller, Cancel: cancel}, input.FsyncFlags))
+		return errnoToStatus(fs.Fsync(ctx, input.FsyncFlags))
 	}
 	return fuse.ENOTSUP
 }
 
 func (b *rawBridge) Fallocate(cancel <-chan struct{}, input *fuse.FallocateIn) fuse.Status {
 	n, f := b.inode(input.NodeId, input.Fh)
+	ctx := &fuse.Context{Caller: input.Caller, Cancel: cancel}
 	if a, ok := n.ops.(NodeAllocater); ok {
-		return errnoToStatus(a.Allocate(&fuse.Context{Caller: input.Caller, Cancel: cancel}, f.file, input.Offset, input.Length, input.Mode))
+		return errnoToStatus(a.Allocate(ctx, f.file, input.Offset, input.Length, input.Mode))
 	}
 	if a, ok := f.file.(FileAllocater); ok {
-		return errnoToStatus(a.Allocate(&fuse.Context{Caller: input.Caller, Cancel: cancel}, input.Offset, input.Length, input.Mode))
+		return errnoToStatus(a.Allocate(ctx, input.Offset, input.Length, input.Mode))
 	}
 	return fuse.ENOTSUP
 }
@@ -969,11 +981,12 @@ func (b *rawBridge) getStream(ctx context.Context, inode *Inode) (DirStream, sys
 		return rd.Readdir(ctx)
 	}
 
-	r := []fuse.DirEntry{}
-	for k, ch := range inode.Children() {
-		r = append(r, fuse.DirEntry{Mode: ch.Mode(),
-			Name: k,
-			Ino:  ch.StableAttr().Ino})
+	lst := inode.childrenList()
+	r := make([]fuse.DirEntry, 0, len(lst))
+	for _, e := range lst {
+		r = append(r, fuse.DirEntry{Mode: e.Inode.Mode(),
+			Name: e.Name,
+			Ino:  e.Inode.StableAttr().Ino})
 	}
 	return NewListDirStream(r), 0
 }
@@ -992,18 +1005,31 @@ func (b *rawBridge) ReadDir(cancel <-chan struct{}, input *fuse.ReadIn, out *fus
 	}
 
 	if f.hasOverflow {
+		if f.overflowErrno != 0 {
+			return errnoToStatus(f.overflowErrno)
+		}
+
+		f.hasOverflow = false
 		// always succeeds.
 		out.AddDirEntry(f.overflow)
-		f.hasOverflow = false
 		f.dirOffset++
 	}
 
+	first := true
 	for f.dirStream.HasNext() {
 		e, errno := f.dirStream.Next()
 
 		if errno != 0 {
-			return errnoToStatus(errno)
+			if first {
+				return errnoToStatus(errno)
+			} else {
+				f.hasOverflow = true
+				f.overflowErrno = errno
+				return fuse.OK
+			}
 		}
+
+		first = false
 		if !out.AddDirEntry(e) {
 			f.overflow = e
 			f.hasOverflow = true
@@ -1029,20 +1055,30 @@ func (b *rawBridge) ReadDirPlus(cancel <-chan struct{}, input *fuse.ReadIn, out 
 	}
 
 	ctx := &fuse.Context{Caller: input.Caller, Cancel: cancel}
+
+	first := true
 	for f.dirStream.HasNext() || f.hasOverflow {
 		var e fuse.DirEntry
 		var errno syscall.Errno
 
 		if f.hasOverflow {
 			e = f.overflow
+			errno = f.overflowErrno
 			f.hasOverflow = false
 		} else {
 			e, errno = f.dirStream.Next()
 		}
 
 		if errno != 0 {
-			return errnoToStatus(errno)
+			if first {
+				return errnoToStatus(errno)
+			} else {
+				f.overflowErrno = errno
+				f.hasOverflow = true
+				return fuse.OK
+			}
 		}
+		first = false
 
 		entryOut := out.AddDirLookupEntry(e)
 		if entryOut == nil {
@@ -1121,21 +1157,33 @@ func (b *rawBridge) CopyFileRange(cancel <-chan struct{}, in *fuse.CopyFileRange
 func (b *rawBridge) Lseek(cancel <-chan struct{}, in *fuse.LseekIn, out *fuse.LseekOut) fuse.Status {
 	n, f := b.inode(in.NodeId, in.Fh)
 
+	ctx := &fuse.Context{Caller: in.Caller, Cancel: cancel}
+
 	ls, ok := n.ops.(NodeLseeker)
 	if ok {
-		off, errno := ls.Lseek(&fuse.Context{Caller: in.Caller, Cancel: cancel},
+		off, errno := ls.Lseek(ctx,
 			f.file, in.Offset, in.Whence)
 		out.Offset = off
 		return errnoToStatus(errno)
 	}
 	if fs, ok := f.file.(FileLseeker); ok {
-		off, errno := fs.Lseek(&fuse.Context{Caller: in.Caller, Cancel: cancel}, in.Offset, in.Whence)
+		off, errno := fs.Lseek(ctx, in.Offset, in.Whence)
 		out.Offset = off
 		return errnoToStatus(errno)
 	}
 
-	if in.Whence == _SEEK_DATA || in.Whence == _SEEK_HOLE {
+	if in.Whence == _SEEK_DATA {
 		out.Offset = in.Offset
+		return fuse.OK
+	}
+
+	if in.Whence == _SEEK_HOLE {
+		var attr fuse.AttrOut
+		if s := b.getattr(ctx, n, nil, &attr); s != 0 {
+			return errnoToStatus(s)
+		}
+
+		out.Offset = attr.Size
 		return fuse.OK
 	}
 

@@ -74,7 +74,7 @@
 // see https://github.com/hanwen/go-fuse/issues/261 for an example of that
 // problem.
 //
-// Higher level interfaces
+// # Higher level interfaces
 //
 // As said above this packages provides way to implement filesystems in terms of
 // raw FUSE protocol.
@@ -82,7 +82,7 @@
 // Package github.com/hanwen/go-fuse/v2/fs provides way to implement
 // filesystems in terms of paths and/or inodes.
 //
-// Mount styles
+// # Mount styles
 //
 // The NewServer() handles mounting the filesystem, which
 // involves opening `/dev/fuse` and calling the
@@ -122,6 +122,8 @@
 // [2] https://sylabs.io/guides/3.7/user-guide/bind_paths_and_mounts.html#fuse-mounts
 package fuse
 
+import "log"
+
 // Types for users to implement.
 
 // The result of Read is an array of bytes, but for performance
@@ -153,12 +155,42 @@ type MountOptions struct {
 	// async I/O.  Concurrency for synchronous I/O is not limited.
 	MaxBackground int
 
-	// Write size to use.  If 0, use default. This number is
-	// capped at the kernel maximum.
+	// MaxWrite is the max size for read and write requests. If 0, use
+	// go-fuse default (currently 64 kiB).
+	// This number is internally capped at MAX_KERNEL_WRITE (higher values don't make
+	// sense).
+	//
+	// Non-direct-io reads are mostly served via kernel readahead, which is
+	// additionally subject to the MaxReadAhead limit.
+	//
+	// Implementation notes:
+	//
+	// There's four values the Linux kernel looks at when deciding the request size:
+	// * MaxWrite, passed via InitOut.MaxWrite. Limits the WRITE size.
+	// * max_read, passed via a string mount option. Limits the READ size.
+	//   go-fuse sets max_read equal to MaxWrite.
+	//   You can see the current max_read value in /proc/self/mounts .
+	// * MaxPages, passed via InitOut.MaxPages. In Linux 4.20 and later, the value
+	//   can go up to 1 MiB and go-fuse calculates the MaxPages value acc.
+	//   to MaxWrite, rounding up.
+	//   On older kernels, the value is fixed at 128 kiB and the
+	//   passed value is ignored. No request can be larger than MaxPages, so
+	//   READ and WRITE are effectively capped at MaxPages.
+	// * MaxReadAhead, passed via InitOut.MaxReadAhead.
 	MaxWrite int
 
-	// Max read ahead to use.  If 0, use default. This number is
-	// capped at the kernel maximum.
+	// MaxReadAhead is the max read ahead size to use. It controls how much data the
+	// kernel reads in advance to satisfy future read requests from applications.
+	// How much exactly is subject to clever heuristics in the kernel
+	// (see https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/mm/readahead.c?h=v6.2-rc5#n375
+	// if you are brave) and hence also depends on the kernel version.
+	//
+	// If 0, use kernel default. This number is capped at the kernel maximum
+	// (128 kiB on Linux) and cannot be larger than MaxWrite.
+	//
+	// MaxReadAhead only affects buffered reads (=non-direct-io), but even then, the
+	// kernel can and does send larger reads to satisfy read reqests from applications
+	// (up to MaxWrite or VM_READAHEAD_PAGES=128 kiB, whichever is less).
 	MaxReadAhead int
 
 	// If IgnoreSecurityLabels is set, all security related xattr
@@ -189,9 +221,17 @@ type MountOptions struct {
 	// If set, print debugging information.
 	Debug bool
 
+	// If set, sink for debug statements.
+	Logger *log.Logger
+
 	// If set, ask kernel to forward file locks to FUSE. If using,
 	// you must implement the GetLk/SetLk/SetLkw methods.
 	EnableLocks bool
+
+	// If set, the kernel caches all Readlink return values. The
+	// filesystem must use content notification to force the
+	// kernel to issue a new Readlink call.
+	EnableSymlinkCaching bool
 
 	// If set, ask kernel not to do automatic data cache invalidation.
 	// The filesystem is fully responsible for invalidating data cache.
@@ -217,10 +257,20 @@ type MountOptions struct {
 	// If set, fuse will first attempt to use syscall.Mount instead of
 	// fusermount to mount the filesystem. This will not update /etc/mtab
 	// but might be needed if fusermount is not available.
+	// Also, Server.Unmount will attempt syscall.Unmount before calling
+	// fusermount.
 	DirectMount bool
 
-	// Options passed to syscall.Mount, the default value used by fusermount
-	// is syscall.MS_NOSUID|syscall.MS_NODEV
+	// DirectMountStrict is like DirectMount but no fallback to fusermount is
+	// performed. If both DirectMount and DirectMountStrict are set,
+	// DirectMountStrict wins.
+	DirectMountStrict bool
+
+	// DirectMountFlags are the mountflags passed to syscall.Mount. If zero, the
+	// default value used by fusermount are used: syscall.MS_NOSUID|syscall.MS_NODEV.
+	//
+	// If you actually *want* zero flags, pass syscall.MS_MGC_VAL, which is ignored
+	// by the kernel. See `man 2 mount` for details about MS_MGC_VAL.
 	DirectMountFlags uintptr
 
 	// EnableAcls enables kernel ACL support.
