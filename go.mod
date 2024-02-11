@@ -61,8 +61,8 @@ require (
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.5.0
-	github.com/prometheus/client_golang v1.16.0
-	github.com/prometheus/procfs v0.10.1
+	github.com/prometheus/client_golang v1.17.0
+	github.com/prometheus/procfs v0.11.1
 	github.com/serialx/hashring v0.0.0-20190422032157-8b2912629002
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spdx/tools-golang v0.5.1
@@ -153,8 +153,8 @@ require (
 	github.com/moby/sys/sequential v0.5.0 // indirect
 	github.com/pkg/browser v0.0.0-20210115035449-ce105d075bb4 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/prometheus/client_model v0.4.0 // indirect
-	github.com/prometheus/common v0.42.0 // indirect
+	github.com/prometheus/client_model v0.5.0 // indirect
+	github.com/prometheus/common v0.44.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/secure-systems-lab/go-securesystemslib v0.4.0 // indirect
 	github.com/shibumi/go-pathspec v1.3.0 // indirect
