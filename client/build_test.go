@@ -60,7 +60,8 @@ func TestClientGatewayIntegration(t *testing.T) {
 	), integration.WithMirroredImages(integration.OfficialImages("busybox:latest")))
 
 	integration.Run(t, integration.TestFuncs(
-		testClientGatewayContainerSecurityMode,
+		testClientGatewayContainerSecurityModeCaps,
+		testClientGatewayContainerSecurityModeValidation,
 	), integration.WithMirroredImages(integration.OfficialImages("busybox:latest")),
 		integration.WithMatrix("secmode", map[string]interface{}{
 			"sandbox":  securitySandbox,
@@ -69,7 +70,8 @@ func TestClientGatewayIntegration(t *testing.T) {
 	)
 
 	integration.Run(t, integration.TestFuncs(
-		testClientGatewayContainerHostNetworking,
+		testClientGatewayContainerHostNetworkingAccess,
+		testClientGatewayContainerHostNetworkingValidation,
 	),
 		integration.WithMirroredImages(integration.OfficialImages("busybox:latest")),
 		integration.WithMatrix("netmode", map[string]interface{}{
@@ -1684,9 +1686,17 @@ func testClientGatewayExecFileActionError(t *testing.T, sb integration.Sandbox) 
 	checkAllReleasable(t, c, sb, true)
 }
 
-// testClientGatewayContainerSecurityMode ensures that the correct security mode
+// testClientGatewayContainerSecurityModeCaps ensures that the correct security mode
 // is propagated to the gateway container
-func testClientGatewayContainerSecurityMode(t *testing.T, sb integration.Sandbox) {
+func testClientGatewayContainerSecurityModeCaps(t *testing.T, sb integration.Sandbox) {
+	testClientGatewayContainerSecurityMode(t, sb, false)
+}
+
+func testClientGatewayContainerSecurityModeValidation(t *testing.T, sb integration.Sandbox) {
+	testClientGatewayContainerSecurityMode(t, sb, true)
+}
+
+func testClientGatewayContainerSecurityMode(t *testing.T, sb integration.Sandbox, expectFail bool) {
 	integration.CheckFeatureCompat(t, sb, integration.FeatureSecurityMode)
 	requiresLinux(t)
 
@@ -1713,6 +1723,9 @@ func testClientGatewayContainerSecurityMode(t *testing.T, sb integration.Sandbox
 			require.EqualValues(t, 0xa80425fb, caps)
 		}
 		allowedEntitlements = []entitlements.Entitlement{}
+		if expectFail {
+			return
+		}
 	} else {
 		assertCaps = func(caps uint64) {
 			/*
@@ -1729,6 +1742,9 @@ func testClientGatewayContainerSecurityMode(t *testing.T, sb integration.Sandbox
 		}
 		mode = llb.SecurityModeInsecure
 		allowedEntitlements = []entitlements.Entitlement{entitlements.EntitlementSecurityInsecure}
+		if expectFail {
+			allowedEntitlements = []entitlements.Entitlement{}
+		}
 	}
 
 	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
@@ -1778,6 +1794,12 @@ func testClientGatewayContainerSecurityMode(t *testing.T, sb integration.Sandbox
 		t.Logf("Stdout: %q", stdout.String())
 		t.Logf("Stderr: %q", stderr.String())
 
+		if expectFail {
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "security.insecure is not allowed")
+			return nil, err
+		}
+
 		require.NoError(t, err)
 
 		capsValue, err := strconv.ParseUint(strings.TrimSpace(stdout.String()), 16, 64)
@@ -1792,7 +1814,13 @@ func testClientGatewayContainerSecurityMode(t *testing.T, sb integration.Sandbox
 		AllowedEntitlements: allowedEntitlements,
 	}
 	_, err = c.Build(ctx, solveOpts, product, b, nil)
-	require.NoError(t, err)
+
+	if expectFail {
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "security.insecure is not allowed")
+	} else {
+		require.NoError(t, err)
+	}
 
 	checkAllReleasable(t, c, sb, true)
 }
@@ -1868,7 +1896,15 @@ func testClientGatewayContainerExtraHosts(t *testing.T, sb integration.Sandbox) 
 	checkAllReleasable(t, c, sb, true)
 }
 
-func testClientGatewayContainerHostNetworking(t *testing.T, sb integration.Sandbox) {
+func testClientGatewayContainerHostNetworkingAccess(t *testing.T, sb integration.Sandbox) {
+	testClientGatewayContainerHostNetworking(t, sb, false)
+}
+
+func testClientGatewayContainerHostNetworkingValidation(t *testing.T, sb integration.Sandbox) {
+	testClientGatewayContainerHostNetworking(t, sb, true)
+}
+
+func testClientGatewayContainerHostNetworking(t *testing.T, sb integration.Sandbox, expectFail bool) {
 	if os.Getenv("BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS") == "" {
 		t.SkipNow()
 	}
@@ -1889,6 +1925,9 @@ func testClientGatewayContainerHostNetworking(t *testing.T, sb integration.Sandb
 	if sb.Value("netmode") == hostNetwork {
 		netMode = pb.NetMode_HOST
 		allowedEntitlements = []entitlements.Entitlement{entitlements.EntitlementNetworkHost}
+		if expectFail {
+			allowedEntitlements = []entitlements.Entitlement{}
+		}
 	}
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -1947,7 +1986,12 @@ func testClientGatewayContainerHostNetworking(t *testing.T, sb integration.Sandb
 		t.Logf("Stderr: %q", stderr.String())
 
 		if netMode == pb.NetMode_HOST {
-			require.NoError(t, err)
+			if expectFail {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "network.host is not allowed")
+			} else {
+				require.NoError(t, err)
+			}
 		} else {
 			require.Error(t, err)
 		}
