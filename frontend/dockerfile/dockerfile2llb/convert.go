@@ -1114,14 +1114,6 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bo
 	return nil
 }
 
-type excludeOnCopy struct {
-	patterns []string
-}
-
-func (e *excludeOnCopy) SetCopyOption(i *llb.CopyInfo) {
-	i.ExcludePatterns = append(i.ExcludePatterns, e.patterns...)
-}
-
 func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 	dest, err := pathRelativeToWorkingDir(d.state, cfg.params.DestPath, *d.platform)
 	if err != nil {
@@ -1138,7 +1130,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		copyOpt = append(copyOpt, llb.WithUser(cfg.chown))
 	}
 
-	copyOpt = append(copyOpt, &excludeOnCopy{cfg.excludePatterns})
+	copyOpt = append(copyOpt, llb.WithExcludePatterns(cfg.excludePatterns))
 
 	var mode *os.FileMode
 	if cfg.chmod != "" {
