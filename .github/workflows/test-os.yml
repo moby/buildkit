@@ -19,7 +19,7 @@ on:
       - 'frontend/dockerfile/docs/**'
 
 env:
-  GO_VERSION: "1.21"
+  GO_VERSION: "1.22"
   TESTFLAGS: "-v --parallel=6 --timeout=60m"
   GOTESTSUM_VERSION: "v1.9.0"  # same as one in Dockerfile
   GOTESTSUM_FORMAT: "standard-verbose"

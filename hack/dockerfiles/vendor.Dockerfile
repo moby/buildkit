@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile-upstream:master
 
-ARG GO_VERSION=1.21
+ARG GO_VERSION=1.22
 ARG MODOUTDATED_VERSION=v0.9.0
 
 FROM golang:${GO_VERSION}-alpine AS base
