@@ -212,7 +212,6 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testSnapshotWithMultipleBlobs,
 	testExportLocalNoPlatformSplit,
 	testExportLocalNoPlatformSplitOverwrite,
-	testSolverOptLocalDirsStillWorks,
 }
 
 func TestIntegration(t *testing.T) {
@@ -1555,49 +1554,6 @@ func testRelativeWorkDir(t *testing.T, sb integration.Sandbox) {
 	dt, err := os.ReadFile(filepath.Join(destDir, "pwd"))
 	require.NoError(t, err)
 	require.Equal(t, []byte("/test1/test2\n"), dt)
-}
-
-// TODO: remove this test once `client.SolveOpt.LocalDirs`, now marked as deprecated, is removed.
-// For more context on this test, please check:
-// https://github.com/moby/buildkit/pull/4583#pullrequestreview-1847043452
-func testSolverOptLocalDirsStillWorks(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
-
-	c, err := New(sb.Context(), sb.Address())
-	require.NoError(t, err)
-	defer c.Close()
-
-	out := llb.Image("docker.io/library/busybox:latest").
-		File(llb.Copy(llb.Local("mylocal"), "input.txt", "input.txt")).
-		Run(llb.Shlex(`sh -c "/bin/rev < input.txt > /out/output.txt"`)).
-		AddMount(`/out`, llb.Scratch())
-
-	def, err := out.Marshal(sb.Context())
-	require.NoError(t, err)
-
-	srcDir := integration.Tmpdir(t,
-		fstest.CreateFile("input.txt", []byte("Hello World"), 0600),
-	)
-
-	destDir := integration.Tmpdir(t)
-
-	_, err = c.Solve(sb.Context(), def, SolveOpt{
-		LocalDirs: map[string]string{
-			"mylocal": srcDir.Name,
-		},
-		Exports: []ExportEntry{
-			{
-				Type:      ExporterLocal,
-				OutputDir: destDir.Name,
-			},
-		},
-	}, nil)
-
-	require.NoError(t, err)
-
-	dt, err := os.ReadFile(filepath.Join(destDir.Name, "output.txt"))
-	require.NoError(t, err)
-	require.Equal(t, []byte("dlroW olleH"), dt)
 }
 
 func testFileOpMkdirMkfile(t *testing.T, sb integration.Sandbox) {
