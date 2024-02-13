@@ -172,6 +172,12 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		for _, dep := range deps {
 			recs, err := dep.CacheKey.Exporter.ExportTo(ctx, t, opt)
 			if err != nil {
+				if opt.Mode == CacheExportModeMax {
+					// we wanted to export everything in this mode, so no toleration
+					// for failures
+					return nil, err
+				}
+				// ignore errors in min or remote-only mode
 				return nil, nil
 			}
 			for _, r := range recs {
@@ -184,6 +190,12 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		for _, de := range e.edge.secondaryExporters {
 			recs, err := de.cacheKey.CacheKey.Exporter.ExportTo(ctx, t, opt)
 			if err != nil {
+				if opt.Mode == CacheExportModeMax {
+					// we wanted to export everything in this mode, so no toleration
+					// for failures
+					return nil, err
+				}
+				// ignore errors in min or remote-only mode
 				return nil, nil
 			}
 			for _, r := range recs {
