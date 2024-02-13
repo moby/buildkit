@@ -20,6 +20,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+var excludePatternsEnabled = false
+
 type parseRequest struct {
 	command    string
 	args       []string
@@ -280,12 +282,26 @@ func parseSourcesAndDest(req parseRequest, command string) (*SourcesAndDest, err
 	}, nil
 }
 
+func stringValuesFromFlagIfPossible(f *Flag) []string {
+	if f == nil {
+		return nil
+	}
+
+	return f.StringValues
+}
+
 func parseAdd(req parseRequest) (*AddCommand, error) {
 	if len(req.args) < 2 {
 		return nil, errNoDestinationArgument("ADD")
 	}
 
-	flExcludes := req.flags.AddStrings("exclude")
+	var flExcludes *Flag
+
+	// silently ignore if not -labs
+	if excludePatternsEnabled {
+		flExcludes = req.flags.AddStrings("exclude")
+	}
+
 	flChown := req.flags.AddString("chown", "")
 	flChmod := req.flags.AddString("chmod", "")
 	flLink := req.flags.AddBool("link", false)
@@ -308,7 +324,7 @@ func parseAdd(req parseRequest) (*AddCommand, error) {
 		Link:            flLink.Value == "true",
 		KeepGitDir:      flKeepGitDir.Value == "true",
 		Checksum:        flChecksum.Value,
-		ExcludePatterns: flExcludes.StringValues,
+		ExcludePatterns: stringValuesFromFlagIfPossible(flExcludes),
 	}, nil
 }
 
@@ -317,7 +333,13 @@ func parseCopy(req parseRequest) (*CopyCommand, error) {
 		return nil, errNoDestinationArgument("COPY")
 	}
 
-	flExcludes := req.flags.AddStrings("exclude")
+	var flExcludes *Flag
+
+	// silently ignore if not -labs
+	if excludePatternsEnabled {
+		flExcludes = req.flags.AddStrings("exclude")
+	}
+
 	flChown := req.flags.AddString("chown", "")
 	flFrom := req.flags.AddString("from", "")
 	flChmod := req.flags.AddString("chmod", "")
@@ -340,7 +362,7 @@ func parseCopy(req parseRequest) (*CopyCommand, error) {
 		Chmod:           flChmod.Value,
 		Link:            flLink.Value == "true",
 		Parents:         (flParents.Value == "true") && parentsEnabled, // silently ignore if not -labs
-		ExcludePatterns: flExcludes.StringValues,
+		ExcludePatterns: stringValuesFromFlagIfPossible(flExcludes),
 	}, nil
 }
 

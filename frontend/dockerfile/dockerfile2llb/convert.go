@@ -1130,7 +1130,12 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		copyOpt = append(copyOpt, llb.WithUser(cfg.chown))
 	}
 
-	copyOpt = append(copyOpt, llb.WithExcludePatterns(cfg.excludePatterns))
+	if len(cfg.excludePatterns) > 0 {
+		// in theory we don't need to check whether there are any exclude patterns,
+		// as an empty list is a no-op. However, performing the check makes
+		// the code easier to understand and costs virtually nothing.
+		copyOpt = append(copyOpt, llb.WithExcludePatterns(cfg.excludePatterns))
+	}
 
 	var mode *os.FileMode
 	if cfg.chmod != "" {

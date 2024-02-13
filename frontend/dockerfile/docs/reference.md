@@ -1161,7 +1161,7 @@ The latter form is required for paths containing whitespace.
 > **Note**
 >
 > The `--exclude` option can be specified multiple times and cause files matching its patterns not to be copied,
-> even if the files paths match the pattern specified in `<src>`.
+> even if the files paths match the pattern specified in `<src>`. This feature requires the build tag `dfexcludepatterns`.
 
 The `ADD` instruction copies new files, directories or remote file URLs from `<src>`
 and adds them to the filesystem of the image at the path `<dest>`.
@@ -1388,7 +1388,7 @@ This latter form is required for paths containing whitespace
 > **Note**
 >
 > The `--exclude` option can be specified multiple times and cause files matching its patterns not to be copied,
-> even if the files paths match the pattern specified in `<src>`.
+> even if the files paths match the pattern specified in `<src>`. This feature requires the build tag `dfexcludepatterns`.
 
 The `COPY` instruction copies new files or directories from `<src>`
 and adds them to the filesystem of the container at the path `<dest>`.
