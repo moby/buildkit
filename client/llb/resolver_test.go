@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/containerd/containerd/platforms"
+	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -74,7 +75,7 @@ type testResolver struct {
 	platform string
 }
 
-func (r *testResolver) ResolveImageConfig(ctx context.Context, ref string, opt ResolveImageConfigOpt) (string, digest.Digest, []byte, error) {
+func (r *testResolver) ResolveImageConfig(ctx context.Context, ref string, opt sourceresolver.Opt) (string, digest.Digest, []byte, error) {
 	var img struct {
 		Config struct {
 			Env        []string `json:"Env,omitempty"`

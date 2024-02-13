@@ -3,6 +3,7 @@ package llbsolver
 import (
 	"context"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"sync"
@@ -11,7 +12,7 @@ import (
 	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/config"
-	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/executor/resources"
 	"github.com/moby/buildkit/exporter/containerimage"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
@@ -133,21 +134,26 @@ func (b *provenanceBridge) findByResult(rp solver.ResultProxy) (*resultWithBridg
 	return nil, false
 }
 
-func (b *provenanceBridge) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt) (resolvedRef string, dgst digest.Digest, config []byte, err error) {
-	ref, dgst, config, err = b.llbBridge.ResolveImageConfig(ctx, ref, opt)
+func (b *provenanceBridge) ResolveSourceMetadata(ctx context.Context, op *pb.SourceOp, opt sourceresolver.Opt) (*sourceresolver.MetaResponse, error) {
+	log.Printf("prov.ResolveSourceMetadata: %#v %#v", op, opt)
+	resp, err := b.llbBridge.ResolveSourceMetadata(ctx, op, opt)
 	if err != nil {
-		return "", "", nil, err
+		return nil, err
 	}
-
-	b.mu.Lock()
-	b.images = append(b.images, provenance.ImageSource{
-		Ref:      ref,
-		Platform: opt.Platform,
-		Digest:   dgst,
-		Local:    opt.ResolverType == llb.ResolverTypeOCILayout,
-	})
-	b.mu.Unlock()
-	return ref, dgst, config, nil
+	if img := resp.Image; img != nil {
+		local := !strings.HasPrefix(resp.Op.Identifier, "docker-image://")
+		ref := strings.TrimPrefix(resp.Op.Identifier, "docker-image://")
+		ref = strings.TrimPrefix(ref, "oci-layout://")
+		b.mu.Lock()
+		b.images = append(b.images, provenance.ImageSource{
+			Ref:      ref,
+			Platform: opt.Platform,
+			Digest:   img.Digest,
+			Local:    local,
+		})
+		b.mu.Unlock()
+	}
+	return resp, nil
 }
 
 func (b *provenanceBridge) Solve(ctx context.Context, req frontend.SolveRequest, sid string) (res *frontend.Result, err error) {

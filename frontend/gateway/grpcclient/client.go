@@ -12,10 +12,12 @@ import (
 	"syscall"
 	"time"
 
+	distreference "github.com/distribution/reference"
 	"github.com/gogo/googleapis/google/rpc"
 	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
@@ -23,6 +25,7 @@ import (
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/grpcerrors"
+	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/sys/signal"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -479,7 +482,11 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (res *
 	return res, nil
 }
 
-func (c *grpcClient) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt) (string, digest.Digest, []byte, error) {
+func (c *grpcClient) ResolveSourceMetadata(ctx context.Context, op *opspb.SourceOp, opt sourceresolver.Opt) (*sourceresolver.MetaResponse, error) {
+	if c.caps.Supports(pb.CapSourceMetaResolver) != nil {
+		return nil, errors.Errorf("fallback not implemented")
+	}
+
 	var p *opspb.Platform
 	if platform := opt.Platform; platform != nil {
 		p = &opspb.Platform{
@@ -491,16 +498,97 @@ func (c *grpcClient) ResolveImageConfig(ctx context.Context, ref string, opt llb
 		}
 	}
 
-	resp, err := c.client.ResolveImageConfig(ctx, &pb.ResolveImageConfigRequest{
-		ResolverType:   int32(opt.ResolverType),
-		Ref:            ref,
+	req := &pb.ResolveSourceMetaRequest{
+		Source:         op,
 		Platform:       p,
-		ResolveMode:    opt.ResolveMode,
 		LogName:        opt.LogName,
-		SessionID:      opt.Store.SessionID,
-		StoreID:        opt.Store.StoreID,
 		SourcePolicies: opt.SourcePolicies,
-	})
+	}
+	resp, err := c.client.ResolveSourceMeta(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	r := &sourceresolver.MetaResponse{
+		Op: resp.Source,
+	}
+	if resp.Image != nil {
+		r.Image = &sourceresolver.ResolveImageResponse{
+			Digest: resp.Image.Digest,
+			Config: resp.Image.Config,
+		}
+	}
+	return r, nil
+}
+
+func (c *grpcClient) resolveImageConfigViaSourceMetadata(ctx context.Context, ref string, opt sourceresolver.Opt, p *opspb.Platform) (string, digest.Digest, []byte, error) {
+	op := &opspb.SourceOp{
+		Identifier: "docker-image://" + ref,
+	}
+	if opt.OCILayoutOpt != nil {
+		named, err := distreference.ParseNormalizedNamed(ref)
+		if err != nil {
+			return "", "", nil, err
+		}
+		op.Identifier = "oci-layout://" + named.String()
+		op.Attrs = map[string]string{
+			opspb.AttrOCILayoutSessionID: opt.OCILayoutOpt.Store.SessionID,
+			opspb.AttrOCILayoutStoreID:   opt.OCILayoutOpt.Store.StoreID,
+		}
+	}
+
+	req := &pb.ResolveSourceMetaRequest{
+		Source:         op,
+		Platform:       p,
+		LogName:        opt.LogName,
+		SourcePolicies: opt.SourcePolicies,
+	}
+	resp, err := c.client.ResolveSourceMeta(ctx, req)
+	if err != nil {
+		return "", "", nil, err
+	}
+	if resp.Image == nil {
+		return "", "", nil, &imageutil.ResolveToNonImageError{Ref: ref, Updated: resp.Source.Identifier}
+	}
+	ref = strings.TrimPrefix(resp.Source.Identifier, "docker-image://")
+	ref = strings.TrimPrefix(ref, "oci-layout://")
+	return ref, resp.Image.Digest, resp.Image.Config, nil
+}
+
+func (c *grpcClient) ResolveImageConfig(ctx context.Context, ref string, opt sourceresolver.Opt) (string, digest.Digest, []byte, error) {
+	var p *opspb.Platform
+	if platform := opt.Platform; platform != nil {
+		p = &opspb.Platform{
+			OS:           platform.OS,
+			Architecture: platform.Architecture,
+			Variant:      platform.Variant,
+			OSVersion:    platform.OSVersion,
+			OSFeatures:   platform.OSFeatures,
+		}
+	}
+
+	if c.caps.Supports(pb.CapSourceMetaResolver) == nil {
+		return c.resolveImageConfigViaSourceMetadata(ctx, ref, opt, p)
+	}
+
+	req := &pb.ResolveImageConfigRequest{
+		Ref:            ref,
+		LogName:        opt.LogName,
+		SourcePolicies: opt.SourcePolicies,
+		Platform:       p,
+	}
+	if iopt := opt.ImageOpt; iopt != nil {
+		req.ResolveMode = iopt.ResolveMode
+		req.ResolverType = int32(sourceresolver.ResolverTypeRegistry)
+	}
+
+	if iopt := opt.OCILayoutOpt; iopt != nil {
+		req.ResolverType = int32(sourceresolver.ResolverTypeOCILayout)
+		req.StoreID = iopt.Store.StoreID
+		req.SessionID = iopt.Store.SessionID
+	}
+
+	resp, err := c.client.ResolveImageConfig(ctx, req)
 	if err != nil {
 		return "", "", nil, err
 	}

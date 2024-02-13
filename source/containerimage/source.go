@@ -14,7 +14,7 @@ import (
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client"
-	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
@@ -89,7 +89,7 @@ func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session
 		mode       resolver.ResolveMode
 		recordType client.UsageRecordType
 		ref        reference.Spec
-		store      llb.ResolveImageConfigOptStore
+		store      sourceresolver.ResolveImageConfigOptStore
 		layerLimit *int
 	)
 	switch is.ResolverType {
@@ -116,7 +116,7 @@ func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session
 			platform = *ociIdentifier.Platform
 		}
 		mode = resolver.ResolveModeForcePull // with OCI layout, we always just "pull"
-		store = llb.ResolveImageConfigOptStore{
+		store = sourceresolver.ResolveImageConfigOptStore{
 			SessionID: ociIdentifier.SessionID,
 			StoreID:   ociIdentifier.StoreID,
 		}
@@ -148,44 +148,51 @@ func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session
 	return p, nil
 }
 
-func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt, sm *session.Manager, g session.Group) (string, digest.Digest, []byte, error) {
+func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt sourceresolver.Opt, sm *session.Manager, g session.Group) (digest.Digest, []byte, error) {
 	key := ref
-	if platform := opt.Platform; platform != nil {
-		key += platforms.Format(*platform)
-	}
 	var (
 		rm    resolver.ResolveMode
 		rslvr remotes.Resolver
 		err   error
 	)
+	if platform := opt.Platform; platform != nil {
+		key += platforms.Format(*platform)
+	}
 
 	switch is.ResolverType {
 	case ResolverTypeRegistry:
-		rm, err = resolver.ParseImageResolveMode(opt.ResolveMode)
+		iopt := opt.ImageOpt
+		if iopt == nil {
+			return "", nil, errors.Errorf("missing imageopt for resolve")
+		}
+		rm, err = resolver.ParseImageResolveMode(iopt.ResolveMode)
 		if err != nil {
-			return "", "", nil, err
+			return "", nil, err
 		}
 		rslvr = resolver.DefaultPool.GetResolver(is.RegistryHosts, ref, "pull", sm, g).WithImageStore(is.ImageStore, rm)
 	case ResolverTypeOCILayout:
+		iopt := opt.OCILayoutOpt
+		if iopt == nil {
+			return "", nil, errors.Errorf("missing ocilayoutopt for resolve")
+		}
 		rm = resolver.ResolveModeForcePull
-		rslvr = getOCILayoutResolver(opt.Store, sm, g)
+		rslvr = getOCILayoutResolver(iopt.Store, sm, g)
 	}
 	key += rm.String()
 	res, err := is.g.Do(ctx, key, func(ctx context.Context) (*resolveImageResult, error) {
-		newRef, dgst, dt, err := imageutil.Config(ctx, ref, rslvr, is.ContentStore, is.LeaseManager, opt.Platform, opt.SourcePolicies)
+		dgst, dt, err := imageutil.Config(ctx, ref, rslvr, is.ContentStore, is.LeaseManager, opt.Platform)
 		if err != nil {
 			return nil, err
 		}
-		return &resolveImageResult{dgst: dgst, dt: dt, ref: newRef}, nil
+		return &resolveImageResult{dgst: dgst, dt: dt}, nil
 	})
 	if err != nil {
-		return "", "", nil, err
+		return "", nil, err
 	}
-	return res.ref, res.dgst, res.dt, nil
+	return res.dgst, res.dt, nil
 }
 
 type resolveImageResult struct {
-	ref  string
 	dgst digest.Digest
 	dt   []byte
 }

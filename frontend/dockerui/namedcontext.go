@@ -10,6 +10,7 @@ import (
 
 	"github.com/distribution/reference"
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/exporter/containerimage/image"
 	"github.com/moby/buildkit/frontend/gateway/client"
@@ -31,7 +32,8 @@ func (bc *Client) namedContext(ctx context.Context, name string, nameWithPlatfor
 
 func (bc *Client) namedContextRecursive(ctx context.Context, name string, nameWithPlatform string, opt ContextOpt, count int) (*llb.State, *image.Image, error) {
 	opts := bc.bopts.Opts
-	v, ok := opts[contextPrefix+nameWithPlatform]
+	contextKey := contextPrefix + nameWithPlatform
+	v, ok := opts[contextKey]
 	if !ok {
 		return nil, nil, nil
 	}
@@ -71,16 +73,23 @@ func (bc *Client) namedContextRecursive(ctx context.Context, name string, nameWi
 
 		named = reference.TagNameOnly(named)
 
-		ref, dgst, data, err := bc.client.ResolveImageConfig(ctx, named.String(), llb.ResolveImageConfigOpt{
-			Platform:     opt.Platform,
-			ResolveMode:  opt.ResolveMode,
-			LogName:      fmt.Sprintf("[context %s] load metadata for %s", nameWithPlatform, ref),
-			ResolverType: llb.ResolverTypeRegistry,
+		ref, dgst, data, err := bc.client.ResolveImageConfig(ctx, named.String(), sourceresolver.Opt{
+			LogName:  fmt.Sprintf("[context %s] load metadata for %s", nameWithPlatform, ref),
+			Platform: opt.Platform,
+			ImageOpt: &sourceresolver.ResolveImageOpt{
+				ResolveMode: opt.ResolveMode,
+			},
 		})
 		if err != nil {
 			e := &imageutil.ResolveToNonImageError{}
 			if errors.As(err, &e) {
-				return bc.namedContextRecursive(ctx, e.Updated, name, opt, count+1)
+				before, after, ok := strings.Cut(e.Updated, "://")
+				if !ok {
+					return nil, nil, errors.Errorf("could not parse ref: %s", e.Updated)
+				}
+
+				bc.bopts.Opts[contextKey] = before + ":" + after
+				return bc.namedContextRecursive(ctx, name, nameWithPlatform, opt, count+1)
 			}
 			return nil, nil, err
 		}
@@ -139,15 +148,14 @@ func (bc *Client) namedContextRecursive(ctx context.Context, name string, nameWi
 			return nil, nil, errors.Wrapf(err, "could not wrap %q with digest", name)
 		}
 
-		// TODO: How should source policy be handled here with a dummy ref?
-		_, dgst, data, err := bc.client.ResolveImageConfig(ctx, dummyRef.String(), llb.ResolveImageConfigOpt{
-			Platform:     opt.Platform,
-			ResolveMode:  opt.ResolveMode,
-			LogName:      fmt.Sprintf("[context %s] load metadata for %s", nameWithPlatform, dummyRef.String()),
-			ResolverType: llb.ResolverTypeOCILayout,
-			Store: llb.ResolveImageConfigOptStore{
-				SessionID: bc.bopts.SessionID,
-				StoreID:   named.Name(),
+		_, dgst, data, err := bc.client.ResolveImageConfig(ctx, dummyRef.String(), sourceresolver.Opt{
+			LogName:  fmt.Sprintf("[context %s] load metadata for %s", nameWithPlatform, dummyRef.String()),
+			Platform: opt.Platform,
+			OCILayoutOpt: &sourceresolver.ResolveOCILayoutOpt{
+				Store: sourceresolver.ResolveImageConfigOptStore{
+					SessionID: bc.bopts.SessionID,
+					StoreID:   named.Name(),
+				},
 			},
 		})
 		if err != nil {
