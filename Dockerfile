@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile-upstream:master@sha256:cd94315a37d63ca11498df06c59883d86fa5b662b0fe5dfee7ad5b7086e95fdf
+# syntax=docker/dockerfile-upstream:master
 
 ARG RUNC_VERSION=v1.1.12
 ARG CONTAINERD_VERSION=v1.7.11
