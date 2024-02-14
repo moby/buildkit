@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile-upstream:master
+# syntax=docker/dockerfile-upstream:master@@sha256:cd94315a37d63ca11498df06c59883d86fa5b662b0fe5dfee7ad5b7086e95fdf
 
 ARG GO_VERSION=1.21
 
