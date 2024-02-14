@@ -6867,7 +6867,7 @@ RUN rm -f /foo-2010.1
 RUN rm -f /foo-2030.1
 `)
 
-	const expectedDigest = "sha256:29f2980a804038b0f910af98e9ddb18bfa4d5514995ee6bb4343ddf621a4e183"
+	const expectedDigest = "sha256:3eb3c164e3420bbfcf52c34f1e40ee66631d69445e934175b779551c729f80df"
 
 	dir := integration.Tmpdir(
 		t,
