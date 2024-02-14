@@ -484,7 +484,31 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (res *
 
 func (c *grpcClient) ResolveSourceMetadata(ctx context.Context, op *opspb.SourceOp, opt sourceresolver.Opt) (*sourceresolver.MetaResponse, error) {
 	if c.caps.Supports(pb.CapSourceMetaResolver) != nil {
-		return nil, errors.Errorf("fallback not implemented")
+		var ref string
+		if v, ok := strings.CutPrefix(op.Identifier, "docker-image://"); ok {
+			ref = v
+		} else if v, ok := strings.CutPrefix(op.Identifier, "oci-layout://"); ok {
+			ref = v
+		} else {
+			return &sourceresolver.MetaResponse{Op: op}, nil
+		}
+		retRef, dgst, config, err := c.ResolveImageConfig(ctx, ref, opt)
+		if err != nil {
+			return nil, err
+		}
+		if strings.HasPrefix(op.Identifier, "docker-image://") {
+			op.Identifier = "docker-image://" + retRef
+		} else if strings.HasPrefix(op.Identifier, "oci-layout://") {
+			op.Identifier = "oci-layout://" + retRef
+		}
+
+		return &sourceresolver.MetaResponse{
+			Op: op,
+			Image: &sourceresolver.ResolveImageResponse{
+				Digest: dgst,
+				Config: config,
+			},
+		}, nil
 	}
 
 	var p *opspb.Platform
