@@ -367,6 +367,12 @@ ENTRYPOINT ["/buildkitd"]
 
 FROM binaries AS buildkit-windows
 
+FROM scratch AS binaries-for-test
+COPY --link --from=gotestsum /out /
+COPY --link --from=registry /out /
+COPY --link --from=containerd /out /
+COPY --link --from=binaries / /
+
 FROM buildkit-base AS integration-tests-base
 ENV BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR="1000:1000"
 RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables ip6tables dnsmasq fuse curl git-daemon openssh-client slirp4netns iproute2 \
