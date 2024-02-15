@@ -2729,51 +2729,65 @@ func testMultipleExporters(t *testing.T, sb integration.Sandbox) {
 	target1, target2 := registry+"/buildkit/build/exporter:image",
 		registry+"/buildkit/build/alternative:image"
 
-	imageExporter := ExporterImage
+	var exporters []ExportEntry
 	if workers.IsTestDockerd() {
-		imageExporter = "moby"
-	}
-
-	ref := identity.NewID()
-	resp, err := c.Solve(sb.Context(), def, SolveOpt{
-		Ref: ref,
-		Exports: []ExportEntry{
+		exporters = append(exporters, ExportEntry{
+			Type: "moby",
+			Attrs: map[string]string{
+				"name": strings.Join([]string{target1, target2}, ","),
+			},
+		})
+	} else {
+		exporters = append(exporters, []ExportEntry{
 			{
-				Type: imageExporter,
+				Type: ExporterImage,
 				Attrs: map[string]string{
 					"name": target1,
 				},
 			},
 			{
-				Type: imageExporter,
+				Type: ExporterImage,
 				Attrs: map[string]string{
 					"name":           target2,
 					"oci-mediatypes": "true",
 				},
 			},
-			// Ensure that multiple local exporter destinations are written properly
-			{
-				Type:      ExporterLocal,
-				OutputDir: destDir,
-			},
-			{
-				Type:      ExporterLocal,
-				OutputDir: destDir2,
-			},
-			// Ensure that multiple instances of the same exporter are possible
-			{
-				Type:   ExporterTar,
-				Output: fixedWriteCloser(outW),
-			},
-			{
-				Type:   ExporterTar,
-				Output: fixedWriteCloser(outW2),
-			},
+		}...)
+	}
+
+	exporters = append(exporters, []ExportEntry{
+		// Ensure that multiple local exporter destinations are written properly
+		{
+			Type:      ExporterLocal,
+			OutputDir: destDir,
 		},
+		{
+			Type:      ExporterLocal,
+			OutputDir: destDir2,
+		},
+		// Ensure that multiple instances of the same exporter are possible
+		{
+			Type:   ExporterTar,
+			Output: fixedWriteCloser(outW),
+		},
+		{
+			Type:   ExporterTar,
+			Output: fixedWriteCloser(outW2),
+		},
+	}...)
+
+	ref := identity.NewID()
+	resp, err := c.Solve(sb.Context(), def, SolveOpt{
+		Ref:     ref,
+		Exports: exporters,
 	}, nil)
 	require.NoError(t, err)
 
-	require.Equal(t, resp.ExporterResponse["image.name"], target2)
+	if workers.IsTestDockerd() {
+		require.Equal(t, resp.ExporterResponse["image.name"], target1+","+target2)
+	} else {
+		require.Equal(t, resp.ExporterResponse["image.name"], target2)
+	}
 	require.FileExists(t, filepath.Join(destDir, "out.tar"))
 	require.FileExists(t, filepath.Join(destDir, "out2.tar"))
 	require.FileExists(t, filepath.Join(destDir, "foo.txt"))
@@ -2792,9 +2806,14 @@ func testMultipleExporters(t *testing.T, sb integration.Sandbox) {
 		}
 		require.Equal(t, ref, ev.Record.Ref)
 
-		require.Len(t, ev.Record.Result.Results, 2)
-		require.Equal(t, images.MediaTypeDockerSchema2Manifest, ev.Record.Result.Results[0].MediaType)
-		require.Equal(t, ocispecs.MediaTypeImageManifest, ev.Record.Result.Results[1].MediaType)
+		if workers.IsTestDockerd() {
+			require.Len(t, ev.Record.Result.Results, 1)
+			require.Equal(t, images.MediaTypeDockerSchema2Manifest, ev.Record.Result.Results[0].MediaType)
+		} else {
+			require.Len(t, ev.Record.Result.Results, 2)
+			require.Equal(t, images.MediaTypeDockerSchema2Manifest, ev.Record.Result.Results[0].MediaType)
+			require.Equal(t, ocispecs.MediaTypeImageManifest, ev.Record.Result.Results[1].MediaType)
+		}
 		require.Equal(t, ev.Record.Result.Results[0], ev.Record.Result.ResultDeprecated)
 	}
 }
