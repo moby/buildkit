@@ -25,6 +25,7 @@ set -eu -o pipefail
 
 : "${DOCKERFILE_RELEASES=}"
 : "${BUILDKIT_WORKER_RANDOM=}"
+: "${BUILDKIT_TEST_DISABLE_FEATURES=}"
 
 if [ "$TEST_DOCKERD" == "1" ]; then
   if [ ! -f "$TEST_DOCKERD_BINARY" ]; then
