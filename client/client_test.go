@@ -2808,7 +2808,11 @@ func testMultipleExporters(t *testing.T, sb integration.Sandbox) {
 
 		if workers.IsTestDockerd() {
 			require.Len(t, ev.Record.Result.Results, 1)
-			require.Equal(t, images.MediaTypeDockerSchema2Manifest, ev.Record.Result.Results[0].MediaType)
+			if workers.IsTestDockerdMoby(sb) {
+				require.Equal(t, images.MediaTypeDockerSchema2Config, ev.Record.Result.Results[0].MediaType)
+			} else {
+				require.Equal(t, images.MediaTypeDockerSchema2Manifest, ev.Record.Result.Results[0].MediaType)
+			}
 		} else {
 			require.Len(t, ev.Record.Result.Results, 2)
 			require.Equal(t, images.MediaTypeDockerSchema2Manifest, ev.Record.Result.Results[0].MediaType)
