@@ -243,14 +243,17 @@ RUN --mount=from=containerd-src,src=/usr/src/containerd,rw \
   git fetch origin
   git checkout -q "$CONTAINERD_VERSION"
   mkdir /out
+  ext=""
   if [ "$(xx-info os)" = "windows" ]; then
-    CGO_ENABLED=0 make STATIC=1 binaries
-    mv bin/containerd.exe bin/containerd-shim* bin/ctr* /out
-  else
+    ext=".exe"
+  fi
+  if [ "$(xx-info os)" = "linux" ]; then
     make bin/containerd
     make bin/containerd-shim-runc-v2
-    make bin/ctr
-    mv bin/containerd bin/containerd-shim* bin/ctr* /out
+    mv bin/containerd bin/containerd-shim* /out
+  else
+    CGO_ENABLED=0 make STATIC=1 binaries
+    mv bin/containerd${ext} bin/containerd-shim* /out
   fi
 EOT
 
@@ -263,13 +266,17 @@ RUN --mount=from=containerd-src,src=/usr/src/containerd,rw \
   git fetch origin
   git checkout -q "$CONTAINERD_ALT_VERSION_16"
   mkdir /out
+  ext=""
   if [ "$(xx-info os)" = "windows" ]; then
-    CGO_ENABLED=0 make STATIC=1 binaries
-    mv bin/containerd.exe bin/containerd-shim* /out
-  else
+    ext=".exe"
+  fi
+  if [ "$(xx-info os)" = "linux" ]; then
     make bin/containerd
     make bin/containerd-shim-runc-v2
     mv bin/containerd bin/containerd-shim* /out
+  else
+    CGO_ENABLED=0 make STATIC=1 binaries
+    mv bin/containerd${ext} bin/containerd-shim* /out
   fi
 EOT
 
