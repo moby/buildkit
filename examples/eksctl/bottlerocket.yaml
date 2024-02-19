@@ -22,4 +22,4 @@ nodeGroups:
         kernel:
           sysctl:
             # Adjust the value as needed
-            "user.max_user_namespace": "16384"
+            "user.max_user_namespaces": "16384"
