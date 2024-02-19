@@ -16,11 +16,16 @@ import (
 	"github.com/docker/docker/api/types/strslice"
 	"github.com/moby/buildkit/frontend/dockerfile/command"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
+	"github.com/moby/buildkit/frontend/dockerui/types"
 	"github.com/moby/buildkit/util/suggest"
 	"github.com/pkg/errors"
 )
 
 var excludePatternsEnabled = false
+
+type ParseOpts struct {
+	InstructionHook *types.InstructionHook
+}
 
 type parseRequest struct {
 	command    string
@@ -31,6 +36,7 @@ type parseRequest struct {
 	original   string
 	location   []parser.Range
 	comments   []string
+	opts       ParseOpts
 }
 
 var parseRunPreHooks []func(*RunCommand, parseRequest) error
@@ -67,11 +73,12 @@ func newParseRequestFromNode(node *parser.Node) parseRequest {
 }
 
 // ParseInstruction converts an AST to a typed instruction (either a command or a build stage beginning when encountering a `FROM` statement)
-func ParseInstruction(node *parser.Node) (v interface{}, err error) {
+func ParseInstruction(node *parser.Node, opts ParseOpts) (v interface{}, err error) {
 	defer func() {
 		err = parser.WithLocation(err, node.Location())
 	}()
 	req := newParseRequestFromNode(node)
+	req.opts = opts
 	switch strings.ToLower(node.Value) {
 	case command.Env:
 		return parseEnv(req)
@@ -114,8 +121,8 @@ func ParseInstruction(node *parser.Node) (v interface{}, err error) {
 }
 
 // ParseCommand converts an AST to a typed Command
-func ParseCommand(node *parser.Node) (Command, error) {
-	s, err := ParseInstruction(node)
+func ParseCommand(node *parser.Node, opts ParseOpts) (Command, error) {
+	s, err := ParseInstruction(node, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -150,9 +157,9 @@ func (e *parseError) Unwrap() error {
 
 // Parse a Dockerfile into a collection of buildable stages.
 // metaArgs is a collection of ARG instructions that occur before the first FROM.
-func Parse(ast *parser.Node) (stages []Stage, metaArgs []ArgCommand, err error) {
+func Parse(ast *parser.Node, opts ParseOpts) (stages []Stage, metaArgs []ArgCommand, err error) {
 	for _, n := range ast.Children {
-		cmd, err := ParseInstruction(n)
+		cmd, err := ParseInstruction(n, opts)
 		if err != nil {
 			return nil, nil, &parseError{inner: err, node: n}
 		}
@@ -475,6 +482,7 @@ func parseShellDependentCommand(req parseRequest, command string, emptyAsNil boo
 
 func parseRun(req parseRequest) (*RunCommand, error) {
 	cmd := &RunCommand{}
+	cmd.SetInstructionHook(req.opts.InstructionHook)
 
 	for _, fn := range parseRunPreHooks {
 		if err := fn(cmd, req); err != nil {

@@ -21,7 +21,7 @@ func TestCommandsExactlyOneArgument(t *testing.T) {
 	for _, cmd := range commands {
 		ast, err := parser.Parse(strings.NewReader(cmd))
 		require.NoError(t, err)
-		_, err = ParseInstruction(ast.AST.Children[0])
+		_, err = ParseInstruction(ast.AST.Children[0], ParseOpts{})
 		require.EqualError(t, err, errExactlyOneArgument(cmd).Error())
 	}
 }
@@ -39,7 +39,7 @@ func TestCommandsAtLeastOneArgument(t *testing.T) {
 	for _, cmd := range commands {
 		ast, err := parser.Parse(strings.NewReader(cmd))
 		require.NoError(t, err)
-		_, err = ParseInstruction(ast.AST.Children[0])
+		_, err = ParseInstruction(ast.AST.Children[0], ParseOpts{})
 		require.EqualError(t, err, errAtLeastOneArgument(cmd).Error())
 	}
 }
@@ -53,7 +53,7 @@ func TestCommandsNoDestinationArgument(t *testing.T) {
 	for _, cmd := range commands {
 		ast, err := parser.Parse(strings.NewReader(cmd + " arg1"))
 		require.NoError(t, err)
-		_, err = ParseInstruction(ast.AST.Children[0])
+		_, err = ParseInstruction(ast.AST.Children[0], ParseOpts{})
 		require.EqualError(t, err, errNoDestinationArgument(cmd).Error())
 	}
 }
@@ -78,7 +78,7 @@ func TestCommandsTooManyArguments(t *testing.T) {
 				},
 			},
 		}
-		_, err := ParseInstruction(node)
+		_, err := ParseInstruction(node, ParseOpts{})
 		require.EqualError(t, err, errTooManyArguments(cmd).Error())
 	}
 }
@@ -100,7 +100,7 @@ func TestCommandsBlankNames(t *testing.T) {
 				},
 			},
 		}
-		_, err := ParseInstruction(node)
+		_, err := ParseInstruction(node, ParseOpts{})
 		require.EqualError(t, err, errBlankCommandNames(cmd).Error())
 	}
 }
@@ -118,7 +118,7 @@ func TestHealthCheckCmd(t *testing.T) {
 			},
 		},
 	}
-	cmd, err := ParseInstruction(node)
+	cmd, err := ParseInstruction(node, ParseOpts{})
 	require.NoError(t, err)
 	hc, ok := cmd.(*HealthCheckCommand)
 	require.Equal(t, true, ok)
@@ -161,7 +161,7 @@ ARG bar baz=123
 	ast, err := parser.Parse(bytes.NewBuffer([]byte(dt)))
 	require.NoError(t, err)
 
-	stages, meta, err := Parse(ast.AST)
+	stages, meta, err := Parse(ast.AST, ParseOpts{})
 	require.NoError(t, err)
 
 	require.Equal(t, "defines first stage", stages[0].Comment)
@@ -225,7 +225,7 @@ func TestErrorCases(t *testing.T) {
 			t.Fatalf("Error when parsing Dockerfile: %s", err)
 		}
 		n := ast.AST.Children[0]
-		_, err = ParseInstruction(n)
+		_, err = ParseInstruction(n, ParseOpts{})
 		require.ErrorContains(t, err, c.expectedError)
 	}
 }
@@ -237,7 +237,7 @@ func TestRunCmdFlagsUsed(t *testing.T) {
 	require.NoError(t, err)
 
 	n := ast.AST.Children[0]
-	c, err := ParseInstruction(n)
+	c, err := ParseInstruction(n, ParseOpts{})
 	require.NoError(t, err)
 	require.IsType(t, c, &RunCommand{})
 	require.Equal(t, []string{"mount"}, c.(*RunCommand).FlagsUsed)

@@ -25,6 +25,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/moby/buildkit/frontend/dockerui"
+	"github.com/moby/buildkit/frontend/dockerui/types"
 	"github.com/moby/buildkit/frontend/subrequests/outline"
 	"github.com/moby/buildkit/frontend/subrequests/targets"
 	"github.com/moby/buildkit/identity"
@@ -114,7 +115,7 @@ func ListTargets(ctx context.Context, dt []byte) (*targets.List, error) {
 	if err != nil {
 		return nil, err
 	}
-	stages, _, err := instructions.Parse(dockerfile.AST)
+	stages, _, err := instructions.Parse(dockerfile.AST, instructions.ParseOpts{})
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +187,10 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 
 	proxyEnv := proxyEnvFromBuildArgs(opt.BuildArgs)
 
-	stages, metaArgs, err := instructions.Parse(dockerfile.AST)
+	parseOpts := instructions.ParseOpts{
+		InstructionHook: opt.InstructionHook,
+	}
+	stages, metaArgs, err := instructions.Parse(dockerfile.AST, parseOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -565,6 +569,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			cgroupParent:      opt.CgroupParent,
 			llbCaps:           opt.LLBCaps,
 			sourceMap:         opt.SourceMap,
+			instHook:          opt.InstructionHook,
 		}
 
 		if err = dispatchOnBuildTriggers(d, d.image.Config.OnBuild, opt); err != nil {
@@ -700,6 +705,7 @@ type dispatchOpt struct {
 	cgroupParent      string
 	llbCaps           *apicaps.CapSet
 	sourceMap         *llb.SourceMap
+	instHook          *types.InstructionHook
 }
 
 func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
@@ -910,6 +916,9 @@ type command struct {
 }
 
 func dispatchOnBuildTriggers(d *dispatchState, triggers []string, opt dispatchOpt) error {
+	parseOpts := instructions.ParseOpts{
+		InstructionHook: opt.instHook,
+	}
 	for _, trigger := range triggers {
 		ast, err := parser.Parse(strings.NewReader(trigger))
 		if err != nil {
@@ -918,7 +927,7 @@ func dispatchOnBuildTriggers(d *dispatchState, triggers []string, opt dispatchOp
 		if len(ast.AST.Children) != 1 {
 			return errors.New("onbuild trigger should be a single expression")
 		}
-		ic, err := instructions.ParseCommand(ast.AST.Children[0])
+		ic, err := instructions.ParseCommand(ast.AST.Children[0], parseOpts)
 		if err != nil {
 			return err
 		}
@@ -1008,6 +1017,12 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 		args = withShell(d.image, args)
 	}
 
+	argsForHistory := args
+	if dopt.instHook != nil && dopt.instHook.Run != nil {
+		args = append(dopt.instHook.Run.Entrypoint, args...)
+		// leave argsForHistory unmodified
+	}
+
 	env, err := d.state.Env(context.TODO())
 	if err != nil {
 		return err
@@ -1074,7 +1089,7 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 	}
 
 	d.state = d.state.Run(opt...).Root()
-	return commitToHistory(&d.image, "RUN "+runCommandString(args, d.buildArgs, shell.BuildEnvs(env)), true, &d.state, d.epoch)
+	return commitToHistory(&d.image, "RUN "+runCommandString(argsForHistory, d.buildArgs, shell.BuildEnvs(env)), true, &d.state, d.epoch)
 }
 
 func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bool, opt *dispatchOpt) error {
