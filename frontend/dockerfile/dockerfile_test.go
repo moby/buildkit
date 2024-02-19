@@ -257,6 +257,7 @@ func TestIntegration(t *testing.T) {
 			"amd64/bullseye-20230109-slim:latest": "docker.io/amd64/debian:bullseye-20230109-slim@sha256:1acb06a0c31fb467eb8327ad361f1091ab265e0bf26d452dea45dcb0c0ea5e75",
 		}),
 	)...)
+	integration.Run(t, instHookTests, opts...)
 }
 
 func testDefaultEnvWithArgs(t *testing.T, sb integration.Sandbox) {
