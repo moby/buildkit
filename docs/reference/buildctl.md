@@ -181,6 +181,45 @@ $ buildctl build --frontend dockerfile.v0 --local context=. --local dockerfile=.
 $ buildctl build --frontend dockerfile.v0 --local context=. --local dockerfile=. --oci-layout foo2=/home/dir/oci --opt context:alpine=oci-layout://foo2@sha256:bd04a5b26dec16579cd1d7322e949c5905c4742269663fcbc84dcb2e9f4592fb
 ```
 
+##### Instruction hooks
+<!-- TODO: s/master/v0.16/ -->
+In the master branch, the Dockerfile frontend also supports "instruction hooks".
+
+e.g.,
+
+```bash
+buildctl build \
+  --frontend dockerfile.v0 \
+  --opt hook="$(cat hook.json)"
+```
+with `hook.json` as follows:
+```json
+{
+  "RUN": {
+    "entrypoint": ["/dev/.dfhook/entrypoint"],
+    "mounts": [
+       {"from": "example.com/hook", "target": "/dev/.dfhook"},
+       {"type": "secret", "source": "something", "target": "/etc/something"}
+    ]
+  }
+}
+```
+
+This will let the frontend treat `RUN foo` as:
+```dockerfile
+RUN \
+  --mount=from=example.com/hook,target=/dev/.dfhook \
+  --mount=type=secret,source=something,target=/etc/something \
+  /dev/.dfhook/entrypoint foo
+```
+
+`docker history` will still show this as `RUN foo`.
+
+<!--
+TODO: add example hook images to show concrete use-cases
+https://github.com/moby/buildkit/issues/4576
+-->
+
 #### gateway-specific options
 
 The `gateway.v0` frontend passes all of its `--opt` options on to the OCI image that is called to convert the
