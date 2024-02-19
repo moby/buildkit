@@ -10,9 +10,9 @@ import (
 )
 
 func init() {
-	openFlagNames[syscall.O_DIRECT] = "DIRECT"
-	openFlagNames[syscall.O_LARGEFILE] = "LARGEFILE"
-	openFlagNames[syscall_O_NOATIME] = "NOATIME"
+	openFlagNames.set(syscall.O_DIRECT, "DIRECT")
+	openFlagNames.set(syscall.O_LARGEFILE, "LARGEFILE")
+	openFlagNames.set(syscall_O_NOATIME, "NOATIME")
 }
 
 func (a *Attr) string() string {
@@ -37,7 +37,7 @@ func (in *CreateIn) string() string {
 }
 
 func (in *GetAttrIn) string() string {
-	return fmt.Sprintf("{Fh %d}", in.Fh_)
+	return fmt.Sprintf("{Fh %d %s}", in.Fh_, flagString(getAttrFlagNames, int64(in.Flags_), ""))
 }
 
 func (in *MknodIn) string() string {

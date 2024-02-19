@@ -25,12 +25,12 @@ import (
 	"syscall"
 
 	"github.com/containerd/containerd/errdefs"
-	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/overlay/overlayutils"
 	"github.com/containerd/containerd/snapshots/storage"
 	"github.com/containerd/continuity/fs"
+	"github.com/containerd/log"
 	"github.com/moby/sys/mountinfo"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
@@ -316,8 +316,9 @@ func (o *snapshotter) commit(ctx context.Context, isRemote bool, name, key strin
 		return err
 	}
 
+	rollback := true
 	defer func() {
-		if err != nil {
+		if rollback {
 			if rerr := t.Rollback(); rerr != nil {
 				log.G(ctx).WithError(rerr).Warn("failed to rollback transaction")
 			}
@@ -342,6 +343,7 @@ func (o *snapshotter) commit(ctx context.Context, isRemote bool, name, key strin
 		return fmt.Errorf("failed to commit snapshot: %w", err)
 	}
 
+	rollback = false
 	return t.Commit()
 }
 

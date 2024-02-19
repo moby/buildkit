@@ -509,7 +509,7 @@ const (
 	NOTIFY_RETRIEVE_CACHE = -5 // retrieve data from kernel cache of an inode
 	NOTIFY_DELETE         = -6 // notify kernel that a directory entry has been deleted
 
-//	NOTIFY_CODE_MAX     = -6
+// NOTIFY_CODE_MAX     = -6
 )
 
 type FlushIn struct {
