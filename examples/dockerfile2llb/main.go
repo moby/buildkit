@@ -19,7 +19,6 @@ import (
 type buildOpt struct {
 	target                 string
 	partialImageConfigFile string
-	partialMetadataFile    string
 }
 
 func main() {
@@ -32,7 +31,6 @@ func xmain() error {
 	var opt buildOpt
 	flag.StringVar(&opt.target, "target", "", "target stage")
 	flag.StringVar(&opt.partialImageConfigFile, "partial-image-config-file", "", "Output partial image config as a JSON file")
-	flag.StringVar(&opt.partialMetadataFile, "partial-metadata-file", "", "Output partial metadata sa a JSON file")
 	flag.Parse()
 
 	df, err := io.ReadAll(os.Stdin)
