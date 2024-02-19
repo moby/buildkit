@@ -250,17 +250,24 @@ func parseMount(val string, expander SingleWordExpander) (*Mount, error) {
 		}
 	}
 
+	if err = validateMount(m, roAuto); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func validateMount(m *Mount, roAuto bool) error {
 	fileInfoAllowed := m.Type == MountTypeSecret || m.Type == MountTypeSSH || m.Type == MountTypeCache
 
 	if !fileInfoAllowed {
 		if m.Mode != nil {
-			return nil, errors.Errorf("mode not allowed for %q type mounts", m.Type)
+			return errors.Errorf("mode not allowed for %q type mounts", m.Type)
 		}
 		if m.UID != nil {
-			return nil, errors.Errorf("uid not allowed for %q type mounts", m.Type)
+			return errors.Errorf("uid not allowed for %q type mounts", m.Type)
 		}
 		if m.GID != nil {
-			return nil, errors.Errorf("gid not allowed for %q type mounts", m.Type)
+			return errors.Errorf("gid not allowed for %q type mounts", m.Type)
 		}
 	}
 
@@ -274,22 +281,22 @@ func parseMount(val string, expander SingleWordExpander) (*Mount, error) {
 
 	if m.Type == MountTypeSecret {
 		if m.From != "" {
-			return nil, errors.Errorf("secret mount should not have a from")
+			return errors.Errorf("secret mount should not have a from")
 		}
 		if m.CacheSharing != "" {
-			return nil, errors.Errorf("secret mount should not define sharing")
+			return errors.Errorf("secret mount should not define sharing")
 		}
 		if m.Source == "" && m.Target == "" && m.CacheID == "" {
-			return nil, errors.Errorf("invalid secret mount. one of source, target required")
+			return errors.Errorf("invalid secret mount. one of source, target required")
 		}
 		if m.Source != "" && m.CacheID != "" {
-			return nil, errors.Errorf("both source and id can't be set")
+			return errors.Errorf("both source and id can't be set")
 		}
 	}
 
 	if m.CacheSharing != "" && m.Type != MountTypeCache {
-		return nil, errors.Errorf("invalid cache sharing set for %v mount", m.Type)
+		return errors.Errorf("invalid cache sharing set for %v mount", m.Type)
 	}
 
-	return m, nil
+	return nil
 }
