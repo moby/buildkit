@@ -15,9 +15,11 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/attestations"
 	"github.com/moby/buildkit/frontend/dockerfile/linter"
+	"github.com/moby/buildkit/frontend/dockerui/types"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/flightcontrol"
+	"github.com/moby/buildkit/util/jsonutil"
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	"github.com/moby/patternmatcher/ignorefile"
 	digest "github.com/opencontainers/go-digest"
@@ -43,6 +45,7 @@ const (
 	keyUlimit           = "ulimit"
 	keyCacheFrom        = "cache-from"    // for registry only. deprecated in favor of keyCacheImports
 	keyCacheImports     = "cache-imports" // JSON representation of []CacheOptionsEntry
+	keyHook             = "hook"          // JSON representation of types.Hook
 
 	// Don't forget to update frontend documentation if you add
 	// a new build-arg: frontend/dockerfile/docs/reference.md
@@ -74,6 +77,7 @@ type Config struct {
 	BuildPlatforms         []ocispecs.Platform
 	MultiPlatformRequested bool
 	SBOM                   *SBOM
+	InstructionHook        *types.InstructionHook
 }
 
 type Client struct {
@@ -291,6 +295,16 @@ func (bc *Client) init() error {
 
 	bc.localsSessionIDs = parseLocalSessionIDs(opts)
 
+	if hookStr := opts[keyHook]; hookStr != "" {
+		var hook types.InstructionHook
+		// Using UnmarshalStrict is important to notify invalid hooks,
+		// because the JSON form of the mount struct is not as flexible as the CSV form.
+		// (e.g., "source" cannot be abbreviated as "src")
+		if err := jsonutil.UnmarshalStrict([]byte(hookStr), &hook); err != nil {
+			return errors.Wrapf(err, "failed to parse dockerfile hook")
+		}
+		bc.InstructionHook = &hook
+	}
 	return nil
 }
 

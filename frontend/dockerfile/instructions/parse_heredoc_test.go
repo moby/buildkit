@@ -28,7 +28,7 @@ func TestErrorCasesHeredoc(t *testing.T) {
 			t.Fatalf("Error when parsing Dockerfile: %s", err)
 		}
 		n := ast.AST.Children[0]
-		_, err = ParseInstruction(n)
+		_, err = ParseInstruction(n, ParseOpts{})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), c.expectedError)
 	}
@@ -166,7 +166,7 @@ EOF`,
 		require.NoError(t, err)
 
 		n := ast.AST.Children[0]
-		comm, err := ParseInstruction(n)
+		comm, err := ParseInstruction(n, ParseOpts{})
 		require.NoError(t, err)
 
 		sd := comm.(*CopyCommand).SourcesAndDest
@@ -248,7 +248,7 @@ EOF`,
 		require.NoError(t, err)
 
 		n := ast.AST.Children[0]
-		comm, err := ParseInstruction(n)
+		comm, err := ParseInstruction(n, ParseOpts{})
 		require.NoError(t, err)
 		require.Equal(t, c.shell, comm.(*RunCommand).PrependShell)
 		require.Equal(t, c.command, comm.(*RunCommand).CmdLine)

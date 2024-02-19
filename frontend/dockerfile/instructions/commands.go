@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
+	"github.com/moby/buildkit/frontend/dockerui/types"
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
@@ -352,7 +353,7 @@ type ShellDependantCmdLine struct {
 //	RUN ["echo", "hi"]  # echo hi
 type RunCommand struct {
 	withNameAndCode
-	withExternalData
+	WithInstructionHook
 	ShellDependantCmdLine
 	FlagsUsed []string
 }
@@ -562,4 +563,22 @@ func (c *withExternalData) setExternalValue(k, v interface{}) {
 		c.m = map[interface{}]interface{}{}
 	}
 	c.m[k] = v
+}
+
+type WithInstructionHook struct {
+	withExternalData
+}
+
+const instHookKey = "dockerfile/run/instruction-hook"
+
+func (c *WithInstructionHook) GetInstructionHook() *types.InstructionHook {
+	x := c.getExternalValue(instHookKey)
+	if x == nil {
+		return nil
+	}
+	return x.(*types.InstructionHook)
+}
+
+func (c *WithInstructionHook) SetInstructionHook(h *types.InstructionHook) {
+	c.setExternalValue(instHookKey, h)
 }

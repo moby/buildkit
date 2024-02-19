@@ -84,13 +84,22 @@ func setMountState(cmd *RunCommand, expander SingleWordExpander) error {
 	if st == nil {
 		return errors.Errorf("no mount state")
 	}
-	mounts := make([]*Mount, len(st.flag.StringValues))
-	for i, str := range st.flag.StringValues {
+	var mounts []*Mount
+	if hook := cmd.GetInstructionHook(); hook != nil && hook.Run != nil {
+		for _, m := range hook.Run.Mounts {
+			m := m
+			if err := validateMount(&m, false); err != nil {
+				return err
+			}
+			mounts = append(mounts, &m)
+		}
+	}
+	for _, str := range st.flag.StringValues {
 		m, err := parseMount(str, expander)
 		if err != nil {
 			return err
 		}
-		mounts[i] = m
+		mounts = append(mounts, m)
 	}
 	st.mounts = mounts
 	return nil
