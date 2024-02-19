@@ -270,7 +270,9 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 				ds.noinit = true
 				ds.state = *s
 				if img != nil {
-					ds.image = clampTimes(*img, opt.Epoch)
+					// timestamps are inherited as-is, regardless to SOURCE_DATE_EPOCH
+					// https://github.com/moby/buildkit/issues/4614
+					ds.image = *img
 					if img.Architecture != "" && img.OS != "" {
 						ds.platform = &ocispecs.Platform{
 							OS:           img.OS,
@@ -1883,21 +1885,6 @@ func commonImageNames() []string {
 		out = append(out, name, "docker.io/library"+name, name+":latest", "docker.io/library"+name+":latest")
 	}
 	return out
-}
-
-func clampTimes(img dockerspec.DockerOCIImage, tm *time.Time) dockerspec.DockerOCIImage {
-	if tm == nil {
-		return img
-	}
-	for i, h := range img.History {
-		if h.Created == nil || h.Created.After(*tm) {
-			img.History[i].Created = tm
-		}
-	}
-	if img.Created != nil && img.Created.After(*tm) {
-		img.Created = tm
-	}
-	return img
 }
 
 func isHTTPSource(src string) bool {

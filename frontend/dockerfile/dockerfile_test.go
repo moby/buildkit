@@ -53,6 +53,7 @@ import (
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/moby/buildkit/util/testutil/workers"
+	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -6866,8 +6867,16 @@ RUN rm -f /foo.1
 RUN rm -f /foo-2010.1
 RUN rm -f /foo-2030.1
 `)
+	// https://explore.ggcr.dev/?image=amd64%2Fdebian%3Abullseye-20230109-slim
+	baseImageLayers := []digest.Digest{
+		"sha256:8740c948ffd4c816ea7ca963f99ca52f4788baa23f228da9581a9ea2edd3fcd7",
+	}
+	baseImageHistoryTimestamps := []time.Time{
+		timeMustParse(t, time.RFC3339Nano, "2023-01-11T02:34:44.402266175Z"),
+		timeMustParse(t, time.RFC3339Nano, "2023-01-11T02:34:44.829692296Z"),
+	}
 
-	const expectedDigest = "sha256:3eb3c164e3420bbfcf52c34f1e40ee66631d69445e934175b779551c729f80df"
+	const expectedDigest = "sha256:04e5d0cbee3317c79f50494cfeb4d8a728402a970ef32582ee47c62050037e3f"
 
 	dir := integration.Tmpdir(
 		t,
@@ -6914,13 +6923,24 @@ RUN rm -f /foo-2030.1
 	_, err = f.Solve(ctx, c, solveOpt, nil)
 	require.NoError(t, err)
 
-	desc, manifest := readImage(t, ctx, target)
-	_, cacheManifest := readImage(t, ctx, target+"-cache")
+	desc, manifest, img := readImage(t, ctx, target)
+	_, cacheManifest, _ := readImage(t, ctx, target+"-cache")
 	t.Log("The digest may change depending on the BuildKit version, the snapshotter configuration, etc.")
 	require.Equal(t, expectedDigest, desc.Digest.String())
-	// Image layers must have rewritten-timestamp
-	for _, l := range manifest.Layers {
-		require.Equal(t, fmt.Sprintf("%d", tm.Unix()), l.Annotations["buildkit/rewritten-timestamp"])
+
+	// Image history from the base config must remain immutable
+	for i, tm := range baseImageHistoryTimestamps {
+		require.True(t, img.History[i].Created.Equal(tm))
+	}
+
+	// Image layers, *except the base layers*, must have rewritten-timestamp
+	for i, l := range manifest.Layers {
+		if i < len(baseImageLayers) {
+			require.Empty(t, l.Annotations["buildkit/rewritten-timestamp"])
+			require.Equal(t, baseImageLayers[i], l.Digest)
+		} else {
+			require.Equal(t, fmt.Sprintf("%d", tm.Unix()), l.Annotations["buildkit/rewritten-timestamp"])
+		}
 	}
 	// Cache layers must *not* have rewritten-timestamp
 	for _, l := range cacheManifest.Layers {
@@ -6932,21 +6952,34 @@ RUN rm -f /foo-2030.1
 	delete(solveOpt2.Exports[0].Attrs, "rewrite-timestamp")
 	_, err = f.Solve(ctx, c, solveOpt2, nil)
 	require.NoError(t, err)
-	_, manifest2 := readImage(t, ctx, target)
+	_, manifest2, img2 := readImage(t, ctx, target)
+	for i, tm := range baseImageHistoryTimestamps {
+		require.True(t, img2.History[i].Created.Equal(tm))
+	}
 	for _, l := range manifest2.Layers {
 		require.Empty(t, l.Annotations["buildkit/rewritten-timestamp"])
 	}
 }
 
+func timeMustParse(t *testing.T, layout, value string) time.Time {
+	tm, err := time.Parse(layout, value)
+	require.NoError(t, err)
+	return tm
+}
+
 //nolint:revive // context-as-argument: context.Context should be the first parameter of a function
-func readImage(t *testing.T, ctx context.Context, ref string) (ocispecs.Descriptor, ocispecs.Manifest) {
+func readImage(t *testing.T, ctx context.Context, ref string) (ocispecs.Descriptor, ocispecs.Manifest, ocispecs.Image) {
 	desc, provider, err := contentutil.ProviderFromRef(ref)
 	require.NoError(t, err)
 	dt, err := content.ReadBlob(ctx, provider, desc)
 	require.NoError(t, err)
 	var manifest ocispecs.Manifest
 	require.NoError(t, json.Unmarshal(dt, &manifest))
-	return desc, manifest
+	imgDt, err := content.ReadBlob(ctx, provider, manifest.Config)
+	require.NoError(t, err)
+	var img ocispecs.Image
+	require.NoError(t, json.Unmarshal(imgDt, &img))
+	return desc, manifest, img
 }
 
 func testNilContextInSolveGateway(t *testing.T, sb integration.Sandbox) {
