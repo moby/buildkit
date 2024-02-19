@@ -19,16 +19,16 @@ const (
 )
 
 type Mount struct {
-	Type         MountType
-	From         string
-	Source       string
-	Target       string
-	ReadOnly     bool
-	SizeLimit    int64
-	CacheID      string
-	CacheSharing ShareMode
-	Required     bool
-	Mode         *uint64
-	UID          *uint64
-	GID          *uint64
+	Type         MountType `json:"type,omitempty"`
+	From         string    `json:"from,omitempty"`
+	Source       string    `json:"source,omitempty"`
+	Target       string    `json:"target,omitempty"`
+	ReadOnly     bool      `json:"readOnly,omitempty"`
+	SizeLimit    int64     `json:"sizeLimit,omitempty"`
+	CacheID      string    `json:"cacheID,omitempty"`
+	CacheSharing ShareMode `json:"cacheSharing,omitempty"`
+	Required     bool      `json:"required,omitempty"`
+	Mode         *uint64   `json:"mode,omitempty"`
+	UID          *uint64   `json:"uid,omitempty"`
+	GID          *uint64   `json:"gid,omitempty"`
 }
