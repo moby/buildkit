@@ -7,18 +7,19 @@ import (
 	"strings"
 
 	"github.com/docker/go-units"
+	"github.com/moby/buildkit/frontend/dockerui/types"
 	"github.com/moby/buildkit/util/suggest"
 	"github.com/pkg/errors"
 )
 
-type MountType string
+type MountType = types.MountType
 
 const (
-	MountTypeBind   MountType = "bind"
-	MountTypeCache  MountType = "cache"
-	MountTypeTmpfs  MountType = "tmpfs"
-	MountTypeSecret MountType = "secret"
-	MountTypeSSH    MountType = "ssh"
+	MountTypeBind   = types.MountTypeBind
+	MountTypeCache  = types.MountTypeCache
+	MountTypeTmpfs  = types.MountTypeTmpfs
+	MountTypeSecret = types.MountTypeSecret
+	MountTypeSSH    = types.MountTypeSSH
 )
 
 var allowedMountTypes = map[MountType]struct{}{
@@ -29,12 +30,12 @@ var allowedMountTypes = map[MountType]struct{}{
 	MountTypeSSH:    {},
 }
 
-type ShareMode string
+type ShareMode = types.ShareMode
 
 const (
-	MountSharingShared  ShareMode = "shared"
-	MountSharingPrivate ShareMode = "private"
-	MountSharingLocked  ShareMode = "locked"
+	MountSharingShared  = types.MountSharingShared
+	MountSharingPrivate = types.MountSharingPrivate
+	MountSharingLocked  = types.MountSharingLocked
 )
 
 var allowedSharingModes = map[ShareMode]struct{}{
@@ -113,20 +114,7 @@ type mountState struct {
 	mounts []*Mount
 }
 
-type Mount struct {
-	Type         MountType
-	From         string
-	Source       string
-	Target       string
-	ReadOnly     bool
-	SizeLimit    int64
-	CacheID      string
-	CacheSharing ShareMode
-	Required     bool
-	Mode         *uint64
-	UID          *uint64
-	GID          *uint64
-}
+type Mount = types.Mount
 
 func parseMount(val string, expander SingleWordExpander) (*Mount, error) {
 	csvReader := csv.NewReader(strings.NewReader(val))
