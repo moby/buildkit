@@ -19,19 +19,19 @@ const (
 )
 
 type Mount struct {
-	Type         MountType
-	From         string
-	Source       string
-	Target       string
-	ReadOnly     bool
-	SizeLimit    int64
-	CacheID      string
-	CacheSharing ShareMode
-	Required     bool
+	Type         MountType `json:"type,omitempty"`
+	From         string    `json:"from,omitempty"`
+	Source       string    `json:"source,omitempty"`
+	Target       string    `json:"target,omitempty"`
+	ReadOnly     bool      `json:"readOnly,omitempty"`
+	SizeLimit    int64     `json:"sizeLimit,omitempty"`
+	CacheID      string    `json:"cacheID,omitempty"`
+	CacheSharing ShareMode `json:"cacheSharing,omitempty"`
+	Required     bool      `json:"required,omitempty"`
 	// Env optionally specifies the name of the environment variable for a secret.
 	// A pointer to an empty value uses the default
-	Env  *string
-	Mode *uint64
-	UID  *uint64
-	GID  *uint65
+	Env  *string `json:"env,omitempty"`
+	Mode *uint64 `json:"mode,omitempty"`
+	UID  *uint64 `json:"uid,omitempty"`
+	GID  *uint64 `json:"gid,omitempty"`
 }
