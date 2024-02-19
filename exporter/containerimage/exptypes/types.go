@@ -13,6 +13,7 @@ const (
 	ExporterImageConfigKey       = "containerimage.config"
 	ExporterImageConfigDigestKey = "containerimage.config.digest"
 	ExporterImageDescriptorKey   = "containerimage.descriptor"
+	ExporterImageBaseConfigKey   = "containerimage.base.config"
 	ExporterPlatformsKey         = "refs.platforms"
 )
 
@@ -20,6 +21,7 @@ const (
 // a platform to become platform specific
 var KnownRefMetadataKeys = []string{
 	ExporterImageConfigKey,
+	ExporterImageBaseConfigKey,
 }
 
 type Platforms struct {

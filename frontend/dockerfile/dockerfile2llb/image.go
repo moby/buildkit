@@ -15,6 +15,14 @@ func clone(src dockerspec.DockerOCIImage) dockerspec.DockerOCIImage {
 	return img
 }
 
+func cloneX(src *dockerspec.DockerOCIImage) *dockerspec.DockerOCIImage {
+	if src == nil {
+		return nil
+	}
+	img := clone(*src)
+	return &img
+}
+
 func emptyImage(platform ocispecs.Platform) dockerspec.DockerOCIImage {
 	img := dockerspec.DockerOCIImage{}
 	img.Architecture = platform.Architecture
