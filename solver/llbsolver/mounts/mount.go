@@ -305,10 +305,15 @@ func (sm *secretMountInstance) Mount() ([]mount.Mount, func() error, error) {
 		return nil, nil, err
 	}
 
+	var mountOpts []string
+	if sm.sm.mount.SecretOpt.Mode&0o111 == 0 {
+		mountOpts = append(mountOpts, "noexec")
+	}
+
 	tmpMount := mount.Mount{
 		Type:    "tmpfs",
 		Source:  "tmpfs",
-		Options: []string{"nodev", "nosuid", "noexec", fmt.Sprintf("uid=%d,gid=%d", os.Geteuid(), os.Getegid())},
+		Options: append([]string{"nodev", "nosuid", fmt.Sprintf("uid=%d,gid=%d", os.Geteuid(), os.Getegid())}, mountOpts...),
 	}
 
 	if userns.RunningInUserNS() {
@@ -364,7 +369,7 @@ func (sm *secretMountInstance) Mount() ([]mount.Mount, func() error, error) {
 	return []mount.Mount{{
 		Type:    "bind",
 		Source:  fp,
-		Options: []string{"ro", "rbind", "nodev", "nosuid", "noexec"},
+		Options: append([]string{"ro", "rbind", "nodev", "nosuid"}, mountOpts...),
 	}}, cleanup, nil
 }
 
