@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"sort"
 	"strings"
 
 	"github.com/containerd/containerd/platforms"
@@ -190,7 +191,21 @@ func marshal(ctx context.Context, v Vertex, def *Definition, s *sourceMapCollect
 	if _, ok := vertexCache[v]; ok {
 		return def, nil
 	}
-	for _, inp := range v.Inputs() {
+	inputs := v.Inputs()
+	imap := map[Output]*pb.Input{}
+	for _, iv := range inputs {
+		inp, err := iv.ToInput(ctx, c)
+		if err != nil {
+			return nil, err
+		}
+		imap[iv] = inp
+	}
+
+	sort.Slice(inputs, func(i, j int) bool {
+		return imap[inputs[i]].Index < imap[inputs[j]].Index
+	})
+
+	for _, inp := range inputs {
 		var err error
 		def, err = marshal(ctx, inp.Vertex(ctx, c), def, s, cache, vertexCache, c)
 		if err != nil {
