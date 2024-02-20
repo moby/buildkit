@@ -80,6 +80,13 @@ func NewBridge(opt Opt) (network.Provider, error) {
 		cniOptions = append(cniOptions, cni.WithPluginDir([]string{opt.BinaryDir}))
 	}
 
+	var firewallBackend string // empty value defaults to firewalld or iptables
+	if os.Getenv("ROOTLESSKIT_STATE_DIR") != "" {
+		// firewalld backend is incompatible with Rootless
+		// https://github.com/containerd/nerdctl/issues/2818
+		firewallBackend = "iptables"
+	}
+
 	cniOptions = append(cniOptions, cni.WithConfListBytes([]byte(fmt.Sprintf(`{
 		"cniVersion": "1.0.0",
 		"name": "buildkit",
@@ -103,10 +110,11 @@ func NewBridge(opt Opt) (network.Provider, error) {
 			  },
 			  {
 				"type": "%s",
+				"backend": "%s",
 				"ingressPolicy": "same-bridge"
 			}
 		]
-		}`, loopbackBinName, bridgeBinName, opt.BridgeName, hostLocalBinName, opt.BridgeSubnet, firewallBinName))))
+		}`, loopbackBinName, bridgeBinName, opt.BridgeName, hostLocalBinName, opt.BridgeSubnet, firewallBinName, firewallBackend))))
 
 	unlock, err := initLock()
 	if err != nil {
