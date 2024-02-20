@@ -7,14 +7,14 @@ import (
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
-	"github.com/moby/buildkit/exporter/containerimage/image"
 	"github.com/moby/buildkit/frontend/gateway/client"
+	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
-type BuildFunc func(ctx context.Context, platform *ocispecs.Platform, idx int) (client.Reference, *image.Image, error)
+type BuildFunc func(ctx context.Context, platform *ocispecs.Platform, idx int) (client.Reference, *dockerspec.DockerOCIImage, error)
 
 func (bc *Client) Build(ctx context.Context, fn BuildFunc) (*ResultBuilder, error) {
 	res := client.NewResult()

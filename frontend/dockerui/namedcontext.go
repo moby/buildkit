@@ -12,10 +12,10 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
-	"github.com/moby/buildkit/exporter/containerimage/image"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/imageutil"
+	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	"github.com/moby/patternmatcher/ignorefile"
 	"github.com/pkg/errors"
 )
@@ -26,11 +26,11 @@ const (
 	maxContextRecursion = 10
 )
 
-func (bc *Client) namedContext(ctx context.Context, name string, nameWithPlatform string, opt ContextOpt) (*llb.State, *image.Image, error) {
+func (bc *Client) namedContext(ctx context.Context, name string, nameWithPlatform string, opt ContextOpt) (*llb.State, *dockerspec.DockerOCIImage, error) {
 	return bc.namedContextRecursive(ctx, name, nameWithPlatform, opt, 0)
 }
 
-func (bc *Client) namedContextRecursive(ctx context.Context, name string, nameWithPlatform string, opt ContextOpt, count int) (*llb.State, *image.Image, error) {
+func (bc *Client) namedContextRecursive(ctx context.Context, name string, nameWithPlatform string, opt ContextOpt, count int) (*llb.State, *dockerspec.DockerOCIImage, error) {
 	opts := bc.bopts.Opts
 	contextKey := contextPrefix + nameWithPlatform
 	v, ok := opts[contextKey]
@@ -94,7 +94,7 @@ func (bc *Client) namedContextRecursive(ctx context.Context, name string, nameWi
 			return nil, nil, err
 		}
 
-		var img image.Image
+		var img dockerspec.DockerOCIImage
 		if err := json.Unmarshal(data, &img); err != nil {
 			return nil, nil, err
 		}
@@ -162,7 +162,7 @@ func (bc *Client) namedContextRecursive(ctx context.Context, name string, nameWi
 			return nil, nil, err
 		}
 
-		var img image.Image
+		var img dockerspec.DockerOCIImage
 		if err := json.Unmarshal(data, &img); err != nil {
 			return nil, nil, errors.Wrap(err, "could not parse oci-layout image config")
 		}
@@ -247,7 +247,7 @@ func (bc *Client) namedContextRecursive(ctx context.Context, name string, nameWi
 			if err := json.Unmarshal([]byte(md), &m); err != nil {
 				return nil, nil, errors.Wrapf(err, "failed to parse input metadata %s", md)
 			}
-			var img *image.Image
+			var img *dockerspec.DockerOCIImage
 			if dtic, ok := m[exptypes.ExporterImageConfigKey]; ok {
 				st, err = st.WithImageConfig(dtic)
 				if err != nil {
