@@ -4,7 +4,7 @@ ARG RUNC_VERSION=v1.1.12
 ARG CONTAINERD_VERSION=v1.7.11
 # containerd v1.6 for integration tests
 ARG CONTAINERD_ALT_VERSION_16=v1.6.24
-ARG REGISTRY_VERSION=2.8.3
+ARG REGISTRY_VERSION=v2.8.3
 ARG ROOTLESSKIT_VERSION=v2.0.0
 ARG CNI_VERSION=v1.3.0
 ARG STARGZ_SNAPSHOTTER_VERSION=v0.15.1
@@ -185,7 +185,6 @@ COPY --link --from=cni-plugins /opt/cni/bin/firewall /buildkit-cni-firewall
 FROM scratch AS cni-plugins-export-squashed
 COPY --from=cni-plugins-export / /
 
-
 FROM scratch AS binaries-linux
 COPY --link --from=runc /usr/bin/runc /buildkit-runc
 # built from https://github.com/tonistiigi/binfmt/releases/tag/buildkit%2Fv7.1.0-30
@@ -227,8 +226,6 @@ COPY --link examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 VOLUME /var/lib/buildkit
 
 FROM git AS containerd-src
-ARG CONTAINERD_VERSION
-ARG CONTAINERD_ALT_VERSION
 WORKDIR /usr/src
 RUN git clone https://github.com/containerd/containerd.git containerd
 
@@ -240,26 +237,63 @@ RUN xx-apk add musl-dev gcc && xx-go --wrap
 
 FROM containerd-base AS containerd
 ARG CONTAINERD_VERSION
-RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target=/root/.cache,type=cache \
-  git fetch origin \
-  && git checkout -q "$CONTAINERD_VERSION" \
-  && make bin/containerd \
-  && make bin/containerd-shim-runc-v2 \
-  && make bin/ctr \
-  && mv bin /out
+RUN --mount=from=containerd-src,src=/usr/src/containerd,rw \
+    --mount=target=/root/.cache,type=cache <<EOT
+  set -ex
+  git fetch origin
+  git checkout -q "$CONTAINERD_VERSION"
+  mkdir /out
+  if [ "$(xx-info os)" = "windows" ]; then
+    CGO_ENABLED=0 make STATIC=1 binaries
+    mv bin/containerd.exe bin/containerd-shim* bin/ctr* /out
+  else
+    make bin/containerd
+    make bin/containerd-shim-runc-v2
+    make bin/ctr
+    mv bin/containerd bin/containerd-shim* bin/ctr* /out
+  fi
+EOT
 
 # containerd v1.6 for integration tests
 FROM containerd-base as containerd-alt-16
 ARG CONTAINERD_ALT_VERSION_16
-RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target=/root/.cache,type=cache \
-  git fetch origin \
-  && git checkout -q "$CONTAINERD_ALT_VERSION_16" \
-  && make bin/containerd \
-  && make bin/containerd-shim-runc-v2 \
-  && mv bin /out
+RUN --mount=from=containerd-src,src=/usr/src/containerd,rw \
+    --mount=target=/root/.cache,type=cache <<EOT
+  set -ex
+  git fetch origin
+  git checkout -q "$CONTAINERD_ALT_VERSION_16"
+  mkdir /out
+  if [ "$(xx-info os)" = "windows" ]; then
+    CGO_ENABLED=0 make STATIC=1 binaries
+    mv bin/containerd.exe bin/containerd-shim* /out
+  else
+    make bin/containerd
+    make bin/containerd-shim-runc-v2
+    mv bin/containerd bin/containerd-shim* /out
+  fi
+EOT
 
+FROM git AS registry-src
+WORKDIR /usr/src
+RUN git clone https://github.com/distribution/distribution.git distribution
+
+FROM gobuild-base AS registry
 ARG REGISTRY_VERSION
-FROM registry:$REGISTRY_VERSION AS registry
+ARG TARGETPLATFORM
+WORKDIR /go/src/github.com/docker/distribution
+RUN --mount=from=registry-src,src=/usr/src/distribution,rw \
+    --mount=target=/root/.cache,type=cache <<EOT
+  set -ex
+  git fetch origin
+  git checkout -q "$REGISTRY_VERSION"
+  mkdir /out
+  export GOPATH="$(pwd)/Godeps/_workspace:$GOPATH"
+  GO111MODULE=off CGO_ENABLED=0 xx-go build -o /out/registry ./cmd/registry
+  xx-verify --static /out/registry
+  if [ "$(xx-info os)" = "windows" ]; then
+    mv /out/registry /out/registry.exe
+  fi
+EOT
 
 FROM gobuild-base AS rootlesskit
 ARG ROOTLESSKIT_VERSION
@@ -293,9 +327,18 @@ RUN mkdir -p /out/nydus-static && tar xzvf nydus-static-$NYDUS_VERSION-$TARGETOS
 
 FROM gobuild-base AS gotestsum
 ARG GOTESTSUM_VERSION
-RUN --mount=target=/root/.cache,type=cache \
-  GOBIN=/out/ go install "gotest.tools/gotestsum@${GOTESTSUM_VERSION}" && \
-  /out/gotestsum --version
+ARG TARGETPLATFORM
+RUN --mount=target=/root/.cache,type=cache <<EOT
+  set -ex
+  xx-go install "gotest.tools/gotestsum@${GOTESTSUM_VERSION}"
+  mkdir /out
+  if ! xx-info is-cross; then
+    /go/bin/gotestsum --version
+    mv /go/bin/gotestsum /out
+  else
+    mv /go/bin/*/gotestsum* /out
+  fi
+EOT
 
 FROM buildkit-export AS buildkit-linux
 COPY --link --from=binaries / /usr/bin/
@@ -324,6 +367,12 @@ ENTRYPOINT ["/buildkitd"]
 
 FROM binaries AS buildkit-windows
 
+FROM scratch AS binaries-for-test
+COPY --link --from=gotestsum /out /
+COPY --link --from=registry /out /
+COPY --link --from=containerd /out /
+COPY --link --from=binaries / /
+
 FROM buildkit-base AS integration-tests-base
 ENV BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR="1000:1000"
 RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables ip6tables dnsmasq fuse curl git-daemon openssh-client slirp4netns iproute2 \
@@ -349,14 +398,14 @@ ENV BUILDKIT_INTEGRATION_SNAPSHOTTER=stargz
 ENV BUILDKIT_SETUP_CGROUPV2_ROOT=1
 ENV CGO_ENABLED=0
 ENV GOTESTSUM_FORMAT=standard-verbose
-COPY --link --from=gotestsum /out/gotestsum /usr/bin/
+COPY --link --from=gotestsum /out /usr/bin/
 COPY --link --from=minio /opt/bin/minio /usr/bin/
 COPY --link --from=minio-mc /usr/bin/mc /usr/bin/
 COPY --link --from=nydus /out/nydus-static/* /usr/bin/
 COPY --link --from=stargz-snapshotter /out/* /usr/bin/
 COPY --link --from=rootlesskit /rootlesskit /usr/bin/
 COPY --link --from=containerd-alt-16 /out/containerd* /opt/containerd-alt-16/bin/
-COPY --link --from=registry /bin/registry /usr/bin/
+COPY --link --from=registry /out /usr/bin/
 COPY --link --from=runc /usr/bin/runc /usr/bin/
 COPY --link --from=containerd /out/containerd* /usr/bin/
 COPY --link --from=cni-plugins /opt/cni/bin/bridge /opt/cni/bin/host-local /opt/cni/bin/loopback /opt/cni/bin/firewall /opt/cni/bin/dnsname /opt/cni/bin/

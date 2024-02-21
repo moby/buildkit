@@ -21,20 +21,42 @@ on:
 env:
   GO_VERSION: "1.21"
   TESTFLAGS: "-v --parallel=6 --timeout=60m"
-  GOTESTSUM_VERSION: "v1.9.0"  # same as one in Dockerfile
   GOTESTSUM_FORMAT: "standard-verbose"
   DESTDIR: "./bin"
 
 jobs:
-  test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          # - ubuntu-22.04
-          # - macOS-11
-          - windows-2022
+  build-windows-amd64:
+    runs-on: ubuntu-22.04
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v4
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      -
+        name: Build
+        uses: docker/bake-action@v4
+        with:
+          provenance: false
+          targets: binaries-for-test
+          set: |
+            *.platform=windows/amd64
+            *.cache-from=type=gha,scope=binaries-test-windows
+            *.cache-to=type=gha,scope=binaries-test-windows
+      -
+        name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: buildkit-windows-amd64
+          path: ${{ env.DESTDIR }}/*
+          if-no-files-found: error
+          retention-days: 1
+
+  test-windows-amd64:
+    runs-on: windows-2022
+    needs:
+      - build-windows-amd64
     steps:
       -
         name: Checkout
@@ -44,41 +66,21 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "${{ env.GO_VERSION }}"
+          cache: false
       -
-        name: Install gotestsum
-        run: |
-          go install gotest.tools/gotestsum@${{ env.GOTESTSUM_VERSION }}
+        name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: buildkit-windows-amd64
+          path: ${{ github.workspace }}\bin
       -
-        name: Install buildkitd.exe binary
+        name: Add bin folder to Path
         run: |
-          go install .\cmd\buildkitd
-      -
-        name: Install containerd.exe binary
-        run: |
-          $goModFileContent = Get-Content go.mod -Raw
-          $pattern = '(?<=github\.com/containerd/containerd v)[\d\.]+'
-          $version = [regex]::Match($goModFileContent, $pattern).Value
-          mkdir -p .\bin\installs -f
-          cd .\bin\installs
-          git clone https://github.com/containerd/containerd.git
-          cd containerd
-          git checkout tags/v$version
-          go install .\cmd\...
-          cd ..\..\..
-      -
-        name: Install registry.exe (distribution/distribution) binary
-        run: |
-          mkdir -p .\bin\installs -f
-          cd .\bin\installs
-          git clone https://github.com/distribution/distribution.git
-          cd distribution
-          go install .\cmd\...
-          cd ..\..\..
+          echo "${{ github.workspace }}\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       -
         name: Test
         env:
           TMPDIR: ${{ runner.temp }}
-          # SKIP_INTEGRATION_TESTS: 1
         run: |
           mkdir -p ./bin/testreports
           gotestsum \

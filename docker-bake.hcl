@@ -94,6 +94,12 @@ target "binaries-cross" {
   ]
 }
 
+target "binaries-for-test" {
+  inherits = ["_common"]
+  target = "binaries-for-test"
+  output = [bindir("build")]
+}
+
 target "release" {
   inherits = ["binaries-cross"]
   target = "release"
