@@ -28,6 +28,7 @@ env:
 jobs:
   test:
     uses: ./.github/workflows/.test.yml
+    secrets: inherit
     with:
       cache_scope: frontend-integration-tests
       pkgs: ./frontend/dockerfile
