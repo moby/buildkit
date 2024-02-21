@@ -3,7 +3,6 @@ package llbsolver
 import (
 	"context"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 	"sync"
@@ -135,7 +134,6 @@ func (b *provenanceBridge) findByResult(rp solver.ResultProxy) (*resultWithBridg
 }
 
 func (b *provenanceBridge) ResolveSourceMetadata(ctx context.Context, op *pb.SourceOp, opt sourceresolver.Opt) (*sourceresolver.MetaResponse, error) {
-	log.Printf("prov.ResolveSourceMetadata: %#v %#v", op, opt)
 	resp, err := b.llbBridge.ResolveSourceMetadata(ctx, op, opt)
 	if err != nil {
 		return nil, err
