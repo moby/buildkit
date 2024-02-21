@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -561,7 +560,6 @@ func (lbf *llbBridgeForwarder) ResolveSourceMeta(ctx context.Context, req *pb.Re
 	if req.Source == nil {
 		return nil, status.Error(codes.InvalidArgument, "source is required")
 	}
-	log.Printf("bridge.ResolveSourceMeta: %v", req.Source)
 
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
 	var platform *ocispecs.Platform
@@ -612,7 +610,6 @@ func (lbf *llbBridgeForwarder) ResolveImageConfig(ctx context.Context, req *pb.R
 			OSFeatures:   p.OSFeatures,
 		}
 	}
-	log.Printf("bridge.ResolveImageConfig: %v", req.Ref)
 	imr := sourceresolver.NewImageMetaResolver(lbf.llbBridge)
 	resolveopt := sourceresolver.Opt{
 		LogName:        req.LogName,
