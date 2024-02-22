@@ -25,9 +25,20 @@ env:
   DESTDIR: "./bin"
 
 jobs:
-  build-windows-amd64:
+  build:
     runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - windows/amd64
+          - freebsd/amd64
     steps:
+      -
+        name: Prepare
+        run: |
+          platform=${{ matrix.platform }}
+          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
       -
         name: Checkout
         uses: actions/checkout@v4
@@ -41,14 +52,18 @@ jobs:
           provenance: false
           targets: binaries-for-test
           set: |
-            *.platform=windows/amd64
-            *.cache-from=type=gha,scope=binaries-test-windows
-            *.cache-to=type=gha,scope=binaries-test-windows
+            *.platform=${{ matrix.platform }}
+            *.cache-from=type=gha,scope=binaries-for-test-${{ env.PLATFORM_PAIR }}
+            *.cache-to=type=gha,scope=binaries-for-test-${{ env.PLATFORM_PAIR }}
+      -
+        name: List artifacts
+        run: |
+          tree -nh ${{ env.DESTDIR }}
       -
         name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: buildkit-windows-amd64
+          name: buildkit-${{ env.PLATFORM_PAIR }}
           path: ${{ env.DESTDIR }}/*
           if-no-files-found: error
           retention-days: 1
@@ -56,7 +71,7 @@ jobs:
   test-windows-amd64:
     runs-on: windows-2022
     needs:
-      - build-windows-amd64
+      - build
     steps:
       -
         name: Checkout
@@ -119,35 +134,10 @@ jobs:
         if: failure()
         uses: crazy-max/ghaction-dump-context@v2
 
-  build-freebsd-amd64:
-    runs-on: ubuntu-22.04
-    steps:
-      -
-        name: Checkout
-        uses: actions/checkout@v4
-      -
-        name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      -
-        name: Build
-        uses: docker/bake-action@v4
-        with:
-          targets: binaries
-          set: |
-            *.platform=freebsd/amd64
-      -
-        name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: buildkit-freebsd-amd64
-          path: ${{ env.DESTDIR }}/*
-          if-no-files-found: error
-          retention-days: 1
-
   test-freebsd-amd64:
     runs-on: macos-13
     needs:
-      - build-freebsd-amd64
+      - build
     env:
       VAGRANT_VAGRANTFILE: hack/Vagrantfile.freebsd13
       GOOS: freebsd

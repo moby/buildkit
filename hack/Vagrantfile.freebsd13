@@ -15,7 +15,7 @@ Vagrant.configure("2") do |config|
       #!/usr/bin/env bash
       set -eux -o pipefail
       kldload nullfs
-      pkg install -y git containerd runj
+      pkg install -y git runj
       mkdir -p /vagrant/coverage /vagrant/.tmp/logs
     SHELL
   end
@@ -45,6 +45,8 @@ Vagrant.configure("2") do |config|
     sh.inline = <<~SHELL
       #!/usr/bin/env bash
       set -eux -o pipefail
+      cd /vagrant
+      install -m 755 bin/containerd /bin/containerd
       containerd --version
       daemon -o /vagrant/.tmp/logs/containerd containerd
     SHELL
