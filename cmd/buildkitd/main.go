@@ -270,7 +270,7 @@ func main() {
 			return err
 		}
 
-		streamTracer := otelgrpc.StreamServerInterceptor(
+		streamTracer := otelgrpc.StreamServerInterceptor( //nolint:staticcheck // TODO(thaJeztah): ignore SA1019 for deprecated options: see https://github.com/moby/buildkit/issues/4681
 			otelgrpc.WithTracerProvider(tp),
 			otelgrpc.WithMeterProvider(mp),
 			otelgrpc.WithPropagators(propagators),
@@ -661,7 +661,7 @@ func getListener(addr string, uid, gid int, tlsConfig *tls.Config) (net.Listener
 }
 
 func unaryInterceptor(globalCtx context.Context, tp trace.TracerProvider, mp metric.MeterProvider) grpc.UnaryServerInterceptor {
-	withTrace := otelgrpc.UnaryServerInterceptor(
+	withTrace := otelgrpc.UnaryServerInterceptor( //nolint:staticcheck // TODO(thaJeztah): ignore SA1019 for deprecated options: see https://github.com/moby/buildkit/issues/4681
 		otelgrpc.WithTracerProvider(tp),
 		otelgrpc.WithMeterProvider(mp),
 		otelgrpc.WithPropagators(propagators),
