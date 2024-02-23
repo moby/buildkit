@@ -1,6 +1,7 @@
 package git
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client"
@@ -32,12 +34,15 @@ import (
 	"github.com/moby/buildkit/util/urlutil"
 	"github.com/moby/locker"
 	"github.com/pkg/errors"
+	"golang.org/x/mod/semver"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 var validHex = regexp.MustCompile(`^[a-f0-9]{40}$`)
 var defaultBranch = regexp.MustCompile(`refs/heads/(\S+)`)
+var supportsSparseCheckoutBool bool
+var supportsSparseCheckoutOnce sync.Once
 
 type Opt struct {
 	CacheAccessor cache.Accessor
@@ -54,6 +59,13 @@ func Supported() error {
 		return errors.Wrap(err, "failed to find git binary")
 	}
 	return nil
+}
+
+func supportsSparseCheckout() bool {
+	supportsSparseCheckoutOnce.Do(func() {
+		supportsSparseCheckoutBool, _ = isGitVersionGreaterThan("v2.25.0")
+	})
+	return supportsSparseCheckoutBool
 }
 
 func NewSource(opt Opt) (source.Source, error) {
@@ -172,6 +184,13 @@ func (gs *gitSource) mountRemote(ctx context.Context, remote string, authArgs []
 
 		if _, err := git.Run(ctx, "remote", "add", "origin", remote); err != nil {
 			return "", nil, errors.Wrapf(err, "failed add origin repo at %s", dir)
+		}
+
+		if _, err := git.Run(ctx, "config", "--local", "remote.origin.promisor", "true"); err != nil {
+			return "", nil, errors.Wrapf(err, "failed to set promisor for remote %s", urlutil.RedactCredentials(remote))
+		}
+		if _, err := git.Run(ctx, "config", "--local", "remote.origin.partialclonefilter", "tree:0"); err != nil {
+			return "", nil, errors.Wrapf(err, "failed to set partialclonefilter for remote %s", urlutil.RedactCredentials(remote))
 		}
 
 		// save new remote metadata
@@ -589,10 +608,46 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 			}
 		}
 		checkoutGit := git.New(gitutil.WithWorkTree(cd), gitutil.WithGitDir(gitDir))
-		_, err = checkoutGit.Run(ctx, "checkout", ref, "--", ".")
+
+		var cleanWorktree func() error
+
+		if subdir != "." && supportsSparseCheckout() {
+			if _, err := checkoutGit.Run(ctx, "worktree", "add", "--no-checkout", cd, ref); err != nil {
+				return nil, errors.Wrapf(err, "failed to add workdir for remote %s", urlutil.RedactCredentials(gs.src.Remote))
+			}
+			cleanWorktree = func() error {
+				return os.RemoveAll(filepath.Join(gitDir, "worktrees", filepath.Base(cd)))
+			}
+			defer func() {
+				if cleanWorktree != nil {
+					cleanWorktree()
+				}
+			}()
+			if _, err := checkoutGit.Run(ctx, "sparse-checkout", "init", "--cone"); err != nil {
+				return nil, errors.Wrapf(err, "failed to init sparse-checkout for remote %s", urlutil.RedactCredentials(gs.src.Remote))
+			}
+			if _, err := checkoutGit.Run(ctx, "sparse-checkout", "set", subdir); err != nil {
+				return nil, errors.Wrapf(err, "failed to set sparse-checkout for remote %s", urlutil.RedactCredentials(gs.src.Remote))
+			}
+		}
+
+		// do not add "-- ." filter in this command. Causes bad performance with promisor-remote
+		_, err = checkoutGit.Run(ctx, "checkout", ref)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to checkout remote %s", urlutil.RedactCredentials(gs.src.Remote))
 		}
+
+		if cleanWorktree != nil {
+			if err := os.Remove(filepath.Join(cd, ".git")); err != nil {
+				return nil, errors.Wrapf(err, "failed to remove .git for remote %s", urlutil.RedactCredentials(gs.src.Remote))
+			}
+			err := cleanWorktree()
+			cleanWorktree = nil
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to clean worktree for remote %s", urlutil.RedactCredentials(gs.src.Remote))
+			}
+		}
+
 		if subdir != "." {
 			d, err := os.Open(filepath.Join(cd, subdir))
 			if err != nil {
@@ -786,4 +841,26 @@ func gitCLI(opts ...gitutil.Option) *gitutil.GitCLI {
 		}),
 	}, opts...)
 	return gitutil.NewGitCLI(opts...)
+}
+
+// getGitVersion executes `git --version` and returns the version string.
+func getGitVersion() (string, error) {
+	cmd := exec.Command("git", "--version")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	err := cmd.Run()
+	if err != nil {
+		return "", err
+	}
+	versionStr := strings.TrimSpace(strings.Replace(out.String(), "git version", "", 1))
+	return "v" + versionStr, nil // semver requires 'v' prefix
+}
+
+// isGitVersionGreaterThan checks if the installed Git version is greater than the specified version.
+func isGitVersionGreaterThan(x string) (bool, error) {
+	installedVersion, err := getGitVersion()
+	if err != nil {
+		return false, err
+	}
+	return semver.Compare(installedVersion, x) > 0, nil
 }
