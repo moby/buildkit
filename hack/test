@@ -22,6 +22,7 @@ set -eu -o pipefail
 : "${TEST_DOCKERD_BINARY=$(which dockerd)}"
 : "${TEST_REPORT_SUFFIX=}"
 : "${TEST_KEEP_CACHE=}"
+: "${TESTFLAGS=}"
 
 : "${DOCKERFILE_RELEASES=}"
 : "${BUILDKIT_WORKER_RANDOM=}"
