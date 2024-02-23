@@ -1166,6 +1166,19 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		commitMessage.WriteString(" " + "--chmod=" + cfg.chmod)
 	}
 
+	platform := cfg.opt.targetPlatform
+	if d.platform != nil {
+		platform = *d.platform
+	}
+
+	env, err := d.state.Env(context.TODO())
+	if err != nil {
+		return err
+	}
+
+	name := uppercaseCmd(processCmdEnv(cfg.opt.shlex, cfg.cmdToPrint.String(), env))
+	pgName := prefixCommand(d, name, d.prefixPlatform, &platform, env)
+
 	var a *llb.FileAction
 
 	for _, src := range cfg.params.SourcePaths {
@@ -1180,7 +1193,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 			if gitRef.SubDir != "" {
 				commit += ":" + gitRef.SubDir
 			}
-			var gitOptions []llb.GitOption
+			gitOptions := []llb.GitOption{llb.WithCustomName(pgName)}
 			if cfg.keepGitDir {
 				gitOptions = append(gitOptions, llb.KeepGitDir())
 			}
@@ -1212,7 +1225,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 				}
 			}
 
-			st := llb.HTTP(src, llb.Filename(f), llb.Checksum(cfg.checksum), dfCmd(cfg.params))
+			st := llb.HTTP(src, llb.Filename(f), llb.WithCustomName(pgName), llb.Checksum(cfg.checksum), dfCmd(cfg.params))
 
 			opts := append([]llb.CopyOption{&llb.CopyInfo{
 				Mode:           mode,
@@ -1284,19 +1297,8 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 
 	commitMessage.WriteString(" " + cfg.params.DestPath)
 
-	platform := cfg.opt.targetPlatform
-	if d.platform != nil {
-		platform = *d.platform
-	}
-
-	env, err := d.state.Env(context.TODO())
-	if err != nil {
-		return err
-	}
-
-	name := uppercaseCmd(processCmdEnv(cfg.opt.shlex, cfg.cmdToPrint.String(), env))
 	fileOpt := []llb.ConstraintsOpt{
-		llb.WithCustomName(prefixCommand(d, name, d.prefixPlatform, &platform, env)),
+		llb.WithCustomName(pgName),
 		location(cfg.opt.sourceMap, cfg.location),
 	}
 	if d.ignoreCache {
