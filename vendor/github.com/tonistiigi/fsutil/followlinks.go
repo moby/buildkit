@@ -137,8 +137,8 @@ func (r *symlinkResolver) readSymlink(p string, allowWildcard bool) ([]string, e
 func statFile(fs FS, root string) (os.DirEntry, error) {
 	var out os.DirEntry
 
-	root = filepath.Clean(root)
-	if root == "/" || root == "." {
+	root = filepath.FromSlash(filepath.Clean(root))
+	if root == string(filepath.Separator) || root == "." {
 		return nil, nil
 	}
 
@@ -168,8 +168,8 @@ func statFile(fs FS, root string) (os.DirEntry, error) {
 func readDir(fs FS, root string) ([]os.DirEntry, error) {
 	var out []os.DirEntry
 
-	root = filepath.Clean(root)
-	if root == "/" || root == "." {
+	root = filepath.FromSlash(filepath.Clean(root))
+	if root == string(filepath.Separator) || root == "." {
 		root = "."
 		out = make([]gofs.DirEntry, 0)
 	}
