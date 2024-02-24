@@ -72,13 +72,13 @@ type SBOMTargets struct {
 	IgnoreCache bool
 }
 
-func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *dockerspec.DockerOCIImage, *SBOMTargets, error) {
+func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (st *llb.State, img, baseImg *dockerspec.DockerOCIImage, sbom *SBOMTargets, err error) {
 	ds, err := toDispatchState(ctx, dt, opt)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
-	sbom := SBOMTargets{
+	sbom = &SBOMTargets{
 		Core:   ds.state,
 		Extras: map[string]llb.State{},
 	}
@@ -97,7 +97,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		}
 	}
 
-	return &ds.state, &ds.image, &sbom, nil
+	return &ds.state, &ds.image, ds.baseImg, sbom, nil
 }
 
 func Dockefile2Outline(ctx context.Context, dt []byte, opt ConvertOpt) (*outline.Outline, error) {
@@ -270,7 +270,9 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 				ds.noinit = true
 				ds.state = *s
 				if img != nil {
-					ds.image = clampTimes(*img, opt.Epoch)
+					// timestamps are inherited as-is, regardless to SOURCE_DATE_EPOCH
+					// https://github.com/moby/buildkit/issues/4614
+					ds.image = *img
 					if img.Architecture != "" && img.OS != "" {
 						ds.platform = &ocispecs.Platform{
 							OS:           img.OS,
@@ -445,6 +447,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 						if err := json.Unmarshal(dt, &img); err != nil {
 							return errors.Wrap(err, "failed to parse image config")
 						}
+						d.baseImg = cloneX(&img) // immutable
 						img.Created = nil
 						// if there is no explicit target platform, try to match based on image config
 						if d.platform == nil && platformOpt.implicitTarget {
@@ -507,6 +510,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			d.state = d.base.state
 			d.platform = d.base.platform
 			d.image = clone(d.base.image)
+			d.baseImg = cloneX(d.base.baseImg)
 			// Utilize the same path index as our base image so we propagate
 			// the paths we use back to the base image.
 			d.paths = d.base.paths
@@ -836,6 +840,7 @@ type dispatchState struct {
 	platform  *ocispecs.Platform
 	stage     instructions.Stage
 	base      *dispatchState
+	baseImg   *dockerspec.DockerOCIImage // immutable, unlike image
 	noinit    bool
 	deps      map[*dispatchState]instructions.Command
 	buildArgs []instructions.KeyValuePairOptional
@@ -1892,21 +1897,6 @@ func commonImageNames() []string {
 		out = append(out, name, "docker.io/library"+name, name+":latest", "docker.io/library"+name+":latest")
 	}
 	return out
-}
-
-func clampTimes(img dockerspec.DockerOCIImage, tm *time.Time) dockerspec.DockerOCIImage {
-	if tm == nil {
-		return img
-	}
-	for i, h := range img.History {
-		if h.Created == nil || h.Created.After(*tm) {
-			img.History[i].Created = tm
-		}
-	}
-	if img.Created != nil && img.Created.After(*tm) {
-		img.Created = tm
-	}
-	return img
 }
 
 func isHTTPSource(src string) bool {

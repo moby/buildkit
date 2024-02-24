@@ -8,6 +8,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/moby/buildkit/frontend/dockerui"
 	"github.com/moby/buildkit/util/appcontext"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -33,7 +34,7 @@ ENV FOO bar
 COPY f1 f2 /sub/
 RUN ls -l
 `
-	_, _, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	_, _, _, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.NoError(t, err)
 
 	df = `FROM scratch AS foo
@@ -42,7 +43,7 @@ FROM foo
 COPY --from=foo f1 /
 COPY --from=0 f2 /
 	`
-	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	_, _, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.NoError(t, err)
 
 	df = `FROM scratch AS foo
@@ -51,14 +52,14 @@ FROM foo
 COPY --from=foo f1 /
 COPY --from=0 f2 /
 	`
-	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
+	_, _, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
 		Config: dockerui.Config{
 			Target: "Foo",
 		},
 	})
 	assert.NoError(t, err)
 
-	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
+	_, _, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
 		Config: dockerui.Config{
 			Target: "nosuch",
 		},
@@ -68,21 +69,21 @@ COPY --from=0 f2 /
 	df = `FROM scratch
 	ADD http://github.com/moby/buildkit/blob/master/README.md /
 		`
-	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	_, _, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.NoError(t, err)
 
 	df = `FROM scratch
 	COPY http://github.com/moby/buildkit/blob/master/README.md /
 		`
-	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	_, _, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.EqualError(t, err, "source can't be a URL for COPY")
 
 	df = `FROM "" AS foo`
-	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	_, _, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.Error(t, err)
 
 	df = `FROM ${BLANK} AS foo`
-	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	_, _, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.Error(t, err)
 }
 
@@ -93,7 +94,7 @@ ENV FOO bar
 COPY f1 f2 /sub/
 RUN ls -l
 `
-	state, _, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	state, _, _, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.NoError(t, err)
 
 	_, err = state.Marshal(context.TODO())
@@ -194,7 +195,7 @@ func TestDockerfileCircularDependencies(t *testing.T) {
 	df := `FROM busybox AS stage0
 COPY --from=stage0 f1 /sub/
 `
-	_, _, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	_, _, _, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.EqualError(t, err, "circular dependency detected on stage: stage0")
 
 	// multiple stages with circular dependency
@@ -205,6 +206,21 @@ COPY --from=stage0 f2 /sub/
 FROM busybox AS stage2
 COPY --from=stage1 f2 /sub/
 `
-	_, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	_, _, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.EqualError(t, err, "circular dependency detected on stage: stage0")
+}
+
+func TestBaseImageConfig(t *testing.T) {
+	df := `FROM --platform=linux/amd64 busybox:1.36.1@sha256:6d9ac9237a84afe1516540f40a0fafdc86859b2141954b4d643af7066d598b74 AS foo
+RUN echo foo
+
+# the source image of bar is busybox, not foo
+FROM foo AS bar
+RUN echo bar
+`
+	_, _, baseImg, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	assert.NoError(t, err)
+	t.Logf("baseImg=%+v", baseImg)
+	assert.Equal(t, []digest.Digest{"sha256:2e112031b4b923a873c8b3d685d48037e4d5ccd967b658743d93a6e56c3064b9"}, baseImg.RootFS.DiffIDs)
+	assert.Equal(t, "2024-01-17 21:49:12 +0000 UTC", baseImg.Created.String())
 }

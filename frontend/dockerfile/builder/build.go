@@ -115,21 +115,21 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 
 	scanTargets := sync.Map{}
 
-	rb, err := bc.Build(ctx, func(ctx context.Context, platform *ocispecs.Platform, idx int) (client.Reference, *dockerspec.DockerOCIImage, error) {
+	rb, err := bc.Build(ctx, func(ctx context.Context, platform *ocispecs.Platform, idx int) (client.Reference, *dockerspec.DockerOCIImage, *dockerspec.DockerOCIImage, error) {
 		opt := convertOpt
 		opt.TargetPlatform = platform
 		if idx != 0 {
 			opt.Warn = nil
 		}
 
-		st, img, scanTarget, err := dockerfile2llb.Dockerfile2LLB(ctx, src.Data, opt)
+		st, img, baseImg, scanTarget, err := dockerfile2llb.Dockerfile2LLB(ctx, src.Data, opt)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 
 		def, err := st.Marshal(ctx)
 		if err != nil {
-			return nil, nil, errors.Wrapf(err, "failed to marshal LLB definition")
+			return nil, nil, nil, errors.Wrapf(err, "failed to marshal LLB definition")
 		}
 
 		r, err := c.Solve(ctx, client.SolveRequest{
@@ -137,12 +137,12 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 			CacheImports: bc.CacheImports,
 		})
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 
 		ref, err := r.SingleRef()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 
 		p := platforms.DefaultSpec()
@@ -151,7 +151,7 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 		}
 		scanTargets.Store(platforms.Format(platforms.Normalize(p)), scanTarget)
 
-		return ref, img, nil
+		return ref, img, baseImg, nil
 	})
 	if err != nil {
 		return nil, err
