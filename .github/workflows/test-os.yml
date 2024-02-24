@@ -20,8 +20,6 @@ on:
 
 env:
   GO_VERSION: "1.21"
-  TESTFLAGS: "-v --parallel=6 --timeout=60m"
-  GOTESTSUM_FORMAT: "standard-verbose"
   DESTDIR: "./bin"
 
 jobs:
@@ -72,10 +70,42 @@ jobs:
     runs-on: windows-2022
     needs:
       - build
+    env:
+      TESTFLAGS: "-v --parallel=6 --timeout=30m"
+      GOTESTSUM_FORMAT: "standard-verbose"
+    strategy:
+      fail-fast: false
+      matrix:
+        worker:
+          - containerd
+        pkg:
+          - ./client
+          - ./cmd/buildctl
+          - ./worker/containerd
+          - ./solver
+          - ./frontend
+          - ./frontend/dockerfile
+        include:
+          -
+            pkg: ./...
+            skip-integration-tests: 1
     steps:
+      -
+        name: Prepare
+        run: |
+          echo "TEST_REPORT_NAME=${{ github.job }}-$(echo "${{ matrix.pkg }}-${{ matrix.skip-integration-tests }}-${{ matrix.worker }}" | tr -dc '[:alnum:]-\n\r' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+          testFlags="${{ env.TESTFLAGS }}"
+          if [ -n "${{ matrix.worker }}" ]; then
+            testFlags="${testFlags} --run=//worker=${{ matrix.worker }}$"
+          fi
+          echo "TESTFLAGS=${testFlags}" >> $GITHUB_ENV
+        shell: bash
       -
         name: Checkout
         uses: actions/checkout@v4
+      -
+        name: Expose GitHub Runtime
+        uses: crazy-max/ghaction-github-runtime@v3
       -
         name: Set up Go
         uses: actions/setup-go@v5
@@ -96,16 +126,17 @@ jobs:
         name: Test
         env:
           TMPDIR: ${{ runner.temp }}
+          SKIP_INTEGRATION_TESTS: ${{ matrix.skip-integration-tests }}
         run: |
           mkdir -p ./bin/testreports
           gotestsum \
-            --jsonfile="./bin/testreports/go-test-report.json" \
-            --junitfile="./bin/testreports/junit-report.xml" \
-            --packages="./..." \
+            --jsonfile="./bin/testreports/go-test-report-${{ env.TEST_REPORT_NAME }}.json" \
+            --junitfile="./bin/testreports/junit-report-${{ env.TEST_REPORT_NAME }}.xml" \
+            --packages="${{ matrix.pkg }}" \
             -- \
               "-mod=vendor" \
-              "-coverprofile" "./bin/testreports/coverage.txt" \
-              "-covermode" "atomic" ${TESTFLAGS}
+              "-coverprofile" "./bin/testreports/coverage-${{ env.TEST_REPORT_NAME }}.txt" \
+              "-covermode" "atomic" ${{ env.TESTFLAGS }}
         shell: bash
       -
         name: Send to Codecov
@@ -127,7 +158,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-reports-${{ matrix.os }}
+          name: test-reports-${{ env.TEST_REPORT_NAME }}
           path: ./bin/testreports
       -
         name: Dump context
