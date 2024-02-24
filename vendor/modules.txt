@@ -760,8 +760,8 @@ github.com/spdx/tools-golang/spdx/v2/v2_3
 ## explicit; go 1.20
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
-# github.com/tonistiigi/fsutil v0.0.0-20230825212630-f09800878302
-## explicit; go 1.19
+# github.com/tonistiigi/fsutil v0.0.0-20240223190444-7a889f53dbf6
+## explicit; go 1.20
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy
 github.com/tonistiigi/fsutil/types

@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"path/filepath"
 	"sync"
 	"syscall"
 
@@ -156,7 +157,7 @@ func (s *sender) walk(ctx context.Context) error {
 		if !ok {
 			return errors.WithStack(&os.PathError{Path: path, Err: syscall.EBADMSG, Op: "fileinfo without stat info"})
 		}
-
+		stat.Path = filepath.ToSlash(stat.Path)
 		p := &types.Packet{
 			Type: types.PACKET_STAT,
 			Stat: stat,

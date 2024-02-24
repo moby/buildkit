@@ -66,9 +66,9 @@ type filterFS struct {
 
 // NewFilterFS creates a new FS that filters the given FS using the given
 // FilterOpt.
-
+//
 // The returned FS will not contain any paths that do not match the provided
-// include and exclude patterns, or that are are exlcluded using the mapping
+// include and exclude patterns, or that are are excluded using the mapping
 // function.
 //
 // The FS is assumed to be a snapshot of the filesystem at the time of the
@@ -96,7 +96,7 @@ func NewFilterFS(fs FS, opt *FilterOpt) (FS, error) {
 	}
 
 	patternChars := "*[]?^"
-	if os.PathSeparator != '\\' {
+	if filepath.Separator != '\\' {
 		patternChars += `\`
 	}
 
@@ -176,6 +176,7 @@ func (fs *filterFS) Walk(ctx context.Context, target string, fn gofs.WalkDirFunc
 		includeMatchInfo patternmatcher.MatchInfo
 		excludeMatchInfo patternmatcher.MatchInfo
 		calledFn         bool
+		skipFn           bool
 	}
 
 	// used only for include/exclude handling
@@ -333,6 +334,9 @@ func (fs *filterFS) Walk(ctx context.Context, target string, fn gofs.WalkDirFunc
 				}
 			}
 			for i, parentDir := range parentDirs {
+				if parentDir.skipFn {
+					return filepath.SkipDir
+				}
 				if parentDir.calledFn {
 					continue
 				}
@@ -352,15 +356,21 @@ func (fs *filterFS) Walk(ctx context.Context, target string, fn gofs.WalkDirFunc
 				}
 				if fs.mapFn != nil {
 					result := fs.mapFn(parentStat.Path, parentStat)
-					if result == MapResultSkipDir || result == MapResultExclude {
+					if result == MapResultExclude {
 						continue
+					} else if result == MapResultSkipDir {
+						parentDirs[i].skipFn = true
+						return filepath.SkipDir
 					}
 				}
 
-				if err := fn(parentStat.Path, &DirEntryInfo{Stat: parentStat}, nil); err != nil {
+				parentDirs[i].calledFn = true
+				if err := fn(parentStat.Path, &DirEntryInfo{Stat: parentStat}, nil); err == filepath.SkipDir {
+					parentDirs[i].skipFn = true
+					return filepath.SkipDir
+				} else if err != nil {
 					return err
 				}
-				parentDirs[i].calledFn = true
 			}
 			if err := fn(stat.Path, &DirEntryInfo{Stat: stat}, nil); err != nil {
 				return err
