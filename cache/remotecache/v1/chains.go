@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/content"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -133,6 +134,26 @@ func (p DescriptorProviderPair) Info(ctx context.Context, dgst digest.Digest) (c
 		Digest: p.Descriptor.Digest,
 		Size:   p.Descriptor.Size,
 	}, nil
+}
+
+func (p DescriptorProviderPair) UnlazySession(desc ocispecs.Descriptor) session.Group {
+	type unlazySession interface {
+		UnlazySession(ocispecs.Descriptor) session.Group
+	}
+	if cd, ok := p.Provider.(unlazySession); ok {
+		return cd.UnlazySession(desc)
+	}
+	return nil
+}
+
+func (p DescriptorProviderPair) SnapshotLabels(descs []ocispecs.Descriptor, index int) map[string]string {
+	type snapshotLabels interface {
+		SnapshotLabels([]ocispecs.Descriptor, int) map[string]string
+	}
+	if cd, ok := p.Provider.(snapshotLabels); ok {
+		return cd.SnapshotLabels(descs, index)
+	}
+	return nil
 }
 
 // item is an implementation of a record in the cache chain. After validation,
