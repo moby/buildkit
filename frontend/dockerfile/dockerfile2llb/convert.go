@@ -744,17 +744,18 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 		}
 		if err == nil {
 			err = dispatchCopy(d, copyConfig{
-				params:       c.SourcesAndDest,
-				source:       opt.buildContext,
-				isAddCommand: true,
-				cmdToPrint:   c,
-				chown:        c.Chown,
-				chmod:        c.Chmod,
-				link:         c.Link,
-				keepGitDir:   c.KeepGitDir,
-				checksum:     checksum,
-				location:     c.Location(),
-				opt:          opt,
+				params:          c.SourcesAndDest,
+				excludePatterns: c.ExcludePatterns,
+				source:          opt.buildContext,
+				isAddCommand:    true,
+				cmdToPrint:      c,
+				chown:           c.Chown,
+				chmod:           c.Chmod,
+				link:            c.Link,
+				keepGitDir:      c.KeepGitDir,
+				checksum:        checksum,
+				location:        c.Location(),
+				opt:             opt,
 			})
 		}
 		if err == nil {
@@ -796,16 +797,17 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 			l = src.state
 		}
 		err = dispatchCopy(d, copyConfig{
-			params:       c.SourcesAndDest,
-			source:       l,
-			isAddCommand: false,
-			cmdToPrint:   c,
-			chown:        c.Chown,
-			chmod:        c.Chmod,
-			link:         c.Link,
-			parents:      c.Parents,
-			location:     c.Location(),
-			opt:          opt,
+			params:          c.SourcesAndDest,
+			excludePatterns: c.ExcludePatterns,
+			source:          l,
+			isAddCommand:    false,
+			cmdToPrint:      c,
+			chown:           c.Chown,
+			chmod:           c.Chmod,
+			link:            c.Link,
+			parents:         c.Parents,
+			location:        c.Location(),
+			opt:             opt,
 		})
 		if err == nil {
 			if len(cmd.sources) == 0 {
@@ -1128,6 +1130,13 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		copyOpt = append(copyOpt, llb.WithUser(cfg.chown))
 	}
 
+	if len(cfg.excludePatterns) > 0 {
+		// in theory we don't need to check whether there are any exclude patterns,
+		// as an empty list is a no-op. However, performing the check makes
+		// the code easier to understand and costs virtually nothing.
+		copyOpt = append(copyOpt, llb.WithExcludePatterns(cfg.excludePatterns))
+	}
+
 	var mode *os.FileMode
 	if cfg.chmod != "" {
 		p, err := strconv.ParseUint(cfg.chmod, 8, 32)
@@ -1331,18 +1340,19 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 }
 
 type copyConfig struct {
-	params       instructions.SourcesAndDest
-	source       llb.State
-	isAddCommand bool
-	cmdToPrint   fmt.Stringer
-	chown        string
-	chmod        string
-	link         bool
-	keepGitDir   bool
-	checksum     digest.Digest
-	parents      bool
-	location     []parser.Range
-	opt          dispatchOpt
+	params          instructions.SourcesAndDest
+	excludePatterns []string
+	source          llb.State
+	isAddCommand    bool
+	cmdToPrint      fmt.Stringer
+	chown           string
+	chmod           string
+	link            bool
+	keepGitDir      bool
+	checksum        digest.Digest
+	parents         bool
+	location        []parser.Range
+	opt             dispatchOpt
 }
 
 func dispatchMaintainer(d *dispatchState, c *instructions.MaintainerCommand) error {

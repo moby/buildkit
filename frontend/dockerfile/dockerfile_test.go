@@ -232,6 +232,7 @@ func init() {
 
 func TestIntegration(t *testing.T) {
 	integration.Run(t, allTests, opts...)
+
 	integration.Run(t, securityTests, append(append(opts, securityOpts...),
 		integration.WithMatrix("security.insecure", map[string]interface{}{
 			"granted": securityInsecureGranted,
