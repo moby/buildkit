@@ -47,7 +47,10 @@ Join `#buildkit` channel on [Docker Community Slack](https://dockr.ly/comm-slack
 
 - [Used by](#used-by)
 - [Quick start](#quick-start)
-  - [Starting the `buildkitd` daemon](#starting-the-buildkitd-daemon)
+  - [Linux Setup](#linux-setup)
+  - [Windows Setup](#windows-setup)
+  - [macOS Setup](#macos-setup)
+  - [Build from source](#build-from-source)
   - [Exploring LLB](#exploring-llb)
   - [Exploring Dockerfiles](#exploring-dockerfiles)
     - [Building a Dockerfile with `buildctl`](#building-a-dockerfile-with-buildctl)
@@ -116,25 +119,18 @@ BuildKit is used by the following projects:
 :information_source: For Kubernetes deployments, see [`examples/kubernetes`](./examples/kubernetes).
 
 BuildKit is composed of the `buildkitd` daemon and the `buildctl` client.
-While the `buildctl` client is available for Linux, macOS, and Windows, the `buildkitd` daemon is only available for Linux currently.
+While the `buildctl` client is available for Linux, macOS, and Windows, the `buildkitd` daemon is only available for Linux and *Windows currently.
+
+The latest binaries of BuildKit are available [here](https://github.com/moby/buildkit/releases) for Linux, macOS, and Windows.
+
+
+### Linux Setup
 
 The `buildkitd` daemon requires the following components to be installed:
 -   [runc](https://github.com/opencontainers/runc) or [crun](https://github.com/containers/crun)
 -   [containerd](https://github.com/containerd/containerd) (if you want to use containerd worker)
 
-The latest binaries of BuildKit are available [here](https://github.com/moby/buildkit/releases) for Linux, macOS, and Windows.
-
-[Homebrew package](https://formulae.brew.sh/formula/buildkit) (unofficial) is available for macOS.
-```console
-$ brew install buildkit
-```
-
-To build BuildKit from source, see [`.github/CONTRIBUTING.md`](./.github/CONTRIBUTING.md).
-
-For a `buildctl` reference, see [this document](./docs/reference/buildctl.md).
-
-### Starting the `buildkitd` daemon
-
+**Starting the `buildkitd` daemon:**
 You need to run `buildkitd` as the root user on the host.
 
 ```bash
@@ -154,6 +150,23 @@ See [Systemd socket activation](#systemd-socket-activation)
 
 The buildkitd daemon listens gRPC API on `/run/buildkit/buildkitd.sock` by default, but you can also use TCP sockets.
 See [Expose BuildKit as a TCP service](#expose-buildkit-as-a-tcp-service).
+
+### Windows Setup
+
+See instructions and notes at [`docs/windows.md`](./docs/windows.md).
+
+### macOS Setup
+
+[Homebrew package](https://formulae.brew.sh/formula/buildkit) (unofficial) is available for macOS.
+```console
+$ brew install buildkit
+```
+
+### Build from source
+
+To build BuildKit from source, see [`.github/CONTRIBUTING.md`](./.github/CONTRIBUTING.md).
+
+For a `buildctl` reference, see [this document](./docs/reference/buildctl.md).
 
 ### Exploring LLB
 
