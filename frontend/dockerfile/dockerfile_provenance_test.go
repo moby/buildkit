@@ -29,7 +29,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerui"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/identity"
-	"github.com/moby/buildkit/solver/llbsolver/provenance"
+	provenancetypes "github.com/moby/buildkit/solver/llbsolver/provenance/types"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/testutil"
@@ -126,7 +126,7 @@ RUN echo "ok" > /foo
 			require.Equal(t, "https://slsa.dev/provenance/v0.2", attest.PredicateType) // intentionally not const
 
 			type stmtT struct {
-				Predicate provenance.ProvenancePredicate `json:"predicate"`
+				Predicate provenancetypes.ProvenancePredicate `json:"predicate"`
 			}
 			var stmt stmtT
 			require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
@@ -323,7 +323,7 @@ COPY myapp.Dockerfile /
 	require.Equal(t, "https://slsa.dev/provenance/v0.2", attest.PredicateType) // intentionally not const
 
 	type stmtT struct {
-		Predicate provenance.ProvenancePredicate `json:"predicate"`
+		Predicate provenancetypes.ProvenancePredicate `json:"predicate"`
 	}
 	var stmt stmtT
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
@@ -459,7 +459,7 @@ RUN echo "ok-$TARGETARCH" > /foo
 		require.Equal(t, "https://slsa.dev/provenance/v0.2", attest.PredicateType) // intentionally not const
 
 		type stmtT struct {
-			Predicate provenance.ProvenancePredicate `json:"predicate"`
+			Predicate provenancetypes.ProvenancePredicate `json:"predicate"`
 		}
 		var stmt stmtT
 		require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
@@ -641,7 +641,7 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, "https://slsa.dev/provenance/v0.2", attest.PredicateType) // intentionally not const
 
 	type stmtT struct {
-		Predicate provenance.ProvenancePredicate `json:"predicate"`
+		Predicate provenancetypes.ProvenancePredicate `json:"predicate"`
 	}
 	var stmt stmtT
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
@@ -787,7 +787,7 @@ func testClientLLBProvenance(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, "https://slsa.dev/provenance/v0.2", attest.PredicateType) // intentionally not const
 
 	type stmtT struct {
-		Predicate provenance.ProvenancePredicate `json:"predicate"`
+		Predicate provenancetypes.ProvenancePredicate `json:"predicate"`
 	}
 	var stmt stmtT
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
@@ -867,7 +867,7 @@ RUN --mount=type=secret,id=mysecret --mount=type=secret,id=othersecret --mount=t
 
 	att := imgs.FindAttestation(expPlatform)
 	type stmtT struct {
-		Predicate provenance.ProvenancePredicate `json:"predicate"`
+		Predicate provenancetypes.ProvenancePredicate `json:"predicate"`
 	}
 	var stmt stmtT
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
@@ -994,7 +994,7 @@ EOF
 
 	att := imgs.FindAttestation(expPlatform)
 	type stmtT struct {
-		Predicate provenance.ProvenancePredicate `json:"predicate"`
+		Predicate provenancetypes.ProvenancePredicate `json:"predicate"`
 	}
 	var stmt stmtT
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
@@ -1268,7 +1268,7 @@ COPY bar bar2
 
 	require.NotEqual(t, len(provDt), 0)
 
-	var pred provenance.ProvenancePredicate
+	var pred provenancetypes.ProvenancePredicate
 	require.NoError(t, json.Unmarshal(provDt, &pred))
 
 	sources := pred.Metadata.BuildKitMetadata.Source.Infos
@@ -1349,7 +1349,7 @@ RUN date +%s > /b.txt
 	require.NotNil(t, att)
 
 	var stmt struct {
-		Predicate provenance.ProvenancePredicate `json:"predicate"`
+		Predicate provenancetypes.ProvenancePredicate `json:"predicate"`
 	}
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
 	pred := stmt.Predicate

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/moby/buildkit/executor/resources/types"
+	resourcestypes "github.com/moby/buildkit/executor/resources/types"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -25,14 +25,14 @@ full avg10=0.12 avg60=0.34 avg300=0.56 total=9876`
 	ioStat, err := getCgroupIOStat(testDir)
 	assert.NoError(t, err)
 
-	var expectedPressure = &types.Pressure{
-		Some: &types.PressureValues{
+	var expectedPressure = &resourcestypes.Pressure{
+		Some: &resourcestypes.PressureValues{
 			Avg10:  float64Ptr(1.23),
 			Avg60:  float64Ptr(4.56),
 			Avg300: float64Ptr(7.89),
 			Total:  uint64Ptr(3031),
 		},
-		Full: &types.PressureValues{
+		Full: &resourcestypes.PressureValues{
 			Avg10:  float64Ptr(0.12),
 			Avg60:  float64Ptr(0.34),
 			Avg300: float64Ptr(0.56),
@@ -40,7 +40,7 @@ full avg10=0.12 avg60=0.34 avg300=0.56 total=9876`
 		},
 	}
 
-	expectedIOStat := &types.IOStat{
+	expectedIOStat := &resourcestypes.IOStat{
 		ReadBytes:    uint64Ptr(1024 + 512),
 		WriteBytes:   uint64Ptr(2048 + 1024),
 		DiscardBytes: uint64Ptr(4096 + 2048),

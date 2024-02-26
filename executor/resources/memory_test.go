@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/moby/buildkit/executor/resources/types"
+	resourcestypes "github.com/moby/buildkit/executor/resources/types"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -51,14 +51,14 @@ oom_kill 5`
 	memoryStat, err := getCgroupMemoryStat(testDir)
 	assert.NoError(t, err)
 
-	var expectedPressure = &types.Pressure{
-		Some: &types.PressureValues{
+	var expectedPressure = &resourcestypes.Pressure{
+		Some: &resourcestypes.PressureValues{
 			Avg10:  float64Ptr(1.23),
 			Avg60:  float64Ptr(4.56),
 			Avg300: float64Ptr(7.89),
 			Total:  uint64Ptr(3031),
 		},
-		Full: &types.PressureValues{
+		Full: &resourcestypes.PressureValues{
 			Avg10:  float64Ptr(0.12),
 			Avg60:  float64Ptr(0.34),
 			Avg300: float64Ptr(0.56),
@@ -66,7 +66,7 @@ oom_kill 5`
 		},
 	}
 
-	expectedMemoryStat := &types.MemoryStat{
+	expectedMemoryStat := &resourcestypes.MemoryStat{
 		SwapBytes:     uint64Ptr(987654),
 		Anon:          uint64Ptr(24576),
 		File:          uint64Ptr(12791808),
