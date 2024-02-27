@@ -66,7 +66,7 @@ require (
 	github.com/prometheus/procfs v0.12.0
 	github.com/serialx/hashring v0.0.0-20190422032157-8b2912629002
 	github.com/sirupsen/logrus v1.9.3
-	github.com/spdx/tools-golang v0.5.1
+	github.com/spdx/tools-golang v0.5.3
 	github.com/stretchr/testify v1.8.4
 	github.com/tonistiigi/fsutil v0.0.0-20240223190444-7a889f53dbf6
 	github.com/tonistiigi/go-actions-cache v0.0.0-20220404170428-0bdeb6e1eac7
