@@ -737,7 +737,7 @@ github.com/russross/blackfriday/v2
 ## explicit; go 1.17
 github.com/secure-systems-lab/go-securesystemslib/cjson
 github.com/secure-systems-lab/go-securesystemslib/dsse
-# github.com/serialx/hashring v0.0.0-20190422032157-8b2912629002
+# github.com/serialx/hashring v0.0.0-20200727003509-22c0c7ab6b1b
 ## explicit
 github.com/serialx/hashring
 # github.com/shibumi/go-pathspec v1.3.0
