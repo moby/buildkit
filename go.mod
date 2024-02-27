@@ -64,7 +64,7 @@ require (
 	github.com/pkg/profile v1.5.0
 	github.com/prometheus/client_golang v1.17.0
 	github.com/prometheus/procfs v0.12.0
-	github.com/serialx/hashring v0.0.0-20190422032157-8b2912629002
+	github.com/serialx/hashring v0.0.0-20200727003509-22c0c7ab6b1b
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spdx/tools-golang v0.5.1
 	github.com/stretchr/testify v1.8.4
