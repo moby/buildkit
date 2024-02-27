@@ -61,7 +61,7 @@ require (
 	github.com/package-url/packageurl-go v0.1.1-0.20220428063043-89078438f170
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pkg/errors v0.9.1
-	github.com/pkg/profile v1.5.0
+	github.com/pkg/profile v1.7.0
 	github.com/prometheus/client_golang v1.17.0
 	github.com/prometheus/procfs v0.12.0
 	github.com/serialx/hashring v0.0.0-20200727003509-22c0c7ab6b1b
@@ -137,11 +137,13 @@ require (
 	github.com/docker/docker-credential-helpers v0.8.0 // indirect
 	github.com/docker/go-events v0.0.0-20190806004212-e31b211e4f1c // indirect
 	github.com/docker/go-metrics v0.0.1 // indirect
+	github.com/felixge/fgprof v0.9.3 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.3.0 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
+	github.com/google/pprof v0.0.0-20230323073829-e72429f035bd // indirect
 	github.com/google/uuid v1.5.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.16.0 // indirect
 	github.com/hanwen/go-fuse/v2 v2.4.0 // indirect

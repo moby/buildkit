@@ -12,6 +12,8 @@ import (
 	"runtime/pprof"
 	"runtime/trace"
 	"sync/atomic"
+
+	"github.com/felixge/fgprof"
 )
 
 const (
@@ -22,6 +24,7 @@ const (
 	traceMode
 	threadCreateMode
 	goroutineMode
+	clockMode
 )
 
 // Profile represents an active profiling session.
@@ -90,20 +93,16 @@ func MemProfileRate(rate int) func(*Profile) {
 
 // MemProfileHeap changes which type of memory profiling to profile
 // the heap.
-func MemProfileHeap() func(*Profile) {
-	return func(p *Profile) {
-		p.memProfileType = "heap"
-		p.mode = memMode
-	}
+func MemProfileHeap(p *Profile) {
+	p.memProfileType = "heap"
+	p.mode = memMode
 }
 
 // MemProfileAllocs changes which type of memory to profile
 // allocations.
-func MemProfileAllocs() func(*Profile) {
-	return func(p *Profile) {
-		p.memProfileType = "allocs"
-		p.mode = memMode
-	}
+func MemProfileAllocs(p *Profile) {
+	p.memProfileType = "allocs"
+	p.mode = memMode
 }
 
 // MutexProfile enables mutex profiling.
@@ -125,6 +124,10 @@ func ThreadcreationProfile(p *Profile) { p.mode = threadCreateMode }
 // GoroutineProfile enables goroutine profiling.
 // It disables any previous profiling settings.
 func GoroutineProfile(p *Profile) { p.mode = goroutineMode }
+
+// ClockProfile enables wall clock (fgprof) profiling.
+// It disables any previous profiling settings.
+func ClockProfile(p *Profile) { p.mode = clockMode }
 
 // ProfilePath controls the base path where various profiling
 // files are written. If blank, the base path will be generated
@@ -290,6 +293,20 @@ func Start(options ...func(*Profile)) interface {
 			}
 			f.Close()
 			logf("profile: goroutine profiling disabled, %s", fn)
+		}
+
+	case clockMode:
+		fn := filepath.Join(path, "clock.pprof")
+		f, err := os.Create(fn)
+		if err != nil {
+			log.Fatalf("profile: could not create clock profile %q: %v", fn, err)
+		}
+		logf("profile: clock profiling enabled, %s", fn)
+		stop := fgprof.Start(f, fgprof.FormatPprof)
+		prof.closer = func() {
+			stop()
+			f.Close()
+			logf("profile: clock profiling disabled, %s", fn)
 		}
 	}
 
