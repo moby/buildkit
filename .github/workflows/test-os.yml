@@ -52,7 +52,7 @@ jobs:
           set: |
             *.platform=${{ matrix.platform }}
             *.cache-from=type=gha,scope=binaries-for-test-${{ env.PLATFORM_PAIR }}
-            *.cache-to=type=gha,scope=binaries-for-test-${{ env.PLATFORM_PAIR }}
+            *.cache-to=type=gha,scope=binaries-for-test-${{ env.PLATFORM_PAIR }},ignore-error=true
       -
         name: List artifacts
         run: |

@@ -122,7 +122,7 @@ jobs:
         env:
           RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
           CACHE_FROM: type=gha,scope=${{ env.CACHE_SCOPE }}
-          CACHE_TO: type=gha,scope=${{ env.CACHE_SCOPE }}
+          CACHE_TO: type=gha,scope=${{ env.CACHE_SCOPE }},ignore-error=true
 
   release:
     runs-on: ubuntu-22.04
