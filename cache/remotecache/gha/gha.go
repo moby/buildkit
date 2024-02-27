@@ -39,7 +39,7 @@ const (
 	attrURL     = "url"
 	version     = "1"
 
-	defaultTimeout = 5 * time.Minute
+	defaultTimeout = 10 * time.Minute
 )
 
 type Config struct {

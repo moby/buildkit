@@ -506,12 +506,12 @@ in your workflow to expose the runtime.
   * `max`: export all the layers of all intermediate steps
 * `scope=<scope>`: which scope cache object belongs to (default `buildkit`)
 * `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
-* `timeout=<duration>`: sets the timeout duration for cache export (default: `5m`)
+* `timeout=<duration>`: sets the timeout duration for cache export (default: `10m`)
 
 `--import-cache` options:
 * `type=gha`
 * `scope=<scope>`: which scope cache object belongs to (default `buildkit`)
-* `timeout=<duration>`: sets the timeout duration for cache import (default: `5m`)
+* `timeout=<duration>`: sets the timeout duration for cache import (default: `10m`)
 
 #### S3 cache (experimental)
 
