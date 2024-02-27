@@ -28,6 +28,7 @@ import (
 	"github.com/moby/buildkit/cache/remotecache/gha"
 	inlineremotecache "github.com/moby/buildkit/cache/remotecache/inline"
 	localremotecache "github.com/moby/buildkit/cache/remotecache/local"
+	"github.com/moby/buildkit/cache/remotecache/oss"
 	registryremotecache "github.com/moby/buildkit/cache/remotecache/registry"
 	s3remotecache "github.com/moby/buildkit/cache/remotecache/s3"
 	"github.com/moby/buildkit/client"
@@ -786,6 +787,7 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 		"gha":      gha.ResolveCacheExporterFunc(),
 		"s3":       s3remotecache.ResolveCacheExporterFunc(),
 		"azblob":   azblob.ResolveCacheExporterFunc(),
+		"oss":      oss.ResolveCacheExporterFunc(),
 	}
 	remoteCacheImporterFuncs := map[string]remotecache.ResolveCacheImporterFunc{
 		"registry": registryremotecache.ResolveCacheImporterFunc(sessionManager, w.ContentStore(), resolverFn),
@@ -793,6 +795,7 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 		"gha":      gha.ResolveCacheImporterFunc(),
 		"s3":       s3remotecache.ResolveCacheImporterFunc(),
 		"azblob":   azblob.ResolveCacheImporterFunc(),
+		"oss":      oss.ResolveCacheImporterFunc(),
 	}
 	return control.NewController(control.Opt{
 		SessionManager:            sessionManager,
