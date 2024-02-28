@@ -13,7 +13,7 @@
 
 # Experimental Windows containers support
 
-As from `v0.13`, Buildkit now has exprimental support for Windows containers (WCOW). Both `buildctl.exe` and `buildkitd.exe` binaries are being released for testing purposes.
+As from `v0.13`, Buildkit now has experimental support for Windows containers (WCOW). Both `buildctl.exe` and `buildkitd.exe` binaries are being released for testing purposes.
 
 We will apprecate any feedback by [opening an issue here](https://github.com/moby/buildkit/issues/new), as we stabilize the product, especially `buildkitd.exe`.
 
