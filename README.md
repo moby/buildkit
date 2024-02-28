@@ -157,9 +157,18 @@ See instructions and notes at [`docs/windows.md`](./docs/windows.md).
 
 ### macOS Setup
 
-[Homebrew package](https://formulae.brew.sh/formula/buildkit) (unofficial) is available for macOS.
+[Homebrew formula](https://formulae.brew.sh/formula/buildkit) (unofficial) is available for macOS.
 ```console
 $ brew install buildkit
+```
+
+The Homebrew formula does not contain the daemon (`buildkitd`).
+
+For example, [Lima](https://lima-vm.io) can be used for launching the daemon inside a Linux VM.
+```console
+brew install lima
+limactl start template://buildkit
+export BUILDKIT_HOST="unix://$HOME/.lima/buildkit/sock/buildkitd.sock"
 ```
 
 ### Build from source
