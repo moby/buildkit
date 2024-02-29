@@ -4,23 +4,24 @@ run:
 linters:
   disable-all: true
   enable:
-    - deadcode
-    - dupl
-    - errcheck
-    - gofmt
-    - goimports
-    - golint
-    - gosimple
-    - govet
-    - ineffassign
     - misspell
+    - govet
+    - staticcheck
+    - errcheck
+    - unparam
+    - ineffassign
     - nakedret
-    - structcheck
+    - gocyclo
+    - dupl
+    - goimports
+    - revive
+    - gosec
+    - gosimple
+    - typecheck
     - unused
-    - varcheck
 
 linters-settings:
   gofmt:
     simplify: true
   dupl:
-    threshold: 400
+    threshold: 600

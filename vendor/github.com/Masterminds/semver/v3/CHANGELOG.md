@@ -1,5 +1,31 @@
 # Changelog
 
+## 3.2.0 (2022-11-28)
+
+### Added
+
+- #190: Added text marshaling and unmarshaling
+- #167: Added JSON marshalling for constraints (thanks @SimonTheLeg)
+- #173: Implement encoding.TextMarshaler and encoding.TextUnmarshaler on Version (thanks @MarkRosemaker)
+- #179: Added New() version constructor (thanks @kazhuravlev)
+
+### Changed
+
+- #182/#183: Updated CI testing setup
+
+### Fixed
+
+- #186: Fixing issue where validation of constraint section gave false positives
+- #176: Fix constraints check with *-0 (thanks @mtt0)
+- #181: Fixed Caret operator (^) gives unexpected results when the minor version in constraint is 0 (thanks @arshchimni)
+- #161: Fixed godoc (thanks @afirth)
+
+## 3.1.1 (2020-11-23)
+
+### Fixed
+
+- #158: Fixed issue with generated regex operation order that could cause problem
+
 ## 3.1.0 (2020-04-15)
 
 ### Added
