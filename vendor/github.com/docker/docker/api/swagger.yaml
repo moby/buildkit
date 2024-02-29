@@ -19,10 +19,10 @@ produces:
 consumes:
   - "application/json"
   - "text/plain"
-basePath: "/v1.44"
+basePath: "/v1.45"
 info:
   title: "Docker Engine API"
-  version: "1.44"
+  version: "1.45"
   x-logo:
     url: "https://docs.docker.com/assets/images/logo-docker-main.png"
   description: |
@@ -55,8 +55,8 @@ info:
     the URL is not supported by the daemon, a HTTP `400 Bad Request` error message
     is returned.
 
-    If you omit the version-prefix, the current version of the API (v1.44) is used.
-    For example, calling `/info` is the same as calling `/v1.44/info`. Using the
+    If you omit the version-prefix, the current version of the API (v1.45) is used.
+    For example, calling `/info` is the same as calling `/v1.45/info`. Using the
     API without a version-prefix is deprecated and will be removed in a future release.
 
     Engine releases in the near future should support this version of the API,
@@ -391,7 +391,11 @@ definitions:
           ReadOnlyNonRecursive:
             description: |
                Make the mount non-recursively read-only, but still leave the mount recursive
-               (unless NonRecursive is set to true in conjunction).
+               (unless NonRecursive is set to `true` in conjunction).
+
+               Addded in v1.44, before that version all read-only mounts were
+               non-recursive by default. To match the previous behaviour this
+               will default to `true` for clients on versions prior to v1.44.
             type: "boolean"
             default: false
           ReadOnlyForceRecursive:
@@ -423,6 +427,10 @@ definitions:
                 type: "object"
                 additionalProperties:
                   type: "string"
+          Subpath:
+            description: "Source path inside the volume. Must be relative without any back traversals."
+            type: "string"
+            example: "dir-inside-volume/subdirectory"
       TmpfsOptions:
         description: "Optional configuration for the `tmpfs` type."
         type: "object"
@@ -1743,8 +1751,12 @@ definitions:
         description: |
           Date and time at which the image was created, formatted in
           [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) format with nano-seconds.
+
+          This information is only available if present in the image,
+          and omitted otherwise.
         type: "string"
-        x-nullable: false
+        format: "dateTime"
+        x-nullable: true
         example: "2022-02-04T21:20:12.497794809Z"
       Container:
         description: |
