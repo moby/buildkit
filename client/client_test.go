@@ -72,6 +72,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tonistiigi/fsutil"
 	"golang.org/x/crypto/ssh/agent"
+	"golang.org/x/mod/semver"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
@@ -3362,8 +3363,13 @@ func testSourceDateEpochImageExporter(t *testing.T, sb integration.Sandbox) {
 	if cdAddress == "" {
 		t.SkipNow()
 	}
+
 	// https://github.com/containerd/containerd/commit/133ddce7cf18a1db175150e7a69470dea1bb3132
-	containerdutil.CheckVersion(t, cdAddress, ">= 1.7.0-beta.1")
+	minVer := "v1.7.0-beta.1"
+	cdVersion := containerdutil.GetVersion(t, cdAddress)
+	if semver.Compare(cdVersion, minVer) < 0 {
+		t.Skipf("containerd version %q does not satisfy minimal version %q", cdVersion, minVer)
+	}
 
 	workers.CheckFeatureCompat(t, sb, workers.FeatureSourceDateEpoch)
 	requiresLinux(t)
