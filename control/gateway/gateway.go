@@ -156,6 +156,15 @@ func (gwf *GatewayForwarder) Inputs(ctx context.Context, req *gwapi.InputsReques
 	return res, err
 }
 
+func (gwf *GatewayForwarder) Opts(ctx context.Context, req *gwapi.OptsRequest) (*gwapi.OptsResponse, error) {
+	fwd, err := gwf.lookupForwarder(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "forwarding Opts")
+	}
+	res, err := fwd.Opts(ctx, req)
+	return res, err
+}
+
 func (gwf *GatewayForwarder) ReadDir(ctx context.Context, req *gwapi.ReadDirRequest) (*gwapi.ReadDirResponse, error) {
 	fwd, err := gwf.lookupForwarder(ctx)
 	if err != nil {

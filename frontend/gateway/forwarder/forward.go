@@ -138,6 +138,10 @@ func (c *BridgeClient) Inputs(ctx context.Context) (map[string]llb.State, error)
 	return inputs, nil
 }
 
+func (c *BridgeClient) Opts() map[string]string {
+	return c.buildOpts.Opts
+}
+
 func (c *BridgeClient) wrapSolveError(solveErr error) error {
 	var (
 		ee       *llberrdefs.ExecError

@@ -146,6 +146,14 @@ func (g *gatewayClientForBuild) Inputs(ctx context.Context, in *gatewayapi.Input
 	return g.gateway.Inputs(ctx, in, opts...)
 }
 
+func (g *gatewayClientForBuild) Opts(ctx context.Context, in *gatewayapi.OptsRequest, opts ...grpc.CallOption) (*gatewayapi.OptsResponse, error) {
+	if err := g.caps.Supports(gatewayapi.CapFrontendOpts); err != nil {
+		return nil, err
+	}
+	ctx = buildid.AppendToOutgoingContext(ctx, g.buildID)
+	return g.gateway.Opts(ctx, in, opts...)
+}
+
 func (g *gatewayClientForBuild) NewContainer(ctx context.Context, in *gatewayapi.NewContainerRequest, opts ...grpc.CallOption) (*gatewayapi.NewContainerResponse, error) {
 	if err := g.caps.Supports(gatewayapi.CapGatewayExec); err != nil {
 		return nil, err

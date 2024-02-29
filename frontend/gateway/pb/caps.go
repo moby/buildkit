@@ -33,6 +33,10 @@ const (
 	// LLBBridge GRPC server.
 	CapFrontendInputs apicaps.CapID = "frontend.inputs"
 
+	// CapFrontendOpts is a capability to request frontend build options from the
+	// LLBBridge GRPC server.
+	CapFrontendOpts apicaps.CapID = "frontend.opts"
+
 	// CapGatewaySolveMetadata can be used to check if solve calls from gateway reliably return metadata
 	CapGatewaySolveMetadata apicaps.CapID = "gateway.solve.metadata"
 

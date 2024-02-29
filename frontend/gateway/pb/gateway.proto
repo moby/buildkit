@@ -33,6 +33,8 @@ service LLBBridge {
 	rpc Return(ReturnRequest) returns (ReturnResponse);
 	// apicaps:CapFrontendInputs
 	rpc Inputs(InputsRequest) returns (InputsResponse);
+	// apicaps:CapFrontendOpts
+	rpc Opts(OptsRequest) returns (OptsResponse);
 
 	rpc NewContainer(NewContainerRequest) returns (NewContainerResponse);
 	rpc ReleaseContainer(ReleaseContainerRequest) returns (ReleaseContainerResponse);
@@ -115,6 +117,13 @@ message InputsRequest {
 
 message InputsResponse {
 	map<string, pb.Definition> Definitions = 1;
+}
+
+message OptsRequest {
+}
+
+message OptsResponse {
+	map<string, string> Opts = 1;
 }
 
 message ResolveImageConfigRequest {
