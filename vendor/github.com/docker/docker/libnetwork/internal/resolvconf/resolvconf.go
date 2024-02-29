@@ -12,19 +12,21 @@
 // This package includes methods to write the file for the container, along with
 // a hash that can be used to detect modifications made by the user to avoid
 // overwriting those updates.
+
+// FIXME(thaJeztah): remove once we are a module; the go:build directive prevents go from downgrading language version to go1.16:
+//go:build go1.19
+
 package resolvconf
 
 import (
 	"bufio"
 	"bytes"
 	"context"
-	_ "embed"
 	"fmt"
 	"io"
 	"io/fs"
 	"net/netip"
 	"os"
-	"slices"
 	"strconv"
 	"strings"
 	"text/template"
@@ -141,7 +143,7 @@ func (rc *ResolvConf) SetHeader(c string) {
 
 // NameServers returns addresses used in nameserver directives.
 func (rc *ResolvConf) NameServers() []netip.Addr {
-	return slices.Clone(rc.nameServers)
+	return append([]netip.Addr(nil), rc.nameServers...)
 }
 
 // OverrideNameServers replaces the current set of nameservers.
@@ -152,7 +154,7 @@ func (rc *ResolvConf) OverrideNameServers(nameServers []netip.Addr) {
 
 // Search returns the current DNS search domains.
 func (rc *ResolvConf) Search() []string {
-	return slices.Clone(rc.search)
+	return append([]string(nil), rc.search...)
 }
 
 // OverrideSearch replaces the current DNS search domains.
@@ -169,7 +171,7 @@ func (rc *ResolvConf) OverrideSearch(search []string) {
 
 // Options returns the current options.
 func (rc *ResolvConf) Options() []string {
-	return slices.Clone(rc.options)
+	return append([]string(nil), rc.options...)
 }
 
 // Option finds the last option named search, and returns (value, true) if
@@ -192,7 +194,7 @@ func (rc *ResolvConf) Option(search string) (string, bool) {
 
 // OverrideOptions replaces the current DNS options.
 func (rc *ResolvConf) OverrideOptions(options []string) {
-	rc.options = slices.Clone(options)
+	rc.options = append([]string(nil), options...)
 	rc.md.NDotsFrom = ""
 	if _, exists := rc.Option("ndots"); exists {
 		rc.md.NDotsFrom = "override"
@@ -314,7 +316,7 @@ func (rc *ResolvConf) TransformForIntNS(
 	}
 
 	rc.md.Transform = "internal resolver"
-	return slices.Clone(rc.md.ExtNameServers), nil
+	return append([]ExtDNSEntry(nil), rc.md.ExtNameServers...), nil
 }
 
 // Generate returns content suitable for writing to a resolv.conf file. If comments

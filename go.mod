@@ -173,3 +173,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	kernel.org/pub/linux/libs/security/libcap/psx v1.2.67 // indirect
 )
+
+replace github.com/docker/docker => github.com/robmry/moby v0.0.0-20240229231553-bcc0ad7b9776

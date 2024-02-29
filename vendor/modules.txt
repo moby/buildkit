@@ -453,7 +453,7 @@ github.com/docker/cli/cli/config/configfile
 github.com/docker/cli/cli/config/credentials
 github.com/docker/cli/cli/config/types
 github.com/docker/cli/cli/connhelper/commandconn
-# github.com/docker/docker v26.0.0-rc1.0.20240229165828-b8aa8579cad7+incompatible
+# github.com/docker/docker v26.0.0-rc1.0.20240229165828-b8aa8579cad7+incompatible => github.com/robmry/moby v0.0.0-20240229231553-bcc0ad7b9776
 ## explicit
 github.com/docker/docker/api
 github.com/docker/docker/api/types
@@ -1099,3 +1099,4 @@ kernel.org/pub/linux/libs/security/libcap/cap
 # kernel.org/pub/linux/libs/security/libcap/psx v1.2.67
 ## explicit; go 1.11
 kernel.org/pub/linux/libs/security/libcap/psx
+# github.com/docker/docker => github.com/robmry/moby v0.0.0-20240229231553-bcc0ad7b9776
