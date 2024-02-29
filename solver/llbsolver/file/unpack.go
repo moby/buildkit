@@ -35,7 +35,9 @@ func unpack(ctx context.Context, srcRoot string, src string, destRoot string, de
 	}
 	defer file.Close()
 
-	return true, chrootarchive.Untar(file, dest, nil)
+	return true, chrootarchive.Untar(file, dest, &archive.TarOptions{
+		BestEffortXattrs: true,
+	})
 }
 
 func isArchivePath(path string) bool {
