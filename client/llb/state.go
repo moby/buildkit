@@ -190,7 +190,6 @@ func marshal(ctx context.Context, v Vertex, def *Definition, s *sourceMapCollect
 	if _, ok := vertexCache[v]; ok {
 		return def, nil
 	}
-
 	for _, inp := range v.Inputs() {
 		var err error
 		def, err = marshal(ctx, inp.Vertex(ctx, c), def, s, cache, vertexCache, c)
