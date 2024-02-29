@@ -716,3 +716,20 @@ func last(t *testing.T, arr []pb.Op) (digest.Digest, int) {
 	require.Equal(t, 1, len(op.Inputs))
 	return op.Inputs[0].Digest, int(op.Inputs[0].Index)
 }
+
+func TestFileOpMarshalConsistency(t *testing.T) {
+	f1 := Scratch().File(Mkfile("/tmp", 0644, []byte("tmp 1")))
+	f2 := Scratch().File(Mkfile("/a", 0644, []byte("tmp 2")))
+	st := Image("foo").Dir("/tmp").
+		File(Copy(f1, "/foo", "/bar")).
+		File(Copy(f2, "/a", "/b"))
+
+	def0, err := st.Marshal(context.TODO())
+	for i := 0; i < 1000; i++ {
+		def, err := st.Marshal(context.TODO())
+		require.NoError(t, err)
+		require.Equal(t, def.Def, def0.Def)
+	}
+
+	require.NoError(t, err)
+}

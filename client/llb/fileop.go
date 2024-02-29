@@ -96,24 +96,29 @@ func (fa *FileAction) Copy(input CopyInput, src, dest string, opt ...CopyOption)
 	return a
 }
 
-func (fa *FileAction) allOutputs(m map[Output]struct{}) {
+func (fa *FileAction) allOutputs(seen map[Output]bool, outputs []Output) []Output {
 	if fa == nil {
-		return
+		return outputs
 	}
-	if fa.state != nil && fa.state.Output() != nil {
-		m[fa.state.Output()] = struct{}{}
+
+	if fa.state != nil {
+		if out := fa.state.Output(); out != nil && !seen[out] {
+			outputs = append(outputs, out)
+			seen[out] = true
+		}
 	}
 
 	if a, ok := fa.action.(*fileActionCopy); ok {
 		if a.state != nil {
-			if out := a.state.Output(); out != nil {
-				m[out] = struct{}{}
+			if out := a.state.Output(); out != nil && !seen[out] {
+				outputs = append(outputs, out)
+				seen[out] = true
 			}
 		} else if a.fas != nil {
-			a.fas.allOutputs(m)
+			outputs = a.fas.allOutputs(seen, outputs)
 		}
 	}
-	fa.prev.allOutputs(m)
+	return fa.prev.allOutputs(seen, outputs)
 }
 
 func (fa *FileAction) bind(s State) *FileAction {
@@ -806,15 +811,11 @@ func (f *FileOp) Output() Output {
 	return f.output
 }
 
-func (f *FileOp) Inputs() (inputs []Output) {
-	mm := map[Output]struct{}{}
+func (f *FileOp) Inputs() []Output {
+	seen := map[Output]bool{}
+	inputs := []Output{}
 
-	f.action.allOutputs(mm)
-
-	for o := range mm {
-		inputs = append(inputs, o)
-	}
-	return inputs
+	return f.action.allOutputs(seen, inputs)
 }
 
 func getIndex(input pb.InputIndex, len int, relative *int) pb.InputIndex {
