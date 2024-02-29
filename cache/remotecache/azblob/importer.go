@@ -7,7 +7,6 @@ import (
 	"io"
 	"sync"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/pkg/labels"
 	"github.com/moby/buildkit/cache/remotecache"
@@ -32,25 +31,23 @@ func ResolveCacheImporterFunc() remotecache.ResolveCacheImporterFunc {
 			return nil, ocispecs.Descriptor{}, errors.WithMessage(err, "failed to create azblob config")
 		}
 
-		containerClient, err := createContainerClient(ctx, config)
+		client, err := newClient(ctx, config)
 		if err != nil {
 			return nil, ocispecs.Descriptor{}, errors.WithMessage(err, "failed to create container client")
 		}
 
-		importer := &importer{
-			config:          config,
-			containerClient: containerClient,
-		}
-
-		return importer, ocispecs.Descriptor{}, nil
+		return &importer{
+			config: config,
+			client: client,
+		}, ocispecs.Descriptor{}, nil
 	}
 }
 
 var _ remotecache.Importer = &importer{}
 
 type importer struct {
-	config          *Config
-	containerClient *azblob.ContainerClient
+	config *Config
+	client *Client
 }
 
 func (ci *importer) Resolve(ctx context.Context, _ ocispecs.Descriptor, id string, w worker.Worker) (solver.CacheManager, error) {
@@ -88,29 +85,23 @@ func (ci *importer) Resolve(ctx context.Context, _ ocispecs.Descriptor, id strin
 }
 
 func (ci *importer) loadManifest(ctx context.Context, name string) (*v1.CacheChains, error) {
-	key := manifestKey(ci.config, name)
-	exists, err := blobExists(ctx, ci.containerClient, key)
+	key := ci.client.manifestKey(name)
+	exists, err := ci.client.blobExists(ctx, key)
 	if err != nil {
 		return nil, err
 	}
 
 	bklog.G(ctx).Debugf("name %s cache with key %s exists = %v", name, key, exists)
-
 	if !exists {
 		return v1.NewCacheChains(), nil
 	}
 
-	blobClient, err := ci.containerClient.NewBlockBlobClient(key)
+	res, err := ci.client.DownloadStream(ctx, ci.config.Container, name, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "error creating container client")
+		return nil, errors.Wrapf(err, "failed to download cache manifest %s", name)
 	}
 
-	res, err := blobClient.Download(ctx, &azblob.BlobDownloadOptions{})
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	bytes, err := io.ReadAll(res.RawResponse.Body)
+	bytes, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -164,10 +155,9 @@ func (ci *importer) makeDescriptorProviderPair(l v1.CacheLayer) (*v1.DescriptorP
 		Annotations: annotations,
 	}
 	p := &ciProvider{
-		desc:            desc,
-		containerClient: ci.containerClient,
-		Provider:        contentutil.FromFetcher(&fetcher{containerClient: ci.containerClient, config: ci.config}),
-		config:          ci.config,
+		desc:     desc,
+		client:   ci.client,
+		Provider: contentutil.FromFetcher(&fetcher{client: ci.client, config: ci.config}),
 	}
 	return &v1.DescriptorProviderPair{
 		Descriptor:   desc,
@@ -177,13 +167,13 @@ func (ci *importer) makeDescriptorProviderPair(l v1.CacheLayer) (*v1.DescriptorP
 }
 
 type fetcher struct {
-	containerClient *azblob.ContainerClient
-	config          *Config
+	client *Client
+	config *Config
 }
 
 func (f *fetcher) Fetch(ctx context.Context, desc ocispecs.Descriptor) (io.ReadCloser, error) {
-	key := blobKey(f.config, desc.Digest.String())
-	exists, err := blobExists(ctx, f.containerClient, key)
+	key := f.client.blobKey(desc.Digest.String())
+	exists, err := f.client.blobExists(ctx, key)
 	if err != nil {
 		return nil, err
 	}
@@ -191,29 +181,22 @@ func (f *fetcher) Fetch(ctx context.Context, desc ocispecs.Descriptor) (io.ReadC
 	if !exists {
 		return nil, errors.Errorf("blob %s not found", desc.Digest)
 	}
-
 	bklog.G(ctx).Debugf("reading layer from cache: %s", key)
 
-	blobClient, err := f.containerClient.NewBlockBlobClient(key)
+	res, err := f.client.DownloadStream(ctx, f.config.Container, key, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "error creating block blob client")
+		return nil, errors.Wrapf(err, "failed to download blob %s", key)
 	}
 
-	res, err := blobClient.Download(ctx, &azblob.BlobDownloadOptions{})
-	if err != nil {
-		return nil, err
-	}
-
-	return res.RawResponse.Body, nil
+	return res.Body, nil
 }
 
 type ciProvider struct {
 	content.Provider
-	desc            ocispecs.Descriptor
-	containerClient *azblob.ContainerClient
-	config          *Config
-	checkMutex      sync.Mutex
-	checked         bool
+	desc       ocispecs.Descriptor
+	client     *Client
+	checkMutex sync.Mutex
+	checked    bool
 }
 
 func (p *ciProvider) Info(ctx context.Context, dgst digest.Digest) (content.Info, error) {
@@ -231,8 +214,8 @@ func (p *ciProvider) Info(ctx context.Context, dgst digest.Digest) (content.Info
 	p.checkMutex.Lock()
 	defer p.checkMutex.Unlock()
 
-	key := blobKey(p.config, dgst.String())
-	exists, err := blobExists(ctx, p.containerClient, key)
+	key := p.client.blobKey(dgst.String())
+	exists, err := p.client.blobExists(ctx, key)
 	if err != nil {
 		return content.Info{}, err
 	}

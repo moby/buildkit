@@ -8,7 +8,9 @@ import (
 	"io"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/pkg/labels"
 	"github.com/moby/buildkit/cache/remotecache"
@@ -30,7 +32,7 @@ func ResolveCacheExporterFunc() remotecache.ResolveCacheExporterFunc {
 			return nil, errors.WithMessage(err, "failed to create azblob config")
 		}
 
-		containerClient, err := createContainerClient(ctx, config)
+		client, err := newClient(ctx, config)
 		if err != nil {
 			return nil, errors.WithMessage(err, "failed to create container client")
 		}
@@ -39,7 +41,7 @@ func ResolveCacheExporterFunc() remotecache.ResolveCacheExporterFunc {
 		return &exporter{
 			CacheExporterTarget: cc,
 			chains:              cc,
-			containerClient:     containerClient,
+			client:              client,
 			config:              config,
 		}, nil
 	}
@@ -49,9 +51,9 @@ var _ remotecache.Exporter = &exporter{}
 
 type exporter struct {
 	solver.CacheExporterTarget
-	chains          *v1.CacheChains
-	containerClient *azblob.ContainerClient
-	config          *Config
+	chains *v1.CacheChains
+	client *Client
+	config *Config
 }
 
 func (ce *exporter) Name() string {
@@ -83,9 +85,9 @@ func (ce *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 		}
 		diffID = dgst
 
-		key := blobKey(ce.config, dgstPair.Descriptor.Digest.String())
+		key := ce.client.blobKey(dgstPair.Descriptor.Digest.String())
 
-		exists, err := blobExists(ctx, ce.containerClient, key)
+		exists, err := ce.client.blobExists(ctx, key)
 		if err != nil {
 			return nil, err
 		}
@@ -126,7 +128,7 @@ func (ce *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 	}
 
 	for _, name := range ce.config.Names {
-		if innerError := ce.uploadManifest(ctx, manifestKey(ce.config, name), bytesToReadSeekCloser(dt)); innerError != nil {
+		if innerError := ce.uploadManifest(ctx, ce.client.manifestKey(name), bytesToReadSeekCloser(dt)); innerError != nil {
 			return nil, errors.Wrapf(innerError, "error writing manifest %s", name)
 		}
 	}
@@ -140,22 +142,17 @@ func (ce *exporter) Config() remotecache.Config {
 	}
 }
 
-// For uploading manifests, use the Upload API which follows "last writer wins" sematics
+// For uploading manifests, use the Upload API which follows "last writer wins" semantics
 // This is slightly slower than UploadStream call but is safe to call concurrently from multiple threads. Refer to:
 // https://github.com/Azure/azure-sdk-for-go/issues/18490#issuecomment-1170806877
 func (ce *exporter) uploadManifest(ctx context.Context, manifestKey string, reader io.ReadSeekCloser) error {
 	defer reader.Close()
-	blobClient, err := ce.containerClient.NewBlockBlobClient(manifestKey)
-	if err != nil {
-		return errors.Wrap(err, "error creating container client")
-	}
 
 	ctx, cnclFn := context.WithCancelCause(ctx)
 	ctx, _ = context.WithTimeoutCause(ctx, time.Minute*5, errors.WithStack(context.DeadlineExceeded))
 	defer cnclFn(errors.WithStack(context.Canceled))
 
-	_, err = blobClient.Upload(ctx, reader, &azblob.BlockBlobUploadOptions{})
-	if err != nil {
+	if _, err := ce.client.UploadStream(ctx, ce.config.Container, manifestKey, reader, nil); err != nil {
 		return errors.Wrapf(err, "failed to upload blob %s: %v", manifestKey, err)
 	}
 
@@ -166,37 +163,24 @@ func (ce *exporter) uploadManifest(ctx context.Context, manifestKey string, read
 // does not already exist. Since blobs are content addressable, this is the right thing to do for blobs and it gives
 // a performance improvement over the Upload API used for uploading manifests.
 func (ce *exporter) uploadBlobIfNotExists(ctx context.Context, blobKey string, reader io.Reader) error {
-	blobClient, err := ce.containerClient.NewBlockBlobClient(blobKey)
-	if err != nil {
-		return errors.Wrap(err, "error creating container client")
-	}
-
-	uploadCtx, cnclFn := context.WithCancelCause(ctx)
-	uploadCtx, _ = context.WithTimeoutCause(uploadCtx, time.Minute*5, errors.WithStack(context.DeadlineExceeded))
+	ctx, cnclFn := context.WithCancelCause(ctx)
+	ctx, _ = context.WithTimeoutCause(ctx, time.Minute*5, errors.WithStack(context.DeadlineExceeded))
 	defer cnclFn(errors.WithStack(context.Canceled))
 
-	// Only upload if the blob doesn't exist
-	eTagAny := azblob.ETagAny
-	_, err = blobClient.UploadStream(uploadCtx, reader, azblob.UploadStreamOptions{
-		BufferSize: IOChunkSize,
-		MaxBuffers: IOConcurrency,
-		BlobAccessConditions: &azblob.BlobAccessConditions{
-			ModifiedAccessConditions: &azblob.ModifiedAccessConditions{
+	eTagAny := azcore.ETagAny
+	if _, err := ce.client.UploadStream(ctx, ce.config.Container, blobKey, reader, &azblob.UploadStreamOptions{
+		BlockSize:   IOChunkSize,
+		Concurrency: IOConcurrency,
+		AccessConditions: &azblob.AccessConditions{
+			ModifiedAccessConditions: &blob.ModifiedAccessConditions{
 				IfNoneMatch: &eTagAny,
 			},
 		},
-	})
-
-	if err == nil {
-		return nil
+	}); err != nil {
+		return errors.Wrapf(err, "failed to upload blob %s: %v", blobKey, err)
 	}
 
-	var se *azblob.StorageError
-	if errors.As(err, &se) && se.ErrorCode == azblob.StorageErrorCodeBlobAlreadyExists {
-		return nil
-	}
-
-	return errors.Wrapf(err, "failed to upload blob %s: %v", blobKey, err)
+	return nil
 }
 
 var _ io.ReadSeekCloser = &readSeekCloser{}
