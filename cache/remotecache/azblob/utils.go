@@ -8,8 +8,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/pkg/errors"
 )
 
@@ -110,26 +114,35 @@ func getConfig(attrs map[string]string) (*Config, error) {
 	return &config, nil
 }
 
-func createContainerClient(ctx context.Context, config *Config) (*azblob.ContainerClient, error) {
-	var serviceClient *azblob.ServiceClient
+type Client struct {
+	azblob.Client
+	config    *Config
+	sharedKey *azblob.SharedKeyCredential
+	cred      *azidentity.DefaultAzureCredential
+}
+
+func newClient(ctx context.Context, config *Config) (*Client, error) {
+	var client *azblob.Client
+	var sharedKey *azblob.SharedKeyCredential
+	var cred *azidentity.DefaultAzureCredential
+	var err error
 	if config.secretAccessKey != "" {
-		sharedKey, err := azblob.NewSharedKeyCredential(config.AccountName, config.secretAccessKey)
+		sharedKey, err = azblob.NewSharedKeyCredential(config.AccountName, config.secretAccessKey)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create shared key")
 		}
-		serviceClient, err = azblob.NewServiceClientWithSharedKey(config.AccountURL, sharedKey, &azblob.ClientOptions{})
+		client, err = azblob.NewClientWithSharedKeyCredential(config.AccountURL, sharedKey, &azblob.ClientOptions{})
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to created service client from shared key")
+			return nil, errors.Wrap(err, "failed to created client from shared key")
 		}
 	} else {
-		cred, err := azidentity.NewDefaultAzureCredential(nil)
+		cred, err = azidentity.NewDefaultAzureCredential(nil)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create default azure credentials")
 		}
-
-		serviceClient, err = azblob.NewServiceClient(config.AccountURL, cred, &azblob.ClientOptions{})
+		client, err = azblob.NewClient(config.AccountURL, cred, &azblob.ClientOptions{})
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to create service client")
+			return nil, errors.Wrap(err, "failed to create client")
 		}
 	}
 
@@ -137,60 +150,69 @@ func createContainerClient(ctx context.Context, config *Config) (*azblob.Contain
 	ctx, _ = context.WithTimeoutCause(ctx, time.Second*60, errors.WithStack(context.DeadlineExceeded))
 	defer cnclFn(errors.WithStack(context.Canceled))
 
-	containerClient, err := serviceClient.NewContainerClient(config.Container)
+	ctnURL := runtime.JoinPaths(client.URL(), config.Container)
+	var cc *container.Client
+	if sharedKey != nil {
+		cc, err = container.NewClientWithSharedKeyCredential(ctnURL, sharedKey, nil)
+	} else {
+		cc, err = container.NewClient(ctnURL, cred, nil)
+	}
 	if err != nil {
-		return nil, errors.Wrap(err, "error creating container client")
+		return nil, errors.Wrap(err, "failed to create container client")
 	}
 
-	_, err = containerClient.GetProperties(ctx, &azblob.ContainerGetPropertiesOptions{})
-	if err == nil {
-		return containerClient, nil
-	}
-
-	var se *azblob.StorageError
-	if errors.As(err, &se) && se.ErrorCode == azblob.StorageErrorCodeContainerNotFound {
-		ctx, cnclFn := context.WithCancelCause(ctx)
-		ctx, _ = context.WithTimeoutCause(ctx, time.Minute*5, errors.WithStack(context.DeadlineExceeded))
-		defer cnclFn(errors.WithStack(context.Canceled))
-		_, err := containerClient.Create(ctx, &azblob.ContainerCreateOptions{})
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to create cache container %s", config.Container)
+	_, err = cc.GetProperties(ctx, &container.GetPropertiesOptions{})
+	if err != nil {
+		if bloberror.HasCode(err, bloberror.ContainerNotFound) {
+			_, err = client.CreateContainer(ctx, config.Container, nil)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to create cache container %s", config.Container)
+			}
 		}
-
-		return containerClient, nil
+		return nil, errors.Wrapf(err, "failed to get properties of container %s", config.Container)
 	}
 
-	return nil, errors.Wrapf(err, "failed to get properties of cache container %s", config.Container)
+	return &Client{
+		Client:    *client,
+		config:    config,
+		sharedKey: sharedKey,
+		cred:      cred,
+	}, nil
 }
 
-func manifestKey(config *Config, name string) string {
-	key := filepath.Join(config.Prefix, config.ManifestsPrefix, name)
+func (c *Client) manifestKey(name string) string {
+	key := filepath.Join(c.config.Prefix, c.config.ManifestsPrefix, name)
 	return key
 }
 
-func blobKey(config *Config, digest string) string {
-	key := filepath.Join(config.Prefix, config.BlobsPrefix, digest)
+func (c *Client) blobKey(digest string) string {
+	key := filepath.Join(c.config.Prefix, c.config.BlobsPrefix, digest)
 	return key
 }
 
-func blobExists(ctx context.Context, containerClient *azblob.ContainerClient, blobKey string) (bool, error) {
-	blobClient, err := containerClient.NewBlobClient(blobKey)
+func (c *Client) blobExists(ctx context.Context, blobName string) (bool, error) {
+	blobURL := runtime.JoinPaths(c.URL(), c.config.Container, url.PathEscape(blobName))
+
+	var bc *blob.Client
+	var err error
+	if c.sharedKey != nil {
+		bc, err = blob.NewClientWithSharedKeyCredential(blobURL, c.sharedKey, nil)
+	} else {
+		bc, err = blob.NewClient(blobURL, c.cred, nil)
+	}
 	if err != nil {
-		return false, errors.Wrap(err, "error creating blob client")
+		return false, errors.Wrap(err, "failed to create blob client")
 	}
 
 	ctx, cnclFn := context.WithCancelCause(ctx)
 	ctx, _ = context.WithTimeoutCause(ctx, time.Second*60, errors.WithStack(context.DeadlineExceeded))
 	defer cnclFn(errors.WithStack(context.Canceled))
-	_, err = blobClient.GetProperties(ctx, &azblob.BlobGetPropertiesOptions{})
+
+	_, err = bc.GetProperties(ctx, &blob.GetPropertiesOptions{})
 	if err == nil {
 		return true, nil
-	}
-
-	var se *azblob.StorageError
-	if errors.As(err, &se) && se.ErrorCode == azblob.StorageErrorCodeBlobNotFound {
+	} else if bloberror.HasCode(err, bloberror.BlobNotFound) {
 		return false, nil
 	}
-
-	return false, errors.Wrapf(err, "failed to check blob %s existence", blobKey)
+	return false, errors.Wrapf(err, "failed to check blob %s existence", blobName)
 }

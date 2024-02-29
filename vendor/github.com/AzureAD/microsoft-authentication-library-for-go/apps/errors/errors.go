@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"reflect"
 	"strings"
@@ -21,7 +20,7 @@ var prettyConf = &pretty.Config{
 	TrackCycles:       true,
 	Formatter: map[reflect.Type]interface{}{
 		reflect.TypeOf((*io.Reader)(nil)).Elem(): func(r io.Reader) string {
-			b, err := ioutil.ReadAll(r)
+			b, err := io.ReadAll(r)
 			if err != nil {
 				return "could not read io.Reader content"
 			}
