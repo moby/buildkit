@@ -15,7 +15,8 @@ RUN apt-get update && apt-get --no-install-recommends install -y git binutils \
   binutils-s390x-linux-gnu \
   binutils-powerpc64le-linux-gnu \
   binutils-mips64el-linux-gnuabi64 \
-  binutils-mips64-linux-gnuabi64
+  binutils-mips64-linux-gnuabi64 \
+  binutils-loongarch64-linux-gnu
 WORKDIR /src
 
 FROM base AS exit-amd64
@@ -58,6 +59,10 @@ FROM base AS exit-mips64
 COPY util/archutil/fixtures/exit.mips64.s .
 RUN mips64-linux-gnuabi64-as --noexecstack -o exit.o exit.mips64.s && mips64-linux-gnuabi64-ld -o exit -s exit.o && mips64-linux-gnuabi64-strip --strip-unneeded exit
 
+FROM base AS exit-loong64
+COPY util/archutil/fixtures/exit.loongarch64.s .
+RUN loongarch64-linux-gnu-as --noexecstack -o exit.o exit.loongarch64.s && loongarch64-linux-gnu-ld -o exit -s exit.o && loongarch64-linux-gnu-strip --strip-unneeded exit
+
 FROM scratch AS exits
 COPY --from=exit-amd64 /src/exit amd64
 COPY --from=exit-386 /src/exit 386
@@ -69,6 +74,7 @@ COPY --from=exit-ppc64 /src/exit ppc64
 COPY --from=exit-ppc64le /src/exit ppc64le
 COPY --from=exit-mips64le /src/exit mips64le
 COPY --from=exit-mips64 /src/exit mips64
+COPY --from=exit-loong64 /src/exit loong64
 
 FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS generate
 WORKDIR /go/src/github.com/moby/buildkit
@@ -86,7 +92,8 @@ RUN --mount=type=bind,target=.,rw \
     bin/archutil/ppc64 \
     bin/archutil/ppc64le \
     bin/archutil/mips64le \
-    bin/archutil/mips64
+    bin/archutil/mips64 \
+    bin/archutil/loong64
   tree -nh bin/archutil
   cp bin/archutil/*_binary.go /out
 EOT
