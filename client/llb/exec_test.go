@@ -66,5 +66,4 @@ func TestExecOpMarshalConsistency(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, def.Def, def0.Def)
 	}
-
 }
