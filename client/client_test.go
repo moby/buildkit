@@ -165,6 +165,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testFileOpInputSwap,
 	testRelativeMountpoint,
 	testLocalSourceDiffer,
+	testNoTarOCIIndexMediaType,
 	testOCILayoutSource,
 	testOCILayoutPlatformSource,
 	testBuildExportZstd,
@@ -3013,6 +3014,52 @@ func testOCIExporterContentStore(t *testing.T, sb integration.Sandbox) {
 			return nil
 		})
 	}
+
+	checkAllReleasable(t, c, sb, true)
+}
+
+func testNoTarOCIIndexMediaType(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter)
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("busybox:latest").Run(llb.Shlex(`sh -c "echo -n hello > hello"`))
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir, err := os.MkdirTemp("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	outDir := filepath.Join(destDir, "out.d")
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterOCI,
+				Attrs: map[string]string{
+					"tar": "false",
+				},
+				OutputDir: outDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(outDir, "index.json"))
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(outDir, "index.json"))
+	require.NoError(t, err)
+
+	var index ocispecs.Index
+	err = json.Unmarshal(dt, &index)
+	require.NoError(t, err)
+
+	require.Equal(t, "application/vnd.oci.image.index.v1+json", index.MediaType)
 
 	checkAllReleasable(t, c, sb, true)
 }

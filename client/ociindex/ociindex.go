@@ -155,6 +155,9 @@ func insertDesc(index *ocispecs.Index, desc ocispecs.Descriptor, tag string) err
 	if index.SchemaVersion == 0 {
 		index.SchemaVersion = 2
 	}
+	if index.MediaType == "" {
+		index.MediaType = ocispecs.MediaTypeImageIndex
+	}
 	if tag != "" {
 		if desc.Annotations == nil {
 			desc.Annotations = make(map[string]string)
