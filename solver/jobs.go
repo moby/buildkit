@@ -149,7 +149,7 @@ func (s *state) getEdge(index Index) *edge {
 	}
 
 	if s.op == nil {
-		s.op = newSharedOp(s.opts.ResolveOpFunc, s.opts.DefaultCache, s)
+		s.op = newSharedOp(s.opts.ResolveOpFunc, s)
 	}
 
 	e := newEdge(Edge{Index: index, Vertex: s.vtx}, s.op, s.index)
@@ -709,7 +709,7 @@ type activeOp interface {
 	CalcSlowCache(context.Context, Index, PreprocessFunc, ResultBasedCacheFunc, Result) (digest.Digest, error)
 }
 
-func newSharedOp(resolver ResolveOpFunc, cacheManager CacheManager, st *state) *sharedOp {
+func newSharedOp(resolver ResolveOpFunc, st *state) *sharedOp {
 	so := &sharedOp{
 		resolver:     resolver,
 		st:           st,
