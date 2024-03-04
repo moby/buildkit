@@ -96,23 +96,29 @@ func (fa *FileAction) Copy(input CopyInput, src, dest string, opt ...CopyOption)
 	return a
 }
 
-func (fa *FileAction) allOutputs(seen map[Output]bool, outputs []Output) []Output {
+func (fa *FileAction) allOutputs(seen map[Output]struct{}, outputs []Output) []Output {
 	if fa == nil {
 		return outputs
 	}
 
 	if fa.state != nil {
-		if out := fa.state.Output(); out != nil && !seen[out] {
-			outputs = append(outputs, out)
-			seen[out] = true
+		out := fa.state.Output()
+		if out != nil {
+			if _, ok := seen[out]; !ok {
+				outputs = append(outputs, out)
+				seen[out] = struct{}{}
+			}
 		}
 	}
 
 	if a, ok := fa.action.(*fileActionCopy); ok {
 		if a.state != nil {
-			if out := a.state.Output(); out != nil && !seen[out] {
-				outputs = append(outputs, out)
-				seen[out] = true
+			out := a.state.Output()
+			if out != nil {
+				if _, ok := seen[out]; !ok {
+					outputs = append(outputs, out)
+					seen[out] = struct{}{}
+				}
 			}
 		} else if a.fas != nil {
 			outputs = a.fas.allOutputs(seen, outputs)
@@ -812,10 +818,7 @@ func (f *FileOp) Output() Output {
 }
 
 func (f *FileOp) Inputs() []Output {
-	seen := map[Output]bool{}
-	inputs := []Output{}
-
-	return f.action.allOutputs(seen, inputs)
+	return f.action.allOutputs(map[Output]struct{}{}, []Output{})
 }
 
 func getIndex(input pb.InputIndex, len int, relative *int) pb.InputIndex {

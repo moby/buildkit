@@ -439,15 +439,19 @@ func (e *ExecOp) Output() Output {
 
 func (e *ExecOp) Inputs() (inputs []Output) {
 	// make sure mounts are sorted
-	sort.Slice(e.mounts, func(i, j int) bool {
+	// the same sort occurs in (*ExecOp).Marshal, and this
+	// sort must be the same
+	sort.Slice(e.mounts, func(i int, j int) bool {
 		return e.mounts[i].target < e.mounts[j].target
 	})
 
-	seen := map[Output]bool{}
+	seen := map[Output]struct{}{}
 	for _, m := range e.mounts {
-		if m.source != nil && !seen[m.source] {
-			inputs = append(inputs, m.source)
-			seen[m.source] = true
+		if m.source != nil {
+			if _, ok := seen[m.source]; !ok {
+				inputs = append(inputs, m.source)
+				seen[m.source] = struct{}{}
+			}
 		}
 	}
 

@@ -52,18 +52,21 @@ func TestValidGetMountIndex(t *testing.T) {
 }
 
 func TestExecOpMarshalConsistency(t *testing.T) {
+	var prevDef [][]byte
 	st := Image("busybox:latest").
 		Run(
 			Args([]string{"ls /a; ls /b"}),
 			AddMount("/b", Scratch().File(Mkfile("file1", 0644, []byte("file1 contents")))),
 		).AddMount("/a", Scratch().File(Mkfile("file2", 0644, []byte("file2 contents"))))
 
-	def0, err := st.Marshal(context.TODO())
-	require.NoError(t, err)
-
 	for i := 0; i < 100; i++ {
 		def, err := st.Marshal(context.TODO())
 		require.NoError(t, err)
-		require.Equal(t, def.Def, def0.Def)
+
+		if prevDef != nil {
+			require.Equal(t, def.Def, prevDef)
+		}
+
+		prevDef = def.Def
 	}
 }
