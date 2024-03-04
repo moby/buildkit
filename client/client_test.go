@@ -3049,9 +3049,6 @@ func testNoTarOCIIndexMediaType(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	_, err = os.Stat(filepath.Join(outDir, "index.json"))
-	require.NoError(t, err)
-
 	dt, err := os.ReadFile(filepath.Join(outDir, "index.json"))
 	require.NoError(t, err)
 
