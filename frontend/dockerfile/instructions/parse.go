@@ -15,12 +15,15 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/strslice"
 	"github.com/moby/buildkit/frontend/dockerfile/command"
+	"github.com/moby/buildkit/frontend/dockerfile/linter"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/util/suggest"
 	"github.com/pkg/errors"
 )
 
 var excludePatternsEnabled = false
+
+type warnCallback func(string, string, [][]byte, *parser.Range)
 
 type parseRequest struct {
 	command    string
@@ -66,8 +69,13 @@ func newParseRequestFromNode(node *parser.Node) parseRequest {
 	}
 }
 
-// ParseInstruction converts an AST to a typed instruction (either a command or a build stage beginning when encountering a `FROM` statement)
 func ParseInstruction(node *parser.Node) (v interface{}, err error) {
+	noWarn := func(string, string, [][]byte, *parser.Range) {}
+	return ParseInstructionWithWarnings(node, noWarn)
+}
+
+// ParseInstruction converts an AST to a typed instruction (either a command or a build stage beginning when encountering a `FROM` statement)
+func ParseInstructionWithWarnings(node *parser.Node, warn warnCallback) (v interface{}, err error) {
 	defer func() {
 		err = parser.WithLocation(err, node.Location())
 	}()
@@ -84,6 +92,11 @@ func ParseInstruction(node *parser.Node) (v interface{}, err error) {
 	case command.Copy:
 		return parseCopy(req)
 	case command.From:
+		if !linter.ValidateStageNameCasing(req.args) {
+			location := linter.FirstNodeRange(node)
+			stageNameCasing := linter.LinterRules[linter.RuleStageNameCasing]
+			warn(stageNameCasing.Short, "", [][]byte{[]byte(stageNameCasing.Description)}, location)
+		}
 		return parseFrom(req)
 	case command.Onbuild:
 		return parseOnBuild(req)
@@ -150,9 +163,9 @@ func (e *parseError) Unwrap() error {
 
 // Parse a Dockerfile into a collection of buildable stages.
 // metaArgs is a collection of ARG instructions that occur before the first FROM.
-func Parse(ast *parser.Node) (stages []Stage, metaArgs []ArgCommand, err error) {
+func Parse(ast *parser.Node, warn warnCallback) (stages []Stage, metaArgs []ArgCommand, err error) {
 	for _, n := range ast.Children {
-		cmd, err := ParseInstruction(n)
+		cmd, err := ParseInstructionWithWarnings(n, warn)
 		if err != nil {
 			return nil, nil, &parseError{inner: err, node: n}
 		}

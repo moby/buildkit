@@ -246,6 +246,7 @@ func TestIntegration(t *testing.T) {
 		}))...)
 	integration.Run(t, heredocTests, opts...)
 	integration.Run(t, outlineTests, opts...)
+	integration.Run(t, lintTests, opts...)
 	integration.Run(t, targetsTests, opts...)
 
 	integration.Run(t, reproTests, append(opts,

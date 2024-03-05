@@ -22,9 +22,11 @@ import (
 	"github.com/moby/buildkit/client/llb/imagemetaresolver"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
+	"github.com/moby/buildkit/frontend/dockerfile/linter"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/moby/buildkit/frontend/dockerui"
+	"github.com/moby/buildkit/frontend/subrequests/lint"
 	"github.com/moby/buildkit/frontend/subrequests/outline"
 	"github.com/moby/buildkit/frontend/subrequests/targets"
 	"github.com/moby/buildkit/identity"
@@ -109,12 +111,51 @@ func Dockefile2Outline(ctx context.Context, dt []byte, opt ConvertOpt) (*outline
 	return &o, nil
 }
 
+func lintSourceInfo(srcMap *llb.SourceMap, srcRange *parser.Range) (filename string, source []string) {
+	if srcMap == nil {
+		return
+	}
+	filename = srcMap.Filename
+	if srcRange == nil {
+		return
+	}
+	lines := strings.Split(string(srcMap.Data), "\n")
+	start := srcRange.Start.Line
+	end := srcRange.End.Line
+	source = lines[start-1 : end]
+	return
+}
+
+func DockerfileLint(ctx context.Context, dt []byte, opt ConvertOpt) (*lint.WarningList, error) {
+	warnings := []lint.Warning{}
+	opt.Warn = func(short, url string, detail [][]byte, location *parser.Range) {
+		var source []string
+		var filename string
+		filename, source = lintSourceInfo(opt.SourceMap, location)
+		warnings = append(warnings, lint.Warning{
+			Short:    short,
+			Detail:   detail,
+			Location: location,
+			Filename: filename,
+			Source:   source,
+		})
+	}
+
+	_, err := toDispatchState(ctx, dt, opt)
+	if err != nil {
+		return nil, err
+	}
+	return &lint.WarningList{Warnings: warnings}, nil
+}
+
 func ListTargets(ctx context.Context, dt []byte) (*targets.List, error) {
 	dockerfile, err := parser.Parse(bytes.NewReader(dt))
 	if err != nil {
 		return nil, err
 	}
-	stages, _, err := instructions.Parse(dockerfile.AST)
+
+	noWarn := func(string, string, [][]byte, *parser.Range) {}
+	stages, _, err := instructions.Parse(dockerfile.AST, noWarn)
 	if err != nil {
 		return nil, err
 	}
@@ -180,13 +221,18 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		return nil, err
 	}
 
+	for _, node := range dockerfile.AST.Children {
+		warnings := linter.ValidateNodeLintRules(node)
+		dockerfile.Warnings = append(dockerfile.Warnings, warnings...)
+	}
+
 	for _, w := range dockerfile.Warnings {
 		opt.Warn(w.Short, w.URL, w.Detail, w.Location)
 	}
 
 	proxyEnv := proxyEnvFromBuildArgs(opt.BuildArgs)
 
-	stages, metaArgs, err := instructions.Parse(dockerfile.AST)
+	stages, metaArgs, err := instructions.Parse(dockerfile.AST, opt.Warn)
 	if err != nil {
 		return nil, err
 	}
