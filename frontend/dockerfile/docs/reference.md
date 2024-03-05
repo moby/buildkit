@@ -1596,8 +1596,28 @@ COPY --parents ./x/a.txt ./y/a.txt /parents/
 # /parents/y/a.txt
 ```
 
-This behavior is analogous to the [Linux `cp` utility's](https://www.man7.org/linux/man-pages/man1/cp.1.html)
-`--parents` flag.
+This behavior is similar to the [Linux `cp` utility's](https://www.man7.org/linux/man-pages/man1/cp.1.html)
+`--parents` or [`rsync`](https://man7.org/linux/man-pages/man1/rsync.1.html) `--relative` flag.
+
+As with Rsync, it is possible to limit which parent directories are preserved by
+inserting a dot and a slash (`./`) into the source path. If such point exists, only parent
+directories after it will be preserved. This may be especially useful copies between stages
+with `--from` where the source paths need to be absolute.
+
+```dockerfile
+# syntax=docker/dockerfile-upstream:master-labs
+FROM scratch
+
+COPY --parents ./x/./y/*.txt /parents/
+
+# Build context:
+# ./x/y/a.txt
+# ./x/y/b.txt
+#
+# Output:
+# /parents/y/a.txt
+# /parents/y/b.txt
+```
 
 Note that, without the `--parents` flag specified, any filename collision will
 fail the Linux `cp` operation with an explicit error message
