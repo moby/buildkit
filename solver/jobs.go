@@ -383,6 +383,7 @@ func (jl *Solver) load(v, parent Vertex, j *Job) (Vertex, error) {
 	return jl.loadUnlocked(v, parent, j, cache)
 }
 
+// called with solver lock
 func (jl *Solver) loadUnlocked(v, parent Vertex, j *Job, cache map[Vertex]Vertex) (Vertex, error) {
 	if v, ok := cache[v]; ok {
 		return v, nil
@@ -589,8 +590,6 @@ func (j *Job) Build(ctx context.Context, e Edge) (CachedResultWithProvenance, er
 		return nil, err
 	}
 
-	j.list.mu.Lock()
-	defer j.list.mu.Unlock()
 	return &withProvenance{CachedResult: res, j: j, e: e}, nil
 }
 
@@ -610,6 +609,7 @@ func (wp *withProvenance) WalkProvenance(ctx context.Context, f func(ProvenanceP
 	return wp.j.walkProvenance(ctx, wp.e, f, m)
 }
 
+// called with solver lock
 func (j *Job) walkProvenance(ctx context.Context, e Edge, f func(ProvenanceProvider) error, visited map[digest.Digest]struct{}) error {
 	if _, ok := visited[e.Vertex.Digest()]; ok {
 		return nil
