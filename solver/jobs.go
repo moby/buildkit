@@ -589,8 +589,6 @@ func (j *Job) Build(ctx context.Context, e Edge) (CachedResultWithProvenance, er
 		return nil, err
 	}
 
-	j.list.mu.Lock()
-	defer j.list.mu.Unlock()
 	return &withProvenance{CachedResult: res, j: j, e: e}, nil
 }
 
