@@ -1575,8 +1575,7 @@ conditions for cache reuse.
 
 > **Note**
 >
-> Available in [`docker/dockerfile-upstream:master-labs`](#syntax).
-> Will be included in `docker/dockerfile:1.7-labs`.
+> Not yet available in stable syntax, use [`docker/dockerfile:1.7-labs`](#syntax) version.
 
 ```dockerfile
 COPY [--parents[=<boolean>]] <src> ... <dest>
@@ -1585,7 +1584,7 @@ COPY [--parents[=<boolean>]] <src> ... <dest>
 The `--parents` flag preserves parent directories for `src` entries. This flag defaults to `false`.
 
 ```dockerfile
-# syntax=docker/dockerfile-upstream:master-labs
+# syntax=docker/dockerfile:1.7-labs
 FROM scratch
 
 COPY ./x/a.txt ./y/a.txt /no_parents/
@@ -1605,7 +1604,7 @@ directories after it will be preserved. This may be especially useful copies bet
 with `--from` where the source paths need to be absolute.
 
 ```dockerfile
-# syntax=docker/dockerfile-upstream:master-labs
+# syntax=docker/dockerfile:1.7-labs
 FROM scratch
 
 COPY --parents ./x/./y/*.txt /parents/
@@ -1634,8 +1633,7 @@ with the `--parents` flag, the Buildkit is capable of packing multiple
 
 > **Note**
 >
-> Available in [`docker/dockerfile-upstream:master-labs`](#syntax).
-> Will be included in `docker/dockerfile:1.7-labs`.
+> Not yet available in stable syntax, use [`docker/dockerfile:1.7-labs`](#syntax) version.
 
 ```dockerfile
 COPY [--exclude=<path> ...] <src> ... <dest>
