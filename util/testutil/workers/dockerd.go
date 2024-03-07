@@ -55,12 +55,12 @@ func InitDockerdWorker() {
 }
 
 type Moby struct {
-	ID         string
-	IsRootless bool
-
+	ID                    string
+	Binary                string
+	IsRootless            bool
 	ContainerdSnapshotter bool
-
-	Unsupported []string
+	Unsupported           []string
+	ExtraEnv              []string
 }
 
 func (c Moby) Name() string {
@@ -137,7 +137,13 @@ func (c Moby) New(ctx context.Context, cfg *integration.BackendConfig) (b integr
 		return nil, nil, err
 	}
 
-	d, err := dockerd.NewDaemon(workDir)
+	dockerdOpts := []dockerd.Option{
+		dockerd.WithExtraEnv(c.ExtraEnv),
+	}
+	if c.Binary != "" {
+		dockerdOpts = append(dockerdOpts, dockerd.WithBinary(c.Binary))
+	}
+	d, err := dockerd.NewDaemon(workDir, dockerdOpts...)
 	if err != nil {
 		return nil, nil, errors.Errorf("new daemon error: %q, %s", err, integration.FormatLogs(cfg.Logs))
 	}
@@ -164,7 +170,7 @@ func (c Moby) New(ctx context.Context, cfg *integration.BackendConfig) (b integr
 	deferF.Append(d.StopWithError)
 
 	if err := integration.WaitSocket(d.Sock(), 5*time.Second, nil); err != nil {
-		return nil, nil, errors.Errorf("dockerd did not start up: %q, %s", err, integration.FormatLogs(cfg.Logs))
+		return nil, nil, errors.Wrapf(err, "dockerd did not start up: %s", integration.FormatLogs(cfg.Logs))
 	}
 
 	dockerAPI, err := client.NewClientWithOpts(client.WithHost(d.Sock()))
@@ -229,6 +235,7 @@ func (c Moby) New(ctx context.Context, cfg *integration.BackendConfig) (b integr
 		dockerAddress:       d.Sock(),
 		rootless:            c.IsRootless,
 		netnsDetached:       false,
+		extraEnv:            c.ExtraEnv,
 		isDockerd:           true,
 		unsupportedFeatures: c.Unsupported,
 	}, cl, nil

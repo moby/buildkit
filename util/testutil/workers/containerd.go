@@ -244,6 +244,7 @@ disabled_plugins = ["cri"]
 		rootless:          rootless,
 		netnsDetached:     false,
 		snapshotter:       c.Snapshotter,
+		extraEnv:          c.ExtraEnv,
 	}, cl, nil
 }
 

@@ -12,6 +12,7 @@ type backend struct {
 	rootless            bool
 	netnsDetached       bool
 	snapshotter         string
+	extraEnv            []string
 	unsupportedFeatures []string
 	isDockerd           bool
 }
@@ -38,6 +39,10 @@ func (b backend) NetNSDetached() bool {
 
 func (b backend) Snapshotter() string {
 	return b.snapshotter
+}
+
+func (b backend) ExtraEnv() []string {
+	return b.extraEnv
 }
 
 func (b backend) Supports(feature string) bool {

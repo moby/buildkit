@@ -40,6 +40,7 @@ type Backend interface {
 	Rootless() bool
 	NetNSDetached() bool
 	Snapshotter() string
+	ExtraEnv() []string
 	Supports(feature string) bool
 }
 
