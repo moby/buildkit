@@ -286,7 +286,7 @@ Keys supported by image output:
 * `name-canonical=true`: add additional canonical name `name@<digest>`
 * `compression=<uncompressed|gzip|estargz|zstd>`: choose compression type for layers newly created and cached, gzip is default value. estargz should be used with `oci-mediatypes=true`.
 * `compression-level=<value>`: compression level for gzip, estargz (0-9) and zstd (0-22)
-* `rewrite-timestamp=true` (Present in the `master` branch <!-- TODO: v0.13-->): rewrite the file timestamps to the `SOURCE_DATE_EPOCH` value.
+* `rewrite-timestamp=true`: rewrite the file timestamps to the `SOURCE_DATE_EPOCH` value.
    See [`docs/build-repro.md`](docs/build-repro.md) for how to specify the `SOURCE_DATE_EPOCH` value.
 * `force-compression=true`: forcefully apply `compression` option to all layers (including already existing layers)
 * `store=true`: store the result images to the worker's (e.g. containerd) image store as well as ensures that the image has all blobs in the content store (default `true`). Ignored if the worker doesn't have image store (e.g. OCI worker).

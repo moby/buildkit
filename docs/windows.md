@@ -31,6 +31,14 @@ We will apprecate any feedback by [opening an issue here](https://github.com/mob
 
 > **NOTE:** all these requires running as admin (elevated) on a PowerShell terminal.
 
+Make sure that `Containers` feature is enabled. (_`Microsoft-Hyper-V` is a bonus but not necessarily needed for our current guide. Also it's depended on your virtualization platform setup._) Run:
+
+```powershell
+Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V, Containers -All
+```
+
+You will be asked to restart your machine, do so, and then continue with the rest of the steps. No other restart needed.
+
 1. Setup `containerd` by following [the setup instructions here](https://github.com/containerd/containerd/blob/main/docs/getting-started.md#installing-containerd-on-windows). (_Currently, we only support the `containerd` worker_.)
 1. Start the `containerd` service, if not yet started.
 1. Download and extract:
