@@ -669,6 +669,7 @@ The supported mount types are:
 | ---------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | [`bind`](#run---mounttypebind) (default) | Bind-mount context directories (read-only).                                                               |
 | [`cache`](#run---mounttypecache)         | Mount a temporary directory to cache directories for compilers and package managers.                      |
+| [`tmpfs`](#run---mounttypetmpfs)         | Mount a `tmpfs` in the build container.                                                                   |
 | [`secret`](#run---mounttypesecret)       | Allow the build container to access secure files such as private keys without baking them into the image. |
 | [`ssh`](#run---mounttypessh)             | Allow the build container to access SSH keys via SSH agents, with support for passphrases.                |
 
