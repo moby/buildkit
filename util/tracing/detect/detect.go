@@ -21,7 +21,10 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
-type ExporterDetector func() (sdktrace.SpanExporter, sdkmetric.Exporter, error)
+type ExporterDetector interface {
+	DetectTraceExporter() (sdktrace.SpanExporter, error)
+	DetectMetricExporter() (sdkmetric.Exporter, error)
+}
 
 type detector struct {
 	f        ExporterDetector
@@ -52,17 +55,45 @@ func Register(name string, exp ExporterDetector, priority int) {
 	}
 }
 
-func detectExporter() (texp sdktrace.SpanExporter, mexp sdkmetric.Exporter, err error) {
-	if n := os.Getenv("OTEL_TRACES_EXPORTER"); n != "" {
+type TraceExporterDetector func() (sdktrace.SpanExporter, error)
+
+func (fn TraceExporterDetector) DetectTraceExporter() (sdktrace.SpanExporter, error) {
+	return fn()
+}
+
+func (fn TraceExporterDetector) DetectMetricExporter() (sdkmetric.Exporter, error) {
+	return nil, nil
+}
+
+func detectExporters() (texp sdktrace.SpanExporter, mexp sdkmetric.Exporter, err error) {
+	texp, err = detectExporter("OTEL_TRACES_EXPORTER", func(d ExporterDetector) (sdktrace.SpanExporter, bool, error) {
+		exp, err := d.DetectTraceExporter()
+		return exp, exp != nil, err
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	mexp, err = detectExporter("OTEL_METRICS_EXPORTER", func(d ExporterDetector) (sdkmetric.Exporter, bool, error) {
+		exp, err := d.DetectMetricExporter()
+		return exp, exp != nil, err
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return texp, mexp, nil
+}
+
+func detectExporter[T any](envVar string, fn func(d ExporterDetector) (T, bool, error)) (exp T, err error) {
+	if n := os.Getenv(envVar); n != "" {
 		d, ok := detectors[n]
 		if !ok {
-			if n == "none" {
-				return nil, nil, nil
-			}
-			return nil, nil, errors.Errorf("unsupported opentelemetry tracer %v", n)
+			return exp, errors.Errorf("unsupported opentelemetry exporter %v", n)
 		}
-		return d.f()
+		exp, _, err = fn(d.f)
+		return exp, err
 	}
+
 	arr := make([]detector, 0, len(detectors))
 	for _, d := range detectors {
 		arr = append(arr, d)
@@ -71,28 +102,22 @@ func detectExporter() (texp sdktrace.SpanExporter, mexp sdkmetric.Exporter, err 
 		return arr[i].priority < arr[j].priority
 	})
 
+	var ok bool
 	for _, d := range arr {
-		t, m, err := d.f()
+		exp, ok, err = fn(d.f)
 		if err != nil {
-			return nil, nil, err
-		}
-		if texp == nil {
-			texp = t
-		}
-		if mexp == nil {
-			mexp = m
+			return exp, err
 		}
 
-		// Found a candidate for both exporters so just return now.
-		if texp != nil && mexp != nil {
-			return texp, mexp, nil
+		if ok {
+			break
 		}
 	}
-	return texp, mexp, nil
+	return exp, nil
 }
 
 func getExporters() (sdktrace.SpanExporter, sdkmetric.Exporter, error) {
-	texp, mexp, err := detectExporter()
+	texp, mexp, err := detectExporters()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -252,4 +277,21 @@ func (serviceNameDetector) Detect(ctx context.Context) (*resource.Resource, erro
 			return filepath.Base(os.Args[0]), nil
 		},
 	).Detect(ctx)
+}
+
+type noneDetector struct{}
+
+func (n noneDetector) DetectTraceExporter() (sdktrace.SpanExporter, error) {
+	return nil, nil
+}
+
+func (n noneDetector) DetectMetricExporter() (sdkmetric.Exporter, error) {
+	return nil, nil
+}
+
+func init() {
+	// Register a none detector. This will never be chosen if there's another suitable
+	// exporter that can be detected, but exists to allow telemetry to be explicitly
+	// disabled.
+	Register("none", noneDetector{}, 1000)
 }
