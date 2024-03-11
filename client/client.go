@@ -18,6 +18,7 @@ import (
 	"github.com/moby/buildkit/session/grpchijack"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/grpcerrors"
+	"github.com/moby/buildkit/util/grpcutil"
 	"github.com/moby/buildkit/util/tracing/otlptracegrpc"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -29,6 +30,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/stats"
 )
 
 type Client struct {
@@ -47,9 +49,6 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 		grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(defaults.DefaultMaxSendMsgSize)),
 	}
 	needDialer := true
-
-	var unary []grpc.UnaryClientInterceptor
-	var stream []grpc.StreamClientInterceptor
 
 	var customTracer bool // allows manually setting disabling tracing even if tracer in context
 	var tracerProvider trace.TracerProvider
@@ -101,9 +100,14 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 	}
 
 	if tracerProvider != nil {
-		var propagators = propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
-		unary = append(unary, filterInterceptor(otelgrpc.UnaryClientInterceptor(otelgrpc.WithTracerProvider(tracerProvider), otelgrpc.WithPropagators(propagators)))) //nolint:staticcheck // TODO(thaJeztah): ignore SA1019 for deprecated options: see https://github.com/moby/buildkit/issues/4681
-		stream = append(stream, otelgrpc.StreamClientInterceptor(otelgrpc.WithTracerProvider(tracerProvider), otelgrpc.WithPropagators(propagators)))                 //nolint:staticcheck // TODO(thaJeztah): ignore SA1019 for deprecated options: see https://github.com/moby/buildkit/issues/4681
+		gopts = append(gopts, grpc.WithStatsHandler(
+			grpcutil.StatsFilter(otelgrpc.NewClientHandler(
+				otelgrpc.WithTracerProvider(tracerProvider),
+				otelgrpc.WithPropagators(
+					propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}),
+				),
+			), traceServiceExportFilter),
+		))
 	}
 
 	if needDialer {
@@ -138,11 +142,8 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 	}
 	gopts = append(gopts, grpc.WithAuthority(authority))
 
-	unary = append(unary, grpcerrors.UnaryClientInterceptor)
-	stream = append(stream, grpcerrors.StreamClientInterceptor)
-
-	gopts = append(gopts, grpc.WithChainUnaryInterceptor(unary...))
-	gopts = append(gopts, grpc.WithChainStreamInterceptor(stream...))
+	gopts = append(gopts, grpc.WithUnaryInterceptor(grpcerrors.UnaryClientInterceptor))
+	gopts = append(gopts, grpc.WithStreamInterceptor(grpcerrors.StreamClientInterceptor))
 	gopts = append(gopts, customDialOptions...)
 
 	conn, err := grpc.DialContext(ctx, address, gopts...)
@@ -379,13 +380,8 @@ func resolveDialer(address string) (func(context.Context, string) (net.Conn, err
 	return dialer, nil
 }
 
-func filterInterceptor(intercept grpc.UnaryClientInterceptor) grpc.UnaryClientInterceptor {
-	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-		if strings.HasSuffix(method, "opentelemetry.proto.collector.trace.v1.TraceService/Export") {
-			return invoker(ctx, method, req, reply, cc, opts...)
-		}
-		return intercept(ctx, method, req, reply, cc, invoker, opts...)
-	}
+func traceServiceExportFilter(info *stats.RPCTagInfo) bool {
+	return strings.HasSuffix(info.FullMethodName, "opentelemetry.proto.collector.trace.v1.TraceService/Export")
 }
 
 type withGRPCDialOption struct {

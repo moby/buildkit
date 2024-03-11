@@ -8,7 +8,6 @@ services:
         BUILDKIT_DEBUG: 1
     image: moby/buildkit:local
     ports:
-      - 127.0.0.1:1234:1234
       - 127.0.0.1:5000:5000
       - 127.0.0.1:6060:6060
     restart: always
