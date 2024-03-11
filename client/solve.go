@@ -35,7 +35,6 @@ import (
 
 type SolveOpt struct {
 	Exports               []ExportEntry
-	LocalDirs             map[string]string // Deprecated: use LocalMounts
 	LocalMounts           map[string]fsutil.FS
 	OCIStores             map[string]content.Store
 	SharedKey             string
@@ -91,11 +90,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		return nil, errors.New("invalid with def and cb")
 	}
 
-	mounts, err := prepareMounts(&opt)
-	if err != nil {
-		return nil, err
-	}
-	syncedDirs, err := prepareSyncedFiles(def, mounts)
+	syncedDirs, err := prepareSyncedFiles(def, opt.LocalMounts)
 	if err != nil {
 		return nil, err
 	}
@@ -542,23 +537,4 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 		frontendAttrs:  frontendAttrs,
 	}
 	return &res, nil
-}
-
-func prepareMounts(opt *SolveOpt) (map[string]fsutil.FS, error) {
-	// merge local mounts and fallback local directories together
-	mounts := make(map[string]fsutil.FS)
-	for k, mount := range opt.LocalMounts {
-		mounts[k] = mount
-	}
-	for k, dir := range opt.LocalDirs {
-		mount, err := fsutil.NewFS(dir)
-		if err != nil {
-			return nil, err
-		}
-		if _, ok := mounts[k]; ok {
-			return nil, errors.Errorf("local mount %s already exists", k)
-		}
-		mounts[k] = mount
-	}
-	return mounts, nil
 }
