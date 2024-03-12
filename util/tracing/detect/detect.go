@@ -32,7 +32,6 @@ type detector struct {
 }
 
 var ServiceName string
-var Recorder *TraceRecorder
 
 var detectors map[string]detector
 var once sync.Once
@@ -116,45 +115,32 @@ func detectExporter[T any](envVar string, fn func(d ExporterDetector) (T, bool, 
 	return exp, nil
 }
 
-func getExporters() (sdktrace.SpanExporter, sdkmetric.Exporter, error) {
-	texp, mexp, err := detectExporters()
-	if err != nil {
-		return nil, nil, err
-	}
-
-	if Recorder != nil {
-		Recorder.SpanExporter = texp
-		texp = Recorder
-	}
-
-	return texp, mexp, nil
-}
-
 func detect() error {
 	tp = noop.NewTracerProvider()
 	mp = sdkmetric.NewMeterProvider()
 
-	texp, mexp, err := getExporters()
+	texp, mexp, err := detectExporters()
 	if err != nil || (texp == nil && mexp == nil) {
 		return err
 	}
 
 	res := Resource()
 
-	// enable log with traceID when valid exporter
-	if texp != nil {
+	if texp != nil || Recorder != nil {
+		// enable log with traceID when a valid exporter is used
 		bklog.EnableLogWithTraceID(true)
 
-		sp := sdktrace.NewBatchSpanProcessor(texp)
-
-		if Recorder != nil {
-			Recorder.flush = sp.ForceFlush
-		}
-
-		sdktp := sdktrace.NewTracerProvider(
-			sdktrace.WithSpanProcessor(sp),
+		sdktpopts := []sdktrace.TracerProviderOption{
 			sdktrace.WithResource(res),
-		)
+		}
+		if texp != nil {
+			sdktpopts = append(sdktpopts, sdktrace.WithBatcher(texp))
+		}
+		if Recorder != nil {
+			sp := sdktrace.NewSimpleSpanProcessor(Recorder)
+			sdktpopts = append(sdktpopts, sdktrace.WithSpanProcessor(sp))
+		}
+		sdktp := sdktrace.NewTracerProvider(sdktpopts...)
 		closers = append(closers, sdktp.Shutdown)
 
 		exporter.SpanExporter = texp
