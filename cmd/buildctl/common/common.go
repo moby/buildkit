@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/client"
-	"github.com/moby/buildkit/util/tracing/detect"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -69,15 +69,6 @@ func ResolveClient(c *cli.Context) (*client.Client, error) {
 	var opts []client.ClientOpt
 	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
 		opts = append(opts, client.WithTracerProvider(span.TracerProvider()))
-
-		exp, _, err := detect.Exporter()
-		if err != nil {
-			return nil, err
-		}
-
-		if td, ok := exp.(client.TracerDelegate); ok {
-			opts = append(opts, client.WithTracerDelegate(td))
-		}
 	}
 
 	if caCert != "" {
@@ -107,6 +98,13 @@ func ResolveClient(c *cli.Context) (*client.Client, error) {
 		}
 	}
 
+	// If tracing has been configured, register the new client
+	// with the tracer provider.
+	if err := SetSpanExporter(c, func() (sdktrace.SpanExporter, error) {
+		return cl.TraceClient(ctx)
+	}); err != nil {
+		return nil, err
+	}
 	return cl, nil
 }
 
