@@ -210,14 +210,22 @@ func (e *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 			}
 		} else {
 			layerDone := progress.OneOff(ctx, fmt.Sprintf("writing layer %s", l.Blob))
-			dt, err := content.ReadBlob(ctx, dgstPair.Provider, dgstPair.Descriptor)
-			if err != nil {
-				return nil, layerDone(err)
+			if int64(len(dgstPair.Descriptor.Data)) == dgstPair.Descriptor.Size && digest.FromBytes(dgstPair.Descriptor.Data) == dgstPair.Descriptor.Digest {
+				if err := e.s3Client.saveMutable(ctx, key, dgstPair.Descriptor.Data); err != nil {
+					return nil, layerDone(errors.Wrap(err, "error writing layer blob"))
+				}
+				layerDone(nil)
+			} else {
+				ra, err := dgstPair.Provider.ReaderAt(ctx, dgstPair.Descriptor)
+				if err != nil {
+					return nil, layerDone(errors.Wrap(err, "error reading layer blob from provider"))
+				}
+				defer ra.Close()
+				if err := e.s3Client.saveMutableAt(ctx, key, ra); err != nil {
+					return nil, layerDone(errors.Wrap(err, "error writing layer blob"))
+				}
+				layerDone(nil)
 			}
-			if err := e.s3Client.saveMutable(ctx, key, dt); err != nil {
-				return nil, layerDone(errors.Wrap(err, "error writing layer blob"))
-			}
-			layerDone(nil)
 		}
 
 		la := &v1.LayerAnnotations{
@@ -421,6 +429,16 @@ func (s3Client *s3Client) saveMutable(ctx context.Context, key string, value []b
 		Key:    &key,
 
 		Body: bytes.NewReader(value),
+	}
+	_, err := s3Client.Upload(ctx, input)
+	return err
+}
+
+func (s3Client *s3Client) saveMutableAt(ctx context.Context, key string, body content.ReaderAt) error {
+	input := &s3.PutObjectInput{
+		Bucket: &s3Client.bucket,
+		Key:    &key,
+		Body:   ReadSeekerFromReaderAt(body),
 	}
 	_, err := s3Client.Upload(ctx, input)
 	return err
