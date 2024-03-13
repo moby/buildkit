@@ -19,15 +19,13 @@ $ BUILDKIT_DEBUG=1 make images
 ## Running the buildkit image
 
 Delve runs on port 5000 but a different host address can be used if there's a port conflict. It's also recommended that
-you limit the host port to the loopback interface (localhost) to prevent exposing buildkit or delve to external
-computers.
+you limit the host port to the loopback interface (localhost) to prevent exposing delve to external computers.
 
 ```bash
-$ docker run --privileged -d \
+$ docker run --privileged -d --name=buildkit-dev \
     -p 127.0.0.1:5000:5000 \
-    -p 127.0.0.1:1234:1234 \
     --restart always \
-    moby/buildkit:local --addr tcp://0.0.0.0:1234
+    moby/buildkit:local
 ```
 
 It's also useful to use `--restart always` when debugging. Delve will always shutdown the program with `SIGTERM` when
@@ -42,7 +40,7 @@ it's running through the debugger without optimizations.
 If using `docker` to run builds, you can inform docker about this new instance of buildkit by running the following:
 
 ```bash
-$ docker buildx create --name=dev --driver=remote tcp://127.0.0.1:1234
+$ docker buildx create --name=dev --driver=remote docker-container://buildkit-dev
 ```
 
 You can then set the builder in one of the following ways:

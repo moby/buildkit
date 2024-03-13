@@ -1,5 +1,4 @@
 debug = true
 
 [grpc]
-  address = [ "tcp://0.0.0.0:1234" ]
   debugAddress = "0.0.0.0:6060"
