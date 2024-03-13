@@ -1,0 +1,6 @@
+scrape_configs:
+  - job_name: otel
+    scrape_interval: 1m
+    static_configs:
+      - targets:
+          - "otel-collector:8000"

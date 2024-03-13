@@ -1,31 +1,7 @@
 #!/usr/bin/env bash
 
-# Use to set up a dev environment for buildkit.
-# Not meant for production deployments.
-# Use the same way you would use docker compose.
-#
-#     $ hack/compose up -d --build
-#
-# Can be extended for local development by adding
-# a compose.override.yaml file to the same directory.
-#
-# Additional config files for extra services can
-# also be placed in the same folder and they will
-# be automatically ignored by git.
-#
-# To access the newly created development buildkit,
-# use either:
-#
-#     $ buildctl --addr tcp://127.0.0.1:1234 ...
-#
-# or alternatively configure a new builder with buildx.
-#
-#     $ docker buildx create \
-#         --bootstrap \
-#         --name dev \
-#         --driver remote \
-#         tcp://127.0.0.1:1234
-#     $ docker buildx --builder dev ...
+# Use to set up a dev environment for buildkit using docker compose.
+# See composefiles/README.md for more details.
 
 . $(dirname $0)/util
 set -eu -o pipefail
@@ -33,8 +9,8 @@ set -eu -o pipefail
 filesDir=$(dirname $0)/composefiles
 
 args=(compose '-f' "$filesDir/compose.yaml")
-if [ -f "$filesDir/compose.override.yaml" ]; then
-  args+=('-f' "$filesDir/compose.override.yaml")
+if [ -f "$filesDir/override/compose.yaml" ]; then
+  args+=('-f' "$filesDir/override/compose.yaml")
 fi
 
 dockerCmd "${args[@]}" "$@"

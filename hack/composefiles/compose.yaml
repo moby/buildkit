@@ -8,28 +8,77 @@ services:
         BUILDKIT_DEBUG: 1
     image: moby/buildkit:local
     ports:
-      - 127.0.0.1:1234:1234
       - 127.0.0.1:5000:5000
       - 127.0.0.1:6060:6060
     restart: always
     privileged: true
     environment:
       DELVE_PORT: 5000
-      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4317
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     configs:
       - source: buildkit_config
         target: /etc/buildkit/buildkitd.toml
     volumes:
       - buildkit:/var/lib/buildkit
+    depends_on:
+      - otel-collector
 
   jaeger:
     image: jaegertracing/all-in-one:latest
     ports:
       - 127.0.0.1:16686:16686
 
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.92.0
+    configs:
+      - source: otelcol_config
+        target: /etc/otelcol-contrib/config.yaml
+    ports:
+      - 127.0.0.1:4317:4317
+    depends_on:
+      - jaeger
+
+  prometheus:
+    image: prom/prometheus:v2.48.1
+    configs:
+      - source: prometheus_config
+        target: /etc/prometheus/prometheus.yml
+    volumes:
+      - prometheus:/prometheus
+    depends_on:
+      - otel-collector
+
+  grafana:
+    image: grafana/grafana-oss:10.2.3
+    configs:
+      - source: grafana_config
+        target: /etc/grafana/grafana.ini
+      - source: grafana_datasources_config
+        target: /etc/grafana/provisioning/datasources/datasources.yaml
+    ports:
+      - 127.0.0.1:3000:3000
+    volumes:
+      - grafana:/var/lib/grafana
+    depends_on:
+      - prometheus
+
 volumes:
   buildkit:
+  prometheus:
+  grafana:
 
 configs:
   buildkit_config:
     file: ./buildkitd.toml
+
+  otelcol_config:
+    file: ./otelcol.yaml
+
+  prometheus_config:
+    file: ./prometheus.yml
+
+  grafana_config:
+    file: ./grafana.ini
+
+  grafana_datasources_config:
+    file: ./datasources.yaml
