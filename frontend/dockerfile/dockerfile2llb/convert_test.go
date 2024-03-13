@@ -27,6 +27,57 @@ func toEnvMap(args []instructions.KeyValuePairOptional, env []string) map[string
 	return m
 }
 
+func TestDockerfileLinting(t *testing.T) {
+	t.Parallel()
+	df := `FROM scratch AS foo
+ENV FOO bar
+FROM foo
+COPY --from=foo f1 /
+	`
+	convertOpt := ConvertOpt{}
+	warningList, err := DockerfileLint(appcontext.Context(), []byte(df), convertOpt)
+	assert.NoError(t, err)
+	assert.Empty(t, warningList)
+
+	df = `from scratch AS foo
+env FOO bar
+from foo
+copy --from=foo f1 /
+	`
+	warningList, err = DockerfileLint(appcontext.Context(), []byte(df), convertOpt)
+	assert.NoError(t, err)
+	assert.Empty(t, warningList)
+
+	df = `FROM scratch AS FOO
+ENV FOO bar
+FROM foo
+COPY --from=FOO f1 /
+	`
+	convertOpt = ConvertOpt{}
+	warningList, err = DockerfileLint(appcontext.Context(), []byte(df), convertOpt)
+	assert.NoError(t, err)
+	assert.Len(t, warningList, 2)
+
+	df = `FROM scratch AS Foo
+ENV FOO bar
+FROM foo
+COPY --from=Foo f1 /
+	`
+	convertOpt = ConvertOpt{}
+	warningList, err = DockerfileLint(appcontext.Context(), []byte(df), convertOpt)
+	assert.NoError(t, err)
+	assert.Len(t, warningList, 2)
+
+	df = `FRom scratch AS foo
+env FOO bar
+from foo
+copy --from=foo f1 /
+	`
+	warningList, err = DockerfileLint(appcontext.Context(), []byte(df), convertOpt)
+	assert.NoError(t, err)
+	assert.Len(t, warningList, 1)
+}
+
 func TestDockerfileParsing(t *testing.T) {
 	t.Parallel()
 	df := `FROM scratch
