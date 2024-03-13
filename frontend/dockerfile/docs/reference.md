@@ -2098,14 +2098,6 @@ flag.
 > learn about secure ways to use secrets when building images.
 { .warning }
 
-
-If you specify a build argument that wasn't defined in the Dockerfile,
-the build outputs a warning.
-
-```console
-[Warning] One or more build-args [foo] were not consumed.
-```
-
 A Dockerfile may include one or more `ARG` instructions. For example,
 the following is a valid Dockerfile:
 
