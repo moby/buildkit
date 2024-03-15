@@ -13,7 +13,8 @@ var colorCancel aec.ANSI
 var colorWarning aec.ANSI
 var colorError aec.ANSI
 
-var termHeight = 6
+var termHeightMin = 6
+var termHeight = termHeightMin
 
 func init() {
 	// As recommended on https://no-color.org/
