@@ -23,8 +23,6 @@ import (
 
 var excludePatternsEnabled = false
 
-type warnCallback func(string, string, [][]byte, *parser.Range)
-
 type parseRequest struct {
 	command    string
 	args       []string
@@ -69,13 +67,20 @@ func newParseRequestFromNode(node *parser.Node) parseRequest {
 	}
 }
 
+func validStageNameCasing(cmdArgs []string) bool {
+	if len(cmdArgs) != 3 {
+		return true
+	}
+	stageName := cmdArgs[2]
+	return stageName == strings.ToLower(stageName)
+}
+
 func ParseInstruction(node *parser.Node) (v interface{}, err error) {
-	noWarn := func(string, string, [][]byte, *parser.Range) {}
-	return ParseInstructionWithWarnings(node, noWarn)
+	return ParseInstructionWithLinter(node, nil)
 }
 
 // ParseInstruction converts an AST to a typed instruction (either a command or a build stage beginning when encountering a `FROM` statement)
-func ParseInstructionWithWarnings(node *parser.Node, warn warnCallback) (v interface{}, err error) {
+func ParseInstructionWithLinter(node *parser.Node, lintWarn linter.LintWarnFunc) (v interface{}, err error) {
 	defer func() {
 		err = parser.WithLocation(err, node.Location())
 	}()
@@ -92,10 +97,9 @@ func ParseInstructionWithWarnings(node *parser.Node, warn warnCallback) (v inter
 	case command.Copy:
 		return parseCopy(req)
 	case command.From:
-		if !linter.ValidateStageNameCasing(req.args) {
-			location := linter.FirstNodeRange(node)
-			stageNameCasing := linter.LinterRules[linter.RuleStageNameCasing]
-			warn(stageNameCasing.Short, "", [][]byte{[]byte(stageNameCasing.Description)}, location)
+		if lintWarn != nil && !validStageNameCasing(req.args) {
+			short := fmt.Sprintf("Stage name '%s' should be lowercase", req.args[2])
+			lintWarn(linter.RuleStageNameCasing, short, node.Location())
 		}
 		return parseFrom(req)
 	case command.Onbuild:
@@ -163,9 +167,9 @@ func (e *parseError) Unwrap() error {
 
 // Parse a Dockerfile into a collection of buildable stages.
 // metaArgs is a collection of ARG instructions that occur before the first FROM.
-func Parse(ast *parser.Node, warn warnCallback) (stages []Stage, metaArgs []ArgCommand, err error) {
+func Parse(ast *parser.Node, lint linter.LintWarnFunc) (stages []Stage, metaArgs []ArgCommand, err error) {
 	for _, n := range ast.Children {
-		cmd, err := ParseInstructionWithWarnings(n, warn)
+		cmd, err := ParseInstructionWithLinter(n, lint)
 		if err != nil {
 			return nil, nil, &parseError{inner: err, node: n}
 		}

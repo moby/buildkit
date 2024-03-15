@@ -73,7 +73,7 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 		Client:       bc,
 		SourceMap:    src.SourceMap,
 		MetaResolver: c,
-		Warn: func(msg, url string, detail [][]byte, location *parser.Range) {
+		Warn: func(msg, url string, detail [][]byte, location []parser.Range) {
 			src.Warn(ctx, msg, warnOpts(location, detail, url))
 		},
 	}
@@ -236,21 +236,24 @@ func forwardGateway(ctx context.Context, c client.Client, ref string, cmdline st
 	})
 }
 
-func warnOpts(r *parser.Range, detail [][]byte, url string) client.WarnOpts {
+func warnOpts(r []parser.Range, detail [][]byte, url string) client.WarnOpts {
 	opts := client.WarnOpts{Level: 1, Detail: detail, URL: url}
 	if r == nil {
 		return opts
 	}
-	opts.Range = []*pb.Range{{
-		Start: pb.Position{
-			Line:      int32(r.Start.Line),
-			Character: int32(r.Start.Character),
-		},
-		End: pb.Position{
-			Line:      int32(r.End.Line),
-			Character: int32(r.End.Character),
-		},
-	}}
+	opts.Range = []*pb.Range{}
+	for _, r := range r {
+		opts.Range = append(opts.Range, &pb.Range{
+			Start: pb.Position{
+				Line:      int32(r.Start.Line),
+				Character: int32(r.Start.Character),
+			},
+			End: pb.Position{
+				Line:      int32(r.End.Line),
+				Character: int32(r.End.Character),
+			},
+		})
+	}
 	return opts
 }
 

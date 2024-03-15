@@ -161,8 +161,7 @@ ARG bar baz=123
 	ast, err := parser.Parse(bytes.NewBuffer([]byte(dt)))
 	require.NoError(t, err)
 
-	emptyCallback := func(short, url string, detail [][]byte, location *parser.Range) {}
-	stages, meta, err := Parse(ast.AST, emptyCallback)
+	stages, meta, err := Parse(ast.AST, nil)
 	require.NoError(t, err)
 
 	require.Equal(t, "defines first stage", stages[0].Comment)

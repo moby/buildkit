@@ -63,7 +63,7 @@ type ConvertOpt struct {
 	TargetPlatform *ocispecs.Platform
 	MetaResolver   llb.ImageMetaResolver
 	LLBCaps        *apicaps.CapSet
-	Warn           func(short, url string, detail [][]byte, location *parser.Range)
+	Warn           func(short, url string, detail [][]byte, location []parser.Range)
 }
 
 type SBOMTargets struct {
@@ -125,36 +125,13 @@ func lintSourceInfo(srcMap *llb.SourceMap, srcRange *parser.Range) (filename str
 	return
 }
 
-func DockerfileLint(ctx context.Context, dt []byte, opt ConvertOpt) ([]linter.Warning, error) {
-	warnings := []linter.Warning{}
-	opt.Warn = func(short, url string, detail [][]byte, location *parser.Range) {
-		var source []string
-		var filename string
-		filename, source = lintSourceInfo(opt.SourceMap, location)
-		warnings = append(warnings, linter.Warning{
-			Short:    short,
-			Detail:   detail,
-			Location: location,
-			Filename: filename,
-			Source:   source,
-		})
-	}
-
-	_, err := toDispatchState(ctx, dt, opt)
-	if err != nil {
-		return nil, err
-	}
-	return warnings, nil
-}
-
 func ListTargets(ctx context.Context, dt []byte) (*targets.List, error) {
 	dockerfile, err := parser.Parse(bytes.NewReader(dt))
 	if err != nil {
 		return nil, err
 	}
 
-	noWarn := func(string, string, [][]byte, *parser.Range) {}
-	stages, _, err := instructions.Parse(dockerfile.AST, noWarn)
+	stages, _, err := instructions.Parse(dockerfile.AST, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -175,6 +152,10 @@ func ListTargets(ctx context.Context, dt []byte) (*targets.List, error) {
 		l.Targets = append(l.Targets, t)
 	}
 	return l, nil
+}
+
+func consistentCasing(s string) bool {
+	return s == strings.ToLower(s) || s == strings.ToUpper(s)
 }
 
 func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchState, error) {
@@ -200,7 +181,16 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	}
 
 	if opt.Warn == nil {
-		opt.Warn = func(string, string, [][]byte, *parser.Range) {}
+		opt.Warn = func(string, string, [][]byte, []parser.Range) {}
+	}
+
+	lintWarn := func(rule linter.LinterRule, short string, location []parser.Range) {
+		startLine := 0
+		if len(location) > 0 {
+			startLine = location[0].Start.Line
+		}
+		short = fmt.Sprintf("%s (%s:%d)", short, opt.SourceMap.Filename, startLine)
+		opt.Warn(short, rule.URL, [][]byte{[]byte(rule.Description)}, location)
 	}
 
 	if opt.Client != nil && opt.LLBCaps == nil {
@@ -220,18 +210,30 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		return nil, err
 	}
 
-	for _, node := range dockerfile.AST.Children {
-		warnings := linter.ValidateNodeLintRules(node)
-		dockerfile.Warnings = append(dockerfile.Warnings, warnings...)
+	// Moby still uses the `dockerfile.PrintWarnings` method to print warnings,
+	// which prevents us from meaningfully refactoring the `parser.Parse` method
+	// to accept a lint warning callback in the same way that the `instructions.Parse`
+	// method does. As a result, we need to manually iterate over the warnings
+	// and call the lint warning callback for each one.
+	for _, warning := range dockerfile.Warnings {
+		// The `dockerfile.Warnings` *should* only contain warnings about empty continuation
+		// lines, but we'll check the warning message to be sure.
+		if warning.URL == linter.RuleNoEmptyContinuations.URL {
+			location := []parser.Range{*warning.Location}
+			lintWarn(linter.RuleNoEmptyContinuations, "Empty Continuation Line", location)
+		}
 	}
 
-	for _, w := range dockerfile.Warnings {
-		opt.Warn(w.Short, w.URL, w.Detail, w.Location)
+	for _, node := range dockerfile.AST.Children {
+		if !consistentCasing(node.Value) {
+			short := fmt.Sprintf("Command '%s' should be consistently cased", node.Value)
+			lintWarn(linter.RuleCommandCasing, short, node.Location())
+		}
 	}
 
 	proxyEnv := proxyEnvFromBuildArgs(opt.BuildArgs)
 
-	stages, metaArgs, err := instructions.Parse(dockerfile.AST, opt.Warn)
+	stages, metaArgs, err := instructions.Parse(dockerfile.AST, lintWarn)
 	if err != nil {
 		return nil, err
 	}
