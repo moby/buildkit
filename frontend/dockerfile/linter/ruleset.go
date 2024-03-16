@@ -5,16 +5,16 @@ import (
 )
 
 var (
-	RuleStageNameCasing LinterRule = LinterRule{
+	RuleStageNameCasing = LinterRule{
 		Name:        "StageNameCasing",
 		Description: "Stage names should be lowercase",
 	}
-	RuleNoEmptyContinuations LinterRule = LinterRule{
+	RuleNoEmptyContinuations = LinterRule{
 		Name:        "NoEmptyContinuations",
 		Description: "Empty continuation lines will become errors in a future release",
 		URL:         "https://github.com/moby/moby/pull/33719",
 	}
-	RuleCommandCasing LinterRule = LinterRule{
+	RuleCommandCasing = LinterRule{
 		Name:        "CommandCasing",
 		Description: "Commands should be in consistent casing (all lower or all upper)",
 	}

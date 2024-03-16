@@ -6831,7 +6831,7 @@ COPY Dockerfile \
 
 	w := warnings[0]
 
-	require.Equal(t, "Empty continuation line found in: COPY Dockerfile .", string(w.Short))
+	require.Equal(t, "Empty continuation line (Dockerfile:5)", string(w.Short))
 	require.Equal(t, 1, len(w.Detail))
 	require.Equal(t, "Empty continuation lines will become errors in a future release", string(w.Detail[0]))
 	require.Equal(t, "https://github.com/moby/moby/pull/33719", w.URL)

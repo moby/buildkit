@@ -110,21 +110,6 @@ func Dockefile2Outline(ctx context.Context, dt []byte, opt ConvertOpt) (*outline
 	return &o, nil
 }
 
-func lintSourceInfo(srcMap *llb.SourceMap, srcRange *parser.Range) (filename string, source []string) {
-	if srcMap == nil {
-		return
-	}
-	filename = srcMap.Filename
-	if srcRange == nil {
-		return
-	}
-	lines := strings.Split(string(srcMap.Data), "\n")
-	start := srcRange.Start.Line
-	end := srcRange.End.Line
-	source = lines[start-1 : end]
-	return
-}
-
 func ListTargets(ctx context.Context, dt []byte) (*targets.List, error) {
 	dockerfile, err := parser.Parse(bytes.NewReader(dt))
 	if err != nil {
@@ -220,7 +205,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		// lines, but we'll check the warning message to be sure.
 		if warning.URL == linter.RuleNoEmptyContinuations.URL {
 			location := []parser.Range{*warning.Location}
-			lintWarn(linter.RuleNoEmptyContinuations, "Empty Continuation Line", location)
+			lintWarn(linter.RuleNoEmptyContinuations, "Empty continuation line", location)
 		}
 	}
 
