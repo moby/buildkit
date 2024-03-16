@@ -24,6 +24,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/compression"
+	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
@@ -285,7 +286,7 @@ func (i *importer) makeDescriptorProviderPair(l v1.CacheLayer) (*v1.DescriptorPr
 		annotations["buildkit/createdat"] = string(txt)
 	}
 	return &v1.DescriptorProviderPair{
-		Provider: i.s3Client,
+		Provider: contentutil.FromFetcher(i.s3Client),
 		Descriptor: ocispecs.Descriptor{
 			MediaType:   l.Annotations.MediaType,
 			Digest:      l.Blob,
@@ -334,15 +335,6 @@ func (i *importer) Resolve(ctx context.Context, _ ocispecs.Descriptor, id string
 	}
 
 	return solver.NewCacheManager(ctx, id, keysStorage, resultStorage), nil
-}
-
-type readerAt struct {
-	ReaderAtCloser
-	size int64
-}
-
-func (r *readerAt) Size() int64 {
-	return r.size
 }
 
 type s3Client struct {
@@ -402,7 +394,8 @@ func (s3Client *s3Client) getManifest(ctx context.Context, key string, config *v
 	return true, nil
 }
 
-func (s3Client *s3Client) getReader(ctx context.Context, key string) (io.ReadCloser, error) {
+func (s3Client *s3Client) Fetch(ctx context.Context, desc ocispecs.Descriptor) (io.ReadCloser, error) {
+	key := s3Client.blobKey(desc.Digest)
 	input := &s3.GetObjectInput{
 		Bucket: &s3Client.bucket,
 		Key:    &key,
@@ -455,13 +448,6 @@ func (s3Client *s3Client) touch(ctx context.Context, key string) error {
 	_, err := s3Client.CopyObject(ctx, cp)
 
 	return err
-}
-
-func (s3Client *s3Client) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
-	readerAtCloser := toReaderAtCloser(func(offset int64) (io.ReadCloser, error) {
-		return s3Client.getReader(ctx, s3Client.blobKey(desc.Digest))
-	})
-	return &readerAt{ReaderAtCloser: readerAtCloser, size: desc.Size}, nil
 }
 
 func (s3Client *s3Client) manifestKey(name string) string {
