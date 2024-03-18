@@ -4,6 +4,9 @@ import (
 	"net"
 
 	"github.com/Microsoft/go-winio"
+
+	// include npipe connhelper for windows tests
+	_ "github.com/moby/buildkit/client/connhelper/npipe"
 )
 
 var socketScheme = "npipe://"

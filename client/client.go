@@ -101,7 +101,7 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 	}
 
 	if tracerProvider != nil {
-		var propagators = propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
+		propagators := propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
 		unary = append(unary, filterInterceptor(otelgrpc.UnaryClientInterceptor(otelgrpc.WithTracerProvider(tracerProvider), otelgrpc.WithPropagators(propagators)))) //nolint:staticcheck // TODO(thaJeztah): ignore SA1019 for deprecated options: see https://github.com/moby/buildkit/issues/4681
 		stream = append(stream, otelgrpc.StreamClientInterceptor(otelgrpc.WithTracerProvider(tracerProvider), otelgrpc.WithPropagators(propagators)))                 //nolint:staticcheck // TODO(thaJeztah): ignore SA1019 for deprecated options: see https://github.com/moby/buildkit/issues/4681
 	}
@@ -111,10 +111,16 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 		if err != nil {
 			return nil, err
 		}
-		gopts = append(gopts, grpc.WithContextDialer(dialFn))
+		if dialFn != nil {
+			gopts = append(gopts, grpc.WithContextDialer(dialFn))
+		}
 	}
 	if address == "" {
 		address = appdefaults.Address
+	}
+	uri, err := url.Parse(address)
+	if err != nil {
+		return nil, err
 	}
 
 	// Setting :authority pseudo header
@@ -130,12 +136,14 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 	}
 	if authority == "" {
 		// authority as hostname from target address
-		uri, err := url.Parse(address)
-		if err != nil {
-			return nil, err
-		}
 		authority = uri.Host
 	}
+	if uri.Scheme == "tcp" {
+		// remove tcp scheme from address, since default dialer doesn't expect that
+		// name resolution is done by grpc according to the following spec: https://github.com/grpc/grpc/blob/master/doc/naming.md
+		address = uri.Host
+	}
+
 	gopts = append(gopts, grpc.WithAuthority(authority))
 
 	unary = append(unary, grpcerrors.UnaryClientInterceptor)
@@ -375,8 +383,7 @@ func resolveDialer(address string) (func(context.Context, string) (net.Conn, err
 	if ch != nil {
 		return ch.ContextDialer, nil
 	}
-	// basic dialer
-	return dialer, nil
+	return nil, nil
 }
 
 func filterInterceptor(intercept grpc.UnaryClientInterceptor) grpc.UnaryClientInterceptor {
