@@ -12,22 +12,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const defaultResolvConf = `
-nameserver 8.8.8.8
+const defaultResolvConf = `nameserver 8.8.8.8
 nameserver 8.8.4.4
 nameserver 2001:4860:4860::8888
-nameserver 2001:4860:4860::8844`
+nameserver 2001:4860:4860::8844
+`
 
-const dnsOption = `
-options ndots:0`
+const dnsOption = `options ndots:0
+`
 
-const localDNSResolvConf = `
-nameserver 127.0.0.11
-options ndots:0`
+const localDNSResolvConf = `nameserver 127.0.0.11
+options ndots:0
+`
 
-const regularResolvConf = `
-# DNS requests are forwarded to the host. DHCP DNS options are ignored.
-nameserver 192.168.65.5`
+const regularResolvConf = `nameserver 192.168.65.5
+`
 
 // TestResolvConf modifies a global variable
 // It must not run in parallel.
@@ -79,7 +78,7 @@ func TestResolvConf(t *testing.T) {
 			dt:          []byte(localDNSResolvConf),
 			execution:   1,
 			networkMode: []pb.NetMode{pb.NetMode_UNSET},
-			expected:    []string{fmt.Sprintf("%s%s", dnsOption, defaultResolvConf)},
+			expected:    []string{fmt.Sprintf("%s%s", defaultResolvConf, dnsOption)},
 		},
 		{
 			name:        "TestRegenerateResolvconfToRemoveLocalDNS",
@@ -88,7 +87,7 @@ func TestResolvConf(t *testing.T) {
 			networkMode: []pb.NetMode{pb.NetMode_HOST, pb.NetMode_UNSET},
 			expected: []string{
 				localDNSResolvConf,
-				fmt.Sprintf("%s%s", dnsOption, defaultResolvConf),
+				fmt.Sprintf("%s%s", defaultResolvConf, dnsOption),
 			},
 		},
 		{
@@ -97,7 +96,7 @@ func TestResolvConf(t *testing.T) {
 			execution:   2,
 			networkMode: []pb.NetMode{pb.NetMode_UNSET, pb.NetMode_HOST},
 			expected: []string{
-				fmt.Sprintf("%s%s", dnsOption, defaultResolvConf),
+				fmt.Sprintf("%s%s", defaultResolvConf, dnsOption),
 				localDNSResolvConf,
 			},
 		},
