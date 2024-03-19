@@ -1,29 +1,30 @@
 package linter
 
 import (
-	"github.com/moby/buildkit/frontend/dockerfile/parser"
+	"fmt"
 )
 
 var (
-	RuleStageNameCasing = LinterRule{
+	RuleStageNameCasing = LinterRule[func(string) string]{
 		Name:        "StageNameCasing",
 		Description: "Stage names should be lowercase",
+		Format: func(stageName string) string {
+			return fmt.Sprintf("Stage name '%s' should be lowercase", stageName)
+		},
 	}
-	RuleNoEmptyContinuations = LinterRule{
+	RuleNoEmptyContinuations = LinterRule[func() string]{
 		Name:        "NoEmptyContinuations",
 		Description: "Empty continuation lines will become errors in a future release",
 		URL:         "https://github.com/moby/moby/pull/33719",
+		Format: func() string {
+			return "Empty continuation line"
+		},
 	}
-	RuleCommandCasing = LinterRule{
+	RuleCommandCasing = LinterRule[func(string) string]{
 		Name:        "CommandCasing",
 		Description: "Commands should be in consistent casing (all lower or all upper)",
+		Format: func(command string) string {
+			return fmt.Sprintf("Command '%s' should be consistently cased", command)
+		},
 	}
 )
-
-type LinterRule struct {
-	Name        string
-	URL         string
-	Description string
-}
-
-type LintWarnFunc func(rule LinterRule, message string, location []parser.Range)

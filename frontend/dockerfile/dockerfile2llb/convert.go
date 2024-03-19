@@ -169,15 +169,6 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		opt.Warn = func(string, string, [][]byte, []parser.Range) {}
 	}
 
-	lintWarn := func(rule linter.LinterRule, short string, location []parser.Range) {
-		startLine := 0
-		if len(location) > 0 {
-			startLine = location[0].Start.Line
-		}
-		short = fmt.Sprintf("%s (%s:%d)", short, opt.SourceMap.Filename, startLine)
-		opt.Warn(short, rule.URL, [][]byte{[]byte(rule.Description)}, location)
-	}
-
 	if opt.Client != nil && opt.LLBCaps == nil {
 		caps := opt.Client.BuildOpts().LLBCaps
 		opt.LLBCaps = &caps
@@ -205,20 +196,21 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		// lines, but we'll check the warning message to be sure.
 		if warning.URL == linter.RuleNoEmptyContinuations.URL {
 			location := []parser.Range{*warning.Location}
-			lintWarn(linter.RuleNoEmptyContinuations, "Empty continuation line", location)
+			msg := linter.RuleNoEmptyContinuations.Format()
+			linter.RuleNoEmptyContinuations.Run(opt.Warn, location, msg)
 		}
 	}
 
 	for _, node := range dockerfile.AST.Children {
 		if !consistentCasing(node.Value) {
-			short := fmt.Sprintf("Command '%s' should be consistently cased", node.Value)
-			lintWarn(linter.RuleCommandCasing, short, node.Location())
+			msg := linter.RuleCommandCasing.Format(node.Value)
+			linter.RuleCommandCasing.Run(opt.Warn, node.Location(), msg)
 		}
 	}
 
 	proxyEnv := proxyEnvFromBuildArgs(opt.BuildArgs)
 
-	stages, metaArgs, err := instructions.Parse(dockerfile.AST, lintWarn)
+	stages, metaArgs, err := instructions.Parse(dockerfile.AST, opt.Warn)
 	if err != nil {
 		return nil, err
 	}

@@ -98,8 +98,8 @@ func ParseInstructionWithLinter(node *parser.Node, lintWarn linter.LintWarnFunc)
 		return parseCopy(req)
 	case command.From:
 		if lintWarn != nil && !validStageNameCasing(req.args) {
-			short := fmt.Sprintf("Stage name '%s' should be lowercase", req.args[2])
-			lintWarn(linter.RuleStageNameCasing, short, node.Location())
+			msg := linter.RuleStageNameCasing.Format(req.args[2])
+			linter.RuleStageNameCasing.Run(lintWarn, node.Location(), msg)
 		}
 		return parseFrom(req)
 	case command.Onbuild:

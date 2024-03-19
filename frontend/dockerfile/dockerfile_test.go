@@ -6846,17 +6846,17 @@ COPY Dockerfile .
 		return w1.Range[0].Start.Line < w2.Range[0].Start.Line
 	})
 
-	require.Equal(t, "Stage name 'BadStageName' should be lowercase (Dockerfile:3)", string(warnings[0].Short))
+	require.Equal(t, "Lint Rule 'StageNameCasing': Stage name 'BadStageName' should be lowercase (line 3)", string(warnings[0].Short))
 	require.Equal(t, "Stage names should be lowercase", string(warnings[0].Detail[0]))
 	require.Equal(t, "", warnings[0].URL)
 	require.Equal(t, 1, warnings[0].Level)
 
-	require.Equal(t, "Command 'Copy' should be consistently cased (Dockerfile:4)", string(warnings[1].Short))
+	require.Equal(t, "Lint Rule 'CommandCasing': Command 'Copy' should be consistently cased (line 4)", string(warnings[1].Short))
 	require.Equal(t, "Commands should be in consistent casing (all lower or all upper)", string(warnings[1].Detail[0]))
 	require.Equal(t, "", warnings[1].URL)
 	require.Equal(t, 1, warnings[1].Level)
 
-	require.Equal(t, "Empty continuation line (Dockerfile:7)", string(warnings[2].Short))
+	require.Equal(t, "Lint Rule 'NoEmptyContinuations': Empty continuation line (line 7)", string(warnings[2].Short))
 	require.Equal(t, "Empty continuation lines will become errors in a future release", string(warnings[2].Detail[0]))
 	require.Equal(t, "https://github.com/moby/moby/pull/33719", warnings[2].URL)
 }
@@ -6928,7 +6928,7 @@ COPY Dockerfile \
 
 	w := warnings[0]
 
-	require.Equal(t, "Empty continuation line (Dockerfile:5)", string(w.Short))
+	require.Equal(t, "Lint Rule 'NoEmptyContinuations': Empty continuation line (line 5)", string(w.Short))
 	require.Equal(t, 1, len(w.Detail))
 	require.Equal(t, "Empty continuation lines will become errors in a future release", string(w.Detail[0]))
 	require.Equal(t, "https://github.com/moby/moby/pull/33719", w.URL)
