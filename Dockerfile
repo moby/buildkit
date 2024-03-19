@@ -22,19 +22,20 @@ ARG ALPINE_VERSION=3.19
 ARG XX_VERSION=1.4.0
 ARG BUILDKIT_DEBUG
 
+ARG ALPINE_ARCH=${TARGETARCH#riscv64}
+ARG ALPINE_ARCH=${ALPINE_ARCH:+"default"}
+ARG ALPINE_ARCH=${ALPINE_ARCH:-$TARGETARCH}
+
 # minio for s3 integration tests
 FROM minio/minio:${MINIO_VERSION} AS minio
 FROM minio/mc:${MINIO_MC_VERSION} AS minio-mc
 
 # alpine base for buildkit image
 # TODO: remove this when alpine image supports riscv64
-FROM alpine:${ALPINE_VERSION} AS alpine-amd64
-FROM alpine:${ALPINE_VERSION} AS alpine-arm
-FROM alpine:${ALPINE_VERSION} AS alpine-arm64
-FROM alpine:${ALPINE_VERSION} AS alpine-s390x
-FROM alpine:${ALPINE_VERSION} AS alpine-ppc64le
+FROM alpine:${ALPINE_VERSION} AS alpine-default
 FROM alpine:edge@sha256:2d01a16bab53a8405876cec4c27235d47455a7b72b75334c614f2fb0968b3f90 AS alpine-riscv64
-FROM alpine-$TARGETARCH AS alpinebase
+FROM alpine-${ALPINE_ARCH} AS alpinebase
+
 
 # xx is a helper for cross-compilation
 FROM --platform=$BUILDPLATFORM tonistiigi/xx:${XX_VERSION} AS xx
