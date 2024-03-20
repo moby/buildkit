@@ -328,7 +328,7 @@ func (p lazyRefProvider) Info(ctx context.Context, dgst digest.Digest) (content.
 	return content.Info{
 		Digest: p.desc.Digest,
 		Size:   p.desc.Size,
-	}, err
+	}, nil
 }
 
 func (p lazyRefProvider) Unlazy(ctx context.Context) error {
