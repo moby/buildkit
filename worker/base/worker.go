@@ -472,14 +472,12 @@ func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, 
 }
 
 func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (ref cache.ImmutableRef, err error) {
-	if cd, ok := remote.Provider.(interface {
-		CheckDescriptor(context.Context, ocispecs.Descriptor) error
-	}); ok && len(remote.Descriptors) > 0 {
+	if len(remote.Descriptors) > 0 {
 		var eg errgroup.Group
 		for _, desc := range remote.Descriptors {
 			desc := desc
 			eg.Go(func() error {
-				if err := cd.CheckDescriptor(ctx, desc); err != nil {
+				if _, err := remote.Provider.Info(ctx, desc.Digest); err != nil {
 					return err
 				}
 				return nil
