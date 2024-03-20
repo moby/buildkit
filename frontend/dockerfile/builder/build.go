@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerui"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	gwpb "github.com/moby/buildkit/frontend/gateway/pb"
+	"github.com/moby/buildkit/frontend/subrequests/lint"
 	"github.com/moby/buildkit/frontend/subrequests/outline"
 	"github.com/moby/buildkit/frontend/subrequests/targets"
 	"github.com/moby/buildkit/solver/errdefs"
@@ -73,7 +74,7 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 		Client:       bc,
 		SourceMap:    src.SourceMap,
 		MetaResolver: c,
-		Warn: func(msg, url string, detail [][]byte, location *parser.Range) {
+		Warn: func(msg, url string, detail [][]byte, location []parser.Range) {
 			src.Warn(ctx, msg, warnOpts(location, detail, url))
 		},
 	}
@@ -84,6 +85,10 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 		},
 		ListTargets: func(ctx context.Context) (*targets.List, error) {
 			return dockerfile2llb.ListTargets(ctx, src.Data)
+		},
+		Lint: func(ctx context.Context) (*lint.LintResults, error) {
+			warnings, err := dockerfile2llb.DockerfileLint(ctx, src.Data, convertOpt)
+			return &lint.LintResults{Warnings: warnings}, err
 		},
 	}); err != nil {
 		return nil, err
@@ -236,21 +241,24 @@ func forwardGateway(ctx context.Context, c client.Client, ref string, cmdline st
 	})
 }
 
-func warnOpts(r *parser.Range, detail [][]byte, url string) client.WarnOpts {
+func warnOpts(r []parser.Range, detail [][]byte, url string) client.WarnOpts {
 	opts := client.WarnOpts{Level: 1, Detail: detail, URL: url}
 	if r == nil {
 		return opts
 	}
-	opts.Range = []*pb.Range{{
-		Start: pb.Position{
-			Line:      int32(r.Start.Line),
-			Character: int32(r.Start.Character),
-		},
-		End: pb.Position{
-			Line:      int32(r.End.Line),
-			Character: int32(r.End.Character),
-		},
-	}}
+	opts.Range = []*pb.Range{}
+	for _, r := range r {
+		opts.Range = append(opts.Range, &pb.Range{
+			Start: pb.Position{
+				Line:      int32(r.Start.Line),
+				Character: int32(r.Start.Character),
+			},
+			End: pb.Position{
+				Line:      int32(r.End.Line),
+				Character: int32(r.End.Character),
+			},
+		})
+	}
 	return opts
 }
 

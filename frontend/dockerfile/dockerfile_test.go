@@ -176,6 +176,7 @@ var allTests = integration.TestFuncs(
 	testDockerIgnoreMissingProvenance,
 	testSBOMScannerArgs,
 	testMultiPlatformWarnings,
+	testLintWarnings,
 	testNilContextInSolveGateway,
 	testCopyUnicodePath,
 	testFrontendDeduplicateSources,
@@ -6764,6 +6765,102 @@ ARG BUILDKIT_SBOM_SCAN_STAGE=true
 	require.Equal(t, 1, len(att.LayersRaw))
 }
 
+func testLintWarnings(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	f := getFrontend(t, sb)
+
+	// empty line in here is intentional to cause line continuation warning
+	dockerfile := []byte(`
+# set of commands which should cause warnings
+FROM scratch as BadStageName
+Copy Dockerfile .
+COPY Dockerfile \
+
+.
+
+# set of commands which should not cause warnings
+FROM scratch as base
+copy Dockerfile .
+COPY Dockerfile .
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	status := make(chan *client.SolveStatus)
+	statusDone := make(chan struct{})
+	done := make(chan struct{})
+
+	var warnings []*client.VertexWarning
+
+	go func() {
+		defer close(statusDone)
+		for {
+			select {
+			case st, ok := <-status:
+				if !ok {
+					return
+				}
+				warnings = append(warnings, st.Warnings...)
+			case <-done:
+				return
+			}
+		}
+	}()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"platform": "linux/amd64,linux/arm64",
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, status)
+	require.NoError(t, err)
+
+	select {
+	case <-statusDone:
+	case <-time.After(10 * time.Second):
+		close(done)
+	}
+
+	<-statusDone
+
+	// two platforms only show one warning
+	require.Equal(t, 3, len(warnings))
+	sort.Slice(warnings, func(i, j int) bool {
+		w1 := warnings[i]
+		w2 := warnings[j]
+		if len(w1.Range) == 0 {
+			return true
+		} else if len(w2.Range) == 0 {
+			return false
+		}
+		return w1.Range[0].Start.Line < w2.Range[0].Start.Line
+	})
+
+	require.Equal(t, "Lint Rule 'StageNameCasing': Stage name 'BadStageName' should be lowercase (line 3)", string(warnings[0].Short))
+	require.Equal(t, "Stage names should be lowercase", string(warnings[0].Detail[0]))
+	require.Equal(t, "", warnings[0].URL)
+	require.Equal(t, 1, warnings[0].Level)
+
+	require.Equal(t, "Lint Rule 'CommandCasing': Command 'Copy' should be consistently cased (line 4)", string(warnings[1].Short))
+	require.Equal(t, "Commands should be in consistent casing (all lower or all upper)", string(warnings[1].Detail[0]))
+	require.Equal(t, "", warnings[1].URL)
+	require.Equal(t, 1, warnings[1].Level)
+
+	require.Equal(t, "Lint Rule 'NoEmptyContinuations': Empty continuation line (line 7)", string(warnings[2].Short))
+	require.Equal(t, "Empty continuation lines will become errors in a future release", string(warnings[2].Detail[0]))
+	require.Equal(t, "https://github.com/moby/moby/pull/33719", warnings[2].URL)
+}
+
 // #3495
 func testMultiPlatformWarnings(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
@@ -6831,7 +6928,7 @@ COPY Dockerfile \
 
 	w := warnings[0]
 
-	require.Equal(t, "Empty continuation line found in: COPY Dockerfile .", string(w.Short))
+	require.Equal(t, "Lint Rule 'NoEmptyContinuations': Empty continuation line (line 5)", string(w.Short))
 	require.Equal(t, 1, len(w.Detail))
 	require.Equal(t, "Empty continuation lines will become errors in a future release", string(w.Detail[0]))
 	require.Equal(t, "https://github.com/moby/moby/pull/33719", w.URL)
