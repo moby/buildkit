@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerui"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	gwpb "github.com/moby/buildkit/frontend/gateway/pb"
+	"github.com/moby/buildkit/frontend/subrequests/lint"
 	"github.com/moby/buildkit/frontend/subrequests/outline"
 	"github.com/moby/buildkit/frontend/subrequests/targets"
 	"github.com/moby/buildkit/solver/errdefs"
@@ -84,6 +85,10 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 		},
 		ListTargets: func(ctx context.Context) (*targets.List, error) {
 			return dockerfile2llb.ListTargets(ctx, src.Data)
+		},
+		Lint: func(ctx context.Context) (*lint.LintResults, error) {
+			warnings, err := dockerfile2llb.DockerfileLint(ctx, src.Data, convertOpt)
+			return &lint.LintResults{Warnings: warnings}, err
 		},
 	}); err != nil {
 		return nil, err
