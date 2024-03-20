@@ -260,9 +260,11 @@ func (ci *importer) makeDescriptorProviderPair(l v1.CacheLayer) (*v1.DescriptorP
 		Size:        l.Annotations.Size,
 		Annotations: annotations,
 	}
+	p := &ciProvider{desc: desc, ci: ci}
 	return &v1.DescriptorProviderPair{
-		Descriptor: desc,
-		Provider:   &ciProvider{desc: desc, ci: ci},
+		Descriptor:   desc,
+		Provider:     p,
+		InfoProvider: p,
 	}, nil
 }
 
@@ -347,13 +349,18 @@ type ciProvider struct {
 	entries map[digest.Digest]*actionscache.Entry
 }
 
-func (p *ciProvider) CheckDescriptor(ctx context.Context, desc ocispecs.Descriptor) error {
-	if desc.Digest != p.desc.Digest {
-		return nil
+func (p *ciProvider) Info(ctx context.Context, dgst digest.Digest) (content.Info, error) {
+	if dgst != p.desc.Digest {
+		return content.Info{}, errors.Errorf("content not found %s", dgst)
 	}
 
-	_, err := p.loadEntry(ctx, desc)
-	return err
+	if _, err := p.loadEntry(ctx, p.desc); err != nil {
+		return content.Info{}, err
+	}
+	return content.Info{
+		Digest: p.desc.Digest,
+		Size:   p.desc.Size,
+	}, nil
 }
 
 func (p *ciProvider) loadEntry(ctx context.Context, desc ocispecs.Descriptor) (*actionscache.Entry, error) {

@@ -313,10 +313,22 @@ func (p lazyRefProvider) Info(ctx context.Context, dgst digest.Digest) (content.
 	if dgst != p.desc.Digest {
 		return content.Info{}, errdefs.ErrNotFound
 	}
-	if err := p.Unlazy(ctx); err != nil {
-		return content.Info{}, errdefs.ErrNotFound
+	info, err := p.ref.cm.ContentStore.Info(ctx, dgst)
+	if err == nil {
+		return info, nil
 	}
-	return p.ref.cm.ContentStore.Info(ctx, dgst)
+
+	if isLazy, err1 := p.ref.isLazy(ctx); err1 != nil {
+		return content.Info{}, err1
+	} else if !isLazy {
+		return content.Info{}, err
+	}
+
+	// for lazy records don't unlazy without read request
+	return content.Info{
+		Digest: p.desc.Digest,
+		Size:   p.desc.Size,
+	}, err
 }
 
 func (p lazyRefProvider) Unlazy(ctx context.Context) error {
