@@ -68,7 +68,7 @@ require (
 	github.com/spdx/tools-golang v0.5.3
 	github.com/stretchr/testify v1.8.4
 	github.com/tonistiigi/fsutil v0.0.0-20240301111122-7525a1af2bb5
-	github.com/tonistiigi/go-actions-cache v0.0.0-20240227172821-a0b64f338598
+	github.com/tonistiigi/go-actions-cache v0.0.0-20240320205438-9794bdbb2fb4
 	github.com/tonistiigi/go-archvariant v1.0.0
 	github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea
 	github.com/tonistiigi/vt100 v0.0.0-20230623042737-f9a4f7ef6531
