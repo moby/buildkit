@@ -139,10 +139,6 @@ func ListTargets(ctx context.Context, dt []byte) (*targets.List, error) {
 	return l, nil
 }
 
-func consistentCasing(s string) bool {
-	return s == strings.ToLower(s) || s == strings.ToUpper(s)
-}
-
 func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchState, error) {
 	if len(dt) == 0 {
 		return nil, errors.Errorf("the Dockerfile cannot be empty")
@@ -202,7 +198,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	}
 
 	for _, node := range dockerfile.AST.Children {
-		if !consistentCasing(node.Value) {
+		if !isConsistentCasing(node.Value) {
 			msg := linter.RuleCommandCasing.Format(node.Value)
 			linter.RuleCommandCasing.Run(opt.Warn, node.Location(), msg)
 		}
@@ -1951,4 +1947,8 @@ func isEnabledForStage(stage string, value string) bool {
 		}
 	}
 	return false
+}
+
+func isConsistentCasing(s string) bool {
+	return s == strings.ToLower(s) || s == strings.ToUpper(s)
 }

@@ -67,14 +67,6 @@ func newParseRequestFromNode(node *parser.Node) parseRequest {
 	}
 }
 
-func validStageNameCasing(cmdArgs []string) bool {
-	if len(cmdArgs) != 3 {
-		return true
-	}
-	stageName := cmdArgs[2]
-	return stageName == strings.ToLower(stageName)
-}
-
 func ParseInstruction(node *parser.Node) (v interface{}, err error) {
 	return ParseInstructionWithLinter(node, nil)
 }
@@ -97,9 +89,13 @@ func ParseInstructionWithLinter(node *parser.Node, lintWarn linter.LintWarnFunc)
 	case command.Copy:
 		return parseCopy(req)
 	case command.From:
-		if lintWarn != nil && !validStageNameCasing(req.args) {
+		if lintWarn != nil && !isValidStageNameCasing(req.args) {
 			msg := linter.RuleStageNameCasing.Format(req.args[2])
 			linter.RuleStageNameCasing.Run(lintWarn, node.Location(), msg)
+		}
+		if lintWarn != nil && !doesFromCaseMatchAsCase(req) {
+			msg := linter.RuleFromAsCasing.Format(req.command, req.args[1])
+			linter.RuleFromAsCasing.Run(lintWarn, node.Location(), msg)
 		}
 		return parseFrom(req)
 	case command.Onbuild:
@@ -831,4 +827,41 @@ func allInstructionNames() []string {
 		i++
 	}
 	return out
+}
+
+func isLowerCased(s string) bool {
+	return s == strings.ToLower(s)
+}
+
+func isUpperCased(s string) bool {
+	return s == strings.ToUpper(s)
+}
+
+func isConsistentCasing(s string) bool {
+	return isLowerCased(s) || isUpperCased(s)
+}
+
+func isValidStageNameCasing(cmdArgs []string) bool {
+	if len(cmdArgs) != 3 {
+		return true
+	}
+	stageName := cmdArgs[2]
+	return isLowerCased(stageName)
+}
+
+func doesFromCaseMatchAsCase(req parseRequest) bool {
+	if len(req.args) < 3 {
+		return true
+	}
+	// consistent casing for the command is handled elsewhere.
+	// If the command is not consistent, there's no need to
+	// add an additional lint warning for the `as` argument.
+	if !isConsistentCasing(req.command) {
+		return true
+	}
+	var lowerCaseCmd = isLowerCased(req.command)
+	if lowerCaseCmd {
+		return isLowerCased(req.args[1])
+	}
+	return isUpperCased(req.args[1])
 }
