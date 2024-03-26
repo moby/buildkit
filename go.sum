@@ -404,8 +404,8 @@ github.com/stretchr/testify v1.8.4 h1:CcVxjf3Q8PM0mHUKJCdn+eZZtm5yQwehR5yeSVQQcU
 github.com/stretchr/testify v1.8.4/go.mod h1:sz/lmYIOXD/1dqDmKjjqLyZ2RngseejIcXlSw2iwfAo=
 github.com/tonistiigi/fsutil v0.0.0-20240301111122-7525a1af2bb5 h1:oZS8KCqAg62sxJkEq/Ppzqrb6EooqzWtL8Oaex7bc5c=
 github.com/tonistiigi/fsutil v0.0.0-20240301111122-7525a1af2bb5/go.mod h1:vbbYqJlnswsbJqWUcJN8fKtBhnEgldDrcagTgnBVKKM=
-github.com/tonistiigi/go-actions-cache v0.0.0-20240227172821-a0b64f338598 h1:DA/NDC0YbMdnfcOSUzAnbUZE6dSM54d+0hrBqG+bOfs=
-github.com/tonistiigi/go-actions-cache v0.0.0-20240227172821-a0b64f338598/go.mod h1:anhKd3mnC1shAbQj1Q4IJ+w6xqezxnyDYlx/yKa7IXM=
+github.com/tonistiigi/go-actions-cache v0.0.0-20240320205438-9794bdbb2fb4 h1:R0lM8Jo3aZL95yjQHWQti7nszllleKBxCs9uyFbykII=
+github.com/tonistiigi/go-actions-cache v0.0.0-20240320205438-9794bdbb2fb4/go.mod h1:anhKd3mnC1shAbQj1Q4IJ+w6xqezxnyDYlx/yKa7IXM=
 github.com/tonistiigi/go-archvariant v1.0.0 h1:5LC1eDWiBNflnTF1prCiX09yfNHIxDC/aukdhCdTyb0=
 github.com/tonistiigi/go-archvariant v1.0.0/go.mod h1:TxFmO5VS6vMq2kvs3ht04iPXtu2rUT/erOnGFYfk5Ho=
 github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea h1:SXhTLE6pb6eld/v/cCndK0AMpt1wiVFb/YYmqB3/QG0=
