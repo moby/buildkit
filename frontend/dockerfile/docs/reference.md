@@ -453,7 +453,7 @@ The exec form is parsed as a JSON array, which means that
 you must use double-quotes (") around words, not single-quotes (').
 
 ```dockerfile
-ENTRYPOINT ["/bin/bash", "-c", "echo", "hello"]
+ENTRYPOINT ["/bin/bash", "-c", "echo hello"]
 ```
 
 The exec form is best used to specify an `ENTRYPOINT` instruction, combined
