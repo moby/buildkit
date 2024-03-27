@@ -564,8 +564,10 @@ The image can be any valid image.
   `FROM` instruction. Each `FROM` instruction clears any state created by previous
   instructions.
 - Optionally a name can be given to a new build stage by adding `AS name` to the
-  `FROM` instruction. The name can be used in subsequent `FROM` and
-  `COPY --from=<name>` instructions to refer to the image built in this stage.
+  `FROM` instruction. The name can be used in subsequent `FROM <name>`,
+  [`COPY --from=<name>`](#copy---from),
+  and [`RUN --mount=type=bind,from=<name>`](#run---mounttypebind) instructions
+  to refer to the image built in this stage.
 - The `tag` or `digest` values are optional. If you omit either of them, the
   builder assumes a `latest` tag by default. The builder returns an error if it
   can't find the `tag` value.
@@ -1361,6 +1363,7 @@ COPY [OPTIONS] ["<src>", ... "<dest>"]
 
 The available `[OPTIONS]` are:
 
+- [`--from`](#copy---from)
 - [`--chown`](#copy---chown---chmod)
 - [`--chmod`](#copy---chown---chmod)
 - [`--link`](#copy---link)
@@ -1461,6 +1464,42 @@ attempted to be used instead.
 > See the [Dockerfile Best Practices
 > guide – Leverage build cache](https://docs.docker.com/develop/develop-images/dockerfile_best-practices/#leverage-build-cache)
 > for more information.
+
+### COPY --from
+
+By default, the `COPY` instruction copies files from the build context. The
+`COPY --from` flag lets you copy files from an image, a build stage,
+or a named context instead.
+
+```dockerfile
+COPY [--from=<image|stage|context>] <src> ... <dest>
+```
+
+To copy from a build stage in a
+[multi-stage build](https://docs.docker.com/build/building/multi-stage/),
+specify the name of the stage you want to copy from. You specify stage names
+using the `AS` keyword with the `FROM` instruction.
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM alpine AS build
+COPY . .
+RUN apk add clang
+RUN clang -o /hello hello.c
+
+FROM scratch
+COPY --from=build /hello /
+```
+
+You can also copy files directly from other images. The following example
+copies an `nginx.conf` file from the official Nginx image.
+
+```dockerfile
+COPY --from=nginx:latest /etc/nginx/nginx.conf /nginx.conf
+```
+
+The source path of `COPY --from` is always resolved from filesystem root of the
+image or stage that you specify.
 
 ### COPY --chown --chmod
 
