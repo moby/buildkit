@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -233,6 +234,8 @@ func (r *receiver) run(ctx context.Context) error {
 }
 
 func (r *receiver) asyncDataFunc(ctx context.Context, p string, wc io.WriteCloser) error {
+	// normalize Windows path
+	p = filepath.ToSlash(p)
 	r.mu.Lock()
 	id, ok := r.files[p]
 	if !ok {

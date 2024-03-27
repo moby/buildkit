@@ -3,6 +3,7 @@ package fsutil
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"syscall"
@@ -27,7 +28,16 @@ func (v *Validator) HandleChange(kind ChangeKind, p string, fi os.FileInfo, err 
 	if v.parentDirs == nil {
 		v.parentDirs = make([]parent, 1, 10)
 	}
-	if p != filepath.Clean(p) {
+	cleanPath := true
+	if runtime.GOOS == "windows" {
+		// windows paths could either be \\ or / separated
+		// and filepath.Clean() returns \\ for either
+		p_ := filepath.FromSlash(p)
+		cleanPath = p_ == filepath.Clean(p_)
+	} else {
+		cleanPath = p == filepath.Clean(p)
+	}
+	if !cleanPath {
 		return errors.WithStack(&os.PathError{Path: p, Err: syscall.EINVAL, Op: "unclean path"})
 	}
 	if filepath.IsAbs(p) {
