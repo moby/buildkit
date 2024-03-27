@@ -1429,10 +1429,10 @@ attempted to be used instead.
 
 `COPY` obeys the following rules:
 
-- The `<src>` path must be inside the build context;
-  you can't use `COPY ../something /something`, because the builder can only
-  access files from the context, and `../something` specifies a parent file or
-  directory of the build context root.
+- The `<src>` path is resolved relative to the build context.
+  If you specify a relative path leading outside of the build context, such as
+  `COPY ../something /something`, parent directory paths are stripped out automatically.
+  The effective source path in this example becomes `COPY something /something`
 
 - If `<src>` is a directory, the entire contents of the directory are copied,
   including filesystem metadata.
