@@ -786,7 +786,7 @@ with support for passphrases.
 | `uid`      | User ID for socket. Default `0`.                                                               |
 | `gid`      | Group ID for socket. Default `0`.                                                              |
 
-#### Example: access to Gitlab
+#### Example: access to GitLab
 
 ```dockerfile
 # syntax=docker/dockerfile:1
