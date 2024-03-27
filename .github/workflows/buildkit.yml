@@ -113,6 +113,7 @@ jobs:
           name: buildkit-${{ env.PLATFORM_PAIR }}
           path: ${{ env.DESTDIR }}/*
           if-no-files-found: error
+          retention-days: 1
 
   test:
     uses: ./.github/workflows/.test.yml
