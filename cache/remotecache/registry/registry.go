@@ -38,6 +38,7 @@ const (
 	attrRef           = "ref"
 	attrImageManifest = "image-manifest"
 	attrOCIMediatypes = "oci-mediatypes"
+	attrRoots         = "roots"
 	attrInsecure      = "registry.insecure"
 )
 
@@ -84,6 +85,14 @@ func ResolveCacheExporterFunc(sm *session.Manager, hosts docker.RegistryHosts) r
 			}
 			insecure = b
 		}
+		roots := false
+		if v, ok := attrs[attrRoots]; ok {
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to parse %s", attrRoots)
+			}
+			roots = b
+		}
 
 		scope, hosts := registryConfig(hosts, ref, "push", insecure)
 		remote := resolver.DefaultPool.GetResolver(hosts, refString, scope, sm, g)
@@ -91,7 +100,7 @@ func ResolveCacheExporterFunc(sm *session.Manager, hosts docker.RegistryHosts) r
 		if err != nil {
 			return nil, err
 		}
-		return &exporter{remotecache.NewExporter(contentutil.FromPusher(pusher), refString, ociMediatypes, imageManifest, compressionConfig)}, nil
+		return &exporter{remotecache.NewExporter(contentutil.FromPusher(pusher), refString, ociMediatypes, imageManifest, compressionConfig, roots)}, nil
 	}
 }
 
