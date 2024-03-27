@@ -174,6 +174,7 @@ var allTests = integration.TestFuncs(
 	testNilProvenance,
 	testDuplicatePlatformProvenance,
 	testDockerIgnoreMissingProvenance,
+	testBaseImageLayersFromCachedBuild,
 	testCommandSourceMapping,
 	testSBOMScannerArgs,
 	testMultiPlatformWarnings,

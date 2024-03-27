@@ -1480,3 +1480,159 @@ RUN date +%s > /b.txt
 	require.NotNil(t, layers)
 	require.Len(t, layers, 1)
 }
+
+func testBaseImageLayersFromCachedBuild(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dockerfile := []byte(`FROM alpine
+RUN cat /dev/urandom | head -c 100 | sha256sum > unique
+WORKDIR /tmp
+COPY foo foo2`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte("data"), 0600),
+	)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	target := registry + "/buildkit/testbasecached:latest"
+	targetCache := registry + "/buildkit/testbasecached:cache"
+	f := getFrontend(t, sb)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"attest:provenance": "mode=max",
+		},
+		CacheExports: []client.CacheOptionsEntry{
+			{
+				Type: "registry",
+				Attrs: map[string]string{
+					"ref":   targetCache,
+					"roots": "true",
+				},
+			},
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	err = c.Prune(sb.Context(), nil, client.PruneAll)
+	require.NoError(t, err)
+
+	desc, provider, err := contentutil.ProviderFromRef(target)
+	require.NoError(t, err)
+
+	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(imgs.Images))
+
+	expPlatform := platforms.Format(platforms.Normalize(platforms.DefaultSpec()))
+
+	img := imgs.Find(expPlatform)
+	require.NotNil(t, img)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"attest:provenance": "mode=max",
+		},
+		CacheImports: []client.CacheOptionsEntry{
+			{
+				Type: "registry",
+				Attrs: map[string]string{
+					"ref": targetCache,
+				},
+			},
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target + "2",
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	desc, provider, err = contentutil.ProviderFromRef(target + "2")
+	require.NoError(t, err)
+
+	imgs, err = testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(imgs.Images))
+
+	img2 := imgs.Find(expPlatform)
+	require.NotNil(t, img)
+
+	require.Equal(t, img2.Desc.Digest, img.Desc.Digest)
+
+	att := imgs.FindAttestation(expPlatform)
+	type stmtT struct {
+		Predicate provenancetypes.ProvenancePredicate `json:"predicate"`
+	}
+	var stmt stmtT
+	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
+	pred := stmt.Predicate
+
+	def := pred.BuildConfig.Definition
+
+	// look up base image step, usually step0
+	var baseStep string
+	for _, step := range def {
+		src := step.Op.GetSource()
+		if src == nil {
+			continue
+		}
+		if strings.HasPrefix(src.Identifier, "docker-image://docker.io/library/alpine:latest@sha256:") {
+			if baseStep != "" {
+				t.Fatalf("found multiple base steps: %s and %s", baseStep, step.ID)
+			}
+			baseStep = step.ID
+		}
+	}
+	require.NotEmpty(t, baseStep)
+
+	layers := pred.Metadata.BuildKitMetadata.Layers
+
+	baseLayers, ok := layers[baseStep+":0"]
+	require.True(t, ok)
+
+	require.Len(t, baseLayers, 1)
+
+	descs := baseLayers[0]
+	require.GreaterOrEqual(t, len(descs), 1)
+
+	for _, desc := range descs {
+		require.NoError(t, desc.Digest.Validate())
+		require.NotEmpty(t, desc.Size)
+		require.NotEmpty(t, desc.MediaType)
+	}
+}
