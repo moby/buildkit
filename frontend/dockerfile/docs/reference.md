@@ -2480,15 +2480,11 @@ ONBUILD ADD . /app/src
 ONBUILD RUN /usr/local/bin/python-build --dir /app/src
 ```
 
-> **Warning**
->
-> Chaining `ONBUILD` instructions using `ONBUILD ONBUILD` isn't allowed.
-{ .warning }
+### ONBUILD limitations
 
-> **Warning**
->
-> The `ONBUILD` instruction may not trigger `FROM` or `MAINTAINER` instructions.
-{ .warning }
+- Chaining `ONBUILD` instructions using `ONBUILD ONBUILD` isn't allowed.
+- The `ONBUILD` instruction may not trigger `FROM` or `MAINTAINER` instructions.
+- `ONBUILD COPY --from` is [not supported](https://github.com/moby/buildkit/issues/816).
 
 ## STOPSIGNAL
 
