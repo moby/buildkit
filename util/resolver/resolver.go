@@ -141,8 +141,13 @@ func NewRegistryConfig(m map[string]config.RegistryConfig) docker.RegistryHosts 
 				host = "registry-1.docker.io"
 			}
 
+			schema := "https"
+			if c.PlainHTTP != nil && *c.PlainHTTP {
+				schema = "http"
+			}
+
 			h := docker.RegistryHost{
-				Scheme:       "https",
+				Scheme:       schema,
 				Client:       newDefaultClient(),
 				Host:         host,
 				Path:         "/v2",
