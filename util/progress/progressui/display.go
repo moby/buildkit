@@ -1056,6 +1056,7 @@ func (disp *ttyDisplay) print(d displayInfo, width, height int, all bool) {
 		lineCount++
 		if j.showTerm {
 			term := j.vertex.term
+			termHeight = max(termHeightMin, min(termHeight, height-termHeightMin-1))
 			term.Resize(termHeight, width-termPad)
 			for _, l := range term.Content {
 				if !isEmpty(l) {
