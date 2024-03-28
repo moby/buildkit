@@ -29,6 +29,7 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -178,74 +179,105 @@ func (e *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	return e.FinalizeWithChain(ctx, cacheConfig, descs)
+}
 
-	for i, l := range cacheConfig.Layers {
-		dgstPair, ok := descs[l.Blob]
-		if !ok {
-			return nil, errors.Errorf("missing blob %s", l.Blob)
-		}
-		if dgstPair.Descriptor.Annotations == nil {
-			return nil, errors.Errorf("invalid descriptor without annotations")
-		}
-		v, ok := dgstPair.Descriptor.Annotations[labels.LabelUncompressed]
-		if !ok {
-			return nil, errors.Errorf("invalid descriptor without uncompressed annotation")
-		}
-		diffID, err := digest.Parse(v)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to parse uncompressed annotation")
-		}
+func (e *exporter) FinalizeWithChain(ctx context.Context, cacheConfig *v1.CacheConfig, descs v1.DescriptorProvider) (map[string]string, error) {
+	if err := e.finalizeBlobs(ctx, cacheConfig, descs); err != nil {
+		return nil, err
+	}
+	return nil, e.finalizeManifest(ctx, cacheConfig)
+}
 
-		key := e.s3Client.blobKey(dgstPair.Descriptor.Digest)
-		exists, err := e.s3Client.exists(ctx, key)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to check file presence in cache")
+func (e *exporter) finalizeBlobs(ctx context.Context, cacheConfig *v1.CacheConfig, descs v1.DescriptorProvider) error {
+	g, ctx := errgroup.WithContext(ctx)
+	parallelism := 5
+	tasks := make(chan int, parallelism)
+	go func() {
+		for i := range cacheConfig.Layers {
+			tasks <- i
 		}
-		if exists != nil {
-			if time.Since(*exists) > e.config.TouchRefresh {
-				err = e.s3Client.touch(ctx, key)
-				if err != nil {
-					return nil, errors.Wrapf(err, "failed to touch file")
+		close(tasks)
+	}()
+
+	for i := 0; i < parallelism; i++ {
+		g.Go(func() error {
+			for l := range tasks {
+
+				dgstPair, ok := descs[l.Blob]
+				if !ok {
+					return errors.Errorf("missing blob %s", l.Blob)
 				}
-			}
-		} else {
-			layerDone := progress.OneOff(ctx, fmt.Sprintf("writing layer %s", l.Blob))
-			dt, err := content.ReadBlob(ctx, dgstPair.Provider, dgstPair.Descriptor)
-			if err != nil {
-				return nil, layerDone(err)
-			}
-			if err := e.s3Client.saveMutable(ctx, key, dt); err != nil {
-				return nil, layerDone(errors.Wrap(err, "error writing layer blob"))
-			}
-			layerDone(nil)
-		}
+				if dgstPair.Descriptor.Annotations == nil {
+					return errors.Errorf("invalid descriptor without annotations")
+				}
+				v, ok := dgstPair.Descriptor.Annotations[labels.LabelUncompressed]
+				if !ok {
+					return errors.Errorf("invalid descriptor without uncompressed annotation")
+				}
+				diffID, err := digest.Parse(v)
+				if err != nil {
+					return errors.Wrapf(err, "failed to parse uncompressed annotation")
+				}
 
-		la := &v1.LayerAnnotations{
-			DiffID:    diffID,
-			Size:      dgstPair.Descriptor.Size,
-			MediaType: dgstPair.Descriptor.MediaType,
-		}
-		if v, ok := dgstPair.Descriptor.Annotations["buildkit/createdat"]; ok {
-			var t time.Time
-			if err := (&t).UnmarshalText([]byte(v)); err != nil {
-				return nil, err
+				key := e.s3Client.blobKey(dgstPair.Descriptor.Digest)
+				exists, err := e.s3Client.exists(ctx, key)
+				if err != nil {
+					return errors.Wrapf(err, "failed to check file presence in cache")
+				}
+
+				if exists != nil {
+					if time.Since(*exists) > e.config.TouchRefresh {
+						err = e.s3Client.touch(ctx, key)
+						if err != nil {
+							return errors.Wrapf(err, "failed to touch file")
+						}
+					}
+				} else {
+					layerDone := progress.OneOff(ctx, fmt.Sprintf("writing layer %s", l.Blob))
+					dt, err := content.ReadBlob(ctx, dgstPair.Provider, dgstPair.Descriptor)
+					if err != nil {
+						return layerDone(err)
+					}
+					if err := e.s3Client.saveMutable(ctx, key, dt); err != nil {
+						return layerDone(errors.Wrap(err, "error writing layer blob"))
+					}
+					layerDone(nil)
+				}
+
+				la := &v1.LayerAnnotations{
+					DiffID:    diffID,
+					Size:      dgstPair.Descriptor.Size,
+					MediaType: dgstPair.Descriptor.MediaType,
+				}
+				if v, ok := dgstPair.Descriptor.Annotations["buildkit/createdat"]; ok {
+					var t time.Time
+					if err := (&t).UnmarshalText([]byte(v)); err != nil {
+						return err
+					}
+					la.CreatedAt = t.UTC()
+				}
+				cacheConfig.Layers[i].Annotations = la
+				return nil
 			}
-			la.CreatedAt = t.UTC()
-		}
-		cacheConfig.Layers[i].Annotations = la
+		})
 	}
 
+	return g.Wait()
+}
+
+func (e *exporter) finalizeManifest(ctx context.Context, cacheConfig *v1.CacheConfig) error {
 	dt, err := json.Marshal(cacheConfig)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	for _, name := range e.config.Names {
 		if err := e.s3Client.saveMutable(ctx, e.s3Client.manifestKey(name), dt); err != nil {
-			return nil, errors.Wrapf(err, "error writing manifest: %s", name)
+			return errors.Wrapf(err, "error writing manifest: %s", name)
 		}
 	}
-	return nil, nil
+	return nil
 }
 
 // ResolveCacheImporterFunc for s3 cache importer.
@@ -268,7 +300,7 @@ type importer struct {
 	config   Config
 }
 
-func (i *importer) makeDescriptorProviderPair(l v1.CacheLayer) (*v1.DescriptorProviderPair, error) {
+func (s3Client *s3Client) makeDescriptorProviderPair(l v1.CacheLayer) (*v1.DescriptorProviderPair, error) {
 	if l.Annotations == nil {
 		return nil, errors.Errorf("cache layer with missing annotations")
 	}
@@ -285,7 +317,7 @@ func (i *importer) makeDescriptorProviderPair(l v1.CacheLayer) (*v1.DescriptorPr
 		annotations["buildkit/createdat"] = string(txt)
 	}
 	return &v1.DescriptorProviderPair{
-		Provider: i.s3Client,
+		Provider: s3Client,
 		Descriptor: ocispecs.Descriptor{
 			MediaType:   l.Annotations.MediaType,
 			Digest:      l.Blob,
@@ -308,7 +340,7 @@ func (i *importer) load(ctx context.Context) (*v1.CacheChains, error) {
 	allLayers := v1.DescriptorProvider{}
 
 	for _, l := range config.Layers {
-		dpp, err := i.makeDescriptorProviderPair(l)
+		dpp, err := i.s3Client.makeDescriptorProviderPair(l)
 		if err != nil {
 			return nil, err
 		}
@@ -476,4 +508,44 @@ func isNotFound(err error) bool {
 	var nf *s3types.NotFound
 	var nsk *s3types.NoSuchKey
 	return errors.As(err, &nf) || errors.As(err, &nsk)
+}
+
+type listAllObjectOption func(*s3.ListObjectsV2Input)
+
+func PageSize(size int) func(*s3.ListObjectsV2Input) {
+	return func(lovo *s3.ListObjectsV2Input) {
+		lovo.MaxKeys = int32(size)
+	}
+}
+
+func (s3Client *s3Client) ListAllOjectsV2Prefix(
+	ctx context.Context,
+	prefix string,
+	fn func(*s3.ListObjectsV2Output) (bool, error),
+	opts ...listAllObjectOption,
+) error {
+	q := &s3.ListObjectsV2Input{
+		Bucket: &s3Client.bucket,
+		Prefix: &prefix,
+	}
+
+	for {
+		out, err := s3Client.ListObjectsV2(ctx, q)
+		if err != nil {
+			return err
+		}
+		conti, err := fn(out)
+		if err != nil {
+			return err
+		}
+		if conti == false {
+			break
+		}
+		if out.ContinuationToken != nil {
+			q.ContinuationToken = out.ContinuationToken
+			continue
+		}
+		break
+	}
+	return nil
 }
