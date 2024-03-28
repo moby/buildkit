@@ -182,14 +182,12 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		return nil, err
 	}
 
-	// Moby still uses the `dockerfile.PrintWarnings` method to print warnings,
-	// which prevents us from meaningfully refactoring the `parser.Parse` method
-	// to accept a lint warning callback in the same way that the `instructions.Parse`
-	// method does. As a result, we need to manually iterate over the warnings
-	// and call the lint warning callback for each one.
+	// Moby still uses the `dockerfile.PrintWarnings` method to print non-empty
+	// continuation line warnings. We iterate over those warnings here.
 	for _, warning := range dockerfile.Warnings {
 		// The `dockerfile.Warnings` *should* only contain warnings about empty continuation
-		// lines, but we'll check the warning message to be sure.
+		// lines, but we'll check the warning message to be sure, so that we don't accidentally
+		// process warnings that are not related to empty continuation lines twice.
 		if warning.URL == linter.RuleNoEmptyContinuations.URL {
 			location := []parser.Range{*warning.Location}
 			msg := linter.RuleNoEmptyContinuations.Format()
