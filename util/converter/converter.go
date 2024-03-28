@@ -124,9 +124,10 @@ func (c *conversion) convert(ctx context.Context, cs content.Store, desc ocispec
 		return nil, err
 	}
 	defer decR.Close()
-	rdr := decR
+	decTR := io.TeeReader(decR, origDiffID.Hash())
+	rdr := decTR
 	if c.rewriteTimestamp != nil {
-		tcR := tarconverter.NewReader(io.TeeReader(decR, origDiffID.Hash()), rewriteTimestampInTarHeader(*c.rewriteTimestamp))
+		tcR := tarconverter.NewReader(decTR, rewriteTimestampInTarHeader(*c.rewriteTimestamp))
 		defer tcR.Close()
 		rdr = tcR
 	}
@@ -138,6 +139,9 @@ func (c *conversion) convert(ctx context.Context, cs content.Store, desc ocispec
 	}
 	if err := bufW.Flush(); err != nil { // Flush the buffer
 		return nil, errors.Wrap(err, "failed to flush diff during conversion")
+	}
+	if _, err := io.Copy(io.Discard, decTR); err != nil { // Complete origDiffID computation
+		return nil, err
 	}
 	origDiffIDVal := origDiffID.Digest()
 	if _, ok := c.immDiffIDs[origDiffIDVal]; ok {
