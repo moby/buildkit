@@ -22,6 +22,7 @@ import (
 	"github.com/moby/buildkit/client/llb/imagemetaresolver"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
+	"github.com/moby/buildkit/frontend/dockerfile/linter"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/moby/buildkit/frontend/dockerui"
@@ -62,7 +63,7 @@ type ConvertOpt struct {
 	TargetPlatform *ocispecs.Platform
 	MetaResolver   llb.ImageMetaResolver
 	LLBCaps        *apicaps.CapSet
-	Warn           func(short, url string, detail [][]byte, location *parser.Range)
+	Warn           func(short, url string, detail [][]byte, location []parser.Range)
 }
 
 type SBOMTargets struct {
@@ -114,7 +115,8 @@ func ListTargets(ctx context.Context, dt []byte) (*targets.List, error) {
 	if err != nil {
 		return nil, err
 	}
-	stages, _, err := instructions.Parse(dockerfile.AST)
+
+	stages, _, err := instructions.Parse(dockerfile.AST, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +162,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	}
 
 	if opt.Warn == nil {
-		opt.Warn = func(string, string, [][]byte, *parser.Range) {}
+		opt.Warn = func(string, string, [][]byte, []parser.Range) {}
 	}
 
 	if opt.Client != nil && opt.LLBCaps == nil {
@@ -180,13 +182,31 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		return nil, err
 	}
 
-	for _, w := range dockerfile.Warnings {
-		opt.Warn(w.Short, w.URL, w.Detail, w.Location)
+	// Moby still uses the `dockerfile.PrintWarnings` method to print warnings,
+	// which prevents us from meaningfully refactoring the `parser.Parse` method
+	// to accept a lint warning callback in the same way that the `instructions.Parse`
+	// method does. As a result, we need to manually iterate over the warnings
+	// and call the lint warning callback for each one.
+	for _, warning := range dockerfile.Warnings {
+		// The `dockerfile.Warnings` *should* only contain warnings about empty continuation
+		// lines, but we'll check the warning message to be sure.
+		if warning.URL == linter.RuleNoEmptyContinuations.URL {
+			location := []parser.Range{*warning.Location}
+			msg := linter.RuleNoEmptyContinuations.Format()
+			linter.RuleNoEmptyContinuations.Run(opt.Warn, location, msg)
+		}
+	}
+
+	for _, node := range dockerfile.AST.Children {
+		if !isConsistentCasing(node.Value) {
+			msg := linter.RuleCommandCasing.Format(node.Value)
+			linter.RuleCommandCasing.Run(opt.Warn, node.Location(), msg)
+		}
 	}
 
 	proxyEnv := proxyEnvFromBuildArgs(opt.BuildArgs)
 
-	stages, metaArgs, err := instructions.Parse(dockerfile.AST)
+	stages, metaArgs, err := instructions.Parse(dockerfile.AST, opt.Warn)
 	if err != nil {
 		return nil, err
 	}
@@ -1927,4 +1947,8 @@ func isEnabledForStage(stage string, value string) bool {
 		}
 	}
 	return false
+}
+
+func isConsistentCasing(s string) bool {
+	return s == strings.ToLower(s) || s == strings.ToUpper(s)
 }

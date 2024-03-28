@@ -15,6 +15,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/strslice"
 	"github.com/moby/buildkit/frontend/dockerfile/command"
+	"github.com/moby/buildkit/frontend/dockerfile/linter"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/util/suggest"
 	"github.com/pkg/errors"
@@ -66,8 +67,12 @@ func newParseRequestFromNode(node *parser.Node) parseRequest {
 	}
 }
 
-// ParseInstruction converts an AST to a typed instruction (either a command or a build stage beginning when encountering a `FROM` statement)
 func ParseInstruction(node *parser.Node) (v interface{}, err error) {
+	return ParseInstructionWithLinter(node, nil)
+}
+
+// ParseInstruction converts an AST to a typed instruction (either a command or a build stage beginning when encountering a `FROM` statement)
+func ParseInstructionWithLinter(node *parser.Node, lintWarn linter.LintWarnFunc) (v interface{}, err error) {
 	defer func() {
 		err = parser.WithLocation(err, node.Location())
 	}()
@@ -84,6 +89,14 @@ func ParseInstruction(node *parser.Node) (v interface{}, err error) {
 	case command.Copy:
 		return parseCopy(req)
 	case command.From:
+		if lintWarn != nil && !isValidStageNameCasing(req.args) {
+			msg := linter.RuleStageNameCasing.Format(req.args[2])
+			linter.RuleStageNameCasing.Run(lintWarn, node.Location(), msg)
+		}
+		if lintWarn != nil && !doesFromCaseMatchAsCase(req) {
+			msg := linter.RuleFromAsCasing.Format(req.command, req.args[1])
+			linter.RuleFromAsCasing.Run(lintWarn, node.Location(), msg)
+		}
 		return parseFrom(req)
 	case command.Onbuild:
 		return parseOnBuild(req)
@@ -150,9 +163,9 @@ func (e *parseError) Unwrap() error {
 
 // Parse a Dockerfile into a collection of buildable stages.
 // metaArgs is a collection of ARG instructions that occur before the first FROM.
-func Parse(ast *parser.Node) (stages []Stage, metaArgs []ArgCommand, err error) {
+func Parse(ast *parser.Node, lint linter.LintWarnFunc) (stages []Stage, metaArgs []ArgCommand, err error) {
 	for _, n := range ast.Children {
-		cmd, err := ParseInstruction(n)
+		cmd, err := ParseInstructionWithLinter(n, lint)
 		if err != nil {
 			return nil, nil, &parseError{inner: err, node: n}
 		}
@@ -814,4 +827,41 @@ func allInstructionNames() []string {
 		i++
 	}
 	return out
+}
+
+func isLowerCased(s string) bool {
+	return s == strings.ToLower(s)
+}
+
+func isUpperCased(s string) bool {
+	return s == strings.ToUpper(s)
+}
+
+func isConsistentCasing(s string) bool {
+	return isLowerCased(s) || isUpperCased(s)
+}
+
+func isValidStageNameCasing(cmdArgs []string) bool {
+	if len(cmdArgs) != 3 {
+		return true
+	}
+	stageName := cmdArgs[2]
+	return isLowerCased(stageName)
+}
+
+func doesFromCaseMatchAsCase(req parseRequest) bool {
+	if len(req.args) < 3 {
+		return true
+	}
+	// consistent casing for the command is handled elsewhere.
+	// If the command is not consistent, there's no need to
+	// add an additional lint warning for the `as` argument.
+	if !isConsistentCasing(req.command) {
+		return true
+	}
+	var lowerCaseCmd = isLowerCased(req.command)
+	if lowerCaseCmd {
+		return isLowerCased(req.args[1])
+	}
+	return isUpperCased(req.args[1])
 }

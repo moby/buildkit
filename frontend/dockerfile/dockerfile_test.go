@@ -176,6 +176,7 @@ var allTests = integration.TestFuncs(
 	testDockerIgnoreMissingProvenance,
 	testSBOMScannerArgs,
 	testMultiPlatformWarnings,
+	testLintWarnings,
 	testNilContextInSolveGateway,
 	testCopyUnicodePath,
 	testFrontendDeduplicateSources,
@@ -6764,6 +6765,82 @@ ARG BUILDKIT_SBOM_SCAN_STAGE=true
 	require.Equal(t, 1, len(att.LayersRaw))
 }
 
+func testLintWarnings(t *testing.T, sb integration.Sandbox) {
+	testLintStageName(t, sb)
+	testLintNoEmptyContinuations(t, sb)
+	testCommandCasing(t, sb)
+}
+
+func testLintStageName(t *testing.T, sb integration.Sandbox) {
+	dockerfile := []byte(`
+# warning: stage name should be lowercase
+FROM scratch AS BadStageName
+
+# warning: 'as' should match 'FROM' cmd casing.
+FROM scratch as base2
+
+# warning: 'AS' should match 'from' cmd casing.
+from scratch AS base3
+
+FROM scratch AS base4
+from scratch as base5
+`)
+	compareLintWarnings(t, sb, dockerfile, []expectedLintWarning{
+		{
+			Short:  "Lint Rule 'StageNameCasing': Stage name 'BadStageName' should be lowercase (line 3)",
+			Detail: "Stage names should be lowercase",
+			Level:  1,
+		},
+		{
+			Short:  "Lint Rule 'FromAsCasing': 'as' and 'FROM' keywords' casing do not match (line 6)",
+			Detail: "The 'as' keyword should match the case of the 'from' keyword",
+			Level:  1,
+		},
+		{
+			Short:  "Lint Rule 'FromAsCasing': 'AS' and 'from' keywords' casing do not match (line 9)",
+			Detail: "The 'as' keyword should match the case of the 'from' keyword",
+			Level:  1,
+		},
+	})
+}
+
+func testLintNoEmptyContinuations(t *testing.T, sb integration.Sandbox) {
+	dockerfile := []byte(`
+FROM scratch
+# warning: empty continuation line
+COPY Dockerfile \
+
+.
+COPY Dockerfile \
+.
+`)
+
+	compareLintWarnings(t, sb, dockerfile, []expectedLintWarning{
+		{
+			Short:  "Lint Rule 'NoEmptyContinuations': Empty continuation line (line 6)",
+			Detail: "Empty continuation lines will become errors in a future release",
+			URL:    "https://github.com/moby/moby/pull/33719",
+			Level:  1,
+		},
+	})
+}
+
+func testCommandCasing(t *testing.T, sb integration.Sandbox) {
+	dockerfile := []byte(`
+# warning: 'FROM' should be either lowercased or uppercased
+From scratch as base
+FROM scratch AS base2
+from scratch as base3
+`)
+	compareLintWarnings(t, sb, dockerfile, []expectedLintWarning{
+		{
+			Short:  "Lint Rule 'CommandCasing': Command 'From' should be consistently cased (line 3)",
+			Detail: "Commands should be in consistent casing (all lower or all upper)",
+			Level:  1,
+		},
+	})
+}
+
 // #3495
 func testMultiPlatformWarnings(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
@@ -6831,7 +6908,7 @@ COPY Dockerfile \
 
 	w := warnings[0]
 
-	require.Equal(t, "Empty continuation line found in: COPY Dockerfile .", string(w.Short))
+	require.Equal(t, "Lint Rule 'NoEmptyContinuations': Empty continuation line (line 5)", string(w.Short))
 	require.Equal(t, 1, len(w.Detail))
 	require.Equal(t, "Empty continuation lines will become errors in a future release", string(w.Detail[0]))
 	require.Equal(t, "https://github.com/moby/moby/pull/33719", w.URL)
@@ -6959,6 +7036,82 @@ RUN rm -f /foo-2030.1
 	}
 	for _, l := range manifest2.Layers {
 		require.Empty(t, l.Annotations["buildkit/rewritten-timestamp"])
+	}
+}
+
+func compareLintWarnings(t *testing.T, sb integration.Sandbox, dockerfile []byte, expected []expectedLintWarning) {
+	// As a note, this test depends on the `expected` lint
+	// warnings to be in order of appearance in the Dockerfile.
+
+	integration.SkipOnPlatform(t, "windows")
+	f := getFrontend(t, sb)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	status := make(chan *client.SolveStatus)
+	statusDone := make(chan struct{})
+	done := make(chan struct{})
+
+	var warnings []*client.VertexWarning
+
+	go func() {
+		defer close(statusDone)
+		for {
+			select {
+			case st, ok := <-status:
+				if !ok {
+					return
+				}
+				warnings = append(warnings, st.Warnings...)
+			case <-done:
+				return
+			}
+		}
+	}()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"platform": "linux/amd64,linux/arm64",
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, status)
+	require.NoError(t, err)
+
+	select {
+	case <-statusDone:
+	case <-time.After(10 * time.Second):
+		close(done)
+	}
+
+	<-statusDone
+
+	// two platforms only show one warning
+	require.Equal(t, len(expected), len(warnings))
+	sort.Slice(warnings, func(i, j int) bool {
+		w1 := warnings[i]
+		w2 := warnings[j]
+		if len(w1.Range) == 0 {
+			return true
+		} else if len(w2.Range) == 0 {
+			return false
+		}
+		return w1.Range[0].Start.Line < w2.Range[0].Start.Line
+	})
+	for i, w := range warnings {
+		require.Equal(t, expected[i].Short, string(w.Short))
+		require.Equal(t, expected[i].Detail, string(w.Detail[0]))
+		require.Equal(t, expected[i].URL, w.URL)
+		require.Equal(t, expected[i].Level, w.Level)
 	}
 }
 
@@ -7331,6 +7484,13 @@ type nopWriteCloser struct {
 }
 
 func (nopWriteCloser) Close() error { return nil }
+
+type expectedLintWarning struct {
+	Short  string
+	Detail string
+	URL    string
+	Level  int
+}
 
 type secModeSandbox struct{}
 
