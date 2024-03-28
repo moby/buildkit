@@ -4,19 +4,13 @@ import (
 	"context"
 	"sync"
 
-	"github.com/moby/buildkit/util/tracing/detect"
+	"github.com/moby/buildkit/client"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 const maxBuffer = 256
 
-var exp = &Exporter{}
-
-func init() {
-	detect.Register("delegated", detect.TraceExporterDetector(func() (sdktrace.SpanExporter, error) {
-		return exp, nil
-	}), 100)
-}
+var DefaultExporter = &Exporter{}
 
 type Exporter struct {
 	mu        sync.Mutex
@@ -24,7 +18,10 @@ type Exporter struct {
 	buffer    []sdktrace.ReadOnlySpan
 }
 
-var _ sdktrace.SpanExporter = &Exporter{}
+var (
+	_ sdktrace.SpanExporter = (*Exporter)(nil)
+	_ client.TracerDelegate = (*Exporter)(nil)
+)
 
 func (e *Exporter) ExportSpans(ctx context.Context, ss []sdktrace.ReadOnlySpan) error {
 	e.mu.Lock()
