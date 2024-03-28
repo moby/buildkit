@@ -12,6 +12,7 @@ import (
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
+	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/labels"
 	"github.com/containerd/containerd/platforms"
@@ -421,6 +422,12 @@ func (ic *ImageWriter) rewriteRemoteWithEpoch(ctx context.Context, opts *ImageCo
 		i, desc := i, desc
 		info, err := cs.Info(ctx, desc.Digest)
 		if err != nil {
+			if errors.Is(err, errdefs.ErrNotFound) {
+				// blobs for base image layers can be missing here
+				// https://github.com/moby/buildkit/issues/4746
+				bklog.G(ctx).WithError(err).Debug("skipping to rewrite")
+				continue
+			}
 			return nil, err
 		}
 		diffID := digest.Digest(info.Labels[labels.LabelUncompressed]) // can be empty
