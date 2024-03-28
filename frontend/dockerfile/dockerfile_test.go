@@ -6856,7 +6856,16 @@ func testReproSourceDateEpoch(t *testing.T, sb integration.Sandbox) {
 	tm := time.Date(2023, time.January, 10, 12, 34, 56, 0, time.UTC) // 1673354096
 	t.Logf("SOURCE_DATE_EPOCH=%d", tm.Unix())
 
-	dockerfile := []byte(`# The base image cannot be busybox, due to https://github.com/moby/buildkit/issues/3455
+	type testCase struct {
+		name           string
+		dockerfile     string
+		files          []fstest.Applier
+		expectedDigest string
+	}
+	testCases := []testCase{
+		{
+			name: "Basic",
+			dockerfile: `# The base image could not be busybox, due to https://github.com/moby/buildkit/issues/3455
 FROM amd64/debian:bullseye-20230109-slim
 RUN touch /foo
 RUN touch /foo.1
@@ -6867,7 +6876,20 @@ RUN touch -d '2030-01-01 12:34:56' /foo-2030.1
 RUN rm -f /foo.1
 RUN rm -f /foo-2010.1
 RUN rm -f /foo-2030.1
-`)
+`,
+			expectedDigest: "sha256:04e5d0cbee3317c79f50494cfeb4d8a728402a970ef32582ee47c62050037e3f",
+		},
+		{
+			// https://github.com/moby/buildkit/issues/4746
+			name: "CopyLink",
+			dockerfile: `FROM amd64/debian:bullseye-20230109-slim
+COPY --link foo foo
+`,
+			files:          []fstest.Applier{fstest.CreateFile("foo", []byte("foo"), 0600)},
+			expectedDigest: "sha256:9f75e4bdbf3d825acb36bb603ddef4a25742afb8ccb674763ffc611ae047d8a6",
+		},
+	}
+
 	// https://explore.ggcr.dev/?image=amd64%2Fdebian%3Abullseye-20230109-slim
 	baseImageLayers := []digest.Digest{
 		"sha256:8740c948ffd4c816ea7ca963f99ca52f4788baa23f228da9581a9ea2edd3fcd7",
@@ -6877,88 +6899,98 @@ RUN rm -f /foo-2030.1
 		timeMustParse(t, time.RFC3339Nano, "2023-01-11T02:34:44.829692296Z"),
 	}
 
-	const expectedDigest = "sha256:04e5d0cbee3317c79f50494cfeb4d8a728402a970ef32582ee47c62050037e3f"
-
-	dir := integration.Tmpdir(
-		t,
-		fstest.CreateFile("Dockerfile", dockerfile, 0600),
-	)
-
 	ctx := sb.Context()
 	c, err := client.New(ctx, sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	target := registry + "/buildkit/testreprosourcedateepoch:" + fmt.Sprintf("%d", tm.Unix())
-	solveOpt := client.SolveOpt{
-		FrontendAttrs: map[string]string{
-			"build-arg:SOURCE_DATE_EPOCH": fmt.Sprintf("%d", tm.Unix()),
-			"platform":                    "linux/amd64",
-		},
-		LocalMounts: map[string]fsutil.FS{
-			dockerui.DefaultLocalNameDockerfile: dir,
-			dockerui.DefaultLocalNameContext:    dir,
-		},
-		Exports: []client.ExportEntry{
-			{
-				Type: client.ExporterImage,
-				Attrs: map[string]string{
-					"name":              target,
-					"push":              "true",
-					"oci-mediatypes":    "true",
-					"rewrite-timestamp": "true",
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := integration.Tmpdir(
+				t,
+				append([]fstest.Applier{fstest.CreateFile("Dockerfile", []byte(tc.dockerfile), 0600)}, tc.files...)...,
+			)
+
+			target := registry + "/buildkit/testreprosourcedateepoch-" + strings.ToLower(tc.name) + ":" + fmt.Sprintf("%d", tm.Unix())
+			solveOpt := client.SolveOpt{
+				FrontendAttrs: map[string]string{
+					"build-arg:SOURCE_DATE_EPOCH": fmt.Sprintf("%d", tm.Unix()),
+					"platform":                    "linux/amd64",
 				},
-			},
-		},
-		CacheExports: []client.CacheOptionsEntry{
-			{
-				Type: "registry",
-				Attrs: map[string]string{
-					"ref":            target + "-cache",
-					"oci-mediatypes": "true",
-					"image-manifest": "true",
+				LocalMounts: map[string]fsutil.FS{
+					dockerui.DefaultLocalNameDockerfile: dir,
+					dockerui.DefaultLocalNameContext:    dir,
 				},
-			},
-		},
-	}
-	_, err = f.Solve(ctx, c, solveOpt, nil)
-	require.NoError(t, err)
+				Exports: []client.ExportEntry{
+					{
+						Type: client.ExporterImage,
+						Attrs: map[string]string{
+							"name":              target,
+							"push":              "true",
+							"oci-mediatypes":    "true",
+							"rewrite-timestamp": "true",
+						},
+					},
+				},
+				CacheExports: []client.CacheOptionsEntry{
+					{
+						Type: "registry",
+						Attrs: map[string]string{
+							"ref":            target + "-cache",
+							"oci-mediatypes": "true",
+							"image-manifest": "true",
+						},
+					},
+				},
+			}
+			_, err = f.Solve(ctx, c, solveOpt, nil)
+			require.NoError(t, err)
 
-	desc, manifest, img := readImage(t, ctx, target)
-	_, cacheManifest, _ := readImage(t, ctx, target+"-cache")
-	t.Log("The digest may change depending on the BuildKit version, the snapshotter configuration, etc.")
-	require.Equal(t, expectedDigest, desc.Digest.String())
+			desc, manifest, img := readImage(t, ctx, target)
+			_, cacheManifest, _ := readImage(t, ctx, target+"-cache")
+			t.Log("The digest may change depending on the BuildKit version, the snapshotter configuration, etc.")
+			require.Equal(t, tc.expectedDigest, desc.Digest.String())
 
-	// Image history from the base config must remain immutable
-	for i, tm := range baseImageHistoryTimestamps {
-		require.True(t, img.History[i].Created.Equal(tm))
-	}
+			// Image history from the base config must remain immutable
+			for i, tm := range baseImageHistoryTimestamps {
+				require.True(t, img.History[i].Created.Equal(tm))
+			}
 
-	// Image layers, *except the base layers*, must have rewritten-timestamp
-	for i, l := range manifest.Layers {
-		if i < len(baseImageLayers) {
-			require.Empty(t, l.Annotations["buildkit/rewritten-timestamp"])
-			require.Equal(t, baseImageLayers[i], l.Digest)
-		} else {
-			require.Equal(t, fmt.Sprintf("%d", tm.Unix()), l.Annotations["buildkit/rewritten-timestamp"])
-		}
-	}
-	// Cache layers must *not* have rewritten-timestamp
-	for _, l := range cacheManifest.Layers {
-		require.Empty(t, l.Annotations["buildkit/rewritten-timestamp"])
-	}
+			// Image layers, *except the base layers*, must have rewritten-timestamp
+			for i, l := range manifest.Layers {
+				if i < len(baseImageLayers) {
+					require.Empty(t, l.Annotations["buildkit/rewritten-timestamp"])
+					require.Equal(t, baseImageLayers[i], l.Digest)
+				} else {
+					require.Equal(t, fmt.Sprintf("%d", tm.Unix()), l.Annotations["buildkit/rewritten-timestamp"])
+				}
+			}
+			// Cache layers must *not* have rewritten-timestamp
+			for _, l := range cacheManifest.Layers {
+				require.Empty(t, l.Annotations["buildkit/rewritten-timestamp"])
+			}
 
-	// Build again, but without rewrite-timestamp
-	solveOpt2 := solveOpt
-	delete(solveOpt2.Exports[0].Attrs, "rewrite-timestamp")
-	_, err = f.Solve(ctx, c, solveOpt2, nil)
-	require.NoError(t, err)
-	_, manifest2, img2 := readImage(t, ctx, target)
-	for i, tm := range baseImageHistoryTimestamps {
-		require.True(t, img2.History[i].Created.Equal(tm))
-	}
-	for _, l := range manifest2.Layers {
-		require.Empty(t, l.Annotations["buildkit/rewritten-timestamp"])
+			// Build again, after pruning the base image layer cache.
+			// For testing https://github.com/moby/buildkit/issues/4746
+			ensurePruneAll(t, c, sb)
+			_, err = f.Solve(ctx, c, solveOpt, nil)
+			require.NoError(t, err)
+			descAfterPrune, _, _ := readImage(t, ctx, target)
+			require.Equal(t, desc.Digest.String(), descAfterPrune.Digest.String())
+
+			// Build again, but without rewrite-timestamp
+			solveOpt2 := solveOpt
+			delete(solveOpt2.Exports[0].Attrs, "rewrite-timestamp")
+			_, err = f.Solve(ctx, c, solveOpt2, nil)
+			require.NoError(t, err)
+			_, manifest2, img2 := readImage(t, ctx, target)
+			for i, tm := range baseImageHistoryTimestamps {
+				require.True(t, img2.History[i].Created.Equal(tm))
+			}
+			for _, l := range manifest2.Layers {
+				require.Empty(t, l.Annotations["buildkit/rewritten-timestamp"])
+			}
+		})
 	}
 }
 
@@ -6978,6 +7010,14 @@ func readImage(t *testing.T, ctx context.Context, ref string) (ocispecs.Descript
 	require.NoError(t, json.Unmarshal(dt, &manifest))
 	imgDt, err := content.ReadBlob(ctx, provider, manifest.Config)
 	require.NoError(t, err)
+	// Verify that all the layer blobs are present
+	for _, layer := range manifest.Layers {
+		layerRA, err := provider.ReaderAt(ctx, layer)
+		require.NoError(t, err)
+		layerDigest, err := layer.Digest.Algorithm().FromReader(content.NewReader(layerRA))
+		require.NoError(t, err)
+		require.Equal(t, layer.Digest, layerDigest)
+	}
 	var img ocispecs.Image
 	require.NoError(t, json.Unmarshal(imgDt, &img))
 	return desc, manifest, img
