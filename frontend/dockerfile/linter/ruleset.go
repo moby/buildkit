@@ -37,8 +37,8 @@ var (
 	RuleFileConsistentCommandCasing = LinterRule[func(string, string) string]{
 		Name:        "FileConsistentCommandCasing",
 		Description: "All commands within the Dockerfile should use the same casing (either upper or lower)",
-		Format: func(firstCommand, violatingCommand string) string {
-			return fmt.Sprintf("Command '%s' should be consistently cased with '%s'", violatingCommand, firstCommand)
+		Format: func(violatingCommand, correctCasing string) string {
+			return fmt.Sprintf("Command '%s' should match the case of the command majority (%s)", violatingCommand, correctCasing)
 		},
 	}
 )

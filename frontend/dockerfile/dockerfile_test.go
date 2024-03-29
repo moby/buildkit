@@ -6856,15 +6856,13 @@ from scratch as base2
 func testFileConsistentCommandCasing(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
 FROM scratch
-
-# warning: 'copy' should match first command's casing (in this case, 'FROM's casing)
+# warning: 'copy' should match command majority's casing (uppercase)
 copy Dockerfile /foo
-
 COPY Dockerfile /bar
 `)
 	checkLintWarnings(t, sb, dockerfile, []expectedLintWarning{
 		{
-			Short:  "Lint Rule 'FileConsistentCommandCasing': Command 'copy' should be consistently cased with 'FROM' (line 5)",
+			Short:  "Lint Rule 'FileConsistentCommandCasing': Command 'copy' should match the case of the command majority (uppercase) (line 4)",
 			Detail: "All commands within the Dockerfile should use the same casing (either upper or lower)",
 			Level:  1,
 		},
@@ -6872,15 +6870,43 @@ COPY Dockerfile /bar
 
 	dockerfile = []byte(`
 from scratch
-
-# warning: 'COPY' should match first command's casing (in this case, 'from's casing)
+# warning: 'COPY' should match command majority's casing (lowercase)
 COPY Dockerfile /foo
-
 copy Dockerfile /bar
 `)
 	checkLintWarnings(t, sb, dockerfile, []expectedLintWarning{
 		{
-			Short:  "Lint Rule 'FileConsistentCommandCasing': Command 'COPY' should be consistently cased with 'from' (line 5)",
+			Short:  "Lint Rule 'FileConsistentCommandCasing': Command 'COPY' should match the case of the command majority (lowercase) (line 4)",
+			Detail: "All commands within the Dockerfile should use the same casing (either upper or lower)",
+			Level:  1,
+		},
+	})
+
+	dockerfile = []byte(`
+# warning: 'from' should match command majority's casing (uppercase)
+from scratch
+COPY Dockerfile /foo
+COPY Dockerfile /bar
+COPY Dockerfile /baz
+`)
+	checkLintWarnings(t, sb, dockerfile, []expectedLintWarning{
+		{
+			Short:  "Lint Rule 'FileConsistentCommandCasing': Command 'from' should match the case of the command majority (uppercase) (line 3)",
+			Detail: "All commands within the Dockerfile should use the same casing (either upper or lower)",
+			Level:  1,
+		},
+	})
+
+	dockerfile = []byte(`
+# warning: 'FROM' should match command majority's casing (lowercase)
+FROM scratch
+copy Dockerfile /foo
+copy Dockerfile /bar
+copy Dockerfile /baz
+`)
+	checkLintWarnings(t, sb, dockerfile, []expectedLintWarning{
+		{
+			Short:  "Lint Rule 'FileConsistentCommandCasing': Command 'FROM' should match the case of the command majority (lowercase) (line 3)",
 			Detail: "All commands within the Dockerfile should use the same casing (either upper or lower)",
 			Level:  1,
 		},
@@ -7078,8 +7104,6 @@ func checkLintWarnings(t *testing.T, sb integration.Sandbox, dockerfile []byte, 
 	case <-time.After(10 * time.Second):
 		t.Fatalf("timed out waiting for statusDone")
 	}
-
-	<-statusDone
 
 	// two platforms only show one warning
 	require.Equal(t, len(expected), len(warnings))
