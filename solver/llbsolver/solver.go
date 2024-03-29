@@ -38,8 +38,6 @@ import (
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
-	"go.opentelemetry.io/otel/sdk/trace/tracetest"
-	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -158,14 +156,9 @@ func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 }
 
 func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend.SolveRequest, exp ExporterRequest, j *solver.Job, usage *resources.SysSampler) (func(*Result, []exporter.DescriptorReference, error) error, error) {
-	var stopTrace func() []tracetest.SpanStub
-
-	if s := trace.SpanFromContext(ctx); s.SpanContext().IsValid() {
-		if exp, _, err := detect.Exporter(); err == nil {
-			if rec, ok := exp.(*detect.TraceRecorder); ok {
-				stopTrace = rec.Record(s.SpanContext().TraceID())
-			}
-		}
+	stopTrace, err := detect.Recorder.Record(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	st := time.Now()
