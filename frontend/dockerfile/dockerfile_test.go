@@ -175,8 +175,10 @@ var allTests = integration.TestFuncs(
 	testDuplicatePlatformProvenance,
 	testDockerIgnoreMissingProvenance,
 	testSBOMScannerArgs,
-	testMultiPlatformWarnings,
-	testLintWarnings,
+	testLintStageName,
+	testLintNoEmptyContinuations,
+	testSelfConsistentCommandCasing,
+	testFileConsistentCommandCasing,
 	testNilContextInSolveGateway,
 	testCopyUnicodePath,
 	testFrontendDeduplicateSources,
@@ -6765,12 +6767,6 @@ ARG BUILDKIT_SBOM_SCAN_STAGE=true
 	require.Equal(t, 1, len(att.LayersRaw))
 }
 
-func testLintWarnings(t *testing.T, sb integration.Sandbox) {
-	testLintStageName(t, sb)
-	testLintNoEmptyContinuations(t, sb)
-	testCommandCasing(t, sb)
-}
-
 func testLintStageName(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
 # warning: stage name should be lowercase
@@ -6779,13 +6775,9 @@ FROM scratch AS BadStageName
 # warning: 'as' should match 'FROM' cmd casing.
 FROM scratch as base2
 
-# warning: 'AS' should match 'from' cmd casing.
-from scratch AS base3
-
-FROM scratch AS base4
-from scratch as base5
+FROM scratch AS base3
 `)
-	compareLintWarnings(t, sb, dockerfile, []expectedLintWarning{
+	checkLintWarnings(t, sb, dockerfile, []expectedLintWarning{
 		{
 			Short:  "Lint Rule 'StageNameCasing': Stage name 'BadStageName' should be lowercase (line 3)",
 			Detail: "Stage names should be lowercase",
@@ -6796,8 +6788,17 @@ from scratch as base5
 			Detail: "The 'as' keyword should match the case of the 'from' keyword",
 			Level:  1,
 		},
+	})
+
+	dockerfile = []byte(`
+# warning: 'AS' should match 'from' cmd casing.
+from scratch AS base
+
+from scratch as base2
+`)
+	checkLintWarnings(t, sb, dockerfile, []expectedLintWarning{
 		{
-			Short:  "Lint Rule 'FromAsCasing': 'AS' and 'from' keywords' casing do not match (line 9)",
+			Short:  "Lint Rule 'FromAsCasing': 'AS' and 'from' keywords' casing do not match (line 3)",
 			Detail: "The 'as' keyword should match the case of the 'from' keyword",
 			Level:  1,
 		},
@@ -6815,7 +6816,7 @@ COPY Dockerfile \
 .
 `)
 
-	compareLintWarnings(t, sb, dockerfile, []expectedLintWarning{
+	checkLintWarnings(t, sb, dockerfile, []expectedLintWarning{
 		{
 			Short:  "Lint Rule 'NoEmptyContinuations': Empty continuation line (line 6)",
 			Detail: "Empty continuation lines will become errors in a future release",
@@ -6825,94 +6826,79 @@ COPY Dockerfile \
 	})
 }
 
-func testCommandCasing(t *testing.T, sb integration.Sandbox) {
+func testSelfConsistentCommandCasing(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
 # warning: 'FROM' should be either lowercased or uppercased
 From scratch as base
 FROM scratch AS base2
-from scratch as base3
 `)
-	compareLintWarnings(t, sb, dockerfile, []expectedLintWarning{
+	checkLintWarnings(t, sb, dockerfile, []expectedLintWarning{
 		{
-			Short:  "Lint Rule 'CommandCasing': Command 'From' should be consistently cased (line 3)",
+			Short:  "Lint Rule 'SelfConsistentCommandCasing': Command 'From' should be consistently cased (line 3)",
+			Detail: "Commands should be in consistent casing (all lower or all upper)",
+			Level:  1,
+		},
+	})
+	dockerfile = []byte(`
+# warning: 'FROM' should be either lowercased or uppercased
+frOM scratch as base
+from scratch as base2
+`)
+	checkLintWarnings(t, sb, dockerfile, []expectedLintWarning{
+		{
+			Short:  "Lint Rule 'SelfConsistentCommandCasing': Command 'frOM' should be consistently cased (line 3)",
 			Detail: "Commands should be in consistent casing (all lower or all upper)",
 			Level:  1,
 		},
 	})
 }
 
-// #3495
-func testMultiPlatformWarnings(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
-	f := getFrontend(t, sb)
-
-	// empty line in here is intentional to cause line continuation warning
+func testFileConsistentCommandCasing(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
 FROM scratch
-COPY Dockerfile \
 
-.
+# warning: 'copy' should match first command's casing (in this case, 'FROM's casing)
+copy Dockerfile /foo
+
+COPY Dockerfile /bar
 `)
-
-	dir := integration.Tmpdir(
-		t,
-		fstest.CreateFile("Dockerfile", dockerfile, 0600),
-	)
-
-	c, err := client.New(sb.Context(), sb.Address())
-	require.NoError(t, err)
-	defer c.Close()
-
-	status := make(chan *client.SolveStatus)
-	statusDone := make(chan struct{})
-	done := make(chan struct{})
-
-	var warnings []*client.VertexWarning
-
-	go func() {
-		defer close(statusDone)
-		for {
-			select {
-			case st, ok := <-status:
-				if !ok {
-					return
-				}
-				warnings = append(warnings, st.Warnings...)
-			case <-done:
-				return
-			}
-		}
-	}()
-
-	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		FrontendAttrs: map[string]string{
-			"platform": "linux/amd64,linux/arm64",
+	checkLintWarnings(t, sb, dockerfile, []expectedLintWarning{
+		{
+			Short:  "Lint Rule 'FileConsistentCommandCasing': Command 'copy' should be consistently cased with 'FROM' (line 5)",
+			Detail: "All commands within the Dockerfile should use the same casing (either upper or lower)",
+			Level:  1,
 		},
-		LocalMounts: map[string]fsutil.FS{
-			dockerui.DefaultLocalNameDockerfile: dir,
-			dockerui.DefaultLocalNameContext:    dir,
+	})
+
+	dockerfile = []byte(`
+from scratch
+
+# warning: 'COPY' should match first command's casing (in this case, 'from's casing)
+COPY Dockerfile /foo
+
+copy Dockerfile /bar
+`)
+	checkLintWarnings(t, sb, dockerfile, []expectedLintWarning{
+		{
+			Short:  "Lint Rule 'FileConsistentCommandCasing': Command 'COPY' should be consistently cased with 'from' (line 5)",
+			Detail: "All commands within the Dockerfile should use the same casing (either upper or lower)",
+			Level:  1,
 		},
-	}, status)
-	require.NoError(t, err)
+	})
 
-	select {
-	case <-statusDone:
-	case <-time.After(10 * time.Second):
-		close(done)
-	}
+	dockerfile = []byte(`
+from scratch
+copy Dockerfile /foo
+copy Dockerfile /bar
+`)
+	checkLintWarnings(t, sb, dockerfile, []expectedLintWarning{})
 
-	<-statusDone
-
-	// two platforms only show one warning
-	require.Equal(t, 1, len(warnings))
-
-	w := warnings[0]
-
-	require.Equal(t, "Lint Rule 'NoEmptyContinuations': Empty continuation line (line 5)", string(w.Short))
-	require.Equal(t, 1, len(w.Detail))
-	require.Equal(t, "Empty continuation lines will become errors in a future release", string(w.Detail[0]))
-	require.Equal(t, "https://github.com/moby/moby/pull/33719", w.URL)
-	require.Equal(t, 1, w.Level)
+	dockerfile = []byte(`
+FROM scratch
+COPY Dockerfile /foo
+COPY Dockerfile /bar
+`)
+	checkLintWarnings(t, sb, dockerfile, []expectedLintWarning{})
 }
 
 func testReproSourceDateEpoch(t *testing.T, sb integration.Sandbox) {
@@ -7039,7 +7025,7 @@ RUN rm -f /foo-2030.1
 	}
 }
 
-func compareLintWarnings(t *testing.T, sb integration.Sandbox, dockerfile []byte, expected []expectedLintWarning) {
+func checkLintWarnings(t *testing.T, sb integration.Sandbox, dockerfile []byte, expected []expectedLintWarning) {
 	// As a note, this test depends on the `expected` lint
 	// warnings to be in order of appearance in the Dockerfile.
 
@@ -7090,7 +7076,7 @@ func compareLintWarnings(t *testing.T, sb integration.Sandbox, dockerfile []byte
 	select {
 	case <-statusDone:
 	case <-time.After(10 * time.Second):
-		close(done)
+		t.Fatalf("timed out waiting for statusDone")
 	}
 
 	<-statusDone

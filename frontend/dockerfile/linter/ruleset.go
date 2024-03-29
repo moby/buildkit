@@ -27,11 +27,18 @@ var (
 			return "Empty continuation line"
 		},
 	}
-	RuleCommandCasing = LinterRule[func(string) string]{
-		Name:        "CommandCasing",
+	RuleSelfConsistentCommandCasing = LinterRule[func(string) string]{
+		Name:        "SelfConsistentCommandCasing",
 		Description: "Commands should be in consistent casing (all lower or all upper)",
 		Format: func(command string) string {
 			return fmt.Sprintf("Command '%s' should be consistently cased", command)
+		},
+	}
+	RuleFileConsistentCommandCasing = LinterRule[func(string, string) string]{
+		Name:        "FileConsistentCommandCasing",
+		Description: "All commands within the Dockerfile should use the same casing (either upper or lower)",
+		Format: func(firstCommand, violatingCommand string) string {
+			return fmt.Sprintf("Command '%s' should be consistently cased with '%s'", violatingCommand, firstCommand)
 		},
 	}
 )

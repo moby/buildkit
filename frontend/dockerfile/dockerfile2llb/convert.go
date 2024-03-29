@@ -195,10 +195,27 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		}
 	}
 
+	var firstConsistentCommand string
+	var isFirstCommandLower bool
+
 	for _, node := range dockerfile.AST.Children {
-		if !isConsistentCasing(node.Value) {
-			msg := linter.RuleCommandCasing.Format(node.Value)
-			linter.RuleCommandCasing.Run(opt.Warn, node.Location(), msg)
+		// Here, we check both if the command is consistent per command (ie, "CMD" or "cmd", not "Cmd")
+		// as well as ensuring that the casing is consistent throughout the dockerfile by comparing the
+		// first self-consistent command to every other command which is self-consistent.
+		if !isSelfConsistentCasing(node.Value) {
+			msg := linter.RuleSelfConsistentCommandCasing.Format(node.Value)
+			linter.RuleSelfConsistentCommandCasing.Run(opt.Warn, node.Location(), msg)
+		} else {
+			isCommandLowercase := strings.ToLower(node.Value) == node.Value
+			if firstConsistentCommand == "" {
+				firstConsistentCommand = node.Value
+				isFirstCommandLower = isCommandLowercase
+			} else {
+				if isCommandLowercase != isFirstCommandLower {
+					msg := linter.RuleFileConsistentCommandCasing.Format(firstConsistentCommand, node.Value)
+					linter.RuleFileConsistentCommandCasing.Run(opt.Warn, node.Location(), msg)
+				}
+			}
 		}
 	}
 
@@ -1947,6 +1964,6 @@ func isEnabledForStage(stage string, value string) bool {
 	return false
 }
 
-func isConsistentCasing(s string) bool {
+func isSelfConsistentCasing(s string) bool {
 	return s == strings.ToLower(s) || s == strings.ToUpper(s)
 }
