@@ -22,6 +22,7 @@ import (
 	"github.com/moby/buildkit/client/llb/imagemetaresolver"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
+	"github.com/moby/buildkit/frontend/dockerfile/linter"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/moby/buildkit/frontend/dockerui"
@@ -62,7 +63,7 @@ type ConvertOpt struct {
 	TargetPlatform *ocispecs.Platform
 	MetaResolver   llb.ImageMetaResolver
 	LLBCaps        *apicaps.CapSet
-	Warn           func(short, url string, detail [][]byte, location *parser.Range)
+	Warn           func(short, url string, detail [][]byte, location []parser.Range)
 }
 
 type SBOMTargets struct {
@@ -114,7 +115,8 @@ func ListTargets(ctx context.Context, dt []byte) (*targets.List, error) {
 	if err != nil {
 		return nil, err
 	}
-	stages, _, err := instructions.Parse(dockerfile.AST)
+
+	stages, _, err := instructions.Parse(dockerfile.AST, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +162,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	}
 
 	if opt.Warn == nil {
-		opt.Warn = func(string, string, [][]byte, *parser.Range) {}
+		opt.Warn = func(string, string, [][]byte, []parser.Range) {}
 	}
 
 	if opt.Client != nil && opt.LLBCaps == nil {
@@ -180,13 +182,24 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		return nil, err
 	}
 
-	for _, w := range dockerfile.Warnings {
-		opt.Warn(w.Short, w.URL, w.Detail, w.Location)
+	// Moby still uses the `dockerfile.PrintWarnings` method to print non-empty
+	// continuation line warnings. We iterate over those warnings here.
+	for _, warning := range dockerfile.Warnings {
+		// The `dockerfile.Warnings` *should* only contain warnings about empty continuation
+		// lines, but we'll check the warning message to be sure, so that we don't accidentally
+		// process warnings that are not related to empty continuation lines twice.
+		if warning.URL == linter.RuleNoEmptyContinuations.URL {
+			location := []parser.Range{*warning.Location}
+			msg := linter.RuleNoEmptyContinuations.Format()
+			linter.RuleNoEmptyContinuations.Run(opt.Warn, location, msg)
+		}
 	}
+
+	validateCommandCasing(dockerfile, opt.Warn)
 
 	proxyEnv := proxyEnvFromBuildArgs(opt.BuildArgs)
 
-	stages, metaArgs, err := instructions.Parse(dockerfile.AST)
+	stages, metaArgs, err := instructions.Parse(dockerfile.AST, opt.Warn)
 	if err != nil {
 		return nil, err
 	}
@@ -1927,4 +1940,45 @@ func isEnabledForStage(stage string, value string) bool {
 		}
 	}
 	return false
+}
+
+func isSelfConsistentCasing(s string) bool {
+	return s == strings.ToLower(s) || s == strings.ToUpper(s)
+}
+
+func validateCommandCasing(dockerfile *parser.Result, warn func(short, url string, detail [][]byte, location []parser.Range)) {
+	var lowerCount, upperCount int
+	for _, node := range dockerfile.AST.Children {
+		if isSelfConsistentCasing(node.Value) {
+			if strings.ToLower(node.Value) == node.Value {
+				lowerCount++
+			} else {
+				upperCount++
+			}
+		}
+	}
+
+	isMajorityLower := lowerCount > upperCount
+	for _, node := range dockerfile.AST.Children {
+		// Here, we check both if the command is consistent per command (ie, "CMD" or "cmd", not "Cmd")
+		// as well as ensuring that the casing is consistent throughout the dockerfile by comparing the
+		// command to the casing of the majority of commands.
+		if !isSelfConsistentCasing(node.Value) {
+			msg := linter.RuleSelfConsistentCommandCasing.Format(node.Value)
+			linter.RuleSelfConsistentCommandCasing.Run(warn, node.Location(), msg)
+		} else {
+			var msg string
+			var needsLintWarn bool
+			if isMajorityLower && strings.ToUpper(node.Value) == node.Value {
+				msg = linter.RuleFileConsistentCommandCasing.Format(node.Value, "lowercase")
+				needsLintWarn = true
+			} else if !isMajorityLower && strings.ToLower(node.Value) == node.Value {
+				msg = linter.RuleFileConsistentCommandCasing.Format(node.Value, "uppercase")
+				needsLintWarn = true
+			}
+			if needsLintWarn {
+				linter.RuleFileConsistentCommandCasing.Run(warn, node.Location(), msg)
+			}
+		}
+	}
 }
