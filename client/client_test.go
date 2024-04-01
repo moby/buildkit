@@ -216,6 +216,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testExportLocalNoPlatformSplitOverwrite,
 	testSolverOptLocalDirsStillWorks,
 	testOCIIndexMediatype,
+	testLayerLimitOnMounts,
 }
 
 func TestIntegration(t *testing.T) {
@@ -10239,6 +10240,40 @@ func testLLBMountPerformance(t *testing.T, sb integration.Sandbox) {
 	timeoutCtx, cancel := context.WithTimeoutCause(sb.Context(), time.Minute, nil)
 	defer cancel()
 	_, err = c.Solve(timeoutCtx, def, SolveOpt{}, nil)
+	require.NoError(t, err)
+}
+
+func testLayerLimitOnMounts(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+
+	ctx := sb.Context()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	base := llb.Image("busybox:latest")
+
+	const numLayers = 110
+
+	for i := 0; i < numLayers; i++ {
+		base = base.Run(llb.Shlex("sh -c 'echo hello >> /hello'")).Root()
+	}
+
+	def, err := base.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(ctx, def, SolveOpt{}, nil)
+	require.NoError(t, err)
+
+	ls := llb.Image("busybox:latest").
+		Run(llb.Shlexf("ls -l /base/hello"))
+	ls.AddMount("/base", base, llb.Readonly)
+
+	def, err = ls.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(ctx, def, SolveOpt{}, nil)
 	require.NoError(t, err)
 }
 
