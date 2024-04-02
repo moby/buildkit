@@ -22,7 +22,6 @@ import (
 	sddaemon "github.com/coreos/go-systemd/v22/daemon"
 	"github.com/docker/docker/pkg/reexec"
 	"github.com/gofrs/flock"
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/cache/remotecache/azblob"
 	"github.com/moby/buildkit/cache/remotecache/gha"
@@ -50,6 +49,7 @@ import (
 	"github.com/moby/buildkit/util/profiler"
 	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/util/stack"
+	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/util/tracing/detect"
 	_ "github.com/moby/buildkit/util/tracing/detect/jaeger"
 	_ "github.com/moby/buildkit/util/tracing/env"
@@ -62,10 +62,8 @@ import (
 	"github.com/urfave/cli"
 	"go.etcd.io/bbolt"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/trace"
 	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -270,16 +268,16 @@ func main() {
 			return err
 		}
 
-		streamTracer := otelgrpc.StreamServerInterceptor( //nolint:staticcheck // TODO(thaJeztah): ignore SA1019 for deprecated options: see https://github.com/moby/buildkit/issues/4681
+		statsHandler := tracing.ServerStatsHandler(
 			otelgrpc.WithTracerProvider(tp),
 			otelgrpc.WithMeterProvider(mp),
 			otelgrpc.WithPropagators(propagators),
 		)
-
-		unary := grpc_middleware.ChainUnaryServer(unaryInterceptor(ctx, tp, mp), grpcerrors.UnaryServerInterceptor)
-		stream := grpc_middleware.ChainStreamServer(streamTracer, grpcerrors.StreamServerInterceptor)
-
-		opts := []grpc.ServerOption{grpc.UnaryInterceptor(unary), grpc.StreamInterceptor(stream)}
+		opts := []grpc.ServerOption{
+			grpc.StatsHandler(statsHandler),
+			grpc.ChainUnaryInterceptor(unaryInterceptor, grpcerrors.UnaryServerInterceptor),
+			grpc.StreamInterceptor(grpcerrors.StreamServerInterceptor),
+		}
 		server := grpc.NewServer(opts...)
 
 		// relative path does not work with nightlyone/lockfile
@@ -660,38 +658,19 @@ func getListener(addr string, uid, gid int, tlsConfig *tls.Config) (net.Listener
 	}
 }
 
-func unaryInterceptor(globalCtx context.Context, tp trace.TracerProvider, mp metric.MeterProvider) grpc.UnaryServerInterceptor {
-	withTrace := otelgrpc.UnaryServerInterceptor( //nolint:staticcheck // TODO(thaJeztah): ignore SA1019 for deprecated options: see https://github.com/moby/buildkit/issues/4681
-		otelgrpc.WithTracerProvider(tp),
-		otelgrpc.WithMeterProvider(mp),
-		otelgrpc.WithPropagators(propagators),
-	)
-
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
-		ctx, cancel := context.WithCancelCause(ctx)
-		defer cancel(errors.WithStack(context.Canceled))
-
-		go func() {
-			select {
-			case <-ctx.Done():
-			case <-globalCtx.Done():
-				cancel(context.Cause(globalCtx))
-			}
-		}()
-
-		if strings.HasSuffix(info.FullMethod, "opentelemetry.proto.collector.trace.v1.TraceService/Export") {
-			return handler(ctx, req)
-		}
-
-		resp, err = withTrace(ctx, req, info, handler)
-		if err != nil {
-			bklog.G(ctx).Errorf("%s returned error: %v", info.FullMethod, err)
-			if logrus.GetLevel() >= logrus.DebugLevel {
-				fmt.Fprintf(os.Stderr, "%+v", stack.Formatter(grpcerrors.FromGRPC(err)))
-			}
-		}
-		return
+func unaryInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
+	if strings.HasSuffix(info.FullMethod, "opentelemetry.proto.collector.trace.v1.TraceService/Export") {
+		return handler(ctx, req)
 	}
+
+	resp, err = handler(ctx, req)
+	if err != nil {
+		bklog.G(ctx).Errorf("%s returned error: %v", info.FullMethod, err)
+		if logrus.GetLevel() >= logrus.DebugLevel {
+			fmt.Fprintf(os.Stderr, "%+v", stack.Formatter(grpcerrors.FromGRPC(err)))
+		}
+	}
+	return resp, err
 }
 
 func serverCredentials(cfg config.TLSConfig) (*tls.Config, error) {
