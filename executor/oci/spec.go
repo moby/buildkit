@@ -221,6 +221,7 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 	if userns.RunningInUserNS() {
 		s.Mounts, err = rootlessmountopts.FixUpOCI(s.Mounts)
 		if err != nil {
+			releaseAll()
 			return nil, nil, err
 		}
 	}
