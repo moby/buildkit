@@ -172,6 +172,7 @@ func docopy(ctx context.Context, src, dest string, action pb.FileActionCopy, u *
 			}
 			ci.CopyDirContents = action.DirCopyContents
 			ci.FollowLinks = action.FollowSymlink
+			ci.AlwaysReplaceExistingDestPaths = action.AlwaysReplaceExistingDestPaths
 		},
 		copy.WithXAttrErrorHandler(xattrErrorHandler),
 	}
