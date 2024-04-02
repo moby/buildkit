@@ -259,7 +259,7 @@ RUN --mount=from=containerd-src,src=/usr/src/containerd,rw \
 EOT
 
 # containerd v1.6 for integration tests
-FROM containerd-base as containerd-alt-16
+FROM containerd-base AS containerd-alt-16
 ARG CONTAINERD_ALT_VERSION_16
 RUN --mount=from=containerd-src,src=/usr/src/containerd,rw \
     --mount=target=/root/.cache,type=cache <<EOT
