@@ -184,16 +184,47 @@ func (s *scheduler) dispatch(e *edge) {
 			origEdge := e.index.LoadOrStore(k, e)
 			if origEdge != nil {
 				if e.isDep(origEdge) || origEdge.isDep(e) {
-					bklog.G(context.TODO()).Debugf("skip merge due to dependency")
+					bklog.G(context.TODO()).
+						WithField("edge_vertex_name", e.edge.Vertex.Name()).
+						WithField("edge_vertex_digest", e.edge.Vertex.Digest()).
+						WithField("edge_index", e.edge.Index).
+						WithField("origEdge_vertex_name", origEdge.edge.Vertex.Name()).
+						WithField("origEdge_vertex_digest", origEdge.edge.Vertex.Digest()).
+						WithField("origEdge_index", origEdge.edge.Index).
+						Debug("skip merge due to dependency")
 				} else {
 					dest, src := origEdge, e
 					if s.ef.hasOwner(origEdge.edge, e.edge) {
+						bklog.G(context.TODO()).
+							WithField("edge_vertex_name", e.edge.Vertex.Name()).
+							WithField("edge_vertex_digest", e.edge.Vertex.Digest()).
+							WithField("edge_index", e.edge.Index).
+							WithField("origEdge_vertex_name", origEdge.edge.Vertex.Name()).
+							WithField("origEdge_vertex_digest", origEdge.edge.Vertex.Digest()).
+							WithField("origEdge_index", origEdge.edge.Index).
+							Debug("swap merge due to owner")
 						dest, src = src, dest
 					}
 
-					bklog.G(context.TODO()).Debugf("merging edge %s[%d] to %s[%d]\n", src.edge.Vertex.Name(), src.edge.Index, dest.edge.Vertex.Name(), dest.edge.Index)
+					bklog.G(context.TODO()).
+						WithField("source_edge_vertex_name", src.edge.Vertex.Name()).
+						WithField("source_edge_vertex_digest", src.edge.Vertex.Digest()).
+						WithField("source_edge_index", src.edge.Index).
+						WithField("dest_vertex_name", dest.edge.Vertex.Name()).
+						WithField("dest_vertex_digest", dest.edge.Vertex.Digest()).
+						WithField("dest_index", dest.edge.Index).
+						Debug("merging edges")
 					if s.mergeTo(dest, src) {
 						s.ef.setEdge(src.edge, dest)
+					} else {
+						bklog.G(context.TODO()).
+							WithField("source_edge_vertex_name", src.edge.Vertex.Name()).
+							WithField("source_edge_vertex_digest", src.edge.Vertex.Digest()).
+							WithField("source_edge_index", src.edge.Index).
+							WithField("dest_vertex_name", dest.edge.Vertex.Name()).
+							WithField("dest_vertex_digest", dest.edge.Vertex.Digest()).
+							WithField("dest_index", dest.edge.Index).
+							Debug("merging edges skipped")
 					}
 				}
 			}
@@ -367,8 +398,13 @@ type pipeFactory struct {
 func (pf *pipeFactory) NewInputRequest(ee Edge, req *edgeRequest) pipe.Receiver {
 	target := pf.s.ef.getEdge(ee)
 	if target == nil {
+		bklog.G(context.TODO()).
+			WithField("edge_vertex_name", ee.Vertex.Name()).
+			WithField("edge_vertex_digest", ee.Vertex.Digest()).
+			WithField("edge_index", ee.Index).
+			Error("failed to get edge: inconsistent graph state")
 		return pf.NewFuncRequest(func(_ context.Context) (interface{}, error) {
-			return nil, errors.Errorf("failed to get edge: inconsistent graph state")
+			return nil, errors.Errorf("failed to get edge: inconsistent graph state in edge %s %s %d", ee.Vertex.Name(), ee.Vertex.Digest(), ee.Index)
 		})
 	}
 	p := pf.s.newPipe(target, pf.e, pipe.Request{Payload: req})
