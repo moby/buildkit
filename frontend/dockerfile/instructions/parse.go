@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types/container"
 	"github.com/moby/buildkit/frontend/dockerfile/command"
 	"github.com/moby/buildkit/frontend/dockerfile/linter"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/util/suggest"
+	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
@@ -561,8 +561,10 @@ func parseOptInterval(f *Flag) (time.Duration, error) {
 	if d == 0 {
 		return 0, nil
 	}
-	if d < container.MinimumDuration {
-		return 0, errors.Errorf("Interval %#v cannot be less than %s", f.name, container.MinimumDuration)
+
+	const minimumDuration = time.Millisecond
+	if d < minimumDuration {
+		return 0, errors.Errorf("Interval %#v cannot be less than %s", f.name, minimumDuration)
 	}
 	return d, nil
 }
@@ -580,11 +582,11 @@ func parseHealthcheck(req parseRequest) (*HealthCheckCommand, error) {
 		if len(args) != 0 {
 			return nil, errors.New("HEALTHCHECK NONE takes no arguments")
 		}
-		cmd.Health = &container.HealthConfig{
+		cmd.Health = &dockerspec.HealthcheckConfig{
 			Test: []string{typ},
 		}
 	} else {
-		healthcheck := container.HealthConfig{}
+		healthcheck := dockerspec.HealthcheckConfig{}
 
 		flInterval := req.flags.AddString("interval", "")
 		flTimeout := req.flags.AddString("timeout", "")

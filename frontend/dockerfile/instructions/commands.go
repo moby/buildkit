@@ -3,8 +3,8 @@ package instructions
 import (
 	"strings"
 
-	"github.com/docker/docker/api/types/container"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
+	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
@@ -367,7 +367,7 @@ type CmdCommand struct {
 //	HEALTHCHECK <health-config>
 type HealthCheckCommand struct {
 	withNameAndCode
-	Health *container.HealthConfig
+	Health *dockerspec.HealthcheckConfig
 }
 
 // EntrypointCommand sets the default entrypoint of the container to use the
