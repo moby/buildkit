@@ -21,6 +21,7 @@ import (
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/identity"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
+	"github.com/moby/buildkit/util/iohelper"
 	"github.com/moby/buildkit/util/leaseutil"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -254,7 +255,7 @@ func (h *HistoryQueue) migrateBlobV2(ctx context.Context, id string, detectSkipL
 		return false, nil // allow skipping
 	}
 	defer ra.Close()
-	if err := content.Copy(ctx, w, &reader{ReaderAt: ra}, 0, dgst, content.WithLabels(labels)); err != nil {
+	if err := content.Copy(ctx, w, iohelper.ReadCloser(ra), 0, dgst, content.WithLabels(labels)); err != nil {
 		return false, err
 	}
 
@@ -460,9 +461,11 @@ func (h *HistoryQueue) Status(ctx context.Context, ref string, st chan<- *client
 	if err != nil {
 		return err
 	}
-	defer ra.Close()
 
-	brdr := bufio.NewReader(&reader{ReaderAt: ra})
+	rc := iohelper.ReadCloser(ra)
+	defer rc.Close()
+
+	brdr := bufio.NewReader(rc)
 
 	buf := make([]byte, 32*1024)
 
@@ -905,15 +908,4 @@ func (p *channel[T]) close() {
 		p.ps.mu.Unlock()
 		close(p.done)
 	})
-}
-
-type reader struct {
-	io.ReaderAt
-	pos int64
-}
-
-func (r *reader) Read(p []byte) (int, error) {
-	n, err := r.ReaderAt.ReadAt(p, r.pos)
-	r.pos += int64(len(p))
-	return n, err
 }
