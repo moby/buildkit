@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/strslice"
 	"github.com/moby/buildkit/frontend/dockerfile/command"
 	"github.com/moby/buildkit/frontend/dockerfile/linter"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
@@ -475,12 +474,11 @@ func parseShellDependentCommand(req parseRequest, command string, emptyAsNil boo
 	}
 
 	args := handleJSONArgs(req.args, req.attributes)
-	cmd := strslice.StrSlice(args)
-	if emptyAsNil && len(cmd) == 0 {
-		cmd = nil
+	if emptyAsNil && len(args) == 0 {
+		args = nil
 	}
 	return ShellDependantCmdLine{
-		CmdLine:      cmd,
+		CmdLine:      args,
 		Files:        files,
 		PrependShell: !req.attributes["json"],
 	}, nil
@@ -582,9 +580,8 @@ func parseHealthcheck(req parseRequest) (*HealthCheckCommand, error) {
 		if len(args) != 0 {
 			return nil, errors.New("HEALTHCHECK NONE takes no arguments")
 		}
-		test := strslice.StrSlice{typ}
 		cmd.Health = &container.HealthConfig{
-			Test: test,
+			Test: []string{typ},
 		}
 	} else {
 		healthcheck := container.HealthConfig{}
@@ -610,7 +607,7 @@ func parseHealthcheck(req parseRequest) (*HealthCheckCommand, error) {
 				typ = "CMD-SHELL"
 			}
 
-			healthcheck.Test = strslice.StrSlice(append([]string{typ}, cmdSlice...))
+			healthcheck.Test = append([]string{typ}, cmdSlice...)
 		default:
 			return nil, errors.Errorf("Unknown type %#v in HEALTHCHECK (try CMD)", typ)
 		}
@@ -774,7 +771,7 @@ func parseShell(req parseRequest) (*ShellCommand, error) {
 		// SHELL ["powershell", "-command"]
 
 		return &ShellCommand{
-			Shell:           strslice.StrSlice(shellSlice),
+			Shell:           shellSlice,
 			withNameAndCode: newWithNameAndCode(req),
 		}, nil
 	default:

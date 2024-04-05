@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/strslice"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/pkg/errors"
 )
@@ -325,7 +324,7 @@ type ShellInlineFile struct {
 
 // ShellDependantCmdLine represents a cmdline optionally prepended with the shell
 type ShellDependantCmdLine struct {
-	CmdLine      strslice.StrSlice
+	CmdLine      []string
 	Files        []ShellInlineFile
 	PrependShell bool
 }
@@ -479,7 +478,7 @@ func (c *ArgCommand) Expand(expander SingleWordExpander) error {
 //	SHELL bash -e -c
 type ShellCommand struct {
 	withNameAndCode
-	Shell strslice.StrSlice
+	Shell []string
 }
 
 // Stage represents a bundled collection of commands.
