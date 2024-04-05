@@ -1138,10 +1138,6 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		return err
 	}
 
-	if cfg.params.DestPath == "." || cfg.params.DestPath == "" || cfg.params.DestPath[len(cfg.params.DestPath)-1] == filepath.Separator {
-		dest += string(filepath.Separator)
-	}
-
 	var copyOpt []llb.CopyOption
 
 	if cfg.chown != "" {
@@ -1562,9 +1558,9 @@ func pathRelativeToWorkingDir(s llb.State, p string, platform ocispecs.Platform)
 	}
 
 	if system.IsAbs(p, platform.OS) {
-		return system.NormalizePath("/", p, platform.OS, false)
+		return system.NormalizePath("/", p, platform.OS, true)
 	}
-	return system.NormalizePath(dir, p, platform.OS, false)
+	return system.NormalizePath(dir, p, platform.OS, true)
 }
 
 func addEnv(env []string, k, v string) []string {
