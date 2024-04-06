@@ -80,10 +80,9 @@ func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper 
 		if err := compressed.Close(); err != nil {
 			return emptyDesc, false, errors.Wrap(err, "failed to close compressed diff writer")
 		}
-		if labels == nil {
-			labels = map[string]string{}
+		labels = map[string]string{
+			labelspkg.LabelUncompressed: dgstr.Digest().String(),
 		}
-		labels[labelspkg.LabelUncompressed] = dgstr.Digest().String()
 	} else {
 		if err = overlay.WriteUpperdir(ctx, bufW, upperdir, lower); err != nil {
 			return emptyDesc, false, errors.Wrap(err, "failed to write diff")
