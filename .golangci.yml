@@ -29,6 +29,14 @@ linters:
   disable-all: true
 
 linters-settings:
+  govet:
+    enable:
+      - nilness
+      - unusedwrite
+  # enable-all: true
+  # disable:
+  #   - fieldalignment
+  #   - shadow
   depguard:
     rules:
       main:
