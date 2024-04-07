@@ -445,7 +445,7 @@ func (w *runcExecutor) Exec(ctx context.Context, id string, process executor.Pro
 		spec.Process.Env = process.Meta.Env
 	}
 
-	err = w.exec(ctx, id, state.Bundle, spec.Process, process, nil)
+	err = w.exec(ctx, id, spec.Process, process, nil)
 	return exitError(ctx, err)
 }
 

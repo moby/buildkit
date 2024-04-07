@@ -113,14 +113,14 @@ func (b *buffer) Writer(ctx context.Context, opts ...content.WriterOpt) (content
 }
 
 func (b *buffer) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
-	r, err := b.getBytesReader(ctx, desc.Digest)
+	r, err := b.getBytesReader(desc.Digest)
 	if err != nil {
 		return nil, err
 	}
 	return &readerAt{Reader: r, Closer: io.NopCloser(r), size: int64(r.Len())}, nil
 }
 
-func (b *buffer) getBytesReader(ctx context.Context, dgst digest.Digest) (*bytes.Reader, error) {
+func (b *buffer) getBytesReader(dgst digest.Digest) (*bytes.Reader, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 

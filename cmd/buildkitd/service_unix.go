@@ -19,11 +19,11 @@ func applyPlatformFlags(context *cli.Context) {
 }
 
 // registerUnregisterService is only relevant on Windows.
-func registerUnregisterService(root string) (bool, error) {
+func registerUnregisterService(_ string) (bool, error) {
 	return false, nil
 }
 
 // launchService is only relevant on Windows.
-func launchService(s *grpc.Server) error {
+func launchService(_ *grpc.Server) error {
 	return nil
 }

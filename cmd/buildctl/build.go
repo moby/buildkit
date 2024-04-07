@@ -326,7 +326,7 @@ func buildAction(clicontext *cli.Context) error {
 		metricsCh := make(chan *client.SolveStatus)
 		pw = progresswriter.Tee(pw, metricsCh)
 		meg.Go(func() error {
-			vtxMap := tailVTXInfo(ctx, pw, metricsCh)
+			vtxMap := tailVTXInfo(metricsCh)
 			if cacheMetricsFile == os.Stdout || cacheMetricsFile == os.Stdin {
 				// make sure everything was printed out to get it as the last line.
 				eg.Wait()

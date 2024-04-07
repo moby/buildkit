@@ -267,7 +267,7 @@ func newAuthHandler(host string, client *http.Client, scheme auth.Authentication
 func (ah *authHandler) authorize(ctx context.Context, sm *session.Manager, g session.Group) (string, error) {
 	switch ah.scheme {
 	case auth.BasicAuth:
-		return ah.doBasicAuth(ctx)
+		return ah.doBasicAuth()
 	case auth.BearerAuth:
 		return ah.doBearerAuth(ctx, sm, g)
 	default:
@@ -275,7 +275,7 @@ func (ah *authHandler) authorize(ctx context.Context, sm *session.Manager, g ses
 	}
 }
 
-func (ah *authHandler) doBasicAuth(ctx context.Context) (string, error) {
+func (ah *authHandler) doBasicAuth() (string, error) {
 	username, secret := ah.common.Username, ah.common.Secret
 
 	if username == "" || secret == "" {

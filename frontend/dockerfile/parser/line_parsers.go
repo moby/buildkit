@@ -269,7 +269,7 @@ func parseString(rest string, d *directives) (*Node, map[string]bool, error) {
 }
 
 // parseJSON converts JSON arrays to an AST.
-func parseJSON(rest string, d *directives) (*Node, map[string]bool, error) {
+func parseJSON(rest string) (*Node, map[string]bool, error) {
 	rest = strings.TrimLeftFunc(rest, unicode.IsSpace)
 	if !strings.HasPrefix(rest, "[") {
 		return nil, nil, errors.Errorf("Error parsing %q as a JSON array", rest)
@@ -307,7 +307,7 @@ func parseMaybeJSON(rest string, d *directives) (*Node, map[string]bool, error) 
 		return nil, nil, nil
 	}
 
-	node, attrs, err := parseJSON(rest, d)
+	node, attrs, err := parseJSON(rest)
 
 	if err == nil {
 		return node, attrs, nil
@@ -325,7 +325,7 @@ func parseMaybeJSON(rest string, d *directives) (*Node, map[string]bool, error) 
 // so, passes to parseJSON; if not, attempts to parse it as a whitespace
 // delimited string.
 func parseMaybeJSONToList(rest string, d *directives) (*Node, map[string]bool, error) {
-	node, attrs, err := parseJSON(rest, d)
+	node, attrs, err := parseJSON(rest)
 
 	if err == nil {
 		return node, attrs, nil

@@ -383,7 +383,7 @@ func (cr *cacheRecord) size(ctx context.Context) (int64, error) {
 }
 
 // caller must hold cr.mu
-func (cr *cacheRecord) mount(ctx context.Context, s session.Group) (_ snapshot.Mountable, rerr error) {
+func (cr *cacheRecord) mount(ctx context.Context) (_ snapshot.Mountable, rerr error) {
 	if cr.mountCache != nil {
 		return cr.mountCache, nil
 	}
@@ -975,12 +975,12 @@ func (sr *immutableRef) Mount(ctx context.Context, readonly bool, s session.Grou
 	var mnt snapshot.Mountable
 	if sr.cm.Snapshotter.Name() == "stargz" {
 		if err := sr.withRemoteSnapshotLabelsStargzMode(ctx, s, func() {
-			mnt, rerr = sr.mount(ctx, s)
+			mnt, rerr = sr.mount(ctx)
 		}); err != nil {
 			return nil, err
 		}
 	} else {
-		mnt, rerr = sr.mount(ctx, s)
+		mnt, rerr = sr.mount(ctx)
 	}
 	if rerr != nil {
 		return nil, rerr
@@ -1459,7 +1459,7 @@ func (sr *mutableRef) shouldUpdateLastUsed() bool {
 	return sr.triggerLastUsed
 }
 
-func (sr *mutableRef) commit(ctx context.Context) (_ *immutableRef, rerr error) {
+func (sr *mutableRef) commit() (_ *immutableRef, rerr error) {
 	if !sr.mutable || len(sr.refs) == 0 {
 		return nil, errors.Wrapf(errInvalid, "invalid mutable ref %p", sr)
 	}
@@ -1518,12 +1518,12 @@ func (sr *mutableRef) Mount(ctx context.Context, readonly bool, s session.Group)
 	var mnt snapshot.Mountable
 	if sr.cm.Snapshotter.Name() == "stargz" && sr.layerParent != nil {
 		if err := sr.layerParent.withRemoteSnapshotLabelsStargzMode(ctx, s, func() {
-			mnt, rerr = sr.mount(ctx, s)
+			mnt, rerr = sr.mount(ctx)
 		}); err != nil {
 			return nil, err
 		}
 	} else {
-		mnt, rerr = sr.mount(ctx, s)
+		mnt, rerr = sr.mount(ctx)
 	}
 	if rerr != nil {
 		return nil, rerr
@@ -1546,7 +1546,7 @@ func (sr *mutableRef) Commit(ctx context.Context) (ImmutableRef, error) {
 	sr.mu.Lock()
 	defer sr.mu.Unlock()
 
-	return sr.commit(ctx)
+	return sr.commit()
 }
 
 func (sr *mutableRef) Release(ctx context.Context) error {
