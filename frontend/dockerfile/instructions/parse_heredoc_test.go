@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/docker/docker/api/types/strslice"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/stretchr/testify/require"
 )
@@ -179,22 +178,22 @@ func TestRunHeredoc(t *testing.T) {
 	cases := []struct {
 		dockerfile string
 		shell      bool
-		command    strslice.StrSlice
+		command    []string
 		files      []ShellInlineFile
 	}{
 		{
 			dockerfile: `RUN ["ls", "/"]`,
-			command:    strslice.StrSlice{"ls", "/"},
+			command:    []string{"ls", "/"},
 			shell:      false,
 		},
 		{
 			dockerfile: `RUN ["<<EOF"]`,
-			command:    strslice.StrSlice{"<<EOF"},
+			command:    []string{"<<EOF"},
 			shell:      false,
 		},
 		{
 			dockerfile: "RUN ls /",
-			command:    strslice.StrSlice{"ls /"},
+			command:    []string{"ls /"},
 			shell:      true,
 		},
 		{
@@ -202,7 +201,7 @@ func TestRunHeredoc(t *testing.T) {
 ls /
 whoami
 EOF`,
-			command: strslice.StrSlice{"<<EOF"},
+			command: []string{"<<EOF"},
 			files: []ShellInlineFile{
 				{
 					Name: "EOF",
@@ -216,7 +215,7 @@ EOF`,
 print("hello")
 print("world")
 EOF`,
-			command: strslice.StrSlice{"<<'EOF' | python"},
+			command: []string{"<<'EOF' | python"},
 			files: []ShellInlineFile{
 				{
 					Name: "EOF",
@@ -231,7 +230,7 @@ print("world")
 			dockerfile: `RUN <<-EOF
 	echo test
 EOF`,
-			command: strslice.StrSlice{"<<-EOF"},
+			command: []string{"<<-EOF"},
 			files: []ShellInlineFile{
 				{
 					Name:  "EOF",
