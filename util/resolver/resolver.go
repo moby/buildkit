@@ -17,6 +17,7 @@ import (
 	"github.com/docker/distribution/registry/client/auth"
 	"github.com/docker/distribution/registry/client/transport"
 	"github.com/docker/docker/registry"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/resolver/config"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/version"
@@ -218,16 +219,19 @@ func isHttpRegistry(host string) bool {
 
 	resp, err := pingClient.Do(req)
 	if err != nil {
+		bklog.L.Debugf("failed request %s v2 endpoint response, error: %s", host, err.Error())
 		return true
 	}
 	defer resp.Body.Close()
 
 	versions := auth.APIVersions(resp, DefaultRegistryVersionHeader)
+	bklog.L.Debugf("%s v2 endpoint response status code %d", host, resp.StatusCode)
 	for _, pingVersion := range versions {
 		if pingVersion == v2Version {
 			// The version header indicates we're definitely
 			// talking to a v2 registry. So don't allow future
 			// fallbacks to the v1 protocol.
+			bklog.L.Debugf("%s is https registry", host)
 			return false
 		}
 	}

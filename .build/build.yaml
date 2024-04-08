@@ -83,6 +83,86 @@ spec:
             - $(tasks.build-buildkit-image.results.ociContainerImageBuild-url)
         - name: quality-gate
           value: "false"
+    - name: test-image
+      runAfter:
+        - build-buildkit-image
+      timeout: "1h"
+      workspaces:
+        - name: source
+          workspace: source
+      params:
+        - name: tools-image
+          value: build-harbor.alauda.cn/devops/buildkit:$(tasks.buildkit-oss-version.results.oss-version)-alpine-$(build.git.lastCommit.shortID)
+      taskSpec:
+        params:
+          - name: tools-image
+            description: test image reference
+        volumes:
+          - name: dind-certs
+            emptyDir: {}
+        sidecars:
+          - image: docker-mirrors.alauda.cn/library/docker:20.10-dind
+            name: docker-daemon
+            args:
+              - --storage-driver=overlay2
+              - --userland-proxy=false
+              - --debug
+              - --registry-mirror=https://docker-mirrors.alauda.cn
+            securityContext:
+              privileged: true
+            env:
+              - name: DOCKER_TLS_CERTDIR  # 将生成的证书写入与客户端共享的路径
+                value: /certs
+            resources:
+              requests:
+                cpu: 1000m
+                memory: 2000Mi
+              limits:
+                cpu: 4000m
+                memory: 8000Mi
+            volumeMounts:
+              - mountPath: /certs/client
+                name: dind-certs
+              - mountPath: /workspace/source
+                name: $(workspaces.source.volume)
+            readinessProbe: # 等待 dind daemon 生成它与客户端共享的证书
+              periodSeconds: 1
+              exec:
+                command: [ 'ls', '/certs/client/ca.pem' ]
+        steps:
+          - name: test-run
+            image: registry.alauda.cn:60080/devops/builder-tools:ubuntu-v3.8.1
+            imagePullPolicy: IfNotPresent
+            workingDir: $(workspaces.source.path)
+            timeout: 2.5h
+            resources:
+              requests:
+                cpu: 1000m
+                memory: 2000Mi
+              limits:
+                cpu: 2000m
+                memory: 4000Mi
+            env:
+              - name: DOCKER_HOST
+                value: tcp://localhost:2376
+              - name: DOCKER_TLS_VERIFY
+                value: "1"
+              - name: DOCKER_CERT_PATH
+                value: /certs/client
+            volumeMounts:
+              - mountPath: /certs/client
+                name: dind-certs
+            script: |
+              #!/bin/bash
+              set -e
+              /katanomi/bin/ktn-settings copy docker --always-match=true ~/.docker/config.json
+              cd e2e
+              source ./tools.sh
+              perpare
+              docker run --rm --net=host -v $(pwd):/workspace -v ~/.docker/:/root/.docker/ --privileged --entrypoint /workspace/test.sh $(params.tools-image)
+        workspaces:
+          - name: source
+            workspace: source
   runTemplate:
     spec:
       taskRunSpecs: []

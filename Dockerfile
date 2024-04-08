@@ -221,7 +221,7 @@ FROM scratch AS release
 COPY --link --from=releaser /out/ /
 
 FROM alpinebase AS buildkit-export
-RUN apk add --no-cache fuse3 git openssh pigz xz iptables ip6tables skopeo \
+RUN apk add --no-cache fuse3 git openssh pigz xz iptables ip6tables bash skopeo \
   && ln -s fusermount3 /usr/bin/fusermount
 COPY --link examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 VOLUME /var/lib/buildkit
