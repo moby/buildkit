@@ -1,0 +1,26 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: buildkit
+  title: buildkit
+  description: Buildkit 是一个高效的构建镜像的工具，该镜像基于官方版本做了若干参数的调整定制。
+  annotations:
+    # gitlab plugin
+    gitlab.com/project-slug: devops/builder-buildkit
+    gitlab.com/instance: gitlab-ce.alauda.cn
+    # acp cicd plugin
+    acp.cpaas.io/ci-pipeline: devops/business-build/tools/builder-buildkit
+    acp.cpaas.io/instance: edge.alauda.cn
+    # harbor plugin
+    goharbor.io/repository-slug: devops/buildkit
+    # sonarqube plugin
+    sonarqube.org/project-key: ""
+    # backstage techdocs plugin
+    backstage.io/techdocs-ref: dir:./buildkit-v0.10.4
+    acp.cpaas.io/owner: kychen@alauda.io
+
+spec:
+  type: tools
+  system: system:katanomi-system
+  lifecycle: production
+  owner: devops
