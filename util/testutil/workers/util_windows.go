@@ -35,11 +35,11 @@ func getContainerdDebugSock(tmpdir string) string {
 }
 
 // no-op for parity with unix
-func mountInfo(tmpdir string) error {
+func mountInfo(_ string) error {
 	return nil
 }
 
-func chown(name string, uid, gid int) error {
+func chown(_ string, _, _ int) error {
 	// Chown not supported on Windows
 	return nil
 }
