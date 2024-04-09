@@ -63,4 +63,11 @@ var (
 			return "Maintainer instruction is deprecated in favor of using label"
 		},
 	}
+	RuleUndeclaredArgInFrom = LinterRule[func(string) string]{
+		Name:        "UndeclaredArgInFrom",
+		Description: "FROM command must use declared ARGs",
+		Format: func(baseArg string) string {
+			return fmt.Sprintf("FROM argument '%s' is not declared", baseArg)
+		},
+	}
 )

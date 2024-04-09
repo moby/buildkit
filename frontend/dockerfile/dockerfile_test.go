@@ -231,6 +231,10 @@ func init() {
 	}
 }
 
+func TestLint(t *testing.T) {
+	integration.Run(t, lintTests, opts...)
+}
+
 func TestIntegration(t *testing.T) {
 	integration.Run(t, allTests, opts...)
 

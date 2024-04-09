@@ -236,7 +236,9 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			info := argInfo{definition: metaArg, location: cmd.Location()}
 			if v, ok := opt.BuildArgs[metaArg.Key]; !ok {
 				if metaArg.Value != nil {
-					*metaArg.Value, info.deps, _ = shlex.ProcessWordWithMatches(*metaArg.Value, metaArgsToMap(optMetaArgs))
+					result, _ := shlex.ProcessWordWithMatches(*metaArg.Value, metaArgsToMap(optMetaArgs))
+					*metaArg.Value = result.Word
+					info.deps = result.Matched
 				}
 			} else {
 				metaArg.Value = &v
@@ -258,7 +260,15 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 
 	// set base state for every image
 	for i, st := range stages {
-		name, used, err := shlex.ProcessWordWithMatches(st.BaseName, metaArgsToMap(optMetaArgs))
+		result, err := shlex.ProcessWordWithMatches(st.BaseName, metaArgsToMap(optMetaArgs))
+		name := result.Word
+		used := result.Matched
+		if len(result.Unmatched) > 0 {
+			for unmatched := range result.Unmatched {
+				msg := linter.RuleUndeclaredArgInFrom.Format(unmatched)
+				linter.RuleUndeclaredArgInFrom.Run(opt.Warn, st.Location, msg)
+			}
+		}
 		if err != nil {
 			return nil, parser.WithLocation(err, st.Location)
 		}
@@ -279,7 +289,16 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		}
 
 		if v := st.Platform; v != "" {
-			v, u, err := shlex.ProcessWordWithMatches(v, metaArgsToMap(optMetaArgs))
+			result, err := shlex.ProcessWordWithMatches(v, metaArgsToMap(optMetaArgs))
+			v := result.Word
+			u := result.Matched
+
+			if len(result.Unmatched) > 0 {
+				for unmatched := range result.Unmatched {
+					msg := linter.RuleUndeclaredArgInFrom.Format(unmatched)
+					linter.RuleUndeclaredArgInFrom.Run(opt.Warn, st.Location, msg)
+				}
+			}
 			if err != nil {
 				return nil, parser.WithLocation(errors.Wrapf(err, "failed to process arguments for platform %s", v), st.Location)
 			}

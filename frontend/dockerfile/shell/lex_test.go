@@ -221,7 +221,7 @@ func TestShellParser4Words(t *testing.T) {
 }
 
 func TestGetEnv(t *testing.T) {
-	sw := &shellWord{envs: nil, matches: make(map[string]struct{})}
+	sw := &shellWord{envs: nil, matches: make(map[string]struct{}), nonmatches: make(map[string]struct{})}
 
 	getEnv := func(name string) string {
 		value, _ := sw.getEnv(name)
@@ -480,7 +480,9 @@ func TestProcessWithMatches(t *testing.T) {
 	for _, c := range tc {
 		c := c
 		t.Run(c.input, func(t *testing.T) {
-			w, matches, err := shlex.ProcessWordWithMatches(c.input, c.envs)
+			result, err := shlex.ProcessWordWithMatches(c.input, c.envs)
+			w := result.Word
+			matches := result.Matched
 			if c.expectedErr {
 				require.Error(t, err)
 				return
@@ -505,30 +507,30 @@ func TestProcessWithMatchesPlatform(t *testing.T) {
 		version = "v1.2.3"
 	)
 
-	w, _, err := shlex.ProcessWordWithMatches(release, map[string]string{
+	results, err := shlex.ProcessWordWithMatches(release, map[string]string{
 		"VERSION":       version,
 		"TARGETOS":      "linux",
 		"TARGETARCH":    "arm",
 		"TARGETVARIANT": "v7",
 	})
 	require.NoError(t, err)
-	require.Equal(t, "something-v1.2.3.linux-arm-v7.tar.gz", w)
+	require.Equal(t, "something-v1.2.3.linux-arm-v7.tar.gz", results.Word)
 
-	w, _, err = shlex.ProcessWordWithMatches(release, map[string]string{
+	results, err = shlex.ProcessWordWithMatches(release, map[string]string{
 		"VERSION":       version,
 		"TARGETOS":      "linux",
 		"TARGETARCH":    "arm64",
 		"TARGETVARIANT": "",
 	})
 	require.NoError(t, err)
-	require.Equal(t, "something-v1.2.3.linux-arm64.tar.gz", w)
+	require.Equal(t, "something-v1.2.3.linux-arm64.tar.gz", results.Word)
 
-	w, _, err = shlex.ProcessWordWithMatches(release, map[string]string{
+	results, err = shlex.ProcessWordWithMatches(release, map[string]string{
 		"VERSION":    version,
 		"TARGETOS":   "linux",
 		"TARGETARCH": "arm64",
 		// No "TARGETVARIANT": "",
 	})
 	require.NoError(t, err)
-	require.Equal(t, "something-v1.2.3.linux-arm64.tar.gz", w)
+	require.Equal(t, "something-v1.2.3.linux-arm64.tar.gz", results.Word)
 }

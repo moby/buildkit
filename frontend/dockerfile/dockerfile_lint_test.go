@@ -30,6 +30,7 @@ var lintTests = integration.TestFuncs(
 	testReservedStageName,
 	testMaintainerDeprecated,
 	testWarningsBeforeError,
+	testUndeclaredArg,
 )
 
 func testStageName(t *testing.T, sb integration.Sandbox) {
@@ -347,6 +348,40 @@ FROM ${BAR} AS base
 		StreamBuildErr:    "failed to solve: base name (${BAR}) should not be blank",
 		UnmarshalBuildErr: "base name (${BAR}) should not be blank",
 		BuildErrLocation:  4,
+	})
+}
+
+func testUndeclaredArg(t *testing.T, sb integration.Sandbox) {
+	dockerfile := []byte(`
+ARG base=scratch
+FROM $base
+COPY Dockerfile .
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`
+ARG platform=linux/amd64
+FROM --platform=$platform scratch
+COPY Dockerfile .
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`
+ARG tag=latest
+FROM busybox:${tag}${version} AS b
+COPY Dockerfile .
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "UndeclaredArgInFrom",
+				Description: "FROM command must use declared ARGs",
+				Detail:      "FROM argument 'version' is not declared",
+				Level:       1,
+				Line:        3,
+			},
+		},
 	})
 }
 
