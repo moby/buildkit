@@ -26,6 +26,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/moby/buildkit/frontend/dockerui"
+	"github.com/moby/buildkit/frontend/subrequests/lint"
 	"github.com/moby/buildkit/frontend/subrequests/outline"
 	"github.com/moby/buildkit/frontend/subrequests/targets"
 	"github.com/moby/buildkit/identity"
@@ -108,6 +109,34 @@ func Dockefile2Outline(ctx context.Context, dt []byte, opt ConvertOpt) (*outline
 	}
 	o := ds.Outline(dt)
 	return &o, nil
+}
+
+func DockerfileLint(ctx context.Context, dt []byte, opt ConvertOpt) ([]lint.Warning, error) {
+	warnings := []lint.Warning{}
+	sourceData := strings.Split(string(opt.SourceMap.Data), "\n")
+	opt.Warn = func(short, url string, detail [][]byte, location []parser.Range) {
+		var rulename, ruledetail string
+		if strings.HasPrefix(short, "Lint Rule ") {
+			rulename = strings.TrimPrefix(short, "Lint Rule ")
+			ruleParts := strings.Split(rulename, ":")
+			rulename = strings.Trim(ruleParts[0], "'")
+			ruledetail = strings.TrimSpace(ruleParts[1])
+		} else {
+			return
+		}
+		warnings = append(warnings, lint.Warning{
+			RuleName:  rulename,
+			Detail:    ruledetail,
+			Filename:  opt.SourceMap.Filename,
+			Source:    sourceData[location[0].Start.Line-1 : location[0].End.Line],
+			StartLine: location[0].Start.Line,
+		})
+	}
+	_, err := toDispatchState(ctx, dt, opt)
+	if err != nil {
+		return nil, err
+	}
+	return warnings, nil
 }
 
 func ListTargets(ctx context.Context, dt []byte) (*targets.List, error) {
