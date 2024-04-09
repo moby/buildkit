@@ -216,7 +216,7 @@ func Changes(ctx context.Context, changeFn fs.ChangeFunc, upperdir, upperdirView
 		} else if os.IsNotExist(err) || errors.Is(err, unix.ENOTDIR) {
 			// File doesn't exist in the base layer. Thus this is added.
 			kind = fs.ChangeKindAdd
-		} else if err != nil {
+		} else {
 			return errors.Wrap(err, "failed to stat base file during overlay diff")
 		}
 

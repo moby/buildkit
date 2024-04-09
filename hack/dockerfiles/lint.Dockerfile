@@ -4,7 +4,7 @@ ARG GO_VERSION=1.21
 ARG ALPINE_VERSION=3.19
 ARG XX_VERSION=1.4.0
 ARG PROTOLINT_VERSION=0.45.0
-ARG GOLANGCI_LINT_VERSION=1.55.0
+ARG GOLANGCI_LINT_VERSION=1.57.1
 
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS golang-base
 FROM --platform=$BUILDPLATFORM yoheimuta/protolint:${PROTOLINT_VERSION} AS protolint-base
@@ -19,7 +19,7 @@ COPY --link --from=protolint-base /usr/local/bin/protolint /usr/local/bin/protol
 COPY --link --from=xx / /
 WORKDIR /go/src/github.com/moby/buildkit
 
-FROM base as golangci-lint
+FROM base AS golangci-lint
 ARG TARGETNAME
 ARG BUILDTAGS
 ARG TARGETPLATFORM
@@ -29,12 +29,12 @@ RUN --mount=target=/go/src/github.com/moby/buildkit \
   golangci-lint run --build-tags "${BUILDTAGS}" && \
   touch /golangci-lint.done
 
-FROM base as yamllint
+FROM base AS yamllint
 RUN --mount=target=/go/src/github.com/moby/buildkit \
   yamllint -c .yamllint.yml --strict . && \
   touch /yamllint.done
 
-FROM base as protolint
+FROM base AS protolint
 RUN --mount=target=/go/src/github.com/moby/buildkit \
   protolint lint . && \
   touch /protolint.done

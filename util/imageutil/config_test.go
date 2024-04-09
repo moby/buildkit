@@ -39,7 +39,7 @@ func TestConfigMultiplatform(t *testing.T) {
 	pArm64 := platforms.MustParse("linux/arm64")
 	cfgDescArm64 := cc.Add(t, ocispecs.Image{Platform: pArm64}, ocispecs.MediaTypeImageConfig, nil)
 	mfstArm64 := ocispecs.Manifest{MediaType: ocispecs.MediaTypeImageManifest, Config: cfgDescArm64}
-	_, descArm64 := makeDesc(t, mfst386, mfstArm64.MediaType, &pArm64)
+	_, descArm64 := makeDesc(t, mfstArm64, mfstArm64.MediaType, &pArm64)
 
 	idx := ocispecs.Index{
 		MediaType: ocispecs.MediaTypeImageIndex,

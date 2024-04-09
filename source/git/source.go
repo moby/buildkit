@@ -440,9 +440,6 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 	if err != nil {
 		return nil, err
 	}
-	if err != nil {
-		return nil, err
-	}
 	defer cleanup()
 	gitDir, err := git.GitDir(ctx)
 	if err != nil {
