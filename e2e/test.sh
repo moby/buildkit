@@ -15,7 +15,7 @@ set -eu
 tmp=$(mktemp -d /tmp/buildctl-daemonless.XXXXXX)
 trap "kill \$(cat $tmp/pid) || true; wait \$(cat $tmp/pid) || true; cat $tmp/log" EXIT
 source /workspace/tools.sh
-config_dns
+configDns
 
 # 启动 buildkitd 守护进程
 echo "start buildkitd..."

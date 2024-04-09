@@ -42,15 +42,15 @@ startRegistry() {
     -e REGISTRY_HTTP_TLS_KEY=/certs/domain.key \
     -p 4443:443 \
     registry:2
-    skopeo copy --src-tls-verify=false --dest-tls-verify=false  docker://registry.alauda.cn:60080/ops/alpine:3 docker://localhost/ops/alpine:3  --all
-    skopeo copy --src-tls-verify=false --dest-tls-verify=false  docker://registry.alauda.cn:60080/ops/alpine:3 docker://localhost:4443/ops/alpine:3  --all 
+    skopeo copy --dest-tls-verify=false  docker-archive:./test_image.tar docker://localhost/ops/alpine:3  --all
+    skopeo copy --dest-tls-verify=false  docker-archive:./test_image.tar docker://localhost:4443/ops/alpine:3  --all 
 }
 
-config_dns() {
+configDns() {
     echo "127.0.0.1 test.registry.com" >> /etc/hosts
 }
 
 perpare() {
     startRegistry
-    config_dns
+    configDns
 }
