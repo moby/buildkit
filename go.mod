@@ -28,8 +28,8 @@ require (
 	github.com/containernetworking/plugins v1.4.0
 	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/distribution/reference v0.5.0
-	github.com/docker/cli v26.0.0-rc1+incompatible
-	github.com/docker/docker v26.0.0-rc1+incompatible
+	github.com/docker/cli v26.0.0+incompatible
+	github.com/docker/docker v26.0.0+incompatible
 	github.com/docker/go-connections v0.5.0
 	github.com/docker/go-units v0.5.0
 	github.com/gofrs/flock v0.8.1
@@ -94,7 +94,7 @@ require (
 	golang.org/x/mod v0.13.0
 	golang.org/x/net v0.18.0
 	golang.org/x/sync v0.5.0
-	golang.org/x/sys v0.16.0
+	golang.org/x/sys v0.18.0
 	golang.org/x/time v0.3.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20231016165738-49dd2c1f3d0b
 	google.golang.org/grpc v1.59.0
