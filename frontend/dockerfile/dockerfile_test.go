@@ -175,8 +175,6 @@ var allTests = integration.TestFuncs(
 	testDuplicatePlatformProvenance,
 	testDockerIgnoreMissingProvenance,
 	testSBOMScannerArgs,
-	testSelfConsistentCommandCasing,
-	testFileConsistentCommandCasing,
 	testNilContextInSolveGateway,
 	testCopyUnicodePath,
 	testFrontendDeduplicateSources,

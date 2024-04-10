@@ -74,8 +74,8 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 		Client:       bc,
 		SourceMap:    src.SourceMap,
 		MetaResolver: c,
-		Warn: func(msg, url string, detail [][]byte, location []parser.Range) {
-			src.Warn(ctx, msg, warnOpts(location, detail, url))
+		Warn: func(rulename, description, url, msg string, location []parser.Range) {
+			src.Warn(ctx, msg, warnOpts(location, [][]byte{[]byte(description)}, url))
 		},
 	}
 

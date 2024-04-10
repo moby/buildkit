@@ -3,7 +3,6 @@ package dockerfile
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"sort"
 	"testing"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/frontend/dockerfile/linter"
 	"github.com/moby/buildkit/frontend/dockerui"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
 
@@ -22,11 +22,13 @@ import (
 )
 
 var lintTests = integration.TestFuncs(
-	testLintStageName,
-	testLintNoEmptyContinuations,
+	testStageName,
+	testNoEmptyContinuations,
+	testSelfConsistentCommandCasing,
+	testFileConsistentCommandCasing,
 )
 
-func testLintStageName(t *testing.T, sb integration.Sandbox) {
+func testStageName(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
 # warning: stage name should be lowercase
 FROM scratch AS BadStageName
@@ -39,16 +41,16 @@ FROM scratch AS base3
 	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{
 		{
 			RuleName:    "StageNameCasing",
-			Description: "Stage name 'BadStageName' should be lowercase",
+			Description: "Stage names should be lowercase",
+			Detail:      "Stage name 'BadStageName' should be lowercase",
 			Line:        3,
-			Detail:      "Stage names should be lowercase",
 			Level:       1,
 		},
 		{
 			RuleName:    "FromAsCasing",
-			Description: "'as' and 'FROM' keywords' casing do not match",
+			Description: "The 'as' keyword should match the case of the 'from' keyword",
+			Detail:      "'as' and 'FROM' keywords' casing do not match",
 			Line:        6,
-			Detail:      "The 'as' keyword should match the case of the 'from' keyword",
 			Level:       1,
 		},
 	})
@@ -62,15 +64,15 @@ from scratch as base2
 	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{
 		{
 			RuleName:    "FromAsCasing",
-			Description: "'AS' and 'from' keywords' casing do not match",
-			Line:        3,
-			Detail:      "The 'as' keyword should match the case of the 'from' keyword",
+			Description: "The 'as' keyword should match the case of the 'from' keyword",
+			Detail:      "'AS' and 'from' keywords' casing do not match",
 			Level:       1,
+			Line:        3,
 		},
 	})
 }
 
-func testLintNoEmptyContinuations(t *testing.T, sb integration.Sandbox) {
+func testNoEmptyContinuations(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
 FROM scratch
 # warning: empty continuation line
@@ -84,11 +86,11 @@ COPY Dockerfile \
 	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{
 		{
 			RuleName:    "NoEmptyContinuations",
-			Description: "Empty continuation line",
-			Line:        6,
-			Detail:      "Empty continuation lines will become errors in a future release",
-			URL:         "https://github.com/moby/moby/pull/33719",
+			Description: "Empty continuation lines will become errors in a future release",
+			Detail:      "Empty continuation line",
 			Level:       1,
+			Line:        6,
+			URL:         "https://github.com/moby/moby/pull/33719",
 		},
 	})
 }
@@ -102,10 +104,10 @@ FROM scratch AS base2
 	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{
 		{
 			RuleName:    "SelfConsistentCommandCasing",
-			Description: "Command 'From' should be consistently cased",
-			Line:        3,
-			Detail:      "Commands should be in consistent casing (all lower or all upper)",
+			Description: "Commands should be in consistent casing (all lower or all upper)",
+			Detail:      "Command 'From' should be consistently cased",
 			Level:       1,
+			Line:        3,
 		},
 	})
 	dockerfile = []byte(`
@@ -116,9 +118,9 @@ from scratch as base2
 	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{
 		{
 			RuleName:    "SelfConsistentCommandCasing",
-			Description: "Command 'frOM' should be consistently cased",
+			Description: "Commands should be in consistent casing (all lower or all upper)",
+			Detail:      "Command 'frOM' should be consistently cased",
 			Line:        3,
-			Detail:      "Commands should be in consistent casing (all lower or all upper)",
 			Level:       1,
 		},
 	})
@@ -134,9 +136,9 @@ COPY Dockerfile /bar
 	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{
 		{
 			RuleName:    "FileConsistentCommandCasing",
-			Description: "Command 'copy' should match the case of the command majority (uppercase)",
+			Description: "All commands within the Dockerfile should use the same casing (either upper or lower)",
+			Detail:      "Command 'copy' should match the case of the command majority (uppercase)",
 			Line:        4,
-			Detail:      "All commands within the Dockerfile should use the same casing (either upper or lower)",
 			Level:       1,
 		},
 	})
@@ -150,9 +152,9 @@ copy Dockerfile /bar
 	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{
 		{
 			RuleName:    "FileConsistentCommandCasing",
-			Description: "Command 'COPY' should match the case of the command majority (lowercase)",
+			Description: "All commands within the Dockerfile should use the same casing (either upper or lower)",
+			Detail:      "Command 'COPY' should match the case of the command majority (lowercase)",
 			Line:        4,
-			Detail:      "All commands within the Dockerfile should use the same casing (either upper or lower)",
 			Level:       1,
 		},
 	})
@@ -167,9 +169,9 @@ COPY Dockerfile /baz
 	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{
 		{
 			RuleName:    "FileConsistentCommandCasing",
-			Description: "Command 'from' should match the case of the command majority (uppercase)",
+			Description: "All commands within the Dockerfile should use the same casing (either upper or lower)",
+			Detail:      "Command 'from' should match the case of the command majority (uppercase)",
 			Line:        3,
-			Detail:      "All commands within the Dockerfile should use the same casing (either upper or lower)",
 			Level:       1,
 		},
 	})
@@ -184,9 +186,9 @@ copy Dockerfile /baz
 	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{
 		{
 			RuleName:    "FileConsistentCommandCasing",
-			Description: "Command 'FROM' should match the case of the command majority (lowercase)",
+			Description: "All commands within the Dockerfile should use the same casing (either upper or lower)",
+			Detail:      "Command 'FROM' should match the case of the command majority (lowercase)",
 			Line:        3,
-			Detail:      "All commands within the Dockerfile should use the same casing (either upper or lower)",
 			Level:       1,
 		},
 	})
@@ -229,8 +231,8 @@ func checkUnmarshal(t *testing.T, sb integration.Sandbox, c *client.Client, f fr
 		require.Equal(t, len(expected), len(lintResults.Warnings))
 		sort.Slice(lintResults.Warnings, func(i, j int) bool {
 			// sort by line number in ascending order
-			firstRange := lintResults.Warnings[i].Location[0]
-			secondRange := lintResults.Warnings[j].Location[0]
+			firstRange := lintResults.Warnings[i].Location.Ranges[0]
+			secondRange := lintResults.Warnings[j].Location.Ranges[0]
 			return firstRange.Start.Line < secondRange.Start.Line
 		})
 		// Compare expectedLintWarning with actual lint results
@@ -323,22 +325,28 @@ func checkLinterWarnings(t *testing.T, sb integration.Sandbox, dockerfile []byte
 	require.NoError(t, err)
 	defer c.Close()
 
-	checkProgressStream(t, sb, c, f, dir, dockerfile, expected)
-	checkUnmarshal(t, sb, c, f, dir, dockerfile, expected)
+	t.Run("warntype=progress", func(t *testing.T) {
+		checkProgressStream(t, sb, c, f, dir, dockerfile, expected)
+	})
+	t.Run("warntype=unmarshal", func(t *testing.T) {
+		checkUnmarshal(t, sb, c, f, dir, dockerfile, expected)
+	})
 }
 
 func checkVertexWarning(t *testing.T, warning *client.VertexWarning, expected expectedLintWarning) {
-	short := fmt.Sprintf("Lint Rule '%s': %s (line %d)", expected.RuleName, expected.Description, expected.Line)
+	short := linter.LintFormatShort(expected.RuleName, expected.Detail, expected.Line)
 	require.Equal(t, short, string(warning.Short))
-	require.Equal(t, expected.Detail, string(warning.Detail[0]))
+	require.Equal(t, expected.Description, string(warning.Detail[0]))
 	require.Equal(t, expected.URL, warning.URL)
 	require.Equal(t, expected.Level, warning.Level)
 }
 
 func checkLintWarning(t *testing.T, warning lint.Warning, expected expectedLintWarning) {
+	short := linter.LintFormatShort(expected.RuleName, expected.Detail, expected.Line)
 	require.Equal(t, expected.RuleName, warning.RuleName)
-	detail := fmt.Sprintf("%s (line %d)", expected.Description, expected.Line)
-	require.Equal(t, detail, warning.Detail)
+	require.Equal(t, expected.Description, warning.Description)
+	require.Equal(t, expected.URL, warning.URL)
+	require.Equal(t, short, warning.Detail)
 }
 
 func unmarshalLintResults(res *gateway.Result) (*lint.LintResults, error) {
