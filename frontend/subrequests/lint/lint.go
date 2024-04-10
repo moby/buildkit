@@ -26,16 +26,67 @@ var SubrequestLintDefinition = subrequests.Request{
 	},
 }
 
+type Source struct {
+	Filename string `json:"filename"`
+	Language string `json:"language"`
+	Data     []byte `json:"data"`
+}
+
+type Range struct {
+	Start Position `json:"start"`
+	End   Position `json:"end"`
+}
+
+type Position struct {
+	Line   int `json:"line"`
+	Column int `json:"column"`
+}
+
 type Warning struct {
-	RuleName  string   `json:"rule_name"`
-	Detail    string   `json:"detail"`
-	Filename  string   `json:"filename"`
-	Source    []string `json:"source"`
-	StartLine int      `json:"start_line"`
+	RuleName    string  `json:"rule_name"`
+	Detail      string  `json:"detail"`
+	SourceIndex int     `json:"source_index"`
+	Location    []Range `json:"location"`
 }
 
 type LintResults struct {
 	Warnings []Warning `json:"warnings"`
+	Sources  []Source  `json:"sources"`
+}
+
+func (results *LintResults) AddSource(filename string, language string, data []byte) int {
+	sourceE := Source{
+		Filename: filename,
+		Language: language,
+		Data:     data,
+	}
+	for i, source := range results.Sources {
+		if sourceEqual(source, sourceE) {
+			return i
+		}
+	}
+	results.Sources = append(results.Sources, Source{
+		Filename: filename,
+		Language: language,
+		Data:     data,
+	})
+	return len(results.Sources) - 1
+}
+
+func (results *LintResults) AddWarning(ruleName, detail string, sourceIndex int, location []Range) {
+	results.Warnings = append(results.Warnings, Warning{
+		RuleName:    ruleName,
+		Detail:      detail,
+		SourceIndex: sourceIndex,
+		Location:    location,
+	})
+}
+
+func sourceEqual(a, b Source) bool {
+	if a.Filename != b.Filename || a.Language != b.Language {
+		return false
+	}
+	return bytes.Equal(a.Data, b.Data)
 }
 
 func (warns LintResults) ToResult() (*client.Result, error) {
@@ -79,10 +130,19 @@ func PrintLintViolations(dt []byte, w io.Writer) error {
 	for _, rule := range lintWarningRules {
 		fmt.Fprintf(tw, "Lint Rule %s\n", rule)
 		for _, warning := range lintWarnings[rule] {
-			fmt.Fprintf(tw, "\t%s:%d\n", warning.Filename, warning.StartLine)
+			source := warnings.Sources[warning.SourceIndex]
+			sourceData := bytes.Split(source.Data, []byte("\n"))
+			firstRange := warning.Location[0]
+			if firstRange.Start.Line != firstRange.End.Line {
+				fmt.Fprintf(tw, "\t%s:%d-%d\n", source.Filename, firstRange.Start.Line, firstRange.End.Line)
+			} else {
+				fmt.Fprintf(tw, "\t%s:%d\n", source.Filename, firstRange.Start.Line)
+			}
 			fmt.Fprintf(tw, "\t%s\n", warning.Detail)
-			for offset, source := range warning.Source {
-				fmt.Fprintf(tw, "\t\t%d\t|\t%s\n", warning.StartLine+offset, source)
+			for _, r := range warning.Location {
+				for i := r.Start.Line; i <= r.End.Line; i++ {
+					fmt.Fprintf(tw, "\t%d\t|\t%s\n", i, sourceData[i-1])
+				}
 			}
 			fmt.Fprintln(tw)
 		}

@@ -87,8 +87,7 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 			return dockerfile2llb.ListTargets(ctx, src.Data)
 		},
 		Lint: func(ctx context.Context) (*lint.LintResults, error) {
-			warnings, err := dockerfile2llb.DockerfileLint(ctx, src.Data, convertOpt)
-			return &lint.LintResults{Warnings: warnings}, err
+			return dockerfile2llb.DockerfileLint(ctx, src.Data, convertOpt)
 		},
 	}); err != nil {
 		return nil, err

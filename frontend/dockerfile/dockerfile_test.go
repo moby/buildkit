@@ -7300,13 +7300,6 @@ type nopWriteCloser struct {
 
 func (nopWriteCloser) Close() error { return nil }
 
-type expectedLintWarning struct {
-	Short  string
-	Detail string
-	URL    string
-	Level  int
-}
-
 type secModeSandbox struct{}
 
 func (*secModeSandbox) UpdateConfigFile(in string) string {

@@ -111,32 +111,39 @@ func Dockefile2Outline(ctx context.Context, dt []byte, opt ConvertOpt) (*outline
 	return &o, nil
 }
 
-func DockerfileLint(ctx context.Context, dt []byte, opt ConvertOpt) ([]lint.Warning, error) {
-	warnings := []lint.Warning{}
-	sourceData := strings.Split(string(opt.SourceMap.Data), "\n")
+func DockerfileLint(ctx context.Context, dt []byte, opt ConvertOpt) (*lint.LintResults, error) {
+	results := &lint.LintResults{}
 	opt.Warn = func(short, url string, detail [][]byte, location []parser.Range) {
-		var rulename, ruledetail string
+		var ruleName, ruleDetail string
 		if strings.HasPrefix(short, "Lint Rule ") {
-			rulename = strings.TrimPrefix(short, "Lint Rule ")
-			ruleParts := strings.Split(rulename, ":")
-			rulename = strings.Trim(ruleParts[0], "'")
-			ruledetail = strings.TrimSpace(ruleParts[1])
+			ruleName = strings.TrimPrefix(short, "Lint Rule ")
+			ruleParts := strings.Split(ruleName, ":")
+			ruleName = strings.Trim(ruleParts[0], "'")
+			ruleDetail = strings.TrimSpace(ruleParts[1])
 		} else {
 			return
 		}
-		warnings = append(warnings, lint.Warning{
-			RuleName:  rulename,
-			Detail:    ruledetail,
-			Filename:  opt.SourceMap.Filename,
-			Source:    sourceData[location[0].Start.Line-1 : location[0].End.Line],
-			StartLine: location[0].Start.Line,
-		})
+		sourceIndex := results.AddSource(opt.SourceMap.Filename, "Dockerfile", opt.SourceMap.Data)
+		sourceLocation := []lint.Range{}
+		for _, loc := range location {
+			sourceLocation = append(sourceLocation, lint.Range{
+				Start: lint.Position{
+					Line:   loc.Start.Line,
+					Column: loc.Start.Character,
+				},
+				End: lint.Position{
+					Line:   loc.End.Line,
+					Column: loc.End.Character,
+				},
+			})
+		}
+		results.AddWarning(ruleName, ruleDetail, sourceIndex, sourceLocation)
 	}
 	_, err := toDispatchState(ctx, dt, opt)
 	if err != nil {
 		return nil, err
 	}
-	return warnings, nil
+	return results, nil
 }
 
 func ListTargets(ctx context.Context, dt []byte) (*targets.List, error) {

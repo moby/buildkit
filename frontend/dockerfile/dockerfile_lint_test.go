@@ -3,6 +3,7 @@ package dockerfile
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"sort"
 	"testing"
@@ -15,108 +16,15 @@ import (
 
 	"github.com/moby/buildkit/frontend/subrequests/lint"
 	"github.com/moby/buildkit/util/testutil/integration"
-	"github.com/moby/buildkit/util/testutil/workers"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"github.com/tonistiigi/fsutil"
 )
 
 var lintTests = integration.TestFuncs(
-	testLintRequest,
 	testLintStageName,
 	testLintNoEmptyContinuations,
 )
-
-func testLintRequest(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
-	workers.CheckFeatureCompat(t, sb, workers.FeatureFrontendOutline)
-	f := getFrontend(t, sb)
-	if _, ok := f.(*clientFrontend); !ok {
-		t.Skip("only test with client frontend")
-	}
-
-	dockerfile := []byte(`
-	FROM scratch as target
-	COPY Dockerfile \
-
-	.
-	ARG inherited=box
-	copy Dockerfile /foo
-
-	FROM scratch AS target2
-	COPY Dockerfile /Dockerfile
-	`)
-
-	dir := integration.Tmpdir(
-		t,
-		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
-	)
-
-	c, err := client.New(sb.Context(), sb.Address())
-	require.NoError(t, err)
-	defer c.Close()
-
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
-
-	called := false
-	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
-		res, err := c.Solve(ctx, gateway.SolveRequest{
-			FrontendOpt: map[string]string{
-				"frontend.caps": "moby.buildkit.frontend.subrequests",
-				"requestid":     "frontend.lint",
-				"build-arg:BAR": "678",
-				"target":        "target",
-			},
-			Frontend: "dockerfile.v0",
-		})
-		require.NoError(t, err)
-
-		lintResults, err := unmarshalLintResults(res)
-		require.NoError(t, err)
-
-		require.Equal(t, 3, len(lintResults.Warnings))
-		sort.Slice(lintResults.Warnings, func(i, j int) bool {
-			// sort by line number in ascending order
-			return lintResults.Warnings[i].StartLine < lintResults.Warnings[j].StartLine
-		})
-		checkLintRequestWarnings(t, lintResults.Warnings, []lint.Warning{
-			{
-				RuleName:  "FromAsCasing",
-				Detail:    "'as' and 'FROM' keywords' casing do not match (line 2)",
-				Filename:  "Dockerfile",
-				StartLine: 2,
-				Source:    []string{"\tFROM scratch as target"},
-			},
-			{
-				RuleName:  "NoEmptyContinuations",
-				Detail:    "Empty continuation line (line 5)",
-				Filename:  "Dockerfile",
-				StartLine: 5,
-				Source:    []string{"\t."},
-			},
-			{
-				RuleName:  "FileConsistentCommandCasing",
-				Detail:    "Command 'copy' should match the case of the command majority (uppercase) (line 7)",
-				Filename:  "Dockerfile",
-				StartLine: 7,
-				Source:    []string{"\tcopy Dockerfile /foo"},
-			},
-		})
-		called = true
-		return nil, nil
-	}
-
-	_, err = c.Build(sb.Context(), client.SolveOpt{
-		LocalMounts: map[string]fsutil.FS{
-			dockerui.DefaultLocalNameDockerfile: dir,
-		},
-	}, "", frontend, nil)
-	require.NoError(t, err)
-
-	require.True(t, called)
-}
 
 func testLintStageName(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
@@ -130,14 +38,18 @@ FROM scratch AS base3
 `)
 	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{
 		{
-			Short:  "Lint Rule 'StageNameCasing': Stage name 'BadStageName' should be lowercase (line 3)",
-			Detail: "Stage names should be lowercase",
-			Level:  1,
+			RuleName:    "StageNameCasing",
+			Description: "Stage name 'BadStageName' should be lowercase",
+			Line:        3,
+			Detail:      "Stage names should be lowercase",
+			Level:       1,
 		},
 		{
-			Short:  "Lint Rule 'FromAsCasing': 'as' and 'FROM' keywords' casing do not match (line 6)",
-			Detail: "The 'as' keyword should match the case of the 'from' keyword",
-			Level:  1,
+			RuleName:    "FromAsCasing",
+			Description: "'as' and 'FROM' keywords' casing do not match",
+			Line:        6,
+			Detail:      "The 'as' keyword should match the case of the 'from' keyword",
+			Level:       1,
 		},
 	})
 
@@ -149,9 +61,11 @@ from scratch as base2
 `)
 	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{
 		{
-			Short:  "Lint Rule 'FromAsCasing': 'AS' and 'from' keywords' casing do not match (line 3)",
-			Detail: "The 'as' keyword should match the case of the 'from' keyword",
-			Level:  1,
+			RuleName:    "FromAsCasing",
+			Description: "'AS' and 'from' keywords' casing do not match",
+			Line:        3,
+			Detail:      "The 'as' keyword should match the case of the 'from' keyword",
+			Level:       1,
 		},
 	})
 }
@@ -169,10 +83,12 @@ COPY Dockerfile \
 
 	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{
 		{
-			Short:  "Lint Rule 'NoEmptyContinuations': Empty continuation line (line 6)",
-			Detail: "Empty continuation lines will become errors in a future release",
-			URL:    "https://github.com/moby/moby/pull/33719",
-			Level:  1,
+			RuleName:    "NoEmptyContinuations",
+			Description: "Empty continuation line",
+			Line:        6,
+			Detail:      "Empty continuation lines will become errors in a future release",
+			URL:         "https://github.com/moby/moby/pull/33719",
+			Level:       1,
 		},
 	})
 }
@@ -185,9 +101,11 @@ FROM scratch AS base2
 `)
 	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{
 		{
-			Short:  "Lint Rule 'SelfConsistentCommandCasing': Command 'From' should be consistently cased (line 3)",
-			Detail: "Commands should be in consistent casing (all lower or all upper)",
-			Level:  1,
+			RuleName:    "SelfConsistentCommandCasing",
+			Description: "Command 'From' should be consistently cased",
+			Line:        3,
+			Detail:      "Commands should be in consistent casing (all lower or all upper)",
+			Level:       1,
 		},
 	})
 	dockerfile = []byte(`
@@ -197,9 +115,11 @@ from scratch as base2
 `)
 	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{
 		{
-			Short:  "Lint Rule 'SelfConsistentCommandCasing': Command 'frOM' should be consistently cased (line 3)",
-			Detail: "Commands should be in consistent casing (all lower or all upper)",
-			Level:  1,
+			RuleName:    "SelfConsistentCommandCasing",
+			Description: "Command 'frOM' should be consistently cased",
+			Line:        3,
+			Detail:      "Commands should be in consistent casing (all lower or all upper)",
+			Level:       1,
 		},
 	})
 }
@@ -213,9 +133,11 @@ COPY Dockerfile /bar
 `)
 	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{
 		{
-			Short:  "Lint Rule 'FileConsistentCommandCasing': Command 'copy' should match the case of the command majority (uppercase) (line 4)",
-			Detail: "All commands within the Dockerfile should use the same casing (either upper or lower)",
-			Level:  1,
+			RuleName:    "FileConsistentCommandCasing",
+			Description: "Command 'copy' should match the case of the command majority (uppercase)",
+			Line:        4,
+			Detail:      "All commands within the Dockerfile should use the same casing (either upper or lower)",
+			Level:       1,
 		},
 	})
 
@@ -227,9 +149,11 @@ copy Dockerfile /bar
 `)
 	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{
 		{
-			Short:  "Lint Rule 'FileConsistentCommandCasing': Command 'COPY' should match the case of the command majority (lowercase) (line 4)",
-			Detail: "All commands within the Dockerfile should use the same casing (either upper or lower)",
-			Level:  1,
+			RuleName:    "FileConsistentCommandCasing",
+			Description: "Command 'COPY' should match the case of the command majority (lowercase)",
+			Line:        4,
+			Detail:      "All commands within the Dockerfile should use the same casing (either upper or lower)",
+			Level:       1,
 		},
 	})
 
@@ -242,9 +166,11 @@ COPY Dockerfile /baz
 `)
 	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{
 		{
-			Short:  "Lint Rule 'FileConsistentCommandCasing': Command 'from' should match the case of the command majority (uppercase) (line 3)",
-			Detail: "All commands within the Dockerfile should use the same casing (either upper or lower)",
-			Level:  1,
+			RuleName:    "FileConsistentCommandCasing",
+			Description: "Command 'from' should match the case of the command majority (uppercase)",
+			Line:        3,
+			Detail:      "All commands within the Dockerfile should use the same casing (either upper or lower)",
+			Level:       1,
 		},
 	})
 
@@ -257,9 +183,11 @@ copy Dockerfile /baz
 `)
 	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{
 		{
-			Short:  "Lint Rule 'FileConsistentCommandCasing': Command 'FROM' should match the case of the command majority (lowercase) (line 3)",
-			Detail: "All commands within the Dockerfile should use the same casing (either upper or lower)",
-			Level:  1,
+			RuleName:    "FileConsistentCommandCasing",
+			Description: "Command 'FROM' should match the case of the command majority (lowercase)",
+			Line:        3,
+			Detail:      "All commands within the Dockerfile should use the same casing (either upper or lower)",
+			Level:       1,
 		},
 	})
 
@@ -278,22 +206,52 @@ COPY Dockerfile /bar
 	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{})
 }
 
-func checkLinterWarnings(t *testing.T, sb integration.Sandbox, dockerfile []byte, expected []expectedLintWarning) {
-	// As a note, this test depends on the `expected` lint
-	// warnings to be in order of appearance in the Dockerfile.
-
-	integration.SkipOnPlatform(t, "windows")
-	f := getFrontend(t, sb)
-
-	dir := integration.Tmpdir(
-		t,
-		fstest.CreateFile("Dockerfile", dockerfile, 0600),
-	)
-
-	c, err := client.New(sb.Context(), sb.Address())
+func checkUnmarshal(t *testing.T, sb integration.Sandbox, c *client.Client, f frontend, dir *integration.TmpDirWithName, dockerfile []byte, expected []expectedLintWarning) {
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
-	defer c.Close()
+	defer os.RemoveAll(destDir)
 
+	called := false
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		res, err := c.Solve(ctx, gateway.SolveRequest{
+			FrontendOpt: map[string]string{
+				"frontend.caps": "moby.buildkit.frontend.subrequests",
+				"requestid":     "frontend.lint",
+				"build-arg:BAR": "678",
+			},
+			Frontend: "dockerfile.v0",
+		})
+		require.NoError(t, err)
+
+		lintResults, err := unmarshalLintResults(res)
+		require.NoError(t, err)
+
+		require.Equal(t, len(expected), len(lintResults.Warnings))
+		sort.Slice(lintResults.Warnings, func(i, j int) bool {
+			// sort by line number in ascending order
+			firstRange := lintResults.Warnings[i].Location[0]
+			secondRange := lintResults.Warnings[j].Location[0]
+			return firstRange.Start.Line < secondRange.Start.Line
+		})
+		// Compare expectedLintWarning with actual lint results
+		for i, w := range lintResults.Warnings {
+			checkLintWarning(t, w, expected[i])
+		}
+		called = true
+		return nil, nil
+	}
+
+	_, err = c.Build(sb.Context(), client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+		},
+	}, "", frontend, nil)
+	require.NoError(t, err)
+
+	require.True(t, called)
+}
+
+func checkProgressStream(t *testing.T, sb integration.Sandbox, c *client.Client, f frontend, dir *integration.TmpDirWithName, dockerfile []byte, expected []expectedLintWarning) {
 	status := make(chan *client.SolveStatus)
 	statusDone := make(chan struct{})
 	done := make(chan struct{})
@@ -315,7 +273,7 @@ func checkLinterWarnings(t *testing.T, sb integration.Sandbox, dockerfile []byte
 		}
 	}()
 
-	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+	_, err := f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
 			"platform": "linux/amd64,linux/arm64",
 		},
@@ -345,27 +303,42 @@ func checkLinterWarnings(t *testing.T, sb integration.Sandbox, dockerfile []byte
 		return w1.Range[0].Start.Line < w2.Range[0].Start.Line
 	})
 	for i, w := range warnings {
-		require.Equal(t, expected[i].Short, string(w.Short))
-		require.Equal(t, expected[i].Detail, string(w.Detail[0]))
-		require.Equal(t, expected[i].URL, w.URL)
-		require.Equal(t, expected[i].Level, w.Level)
+		checkVertexWarning(t, w, expected[i])
 	}
 }
 
-func checkLintRequestWarnings(t *testing.T, actual, expected []lint.Warning) {
-	require.Equal(t, len(expected), len(actual))
+func checkLinterWarnings(t *testing.T, sb integration.Sandbox, dockerfile []byte, expected []expectedLintWarning) {
+	// As a note, this test depends on the `expected` lint
+	// warnings to be in order of appearance in the Dockerfile.
 
-	for i, expected := range expected {
-		actual := actual[i]
-		require.Equal(t, expected.RuleName, actual.RuleName)
-		require.Equal(t, expected.Detail, actual.Detail)
-		require.Equal(t, expected.Filename, actual.Filename)
-		require.Equal(t, expected.StartLine, actual.StartLine)
-		require.Equal(t, len(expected.Source), len(actual.Source))
-		for j, expectedSource := range expected.Source {
-			require.Equal(t, expectedSource, actual.Source[j])
-		}
-	}
+	integration.SkipOnPlatform(t, "windows")
+	f := getFrontend(t, sb)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	checkProgressStream(t, sb, c, f, dir, dockerfile, expected)
+	checkUnmarshal(t, sb, c, f, dir, dockerfile, expected)
+}
+
+func checkVertexWarning(t *testing.T, warning *client.VertexWarning, expected expectedLintWarning) {
+	short := fmt.Sprintf("Lint Rule '%s': %s (line %d)", expected.RuleName, expected.Description, expected.Line)
+	require.Equal(t, short, string(warning.Short))
+	require.Equal(t, expected.Detail, string(warning.Detail[0]))
+	require.Equal(t, expected.URL, warning.URL)
+	require.Equal(t, expected.Level, warning.Level)
+}
+
+func checkLintWarning(t *testing.T, warning lint.Warning, expected expectedLintWarning) {
+	require.Equal(t, expected.RuleName, warning.RuleName)
+	detail := fmt.Sprintf("%s (line %d)", expected.Description, expected.Line)
+	require.Equal(t, detail, warning.Detail)
 }
 
 func unmarshalLintResults(res *gateway.Result) (*lint.LintResults, error) {
@@ -378,4 +351,13 @@ func unmarshalLintResults(res *gateway.Result) (*lint.LintResults, error) {
 		return nil, err
 	}
 	return &l, nil
+}
+
+type expectedLintWarning struct {
+	RuleName    string
+	Description string
+	Line        int
+	Detail      string
+	URL         string
+	Level       int
 }
