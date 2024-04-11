@@ -26,6 +26,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/moby/buildkit/frontend/dockerui"
+	"github.com/moby/buildkit/frontend/subrequests/lint"
 	"github.com/moby/buildkit/frontend/subrequests/outline"
 	"github.com/moby/buildkit/frontend/subrequests/targets"
 	"github.com/moby/buildkit/identity"
@@ -63,7 +64,7 @@ type ConvertOpt struct {
 	TargetPlatform *ocispecs.Platform
 	MetaResolver   llb.ImageMetaResolver
 	LLBCaps        *apicaps.CapSet
-	Warn           func(short, url string, detail [][]byte, location []parser.Range)
+	Warn           linter.LintWarnFunc
 }
 
 type SBOMTargets struct {
@@ -108,6 +109,19 @@ func Dockefile2Outline(ctx context.Context, dt []byte, opt ConvertOpt) (*outline
 	}
 	o := ds.Outline(dt)
 	return &o, nil
+}
+
+func DockerfileLint(ctx context.Context, dt []byte, opt ConvertOpt) (*lint.LintResults, error) {
+	results := &lint.LintResults{}
+	sourceIndex := results.AddSource(opt.SourceMap)
+	opt.Warn = func(rulename, description, url, fmtmsg string, location []parser.Range) {
+		results.AddWarning(rulename, description, url, fmtmsg, sourceIndex, location)
+	}
+	_, err := toDispatchState(ctx, dt, opt)
+	if err != nil {
+		return nil, err
+	}
+	return results, nil
 }
 
 func ListTargets(ctx context.Context, dt []byte) (*targets.List, error) {
@@ -162,7 +176,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	}
 
 	if opt.Warn == nil {
-		opt.Warn = func(string, string, [][]byte, []parser.Range) {}
+		opt.Warn = func(string, string, string, string, []parser.Range) {}
 	}
 
 	if opt.Client != nil && opt.LLBCaps == nil {
@@ -1946,7 +1960,7 @@ func isSelfConsistentCasing(s string) bool {
 	return s == strings.ToLower(s) || s == strings.ToUpper(s)
 }
 
-func validateCommandCasing(dockerfile *parser.Result, warn func(short, url string, detail [][]byte, location []parser.Range)) {
+func validateCommandCasing(dockerfile *parser.Result, warn linter.LintWarnFunc) {
 	var lowerCount, upperCount int
 	for _, node := range dockerfile.AST.Children {
 		if isSelfConsistentCasing(node.Value) {

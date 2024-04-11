@@ -22,9 +22,12 @@ func (rule LinterRule[F]) Run(warn LintWarnFunc, location []parser.Range, txt ..
 	if len(txt) == 0 {
 		txt = []string{rule.Description}
 	}
-	short := strings.Join(txt, " ")
-	short = fmt.Sprintf("Lint Rule '%s': %s (line %d)", rule.Name, short, startLine)
-	warn(short, rule.URL, [][]byte{[]byte(rule.Description)}, location)
+	short := LintFormatShort(rule.Name, strings.Join(txt, " "), startLine)
+	warn(rule.Name, rule.Description, rule.URL, short, location)
 }
 
-type LintWarnFunc func(short, url string, detail [][]byte, location []parser.Range)
+func LintFormatShort(rulename, msg string, startLine int) string {
+	return fmt.Sprintf("Lint Rule '%s': %s (line %d)", rulename, msg, startLine)
+}
+
+type LintWarnFunc func(rulename, description, url, fmtmsg string, location []parser.Range)
