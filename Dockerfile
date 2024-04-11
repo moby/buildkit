@@ -19,6 +19,7 @@ ARG DELVE_VERSION=v1.21.0
 
 ARG GO_VERSION=1.21
 ARG ALPINE_VERSION=3.19
+ARG ALPINE_IMAGE=build-harbor.alauda.cn/ops/alpine
 ARG XX_VERSION=1.4.0
 ARG BUILDKIT_DEBUG
 
@@ -28,12 +29,12 @@ FROM minio/mc:${MINIO_MC_VERSION} AS minio-mc
 
 # alpine base for buildkit image
 # TODO: remove this when alpine image supports riscv64
-FROM alpine:${ALPINE_VERSION} AS alpine-amd64
-FROM alpine:${ALPINE_VERSION} AS alpine-arm
-FROM alpine:${ALPINE_VERSION} AS alpine-arm64
-FROM alpine:${ALPINE_VERSION} AS alpine-s390x
-FROM alpine:${ALPINE_VERSION} AS alpine-ppc64le
-FROM alpine:edge@sha256:2d01a16bab53a8405876cec4c27235d47455a7b72b75334c614f2fb0968b3f90 AS alpine-riscv64
+FROM ${ALPINE_IMAGE}:${ALPINE_VERSION} AS alpine-amd64
+FROM ${ALPINE_IMAGE}:${ALPINE_VERSION} AS alpine-arm
+FROM ${ALPINE_IMAGE}:${ALPINE_VERSION} AS alpine-arm64
+FROM ${ALPINE_IMAGE}:${ALPINE_VERSION} AS alpine-s390x
+FROM ${ALPINE_IMAGE}:${ALPINE_VERSION} AS alpine-ppc64le
+FROM ${ALPINE_IMAGE}:edge@sha256:2d01a16bab53a8405876cec4c27235d47455a7b72b75334c614f2fb0968b3f90 AS alpine-riscv64
 FROM alpine-$TARGETARCH AS alpinebase
 
 # xx is a helper for cross-compilation
@@ -43,7 +44,7 @@ FROM --platform=$BUILDPLATFORM tonistiigi/xx:${XX_VERSION} AS xx
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS golatest
 
 # git stage is used for checking out remote repository sources
-FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS git
+FROM --platform=$BUILDPLATFORM ${ALPINE_IMAGE}:${ALPINE_VERSION} AS git
 RUN apk add --no-cache git
 
 # gobuild is base stage for compiling go/cgo
@@ -164,7 +165,7 @@ RUN --mount=from=dnsname-src,src=/usr/src/dnsname,target=.,rw \
     CGO_ENABLED=0 xx-go build -o /usr/bin/dnsname ./plugins/meta/dnsname && \
     xx-verify --static /usr/bin/dnsname
 
-FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS cni-plugins
+FROM --platform=$BUILDPLATFORM ${ALPINE_IMAGE}:${ALPINE_VERSION} AS cni-plugins
 RUN apk add --no-cache curl
 COPY --from=xx / /
 ARG CNI_VERSION
@@ -208,7 +209,7 @@ FROM binaries-$TARGETOS AS binaries
 # enable scanning for this stage
 ARG BUILDKIT_SBOM_SCAN_STAGE=true
 
-FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS releaser
+FROM --platform=$BUILDPLATFORM ${ALPINE_IMAGE}:${ALPINE_VERSION} AS releaser
 RUN apk add --no-cache tar gzip
 WORKDIR /work
 ARG TARGETPLATFORM
@@ -220,7 +221,7 @@ FROM scratch AS release
 COPY --link --from=releaser /out/ /
 
 FROM alpinebase AS buildkit-export
-RUN apk add --no-cache fuse3 git openssh pigz xz iptables ip6tables \
+RUN apk add --no-cache fuse3 git openssh pigz xz iptables ip6tables bash skopeo \
   && ln -s fusermount3 /usr/bin/fusermount
 COPY --link examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 VOLUME /var/lib/buildkit

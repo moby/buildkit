@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -13,13 +14,22 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/remotes/docker"
+	"github.com/docker/distribution/registry/client/auth"
+	"github.com/docker/distribution/registry/client/transport"
+	"github.com/docker/docker/registry"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/resolver/config"
 	"github.com/moby/buildkit/util/tracing"
+	"github.com/moby/buildkit/version"
 	"github.com/pkg/errors"
 )
 
 const (
 	defaultPath = "/v2"
+
+	// DefaultRegistryVersionHeader is the name of the default HTTP header
+	// that carries Registry version info
+	DefaultRegistryVersionHeader = "Docker-Distribution-Api-Version"
 )
 
 func fillInsecureOpts(host string, c config.RegistryConfig, h docker.RegistryHost) (*docker.RegistryHost, error) {
@@ -159,10 +169,74 @@ func NewRegistryConfig(m map[string]config.RegistryConfig) docker.RegistryHosts 
 			return out, nil
 		},
 		docker.ConfigureDefaultRegistries(
-			docker.WithClient(newDefaultClient()),
-			docker.WithPlainHTTP(docker.MatchLocalhost),
+			docker.WithClient(newInsecureDefaultClient()),
+			docker.WithPlainHTTP(isPlainHTTP),
 		),
 	)
+}
+
+func isPlainHTTP(host string) (bool, error) {
+	plainHTTP, err := docker.MatchLocalhost(host)
+	if err != nil {
+		return false, err
+	}
+
+	if plainHTTP {
+		return plainHTTP, nil
+	}
+
+	return isHttpRegistry(host), nil
+}
+
+func isHttpRegistry(host string) bool {
+	base := newDefaultTransport()
+	base.TLSClientConfig = &tls.Config{}
+	base.TLSClientConfig.InsecureSkipVerify = true
+
+	modifiers := registry.Headers(version.UserAgent(), nil)
+	authTransport := transport.NewTransport(base, modifiers...)
+
+	// By default, http attempts to authenticate the v2 interface.
+	endpoint := &url.URL{
+		Scheme: "https",
+		Host:   host,
+	}
+	v2Version := auth.APIVersion{
+		Type:    "registry",
+		Version: "2.0",
+	}
+
+	pingClient := &http.Client{
+		Transport: authTransport,
+		Timeout:   15 * time.Second,
+	}
+
+	endpointStr := strings.TrimRight(endpoint.String(), "/") + "/v2/"
+	req, err := http.NewRequest(http.MethodGet, endpointStr, nil)
+	if err != nil {
+		return true
+	}
+
+	resp, err := pingClient.Do(req)
+	if err != nil {
+		bklog.L.Debugf("failed request %s v2 endpoint response, error: %s", host, err.Error())
+		return true
+	}
+	defer resp.Body.Close()
+
+	versions := auth.APIVersions(resp, DefaultRegistryVersionHeader)
+	bklog.L.Debugf("%s v2 endpoint response status code %d", host, resp.StatusCode)
+	for _, pingVersion := range versions {
+		if pingVersion == v2Version {
+			// The version header indicates we're definitely
+			// talking to a v2 registry. So don't allow future
+			// fallbacks to the v1 protocol.
+			bklog.L.Debugf("%s is https registry", host)
+			return false
+		}
+	}
+
+	return true
 }
 
 func newMirrorRegistryHost(mirror string) docker.RegistryHost {
@@ -177,6 +251,16 @@ func newMirrorRegistryHost(mirror string) docker.RegistryHost {
 	}
 
 	return h
+}
+
+func newInsecureDefaultClient() *http.Client {
+	httpsTransport := newDefaultTransport()
+	httpsTransport.TLSClientConfig = &tls.Config{}
+	httpsTransport.TLSClientConfig.InsecureSkipVerify = true
+
+	return &http.Client{
+		Transport: tracing.NewTransport(httpsTransport),
+	}
 }
 
 func newDefaultClient() *http.Client {
