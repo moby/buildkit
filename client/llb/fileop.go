@@ -642,7 +642,7 @@ type fileActionState struct {
 	fa             *FileAction
 }
 
-func (ms *marshalState) addInput(st *fileActionState, c *Constraints, o Output) (pb.InputIndex, error) {
+func (ms *marshalState) addInput(c *Constraints, o Output) (pb.InputIndex, error) {
 	inp, err := o.ToInput(ms.ctx, c)
 	if err != nil {
 		return 0, err
@@ -684,7 +684,7 @@ func (ms *marshalState) add(fa *FileAction, c *Constraints) (*fileActionState, e
 	}
 
 	if source := fa.state.Output(); source != nil {
-		inp, err := ms.addInput(st, c, source)
+		inp, err := ms.addInput(c, source)
 		if err != nil {
 			return nil, err
 		}
@@ -700,7 +700,7 @@ func (ms *marshalState) add(fa *FileAction, c *Constraints) (*fileActionState, e
 	if a, ok := fa.action.(*fileActionCopy); ok {
 		if a.state != nil {
 			if out := a.state.Output(); out != nil {
-				inp, err := ms.addInput(st, c, out)
+				inp, err := ms.addInput(c, out)
 				if err != nil {
 					return nil, err
 				}

@@ -131,7 +131,7 @@ target "lint" {
     TARGETNAME = buildtags.name
     BUILDTAGS = buildtags.tags
   }
-  platforms = buildtags.target == "golangci-lint" && GOLANGCI_LINT_MULTIPLATFORM != null ? [
+  platforms = ( buildtags.target == "golangci-lint" || buildtags.name == "gopls" ) && GOLANGCI_LINT_MULTIPLATFORM != null ? [
     "freebsd/amd64",
     "linux/amd64",
     "linux/arm64",
@@ -148,6 +148,7 @@ target "lint" {
       { name = "nydus", tags = "nydus", target = "golangci-lint" },
       { name = "yaml", tags = "", target = "yamllint" },
       { name = "proto", tags = "", target = "protolint" },
+      { name = "gopls", tags = "", target = "gopls-analyze" }
     ]
   }
 }

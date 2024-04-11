@@ -2,7 +2,6 @@ package workers
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -27,7 +26,6 @@ func (osp otelSocketPath) UpdateConfigFile(in string) string {
 }
 
 func runBuildkitd(
-	ctx context.Context,
 	conf *integration.BackendConfig,
 	args []string,
 	logs map[string]*bytes.Buffer,

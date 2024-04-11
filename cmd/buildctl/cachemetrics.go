@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,7 +9,6 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/client"
-	"github.com/moby/buildkit/util/progress/progresswriter"
 	digest "github.com/opencontainers/go-digest"
 )
 
@@ -21,7 +19,7 @@ type vtxInfo struct {
 	name      string
 }
 
-func tailVTXInfo(ctx context.Context, pw progresswriter.Writer, metricsCh <-chan *client.SolveStatus) map[digest.Digest]*vtxInfo {
+func tailVTXInfo(metricsCh <-chan *client.SolveStatus) map[digest.Digest]*vtxInfo {
 	fromRegexp := regexp.MustCompile(`^\[.*\] FROM`)
 
 	vtxMap := make(map[digest.Digest]*vtxInfo)

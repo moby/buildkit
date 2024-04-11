@@ -58,7 +58,7 @@ type puller struct {
 	*pull.Puller
 }
 
-func mainManifestKey(ctx context.Context, desc ocispecs.Descriptor, platform ocispecs.Platform, layerLimit *int) (digest.Digest, error) {
+func mainManifestKey(desc ocispecs.Descriptor, platform ocispecs.Platform, layerLimit *int) (digest.Digest, error) {
 	dt, err := json.Marshal(struct {
 		Digest     digest.Digest
 		OS         string
@@ -164,7 +164,7 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 		}
 
 		desc := p.manifest.MainManifestDesc
-		k, err := mainManifestKey(ctx, desc, p.Platform, p.layerLimit)
+		k, err := mainManifestKey(desc, p.Platform, p.layerLimit)
 		if err != nil {
 			return struct{}{}, err
 		}

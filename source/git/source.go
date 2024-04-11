@@ -312,7 +312,7 @@ func (gs *gitSourceHandler) mountSSHAuthSock(ctx context.Context, sshID string, 
 	return sock, cleanup, nil
 }
 
-func (gs *gitSourceHandler) mountKnownHosts(ctx context.Context) (string, func() error, error) {
+func (gs *gitSourceHandler) mountKnownHosts() (string, func() error, error) {
 	if gs.src.KnownSSHHosts == "" {
 		return "", nil, errors.Errorf("no configured known hosts forwarded from the client")
 	}
@@ -692,7 +692,7 @@ func (gs *gitSourceHandler) gitCli(ctx context.Context, g session.Group, opts ..
 	var knownHosts string
 	if gs.src.KnownSSHHosts != "" {
 		var unmountKnownHosts func() error
-		knownHosts, unmountKnownHosts, err = gs.mountKnownHosts(ctx)
+		knownHosts, unmountKnownHosts, err = gs.mountKnownHosts()
 		if err != nil {
 			cleanup()
 			return nil, nil, err

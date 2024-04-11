@@ -1035,7 +1035,7 @@ func testSecurityMode(t *testing.T, sb integration.Sandbox) {
 				0x00000000a80425fb=cap_chown,cap_dac_override,cap_fowner,cap_fsetid,cap_kill,cap_setgid,cap_setuid,cap_setpcap,
 				cap_net_bind_service,cap_net_raw,cap_sys_chroot,cap_mknod,cap_audit_write,cap_setfcap
 			*/
-			require.EqualValues(t, 0xa80425fb, caps)
+			require.Equal(t, uint64(0xa80425fb), caps)
 		}
 		allowedEntitlements = []entitlements.Entitlement{}
 	} else {
@@ -1050,7 +1050,7 @@ func testSecurityMode(t *testing.T, sb integration.Sandbox) {
 			*/
 
 			// require that _at least_ minimum capabilities are granted
-			require.EqualValues(t, 0x3fffffffff, caps&0x3fffffffff)
+			require.Equal(t, uint64(0x3fffffffff), caps&0x3fffffffff)
 		}
 		mode = llb.SecurityModeInsecure
 		allowedEntitlements = []entitlements.Entitlement{entitlements.EntitlementSecurityInsecure}

@@ -189,7 +189,7 @@ func Changes(ctx context.Context, changeFn fs.ChangeFunc, upperdir, upperdirView
 		}
 
 		// Check if this is a deleted entry
-		isDelete, skip, err := checkDelete(upperdir, path, base, f)
+		isDelete, skip, err := checkDelete(path, base, f)
 		if err != nil {
 			return err
 		} else if skip {
@@ -247,7 +247,7 @@ func Changes(ctx context.Context, changeFn fs.ChangeFunc, upperdir, upperdirView
 }
 
 // checkDelete checks if the specified file is a whiteout
-func checkDelete(upperdir string, path string, base string, f os.FileInfo) (delete, skip bool, _ error) {
+func checkDelete(path string, base string, f os.FileInfo) (delete, skip bool, _ error) {
 	if f.Mode()&os.ModeCharDevice != 0 {
 		if _, ok := f.Sys().(*syscall.Stat_t); ok {
 			maj, min, err := devices.DeviceInfo(f)
