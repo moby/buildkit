@@ -139,7 +139,7 @@ func docopy(ctx context.Context, src, dest string, action pb.FileActionCopy, u *
 	}
 	destPath, err := cleanPath(action.Dest)
 	if err != nil {
-		return errors.Wrap(err, "cleaning path")
+		return errors.Wrap(err, "cleaning destination path")
 	}
 	if !action.CreateDestPath {
 		p, err := fs.RootPath(dest, filepath.Join("/", action.Dest))
