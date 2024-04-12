@@ -22,6 +22,7 @@ import (
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend"
+	"github.com/moby/buildkit/frontend/attestations"
 	"github.com/moby/buildkit/frontend/gateway"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
@@ -208,6 +209,15 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 		attrs := map[string]string{
 			"mode":          "max",
 			"capture-usage": "true",
+		}
+
+		// infer builder-id from user input if available
+		if attests, err := attestations.Parse(rec.FrontendAttrs); err == nil {
+			if prvAttrs, ok := attests["provenance"]; ok {
+				if builderID, ok := prvAttrs["builder-id"]; ok {
+					attrs["builder-id"] = builderID
+				}
+			}
 		}
 
 		makeProvenance := func(res solver.ResultProxy, cap *provenance.Capture) (*controlapi.Descriptor, func(), error) {
