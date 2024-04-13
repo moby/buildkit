@@ -208,7 +208,7 @@ COPY Dockerfile /bar
 	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{})
 }
 
-func checkUnmarshal(t *testing.T, sb integration.Sandbox, c *client.Client, f frontend, dir *integration.TmpDirWithName, dockerfile []byte, expected []expectedLintWarning) {
+func checkUnmarshal(t *testing.T, sb integration.Sandbox, c *client.Client, dir *integration.TmpDirWithName, expected []expectedLintWarning) {
 	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
@@ -253,7 +253,7 @@ func checkUnmarshal(t *testing.T, sb integration.Sandbox, c *client.Client, f fr
 	require.True(t, called)
 }
 
-func checkProgressStream(t *testing.T, sb integration.Sandbox, c *client.Client, f frontend, dir *integration.TmpDirWithName, dockerfile []byte, expected []expectedLintWarning) {
+func checkProgressStream(t *testing.T, sb integration.Sandbox, c *client.Client, dir *integration.TmpDirWithName, expected []expectedLintWarning) {
 	status := make(chan *client.SolveStatus)
 	statusDone := make(chan struct{})
 	done := make(chan struct{})
@@ -274,6 +274,8 @@ func checkProgressStream(t *testing.T, sb integration.Sandbox, c *client.Client,
 			}
 		}
 	}()
+
+	f := getFrontend(t, sb)
 
 	_, err := f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
@@ -314,7 +316,6 @@ func checkLinterWarnings(t *testing.T, sb integration.Sandbox, dockerfile []byte
 	// warnings to be in order of appearance in the Dockerfile.
 
 	integration.SkipOnPlatform(t, "windows")
-	f := getFrontend(t, sb)
 
 	dir := integration.Tmpdir(
 		t,
@@ -326,10 +327,10 @@ func checkLinterWarnings(t *testing.T, sb integration.Sandbox, dockerfile []byte
 	defer c.Close()
 
 	t.Run("warntype=progress", func(t *testing.T) {
-		checkProgressStream(t, sb, c, f, dir, dockerfile, expected)
+		checkProgressStream(t, sb, c, dir, expected)
 	})
 	t.Run("warntype=unmarshal", func(t *testing.T) {
-		checkUnmarshal(t, sb, c, f, dir, dockerfile, expected)
+		checkUnmarshal(t, sb, c, dir, expected)
 	})
 }
 
