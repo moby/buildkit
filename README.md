@@ -702,7 +702,7 @@ buildctl \
 
 ### Load balancing
 
-`buildctl build` can be called against randomly load balanced the `buildkitd` daemon.
+`buildctl build` can be called against randomly load balanced `buildkitd` daemons.
 
 See also [Consistent hashing](#consistent-hashing) for client-side load balancing.
 
