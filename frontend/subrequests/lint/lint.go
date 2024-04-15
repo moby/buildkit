@@ -26,6 +26,7 @@ var SubrequestLintDefinition = subrequests.Request{
 	Metadata: []subrequests.Named{
 		{Name: "result.json"},
 		{Name: "result.txt"},
+		{Name: "result.statuscode"},
 	},
 }
 
@@ -112,6 +113,12 @@ func (results *LintResults) ToResult() (*client.Result, error) {
 		return nil, err
 	}
 	res.AddMeta("result.txt", b.Bytes())
+
+	status := 0
+	if len(results.Warnings) > 0 {
+		status = 1
+	}
+	res.AddMeta("result.statuscode", []byte(fmt.Sprintf("%d", status)))
 
 	res.AddMeta("version", []byte(SubrequestLintDefinition.Version))
 	return res, nil
