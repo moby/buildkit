@@ -1,5 +1,6 @@
-# syntax=docker/dockerfile-upstream:master
+# syntax=docker-mirrors.alauda.cn/docker/dockerfile-upstream:master
 
+ARG MIRROR_REGISTRY=docker-mirrors.alauda.cn
 ARG RUNC_VERSION=v1.1.12
 ARG CONTAINERD_VERSION=v1.7.11
 # containerd v1.6 for integration tests
@@ -38,10 +39,10 @@ FROM ${ALPINE_IMAGE}:edge@sha256:2d01a16bab53a8405876cec4c27235d47455a7b72b75334
 FROM alpine-$TARGETARCH AS alpinebase
 
 # xx is a helper for cross-compilation
-FROM --platform=$BUILDPLATFORM tonistiigi/xx:${XX_VERSION} AS xx
+FROM --platform=$BUILDPLATFORM ${MIRROR_REGISTRY}/tonistiigi/xx:${XX_VERSION} AS xx
 
 # go base image
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS golatest
+FROM --platform=$BUILDPLATFORM ${MIRROR_REGISTRY}/library/golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS golatest
 
 # git stage is used for checking out remote repository sources
 FROM --platform=$BUILDPLATFORM ${ALPINE_IMAGE}:${ALPINE_VERSION} AS git
@@ -186,10 +187,12 @@ COPY --link --from=cni-plugins /opt/cni/bin/firewall /buildkit-cni-firewall
 FROM scratch AS cni-plugins-export-squashed
 COPY --from=cni-plugins-export / /
 
+FROM ${MIRROR_REGISTRY}/tonistiigi/binfmt:buildkit-v7.1.0-30@sha256:45dd57b4ba2f24e2354f71f1e4e51f073cb7a28fd848ce6f5f2a7701142a6bf0 AS binfmt
+
 FROM scratch AS binaries-linux
 COPY --link --from=runc /usr/bin/runc /buildkit-runc
 # built from https://github.com/tonistiigi/binfmt/releases/tag/buildkit%2Fv7.1.0-30
-COPY --link --from=tonistiigi/binfmt:buildkit-v7.1.0-30@sha256:45dd57b4ba2f24e2354f71f1e4e51f073cb7a28fd848ce6f5f2a7701142a6bf0 / /
+COPY --link --from=binfmt / /
 COPY --link --from=cni-plugins-export-squashed / /
 COPY --link --from=buildctl /usr/bin/buildctl /
 COPY --link --from=buildkitd /usr/bin/buildkitd /
