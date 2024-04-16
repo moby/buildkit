@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"io"
 	"sort"
-	"text/tabwriter"
 
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/frontend/subrequests"
+	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 )
 
@@ -30,13 +30,6 @@ var SubrequestLintDefinition = subrequests.Request{
 	},
 }
 
-type Source struct {
-	Filename   string         `json:"fileName"`
-	Language   string         `json:"language"`
-	Definition *pb.Definition `json:"definition"`
-	Data       []byte         `json:"data"`
-}
-
 type Warning struct {
 	RuleName    string      `json:"ruleName"`
 	Description string      `json:"description,omitempty"`
@@ -46,19 +39,19 @@ type Warning struct {
 }
 
 type LintResults struct {
-	Warnings []Warning `json:"warnings"`
-	Sources  []Source  `json:"sources"`
+	Warnings []Warning        `json:"warnings"`
+	Sources  []*pb.SourceInfo `json:"sources"`
 }
 
 func (results *LintResults) AddSource(sourceMap *llb.SourceMap) int {
-	newSource := Source{
+	newSource := &pb.SourceInfo{
 		Filename:   sourceMap.Filename,
 		Language:   sourceMap.Language,
 		Definition: sourceMap.Definition.ToPB(),
 		Data:       sourceMap.Data,
 	}
 	for i, source := range results.Sources {
-		if sourceEqual(source, newSource) {
+		if sourceInfoEqual(source, newSource) {
 			return i
 		}
 	}
@@ -93,7 +86,7 @@ func (results *LintResults) AddWarning(rulename, description, url, fmtmsg string
 	})
 }
 
-func sourceEqual(a, b Source) bool {
+func sourceInfoEqual(a, b *pb.SourceInfo) bool {
 	if a.Filename != b.Filename || a.Language != b.Language {
 		return false
 	}
@@ -125,46 +118,38 @@ func (results *LintResults) ToResult() (*client.Result, error) {
 }
 
 func PrintLintViolations(dt []byte, w io.Writer) error {
-	var warnings LintResults
+	var results LintResults
 
-	if err := json.Unmarshal(dt, &warnings); err != nil {
+	if err := json.Unmarshal(dt, &results); err != nil {
 		return err
 	}
 
-	// Here, we're grouping the warnings by rule name
-	lintWarnings := make(map[string][]Warning)
-	lintWarningRules := []string{}
-	for _, warning := range warnings.Warnings {
-		if _, ok := lintWarnings[warning.RuleName]; !ok {
-			lintWarningRules = append(lintWarningRules, warning.RuleName)
-			lintWarnings[warning.RuleName] = []Warning{}
+	sort.Slice(results.Warnings, func(i, j int) bool {
+		sourceInfoI := results.Sources[results.Warnings[i].Location.SourceIndex]
+		sourceInfoJ := results.Sources[results.Warnings[j].Location.SourceIndex]
+		if sourceInfoI.Filename != sourceInfoJ.Filename {
+			return sourceInfoI.Filename < sourceInfoJ.Filename
 		}
-		lintWarnings[warning.RuleName] = append(lintWarnings[warning.RuleName], warning)
-	}
-	sort.Strings(lintWarningRules)
-
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	for _, rule := range lintWarningRules {
-		fmt.Fprintf(tw, "Lint Rule %s\n", rule)
-		for _, warning := range lintWarnings[rule] {
-			source := warnings.Sources[warning.Location.SourceIndex]
-			sourceData := bytes.Split(source.Data, []byte("\n"))
-			firstRange := warning.Location.Ranges[0]
-			if firstRange.Start.Line != firstRange.End.Line {
-				fmt.Fprintf(tw, "\t%s:%d-%d\n", source.Filename, firstRange.Start.Line, firstRange.End.Line)
-			} else {
-				fmt.Fprintf(tw, "\t%s:%d\n", source.Filename, firstRange.Start.Line)
-			}
-			fmt.Fprintf(tw, "\t%s\n", warning.Detail)
-			for _, r := range warning.Location.Ranges {
-				for i := r.Start.Line; i <= r.End.Line; i++ {
-					fmt.Fprintf(tw, "\t%d\t|\t%s\n", i, sourceData[i-1])
-				}
-			}
-			fmt.Fprintln(tw)
+		if len(results.Warnings[i].Location.Ranges) == 0 || len(results.Warnings[j].Location.Ranges) == 0 {
+			return false
 		}
-		fmt.Fprintln(tw)
-	}
+		return results.Warnings[i].Location.Ranges[0].Start.Line < results.Warnings[j].Location.Ranges[0].Start.Line
+	})
 
-	return tw.Flush()
+	for _, warning := range results.Warnings {
+		fmt.Fprintf(w, "\n- %s\n%s\n", warning.Detail, warning.Description)
+		if warning.URL != "" {
+			fmt.Fprintf(w, "URL: %s\n", warning.URL)
+		}
+		sourceInfo := results.Sources[warning.Location.SourceIndex]
+		source := errdefs.Source{
+			Info:   sourceInfo,
+			Ranges: warning.Location.Ranges,
+		}
+		err := source.Print(w)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
