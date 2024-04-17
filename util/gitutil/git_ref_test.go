@@ -67,11 +67,8 @@ func TestParseGitRef(t *testing.T) {
 			},
 		},
 		{
-			ref: "custom.xyz/moby/buildkit.git",
-			expected: &GitRef{
-				Remote:    "https://custom.xyz/moby/buildkit.git",
-				ShortName: "buildkit",
-			},
+			ref:      "custom.xyz/moby/buildkit.git",
+			expected: nil,
 		},
 		{
 			ref:      "https://github.com/moby/buildkit",

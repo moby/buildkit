@@ -69,7 +69,7 @@ func ParseGitRef(ref string) (*GitRef, error) {
 	} else {
 		remote, err = ParseURL(ref)
 		if errors.Is(err, ErrUnknownProtocol) {
-			remote, err = ParseURL("https://" + ref)
+			return nil, err
 		}
 		if err != nil {
 			return nil, err
