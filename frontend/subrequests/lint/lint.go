@@ -86,13 +86,6 @@ func (results *LintResults) AddWarning(rulename, description, url, fmtmsg string
 	})
 }
 
-func sourceInfoEqual(a, b *pb.SourceInfo) bool {
-	if a.Filename != b.Filename || a.Language != b.Language {
-		return false
-	}
-	return bytes.Equal(a.Data, b.Data)
-}
-
 func (results *LintResults) ToResult() (*client.Result, error) {
 	res := client.NewResult()
 	dt, err := json.MarshalIndent(results, "", "  ")
@@ -117,10 +110,36 @@ func (results *LintResults) ToResult() (*client.Result, error) {
 	return res, nil
 }
 
+func (results *LintResults) validateWarnings() error {
+	for _, warning := range results.Warnings {
+		if warning.Location.SourceIndex < 0 {
+			return fmt.Errorf("sourceIndex is required")
+		}
+		if int(warning.Location.SourceIndex) >= len(results.Sources) {
+			return fmt.Errorf("sourceIndex is out of range")
+		}
+		warningSource := results.Sources[warning.Location.SourceIndex]
+		if warningSource == nil {
+			return fmt.Errorf("sourceIndex points to nil source")
+		}
+		if warningSource.Definition == nil {
+			return fmt.Errorf("sourceIndex points to source with nil definition")
+		}
+		if len(warning.Location.Ranges) == 0 {
+			return fmt.Errorf("ranges is required")
+		}
+	}
+	return nil
+}
+
 func PrintLintViolations(dt []byte, w io.Writer) error {
 	var results LintResults
 
 	if err := json.Unmarshal(dt, &results); err != nil {
+		return err
+	}
+
+	if err := results.validateWarnings(); err != nil {
 		return err
 	}
 
@@ -129,9 +148,6 @@ func PrintLintViolations(dt []byte, w io.Writer) error {
 		sourceInfoJ := results.Sources[results.Warnings[j].Location.SourceIndex]
 		if sourceInfoI.Filename != sourceInfoJ.Filename {
 			return sourceInfoI.Filename < sourceInfoJ.Filename
-		}
-		if len(results.Warnings[i].Location.Ranges) == 0 || len(results.Warnings[j].Location.Ranges) == 0 {
-			return false
 		}
 		return results.Warnings[i].Location.Ranges[0].Start.Line < results.Warnings[j].Location.Ranges[0].Start.Line
 	})
@@ -152,4 +168,11 @@ func PrintLintViolations(dt []byte, w io.Writer) error {
 		}
 	}
 	return nil
+}
+
+func sourceInfoEqual(a, b *pb.SourceInfo) bool {
+	if a.Filename != b.Filename || a.Language != b.Language {
+		return false
+	}
+	return bytes.Equal(a.Data, b.Data)
 }
