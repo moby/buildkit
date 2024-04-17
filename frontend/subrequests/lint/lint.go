@@ -13,6 +13,7 @@ import (
 	"github.com/moby/buildkit/frontend/subrequests"
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/pkg/errors"
 )
 
 const RequestLint = "frontend.lint"
@@ -112,21 +113,14 @@ func (results *LintResults) ToResult() (*client.Result, error) {
 
 func (results *LintResults) validateWarnings() error {
 	for _, warning := range results.Warnings {
-		if warning.Location.SourceIndex < 0 {
-			return fmt.Errorf("sourceIndex is required")
-		}
 		if int(warning.Location.SourceIndex) >= len(results.Sources) {
-			return fmt.Errorf("sourceIndex is out of range")
+			return errors.Errorf("sourceIndex is out of range")
 		}
-		warningSource := results.Sources[warning.Location.SourceIndex]
-		if warningSource == nil {
-			return fmt.Errorf("sourceIndex points to nil source")
-		}
-		if warningSource.Definition == nil {
-			return fmt.Errorf("sourceIndex points to source with nil definition")
-		}
-		if len(warning.Location.Ranges) == 0 {
-			return fmt.Errorf("ranges is required")
+		if warning.Location.SourceIndex > 0 {
+			warningSource := results.Sources[warning.Location.SourceIndex]
+			if warningSource == nil {
+				return errors.Errorf("sourceIndex points to nil source")
+			}
 		}
 	}
 	return nil
@@ -144,18 +138,37 @@ func PrintLintViolations(dt []byte, w io.Writer) error {
 	}
 
 	sort.Slice(results.Warnings, func(i, j int) bool {
-		sourceInfoI := results.Sources[results.Warnings[i].Location.SourceIndex]
-		sourceInfoJ := results.Sources[results.Warnings[j].Location.SourceIndex]
+		warningI := results.Warnings[i]
+		warningJ := results.Warnings[j]
+		sourceIndexI := warningI.Location.SourceIndex
+		sourceIndexJ := warningJ.Location.SourceIndex
+		if sourceIndexI < 0 && sourceIndexJ < 0 {
+			return warningI.RuleName < warningJ.RuleName
+		} else if sourceIndexI < 0 || sourceIndexJ < 0 {
+			return sourceIndexI < 0
+		}
+
+		sourceInfoI := results.Sources[warningI.Location.SourceIndex]
+		sourceInfoJ := results.Sources[warningJ.Location.SourceIndex]
 		if sourceInfoI.Filename != sourceInfoJ.Filename {
 			return sourceInfoI.Filename < sourceInfoJ.Filename
 		}
-		return results.Warnings[i].Location.Ranges[0].Start.Line < results.Warnings[j].Location.Ranges[0].Start.Line
+		if len(warningI.Location.Ranges) == 0 && len(warningJ.Location.Ranges) == 0 {
+			return warningI.RuleName < warningJ.RuleName
+		} else if len(warningI.Location.Ranges) == 0 || len(warningJ.Location.Ranges) == 0 {
+			return len(warningI.Location.Ranges) == 0
+		}
+
+		return warningI.Location.Ranges[0].Start.Line < warningJ.Location.Ranges[0].Start.Line
 	})
 
 	for _, warning := range results.Warnings {
 		fmt.Fprintf(w, "\n- %s\n%s\n", warning.Detail, warning.Description)
 		if warning.URL != "" {
 			fmt.Fprintf(w, "URL: %s\n", warning.URL)
+		}
+		if warning.Location.SourceIndex < 0 {
+			continue
 		}
 		sourceInfo := results.Sources[warning.Location.SourceIndex]
 		source := errdefs.Source{
