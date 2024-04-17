@@ -11,6 +11,7 @@ import (
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/attestations/sbom"
 	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
+	"github.com/moby/buildkit/frontend/dockerfile/linter"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/frontend/dockerui"
 	"github.com/moby/buildkit/frontend/gateway/client"
@@ -75,6 +76,11 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 		SourceMap:    src.SourceMap,
 		MetaResolver: c,
 		Warn: func(rulename, description, url, msg string, location []parser.Range) {
+			startLine := 0
+			if len(location) > 0 {
+				startLine = location[0].Start.Line
+			}
+			msg = linter.LintFormatShort(rulename, msg, startLine)
 			src.Warn(ctx, msg, warnOpts(location, [][]byte{[]byte(description)}, url))
 		},
 	}
