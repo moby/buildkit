@@ -343,11 +343,10 @@ func checkVertexWarning(t *testing.T, warning *client.VertexWarning, expected ex
 }
 
 func checkLintWarning(t *testing.T, warning lint.Warning, expected expectedLintWarning) {
-	short := linter.LintFormatShort(expected.RuleName, expected.Detail, expected.Line)
 	require.Equal(t, expected.RuleName, warning.RuleName)
 	require.Equal(t, expected.Description, warning.Description)
 	require.Equal(t, expected.URL, warning.URL)
-	require.Equal(t, short, warning.Detail)
+	require.Equal(t, expected.Detail, warning.Detail)
 }
 
 func unmarshalLintResults(res *gateway.Result) (*lint.LintResults, error) {

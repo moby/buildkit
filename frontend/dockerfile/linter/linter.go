@@ -15,14 +15,10 @@ type LinterRule[F any] struct {
 }
 
 func (rule LinterRule[F]) Run(warn LintWarnFunc, location []parser.Range, txt ...string) {
-	startLine := 0
-	if len(location) > 0 {
-		startLine = location[0].Start.Line
-	}
 	if len(txt) == 0 {
 		txt = []string{rule.Description}
 	}
-	short := LintFormatShort(rule.Name, strings.Join(txt, " "), startLine)
+	short := strings.Join(txt, " ")
 	warn(rule.Name, rule.Description, rule.URL, short, location)
 }
 
