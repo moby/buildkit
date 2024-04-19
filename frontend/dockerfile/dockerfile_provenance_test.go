@@ -1,6 +1,7 @@
 package dockerfile
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -1130,6 +1131,123 @@ func testDockerIgnoreMissingProvenance(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 }
 
+func testCommandSourceMapping(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dockerfile := []byte(`FROM alpine
+RUN echo "hello" > foo
+WORKDIR /tmp
+COPY foo foo2
+COPY --link foo foo3
+ADD bar bar`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte("data"), 0600),
+		fstest.CreateFile("bar", []byte("data2"), 0600),
+	)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	target := registry + "/buildkit/testsourcemappingprov:latest"
+	f := getFrontend(t, sb)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"attest:provenance": "mode=max",
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	desc, provider, err := contentutil.ProviderFromRef(target)
+	require.NoError(t, err)
+	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(imgs.Images))
+
+	expPlatform := platforms.Format(platforms.Normalize(platforms.DefaultSpec()))
+
+	img := imgs.Find(expPlatform)
+	require.NotNil(t, img)
+
+	att := imgs.FindAttestation(expPlatform)
+	type stmtT struct {
+		Predicate provenancetypes.ProvenancePredicate `json:"predicate"`
+	}
+	var stmt stmtT
+	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
+	pred := stmt.Predicate
+
+	def := pred.BuildConfig.Definition
+
+	steps := map[string]provenancetypes.BuildStep{}
+	for _, step := range def {
+		steps[step.ID] = step
+	}
+	// ensure all IDs are unique
+	require.Equal(t, len(steps), len(def))
+
+	src := pred.Metadata.BuildKitMetadata.Source
+
+	lines := make([]bool, bytes.Count(dockerfile, []byte("\n"))+1)
+
+	for id, loc := range src.Locations {
+		// - only context upload can be without source mapping
+		// - every step must only be in one line
+		// - perform bounds check for location
+		step, ok := steps[id]
+		require.True(t, ok, "definition for step %s not found", id)
+
+		if len(loc.Locations) == 0 {
+			s := step.Op.GetSource()
+			require.NotNil(t, s, "unmapped step %s is not source", id)
+			require.Equal(t, "local://context", s.Identifier)
+		} else if len(loc.Locations) >= 1 {
+			require.Equal(t, 1, len(loc.Locations), "step %s has more than one location", id)
+		}
+
+		for _, loc := range loc.Locations {
+			for _, r := range loc.Ranges {
+				require.Equal(t, r.Start.Line, r.End.Line, "step %s has range with multiple lines", id)
+
+				idx := r.Start.Line - 1
+				if idx < 0 || int(idx) >= len(lines) {
+					t.Fatalf("step %s has invalid range on line %d", id, idx)
+				}
+				lines[idx] = true
+			}
+		}
+	}
+
+	// ensure all lines are covered
+	for i, covered := range lines {
+		require.True(t, covered, "line %d is not covered", i+1)
+	}
+}
+
 func testFrontendDeduplicateSources(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
 	ctx := sb.Context()
@@ -1361,4 +1479,160 @@ RUN date +%s > /b.txt
 	layers := metadata.BuildKitMetadata.Layers["step0:0"]
 	require.NotNil(t, layers)
 	require.Len(t, layers, 1)
+}
+
+func testBaseImageLayersFromCachedBuild(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dockerfile := []byte(`FROM alpine
+RUN cat /dev/urandom | head -c 100 | sha256sum > unique
+WORKDIR /tmp
+COPY foo foo2`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte("data"), 0600),
+	)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	target := registry + "/buildkit/testbasecached:latest"
+	targetCache := registry + "/buildkit/testbasecached:cache"
+	f := getFrontend(t, sb)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"attest:provenance": "mode=max",
+		},
+		CacheExports: []client.CacheOptionsEntry{
+			{
+				Type: "registry",
+				Attrs: map[string]string{
+					"ref":   targetCache,
+					"roots": "true",
+				},
+			},
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	err = c.Prune(sb.Context(), nil, client.PruneAll)
+	require.NoError(t, err)
+
+	desc, provider, err := contentutil.ProviderFromRef(target)
+	require.NoError(t, err)
+
+	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(imgs.Images))
+
+	expPlatform := platforms.Format(platforms.Normalize(platforms.DefaultSpec()))
+
+	img := imgs.Find(expPlatform)
+	require.NotNil(t, img)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"attest:provenance": "mode=max",
+		},
+		CacheImports: []client.CacheOptionsEntry{
+			{
+				Type: "registry",
+				Attrs: map[string]string{
+					"ref": targetCache,
+				},
+			},
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target + "2",
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	desc, provider, err = contentutil.ProviderFromRef(target + "2")
+	require.NoError(t, err)
+
+	imgs, err = testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(imgs.Images))
+
+	img2 := imgs.Find(expPlatform)
+	require.NotNil(t, img)
+
+	require.Equal(t, img2.Desc.Digest, img.Desc.Digest)
+
+	att := imgs.FindAttestation(expPlatform)
+	type stmtT struct {
+		Predicate provenancetypes.ProvenancePredicate `json:"predicate"`
+	}
+	var stmt stmtT
+	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
+	pred := stmt.Predicate
+
+	def := pred.BuildConfig.Definition
+
+	// look up base image step, usually step0
+	var baseStep string
+	for _, step := range def {
+		src := step.Op.GetSource()
+		if src == nil {
+			continue
+		}
+		if strings.HasPrefix(src.Identifier, "docker-image://docker.io/library/alpine:latest@sha256:") {
+			if baseStep != "" {
+				t.Fatalf("found multiple base steps: %s and %s", baseStep, step.ID)
+			}
+			baseStep = step.ID
+		}
+	}
+	require.NotEmpty(t, baseStep)
+
+	layers := pred.Metadata.BuildKitMetadata.Layers
+
+	baseLayers, ok := layers[baseStep+":0"]
+	require.True(t, ok)
+
+	require.Len(t, baseLayers, 1)
+
+	descs := baseLayers[0]
+	require.GreaterOrEqual(t, len(descs), 1)
+
+	for _, desc := range descs {
+		require.NoError(t, desc.Digest.Validate())
+		require.NotEmpty(t, desc.Size)
+		require.NotEmpty(t, desc.MediaType)
+	}
 }

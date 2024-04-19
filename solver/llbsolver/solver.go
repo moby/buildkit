@@ -658,6 +658,7 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 						Mode:           exp.CacheExportMode,
 						Session:        g,
 						CompressionOpt: &compressionConfig,
+						ExportRoots:    exp.Config().WithRoots,
 					})
 					return err
 				}); err != nil {
@@ -924,7 +925,8 @@ func inlineCache(ctx context.Context, ie inlineCacheExporter, res solver.CachedR
 		ResolveRemotes: workerRefResolver(refCfg, true, g), // load as many compression blobs as possible
 		Mode:           solver.CacheExportModeMin,
 		Session:        g,
-		CompressionOpt: &compressionopt, // cache possible compression variants
+		CompressionOpt: &compressionopt, // cache possible compression variants,
+		ExportRoots:    true,
 	}); err != nil {
 		return nil, err
 	}

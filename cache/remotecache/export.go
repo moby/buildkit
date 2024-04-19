@@ -36,6 +36,7 @@ type Exporter interface {
 
 type Config struct {
 	Compression compression.Config
+	WithRoots   bool
 }
 
 type CacheType int
@@ -63,9 +64,18 @@ func (data CacheType) String() string {
 	}
 }
 
-func NewExporter(ingester content.Ingester, ref string, oci bool, imageManifest bool, compressionConfig compression.Config) Exporter {
+func NewExporter(ingester content.Ingester, ref string, oci bool, imageManifest bool, compressionConfig compression.Config, withRoots bool) Exporter {
 	cc := v1.NewCacheChains()
-	return &contentCacheExporter{CacheExporterTarget: cc, chains: cc, ingester: ingester, oci: oci, imageManifest: imageManifest, ref: ref, comp: compressionConfig}
+	return &contentCacheExporter{
+		CacheExporterTarget: cc,
+		chains:              cc,
+		ingester:            ingester,
+		oci:                 oci,
+		imageManifest:       imageManifest,
+		ref:                 ref,
+		comp:                compressionConfig,
+		roots:               withRoots,
+	}
 }
 
 type ExportableCache struct {
@@ -167,6 +177,7 @@ type contentCacheExporter struct {
 	imageManifest bool
 	ref           string
 	comp          compression.Config
+	roots         bool
 }
 
 func (ce *contentCacheExporter) Name() string {
@@ -176,6 +187,7 @@ func (ce *contentCacheExporter) Name() string {
 func (ce *contentCacheExporter) Config() Config {
 	return Config{
 		Compression: ce.comp,
+		WithRoots:   ce.roots,
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -39,6 +40,7 @@ const (
 	attrURL        = "url"
 	attrRepository = "repository"
 	attrGHToken    = "ghtoken"
+	attrRoots      = "roots"
 	version        = "1"
 
 	defaultTimeout = 10 * time.Minute
@@ -51,6 +53,7 @@ type Config struct {
 	GHToken    string // token for the Github REST API
 	Repository string
 	Timeout    time.Duration
+	WithRoots  bool
 }
 
 func getConfig(attrs map[string]string) (*Config, error) {
@@ -75,6 +78,16 @@ func getConfig(attrs map[string]string) (*Config, error) {
 			return nil, errors.Wrap(err, "failed to parse timeout for github actions cache")
 		}
 	}
+
+	rootfs := false
+	if v, ok := attrs[attrRoots]; ok {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to parse %s", attrRoots)
+		}
+		rootfs = b
+	}
+
 	return &Config{
 		Scope:      scope,
 		URL:        url,
@@ -82,6 +95,7 @@ func getConfig(attrs map[string]string) (*Config, error) {
 		Timeout:    timeout,
 		GHToken:    attrs[attrGHToken],
 		Repository: attrs[attrRepository],
+		WithRoots:  rootfs,
 	}, nil
 }
 
@@ -124,6 +138,7 @@ func (*exporter) Name() string {
 func (ce *exporter) Config() remotecache.Config {
 	return remotecache.Config{
 		Compression: compression.New(compression.Default),
+		WithRoots:   ce.config.WithRoots,
 	}
 }
 

@@ -96,9 +96,9 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 	if e.override != nil {
 		addRecord = *e.override
 	}
-
 	exportRecord := opt.ExportRoots
-	if len(deps) > 0 {
+	isRoot := len(deps) == 0
+	if !isRoot {
 		exportRecord = true
 	}
 
@@ -132,7 +132,7 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 			}
 		}
 
-		if (remote == nil || opt.CompressionOpt != nil) && opt.Mode != CacheExportModeRemoteOnly {
+		if (remote == nil || opt.CompressionOpt != nil) && opt.Mode != CacheExportModeRemoteOnly && !isRoot {
 			res, err := cm.results.Load(ctx, res)
 			if err != nil {
 				return nil, err

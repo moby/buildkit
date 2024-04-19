@@ -21,6 +21,7 @@ const (
 	attrDest             = "dest"
 	attrImageManifest    = "image-manifest"
 	attrOCIMediatypes    = "oci-mediatypes"
+	attrRoots            = "roots"
 	contentStoreIDPrefix = "local:"
 )
 
@@ -59,12 +60,21 @@ func ResolveCacheExporterFunc(sm *session.Manager) remotecache.ResolveCacheExpor
 			}
 			imageManifest = b
 		}
+		roots := true // default to true for local cache as prefer local cache sources to registry
+		if v, ok := attrs[attrRoots]; ok {
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to parse %s", attrRoots)
+			}
+			roots = b
+		}
+
 		csID := contentStoreIDPrefix + store
 		cs, err := getContentStore(ctx, sm, g, csID)
 		if err != nil {
 			return nil, err
 		}
-		return &exporter{remotecache.NewExporter(cs, "", ociMediatypes, imageManifest, compressionConfig)}, nil
+		return &exporter{remotecache.NewExporter(cs, "", ociMediatypes, imageManifest, compressionConfig, roots)}, nil
 	}
 }
 
