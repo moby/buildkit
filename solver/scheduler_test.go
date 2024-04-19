@@ -2378,7 +2378,7 @@ func TestSlowCacheAvoidAccess(t *testing.T) {
 	require.Equal(t, int64(1), cacheManager.loadCounter)
 }
 
-// TestSlowCacheAvoidExecOnCache tests a regression where an input with
+// TestSlowCacheAvoidLoadOnCache tests a regression where an input with
 // possible matches and a content based checksum should not try to checksum
 // before other inputs with no keys have at least made into a slow state.
 // moby/buildkit#648

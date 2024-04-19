@@ -1221,7 +1221,7 @@ func testClientGatewayContainerExecTty(t *testing.T, sb integration.Sandbox) {
 	checkAllReleasable(t, c, sb, true)
 }
 
-// testClientGatewayContainerExecTty is testing the tty shuts down cleanly
+// testClientGatewayContainerCancelExecTty is testing the tty shuts down cleanly
 // on context.Cancel
 func testClientGatewayContainerCancelExecTty(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)

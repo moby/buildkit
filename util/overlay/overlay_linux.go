@@ -271,7 +271,7 @@ func checkDelete(path string, base string, f os.FileInfo) (delete, skip bool, _ 
 	return false, false, nil
 }
 
-// checkDelete checks if the specified file is an opaque directory
+// checkOpaque checks if the specified file is an opaque directory
 func checkOpaque(upperdir string, path string, base string, f os.FileInfo) (isOpaque bool, _ error) {
 	if f.IsDir() {
 		for _, oKey := range []string{"trusted.overlay.opaque", "user.overlay.opaque"} {
