@@ -68,6 +68,7 @@ jobs:
           name: dockerd
           path: /tmp/moby/dockerd
           if-no-files-found: error
+          retention-days: 1
 
   test:
     runs-on: ubuntu-22.04

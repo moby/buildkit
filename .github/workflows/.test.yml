@@ -194,6 +194,7 @@ jobs:
         with:
           name: test-reports-${{ env.TEST_REPORT_NAME }}
           path: ./bin/testreports
+          retention-days: 1
       -
         name: Dump context
         if: failure()
