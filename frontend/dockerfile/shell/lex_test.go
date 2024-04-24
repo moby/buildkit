@@ -271,6 +271,7 @@ func TestProcessWithMatches(t *testing.T) {
 		expected    string
 		expectedErr bool
 		matches     map[string]struct{}
+		unmatched   map[string]struct{}
 	}{
 		{
 			input:    "x",
@@ -279,10 +280,11 @@ func TestProcessWithMatches(t *testing.T) {
 			matches:  nil,
 		},
 		{
-			input:    "x ${UNUSED}",
-			envs:     map[string]string{"DUMMY": "dummy"},
-			expected: "x ",
-			matches:  nil,
+			input:     "x ${UNUSED}",
+			envs:      map[string]string{"DUMMY": "dummy"},
+			expected:  "x ",
+			matches:   nil,
+			unmatched: map[string]struct{}{"UNUSED": {}},
 		},
 		{
 			input:    "x ${FOO}",
@@ -297,8 +299,9 @@ func TestProcessWithMatches(t *testing.T) {
 				"FOO": "xxx",
 				"BAR": "",
 			},
-			expected: "xxx  ccc",
-			matches:  map[string]struct{}{"FOO": {}, "BAR": {}},
+			expected:  "xxx  ccc",
+			matches:   map[string]struct{}{"FOO": {}, "BAR": {}},
+			unmatched: map[string]struct{}{"BAZ": {}},
 		},
 		{
 			input: "${FOO:-aaa} ${BAR:-bbb} ${BAZ:-ccc}",
@@ -306,8 +309,9 @@ func TestProcessWithMatches(t *testing.T) {
 				"FOO": "xxx",
 				"BAR": "",
 			},
-			expected: "xxx bbb ccc",
-			matches:  map[string]struct{}{"FOO": {}, "BAR": {}},
+			expected:  "xxx bbb ccc",
+			matches:   map[string]struct{}{"FOO": {}, "BAR": {}},
+			unmatched: map[string]struct{}{"BAZ": {}},
 		},
 
 		{
@@ -316,8 +320,9 @@ func TestProcessWithMatches(t *testing.T) {
 				"FOO": "xxx",
 				"BAR": "",
 			},
-			expected: "aaa bbb ",
-			matches:  map[string]struct{}{"FOO": {}, "BAR": {}},
+			expected:  "aaa bbb ",
+			matches:   map[string]struct{}{"FOO": {}, "BAR": {}},
+			unmatched: map[string]struct{}{"BAZ": {}},
 		},
 		{
 			input: "${FOO:+aaa} ${BAR:+bbb} ${BAZ:+ccc}",
@@ -325,8 +330,9 @@ func TestProcessWithMatches(t *testing.T) {
 				"FOO": "xxx",
 				"BAR": "",
 			},
-			expected: "aaa  ",
-			matches:  map[string]struct{}{"FOO": {}, "BAR": {}},
+			expected:  "aaa  ",
+			matches:   map[string]struct{}{"FOO": {}, "BAR": {}},
+			unmatched: map[string]struct{}{"BAZ": {}},
 		},
 
 		{
@@ -354,6 +360,7 @@ func TestProcessWithMatches(t *testing.T) {
 				"BAR": "",
 			},
 			expectedErr: true,
+			unmatched:   map[string]struct{}{"BAZ": {}},
 		},
 		{
 			input: "${FOO:?aaa}",
@@ -379,6 +386,7 @@ func TestProcessWithMatches(t *testing.T) {
 				"BAR": "",
 			},
 			expectedErr: true,
+			unmatched:   map[string]struct{}{"BAZ": {}},
 		},
 
 		{
@@ -431,10 +439,11 @@ func TestProcessWithMatches(t *testing.T) {
 			matches:  map[string]struct{}{"FOO": {}},
 		},
 		{
-			input:    "${ABC:-.}${FOO%x}${ABC:-.}",
-			envs:     map[string]string{"FOO": "xxyy"},
-			expected: ".xxyy.",
-			matches:  map[string]struct{}{"FOO": {}},
+			input:     "${ABC:-.}${FOO%x}${ABC:-.}",
+			envs:      map[string]string{"FOO": "xxyy"},
+			expected:  ".xxyy.",
+			matches:   map[string]struct{}{"FOO": {}},
+			unmatched: map[string]struct{}{"ABC": {}},
 		},
 		{
 			input:    "${FOO%%\\**\\*}",
@@ -481,8 +490,9 @@ func TestProcessWithMatches(t *testing.T) {
 		c := c
 		t.Run(c.input, func(t *testing.T) {
 			result, err := shlex.ProcessWordWithMatches(c.input, c.envs)
-			w := result.Word
+			w := result.Result
 			matches := result.Matched
+			unmatched := result.Unmatched
 			if c.expectedErr {
 				require.Error(t, err)
 				return
@@ -493,6 +503,11 @@ func TestProcessWithMatches(t *testing.T) {
 			require.Equal(t, len(c.matches), len(matches))
 			for k := range c.matches {
 				require.Contains(t, matches, k)
+			}
+
+			require.Equal(t, len(c.unmatched), len(unmatched))
+			for k := range c.unmatched {
+				require.Contains(t, unmatched, k)
 			}
 		})
 	}
@@ -514,7 +529,7 @@ func TestProcessWithMatchesPlatform(t *testing.T) {
 		"TARGETVARIANT": "v7",
 	})
 	require.NoError(t, err)
-	require.Equal(t, "something-v1.2.3.linux-arm-v7.tar.gz", results.Word)
+	require.Equal(t, "something-v1.2.3.linux-arm-v7.tar.gz", results.Result)
 
 	results, err = shlex.ProcessWordWithMatches(release, map[string]string{
 		"VERSION":       version,
@@ -523,7 +538,7 @@ func TestProcessWithMatchesPlatform(t *testing.T) {
 		"TARGETVARIANT": "",
 	})
 	require.NoError(t, err)
-	require.Equal(t, "something-v1.2.3.linux-arm64.tar.gz", results.Word)
+	require.Equal(t, "something-v1.2.3.linux-arm64.tar.gz", results.Result)
 
 	results, err = shlex.ProcessWordWithMatches(release, map[string]string{
 		"VERSION":    version,
@@ -532,5 +547,5 @@ func TestProcessWithMatchesPlatform(t *testing.T) {
 		// No "TARGETVARIANT": "",
 	})
 	require.NoError(t, err)
-	require.Equal(t, "something-v1.2.3.linux-arm64.tar.gz", results.Word)
+	require.Equal(t, "something-v1.2.3.linux-arm64.tar.gz", results.Result)
 }

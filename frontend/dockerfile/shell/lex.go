@@ -58,7 +58,7 @@ func (s *Lex) ProcessWordWithMap(word string, env map[string]string) (string, er
 }
 
 type ProcessWordMatchesResult struct {
-	Word      string
+	Result    string
 	Matched   map[string]struct{}
 	Unmatched map[string]struct{}
 }
@@ -69,7 +69,7 @@ func (s *Lex) ProcessWordWithMatches(word string, env map[string]string) (Proces
 	sw := s.init(word, env)
 	word, _, err := sw.process(word)
 	return ProcessWordMatchesResult{
-		Word:      word,
+		Result:    word,
 		Matched:   sw.matches,
 		Unmatched: sw.nonmatches,
 	}, err

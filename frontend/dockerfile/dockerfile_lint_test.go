@@ -344,6 +344,13 @@ FROM ${BAR} AS base
 				Line:        3,
 				Level:       1,
 			},
+			{
+				RuleName:    "UndeclaredArgInFrom",
+				Description: "FROM command must use declared ARGs",
+				Detail:      "FROM argument 'BAR' is not declared",
+				Level:       1,
+				Line:        4,
+			},
 		},
 		StreamBuildErr:    "failed to solve: base name (${BAR}) should not be blank",
 		UnmarshalBuildErr: "base name (${BAR}) should not be blank",
@@ -360,11 +367,37 @@ COPY Dockerfile .
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 
 	dockerfile = []byte(`
-ARG platform=linux/amd64
-FROM --platform=$platform scratch
+ARG BUILDPLATFORM=linux/amd64
+FROM --platform=$BUILDPLATFORM scratch
 COPY Dockerfile .
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`
+FROM --platform=$BUILDPLATFORM scratch
+COPY Dockerfile .
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`
+FROM --platform=$BULIDPLATFORM scratch
+COPY Dockerfile .
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "UndeclaredArgInFrom",
+				Description: "FROM command must use declared ARGs",
+				Detail:      "FROM argument 'BULIDPLATFORM' is not declared",
+				Level:       1,
+				Line:        2,
+			},
+		},
+		StreamBuildErr:    "failed to solve: failed to parse platform : \"\" is an invalid component of \"\": platform specifier component must match \"^[A-Za-z0-9_-]+$\": invalid argument",
+		UnmarshalBuildErr: "failed to parse platform : \"\" is an invalid component of \"\": platform specifier component must match \"^[A-Za-z0-9_-]+$\": invalid argument",
+		BuildErrLocation:  2,
+	})
 
 	dockerfile = []byte(`
 ARG tag=latest
@@ -434,7 +467,6 @@ func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestPara
 		},
 	}, "", frontend, nil)
 	require.NoError(t, err)
-
 	require.True(t, called)
 }
 
@@ -503,6 +535,7 @@ func checkProgressStream(t *testing.T, sb integration.Sandbox, lintTest *lintTes
 }
 
 func checkLinterWarnings(t *testing.T, sb integration.Sandbox, lintTest *lintTestParams) {
+	t.Helper()
 	sort.Slice(lintTest.Warnings, func(i, j int) bool {
 		return lintTest.Warnings[i].Line < lintTest.Warnings[j].Line
 	})
