@@ -1,4 +1,6 @@
-# Dockerfile reference
+---
+title: Dockerfile reference
+---
 
 Docker can build images automatically by reading the instructions from a
 Dockerfile. A Dockerfile is a text document that contains all the commands a
