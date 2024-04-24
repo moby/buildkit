@@ -639,6 +639,9 @@ func getListener(addr string, uid, gid int, tlsConfig *tls.Config) (net.Listener
 		if tlsConfig != nil {
 			bklog.L.Warnf("TLS is disabled for %s", addr)
 		}
+		if proto == "npipe" {
+			return getLocalListener(listenAddr)
+		}
 		return sys.GetLocalListener(listenAddr, uid, gid)
 	case "fd":
 		return listenFD(listenAddr, tlsConfig)
