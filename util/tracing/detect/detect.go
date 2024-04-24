@@ -120,7 +120,7 @@ func detect() error {
 	mp = sdkmetric.NewMeterProvider()
 
 	texp, mexp, err := detectExporters()
-	if err != nil || (texp == nil && mexp == nil) {
+	if err != nil {
 		return err
 	}
 
