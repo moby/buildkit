@@ -80,6 +80,10 @@ func ParseInstructionWithLinter(node *parser.Node, lintWarn linter.LintWarnFunc)
 	case command.Env:
 		return parseEnv(req)
 	case command.Maintainer:
+		if lintWarn != nil {
+			msg := linter.RuleMaintainerDeprecated.Format()
+			linter.RuleMaintainerDeprecated.Run(lintWarn, node.Location(), msg)
+		}
 		return parseMaintainer(req)
 	case command.Label:
 		return parseLabel(req)
