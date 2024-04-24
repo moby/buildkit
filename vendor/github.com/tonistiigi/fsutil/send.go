@@ -29,7 +29,7 @@ type Stream interface {
 func Send(ctx context.Context, conn Stream, fs FS, progressCb func(int, bool)) error {
 	s := &sender{
 		conn:         &syncStream{Stream: conn},
-		fs:           fs,
+		fs:           WithHardlinkReset(fs),
 		files:        make(map[uint32]string),
 		progressCb:   progressCb,
 		sendpipeline: make(chan *sendHandle, 128),
