@@ -165,6 +165,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testFileOpInputSwap,
 	testRelativeMountpoint,
 	testLocalSourceDiffer,
+	testLocalSourceWithHardlinksFilter,
 	testOCILayoutSource,
 	testOCILayoutPlatformSource,
 	testBuildExportZstd,
@@ -1962,6 +1963,57 @@ func testLocalSourceWithDiffer(t *testing.T, sb integration.Sandbox, d llb.DiffT
 	if d == llb.DiffNone {
 		require.Equal(t, []byte("bar"), dt)
 	}
+}
+
+// moby/buildkit#4831
+func testLocalSourceWithHardlinksFilter(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("bar", []byte("bar"), 0600),
+		fstest.Link("bar", "foo1"),
+		fstest.Link("bar", "foo2"),
+	)
+
+	st := llb.Local("mylocal", llb.FollowPaths([]string{"foo*"}))
+
+	def, err := st.Marshal(context.TODO())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			"mylocal": dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	_, err = os.ReadFile(filepath.Join(destDir, "bar"))
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "foo1"))
+	require.NoError(t, err)
+	require.Equal(t, []byte("bar"), dt)
+
+	st1, err := os.Stat(filepath.Join(destDir, "foo1"))
+	require.NoError(t, err)
+
+	st2, err := os.Stat(filepath.Join(destDir, "foo2"))
+	require.NoError(t, err)
+
+	require.True(t, os.SameFile(st1, st2))
 }
 
 func testOCILayoutSource(t *testing.T, sb integration.Sandbox) {
