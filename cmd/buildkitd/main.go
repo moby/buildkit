@@ -150,6 +150,11 @@ func main() {
 		return strconv.Itoa(*gid)
 	}
 
+	groupUsageStr := "group (name or gid) which will own all Unix socket listening addresses"
+	if runtime.GOOS == "windows" {
+		groupUsageStr = "group name(s), comma-separated, which will have RW access to the named pipe listening addresses"
+	}
+
 	app.Flags = append(app.Flags,
 		cli.StringFlag{
 			Name:  "config",
@@ -182,7 +187,7 @@ func main() {
 		},
 		cli.StringFlag{
 			Name:  "group",
-			Usage: "group (name or gid) which will own all Unix socket listening addresses",
+			Usage: groupUsageStr,
 			Value: groupValue(defaultConf.GRPC.GID),
 		},
 		cli.StringFlag{

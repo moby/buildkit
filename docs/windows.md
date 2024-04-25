@@ -1,13 +1,13 @@
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 <!-- details here: https://github.com/thlorenz/doctoc -->
-**Table of Contents**
 
 - [Experimental Windows containers support](#experimental-windows-containers-support)
   - [Quick start guide](#quick-start-guide)
     - [Platform requirements](#platform-requirements)
     - [Setup Instructions](#setup-instructions)
     - [Example Build](#example-build)
+  - [Running `buildctl` from a Non-Admin Terminal](#running-buildctl-from-a-non-admin-terminal)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -145,3 +145,41 @@ Now that everything is setup, let's build a [simple _hello world_ image](https:/
     ```
 
 > **NOTE:** After pushing to the registry, you can use your image with any other clients to spin off containers, e.g. `docker run`, `ctr run`, `nerdctl run`, etc.
+
+## Running `buildctl` from a Non-Admin Terminal
+
+The default case for running `buildctl` is from an admin (elevated) terminal.
+If you attempt running in a non-admin terminal, you will get an `Access Denied`
+error, on the named pipe:
+
+```
+connection error: desc = "transport: Error while dialing: open \\\\.\\pipe\\buildkitd: Access is denied."
+```
+
+However, it is possible to run it in a non-admin terminal by providing
+the group name(s) of the users executing the command.
+
+You can find the group names that the current user belongs too by running:
+
+```cmd
+whoami /groups
+```
+
+You can also create a group and add the user on it by running the following in
+an admin terminal:
+
+```powershell
+# you can use $env:USERNAME for PowerShell or
+# %USERNAME% for CMD terminal
+net localgroup buildkit-users <username> /add
+```
+NOTE: You will need to log out and log in for the changes to reflect.
+
+Once you have the group(s), you can supply it as part of the `--group` flag when starting
+`buildkitd` (still in an admin termainal). If it is more than one group, comma-separate them. Example:
+
+```powershell
+buildkitd --group="USERBOX-1\buildkit-users"
+```
+
+With this now, you can run `buildctl` in a non-admin terminal.
