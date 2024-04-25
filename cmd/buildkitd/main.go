@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -395,9 +396,18 @@ func newGRPCListeners(cfg config.GRPCConfig) ([]net.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	sd := cfg.SecurityDescriptor
+	if sd == "" {
+		sd, err = groupToSecurityDescriptor("")
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	listeners := make([]net.Listener, 0, len(addrs))
 	for _, addr := range addrs {
-		l, err := getListener(addr, *cfg.UID, *cfg.GID, tlsConfig)
+		l, err := getListener(addr, *cfg.UID, *cfg.GID, sd, tlsConfig)
 		if err != nil {
 			for _, l := range listeners {
 				l.Close()
@@ -567,11 +577,19 @@ func applyMainFlags(c *cli.Context, cfg *config.Config) error {
 	}
 
 	if group := c.String("group"); group != "" {
-		gid, err := groupToGid(group)
-		if err != nil {
-			return err
+		if runtime.GOOS == "windows" {
+			secDescriptor, err := groupToSecurityDescriptor(group)
+			if err != nil {
+				return err
+			}
+			cfg.GRPC.SecurityDescriptor = secDescriptor
+		} else {
+			gid, err := groupToGid(group)
+			if err != nil {
+				return err
+			}
+			cfg.GRPC.GID = &gid
 		}
-		cfg.GRPC.GID = &gid
 	}
 
 	if tlscert := c.String("tlscert"); tlscert != "" {
@@ -626,7 +644,7 @@ func groupToGid(group string) (int, error) {
 	return id, nil
 }
 
-func getListener(addr string, uid, gid int, tlsConfig *tls.Config) (net.Listener, error) {
+func getListener(addr string, uid, gid int, secDescriptor string, tlsConfig *tls.Config) (net.Listener, error) {
 	addrSlice := strings.SplitN(addr, "://", 2)
 	if len(addrSlice) < 2 {
 		return nil, errors.Errorf("address %s does not contain proto, you meant unix://%s ?",
@@ -638,6 +656,9 @@ func getListener(addr string, uid, gid int, tlsConfig *tls.Config) (net.Listener
 	case "unix", "npipe":
 		if tlsConfig != nil {
 			bklog.L.Warnf("TLS is disabled for %s", addr)
+		}
+		if proto == "npipe" {
+			return getLocalListener(listenAddr, secDescriptor)
 		}
 		return sys.GetLocalListener(listenAddr, uid, gid)
 	case "fd":
@@ -907,7 +928,7 @@ func parseBoolOrAuto(s string) (*bool, error) {
 func runTraceController(p string, exp sdktrace.SpanExporter) error {
 	server := grpc.NewServer()
 	tracev1.RegisterTraceServiceServer(server, &traceCollector{exporter: exp})
-	l, err := getLocalListener(p)
+	l, err := getLocalListener(p, "")
 	if err != nil {
 		return errors.Wrap(err, "creating trace controller listener")
 	}
