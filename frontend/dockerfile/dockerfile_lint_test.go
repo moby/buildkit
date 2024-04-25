@@ -26,6 +26,8 @@ var lintTests = integration.TestFuncs(
 	testNoEmptyContinuations,
 	testSelfConsistentCommandCasing,
 	testFileConsistentCommandCasing,
+	testDuplicateStageName,
+	testReservedStageName,
 	testMaintainerDeprecated,
 )
 
@@ -205,6 +207,59 @@ copy Dockerfile /bar
 FROM scratch
 COPY Dockerfile /foo
 COPY Dockerfile /bar
+`)
+	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{})
+}
+
+func testDuplicateStageName(t *testing.T, sb integration.Sandbox) {
+	dockerfile := []byte(`
+FROM scratch AS b
+FROM scratch AS b
+`)
+	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{
+		{
+			RuleName:    "DuplicateStageName",
+			Description: "Stage names should be unique",
+			Detail:      "Duplicate stage name \"b\", stage names should be unique",
+			Level:       1,
+			Line:        3,
+		},
+	})
+
+	dockerfile = []byte(`
+FROM scratch AS b1
+FROM scratch AS b2
+`)
+	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{})
+}
+
+func testReservedStageName(t *testing.T, sb integration.Sandbox) {
+	dockerfile := []byte(`
+FROM scratch AS scratch
+FROM scratch AS context
+`)
+	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{
+		{
+			RuleName:    "ReservedStageName",
+			Description: "Reserved stage names should not be used to name a stage",
+			Detail:      "Stage name should not use the same name as reserved stage \"scratch\"",
+			Level:       1,
+			Line:        2,
+		},
+		{
+			RuleName:    "ReservedStageName",
+			Description: "Reserved stage names should not be used to name a stage",
+			Detail:      "Stage name should not use the same name as reserved stage \"context\"",
+			Level:       1,
+			Line:        3,
+		},
+	})
+
+	// Using a reserved name as the base without a set name
+	// or a non-reserved name shouldn't trigger a lint warning.
+	dockerfile = []byte(`
+FROM scratch
+FROM scratch AS a
 `)
 	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{})
 }

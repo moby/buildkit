@@ -217,6 +217,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	if err != nil {
 		return nil, err
 	}
+	validateStageNames(stages, opt.Warn)
 
 	shlex := shell.NewLex(dockerfile.EscapeToken)
 	outline := newOutlineCapture()
@@ -1988,6 +1989,29 @@ func validateCommandCasing(dockerfile *parser.Result, warn linter.LintWarnFunc) 
 			if needsLintWarn {
 				linter.RuleFileConsistentCommandCasing.Run(warn, node.Location(), msg)
 			}
+		}
+	}
+}
+
+var reservedStageNames = map[string]struct{}{
+	"context": {},
+	"scratch": {},
+}
+
+func validateStageNames(stages []instructions.Stage, warn linter.LintWarnFunc) {
+	stageNames := make(map[string]struct{})
+	for _, stage := range stages {
+		if stage.Name != "" {
+			if _, ok := reservedStageNames[stage.Name]; ok {
+				msg := linter.RuleReservedStageName.Format(stage.Name)
+				linter.RuleReservedStageName.Run(warn, stage.Location, msg)
+			}
+
+			if _, ok := stageNames[stage.Name]; ok {
+				msg := linter.RuleDuplicateStageName.Format(stage.Name)
+				linter.RuleDuplicateStageName.Run(warn, stage.Location, msg)
+			}
+			stageNames[stage.Name] = struct{}{}
 		}
 	}
 }
