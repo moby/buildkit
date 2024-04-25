@@ -26,6 +26,7 @@ var lintTests = integration.TestFuncs(
 	testNoEmptyContinuations,
 	testSelfConsistentCommandCasing,
 	testFileConsistentCommandCasing,
+	testMaintainerDeprecated,
 )
 
 func testStageName(t *testing.T, sb integration.Sandbox) {
@@ -208,6 +209,29 @@ COPY Dockerfile /bar
 	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{})
 }
 
+func testMaintainerDeprecated(t *testing.T, sb integration.Sandbox) {
+	dockerfile := []byte(`
+FROM scratch
+MAINTAINER me@example.org
+`)
+	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{
+		{
+			RuleName:    "MaintainerDeprecated",
+			Description: "The maintainer instruction is deprecated, use a label instead to define an image author",
+			Detail:      "Maintainer instruction is deprecated in favor of using label",
+			URL:         "https://docs.docker.com/reference/dockerfile/#maintainer-deprecated",
+			Level:       1,
+			Line:        3,
+		},
+	})
+
+	dockerfile = []byte(`
+FROM scratch
+LABEL org.opencontainers.image.authors="me@example.org"
+`)
+	checkLinterWarnings(t, sb, dockerfile, []expectedLintWarning{})
+}
+
 func checkUnmarshal(t *testing.T, sb integration.Sandbox, c *client.Client, dir *integration.TmpDirWithName, expected []expectedLintWarning) {
 	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
@@ -254,6 +278,8 @@ func checkUnmarshal(t *testing.T, sb integration.Sandbox, c *client.Client, dir 
 }
 
 func checkProgressStream(t *testing.T, sb integration.Sandbox, c *client.Client, dir *integration.TmpDirWithName, expected []expectedLintWarning) {
+	t.Helper()
+
 	status := make(chan *client.SolveStatus)
 	statusDone := make(chan struct{})
 	done := make(chan struct{})
@@ -335,6 +361,7 @@ func checkLinterWarnings(t *testing.T, sb integration.Sandbox, dockerfile []byte
 }
 
 func checkVertexWarning(t *testing.T, warning *client.VertexWarning, expected expectedLintWarning) {
+	t.Helper()
 	short := linter.LintFormatShort(expected.RuleName, expected.Detail, expected.Line)
 	require.Equal(t, short, string(warning.Short))
 	require.Equal(t, expected.Description, string(warning.Detail[0]))
@@ -343,6 +370,7 @@ func checkVertexWarning(t *testing.T, warning *client.VertexWarning, expected ex
 }
 
 func checkLintWarning(t *testing.T, warning lint.Warning, expected expectedLintWarning) {
+	t.Helper()
 	require.Equal(t, expected.RuleName, warning.RuleName)
 	require.Equal(t, expected.Description, warning.Description)
 	require.Equal(t, expected.URL, warning.URL)

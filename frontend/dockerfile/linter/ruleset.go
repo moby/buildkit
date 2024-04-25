@@ -41,4 +41,12 @@ var (
 			return fmt.Sprintf("Command '%s' should match the case of the command majority (%s)", violatingCommand, correctCasing)
 		},
 	}
+	RuleMaintainerDeprecated = LinterRule[func() string]{
+		Name:        "MaintainerDeprecated",
+		Description: "The maintainer instruction is deprecated, use a label instead to define an image author",
+		URL:         "https://docs.docker.com/reference/dockerfile/#maintainer-deprecated",
+		Format: func() string {
+			return "Maintainer instruction is deprecated in favor of using label"
+		},
+	}
 )
