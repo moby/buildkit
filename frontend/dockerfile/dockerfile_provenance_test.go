@@ -1133,6 +1133,7 @@ func testDockerIgnoreMissingProvenance(t *testing.T, sb integration.Sandbox) {
 
 func testCommandSourceMapping(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
