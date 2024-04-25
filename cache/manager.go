@@ -1109,10 +1109,11 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt
 			}
 
 			c := &client.UsageInfo{
-				ID:         cr.ID(),
-				Mutable:    cr.mutable,
-				RecordType: recordType,
-				Shared:     shared,
+				ID:          cr.ID(),
+				Mutable:     cr.mutable,
+				RecordType:  recordType,
+				Shared:      shared,
+				Description: cr.GetDescription(),
 			}
 
 			usageCount, lastUsedAt := cr.getLastUsed()
