@@ -476,16 +476,25 @@ func (jl *Solver) loadUnlocked(ctx context.Context, v, parent Vertex, j *Job, ca
 		if debugScheduler {
 			lg := bklog.G(ctx).
 				WithField("vertex_name", v.Name()).
-				WithField("vertex_digest", v.Digest())
+				WithField("vertex_digest", v.Digest()).
+				WithField("actives_digest_key", dgst)
 			if j != nil {
 				lg = lg.WithField("job", j.id)
 			}
 			lg.Debug("adding active vertex")
+			for i, inp := range v.Inputs() {
+				lg.WithField("input_index", i).
+					WithField("input_vertex_name", inp.Vertex.Name()).
+					WithField("input_vertex_digest", inp.Vertex.Digest()).
+					WithField("input_edge_index", inp.Index).
+					Debug("new active vertex input")
+			}
 		}
 	} else if debugScheduler {
 		lg := bklog.G(ctx).
 			WithField("vertex_name", v.Name()).
-			WithField("vertex_digest", v.Digest())
+			WithField("vertex_digest", v.Digest()).
+			WithField("actives_digest_key", dgst)
 		if j != nil {
 			lg = lg.WithField("job", j.id)
 		}
@@ -504,17 +513,6 @@ func (jl *Solver) loadUnlocked(ctx context.Context, v, parent Vertex, j *Job, ca
 	if j != nil {
 		if _, ok := st.jobs[j]; !ok {
 			st.jobs[j] = struct{}{}
-		}
-		if debugScheduler {
-			jobIDs := make([]string, 0, len(st.jobs))
-			for j := range st.jobs {
-				jobIDs = append(jobIDs, j.id)
-			}
-			bklog.G(ctx).
-				WithField("vertex_name", v.Name()).
-				WithField("vertex_digest", v.Digest()).
-				WithField("jobs", jobIDs).
-				Debug("current jobs for vertex")
 		}
 	}
 	st.mu.Unlock()
