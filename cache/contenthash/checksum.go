@@ -542,7 +542,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 		// involves a symlink. That will match fsutil behavior of
 		// calling functions such as stat and walk.
 		var cr *CacheRecord
-		k, cr, err = getFollowLinks(root, k, true)
+		k, cr, err = getFollowParentLinks(root, k, true)
 		if err != nil {
 			return nil, err
 		}
@@ -751,35 +751,15 @@ func wildcardPrefix(root *iradix.Node, p string) (string, []byte, bool, error) {
 		return "", nil, false, nil
 	}
 
-	linksWalked := 0
-	k, cr, err := getFollowLinksWalk(root, convertPathToKey(d1), true, &linksWalked)
+	// Only resolve the final symlink component if there are components in the
+	// wildcard segment.
+	resolveFn := getFollowParentLinks
+	if d2 != "" {
+		resolveFn = getFollowLinks
+	}
+	k, cr, err := resolveFn(root, convertPathToKey(d1), true)
 	if err != nil {
 		return "", k, false, err
-	}
-
-	if d2 != "" && cr != nil && cr.Type == CacheRecordTypeSymlink {
-		// getFollowLinks only handles symlinks in path
-		// components before the last component, so
-		// handle last component in d1 specially.
-		resolved := convertKeyToPath(k)
-		for {
-			v, ok := root.Get(k)
-
-			if !ok {
-				return d1, k, false, nil
-			}
-			if v.(*CacheRecord).Type != CacheRecordTypeSymlink {
-				break
-			}
-
-			linksWalked++
-			if linksWalked > 255 {
-				return "", k, false, errors.Errorf("too many links")
-			}
-
-			resolved := cleanLink(resolved, v.(*CacheRecord).Linkname)
-			k = convertPathToKey(resolved)
-		}
 	}
 	return d1, k, cr != nil, nil
 }
@@ -892,7 +872,7 @@ func (cc *cacheContext) lazyChecksum(ctx context.Context, m *mount, p string) (*
 
 func (cc *cacheContext) checksum(ctx context.Context, root *iradix.Node, txn *iradix.Txn, m *mount, k []byte, follow bool) (*CacheRecord, bool, error) {
 	origk := k
-	k, cr, err := getFollowLinks(root, k, follow)
+	k, cr, err := getFollowParentLinks(root, k, follow)
 	if err != nil {
 		return nil, false, err
 	}
@@ -1070,12 +1050,10 @@ func (cc *cacheContext) scanPath(ctx context.Context, m *mount, p string) (retEr
 	return nil
 }
 
-func getFollowLinks(root *iradix.Node, k []byte, follow bool) ([]byte, *CacheRecord, error) {
-	var linksWalked int
-	return getFollowLinksWalk(root, k, follow, &linksWalked)
-}
-
-func getFollowLinksWalk(root *iradix.Node, k []byte, follow bool, linksWalked *int) ([]byte, *CacheRecord, error) {
+// getFollowParentLinks is effectively O_PATH|O_NOFOLLOW, where the final
+// component is looked up without doing any symlink resolution (if it is a
+// symlink).
+func getFollowParentLinks(root *iradix.Node, k []byte, follow bool) ([]byte, *CacheRecord, error) {
 	v, ok := root.Get(k)
 	if ok {
 		return k, v.(*CacheRecord), nil
@@ -1084,24 +1062,15 @@ func getFollowLinksWalk(root *iradix.Node, k []byte, follow bool, linksWalked *i
 		return k, nil, nil
 	}
 
+	// Only fully evaluate the parent path.
 	dir, file := splitKey(k)
-
-	k, parent, err := getFollowLinksWalk(root, dir, follow, linksWalked)
+	dir, _, err := getFollowLinks(root, dir, follow)
 	if err != nil {
 		return nil, nil, err
 	}
-	if parent != nil {
-		if parent.Type == CacheRecordTypeSymlink {
-			*linksWalked++
-			if *linksWalked > 255 {
-				return nil, nil, errors.Errorf("too many links")
-			}
 
-			link := cleanLink(convertKeyToPath(dir), parent.Linkname)
-			return getFollowLinksWalk(root, append(convertPathToKey(link), file...), follow, linksWalked)
-		}
-	}
-	k = append(k, file...)
+	// Do a direct lookup of the final component.
+	k = append(dir, file...)
 	v, ok = root.Get(k)
 	if ok {
 		return k, v.(*CacheRecord), nil
@@ -1109,16 +1078,79 @@ func getFollowLinksWalk(root *iradix.Node, k []byte, follow bool, linksWalked *i
 	return k, nil, nil
 }
 
-func cleanLink(dir, linkname string) string {
-	dirPath := path.Clean(dir)
-	if dirPath == "." || dirPath == "/" {
-		dirPath = ""
+func getFollowLinks(root *iradix.Node, k []byte, follow bool) ([]byte, *CacheRecord, error) {
+	v, ok := root.Get(k)
+	if ok && v.(*CacheRecord).Type != CacheRecordTypeSymlink {
+		return k, v.(*CacheRecord), nil
 	}
-	link := path.Clean(linkname)
-	if !path.IsAbs(link) {
-		return path.Join("/", path.Join(path.Dir(dirPath), link))
+	if !follow || len(k) == 0 {
+		return k, nil, nil
 	}
-	return link
+
+	var (
+		currentPath   = "/"
+		remainingPath = convertKeyToPath(k)
+		linksWalked   int
+		cr            *CacheRecord
+	)
+	// Trailing slashes are significant for the cache, but path.Clean strips
+	// them. We only care about the slash for the final lookup.
+	remainingPath, hadTrailingSlash := strings.CutSuffix(remainingPath, "/")
+	for remainingPath != "" {
+		// Get next component.
+		var part string
+		if i := strings.IndexRune(remainingPath, '/'); i == -1 {
+			part, remainingPath = remainingPath, ""
+		} else {
+			part, remainingPath = remainingPath[:i], remainingPath[i+1:]
+		}
+
+		// Apply the component to the path. Since it is a single component, and
+		// our current path contains no symlinks, we can just apply it
+		// leixically.
+		nextPath := path.Join("/", currentPath, part)
+		if nextPath == "/" {
+			// If we hit the root, just treat it as a directory.
+			currentPath = "/"
+			continue
+		}
+		if nextPath == currentPath {
+			// noop component
+			continue
+		}
+
+		cr = nil
+		v, ok := root.Get(convertPathToKey(nextPath))
+		if ok {
+			cr = v.(*CacheRecord)
+		}
+		if !ok || cr.Type != CacheRecordTypeSymlink {
+			currentPath = nextPath
+			continue
+		}
+
+		linksWalked++
+		if linksWalked > maxSymlinkLimit {
+			return nil, nil, errTooManyLinks
+		}
+
+		remainingPath = cr.Linkname + "/" + remainingPath
+		if path.IsAbs(cr.Linkname) {
+			currentPath = "/"
+		}
+	}
+	// We've already looked up the final component. However, if there was a
+	// trailing slash in the original path, we need to do the lookup again with
+	// the slash applied.
+	if hadTrailingSlash {
+		cr = nil
+		currentPath += "/"
+		v, ok := root.Get(convertPathToKey(currentPath))
+		if ok {
+			cr = v.(*CacheRecord)
+		}
+	}
+	return convertPathToKey(currentPath), cr, nil
 }
 
 func prepareDigest(fp, p string, fi os.FileInfo) (digest.Digest, error) {
