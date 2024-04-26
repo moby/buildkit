@@ -611,6 +611,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			cgroupParent:      opt.CgroupParent,
 			llbCaps:           opt.LLBCaps,
 			sourceMap:         opt.SourceMap,
+			lintWarn:          opt.Warn,
 		}
 
 		if err = dispatchOnBuildTriggers(d, d.image.Config.OnBuild, opt); err != nil {
@@ -746,6 +747,7 @@ type dispatchOpt struct {
 	cgroupParent      string
 	llbCaps           *apicaps.CapSet
 	sourceMap         *llb.SourceMap
+	lintWarn          linter.LintWarnFunc
 }
 
 func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
@@ -820,9 +822,9 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 	case *instructions.OnbuildCommand:
 		err = dispatchOnbuild(d, c)
 	case *instructions.CmdCommand:
-		err = dispatchCmd(d, c)
+		err = dispatchCmd(d, c, opt.lintWarn)
 	case *instructions.EntrypointCommand:
-		err = dispatchEntrypoint(d, c)
+		err = dispatchEntrypoint(d, c, opt.lintWarn)
 	case *instructions.HealthCheckCommand:
 		err = dispatchHealthcheck(d, c)
 	case *instructions.ExposeCommand:
@@ -1051,6 +1053,8 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 		}
 	}
 	if c.PrependShell {
+		// Don't pass the linter function because we do not report a warning for
+		// shell usage on run commands.
 		args = withShell(d.image, args)
 	}
 
@@ -1435,9 +1439,13 @@ func dispatchOnbuild(d *dispatchState, c *instructions.OnbuildCommand) error {
 	return nil
 }
 
-func dispatchCmd(d *dispatchState, c *instructions.CmdCommand) error {
+func dispatchCmd(d *dispatchState, c *instructions.CmdCommand, warn linter.LintWarnFunc) error {
 	var args []string = c.CmdLine
 	if c.PrependShell {
+		if len(d.image.Config.Shell) == 0 {
+			msg := linter.RuleJSONArgsRecommended.Format(c.Name())
+			linter.RuleJSONArgsRecommended.Run(warn, c.Location(), msg)
+		}
 		args = withShell(d.image, args)
 	}
 	d.image.Config.Cmd = args
@@ -1446,9 +1454,13 @@ func dispatchCmd(d *dispatchState, c *instructions.CmdCommand) error {
 	return commitToHistory(&d.image, fmt.Sprintf("CMD %q", args), false, nil, d.epoch)
 }
 
-func dispatchEntrypoint(d *dispatchState, c *instructions.EntrypointCommand) error {
+func dispatchEntrypoint(d *dispatchState, c *instructions.EntrypointCommand, warn linter.LintWarnFunc) error {
 	var args []string = c.CmdLine
 	if c.PrependShell {
+		if len(d.image.Config.Shell) == 0 {
+			msg := linter.RuleJSONArgsRecommended.Format(c.Name())
+			linter.RuleJSONArgsRecommended.Run(warn, c.Location(), msg)
+		}
 		args = withShell(d.image, args)
 	}
 	d.image.Config.Entrypoint = args
