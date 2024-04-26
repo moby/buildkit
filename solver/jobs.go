@@ -176,6 +176,12 @@ func (s *state) setEdge(index Index, targetEdge *edge, targetState *state) {
 	targetEdge.takeOwnership(e)
 
 	if targetState != nil {
+		targetState.mu.Lock()
+		for j := range s.jobs {
+			targetState.jobs[j] = struct{}{}
+		}
+		targetState.mu.Unlock()
+
 		if _, ok := targetState.allPw[s.mpw]; !ok {
 			targetState.mpw.Add(s.mpw)
 			targetState.allPw[s.mpw] = struct{}{}
