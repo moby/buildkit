@@ -211,7 +211,7 @@ func init() {
 	frontends := map[string]interface{}{}
 
 	opts = []integration.TestOpt{
-		integration.WithMirroredImages(integration.OfficialImages("busybox:latest")),
+		integration.WithMirroredImages(integration.OfficialImages("busybox:latest", "alpine:latest")),
 		integration.WithMatrix("frontend", frontends),
 	}
 
