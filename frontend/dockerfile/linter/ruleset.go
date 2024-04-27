@@ -41,6 +41,20 @@ var (
 			return fmt.Sprintf("Command '%s' should match the case of the command majority (%s)", violatingCommand, correctCasing)
 		},
 	}
+	RuleDuplicateStageName = LinterRule[func(string) string]{
+		Name:        "DuplicateStageName",
+		Description: "Stage names should be unique",
+		Format: func(stageName string) string {
+			return fmt.Sprintf("Duplicate stage name %q, stage names should be unique", stageName)
+		},
+	}
+	RuleReservedStageName = LinterRule[func(string) string]{
+		Name:        "ReservedStageName",
+		Description: "Reserved stage names should not be used to name a stage",
+		Format: func(reservedStageName string) string {
+			return fmt.Sprintf("Stage name should not use the same name as reserved stage %q", reservedStageName)
+		},
+	}
 	RuleMaintainerDeprecated = LinterRule[func() string]{
 		Name:        "MaintainerDeprecated",
 		Description: "The maintainer instruction is deprecated, use a label instead to define an image author",
