@@ -176,16 +176,57 @@ func (s *state) setEdge(index Index, targetEdge *edge, targetState *state) {
 	targetEdge.takeOwnership(e)
 
 	if targetState != nil {
-		targetState.mu.Lock()
-		for j := range s.jobs {
-			targetState.jobs[j] = struct{}{}
-		}
-		targetState.mu.Unlock()
+		targetState.addJobs(s, map[*state]struct{}{})
 
 		if _, ok := targetState.allPw[s.mpw]; !ok {
 			targetState.mpw.Add(s.mpw)
 			targetState.allPw[s.mpw] = struct{}{}
 		}
+	}
+}
+
+// addJobs recursively adds jobs to state and all its ancestors. currently
+// only used during edge merges to add jobs from the source of the merge to the
+// target and its ancestors.
+// requires that Solver.mu is read-locked and srcState.mu is locked
+func (s *state) addJobs(srcState *state, memo map[*state]struct{}) {
+	if _, ok := memo[s]; ok {
+		return
+	}
+	memo[s] = struct{}{}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for j := range srcState.jobs {
+		s.jobs[j] = struct{}{}
+	}
+
+	for _, inputEdge := range s.vtx.Inputs() {
+		inputState, ok := s.solver.actives[inputEdge.Vertex.Digest()]
+		if !ok {
+			bklog.G(context.TODO()).
+				WithField("vertex_digest", inputEdge.Vertex.Digest()).
+				Error("input vertex not found during addJobs")
+			continue
+		}
+		inputState.addJobs(srcState, memo)
+
+		// tricky case: if the inputState's edge was *already* merged we should
+		// also add jobs to the merged edge's state
+		mergedInputEdge := inputState.getEdge(inputEdge.Index)
+		if mergedInputEdge == nil || mergedInputEdge.edge.Vertex.Digest() == inputEdge.Vertex.Digest() {
+			// not merged
+			continue
+		}
+		mergedInputState, ok := s.solver.actives[mergedInputEdge.edge.Vertex.Digest()]
+		if !ok {
+			bklog.G(context.TODO()).
+				WithField("vertex_digest", mergedInputEdge.edge.Vertex.Digest()).
+				Error("merged input vertex not found during addJobs")
+			continue
+		}
+		mergedInputState.addJobs(srcState, memo)
 	}
 }
 

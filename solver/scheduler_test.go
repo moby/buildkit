@@ -3457,18 +3457,19 @@ func TestStaleEdgeMerge(t *testing.T) {
 	})
 	defer s.Close()
 
+	depV0 := vtxConst(1, vtxOpt{name: "depV0"})
+	depV1 := vtxConst(1, vtxOpt{name: "depV1"})
+	depV2 := vtxConst(1, vtxOpt{name: "depV2"})
+
 	// These should all end up edge merged
 	v0 := vtxAdd(2, vtxOpt{name: "v0", inputs: []Edge{
-		{Vertex: vtxConst(3, vtxOpt{})},
-		{Vertex: vtxConst(4, vtxOpt{})},
+		{Vertex: depV0},
 	}})
 	v1 := vtxAdd(2, vtxOpt{name: "v1", inputs: []Edge{
-		{Vertex: vtxConst(3, vtxOpt{})},
-		{Vertex: vtxConst(4, vtxOpt{})},
+		{Vertex: depV1},
 	}})
 	v2 := vtxAdd(2, vtxOpt{name: "v2", inputs: []Edge{
-		{Vertex: vtxConst(3, vtxOpt{})},
-		{Vertex: vtxConst(4, vtxOpt{})},
+		{Vertex: depV2},
 	}})
 
 	j0, err := s.NewJob("job0")
@@ -3478,6 +3479,11 @@ func TestStaleEdgeMerge(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, res)
 
+	require.Contains(t, s.actives, v0.Digest())
+	require.Contains(t, s.actives[v0.Digest()].jobs, j0)
+	require.Contains(t, s.actives, depV0.Digest())
+	require.Contains(t, s.actives[depV0.Digest()].jobs, j0)
+
 	// this edge should be merged with the one from j0
 	j1, err := s.NewJob("job1")
 	require.NoError(t, err)
@@ -3486,14 +3492,37 @@ func TestStaleEdgeMerge(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, res)
 
+	require.Contains(t, s.actives, v0.Digest())
+	require.Contains(t, s.actives[v0.Digest()].jobs, j0)
+	require.Contains(t, s.actives[v0.Digest()].jobs, j1)
+	require.Contains(t, s.actives, depV0.Digest())
+	require.Contains(t, s.actives[depV0.Digest()].jobs, j0)
+	require.Contains(t, s.actives[depV0.Digest()].jobs, j1)
+
+	require.Contains(t, s.actives, v1.Digest())
+	require.NotContains(t, s.actives[v1.Digest()].jobs, j0)
+	require.Contains(t, s.actives[v1.Digest()].jobs, j1)
+	require.Contains(t, s.actives, depV1.Digest())
+	require.NotContains(t, s.actives[depV1.Digest()].jobs, j0)
+	require.Contains(t, s.actives[depV1.Digest()].jobs, j1)
+
 	// discard j0, verify that v0 is still active and it's state contains j1 since j1's
 	// edge was merged to v0's state
 	require.NoError(t, j0.Discard())
+
 	require.Contains(t, s.actives, v0.Digest())
-	require.Contains(t, s.actives, v1.Digest())
 	require.NotContains(t, s.actives[v0.Digest()].jobs, j0)
 	require.Contains(t, s.actives[v0.Digest()].jobs, j1)
+	require.Contains(t, s.actives, depV0.Digest())
+	require.NotContains(t, s.actives[depV0.Digest()].jobs, j0)
+	require.Contains(t, s.actives[depV0.Digest()].jobs, j1)
+
+	require.Contains(t, s.actives, v1.Digest())
+	require.NotContains(t, s.actives[v1.Digest()].jobs, j0)
 	require.Contains(t, s.actives[v1.Digest()].jobs, j1)
+	require.Contains(t, s.actives, depV1.Digest())
+	require.NotContains(t, s.actives[depV1.Digest()].jobs, j0)
+	require.Contains(t, s.actives[depV1.Digest()].jobs, j1)
 
 	// verify another job can still merge
 	j2, err := s.NewJob("job2")
@@ -3504,29 +3533,52 @@ func TestStaleEdgeMerge(t *testing.T) {
 	require.NotNil(t, res)
 
 	require.Contains(t, s.actives, v0.Digest())
-	require.Contains(t, s.actives, v1.Digest())
-	require.Contains(t, s.actives, v2.Digest())
-	require.NotContains(t, s.actives[v0.Digest()].jobs, j0)
 	require.Contains(t, s.actives[v0.Digest()].jobs, j1)
 	require.Contains(t, s.actives[v0.Digest()].jobs, j2)
+	require.Contains(t, s.actives, depV0.Digest())
+	require.Contains(t, s.actives[depV0.Digest()].jobs, j1)
+	require.Contains(t, s.actives[depV0.Digest()].jobs, j2)
+
+	require.Contains(t, s.actives, v1.Digest())
 	require.Contains(t, s.actives[v1.Digest()].jobs, j1)
+	require.NotContains(t, s.actives[v1.Digest()].jobs, j2)
+	require.Contains(t, s.actives, depV1.Digest())
+	require.Contains(t, s.actives[depV1.Digest()].jobs, j1)
+	require.NotContains(t, s.actives[depV1.Digest()].jobs, j2)
+
+	require.Contains(t, s.actives, v2.Digest())
+	require.NotContains(t, s.actives[v2.Digest()].jobs, j1)
 	require.Contains(t, s.actives[v2.Digest()].jobs, j2)
+	require.Contains(t, s.actives, depV2.Digest())
+	require.NotContains(t, s.actives[depV2.Digest()].jobs, j1)
+	require.Contains(t, s.actives[depV2.Digest()].jobs, j2)
 
 	// discard j1, verify only referenced edges still exist
 	require.NoError(t, j1.Discard())
+
 	require.Contains(t, s.actives, v0.Digest())
-	require.NotContains(t, s.actives, v1.Digest())
-	require.Contains(t, s.actives, v2.Digest())
-	require.NotContains(t, s.actives[v0.Digest()].jobs, j0)
 	require.NotContains(t, s.actives[v0.Digest()].jobs, j1)
 	require.Contains(t, s.actives[v0.Digest()].jobs, j2)
+	require.Contains(t, s.actives, depV0.Digest())
+	require.NotContains(t, s.actives[depV0.Digest()].jobs, j1)
+	require.Contains(t, s.actives[depV0.Digest()].jobs, j2)
+
+	require.NotContains(t, s.actives, v1.Digest())
+	require.NotContains(t, s.actives, depV1.Digest())
+
+	require.Contains(t, s.actives, v2.Digest())
 	require.Contains(t, s.actives[v2.Digest()].jobs, j2)
+	require.Contains(t, s.actives, depV2.Digest())
+	require.Contains(t, s.actives[depV2.Digest()].jobs, j2)
 
 	// discard the last job and verify everything was removed now
 	require.NoError(t, j2.Discard())
 	require.NotContains(t, s.actives, v0.Digest())
 	require.NotContains(t, s.actives, v1.Digest())
 	require.NotContains(t, s.actives, v2.Digest())
+	require.NotContains(t, s.actives, depV0.Digest())
+	require.NotContains(t, s.actives, depV1.Digest())
+	require.NotContains(t, s.actives, depV2.Digest())
 }
 
 func generateSubGraph(nodes int) (Edge, int) {
