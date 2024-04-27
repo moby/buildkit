@@ -118,8 +118,17 @@ func DockerfileLint(ctx context.Context, dt []byte, opt ConvertOpt) (*lint.LintR
 		results.AddWarning(rulename, description, url, fmtmsg, sourceIndex, location)
 	}
 	_, err := toDispatchState(ctx, dt, opt)
+
+	var errLoc *parser.ErrorLocation
 	if err != nil {
-		return nil, err
+		buildErr := &lint.BuildError{
+			Message: err.Error(),
+		}
+		if errors.As(err, &errLoc) {
+			ranges := mergeLocations(errLoc.Locations...)
+			buildErr.Location = toPBLocation(sourceIndex, ranges)
+		}
+		results.Error = buildErr
 	}
 	return results, nil
 }
@@ -2013,5 +2022,55 @@ func validateStageNames(stages []instructions.Stage, warn linter.LintWarnFunc) {
 			}
 			stageNames[stage.Name] = struct{}{}
 		}
+	}
+}
+
+func mergeLocations(locations ...[]parser.Range) []parser.Range {
+	allRanges := []parser.Range{}
+	for _, ranges := range locations {
+		allRanges = append(allRanges, ranges...)
+	}
+	if len(allRanges) == 0 {
+		return []parser.Range{}
+	}
+	if len(allRanges) == 1 {
+		return allRanges
+	}
+
+	sort.Slice(allRanges, func(i, j int) bool {
+		return allRanges[i].Start.Line < allRanges[j].Start.Line
+	})
+
+	location := []parser.Range{}
+	currentRange := allRanges[0]
+	for _, r := range allRanges[1:] {
+		if r.Start.Line <= currentRange.End.Line {
+			currentRange.End.Line = max(currentRange.End.Line, r.End.Line)
+		} else {
+			location = append(location, currentRange)
+			currentRange = r
+		}
+	}
+	location = append(location, currentRange)
+	return location
+}
+
+func toPBLocation(sourceIndex int, location []parser.Range) pb.Location {
+	loc := make([]*pb.Range, 0, len(location))
+	for _, l := range location {
+		loc = append(loc, &pb.Range{
+			Start: pb.Position{
+				Line:      int32(l.Start.Line),
+				Character: int32(l.Start.Character),
+			},
+			End: pb.Position{
+				Line:      int32(l.End.Line),
+				Character: int32(l.End.Character),
+			},
+		})
+	}
+	return pb.Location{
+		SourceIndex: int32(sourceIndex),
+		Ranges:      loc,
 	}
 }
