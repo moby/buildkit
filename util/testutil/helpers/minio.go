@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"context"
 	"crypto/rand"
 	"fmt"
 	"net"
@@ -67,7 +68,7 @@ func NewMinioServer(t *testing.T, sb integration.Sandbox, opts MinioOpts) (addre
 	if err != nil {
 		return "", "", nil, err
 	}
-	if err = waitMinio(address, 15*time.Second); err != nil {
+	if err = waitMinio(sb.Context(), address, 15*time.Second); err != nil {
 		minioStop()
 		return "", "", nil, errors.Wrapf(err, "minio did not start up: %s", integration.FormatLogs(sb.Logs()))
 	}
@@ -100,11 +101,16 @@ func NewMinioServer(t *testing.T, sb integration.Sandbox, opts MinioOpts) (addre
 	return
 }
 
-func waitMinio(address string, d time.Duration) error {
+func waitMinio(ctx context.Context, address string, d time.Duration) error {
 	step := 1 * time.Second
 	i := 0
 	for {
-		if resp, err := http.Get(fmt.Sprintf("%s/minio/health/live", address)); err == nil {
+		req, err := http.NewRequest("GET", fmt.Sprintf("%s/minio/health/live", address), nil)
+		if err != nil {
+			return errors.Wrapf(err, "failed to create request")
+		}
+		req = req.WithContext(ctx)
+		if resp, err := http.DefaultClient.Do(req); err == nil {
 			resp.Body.Close()
 			break
 		}

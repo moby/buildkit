@@ -18,6 +18,7 @@ linters:
     - ineffassign
     - makezero
     - misspell
+    - noctx
     - nolintlint
     - revive
     - staticcheck
