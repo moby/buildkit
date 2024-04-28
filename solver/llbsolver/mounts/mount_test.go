@@ -25,6 +25,7 @@ import (
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/winlayers"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
 	"golang.org/x/sync/errgroup"
@@ -288,8 +289,8 @@ func TestCacheMountLockedRefs(t *testing.T) {
 	gotRef4 := make(chan struct{})
 	go func() {
 		ref4, err := g2.getRefCacheDir(ctx, nil, "foo", pb.CacheSharingOpt_LOCKED)
-		require.NoError(t, err)
-		require.Equal(t, ref.ID(), ref4.ID())
+		assert.NoError(t, err)
+		assert.Equal(t, ref.ID(), ref4.ID())
 		close(gotRef4)
 	}()
 
@@ -359,7 +360,7 @@ func TestCacheMountSharedRefsDeadlock(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		err = eg.Wait()
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		close(done)
 	}()
 

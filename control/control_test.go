@@ -140,9 +140,9 @@ func TestParseCacheExportIgnoreError(t *testing.T) {
 		t.Run(ignoreErrStr, func(t *testing.T) {
 			ignoreErr, supported := parseCacheExportIgnoreError(ignoreErrStr)
 			t.Log("checking expectedIgnoreError")
-			require.Equal(t, ignoreErr, test.expectedIgnoreError)
+			require.Equal(t, test.expectedIgnoreError, ignoreErr)
 			t.Log("checking expectedSupported")
-			require.Equal(t, supported, test.expectedSupported)
+			require.Equal(t, test.expectedSupported, supported)
 		})
 	}
 }

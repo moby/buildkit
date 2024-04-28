@@ -230,7 +230,7 @@ func TestManager(t *testing.T) {
 
 	fi, err := os.Stat(target)
 	require.NoError(t, err)
-	require.Equal(t, fi.IsDir(), true)
+	require.Equal(t, true, fi.IsDir())
 
 	err = lm.Unmount()
 	require.NoError(t, err)
@@ -315,7 +315,7 @@ func TestManager(t *testing.T) {
 
 	checkDiskUsage(ctx, t, cm, 0, 0)
 
-	require.Equal(t, len(buf.all), 2)
+	require.Equal(t, 2, len(buf.all))
 
 	err = cm.Close()
 	require.NoError(t, err)
@@ -506,7 +506,7 @@ func TestSnapshotExtract(t *testing.T) {
 
 	checkDiskUsage(ctx, t, cm, 2, 0)
 
-	require.Equal(t, len(buf.all), 0)
+	require.Equal(t, 0, len(buf.all))
 
 	dirs, err = os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
@@ -1823,7 +1823,7 @@ func TestGetRemotes(t *testing.T) {
 			eg.Go(func() error {
 				remotes, err := ir.GetRemotes(egctx, false, refCfg, true, nil)
 				require.NoError(t, err)
-				require.True(t, len(remotes) > 0, "for %s : %d", compressionType, len(remotes))
+				require.Greater(t, len(remotes), 0, "for %s : %d", compressionType, len(remotes))
 				gotMain, gotVariants := remotes[0], remotes[1:]
 
 				// Check the main blob is compatible with all == false

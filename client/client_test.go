@@ -1018,7 +1018,7 @@ func testPushByDigest(t *testing.T, sb integration.Sandbox) {
 
 	require.Equal(t, resp.ExporterResponse[exptypes.ExporterImageDigestKey], desc.Digest.String())
 	require.Equal(t, images.MediaTypeDockerSchema2Manifest, desc.MediaType)
-	require.True(t, desc.Size > 0)
+	require.Greater(t, desc.Size, int64(0))
 }
 
 func testSecurityMode(t *testing.T, sb integration.Sandbox) {
@@ -3354,7 +3354,7 @@ func testSourceDateEpochClamp(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	busyboxTms := busyboxTmsX.FromImage
 
-	require.True(t, len(busyboxTms) > 1)
+	require.Greater(t, len(busyboxTms), 1)
 	bboxLayerLen := len(busyboxTms) - 1
 
 	tm, err := time.Parse(time.RFC3339Nano, busyboxTms[1])
@@ -4475,7 +4475,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, "layers", ociimg.RootFS.Type)
 	require.Equal(t, 3, len(ociimg.RootFS.DiffIDs))
 	require.NotNil(t, ociimg.Created)
-	require.True(t, time.Since(*ociimg.Created) < 2*time.Minute)
+	require.Less(t, time.Since(*ociimg.Created), 2*time.Minute)
 	require.Condition(t, func() bool {
 		for _, env := range ociimg.Config.Env {
 			if strings.HasPrefix(env, "PATH=") {
@@ -7766,7 +7766,7 @@ func checkAllReleasable(t *testing.T, c *Client, sb integration.Sandbox, checkCo
 	retries := 0
 loop0:
 	for {
-		require.True(t, 20 > retries)
+		require.Greater(t, 20, retries)
 		retries++
 		du, err := c.DiskUsage(sb.Context())
 		require.NoError(t, err)
@@ -7814,7 +7814,7 @@ loop0:
 		if count == 0 {
 			break
 		}
-		require.True(t, 20 > retries)
+		require.Less(t, retries, 20)
 		retries++
 		time.Sleep(500 * time.Millisecond)
 	}

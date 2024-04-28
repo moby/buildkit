@@ -40,7 +40,7 @@ func TestNoCancel(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "bar", r1)
 	assert.Equal(t, "bar", r2)
-	assert.Equal(t, counter, int64(1))
+	assert.Equal(t, int64(1), counter)
 }
 
 func TestCancelOne(t *testing.T) {
@@ -81,7 +81,7 @@ func TestCancelOne(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "", r1)
 	assert.Equal(t, "bar", r2)
-	assert.Equal(t, counter, int64(1))
+	assert.Equal(t, int64(1), counter)
 }
 
 func TestCancelRace(t *testing.T) {
@@ -130,7 +130,7 @@ func TestCancelRace(t *testing.T) {
 		cancel(errors.WithStack(context.Canceled))
 		time.Sleep(5 * time.Millisecond)
 		_, err := g.Do(context.Background(), "foo", f)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	}()
 
 	_, err := g.Do(ctx, "foo", f)
@@ -188,7 +188,7 @@ func TestCancelBoth(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "", r1)
 	assert.Equal(t, "", r2)
-	assert.Equal(t, counter, int64(1))
+	assert.Equal(t, int64(1), counter)
 	ret1, err := g.Do(context.TODO(), "foo", f)
 	assert.NoError(t, err)
 	assert.Equal(t, ret1, "bar")

@@ -82,7 +82,7 @@ func TestRuncWorker(t *testing.T) {
 
 	names, err := f.Readdirnames(-1)
 	require.NoError(t, err)
-	require.True(t, len(names) > 5)
+	require.Greater(t, len(names), 5)
 
 	err = f.Close()
 	require.NoError(t, err)
@@ -98,7 +98,7 @@ func TestRuncWorker(t *testing.T) {
 	// }
 
 	for _, d := range du {
-		require.True(t, d.Size >= 8192)
+		require.GreaterOrEqual(t, d.Size, int64(8192))
 	}
 
 	meta := executor.Meta{

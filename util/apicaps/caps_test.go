@@ -5,6 +5,7 @@ import (
 
 	pb "github.com/moby/buildkit/util/apicaps/pb"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDisabledCap(t *testing.T) {
@@ -27,16 +28,16 @@ func TestDisabledCap(t *testing.T) {
 		{ID: "cap2", Enabled: true},
 	})
 	err := cs.Supports("cap1")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = cs.Supports("cap2")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	cs = cl.CapSet([]pb.APICap{
 		{ID: "cap1", Enabled: true},
 		{ID: "cap2", Enabled: false},
 	})
 	err = cs.Supports("cap1")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = cs.Supports("cap2")
 	assert.EqualError(t, err, "requested experimental feature cap2 (a second test cap) has been disabled on the build server")
 
