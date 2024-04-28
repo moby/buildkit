@@ -19,7 +19,7 @@ func Helper(u *url.URL) (*connhelper.ConnectionHelper, error) {
 	if len(addrParts) != 2 {
 		return nil, errors.Errorf("invalid address %s", u)
 	}
-	address := strings.Replace(addrParts[1], "/", "\\", -1)
+	address := strings.ReplaceAll(addrParts[1], "/", "\\")
 	return &connhelper.ConnectionHelper{
 		ContextDialer: func(ctx context.Context, addr string) (net.Conn, error) {
 			return winio.DialPipeContext(ctx, address)

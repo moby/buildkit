@@ -203,7 +203,7 @@ COPY --from=builder6 / /builder6
 		err = runShell(srcDir.Name, gitCommands...)
 		require.NoError(t, err)
 
-		server := httptest.NewServer(http.FileServer(http.Dir(filepath.Join(srcDir.Name))))
+		server := httptest.NewServer(http.FileServer(http.Dir(filepath.Clean(srcDir.Name))))
 
 		defer server.Close()
 		serverURL := server.URL

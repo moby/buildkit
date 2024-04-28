@@ -9,6 +9,7 @@ linters:
     - depguard
     - errname
     - forbidigo
+    - gocritic
     - gofmt
     - goimports
     - gosec
@@ -28,6 +29,12 @@ linters:
   disable-all: true
 
 linters-settings:
+  gocritic:
+    disabled-checks:
+      - "ifElseChain"
+      - "assignOp"
+      - "appendAssign"
+      - "singleCaseSwitch"
   govet:
     enable:
       - nilness

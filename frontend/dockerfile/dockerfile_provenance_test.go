@@ -276,7 +276,7 @@ COPY myapp.Dockerfile /
 	expectedGitSHA, err := cmd.Output()
 	require.NoError(t, err)
 
-	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Join(dir.Name))))
+	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Clean(dir.Name))))
 	defer server.Close()
 
 	target := registry + "/buildkit/testwithprovenance:git"

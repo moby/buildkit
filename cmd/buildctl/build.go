@@ -289,10 +289,8 @@ func buildAction(clicontext *cli.Context) error {
 		if len(def.Def) == 0 {
 			return errors.Errorf("empty definition sent to build. Specify --frontend instead?")
 		}
-	} else {
-		if clicontext.Bool("no-cache") {
-			solveOpt.FrontendAttrs["no-cache"] = ""
-		}
+	} else if clicontext.Bool("no-cache") {
+		solveOpt.FrontendAttrs["no-cache"] = ""
 	}
 
 	refFile := clicontext.String("ref-file")

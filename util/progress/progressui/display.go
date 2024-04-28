@@ -822,7 +822,7 @@ func (t *trace) displayInfo() (d displayInfo) {
 		}
 		var jobs []*job
 		j := &job{
-			name:        strings.Replace(v.Name, "\t", " ", -1),
+			name:        strings.ReplaceAll(v.Name, "\t", " "),
 			vertex:      v,
 			isCompleted: true,
 		}
@@ -912,7 +912,7 @@ func addTime(tm *time.Time, d time.Duration) *time.Time {
 	if tm == nil {
 		return nil
 	}
-	t := (*tm).Add(d)
+	t := tm.Add(d)
 	return &t
 }
 

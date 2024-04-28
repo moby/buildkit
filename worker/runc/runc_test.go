@@ -138,7 +138,7 @@ func TestRuncWorker(t *testing.T) {
 	target, err = lm.Mount()
 	require.NoError(t, err)
 
-	//Verifies fix for issue https://github.com/moby/buildkit/issues/429
+	// verifies fix for issue https://github.com/moby/buildkit/issues/429
 	dt, err := os.ReadFile(filepath.Join(target, "run", "bar"))
 
 	require.NoError(t, err)

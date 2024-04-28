@@ -60,7 +60,7 @@ func TestParseCases(t *testing.T) {
 
 			if runtime.GOOS == "windows" {
 				// CRLF --> CR to match Unix behavior
-				content = bytes.Replace(content, []byte{'\x0d', '\x0a'}, []byte{'\x0a'}, -1)
+				content = bytes.ReplaceAll(content, []byte{'\x0d', '\x0a'}, []byte{'\x0a'})
 			}
 			require.Equal(t, string(content), result.AST.Dump()+"\n", dockerfile)
 		})
