@@ -39,9 +39,15 @@ type Warning struct {
 	Location    pb.Location `json:"location,omitempty"`
 }
 
+type BuildError struct {
+	Message  string      `json:"message"`
+	Location pb.Location `json:"location"`
+}
+
 type LintResults struct {
 	Warnings []Warning        `json:"warnings"`
 	Sources  []*pb.SourceInfo `json:"sources"`
+	Error    *BuildError      `json:"buildError,omitempty"`
 }
 
 func (results *LintResults) AddSource(sourceMap *llb.SourceMap) int {
