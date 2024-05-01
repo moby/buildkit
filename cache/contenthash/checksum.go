@@ -948,41 +948,41 @@ func (cc *cacheContext) checksum(ctx context.Context, root *iradix.Node, txn *ir
 }
 
 // needsScan returns false if path is in the tree or a parent path is in tree
-// and subpath is missing
-func (cc *cacheContext) needsScan(root *iradix.Node, p string) (bool, error) {
-	var linksWalked int
-	return cc.needsScanFollow(root, p, &linksWalked)
-}
-
-func (cc *cacheContext) needsScanFollow(root *iradix.Node, p string, linksWalked *int) (bool, error) {
-	if p == "/" {
-		p = ""
-	}
-	v, ok := root.Get(convertPathToKey(p))
-	if !ok {
-		if p == "" {
-			return true, nil
+// and subpath is missing.
+func (cc *cacheContext) needsScan(root *iradix.Node, path string) (bool, error) {
+	var (
+		lastGoodPath    string
+		hasParentInTree bool
+	)
+	k := convertPathToKey(path)
+	_, cr, err := getFollowLinksCallback(root, k, true, func(subpath string, cr *CacheRecord) error {
+		if cr != nil {
+			// If the path is not a symlink, then for now we have a parent in
+			// the tree. Otherwise, we reset hasParentInTree because we
+			// might've jumped to a part of the tree that hasn't been scanned.
+			hasParentInTree = (cr.Type != CacheRecordTypeSymlink)
+			if hasParentInTree {
+				lastGoodPath = subpath
+			}
+		} else if hasParentInTree {
+			// If the current component was something like ".." and the subpath
+			// couldn't be found, then we need to invalidate hasParentInTree.
+			// In practice this means that our subpath needs to be prefixed by
+			// the last good path. We add a trailing slash to make sure the
+			// prefix is a proper lexical prefix (as opposed to /a/b being seen
+			// as a prefix of /a/bc).
+			hasParentInTree = strings.HasPrefix(subpath+"/", lastGoodPath+"/")
 		}
-		return cc.needsScanFollow(root, path.Clean(path.Dir(p)), linksWalked)
+		return nil
+	})
+	if err != nil {
+		return false, err
 	}
-	cr := v.(*CacheRecord)
-	if cr.Type == CacheRecordTypeSymlink {
-		if *linksWalked > 255 {
-			return false, errTooManyLinks
-		}
-		*linksWalked++
-		link := path.Clean(cr.Linkname)
-		if !path.IsAbs(cr.Linkname) {
-			link = path.Join("/", path.Dir(p), link)
-		}
-		return cc.needsScanFollow(root, link, linksWalked)
-	}
-	return false, nil
+	return cr == nil && !hasParentInTree, nil
 }
 
 func (cc *cacheContext) scanPath(ctx context.Context, m *mount, p string) (retErr error) {
-	p = path.Join("/", p)
-	d, _ := path.Split(p)
+	d := path.Dir(path.Join("/", p))
 
 	mp, err := m.mount(ctx)
 	if err != nil {
@@ -1007,6 +1007,10 @@ func (cc *cacheContext) scanPath(ctx context.Context, m *mount, p string) (retEr
 
 	err = filepath.Walk(parentPath, func(itemPath string, fi os.FileInfo, err error) error {
 		if err != nil {
+			// If the root doesn't exist, ignore the error.
+			if itemPath == scanPath && errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
 			return errors.Wrapf(err, "failed to walk %s", itemPath)
 		}
 		rel, err := filepath.Rel(mp, itemPath)
@@ -1078,7 +1082,15 @@ func getFollowParentLinks(root *iradix.Node, k []byte, follow bool) ([]byte, *Ca
 	return k, nil, nil
 }
 
+// followLinksCallback is called after we try to resolve each element. If the
+// path was not found, cr is nil.
+type followLinksCallback func(path string, cr *CacheRecord) error
+
 func getFollowLinks(root *iradix.Node, k []byte, follow bool) ([]byte, *CacheRecord, error) {
+	return getFollowLinksCallback(root, k, follow, nil)
+}
+
+func getFollowLinksCallback(root *iradix.Node, k []byte, follow bool, cb followLinksCallback) ([]byte, *CacheRecord, error) {
 	v, ok := root.Get(k)
 	if ok && v.(*CacheRecord).Type != CacheRecordTypeSymlink {
 		return k, v.(*CacheRecord), nil
@@ -1124,6 +1136,11 @@ func getFollowLinks(root *iradix.Node, k []byte, follow bool) ([]byte, *CacheRec
 		if ok {
 			cr = v.(*CacheRecord)
 		}
+		if cb != nil {
+			if err := cb(nextPath, cr); err != nil {
+				return nil, nil, err
+			}
+		}
 		if !ok || cr.Type != CacheRecordTypeSymlink {
 			currentPath = nextPath
 			continue
@@ -1148,6 +1165,11 @@ func getFollowLinks(root *iradix.Node, k []byte, follow bool) ([]byte, *CacheRec
 		v, ok := root.Get(convertPathToKey(currentPath))
 		if ok {
 			cr = v.(*CacheRecord)
+		}
+		if cb != nil {
+			if err := cb(currentPath, cr); err != nil {
+				return nil, nil, err
+			}
 		}
 	}
 	return convertPathToKey(currentPath), cr, nil
