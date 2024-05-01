@@ -57,12 +57,22 @@ func (s *Lex) ProcessWordWithMap(word string, env map[string]string) (string, er
 	return word, err
 }
 
+type ProcessWordMatchesResult struct {
+	Result    string
+	Matched   map[string]struct{}
+	Unmatched map[string]struct{}
+}
+
 // ProcessWordWithMatches will use the 'env' list of environment variables,
 // replace any env var references in 'word' and return the env that were used.
-func (s *Lex) ProcessWordWithMatches(word string, env map[string]string) (string, map[string]struct{}, error) {
+func (s *Lex) ProcessWordWithMatches(word string, env map[string]string) (ProcessWordMatchesResult, error) {
 	sw := s.init(word, env)
 	word, _, err := sw.process(word)
-	return word, sw.matches, err
+	return ProcessWordMatchesResult{
+		Result:    word,
+		Matched:   sw.matches,
+		Unmatched: sw.nonmatches,
+	}, err
 }
 
 func (s *Lex) ProcessWordsWithMap(word string, env map[string]string) ([]string, error) {
@@ -79,6 +89,7 @@ func (s *Lex) init(word string, env map[string]string) *shellWord {
 		rawQuotes:         s.RawQuotes,
 		rawEscapes:        s.RawEscapes,
 		matches:           make(map[string]struct{}),
+		nonmatches:        make(map[string]struct{}),
 	}
 	sw.scanner.Init(strings.NewReader(word))
 	return sw
@@ -98,6 +109,7 @@ type shellWord struct {
 	skipUnsetEnv      bool
 	skipProcessQuotes bool
 	matches           map[string]struct{}
+	nonmatches        map[string]struct{}
 }
 
 func (sw *shellWord) process(source string) (string, []string, error) {
@@ -511,6 +523,7 @@ func (sw *shellWord) getEnv(name string) (string, bool) {
 			return value, true
 		}
 	}
+	sw.nonmatches[name] = struct{}{}
 	return "", false
 }
 

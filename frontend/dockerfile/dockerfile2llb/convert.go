@@ -236,7 +236,9 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			info := argInfo{definition: metaArg, location: cmd.Location()}
 			if v, ok := opt.BuildArgs[metaArg.Key]; !ok {
 				if metaArg.Value != nil {
-					*metaArg.Value, info.deps, _ = shlex.ProcessWordWithMatches(*metaArg.Value, metaArgsToMap(optMetaArgs))
+					result, _ := shlex.ProcessWordWithMatches(*metaArg.Value, metaArgsToMap(optMetaArgs))
+					*metaArg.Value = result.Result
+					info.deps = result.Matched
 				}
 			} else {
 				metaArg.Value = &v
@@ -258,14 +260,17 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 
 	// set base state for every image
 	for i, st := range stages {
-		name, used, err := shlex.ProcessWordWithMatches(st.BaseName, metaArgsToMap(optMetaArgs))
+		nameMatch, err := shlex.ProcessWordWithMatches(st.BaseName, metaArgsToMap(optMetaArgs))
+		reportUnusedFromArgs(nameMatch.Unmatched, st.Location, opt.Warn)
+		used := nameMatch.Matched
+
 		if err != nil {
 			return nil, parser.WithLocation(err, st.Location)
 		}
-		if name == "" {
+		if nameMatch.Result == "" {
 			return nil, parser.WithLocation(errors.Errorf("base name (%s) should not be blank", st.BaseName), st.Location)
 		}
-		st.BaseName = name
+		st.BaseName = nameMatch.Result
 
 		ds := &dispatchState{
 			stage:          st,
@@ -279,18 +284,22 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		}
 
 		if v := st.Platform; v != "" {
-			v, u, err := shlex.ProcessWordWithMatches(v, metaArgsToMap(optMetaArgs))
+			platMatch, err := shlex.ProcessWordWithMatches(v, metaArgsToMap(optMetaArgs))
+			reportUnusedFromArgs(platMatch.Unmatched, st.Location, opt.Warn)
+
 			if err != nil {
-				return nil, parser.WithLocation(errors.Wrapf(err, "failed to process arguments for platform %s", v), st.Location)
+				return nil, parser.WithLocation(errors.Wrapf(err, "failed to process arguments for platform %s", platMatch.Result), st.Location)
 			}
 
-			p, err := platforms.Parse(v)
+			p, err := platforms.Parse(platMatch.Result)
 			if err != nil {
-				return nil, parser.WithLocation(errors.Wrapf(err, "failed to parse platform %s", v), st.Location)
+				return nil, parser.WithLocation(errors.Wrapf(err, "failed to parse platform %s", platMatch.Result), st.Location)
 			}
-			for k := range u {
+
+			for k := range platMatch.Matched {
 				used[k] = struct{}{}
 			}
+
 			ds.platform = &p
 		}
 
@@ -2072,5 +2081,12 @@ func toPBLocation(sourceIndex int, location []parser.Range) pb.Location {
 	return pb.Location{
 		SourceIndex: int32(sourceIndex),
 		Ranges:      loc,
+	}
+}
+
+func reportUnusedFromArgs(unmatched map[string]struct{}, location []parser.Range, warn linter.LintWarnFunc) {
+	for arg := range unmatched {
+		msg := linter.RuleUndeclaredArgInFrom.Format(arg)
+		linter.RuleUndeclaredArgInFrom.Run(warn, location, msg)
 	}
 }
