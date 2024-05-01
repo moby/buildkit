@@ -285,7 +285,6 @@ type rawJSONDisplay struct {
 // output of status update events.
 func newRawJSONDisplay(w io.Writer) Display {
 	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
 	return Display{
 		disp: &rawJSONDisplay{
 			enc: enc,
