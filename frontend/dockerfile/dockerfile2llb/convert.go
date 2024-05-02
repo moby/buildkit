@@ -364,8 +364,6 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		}
 	}
 
-	validateCommandArgs(allDispatchStates, shlex, opt.Warn)
-
 	var target *dispatchState
 	if opt.Target == "" {
 		target = allDispatchStates.lastTarget()
@@ -603,6 +601,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			llbCaps:           opt.LLBCaps,
 			sourceMap:         opt.SourceMap,
 			lintWarn:          opt.Warn,
+			argCmdVars:        make(map[string]struct{}),
 		}
 
 		if err = dispatchOnBuildTriggers(d, d.image.Config.OnBuild, opt); err != nil {
@@ -739,15 +738,16 @@ type dispatchOpt struct {
 	llbCaps           *apicaps.CapSet
 	sourceMap         *llb.SourceMap
 	lintWarn          linter.LintWarnFunc
+	argCmdVars        map[string]struct{}
 }
 
 func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
+	env, err := d.state.Env(context.TODO())
+	if err != nil {
+		return err
+	}
 	if ex, ok := cmd.Command.(instructions.SupportsSingleWordExpansion); ok {
 		err := ex.Expand(func(word string) (string, error) {
-			env, err := d.state.Env(context.TODO())
-			if err != nil {
-				return "", err
-			}
 			newword, _, err := opt.shlex.ProcessWord(word, env)
 			return newword, err
 		})
@@ -757,11 +757,6 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 	}
 	if ex, ok := cmd.Command.(instructions.SupportsSingleWordExpansionRaw); ok {
 		err := ex.ExpandRaw(func(word string) (string, error) {
-			env, err := d.state.Env(context.TODO())
-			if err != nil {
-				return "", err
-			}
-
 			lex := shell.NewLex('\\')
 			lex.SkipProcessQuotes = true
 			newword, _, err := lex.ProcessWord(word, env)
@@ -771,8 +766,8 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 			return err
 		}
 	}
+	validateCommandVar(cmd.Command, env, &opt)
 
-	var err error
 	switch c := cmd.Command.(type) {
 	case *instructions.MaintainerCommand:
 		err = dispatchMaintainer(d, c)
@@ -831,7 +826,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 	case *instructions.ShellCommand:
 		err = dispatchShell(d, c)
 	case *instructions.ArgCommand:
-		err = dispatchArg(d, c, opt.metaArgs, opt.buildArgValues)
+		err = dispatchArg(d, c, opt.metaArgs, &opt)
 	case *instructions.CopyCommand:
 		l := opt.buildContext
 		if len(cmd.sources) != 0 {
@@ -1580,10 +1575,11 @@ func dispatchShell(d *dispatchState, c *instructions.ShellCommand) error {
 	return commitToHistory(&d.image, fmt.Sprintf("SHELL %v", c.Shell), false, nil, d.epoch)
 }
 
-func dispatchArg(d *dispatchState, c *instructions.ArgCommand, metaArgs []instructions.KeyValuePairOptional, buildArgValues map[string]string) error {
+func dispatchArg(d *dispatchState, c *instructions.ArgCommand, metaArgs []instructions.KeyValuePairOptional, opt *dispatchOpt) error {
 	commitStrs := make([]string, 0, len(c.Args))
 	for _, arg := range c.Args {
-		buildArg := setKVValue(arg, buildArgValues)
+		opt.argCmdVars[arg.Key] = struct{}{}
+		buildArg := setKVValue(arg, opt.buildArgValues)
 
 		commitStr := arg.Key
 		if arg.Value != nil {
@@ -2079,27 +2075,15 @@ func validateStageNames(stages []instructions.Stage, warn linter.LintWarnFunc) {
 	}
 }
 
-func validateCommandArgs(allDispatchStates *dispatchStates, shlex *shell.Lex, warn linter.LintWarnFunc) {
-	nonEnvArgs := map[string]struct{}{}
-	for _, d := range allDispatchStates.states {
-		env, err := d.state.Env(context.TODO())
-		if err != nil {
-			continue
-		}
-		for _, cmd := range d.stage.Commands {
-			if argCmd, ok := cmd.(*instructions.ArgCommand); ok {
-				for _, arg := range argCmd.Args {
-					nonEnvArgs[arg.Key] = struct{}{}
-				}
-			}
-			if cmdstr, ok := cmd.(fmt.Stringer); ok {
-				_, unmatched, _ := shlex.ProcessWord(cmdstr.String(), env)
-				for arg := range unmatched {
-					if _, ok := nonEnvArgs[arg]; !ok {
-						msg := linter.RuleUndefinedArg.Format(arg)
-						linter.RuleUndefinedArg.Run(warn, cmd.Location(), msg)
-					}
-				}
+func validateCommandVar(cmd instructions.Command, env []string, opt *dispatchOpt) {
+	if cmdstr, ok := cmd.(fmt.Stringer); ok {
+		_, unmatched, _ := opt.shlex.ProcessWord(cmdstr.String(), env)
+		for arg := range unmatched {
+			_, argCmdOk := opt.argCmdVars[arg]
+			_, nonEnvOk := nonEnvArgs[arg]
+			if !argCmdOk && !nonEnvOk {
+				msg := linter.RuleUndefinedVar.Format(arg)
+				linter.RuleUndefinedVar.Run(opt.warn, cmd.Location(), msg)
 			}
 		}
 	}

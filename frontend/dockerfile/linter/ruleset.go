@@ -88,7 +88,14 @@ var (
 		Name:        "UndefinedArg",
 		Description: "ARGs should be defined before their use",
 		Format: func(arg string) string {
-			return fmt.Sprintf("Usage of undefined ARG '%s'", arg)
+			return fmt.Sprintf("Usage of undefined variable '$%s'", arg)
+		},
+	}
+	RuleUndefinedVar = LinterRule[func(string) string]{
+		Name:        "UndefinedVar",
+		Description: "Variables should be defined before their use",
+		Format: func(arg string) string {
+			return fmt.Sprintf("Usage of undefined variable '$%s'", arg)
 		},
 	}
 )

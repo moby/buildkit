@@ -489,6 +489,7 @@ COPY Dockerfile .
 	})
 }
 
+<<<<<<< HEAD
 func testWorkdirRelativePath(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
 FROM scratch
@@ -521,7 +522,22 @@ COPY Dockerfile${foo} .
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 
 	dockerfile = []byte(`
-FROM busybox
+FROM alpine AS base
+ARG foo=Dockerfile
+
+FROM base
+COPY $foo .
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`
+FROM alpine
+RUN echo $PATH
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`
+FROM alpine
 COPY $foo .
 ARG foo=bar
 RUN echo $foo
@@ -530,9 +546,9 @@ RUN echo $foo
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
 			{
-				RuleName:    "UndefinedArg",
-				Description: "ARGs should be defined before their use",
-				Detail:      "Usage of undefined ARG 'foo'",
+				RuleName:    "UndefinedVar",
+				Description: "Variables should be defined before their use",
+				Detail:      "Usage of undefined variable '$foo'",
 				Level:       1,
 				Line:        3,
 			},
@@ -569,6 +585,7 @@ func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestPara
 			require.Less(t, lintResults.Error.Location.SourceIndex, int32(len(lintResults.Sources)))
 		}
 		require.Equal(t, len(lintTest.Warnings), len(lintResults.Warnings))
+
 		sort.Slice(lintResults.Warnings, func(i, j int) bool {
 			// sort by line number in ascending order
 			firstRange := lintResults.Warnings[i].Location.Ranges[0]
