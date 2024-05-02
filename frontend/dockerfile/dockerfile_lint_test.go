@@ -33,6 +33,7 @@ var lintTests = integration.TestFuncs(
 	testWarningsBeforeError,
 	testUndeclaredArg,
 	testWorkdirRelativePath,
+	testUndefinedArg,
 )
 
 func testStageName(t *testing.T, sb integration.Sandbox) {
@@ -500,11 +501,6 @@ WORKDIR app/
 				RuleName:    "WorkdirRelativePath",
 				Description: "Relative workdir without an absolute workdir declared within the build can have unexpected results if the base image changes",
 				Detail:      "Relative workdir \"app/\" can have unexpected results if the base image changes",
-				Level:       1,
-				Line:        3,
-			},
-		},
-	})
 
 	dockerfile = []byte(`
 FROM scratch AS a
@@ -514,6 +510,34 @@ FROM a AS b
 WORKDIR subdir/
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+}
+
+func testUndefinedArg(t *testing.T, sb integration.Sandbox) {
+	dockerfile := []byte(`
+FROM scratch
+ARG foo
+COPY Dockerfile${foo} .
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`
+FROM busybox
+COPY $foo .
+ARG foo=bar
+RUN echo $foo
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "UndefinedArg",
+				Description: "ARGs should be defined before their use",
+				Detail:      "Usage of undefined ARG 'foo'",
+				Level:       1,
+				Line:        3,
+			},
+		},
+	})
 }
 
 func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestParams) {

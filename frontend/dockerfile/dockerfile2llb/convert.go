@@ -364,6 +364,8 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		}
 	}
 
+	validateCommandArgs(allDispatchStates, shlex, opt.Warn)
+
 	var target *dispatchState
 	if opt.Target == "" {
 		target = allDispatchStates.lastTarget()
@@ -746,7 +748,8 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 			if err != nil {
 				return "", err
 			}
-			return opt.shlex.ProcessWord(word, env)
+			newword, _, err := opt.shlex.ProcessWord(word, env)
+			return newword, err
 		})
 		if err != nil {
 			return err
@@ -761,7 +764,8 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 
 			lex := shell.NewLex('\\')
 			lex.SkipProcessQuotes = true
-			return lex.ProcessWord(word, env)
+			newword, _, err := lex.ProcessWord(word, env)
+			return newword, err
 		})
 		if err != nil {
 			return err
@@ -1876,7 +1880,7 @@ func uppercaseCmd(str string) string {
 }
 
 func processCmdEnv(shlex *shell.Lex, cmd string, env []string) string {
-	w, err := shlex.ProcessWord(cmd, env)
+	w, _, err := shlex.ProcessWord(cmd, env)
 	if err != nil {
 		return cmd
 	}
@@ -2071,6 +2075,32 @@ func validateStageNames(stages []instructions.Stage, warn linter.LintWarnFunc) {
 				linter.RuleDuplicateStageName.Run(warn, stage.Location, msg)
 			}
 			stageNames[stage.Name] = struct{}{}
+		}
+	}
+}
+
+func validateCommandArgs(allDispatchStates *dispatchStates, shlex *shell.Lex, warn linter.LintWarnFunc) {
+	nonEnvArgs := map[string]struct{}{}
+	for _, d := range allDispatchStates.states {
+		env, err := d.state.Env(context.TODO())
+		if err != nil {
+			continue
+		}
+		for _, cmd := range d.stage.Commands {
+			if argCmd, ok := cmd.(*instructions.ArgCommand); ok {
+				for _, arg := range argCmd.Args {
+					nonEnvArgs[arg.Key] = struct{}{}
+				}
+			}
+			if cmdstr, ok := cmd.(fmt.Stringer); ok {
+				_, unmatched, _ := shlex.ProcessWord(cmdstr.String(), env)
+				for arg := range unmatched {
+					if _, ok := nonEnvArgs[arg]; !ok {
+						msg := linter.RuleUndefinedArg.Format(arg)
+						linter.RuleUndefinedArg.Run(warn, cmd.Location(), msg)
+					}
+				}
+			}
 		}
 	}
 }
