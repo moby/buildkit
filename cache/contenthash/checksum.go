@@ -407,7 +407,7 @@ func (cc *cacheContext) Checksum(ctx context.Context, mountable cache.Mountable,
 	defer m.clean()
 
 	if !opts.Wildcard && len(opts.IncludePatterns) == 0 && len(opts.ExcludePatterns) == 0 {
-		return cc.checksumFollow(ctx, m, p, opts.FollowLinks)
+		return cc.lazyChecksum(ctx, m, p, opts.FollowLinks)
 	}
 
 	includedPaths, err := cc.includedPaths(ctx, m, p, opts)
@@ -418,7 +418,7 @@ func (cc *cacheContext) Checksum(ctx context.Context, mountable cache.Mountable,
 	if opts.FollowLinks {
 		for i, w := range includedPaths {
 			if w.record.Type == CacheRecordTypeSymlink {
-				dgst, err := cc.checksumFollow(ctx, m, w.path, opts.FollowLinks)
+				dgst, err := cc.lazyChecksum(ctx, m, w.path, opts.FollowLinks)
 				if err != nil {
 					return "", err
 				}
@@ -445,30 +445,6 @@ func (cc *cacheContext) Checksum(ctx context.Context, mountable cache.Mountable,
 	return digester.Digest(), nil
 }
 
-func (cc *cacheContext) checksumFollow(ctx context.Context, m *mount, p string, follow bool) (digest.Digest, error) {
-	const maxSymlinkLimit = 255
-	i := 0
-	for {
-		if i > maxSymlinkLimit {
-			return "", errors.Errorf("too many symlinks: %s", p)
-		}
-		cr, err := cc.checksumNoFollow(ctx, m, p)
-		if err != nil {
-			return "", err
-		}
-		if cr.Type == CacheRecordTypeSymlink && follow {
-			link := cr.Linkname
-			if !path.IsAbs(cr.Linkname) {
-				link = path.Join(path.Dir(p), link)
-			}
-			i++
-			p = link
-		} else {
-			return cr.Digest, nil
-		}
-	}
-}
-
 func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, opts ChecksumOpts) ([]*includedPath, error) {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
@@ -478,12 +454,12 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 	}
 
 	root := cc.tree.Root()
-	scan, err := cc.needsScan(root, "")
+	scan, err := cc.needsScan(root, "", false)
 	if err != nil {
 		return nil, err
 	}
 	if scan {
-		if err := cc.scanPath(ctx, m, ""); err != nil {
+		if err := cc.scanPath(ctx, m, "", false); err != nil {
 			return nil, err
 		}
 	}
@@ -542,7 +518,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 		// involves a symlink. That will match fsutil behavior of
 		// calling functions such as stat and walk.
 		var cr *CacheRecord
-		k, cr, err = getFollowParentLinks(root, k, true)
+		k, cr, err = getFollowLinks(root, k, false)
 		if err != nil {
 			return nil, err
 		}
@@ -753,11 +729,7 @@ func wildcardPrefix(root *iradix.Node, p string) (string, []byte, bool, error) {
 
 	// Only resolve the final symlink component if there are components in the
 	// wildcard segment.
-	resolveFn := getFollowParentLinks
-	if d2 != "" {
-		resolveFn = getFollowLinks
-	}
-	k, cr, err := resolveFn(root, convertPathToKey(d1), true)
+	k, cr, err := getFollowLinks(root, convertPathToKey(d1), d2 != "")
 	if err != nil {
 		return "", k, false, err
 	}
@@ -796,19 +768,22 @@ func containsWildcards(name string) bool {
 	return false
 }
 
-func (cc *cacheContext) checksumNoFollow(ctx context.Context, m *mount, p string) (*CacheRecord, error) {
+func (cc *cacheContext) lazyChecksum(ctx context.Context, m *mount, p string, followTrailing bool) (digest.Digest, error) {
 	p = keyPath(p)
+	k := convertPathToKey(p)
 
+	// Try to look up the path directly without doing a scan.
 	cc.mu.RLock()
 	if cc.txn == nil {
 		root := cc.tree.Root()
 		cc.mu.RUnlock()
-		v, ok := root.Get(convertPathToKey(p))
-		if ok {
-			cr := v.(*CacheRecord)
-			if cr.Digest != "" {
-				return cr, nil
-			}
+
+		_, cr, err := getFollowLinks(root, k, followTrailing)
+		if err != nil {
+			return "", err
+		}
+		if cr != nil && cr.Digest != "" {
+			return cr.Digest, nil
 		}
 	} else {
 		cc.mu.RUnlock()
@@ -828,7 +803,11 @@ func (cc *cacheContext) checksumNoFollow(ctx context.Context, m *mount, p string
 		}
 	}()
 
-	return cc.lazyChecksum(ctx, m, p)
+	cr, err := cc.scanChecksum(ctx, m, p, followTrailing)
+	if err != nil {
+		return "", err
+	}
+	return cr.Digest, nil
 }
 
 func (cc *cacheContext) commitActiveTransaction() {
@@ -847,21 +826,21 @@ func (cc *cacheContext) commitActiveTransaction() {
 	cc.txn = nil
 }
 
-func (cc *cacheContext) lazyChecksum(ctx context.Context, m *mount, p string) (*CacheRecord, error) {
+func (cc *cacheContext) scanChecksum(ctx context.Context, m *mount, p string, followTrailing bool) (*CacheRecord, error) {
 	root := cc.tree.Root()
-	scan, err := cc.needsScan(root, p)
+	scan, err := cc.needsScan(root, p, followTrailing)
 	if err != nil {
 		return nil, err
 	}
 	if scan {
-		if err := cc.scanPath(ctx, m, p); err != nil {
+		if err := cc.scanPath(ctx, m, p, followTrailing); err != nil {
 			return nil, err
 		}
 	}
 	k := convertPathToKey(p)
 	txn := cc.tree.Txn()
 	root = txn.Root()
-	cr, updated, err := cc.checksum(ctx, root, txn, m, k, true)
+	cr, updated, err := cc.checksum(ctx, root, txn, m, k, followTrailing)
 	if err != nil {
 		return nil, err
 	}
@@ -870,9 +849,9 @@ func (cc *cacheContext) lazyChecksum(ctx context.Context, m *mount, p string) (*
 	return cr, err
 }
 
-func (cc *cacheContext) checksum(ctx context.Context, root *iradix.Node, txn *iradix.Txn, m *mount, k []byte, follow bool) (*CacheRecord, bool, error) {
+func (cc *cacheContext) checksum(ctx context.Context, root *iradix.Node, txn *iradix.Txn, m *mount, k []byte, followTrailing bool) (*CacheRecord, bool, error) {
 	origk := k
-	k, cr, err := getFollowParentLinks(root, k, follow)
+	k, cr, err := getFollowLinks(root, k, followTrailing)
 	if err != nil {
 		return nil, false, err
 	}
@@ -898,7 +877,9 @@ func (cc *cacheContext) checksum(ctx context.Context, root *iradix.Node, txn *ir
 			}
 			h.Write(bytes.TrimPrefix(subk, k))
 
-			subcr, _, err := cc.checksum(ctx, root, txn, m, subk, true)
+			// We do not follow trailing links when checksumming a directory's
+			// contents.
+			subcr, _, err := cc.checksum(ctx, root, txn, m, subk, false)
 			if err != nil {
 				return nil, false, err
 			}
@@ -949,13 +930,13 @@ func (cc *cacheContext) checksum(ctx context.Context, root *iradix.Node, txn *ir
 
 // needsScan returns false if path is in the tree or a parent path is in tree
 // and subpath is missing.
-func (cc *cacheContext) needsScan(root *iradix.Node, path string) (bool, error) {
+func (cc *cacheContext) needsScan(root *iradix.Node, path string, followTrailing bool) (bool, error) {
 	var (
 		lastGoodPath    string
 		hasParentInTree bool
 	)
 	k := convertPathToKey(path)
-	_, cr, err := getFollowLinksCallback(root, k, true, func(subpath string, cr *CacheRecord) error {
+	_, cr, err := getFollowLinksCallback(root, k, followTrailing, func(subpath string, cr *CacheRecord) error {
 		if cr != nil {
 			// If the path is not a symlink, then for now we have a parent in
 			// the tree. Otherwise, we reset hasParentInTree because we
@@ -981,8 +962,8 @@ func (cc *cacheContext) needsScan(root *iradix.Node, path string) (bool, error) 
 	return cr == nil && !hasParentInTree, nil
 }
 
-func (cc *cacheContext) scanPath(ctx context.Context, m *mount, p string) (retErr error) {
-	d := path.Dir(path.Join("/", p))
+func (cc *cacheContext) scanPath(ctx context.Context, m *mount, p string, followTrailing bool) (retErr error) {
+	p = path.Join("/", p)
 
 	mp, err := m.mount(ctx)
 	if err != nil {
@@ -992,7 +973,7 @@ func (cc *cacheContext) scanPath(ctx context.Context, m *mount, p string) (retEr
 	n := cc.tree.Root()
 	txn := cc.tree.Txn()
 
-	parentPath, err := rootPath(mp, filepath.FromSlash(d), func(p, link string) error {
+	resolvedPath, err := rootPath(mp, filepath.FromSlash(p), followTrailing, func(p, link string) error {
 		cr := &CacheRecord{
 			Type:     CacheRecordTypeSymlink,
 			Linkname: filepath.ToSlash(link),
@@ -1005,7 +986,14 @@ func (cc *cacheContext) scanPath(ctx context.Context, m *mount, p string) (retEr
 		return err
 	}
 
-	err = filepath.Walk(parentPath, func(itemPath string, fi os.FileInfo, err error) error {
+	// Scan the parent directory of the path we resolved, unless we're at the
+	// root (in which case we scan the root).
+	scanPath := filepath.Dir(resolvedPath)
+	if !strings.HasPrefix(filepath.ToSlash(scanPath)+"/", filepath.ToSlash(mp)+"/") {
+		scanPath = resolvedPath
+	}
+
+	err = filepath.Walk(scanPath, func(itemPath string, fi os.FileInfo, err error) error {
 		if err != nil {
 			// If the root doesn't exist, ignore the error.
 			if itemPath == scanPath && errors.Is(err, os.ErrNotExist) {
@@ -1054,48 +1042,33 @@ func (cc *cacheContext) scanPath(ctx context.Context, m *mount, p string) (retEr
 	return nil
 }
 
-// getFollowParentLinks is effectively O_PATH|O_NOFOLLOW, where the final
-// component is looked up without doing any symlink resolution (if it is a
-// symlink).
-func getFollowParentLinks(root *iradix.Node, k []byte, follow bool) ([]byte, *CacheRecord, error) {
-	v, ok := root.Get(k)
-	if ok {
-		return k, v.(*CacheRecord), nil
-	}
-	if !follow || len(k) == 0 {
-		return k, nil, nil
-	}
-
-	// Only fully evaluate the parent path.
-	dir, file := splitKey(k)
-	dir, _, err := getFollowLinks(root, dir, follow)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Do a direct lookup of the final component.
-	k = append(dir, file...)
-	v, ok = root.Get(k)
-	if ok {
-		return k, v.(*CacheRecord), nil
-	}
-	return k, nil, nil
-}
-
 // followLinksCallback is called after we try to resolve each element. If the
 // path was not found, cr is nil.
 type followLinksCallback func(path string, cr *CacheRecord) error
 
-func getFollowLinks(root *iradix.Node, k []byte, follow bool) ([]byte, *CacheRecord, error) {
-	return getFollowLinksCallback(root, k, follow, nil)
+// getFollowLinks is shorthand for getFollowLinksCallback(..., nil).
+func getFollowLinks(root *iradix.Node, k []byte, followTrailing bool) ([]byte, *CacheRecord, error) {
+	return getFollowLinksCallback(root, k, followTrailing, nil)
 }
 
-func getFollowLinksCallback(root *iradix.Node, k []byte, follow bool, cb followLinksCallback) ([]byte, *CacheRecord, error) {
+// getFollowLinksCallback looks up the requested key, fully resolving any
+// symlink components encountered. The implementation is heavily based on
+// <https://github.com/cyphar/filepath-securejoin>.
+//
+// followTrailing indicates whether the *final component* of the path should be
+// resolved (effectively O_PATH|O_NOFOLLOW). Note that (in contrast to some
+// Linux APIs), followTrailing is obeyed even if the key has a trailing slash
+// (though paths like "foo/link/." will cause the link to be resolved).
+//
+// The callback cb is called after each cache lookup done by
+// getFollowLinksCallback, except for the first lookup where the verbatim key
+// is looked up in the cache.
+func getFollowLinksCallback(root *iradix.Node, k []byte, followTrailing bool, cb followLinksCallback) ([]byte, *CacheRecord, error) {
 	v, ok := root.Get(k)
-	if ok && v.(*CacheRecord).Type != CacheRecordTypeSymlink {
+	if ok && (!followTrailing || v.(*CacheRecord).Type != CacheRecordTypeSymlink) {
 		return k, v.(*CacheRecord), nil
 	}
-	if !follow || len(k) == 0 {
+	if len(k) == 0 {
 		return k, nil, nil
 	}
 
@@ -1144,6 +1117,10 @@ func getFollowLinksCallback(root *iradix.Node, k []byte, follow bool, cb followL
 		if !ok || cr.Type != CacheRecordTypeSymlink {
 			currentPath = nextPath
 			continue
+		}
+		if !followTrailing && remainingPath == "" {
+			currentPath = nextPath
+			break
 		}
 
 		linksWalked++
@@ -1235,19 +1212,4 @@ func convertPathToKey(p string) []byte {
 
 func convertKeyToPath(p []byte) string {
 	return string(bytes.ReplaceAll(p, []byte{0}, []byte("/")))
-}
-
-func splitKey(k []byte) ([]byte, []byte) {
-	foundBytes := false
-	i := len(k) - 1
-	for {
-		if i <= 0 || foundBytes && k[i] == 0 {
-			break
-		}
-		if k[i] != 0 {
-			foundBytes = true
-		}
-		i--
-	}
-	return append([]byte{}, k[:i]...), k[i:]
 }

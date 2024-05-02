@@ -25,7 +25,7 @@ type onSymlinkFunc func(string, string) error
 // the root directory. This is a slightly modified version of SecureJoin from
 // github.com/cyphar/filepath-securejoin, with a callback which we call after
 // each symlink resolution.
-func rootPath(root, unsafePath string, cb onSymlinkFunc) (string, error) {
+func rootPath(root, unsafePath string, followTrailing bool, cb onSymlinkFunc) (string, error) {
 	if unsafePath == "" {
 		return root, nil
 	}
@@ -40,6 +40,9 @@ func rootPath(root, unsafePath string, cb onSymlinkFunc) (string, error) {
 		if v := filepath.VolumeName(unsafePath); v != "" {
 			unsafePath = unsafePath[len(v):]
 		}
+
+		// Remove any unnecessary trailing slashes.
+		unsafePath = strings.TrimSuffix(unsafePath, string(filepath.Separator))
 
 		// Get the next path component.
 		var part string
@@ -71,6 +74,11 @@ func rootPath(root, unsafePath string, cb onSymlinkFunc) (string, error) {
 			currentPath = nextPath
 			continue
 		}
+		// Don't resolve the final component with !followTrailing.
+		if !followTrailing && unsafePath == "" {
+			currentPath = nextPath
+			break
+		}
 
 		// It's a symlink, so get its contents and expand it by prepending it
 		// to the yet-unparsed path.
@@ -88,6 +96,7 @@ func rootPath(root, unsafePath string, cb onSymlinkFunc) (string, error) {
 				return "", err
 			}
 		}
+
 		unsafePath = dest + string(filepath.Separator) + unsafePath
 		// Absolute symlinks reset any work we've already done.
 		if filepath.IsAbs(dest) {

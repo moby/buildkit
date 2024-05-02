@@ -49,34 +49,70 @@ func TestRootPathSymlinks(t *testing.T) {
 	symlink(t, tmpdir, "link2/target_abs", "/link2/link1sub/../final")
 	symlink(t, tmpdir, "link2/target2", "./link1/../link1/final")
 	symlink(t, tmpdir, "link2/target2_abs", "/link2/link1/../link1/final")
+	//  |- link3 -> /link2
+	symlink(t, tmpdir, "link3", "/link2")
 
-	// All of the symlinks in the tree should lead to /target.
-	expected := filepath.Join(tmpdir, "target")
-
-	for _, link := range []string{
-		"target",
-		"link1/notaloop",
-		"link1/final",
-		"link2/notaloop",
-		"link2/notaloop_abs",
-		"link2/notaloop2",
-		"link2/notaloop2_abs",
-		"link2/target",
-		"link2/target_abs",
-		"link2/target2",
-		"link2/target2_abs",
-		"link2/link1sub/../notaloop",    // link2/notaloop
-		"link2/link1/../link1/notaloop", // link2/notaloop2
-		"link2/link1sub/../final",       // link2/target
-		"link2/link1/../link1/final",    // link2/target2
+	for _, test := range []struct {
+		path           string
+		followTrailing bool
+		expected       string
+	}{
+		{"target", true, "/target"},
+		{"target", false, "/target"},
+		{"link1/notaloop", true, "/target"},
+		{"link1/notaloop", false, "/link1/notaloop"},
+		{"link1/final", true, "/target"},
+		{"link1/final", false, "/link1/final"},
+		{"link2/notaloop", true, "/target"},
+		{"link2/notaloop", false, "/link2/notaloop"},
+		{"link2/notaloop_abs", true, "/target"},
+		{"link2/notaloop_abs", false, "/link2/notaloop_abs"},
+		{"link2/notaloop2", true, "/target"},
+		{"link2/notaloop2", false, "/link2/notaloop2"},
+		{"link2/notaloop2_abs", true, "/target"},
+		{"link2/notaloop2_abs", false, "/link2/notaloop2_abs"},
+		{"link2/target", true, "/target"},
+		{"link2/target", false, "/link2/target"},
+		{"link2/target_abs", true, "/target"},
+		{"link2/target_abs", false, "/link2/target_abs"},
+		{"link2/target2", true, "/target"},
+		{"link2/target2", false, "/link2/target2"},
+		{"link2/target2_abs", true, "/target"},
+		{"link2/target2_abs", false, "/link2/target2_abs"},
+		{"link2/link1sub/../notaloop", true, "/target"},             // link2/notaloop
+		{"link2/link1sub/../notaloop", false, "/link1/notaloop"},    // link2/notaloop
+		{"link2/link1/../link1/notaloop", true, "/target"},          // link2/notaloop2
+		{"link2/link1/../link1/notaloop", false, "/link1/notaloop"}, // link2/notaloop2
+		{"link2/link1sub/../final", true, "/target"},                // link2/target
+		{"link2/link1sub/../final", false, "/link1/final"},          // link2/target
+		{"link2/link1/../link1/final", true, "/target"},             // link2/target2
+		{"link2/link1/../link1/final", false, "/link1/final"},       // link2/target2
+		{"link3/target", true, "/target"},
+		{"link3/target", false, "/link2/target"},
+		{"link3/target_abs", true, "/target"},
+		{"link3/target_abs", false, "/link2/target_abs"},
+		{"link3/target2", true, "/target"},
+		{"link3/target2", false, "/link2/target2"},
+		{"link3/target2_abs", true, "/target"},
+		{"link3/target2_abs", false, "/link2/target2_abs"},
+		{"link3/link1sub/../notaloop", true, "/target"},             // link3/notaloop
+		{"link3/link1sub/../notaloop", false, "/link1/notaloop"},    // link3/notaloop
+		{"link3/link1/../link1/notaloop", true, "/target"},          // link3/notaloop2
+		{"link3/link1/../link1/notaloop", false, "/link1/notaloop"}, // link3/notaloop2
+		{"link3/link1sub/../final", true, "/target"},                // link3/target
+		{"link3/link1sub/../final", false, "/link1/final"},          // link3/target
+		{"link3/link1/../link1/final", true, "/target"},             // link3/target2
+		{"link3/link1/../link1/final", false, "/link1/final"},       // link3/target2
 	} {
-		link := link // capture range variable
-		t.Run(fmt.Sprintf("resolve(%q)", link), func(t *testing.T) {
+		test := test // capture range variable
+		t.Run(fmt.Sprintf("resolve(%q,followTrailing=%v)", test.path, test.followTrailing), func(t *testing.T) {
 			t.Parallel()
 
-			resolvedPath, err := rootPath(tmpdir, link, nil)
+			resolvedPath, err := rootPath(tmpdir, test.path, test.followTrailing, nil)
 			require.NoError(t, err)
-			require.Equal(t, expected, resolvedPath)
+
+			expectedPath := filepath.Join(tmpdir, filepath.FromSlash(test.expected))
+			require.Equal(t, expectedPath, resolvedPath)
 		})
 	}
 }
