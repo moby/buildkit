@@ -136,4 +136,21 @@ insecure-entitlements = [ "network.host", "security.insecure" ]
 # optionally mirror configuration can be done by defining it as a registry.
 [registry."yourmirror.local:5000"]
   http = true
+
+# Frontend control
+[frontend."dockerfile.v0"]
+ enabled = true
+
+[frontend."gateway.v0"]
+ enabled = true
+
+ # If allowedRepositories is empty, all gateway sources are allowed.
+ # Otherwise, only the listed repositories are allowed as a gateway source.
+ # 
+ # NOTE: Only the repository name (without tag) is compared.
+ #
+ # Example:
+ # allowedRepositories = [ "docker-registry.wikimedia.org/repos/releng/blubber/buildkit" ]
+ allowedRepositories = []
+
 ```
