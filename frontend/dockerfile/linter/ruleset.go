@@ -77,4 +77,11 @@ var (
 			return fmt.Sprintf("FROM argument '%s' is not declared", baseArg)
 		},
 	}
+	RuleWorkdirRelativePath = LinterRule[func(workdir string) string]{
+		Name:        "WorkdirRelativePath",
+		Description: "Relative workdir without an absolute workdir declared within the build can have unexpected results if the base image changes",
+		Format: func(workdir string) string {
+			return fmt.Sprintf("Relative workdir %q can have unexpected results if the base image changes", workdir)
+		},
+	}
 )
