@@ -55,6 +55,13 @@ var (
 			return fmt.Sprintf("Stage name should not use the same name as reserved stage %q", reservedStageName)
 		},
 	}
+	RuleJSONArgsRecommended = LinterRule[func(instructionName string) string]{
+		Name:        "JSONArgsRecommended",
+		Description: "JSON arguments recommended for ENTRYPOINT/CMD to prevent unintended behavior related to OS signals",
+		Format: func(instructionName string) string {
+			return fmt.Sprintf("JSON arguments recommended for %s to prevent unintended behavior related to OS signals", instructionName)
+		},
+	}
 	RuleMaintainerDeprecated = LinterRule[func() string]{
 		Name:        "MaintainerDeprecated",
 		Description: "The maintainer instruction is deprecated, use a label instead to define an image author",

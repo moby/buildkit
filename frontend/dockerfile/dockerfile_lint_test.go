@@ -28,6 +28,7 @@ var lintTests = integration.TestFuncs(
 	testFileConsistentCommandCasing,
 	testDuplicateStageName,
 	testReservedStageName,
+	testJSONArgsRecommended,
 	testMaintainerDeprecated,
 	testWarningsBeforeError,
 	testUndeclaredArg,
@@ -298,6 +299,74 @@ FROM scratch AS context
 	dockerfile = []byte(`
 FROM scratch
 FROM scratch AS a
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+}
+
+func testJSONArgsRecommended(t *testing.T, sb integration.Sandbox) {
+	dockerfile := []byte(`
+FROM scratch
+CMD mycommand
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "JSONArgsRecommended",
+				Description: "JSON arguments recommended for ENTRYPOINT/CMD to prevent unintended behavior related to OS signals",
+				Detail:      "JSON arguments recommended for CMD to prevent unintended behavior related to OS signals",
+				Level:       1,
+				Line:        3,
+			},
+		},
+	})
+
+	dockerfile = []byte(`
+FROM scratch
+ENTRYPOINT mycommand
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "JSONArgsRecommended",
+				Description: "JSON arguments recommended for ENTRYPOINT/CMD to prevent unintended behavior related to OS signals",
+				Detail:      "JSON arguments recommended for ENTRYPOINT to prevent unintended behavior related to OS signals",
+				Level:       1,
+				Line:        3,
+			},
+		},
+	})
+
+	dockerfile = []byte(`
+FROM scratch
+SHELL ["/usr/bin/customshell"]
+CMD mycommand
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`
+FROM scratch
+SHELL ["/usr/bin/customshell"]
+ENTRYPOINT mycommand
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`
+FROM scratch AS base
+SHELL ["/usr/bin/customshell"]
+
+FROM base
+CMD mycommand
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`
+FROM scratch AS base
+SHELL ["/usr/bin/customshell"]
+
+FROM base
+ENTRYPOINT mycommand
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 }
