@@ -23,6 +23,7 @@ import (
 	sddaemon "github.com/coreos/go-systemd/v22/daemon"
 	"github.com/docker/docker/pkg/reexec"
 	"github.com/gofrs/flock"
+	"github.com/hashicorp/go-multierror"
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/cache/remotecache/azblob"
 	"github.com/moby/buildkit/cache/remotecache/gha"
@@ -63,7 +64,9 @@ import (
 	"github.com/urfave/cli"
 	"go.etcd.io/bbolt"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/propagation"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"golang.org/x/sync/errgroup"
@@ -217,6 +220,7 @@ func main() {
 	app.Flags = append(app.Flags, appFlags...)
 	app.Flags = append(app.Flags, serviceFlags()...)
 
+	var closers []func(ctx context.Context) error
 	app.Action = func(c *cli.Context) error {
 		// TODO: On Windows this always returns -1. The actual "are you admin" check is very Windows-specific.
 		// See https://github.com/golang/go/issues/28804#issuecomment-505326268 for the "short" version.
@@ -259,15 +263,17 @@ func main() {
 			}
 		}
 
-		tp, err := detect.TracerProvider()
+		tp, err := newTracerProvider(ctx)
 		if err != nil {
 			return err
 		}
+		closers = append(closers, tp.Shutdown)
 
-		mp, err := detect.MeterProvider()
+		mp, err := newMeterProvider(ctx)
 		if err != nil {
 			return err
 		}
+		closers = append(closers, mp.Shutdown)
 
 		statsHandler := tracing.ServerStatsHandler(
 			otelgrpc.WithTracerProvider(tp),
@@ -375,8 +381,13 @@ func main() {
 		return err
 	}
 
-	app.After = func(_ *cli.Context) error {
-		return detect.Shutdown(context.TODO())
+	app.After = func(_ *cli.Context) (err error) {
+		for _, c := range closers {
+			if e := c(context.TODO()); e != nil {
+				err = multierror.Append(err, e)
+			}
+		}
+		return err
 	}
 
 	profiler.Attach(app)
@@ -737,13 +748,19 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 		return nil, err
 	}
 
-	tc, _, err := detect.Exporter()
-	if err != nil {
+	tc := make(tracing.MultiSpanExporter, 0, 2)
+	if detect.Recorder != nil {
+		tc = append(tc, detect.Recorder)
+	}
+
+	if exp, err := detect.NewSpanExporter(context.TODO()); err != nil {
 		return nil, err
+	} else if !detect.IsNoneSpanExporter(exp) {
+		tc = append(tc, exp)
 	}
 
 	var traceSocket string
-	if tc != nil {
+	if len(tc) > 0 {
 		traceSocket = cfg.OTEL.SocketPath
 		if err := runTraceController(traceSocket, tc); err != nil {
 			return nil, err
@@ -942,9 +959,45 @@ type traceCollector struct {
 }
 
 func (t *traceCollector) Export(ctx context.Context, req *tracev1.ExportTraceServiceRequest) (*tracev1.ExportTraceServiceResponse, error) {
-	err := t.exporter.ExportSpans(ctx, transform.Spans(req.GetResourceSpans()))
-	if err != nil {
+	if err := t.exporter.ExportSpans(ctx, transform.Spans(req.GetResourceSpans())); err != nil {
 		return nil, err
 	}
 	return &tracev1.ExportTraceServiceResponse{}, nil
+}
+
+func newTracerProvider(ctx context.Context) (*sdktrace.TracerProvider, error) {
+	opts := []sdktrace.TracerProviderOption{
+		sdktrace.WithResource(detect.Resource()),
+		sdktrace.WithSyncer(detect.Recorder),
+	}
+
+	if exp, err := detect.NewSpanExporter(ctx); err != nil {
+		return nil, err
+	} else if !detect.IsNoneSpanExporter(exp) {
+		opts = append(opts, sdktrace.WithBatcher(exp))
+	}
+	return sdktrace.NewTracerProvider(opts...), nil
+}
+
+func newMeterProvider(ctx context.Context) (*sdkmetric.MeterProvider, error) {
+	opts := []sdkmetric.Option{
+		sdkmetric.WithResource(detect.Resource()),
+	}
+
+	if r, err := prometheus.New(); err != nil {
+		// Log the error but do not fail if we could not configure the prometheus metrics.
+		bklog.G(context.Background()).
+			WithError(err).
+			Error("failed prometheus metrics configuration")
+	} else {
+		opts = append(opts, sdkmetric.WithReader(r))
+	}
+
+	if exp, err := detect.NewMetricExporter(ctx); err != nil {
+		return nil, err
+	} else if !detect.IsNoneMetricExporter(exp) {
+		r := sdkmetric.NewPeriodicReader(exp)
+		opts = append(opts, sdkmetric.WithReader(r))
+	}
+	return sdkmetric.NewMeterProvider(opts...), nil
 }

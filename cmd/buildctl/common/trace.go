@@ -5,20 +5,28 @@ import (
 	"os"
 
 	"github.com/moby/buildkit/util/appcontext"
+	"github.com/moby/buildkit/util/tracing/delegated"
 	"github.com/moby/buildkit/util/tracing/detect"
 	"github.com/urfave/cli"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 )
 
 func AttachAppContext(app *cli.App) error {
 	ctx := appcontext.Context()
 
-	tp, err := detect.TracerProvider()
+	exp, err := detect.NewSpanExporter(ctx)
 	if err != nil {
 		return err
 	}
+
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithResource(detect.Resource()),
+		sdktrace.WithBatcher(exp),
+		sdktrace.WithBatcher(delegated.DefaultExporter),
+	)
 	tracer := tp.Tracer("")
 
 	var span trace.Span
@@ -60,7 +68,7 @@ func AttachAppContext(app *cli.App) error {
 		if span != nil {
 			span.End()
 		}
-		return detect.Shutdown(context.TODO())
+		return tp.Shutdown(context.TODO())
 	}
 	return nil
 }
