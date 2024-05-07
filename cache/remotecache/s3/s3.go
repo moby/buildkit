@@ -173,6 +173,12 @@ func (e *exporter) Config() remotecache.Config {
 	}
 }
 
+type nopCloserSectionReader struct {
+	*io.SectionReader
+}
+
+func (*nopCloserSectionReader) Close() error { return nil }
+
 func (e *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 	cacheConfig, descs, err := e.chains.Marshal(ctx)
 	if err != nil {
@@ -210,11 +216,15 @@ func (e *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 			}
 		} else {
 			layerDone := progress.OneOff(ctx, fmt.Sprintf("writing layer %s", l.Blob))
-			dt, err := content.ReadBlob(ctx, dgstPair.Provider, dgstPair.Descriptor)
+			// TODO: once buildkit uses v2, start using
+			// https://github.com/containerd/containerd/pull/9657
+			// currently inline data should never happen.
+			ra, err := dgstPair.Provider.ReaderAt(ctx, dgstPair.Descriptor)
 			if err != nil {
-				return nil, layerDone(err)
+				return nil, layerDone(errors.Wrap(err, "error reading layer blob from provider"))
 			}
-			if err := e.s3Client.saveMutable(ctx, key, dt); err != nil {
+			defer ra.Close()
+			if err := e.s3Client.saveMutableAt(ctx, key, &nopCloserSectionReader{io.NewSectionReader(ra, 0, ra.Size())}); err != nil {
 				return nil, layerDone(errors.Wrap(err, "error writing layer blob"))
 			}
 			layerDone(nil)
@@ -421,6 +431,16 @@ func (s3Client *s3Client) saveMutable(ctx context.Context, key string, value []b
 		Key:    &key,
 
 		Body: bytes.NewReader(value),
+	}
+	_, err := s3Client.Upload(ctx, input)
+	return err
+}
+
+func (s3Client *s3Client) saveMutableAt(ctx context.Context, key string, body io.ReadSeekCloser) error {
+	input := &s3.PutObjectInput{
+		Bucket: &s3Client.bucket,
+		Key:    &key,
+		Body:   body,
 	}
 	_, err := s3Client.Upload(ctx, input)
 	return err
