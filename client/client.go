@@ -50,7 +50,6 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 
 	var customTracer bool // allows manually setting disabling tracing even if tracer in context
 	var tracerProvider trace.TracerProvider
-	var tracerDelegate TracerDelegate
 	var sessionDialer func(context.Context, string, map[string][]string) (net.Conn, error)
 	var customDialOptions []grpc.DialOption
 	var creds *withCredentials
@@ -69,9 +68,6 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 		if wd, ok := o.(*withDialer); ok {
 			gopts = append(gopts, grpc.WithContextDialer(wd.dialer))
 			needDialer = false
-		}
-		if wt, ok := o.(*withTracerDelegate); ok {
-			tracerDelegate = wt
 		}
 		if sd, ok := o.(*withSessionDialer); ok {
 			sessionDialer = sd.dialer
@@ -161,20 +157,7 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 		sessionDialer: sessionDialer,
 	}
 
-	if tracerDelegate != nil {
-		_ = c.setupDelegatedTracing(ctx, tracerDelegate) // ignore error
-	}
-
 	return c, nil
-}
-
-func (c *Client) setupDelegatedTracing(ctx context.Context, td TracerDelegate) error {
-	pd := otlptracegrpc.NewClient(c.conn)
-	e, err := otlptrace.New(ctx, pd)
-	if err != nil {
-		return nil
-	}
-	return td.SetSpanExporter(ctx, e)
 }
 
 func (c *Client) ControlClient() controlapi.ControlClient {
@@ -183,6 +166,17 @@ func (c *Client) ControlClient() controlapi.ControlClient {
 
 func (c *Client) ContentClient() contentapi.ContentClient {
 	return contentapi.NewContentClient(c.conn)
+}
+
+// TraceClient returns a SpanExporter that can be used to record spans to buildkit.
+//
+// Builtkit will then use these traces for its own internal trace recording
+// along with forwarding these traces to any configured span exporters.
+//
+// This is meant to be used with the OTEL tracing SDK.
+func (c *Client) TraceClient(ctx context.Context) (sdktrace.SpanExporter, error) {
+	pd := otlptracegrpc.NewClient(c.conn)
+	return otlptrace.New(ctx, pd)
 }
 
 func (c *Client) Dialer() session.Dialer {
@@ -350,18 +344,6 @@ func (w *withTracer) isClientOpt() {}
 type TracerDelegate interface {
 	SetSpanExporter(context.Context, sdktrace.SpanExporter) error
 }
-
-func WithTracerDelegate(td TracerDelegate) ClientOpt {
-	return &withTracerDelegate{
-		TracerDelegate: td,
-	}
-}
-
-type withTracerDelegate struct {
-	TracerDelegate
-}
-
-func (w *withTracerDelegate) isClientOpt() {}
 
 func WithSessionDialer(dialer func(context.Context, string, map[string][]string) (net.Conn, error)) ClientOpt {
 	return &withSessionDialer{dialer}
