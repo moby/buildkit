@@ -33,7 +33,7 @@ var lintTests = integration.TestFuncs(
 	testWarningsBeforeError,
 	testUndeclaredArg,
 	testWorkdirRelativePath,
-	testUndefinedArg,
+	testUnmatchedVars,
 )
 
 func testStageName(t *testing.T, sb integration.Sandbox) {
@@ -489,7 +489,6 @@ COPY Dockerfile .
 	})
 }
 
-<<<<<<< HEAD
 func testWorkdirRelativePath(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
 FROM scratch
@@ -502,6 +501,11 @@ WORKDIR app/
 				RuleName:    "WorkdirRelativePath",
 				Description: "Relative workdir without an absolute workdir declared within the build can have unexpected results if the base image changes",
 				Detail:      "Relative workdir \"app/\" can have unexpected results if the base image changes",
+				Level:       1,
+				Line:        3,
+			},
+		},
+	})
 
 	dockerfile = []byte(`
 FROM scratch AS a
@@ -513,7 +517,7 @@ WORKDIR subdir/
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 }
 
-func testUndefinedArg(t *testing.T, sb integration.Sandbox) {
+func testUnmatchedVars(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
 FROM scratch
 ARG foo
