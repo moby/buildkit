@@ -3,6 +3,7 @@ package dockerfile
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"sort"
 	"testing"
@@ -34,6 +35,7 @@ var lintTests = integration.TestFuncs(
 	testUndeclaredArg,
 	testWorkdirRelativePath,
 	testUnmatchedVars,
+	testMultipleInstructionsDisallowed,
 )
 
 func testStageName(t *testing.T, sb integration.Sandbox) {
@@ -558,6 +560,72 @@ RUN echo $foo
 			},
 		},
 	})
+}
+
+func testMultipleInstructionsDisallowed(t *testing.T, sb integration.Sandbox) {
+	makeLintWarning := func(instructionName string, line int) expectedLintWarning {
+		return expectedLintWarning{
+			RuleName:    "MultipleInstructionsDisallowed",
+			Description: "Multiple instructions of the same type should not be used in the same stage",
+			Detail:      fmt.Sprintf("Multiple %s instructions should not be used in the same stage because only the last one will be used", instructionName),
+			Level:       1,
+			Line:        line,
+		}
+	}
+
+	dockerfile := []byte(`
+FROM scratch
+ENTRYPOINT ["/myapp"]
+ENTRYPOINT ["/myotherapp"]
+CMD ["/myapp"]
+CMD ["/myotherapp"]
+HEALTHCHECK CMD ["/myapp"]
+HEALTHCHECK CMD ["/myotherapp"]
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			makeLintWarning("ENTRYPOINT", 3),
+			makeLintWarning("CMD", 5),
+			makeLintWarning("HEALTHCHECK", 7),
+		},
+	})
+
+	// Still a linter warning even when broken up with another
+	// command. Entrypoint is only used by the resulting image.
+	dockerfile = []byte(`
+FROM scratch
+ENTRYPOINT ["/myapp"]
+CMD ["/myapp"]
+HEALTHCHECK CMD ["/myapp"]
+COPY <<EOF /a.txt
+Hello, World!
+EOF
+ENTRYPOINT ["/myotherapp"]
+CMD ["/myotherapp"]
+HEALTHCHECK CMD ["/myotherapp"]
+	`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			makeLintWarning("ENTRYPOINT", 3),
+			makeLintWarning("CMD", 4),
+			makeLintWarning("HEALTHCHECK", 5),
+		},
+	})
+
+	dockerfile = []byte(`
+FROM scratch AS a
+ENTRYPOINT ["/myapp"]
+CMD ["/myapp"]
+HEALTHCHECK CMD ["/myapp"]
+
+FROM a AS b
+ENTRYPOINT ["/myotherapp"]
+CMD ["/myotherapp"]
+HEALTHCHECK CMD ["/myotherapp"]
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 }
 
 func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestParams) {
