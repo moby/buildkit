@@ -549,18 +549,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		if !isReachable(target, d) || d.noinit {
 			continue
 		}
-		// mark as initialized, used to determine states that have not been dispatched yet
-		d.noinit = true
-
-		if d.base != nil {
-			d.state = d.base.state
-			d.platform = d.base.platform
-			d.image = clone(d.base.image)
-			d.baseImg = cloneX(d.base.baseImg)
-			// Utilize the same path index as our base image so we propagate
-			// the paths we use back to the base image.
-			d.paths = d.base.paths
-		}
+		d.init()
 
 		// Ensure platform is set.
 		if d.platform == nil {
@@ -908,10 +897,33 @@ type dispatchState struct {
 	epoch          *time.Time
 	scanStage      bool
 	scanContext    bool
+	// workdirSet is set to true if a workdir has been set
+	// within the current dockerfile.
+	workdirSet bool
 }
 
 func (ds *dispatchState) asyncLocalOpts() []llb.LocalOption {
 	return filterPaths(ds.paths)
+}
+
+// init is invoked when the dispatch state inherits its attributes
+// from the base image.
+func (ds *dispatchState) init() {
+	// mark as initialized, used to determine states that have not been dispatched yet
+	ds.noinit = true
+
+	if ds.base == nil {
+		return
+	}
+
+	ds.state = ds.base.state
+	ds.platform = ds.base.platform
+	ds.image = clone(ds.base.image)
+	ds.baseImg = cloneX(ds.base.baseImg)
+	// Utilize the same path index as our base image so we propagate
+	// the paths we use back to the base image.
+	ds.paths = ds.base.paths
+	ds.workdirSet = ds.base.workdirSet
 }
 
 type dispatchStates struct {
@@ -1128,6 +1140,23 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 }
 
 func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bool, opt *dispatchOpt) error {
+	if commit {
+		// This linter rule checks if workdir has been set to an absolute value locally
+		// within the current dockerfile. Absolute paths in base images are ignored
+		// because they might change and it is not advised to rely on them.
+		//
+		// We only run this check when commit is true. Commit is true when we are performing
+		// this operation on a local call to workdir rather than one coming from
+		// the base image. We only check the first instance of workdir being set
+		// so successive relative paths are ignored because every instance is fixed
+		// by fixing the first one.
+		if !d.workdirSet && !system.IsAbs(c.Path, d.platform.OS) {
+			msg := linter.RuleWorkdirRelativePath.Format(c.Path)
+			linter.RuleWorkdirRelativePath.Run(opt.lintWarn, c.Location(), msg)
+		}
+		d.workdirSet = true
+	}
+
 	wd, err := system.NormalizeWorkdir(d.image.Config.WorkingDir, c.Path, d.platform.OS)
 	if err != nil {
 		return errors.Wrap(err, "normalizing workdir")

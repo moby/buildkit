@@ -32,6 +32,7 @@ var lintTests = integration.TestFuncs(
 	testMaintainerDeprecated,
 	testWarningsBeforeError,
 	testUndeclaredArg,
+	testWorkdirRelativePath,
 )
 
 func testStageName(t *testing.T, sb integration.Sandbox) {
@@ -485,6 +486,34 @@ COPY Dockerfile .
 			},
 		},
 	})
+}
+
+func testWorkdirRelativePath(t *testing.T, sb integration.Sandbox) {
+	dockerfile := []byte(`
+FROM scratch
+WORKDIR app/
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "WorkdirRelativePath",
+				Description: "Relative workdir without an absolute workdir declared within the build can have unexpected results if the base image changes",
+				Detail:      "Relative workdir \"app/\" can have unexpected results if the base image changes",
+				Level:       1,
+				Line:        3,
+			},
+		},
+	})
+
+	dockerfile = []byte(`
+FROM scratch AS a
+WORKDIR /app
+
+FROM a AS b
+WORKDIR subdir/
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 }
 
 func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestParams) {
