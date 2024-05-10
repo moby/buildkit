@@ -219,6 +219,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testSolverOptLocalDirsStillWorks,
 	testOCIIndexMediatype,
 	testLayerLimitOnMounts,
+	testFrontendVerifyPlatforms,
 }
 
 func TestIntegration(t *testing.T) {
@@ -9997,6 +9998,166 @@ func testMountStubsTimestamp(t *testing.T, sb integration.Sandbox) {
 		require.NotNil(t, hd, name)
 		require.Equal(t, sourceDateEpoch, hd.ModTime.Unix(), name)
 	}
+}
+
+func testFrontendVerifyPlatforms(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		st := llb.Scratch().File(
+			llb.Mkfile("foo", 0600, []byte("data")),
+		)
+
+		def, err := st.Marshal(sb.Context())
+		if err != nil {
+			return nil, err
+		}
+
+		return c.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+	}
+
+	wc := newWarningsCapture()
+	_, err = c.Build(sb.Context(), SolveOpt{
+		FrontendAttrs: map[string]string{
+			"platform": "linux/amd64,linux/arm64",
+		},
+	}, "", frontend, wc.status)
+	require.NoError(t, err)
+	warnings := wc.wait()
+
+	require.Len(t, warnings, 1)
+	require.Contains(t, string(warnings[0].Short), "Multiple platforms requested but result is not multi-platform")
+
+	wc = newWarningsCapture()
+	_, err = c.Build(sb.Context(), SolveOpt{
+		FrontendAttrs: map[string]string{},
+	}, "", frontend, wc.status)
+	require.NoError(t, err)
+
+	warnings = wc.wait()
+	require.Len(t, warnings, 0)
+
+	frontend = func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		res := gateway.NewResult()
+		platformsToTest := []string{"linux/amd64", "linux/arm64"}
+		expPlatforms := &exptypes.Platforms{
+			Platforms: make([]exptypes.Platform, len(platformsToTest)),
+		}
+		for i, platform := range platformsToTest {
+			st := llb.Scratch().File(
+				llb.Mkfile("platform", 0600, []byte(platform)),
+			)
+
+			def, err := st.Marshal(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			r, err := c.Solve(ctx, gateway.SolveRequest{
+				Definition: def.ToPB(),
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			ref, err := r.SingleRef()
+			if err != nil {
+				return nil, err
+			}
+
+			_, err = ref.ToState()
+			if err != nil {
+				return nil, err
+			}
+			res.AddRef(platform, ref)
+
+			expPlatforms.Platforms[i] = exptypes.Platform{
+				ID:       platform,
+				Platform: platforms.MustParse(platform),
+			}
+		}
+		dt, err := json.Marshal(expPlatforms)
+		if err != nil {
+			return nil, err
+		}
+		res.AddMeta(exptypes.ExporterPlatformsKey, dt)
+
+		return res, nil
+	}
+
+	wc = newWarningsCapture()
+	_, err = c.Build(sb.Context(), SolveOpt{
+		FrontendAttrs: map[string]string{
+			"platform": "linux/amd64,linux/arm64",
+		},
+	}, "", frontend, wc.status)
+	require.NoError(t, err)
+	warnings = wc.wait()
+
+	require.Len(t, warnings, 0)
+
+	wc = newWarningsCapture()
+	_, err = c.Build(sb.Context(), SolveOpt{
+		FrontendAttrs: map[string]string{},
+	}, "", frontend, wc.status)
+	require.NoError(t, err)
+
+	warnings = wc.wait()
+	require.Len(t, warnings, 1)
+	require.Contains(t, string(warnings[0].Short), "do not match result platforms linux/amd64,linux/arm64")
+}
+
+type warningsCapture struct {
+	status     chan *SolveStatus
+	statusDone chan struct{}
+	done       chan struct{}
+	warnings   []*VertexWarning
+	vertexes   map[digest.Digest]struct{}
+}
+
+func newWarningsCapture() *warningsCapture {
+	w := &warningsCapture{
+		status:     make(chan *SolveStatus),
+		statusDone: make(chan struct{}),
+		done:       make(chan struct{}),
+		vertexes:   map[digest.Digest]struct{}{},
+	}
+
+	go func() {
+		defer close(w.statusDone)
+		for {
+			select {
+			case st, ok := <-w.status:
+				if !ok {
+					return
+				}
+				for _, s := range st.Vertexes {
+					w.vertexes[s.Digest] = struct{}{}
+				}
+				w.warnings = append(w.warnings, st.Warnings...)
+			case <-w.done:
+				return
+			}
+		}
+	}()
+
+	return w
+}
+
+func (w *warningsCapture) wait() []*VertexWarning {
+	select {
+	case <-w.statusDone:
+	case <-time.After(10 * time.Second):
+		close(w.done)
+	}
+
+	<-w.statusDone
+	return w.warnings
 }
 
 func ensureFile(t *testing.T, path string) {

@@ -21,6 +21,7 @@ import (
 	resourcestypes "github.com/moby/buildkit/executor/resources/types"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
+	"github.com/moby/buildkit/exporter/verifier"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/attestations"
 	"github.com/moby/buildkit/frontend/gateway"
@@ -535,6 +536,10 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		res = &frontend.Result{}
 	}
 
+	if err := verifier.CaptureFrontendOpts(req.FrontendOpt, res); err != nil {
+		return nil, err
+	}
+
 	releasers = append(releasers, func() {
 		res.EachRef(func(ref solver.ResultProxy) error {
 			go ref.Release(context.TODO())
@@ -709,6 +714,11 @@ func runInlineCacheExporter(ctx context.Context, e exporter.ExporterInstance, in
 }
 
 func (s *Solver) runExporters(ctx context.Context, exporters []exporter.ExporterInstance, inlineCacheExporter inlineCacheExporter, job *solver.Job, cached *result.Result[solver.CachedResult], inp *result.Result[cache.ImmutableRef]) (exporterResponse map[string]string, descrefs []exporter.DescriptorReference, err error) {
+	warnings, err := verifier.CheckInvalidPlatforms(ctx, inp)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	eg, ctx := errgroup.WithContext(ctx)
 	resps := make([]map[string]string, len(exporters))
 	descs := make([]exporter.DescriptorReference, len(exporters))
@@ -717,6 +727,15 @@ func (s *Solver) runExporters(ctx context.Context, exporters []exporter.Exporter
 		eg.Go(func() error {
 			id := fmt.Sprint(job.SessionID, "-export-", i)
 			return inBuilderContext(ctx, job, exp.Name(), id, func(ctx context.Context, _ session.Group) error {
+				if i == 0 && len(warnings) > 0 {
+					pw, _, _ := progress.NewFromContext(ctx)
+					for _, w := range warnings {
+						pw.Write(identity.NewID(), w)
+					}
+					if err := pw.Close(); err != nil {
+						return err
+					}
+				}
 				inlineCache := exptypes.InlineCache(func(ctx context.Context) (*result.Result[*exptypes.InlineCacheEntry], error) {
 					return runInlineCacheExporter(ctx, exp, inlineCacheExporter, job, cached)
 				})
@@ -731,6 +750,19 @@ func (s *Solver) runExporters(ctx context.Context, exporters []exporter.Exporter
 	}
 	if err := eg.Wait(); err != nil {
 		return nil, nil, err
+	}
+
+	if len(exporters) == 0 && len(warnings) > 0 {
+		err := inBuilderContext(ctx, job, "Verifying build result", identity.NewID(), func(ctx context.Context, _ session.Group) error {
+			pw, _, _ := progress.NewFromContext(ctx)
+			for _, w := range warnings {
+				pw.Write(identity.NewID(), w)
+			}
+			return pw.Close()
+		})
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
 	// TODO: separate these out, and return multiple exporter responses to the
