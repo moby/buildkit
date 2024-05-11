@@ -33,6 +33,7 @@ var lintTests = integration.TestFuncs(
 	testWarningsBeforeError,
 	testUndeclaredArg,
 	testWorkdirRelativePath,
+	testUnmatchedVars,
 )
 
 func testStageName(t *testing.T, sb integration.Sandbox) {
@@ -516,6 +517,49 @@ WORKDIR subdir/
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 }
 
+func testUnmatchedVars(t *testing.T, sb integration.Sandbox) {
+	dockerfile := []byte(`
+FROM scratch
+ARG foo
+COPY Dockerfile${foo} .
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`
+FROM alpine AS base
+ARG foo=Dockerfile
+
+FROM base
+COPY $foo .
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`
+FROM alpine
+RUN echo $PATH
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`
+FROM alpine
+COPY $foo .
+ARG foo=bar
+RUN echo $foo
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "UndefinedVar",
+				Description: "Variables should be defined before their use",
+				Detail:      "Usage of undefined variable '$foo'",
+				Level:       1,
+				Line:        3,
+			},
+		},
+	})
+}
+
 func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestParams) {
 	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
@@ -545,6 +589,7 @@ func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestPara
 			require.Less(t, lintResults.Error.Location.SourceIndex, int32(len(lintResults.Sources)))
 		}
 		require.Equal(t, len(lintTest.Warnings), len(lintResults.Warnings))
+
 		sort.Slice(lintResults.Warnings, func(i, j int) bool {
 			// sort by line number in ascending order
 			firstRange := lintResults.Warnings[i].Location.Ranges[0]
