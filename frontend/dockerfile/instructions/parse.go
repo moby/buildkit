@@ -78,7 +78,7 @@ func ParseInstructionWithLinter(node *parser.Node, lintWarn linter.LintWarnFunc)
 	req := newParseRequestFromNode(node)
 	switch strings.ToLower(node.Value) {
 	case command.Env:
-		return parseEnv(req)
+		return parseEnv(req, lintWarn)
 	case command.Maintainer:
 		if lintWarn != nil {
 			msg := linter.RuleMaintainerDeprecated.Format()
@@ -86,7 +86,7 @@ func ParseInstructionWithLinter(node *parser.Node, lintWarn linter.LintWarnFunc)
 		}
 		return parseMaintainer(req)
 	case command.Label:
-		return parseLabel(req)
+		return parseLabel(req, lintWarn)
 	case command.Add:
 		return parseAdd(req)
 	case command.Copy:
@@ -195,31 +195,34 @@ func Parse(ast *parser.Node, lint linter.LintWarnFunc) (stages []Stage, metaArgs
 	return stages, metaArgs, nil
 }
 
-func parseKvps(args []string, cmdName string) (KeyValuePairs, error) {
+func parseKvps(args []string, cmdName string, location []parser.Range, lint linter.LintWarnFunc) (KeyValuePairs, error) {
 	if len(args) == 0 {
 		return nil, errAtLeastOneArgument(cmdName)
 	}
-	if len(args)%2 != 0 {
+	if len(args)%3 != 0 {
 		// should never get here, but just in case
 		return nil, errTooManyArguments(cmdName)
 	}
 	var res KeyValuePairs
-	for j := 0; j < len(args); j += 2 {
+	for j := 0; j < len(args); j += 3 {
 		if len(args[j]) == 0 {
 			return nil, errBlankCommandNames(cmdName)
 		}
-		name := args[j]
-		value := args[j+1]
+		name, value, sep := args[j], args[j+1], args[j+2]
+		if sep == "" {
+			msg := linter.RuleLegacyKeyValueFormat.Format(cmdName)
+			linter.RuleLegacyKeyValueFormat.Run(lint, location, msg)
+		}
 		res = append(res, KeyValuePair{Key: name, Value: value})
 	}
 	return res, nil
 }
 
-func parseEnv(req parseRequest) (*EnvCommand, error) {
+func parseEnv(req parseRequest, lint linter.LintWarnFunc) (*EnvCommand, error) {
 	if err := req.flags.Parse(); err != nil {
 		return nil, err
 	}
-	envs, err := parseKvps(req.args, "ENV")
+	envs, err := parseKvps(req.args, "ENV", req.location, lint)
 	if err != nil {
 		return nil, err
 	}
@@ -243,12 +246,12 @@ func parseMaintainer(req parseRequest) (*MaintainerCommand, error) {
 	}, nil
 }
 
-func parseLabel(req parseRequest) (*LabelCommand, error) {
+func parseLabel(req parseRequest, lint linter.LintWarnFunc) (*LabelCommand, error) {
 	if err := req.flags.Parse(); err != nil {
 		return nil, err
 	}
 
-	labels, err := parseKvps(req.args, "LABEL")
+	labels, err := parseKvps(req.args, "LABEL", req.location, lint)
 	if err != nil {
 		return nil, err
 	}
