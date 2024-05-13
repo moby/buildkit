@@ -120,4 +120,11 @@ var (
 			return fmt.Sprintf("\"%s key=value\" should be used instead of legacy \"%s key value\" format", cmdName, cmdName)
 		},
 	}
+	RuleInvalidBaseImagePlatform = LinterRule[func(string, string, string) string]{
+		Name:        "InvalidBaseImagePlatform",
+		Description: "Base image platform does not match expected target platform",
+		Format: func(image, expected, actual string) string {
+			return fmt.Sprintf("Base image %s was pulled with platform %q, expected %q for current build", image, actual, expected)
+		},
+	}
 )

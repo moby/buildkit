@@ -37,6 +37,7 @@ var lintTests = integration.TestFuncs(
 	testUnmatchedVars,
 	testMultipleInstructionsDisallowed,
 	testLegacyKeyValueFormat,
+	testBaseImagePlatformMismatch,
 )
 
 func testStageName(t *testing.T, sb integration.Sandbox) {
@@ -800,10 +801,15 @@ func checkProgressStream(t *testing.T, sb integration.Sandbox, lintTest *lintTes
 
 	f := getFrontend(t, sb)
 
-	_, err := f.Solve(sb.Context(), lintTest.Client, client.SolveOpt{
-		FrontendAttrs: map[string]string{
+	attrs := lintTest.FrontendAttrs
+	if attrs == nil {
+		attrs = map[string]string{
 			"platform": "linux/amd64,linux/arm64",
-		},
+		}
+	}
+
+	_, err := f.Solve(sb.Context(), lintTest.Client, client.SolveOpt{
+		FrontendAttrs: attrs,
 		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: lintTest.TmpDir,
 			dockerui.DefaultLocalNameContext:    lintTest.TmpDir,
@@ -915,4 +921,5 @@ type lintTestParams struct {
 	StreamBuildErr    string
 	UnmarshalBuildErr string
 	BuildErrLocation  int32
+	FrontendAttrs     map[string]string
 }
