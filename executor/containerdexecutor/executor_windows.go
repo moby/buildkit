@@ -17,6 +17,7 @@ import (
 	"github.com/moby/buildkit/util/windows"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+	gowindows "golang.org/x/sys/windows"
 )
 
 func getUserSpec(user, _ string) (specs.User, error) {
@@ -102,5 +103,12 @@ func (d *containerState) getTaskOpts() ([]containerd.NewTaskOpts, error) {
 }
 
 func setArgs(spec *specs.Process, args []string) {
-	spec.CommandLine = strings.Join(args, " ")
+	// TODO handle ArgsEscaped correctly here somehow (ie, avoid re-escaping args[0] if it's true)
+	// if ArgsEscaped { spec.CommandLine = args[0] + " "; args = args[1:] } else { spec.CommandLine = "" }
+	// and then specs.CommandLine += down below
+	escaped := make([]string, len(args))
+	for i, a := range args {
+		escaped[i] = gowindows.EscapeArg(a)
+	}
+	spec.CommandLine = strings.Join(escaped, " ")
 }
