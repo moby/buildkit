@@ -67,14 +67,26 @@ const (
 	keyDevel  = "gateway-devel"
 )
 
-func NewGatewayFrontend(w worker.Infos) frontend.Frontend {
-	return &gatewayFrontend{
-		workers: w,
+func NewGatewayFrontend(workers worker.Infos, allowedRepositories []string) (frontend.Frontend, error) {
+	var parsedAllowedRepositories []string
+
+	for _, allowedRepository := range allowedRepositories {
+		sourceRef, err := reference.ParseNormalizedNamed(allowedRepository)
+		if err != nil {
+			return nil, err
+		}
+		parsedAllowedRepositories = append(parsedAllowedRepositories, reference.TrimNamed(sourceRef).Name())
 	}
+
+	return &gatewayFrontend{
+		workers:             workers,
+		allowedRepositories: parsedAllowedRepositories,
+	}, nil
 }
 
 type gatewayFrontend struct {
-	workers worker.Infos
+	workers             worker.Infos
+	allowedRepositories []string
 }
 
 func filterPrefix(opts map[string]string, pfx string) map[string]string {
@@ -85,6 +97,30 @@ func filterPrefix(opts map[string]string, pfx string) map[string]string {
 		}
 	}
 	return m
+}
+
+func (gf *gatewayFrontend) checkSourceIsAllowed(source string) error {
+	// Returns nil if the source is allowed.
+	// Returns an error if the source is not allowed.
+	if len(gf.allowedRepositories) == 0 {
+		// No source restrictions in place
+		return nil
+	}
+
+	sourceRef, err := reference.ParseNormalizedNamed(source)
+	if err != nil {
+		return err
+	}
+
+	taglessSource := reference.TrimNamed(sourceRef).Name()
+
+	for _, allowedRepository := range gf.allowedRepositories {
+		if taglessSource == allowedRepository {
+			// Allowed
+			return nil
+		}
+	}
+	return errors.Errorf("'%s' is not an allowed gateway source", source)
 }
 
 func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, exec executor.Executor, opts map[string]string, inputs map[string]*opspb.Definition, sid string, sm *session.Manager) (*frontend.Result, error) {
@@ -100,6 +136,11 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	var readonly bool // TODO: try to switch to read-only by default.
 
 	var frontendDef *opspb.Definition
+
+	err := gf.checkSourceIsAllowed(source)
+	if err != nil {
+		return nil, err
+	}
 
 	if isDevel {
 		devRes, err := llbBridge.Solve(ctx,

@@ -33,6 +33,11 @@ type Config struct {
 	DNS *DNSConfig `toml:"dns"`
 
 	History *HistoryConfig `toml:"history"`
+
+	Frontends struct {
+		Dockerfile DockerfileFrontendConfig `toml:"dockerfile.v0"`
+		Gateway    GatewayFrontendConfig    `toml:"gateway.v0"`
+	} `toml:"frontend"`
 }
 
 type LogConfig struct {
@@ -154,4 +159,13 @@ type DNSConfig struct {
 type HistoryConfig struct {
 	MaxAge     Duration `toml:"maxAge"`
 	MaxEntries int64    `toml:"maxEntries"`
+}
+
+type DockerfileFrontendConfig struct {
+	Enabled *bool `toml:"enabled"`
+}
+
+type GatewayFrontendConfig struct {
+	Enabled             *bool    `toml:"enabled"`
+	AllowedRepositories []string `toml:"allowedRepositories"`
 }
