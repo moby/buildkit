@@ -1,10 +1,19 @@
 apiVersion: builds.katanomi.dev/v1alpha1
 kind: Build
 spec:
+  runTemplate:
+    spec:
+      workspaces:
+        - name: cache
+          persistentVolumeClaim:
+            claimName: build-cache
+          subPath: golang
   workspaces:
     - description: |
         This workspace is shared among all the pipeline tasks to read/write common resources
       name: source
+    - description: golang cache
+      name: cache
   tasks:
     - name: buildkit-oss-version
       workspaces:
@@ -55,8 +64,12 @@ spec:
             - branch=$(build.git.branch)
             - commit=$(build.git.lastCommit.id)
         - name: build-extra-args
-          value: --build-arg app_version=$(build.git.version.docker) --build-arg
-            commit_id=$(build.git.lastCommit.id) --build-arg GIT_REVISION=$(build.git.lastCommit.id) --build-arg GIT_VERSION=$(build.git.version.docker)
+          value: >-
+            --build-arg app_version=$(build.git.version.docker) 
+            --build-arg commit_id=$(build.git.lastCommit.id)
+            --build-arg GIT_REVISION=$(build.git.lastCommit.id)
+            --build-arg GIT_VERSION=$(build.git.version.docker)
+            --build-arg RUNC_VERSION=release-1.1
         - name: platform
           value:
             - linux/amd64
@@ -76,6 +89,8 @@ spec:
       workspaces:
         - name: source
           workspace: source
+        - name: cache
+          workspace: cache
       when: []
       params:
         - name: targets
@@ -83,6 +98,14 @@ spec:
             - $(tasks.build-buildkit-image.results.ociContainerImageBuild-url)
         - name: quality-gate
           value: "false"
+        - name: scan-flags
+          value:
+            - vulnerability.ignore-unfixed=true
+            - db.skip-update=false
+            - db.repository=build-harbor.alauda.cn/ops/aquasecurity/trivy-db
+        - name: quality-gate-rules
+          value:
+            - severity=High
     - name: test-image
       runAfter:
         - build-buildkit-image
@@ -163,6 +186,3 @@ spec:
         workspaces:
           - name: source
             workspace: source
-  runTemplate:
-    spec:
-      taskRunSpecs: []
