@@ -527,7 +527,6 @@ func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestPara
 			FrontendOpt: map[string]string{
 				"frontend.caps": "moby.buildkit.frontend.subrequests",
 				"requestid":     "frontend.lint",
-				"build-arg:BAR": "678",
 			},
 			Frontend: "dockerfile.v0",
 		})
