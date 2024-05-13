@@ -21,6 +21,7 @@ import (
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/contentutil"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/semaphore"
 )
@@ -196,6 +197,9 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 						}
 						require.NoError(t, sandboxLimiter.Acquire(context.TODO(), 1))
 						defer sandboxLimiter.Release(1)
+
+						ctx, cancel := context.WithCancelCause(ctx)
+						defer cancel(errors.WithStack(context.Canceled))
 
 						sb, closer, err := newSandbox(ctx, br, mirror, mv)
 						require.NoError(t, err)
