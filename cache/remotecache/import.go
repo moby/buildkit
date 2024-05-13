@@ -129,10 +129,6 @@ func (ci *contentCacheImporter) Resolve(ctx context.Context, desc ocispecs.Descr
 }
 
 func readBlob(ctx context.Context, provider content.Provider, desc ocispecs.Descriptor) ([]byte, error) {
-	maxBlobSize := int64(1 << 20)
-	if desc.Size > maxBlobSize {
-		return nil, errors.Errorf("blob %s is too large (%d > %d)", desc.Digest, desc.Size, maxBlobSize)
-	}
 	dt, err := content.ReadBlob(ctx, provider, desc)
 	if err != nil {
 		// NOTE: even if err == EOF, we might have got expected dt here.
