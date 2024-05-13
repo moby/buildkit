@@ -819,7 +819,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 	case *instructions.EntrypointCommand:
 		err = dispatchEntrypoint(d, c, opt.lintWarn)
 	case *instructions.HealthCheckCommand:
-		err = dispatchHealthcheck(d, c)
+		err = dispatchHealthcheck(d, c, opt.lintWarn)
 	case *instructions.ExposeCommand:
 		err = dispatchExpose(d, c, opt.shlex)
 	case *instructions.UserCommand:
@@ -891,7 +891,6 @@ type dispatchState struct {
 	// paths marks the paths that are used by this dispatchState.
 	paths          map[string]struct{}
 	ignoreCache    bool
-	cmdSet         bool
 	unregistered   bool
 	stageName      string
 	cmdIndex       int
@@ -904,6 +903,10 @@ type dispatchState struct {
 	// workdirSet is set to true if a workdir has been set
 	// within the current dockerfile.
 	workdirSet bool
+
+	entrypoint  instructionTracker
+	cmd         instructionTracker
+	healthcheck instructionTracker
 }
 
 func (ds *dispatchState) asyncLocalOpts() []llb.LocalOption {
@@ -1473,6 +1476,8 @@ func dispatchOnbuild(d *dispatchState, c *instructions.OnbuildCommand) error {
 }
 
 func dispatchCmd(d *dispatchState, c *instructions.CmdCommand, warn linter.LintWarnFunc) error {
+	validateUsedOnce(c, &d.cmd, warn)
+
 	var args []string = c.CmdLine
 	if c.PrependShell {
 		if len(d.image.Config.Shell) == 0 {
@@ -1483,11 +1488,12 @@ func dispatchCmd(d *dispatchState, c *instructions.CmdCommand, warn linter.LintW
 	}
 	d.image.Config.Cmd = args
 	d.image.Config.ArgsEscaped = true //nolint:staticcheck // ignore SA1019: field is deprecated in OCI Image spec, but used for backward-compatibility with Docker image spec.
-	d.cmdSet = true
 	return commitToHistory(&d.image, fmt.Sprintf("CMD %q", args), false, nil, d.epoch)
 }
 
 func dispatchEntrypoint(d *dispatchState, c *instructions.EntrypointCommand, warn linter.LintWarnFunc) error {
+	validateUsedOnce(c, &d.entrypoint, warn)
+
 	var args []string = c.CmdLine
 	if c.PrependShell {
 		if len(d.image.Config.Shell) == 0 {
@@ -1497,13 +1503,14 @@ func dispatchEntrypoint(d *dispatchState, c *instructions.EntrypointCommand, war
 		args = withShell(d.image, args)
 	}
 	d.image.Config.Entrypoint = args
-	if !d.cmdSet {
+	if !d.cmd.IsSet {
 		d.image.Config.Cmd = nil
 	}
 	return commitToHistory(&d.image, fmt.Sprintf("ENTRYPOINT %q", args), false, nil, d.epoch)
 }
 
-func dispatchHealthcheck(d *dispatchState, c *instructions.HealthCheckCommand) error {
+func dispatchHealthcheck(d *dispatchState, c *instructions.HealthCheckCommand, warn linter.LintWarnFunc) error {
+	validateUsedOnce(c, &d.healthcheck, warn)
 	d.image.Config.Healthcheck = &dockerspec.HealthcheckConfig{
 		Test:          c.Health.Test,
 		Interval:      c.Health.Interval,
@@ -2150,4 +2157,24 @@ func reportUnusedFromArgs(unmatched map[string]struct{}, location []parser.Range
 		msg := linter.RuleUndeclaredArgInFrom.Format(arg)
 		linter.RuleUndeclaredArgInFrom.Run(warn, location, msg)
 	}
+}
+
+type instructionTracker struct {
+	Loc   []parser.Range
+	IsSet bool
+}
+
+func (v *instructionTracker) MarkUsed(loc []parser.Range) {
+	v.Loc = loc
+	v.IsSet = true
+}
+
+func validateUsedOnce(c instructions.Command, loc *instructionTracker, warn linter.LintWarnFunc) {
+	if loc.IsSet {
+		msg := linter.RuleMultipleInstructionsDisallowed.Format(c.Name())
+		// Report the location of the previous invocation because it is the one
+		// that will be ignored.
+		linter.RuleMultipleInstructionsDisallowed.Run(warn, loc.Loc, msg)
+	}
+	loc.MarkUsed(c.Location())
 }

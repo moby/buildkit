@@ -98,4 +98,11 @@ var (
 			return fmt.Sprintf("Usage of undefined variable '$%s'", arg)
 		},
 	}
+	RuleMultipleInstructionsDisallowed = LinterRule[func(instructionName string) string]{
+		Name:        "MultipleInstructionsDisallowed",
+		Description: "Multiple instructions of the same type should not be used in the same stage",
+		Format: func(instructionName string) string {
+			return fmt.Sprintf("Multiple %s instructions should not be used in the same stage because only the last one will be used", instructionName)
+		},
+	}
 )
