@@ -70,11 +70,15 @@ var (
 			return "Maintainer instruction is deprecated in favor of using label"
 		},
 	}
-	RuleUndeclaredArgInFrom = LinterRule[func(string) string]{
+	RuleUndeclaredArgInFrom = LinterRule[func(string, string) string]{
 		Name:        "UndeclaredArgInFrom",
 		Description: "FROM command must use declared ARGs",
-		Format: func(baseArg string) string {
-			return fmt.Sprintf("FROM argument '%s' is not declared", baseArg)
+		Format: func(baseArg, suggest string) string {
+			out := fmt.Sprintf("FROM argument '%s' is not declared", baseArg)
+			if suggest != "" {
+				out += fmt.Sprintf(" (did you mean %s?)", suggest)
+			}
+			return out
 		},
 	}
 	RuleWorkdirRelativePath = LinterRule[func(workdir string) string]{

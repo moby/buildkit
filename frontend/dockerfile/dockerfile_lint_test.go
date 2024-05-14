@@ -462,7 +462,7 @@ COPY Dockerfile .
 			{
 				RuleName:    "UndeclaredArgInFrom",
 				Description: "FROM command must use declared ARGs",
-				Detail:      "FROM argument 'BULIDPLATFORM' is not declared",
+				Detail:      "FROM argument 'BULIDPLATFORM' is not declared (did you mean BUILDPLATFORM?)",
 				Level:       1,
 				Line:        2,
 			},
@@ -484,7 +484,7 @@ COPY Dockerfile .
 			{
 				RuleName:    "UndeclaredArgInFrom",
 				Description: "FROM command must use declared ARGs",
-				Detail:      "FROM argument 'MYARCH' is not declared",
+				Detail:      "FROM argument 'MYARCH' is not declared (did you mean MY_ARCH?)",
 				Level:       1,
 				Line:        4,
 			},

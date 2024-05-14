@@ -261,7 +261,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	// set base state for every image
 	for i, st := range stages {
 		nameMatch, err := shlex.ProcessWordWithMatches(st.BaseName, metaArgsToMap(optMetaArgs))
-		reportUnusedFromArgs(nameMatch.Unmatched, st.Location, opt.Warn)
+		reportUnusedFromArgs(metaArgsKeys(optMetaArgs), nameMatch.Unmatched, st.Location, opt.Warn)
 		used := nameMatch.Matched
 
 		if err != nil {
@@ -285,7 +285,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 
 		if v := st.Platform; v != "" {
 			platMatch, err := shlex.ProcessWordWithMatches(v, metaArgsToMap(optMetaArgs))
-			reportUnusedFromArgs(platMatch.Unmatched, st.Location, opt.Warn)
+			reportUnusedFromArgs(metaArgsKeys(optMetaArgs), platMatch.Unmatched, st.Location, opt.Warn)
 
 			if err != nil {
 				return nil, parser.WithLocation(errors.Wrapf(err, "failed to process arguments for platform %s", platMatch.Result), st.Location)
@@ -2169,9 +2169,10 @@ func toPBLocation(sourceIndex int, location []parser.Range) pb.Location {
 	}
 }
 
-func reportUnusedFromArgs(unmatched map[string]struct{}, location []parser.Range, warn linter.LintWarnFunc) {
+func reportUnusedFromArgs(values []string, unmatched map[string]struct{}, location []parser.Range, warn linter.LintWarnFunc) {
 	for arg := range unmatched {
-		msg := linter.RuleUndeclaredArgInFrom.Format(arg)
+		suggest, _ := suggest.Search(arg, values, true)
+		msg := linter.RuleUndeclaredArgInFrom.Format(arg, suggest)
 		linter.RuleUndeclaredArgInFrom.Run(warn, location, msg)
 	}
 }
@@ -2199,7 +2200,7 @@ func validateUsedOnce(c instructions.Command, loc *instructionTracker, warn lint
 func wrapSuggestAny(err error, keys map[string]struct{}, options []string) error {
 	for k := range keys {
 		var ok bool
-		err, ok = suggest.WrapErrorMaybe(err, k, options, true)
+		ok, err = suggest.WrapErrorMaybe(err, k, options, true)
 		if ok {
 			break
 		}
