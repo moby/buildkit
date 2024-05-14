@@ -582,6 +582,43 @@ RUN echo $foo
 			},
 		},
 	})
+
+	dockerfile = []byte(`
+FROM alpine
+ARG DIR_BINARIES=binaries/
+ARG DIR_ASSETS=assets/
+ARG DIR_CONFIG=config/
+COPY $DIR_ASSET .
+	`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "UndefinedVar",
+				Description: "Variables should be defined before their use",
+				Detail:      "Usage of undefined variable '$DIR_ASSET' (did you mean $DIR_ASSETS?)",
+				Level:       1,
+				Line:        6,
+			},
+		},
+	})
+
+	dockerfile = []byte(`
+FROM alpine
+ENV PATH=$PAHT:/tmp/bin
+		`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "UndefinedVar",
+				Description: "Variables should be defined before their use",
+				Detail:      "Usage of undefined variable '$PAHT' (did you mean $PATH?)",
+				Level:       1,
+				Line:        3,
+			},
+		},
+	})
 }
 
 func testMultipleInstructionsDisallowed(t *testing.T, sb integration.Sandbox) {

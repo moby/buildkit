@@ -766,7 +766,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 			}
 
 			newword, unmatched, err := opt.shlex.ProcessWord(word, env)
-			reportUnmatchedVariables(cmd, d.buildArgs, unmatched, &opt)
+			reportUnmatchedVariables(cmd, d.buildArgs, env, unmatched, &opt)
 			return newword, err
 		})
 		if err != nil {
@@ -782,7 +782,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 			lex := shell.NewLex('\\')
 			lex.SkipProcessQuotes = true
 			newword, unmatched, err := lex.ProcessWord(word, env)
-			reportUnmatchedVariables(cmd, d.buildArgs, unmatched, &opt)
+			reportUnmatchedVariables(cmd, d.buildArgs, env, unmatched, &opt)
 			return newword, err
 		})
 		if err != nil {
@@ -2103,19 +2103,25 @@ func validateStageNames(stages []instructions.Stage, warn linter.LintWarnFunc) {
 	}
 }
 
-func reportUnmatchedVariables(cmd instructions.Command, buildArgs []instructions.KeyValuePairOptional, unmatched map[string]struct{}, opt *dispatchOpt) {
-	if len(unmatched) == 0 {
-		return
-	}
+func reportUnmatchedVariables(cmd instructions.Command, buildArgs []instructions.KeyValuePairOptional, env []string, unmatched map[string]struct{}, opt *dispatchOpt) {
 	for _, buildArg := range buildArgs {
 		delete(unmatched, buildArg.Key)
 	}
+	if len(unmatched) == 0 {
+		return
+	}
+	options := metaArgsKeys(opt.metaArgs)
+	for _, envVar := range env {
+		key, _ := parseKeyValue(envVar)
+		options = append(options, key)
+	}
 	for cmdVar := range unmatched {
-		_, nonEnvOk := nonEnvArgs[cmdVar]
-		if !nonEnvOk {
-			msg := linter.RuleUndefinedVar.Format(cmdVar)
-			linter.RuleUndefinedVar.Run(opt.lintWarn, cmd.Location(), msg)
+		if _, nonEnvOk := nonEnvArgs[cmdVar]; nonEnvOk {
+			continue
 		}
+		match, _ := suggest.Search(cmdVar, options, true)
+		msg := linter.RuleUndefinedVar.Format(cmdVar, match)
+		linter.RuleUndefinedVar.Run(opt.lintWarn, cmd.Location(), msg)
 	}
 }
 
