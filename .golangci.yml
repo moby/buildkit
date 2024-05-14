@@ -1,7 +1,5 @@
 run:
   timeout: 30m
-  skip-files:
-    - ".*\\.pb\\.go$"
 
   modules-download-mode: vendor
 
@@ -70,6 +68,8 @@ linters-settings:
       G306: "0644"
 
 issues:
+  exclude-files:
+    - ".*\\.pb\\.go$"
   exclude-rules:
     - linters:
         - revive

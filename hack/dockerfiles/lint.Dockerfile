@@ -31,6 +31,12 @@ RUN --mount=target=/go/src/github.com/moby/buildkit \
   xx-go --wrap && \
   golangci-lint run --build-tags "${BUILDTAGS}" && \
   touch /golangci-lint.done
+  
+
+FROM base AS golangci-verify
+RUN --mount=target=/go/src/github.com/moby/buildkit \
+  golangci-lint config verify && \
+  touch /golangci-verify.done
 
 FROM base AS yamllint
 RUN --mount=target=/go/src/github.com/moby/buildkit \
@@ -89,5 +95,6 @@ EOF
 
 FROM scratch
 COPY --link --from=golangci-lint /golangci-lint.done /
+COPY --link --from=golangci-verify /golangci-verify.done /
 COPY --link --from=yamllint /yamllint.done /
 COPY --link --from=protolint /protolint.done /
