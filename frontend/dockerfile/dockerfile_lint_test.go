@@ -467,9 +467,31 @@ COPY Dockerfile .
 				Line:        2,
 			},
 		},
-		StreamBuildErr:    "failed to solve: failed to parse platform : \"\" is an invalid component of \"\": platform specifier component must match \"^[A-Za-z0-9_-]+$\": invalid argument",
-		UnmarshalBuildErr: "failed to parse platform : \"\" is an invalid component of \"\": platform specifier component must match \"^[A-Za-z0-9_-]+$\": invalid argument",
+		StreamBuildErr:    "failed to solve: empty platform value from expression $BULIDPLATFORM (did you mean BUILDPLATFORM?)",
+		UnmarshalBuildErr: "empty platform value from expression $BULIDPLATFORM (did you mean BUILDPLATFORM?)",
 		BuildErrLocation:  2,
+	})
+
+	dockerfile = []byte(`
+ARG MY_OS=linux
+ARG MY_ARCH=amd64
+FROM --platform=linux/${MYARCH} busybox
+COPY Dockerfile .
+	`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "UndeclaredArgInFrom",
+				Description: "FROM command must use declared ARGs",
+				Detail:      "FROM argument 'MYARCH' is not declared",
+				Level:       1,
+				Line:        4,
+			},
+		},
+		StreamBuildErr:    "failed to solve: failed to parse platform linux/${MYARCH}: \"\" is an invalid component of \"linux/\": platform specifier component must match \"^[A-Za-z0-9_-]+$\": invalid argument (did you mean MY_ARCH?)",
+		UnmarshalBuildErr: "failed to parse platform linux/${MYARCH}: \"\" is an invalid component of \"linux/\": platform specifier component must match \"^[A-Za-z0-9_-]+$\": invalid argument (did you mean MY_ARCH?)",
+		BuildErrLocation:  4,
 	})
 
 	dockerfile = []byte(`

@@ -8,8 +8,13 @@ import (
 
 // WrapError wraps error with a suggestion for fixing it
 func WrapError(err error, val string, options []string, caseSensitive bool) error {
+	err, _ = WrapErrorMaybe(err, val, options, caseSensitive)
+	return err
+}
+
+func WrapErrorMaybe(err error, val string, options []string, caseSensitive bool) (error, bool) {
 	if err == nil {
-		return nil
+		return nil, false
 	}
 	orig := val
 	if !caseSensitive {
@@ -23,7 +28,7 @@ func WrapError(err error, val string, options []string, caseSensitive bool) erro
 		}
 		if val == opt {
 			// exact match means error was unrelated to the value
-			return err
+			return err, false
 		}
 		dist := levenshtein.Distance(val, opt, nil)
 		if dist < mindist {
@@ -37,13 +42,13 @@ func WrapError(err error, val string, options []string, caseSensitive bool) erro
 	}
 
 	if match == "" {
-		return err
+		return err, false
 	}
 
 	return &suggestError{
 		err:   err,
 		match: match,
-	}
+	}, true
 }
 
 type suggestError struct {

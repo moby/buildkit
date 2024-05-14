@@ -291,9 +291,18 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 				return nil, parser.WithLocation(errors.Wrapf(err, "failed to process arguments for platform %s", platMatch.Result), st.Location)
 			}
 
+			if platMatch.Result == "" {
+				err := errors.Errorf("empty platform value from expression %s", v)
+				err = parser.WithLocation(err, st.Location)
+				err = wrapSuggestAny(err, platMatch.Unmatched, metaArgsKeys(optMetaArgs))
+				return nil, err
+			}
+
 			p, err := platforms.Parse(platMatch.Result)
 			if err != nil {
-				return nil, parser.WithLocation(errors.Wrapf(err, "failed to parse platform %s", platMatch.Result), st.Location)
+				err = parser.WithLocation(err, st.Location)
+				err = wrapSuggestAny(err, platMatch.Unmatched, metaArgsKeys(optMetaArgs))
+				return nil, parser.WithLocation(errors.Wrapf(err, "failed to parse platform %s", v), st.Location)
 			}
 
 			for k := range platMatch.Matched {
@@ -685,6 +694,14 @@ func metaArgsToMap(metaArgs []instructions.KeyValuePairOptional) map[string]stri
 	}
 
 	return m
+}
+
+func metaArgsKeys(metaArgs []instructions.KeyValuePairOptional) []string {
+	s := make([]string, 0, len(metaArgs))
+	for _, arg := range metaArgs {
+		s = append(s, arg.Key)
+	}
+	return s
 }
 
 func toCommand(ic instructions.Command, allDispatchStates *dispatchStates) (command, error) {
@@ -2177,4 +2194,15 @@ func validateUsedOnce(c instructions.Command, loc *instructionTracker, warn lint
 		linter.RuleMultipleInstructionsDisallowed.Run(warn, loc.Loc, msg)
 	}
 	loc.MarkUsed(c.Location())
+}
+
+func wrapSuggestAny(err error, keys map[string]struct{}, options []string) error {
+	for k := range keys {
+		var ok bool
+		err, ok = suggest.WrapErrorMaybe(err, k, options, true)
+		if ok {
+			break
+		}
+	}
+	return err
 }
