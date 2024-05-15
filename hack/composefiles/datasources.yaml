@@ -1,0 +1,19 @@
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      httpMethod: POST
+      manageAlerts: false
+      prometheusType: Prometheus
+      prometheusVersion: 2.48.1
+      # cacheLevel set to none because this is primarily used for development
+      # where caching is detrimental to the experience and there's not enough
+      # data where caching is helpful.
+      cacheLevel: 'None'
+      disableRecordingRules: false
+      incrementalQueryOverlapWindow: 10m
+      exemplarTraceIdDestinations: []

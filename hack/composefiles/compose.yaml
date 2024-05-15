@@ -14,6 +14,7 @@ services:
     privileged: true
     environment:
       DELVE_PORT: 5000
+      OTEL_SERVICE_NAME: buildkitd
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     configs:
       - source: buildkit_config
@@ -36,11 +37,38 @@ services:
         target: /etc/otelcol-contrib/config.yaml
     ports:
       - 127.0.0.1:4317:4317
+      - 127.0.0.1:8000:8000
     depends_on:
       - jaeger
 
+  prometheus:
+    image: prom/prometheus:v2.48.1
+    configs:
+      - source: prometheus_config
+        target: /etc/prometheus/prometheus.yml
+    volumes:
+      - prometheus:/prometheus
+    depends_on:
+      - buildkit
+
+  grafana:
+    image: grafana/grafana-oss:10.2.3
+    configs:
+      - source: grafana_config
+        target: /etc/grafana/grafana.ini
+      - source: grafana_datasources_config
+        target: /etc/grafana/provisioning/datasources/datasources.yaml
+    ports:
+      - 127.0.0.1:3000:3000
+    volumes:
+      - grafana:/var/lib/grafana
+    depends_on:
+      - prometheus
+
 volumes:
   buildkit:
+  prometheus:
+  grafana:
 
 configs:
   buildkit_config:
@@ -48,3 +76,12 @@ configs:
 
   otelcol_config:
     file: ./otelcol.yaml
+
+  prometheus_config:
+    file: ./prometheus.yml
+
+  grafana_config:
+    file: ./grafana.ini
+
+  grafana_datasources_config:
+    file: ./datasources.yaml

@@ -1,0 +1,6 @@
+scrape_configs:
+  - job_name: buildkit
+    scrape_interval: 1m
+    static_configs:
+      - targets:
+          - "buildkit:6060"
