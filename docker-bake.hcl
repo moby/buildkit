@@ -147,6 +147,7 @@ target "lint" {
       { name = "labs", tags = "dfrunsecurity dfparents dfexcludepatterns", target = "golangci-lint" },
       { name = "nydus", tags = "nydus", target = "golangci-lint" },
       { name = "yaml", tags = "", target = "yamllint" },
+      { name = "golangci-verify", tags = "", target = "golangci-verify" },
       { name = "proto", tags = "", target = "protolint" },
       { name = "gopls", tags = "", target = "gopls-analyze" }
     ]
