@@ -748,9 +748,9 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 				return "", err
 			}
 
-			newword, unmatched, err := opt.shlex.ProcessWord(word, env)
-			reportUnmatchedVariables(cmd, d.buildArgs, unmatched, &opt)
-			return newword, err
+			result, err := opt.shlex.ProcessWord(word, env)
+			reportUnmatchedVariables(cmd, d.buildArgs, result.Unmatched, &opt)
+			return result.Result, err
 		})
 		if err != nil {
 			return err
@@ -764,9 +764,9 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 			}
 			lex := shell.NewLex('\\')
 			lex.SkipProcessQuotes = true
-			newword, unmatched, err := lex.ProcessWord(word, env)
-			reportUnmatchedVariables(cmd, d.buildArgs, unmatched, &opt)
-			return newword, err
+			result, err := lex.ProcessWord(word, env)
+			reportUnmatchedVariables(cmd, d.buildArgs, result.Unmatched, &opt)
+			return result.Result, err
 		})
 		if err != nil {
 			return err
@@ -1125,7 +1125,17 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 	if err != nil {
 		return err
 	}
-	opt = append(opt, llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(&shlex, customname, env)), d.prefixPlatform, pl, env)))
+
+	name := processCmdEnv(processCmdArgs{
+		cmd:           customname,
+		env:           env,
+		dispatchState: d,
+		dispatchOpt:   &dopt,
+		location:      c.Location(),
+		shlex:         &shlex,
+	})
+
+	opt = append(opt, llb.WithCustomName(prefixCommand(d, uppercaseCmd(name), d.prefixPlatform, pl, env)))
 	for _, h := range dopt.extraHosts {
 		opt = append(opt, llb.AddExtraHost(h.Host, h.IP))
 	}
@@ -1193,8 +1203,18 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bo
 			if err != nil {
 				return err
 			}
+
+			name := processCmdEnv(processCmdArgs{
+				cmd:           c.String(),
+				env:           env,
+				dispatchState: d,
+				dispatchOpt:   opt,
+				location:      c.Location(),
+				shlex:         opt.shlex,
+			})
+
 			d.state = d.state.File(llb.Mkdir(wd, 0755, mkdirOpt...),
-				llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(opt.shlex, c.String(), env)), d.prefixPlatform, &platform, env)),
+				llb.WithCustomName(prefixCommand(d, uppercaseCmd(name), d.prefixPlatform, &platform, env)),
 				location(opt.sourceMap, c.Location()),
 				llb.Platform(*d.platform),
 			)
@@ -1272,7 +1292,15 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		return err
 	}
 
-	name := uppercaseCmd(processCmdEnv(cfg.opt.shlex, cfg.cmdToPrint.String(), env))
+	name := uppercaseCmd(processCmdEnv(processCmdArgs{
+		cmd:           cfg.cmdToPrint.String(),
+		env:           env,
+		dispatchState: d,
+		dispatchOpt:   &cfg.opt,
+		location:      cfg.location,
+		shlex:         cfg.opt.shlex,
+	}))
+
 	pgName := prefixCommand(d, name, d.prefixPlatform, &platform, env)
 
 	var a *llb.FileAction
@@ -1886,12 +1914,24 @@ func uppercaseCmd(str string) string {
 	return strings.Join(p, " ")
 }
 
-func processCmdEnv(shlex *shell.Lex, cmd string, env []string) string {
-	w, _, err := shlex.ProcessWord(cmd, env)
+type processCmdArgs struct {
+	cmd           string
+	dispatchOpt   *dispatchOpt
+	dispatchState *dispatchState
+	env           []string
+	location      []parser.Range
+	shlex         *shell.Lex
+}
+
+func processCmdEnv(args processCmdArgs) string {
+	results, err := args.shlex.ProcessWord(args.cmd, args.env)
 	if err != nil {
-		return cmd
+		return args.cmd
 	}
-	return w
+	if args.dispatchOpt.lintWarn != nil {
+		reportOutOfScopeVars(args, results.Matched)
+	}
+	return results.Result
 }
 
 func prefixCommand(ds *dispatchState, str string, prefixPlatform bool, platform *ocispecs.Platform, env []string) string {
@@ -2082,6 +2122,24 @@ func validateStageNames(stages []instructions.Stage, warn linter.LintWarnFunc) {
 				linter.RuleDuplicateStageName.Run(warn, stage.Location, msg)
 			}
 			stageNames[stage.Name] = struct{}{}
+		}
+	}
+}
+
+func reportOutOfScopeVars(args processCmdArgs, matched map[string]struct{}) {
+	parentBuildArgs := make(map[string]struct{})
+	for base := args.dispatchState.base; base != nil; base = base.base {
+		for _, ba := range base.buildArgs {
+			parentBuildArgs[ba.Key] = struct{}{}
+		}
+	}
+	for _, ba := range args.dispatchState.buildArgs {
+		delete(parentBuildArgs, ba.Key)
+	}
+	for match := range matched {
+		if _, ok := parentBuildArgs[match]; ok {
+			msg := linter.RuleOutOfScopeVar.Format(match, args.dispatchState.stageName)
+			linter.RuleOutOfScopeVar.Run(args.dispatchOpt.lintWarn, args.location, msg)
 		}
 	}
 }

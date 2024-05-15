@@ -36,6 +36,7 @@ var lintTests = integration.TestFuncs(
 	testWorkdirRelativePath,
 	testUnmatchedVars,
 	testMultipleInstructionsDisallowed,
+	testOutOfScopeVar,
 )
 
 func testStageName(t *testing.T, sb integration.Sandbox) {
@@ -531,10 +532,24 @@ COPY Dockerfile${foo} .
 FROM alpine AS base
 ARG foo=Dockerfile
 
-FROM base
+FROM base AS first
 COPY $foo .
+ARG foo=Dockerfile
+COPY $foo .
+
 `)
-	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "OutOfScopeVar",
+				Description: "Variables should be defined within the same stage",
+				Detail:      "Variable 'foo' is out of scope for stage 'first', it should be defined within the same stage",
+				Level:       1,
+				Line:        6,
+			},
+		},
+	})
 
 	dockerfile = []byte(`
 FROM alpine
@@ -626,6 +641,48 @@ CMD ["/myotherapp"]
 HEALTHCHECK CMD ["/myotherapp"]
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+}
+
+func testOutOfScopeVar(t *testing.T, sb integration.Sandbox) {
+	dockerfile := []byte(`
+FROM alpine AS base
+ARG foo=bar
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`
+FROM alpine AS base
+ARG foo=bar
+
+FROM base AS first
+RUN echo $foo
+ARG foo=baz
+RUN echo $foo
+
+FROM first AS second
+RUN echo $foo
+ARG foo=baz
+RUN echo $foo
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "OutOfScopeVar",
+				Description: "Variables should be defined within the same stage",
+				Detail:      "Variable 'foo' is out of scope for stage 'first', it should be defined within the same stage",
+				Level:       1,
+				Line:        6,
+			},
+			{
+				RuleName:    "OutOfScopeVar",
+				Description: "Variables should be defined within the same stage",
+				Detail:      "Variable 'foo' is out of scope for stage 'second', it should be defined within the same stage",
+				Level:       1,
+				Line:        11,
+			},
+		},
+	})
 }
 
 func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestParams) {

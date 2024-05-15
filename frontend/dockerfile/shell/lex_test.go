@@ -50,7 +50,6 @@ func TestReversePattern(t *testing.T) {
 }
 
 func TestShellParserMandatoryEnvVars(t *testing.T) {
-	var newWord string
 	var err error
 	shlex := NewLex('\\')
 	setEnvs := []string{"VAR=plain", "ARG=x"}
@@ -61,26 +60,26 @@ func TestShellParserMandatoryEnvVars(t *testing.T) {
 	noUnset := "${VAR?message here$ARG}"
 
 	// disallow empty
-	newWord, _, err = shlex.ProcessWord(noEmpty, setEnvs)
+	result, err := shlex.ProcessWord(noEmpty, setEnvs)
 	require.NoError(t, err)
-	require.Equal(t, "plain", newWord)
+	require.Equal(t, "plain", result.Result)
 
-	_, _, err = shlex.ProcessWord(noEmpty, emptyEnvs)
+	_, err = shlex.ProcessWord(noEmpty, emptyEnvs)
 	require.ErrorContains(t, err, "message herex")
 
-	_, _, err = shlex.ProcessWord(noEmpty, unsetEnvs)
+	_, err = shlex.ProcessWord(noEmpty, unsetEnvs)
 	require.ErrorContains(t, err, "message herex")
 
 	// disallow unset
-	newWord, _, err = shlex.ProcessWord(noUnset, setEnvs)
+	result, err = shlex.ProcessWord(noUnset, setEnvs)
 	require.NoError(t, err)
-	require.Equal(t, "plain", newWord)
+	require.Equal(t, "plain", result.Result)
 
-	newWord, _, err = shlex.ProcessWord(noUnset, emptyEnvs)
+	result, err = shlex.ProcessWord(noUnset, emptyEnvs)
 	require.NoError(t, err)
-	require.Empty(t, newWord)
+	require.Empty(t, result.Result)
 
-	_, _, err = shlex.ProcessWord(noUnset, unsetEnvs)
+	_, err = shlex.ProcessWord(noUnset, unsetEnvs)
 	require.ErrorContains(t, err, "message herex")
 }
 
@@ -123,15 +122,15 @@ func TestShellParser4EnvVars(t *testing.T) {
 
 		if ((platform == "W" || platform == "A") && runtime.GOOS == "windows") ||
 			((platform == "U" || platform == "A") && runtime.GOOS != "windows") {
-			newWord, _, err := shlex.ProcessWord(source, envs)
+			result, err := shlex.ProcessWord(source, envs)
 			if expected == "error" {
-				require.Errorf(t, err, "input: %q, result: %q", source, newWord)
+				require.Errorf(t, err, "input: %q, result: %q", source, result.Result)
 			} else {
 				require.NoError(t, err, "at line %d of %s", lineCount, fn)
-				require.Equal(t, expected, newWord, "at line %d of %s", lineCount, fn)
+				require.Equal(t, expected, result.Result, "at line %d of %s", lineCount, fn)
 			}
 
-			newWord, err = shlex.ProcessWordWithMap(source, envsMap)
+			newWord, err := shlex.ProcessWordWithMap(source, envsMap)
 			if expected == "error" {
 				require.Errorf(t, err, "input: %q, result: %q", source, newWord)
 			} else {

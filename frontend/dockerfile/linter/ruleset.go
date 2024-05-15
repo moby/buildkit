@@ -105,4 +105,11 @@ var (
 			return fmt.Sprintf("Multiple %s instructions should not be used in the same stage because only the last one will be used", instructionName)
 		},
 	}
+	RuleOutOfScopeVar = LinterRule[func(string, string) string]{
+		Name:        "OutOfScopeVar",
+		Description: "Variables should be defined within the same stage",
+		Format: func(word, stageName string) string {
+			return fmt.Sprintf("Variable '%s' is out of scope for stage '%s', it should be defined within the same stage", word, stageName)
+		},
+	}
 )

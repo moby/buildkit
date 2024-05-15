@@ -35,9 +35,9 @@ func NewLex(escapeToken rune) *Lex {
 // and replace any env var references in 'word'. It will also
 // return variables in word which were not found in the 'env' list,
 // which is useful in later linting.
-func (s *Lex) ProcessWord(word string, env []string) (string, map[string]struct{}, error) {
+func (s *Lex) ProcessWord(word string, env []string) (*ProcessWordResult, error) {
 	result, err := s.process(word, BuildEnvs(env))
-	return result.Result, result.Unmatched, err
+	return result, err
 }
 
 // ProcessWords will use the 'env' list of environment variables,
