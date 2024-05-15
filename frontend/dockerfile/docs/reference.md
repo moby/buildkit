@@ -1520,7 +1520,7 @@ not translate between Linux and Windows, the use of `/etc/passwd` and `/etc/grou
 translating user and group names to IDs restricts this feature to only be viable for
 Linux OS-based containers.
 
-All files and directories copied from the build context are created with a UID and GID of 0.unless the
+All files and directories copied from the build context are created with a UID and GID of `0` unless the
 optional `--chown` flag specifies a given username, groupname, or UID/GID
 combination to request specific ownership of the copied content. The
 format of the `--chown` flag allows for either username and groupname strings
