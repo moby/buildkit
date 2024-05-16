@@ -163,6 +163,7 @@ jobs:
             *.output=type=docker,name=${{ env.TEST_IMAGE_ID }}
         env:
           BUILDKITD_TAGS: ${{ matrix.tags }}
+          TEST_COVERAGE: 1
       -
         name: Test
         run: |

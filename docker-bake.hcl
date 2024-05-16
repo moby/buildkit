@@ -46,6 +46,11 @@ variable "GOLANGCI_LINT_MULTIPLATFORM" {
 variable "DESTDIR" {
   default = ""
 }
+
+variable "TEST_COVERAGE" {
+  default = null
+}
+
 function "bindir" {
   params = [defaultdir]
   result = DESTDIR != "" ? DESTDIR : "./bin/${defaultdir}"
@@ -115,6 +120,9 @@ target "integration-tests-base" {
 target "integration-tests" {
   inherits = ["integration-tests-base"]
   target = "integration-tests"
+  args = {
+    GOBUILDFLAGS = TEST_COVERAGE == "1" ? "-cover" : null
+  }
 }
 
 group "validate" {

@@ -13,6 +13,7 @@ set -eu -o pipefail
 : "${VERIFYFLAGS=}"
 : "${CGO_ENABLED=}"
 
+: "${TEST_COVERAGE=}"
 : "${TEST_IMAGE_BUILD=1}"
 : "${TEST_IMAGE_ID=buildkit-tests}"
 : "${TEST_INTEGRATION=}"
@@ -69,7 +70,7 @@ testReportsDir="$(pwd)/bin/testreports"
 mkdir -p "$testReportsDir"
 testReportsVol="-v $testReportsDir:/testreports"
 gotestsumArgs="--format=standard-verbose --jsonfile=/testreports/go-test-report$TEST_REPORT_SUFFIX.json --junitfile=/testreports/junit-report$TEST_REPORT_SUFFIX.xml"
-gotestArgs="-mod=vendor -coverprofile=/testreports/coverage-report$TEST_REPORT_SUFFIX.txt -covermode=atomic"
+gotestArgs="-mod=vendor"
 
 if [[ "$GOBUILDFLAGS" == *"-race"* ]]; then
   if [ "$CGO_ENABLED" != "1" ]; then
@@ -79,6 +80,11 @@ if [[ "$GOBUILDFLAGS" == *"-race"* ]]; then
   # force buildkitd to halt on detected race conditions, which will cause the tests to fail
   export GORACE="halt_on_error=1"
   export VERIFYFLAGS="" # prevent -static verification
+fi
+
+if [ "$TEST_COVERAGE" == "1" ]; then
+  export GOBUILDFLAGS="$GOBUILDFLAGS -cover"
+  export GO_TEST_COVERPROFILE="/testreports/coverage-report$TEST_REPORT_SUFFIX.txt"
 fi
 
 if [ "$TEST_IMAGE_BUILD" = "1" ]; then
@@ -118,14 +124,15 @@ baseCreateFlags="--rm --privileged \
 -e GOTESTSUM_FORMAT \
 -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry \
 -e BUILDKIT_INTEGRATION_DOCKERD_FLAGS \
--e GORACE"
+-e GORACE \
+-e GO_TEST_COVERPROFILE"
 
 if [ "$TEST_INTEGRATION" == 1 ]; then
   cid=$(dockerCmd create $baseCreateFlags \
     ${BUILDKIT_INTEGRATION_SNAPSHOTTER:+"-eBUILDKIT_INTEGRATION_SNAPSHOTTER"} \
     -e SKIP_INTEGRATION_TESTS \
     $TEST_IMAGE_ID \
-    gotestsum $gotestsumArgs --packages="${TESTPKGS:-./...}" -- $gotestArgs ${TESTFLAGS:--v})
+    gotestsumandcover $gotestsumArgs --packages="${TESTPKGS:-./...}" -- $gotestArgs ${TESTFLAGS:--v})
   if [ "$TEST_DOCKERD" = "1" ]; then
     dockerCmd cp "$TEST_DOCKERD_BINARY" $cid:/usr/bin/dockerd
   fi
@@ -170,7 +177,7 @@ if [ "$TEST_DOCKERFILE" == 1 ]; then
           -e FRONTEND_GATEWAY_ONLY=local:/$release.tar \
           -e EXTERNAL_DF_FRONTEND=/dockerfile-frontend \
           $TEST_IMAGE_ID \
-          gotestsum $gotestsumArgs --packages=./frontend/dockerfile -- $gotestArgs --count=1 -tags "$buildtags" ${TESTFLAGS:--v})
+          gotestsumandcover $gotestsumArgs --packages=./frontend/dockerfile -- $gotestArgs --count=1 -tags "$buildtags" ${TESTFLAGS:--v})
         dockerCmd cp $tarout $cid:/$release.tar
         if [ "$TEST_DOCKERD" = "1" ]; then
           dockerCmd cp "$TEST_DOCKERD_BINARY" $cid:/usr/bin/dockerd
