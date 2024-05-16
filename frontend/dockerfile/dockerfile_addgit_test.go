@@ -52,7 +52,7 @@ func testAddGit(t *testing.T, sb integration.Sandbox) {
 	err = runShell(gitDir, gitCommands...)
 	require.NoError(t, err)
 
-	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Join(gitDir))))
+	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Clean(gitDir))))
 	defer server.Close()
 	serverURL := server.URL
 	t.Logf("serverURL=%q", serverURL)

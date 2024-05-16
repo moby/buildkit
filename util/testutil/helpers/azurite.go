@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -63,7 +64,7 @@ func NewAzuriteServer(t *testing.T, sb integration.Sandbox, opts AzuriteOpts) (a
 	if err != nil {
 		return "", nil, err
 	}
-	if err = waitAzurite(address, 15*time.Second); err != nil {
+	if err = waitAzurite(sb.Context(), address, 15*time.Second); err != nil {
 		azuriteStop()
 		return "", nil, errors.Wrapf(err, "azurite did not start up: %s", integration.FormatLogs(sb.Logs()))
 	}
@@ -72,11 +73,16 @@ func NewAzuriteServer(t *testing.T, sb integration.Sandbox, opts AzuriteOpts) (a
 	return
 }
 
-func waitAzurite(address string, d time.Duration) error {
+func waitAzurite(ctx context.Context, address string, d time.Duration) error {
 	step := 1 * time.Second
 	i := 0
 	for {
-		if resp, err := http.Get(fmt.Sprintf("%s?comp=list", address)); err == nil {
+		req, err := http.NewRequest("GET", fmt.Sprintf("%s?comp=list", address), nil)
+		if err != nil {
+			return errors.Wrapf(err, "failed to create request")
+		}
+		req = req.WithContext(ctx)
+		if resp, err := http.DefaultClient.Do(req); err == nil {
 			resp.Body.Close()
 			break
 		}

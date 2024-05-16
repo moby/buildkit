@@ -637,9 +637,7 @@ func pathCallback[T any](ctx context.Context, t *testing.T, sn *mergeSnapshotter
 
 func tryStatPath(ctx context.Context, t *testing.T, sn *mergeSnapshotter, key, path string) *syscall.Stat_t {
 	t.Helper()
-	return pathCallback(ctx, t, sn, key, path, func(t *testing.T, path string) *syscall.Stat_t {
-		return trySyscallStat(t, path)
-	})
+	return pathCallback(ctx, t, sn, key, path, trySyscallStat)
 }
 
 func statPath(ctx context.Context, t *testing.T, sn *mergeSnapshotter, key, path string) (st *syscall.Stat_t) {

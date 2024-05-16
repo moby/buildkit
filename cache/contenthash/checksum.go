@@ -1176,11 +1176,11 @@ func poolsCopy(dst io.Writer, src io.Reader) (written int64, err error) {
 }
 
 func convertPathToKey(p string) []byte {
-	return bytes.Replace([]byte(p), []byte("/"), []byte{0}, -1)
+	return bytes.ReplaceAll([]byte(p), []byte("/"), []byte{0})
 }
 
 func convertKeyToPath(p []byte) string {
-	return string(bytes.Replace(p, []byte{0}, []byte("/"), -1))
+	return string(bytes.ReplaceAll(p, []byte{0}, []byte("/")))
 }
 
 func splitKey(k []byte) ([]byte, []byte) {
