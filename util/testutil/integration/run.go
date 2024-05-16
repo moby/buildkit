@@ -276,23 +276,7 @@ func copyImagesLocal(t *testing.T, host string, images map[string]string) error 
 }
 
 func OfficialImages(names ...string) map[string]string {
-	ns := runtime.GOARCH
-	if ns == "arm64" {
-		ns = "arm64v8"
-	} else if ns != "amd64" {
-		ns = "library"
-	}
-	m := map[string]string{}
-	for _, name := range names {
-		ref := "docker.io/" + ns + "/" + name
-		if pns, ok := pins[name]; ok {
-			if dgst, ok := pns[ns]; ok {
-				ref += "@" + dgst
-			}
-		}
-		m["library/"+name] = ref
-	}
-	return m
+	return officialImages(names...)
 }
 
 func withMirrorConfig(mirror string) ConfigUpdater {
@@ -433,4 +417,15 @@ func SkipOnPlatform(t *testing.T, goos string) {
 	if runtime.GOOS == goos {
 		t.Skipf("Skipped on %s", goos)
 	}
+}
+
+// Selects a test case from a slice. Works with only two cases:
+// slice[0] for Unix or slice[1] for Windows.
+// You can provide a slice of two items of any type.
+// Choosing this approach to simplify the inlined calls.
+func UnixOrWindows[T any](tc [2]T) T {
+	if runtime.GOOS == "windows" {
+		return tc[1]
+	}
+	return tc[0]
 }
