@@ -226,8 +226,11 @@ type frontend interface {
 func init() {
 	frontends := map[string]interface{}{}
 
+	images := integration.UnixOrWindows([2][]string{
+		{"busybox:latest", "alpine:latest"},
+		{"nanoserver:latest"}})
 	opts = []integration.TestOpt{
-		integration.WithMirroredImages(integration.OfficialImages("busybox:latest", "alpine:latest")),
+		integration.WithMirroredImages(integration.OfficialImages(images...)),
 		integration.WithMatrix("frontend", frontends),
 	}
 
@@ -250,27 +253,34 @@ func init() {
 func TestIntegration(t *testing.T) {
 	integration.Run(t, allTests, opts...)
 
-	integration.Run(t, securityTests, append(append(opts, securityOpts...),
-		integration.WithMatrix("security.insecure", map[string]interface{}{
-			"granted": securityInsecureGranted,
-			"denied":  securityInsecureDenied,
-		}))...)
-	integration.Run(t, networkTests, append(opts,
-		integration.WithMatrix("network.host", map[string]interface{}{
-			"granted": networkHostGranted,
-			"denied":  networkHostDenied,
-		}))...)
 	integration.Run(t, lintTests, opts...)
 	integration.Run(t, heredocTests, opts...)
 	integration.Run(t, outlineTests, opts...)
 	integration.Run(t, targetsTests, opts...)
 
+	runLinuxOnlyTests(t)
+}
+
+func runLinuxOnlyTests(t *testing.T) {
+	integration.SkipOnPlatform(t, "windows")
 	integration.Run(t, reproTests, append(opts,
 		// Only use the amd64 digest,  regardless to the host platform
 		integration.WithMirroredImages(map[string]string{
 			"amd64/bullseye-20230109-slim:latest": "docker.io/amd64/debian:bullseye-20230109-slim@sha256:1acb06a0c31fb467eb8327ad361f1091ab265e0bf26d452dea45dcb0c0ea5e75",
 		}),
 	)...)
+
+	integration.Run(t, securityTests, append(append(opts, securityOpts...),
+		integration.WithMatrix("security.insecure", map[string]interface{}{
+			"granted": securityInsecureGranted,
+			"denied":  securityInsecureDenied,
+		}))...)
+
+	integration.Run(t, networkTests, append(opts,
+		integration.WithMatrix("network.host", map[string]interface{}{
+			"granted": networkHostGranted,
+			"denied":  networkHostDenied,
+		}))...)
 }
 
 func testDefaultEnvWithArgs(t *testing.T, sb integration.Sandbox) {
@@ -339,14 +349,20 @@ echo -n $my_arg $* > /out
 }
 
 func testEnvEmptyFormatting(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows([2]string{
+		`
 FROM busybox AS build
 ENV myenv foo%sbar
 RUN [ "$myenv" = 'foo%sbar' ]
-`)
+`,
+		`
+FROM nanoserver AS build
+ENV myenv foo%sbar
+RUN if %myenv% NEQ foo%sbar (exit 1)
+`,
+	}))
 
 	dir := integration.Tmpdir(
 		t,
@@ -375,23 +391,36 @@ RUN [ "$myenv" = 'foo%sbar' ]
 }
 
 func testDockerignoreOverride(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows([2]string{
+		`
 FROM busybox
 COPY . .
 RUN [ -f foo ] && [ ! -f bar ]
-`)
+`,
+		`
+FROM nanoserver
+COPY . .
+RUN if exist foo (if not exist bar (exit 0) else (exit 1))
+`,
+	}))
 
 	ignore := []byte(`
 bar
 `)
 
-	dockerfile2 := []byte(`
+	dockerfile2 := []byte(integration.UnixOrWindows([2]string{
+		`
 FROM busybox
 COPY . .
 RUN [ ! -f foo ] && [ -f bar ]
-`)
+`,
+		`
+FROM nanoserver
+COPY . .
+RUN if not exist foo (if exist bar (exit 0) else (exit 1))
+`,
+	}))
 
 	ignore2 := []byte(`
 foo
@@ -432,15 +461,22 @@ foo
 }
 
 func testEmptyDestDir(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows([2]string{
+		`
 FROM busybox
 ENV empty=""
 COPY testfile $empty
 RUN [ "$(cat testfile)" == "contents0" ]
-`)
+`,
+		`
+FROM nanoserver
+COPY testfile ''
+RUN cmd /V:on /C "set /p tfcontent=<testfile \
+	& if !tfcontent! NEQ contents0 (exit 1)"
+`,
+	}))
 
 	dir := integration.Tmpdir(
 		t,

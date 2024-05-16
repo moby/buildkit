@@ -1,3 +1,6 @@
+//go:build !windows
+// +build !windows
+
 package integration
 
 var pins = map[string]map[string]string{
