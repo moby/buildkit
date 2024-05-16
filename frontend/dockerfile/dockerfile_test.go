@@ -412,11 +412,6 @@ RUN if %myenv% NEQ foo%sbar (exit 1)
 `,
 	))
 
-	dir := integration.Tmpdir(
-		t,
-		fstest.CreateFile("Dockerfile", dockerfile, 0600),
-	)
-
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -452,11 +447,6 @@ COPY . .
 RUN if exist foo (if not exist bar (exit 0) else (exit 1))
 `,
 	))
-
-	ignore := []byte(`
-bar
-`)
-
 	dockerfile2 := []byte(integration.UnixOrWindows(
 		`
 FROM busybox
@@ -469,11 +459,6 @@ COPY . .
 RUN if not exist foo (if exist bar (exit 0) else (exit 1))
 `,
 	))
-
-	ignore2 := []byte(`
-foo
-`)
-
 	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
