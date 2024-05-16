@@ -285,7 +285,6 @@ func TestIntegration(t *testing.T) {
 			"granted": networkHostGranted,
 			"denied":  networkHostDenied,
 		}))...)
-}
 
 func testEmptyStringArgInEnv(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
@@ -330,8 +329,6 @@ COPY --from=build env.txt .
 	require.Contains(t, envStr, "BAR=")
 	require.NotContains(t, envStr, "FOO=")
 }
-
-func testDefaultEnvWithArgs(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
@@ -459,16 +456,7 @@ COPY . .
 RUN if not exist foo (if exist bar (exit 0) else (exit 1))
 `,
 	))
-	dir := integration.Tmpdir(
 		t,
-		fstest.CreateFile("Dockerfile", dockerfile, 0600),
-		fstest.CreateFile("Dockerfile.dockerignore", ignore, 0600),
-		fstest.CreateFile("Dockerfile2", dockerfile2, 0600),
-		fstest.CreateFile("Dockerfile2.dockerignore", ignore2, 0600),
-		fstest.CreateFile("foo", []byte("contents0"), 0600),
-		fstest.CreateFile("bar", []byte("contents0"), 0600),
-	)
-
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
