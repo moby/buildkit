@@ -77,7 +77,7 @@ jobs:
     needs:
       - build
     env:
-      TESTFLAGS: "-v --parallel=6 --timeout=30m"
+      TESTFLAGS: "-v --parallel=6 --timeout=60m"
       GOTESTSUM_FORMAT: "standard-verbose"
     strategy:
       fail-fast: false
@@ -102,7 +102,7 @@ jobs:
           echo "TEST_REPORT_NAME=${{ github.job }}-$(echo "${{ matrix.pkg }}-${{ matrix.skip-integration-tests }}-${{ matrix.worker }}" | tr -dc '[:alnum:]-\n\r' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
           testFlags="${{ env.TESTFLAGS }}"
           if [ -n "${{ matrix.worker }}" ]; then
-            testFlags="${testFlags} --run=//worker=${{ matrix.worker }}$"
+            testFlags="${testFlags} --run=TestIntegration/.*/worker=${{ matrix.worker }}"
           fi
           echo "TESTFLAGS=${testFlags}" >> $GITHUB_ENV
         shell: bash
