@@ -63,7 +63,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"go.etcd.io/bbolt"
-	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/propagation"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -90,7 +90,7 @@ func init() {
 	detect.Recorder = detect.NewTraceRecorder()
 }
 
-var propagators = propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
+type shutdownFn func(ctx context.Context) error
 
 type workerInitializerOpt struct {
 	config         *config.Config
@@ -225,7 +225,7 @@ func main() {
 	app.Flags = append(app.Flags, appFlags...)
 	app.Flags = append(app.Flags, serviceFlags()...)
 
-	var closers []func(ctx context.Context) error
+	var closers []shutdownFn
 	app.Action = func(c *cli.Context) error {
 		// TODO: On Windows this always returns -1. The actual "are you admin" check is very Windows-specific.
 		// See https://github.com/golang/go/issues/28804#issuecomment-505326268 for the "short" version.
@@ -268,23 +268,12 @@ func main() {
 			}
 		}
 
-		tp, err := newTracerProvider(ctx)
+		closers, err = configureTelemetryProviders(ctx, closers)
 		if err != nil {
 			return err
 		}
-		closers = append(closers, tp.Shutdown)
 
-		mp, err := newMeterProvider(ctx)
-		if err != nil {
-			return err
-		}
-		closers = append(closers, mp.Shutdown)
-
-		statsHandler := tracing.ServerStatsHandler(
-			otelgrpc.WithTracerProvider(tp),
-			otelgrpc.WithMeterProvider(mp),
-			otelgrpc.WithPropagators(propagators),
-		)
+		statsHandler := tracing.ServerStatsHandler()
 		opts := []grpc.ServerOption{
 			grpc.StatsHandler(statsHandler),
 			grpc.ChainUnaryInterceptor(unaryInterceptor, grpcerrors.UnaryServerInterceptor),
@@ -333,7 +322,7 @@ func main() {
 			return err
 		}
 
-		controller, err := newController(c, &cfg)
+		controller, err := newController(ctx, c, &cfg)
 		if err != nil {
 			return err
 		}
@@ -747,7 +736,7 @@ func serverCredentials(cfg config.TLSConfig) (*tls.Config, error) {
 	return tlsConf, nil
 }
 
-func newController(c *cli.Context, cfg *config.Config) (*control.Controller, error) {
+func newController(ctx context.Context, c *cli.Context, cfg *config.Config) (*control.Controller, error) {
 	sessionManager, err := session.NewManager()
 	if err != nil {
 		return nil, err
@@ -758,7 +747,7 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 		tc = append(tc, detect.Recorder)
 	}
 
-	if exp, err := detect.NewSpanExporter(context.TODO()); err != nil {
+	if exp, err := detect.NewSpanExporter(ctx); err != nil {
 		return nil, err
 	} else if !detect.IsNoneSpanExporter(exp) {
 		tc = append(tc, exp)
@@ -977,6 +966,30 @@ func (t *traceCollector) Export(ctx context.Context, req *tracev1.ExportTraceSer
 		return nil, err
 	}
 	return &tracev1.ExportTraceServiceResponse{}, nil
+}
+
+// configureTelemetryProviders will configure OTEL providers and add their shutdown
+// functions to the slice of shutdown functions in the return value.
+//
+// The providers can be retrieved with otel.GetTracerProvider and otel.GetMeterProvider.
+func configureTelemetryProviders(ctx context.Context, closers []shutdownFn) ([]shutdownFn, error) {
+	tp, err := newTracerProvider(ctx)
+	if err != nil {
+		return closers, err
+	}
+	closers = append(closers, tp.Shutdown)
+	otel.SetTracerProvider(tp)
+
+	mp, err := newMeterProvider(ctx)
+	if err != nil {
+		return closers, err
+	}
+	closers = append(closers, mp.Shutdown)
+	otel.SetMeterProvider(mp)
+
+	propagators := propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
+	otel.SetTextMapPropagator(propagators)
+	return closers, nil
 }
 
 func newTracerProvider(ctx context.Context) (*sdktrace.TracerProvider, error) {
