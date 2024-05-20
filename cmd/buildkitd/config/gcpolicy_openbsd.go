@@ -1,5 +1,5 @@
-//go:build !windows && !openbsd
-// +build !windows,!openbsd
+//go:build openbsd
+// +build openbsd
 
 package config
 
@@ -14,6 +14,6 @@ func getDiskSize(root string) (int64, error) {
 	if err := syscall.Statfs(root, &st); err != nil {
 		return 0, err
 	}
-	diskSize := int64(st.Bsize) * int64(st.Blocks)
+	diskSize := int64(st.F_bsize) * int64(st.F_blocks)
 	return diskSize, nil
 }
