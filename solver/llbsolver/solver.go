@@ -198,7 +198,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 		}
 
 		ctx, cancel := context.WithCancelCause(context.Background())
-		ctx, _ = context.WithTimeoutCause(ctx, 20*time.Second, errors.WithStack(context.DeadlineExceeded))
+		ctx, _ = context.WithTimeoutCause(ctx, 300*time.Second, errors.WithStack(context.DeadlineExceeded))
 		defer cancel(errors.WithStack(context.Canceled))
 
 		var mu sync.Mutex
