@@ -34,6 +34,7 @@ import (
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/grpcerrors"
+	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/tracing/detect"
 	"github.com/moby/buildkit/worker"
@@ -156,7 +157,7 @@ func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 	return s.bridge(b)
 }
 
-func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend.SolveRequest, exp ExporterRequest, j *solver.Job, usage *resources.SysSampler) (func(*Result, []exporter.DescriptorReference, error) error, error) {
+func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend.SolveRequest, exp ExporterRequest, j *solver.Job, usage *resources.SysSampler) (func(context.Context, *Result, []exporter.DescriptorReference, error) error, error) {
 	stopTrace, err := detect.Recorder.Record(ctx)
 	if err != nil {
 		return nil, err
@@ -184,7 +185,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 		return nil, err
 	}
 
-	return func(res *Result, descrefs []exporter.DescriptorReference, err error) error {
+	return func(ctx context.Context, res *Result, descrefs []exporter.DescriptorReference, err error) error {
 		en := time.Now()
 		rec.CompletedAt = &en
 
@@ -197,7 +198,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 			}
 		}
 
-		ctx, cancel := context.WithCancelCause(context.Background())
+		ctx, cancel := context.WithCancelCause(ctx)
 		ctx, _ = context.WithTimeoutCause(ctx, 300*time.Second, errors.WithStack(context.DeadlineExceeded))
 		defer cancel(errors.WithStack(context.Canceled))
 
@@ -509,7 +510,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 			return nil, err1
 		}
 		defer func() {
-			err = rec(resProv, descrefs, err)
+			err = rec(context.WithoutCancel(ctx), resProv, descrefs, err)
 		}()
 	}
 
@@ -584,6 +585,22 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	if err != nil {
 		return nil, err
 	}
+
+	// Functions that create new objects in containerd (eg. content blobs) need to have a lease to ensure
+	// that the object is not garbage collected immediately. This is protected by the indivual components,
+	// but because creating a lease is not cheap and requires a disk write, we create a single lease here
+	// early and let all the exporters, cache export and provenance creation use the same one.
+	lm, err := s.leaseManager()
+	if err != nil {
+		return nil, err
+	}
+	ctx, done, err := leaseutil.WithLease(ctx, lm, leaseutil.MakeTemporary)
+	if err != nil {
+		return nil, err
+	}
+	releasers = append(releasers, func() {
+		done(context.WithoutCancel(ctx))
+	})
 
 	cacheExporters, inlineCacheExporter := splitCacheExporters(exp.CacheExporters)
 
@@ -745,6 +762,14 @@ func (s *Solver) runExporters(ctx context.Context, exporters []exporter.Exporter
 	}
 
 	return exporterResponse, descs, nil
+}
+
+func (s *Solver) leaseManager() (*leaseutil.Manager, error) {
+	w, err := defaultResolver(s.workerController)()
+	if err != nil {
+		return nil, err
+	}
+	return w.LeaseManager(), nil
 }
 
 func splitCacheExporters(exporters []RemoteCacheExporter) (rest []RemoteCacheExporter, inline inlineCacheExporter) {
