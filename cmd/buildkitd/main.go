@@ -262,6 +262,12 @@ func main() {
 			logrus.SetLevel(logrus.TraceLevel)
 		}
 
+		if sc := cfg.System; sc != nil {
+			if v := sc.PlatformsCacheMaxAge; v != nil {
+				archutil.CacheMaxAge = v.Duration
+			}
+		}
+
 		if cfg.GRPC.DebugAddress != "" {
 			if err := setupDebugHandlers(cfg.GRPC.DebugAddress); err != nil {
 				return err

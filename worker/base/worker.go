@@ -245,10 +245,14 @@ func (w *Worker) Labels() map[string]string {
 
 func (w *Worker) Platforms(noCache bool) []ocispecs.Platform {
 	if noCache {
+		matchers := make([]platforms.MatchComparer, len(w.WorkerOpt.Platforms))
+		for i, p := range w.WorkerOpt.Platforms {
+			matchers[i] = platforms.Only(p)
+		}
 		for _, p := range archutil.SupportedPlatforms(noCache) {
 			exists := false
-			for _, pp := range w.WorkerOpt.Platforms {
-				if platforms.Only(pp).Match(p) {
+			for _, m := range matchers {
+				if m.Match(p) {
 					exists = true
 					break
 				}
