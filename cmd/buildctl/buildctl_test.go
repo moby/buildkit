@@ -43,7 +43,7 @@ func TestWriteMetadataFile(t *testing.T) {
 	cases := []struct {
 		name             string
 		exporterResponse map[string]string
-		excpected        map[string]interface{}
+		expected         map[string]interface{}
 	}{
 		{
 			name: "common",
@@ -52,7 +52,7 @@ func TestWriteMetadataFile(t *testing.T) {
 				"containerimage.descriptor":    "eyJtZWRpYVR5cGUiOiJhcHBsaWNhdGlvbi92bmQub2NpLmltYWdlLm1hbmlmZXN0LnYxK2pzb24iLCJkaWdlc3QiOiJzaGEyNTY6MTlmZmVhYjZmOGJjOTI5M2FjMmMzZmRmOTRlYmUyODM5NjI1NGM5OTNhZWEwYjVhNTQyY2ZiMDJlMDg4M2ZhMyIsInNpemUiOjUwNiwiYW5ub3RhdGlvbnMiOnsib3JnLm9wZW5jb250YWluZXJzLmltYWdlLmNyZWF0ZWQiOiIyMDIyLTAyLTA4VDE5OjIxOjAzWiJ9fQ==", // {"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:19ffeab6f8bc9293ac2c3fdf94ebe28396254c993aea0b5a542cfb02e0883fa3","size":506,"annotations":{"org.opencontainers.image.created":"2022-02-08T19:21:03Z"}}
 				"containerimage.digest":        "sha256:19ffeab6f8bc9293ac2c3fdf94ebe28396254c993aea0b5a542cfb02e0883fa3",
 			},
-			excpected: map[string]interface{}{
+			expected: map[string]interface{}{
 				"containerimage.config.digest": "sha256:2937f66a9722f7f4a2df583de2f8cb97fc9196059a410e7f00072fc918930e66",
 				"containerimage.descriptor": map[string]interface{}{
 					"annotations": map[string]interface{}{
@@ -71,7 +71,7 @@ func TestWriteMetadataFile(t *testing.T) {
 				"key":                   "MTI=", // 12
 				"containerimage.digest": "sha256:19ffeab6f8bc9293ac2c3fdf94ebe28396254c993aea0b5a542cfb02e0883fa3",
 			},
-			excpected: map[string]interface{}{
+			expected: map[string]interface{}{
 				"key":                   "MTI=",
 				"containerimage.digest": "sha256:19ffeab6f8bc9293ac2c3fdf94ebe28396254c993aea0b5a542cfb02e0883fa3",
 			},
@@ -82,7 +82,7 @@ func TestWriteMetadataFile(t *testing.T) {
 				"key":                   "e30=", // {}
 				"containerimage.digest": "sha256:19ffeab6f8bc9293ac2c3fdf94ebe28396254c993aea0b5a542cfb02e0883fa3",
 			},
-			excpected: map[string]interface{}{
+			expected: map[string]interface{}{
 				"key":                   "e30=",
 				"containerimage.digest": "sha256:19ffeab6f8bc9293ac2c3fdf94ebe28396254c993aea0b5a542cfb02e0883fa3",
 			},
@@ -93,7 +93,7 @@ func TestWriteMetadataFile(t *testing.T) {
 				"key":                   "W10=", // []
 				"containerimage.digest": "sha256:19ffeab6f8bc9293ac2c3fdf94ebe28396254c993aea0b5a542cfb02e0883fa3",
 			},
-			excpected: map[string]interface{}{
+			expected: map[string]interface{}{
 				"key":                   "W10=",
 				"containerimage.digest": "sha256:19ffeab6f8bc9293ac2c3fdf94ebe28396254c993aea0b5a542cfb02e0883fa3",
 			},
@@ -104,7 +104,7 @@ func TestWriteMetadataFile(t *testing.T) {
 				"key":                   "eyJmb28iOm51bGwsImJhciI6ImJheiJ9", // {"foo":null,"bar":"baz"}
 				"containerimage.digest": "sha256:19ffeab6f8bc9293ac2c3fdf94ebe28396254c993aea0b5a542cfb02e0883fa3",
 			},
-			excpected: map[string]interface{}{
+			expected: map[string]interface{}{
 				"key": map[string]interface{}{
 					"foo": nil,
 					"bar": "baz",
@@ -123,7 +123,7 @@ func TestWriteMetadataFile(t *testing.T) {
 			require.NoError(t, err)
 			var raw map[string]interface{}
 			require.NoError(t, json.Unmarshal(current, &raw))
-			require.Equal(t, tt.excpected, raw)
+			require.Equal(t, tt.expected, raw)
 		})
 	}
 }
