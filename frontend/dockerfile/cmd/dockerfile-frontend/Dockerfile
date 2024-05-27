@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile-upstream:master
 
 ARG GO_VERSION=1.21
-ARG ALPINE_VERSION=3.19
+ARG ALPINE_VERSION=3.20
 ARG XX_VERSION=1.4.0
 
 # xx is a helper for cross-compilation
