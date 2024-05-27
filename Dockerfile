@@ -18,24 +18,13 @@ ARG GOTESTSUM_VERSION=v1.9.0
 ARG DELVE_VERSION=v1.21.0
 
 ARG GO_VERSION=1.21
-ARG ALPINE_VERSION=3.19
+ARG ALPINE_VERSION=3.20
 ARG XX_VERSION=1.4.0
 ARG BUILDKIT_DEBUG
-
-ARG ALPINE_ARCH=${TARGETARCH#riscv64}
-ARG ALPINE_ARCH=${ALPINE_ARCH:+"default"}
-ARG ALPINE_ARCH=${ALPINE_ARCH:-$TARGETARCH}
 
 # minio for s3 integration tests
 FROM minio/minio:${MINIO_VERSION} AS minio
 FROM minio/mc:${MINIO_MC_VERSION} AS minio-mc
-
-# alpine base for buildkit image
-# TODO: remove this when alpine image supports riscv64
-FROM alpine:${ALPINE_VERSION} AS alpine-default
-FROM alpine:edge@sha256:2d01a16bab53a8405876cec4c27235d47455a7b72b75334c614f2fb0968b3f90 AS alpine-riscv64
-FROM alpine-${ALPINE_ARCH} AS alpinebase
-
 
 # xx is a helper for cross-compilation
 FROM --platform=$BUILDPLATFORM tonistiigi/xx:${XX_VERSION} AS xx
@@ -220,7 +209,7 @@ RUN --mount=from=binaries \
 FROM scratch AS release
 COPY --link --from=releaser /out/ /
 
-FROM alpinebase AS buildkit-export
+FROM alpine:${ALPINE_VERSION} AS buildkit-export
 RUN apk add --no-cache fuse3 git openssh pigz xz iptables ip6tables \
   && ln -s fusermount3 /usr/bin/fusermount
 COPY --link examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
@@ -430,7 +419,7 @@ FROM integration-tests AS dev-env
 VOLUME /var/lib/buildkit
 
 # Rootless mode.
-FROM alpinebase AS rootless
+FROM alpine:${ALPINE_VERSION} AS rootless
 RUN apk add --no-cache fuse3 fuse-overlayfs git openssh pigz shadow-uidmap xz
 RUN adduser -D -u 1000 user \
   && mkdir -p /run/user/1000 /home/user/.local/tmp /home/user/.local/share/buildkit \
