@@ -366,11 +366,11 @@ func (h *HistoryQueue) addResource(ctx context.Context, l leases.Lease, desc *co
 	}
 	if _, err := h.hContentStore.Info(ctx, desc.Digest); err != nil {
 		if errdefs.IsNotFound(err) {
-			ctx, release, err := leaseutil.WithLease(ctx, h.hLeaseManager, leases.WithID("history_migration_"+identity.NewID()), leaseutil.MakeTemporary)
+			lr, ctx, err := leaseutil.NewLease(ctx, h.hLeaseManager, leases.WithID("history_migration_"+identity.NewID()), leaseutil.MakeTemporary)
 			if err != nil {
 				return err
 			}
-			defer release(ctx)
+			defer lr.Discard()
 			ok, err := h.migrateBlobV2(ctx, string(desc.Digest), detectSkipLayers)
 			if err != nil {
 				return err
