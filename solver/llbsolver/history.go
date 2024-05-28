@@ -591,7 +591,7 @@ func (h *HistoryQueue) Delete(ctx context.Context, ref string) error {
 }
 
 func (h *HistoryQueue) OpenBlobWriter(ctx context.Context, mt string) (_ *Writer, err error) {
-	l, err := h.hLeaseManager.Create(ctx, leases.WithRandomID(), leases.WithExpiration(5*time.Minute), leaseutil.MakeTemporary)
+	l, err := h.hLeaseManager.Create(ctx, leases.WithRandomID(), leases.WithExpiration(os.Getenv("EXPIRATION_TIME")*time.Minute), leaseutil.MakeTemporary)
 	if err != nil {
 		return nil, err
 	}
