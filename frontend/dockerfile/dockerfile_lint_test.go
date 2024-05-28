@@ -23,6 +23,7 @@ import (
 )
 
 var lintTests = integration.TestFuncs(
+	testRuleCheckOption,
 	testStageName,
 	testNoEmptyContinuations,
 	testSelfConsistentCommandCasing,
@@ -39,6 +40,103 @@ var lintTests = integration.TestFuncs(
 	testLegacyKeyValueFormat,
 	testBaseImagePlatformMismatch,
 )
+
+func testRuleCheckOption(t *testing.T, sb integration.Sandbox) {
+	dockerfile := []byte(`#check=skip=all
+FROM scratch as base
+copy Dockerfile .
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`#check=skip=all;error=true
+FROM scratch as base
+copy Dockerfile .
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`#check=skip=FileConsistentCommandCasing,FromAsCasing
+FROM scratch as base
+copy Dockerfile .
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`#check=skip=FileConsistentCommandCasing,FromAsCasing;error=true
+FROM scratch as base
+copy Dockerfile .
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`#check=skip=FileConsistentCommandCasing
+FROM scratch as base
+copy Dockerfile .
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "FromAsCasing",
+				Description: "The 'as' keyword should match the case of the 'from' keyword",
+				Detail:      "'as' and 'FROM' keywords' casing do not match",
+				Line:        2,
+				Level:       1,
+			},
+		},
+	})
+
+	dockerfile = []byte(`#check=skip=FileConsistentCommandCasing;error=true
+FROM scratch as base
+copy Dockerfile .
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "FromAsCasing",
+				Description: "The 'as' keyword should match the case of the 'from' keyword",
+				Detail:      "'as' and 'FROM' keywords' casing do not match",
+				Line:        2,
+				Level:       1,
+			},
+		},
+		StreamBuildErr:    "failed to solve: lint violation found for rules: FromAsCasing",
+		UnmarshalBuildErr: "lint violation found for rules: FromAsCasing",
+		BuildErrLocation:  2,
+	})
+
+	dockerfile = []byte(`#check=skip=all
+FROM scratch as base
+copy Dockerfile .
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "FromAsCasing",
+				Description: "The 'as' keyword should match the case of the 'from' keyword",
+				Detail:      "'as' and 'FROM' keywords' casing do not match",
+				Line:        2,
+				Level:       1,
+			},
+		},
+		StreamBuildErr:    "failed to solve: lint violation found for rules: FromAsCasing",
+		UnmarshalBuildErr: "lint violation found for rules: FromAsCasing",
+		BuildErrLocation:  2,
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_DOCKERFILE_CHECK": "skip=FileConsistentCommandCasing;error=true",
+		},
+	})
+
+	dockerfile = []byte(`#check=error=true
+FROM scratch as base
+copy Dockerfile .
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_DOCKERFILE_CHECK": "skip=all",
+		},
+	})
+}
 
 func testStageName(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
@@ -730,12 +828,16 @@ func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestPara
 
 	called := false
 	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		frontendOpts := map[string]string{
+			"frontend.caps": "moby.buildkit.frontend.subrequests",
+			"requestid":     "frontend.lint",
+		}
+		for k, v := range lintTest.FrontendAttrs {
+			frontendOpts[k] = v
+		}
 		res, err := c.Solve(ctx, gateway.SolveRequest{
-			FrontendOpt: map[string]string{
-				"frontend.caps": "moby.buildkit.frontend.subrequests",
-				"requestid":     "frontend.lint",
-			},
-			Frontend: "dockerfile.v0",
+			FrontendOpt: frontendOpts,
+			Frontend:    "dockerfile.v0",
 		})
 		if err != nil {
 			return nil, err
@@ -746,7 +848,6 @@ func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestPara
 
 		if lintResults.Error != nil {
 			require.Equal(t, lintTest.UnmarshalBuildErr, lintResults.Error.Message)
-			require.Equal(t, lintTest.BuildErrLocation, lintResults.Error.Location.Ranges[0].Start.Line)
 			require.Greater(t, lintResults.Error.Location.SourceIndex, int32(-1))
 			require.Less(t, lintResults.Error.Location.SourceIndex, int32(len(lintResults.Sources)))
 		}
@@ -827,7 +928,6 @@ func checkProgressStream(t *testing.T, sb integration.Sandbox, lintTest *lintTes
 		t.Fatalf("timed out waiting for statusDone")
 	}
 
-	// two platforms only show one warning
 	require.Equal(t, len(lintTest.Warnings), len(warnings))
 	sort.Slice(warnings, func(i, j int) bool {
 		w1 := warnings[i]

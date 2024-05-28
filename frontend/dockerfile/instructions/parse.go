@@ -71,34 +71,34 @@ func ParseInstruction(node *parser.Node) (v interface{}, err error) {
 }
 
 // ParseInstruction converts an AST to a typed instruction (either a command or a build stage beginning when encountering a `FROM` statement)
-func ParseInstructionWithLinter(node *parser.Node, lintWarn linter.LintWarnFunc) (v interface{}, err error) {
+func ParseInstructionWithLinter(node *parser.Node, lint *linter.Linter) (v interface{}, err error) {
 	defer func() {
 		err = parser.WithLocation(err, node.Location())
 	}()
 	req := newParseRequestFromNode(node)
 	switch strings.ToLower(node.Value) {
 	case command.Env:
-		return parseEnv(req, lintWarn)
+		return parseEnv(req, lint)
 	case command.Maintainer:
-		if lintWarn != nil {
+		if lint != nil {
 			msg := linter.RuleMaintainerDeprecated.Format()
-			linter.RuleMaintainerDeprecated.Run(lintWarn, node.Location(), msg)
+			lint.Run(&linter.RuleMaintainerDeprecated, node.Location(), msg)
 		}
 		return parseMaintainer(req)
 	case command.Label:
-		return parseLabel(req, lintWarn)
+		return parseLabel(req, lint)
 	case command.Add:
 		return parseAdd(req)
 	case command.Copy:
 		return parseCopy(req)
 	case command.From:
-		if lintWarn != nil && !isLowerCaseStageName(req.args) {
+		if lint != nil && !isLowerCaseStageName(req.args) {
 			msg := linter.RuleStageNameCasing.Format(req.args[2])
-			linter.RuleStageNameCasing.Run(lintWarn, node.Location(), msg)
+			lint.Run(&linter.RuleStageNameCasing, node.Location(), msg)
 		}
-		if lintWarn != nil && !doesFromCaseMatchAsCase(req) {
+		if lint != nil && !doesFromCaseMatchAsCase(req) {
 			msg := linter.RuleFromAsCasing.Format(req.command, req.args[1])
-			linter.RuleFromAsCasing.Run(lintWarn, node.Location(), msg)
+			lint.Run(&linter.RuleFromAsCasing, node.Location(), msg)
 		}
 		return parseFrom(req)
 	case command.Onbuild:
@@ -166,7 +166,7 @@ func (e *parseError) Unwrap() error {
 
 // Parse a Dockerfile into a collection of buildable stages.
 // metaArgs is a collection of ARG instructions that occur before the first FROM.
-func Parse(ast *parser.Node, lint linter.LintWarnFunc) (stages []Stage, metaArgs []ArgCommand, err error) {
+func Parse(ast *parser.Node, lint *linter.Linter) (stages []Stage, metaArgs []ArgCommand, err error) {
 	for _, n := range ast.Children {
 		cmd, err := ParseInstructionWithLinter(n, lint)
 		if err != nil {
@@ -195,7 +195,7 @@ func Parse(ast *parser.Node, lint linter.LintWarnFunc) (stages []Stage, metaArgs
 	return stages, metaArgs, nil
 }
 
-func parseKvps(args []string, cmdName string, location []parser.Range, lint linter.LintWarnFunc) (KeyValuePairs, error) {
+func parseKvps(args []string, cmdName string, location []parser.Range, lint *linter.Linter) (KeyValuePairs, error) {
 	if len(args) == 0 {
 		return nil, errAtLeastOneArgument(cmdName)
 	}
@@ -211,14 +211,14 @@ func parseKvps(args []string, cmdName string, location []parser.Range, lint lint
 		name, value, sep := args[j], args[j+1], args[j+2]
 		if sep == "" {
 			msg := linter.RuleLegacyKeyValueFormat.Format(cmdName)
-			linter.RuleLegacyKeyValueFormat.Run(lint, location, msg)
+			lint.Run(&linter.RuleLegacyKeyValueFormat, location, msg)
 		}
 		res = append(res, KeyValuePair{Key: name, Value: value})
 	}
 	return res, nil
 }
 
-func parseEnv(req parseRequest, lint linter.LintWarnFunc) (*EnvCommand, error) {
+func parseEnv(req parseRequest, lint *linter.Linter) (*EnvCommand, error) {
 	if err := req.flags.Parse(); err != nil {
 		return nil, err
 	}
@@ -246,7 +246,7 @@ func parseMaintainer(req parseRequest) (*MaintainerCommand, error) {
 	}, nil
 }
 
-func parseLabel(req parseRequest, lint linter.LintWarnFunc) (*LabelCommand, error) {
+func parseLabel(req parseRequest, lint *linter.Linter) (*LabelCommand, error) {
 	if err := req.flags.Parse(); err != nil {
 		return nil, err
 	}

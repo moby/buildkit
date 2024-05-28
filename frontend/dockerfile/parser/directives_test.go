@@ -103,3 +103,68 @@ RUN ls
 	_, _, _, ok = DetectSyntax([]byte(dt))
 	require.False(t, ok)
 }
+
+func TestParseDirective(t *testing.T) {
+	t.Parallel()
+
+	dt := `#check = skip=all // opts
+FROM busybox
+`
+	ref, cmdline, loc, ok := ParseDirective("check", []byte(dt))
+	require.True(t, ok)
+	require.Equal(t, ref, "skip=all")
+	require.Equal(t, cmdline, "skip=all // opts")
+	require.Equal(t, 1, loc[0].Start.Line)
+	require.Equal(t, 1, loc[0].End.Line)
+
+	dt = `#!/bin/sh
+# check = skip=all
+FROM busybox
+`
+	ref, _, loc, ok = ParseDirective("check", []byte(dt))
+	require.True(t, ok)
+	require.Equal(t, ref, "skip=all")
+	require.Equal(t, 2, loc[0].Start.Line)
+	require.Equal(t, 2, loc[0].End.Line)
+
+	dt = `#!/bin/sh
+
+# check = skip=all
+`
+	_, _, _, ok = ParseDirective("check", []byte(dt))
+	require.False(t, ok)
+
+	dt = `FROM busybox
+RUN ls
+`
+	ref, cmdline, _, ok = ParseDirective("check", []byte(dt))
+	require.False(t, ok)
+	require.Equal(t, ref, "")
+	require.Equal(t, cmdline, "")
+
+	dt = `//check=skip=all
+//key=value`
+	ref, _, _, ok = ParseDirective("check", []byte(dt))
+	require.True(t, ok)
+	require.Equal(t, ref, "skip=all")
+
+	dt = `#!/bin/sh
+//check=skip=all`
+	ref, _, _, ok = ParseDirective("check", []byte(dt))
+	require.True(t, ok)
+	require.Equal(t, ref, "skip=all")
+
+	dt = `{"check": "skip=all"}`
+	ref, _, _, ok = ParseDirective("check", []byte(dt))
+	require.True(t, ok)
+	require.Equal(t, ref, "skip=all")
+
+	dt = `{"check": "foo"`
+	_, _, _, ok = ParseDirective("check", []byte(dt))
+	require.False(t, ok)
+
+	dt = `{"check": "foo"}
+# syntax=bar`
+	_, _, _, ok = ParseDirective("check", []byte(dt))
+	require.False(t, ok)
+}
