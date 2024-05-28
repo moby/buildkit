@@ -9,9 +9,9 @@ import (
 	"testing"
 
 	"github.com/containerd/containerd/content"
-	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/remotes"
+	cerrdefs "github.com/containerd/errdefs"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
@@ -68,7 +68,7 @@ func TestConfigMultiplatform(t *testing.T) {
 		// Make sure it doesn't select a non-matching platform
 		pArmv7 := platforms.MustParse("linux/arm/v7")
 		_, _, err = Config(ctx, ref, r, cc, nil, &pArmv7)
-		require.ErrorIs(t, err, errdefs.ErrNotFound)
+		require.ErrorIs(t, err, cerrdefs.ErrNotFound)
 	}
 
 	check(t)
@@ -159,7 +159,7 @@ func (*sectionNopCloser) Close() error {
 func (c *testCache) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
 	ra, ok := c.content[desc.Digest]
 	if !ok {
-		return nil, errdefs.ErrNotFound
+		return nil, cerrdefs.ErrNotFound
 	}
 	return ra, nil
 }

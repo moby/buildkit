@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/continuity/fs/fstest"
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/moby/buildkit/util/testutil/workers"
@@ -1321,7 +1321,7 @@ func (tc verifyContents) Run(t *testing.T, sb integration.Sandbox) {
 					if err == nil {
 						unexpectedLayers = append(unexpectedLayers, desc)
 					} else {
-						require.True(t, errdefs.IsNotFound(err))
+						require.True(t, cerrdefs.IsNotFound(err))
 					}
 				}
 				return images.Children(ctx, client.ContentStore(), desc)

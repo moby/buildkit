@@ -30,13 +30,13 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/content/local"
 	"github.com/containerd/containerd/content/proxy"
-	ctderrdefs "github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/continuity/fs/fstest"
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/distribution/reference"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	controlapi "github.com/moby/buildkit/api/services/control"
@@ -492,12 +492,12 @@ func testExportedImageLabels(t *testing.T, sb integration.Sandbox) {
 	// layers should be deleted
 	_, err = store.Info(ctx, mfst.Layers[1].Digest)
 	require.Error(t, err)
-	require.True(t, errors.Is(err, ctderrdefs.ErrNotFound))
+	require.True(t, errors.Is(err, cerrdefs.ErrNotFound))
 
 	// config should be deleted
 	_, err = store.Info(ctx, mfst.Config.Digest)
 	require.Error(t, err)
-	require.True(t, errors.Is(err, ctderrdefs.ErrNotFound))
+	require.True(t, errors.Is(err, cerrdefs.ErrNotFound))
 
 	// buildkit contentstore still has the layer because it is multi-ns
 	bkstore := proxy.NewContentStore(c.ContentClient())
@@ -3926,7 +3926,7 @@ func testBuildExportWithForeignLayer(t *testing.T, sb integration.Sandbox) {
 		// The request is only made when we attempt to read from the reader.
 		buf := make([]byte, 1)
 		_, err = rc.Read(buf)
-		require.Truef(t, ctderrdefs.IsNotFound(err), "expected error for blob that should not be in registry: %s, %v", mfst.Layers[0].Digest, err)
+		require.Truef(t, cerrdefs.IsNotFound(err), "expected error for blob that should not be in registry: %s, %v", mfst.Layers[0].Digest, err)
 	})
 	t.Run("propagate=0", func(t *testing.T) {
 		registry, err := sb.NewRegistry()
@@ -4681,7 +4681,7 @@ func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbo
 	var sgzLayers []ocispecs.Descriptor
 	for i, layer := range manifest.Layers[:len(manifest.Layers)-1] {
 		_, err = contentStore.Info(ctx, layer.Digest)
-		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v on layer %+v (%d)", err, layer, i)
+		require.ErrorIs(t, err, cerrdefs.ErrNotFound, "unexpected error %v on layer %+v (%d)", err, layer, i)
 		sgzLayers = append(sgzLayers, layer)
 	}
 	require.NotEqual(t, 0, len(sgzLayers), "no layer can be used for checking lazypull")
@@ -4871,7 +4871,7 @@ func testStargzLazyInlineCacheImportExport(t *testing.T, sb integration.Sandbox)
 	var sgzLayers []ocispecs.Descriptor
 	for i, layer := range manifest.Layers[:len(manifest.Layers)-1] {
 		_, err = contentStore.Info(ctx, layer.Digest)
-		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v on layer %+v (%d)", err, layer, i)
+		require.ErrorIs(t, err, cerrdefs.ErrNotFound, "unexpected error %v on layer %+v (%d)", err, layer, i)
 		sgzLayers = append(sgzLayers, layer)
 	}
 	require.NotEqual(t, 0, len(sgzLayers), "no layer can be used for checking lazypull")
@@ -5009,7 +5009,7 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 	var sgzLayers []ocispecs.Descriptor
 	for _, layer := range manifest.Layers[:len(manifest.Layers)-1] {
 		_, err = contentStore.Info(ctx, layer.Digest)
-		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v", err)
+		require.ErrorIs(t, err, cerrdefs.ErrNotFound, "unexpected error %v", err)
 		sgzLayers = append(sgzLayers, layer)
 	}
 	require.NotEqual(t, 0, len(sgzLayers), "no layer can be used for checking lazypull")
@@ -5167,7 +5167,7 @@ func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
 
 	for _, layer := range manifest.Layers {
 		_, err = contentStore.Info(ctx, layer.Digest)
-		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v", err)
+		require.ErrorIs(t, err, cerrdefs.ErrNotFound, "unexpected error %v", err)
 	}
 
 	// clear all local state out again
@@ -5201,7 +5201,7 @@ func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
 
 	for _, layer := range manifest.Layers {
 		_, err = contentStore.Info(ctx, layer.Digest)
-		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v", err)
+		require.ErrorIs(t, err, cerrdefs.ErrNotFound, "unexpected error %v", err)
 	}
 
 	// check that a subsequent build can use the previously lazy image in an exec
@@ -6006,7 +6006,7 @@ func testRegistryEmptyCacheExport(t *testing.T, sb integration.Sandbox) {
 					defer client.Close()
 
 					_, err := client.Fetch(ctx, cacheTarget)
-					require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v", err)
+					require.ErrorIs(t, err, cerrdefs.ErrNotFound, "unexpected error %v", err)
 				}
 			})
 		}
@@ -7317,7 +7317,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 
 	for _, layer := range busyboxManifest.Layers {
 		_, err = contentStore.Info(ctx, layer.Digest)
-		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v", err)
+		require.ErrorIs(t, err, cerrdefs.ErrNotFound, "unexpected error %v", err)
 	}
 
 	// make a new merge that includes the lazy busybox as a base and exports inline cache
@@ -7403,7 +7403,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 	// verify that the busybox image stayed lazy
 	for _, layer := range busyboxManifest.Layers {
 		_, err = contentStore.Info(ctx, layer.Digest)
-		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v", err)
+		require.ErrorIs(t, err, cerrdefs.ErrNotFound, "unexpected error %v", err)
 	}
 
 	// get the random value at /bar/2
@@ -7435,7 +7435,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 
 	for _, layer := range manifest.Layers {
 		_, err = contentStore.Info(ctx, layer.Digest)
-		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v", err)
+		require.ErrorIs(t, err, cerrdefs.ErrNotFound, "unexpected error %v", err)
 	}
 
 	// re-run the same build with cache imports and verify everything stays lazy
@@ -7463,7 +7463,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 
 	for i, layer := range manifest.Layers {
 		_, err = contentStore.Info(ctx, layer.Digest)
-		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v for index %d (%s)", err, i, layer.Digest)
+		require.ErrorIs(t, err, cerrdefs.ErrNotFound, "unexpected error %v for index %d (%s)", err, i, layer.Digest)
 	}
 
 	// re-run the build with a change only to input1 using the remote cache
@@ -7504,7 +7504,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 		case 0, 2:
 			// bottom and top layer should stay lazy as they didn't change
 			_, err = contentStore.Info(ctx, layer.Digest)
-			require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v for index %d", err, i)
+			require.ErrorIs(t, err, cerrdefs.ErrNotFound, "unexpected error %v for index %d", err, i)
 		case 1:
 			// middle layer had to be rebuilt, should exist locally
 			_, err = contentStore.Info(ctx, layer.Digest)
@@ -7540,7 +7540,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 
 	for _, layer := range manifest.Layers {
 		_, err = contentStore.Info(ctx, layer.Digest)
-		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v", err)
+		require.ErrorIs(t, err, cerrdefs.ErrNotFound, "unexpected error %v", err)
 	}
 
 	mergePlusLayer := merge.File(llb.Mkfile("/3", 0444, nil))
@@ -7589,7 +7589,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 
 	for _, layer := range manifest.Layers {
 		_, err = contentStore.Info(ctx, layer.Digest)
-		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v", err)
+		require.ErrorIs(t, err, cerrdefs.ErrNotFound, "unexpected error %v", err)
 	}
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
@@ -7615,7 +7615,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 
 	for i, layer := range manifest.Layers {
 		_, err = contentStore.Info(ctx, layer.Digest)
-		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v for index %d", err, i)
+		require.ErrorIs(t, err, cerrdefs.ErrNotFound, "unexpected error %v for index %d", err, i)
 	}
 }
 

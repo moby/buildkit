@@ -9,9 +9,9 @@ import (
 	"io"
 
 	"github.com/containerd/containerd/content"
-	"github.com/containerd/containerd/errdefs"
 	labelspkg "github.com/containerd/containerd/labels"
 	"github.com/containerd/containerd/mount"
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/overlay"
@@ -98,7 +98,7 @@ func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper 
 	}
 	dgst := cw.Digest()
 	if err := cw.Commit(ctx, 0, dgst, commitopts...); err != nil {
-		if !errdefs.IsAlreadyExists(err) {
+		if !cerrdefs.IsAlreadyExists(err) {
 			return emptyDesc, false, errors.Wrap(err, "failed to commit")
 		}
 	}

@@ -10,13 +10,13 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/content"
-	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/labels"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/pkg/userns"
 	"github.com/containerd/containerd/snapshots"
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/hashicorp/go-multierror"
 	"github.com/moby/buildkit/cache/config"
@@ -292,7 +292,7 @@ func (cr *cacheRecord) isLazy(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 	_, err := cr.cm.ContentStore.Info(ctx, dgst)
-	if errors.Is(err, errdefs.ErrNotFound) {
+	if errors.Is(err, cerrdefs.ErrNotFound) {
 		return true, nil
 	} else if err != nil {
 		return false, err
@@ -349,7 +349,7 @@ func (cr *cacheRecord) size(ctx context.Context) (int64, error) {
 				if isDead {
 					return 0, nil
 				}
-				if !errors.Is(err, errdefs.ErrNotFound) {
+				if !errors.Is(err, cerrdefs.ErrNotFound) {
 					return s, errors.Wrapf(err, "failed to get usage for %s", cr.ID())
 				}
 			}
@@ -401,7 +401,7 @@ func (cr *cacheRecord) mount(ctx context.Context) (_ snapshot.Mountable, rerr er
 				"containerd.io/gc.flat": time.Now().UTC().Format(time.RFC3339Nano),
 			}
 			return nil
-		}, leaseutil.MakeTemporary); err != nil && !errdefs.IsAlreadyExists(err) {
+		}, leaseutil.MakeTemporary); err != nil && !cerrdefs.IsAlreadyExists(err) {
 			return nil, err
 		}
 		defer func() {
@@ -412,14 +412,14 @@ func (cr *cacheRecord) mount(ctx context.Context) (_ snapshot.Mountable, rerr er
 		if err := cr.cm.LeaseManager.AddResource(ctx, leases.Lease{ID: cr.viewLeaseID()}, leases.Resource{
 			ID:   mountSnapshotID,
 			Type: "snapshots/" + cr.cm.Snapshotter.Name(),
-		}); err != nil && !errdefs.IsAlreadyExists(err) {
+		}); err != nil && !cerrdefs.IsAlreadyExists(err) {
 			return nil, err
 		}
 		// Return the mount direct from View rather than setting it using the Mounts call below.
 		// The two are equivalent for containerd snapshotters but the moby snapshotter requires
 		// the use of the mountable returned by View in this case.
 		mnts, err := cr.cm.Snapshotter.View(ctx, mountSnapshotID, cr.getSnapshotID())
-		if err != nil && !errdefs.IsAlreadyExists(err) {
+		if err != nil && !cerrdefs.IsAlreadyExists(err) {
 			return nil, err
 		}
 		cr.mountCache = mnts
@@ -455,12 +455,12 @@ func (cr *cacheRecord) remove(ctx context.Context, removeSnapshot bool) (rerr er
 	if removeSnapshot {
 		if err := cr.cm.LeaseManager.Delete(ctx, leases.Lease{
 			ID: cr.ID(),
-		}); err != nil && !errdefs.IsNotFound(err) {
+		}); err != nil && !cerrdefs.IsNotFound(err) {
 			return errors.Wrapf(err, "failed to delete lease for %s", cr.ID())
 		}
 		if err := cr.cm.LeaseManager.Delete(ctx, leases.Lease{
 			ID: cr.compressionVariantsLeaseID(),
-		}); err != nil && !errdefs.IsNotFound(err) {
+		}); err != nil && !cerrdefs.IsNotFound(err) {
 			return errors.Wrapf(err, "failed to delete compression variant lease for %s", cr.ID())
 		}
 	}
@@ -764,7 +764,7 @@ func (sr *immutableRef) linkBlob(ctx context.Context, desc ocispecs.Descriptor) 
 		l.ID = sr.compressionVariantsLeaseID()
 		// do not make it flat lease to allow linking blobs using gc label
 		return nil
-	}); err != nil && !errdefs.IsAlreadyExists(err) {
+	}); err != nil && !cerrdefs.IsAlreadyExists(err) {
 		return err
 	}
 	if err := sr.cm.LeaseManager.AddResource(ctx, leases.Lease{ID: sr.compressionVariantsLeaseID()}, leases.Resource{
@@ -828,7 +828,7 @@ func getBlobWithCompression(ctx context.Context, cs content.Store, desc ocispecs
 		}
 		return true
 	}); err != nil || target == nil {
-		return ocispecs.Descriptor{}, errdefs.ErrNotFound
+		return ocispecs.Descriptor{}, cerrdefs.ErrNotFound
 	}
 	return *target, nil
 }
@@ -849,7 +849,7 @@ func walkBlobVariantsOnly(ctx context.Context, cs content.Store, dgst digest.Dig
 	}
 	visited[dgst] = struct{}{}
 	info, err := cs.Info(ctx, dgst)
-	if errors.Is(err, errdefs.ErrNotFound) {
+	if errors.Is(err, cerrdefs.ErrNotFound) {
 		return true, nil
 	} else if err != nil {
 		return false, err
@@ -1025,9 +1025,9 @@ func (sr *immutableRef) withRemoteSnapshotLabelsStargzMode(ctx context.Context, 
 	for _, r := range sr.layerChain() {
 		r := r
 		info, err := r.cm.Snapshotter.Stat(ctx, r.getSnapshotID())
-		if err != nil && !errdefs.IsNotFound(err) {
+		if err != nil && !cerrdefs.IsNotFound(err) {
 			return err
-		} else if errdefs.IsNotFound(err) {
+		} else if cerrdefs.IsNotFound(err) {
 			continue // This snpashot doesn't exist; skip
 		} else if _, ok := info.Labels["containerd.io/snapshot/remote"]; !ok {
 			continue // This isn't a remote snapshot; skip
@@ -1100,7 +1100,7 @@ func (sr *immutableRef) prepareRemoteSnapshotsStargzMode(ctx context.Context, s 
 				parentID = r.layerParent.getSnapshotID()
 			}
 			if err := r.cm.Snapshotter.Prepare(ctx, key, parentID, opts...); err != nil {
-				if errdefs.IsAlreadyExists(err) {
+				if cerrdefs.IsAlreadyExists(err) {
 					// Check if the targeting snapshot ID has been prepared as
 					// a remote snapshot in the snapshotter.
 					info, err := r.cm.Snapshotter.Stat(ctx, snapshotID)
@@ -1332,7 +1332,7 @@ func (sr *immutableRef) unlazyLayer(ctx context.Context, dhs DescHandlers, pg pr
 		return err
 	}
 	if err := sr.cm.Snapshotter.Commit(ctx, sr.getSnapshotID(), key); err != nil {
-		if !errors.Is(err, errdefs.ErrAlreadyExists) {
+		if !errors.Is(err, cerrdefs.ErrAlreadyExists) {
 			return err
 		}
 	}
@@ -1391,7 +1391,7 @@ func (sr *immutableRef) release(ctx context.Context) (rerr error) {
 		if sr.equalMutable != nil {
 			sr.equalMutable.release(ctx)
 		} else {
-			if err := sr.cm.LeaseManager.Delete(ctx, leases.Lease{ID: sr.viewLeaseID()}); err != nil && !errdefs.IsNotFound(err) {
+			if err := sr.cm.LeaseManager.Delete(ctx, leases.Lease{ID: sr.viewLeaseID()}); err != nil && !cerrdefs.IsNotFound(err) {
 				return err
 			}
 			sr.mountCache = nil
@@ -1422,7 +1422,7 @@ func (cr *cacheRecord) finalize(ctx context.Context) error {
 		return nil
 	})
 	if err != nil {
-		if !errors.Is(err, errdefs.ErrAlreadyExists) { // migrator adds leases for everything
+		if !errors.Is(err, cerrdefs.ErrAlreadyExists) { // migrator adds leases for everything
 			return errors.Wrap(err, "failed to create lease")
 		}
 	}
