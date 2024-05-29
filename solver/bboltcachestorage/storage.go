@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
 
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/util/bklog"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
@@ -23,9 +26,31 @@ type Store struct {
 }
 
 func NewStore(dbPath string) (*Store, error) {
-	db, err := bolt.Open(dbPath, 0600, nil)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to open database file %s", dbPath)
+	fallback := true
+	var db *bolt.DB
+	for {
+		var err error
+		db, err = safeOpenDB(dbPath)
+		if err != nil {
+			if st, err := os.Stat(dbPath); err != nil && st.Size() == 0 {
+				fallback = false
+			}
+			if !fallback {
+				return nil, errors.Wrapf(err, "failed to open database file %s", dbPath)
+			}
+			backupPath := dbPath + "." + identity.NewID() + ".bak"
+
+			bklog.L.Errorf("failed to open database file %s, resetting to empty. Old DB is backed up to %s. "+
+				"This error signifies that buildkitd likely crashed or was sigkilled abrubtly, leaving DB corrupted. "+
+				"If you see logs from previous panic then please report in issue tracker https://github.com/moby/buildkit . %+v", dbPath, backupPath, err)
+
+			if err := os.Rename(dbPath, backupPath); err != nil {
+				return nil, errors.Wrapf(err, "failed to rename database file %s to %s", dbPath, backupPath)
+			}
+			fallback = false
+			continue
+		}
+		break
 	}
 	if err := db.Update(func(tx *bolt.Tx) error {
 		for _, b := range []string{resultBucket, linksBucket, byResultBucket, backlinksBucket} {
@@ -454,4 +479,16 @@ func isEmptyBucket(b *bolt.Bucket) bool {
 	}
 	k, _ := b.Cursor().First()
 	return k == nil
+}
+
+// safeOpenDB opens a bolt database and recovers from panic that
+// can be caused by corrupted database file.
+func safeOpenDB(dbPath string) (db *bolt.DB, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = errors.Errorf("%v", r)
+			db = nil
+		}
+	}()
+	return bolt.Open(dbPath, 0600, nil)
 }
