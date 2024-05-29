@@ -15,6 +15,7 @@ configs:
           metrics::metric:
             - 'instrumentation_scope.name != "github.com/docker/buildx"'
       exporters::debug::verbosity: detailed
-      service::pipelines::metrics::receivers: [otlp]
-      service::pipelines::metrics::processors: [filter/buildx]
-      service::pipelines::metrics::exporters: [debug]
+      service::pipelines::metrics/buildx:
+        receivers: [otlp]
+        processors: [filter/buildx]
+        exporters: [debug]
