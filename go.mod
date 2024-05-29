@@ -2,6 +2,9 @@ module github.com/moby/buildkit
 
 go 1.21
 
+// FIXME(thaJeztah); testing https://github.com/containerd/containerd/pull/10189 / https://github.com/containerd/containerd/pull/10278
+replace github.com/containerd/containerd => github.com/dmcgowan/containerd v1.7.16-0.20240613132221-3be919f3c023
+
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.4.1
@@ -16,6 +19,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.48.1
 	github.com/containerd/console v1.0.4
 	github.com/containerd/containerd v1.7.19-0.20240613055741-727c392cc72a // release/1.7 (v1.7.19-dev)
+	github.com/containerd/containerd/api v1.8.0-rc.2
 	github.com/containerd/continuity v0.4.3
 	github.com/containerd/errdefs v0.1.0
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.8
@@ -97,7 +101,7 @@ require (
 	golang.org/x/sync v0.5.0
 	golang.org/x/sys v0.18.0
 	golang.org/x/time v0.3.0
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20231016165738-49dd2c1f3d0b
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240401170217-c3f982113cda
 	google.golang.org/grpc v1.59.0
 	google.golang.org/protobuf v1.33.0
 	kernel.org/pub/linux/libs/security/libcap/cap v1.2.67
