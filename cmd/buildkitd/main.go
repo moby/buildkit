@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/containerd/containerd/defaults"
 	"github.com/containerd/containerd/pkg/seed" //nolint:staticcheck // SA1019 deprecated
 	"github.com/containerd/containerd/pkg/userns"
 	"github.com/containerd/containerd/platforms"
@@ -289,6 +290,8 @@ func main() {
 			grpc.StatsHandler(statsHandler),
 			grpc.ChainUnaryInterceptor(unaryInterceptor, grpcerrors.UnaryServerInterceptor),
 			grpc.StreamInterceptor(grpcerrors.StreamServerInterceptor),
+			grpc.MaxRecvMsgSize(defaults.DefaultMaxRecvMsgSize),
+			grpc.MaxSendMsgSize(defaults.DefaultMaxSendMsgSize),
 		}
 		server := grpc.NewServer(opts...)
 
