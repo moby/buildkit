@@ -463,14 +463,36 @@ COPY Dockerfile .
 			{
 				RuleName:    "UndeclaredArgInFrom",
 				Description: "FROM command must use declared ARGs",
-				Detail:      "FROM argument 'BULIDPLATFORM' is not declared",
+				Detail:      "FROM argument 'BULIDPLATFORM' is not declared (did you mean BUILDPLATFORM?)",
 				Level:       1,
 				Line:        2,
 			},
 		},
-		StreamBuildErr:    "failed to solve: failed to parse platform : \"\" is an invalid component of \"\": platform specifier component must match \"^[A-Za-z0-9_-]+$\": invalid argument",
-		UnmarshalBuildErr: "failed to parse platform : \"\" is an invalid component of \"\": platform specifier component must match \"^[A-Za-z0-9_-]+$\": invalid argument",
+		StreamBuildErr:    "failed to solve: empty platform value from expression $BULIDPLATFORM (did you mean BUILDPLATFORM?)",
+		UnmarshalBuildErr: "empty platform value from expression $BULIDPLATFORM (did you mean BUILDPLATFORM?)",
 		BuildErrLocation:  2,
+	})
+
+	dockerfile = []byte(`
+ARG MY_OS=linux
+ARG MY_ARCH=amd64
+FROM --platform=linux/${MYARCH} busybox
+COPY Dockerfile .
+	`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "UndeclaredArgInFrom",
+				Description: "FROM command must use declared ARGs",
+				Detail:      "FROM argument 'MYARCH' is not declared (did you mean MY_ARCH?)",
+				Level:       1,
+				Line:        4,
+			},
+		},
+		StreamBuildErr:    "failed to solve: failed to parse platform linux/${MYARCH}: \"\" is an invalid component of \"linux/\": platform specifier component must match \"^[A-Za-z0-9_-]+$\": invalid argument (did you mean MY_ARCH?)",
+		UnmarshalBuildErr: "failed to parse platform linux/${MYARCH}: \"\" is an invalid component of \"linux/\": platform specifier component must match \"^[A-Za-z0-9_-]+$\": invalid argument (did you mean MY_ARCH?)",
+		BuildErrLocation:  4,
 	})
 
 	dockerfile = []byte(`
@@ -556,6 +578,43 @@ RUN echo $foo
 				RuleName:    "UndefinedVar",
 				Description: "Variables should be defined before their use",
 				Detail:      "Usage of undefined variable '$foo'",
+				Level:       1,
+				Line:        3,
+			},
+		},
+	})
+
+	dockerfile = []byte(`
+FROM alpine
+ARG DIR_BINARIES=binaries/
+ARG DIR_ASSETS=assets/
+ARG DIR_CONFIG=config/
+COPY $DIR_ASSET .
+	`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "UndefinedVar",
+				Description: "Variables should be defined before their use",
+				Detail:      "Usage of undefined variable '$DIR_ASSET' (did you mean $DIR_ASSETS?)",
+				Level:       1,
+				Line:        6,
+			},
+		},
+	})
+
+	dockerfile = []byte(`
+FROM alpine
+ENV PATH=$PAHT:/tmp/bin
+		`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "UndefinedVar",
+				Description: "Variables should be defined before their use",
+				Detail:      "Usage of undefined variable '$PAHT' (did you mean $PATH?)",
 				Level:       1,
 				Line:        3,
 			},
