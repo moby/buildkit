@@ -177,6 +177,7 @@ made through a pull request.
 
 		people = [
 			"thajeztah",
+			"thompson-shaun"
 		]
 
 [people]
@@ -234,6 +235,11 @@ made through a pull request.
 	Name = "Sebastiaan van Stijn"
 	Email = "github@gone.nl"
 	GitHub = "thaJeztah"
+
+	[people.thompson-shaun]
+	Name = "Shaun Thompson"
+	Email = "shaun.thompson@docker.com"
+	GitHub = "thompson-shaun"
 
 	[people.tiborvass]
 	Name = "Tibor Vass"
