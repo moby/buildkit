@@ -154,7 +154,7 @@ func parseNameVal(rest string, key string, d *directives) (*Node, error) {
 		if len(parts) < 2 {
 			return nil, errors.Errorf("%s must have two arguments", key)
 		}
-		return newKeyValueNode(parts[0], parts[1]), nil
+		return newKeyValueNode(parts[0], parts[1], ""), nil
 	}
 
 	var rootNode *Node
@@ -165,17 +165,20 @@ func parseNameVal(rest string, key string, d *directives) (*Node, error) {
 		}
 
 		parts := strings.SplitN(word, "=", 2)
-		node := newKeyValueNode(parts[0], parts[1])
+		node := newKeyValueNode(parts[0], parts[1], "=")
 		rootNode, prevNode = appendKeyValueNode(node, rootNode, prevNode)
 	}
 
 	return rootNode, nil
 }
 
-func newKeyValueNode(key, value string) *Node {
+func newKeyValueNode(key, value, sep string) *Node {
 	return &Node{
 		Value: key,
-		Next:  &Node{Value: value},
+		Next: &Node{
+			Value: value,
+			Next:  &Node{Value: sep},
+		},
 	}
 }
 
@@ -187,7 +190,9 @@ func appendKeyValueNode(node, rootNode, prevNode *Node) (*Node, *Node) {
 		prevNode.Next = node
 	}
 
-	prevNode = node.Next
+	for prevNode = node.Next; prevNode.Next != nil; {
+		prevNode = prevNode.Next
+	}
 	return rootNode, prevNode
 }
 

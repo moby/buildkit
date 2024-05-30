@@ -105,4 +105,11 @@ var (
 			return fmt.Sprintf("Multiple %s instructions should not be used in the same stage because only the last one will be used", instructionName)
 		},
 	}
+	RuleLegacyKeyValueFormat = LinterRule[func(cmdName string) string]{
+		Name:        "LegacyKeyValueFormat",
+		Description: "Legacy key/value format with whitespace separator should not be used",
+		Format: func(cmdName string) string {
+			return fmt.Sprintf("\"%s key=value\" should be used instead of legacy \"%s key value\" format", cmdName, cmdName)
+		},
+	}
 )

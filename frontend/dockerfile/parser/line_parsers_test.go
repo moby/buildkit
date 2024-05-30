@@ -14,7 +14,10 @@ func TestParseNameValOldFormat(t *testing.T) {
 
 	expected := &Node{
 		Value: "foo",
-		Next:  &Node{Value: "bar"},
+		Next: &Node{
+			Value: "bar",
+			Next:  &Node{Value: ""},
+		},
 	}
 	require.Equal(t, expected, node, cmpNodeOpt)
 }
@@ -31,9 +34,15 @@ func TestParseNameValNewFormat(t *testing.T) {
 		Next: &Node{
 			Value: "bar",
 			Next: &Node{
-				Value: "thing",
+				Value: "=",
 				Next: &Node{
-					Value: "star",
+					Value: "thing",
+					Next: &Node{
+						Value: "star",
+						Next: &Node{
+							Value: "=",
+						},
+					},
 				},
 			},
 		},

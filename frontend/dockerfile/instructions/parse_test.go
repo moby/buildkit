@@ -74,6 +74,9 @@ func TestCommandsTooManyArguments(t *testing.T) {
 					Value: "arg2",
 					Next: &parser.Node{
 						Value: "arg3",
+						Next: &parser.Node{
+							Value: "",
+						},
 					},
 				},
 			},
@@ -97,6 +100,9 @@ func TestCommandsBlankNames(t *testing.T) {
 				Value: "",
 				Next: &parser.Node{
 					Value: "arg2",
+					Next: &parser.Node{
+						Value: "=",
+					},
 				},
 			},
 		}

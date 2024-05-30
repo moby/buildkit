@@ -36,6 +36,7 @@ var lintTests = integration.TestFuncs(
 	testWorkdirRelativePath,
 	testUnmatchedVars,
 	testMultipleInstructionsDisallowed,
+	testLegacyKeyValueFormat,
 )
 
 func testStageName(t *testing.T, sb integration.Sandbox) {
@@ -604,7 +605,7 @@ EOF
 ENTRYPOINT ["/myotherapp"]
 CMD ["/myotherapp"]
 HEALTHCHECK CMD ["/myotherapp"]
-	`)
+`)
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
@@ -624,6 +625,40 @@ FROM a AS b
 ENTRYPOINT ["/myotherapp"]
 CMD ["/myotherapp"]
 HEALTHCHECK CMD ["/myotherapp"]
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+}
+
+func testLegacyKeyValueFormat(t *testing.T, sb integration.Sandbox) {
+	dockerfile := []byte(`
+FROM scratch
+ENV key value
+LABEL key value
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "LegacyKeyValueFormat",
+				Description: "Legacy key/value format with whitespace separator should not be used",
+				Detail:      "\"ENV key=value\" should be used instead of legacy \"ENV key value\" format",
+				Line:        3,
+				Level:       1,
+			},
+			{
+				RuleName:    "LegacyKeyValueFormat",
+				Description: "Legacy key/value format with whitespace separator should not be used",
+				Detail:      "\"LABEL key=value\" should be used instead of legacy \"LABEL key value\" format",
+				Line:        4,
+				Level:       1,
+			},
+		},
+	})
+
+	dockerfile = []byte(`
+FROM scratch
+ENV key=value
+LABEL key=value
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 }
