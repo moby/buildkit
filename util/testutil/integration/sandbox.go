@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -65,6 +66,10 @@ func (sb *sandbox) Cmd(args ...string) *exec.Cmd {
 	cmd := exec.Command("buildctl", args...)
 	cmd.Env = append(cmd.Env, os.Environ()...)
 	cmd.Env = append(cmd.Env, "BUILDKIT_HOST="+sb.Address())
+	if v := os.Getenv("GO_TEST_COVERPROFILE"); v != "" {
+		coverDir := filepath.Join(filepath.Dir(v), "helpers")
+		cmd.Env = append(cmd.Env, "GOCOVERDIR="+coverDir)
+	}
 	return cmd
 }
 

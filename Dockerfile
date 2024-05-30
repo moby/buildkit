@@ -87,11 +87,12 @@ RUN --mount=target=. \
 FROM buildkit-base AS buildctl
 ENV CGO_ENABLED=0
 ARG TARGETPLATFORM
+ARG GOBUILDFLAGS
 RUN --mount=target=. --mount=target=/root/.cache,type=cache \
   --mount=target=/go/pkg/mod,type=cache \
   --mount=source=/tmp/.ldflags,target=/tmp/.ldflags,from=buildkit-version <<EOT
   set -ex
-  xx-go build -ldflags "$(cat /tmp/.ldflags)" -o /usr/bin/buildctl ./cmd/buildctl
+  xx-go build ${GOBUILDFLAGS} -ldflags "$(cat /tmp/.ldflags)" -o /usr/bin/buildctl ./cmd/buildctl
   xx-verify --static /usr/bin/buildctl
   if [ "$(xx-info os)" = "linux" ]; then /usr/bin/buildctl --version; fi
 EOT
@@ -328,14 +329,37 @@ ARG TARGETPLATFORM
 RUN --mount=target=/root/.cache,type=cache <<EOT
   set -ex
   xx-go install "gotest.tools/gotestsum@${GOTESTSUM_VERSION}"
+  xx-go install "github.com/wadey/gocovmerge@latest"
   mkdir /out
   if ! xx-info is-cross; then
     /go/bin/gotestsum --version
     mv /go/bin/gotestsum /out
+    mv /go/bin/gocovmerge /out
   else
     mv /go/bin/*/gotestsum* /out
+    mv /go/bin/*/gocovmerge* /out
   fi
 EOT
+COPY --chmod=755 <<"EOF" /out/gotestsumandcover
+#!/bin/sh
+set -x
+if [ -z "$GO_TEST_COVERPROFILE" ]; then
+  exec gotestsum "$@"
+fi
+coverdir="$(dirname "$GO_TEST_COVERPROFILE")"
+mkdir -p "$coverdir/helpers"
+gotestsum "$@" "-coverprofile=$GO_TEST_COVERPROFILE"
+ecode=$?
+go tool covdata textfmt -i=$coverdir/helpers -o=$coverdir/helpers-report.txt
+gocovmerge "$coverdir/helpers-report.txt" "$GO_TEST_COVERPROFILE" > "$coverdir/merged-report.txt"
+mv "$coverdir/merged-report.txt" "$GO_TEST_COVERPROFILE"
+rm "$coverdir/helpers-report.txt"
+for f in "$coverdir/helpers"/*; do
+  rm "$f"
+done
+rmdir "$coverdir/helpers"
+exit $ecode
+EOF
 
 FROM buildkit-export AS buildkit-linux
 COPY --link --from=binaries / /usr/bin/
