@@ -90,7 +90,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (st *llb.Sta
 	if ds.ignoreCache {
 		sbom.IgnoreCache = true
 	}
-	for _, dsi := range findReachable(ds) {
+	for dsi := range allReachableStages(ds) {
 		if ds != dsi && dsi.scanStage {
 			sbom.Extras[dsi.stageName] = dsi.state
 			if dsi.ignoreCache {
@@ -409,11 +409,12 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			allStageNames = append(allStageNames, s.stageName)
 		}
 	}
+	allReachable := allReachableStages(target)
 
 	baseCtx := ctx
 	eg, ctx := errgroup.WithContext(ctx)
 	for i, d := range allDispatchStates.states {
-		reachable := isReachable(target, d)
+		_, reachable := allReachable[d]
 		// resolve image config for every stage
 		if d.base == nil && !d.noinit {
 			if d.stage.BaseName == emptyImageName {
@@ -546,7 +547,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	ctxPaths := map[string]struct{}{}
 
 	for _, d := range allDispatchStates.states {
-		if !isReachable(target, d) || d.noinit {
+		if _, ok := allReachable[d]; !ok || d.noinit {
 			continue
 		}
 		d.init()
@@ -1724,33 +1725,23 @@ func commitToHistory(img *dockerspec.DockerOCIImage, msg string, withLayer bool,
 	return nil
 }
 
-func isReachable(from, to *dispatchState) (ret bool) {
-	if from == nil {
-		return false
-	}
-	if from == to || isReachable(from.base, to) {
-		return true
-	}
-	for d := range from.deps {
-		if isReachable(d, to) {
-			return true
-		}
-	}
-	return false
+func allReachableStages(s *dispatchState) map[*dispatchState]struct{} {
+	stages := make(map[*dispatchState]struct{})
+	addReachableStages(s, stages)
+	return stages
 }
 
-func findReachable(from *dispatchState) (ret []*dispatchState) {
-	if from == nil {
-		return nil
+func addReachableStages(s *dispatchState, stages map[*dispatchState]struct{}) {
+	if _, ok := stages[s]; ok {
+		return
 	}
-	ret = append(ret, from)
-	if from.base != nil {
-		ret = append(ret, findReachable(from.base)...)
+	stages[s] = struct{}{}
+	if s.base != nil {
+		addReachableStages(s.base, stages)
 	}
-	for d := range from.deps {
-		ret = append(ret, findReachable(d)...)
+	for d := range s.deps {
+		addReachableStages(d, stages)
 	}
-	return ret
 }
 
 func validateCircularDependency(states []*dispatchState) error {
