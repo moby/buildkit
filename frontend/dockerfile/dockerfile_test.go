@@ -7167,6 +7167,80 @@ func testSourcePolicyWithNamedContext(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, "foo", string(dt))
 }
 
+func testBaseImagePlatformMismatch(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM scratch
+COPY foo /foo
+`)
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte("test"), 0644),
+	)
+
+	// choose target platform that is different from the current platform
+	targetPlatform := runtime.GOOS + "/arm64"
+	if runtime.GOARCH == "arm64" {
+		targetPlatform = runtime.GOOS + "/amd64"
+	}
+
+	target := registry + "/buildkit/testbaseimageplatform:latest"
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"platform": targetPlatform,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dockerfile = []byte(fmt.Sprintf(`
+FROM %s
+ENV foo=bar
+	`, target))
+
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "InvalidBaseImagePlatform",
+				Description: "Base image platform does not match expected target platform",
+				Detail:      fmt.Sprintf("Base image %s was pulled with platform %q, expected %q for current build", target, targetPlatform, runtime.GOOS+"/"+runtime.GOARCH),
+				Level:       1,
+				Line:        2,
+			},
+		},
+		FrontendAttrs: map[string]string{},
+	})
+}
+
 func runShell(dir string, cmds ...string) error {
 	for _, args := range cmds {
 		var cmd *exec.Cmd

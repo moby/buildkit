@@ -542,6 +542,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 							llb.WithCustomName(prefixCommand(d, "FROM "+d.stage.BaseName, opt.MultiPlatformRequested, platform, nil)),
 							location(opt.SourceMap, d.stage.Location),
 						)
+						validateBaseImagePlatform(origName, *platform, d.image.Platform, d.stage.Location, opt.Warn)
 					}
 					d.platform = platform
 					return nil
@@ -2226,4 +2227,13 @@ func wrapSuggestAny(err error, keys map[string]struct{}, options []string) error
 		}
 	}
 	return err
+}
+
+func validateBaseImagePlatform(name string, expected, actual ocispecs.Platform, location []parser.Range, warn linter.LintWarnFunc) {
+	if expected.OS != actual.OS || expected.Architecture != actual.Architecture {
+		expectedStr := platforms.Format(platforms.Normalize(expected))
+		actualStr := platforms.Format(platforms.Normalize(actual))
+		msg := linter.RuleInvalidBaseImagePlatform.Format(name, expectedStr, actualStr)
+		linter.RuleInvalidBaseImagePlatform.Run(warn, location, msg)
+	}
 }
