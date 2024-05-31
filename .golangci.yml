@@ -23,6 +23,7 @@ linters:
     - nolintlint
     - revive
     - staticcheck
+    # - testifylint
     - typecheck
     - unused
     - whitespace
@@ -74,6 +75,12 @@ linters-settings:
       - G601  # Implicit memory aliasing in for loop (false positives)
     config:
       G306: "0644"
+  testifylint:
+    disable:
+      # disable rules that reduce the test condition
+      - "empty"
+      - "bool-compare"
+      - "len"
 
 issues:
   exclude-files:

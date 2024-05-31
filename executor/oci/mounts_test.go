@@ -153,7 +153,7 @@ func TestWithRemovedMounts(t *testing.T) {
 
 	oldLen := len(s.Mounts)
 	err := withRemovedMount("/run")(appcontext.Context(), nil, nil, &s)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, oldLen-1, len(s.Mounts))
 }
 

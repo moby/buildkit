@@ -306,7 +306,7 @@ func testAllowConvertDeny(t *testing.T) {
 	mutated, err := e.Evaluate(ctx, op)
 	require.True(t, mutated)
 	require.ErrorIs(t, err, ErrSourceDenied)
-	require.Equal(t, op.Identifier, "docker-image://docker.io/library/alpine:latest")
+	require.Equal(t, "docker-image://docker.io/library/alpine:latest", op.Identifier)
 }
 
 func testConvertDeny(t *testing.T) {
@@ -340,7 +340,7 @@ func testConvertDeny(t *testing.T) {
 	mutated, err := e.Evaluate(ctx, op)
 	require.True(t, mutated)
 	require.ErrorIs(t, err, ErrSourceDenied)
-	require.Equal(t, op.Identifier, "docker-image://docker.io/library/alpine:latest")
+	require.Equal(t, "docker-image://docker.io/library/alpine:latest", op.Identifier)
 }
 
 func testConvert(t *testing.T) {

@@ -204,9 +204,9 @@ RUN echo "ok" > /foo
 			require.Equal(t, "dockerfile", pred.Invocation.Parameters.Locals[1].Name)
 
 			require.NotNil(t, pred.Metadata.BuildFinishedOn)
-			require.True(t, time.Since(*pred.Metadata.BuildFinishedOn) < 5*time.Minute)
+			require.Less(t, time.Since(*pred.Metadata.BuildFinishedOn), 5*time.Minute)
 			require.NotNil(t, pred.Metadata.BuildStartedOn)
-			require.True(t, time.Since(*pred.Metadata.BuildStartedOn) < 5*time.Minute)
+			require.Less(t, time.Since(*pred.Metadata.BuildStartedOn), 5*time.Minute)
 			require.True(t, pred.Metadata.BuildStartedOn.Before(*pred.Metadata.BuildFinishedOn))
 
 			require.True(t, pred.Metadata.Completeness.Environment)

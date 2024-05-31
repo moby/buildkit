@@ -245,7 +245,7 @@ func TestRunCmdFlagsUsed(t *testing.T) {
 	n := ast.AST.Children[0]
 	c, err := ParseInstruction(n)
 	require.NoError(t, err)
-	require.IsType(t, c, &RunCommand{})
+	require.IsType(t, &RunCommand{}, c)
 	require.Equal(t, []string{"mount"}, c.(*RunCommand).FlagsUsed)
 }
 

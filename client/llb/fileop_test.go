@@ -710,7 +710,7 @@ func parseDef(t *testing.T, def [][]byte) (map[digest.Digest]pb.Op, []pb.Op) {
 }
 
 func last(t *testing.T, arr []pb.Op) (digest.Digest, int) {
-	require.True(t, len(arr) > 1)
+	require.Greater(t, len(arr), 1)
 
 	op := arr[len(arr)-1]
 	require.Equal(t, 1, len(op.Inputs))

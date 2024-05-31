@@ -10,6 +10,7 @@ import (
 	"github.com/moby/buildkit/util/appcontext"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func toEnvMap(args []instructions.KeyValuePairOptional, env []string) map[string]string {
@@ -35,7 +36,7 @@ COPY f1 f2 /sub/
 RUN ls -l
 `
 	_, _, _, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	df = `FROM scratch AS foo
 ENV FOO bar
@@ -44,7 +45,7 @@ COPY --from=foo f1 /
 COPY --from=0 f2 /
 	`
 	_, _, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	df = `FROM scratch AS foo
 ENV FOO bar
@@ -57,20 +58,20 @@ COPY --from=0 f2 /
 			Target: "Foo",
 		},
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	_, _, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
 		Config: dockerui.Config{
 			Target: "nosuch",
 		},
 	})
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	df = `FROM scratch
 	ADD http://github.com/moby/buildkit/blob/master/README.md /
 		`
 	_, _, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	df = `FROM scratch
 	COPY http://github.com/moby/buildkit/blob/master/README.md /
@@ -80,11 +81,11 @@ COPY --from=0 f2 /
 
 	df = `FROM "" AS foo`
 	_, _, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	df = `FROM ${BLANK} AS foo`
 	_, _, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
-	assert.Error(t, err)
+	require.Error(t, err)
 }
 
 func TestDockerfileParsingMarshal(t *testing.T) {
@@ -219,7 +220,7 @@ FROM foo AS bar
 RUN echo bar
 `
 	_, _, baseImg, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	t.Logf("baseImg=%+v", baseImg)
 	assert.Equal(t, []digest.Digest{"sha256:2e112031b4b923a873c8b3d685d48037e4d5ccd967b658743d93a6e56c3064b9"}, baseImg.RootFS.DiffIDs)
 	assert.Equal(t, "2024-01-17 21:49:12 +0000 UTC", baseImg.Created.String())

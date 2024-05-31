@@ -60,7 +60,7 @@ mirrors = ["https://url/", "https://url/path/"]
 		for _, m := range registry.Mirrors {
 			test := tests[m]
 			h := newMirrorRegistryHost(m)
-			require.NotEqual(t, h, nil)
+			require.NotNil(t, h)
 			require.Equal(t, h.Host, test.host)
 			require.Equal(t, h.Path, test.path)
 		}

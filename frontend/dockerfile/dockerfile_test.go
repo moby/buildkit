@@ -5169,7 +5169,7 @@ COPY Dockerfile Dockerfile
 		reqs, err := subrequests.Describe(ctx, c)
 		require.NoError(t, err)
 
-		require.True(t, len(reqs) > 0)
+		require.Greater(t, len(reqs), 0)
 
 		hasDescribe := false
 
@@ -5178,7 +5178,7 @@ COPY Dockerfile Dockerfile
 				hasDescribe = true
 				require.Equal(t, subrequests.RequestType("rpc"), req.Type)
 				require.NotEqual(t, req.Version, "")
-				require.True(t, len(req.Metadata) > 0)
+				require.Greater(t, len(req.Metadata), 0)
 				require.Equal(t, "result.json", req.Metadata[0].Name)
 			}
 		}

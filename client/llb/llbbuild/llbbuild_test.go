@@ -24,7 +24,7 @@ func TestMarshal(t *testing.T) {
 	require.NoError(t, err)
 
 	buildop := op.GetBuild()
-	require.NotEqual(t, buildop, nil)
+	require.NotNil(t, buildop)
 
 	require.Equal(t, len(op.Inputs), 1)
 	require.Equal(t, buildop.Builder, pb.LLBBuilder)

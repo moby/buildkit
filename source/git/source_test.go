@@ -34,7 +34,6 @@ import (
 	"github.com/moby/buildkit/util/progress/logs"
 	"github.com/moby/buildkit/util/winlayers"
 	"github.com/pkg/errors"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
 )
@@ -93,10 +92,10 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	require.Equal(t, "bar\n", string(dt))
 
 	_, err = os.Lstat(filepath.Join(dir, "ghi"))
-	require.ErrorAs(t, err, &os.ErrNotExist)
+	require.ErrorIs(t, err, os.ErrNotExist)
 
 	_, err = os.Lstat(filepath.Join(dir, "sub/subfile"))
-	require.ErrorAs(t, err, &os.ErrNotExist)
+	require.ErrorIs(t, err, os.ErrNotExist)
 
 	// second fetch returns same dir
 	id = &GitIdentifier{Remote: repo.mainURL, Ref: "master", KeepGitDir: keepGitDir}
@@ -314,10 +313,10 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 
 	dt, err = os.ReadFile(filepath.Join(dir, "foo13"))
 	if hasFoo13File {
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.Equal(t, "sbb\n", string(dt))
 	} else {
-		require.ErrorAs(t, err, &os.ErrNotExist)
+		require.ErrorIs(t, err, os.ErrNotExist)
 	}
 
 	if keepGitDir {
@@ -546,7 +545,7 @@ func testSubdir(t *testing.T, keepGitDir bool) {
 
 func setupGitSource(t *testing.T, tmpdir string) source.Source {
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	store, err := local.NewStore(tmpdir)
 	require.NoError(t, err)
