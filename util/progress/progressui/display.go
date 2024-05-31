@@ -743,6 +743,7 @@ func (t *trace) update(s *client.SolveStatus, termWidth int) {
 		v.jobCached = false
 		if v.term != nil {
 			if v.term.Width != termWidth {
+				termHeight = max(termHeightMin, min(termHeightInitial, v.term.Height-termHeightMin-1))
 				v.term.Resize(termHeight, termWidth-termPad)
 			}
 			v.termBytes += len(l.Data)
@@ -956,6 +957,7 @@ func setupTerminals(jobs []*job, height int, all bool) []*job {
 
 	numFree := height - 2 - numInUse
 	numToHide := 0
+	termHeight = max(termHeightMin, min(termHeightInitial, height-termHeightMin-1))
 	termLimit := termHeight + 3
 
 	for i := 0; numFree > termLimit && i < len(candidates); i++ {
