@@ -8,6 +8,7 @@
     - [Setup Instructions](#setup-instructions)
     - [Example Build](#example-build)
   - [Running `buildctl` from a Non-Admin Terminal](#running-buildctl-from-a-non-admin-terminal)
+  - [CNI / Networking Setup](#cni--networking-setup)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -40,6 +41,7 @@ Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V, Containers
 You will be asked to restart your machine, do so, and then continue with the rest of the steps. No other restart needed.
 
 1. Setup `containerd` by following [the setup instructions here](https://github.com/containerd/containerd/blob/main/docs/getting-started.md#installing-containerd-on-windows). (_Currently, we only support the `containerd` worker_.)
+1. Setup the CNI, see details in the [CNI / Networking Setup](#cni--networking-setup) section.
 1. Start the `containerd` service, if not yet started.
 1. Download and extract:
     ```powershell
@@ -76,6 +78,50 @@ You will be asked to restart your machine, do so, and then continue with the res
     time="2024-02-26T10:42:16+03:00" level=warning msg="currently, only the default worker can be used."
     time="2024-02-26T10:42:16+03:00" level=info msg="running server on //./pipe/buildkitd"
     ```
+
+    **Running `buildkitd` with the CNI:**
+
+    Note that the above simple run will not have the networking bit setup;
+    for instance you won't be able to access the internet from the builds e.g. downloading resources.
+
+    Follow the instructions in the [CNI / Networking Setup](#cni--networking-setup) section.
+    Once that is done, you can now start `buildkitd` providing the binary and config paths to the flags.
+    These are the same paths used by `containerd` too:
+
+    ```powershell
+    buildkitd `
+        --containerd-cni-config-path="C:\Program Files\containerd\cni\conf\0-containerd-nat.conf" `
+        --containerd-cni-binary-dir="C:\Program Files\containerd\cni\bin"
+    ```
+
+    You can also run `buildkitd` as a _Windows Service_:
+
+    ```powershell
+    buildkitd `
+        --register-service `
+        --service-name buildkitd `
+        --containerd-cni-config-path="C:\Program Files\containerd\cni\conf\0-containerd-nat.conf" `
+        --containerd-cni-binary-dir="C:\Program Files\containerd\cni\bin" `
+        --debug `
+        --log-file="C:\Windows\Temp\buildkitd.log
+    ```
+
+    > **NOTE:** the above `log-file` path is just an example, but make sure to set up
+    > your logs properly.
+
+    `buildkitd` on Windows depends on `containerd`. You can make the above registered `buildkitd` service
+    dependent on `containerd` (the naming may vary). The space after `=` is required:
+
+    ```powershell
+    sc.exe config buildkitd depend= containerd
+    ```
+
+    We can also set the service to start automatically:
+
+    ```powershell
+    Set-Service -StartupType Automatic buildkitd
+    ```
+
 1. In another terminal (still elevated), try out a `buildctl` command to test that the setup is good:
     ```
     PS> buildctl debug info
@@ -181,3 +227,54 @@ buildkitd --group="USERBOX-1\buildkit-users"
 ```
 
 With this now, you can run `buildctl` in a non-admin terminal.
+
+## CNI / Networking Setup
+
+Below is a simple setup based on the `nat` network that comes by default, with enabling the
+_containers_ and _Hyper-V_ features.
+
+```powershell
+$networkName = 'nat'
+# Get-HnsNetwork is available once you have enabled the 'Hyper-V Host Compute Service' feature
+# which must have been done at the Quick setup above
+# Enable-WindowsOptionalFeature -Online -FeatureName containers -All
+# Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All -All
+# the default one named `nat` should be available
+$natInfo = Get-HnsNetwork -ErrorAction Ignore | Where-Object { $_.Name -eq $networkName }
+if ($null -eq $natInfo) {
+    throw "NAT network not found, check if you enabled containers, Hyper-V features and restarted the machine"
+}
+$gateway = $natInfo.Subnets[0].GatewayAddress
+$subnet = $natInfo.Subnets[0].AddressPrefix
+
+$cniConfPath = "$env:ProgramFiles\containerd\cni\conf\0-containerd-nat.conf"
+$cniBinDir = "$env:ProgramFiles\containerd\cni\bin"
+$cniVersion = "0.3.0"
+
+# get the CNI plugins (binaries)
+mkdir $cniBinDir -Force
+curl.exe -LO https://github.com/microsoft/windows-container-networking/releases/download/v$cniVersion/windows-container-networking-cni-amd64-v$cniVersion.zip
+tar xvf windows-container-networking-cni-amd64-v$cniVersion.zip -C $cniBinDir
+
+$natConfig = @"
+{
+    "cniVersion": "$cniVersion",
+    "name": "$networkName",
+    "type": "nat",
+    "master": "Ethernet",
+    "ipam": {
+        "subnet": "$subnet",
+        "routes": [
+            {
+                "gateway": "$gateway"
+            }
+        ]
+    },
+    "capabilities": {
+        "portMappings": true,
+        "dns": true
+    }
+}
+"@
+Set-Content -Path $cniConfPath -Value $natConfig
+```
