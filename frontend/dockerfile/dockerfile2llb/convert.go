@@ -236,7 +236,10 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			info := argInfo{definition: metaArg, location: cmd.Location()}
 			if v, ok := opt.BuildArgs[metaArg.Key]; !ok {
 				if metaArg.Value != nil {
-					result, _ := shlex.ProcessWordWithMatches(*metaArg.Value, metaArgsToMap(optMetaArgs))
+					result, err := shlex.ProcessWordWithMatches(*metaArg.Value, metaArgsToMap(optMetaArgs))
+					if err != nil {
+						return nil, parser.WithLocation(err, cmd.Location())
+					}
 					*metaArg.Value = result.Result
 					info.deps = result.Matched
 				}
@@ -759,7 +762,9 @@ type dispatchOpt struct {
 
 func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 	var err error
-	if ex, ok := cmd.Command.(instructions.SupportsSingleWordExpansion); ok {
+	// ARG command value could be ignored, so defer handling the expansion error
+	_, isArg := cmd.Command.(*instructions.ArgCommand)
+	if ex, ok := cmd.Command.(instructions.SupportsSingleWordExpansion); ok && !isArg {
 		err := ex.Expand(func(word string) (string, error) {
 			env, err := d.state.Env(context.TODO())
 			if err != nil {
@@ -1608,31 +1613,43 @@ func dispatchShell(d *dispatchState, c *instructions.ShellCommand) error {
 func dispatchArg(d *dispatchState, c *instructions.ArgCommand, opt *dispatchOpt) error {
 	commitStrs := make([]string, 0, len(c.Args))
 	for _, arg := range c.Args {
-		buildArg := setKVValue(arg, opt.buildArgValues)
-
-		commitStr := arg.Key
-		if arg.Value != nil {
-			commitStr += "=" + *arg.Value
-		}
-		commitStrs = append(commitStrs, commitStr)
+		_, hasValue := opt.buildArgValues[arg.Key]
+		hasDefault := arg.Value != nil
 
 		skipArgInfo := false // skip the arg info if the arg is inherited from global scope
-		if buildArg.Value == nil {
+		if !hasDefault && !hasValue {
 			for _, ma := range opt.metaArgs {
-				if ma.Key == buildArg.Key {
-					buildArg.Value = ma.Value
+				if ma.Key == arg.Key {
+					arg.Value = ma.Value
 					skipArgInfo = true
+					hasDefault = false
 				}
 			}
 		}
 
+		if hasValue {
+			v := opt.buildArgValues[arg.Key]
+			arg.Value = &v
+		} else if hasDefault {
+			env, err := d.state.Env(context.TODO())
+			if err != nil {
+				return err
+			}
+			v, unmatched, err := opt.shlex.ProcessWord(*arg.Value, env)
+			reportUnmatchedVariables(c, d.buildArgs, unmatched, opt)
+			if err != nil {
+				return err
+			}
+			arg.Value = &v
+		}
+
 		ai := argInfo{definition: arg, location: c.Location()}
 
-		if buildArg.Value != nil {
-			if _, ok := nonEnvArgs[buildArg.Key]; !ok {
-				d.state = d.state.AddEnv(buildArg.Key, *buildArg.Value)
+		if arg.Value != nil {
+			if _, ok := nonEnvArgs[arg.Key]; !ok {
+				d.state = d.state.AddEnv(arg.Key, *arg.Value)
 			}
-			ai.value = *buildArg.Value
+			ai.value = *arg.Value
 		}
 
 		if !skipArgInfo {
@@ -1640,7 +1657,13 @@ func dispatchArg(d *dispatchState, c *instructions.ArgCommand, opt *dispatchOpt)
 		}
 		d.outline.usedArgs[arg.Key] = struct{}{}
 
-		d.buildArgs = append(d.buildArgs, buildArg)
+		d.buildArgs = append(d.buildArgs, arg)
+
+		commitStr := arg.Key
+		if arg.Value != nil {
+			commitStr += "=" + *arg.Value
+		}
+		commitStrs = append(commitStrs, commitStr)
 	}
 	return commitToHistory(&d.image, "ARG "+strings.Join(commitStrs, " "), false, nil, d.epoch)
 }
