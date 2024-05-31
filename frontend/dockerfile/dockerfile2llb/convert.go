@@ -1636,7 +1636,7 @@ func dispatchArg(d *dispatchState, c *instructions.ArgCommand, opt *dispatchOpt)
 				return err
 			}
 			v, unmatched, err := opt.shlex.ProcessWord(*arg.Value, env)
-			reportUnmatchedVariables(c, d.buildArgs, unmatched, opt)
+			reportUnmatchedVariables(c, d.buildArgs, env, unmatched, opt)
 			if err != nil {
 				return err
 			}
