@@ -176,10 +176,57 @@ func (s *state) setEdge(index Index, targetEdge *edge, targetState *state) {
 	targetEdge.takeOwnership(e)
 
 	if targetState != nil {
+		targetState.addJobs(s, map[*state]struct{}{})
+
 		if _, ok := targetState.allPw[s.mpw]; !ok {
 			targetState.mpw.Add(s.mpw)
 			targetState.allPw[s.mpw] = struct{}{}
 		}
+	}
+}
+
+// addJobs recursively adds jobs to state and all its ancestors. currently
+// only used during edge merges to add jobs from the source of the merge to the
+// target and its ancestors.
+// requires that Solver.mu is read-locked and srcState.mu is locked
+func (s *state) addJobs(srcState *state, memo map[*state]struct{}) {
+	if _, ok := memo[s]; ok {
+		return
+	}
+	memo[s] = struct{}{}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for j := range srcState.jobs {
+		s.jobs[j] = struct{}{}
+	}
+
+	for _, inputEdge := range s.vtx.Inputs() {
+		inputState, ok := s.solver.actives[inputEdge.Vertex.Digest()]
+		if !ok {
+			bklog.G(context.TODO()).
+				WithField("vertex_digest", inputEdge.Vertex.Digest()).
+				Error("input vertex not found during addJobs")
+			continue
+		}
+		inputState.addJobs(srcState, memo)
+
+		// tricky case: if the inputState's edge was *already* merged we should
+		// also add jobs to the merged edge's state
+		mergedInputEdge := inputState.getEdge(inputEdge.Index)
+		if mergedInputEdge == nil || mergedInputEdge.edge.Vertex.Digest() == inputEdge.Vertex.Digest() {
+			// not merged
+			continue
+		}
+		mergedInputState, ok := s.solver.actives[mergedInputEdge.edge.Vertex.Digest()]
+		if !ok {
+			bklog.G(context.TODO()).
+				WithField("vertex_digest", mergedInputEdge.edge.Vertex.Digest()).
+				Error("merged input vertex not found during addJobs")
+			continue
+		}
+		mergedInputState.addJobs(srcState, memo)
 	}
 }
 
@@ -470,16 +517,25 @@ func (jl *Solver) loadUnlocked(ctx context.Context, v, parent Vertex, j *Job, ca
 		if debugScheduler {
 			lg := bklog.G(ctx).
 				WithField("vertex_name", v.Name()).
-				WithField("vertex_digest", v.Digest())
+				WithField("vertex_digest", v.Digest()).
+				WithField("actives_digest_key", dgst)
 			if j != nil {
 				lg = lg.WithField("job", j.id)
 			}
 			lg.Debug("adding active vertex")
+			for i, inp := range v.Inputs() {
+				lg.WithField("input_index", i).
+					WithField("input_vertex_name", inp.Vertex.Name()).
+					WithField("input_vertex_digest", inp.Vertex.Digest()).
+					WithField("input_edge_index", inp.Index).
+					Debug("new active vertex input")
+			}
 		}
 	} else if debugScheduler {
 		lg := bklog.G(ctx).
 			WithField("vertex_name", v.Name()).
-			WithField("vertex_digest", v.Digest())
+			WithField("vertex_digest", v.Digest()).
+			WithField("actives_digest_key", dgst)
 		if j != nil {
 			lg = lg.WithField("job", j.id)
 		}
@@ -498,17 +554,6 @@ func (jl *Solver) loadUnlocked(ctx context.Context, v, parent Vertex, j *Job, ca
 	if j != nil {
 		if _, ok := st.jobs[j]; !ok {
 			st.jobs[j] = struct{}{}
-		}
-		if debugScheduler {
-			jobIDs := make([]string, 0, len(st.jobs))
-			for j := range st.jobs {
-				jobIDs = append(jobIDs, j.id)
-			}
-			bklog.G(ctx).
-				WithField("vertex_name", v.Name()).
-				WithField("vertex_digest", v.Digest()).
-				WithField("jobs", jobIDs).
-				Debug("current jobs for vertex")
 		}
 	}
 	st.mu.Unlock()
