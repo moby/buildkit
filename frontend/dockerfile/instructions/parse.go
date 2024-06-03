@@ -209,7 +209,7 @@ func parseKvps(args []string, cmdName string, location []parser.Range, lint *lin
 			return nil, errBlankCommandNames(cmdName)
 		}
 		name, value, sep := args[j], args[j+1], args[j+2]
-		if sep == "" {
+		if lint != nil && sep == "" {
 			msg := linter.RuleLegacyKeyValueFormat.Format(cmdName)
 			lint.Run(&linter.RuleLegacyKeyValueFormat, location, msg)
 		}

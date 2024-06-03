@@ -151,6 +151,30 @@ func TestParseOptInterval(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestNilLinter(t *testing.T) {
+	for cmd := range command.Commands {
+		cmd := cmd
+		t.Run(cmd, func(t *testing.T) {
+			t.Parallel()
+
+			for _, tc := range []string{
+				cmd + " foo=bar",
+				cmd + " a",
+				cmd + " a b",
+				cmd + " a b c",
+				cmd + " 0 0",
+			} {
+				t.Run(tc, func(t *testing.T) {
+					ast, err := parser.Parse(strings.NewReader("FROM busybox\n" + tc))
+					if err == nil {
+						_, _, _ = Parse(ast.AST, nil)
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestCommentsDetection(t *testing.T) {
 	dt := `# foo sets foo
 ARG foo=bar
