@@ -601,7 +601,9 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 							llb.WithCustomName(prefixCommand(d, "FROM "+d.stage.BaseName, opt.MultiPlatformRequested, platform, nil)),
 							location(opt.SourceMap, d.stage.Location),
 						)
-						validateBaseImagePlatform(origName, *platform, d.image.Platform, d.stage.Location, lint)
+						if reachable {
+							validateBaseImagePlatform(origName, *platform, d.image.Platform, d.stage.Location, lint)
+						}
 					}
 					d.platform = platform
 					return nil
