@@ -169,10 +169,12 @@ func PrintLintViolations(dt []byte, w io.Writer) error {
 	})
 
 	for _, warning := range results.Warnings {
-		fmt.Fprintf(w, "\n- %s\n%s\n", warning.Detail, warning.Description)
+		fmt.Fprintf(w, "%s", warning.RuleName)
 		if warning.URL != "" {
-			fmt.Fprintf(w, "URL: %s\n", warning.URL)
+			fmt.Fprintf(w, " - %s", warning.URL)
 		}
+		fmt.Fprintf(w, "\n%s\n", warning.Description)
+
 		if warning.Location.SourceIndex < 0 {
 			continue
 		}
@@ -185,6 +187,7 @@ func PrintLintViolations(dt []byte, w io.Writer) error {
 		if err != nil {
 			return err
 		}
+		fmt.Fprintln(w)
 	}
 	return nil
 }
