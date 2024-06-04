@@ -126,7 +126,7 @@ target "integration-tests" {
 }
 
 group "validate" {
-  targets = ["lint", "validate-vendor", "validate-doctoc", "validate-generated-files", "validate-archutil", "validate-shfmt", "validate-docs"]
+  targets = ["lint", "validate-vendor", "validate-doctoc", "validate-generated-files", "validate-archutil", "validate-shfmt", "validate-docs", "validate-docs-dockerfile"]
 }
 
 target "lint" {
@@ -211,6 +211,13 @@ target "validate-docs" {
   output = ["type=cacheonly"]
 }
 
+target "validate-docs-dockerfile" {
+  inherits = ["_common"]
+  dockerfile = "./hack/dockerfiles/docs-dockerfile.Dockerfile"
+  target = "validate"
+  output = ["type=cacheonly"]
+}
+
 target "vendor" {
   inherits = ["_common"]
   dockerfile = "./hack/dockerfiles/vendor.Dockerfile"
@@ -258,6 +265,13 @@ target "docs" {
   dockerfile = "./hack/dockerfiles/docs.Dockerfile"
   target = "update"
   output = ["./docs"]
+}
+
+target "docs-dockerfile" {
+  inherits = ["_common"]
+  dockerfile = "./hack/dockerfiles/docs-dockerfile.Dockerfile"
+  target = "update"
+  output = ["./frontend/dockerfile/docs/rules"]
 }
 
 target "mod-outdated" {

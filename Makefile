@@ -113,6 +113,10 @@ doctoc:
 docs:
 	$(BUILDX_CMD) bake docs
 
+.PHONY: docs-dockerfile
+docs-dockerfile:
+	$(BUILDX_CMD) bake docs-dockerfile
+
 .PHONY: mod-outdated
 mod-outdated:
 	$(BUILDX_CMD) bake mod-outdated
