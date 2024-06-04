@@ -1,6 +1,7 @@
 package credentials
 
 import (
+	"net/url"
 	"strings"
 
 	"github.com/docker/cli/cli/config/types"
@@ -68,14 +69,14 @@ func (c *fileStore) IsFileStore() bool {
 // ConvertToHostname converts a registry url which has http|https prepended
 // to just an hostname.
 // Copied from github.com/docker/docker/registry.ConvertToHostname to reduce dependencies.
-func ConvertToHostname(url string) string {
-	stripped := url
-	if strings.HasPrefix(url, "http://") {
-		stripped = strings.TrimPrefix(url, "http://")
-	} else if strings.HasPrefix(url, "https://") {
-		stripped = strings.TrimPrefix(url, "https://")
+func ConvertToHostname(maybeURL string) string {
+	stripped := maybeURL
+	if strings.Contains(stripped, "://") {
+		u, err := url.Parse(stripped)
+		if err == nil && u.Hostname() != "" {
+			return u.Hostname()
+		}
 	}
-
 	hostName, _, _ := strings.Cut(stripped, "/")
 	return hostName
 }
