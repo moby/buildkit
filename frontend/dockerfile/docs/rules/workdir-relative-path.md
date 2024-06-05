@@ -1,6 +1,8 @@
 ---
 title: WorkdirRelativePath
 description: Relative workdir without an absolute workdir declared within the build can have unexpected results if the base image changes
+aliases:
+  - /go/dockerfile/rule/workdir-relative-path/
 ---
 
 ## Output

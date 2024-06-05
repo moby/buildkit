@@ -7232,6 +7232,7 @@ ENV foo=bar
 			{
 				RuleName:    "InvalidBaseImagePlatform",
 				Description: "Base image platform does not match expected target platform",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/invalid-base-image-platform/",
 				Detail:      fmt.Sprintf("Base image %s was pulled with platform %q, expected %q for current build", target, targetPlatform, runtime.GOOS+"/"+runtime.GOARCH),
 				Level:       1,
 				Line:        2,

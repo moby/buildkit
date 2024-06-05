@@ -1,6 +1,8 @@
 ---
 title: DuplicateStageName
 description: Stage names should be unique
+aliases:
+  - /go/dockerfile/rule/duplicate-stage-name/
 ---
 
 ## Output

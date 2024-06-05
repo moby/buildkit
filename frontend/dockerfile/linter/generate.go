@@ -9,11 +9,12 @@ import (
 	"go/parser"
 	"go/token"
 	"log"
+	"net/url"
 	"os"
 	"path"
-	"regexp"
 	"strings"
 	"text/template"
+	"unicode"
 
 	"github.com/pkg/errors"
 )
@@ -21,15 +22,21 @@ import (
 type Rule struct {
 	Name        string
 	Description string
+	URL         *url.URL
 	Filename    string
+	URLAlias    string
 }
 
 const tmplStr = `---
-title: {{.Rule.Name}}
-description: {{.Rule.Description}}
+title: {{ .Rule.Name }}
+description: {{ .Rule.Description }}
+{{- if .Rule.URLAlias }}
+aliases:
+  - {{ .Rule.URLAlias }}
+{{- end }}
 ---
 
-{{.Content}}
+{{ .Content }}
 `
 
 var destDir string
@@ -123,6 +130,7 @@ func listRules() ([]Rule, error) {
 		return nil, err
 	}
 	var rules []Rule
+	var inspectErr error
 	ast.Inspect(node, func(n ast.Node) bool {
 		switch x := n.(type) {
 		case *ast.GenDecl:
@@ -142,9 +150,31 @@ func listRules() ([]Rule, error) {
 									if basicLit, ok := kv.Value.(*ast.BasicLit); ok {
 										rule.Description = strings.Trim(basicLit.Value, `"`)
 									}
+								case "URL":
+									if basicLit, ok := kv.Value.(*ast.BasicLit); ok {
+										ruleURL := strings.Trim(basicLit.Value, `"`)
+										u, err := url.Parse(ruleURL)
+										if err != nil {
+											inspectErr = errors.Wrapf(err, "cannot parse URL %s", ruleURL)
+											return false
+										}
+										rule.URL = u
+									}
 								}
 							}
 						}
+					}
+					if rule.URL == nil {
+						inspectErr = errors.Errorf("URL not set for %q", rule.Name)
+						return false
+					}
+					if strings.HasPrefix(rule.URL.String(), `https://docs.docker.com/go/`) {
+						lastEntry := path.Base(rule.URL.Path)
+						if lastEntry != camelToKebab(rule.Name) {
+							inspectErr = errors.Errorf("Last entry %q in URL is malformed, should be: %q", lastEntry, camelToKebab(rule.Name))
+							return false
+						}
+						rule.URLAlias = strings.TrimPrefix(rule.URL.String(), `https://docs.docker.com`)
 					}
 					rules = append(rules, rule)
 				}
@@ -152,10 +182,23 @@ func listRules() ([]Rule, error) {
 		}
 		return true
 	})
+	if inspectErr != nil {
+		return nil, inspectErr
+	}
 	return rules, nil
 }
 
 func camelToKebab(s string) string {
-	var re = regexp.MustCompile(`([a-z])([A-Z])`)
-	return strings.ToLower(re.ReplaceAllString(s, `${1}-${2}`))
+	var res []rune
+	for i, r := range s {
+		if unicode.IsUpper(r) {
+			if i != 0 && (unicode.IsLower(rune(s[i-1])) || (i+1 < len(s) && unicode.IsLower(rune(s[i+1])))) {
+				res = append(res, '-')
+			}
+			res = append(res, unicode.ToLower(r))
+		} else {
+			res = append(res, r)
+		}
+	}
+	return string(res)
 }

@@ -1,6 +1,8 @@
 ---
 title: StageNameCasing
 description: Stage names should be lowercase
+aliases:
+  - /go/dockerfile/rule/stage-name-casing/
 ---
 
 ## Output

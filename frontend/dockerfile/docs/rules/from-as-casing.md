@@ -1,6 +1,8 @@
 ---
 title: FromAsCasing
 description: The 'as' keyword should match the case of the 'from' keyword
+aliases:
+  - /go/dockerfile/rule/from-as-casing/
 ---
 
 ## Output

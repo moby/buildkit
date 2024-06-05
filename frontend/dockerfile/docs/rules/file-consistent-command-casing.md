@@ -1,6 +1,8 @@
 ---
 title: FileConsistentCommandCasing
 description: All commands within the Dockerfile should use the same casing (either upper or lower)
+aliases:
+  - /go/dockerfile/rule/file-consistent-command-casing/
 ---
 
 ## Output

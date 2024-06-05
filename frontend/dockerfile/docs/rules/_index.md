@@ -57,7 +57,7 @@ $ docker build --check .
       <td>Reserved stage names should not be used to name a stage</td>
     </tr>
     <tr>
-      <td><a href="./jsonargs-recommended.md">JSONArgsRecommended</a></td>
+      <td><a href="./json-args-recommended.md">JSONArgsRecommended</a></td>
       <td>JSON arguments recommended for ENTRYPOINT/CMD to prevent unintended behavior related to OS signals</td>
     </tr>
     <tr>

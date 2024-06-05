@@ -1,6 +1,8 @@
 ---
 title: MultipleInstructionsDisallowed
 description: Multiple instructions of the same type should not be used in the same stage
+aliases:
+  - /go/dockerfile/rule/multiple-instructions-disallowed/
 ---
 
 ## Output

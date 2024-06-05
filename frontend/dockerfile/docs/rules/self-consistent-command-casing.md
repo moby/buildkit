@@ -1,6 +1,8 @@
 ---
 title: SelfConsistentCommandCasing
 description: Commands should be in consistent casing (all lower or all upper)
+aliases:
+  - /go/dockerfile/rule/self-consistent-command-casing/
 ---
 
 ## Output

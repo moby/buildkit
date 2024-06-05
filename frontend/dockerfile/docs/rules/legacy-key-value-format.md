@@ -1,6 +1,8 @@
 ---
 title: LegacyKeyValueFormat
 description: Legacy key/value format with whitespace separator should not be used
+aliases:
+  - /go/dockerfile/rule/legacy-key-value-format/
 ---
 
 ## Output

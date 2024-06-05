@@ -1,6 +1,8 @@
 ---
 title: UndefinedVar
 description: Variables should be defined before their use
+aliases:
+  - /go/dockerfile/rule/undefined-var/
 ---
 
 ## Output
