@@ -48,8 +48,10 @@ linters-settings:
     rules:
       main:
         deny:
-          # The io/ioutil package has been deprecated.
-          # https://go.dev/doc/go1.16#ioutil
+          - pkg: "github.com/containerd/containerd/errdefs"
+            desc: The containerd errdefs package was migrated to a separate module. Use github.com/containerd/errdefs instead.
+          - pkg: "github.com/containerd/containerd/log"
+            desc: The containerd log package was migrated to a separate module. Use github.com/containerd/log instead.
           - pkg: "io/ioutil"
             desc: The io/ioutil package has been deprecated.
   forbidigo:
@@ -62,10 +64,16 @@ linters-settings:
       - '^ctx\.Err(# use context\.Cause instead)?$'
   importas:
     alias:
+      # Enforce alias to prevent it accidentally being used instead of our
+      # own errdefs package (or vice-versa).
+      - pkg: "github.com/containerd/errdefs"
+        alias: "cerrdefs"
       - pkg: "github.com/opencontainers/image-spec/specs-go/v1"
         alias: "ocispecs"
       - pkg: "github.com/opencontainers/go-digest"
         alias: "digest"
+
+    # Do not allow unaliased imports of aliased packages.
     no-unaliased: true
   gosec:
     excludes:

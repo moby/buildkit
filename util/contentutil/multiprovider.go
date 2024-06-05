@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/containerd/containerd/content"
-	"github.com/containerd/containerd/errdefs"
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/buildkit/session"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -60,7 +60,7 @@ func (mp *MultiProvider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor)
 	}
 	mp.mu.RUnlock()
 	if mp.base == nil {
-		return nil, errors.Wrapf(errdefs.ErrNotFound, "content %v", desc.Digest)
+		return nil, errors.Wrapf(cerrdefs.ErrNotFound, "content %v", desc.Digest)
 	}
 	return mp.base.ReaderAt(ctx, desc)
 }
@@ -74,7 +74,7 @@ func (mp *MultiProvider) Info(ctx context.Context, dgst digest.Digest) (content.
 	}
 	mp.mu.RUnlock()
 	if mp.base == nil {
-		return content.Info{}, errors.Wrapf(errdefs.ErrNotFound, "content %v", dgst)
+		return content.Info{}, errors.Wrapf(cerrdefs.ErrNotFound, "content %v", dgst)
 	}
 	return mp.base.Info(ctx, dgst)
 }

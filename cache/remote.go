@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/containerd/containerd/content"
-	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/reference"
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
@@ -301,7 +301,7 @@ type lazyRefProvider struct {
 
 func (p lazyRefProvider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
 	if desc.Digest != p.desc.Digest {
-		return nil, errdefs.ErrNotFound
+		return nil, cerrdefs.ErrNotFound
 	}
 	if err := p.Unlazy(ctx); err != nil {
 		return nil, err
@@ -311,7 +311,7 @@ func (p lazyRefProvider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor)
 
 func (p lazyRefProvider) Info(ctx context.Context, dgst digest.Digest) (content.Info, error) {
 	if dgst != p.desc.Digest {
-		return content.Info{}, errdefs.ErrNotFound
+		return content.Info{}, cerrdefs.ErrNotFound
 	}
 	info, err := p.ref.cm.ContentStore.Info(ctx, dgst)
 	if err == nil {
