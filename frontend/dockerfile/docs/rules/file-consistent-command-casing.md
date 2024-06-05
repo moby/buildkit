@@ -3,11 +3,15 @@ title: FileConsistentCommandCasing
 description: All commands within the Dockerfile should use the same casing (either upper or lower)
 ---
 
+## Output
+
 Example warning:
 
 ```text
 Command 'foo' should match the case of the command majority (uppercase)
 ```
+
+## Description
 
 Instructions within a Dockerfile should have consistent casing through out the
 entire files. Instructions are not case-sensitive, but the convention is to use
@@ -19,7 +23,7 @@ sure you use consistent casing to help improve readability of the Dockerfile.
 
 ## Examples
 
-❌ Bad: mixing uppercase and lowercase
+❌ Bad: mixed uppercase and lowercase.
 
 ```dockerfile
 FROM alpine:latest AS builder
@@ -29,7 +33,7 @@ FROM builder AS build1
 copy source1.cpp source.cpp
 ```
 
-✅ Good: all uppercase
+✅ Good: all uppercase.
 
 ```dockerfile
 FROM alpine:latest AS builder
@@ -39,7 +43,7 @@ FROM builder AS build1
 COPY source1.cpp source.cpp
 ```
 
-✅ Good: all lowercase
+✅ Good: all lowercase.
 
 ```dockerfile
 from alpine:latest as builder

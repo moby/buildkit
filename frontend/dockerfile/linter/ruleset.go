@@ -88,13 +88,6 @@ var (
 			return fmt.Sprintf("Relative workdir %q can have unexpected results if the base image changes", workdir)
 		},
 	}
-	RuleUndefinedArg = LinterRule[func(string) string]{
-		Name:        "UndefinedArg",
-		Description: "ARGs should be defined before their use",
-		Format: func(arg string) string {
-			return fmt.Sprintf("Usage of undefined variable '$%s'", arg)
-		},
-	}
 	RuleUndefinedVar = LinterRule[func(string, string) string]{
 		Name:        "UndefinedVar",
 		Description: "Variables should be defined before their use",
