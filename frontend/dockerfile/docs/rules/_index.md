@@ -20,60 +20,73 @@ the rules. To run a check, use the `--check` flag:
 $ docker build --check .
 ```
 
-The available rules for build checks are:
-
-- [`DuplicateStageName`](./duplicate-stage-name.md)
-
-  Stage names should be unique.
-
-- [`FileConsistentCommandCasing`](./file-consistent-command-casing.md)
-
-  All commands within the Dockerfile should use the same casing (either uppercase or lowercase).
-
-- [`FromAsCasing`](./from-as-casing.md)
-
-  The `AS` keyword should match the case of the `FROM` keyword.
-
-- [`JSONArgsRecommended`](./json-args-recommended.md)
-
-  JSON arguments recommended for `ENTRYPOINTCMD` and `CMD` to prevent unintended behavior related to OS signals.
-
-- [`MaintainerDeprecated`](./maintainer-deprecated.md)
-
-  The maintainer instruction is deprecated, use a label to define an image author instead.
-
-- [`MultipleInstructionsDisallowed`](./multiple-instructions-disallowed.md)
-
-  Multiple instructions of the same type should not be used in the same stage.
-
-- [`NoEmptyContinuations`](./no-empty-continuations.md)
-
-  Empty continuation lines will become errors in a future release.
-
-- [`ReservedStageName`](./reserved-stage-name.md)
-
-  Reserved stage names should not be used to name a stage.
-
-- [`SelfConsistentCommandCasing`](./self-consistent-command-casing.md)
-
-  Commands should be in consistent casing (all lowercase or all uppercase).
-
-- [`StageNameCasing`](./stage-name-casing.md)
-
-  Stage names should be lowercase.
-
-- [`UndeclaredArgInFrom`](./undeclared-arg-in-from.md)
-
-  `FROM` command must use declared `ARG` instructions.
-
-- [`UndefinedArg`](./undefined-arg.md)
-
-  `ARG` should be defined before their use.
-
-- [`UndefinedVar`](./undefined-var.md)
-
-  Variables should be defined before their use.
-
-- [`WorkdirRelativePath`](./workdir-relative-path.md)
-
-  Using `WORKDIR` with relative paths without an absolute `WORKDIR` declared within the build can have unexpected results if the base image changes.
+<table>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><a href="./stage-name-casing.md">StageNameCasing</a></td>
+      <td>Stage names should be lowercase</td>
+    </tr>
+    <tr>
+      <td><a href="./from-as-casing.md">FromAsCasing</a></td>
+      <td>The 'as' keyword should match the case of the 'from' keyword</td>
+    </tr>
+    <tr>
+      <td><a href="./no-empty-continuations.md">NoEmptyContinuations</a></td>
+      <td>Empty continuation lines will become errors in a future release</td>
+    </tr>
+    <tr>
+      <td><a href="./self-consistent-command-casing.md">SelfConsistentCommandCasing</a></td>
+      <td>Commands should be in consistent casing (all lower or all upper)</td>
+    </tr>
+    <tr>
+      <td><a href="./file-consistent-command-casing.md">FileConsistentCommandCasing</a></td>
+      <td>All commands within the Dockerfile should use the same casing (either upper or lower)</td>
+    </tr>
+    <tr>
+      <td><a href="./duplicate-stage-name.md">DuplicateStageName</a></td>
+      <td>Stage names should be unique</td>
+    </tr>
+    <tr>
+      <td><a href="./reserved-stage-name.md">ReservedStageName</a></td>
+      <td>Reserved stage names should not be used to name a stage</td>
+    </tr>
+    <tr>
+      <td><a href="./jsonargs-recommended.md">JSONArgsRecommended</a></td>
+      <td>JSON arguments recommended for ENTRYPOINT/CMD to prevent unintended behavior related to OS signals</td>
+    </tr>
+    <tr>
+      <td><a href="./maintainer-deprecated.md">MaintainerDeprecated</a></td>
+      <td>The maintainer instruction is deprecated, use a label instead to define an image author</td>
+    </tr>
+    <tr>
+      <td><a href="./undeclared-arg-in-from.md">UndeclaredArgInFrom</a></td>
+      <td>FROM command must use declared ARGs</td>
+    </tr>
+    <tr>
+      <td><a href="./workdir-relative-path.md">WorkdirRelativePath</a></td>
+      <td>Relative workdir without an absolute workdir declared within the build can have unexpected results if the base image changes</td>
+    </tr>
+    <tr>
+      <td><a href="./undefined-var.md">UndefinedVar</a></td>
+      <td>Variables should be defined before their use</td>
+    </tr>
+    <tr>
+      <td><a href="./multiple-instructions-disallowed.md">MultipleInstructionsDisallowed</a></td>
+      <td>Multiple instructions of the same type should not be used in the same stage</td>
+    </tr>
+    <tr>
+      <td><a href="./legacy-key-value-format.md">LegacyKeyValueFormat</a></td>
+      <td>Legacy key/value format with whitespace separator should not be used</td>
+    </tr>
+    <tr>
+      <td><a href="./invalid-base-image-platform.md">InvalidBaseImagePlatform</a></td>
+      <td>Base image platform does not match expected target platform</td>
+    </tr>
+  </tbody>
+</table>

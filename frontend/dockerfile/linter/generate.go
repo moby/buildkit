@@ -21,6 +21,7 @@ import (
 type Rule struct {
 	Name        string
 	Description string
+	Filename    string
 }
 
 const tmplStr = `---
@@ -52,18 +53,20 @@ func run(destDir string) error {
 	if err != nil {
 		return err
 	}
-	tmpl, err := template.New("rule").Parse(tmplStr)
+
+	tmplRule, err := template.New("rule").Parse(tmplStr)
 	if err != nil {
 		return err
 	}
 	for _, rule := range rules {
-		if ok, err := genRuleDoc(rule, tmpl); err != nil {
+		if ok, err := genRuleDoc(rule, tmplRule); err != nil {
 			return errors.Wrapf(err, "Error generating docs for %s", rule.Name)
 		} else if ok {
 			log.Printf("Docs generated for %s\n", rule.Name)
 		}
 	}
-	return nil
+
+	return genIndex(rules)
 }
 
 func genRuleDoc(rule Rule, tmpl *template.Template) (bool, error) {
@@ -72,7 +75,7 @@ func genRuleDoc(rule Rule, tmpl *template.Template) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	outputfile, err := os.Create(path.Join(destDir, fmt.Sprintf("%s.md", camelToKebab(rule.Name))))
+	outputfile, err := os.Create(path.Join(destDir, rule.Filename))
 	if err != nil {
 		return false, err
 	}
@@ -87,6 +90,30 @@ func genRuleDoc(rule Rule, tmpl *template.Template) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+func genIndex(rules []Rule) error {
+	content, err := os.ReadFile("docs/_index.md")
+	if err != nil {
+		return err
+	}
+
+	tmpl, err := template.New("index").Parse(string(content))
+	if err != nil {
+		return err
+	}
+
+	outputfile, err := os.Create(path.Join(destDir, "_index.md"))
+	if err != nil {
+		return err
+	}
+	defer outputfile.Close()
+
+	return tmpl.Execute(outputfile, struct {
+		Rules []Rule
+	}{
+		Rules: rules,
+	})
 }
 
 func listRules() ([]Rule, error) {
@@ -109,6 +136,7 @@ func listRules() ([]Rule, error) {
 								case "Name":
 									if basicLit, ok := kv.Value.(*ast.BasicLit); ok {
 										rule.Name = strings.Trim(basicLit.Value, `"`)
+										rule.Filename = fmt.Sprintf("%s.md", camelToKebab(rule.Name))
 									}
 								case "Description":
 									if basicLit, ok := kv.Value.(*ast.BasicLit); ok {
