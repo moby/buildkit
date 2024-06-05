@@ -38,7 +38,7 @@ func New(config *Config) *Linter {
 }
 
 func (lc *Linter) Run(rule LinterRuleI, location []parser.Range, txt ...string) {
-	if lc.Warn == nil || lc.SkipAll {
+	if lc == nil || lc.Warn == nil || lc.SkipAll {
 		return
 	}
 	rulename := rule.RuleName()
@@ -50,7 +50,7 @@ func (lc *Linter) Run(rule LinterRuleI, location []parser.Range, txt ...string) 
 }
 
 func (lc *Linter) Error() error {
-	if !lc.ReturnAsError {
+	if lc == nil || !lc.ReturnAsError {
 		return nil
 	}
 	if len(lc.CalledRules) == 0 {

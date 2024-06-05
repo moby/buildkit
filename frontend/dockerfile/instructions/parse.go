@@ -80,10 +80,8 @@ func ParseInstructionWithLinter(node *parser.Node, lint *linter.Linter) (v inter
 	case command.Env:
 		return parseEnv(req, lint)
 	case command.Maintainer:
-		if lint != nil {
-			msg := linter.RuleMaintainerDeprecated.Format()
-			lint.Run(&linter.RuleMaintainerDeprecated, node.Location(), msg)
-		}
+		msg := linter.RuleMaintainerDeprecated.Format()
+		lint.Run(&linter.RuleMaintainerDeprecated, node.Location(), msg)
 		return parseMaintainer(req)
 	case command.Label:
 		return parseLabel(req, lint)
@@ -92,11 +90,11 @@ func ParseInstructionWithLinter(node *parser.Node, lint *linter.Linter) (v inter
 	case command.Copy:
 		return parseCopy(req)
 	case command.From:
-		if lint != nil && !isLowerCaseStageName(req.args) {
+		if !isLowerCaseStageName(req.args) {
 			msg := linter.RuleStageNameCasing.Format(req.args[2])
 			lint.Run(&linter.RuleStageNameCasing, node.Location(), msg)
 		}
-		if lint != nil && !doesFromCaseMatchAsCase(req) {
+		if !doesFromCaseMatchAsCase(req) {
 			msg := linter.RuleFromAsCasing.Format(req.command, req.args[1])
 			lint.Run(&linter.RuleFromAsCasing, node.Location(), msg)
 		}
