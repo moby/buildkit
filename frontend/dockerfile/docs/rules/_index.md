@@ -84,9 +84,5 @@ $ docker build --check .
       <td><a href="./legacy-key-value-format.md">LegacyKeyValueFormat</a></td>
       <td>Legacy key/value format with whitespace separator should not be used</td>
     </tr>
-    <tr>
-      <td><a href="./invalid-base-image-platform.md">InvalidBaseImagePlatform</a></td>
-      <td>Base image platform does not match expected target platform</td>
-    </tr>
   </tbody>
 </table>

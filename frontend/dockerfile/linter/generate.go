@@ -164,6 +164,10 @@ func listRules() ([]Rule, error) {
 							}
 						}
 					}
+					if rule.Name == "InvalidBaseImagePlatform" {
+						// this rule does not have any specific documentation needed
+						continue
+					}
 					if rule.URL == nil {
 						inspectErr = errors.Errorf("URL not set for %q", rule.Name)
 						return false

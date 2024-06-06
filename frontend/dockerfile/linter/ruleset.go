@@ -128,7 +128,6 @@ var (
 	RuleInvalidBaseImagePlatform = LinterRule[func(string, string, string) string]{
 		Name:        "InvalidBaseImagePlatform",
 		Description: "Base image platform does not match expected target platform",
-		URL:         "https://docs.docker.com/go/dockerfile/rule/invalid-base-image-platform/",
 		Format: func(image, expected, actual string) string {
 			return fmt.Sprintf("Base image %s was pulled with platform %q, expected %q for current build", image, actual, expected)
 		},
