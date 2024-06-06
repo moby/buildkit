@@ -26,7 +26,7 @@ var lintTests = integration.TestFuncs(
 	testRuleCheckOption,
 	testStageName,
 	testNoEmptyContinuations,
-	testSelfConsistentCommandCasing,
+	testConsistentInstructionCasing,
 	testFileConsistentCommandCasing,
 	testDuplicateStageName,
 	testReservedStageName,
@@ -56,6 +56,7 @@ COPY $bar .
 			{
 				RuleName:    "UndefinedVar",
 				Description: "Variables should be defined before their use",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/undefined-var/",
 				Detail:      "Usage of undefined variable '$bar'",
 				Level:       1,
 				Line:        6,
@@ -65,6 +66,7 @@ COPY $bar .
 			{
 				RuleName:    "UndefinedVar",
 				Description: "Variables should be defined before their use",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/undefined-var/",
 				Detail:      "Usage of undefined variable '$foo'",
 				Level:       1,
 				Line:        3,
@@ -72,6 +74,7 @@ COPY $bar .
 			{
 				RuleName:    "UndefinedVar",
 				Description: "Variables should be defined before their use",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/undefined-var/",
 				Detail:      "Usage of undefined variable '$bar'",
 				Level:       1,
 				Line:        6,
@@ -115,6 +118,7 @@ copy Dockerfile .
 			{
 				RuleName:    "FromAsCasing",
 				Description: "The 'as' keyword should match the case of the 'from' keyword",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/from-as-casing/",
 				Detail:      "'as' and 'FROM' keywords' casing do not match",
 				Line:        2,
 				Level:       1,
@@ -132,6 +136,7 @@ copy Dockerfile .
 			{
 				RuleName:    "FromAsCasing",
 				Description: "The 'as' keyword should match the case of the 'from' keyword",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/from-as-casing/",
 				Detail:      "'as' and 'FROM' keywords' casing do not match",
 				Line:        2,
 				Level:       1,
@@ -152,6 +157,7 @@ copy Dockerfile .
 			{
 				RuleName:    "FromAsCasing",
 				Description: "The 'as' keyword should match the case of the 'from' keyword",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/from-as-casing/",
 				Detail:      "'as' and 'FROM' keywords' casing do not match",
 				Line:        2,
 				Level:       1,
@@ -193,6 +199,7 @@ FROM scratch AS base3
 			{
 				RuleName:    "StageNameCasing",
 				Description: "Stage names should be lowercase",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/stage-name-casing/",
 				Detail:      "Stage name 'BadStageName' should be lowercase",
 				Line:        3,
 				Level:       1,
@@ -200,6 +207,7 @@ FROM scratch AS base3
 			{
 				RuleName:    "FromAsCasing",
 				Description: "The 'as' keyword should match the case of the 'from' keyword",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/from-as-casing/",
 				Detail:      "'as' and 'FROM' keywords' casing do not match",
 				Line:        6,
 				Level:       1,
@@ -220,6 +228,7 @@ from scratch as base2
 			{
 				RuleName:    "FromAsCasing",
 				Description: "The 'as' keyword should match the case of the 'from' keyword",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/from-as-casing/",
 				Detail:      "'AS' and 'from' keywords' casing do not match",
 				Line:        3,
 				Level:       1,
@@ -245,16 +254,16 @@ COPY Dockerfile \
 			{
 				RuleName:    "NoEmptyContinuations",
 				Description: "Empty continuation lines will become errors in a future release",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/no-empty-continuations/",
 				Detail:      "Empty continuation line",
 				Level:       1,
 				Line:        6,
-				URL:         "https://github.com/moby/moby/pull/33719",
 			},
 		},
 	})
 }
 
-func testSelfConsistentCommandCasing(t *testing.T, sb integration.Sandbox) {
+func testConsistentInstructionCasing(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
 # warning: 'FROM' should be either lowercased or uppercased
 From scratch as base
@@ -264,8 +273,9 @@ FROM scratch AS base2
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
 			{
-				RuleName:    "SelfConsistentCommandCasing",
-				Description: "Commands should be in consistent casing (all lower or all upper)",
+				RuleName:    "ConsistentInstructionCasing",
+				Description: "Instructions should be in consistent casing (all lower or all upper)",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/consistent-instruction-casing/",
 				Detail:      "Command 'From' should be consistently cased",
 				Level:       1,
 				Line:        3,
@@ -282,8 +292,9 @@ from scratch as base2
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
 			{
-				RuleName:    "SelfConsistentCommandCasing",
-				Description: "Commands should be in consistent casing (all lower or all upper)",
+				RuleName:    "ConsistentInstructionCasing",
+				Description: "Instructions should be in consistent casing (all lower or all upper)",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/consistent-instruction-casing/",
 				Detail:      "Command 'frOM' should be consistently cased",
 				Line:        3,
 				Level:       1,
@@ -306,6 +317,7 @@ COPY Dockerfile /bar
 			{
 				RuleName:    "FileConsistentCommandCasing",
 				Description: "All commands within the Dockerfile should use the same casing (either upper or lower)",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/file-consistent-command-casing/",
 				Detail:      "Command 'copy' should match the case of the command majority (uppercase)",
 				Line:        4,
 				Level:       1,
@@ -325,6 +337,7 @@ copy Dockerfile /bar
 			{
 				RuleName:    "FileConsistentCommandCasing",
 				Description: "All commands within the Dockerfile should use the same casing (either upper or lower)",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/file-consistent-command-casing/",
 				Detail:      "Command 'COPY' should match the case of the command majority (lowercase)",
 				Line:        4,
 				Level:       1,
@@ -345,6 +358,7 @@ COPY Dockerfile /baz
 			{
 				RuleName:    "FileConsistentCommandCasing",
 				Description: "All commands within the Dockerfile should use the same casing (either upper or lower)",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/file-consistent-command-casing/",
 				Detail:      "Command 'from' should match the case of the command majority (uppercase)",
 				Line:        3,
 				Level:       1,
@@ -365,6 +379,7 @@ copy Dockerfile /baz
 			{
 				RuleName:    "FileConsistentCommandCasing",
 				Description: "All commands within the Dockerfile should use the same casing (either upper or lower)",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/file-consistent-command-casing/",
 				Detail:      "Command 'FROM' should match the case of the command majority (lowercase)",
 				Line:        3,
 				Level:       1,
@@ -398,6 +413,7 @@ FROM scratch AS b
 			{
 				RuleName:    "DuplicateStageName",
 				Description: "Stage names should be unique",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/duplicate-stage-name/",
 				Detail:      "Duplicate stage name \"b\", stage names should be unique",
 				Level:       1,
 				Line:        3,
@@ -422,14 +438,16 @@ FROM scratch AS context
 		Warnings: []expectedLintWarning{
 			{
 				RuleName:    "ReservedStageName",
-				Description: "Reserved stage names should not be used to name a stage",
+				Description: "Reserved words should not be used as stage names",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/reserved-stage-name/",
 				Detail:      "Stage name should not use the same name as reserved stage \"scratch\"",
 				Level:       1,
 				Line:        2,
 			},
 			{
 				RuleName:    "ReservedStageName",
-				Description: "Reserved stage names should not be used to name a stage",
+				Description: "Reserved words should not be used as stage names",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/reserved-stage-name/",
 				Detail:      "Stage name should not use the same name as reserved stage \"context\"",
 				Level:       1,
 				Line:        3,
@@ -457,6 +475,7 @@ CMD mycommand
 			{
 				RuleName:    "JSONArgsRecommended",
 				Description: "JSON arguments recommended for ENTRYPOINT/CMD to prevent unintended behavior related to OS signals",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/json-args-recommended/",
 				Detail:      "JSON arguments recommended for CMD to prevent unintended behavior related to OS signals",
 				Level:       1,
 				Line:        3,
@@ -473,6 +492,7 @@ ENTRYPOINT mycommand
 		Warnings: []expectedLintWarning{
 			{
 				RuleName:    "JSONArgsRecommended",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/json-args-recommended/",
 				Description: "JSON arguments recommended for ENTRYPOINT/CMD to prevent unintended behavior related to OS signals",
 				Detail:      "JSON arguments recommended for ENTRYPOINT to prevent unintended behavior related to OS signals",
 				Level:       1,
@@ -524,9 +544,9 @@ MAINTAINER me@example.org
 		Warnings: []expectedLintWarning{
 			{
 				RuleName:    "MaintainerDeprecated",
-				Description: "The maintainer instruction is deprecated, use a label instead to define an image author",
+				Description: "The MAINTAINER instruction is deprecated, use a label instead to define an image author",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/maintainer-deprecated/",
 				Detail:      "Maintainer instruction is deprecated in favor of using label",
-				URL:         "https://docs.docker.com/reference/dockerfile/#maintainer-deprecated",
 				Level:       1,
 				Line:        3,
 			},
@@ -552,13 +572,15 @@ FROM ${BAR} AS base
 			{
 				RuleName:    "StageNameCasing",
 				Description: "Stage names should be lowercase",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/stage-name-casing/",
 				Detail:      "Stage name 'BadStageName' should be lowercase",
 				Line:        3,
 				Level:       1,
 			},
 			{
-				RuleName:    "UndeclaredArgInFrom",
+				RuleName:    "UndefinedArgInFrom",
 				Description: "FROM command must use declared ARGs",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/undefined-arg-in-from/",
 				Detail:      "FROM argument 'BAR' is not declared",
 				Level:       1,
 				Line:        4,
@@ -599,8 +621,9 @@ COPY Dockerfile .
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
 			{
-				RuleName:    "UndeclaredArgInFrom",
+				RuleName:    "UndefinedArgInFrom",
 				Description: "FROM command must use declared ARGs",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/undefined-arg-in-from/",
 				Detail:      "FROM argument 'BULIDPLATFORM' is not declared (did you mean BUILDPLATFORM?)",
 				Level:       1,
 				Line:        2,
@@ -621,8 +644,9 @@ COPY Dockerfile .
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
 			{
-				RuleName:    "UndeclaredArgInFrom",
+				RuleName:    "UndefinedArgInFrom",
 				Description: "FROM command must use declared ARGs",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/undefined-arg-in-from/",
 				Detail:      "FROM argument 'MYARCH' is not declared (did you mean MY_ARCH?)",
 				Level:       1,
 				Line:        4,
@@ -642,8 +666,9 @@ COPY Dockerfile .
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
 			{
-				RuleName:    "UndeclaredArgInFrom",
+				RuleName:    "UndefinedArgInFrom",
 				Description: "FROM command must use declared ARGs",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/undefined-arg-in-from/",
 				Detail:      "FROM argument 'version' is not declared",
 				Level:       1,
 				Line:        3,
@@ -663,6 +688,7 @@ WORKDIR app/
 			{
 				RuleName:    "WorkdirRelativePath",
 				Description: "Relative workdir without an absolute workdir declared within the build can have unexpected results if the base image changes",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/workdir-relative-path/",
 				Detail:      "Relative workdir \"app/\" can have unexpected results if the base image changes",
 				Level:       1,
 				Line:        3,
@@ -715,6 +741,7 @@ RUN echo $foo
 			{
 				RuleName:    "UndefinedVar",
 				Description: "Variables should be defined before their use",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/undefined-var/",
 				Detail:      "Usage of undefined variable '$foo'",
 				Level:       1,
 				Line:        3,
@@ -735,6 +762,7 @@ COPY $DIR_ASSET .
 			{
 				RuleName:    "UndefinedVar",
 				Description: "Variables should be defined before their use",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/undefined-var/",
 				Detail:      "Usage of undefined variable '$DIR_ASSET' (did you mean $DIR_ASSETS?)",
 				Level:       1,
 				Line:        6,
@@ -752,6 +780,7 @@ ENV PATH=$PAHT:/tmp/bin
 			{
 				RuleName:    "UndefinedVar",
 				Description: "Variables should be defined before their use",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/undefined-var/",
 				Detail:      "Usage of undefined variable '$PAHT' (did you mean $PATH?)",
 				Level:       1,
 				Line:        3,
@@ -765,6 +794,7 @@ func testMultipleInstructionsDisallowed(t *testing.T, sb integration.Sandbox) {
 		return expectedLintWarning{
 			RuleName:    "MultipleInstructionsDisallowed",
 			Description: "Multiple instructions of the same type should not be used in the same stage",
+			URL:         "https://docs.docker.com/go/dockerfile/rule/multiple-instructions-disallowed/",
 			Detail:      fmt.Sprintf("Multiple %s instructions should not be used in the same stage because only the last one will be used", instructionName),
 			Level:       1,
 			Line:        line,
@@ -838,6 +868,7 @@ LABEL key value
 			{
 				RuleName:    "LegacyKeyValueFormat",
 				Description: "Legacy key/value format with whitespace separator should not be used",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/legacy-key-value-format/",
 				Detail:      "\"ENV key=value\" should be used instead of legacy \"ENV key value\" format",
 				Line:        3,
 				Level:       1,
@@ -845,6 +876,7 @@ LABEL key value
 			{
 				RuleName:    "LegacyKeyValueFormat",
 				Description: "Legacy key/value format with whitespace separator should not be used",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/legacy-key-value-format/",
 				Detail:      "\"LABEL key=value\" should be used instead of legacy \"LABEL key value\" format",
 				Line:        4,
 				Level:       1,
@@ -876,6 +908,7 @@ FROM a AS c
 			{
 				RuleName:    "LegacyKeyValueFormat",
 				Description: "Legacy key/value format with whitespace separator should not be used",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/legacy-key-value-format/",
 				Detail:      "\"ENV key=value\" should be used instead of legacy \"ENV key value\" format",
 				Line:        3,
 				Level:       1,
@@ -883,6 +916,7 @@ FROM a AS c
 			{
 				RuleName:    "LegacyKeyValueFormat",
 				Description: "Legacy key/value format with whitespace separator should not be used",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/legacy-key-value-format/",
 				Detail:      "\"LABEL key=value\" should be used instead of legacy \"LABEL key value\" format",
 				Line:        4,
 				Level:       1,

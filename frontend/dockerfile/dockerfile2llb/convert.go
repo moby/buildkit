@@ -2164,8 +2164,8 @@ func validateCommandCasing(dockerfile *parser.Result, lint *linter.Linter) {
 		// as well as ensuring that the casing is consistent throughout the dockerfile by comparing the
 		// command to the casing of the majority of commands.
 		if !isSelfConsistentCasing(node.Value) {
-			msg := linter.RuleSelfConsistentCommandCasing.Format(node.Value)
-			lint.Run(&linter.RuleSelfConsistentCommandCasing, node.Location(), msg)
+			msg := linter.RuleConsistentInstructionCasing.Format(node.Value)
+			lint.Run(&linter.RuleConsistentInstructionCasing, node.Location(), msg)
 		} else {
 			var msg string
 			var needsLintWarn bool
@@ -2284,8 +2284,8 @@ func toPBLocation(sourceIndex int, location []parser.Range) pb.Location {
 func reportUnusedFromArgs(values []string, unmatched map[string]struct{}, location []parser.Range, lint *linter.Linter) {
 	for arg := range unmatched {
 		suggest, _ := suggest.Search(arg, values, true)
-		msg := linter.RuleUndeclaredArgInFrom.Format(arg, suggest)
-		lint.Run(&linter.RuleUndeclaredArgInFrom, location, msg)
+		msg := linter.RuleUndefinedArgInFrom.Format(arg, suggest)
+		lint.Run(&linter.RuleUndefinedArgInFrom, location, msg)
 	}
 }
 
