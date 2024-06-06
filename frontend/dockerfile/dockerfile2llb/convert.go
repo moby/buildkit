@@ -881,7 +881,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 	case *instructions.MaintainerCommand:
 		err = dispatchMaintainer(d, c)
 	case *instructions.EnvCommand:
-		err = dispatchEnv(d, c)
+		err = dispatchEnv(d, c, opt.lint)
 	case *instructions.RunCommand:
 		err = dispatchRun(d, c, opt.proxyEnv, cmd.sources, opt)
 	case *instructions.WorkdirCommand:
@@ -915,7 +915,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 			}
 		}
 	case *instructions.LabelCommand:
-		err = dispatchLabel(d, c)
+		err = dispatchLabel(d, c, opt.lint)
 	case *instructions.OnbuildCommand:
 		err = dispatchOnbuild(d, c)
 	case *instructions.CmdCommand:
@@ -1104,9 +1104,13 @@ func dispatchOnBuildTriggers(d *dispatchState, triggers []string, opt dispatchOp
 	return nil
 }
 
-func dispatchEnv(d *dispatchState, c *instructions.EnvCommand) error {
+func dispatchEnv(d *dispatchState, c *instructions.EnvCommand, lint *linter.Linter) error {
 	commitMessage := bytes.NewBufferString("ENV")
 	for _, e := range c.Env {
+		if e.NoDelim {
+			msg := linter.RuleLegacyKeyValueFormat.Format(c.Name())
+			lint.Run(&linter.RuleLegacyKeyValueFormat, c.Location(), msg)
+		}
 		commitMessage.WriteString(" " + e.String())
 		d.state = d.state.AddEnv(e.Key, e.Value)
 		d.image.Config.Env = addEnv(d.image.Config.Env, e.Key, e.Value)
@@ -1562,12 +1566,16 @@ func dispatchMaintainer(d *dispatchState, c *instructions.MaintainerCommand) err
 	return commitToHistory(&d.image, fmt.Sprintf("MAINTAINER %v", c.Maintainer), false, nil, d.epoch)
 }
 
-func dispatchLabel(d *dispatchState, c *instructions.LabelCommand) error {
+func dispatchLabel(d *dispatchState, c *instructions.LabelCommand, lint *linter.Linter) error {
 	commitMessage := bytes.NewBufferString("LABEL")
 	if d.image.Config.Labels == nil {
 		d.image.Config.Labels = make(map[string]string, len(c.Labels))
 	}
 	for _, v := range c.Labels {
+		if v.NoDelim {
+			msg := linter.RuleLegacyKeyValueFormat.Format(c.Name())
+			lint.Run(&linter.RuleLegacyKeyValueFormat, c.Location(), msg)
+		}
 		d.image.Config.Labels[v.Key] = v.Value
 		commitMessage.WriteString(" " + v.String())
 	}

@@ -858,6 +858,37 @@ ENV key=value
 LABEL key=value
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	// Warnings only happen in unmarshal if the lint happens in a
+	// stage that's not reachable.
+	dockerfile = []byte(`
+FROM scratch AS a
+
+FROM a AS b
+ENV key value
+LABEL key value
+
+FROM a AS c
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		UnmarshalWarnings: []expectedLintWarning{
+			{
+				RuleName:    "LegacyKeyValueFormat",
+				Description: "Legacy key/value format with whitespace separator should not be used",
+				Detail:      "\"ENV key=value\" should be used instead of legacy \"ENV key value\" format",
+				Line:        3,
+				Level:       1,
+			},
+			{
+				RuleName:    "LegacyKeyValueFormat",
+				Description: "Legacy key/value format with whitespace separator should not be used",
+				Detail:      "\"LABEL key=value\" should be used instead of legacy \"LABEL key value\" format",
+				Line:        4,
+				Level:       1,
+			},
+		},
+	})
 }
 
 func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestParams) {
