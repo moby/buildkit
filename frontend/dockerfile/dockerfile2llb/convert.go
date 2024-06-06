@@ -65,6 +65,7 @@ type ConvertOpt struct {
 	MetaResolver   llb.ImageMetaResolver
 	LLBCaps        *apicaps.CapSet
 	Warn           linter.LintWarnFunc
+	AllStages      bool
 }
 
 type SBOMTargets struct {
@@ -117,6 +118,11 @@ func DockerfileLint(ctx context.Context, dt []byte, opt ConvertOpt) (*lint.LintR
 	opt.Warn = func(rulename, description, url, fmtmsg string, location []parser.Range) {
 		results.AddWarning(rulename, description, url, fmtmsg, sourceIndex, location)
 	}
+	// for lint, no target means all targets
+	if opt.Target == "" {
+		opt.AllStages = true
+	}
+
 	_, err := toDispatchState(ctx, dt, opt)
 
 	var errLoc *parser.ErrorLocation
@@ -486,6 +492,9 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	eg, ctx := errgroup.WithContext(ctx)
 	for i, d := range allDispatchStates.states {
 		_, reachable := allReachable[d]
+		if opt.AllStages {
+			reachable = true
+		}
 		// resolve image config for every stage
 		if d.base == nil && !d.noinit {
 			if d.stage.BaseName == emptyImageName {
@@ -621,8 +630,10 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	ctxPaths := map[string]struct{}{}
 
 	for _, d := range allDispatchStates.states {
-		if _, ok := allReachable[d]; !ok || d.noinit {
-			continue
+		if !opt.AllStages {
+			if _, ok := allReachable[d]; !ok || d.noinit {
+				continue
+			}
 		}
 		d.init()
 

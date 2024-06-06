@@ -39,7 +39,46 @@ var lintTests = integration.TestFuncs(
 	testMultipleInstructionsDisallowed,
 	testLegacyKeyValueFormat,
 	testBaseImagePlatformMismatch,
+	testAllTargetUnmarshal,
 )
+
+func testAllTargetUnmarshal(t *testing.T, sb integration.Sandbox) {
+	dockerfile := []byte(`
+FROM scratch AS first
+COPY $foo .
+
+FROM scratch AS second
+COPY $bar .
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "UndefinedVar",
+				Description: "Variables should be defined before their use",
+				Detail:      "Usage of undefined variable '$bar'",
+				Level:       1,
+				Line:        6,
+			},
+		},
+		UnmarshalWarnings: []expectedLintWarning{
+			{
+				RuleName:    "UndefinedVar",
+				Description: "Variables should be defined before their use",
+				Detail:      "Usage of undefined variable '$foo'",
+				Level:       1,
+				Line:        3,
+			},
+			{
+				RuleName:    "UndefinedVar",
+				Description: "Variables should be defined before their use",
+				Detail:      "Usage of undefined variable '$bar'",
+				Level:       1,
+				Line:        6,
+			},
+		},
+	})
+}
 
 func testRuleCheckOption(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`#check=skip=all
@@ -826,6 +865,13 @@ func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestPara
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
+	var warnings []expectedLintWarning
+	if lintTest.UnmarshalWarnings != nil {
+		warnings = lintTest.UnmarshalWarnings
+	} else {
+		warnings = lintTest.Warnings
+	}
+
 	called := false
 	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 		frontendOpts := map[string]string{
@@ -851,7 +897,7 @@ func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestPara
 			require.Greater(t, lintResults.Error.Location.SourceIndex, int32(-1))
 			require.Less(t, lintResults.Error.Location.SourceIndex, int32(len(lintResults.Sources)))
 		}
-		require.Equal(t, len(lintTest.Warnings), len(lintResults.Warnings))
+		require.Equal(t, len(warnings), len(lintResults.Warnings))
 
 		sort.Slice(lintResults.Warnings, func(i, j int) bool {
 			// sort by line number in ascending order
@@ -861,7 +907,7 @@ func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestPara
 		})
 		// Compare expectedLintWarning with actual lint results
 		for i, w := range lintResults.Warnings {
-			checkLintWarning(t, w, lintTest.Warnings[i])
+			checkLintWarning(t, w, warnings[i])
 		}
 		called = true
 		return nil, nil
@@ -1018,6 +1064,7 @@ type lintTestParams struct {
 	TmpDir            *integration.TmpDirWithName
 	Dockerfile        []byte
 	Warnings          []expectedLintWarning
+	UnmarshalWarnings []expectedLintWarning
 	StreamBuildErr    string
 	UnmarshalBuildErr string
 	BuildErrLocation  int32
