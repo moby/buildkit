@@ -26,7 +26,7 @@ var lintTests = integration.TestFuncs(
 	testRuleCheckOption,
 	testStageName,
 	testNoEmptyContinuations,
-	testSelfConsistentCommandCasing,
+	testConsistentInstructionCasing,
 	testFileConsistentCommandCasing,
 	testDuplicateStageName,
 	testReservedStageName,
@@ -56,6 +56,7 @@ COPY $bar .
 			{
 				RuleName:    "UndefinedVar",
 				Description: "Variables should be defined before their use",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/undefined-var/",
 				Detail:      "Usage of undefined variable '$bar'",
 				Level:       1,
 				Line:        6,
@@ -65,6 +66,7 @@ COPY $bar .
 			{
 				RuleName:    "UndefinedVar",
 				Description: "Variables should be defined before their use",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/undefined-var/",
 				Detail:      "Usage of undefined variable '$foo'",
 				Level:       1,
 				Line:        3,
@@ -72,6 +74,7 @@ COPY $bar .
 			{
 				RuleName:    "UndefinedVar",
 				Description: "Variables should be defined before their use",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/undefined-var/",
 				Detail:      "Usage of undefined variable '$bar'",
 				Level:       1,
 				Line:        6,
@@ -260,7 +263,7 @@ COPY Dockerfile \
 	})
 }
 
-func testSelfConsistentCommandCasing(t *testing.T, sb integration.Sandbox) {
+func testConsistentInstructionCasing(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
 # warning: 'FROM' should be either lowercased or uppercased
 From scratch as base
@@ -270,9 +273,9 @@ FROM scratch AS base2
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
 			{
-				RuleName:    "SelfConsistentCommandCasing",
-				Description: "Commands should be in consistent casing (all lower or all upper)",
-				URL:         "https://docs.docker.com/go/dockerfile/rule/self-consistent-command-casing/",
+				RuleName:    "ConsistentInstructionCasing",
+				Description: "Instructions should be in consistent casing (all lower or all upper)",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/consistent-instruction-casing/",
 				Detail:      "Command 'From' should be consistently cased",
 				Level:       1,
 				Line:        3,
@@ -289,9 +292,9 @@ from scratch as base2
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
 			{
-				RuleName:    "SelfConsistentCommandCasing",
-				Description: "Commands should be in consistent casing (all lower or all upper)",
-				URL:         "https://docs.docker.com/go/dockerfile/rule/self-consistent-command-casing/",
+				RuleName:    "ConsistentInstructionCasing",
+				Description: "Instructions should be in consistent casing (all lower or all upper)",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/consistent-instruction-casing/",
 				Detail:      "Command 'frOM' should be consistently cased",
 				Line:        3,
 				Level:       1,
@@ -435,7 +438,7 @@ FROM scratch AS context
 		Warnings: []expectedLintWarning{
 			{
 				RuleName:    "ReservedStageName",
-				Description: "Reserved stage names should not be used to name a stage",
+				Description: "Reserved words should not be used as stage names",
 				URL:         "https://docs.docker.com/go/dockerfile/rule/reserved-stage-name/",
 				Detail:      "Stage name should not use the same name as reserved stage \"scratch\"",
 				Level:       1,
@@ -443,7 +446,7 @@ FROM scratch AS context
 			},
 			{
 				RuleName:    "ReservedStageName",
-				Description: "Reserved stage names should not be used to name a stage",
+				Description: "Reserved words should not be used as stage names",
 				URL:         "https://docs.docker.com/go/dockerfile/rule/reserved-stage-name/",
 				Detail:      "Stage name should not use the same name as reserved stage \"context\"",
 				Level:       1,
@@ -541,7 +544,7 @@ MAINTAINER me@example.org
 		Warnings: []expectedLintWarning{
 			{
 				RuleName:    "MaintainerDeprecated",
-				Description: "The maintainer instruction is deprecated, use a label instead to define an image author",
+				Description: "The MAINTAINER instruction is deprecated, use a label instead to define an image author",
 				URL:         "https://docs.docker.com/go/dockerfile/rule/maintainer-deprecated/",
 				Detail:      "Maintainer instruction is deprecated in favor of using label",
 				Level:       1,
@@ -575,9 +578,9 @@ FROM ${BAR} AS base
 				Level:       1,
 			},
 			{
-				RuleName:    "UndeclaredArgInFrom",
+				RuleName:    "UndefinedArgInFrom",
 				Description: "FROM command must use declared ARGs",
-				URL:         "https://docs.docker.com/go/dockerfile/rule/undeclared-arg-in-from/",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/undefined-arg-in-from/",
 				Detail:      "FROM argument 'BAR' is not declared",
 				Level:       1,
 				Line:        4,
@@ -618,9 +621,9 @@ COPY Dockerfile .
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
 			{
-				RuleName:    "UndeclaredArgInFrom",
+				RuleName:    "UndefinedArgInFrom",
 				Description: "FROM command must use declared ARGs",
-				URL:         "https://docs.docker.com/go/dockerfile/rule/undeclared-arg-in-from/",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/undefined-arg-in-from/",
 				Detail:      "FROM argument 'BULIDPLATFORM' is not declared (did you mean BUILDPLATFORM?)",
 				Level:       1,
 				Line:        2,
@@ -641,9 +644,9 @@ COPY Dockerfile .
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
 			{
-				RuleName:    "UndeclaredArgInFrom",
+				RuleName:    "UndefinedArgInFrom",
 				Description: "FROM command must use declared ARGs",
-				URL:         "https://docs.docker.com/go/dockerfile/rule/undeclared-arg-in-from/",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/undefined-arg-in-from/",
 				Detail:      "FROM argument 'MYARCH' is not declared (did you mean MY_ARCH?)",
 				Level:       1,
 				Line:        4,
@@ -663,9 +666,9 @@ COPY Dockerfile .
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
 			{
-				RuleName:    "UndeclaredArgInFrom",
+				RuleName:    "UndefinedArgInFrom",
 				Description: "FROM command must use declared ARGs",
-				URL:         "https://docs.docker.com/go/dockerfile/rule/undeclared-arg-in-from/",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/undefined-arg-in-from/",
 				Detail:      "FROM argument 'version' is not declared",
 				Level:       1,
 				Line:        3,
@@ -905,6 +908,7 @@ FROM a AS c
 			{
 				RuleName:    "LegacyKeyValueFormat",
 				Description: "Legacy key/value format with whitespace separator should not be used",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/legacy-key-value-format/",
 				Detail:      "\"ENV key=value\" should be used instead of legacy \"ENV key value\" format",
 				Line:        3,
 				Level:       1,
@@ -912,6 +916,7 @@ FROM a AS c
 			{
 				RuleName:    "LegacyKeyValueFormat",
 				Description: "Legacy key/value format with whitespace separator should not be used",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/legacy-key-value-format/",
 				Detail:      "\"LABEL key=value\" should be used instead of legacy \"LABEL key value\" format",
 				Line:        4,
 				Level:       1,

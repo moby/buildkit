@@ -41,8 +41,8 @@ $ docker build --check .
       <td>Empty continuation lines will become errors in a future release</td>
     </tr>
     <tr>
-      <td><a href="./self-consistent-command-casing.md">SelfConsistentCommandCasing</a></td>
-      <td>Commands should be in consistent casing (all lower or all upper)</td>
+      <td><a href="./consistent-instruction-casing.md">ConsistentInstructionCasing</a></td>
+      <td>Instructions should be in consistent casing (all lower or all upper)</td>
     </tr>
     <tr>
       <td><a href="./file-consistent-command-casing.md">FileConsistentCommandCasing</a></td>
@@ -54,7 +54,7 @@ $ docker build --check .
     </tr>
     <tr>
       <td><a href="./reserved-stage-name.md">ReservedStageName</a></td>
-      <td>Reserved stage names should not be used to name a stage</td>
+      <td>Reserved words should not be used as stage names</td>
     </tr>
     <tr>
       <td><a href="./json-args-recommended.md">JSONArgsRecommended</a></td>
@@ -62,10 +62,10 @@ $ docker build --check .
     </tr>
     <tr>
       <td><a href="./maintainer-deprecated.md">MaintainerDeprecated</a></td>
-      <td>The maintainer instruction is deprecated, use a label instead to define an image author</td>
+      <td>The MAINTAINER instruction is deprecated, use a label instead to define an image author</td>
     </tr>
     <tr>
-      <td><a href="./undeclared-arg-in-from.md">UndeclaredArgInFrom</a></td>
+      <td><a href="./undefined-arg-in-from.md">UndefinedArgInFrom</a></td>
       <td>FROM command must use declared ARGs</td>
     </tr>
     <tr>

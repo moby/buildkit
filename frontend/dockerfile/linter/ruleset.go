@@ -29,10 +29,10 @@ var (
 			return "Empty continuation line"
 		},
 	}
-	RuleSelfConsistentCommandCasing = LinterRule[func(string) string]{
-		Name:        "SelfConsistentCommandCasing",
-		Description: "Commands should be in consistent casing (all lower or all upper)",
-		URL:         "https://docs.docker.com/go/dockerfile/rule/self-consistent-command-casing/",
+	RuleConsistentInstructionCasing = LinterRule[func(string) string]{
+		Name:        "ConsistentInstructionCasing",
+		Description: "Instructions should be in consistent casing (all lower or all upper)",
+		URL:         "https://docs.docker.com/go/dockerfile/rule/consistent-instruction-casing/",
 		Format: func(command string) string {
 			return fmt.Sprintf("Command '%s' should be consistently cased", command)
 		},
@@ -55,7 +55,7 @@ var (
 	}
 	RuleReservedStageName = LinterRule[func(string) string]{
 		Name:        "ReservedStageName",
-		Description: "Reserved stage names should not be used to name a stage",
+		Description: "Reserved words should not be used as stage names",
 		URL:         "https://docs.docker.com/go/dockerfile/rule/reserved-stage-name/",
 		Format: func(reservedStageName string) string {
 			return fmt.Sprintf("Stage name should not use the same name as reserved stage %q", reservedStageName)
@@ -71,16 +71,16 @@ var (
 	}
 	RuleMaintainerDeprecated = LinterRule[func() string]{
 		Name:        "MaintainerDeprecated",
-		Description: "The maintainer instruction is deprecated, use a label instead to define an image author",
+		Description: "The MAINTAINER instruction is deprecated, use a label instead to define an image author",
 		URL:         "https://docs.docker.com/go/dockerfile/rule/maintainer-deprecated/",
 		Format: func() string {
 			return "Maintainer instruction is deprecated in favor of using label"
 		},
 	}
-	RuleUndeclaredArgInFrom = LinterRule[func(string, string) string]{
-		Name:        "UndeclaredArgInFrom",
+	RuleUndefinedArgInFrom = LinterRule[func(string, string) string]{
+		Name:        "UndefinedArgInFrom",
 		Description: "FROM command must use declared ARGs",
-		URL:         "https://docs.docker.com/go/dockerfile/rule/undeclared-arg-in-from/",
+		URL:         "https://docs.docker.com/go/dockerfile/rule/undefined-arg-in-from/",
 		Format: func(baseArg, suggest string) string {
 			out := fmt.Sprintf("FROM argument '%s' is not declared", baseArg)
 			if suggest != "" {

@@ -1,6 +1,6 @@
 ---
 title: ReservedStageName
-description: Reserved stage names should not be used to name a stage
+description: Reserved words should not be used as stage names
 aliases:
   - /go/dockerfile/rule/reserved-stage-name/
 ---

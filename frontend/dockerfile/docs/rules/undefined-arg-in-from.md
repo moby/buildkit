@@ -1,8 +1,8 @@
 ---
-title: UndeclaredArgInFrom
+title: UndefinedArgInFrom
 description: FROM command must use declared ARGs
 aliases:
-  - /go/dockerfile/rule/undeclared-arg-in-from/
+  - /go/dockerfile/rule/undefined-arg-in-from/
 ---
 
 ## Output

@@ -1,6 +1,6 @@
 ---
 title: MaintainerDeprecated
-description: The maintainer instruction is deprecated, use a label instead to define an image author
+description: The MAINTAINER instruction is deprecated, use a label instead to define an image author
 aliases:
   - /go/dockerfile/rule/maintainer-deprecated/
 ---
@@ -8,7 +8,7 @@ aliases:
 ## Output
 
 ```text
-Maintainer instruction is deprecated in favor of using label
+MAINTAINER instruction is deprecated in favor of using label
 ```
 
 ## Description

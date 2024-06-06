@@ -8,7 +8,7 @@ aliases:
 ## Output
 
 ```text
-JSON arguments recommended for 'ENTRYPOINT' to prevent unintended behavior related to OS signals
+JSON arguments recommended for ENTRYPOINT/CMD to prevent unintended behavior related to OS signals
 ```
 
 ## Description

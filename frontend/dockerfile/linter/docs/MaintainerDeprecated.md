@@ -1,7 +1,7 @@
 ## Output
 
 ```text
-Maintainer instruction is deprecated in favor of using label
+MAINTAINER instruction is deprecated in favor of using label
 ```
 
 ## Description
