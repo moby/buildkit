@@ -67,6 +67,104 @@ func TestChecksumSymlinkNoParentScan(t *testing.T) {
 	require.Equal(t, dgstFileData0, dgst)
 }
 
+func TestChecksumNonLexicalSymlinks(t *testing.T) {
+	t.Parallel()
+	tmpdir := t.TempDir()
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
+	t.Cleanup(cleanup)
+
+	ch := []string{
+		"ADD target dir",
+		"ADD target/file file data0",
+		"ADD link1 dir",
+		"ADD link1/target_file symlink ../target/file",
+		"ADD link1/target_file_abs symlink /target/file",
+		"ADD link1/target_dir symlink ../target",
+		"ADD link1/target_dir_abs symlink /target",
+		"ADD link2 dir",
+		"ADD link2/link1_rel symlink ../link1",
+		"ADD link2/link1_abs symlink /link1",
+		"ADD link3 dir",
+		"ADD link3/target symlink ../link2/link1_rel/target_dir",
+		"ADD link3/target_file symlink ../link2/link1_rel/target_file",
+	}
+
+	ref := createRef(t, cm, ch)
+
+	cc, err := newCacheContext(ref)
+	require.NoError(t, err)
+
+	// When following links, all of these paths should be resolved identically.
+	for _, path := range []string{
+		"target/file",
+		"link1/target_file",
+		"link1/target_dir/file",
+		"link2/link1_rel/target_file",
+		"link2/link1_rel/target_file_abs",
+		"link2/link1_rel/target_dir/file",
+		"link2/link1_rel/target_dir_abs/file",
+		"link2/link1_abs/target_file",
+		"link2/link1_abs/target_file_abs",
+		"link2/link1_abs/target_dir/file",
+		"link2/link1_abs/target_dir_abs/file",
+		"link3/target_file",
+		"link3/target/file",
+	} {
+		dgst, err := cc.Checksum(context.TODO(), ref, path, ChecksumOpts{FollowLinks: true}, nil)
+		require.NoError(t, err)
+		require.Equal(t, dgstFileData0, dgst)
+	}
+
+	// FollowLinks only affects final component resolution, so make sure that
+	// the resolution still works with symlink path components.
+	for _, path := range []string{
+		"target/file",
+		"link1/target_dir/file",
+		"link2/link1_rel/target_dir/file",
+		"link2/link1_rel/target_dir_abs/file",
+		"link2/link1_abs/target_dir/file",
+		"link2/link1_abs/target_dir_abs/file",
+		"link3/target/file",
+	} {
+		dgst, err := cc.Checksum(context.TODO(), ref, path, ChecksumOpts{FollowLinks: false}, nil)
+		require.NoError(t, err)
+		require.Equal(t, dgstFileData0, dgst)
+	}
+
+	dgstLink1TargetFile, err := cc.Checksum(context.TODO(), ref, "link1/target_file", ChecksumOpts{FollowLinks: false}, nil)
+	require.NoError(t, err)
+	require.NotEqual(t, dgstFileData0, dgstLink1TargetFile)
+
+	dgstLink1TargetFileAbs, err := cc.Checksum(context.TODO(), ref, "link1/target_file_abs", ChecksumOpts{FollowLinks: false}, nil)
+	require.NoError(t, err)
+	require.NotEqual(t, dgstFileData0, dgstLink1TargetFileAbs)
+
+	dgstLink3TargetFile, err := cc.Checksum(context.TODO(), ref, "link3/target_file", ChecksumOpts{FollowLinks: false}, nil)
+	require.NoError(t, err)
+	require.NotEqual(t, dgstFileData0, dgstLink3TargetFile)
+
+	// For the final component, we should get the digest of the expected links.
+	for _, test := range []struct {
+		path         string
+		expectedDgst digest.Digest
+	}{
+		{"link1/target_file", dgstLink1TargetFile},
+		{"link2/link1_rel/target_file", dgstLink1TargetFile},
+		{"link2/link1_rel/target_file_abs", dgstLink1TargetFileAbs},
+		{"link2/link1_abs/target_file", dgstLink1TargetFile},
+		{"link2/link1_abs/target_file_abs", dgstLink1TargetFileAbs},
+		{"link3/target_file", dgstLink3TargetFile},
+	} {
+		dgst, err := cc.Checksum(context.TODO(), ref, test.path, ChecksumOpts{FollowLinks: false}, nil)
+		require.NoError(t, err)
+		require.NotEqual(t, dgstFileData0, dgst)
+		require.Equal(t, test.expectedDgst, dgst)
+	}
+}
+
 func TestChecksumHardlinks(t *testing.T) {
 	t.Parallel()
 	tmpdir := t.TempDir()
