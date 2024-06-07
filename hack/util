@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 
 : "${BUILDX_CMD=docker buildx}"
 : "${BUILDX_BUILDER=}"
@@ -6,6 +6,7 @@
 : "${GITHUB_ACTIONS=}"
 : "${GITHUB_REPOSITORY=}"
 : "${GITHUB_RUN_ID=}"
+: "${GITHUB_TOKEN=}"
 
 : "${CONTEXT=}"
 : "${CACHE_FROM=}"
@@ -43,11 +44,27 @@ if [ "$GITHUB_ACTIONS" = "true" ] && [ "$GITHUB_REPOSITORY" = "moby/buildkit" ];
   currentref="https://github.com/$GITHUB_REPOSITORY.git#$GITHUB_REF"
   if [ -n "$CACHE_FROM" ]; then
     for cfrom in $CACHE_FROM; do
+      if [[ $cfrom == *"type=gha"* ]]; then
+        if [[ -n "$GITHUB_REPOSITORY" ]] && [[ $cfrom != *"repository="* ]]; then
+          cfrom="${cfrom},repository=${GITHUB_REPOSITORY}"
+        fi
+        if [[ -n "$GITHUB_TOKEN" ]] && [[ $cfrom != *"ghtoken="* ]]; then
+          cfrom="${cfrom},ghtoken=${GITHUB_TOKEN}"
+        fi
+      fi
       cacheFromFlags="${cacheFromFlags}--cache-from=$cfrom "
     done
   fi
   if [ -n "$CACHE_TO" ]; then
     for cto in $CACHE_TO; do
+      if [[ $cto == *"type=gha"* ]]; then
+        if [[ -n "$GITHUB_REPOSITORY" ]] && [[ $cto != *"repository="* ]]; then
+          cto="${cto},repository=${GITHUB_REPOSITORY}"
+        fi
+        if [[ -n "$GITHUB_TOKEN" ]] && [[ $cto != *"ghtoken="* ]]; then
+          cto="${cto},ghtoken=${GITHUB_TOKEN}"
+        fi
+      fi
       cacheToFlags="${cacheToFlags}--cache-to=$cto "
     done
   fi

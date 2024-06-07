@@ -85,7 +85,7 @@ exportCacheFlags=""
 if [ -n "$cacheToFlags" ]; then
   exportCacheFlags="$cacheToFlags"
 elif [ "$PUSH" = "push" ]; then
-  exportCacheFlags="$exportCacheFlags--cache-to=type=inline "
+  exportCacheFlags="--cache-to=type=inline"
 fi
 
 tagFlags=""

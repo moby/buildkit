@@ -106,6 +106,7 @@ jobs:
           PLATFORMS: ${{ matrix.platform }}
           CACHE_FROM: type=gha,scope=binaries-${{ env.PLATFORM_PAIR }}
           CACHE_TO: type=gha,scope=binaries-${{ env.PLATFORM_PAIR }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       -
         name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -186,6 +187,7 @@ jobs:
           TARGET: ${{ matrix.target-stage }}
           CACHE_FROM: type=gha,scope=image${{ matrix.target-stage }}
           CACHE_TO: type=gha,scope=image${{ matrix.target-stage }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   release:
     runs-on: ubuntu-24.04

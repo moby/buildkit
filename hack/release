@@ -5,6 +5,7 @@ set -eu -o pipefail
 : "${GITHUB_ACTIONS=}"
 : "${GITHUB_REPOSITORY=}"
 : "${GITHUB_RUN_ID=}"
+: "${GITHUB_TOKEN=}"
 
 : "${BUILDX_CMD=docker buildx}"
 : "${DESTDIR=./bin/release}"
@@ -15,11 +16,27 @@ set -eu -o pipefail
 
 if [ -n "$CACHE_FROM" ]; then
   for cfrom in $CACHE_FROM; do
+    if [[ $cfrom == *"type=gha"* ]]; then
+      if [[ -n "$GITHUB_REPOSITORY" ]] && [[ $cfrom != *"repository="* ]]; then
+        cfrom="${cfrom},repository=${GITHUB_REPOSITORY}"
+      fi
+      if [[ -n "$GITHUB_TOKEN" ]] && [[ $cfrom != *"ghtoken="* ]]; then
+        cfrom="${cfrom},ghtoken=${GITHUB_TOKEN}"
+      fi
+    fi
     setFlags+=(--set "*.cache-from=$cfrom")
   done
 fi
 if [ -n "$CACHE_TO" ]; then
   for cto in $CACHE_TO; do
+    if [[ $cto == *"type=gha"* ]]; then
+      if [[ -n "$GITHUB_REPOSITORY" ]] && [[ $cto != *"repository="* ]]; then
+        cto="${cto},repository=${GITHUB_REPOSITORY}"
+      fi
+      if [[ -n "$GITHUB_TOKEN" ]] && [[ $cto != *"ghtoken="* ]]; then
+        cto="${cto},ghtoken=${GITHUB_TOKEN}"
+      fi
+    fi
     setFlags+=(--set "*.cache-to=$cto")
   done
 fi
