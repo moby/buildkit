@@ -25,7 +25,7 @@ import (
 var lintTests = integration.TestFuncs(
 	testRuleCheckOption,
 	testStageName,
-	testNoEmptyContinuations,
+	testNoEmptyContinuation,
 	testConsistentInstructionCasing,
 	testFileConsistentCommandCasing,
 	testDuplicateStageName,
@@ -237,7 +237,7 @@ from scratch as base2
 	})
 }
 
-func testNoEmptyContinuations(t *testing.T, sb integration.Sandbox) {
+func testNoEmptyContinuation(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
 FROM scratch
 # warning: empty continuation line
@@ -252,9 +252,9 @@ COPY Dockerfile \
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
 			{
-				RuleName:    "NoEmptyContinuations",
+				RuleName:    "NoEmptyContinuation",
 				Description: "Empty continuation lines will become errors in a future release",
-				URL:         "https://docs.docker.com/go/dockerfile/rule/no-empty-continuations/",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/no-empty-continuation/",
 				Detail:      "Empty continuation line",
 				Level:       1,
 				Line:        6,

@@ -37,7 +37,7 @@ $ docker build --check .
       <td>The 'as' keyword should match the case of the 'from' keyword</td>
     </tr>
     <tr>
-      <td><a href="./no-empty-continuations/">NoEmptyContinuations</a></td>
+      <td><a href="./no-empty-continuation/">NoEmptyContinuation</a></td>
       <td>Empty continuation lines will become errors in a future release</td>
     </tr>
     <tr>
