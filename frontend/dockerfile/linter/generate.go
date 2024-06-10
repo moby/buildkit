@@ -23,7 +23,7 @@ type Rule struct {
 	Name        string
 	Description string
 	URL         *url.URL
-	Filename    string
+	PageName    string
 	URLAlias    string
 }
 
@@ -82,7 +82,7 @@ func genRuleDoc(rule Rule, tmpl *template.Template) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	outputfile, err := os.Create(path.Join(destDir, rule.Filename))
+	outputfile, err := os.Create(path.Join(destDir, rule.PageName+".md"))
 	if err != nil {
 		return false, err
 	}
@@ -144,7 +144,7 @@ func listRules() ([]Rule, error) {
 								case "Name":
 									if basicLit, ok := kv.Value.(*ast.BasicLit); ok {
 										rule.Name = strings.Trim(basicLit.Value, `"`)
-										rule.Filename = fmt.Sprintf("%s.md", camelToKebab(rule.Name))
+										rule.PageName = camelToKebab(rule.Name)
 									}
 								case "Description":
 									if basicLit, ok := kv.Value.(*ast.BasicLit); ok {

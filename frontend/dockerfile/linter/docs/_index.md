@@ -30,8 +30,8 @@ $ docker build --check .
   <tbody>
     {{- range .Rules }}
     <tr>
-      <td><a href="./{{.Filename}}">{{.Name}}</a></td>
-      <td>{{.Description}}</td>
+      <td><a href="./{{ .PageName }}/">{{ .Name }}</a></td>
+      <td>{{ .Description }}</td>
     </tr>
     {{- end }}
   </tbody>
