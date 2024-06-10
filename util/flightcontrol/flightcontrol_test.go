@@ -223,6 +223,28 @@ func TestContention(t *testing.T) {
 	wg.Wait()
 }
 
+func TestMassiveParallel(t *testing.T) {
+	var retryCount int64
+	g := &Group[string]{}
+	eg, ctx := errgroup.WithContext(context.Background())
+	for i := 0; i < 1000; i++ {
+		eg.Go(func() error {
+			_, err := g.Do(ctx, "key", func(ctx context.Context) (string, error) {
+				return "", errors.Errorf("always fail")
+			})
+			if errors.Is(err, errRetryTimeout) {
+				atomic.AddInt64(&retryCount, 1)
+			}
+			return err
+		})
+		// magic numbers to increase contention
+		time.Sleep(5 * time.Microsecond)
+	}
+	err := eg.Wait()
+	assert.Error(t, err)
+	assert.Equal(t, int64(0), retryCount)
+}
+
 func testFunc(wait time.Duration, ret string, counter *int64) func(ctx context.Context) (string, error) {
 	return func(ctx context.Context) (string, error) {
 		atomic.AddInt64(counter, 1)
