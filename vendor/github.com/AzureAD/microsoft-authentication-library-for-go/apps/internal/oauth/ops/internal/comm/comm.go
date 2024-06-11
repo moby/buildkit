@@ -11,7 +11,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -89,7 +88,7 @@ func (c *Client) JSONCall(ctx context.Context, endpoint string, headers http.Hea
 		if err != nil {
 			return fmt.Errorf("bug: conn.Call(): could not marshal the body object: %w", err)
 		}
-		req.Body = ioutil.NopCloser(bytes.NewBuffer(data))
+		req.Body = io.NopCloser(bytes.NewBuffer(data))
 		req.Method = http.MethodPost
 	}
 
@@ -163,7 +162,7 @@ func (c *Client) xmlCall(ctx context.Context, u *url.URL, headers http.Header, b
 
 	if len(body) > 0 {
 		req.Method = http.MethodPost
-		req.Body = ioutil.NopCloser(strings.NewReader(body))
+		req.Body = io.NopCloser(strings.NewReader(body))
 	}
 
 	data, err := c.do(ctx, req)
@@ -201,9 +200,9 @@ func (c *Client) URLFormCall(ctx context.Context, endpoint string, qv url.Values
 		URL:           u,
 		Header:        headers,
 		ContentLength: int64(len(enc)),
-		Body:          ioutil.NopCloser(strings.NewReader(enc)),
+		Body:          io.NopCloser(strings.NewReader(enc)),
 		GetBody: func() (io.ReadCloser, error) {
-			return ioutil.NopCloser(strings.NewReader(enc)), nil
+			return io.NopCloser(strings.NewReader(enc)), nil
 		},
 	}
 
@@ -248,7 +247,7 @@ func (c *Client) do(ctx context.Context, req *http.Request) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not read the body of an HTTP Response: %w", err)
 	}
-	reply.Body = ioutil.NopCloser(bytes.NewBuffer(data))
+	reply.Body = io.NopCloser(bytes.NewBuffer(data))
 
 	// NOTE: This doesn't happen immediately after the call so that we can get an error message
 	// from the server and include it in our error.
@@ -297,7 +296,7 @@ func (c *Client) readBody(resp *http.Response) ([]byte, error) {
 	default:
 		return nil, fmt.Errorf("bug: comm.Client.JSONCall(): content was send with unsupported content-encoding %s", resp.Header.Get("Content-Encoding"))
 	}
-	return ioutil.ReadAll(reader)
+	return io.ReadAll(reader)
 }
 
 var testID string
