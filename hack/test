@@ -98,6 +98,7 @@ if [ "$TEST_IMAGE_BUILD" = "1" ]; then
     --build-arg GOBUILDFLAGS \
     --build-arg VERIFYFLAGS \
     --build-arg CGO_ENABLED \
+    --build-arg GOBUILDFLAGS \
     --target "integration-tests" \
     --output "type=docker,name=$TEST_IMAGE_ID" \
     $currentcontext
