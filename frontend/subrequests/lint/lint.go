@@ -169,7 +169,7 @@ func PrintLintViolations(dt []byte, w io.Writer) error {
 	})
 
 	for _, warning := range results.Warnings {
-		fmt.Fprintf(w, "%s", warning.RuleName)
+		fmt.Fprintf(w, "\n%s", warning.RuleName)
 		if warning.URL != "" {
 			fmt.Fprintf(w, " - %s", warning.URL)
 		}
@@ -187,8 +187,24 @@ func PrintLintViolations(dt []byte, w io.Writer) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintln(w)
 	}
+	fmt.Fprintln(w)
+
+	if results.Error != nil {
+		fmt.Fprintf(w, "Build Error: %s\n", results.Error.Message)
+		if results.Error.Location.SourceIndex >= 0 && len(results.Error.Location.Ranges) > 0 {
+			sourceInfo := results.Sources[results.Error.Location.SourceIndex]
+			source := errdefs.Source{
+				Info:   sourceInfo,
+				Ranges: results.Error.Location.Ranges,
+			}
+			err := source.Print(w)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
 	return nil
 }
 
