@@ -26,8 +26,8 @@ func TestFileMkdir(t *testing.T) {
 	require.Equal(t, m[dgst], arr[1])
 
 	f := arr[1].Op.(*pb.Op_File).File
-	require.Equal(t, len(arr[1].Inputs), 1)
-	require.Equal(t, m[arr[1].Inputs[0].Digest], arr[0])
+	require.Equal(t, 1, len(arr[1].Inputs))
+	require.Equal(t, arr[0], m[arr[1].Inputs[0].Digest])
 	require.Equal(t, 0, int(arr[1].Inputs[0].Index))
 
 	require.Equal(t, 1, len(f.Actions))
@@ -113,7 +113,7 @@ func TestFileMkdirMkfile(t *testing.T) {
 	require.Equal(t, m[dgst], arr[0])
 
 	f := arr[0].Op.(*pb.Op_File).File
-	require.Equal(t, len(arr[1].Inputs), 1)
+	require.Equal(t, 1, len(arr[1].Inputs))
 	require.Equal(t, m[arr[1].Inputs[0].Digest], arr[0])
 	require.Equal(t, 0, int(arr[1].Inputs[0].Index))
 
@@ -159,7 +159,7 @@ func TestFileMkfile(t *testing.T) {
 	require.Equal(t, m[dgst], arr[1])
 
 	f := arr[1].Op.(*pb.Op_File).File
-	require.Equal(t, len(arr[1].Inputs), 1)
+	require.Equal(t, 1, len(arr[1].Inputs))
 	require.Equal(t, m[arr[1].Inputs[0].Digest], arr[0])
 	require.Equal(t, 0, int(arr[1].Inputs[0].Index))
 
@@ -194,7 +194,7 @@ func TestFileRm(t *testing.T) {
 	require.Equal(t, m[dgst], arr[1])
 
 	f := arr[1].Op.(*pb.Op_File).File
-	require.Equal(t, len(arr[1].Inputs), 1)
+	require.Equal(t, 1, len(arr[1].Inputs))
 	require.Equal(t, m[arr[1].Inputs[0].Digest], arr[0])
 	require.Equal(t, 0, int(arr[1].Inputs[0].Index))
 
@@ -235,7 +235,7 @@ func TestFileSimpleChains(t *testing.T) {
 	require.Equal(t, m[dgst], arr[2])
 
 	f := arr[2].Op.(*pb.Op_File).File
-	require.Equal(t, len(arr[2].Inputs), 1)
+	require.Equal(t, 1, len(arr[2].Inputs))
 	require.Equal(t, m[arr[2].Inputs[0].Digest], arr[1])
 	require.Equal(t, 0, int(arr[2].Inputs[0].Index))
 	require.Equal(t, 2, len(f.Actions))
@@ -257,7 +257,7 @@ func TestFileSimpleChains(t *testing.T) {
 	require.Equal(t, "/abc", mkfile.Path)
 
 	f = arr[1].Op.(*pb.Op_File).File
-	require.Equal(t, len(arr[1].Inputs), 1)
+	require.Equal(t, 1, len(arr[1].Inputs))
 	require.Equal(t, m[arr[1].Inputs[0].Digest], arr[0])
 	require.Equal(t, 0, int(arr[1].Inputs[0].Index))
 	require.Equal(t, 3, len(f.Actions))
@@ -673,7 +673,7 @@ func TestFileCreatedTime(t *testing.T) {
 	require.Equal(t, m[dgst], arr[1])
 
 	f := arr[1].Op.(*pb.Op_File).File
-	require.Equal(t, len(arr[1].Inputs), 1)
+	require.Equal(t, 1, len(arr[1].Inputs))
 	require.Equal(t, m[arr[1].Inputs[0].Digest], arr[0])
 	require.Equal(t, 0, int(arr[1].Inputs[0].Index))
 

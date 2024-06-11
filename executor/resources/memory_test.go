@@ -7,6 +7,7 @@ import (
 
 	resourcestypes "github.com/moby/buildkit/executor/resources/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseMemoryStat(t *testing.T) {
@@ -27,12 +28,12 @@ pgsteal 99
 pgfault 32711
 pgmajfault 12`
 	err := os.WriteFile(filepath.Join(testDir, memoryStatFile), []byte(memoryStatContents), 0644)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	memoryPressureContents := `some avg10=1.23 avg60=4.56 avg300=7.89 total=3031
 full avg10=0.12 avg60=0.34 avg300=0.56 total=9876`
 	err = os.WriteFile(filepath.Join(testDir, memoryPressureFile), []byte(memoryPressureContents), 0644)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	memoryEventsContents := `low 4
 high 3
@@ -40,16 +41,16 @@ max 2
 oom 1
 oom_kill 5`
 	err = os.WriteFile(filepath.Join(testDir, memoryEventsFile), []byte(memoryEventsContents), 0644)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = os.WriteFile(filepath.Join(testDir, memoryPeakFile), []byte("123456"), 0644)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = os.WriteFile(filepath.Join(testDir, memorySwapCurrentFile), []byte("987654"), 0644)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	memoryStat, err := getCgroupMemoryStat(testDir)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	var expectedPressure = &resourcestypes.Pressure{
 		Some: &resourcestypes.PressureValues{

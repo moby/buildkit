@@ -142,7 +142,7 @@ func TestRuncWorker(t *testing.T) {
 	dt, err := os.ReadFile(filepath.Join(target, "run", "bar"))
 
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "foo\n")
+	require.Equal(t, "foo\n", string(dt))
 
 	lm.Unmount()
 	require.NoError(t, err)

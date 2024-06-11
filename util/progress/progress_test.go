@@ -16,7 +16,7 @@ import (
 func TestProgress(t *testing.T) {
 	t.Parallel()
 	s, err := calc(context.TODO(), 4, "calc")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 10, s)
 
 	eg, ctx := errgroup.WithContext(context.Background())
@@ -30,19 +30,19 @@ func TestProgress(t *testing.T) {
 	pw, _, ctx2 := NewFromContext(ctx, WithMetadata("tag", "foo"))
 	s, err = calc(ctx2, 5, "calc")
 	pw.Close()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 15, s)
 
 	cancelProgress(errors.WithStack(context.Canceled))
 	err = eg.Wait()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	assert.Greater(t, len(trace.items), 5)
 	assert.LessOrEqual(t, len(trace.items), 7)
 	for _, p := range trace.items {
 		v, ok := p.Meta("tag")
 		assert.True(t, ok)
-		assert.Equal(t, v.(string), "foo")
+		assert.Equal(t, "foo", v.(string))
 	}
 }
 

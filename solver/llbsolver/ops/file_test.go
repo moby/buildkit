@@ -47,7 +47,7 @@ func TestMkdirMkfile(t *testing.T) {
 	inp := rb.NewRef("ref1")
 	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{inp}, fo.Actions, nil)
 	require.NoError(t, err)
-	require.Equal(t, len(outs), 1)
+	require.Equal(t, 1, len(outs))
 	rb.checkReleased(t, append(outs, inp))
 
 	o := outs[0].(*testFileRef)
@@ -179,7 +179,7 @@ func TestChownCopy(t *testing.T) {
 	inpDest := rb.NewRef("dest")
 	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{inpSrc, inpDest}, fo.Actions, nil)
 	require.NoError(t, err)
-	require.Equal(t, len(outs), 1)
+	require.Equal(t, 1, len(outs))
 	rb.checkReleased(t, append(outs, inpSrc, inpDest))
 
 	o := outs[0].(*testFileRef)
@@ -348,7 +348,7 @@ func TestMultiOutput(t *testing.T) {
 	inp := rb.NewRef("ref1")
 	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{inp}, fo.Actions, nil)
 	require.NoError(t, err)
-	require.Equal(t, len(outs), 2)
+	require.Equal(t, 2, len(outs))
 	rb.checkReleased(t, append(outs, inp))
 
 	o := outs[0].(*testFileRef)
@@ -396,7 +396,7 @@ func TestFileFromScratch(t *testing.T) {
 	s, rb := newTestFileSolver()
 	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{}, fo.Actions, nil)
 	require.NoError(t, err)
-	require.Equal(t, len(outs), 1)
+	require.Equal(t, 1, len(outs))
 	rb.checkReleased(t, outs)
 
 	o := outs[0].(*testFileRef)
@@ -430,7 +430,7 @@ func TestFileCopyInputSrc(t *testing.T) {
 	inp1 := rb.NewRef("destref")
 	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{inp0, inp1}, fo.Actions, nil)
 	require.NoError(t, err)
-	require.Equal(t, len(outs), 1)
+	require.Equal(t, 1, len(outs))
 	rb.checkReleased(t, append(outs, inp0, inp1))
 
 	o := outs[0].(*testFileRef)
@@ -484,7 +484,7 @@ func TestFileCopyInputRm(t *testing.T) {
 	inp1 := rb.NewRef("destref")
 	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{inp0, inp1}, fo.Actions, nil)
 	require.NoError(t, err)
-	require.Equal(t, len(outs), 1)
+	require.Equal(t, 1, len(outs))
 	rb.checkReleased(t, append(outs, inp0, inp1))
 
 	o := outs[0].(*testFileRef)
@@ -548,7 +548,7 @@ func TestFileParallelActions(t *testing.T) {
 
 	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{inp}, fo.Actions, nil)
 	require.NoError(t, err)
-	require.Equal(t, len(outs), 1)
+	require.Equal(t, 1, len(outs))
 
 	require.Equal(t, int64(2), sem)
 }
