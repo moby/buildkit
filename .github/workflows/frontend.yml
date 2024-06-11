@@ -38,7 +38,7 @@ jobs:
       codecov_flags: dockerfile-frontend
 
   prepare:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     if: github.event_name != 'schedule'
     outputs:
       typ: ${{ steps.prep.outputs.typ }}
@@ -75,7 +75,7 @@ jobs:
           fi
 
   image:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs:
       - test
       - prepare
@@ -125,7 +125,7 @@ jobs:
           CACHE_TO: type=gha,scope=${{ env.CACHE_SCOPE }}
 
   release:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     if: startsWith(github.ref, 'refs/tags/dockerfile')
     needs:
       - prepare
