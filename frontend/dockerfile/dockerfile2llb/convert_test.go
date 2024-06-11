@@ -96,10 +96,10 @@ COPY f1 f2 /sub/
 RUN ls -l
 `
 	state, _, _, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	_, err = state.Marshal(context.TODO())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestAddEnv(t *testing.T) {
@@ -197,7 +197,7 @@ func TestDockerfileCircularDependencies(t *testing.T) {
 COPY --from=stage0 f1 /sub/
 `
 	_, _, _, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
-	assert.EqualError(t, err, "circular dependency detected on stage: stage0")
+	require.EqualError(t, err, "circular dependency detected on stage: stage0")
 
 	// multiple stages with circular dependency
 	df = `FROM busybox AS stage0
@@ -208,7 +208,7 @@ FROM busybox AS stage2
 COPY --from=stage1 f2 /sub/
 `
 	_, _, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
-	assert.EqualError(t, err, "circular dependency detected on stage: stage0")
+	require.EqualError(t, err, "circular dependency detected on stage: stage0")
 }
 
 func TestBaseImageConfig(t *testing.T) {

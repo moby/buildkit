@@ -309,7 +309,7 @@ func testUnknownBuildID(t *testing.T, sb integration.Sandbox) {
 	_, err = g.Ping(ctx, &gatewayapi.PingRequest{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no such job")
-	require.Equal(t, grpcerrors.Code(err), codes.NotFound)
+	require.Equal(t, codes.NotFound, grpcerrors.Code(err))
 }
 
 // testClientGatewayContainerCancelOnRelease is testing that all running

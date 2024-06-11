@@ -65,7 +65,7 @@ func testBuildLocalExporter(t *testing.T, sb integration.Sandbox) {
 
 	dt, err := os.ReadFile(filepath.Join(tmpdir, "foo"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "bar")
+	require.Equal(t, "bar", string(dt))
 }
 
 func testBuildContainerdExporter(t *testing.T, sb integration.Sandbox) {
@@ -109,7 +109,7 @@ func testBuildContainerdExporter(t *testing.T, sb integration.Sandbox) {
 	}
 	ok, err := img.IsUnpacked(ctx, snapshotter)
 	require.NoError(t, err)
-	require.Equal(t, ok, true)
+	require.Equal(t, true, ok)
 }
 
 func testBuildMetadataFile(t *testing.T, sb integration.Sandbox) {

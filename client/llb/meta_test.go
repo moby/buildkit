@@ -10,19 +10,19 @@ import (
 
 func TestRelativeWd(t *testing.T) {
 	st := Scratch().Dir("foo")
-	assert.Equal(t, getDirHelper(t, st), "/foo")
+	assert.Equal(t, "/foo", getDirHelper(t, st))
 
 	st = st.Dir("bar")
-	assert.Equal(t, getDirHelper(t, st), "/foo/bar")
+	assert.Equal(t, "/foo/bar", getDirHelper(t, st))
 
 	st = st.Dir("..")
-	assert.Equal(t, getDirHelper(t, st), "/foo")
+	assert.Equal(t, "/foo", getDirHelper(t, st))
 
 	st = st.Dir("/baz")
-	assert.Equal(t, getDirHelper(t, st), "/baz")
+	assert.Equal(t, "/baz", getDirHelper(t, st))
 
 	st = st.Dir("../../..")
-	assert.Equal(t, getDirHelper(t, st), "/")
+	assert.Equal(t, "/", getDirHelper(t, st))
 }
 
 func getDirHelper(t *testing.T, s State) string {

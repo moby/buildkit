@@ -37,7 +37,7 @@ func TestNoCancel(t *testing.T) {
 		return nil
 	})
 	err := eg.Wait()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "bar", r1)
 	assert.Equal(t, "bar", r2)
 	assert.Equal(t, int64(1), counter)
@@ -53,7 +53,7 @@ func TestCancelOne(t *testing.T) {
 	ctx2, cancel := context.WithCancelCause(ctx)
 	eg.Go(func() error {
 		ret1, err := g.Do(ctx2, "foo", f)
-		assert.Error(t, err)
+		require.Error(t, err)
 		require.Equal(t, true, errors.Is(err, context.Canceled))
 		if err == nil {
 			r1 = ret1
@@ -78,7 +78,7 @@ func TestCancelOne(t *testing.T) {
 		}
 	})
 	err := eg.Wait()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "", r1)
 	assert.Equal(t, "bar", r2)
 	assert.Equal(t, int64(1), counter)
@@ -150,7 +150,7 @@ func TestCancelBoth(t *testing.T) {
 	ctx3, cancel3 := context.WithCancelCause(ctx)
 	eg.Go(func() error {
 		ret1, err := g.Do(ctx2, "foo", f)
-		assert.Error(t, err)
+		require.Error(t, err)
 		require.Equal(t, true, errors.Is(err, context.Canceled))
 		if err == nil {
 			r1 = ret1
@@ -159,7 +159,7 @@ func TestCancelBoth(t *testing.T) {
 	})
 	eg.Go(func() error {
 		ret2, err := g.Do(ctx3, "foo", f)
-		assert.Error(t, err)
+		require.Error(t, err)
 		require.Equal(t, true, errors.Is(err, context.Canceled))
 		if err == nil {
 			r2 = ret2
@@ -185,19 +185,19 @@ func TestCancelBoth(t *testing.T) {
 		}
 	})
 	err := eg.Wait()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "", r1)
 	assert.Equal(t, "", r2)
 	assert.Equal(t, int64(1), counter)
 	ret1, err := g.Do(context.TODO(), "foo", f)
 	assert.NoError(t, err)
-	assert.Equal(t, ret1, "bar")
+	assert.Equal(t, "bar", ret1)
 
 	ret1, err = g.Do(context.TODO(), "abc", f)
-	assert.NoError(t, err)
-	assert.Equal(t, ret1, "bar")
+	require.NoError(t, err)
+	assert.Equal(t, "bar", ret1)
 
-	assert.Equal(t, counter, int64(3))
+	assert.Equal(t, int64(3), counter)
 }
 
 func TestContention(t *testing.T) {
@@ -241,7 +241,7 @@ func TestMassiveParallel(t *testing.T) {
 		time.Sleep(5 * time.Microsecond)
 	}
 	err := eg.Wait()
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Equal(t, int64(0), retryCount)
 }
 
