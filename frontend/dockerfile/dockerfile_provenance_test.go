@@ -1369,6 +1369,7 @@ COPY bar bar2
 			break
 		}
 		require.Equal(t, ref, ev.Record.Ref)
+		require.Len(t, ev.Record.Exporters, 1)
 
 		for _, prov := range ev.Record.Result.Attestations {
 			if len(prov.Annotations) == 0 || prov.Annotations["in-toto.io/predicate-type"] != "https://slsa.dev/provenance/v0.2" {
