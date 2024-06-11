@@ -181,7 +181,7 @@ jobs:
         with:
           directory: ./bin/testreports
           flags: ${{ matrix.codecov_flags }}
-          disable_file_fixes: false
+          disable_file_fixes: true
           token: ${{ secrets.CODECOV_TOKEN }}  # used to upload coverage reports: https://github.com/moby/buildkit/pull/4660#issue-2142122533
       -
         name: Generate annotations

@@ -146,7 +146,7 @@ jobs:
           directory: ./bin/testreports
           env_vars: RUNNER_OS
           flags: unit
-          disable_file_fixes: false
+          disable_file_fixes: true
           token: ${{ secrets.CODECOV_TOKEN }}  # used to upload coverage reports: https://github.com/moby/buildkit/pull/4660#issue-2142122533
       -
         name: Generate annotations
