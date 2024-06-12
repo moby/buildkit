@@ -314,7 +314,6 @@ github.com/containerd/containerd/pkg/kmutex
 github.com/containerd/containerd/pkg/randutil
 github.com/containerd/containerd/pkg/runtimeoptions/v1
 github.com/containerd/containerd/pkg/seccomp
-github.com/containerd/containerd/pkg/seed
 github.com/containerd/containerd/pkg/snapshotters
 github.com/containerd/containerd/pkg/streaming
 github.com/containerd/containerd/pkg/transfer
