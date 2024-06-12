@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,7 +16,6 @@ import (
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/progress/progressui"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"github.com/tonistiigi/fsutil"
 	"github.com/urfave/cli"
 	"golang.org/x/sync/errgroup"
@@ -121,7 +121,7 @@ func action(clicontext *cli.Context) error {
 	if err := eg.Wait(); err != nil {
 		return err
 	}
-	logrus.Infof("Loaded the image %q to Docker.", clicontext.String("tag"))
+	log.Printf("Loaded the image %q to Docker.", clicontext.String("tag"))
 	return nil
 }
 
