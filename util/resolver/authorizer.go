@@ -20,7 +20,6 @@ import (
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/version"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 const defaultExpiration = 60
@@ -393,7 +392,7 @@ func (ah *authHandler) fetchToken(ctx context.Context, sm *session.Manager, g se
 					token = resp.AccessToken
 					return nil, nil
 				}
-				log.G(ctx).WithFields(logrus.Fields{
+				log.G(ctx).WithFields(map[string]any{
 					"status": errStatus.Status,
 					"body":   string(errStatus.Body),
 				}).Debugf("token request failed")

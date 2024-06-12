@@ -7,7 +7,6 @@ import (
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -117,12 +116,11 @@ func (e *Engine) evaluatePolicy(ctx context.Context, pol *spb.Policy, srcOp *pb.
 	ctx = bklog.WithLogger(ctx, bklog.G(ctx).WithField("ref", ident))
 	defer func() {
 		if retMut || retErr != nil {
-			bklog.G(ctx).WithFields(
-				logrus.Fields{
-					"mutated":       retMut,
-					"updated":       srcOp.GetIdentifier(),
-					logrus.ErrorKey: retErr,
-				}).Debug("Evaluated source policy")
+			bklog.G(ctx).WithFields(map[string]any{
+				"mutated": retMut,
+				"updated": srcOp.GetIdentifier(),
+				"error":   retErr,
+			}).Debug("Evaluated source policy")
 		}
 	}()
 

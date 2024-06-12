@@ -19,7 +19,6 @@ import (
 	"github.com/moby/buildkit/version"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 // DefaultPool is the default shared resolver pool instance
@@ -108,7 +107,7 @@ func (p *Pool) GetResolver(hosts docker.RegistryHosts, ref, scope string, sm *se
 		p.m[key] = h
 	}
 
-	log.G(context.TODO()).WithFields(logrus.Fields{
+	log.G(context.TODO()).WithFields(map[string]any{
 		"name":   name,
 		"scope":  scope,
 		"key":    key,

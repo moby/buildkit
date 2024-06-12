@@ -12,7 +12,6 @@ import (
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/net/http2"
@@ -98,7 +97,7 @@ func monitorHealth(ctx context.Context, cc *grpc.ClientConn, cancelConn func(err
 			cancel(errors.WithStack(context.Canceled))
 
 			lastHealthcheckDuration = time.Since(healthcheckStart)
-			logFields := logrus.Fields{
+			logFields := map[string]any{
 				"timeout":        timeout,
 				"actualDuration": lastHealthcheckDuration,
 			}
