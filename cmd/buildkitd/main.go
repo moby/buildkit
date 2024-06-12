@@ -16,7 +16,6 @@ import (
 	"sync"
 
 	"github.com/containerd/containerd/defaults"
-	"github.com/containerd/containerd/pkg/seed" //nolint:staticcheck // SA1019 deprecated
 	"github.com/containerd/containerd/pkg/userns"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/remotes/docker"
@@ -81,8 +80,6 @@ func init() {
 	apicaps.ExportedProduct = "buildkit"
 	stack.SetVersionInfo(version.Version, version.Revision)
 
-	//nolint:staticcheck // SA1019 deprecated
-	seed.WithTimeAndRand()
 	if reexec.Init() {
 		os.Exit(0)
 	}

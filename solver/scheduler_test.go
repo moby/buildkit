@@ -22,7 +22,6 @@ import (
 )
 
 func init() {
-	rand.Seed(time.Now().UnixNano()) //nolint:staticcheck // Ignore SA1019. No way to get the automatically generated seed since Go 1.20.
 	if debugScheduler {
 		logrus.SetOutput(os.Stdout)
 		logrus.SetLevel(logrus.DebugLevel)
