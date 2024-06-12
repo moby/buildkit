@@ -104,11 +104,11 @@ func (s State) getValue(k interface{}) func(context.Context, *Constraints) (inte
 	}
 	if s.async != nil {
 		return func(ctx context.Context, c *Constraints) (interface{}, error) {
-			err := s.async.Do(ctx, c)
+			target, err := s.async.Do(ctx, c)
 			if err != nil {
 				return nil, err
 			}
-			return s.async.target.getValue(k)(ctx, c)
+			return target.getValue(k)(ctx, c)
 		}
 	}
 	if s.prev == nil {
@@ -118,8 +118,13 @@ func (s State) getValue(k interface{}) func(context.Context, *Constraints) (inte
 }
 
 func (s State) Async(f func(context.Context, State, *Constraints) (State, error)) State {
+	as := &asyncState{
+		f:    f,
+		prev: s,
+	}
+	as.g.CacheError = true
 	s2 := State{
-		async: &asyncState{f: f, prev: s},
+		async: as,
 	}
 	return s2
 }
