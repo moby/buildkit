@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"os"
 	"path/filepath"
@@ -859,10 +860,7 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 		if err := json.Unmarshal(req.ExporterAttr, &exp); err != nil {
 			return nil, err
 		}
-
-		for k, v := range res.Metadata {
-			exp[k] = v
-		}
+		maps.Copy(exp, res.Metadata)
 
 		lbf.mu.Lock()
 		lbf.result = &frontend.Result{

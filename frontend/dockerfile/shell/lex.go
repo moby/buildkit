@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"text/scanner"
 	"unicode"
@@ -646,11 +647,7 @@ func reversePattern(pattern string) string {
 
 func reverseString(str string) string {
 	out := []rune(str)
-	outIdx := len(out) - 1
-	for i := 0; i < outIdx; i++ {
-		out[i], out[outIdx] = out[outIdx], out[i]
-		outIdx--
-	}
+	slices.Reverse(out)
 	return string(out)
 }
 

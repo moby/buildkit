@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -727,9 +728,7 @@ func (sr *immutableRef) ociDesc(ctx context.Context, dhs DescHandlers, preferNon
 		}
 	} else if dh, ok := dhs[desc.Digest]; ok {
 		// No blob metadtata is stored in the content store. Try to get annotations from desc handlers.
-		for k, v := range filterAnnotationsForSave(dh.Annotations) {
-			desc.Annotations[k] = v
-		}
+		maps.Copy(desc.Annotations, filterAnnotationsForSave(dh.Annotations))
 	}
 
 	diffID := sr.getDiffID()

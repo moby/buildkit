@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"sort"
 	"testing"
@@ -943,9 +944,8 @@ func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestPara
 			"frontend.caps": "moby.buildkit.frontend.subrequests",
 			"requestid":     "frontend.lint",
 		}
-		for k, v := range lintTest.FrontendAttrs {
-			frontendOpts[k] = v
-		}
+		maps.Copy(frontendOpts, lintTest.FrontendAttrs)
+
 		res, err := c.Solve(ctx, gateway.SolveRequest{
 			FrontendOpt: frontendOpts,
 			Frontend:    "dockerfile.v0",

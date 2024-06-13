@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"sort"
 	"strconv"
 	"strings"
@@ -210,9 +211,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	if src.Metadata == nil {
 		src.Metadata = make(map[string][]byte)
 	}
-	for k, v := range e.meta {
-		src.Metadata[k] = v
-	}
+	maps.Copy(src.Metadata, e.meta)
 
 	opts := e.opts
 	as, _, err := ParseAnnotations(src.Metadata)
@@ -514,9 +513,10 @@ func addAnnotations(m map[digest.Digest]map[string]string, desc ocispecs.Descrip
 		m[desc.Digest] = desc.Annotations
 		return
 	}
-	for k, v := range desc.Annotations {
-		a[k] = v
+	if a == nil {
+		a = make(map[string]string)
 	}
+	maps.Copy(a, desc.Annotations)
 }
 
 func NewDescriptorReference(desc ocispecs.Descriptor, release func(context.Context) error) exporter.DescriptorReference {

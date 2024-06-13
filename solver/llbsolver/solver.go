@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"strings"
 	"sync"
@@ -706,12 +707,10 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 	// TODO: separate these out, and return multiple cache exporter responses
 	// to the client
 	for _, resp := range resps {
-		for k, v := range resp {
-			if cacheExporterResponse == nil {
-				cacheExporterResponse = make(map[string]string)
-			}
-			cacheExporterResponse[k] = v
+		if cacheExporterResponse == nil {
+			cacheExporterResponse = make(map[string]string)
 		}
+		maps.Copy(cacheExporterResponse, resp)
 	}
 	return cacheExporterResponse, nil
 }
