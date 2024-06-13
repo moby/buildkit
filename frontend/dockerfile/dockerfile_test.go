@@ -6882,6 +6882,7 @@ func testReproSourceDateEpoch(t *testing.T, sb integration.Sandbox) {
 		dockerfile     string
 		files          []fstest.Applier
 		expectedDigest string
+		noCacheExport  bool
 	}
 	testCases := []testCase{
 		{
@@ -6908,6 +6909,14 @@ COPY --link foo foo
 `,
 			files:          []fstest.Applier{fstest.CreateFile("foo", []byte("foo"), 0600)},
 			expectedDigest: "sha256:9f75e4bdbf3d825acb36bb603ddef4a25742afb8ccb674763ffc611ae047d8a6",
+		},
+		{
+			// https://github.com/moby/buildkit/issues/4793
+			name: "NoAdditionalLayer",
+			dockerfile: `FROM amd64/debian:bullseye-20230109-slim
+`,
+			expectedDigest: "sha256:eeba8ef81dec46359d099c5d674009da54e088fa8f29945d4d7fb3a7a88c450e",
+			noCacheExport:  true, // "skipping cache export for empty result"
 		},
 	}
 
@@ -6968,7 +6977,10 @@ COPY --link foo foo
 			require.NoError(t, err)
 
 			desc, manifest, img := readImage(t, ctx, target)
-			_, cacheManifest, _ := readImage(t, ctx, target+"-cache")
+			var cacheManifest ocispecs.Manifest
+			if !tc.noCacheExport {
+				_, cacheManifest, _ = readImage(t, ctx, target+"-cache")
+			}
 			t.Log("The digest may change depending on the BuildKit version, the snapshotter configuration, etc.")
 			require.Equal(t, tc.expectedDigest, desc.Digest.String())
 
@@ -6986,9 +6998,11 @@ COPY --link foo foo
 					require.Equal(t, fmt.Sprintf("%d", tm.Unix()), l.Annotations["buildkit/rewritten-timestamp"])
 				}
 			}
-			// Cache layers must *not* have rewritten-timestamp
-			for _, l := range cacheManifest.Layers {
-				require.Empty(t, l.Annotations["buildkit/rewritten-timestamp"])
+			if !tc.noCacheExport {
+				// Cache layers must *not* have rewritten-timestamp
+				for _, l := range cacheManifest.Layers {
+					require.Empty(t, l.Annotations["buildkit/rewritten-timestamp"])
+				}
 			}
 
 			// Build again, after pruning the base image layer cache.
