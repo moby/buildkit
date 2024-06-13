@@ -5,6 +5,9 @@ go 1.21
 // FIXME(thaJeztah); testing https://github.com/containerd/containerd/pull/10189 / https://github.com/containerd/containerd/pull/10278
 replace github.com/containerd/containerd => github.com/dmcgowan/containerd v1.7.16-0.20240613132221-3be919f3c023
 
+// FIXME(thaJeztah); API from https://github.com/containerd/containerd/pull/10189
+replace github.com/containerd/containerd/api => github.com/dmcgowan/containerd/api v0.0.0-20240613132221-3be919f3c023
+
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.4.1

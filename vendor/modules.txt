@@ -330,7 +330,7 @@ github.com/containerd/containerd/snapshots/storage
 github.com/containerd/containerd/sys
 github.com/containerd/containerd/tracing
 github.com/containerd/containerd/version
-# github.com/containerd/containerd/api v1.8.0-rc.2
+# github.com/containerd/containerd/api v1.8.0-rc.2 => github.com/dmcgowan/containerd/api v0.0.0-20240613132221-3be919f3c023
 ## explicit; go 1.21
 github.com/containerd/containerd/api/events
 github.com/containerd/containerd/api/runtime/sandbox/v1
@@ -1082,3 +1082,4 @@ kernel.org/pub/linux/libs/security/libcap/cap
 ## explicit; go 1.11
 kernel.org/pub/linux/libs/security/libcap/psx
 # github.com/containerd/containerd => github.com/dmcgowan/containerd v1.7.16-0.20240613132221-3be919f3c023
+# github.com/containerd/containerd/api => github.com/dmcgowan/containerd/api v0.0.0-20240613132221-3be919f3c023
