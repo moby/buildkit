@@ -302,7 +302,6 @@ github.com/containerd/containerd/pkg/transfer/proxy
 github.com/containerd/containerd/pkg/transfer/streaming
 github.com/containerd/containerd/pkg/unpack
 github.com/containerd/containerd/pkg/userns
-github.com/containerd/containerd/platforms
 github.com/containerd/containerd/plugin
 github.com/containerd/containerd/protobuf
 github.com/containerd/containerd/protobuf/proto
