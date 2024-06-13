@@ -3,6 +3,7 @@ package containerimage
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"runtime"
 	"time"
 
@@ -150,9 +151,8 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 				if labels == nil {
 					labels = make(map[string]string)
 				}
-				for k, v := range estargz.SnapshotLabels(p.manifest.Ref, p.manifest.Descriptors, i) {
-					labels[k] = v
-				}
+				maps.Copy(labels, estargz.SnapshotLabels(p.manifest.Ref, p.manifest.Descriptors, i))
+
 				p.descHandlers[desc.Digest] = &cache.DescHandler{
 					Provider:       p.manifest.Provider,
 					Progress:       progressController,

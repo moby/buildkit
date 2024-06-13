@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"net/url"
 	"os"
@@ -726,9 +727,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	if len(opt.Labels) != 0 && target.image.Config.Labels == nil {
 		target.image.Config.Labels = make(map[string]string, len(opt.Labels))
 	}
-	for k, v := range opt.Labels {
-		target.image.Config.Labels[k] = v
-	}
+	maps.Copy(target.image.Config.Labels, opt.Labels)
 
 	// If lint.Error() returns an error, it means that
 	// there were warnings, and that our linter has been

@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/url"
 	"strings"
 
@@ -235,9 +236,7 @@ func (sr *immutableRef) getRemote(ctx context.Context, createIfNeeded bool, refC
 				for _, k := range addAnnotations {
 					newDesc.Annotations[k] = desc.Annotations[k]
 				}
-				for k, v := range blobDesc.Annotations {
-					newDesc.Annotations[k] = v
-				}
+				maps.Copy(newDesc.Annotations, blobDesc.Annotations)
 				desc = newDesc
 			}
 		}

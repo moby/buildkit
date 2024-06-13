@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"maps"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -137,9 +138,7 @@ func WithMirroredImages(m map[string]string) TestOpt {
 		if tc.mirroredImages == nil {
 			tc.mirroredImages = map[string]string{}
 		}
-		for k, v := range m {
-			tc.mirroredImages[k] = v
-		}
+		maps.Copy(tc.mirroredImages, m)
 	}
 }
 
@@ -418,9 +417,7 @@ func prepareValueMatrix(tc testConf) []matrixValue {
 			for _, c := range current {
 				vv := newMatrixValue(featureName, featureValue, v)
 				vv.fn = append(vv.fn, c.fn...)
-				for k, v := range c.values {
-					vv.values[k] = v
-				}
+				maps.Copy(vv.values, c.values)
 				m = append(m, vv)
 			}
 		}

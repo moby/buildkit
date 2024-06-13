@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"maps"
 	"os"
 	"runtime"
 	"strconv"
@@ -212,9 +213,8 @@ func applyContainerdFlags(c *cli.Context, cfg *config.Config) error {
 	if cfg.Workers.Containerd.Labels == nil {
 		cfg.Workers.Containerd.Labels = make(map[string]string)
 	}
-	for k, v := range labels {
-		cfg.Workers.Containerd.Labels[k] = v
-	}
+	maps.Copy(cfg.Workers.Containerd.Labels, labels)
+
 	if c.GlobalIsSet("containerd-worker-addr") {
 		cfg.Workers.Containerd.Address = c.GlobalString("containerd-worker-addr")
 	}
