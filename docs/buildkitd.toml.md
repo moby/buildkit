@@ -104,6 +104,8 @@ insecure-entitlements = [ "network.host", "security.insecure" ]
   # maintain a pool of reusable CNI network namespaces to amortize the overhead
   # of allocating and releasing the namespaces
   cniPoolSize = 16
+  # defaultCgroupParent sets the parent cgroup of all containers.
+  defaultCgroupParent = "buildkit"
 
   [worker.containerd.labels]
     "foo" = "bar"
