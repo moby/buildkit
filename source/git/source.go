@@ -497,7 +497,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 
 	defer func() {
 		if retErr != nil && checkoutRef != nil {
-			checkoutRef.Release(context.TODO())
+			checkoutRef.Release(context.WithoutCancel(ctx))
 		}
 	}()
 
@@ -646,7 +646,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 
 	defer func() {
 		if retErr != nil {
-			snap.Release(context.TODO())
+			snap.Release(context.WithoutCancel(ctx))
 		}
 	}()
 

@@ -218,14 +218,14 @@ func (p *puller) Snapshot(ctx context.Context, g session.Group) (ir cache.Immuta
 	}
 	defer func() {
 		if p.releaseTmpLeases != nil {
-			p.releaseTmpLeases(context.TODO())
+			p.releaseTmpLeases(context.WithoutCancel(ctx))
 		}
 	}()
 
 	var current cache.ImmutableRef
 	defer func() {
 		if err != nil && current != nil {
-			current.Release(context.TODO())
+			current.Release(context.WithoutCancel(ctx))
 		}
 	}()
 
@@ -255,7 +255,7 @@ func (p *puller) Snapshot(ctx context.Context, g session.Group) (ir cache.Immuta
 			if err != nil {
 				return nil, err
 			}
-			defer done(ctx)
+			defer done(context.WithoutCancel(ctx))
 
 			if _, err := p.PullManifests(ctx, getResolver); err != nil {
 				return nil, err

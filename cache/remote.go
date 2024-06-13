@@ -39,7 +39,7 @@ func (sr *immutableRef) GetRemotes(ctx context.Context, createIfNeeded bool, ref
 	if err != nil {
 		return nil, err
 	}
-	defer done(ctx)
+	defer done(context.WithoutCancel(ctx))
 
 	// fast path if compression variants aren't required
 	// NOTE: compressionopt is applied only to *newly created layers* if Force != true.

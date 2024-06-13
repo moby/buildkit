@@ -432,13 +432,13 @@ func testClientGatewayContainerExecPipe(t *testing.T, sb integration.Sandbox) {
 			Args: []string{"sleep", "10"},
 		})
 		if err != nil {
-			ctr.Release(ctx)
+			ctr.Release(context.WithoutCancel(ctx))
 			return nil, err
 		}
 
 		defer func() {
 			// cancel pid1
-			ctr.Release(ctx)
+			ctr.Release(context.WithoutCancel(ctx))
 			pid1.Wait()
 		}()
 

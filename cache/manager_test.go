@@ -1168,7 +1168,7 @@ func TestLoopLeaseContent(t *testing.T) {
 	allRefs := []ImmutableRef{ref}
 	defer func() {
 		for _, ref := range allRefs {
-			ref.Release(ctx)
+			ref.Release(context.WithoutCancel(ctx))
 		}
 	}()
 	var chain []ocispecs.Descriptor

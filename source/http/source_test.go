@@ -62,7 +62,7 @@ func TestHTTPSource(t *testing.T) {
 	require.NoError(t, err)
 	defer func() {
 		if ref != nil {
-			ref.Release(context.TODO())
+			ref.Release(context.WithoutCancel(ctx))
 			ref = nil
 		}
 	}()
@@ -90,7 +90,7 @@ func TestHTTPSource(t *testing.T) {
 	require.NoError(t, err)
 	defer func() {
 		if ref != nil {
-			ref.Release(context.TODO())
+			ref.Release(context.WithoutCancel(ctx))
 			ref = nil
 		}
 	}()
@@ -128,7 +128,7 @@ func TestHTTPSource(t *testing.T) {
 	require.NoError(t, err)
 	defer func() {
 		if ref != nil {
-			ref.Release(context.TODO())
+			ref.Release(context.WithoutCancel(ctx))
 			ref = nil
 		}
 	}()
@@ -174,7 +174,7 @@ func TestHTTPDefaultName(t *testing.T) {
 	require.NoError(t, err)
 	defer func() {
 		if ref != nil {
-			ref.Release(context.TODO())
+			ref.Release(context.WithoutCancel(ctx))
 			ref = nil
 		}
 	}()
@@ -266,7 +266,7 @@ func TestHTTPChecksum(t *testing.T) {
 	require.NoError(t, err)
 	defer func() {
 		if ref != nil {
-			ref.Release(context.TODO())
+			ref.Release(context.WithoutCancel(ctx))
 			ref = nil
 		}
 	}()

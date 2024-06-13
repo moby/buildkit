@@ -227,7 +227,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	}
 	defer func() {
 		if descref == nil {
-			done(context.TODO())
+			done(context.WithoutCancel(ctx))
 		}
 	}()
 
