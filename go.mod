@@ -23,6 +23,7 @@ require (
 	github.com/containerd/go-runc v1.1.0
 	github.com/containerd/log v0.1.0
 	github.com/containerd/nydus-snapshotter v0.13.7
+	github.com/containerd/platforms v0.2.1
 	github.com/containerd/stargz-snapshotter v0.15.1
 	github.com/containerd/stargz-snapshotter/estargz v0.15.1
 	github.com/containerd/typeurl/v2 v2.1.1
@@ -128,7 +129,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/containerd/cgroups v1.1.0 // indirect
 	github.com/containerd/fifo v1.1.0 // indirect
-	github.com/containerd/platforms v0.2.1 // indirect
 	github.com/containerd/ttrpc v1.2.4 // indirect
 	github.com/containernetworking/cni v1.1.2 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
