@@ -2210,7 +2210,9 @@ func reportUnmatchedVariables(cmd instructions.Command, buildArgs []instructions
 		return
 	}
 	for _, buildArg := range buildArgs {
-		delete(unmatched, buildArg.Key)
+		if buildArg.Value != nil {
+			delete(unmatched, buildArg.Key)
+		}
 	}
 	if len(unmatched) == 0 {
 		return
