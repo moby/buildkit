@@ -108,7 +108,7 @@ func (results *LintResults) ToResult() (*client.Result, error) {
 	res.AddMeta("result.txt", b.Bytes())
 
 	status := 0
-	if len(results.Warnings) > 0 {
+	if len(results.Warnings) > 0 || results.Error != nil {
 		status = 1
 	}
 	res.AddMeta("result.statuscode", []byte(fmt.Sprintf("%d", status)))
@@ -169,7 +169,7 @@ func PrintLintViolations(dt []byte, w io.Writer) error {
 	})
 
 	for _, warning := range results.Warnings {
-		fmt.Fprintf(w, "%s", warning.RuleName)
+		fmt.Fprintf(w, "\nWARNING: %s", warning.RuleName)
 		if warning.URL != "" {
 			fmt.Fprintf(w, " - %s", warning.URL)
 		}
@@ -187,8 +187,8 @@ func PrintLintViolations(dt []byte, w io.Writer) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintln(w)
 	}
+
 	return nil
 }
 
