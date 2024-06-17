@@ -1035,6 +1035,7 @@ func (ds *dispatchState) init() {
 	// the paths we use back to the base image.
 	ds.paths = ds.base.paths
 	ds.workdirSet = ds.base.workdirSet
+	ds.buildArgs = append(ds.buildArgs, ds.base.buildArgs...)
 }
 
 type dispatchStates struct {
