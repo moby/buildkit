@@ -2163,22 +2163,15 @@ func validateCommandCasing(dockerfile *parser.Result, lint *linter.Linter) {
 		// Here, we check both if the command is consistent per command (ie, "CMD" or "cmd", not "Cmd")
 		// as well as ensuring that the casing is consistent throughout the dockerfile by comparing the
 		// command to the casing of the majority of commands.
-		if !isSelfConsistentCasing(node.Value) {
-			msg := linter.RuleConsistentInstructionCasing.Format(node.Value)
+		var correctCasing string
+		if isMajorityLower && strings.ToLower(node.Value) != node.Value {
+			correctCasing = "lowercase"
+		} else if !isMajorityLower && strings.ToUpper(node.Value) != node.Value {
+			correctCasing = "uppercase"
+		}
+		if correctCasing != "" {
+			msg := linter.RuleConsistentInstructionCasing.Format(node.Value, correctCasing)
 			lint.Run(&linter.RuleConsistentInstructionCasing, node.Location(), msg)
-		} else {
-			var msg string
-			var needsLintWarn bool
-			if isMajorityLower && strings.ToUpper(node.Value) == node.Value {
-				msg = linter.RuleFileConsistentCommandCasing.Format(node.Value, "lowercase")
-				needsLintWarn = true
-			} else if !isMajorityLower && strings.ToLower(node.Value) == node.Value {
-				msg = linter.RuleFileConsistentCommandCasing.Format(node.Value, "uppercase")
-				needsLintWarn = true
-			}
-			if needsLintWarn {
-				lint.Run(&linter.RuleFileConsistentCommandCasing, node.Location(), msg)
-			}
 		}
 	}
 }

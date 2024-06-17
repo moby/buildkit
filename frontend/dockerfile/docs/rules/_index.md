@@ -42,10 +42,6 @@ $ docker build --check .
     </tr>
     <tr>
       <td><a href="./consistent-instruction-casing/">ConsistentInstructionCasing</a></td>
-      <td>Instructions should be in consistent casing (all lower or all upper)</td>
-    </tr>
-    <tr>
-      <td><a href="./file-consistent-command-casing/">FileConsistentCommandCasing</a></td>
       <td>All commands within the Dockerfile should use the same casing (either upper or lower)</td>
     </tr>
     <tr>
