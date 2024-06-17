@@ -28,7 +28,6 @@ var lintTests = integration.TestFuncs(
 	testStageName,
 	testNoEmptyContinuation,
 	testConsistentInstructionCasing,
-	testFileConsistentCommandCasing,
 	testDuplicateStageName,
 	testReservedStageName,
 	testJSONArgsRecommended,
@@ -97,19 +96,19 @@ copy Dockerfile .
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 
-	dockerfile = []byte(`#check=skip=FileConsistentCommandCasing,FromAsCasing
+	dockerfile = []byte(`#check=skip=ConsistentInstructionCasing,FromAsCasing
 FROM scratch as base
 copy Dockerfile .
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 
-	dockerfile = []byte(`#check=skip=FileConsistentCommandCasing,FromAsCasing;error=true
+	dockerfile = []byte(`#check=skip=ConsistentInstructionCasing,FromAsCasing;error=true
 FROM scratch as base
 copy Dockerfile .
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 
-	dockerfile = []byte(`#check=skip=FileConsistentCommandCasing
+	dockerfile = []byte(`#check=skip=ConsistentInstructionCasing
 FROM scratch as base
 copy Dockerfile .
 `)
@@ -127,7 +126,7 @@ copy Dockerfile .
 		},
 	})
 
-	dockerfile = []byte(`#check=skip=FileConsistentCommandCasing;error=true
+	dockerfile = []byte(`#check=skip=ConsistentInstructionCasing;error=true
 FROM scratch as base
 copy Dockerfile .
 `)
@@ -168,7 +167,7 @@ copy Dockerfile .
 		UnmarshalBuildErr: "lint violation found for rules: FromAsCasing",
 		BuildErrLocation:  2,
 		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DOCKERFILE_CHECK": "skip=FileConsistentCommandCasing;error=true",
+			"build-arg:BUILDKIT_DOCKERFILE_CHECK": "skip=ConsistentInstructionCasing;error=true",
 		},
 	})
 
@@ -275,9 +274,9 @@ FROM scratch AS base2
 		Warnings: []expectedLintWarning{
 			{
 				RuleName:    "ConsistentInstructionCasing",
-				Description: "Instructions should be in consistent casing (all lower or all upper)",
+				Description: "All commands within the Dockerfile should use the same casing (either upper or lower)",
 				URL:         "https://docs.docker.com/go/dockerfile/rule/consistent-instruction-casing/",
-				Detail:      "Command 'From' should be consistently cased",
+				Detail:      "Command 'From' should match the case of the command majority (uppercase)",
 				Level:       1,
 				Line:        3,
 			},
@@ -285,27 +284,6 @@ FROM scratch AS base2
 	})
 
 	dockerfile = []byte(`
-# warning: 'FROM' should be either lowercased or uppercased
-frOM scratch as base
-from scratch as base2
-`)
-	checkLinterWarnings(t, sb, &lintTestParams{
-		Dockerfile: dockerfile,
-		Warnings: []expectedLintWarning{
-			{
-				RuleName:    "ConsistentInstructionCasing",
-				Description: "Instructions should be in consistent casing (all lower or all upper)",
-				URL:         "https://docs.docker.com/go/dockerfile/rule/consistent-instruction-casing/",
-				Detail:      "Command 'frOM' should be consistently cased",
-				Line:        3,
-				Level:       1,
-			},
-		},
-	})
-}
-
-func testFileConsistentCommandCasing(t *testing.T, sb integration.Sandbox) {
-	dockerfile := []byte(`
 FROM scratch
 # warning: 'copy' should match command majority's casing (uppercase)
 copy Dockerfile /foo
@@ -316,11 +294,30 @@ COPY Dockerfile /bar
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
 			{
-				RuleName:    "FileConsistentCommandCasing",
+				RuleName:    "ConsistentInstructionCasing",
 				Description: "All commands within the Dockerfile should use the same casing (either upper or lower)",
-				URL:         "https://docs.docker.com/go/dockerfile/rule/file-consistent-command-casing/",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/consistent-instruction-casing/",
 				Detail:      "Command 'copy' should match the case of the command majority (uppercase)",
 				Line:        4,
+				Level:       1,
+			},
+		},
+	})
+
+	dockerfile = []byte(`
+# warning: 'frOM' should be either lowercased or uppercased
+frOM scratch as base
+from scratch as base2
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "ConsistentInstructionCasing",
+				Description: "All commands within the Dockerfile should use the same casing (either upper or lower)",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/consistent-instruction-casing/",
+				Detail:      "Command 'frOM' should match the case of the command majority (lowercase)",
+				Line:        3,
 				Level:       1,
 			},
 		},
@@ -336,9 +333,9 @@ copy Dockerfile /bar
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
 			{
-				RuleName:    "FileConsistentCommandCasing",
+				RuleName:    "ConsistentInstructionCasing",
 				Description: "All commands within the Dockerfile should use the same casing (either upper or lower)",
-				URL:         "https://docs.docker.com/go/dockerfile/rule/file-consistent-command-casing/",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/consistent-instruction-casing/",
 				Detail:      "Command 'COPY' should match the case of the command majority (lowercase)",
 				Line:        4,
 				Level:       1,
@@ -357,9 +354,9 @@ COPY Dockerfile /baz
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
 			{
-				RuleName:    "FileConsistentCommandCasing",
+				RuleName:    "ConsistentInstructionCasing",
 				Description: "All commands within the Dockerfile should use the same casing (either upper or lower)",
-				URL:         "https://docs.docker.com/go/dockerfile/rule/file-consistent-command-casing/",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/consistent-instruction-casing/",
 				Detail:      "Command 'from' should match the case of the command majority (uppercase)",
 				Line:        3,
 				Level:       1,
@@ -378,9 +375,9 @@ copy Dockerfile /baz
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
 			{
-				RuleName:    "FileConsistentCommandCasing",
+				RuleName:    "ConsistentInstructionCasing",
 				Description: "All commands within the Dockerfile should use the same casing (either upper or lower)",
-				URL:         "https://docs.docker.com/go/dockerfile/rule/file-consistent-command-casing/",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/consistent-instruction-casing/",
 				Detail:      "Command 'FROM' should match the case of the command majority (lowercase)",
 				Line:        3,
 				Level:       1,
