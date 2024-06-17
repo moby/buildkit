@@ -104,7 +104,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (st *llb.Sta
 	return &ds.state, &ds.image, ds.baseImg, sbom, nil
 }
 
-func Dockefile2Outline(ctx context.Context, dt []byte, opt ConvertOpt) (*outline.Outline, error) {
+func Dockerfile2Outline(ctx context.Context, dt []byte, opt ConvertOpt) (*outline.Outline, error) {
 	ds, err := toDispatchState(ctx, dt, opt)
 	if err != nil {
 		return nil, err
