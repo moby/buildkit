@@ -313,6 +313,21 @@ func TestProcessWithMatches(t *testing.T) {
 			matches:   map[string]struct{}{"FOO": {}, "BAR": {}},
 			unmatched: map[string]struct{}{"BAZ": {}},
 		},
+		{
+			input: "${FOO:-}",
+			envs: map[string]string{
+				"FOO": "xxx",
+				"BAR": "",
+			},
+			expected: "xxx",
+			matches:  map[string]struct{}{"FOO": {}},
+		},
+		{
+			input:     "${FOO:-}",
+			envs:      map[string]string{},
+			expected:  "",
+			unmatched: map[string]struct{}{"FOO": {}},
+		},
 
 		{
 			input: "${FOO+aaa} ${BAR+bbb} ${BAZ+ccc}",
@@ -388,6 +403,15 @@ func TestProcessWithMatches(t *testing.T) {
 			expectedErr: true,
 			unmatched:   map[string]struct{}{"BAZ": {}},
 		},
+		{
+			input: "${BAZ:?}",
+			envs: map[string]string{
+				"FOO": "xxx",
+				"BAR": "",
+			},
+			expectedErr: true,
+			unmatched:   map[string]struct{}{"BAZ": {}},
+		},
 
 		{
 			input: "${FOO=aaa}",
@@ -403,6 +427,11 @@ func TestProcessWithMatches(t *testing.T) {
 				"FOO": "xxx",
 				"BAR": "",
 			},
+			expectedErr: true,
+		},
+		{
+			input:       "${FOO=}",
+			envs:        map[string]string{},
 			expectedErr: true,
 		},
 		{
@@ -427,9 +456,39 @@ func TestProcessWithMatches(t *testing.T) {
 			matches:  map[string]struct{}{"FOO": {}},
 		},
 		{
+			input:    "${FOO#*}",
+			envs:     map[string]string{"FOO": "xxyy"},
+			expected: "xxyy",
+			matches:  map[string]struct{}{"FOO": {}},
+		},
+		{
+			input:    "${FOO#$BAR}",
+			envs:     map[string]string{"FOO": "xxyy", "BAR": "x"},
+			expected: "xyy",
+			matches:  map[string]struct{}{"FOO": {}, "BAR": {}},
+		},
+		{
+			input:    "${FOO#$BAR}",
+			envs:     map[string]string{"FOO": "xxyy", "BAR": ""},
+			expected: "xxyy",
+			matches:  map[string]struct{}{"FOO": {}, "BAR": {}},
+		},
+		{
+			input:    "${FOO#}",
+			envs:     map[string]string{"FOO": "xxyy"},
+			expected: "xxyy",
+			matches:  map[string]struct{}{"FOO": {}},
+		},
+		{
 			input:    "${FOO##*x}",
 			envs:     map[string]string{"FOO": "xxyy"},
 			expected: "yy",
+			matches:  map[string]struct{}{"FOO": {}},
+		},
+		{
+			input:    "${FOO##}",
+			envs:     map[string]string{"FOO": "xxyy"},
+			expected: "xxyy",
 			matches:  map[string]struct{}{"FOO": {}},
 		},
 		{
@@ -450,6 +509,18 @@ func TestProcessWithMatches(t *testing.T) {
 			envs:     map[string]string{"FOO": "a***yy*"},
 			expected: "a",
 			matches:  map[string]struct{}{"FOO": {}},
+		},
+		{
+			input:    "${FOO%}",
+			envs:     map[string]string{"FOO": "xxyy"},
+			expected: "xxyy",
+			matches:  map[string]struct{}{"FOO": {}},
+		},
+		{
+			input:    "${FOO%%$BAR}",
+			envs:     map[string]string{"FOO": "xxyy", "BAR": ""},
+			expected: "xxyy",
+			matches:  map[string]struct{}{"FOO": {}, "BAR": {}},
 		},
 		{
 			// test: wildcards
@@ -484,6 +555,38 @@ func TestProcessWithMatches(t *testing.T) {
 			expected: "\\/tmp\\/foo.txt",
 			matches:  map[string]struct{}{"FOO": {}},
 		},
+
+		// Following cases with empty/partial values are currently not
+		// guaranteed behavior. Tests are provided to make sure partial
+		// input does not cause runtime error.
+		{
+			input:    "${FOO/$BAR/ww}",
+			envs:     map[string]string{"FOO": "xxyy", "BAR": ""},
+			expected: "wwxxyy",
+			matches:  map[string]struct{}{"FOO": {}, "BAR": {}},
+		},
+		{
+			input:       "${FOO//ww}",
+			envs:        map[string]string{"FOO": "xxyy"},
+			expectedErr: true,
+		},
+		{
+			input:       "${FOO//}",
+			envs:        map[string]string{"FOO": "xxyy"},
+			expectedErr: true,
+		},
+		{
+			input:    "${FOO///}",
+			envs:     map[string]string{"FOO": "xxyy"},
+			expected: "xxyy",
+			matches:  map[string]struct{}{"FOO": {}},
+		},
+		{
+			input:     "${FOO///}",
+			envs:      map[string]string{},
+			expected:  "",
+			unmatched: map[string]struct{}{"FOO": {}},
+		},
 	}
 
 	for _, c := range tc {
@@ -500,12 +603,12 @@ func TestProcessWithMatches(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, c.expected, w)
 
-			require.Equal(t, len(c.matches), len(matches))
+			require.Len(t, matches, len(c.matches), c.matches)
 			for k := range c.matches {
 				require.Contains(t, matches, k)
 			}
 
-			require.Equal(t, len(c.unmatched), len(unmatched))
+			require.Len(t, unmatched, len(c.unmatched), c.unmatched)
 			for k := range c.unmatched {
 				require.Contains(t, unmatched, k)
 			}
