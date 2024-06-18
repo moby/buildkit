@@ -1044,6 +1044,7 @@ func (sr *immutableRef) withRemoteSnapshotLabelsStargzMode(ctx context.Context, 
 			return errors.Wrapf(err, "failed to add tmp remote labels for remote snapshot")
 		}
 		defer func() {
+			ctx := context.WithoutCancel(ctx)
 			for k := range info.Labels {
 				info.Labels[k] = "" // Remove labels appended in this call
 			}
@@ -1105,6 +1106,7 @@ func (sr *immutableRef) prepareRemoteSnapshotsStargzMode(ctx context.Context, s 
 					info, err := r.cm.Snapshotter.Stat(ctx, snapshotID)
 					if err == nil { // usable as remote snapshot without unlazying.
 						defer func() {
+							ctx := context.WithoutCancel(ctx)
 							// Remove tmp labels appended in this func
 							if info.Labels != nil {
 								for k := range tmpLabels {

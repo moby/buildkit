@@ -155,8 +155,9 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 			return nil, err
 		}
 		defer func() {
+			ctx := context.WithoutCancel(ctx)
 			devRes.EachRef(func(ref solver.ResultProxy) error {
-				return ref.Release(context.TODO())
+				return ref.Release(ctx)
 			})
 		}()
 		if devRes.Ref == nil {
@@ -248,8 +249,9 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 			return nil, err
 		}
 		defer func() {
+			ctx := context.WithoutCancel(ctx)
 			res.EachRef(func(ref solver.ResultProxy) error {
-				return ref.Release(context.TODO())
+				return ref.Release(ctx)
 			})
 		}()
 		if res.Ref == nil {
@@ -1153,7 +1155,7 @@ func (lbf *llbBridgeForwarder) NewContainer(ctx context.Context, in *pb.NewConta
 	}
 	defer func() {
 		if err != nil {
-			ctr.Release(ctx) // ensure release on error
+			ctr.Release(context.WithoutCancel(ctx)) // ensure release on error
 		}
 	}()
 

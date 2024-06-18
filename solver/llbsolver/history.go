@@ -133,7 +133,7 @@ func (h *HistoryQueue) migrateV2() error {
 		if err != nil {
 			return err
 		}
-		defer release(ctx)
+		defer release(context.WithoutCancel(ctx))
 		return b.ForEach(func(key, dt []byte) error {
 			recs, err := h.opt.LeaseManager.ListResources(ctx, leases.Lease{ID: h.leaseID(string(key))})
 			if err != nil {
@@ -518,7 +518,7 @@ func (h *HistoryQueue) update(ctx context.Context, rec controlapi.BuildHistoryRe
 
 		defer func() {
 			if err != nil && created {
-				h.hLeaseManager.Delete(ctx, l)
+				h.hLeaseManager.Delete(context.WithoutCancel(ctx), l)
 			}
 		}()
 
@@ -598,7 +598,7 @@ func (h *HistoryQueue) OpenBlobWriter(ctx context.Context, mt string) (_ *Writer
 
 	defer func() {
 		if err != nil {
-			h.hLeaseManager.Delete(ctx, l)
+			h.hLeaseManager.Delete(context.WithoutCancel(ctx), l)
 		}
 	}()
 

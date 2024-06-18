@@ -507,7 +507,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		if err := s.gatewayForwarder.RegisterBuild(ctx, id, fwd); err != nil {
 			return nil, err
 		}
-		defer s.gatewayForwarder.UnregisterBuild(ctx, id)
+		defer s.gatewayForwarder.UnregisterBuild(context.WithoutCancel(ctx), id)
 	}
 
 	if !internal {
