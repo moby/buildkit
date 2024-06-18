@@ -173,7 +173,7 @@ func PrintLintViolations(dt []byte, w io.Writer) error {
 		if warning.URL != "" {
 			fmt.Fprintf(w, " - %s", warning.URL)
 		}
-		fmt.Fprintf(w, "\n%s\n", warning.Description)
+		fmt.Fprintf(w, "\n%s\n", warning.Detail)
 
 		if warning.Location.SourceIndex < 0 {
 			continue
