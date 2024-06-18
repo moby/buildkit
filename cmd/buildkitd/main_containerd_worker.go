@@ -328,7 +328,7 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 			Options: opts,
 		}
 	}
-	opt, err := containerd.NewWorkerOpt(common.config.Root, cfg.Address, snapshotter, cfg.Namespace, cfg.Rootless, cfg.Labels, dns, nc, common.config.Workers.Containerd.ApparmorProfile, common.config.Workers.Containerd.SELinux, parallelismSem, common.traceSocket, runtime, ctd.WithTimeout(60*time.Second))
+	opt, err := containerd.NewWorkerOpt(common.config.Root, cfg.Address, snapshotter, cfg.Namespace, cfg.DefaultCgroupParent, cfg.Rootless, cfg.Labels, dns, nc, common.config.Workers.Containerd.ApparmorProfile, common.config.Workers.Containerd.SELinux, parallelismSem, common.traceSocket, runtime, ctd.WithTimeout(60*time.Second))
 	if err != nil {
 		return nil, err
 	}
