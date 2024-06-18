@@ -89,7 +89,7 @@ jobs:
             });
       -
         name: Build
-        uses: docker/bake-action@v4
+        uses: docker/bake-action@v5
         with:
           targets: integration-tests-base
           set: |
@@ -155,7 +155,7 @@ jobs:
           buildkitd-flags: --debug
       -
         name: Build test image
-        uses: docker/bake-action@v4
+        uses: docker/bake-action@v5
         with:
           targets: integration-tests
           set: |
