@@ -11,8 +11,8 @@ import (
 	"strings"
 	"sync"
 
-	iradix "github.com/hashicorp/go-immutable-radix"
-	"github.com/hashicorp/golang-lru/simplelru"
+	iradix "github.com/hashicorp/go-immutable-radix/v2"
+	simplelru "github.com/hashicorp/golang-lru/v2/simplelru"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
@@ -31,7 +31,7 @@ var defaultManagerOnce sync.Once
 
 func getDefaultManager() *cacheManager {
 	defaultManagerOnce.Do(func() {
-		lru, _ := simplelru.NewLRU(20, nil) // error is impossible on positive size
+		lru, _ := simplelru.NewLRU[string, *cacheContext](20, nil) // error is impossible on positive size
 		defaultManager = &cacheManager{lru: lru, locker: locker.New()}
 	})
 	return defaultManager
@@ -85,7 +85,7 @@ type includedPath struct {
 
 type cacheManager struct {
 	locker *locker.Locker
-	lru    *simplelru.LRU
+	lru    *simplelru.LRU[string, *cacheContext]
 	lruMu  sync.Mutex
 }
 
@@ -110,10 +110,10 @@ func (cm *cacheManager) GetCacheContext(ctx context.Context, md cache.RefMetadat
 	cm.lruMu.Unlock()
 	if ok {
 		cm.locker.Unlock(md.ID())
-		v.(*cacheContext).mu.Lock() // locking is required because multiple ImmutableRefs can reach this code; however none of them use the linkMap.
-		v.(*cacheContext).linkMap = map[string][][]byte{}
-		v.(*cacheContext).mu.Unlock()
-		return v.(*cacheContext), nil
+		v.mu.Lock() // locking is required because multiple ImmutableRefs can reach this code; however none of them use the linkMap.
+		v.linkMap = map[string][][]byte{}
+		v.mu.Unlock()
+		return v, nil
 	}
 	cc, err := newCacheContext(md)
 	if err != nil {
@@ -159,12 +159,12 @@ func (cm *cacheManager) clearCacheContext(id string) {
 type cacheContext struct {
 	mu    sync.RWMutex
 	md    cacheMetadata
-	tree  *iradix.Tree
+	tree  *iradix.Tree[*CacheRecord]
 	dirty bool // needs to be persisted to disk
 
 	// used in HandleChange
-	txn      *iradix.Txn
-	node     *iradix.Node
+	txn      *iradix.Txn[*CacheRecord]
+	node     *iradix.Node[*CacheRecord]
 	dirtyMap map[string]struct{}
 	linkMap  map[string][][]byte
 }
@@ -224,7 +224,7 @@ func (m *mount) clean() error {
 func newCacheContext(md cache.RefMetadata) (*cacheContext, error) {
 	cc := &cacheContext{
 		md:       cacheMetadata{md},
-		tree:     iradix.New(),
+		tree:     iradix.New[*CacheRecord](),
 		dirtyMap: map[string]struct{}{},
 		linkMap:  map[string][][]byte{},
 	}
@@ -263,10 +263,10 @@ func (cc *cacheContext) save() error {
 
 	var l CacheRecords
 	node := cc.tree.Root()
-	node.Walk(func(k []byte, v interface{}) bool {
+	node.Walk(func(k []byte, v *CacheRecord) bool {
 		l.Paths = append(l.Paths, &CacheRecordWithPath{
 			Path:   string(k),
-			Record: v.(*CacheRecord),
+			Record: v,
 		})
 		return false
 	})
@@ -294,7 +294,7 @@ func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.Fil
 
 	deleteDir := func(cr *CacheRecord) {
 		if cr.Type == CacheRecordTypeDir {
-			cc.node.WalkPrefix(append(k, 0), func(k []byte, v interface{}) bool {
+			cc.node.WalkPrefix(append(k, 0), func(k []byte, v *CacheRecord) bool {
 				cc.txn.Delete(k)
 				return false
 			})
@@ -322,7 +322,7 @@ func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.Fil
 	if kind == fsutil.ChangeKindDelete {
 		v, ok := cc.txn.Delete(k)
 		if ok {
-			deleteDir(v.(*CacheRecord))
+			deleteDir(v)
 		}
 		d := path.Dir(p)
 		if d == "/" {
@@ -344,7 +344,7 @@ func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.Fil
 
 	v, ok := cc.node.Get(k)
 	if ok {
-		deleteDir(v.(*CacheRecord))
+		deleteDir(v)
 	}
 
 	cr := &CacheRecord{
@@ -371,7 +371,7 @@ func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.Fil
 		ln := path.Join("/", filepath.ToSlash(stat.Linkname))
 		v, ok := cc.txn.Get(convertPathToKey(ln))
 		if ok {
-			cp := *v.(*CacheRecord)
+			cp := *v
 			cr = &cp
 		}
 		cc.linkMap[ln] = append(cc.linkMap[ln], k)
@@ -496,7 +496,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 	root = txn.Root()
 	var (
 		updated        bool
-		iter           *iradix.Iterator
+		iter           *iradix.Iterator[*CacheRecord]
 		k              []byte
 		keyOk          bool
 		origPrefix     string
@@ -716,7 +716,7 @@ func shouldIncludePath(
 	return true, nil
 }
 
-func wildcardPrefix(root *iradix.Node, p string) (string, []byte, bool, error) {
+func wildcardPrefix(root *iradix.Node[*CacheRecord], p string) (string, []byte, bool, error) {
 	// For consistency with what the copy implementation in fsutil
 	// does: split pattern into non-wildcard prefix and rest of
 	// pattern, then follow symlinks when resolving the non-wildcard
@@ -849,7 +849,7 @@ func (cc *cacheContext) scanChecksum(ctx context.Context, m *mount, p string, fo
 	return cr, err
 }
 
-func (cc *cacheContext) checksum(ctx context.Context, root *iradix.Node, txn *iradix.Txn, m *mount, k []byte, followTrailing bool) (*CacheRecord, bool, error) {
+func (cc *cacheContext) checksum(ctx context.Context, root *iradix.Node[*CacheRecord], txn *iradix.Txn[*CacheRecord], m *mount, k []byte, followTrailing bool) (*CacheRecord, bool, error) {
 	origk := k
 	k, cr, err := getFollowLinks(root, k, followTrailing)
 	if err != nil {
@@ -930,7 +930,7 @@ func (cc *cacheContext) checksum(ctx context.Context, root *iradix.Node, txn *ir
 
 // needsScan returns false if path is in the tree or a parent path is in tree
 // and subpath is missing.
-func (cc *cacheContext) needsScan(root *iradix.Node, path string, followTrailing bool) (bool, error) {
+func (cc *cacheContext) needsScan(root *iradix.Node[*CacheRecord], path string, followTrailing bool) (bool, error) {
 	var (
 		lastGoodPath    string
 		hasParentInTree bool
@@ -1047,7 +1047,7 @@ func (cc *cacheContext) scanPath(ctx context.Context, m *mount, p string, follow
 type followLinksCallback func(path string, cr *CacheRecord) error
 
 // getFollowLinks is shorthand for getFollowLinksCallback(..., nil).
-func getFollowLinks(root *iradix.Node, k []byte, followTrailing bool) ([]byte, *CacheRecord, error) {
+func getFollowLinks(root *iradix.Node[*CacheRecord], k []byte, followTrailing bool) ([]byte, *CacheRecord, error) {
 	return getFollowLinksCallback(root, k, followTrailing, nil)
 }
 
@@ -1063,10 +1063,10 @@ func getFollowLinks(root *iradix.Node, k []byte, followTrailing bool) ([]byte, *
 // The callback cb is called after each cache lookup done by
 // getFollowLinksCallback, except for the first lookup where the verbatim key
 // is looked up in the cache.
-func getFollowLinksCallback(root *iradix.Node, k []byte, followTrailing bool, cb followLinksCallback) ([]byte, *CacheRecord, error) {
+func getFollowLinksCallback(root *iradix.Node[*CacheRecord], k []byte, followTrailing bool, cb followLinksCallback) ([]byte, *CacheRecord, error) {
 	v, ok := root.Get(k)
-	if ok && (!followTrailing || v.(*CacheRecord).Type != CacheRecordTypeSymlink) {
-		return k, v.(*CacheRecord), nil
+	if ok && (!followTrailing || v.Type != CacheRecordTypeSymlink) {
+		return k, v, nil
 	}
 	if len(k) == 0 {
 		return k, nil, nil
@@ -1104,11 +1104,7 @@ func getFollowLinksCallback(root *iradix.Node, k []byte, followTrailing bool, cb
 			continue
 		}
 
-		cr = nil
-		v, ok := root.Get(convertPathToKey(nextPath))
-		if ok {
-			cr = v.(*CacheRecord)
-		}
+		cr, ok = root.Get(convertPathToKey(nextPath))
 		if cb != nil {
 			if err := cb(nextPath, cr); err != nil {
 				return nil, nil, err
@@ -1137,12 +1133,8 @@ func getFollowLinksCallback(root *iradix.Node, k []byte, followTrailing bool, cb
 	// trailing slash in the original path, we need to do the lookup again with
 	// the slash applied.
 	if hadTrailingSlash {
-		cr = nil
 		currentPath += "/"
-		v, ok := root.Get(convertPathToKey(currentPath))
-		if ok {
-			cr = v.(*CacheRecord)
-		}
+		cr, _ = root.Get(convertPathToKey(currentPath))
 		if cb != nil {
 			if err := cb(currentPath, cr); err != nil {
 				return nil, nil, err
