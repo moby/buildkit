@@ -12,7 +12,7 @@ import (
 	"sync"
 
 	iradix "github.com/hashicorp/go-immutable-radix/v2"
-	"github.com/hashicorp/golang-lru/simplelru"
+	simplelru "github.com/hashicorp/golang-lru/v2/simplelru"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
@@ -31,7 +31,7 @@ var defaultManagerOnce sync.Once
 
 func getDefaultManager() *cacheManager {
 	defaultManagerOnce.Do(func() {
-		lru, _ := simplelru.NewLRU(20, nil) // error is impossible on positive size
+		lru, _ := simplelru.NewLRU[string, *cacheContext](20, nil) // error is impossible on positive size
 		defaultManager = &cacheManager{lru: lru, locker: locker.New()}
 	})
 	return defaultManager
@@ -85,7 +85,7 @@ type includedPath struct {
 
 type cacheManager struct {
 	locker *locker.Locker
-	lru    *simplelru.LRU
+	lru    *simplelru.LRU[string, *cacheContext]
 	lruMu  sync.Mutex
 }
 
@@ -110,10 +110,10 @@ func (cm *cacheManager) GetCacheContext(ctx context.Context, md cache.RefMetadat
 	cm.lruMu.Unlock()
 	if ok {
 		cm.locker.Unlock(md.ID())
-		v.(*cacheContext).mu.Lock() // locking is required because multiple ImmutableRefs can reach this code; however none of them use the linkMap.
-		v.(*cacheContext).linkMap = map[string][][]byte{}
-		v.(*cacheContext).mu.Unlock()
-		return v.(*cacheContext), nil
+		v.mu.Lock() // locking is required because multiple ImmutableRefs can reach this code; however none of them use the linkMap.
+		v.linkMap = map[string][][]byte{}
+		v.mu.Unlock()
+		return v, nil
 	}
 	cc, err := newCacheContext(md)
 	if err != nil {
