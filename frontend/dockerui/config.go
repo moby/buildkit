@@ -78,8 +78,7 @@ type Client struct {
 	Config
 	client      client.Client
 	ignoreCache []string
-	bctx        *buildContext
-	g           flightcontrol.Group[*buildContext]
+	g           flightcontrol.CachedGroup[*buildContext]
 	bopts       client.BuildOpts
 
 	dockerignore     []byte
@@ -288,14 +287,7 @@ func (bc *Client) init() error {
 
 func (bc *Client) buildContext(ctx context.Context) (*buildContext, error) {
 	return bc.g.Do(ctx, "initcontext", func(ctx context.Context) (*buildContext, error) {
-		if bc.bctx != nil {
-			return bc.bctx, nil
-		}
-		bctx, err := bc.initContext(ctx)
-		if err == nil {
-			bc.bctx = bctx
-		}
-		return bctx, err
+		return bc.initContext(ctx)
 	})
 }
 
