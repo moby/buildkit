@@ -1,4 +1,4 @@
-go-immutable-radix [![CircleCI](https://circleci.com/gh/hashicorp/go-immutable-radix/tree/master.svg?style=svg)](https://circleci.com/gh/hashicorp/go-immutable-radix/tree/master)
+go-immutable-radix [![Run CI Tests](https://github.com/hashicorp/go-immutable-radix/actions/workflows/ci.yaml/badge.svg)](https://github.com/hashicorp/go-immutable-radix/actions/workflows/ci.yaml)
 =========
 
 Provides the `iradix` package that implements an immutable [radix tree](http://en.wikipedia.org/wiki/Radix_tree).
@@ -15,6 +15,13 @@ in a more efficient manner than performing each operation one at a time.
 
 For a mutable variant, see [go-radix](https://github.com/armon/go-radix).
 
+V2
+==
+
+The v2 of go-immutable-radix introduces generics to improve compile-time type
+safety for users of the package. The module name for v2 is
+`github.com/hashicorp/go-immutable-radix/v2`.
+
 Documentation
 =============
 
@@ -27,7 +34,7 @@ Below is a simple example of usage
 
 ```go
 // Create a tree
-r := iradix.New()
+r := iradix.New[int]()
 r, _, _ = r.Insert([]byte("foo"), 1)
 r, _, _ = r.Insert([]byte("bar"), 2)
 r, _, _ = r.Insert([]byte("foobar"), 2)
@@ -43,7 +50,7 @@ Here is an example of performing a range scan of the keys.
 
 ```go
 // Create a tree
-r := iradix.New()
+r := iradix.New[int]()
 r, _, _ = r.Insert([]byte("001"), 1)
 r, _, _ = r.Insert([]byte("002"), 2)
 r, _, _ = r.Insert([]byte("005"), 5)
@@ -54,10 +61,10 @@ r, _, _ = r.Insert([]byte("100"), 10)
 it := r.Root().Iterator()
 it.SeekLowerBound([]byte("003"))
 for key, _, ok := it.Next(); ok; key, _, ok = it.Next() {
-  if key >= "050" {
+  if string(key) >= "050" {
       break
   }
-  fmt.Println(key)
+  fmt.Println(string(key))
 }
 // Output:
 //  005

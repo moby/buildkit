@@ -6,14 +6,14 @@ import (
 
 // Iterator is used to iterate over a set of nodes
 // in pre-order
-type Iterator struct {
-	node  *Node
-	stack []edges
+type Iterator[T any] struct {
+	node  *Node[T]
+	stack []edges[T]
 }
 
 // SeekPrefixWatch is used to seek the iterator to a given prefix
 // and returns the watch channel of the finest granularity
-func (i *Iterator) SeekPrefixWatch(prefix []byte) (watch <-chan struct{}) {
+func (i *Iterator[T]) SeekPrefixWatch(prefix []byte) (watch <-chan struct{}) {
 	// Wipe the stack
 	i.stack = nil
 	n := i.node
@@ -51,11 +51,11 @@ func (i *Iterator) SeekPrefixWatch(prefix []byte) (watch <-chan struct{}) {
 }
 
 // SeekPrefix is used to seek the iterator to a given prefix
-func (i *Iterator) SeekPrefix(prefix []byte) {
+func (i *Iterator[T]) SeekPrefix(prefix []byte) {
 	i.SeekPrefixWatch(prefix)
 }
 
-func (i *Iterator) recurseMin(n *Node) *Node {
+func (i *Iterator[T]) recurseMin(n *Node[T]) *Node[T] {
 	// Traverse to the minimum child
 	if n.leaf != nil {
 		return n
@@ -77,13 +77,13 @@ func (i *Iterator) recurseMin(n *Node) *Node {
 // greater or equal to the given key. There is no watch variant as it's hard to
 // predict based on the radix structure which node(s) changes might affect the
 // result.
-func (i *Iterator) SeekLowerBound(key []byte) {
+func (i *Iterator[T]) SeekLowerBound(key []byte) {
 	// Wipe the stack. Unlike Prefix iteration, we need to build the stack as we
 	// go because we need only a subset of edges of many nodes in the path to the
 	// leaf with the lower bound. Note that the iterator will still recurse into
 	// children that we don't traverse on the way to the reverse lower bound as it
 	// walks the stack.
-	i.stack = []edges{}
+	i.stack = []edges[T]{}
 	// i.node starts off in the common case as pointing to the root node of the
 	// tree. By the time we return we have either found a lower bound and setup
 	// the stack to traverse all larger keys, or we have not and the stack and
@@ -94,11 +94,14 @@ func (i *Iterator) SeekLowerBound(key []byte) {
 	i.node = nil
 	search := key
 
-	found := func(n *Node) {
-		i.stack = append(i.stack, edges{edge{node: n}})
+	found := func(n *Node[T]) {
+		i.stack = append(
+			i.stack,
+			edges[T]{edge[T]{node: n}},
+		)
 	}
 
-	findMin := func(n *Node) {
+	findMin := func(n *Node[T]) {
 		n = i.recurseMin(n)
 		if n != nil {
 			found(n)
@@ -168,14 +171,11 @@ func (i *Iterator) SeekLowerBound(key []byte) {
 }
 
 // Next returns the next node in order
-func (i *Iterator) Next() ([]byte, interface{}, bool) {
+func (i *Iterator[T]) Next() ([]byte, T, bool) {
+	var zero T
 	// Initialize our stack if needed
 	if i.stack == nil && i.node != nil {
-		i.stack = []edges{
-			{
-				edge{node: i.node},
-			},
-		}
+		i.stack = []edges[T]{{edge[T]{node: i.node}}}
 	}
 
 	for len(i.stack) > 0 {
@@ -201,5 +201,5 @@ func (i *Iterator) Next() ([]byte, interface{}, bool) {
 			return elem.leaf.key, elem.leaf.val, true
 		}
 	}
-	return nil, nil, false
+	return nil, zero, false
 }

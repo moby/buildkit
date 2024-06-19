@@ -1,5 +1,9 @@
 # UNRELEASED
 
+# 2.0.0 (December 15th, 2022)
+
+* Update API to use generics [[GH-43](https://github.com/hashicorp/go-immutable-radix/pull/43))
+
 # 1.3.0 (September 17th, 2020)
 
 FEATURES
