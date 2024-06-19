@@ -12,13 +12,9 @@ import (
 	"strings"
 	"time"
 
-	runhcsoptions "github.com/Microsoft/hcsshim/cmd/containerd-shim-runhcs-v1/options"
 	ctd "github.com/containerd/containerd"
 	"github.com/containerd/containerd/defaults"
-	runtimeoptions "github.com/containerd/containerd/pkg/runtimeoptions/v1"
 	"github.com/containerd/containerd/pkg/userns"
-	"github.com/containerd/containerd/plugin"
-	runcoptions "github.com/containerd/containerd/runtime/v2/runc/options"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/network/cniprovider"
@@ -34,9 +30,6 @@ import (
 
 const (
 	defaultContainerdNamespace = "buildkit"
-
-	// runtimeRunhcsV1 is the runtime type for runhcs.
-	runtimeRunhcsV1 = "io.containerd.runhcs.v1"
 )
 
 func init() {
@@ -372,16 +365,4 @@ func validContainerdSocket(cfg config.ContainerdConfig) bool {
 		return false
 	}
 	return true
-}
-
-// getRuntimeOptionsType gets empty runtime options by the runtime type name.
-func getRuntimeOptionsType(t string) interface{} {
-	switch t {
-	case plugin.RuntimeRuncV2:
-		return &runcoptions.Options{}
-	case runtimeRunhcsV1:
-		return &runhcsoptions.Options{}
-	default:
-		return &runtimeoptions.Options{}
-	}
 }
