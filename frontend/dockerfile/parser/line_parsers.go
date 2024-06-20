@@ -17,6 +17,7 @@ import (
 
 var (
 	errDockerfileNotStringArray = errors.New("when using JSON array syntax, arrays must be comprised of strings only")
+	errDockerfileNotJSONArray   = errors.New("not a JSON array")
 )
 
 const (
@@ -277,7 +278,7 @@ func parseString(rest string, d *directives) (*Node, map[string]bool, error) {
 func parseJSON(rest string) (*Node, map[string]bool, error) {
 	rest = strings.TrimLeftFunc(rest, unicode.IsSpace)
 	if !strings.HasPrefix(rest, "[") {
-		return nil, nil, errors.Errorf("Error parsing %q as a JSON array", rest)
+		return nil, nil, errDockerfileNotJSONArray
 	}
 
 	var myJSON []interface{}
