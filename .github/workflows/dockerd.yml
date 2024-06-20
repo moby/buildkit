@@ -42,7 +42,7 @@ jobs:
       -
         name: Build
         if: ${{ env.DOCKER_BUILD == 'true' }}
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ${{ env.DOCKER_VERSION }}
           target: binary
