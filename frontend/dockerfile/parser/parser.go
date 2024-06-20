@@ -418,7 +418,7 @@ func heredocFromMatch(match []string) (*Heredoc, error) {
 	// If there are quotes in one but not the other, then we know that some
 	// part of the heredoc word is quoted, so we shouldn't expand the content.
 	shlex.RawQuotes = false
-	words, err := shlex.ProcessWords(rest, []string{})
+	words, err := shlex.ProcessWords(rest, emptyEnvs{})
 	if err != nil {
 		return nil, err
 	}
@@ -428,7 +428,7 @@ func heredocFromMatch(match []string) (*Heredoc, error) {
 	}
 
 	shlex.RawQuotes = true
-	wordsRaw, err := shlex.ProcessWords(rest, []string{})
+	wordsRaw, err := shlex.ProcessWords(rest, emptyEnvs{})
 	if err != nil {
 		return nil, err
 	}
@@ -469,7 +469,7 @@ func heredocsFromLine(line string) ([]Heredoc, error) {
 	shlex.RawQuotes = true
 	shlex.RawEscapes = true
 	shlex.SkipUnsetEnv = true
-	words, _ := shlex.ProcessWords(line, []string{})
+	words, _ := shlex.ProcessWords(line, emptyEnvs{})
 
 	var docs []Heredoc
 	for _, word := range words {
@@ -556,4 +556,14 @@ func handleScannerError(err error) error {
 	default:
 		return err
 	}
+}
+
+type emptyEnvs struct{}
+
+func (emptyEnvs) Get(string) (string, bool) {
+	return "", false
+}
+
+func (emptyEnvs) Keys() []string {
+	return nil
 }

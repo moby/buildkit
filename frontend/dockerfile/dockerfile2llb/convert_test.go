@@ -14,7 +14,12 @@ import (
 )
 
 func toEnvMap(args []instructions.KeyValuePairOptional, env []string) map[string]string {
-	m := shell.BuildEnvs(env)
+	envs := shell.EnvsFromSlice(env)
+	m := make(map[string]string)
+
+	for _, k := range envs.Keys() {
+		m[k], _ = envs.Get(k)
+	}
 
 	for _, arg := range args {
 		// If key already exists, keep previous value.
@@ -147,48 +152,48 @@ func TestToEnvList(t *testing.T) {
 	v := "val2"
 	args := []instructions.KeyValuePairOptional{{Key: "key2", Value: &v}}
 	env := []string{"key1=val1"}
-	resutl := toEnvMap(args, env)
-	assert.Equal(t, map[string]string{"key1": "val1", "key2": "val2"}, resutl)
+	result := toEnvMap(args, env)
+	assert.Equal(t, map[string]string{"key1": "val1", "key2": "val2"}, result)
 
 	// value of args is nil
 	args = []instructions.KeyValuePairOptional{{Key: "key2", Value: nil}}
 	env = []string{"key1=val1"}
-	resutl = toEnvMap(args, env)
-	assert.Equal(t, map[string]string{"key1": "val1"}, resutl)
+	result = toEnvMap(args, env)
+	assert.Equal(t, map[string]string{"key1": "val1"}, result)
 
 	// args has duplicated key with env
 	v = "val2"
 	args = []instructions.KeyValuePairOptional{{Key: "key1", Value: &v}}
 	env = []string{"key1=val1"}
-	resutl = toEnvMap(args, env)
-	assert.Equal(t, map[string]string{"key1": "val1"}, resutl)
+	result = toEnvMap(args, env)
+	assert.Equal(t, map[string]string{"key1": "val1"}, result)
 
 	v = "val2"
 	args = []instructions.KeyValuePairOptional{{Key: "key1", Value: &v}}
 	env = []string{"key1="}
-	resutl = toEnvMap(args, env)
-	assert.Equal(t, map[string]string{"key1": ""}, resutl)
+	result = toEnvMap(args, env)
+	assert.Equal(t, map[string]string{"key1": ""}, result)
 
 	v = "val2"
 	args = []instructions.KeyValuePairOptional{{Key: "key1", Value: &v}}
 	env = []string{"key1"}
-	resutl = toEnvMap(args, env)
-	assert.Equal(t, map[string]string{"key1": ""}, resutl)
+	result = toEnvMap(args, env)
+	assert.Equal(t, map[string]string{"key1": ""}, result)
 
 	// env has duplicated keys
 	v = "val2"
 	args = []instructions.KeyValuePairOptional{{Key: "key2", Value: &v}}
 	env = []string{"key1=val1", "key1=val1_2"}
-	resutl = toEnvMap(args, env)
-	assert.Equal(t, map[string]string{"key1": "val1_2", "key2": "val2"}, resutl)
+	result = toEnvMap(args, env)
+	assert.Equal(t, map[string]string{"key1": "val1_2", "key2": "val2"}, result)
 
 	// args has duplicated keys
 	v1 := "v1"
 	v2 := "v2"
 	args = []instructions.KeyValuePairOptional{{Key: "key2", Value: &v1}, {Key: "key2", Value: &v2}}
 	env = []string{"key1=val1"}
-	resutl = toEnvMap(args, env)
-	assert.Equal(t, map[string]string{"key1": "val1", "key2": "v1"}, resutl)
+	result = toEnvMap(args, env)
+	assert.Equal(t, map[string]string{"key1": "val1", "key2": "v1"}, result)
 }
 
 func TestDockerfileCircularDependencies(t *testing.T) {

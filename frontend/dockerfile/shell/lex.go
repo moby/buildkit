@@ -12,6 +12,11 @@ import (
 	"github.com/pkg/errors"
 )
 
+type EnvGetter interface {
+	Get(string) (string, bool)
+	Keys() []string
+}
+
 // Lex performs shell word splitting and variable expansion.
 //
 // Lex takes a string and an array of env variables and
@@ -39,8 +44,9 @@ func NewLex(escapeToken rune) *Lex {
 // and replace any env var references in 'word'. It will also
 // return variables in word which were not found in the 'env' list,
 // which is useful in later linting.
-func (s *Lex) ProcessWord(word string, env []string) (string, map[string]struct{}, error) {
-	result, err := s.process(word, BuildEnvs(env))
+// TODO: rename
+func (s *Lex) ProcessWord(word string, env EnvGetter) (string, map[string]struct{}, error) {
+	result, err := s.process(word, env, true)
 	return result.Result, result.Unmatched, err
 }
 
@@ -51,16 +57,9 @@ func (s *Lex) ProcessWord(word string, env []string) (string, map[string]struct{
 // this splitting is done **after** the env var substitutions are done.
 // Note, each one is trimmed to remove leading and trailing spaces (unless
 // they are quoted", but ProcessWord retains spaces between words.
-func (s *Lex) ProcessWords(word string, env []string) ([]string, error) {
-	result, err := s.process(word, BuildEnvs(env))
+func (s *Lex) ProcessWords(word string, env EnvGetter) ([]string, error) {
+	result, err := s.process(word, env, false)
 	return result.Words, err
-}
-
-// ProcessWordWithMap will use the 'env' list of environment variables,
-// and replace any env var references in 'word'.
-func (s *Lex) ProcessWordWithMap(word string, env map[string]string) (string, error) {
-	result, err := s.process(word, env)
-	return result.Result, err
 }
 
 type ProcessWordResult struct {
@@ -72,28 +71,26 @@ type ProcessWordResult struct {
 
 // ProcessWordWithMatches will use the 'env' list of environment variables,
 // replace any env var references in 'word' and return the env that were used.
-func (s *Lex) ProcessWordWithMatches(word string, env map[string]string) (ProcessWordResult, error) {
-	return s.process(word, env)
+func (s *Lex) ProcessWordWithMatches(word string, env EnvGetter) (ProcessWordResult, error) {
+	return s.process(word, env, true)
 }
 
-func (s *Lex) ProcessWordsWithMap(word string, env map[string]string) ([]string, error) {
-	result, err := s.process(word, env)
-	return result.Words, err
-}
-
-func (s *Lex) initWord(word string, env map[string]string) *shellWord {
+func (s *Lex) initWord(word string, env EnvGetter, capture bool) *shellWord {
 	sw := &s.shellWord
 	sw.Lex = s
 	sw.envs = env
+	sw.capture = capture
 	sw.rawEscapes = s.RawEscapes
-	sw.matches = make(map[string]struct{}) // TODO: create these maps lazily
-	sw.nonmatches = make(map[string]struct{})
+	if capture {
+		sw.matches = nil
+		sw.nonmatches = nil
+	}
 	sw.scanner.Init(strings.NewReader(word))
 	return sw
 }
 
-func (s *Lex) process(word string, env map[string]string) (ProcessWordResult, error) {
-	sw := s.initWord(word, env)
+func (s *Lex) process(word string, env EnvGetter, capture bool) (ProcessWordResult, error) {
+	sw := s.initWord(word, env, capture)
 	word, words, err := sw.process(word)
 	return ProcessWordResult{
 		Result:    word,
@@ -107,8 +104,9 @@ type shellWord struct {
 	*Lex
 	wordsBuffer strings.Builder
 	scanner     scanner.Scanner
-	envs        map[string]string
+	envs        EnvGetter
 	rawEscapes  bool
+	capture     bool // capture matches and nonmatches
 	matches     map[string]struct{}
 	nonmatches  map[string]struct{}
 }
@@ -524,34 +522,51 @@ func isSpecialParam(char rune) bool {
 }
 
 func (sw *shellWord) getEnv(name string) (string, bool) {
-	for key, value := range sw.envs {
-		if EqualEnvKeys(name, key) {
+	v, ok := sw.envs.Get(name)
+	if ok {
+		if sw.capture {
+			if sw.matches == nil {
+				sw.matches = make(map[string]struct{})
+			}
 			sw.matches[name] = struct{}{}
-			return value, true
 		}
+		return v, true
 	}
-	sw.nonmatches[name] = struct{}{}
+	if sw.capture {
+		if sw.nonmatches == nil {
+			sw.nonmatches = make(map[string]struct{})
+		}
+		sw.nonmatches[name] = struct{}{}
+	}
 	return "", false
 }
 
-func BuildEnvs(env []string) map[string]string {
+func EnvsFromSlice(env []string) EnvGetter {
 	envs := map[string]string{}
-
+	keys := make([]string, 0, len(env))
 	for _, e := range env {
-		i := strings.Index(e, "=")
-
-		if i < 0 {
-			envs[e] = ""
-		} else {
-			k := e[:i]
-			v := e[i+1:]
-
-			// overwrite value if key already exists
-			envs[k] = v
-		}
+		k, v, _ := strings.Cut(e, "=")
+		keys = append(keys, k)
+		envs[NormalizeEnvKey(k)] = v
 	}
+	return &envGetter{env: envs, keys: keys}
+}
 
-	return envs
+type envGetter struct {
+	env  map[string]string
+	keys []string
+}
+
+var _ EnvGetter = &envGetter{}
+
+func (e *envGetter) Get(key string) (string, bool) {
+	key = NormalizeEnvKey(key)
+	v, ok := e.env[key]
+	return v, ok
+}
+
+func (e *envGetter) Keys() []string {
+	return e.keys
 }
 
 // convertShellPatternToRegex converts a shell-like wildcard pattern

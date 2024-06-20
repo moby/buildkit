@@ -61,26 +61,26 @@ func TestShellParserMandatoryEnvVars(t *testing.T) {
 	noUnset := "${VAR?message here$ARG}"
 
 	// disallow empty
-	newWord, _, err = shlex.ProcessWord(noEmpty, setEnvs)
+	newWord, _, err = shlex.ProcessWord(noEmpty, EnvsFromSlice(setEnvs))
 	require.NoError(t, err)
 	require.Equal(t, "plain", newWord)
 
-	_, _, err = shlex.ProcessWord(noEmpty, emptyEnvs)
+	_, _, err = shlex.ProcessWord(noEmpty, EnvsFromSlice(emptyEnvs))
 	require.ErrorContains(t, err, "message herex")
 
-	_, _, err = shlex.ProcessWord(noEmpty, unsetEnvs)
+	_, _, err = shlex.ProcessWord(noEmpty, EnvsFromSlice(unsetEnvs))
 	require.ErrorContains(t, err, "message herex")
 
 	// disallow unset
-	newWord, _, err = shlex.ProcessWord(noUnset, setEnvs)
+	newWord, _, err = shlex.ProcessWord(noUnset, EnvsFromSlice(setEnvs))
 	require.NoError(t, err)
 	require.Equal(t, "plain", newWord)
 
-	newWord, _, err = shlex.ProcessWord(noUnset, emptyEnvs)
+	newWord, _, err = shlex.ProcessWord(noUnset, EnvsFromSlice(emptyEnvs))
 	require.NoError(t, err)
 	require.Empty(t, newWord)
 
-	_, _, err = shlex.ProcessWord(noUnset, unsetEnvs)
+	_, _, err = shlex.ProcessWord(noUnset, EnvsFromSlice(unsetEnvs))
 	require.ErrorContains(t, err, "message herex")
 }
 
@@ -94,8 +94,7 @@ func TestShellParser4EnvVars(t *testing.T) {
 
 	shlex := NewLex('\\')
 	scanner := bufio.NewScanner(file)
-	envs := []string{"PWD=/home", "SHELL=bash", "KOREAN=한국어", "NULL="}
-	envsMap := BuildEnvs(envs)
+	envs := EnvsFromSlice([]string{"PWD=/home", "SHELL=bash", "KOREAN=한국어", "NULL="})
 	for scanner.Scan() {
 		line := scanner.Text()
 		lineCount++
@@ -124,14 +123,6 @@ func TestShellParser4EnvVars(t *testing.T) {
 		if ((platform == "W" || platform == "A") && runtime.GOOS == "windows") ||
 			((platform == "U" || platform == "A") && runtime.GOOS != "windows") {
 			newWord, _, err := shlex.ProcessWord(source, envs)
-			if expected == "error" {
-				require.Errorf(t, err, "input: %q, result: %q", source, newWord)
-			} else {
-				require.NoError(t, err, "at line %d of %s", lineCount, fn)
-				require.Equal(t, expected, newWord, "at line %d of %s", lineCount, fn)
-			}
-
-			newWord, err = shlex.ProcessWordWithMap(source, envsMap)
 			if expected == "error" {
 				require.Errorf(t, err, "input: %q, result: %q", source, newWord)
 			} else {
@@ -186,23 +177,7 @@ func TestShellParser4Words(t *testing.T) {
 			expected := strings.Split(strings.TrimLeft(words[1], " "), ",")
 
 			// test for ProcessWords
-			result, err := shlex.ProcessWords(test, envs)
-
-			if err != nil {
-				result = []string{"error"}
-			}
-
-			if len(result) != len(expected) {
-				t.Fatalf("Error on line %d. %q was suppose to result in %q, but got %q instead", lineNum, test, expected, result)
-			}
-			for i, w := range expected {
-				if w != result[i] {
-					t.Fatalf("Error on line %d. %q was suppose to result in %q, but got %q instead", lineNum, test, expected, result)
-				}
-			}
-
-			// test for ProcessWordsWithMap
-			result, err = shlex.ProcessWordsWithMap(test, BuildEnvs(envs))
+			result, err := shlex.ProcessWords(test, EnvsFromSlice(envs))
 
 			if err != nil {
 				result = []string{"error"}
@@ -227,27 +202,27 @@ func TestGetEnv(t *testing.T) {
 		value, _ := sw.getEnv(name)
 		return value
 	}
-	sw.envs = BuildEnvs([]string{})
+	sw.envs = EnvsFromSlice([]string{})
 	if getEnv("foo") != "" {
 		t.Fatal("2 - 'foo' should map to ''")
 	}
 
-	sw.envs = BuildEnvs([]string{"foo"})
+	sw.envs = EnvsFromSlice([]string{"foo"})
 	if getEnv("foo") != "" {
 		t.Fatal("3 - 'foo' should map to ''")
 	}
 
-	sw.envs = BuildEnvs([]string{"foo="})
+	sw.envs = EnvsFromSlice([]string{"foo="})
 	if getEnv("foo") != "" {
 		t.Fatal("4 - 'foo' should map to ''")
 	}
 
-	sw.envs = BuildEnvs([]string{"foo=bar"})
+	sw.envs = EnvsFromSlice([]string{"foo=bar"})
 	if getEnv("foo") != "bar" {
 		t.Fatal("5 - 'foo' should map to 'bar'")
 	}
 
-	sw.envs = BuildEnvs([]string{"foo=bar", "car=hat"})
+	sw.envs = EnvsFromSlice([]string{"foo=bar", "car=hat"})
 	if getEnv("foo") != "bar" {
 		t.Fatal("6 - 'foo' should map to 'bar'")
 	}
@@ -256,7 +231,7 @@ func TestGetEnv(t *testing.T) {
 	}
 
 	// Make sure we grab the last 'car' in the list
-	sw.envs = BuildEnvs([]string{"foo=bar", "car=hat", "car=bike"})
+	sw.envs = EnvsFromSlice([]string{"foo=bar", "car=hat", "car=bike"})
 	if getEnv("car") != "bike" {
 		t.Fatal("8 - 'car' should map to 'bike'")
 	}
@@ -592,7 +567,7 @@ func TestProcessWithMatches(t *testing.T) {
 	for _, c := range tc {
 		c := c
 		t.Run(c.input, func(t *testing.T) {
-			result, err := shlex.ProcessWordWithMatches(c.input, c.envs)
+			result, err := shlex.ProcessWordWithMatches(c.input, envsFromMap(c.envs))
 			w := result.Result
 			matches := result.Matched
 			unmatched := result.Unmatched
@@ -625,30 +600,40 @@ func TestProcessWithMatchesPlatform(t *testing.T) {
 		version = "v1.2.3"
 	)
 
-	results, err := shlex.ProcessWordWithMatches(release, map[string]string{
+	results, err := shlex.ProcessWordWithMatches(release, envsFromMap(map[string]string{
 		"VERSION":       version,
 		"TARGETOS":      "linux",
 		"TARGETARCH":    "arm",
 		"TARGETVARIANT": "v7",
-	})
+	}))
 	require.NoError(t, err)
 	require.Equal(t, "something-v1.2.3.linux-arm-v7.tar.gz", results.Result)
 
-	results, err = shlex.ProcessWordWithMatches(release, map[string]string{
+	results, err = shlex.ProcessWordWithMatches(release, envsFromMap(map[string]string{
 		"VERSION":       version,
 		"TARGETOS":      "linux",
 		"TARGETARCH":    "arm64",
 		"TARGETVARIANT": "",
-	})
+	}))
 	require.NoError(t, err)
 	require.Equal(t, "something-v1.2.3.linux-arm64.tar.gz", results.Result)
 
-	results, err = shlex.ProcessWordWithMatches(release, map[string]string{
+	results, err = shlex.ProcessWordWithMatches(release, envsFromMap(map[string]string{
 		"VERSION":    version,
 		"TARGETOS":   "linux",
 		"TARGETARCH": "arm64",
 		// No "TARGETVARIANT": "",
-	})
+	}))
 	require.NoError(t, err)
 	require.Equal(t, "something-v1.2.3.linux-arm64.tar.gz", results.Result)
+}
+
+func envsFromMap(m map[string]string) EnvGetter {
+	envs := map[string]string{}
+	keys := make([]string, 0, len(m))
+	for k, v := range m {
+		keys = append(keys, k)
+		envs[NormalizeEnvKey(k)] = v
+	}
+	return &envGetter{env: envs, keys: keys}
 }
