@@ -114,7 +114,6 @@ type Heredoc struct {
 var (
 	dispatch      map[string]func(string, *directives) (*Node, map[string]bool, error)
 	reWhitespace  = regexp.MustCompile(`[\t\v\f\r ]+`)
-	reComment     = regexp.MustCompile(`^#.*$`)
 	reHeredoc     = regexp.MustCompile(`^(\d*)<<(-?)([^<]*)$`)
 	reLeadingTabs = regexp.MustCompile(`(?m)^\t+`)
 )
@@ -487,7 +486,10 @@ func ChompHeredocContent(src string) string {
 }
 
 func trimComments(src []byte) []byte {
-	return reComment.ReplaceAll(src, []byte{})
+	if !isComment(src) {
+		return src
+	}
+	return nil
 }
 
 func trimLeadingWhitespace(src []byte) []byte {
@@ -501,7 +503,8 @@ func trimNewline(src []byte) []byte {
 }
 
 func isComment(line []byte) bool {
-	return reComment.Match(trimLeadingWhitespace(trimNewline(line)))
+	line = trimLeadingWhitespace(line)
+	return len(line) > 0 && line[0] == '#'
 }
 
 func isEmptyContinuationLine(line []byte) bool {
