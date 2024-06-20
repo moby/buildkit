@@ -347,7 +347,7 @@ func Parse(rwc io.Reader) (*Result, error) {
 			return nil, withLocation(err, startLine, currentLine)
 		}
 
-		if child.canContainHeredoc() {
+		if child.canContainHeredoc() && strings.Contains(line, "<<") {
 			heredocs, err := heredocsFromLine(line)
 			if err != nil {
 				return nil, withLocation(err, startLine, currentLine)
