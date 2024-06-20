@@ -283,6 +283,7 @@ func Parse(rwc io.Reader) (*Result, error) {
 	scanner.Split(scanLines)
 	warnings := []Warning{}
 	var comments []string
+	buf := &bytes.Buffer{}
 
 	var err error
 	for scanner.Scan() {
@@ -306,10 +307,12 @@ func Parse(rwc io.Reader) (*Result, error) {
 		currentLine++
 
 		startLine := currentLine
-		line, isEndOfLine := trimContinuationCharacter(string(bytesRead), d)
-		if isEndOfLine && line == "" {
+		bytesRead, isEndOfLine := trimContinuationCharacter(bytesRead, d)
+		if isEndOfLine && len(bytesRead) == 0 {
 			continue
 		}
+		buf.Reset()
+		buf.Write(bytesRead)
 
 		var hasEmptyContinuationLine bool
 		for !isEndOfLine && scanner.Scan() {
@@ -328,10 +331,11 @@ func Parse(rwc io.Reader) (*Result, error) {
 				continue
 			}
 
-			continuationLine := string(bytesRead)
-			continuationLine, isEndOfLine = trimContinuationCharacter(continuationLine, d)
-			line += continuationLine
+			bytesRead, isEndOfLine = trimContinuationCharacter(bytesRead, d)
+			buf.Write(bytesRead)
 		}
+
+		line := buf.String()
 
 		if hasEmptyContinuationLine {
 			warnings = append(warnings, Warning{
@@ -513,9 +517,9 @@ func isEmptyContinuationLine(line []byte) bool {
 
 var utf8bom = []byte{0xEF, 0xBB, 0xBF}
 
-func trimContinuationCharacter(line string, d *directives) (string, bool) {
-	if d.lineContinuationRegex.MatchString(line) {
-		line = d.lineContinuationRegex.ReplaceAllString(line, "$1")
+func trimContinuationCharacter(line []byte, d *directives) ([]byte, bool) {
+	if d.lineContinuationRegex.Match(line) {
+		line = d.lineContinuationRegex.ReplaceAll(line, []byte("$1"))
 		return line, false
 	}
 	return line, true
