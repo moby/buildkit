@@ -168,8 +168,8 @@ func (d *directives) setEscapeToken(s string) error {
 // possibleParserDirective looks for parser directives, eg '# escapeToken=<char>'.
 // Parser directives must precede any builder instruction or other comments,
 // and cannot be repeated.
-func (d *directives) possibleParserDirective(line string) error {
-	directive, err := d.parser.ParseLine([]byte(line))
+func (d *directives) possibleParserDirective(line []byte) error {
+	directive, err := d.parser.ParseLine(line)
 	if err != nil {
 		return err
 	}
@@ -528,7 +528,7 @@ func processLine(d *directives, token []byte, stripLeftWhitespace bool) ([]byte,
 	if stripLeftWhitespace {
 		token = trimLeadingWhitespace(token)
 	}
-	return trimComments(token), d.possibleParserDirective(string(token))
+	return trimComments(token), d.possibleParserDirective(token)
 }
 
 // Variation of bufio.ScanLines that preserves the line endings
