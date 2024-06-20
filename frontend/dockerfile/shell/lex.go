@@ -105,11 +105,12 @@ func (s *Lex) process(word string, env map[string]string) (ProcessWordResult, er
 
 type shellWord struct {
 	*Lex
-	scanner    scanner.Scanner
-	envs       map[string]string
-	rawEscapes bool
-	matches    map[string]struct{}
-	nonmatches map[string]struct{}
+	wordsBuffer strings.Builder
+	scanner     scanner.Scanner
+	envs        map[string]string
+	rawEscapes  bool
+	matches     map[string]struct{}
+	nonmatches  map[string]struct{}
 }
 
 func (sw *shellWord) process(source string) (string, []string, error) {
@@ -121,16 +122,16 @@ func (sw *shellWord) process(source string) (string, []string, error) {
 }
 
 type wordsStruct struct {
-	word   string
+	buf    *strings.Builder
 	words  []string
 	inWord bool
 }
 
 func (w *wordsStruct) addChar(ch rune) {
 	if unicode.IsSpace(ch) && w.inWord {
-		if len(w.word) != 0 {
-			w.words = append(w.words, w.word)
-			w.word = ""
+		if w.buf.Len() != 0 {
+			w.words = append(w.words, w.buf.String())
+			w.buf.Reset()
 			w.inWord = false
 		}
 	} else if !unicode.IsSpace(ch) {
@@ -139,7 +140,7 @@ func (w *wordsStruct) addChar(ch rune) {
 }
 
 func (w *wordsStruct) addRawChar(ch rune) {
-	w.word += string(ch)
+	w.buf.WriteRune(ch)
 	w.inWord = true
 }
 
@@ -150,16 +151,16 @@ func (w *wordsStruct) addString(str string) {
 }
 
 func (w *wordsStruct) addRawString(str string) {
-	w.word += str
+	w.buf.WriteString(str)
 	w.inWord = true
 }
 
 func (w *wordsStruct) getWords() []string {
-	if len(w.word) > 0 {
-		w.words = append(w.words, w.word)
+	if w.buf.Len() > 0 {
+		w.words = append(w.words, w.buf.String())
 
 		// Just in case we're called again by mistake
-		w.word = ""
+		w.buf.Reset()
 		w.inWord = false
 	}
 	return w.words
@@ -168,9 +169,14 @@ func (w *wordsStruct) getWords() []string {
 // Process the word, starting at 'pos', and stop when we get to the
 // end of the word or the 'stopChar' character
 func (sw *shellWord) processStopOn(stopChar rune, rawEscapes bool) (string, []string, error) {
-	var result bytes.Buffer
+	// result buffer can't be currently shared for shellWord as it is called internally
+	// by processDollar
+	var result strings.Builder
+	sw.wordsBuffer.Reset()
 	var words wordsStruct
+	words.buf = &sw.wordsBuffer
 
+	// no need to initialize all the time
 	var charFuncMapping = map[rune]func() (string, error){
 		'$': sw.processDollar,
 	}
