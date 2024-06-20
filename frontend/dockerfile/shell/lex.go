@@ -19,12 +19,15 @@ import (
 // tokens.  Tries to mimic bash shell process.
 // It doesn't support all flavors of ${xx:...} formats but new ones can
 // be added by adding code to the "special ${} format processing" section
+//
+// It is not safe to call methods on a Lex instance concurrently.
 type Lex struct {
 	escapeToken       rune
 	RawQuotes         bool
 	RawEscapes        bool
 	SkipProcessQuotes bool
 	SkipUnsetEnv      bool
+	shellWord         shellWord
 }
 
 // NewLex creates a new Lex which uses escapeToken to escape quotes.
@@ -70,7 +73,27 @@ type ProcessWordResult struct {
 // ProcessWordWithMatches will use the 'env' list of environment variables,
 // replace any env var references in 'word' and return the env that were used.
 func (s *Lex) ProcessWordWithMatches(word string, env map[string]string) (ProcessWordResult, error) {
-	sw := s.init(word, env)
+	return s.process(word, env)
+}
+
+func (s *Lex) ProcessWordsWithMap(word string, env map[string]string) ([]string, error) {
+	result, err := s.process(word, env)
+	return result.Words, err
+}
+
+func (s *Lex) initWord(word string, env map[string]string) *shellWord {
+	sw := &s.shellWord
+	sw.Lex = s
+	sw.envs = env
+	sw.rawEscapes = s.RawEscapes
+	sw.matches = make(map[string]struct{}) // TODO: create these maps lazily
+	sw.nonmatches = make(map[string]struct{})
+	sw.scanner.Init(strings.NewReader(word))
+	return sw
+}
+
+func (s *Lex) process(word string, env map[string]string) (ProcessWordResult, error) {
+	sw := s.initWord(word, env)
 	word, words, err := sw.process(word)
 	return ProcessWordResult{
 		Result:    word,
@@ -80,47 +103,13 @@ func (s *Lex) ProcessWordWithMatches(word string, env map[string]string) (Proces
 	}, err
 }
 
-func (s *Lex) ProcessWordsWithMap(word string, env map[string]string) ([]string, error) {
-	result, err := s.process(word, env)
-	return result.Words, err
-}
-
-func (s *Lex) init(word string, env map[string]string) *shellWord {
-	sw := &shellWord{
-		envs:              env,
-		escapeToken:       s.escapeToken,
-		skipUnsetEnv:      s.SkipUnsetEnv,
-		skipProcessQuotes: s.SkipProcessQuotes,
-		rawQuotes:         s.RawQuotes,
-		rawEscapes:        s.RawEscapes,
-		matches:           make(map[string]struct{}),
-		nonmatches:        make(map[string]struct{}),
-	}
-	sw.scanner.Init(strings.NewReader(word))
-	return sw
-}
-
-func (s *Lex) process(word string, env map[string]string) (*ProcessWordResult, error) {
-	sw := s.init(word, env)
-	word, words, err := sw.process(word)
-	return &ProcessWordResult{
-		Result:    word,
-		Words:     words,
-		Matched:   sw.matches,
-		Unmatched: sw.nonmatches,
-	}, err
-}
-
 type shellWord struct {
-	scanner           scanner.Scanner
-	envs              map[string]string
-	escapeToken       rune
-	rawQuotes         bool
-	rawEscapes        bool
-	skipUnsetEnv      bool
-	skipProcessQuotes bool
-	matches           map[string]struct{}
-	nonmatches        map[string]struct{}
+	*Lex
+	scanner    scanner.Scanner
+	envs       map[string]string
+	rawEscapes bool
+	matches    map[string]struct{}
+	nonmatches map[string]struct{}
 }
 
 func (sw *shellWord) process(source string) (string, []string, error) {
@@ -185,7 +174,7 @@ func (sw *shellWord) processStopOn(stopChar rune, rawEscapes bool) (string, []st
 	var charFuncMapping = map[rune]func() (string, error){
 		'$': sw.processDollar,
 	}
-	if !sw.skipProcessQuotes {
+	if !sw.SkipProcessQuotes {
 		charFuncMapping['\''] = sw.processSingleQuote
 		charFuncMapping['"'] = sw.processDoubleQuote
 	}
@@ -262,7 +251,7 @@ func (sw *shellWord) processSingleQuote() (string, error) {
 	var result bytes.Buffer
 
 	ch := sw.scanner.Next()
-	if sw.rawQuotes {
+	if sw.RawQuotes {
 		result.WriteRune(ch)
 	}
 
@@ -272,7 +261,7 @@ func (sw *shellWord) processSingleQuote() (string, error) {
 		case scanner.EOF:
 			return "", errors.New("unexpected end of statement while looking for matching single-quote")
 		case '\'':
-			if sw.rawQuotes {
+			if sw.RawQuotes {
 				result.WriteRune(ch)
 			}
 			return result.String(), nil
@@ -297,7 +286,7 @@ func (sw *shellWord) processDoubleQuote() (string, error) {
 	var result bytes.Buffer
 
 	ch := sw.scanner.Next()
-	if sw.rawQuotes {
+	if sw.RawQuotes {
 		result.WriteRune(ch)
 	}
 
@@ -307,7 +296,7 @@ func (sw *shellWord) processDoubleQuote() (string, error) {
 			return "", errors.New("unexpected end of statement while looking for matching double-quote")
 		case '"':
 			ch := sw.scanner.Next()
-			if sw.rawQuotes {
+			if sw.RawQuotes {
 				result.WriteRune(ch)
 			}
 			return result.String(), nil
@@ -351,7 +340,7 @@ func (sw *shellWord) processDollar() (string, error) {
 			return "$", nil
 		}
 		value, found := sw.getEnv(name)
-		if !found && sw.skipUnsetEnv {
+		if !found && sw.SkipUnsetEnv {
 			return "$" + name, nil
 		}
 		return value, nil
@@ -374,7 +363,7 @@ func (sw *shellWord) processDollar() (string, error) {
 	case '}':
 		// Normal ${xx} case
 		value, set := sw.getEnv(name)
-		if !set && sw.skipUnsetEnv {
+		if !set && sw.SkipUnsetEnv {
 			return fmt.Sprintf("${%s}", name), nil
 		}
 		return value, nil
@@ -396,7 +385,7 @@ func (sw *shellWord) processDollar() (string, error) {
 		// Grab the current value of the variable in question so we
 		// can use it to determine what to do based on the modifier
 		value, set := sw.getEnv(name)
-		if sw.skipUnsetEnv && !set {
+		if sw.SkipUnsetEnv && !set {
 			return fmt.Sprintf("${%s%s%s}", name, chs, word), nil
 		}
 
@@ -466,7 +455,7 @@ func (sw *shellWord) processDollar() (string, error) {
 		}
 
 		value, set := sw.getEnv(name)
-		if sw.skipUnsetEnv && !set {
+		if sw.SkipUnsetEnv && !set {
 			return fmt.Sprintf("${%s/%s/%s}", name, pattern, replacement), nil
 		}
 
