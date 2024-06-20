@@ -112,6 +112,12 @@ func TestChecksumSymlinkNoParentScan(t *testing.T) {
 
 // https://github.com/moby/buildkit/issues/5042
 func TestNeedScanChecksumRegression(t *testing.T) {
+	// This test cannot be run in parallel because we use scanCounter.
+	scanCounterEnable = true
+	defer func() {
+		scanCounterEnable = false
+	}()
+
 	tmpdir := t.TempDir()
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
@@ -166,11 +172,22 @@ func TestNeedScanChecksumRegression(t *testing.T) {
 		require.Equalf(t, test.expectNeedsScan, needs, "needsScan(%q, followTrailing=%v)", test.path, test.followTrailing)
 	}
 
+	// Make sure trying to checksum a subpath results in no further scans.
+	initialScanCounter := scanCounter.Load()
+	_, err = cc.Checksum(context.TODO(), ref, "/bb/cc", ChecksumOpts{FollowLinks: true}, nil)
+	require.NoError(t, err)
+	require.Equal(t, initialScanCounter, scanCounter.Load())
+	_, err = cc.Checksum(context.TODO(), ref, "/bb/non-existent", ChecksumOpts{FollowLinks: true}, nil)
+	require.Error(t, err)
+	require.Equal(t, initialScanCounter, scanCounter.Load())
+
 	// Looking up a non-existent path in / will checksum the whole tree. See
 	// <https://github.com/moby/buildkit/issues/5042> for more information.
 	// This means that needsScan will return true for any path.
 	_, err = cc.Checksum(context.TODO(), ref, "/non-existent", ChecksumOpts{FollowLinks: true}, nil)
 	require.Error(t, err)
+	fullScanCounter := scanCounter.Load()
+	require.NotEqual(t, fullScanCounter, initialScanCounter)
 
 	root = cc.tree.Root()
 	for _, path := range []string{
@@ -184,6 +201,21 @@ func TestNeedScanChecksumRegression(t *testing.T) {
 		require.NoErrorf(t, err, "needsScan(%q, followTrailing=true)", path)
 		require.Falsef(t, needs2, "needsScan(%q, followTrailing=true)", path)
 	}
+
+	// Looking up any more paths should not result in any more scans because we
+	// already know / was scanned.
+	_, err = cc.Checksum(context.TODO(), ref, "/non-existent", ChecksumOpts{FollowLinks: true}, nil)
+	require.Error(t, err)
+	require.Equal(t, fullScanCounter, scanCounter.Load())
+	_, err = cc.Checksum(context.TODO(), ref, "/different/non/existent", ChecksumOpts{FollowLinks: true}, nil)
+	require.Error(t, err)
+	require.Equal(t, fullScanCounter, scanCounter.Load())
+	_, err = cc.Checksum(context.TODO(), ref, "/aa/root/aa/non-exist", ChecksumOpts{FollowLinks: true}, nil)
+	require.Error(t, err)
+	require.Equal(t, fullScanCounter, scanCounter.Load())
+	_, err = cc.Checksum(context.TODO(), ref, "/aa/root/bb/cc", ChecksumOpts{FollowLinks: true}, nil)
+	require.NoError(t, err)
+	require.Equal(t, fullScanCounter, scanCounter.Load())
 }
 
 func TestChecksumNonLexicalSymlinks(t *testing.T) {
