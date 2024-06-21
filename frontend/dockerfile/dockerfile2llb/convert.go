@@ -613,7 +613,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 							dfCmd(d.stage.SourceCode),
 							llb.Platform(*platform),
 							opt.ImageResolveMode,
-							llb.WithCustomName(prefixCommand(d, "FROM "+d.stage.BaseName, opt.MultiPlatformRequested, platform, nil)),
+							llb.WithCustomName(prefixCommand(d, "FROM "+d.stage.BaseName, opt.MultiPlatformRequested, platform, emptyEnvs{})),
 							location(opt.SourceMap, d.stage.Location),
 						)
 						if reachable {
@@ -884,7 +884,7 @@ func (e *envsFromState) init() {
 	if err != nil {
 		return
 	}
-	e.env = shell.EnvsFromSlice(env)
+	e.env = env
 }
 
 func (e *envsFromState) Get(key string) (string, bool) {
@@ -2351,4 +2351,14 @@ func validateBaseImagePlatform(name string, expected, actual ocispecs.Platform, 
 		msg := linter.RuleInvalidBaseImagePlatform.Format(name, expectedStr, actualStr)
 		lint.Run(&linter.RuleInvalidBaseImagePlatform, location, msg)
 	}
+}
+
+type emptyEnvs struct{}
+
+func (emptyEnvs) Get(string) (string, bool) {
+	return "", false
+}
+
+func (emptyEnvs) Keys() []string {
+	return nil
 }
