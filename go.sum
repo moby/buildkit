@@ -403,6 +403,8 @@ github.com/tonistiigi/go-actions-cache v0.0.0-20240320205438-9794bdbb2fb4 h1:R0l
 github.com/tonistiigi/go-actions-cache v0.0.0-20240320205438-9794bdbb2fb4/go.mod h1:anhKd3mnC1shAbQj1Q4IJ+w6xqezxnyDYlx/yKa7IXM=
 github.com/tonistiigi/go-archvariant v1.0.0 h1:5LC1eDWiBNflnTF1prCiX09yfNHIxDC/aukdhCdTyb0=
 github.com/tonistiigi/go-archvariant v1.0.0/go.mod h1:TxFmO5VS6vMq2kvs3ht04iPXtu2rUT/erOnGFYfk5Ho=
+github.com/tonistiigi/go-csvvalue v0.0.0-20240619222358-bb8dd5cba3c2 h1:4dXTcm/McJMoXXFhqr+4rNL4WkLqMoHkdMhT4nU0Z28=
+github.com/tonistiigi/go-csvvalue v0.0.0-20240619222358-bb8dd5cba3c2/go.mod h1:278M4p8WsNh3n4a1eqiFcV2FGk7wE5fwUpUom9mK9lE=
 github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea h1:SXhTLE6pb6eld/v/cCndK0AMpt1wiVFb/YYmqB3/QG0=
 github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea/go.mod h1:WPnis/6cRcDZSUvVmezrxJPkiO87ThFYsoUiMwWNDJk=
 github.com/tonistiigi/vt100 v0.0.0-20240514184818-90bafcd6abab h1:H6aJ0yKQ0gF49Qb2z5hI1UHxSQt4JMyxebFR15KnApw=

@@ -1,7 +1,6 @@
 package dockerui
 
 import (
-	"encoding/csv"
 	"net"
 	"strconv"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/tonistiigi/go-csvvalue"
 )
 
 func parsePlatforms(v string) ([]ocispecs.Platform, error) {
@@ -45,8 +45,7 @@ func parseExtraHosts(v string) ([]llb.HostIP, error) {
 		return nil, nil
 	}
 	out := make([]llb.HostIP, 0)
-	csvReader := csv.NewReader(strings.NewReader(v))
-	fields, err := csvReader.Read()
+	fields, err := csvvalue.Fields(v, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -80,8 +79,7 @@ func parseUlimits(v string) ([]pb.Ulimit, error) {
 		return nil, nil
 	}
 	out := make([]pb.Ulimit, 0)
-	csvReader := csv.NewReader(strings.NewReader(v))
-	fields, err := csvReader.Read()
+	fields, err := csvvalue.Fields(v, nil)
 	if err != nil {
 		return nil, err
 	}

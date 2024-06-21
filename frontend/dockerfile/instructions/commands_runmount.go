@@ -1,13 +1,13 @@
 package instructions
 
 import (
-	"encoding/csv"
 	"strconv"
 	"strings"
 
 	"github.com/docker/go-units"
 	"github.com/moby/buildkit/util/suggest"
 	"github.com/pkg/errors"
+	"github.com/tonistiigi/go-csvvalue"
 )
 
 type MountType string
@@ -128,8 +128,7 @@ type Mount struct {
 }
 
 func parseMount(val string, expander SingleWordExpander) (*Mount, error) {
-	csvReader := csv.NewReader(strings.NewReader(val))
-	fields, err := csvReader.Read()
+	fields, err := csvvalue.Fields(val, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to parse csv mounts")
 	}

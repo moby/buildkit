@@ -1,12 +1,12 @@
 package build
 
 import (
-	"encoding/csv"
 	"strings"
 
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/secrets/secretsprovider"
 	"github.com/pkg/errors"
+	"github.com/tonistiigi/go-csvvalue"
 )
 
 // ParseSecret parses --secret
@@ -27,8 +27,7 @@ func ParseSecret(sl []string) (session.Attachable, error) {
 }
 
 func parseSecret(val string) (*secretsprovider.Source, error) {
-	csvReader := csv.NewReader(strings.NewReader(val))
-	fields, err := csvReader.Read()
+	fields, err := csvvalue.Fields(val, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to parse csv secret")
 	}
