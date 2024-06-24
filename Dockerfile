@@ -454,8 +454,8 @@ COPY --link --from=binaries / /usr/bin/
 COPY --link examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 # Kubernetes runAsNonRoot requires USER to be numeric
 USER 1000:1000
-ENV HOME /home/user
-ENV USER user
+ENV HOME=/home/user
+ENV USER=user
 ENV XDG_RUNTIME_DIR=/run/user/1000
 ENV TMPDIR=/home/user/.local/tmp
 ENV BUILDKIT_HOST=unix:///run/user/1000/buildkit/buildkitd.sock
