@@ -14,6 +14,7 @@ import (
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/attestations"
+	"github.com/moby/buildkit/frontend/dockerfile/linter"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/flightcontrol"
@@ -65,7 +66,7 @@ type Config struct {
 	ShmSize          int64
 	Target           string
 	Ulimits          []pb.Ulimit
-	LinterConfig     *string
+	LinterConfig     *linter.Config
 
 	CacheImports           []client.CacheOptionsEntry
 	TargetPlatforms        []ocispecs.Platform // nil means default
@@ -280,7 +281,10 @@ func (bc *Client) init() error {
 	bc.Hostname = opts[keyHostname]
 
 	if v, ok := opts[keyDockerfileLintArg]; ok {
-		bc.LinterConfig = &v
+		bc.LinterConfig, err = linter.ParseLintOptions(v)
+		if err != nil {
+			return errors.Wrapf(err, "failed to parse %s", keyDockerfileLintArg)
+		}
 	}
 	return nil
 }
