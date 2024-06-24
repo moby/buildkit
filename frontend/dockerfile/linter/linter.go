@@ -2,6 +2,7 @@ package linter
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
@@ -100,3 +101,46 @@ func LintFormatShort(rulename, msg string, line int) string {
 }
 
 type LintWarnFunc func(rulename, description, url, fmtmsg string, location []parser.Range)
+
+func ParseLintOptions(checkStr string) (*Config, error) {
+	checkStr = strings.TrimSpace(checkStr)
+	if checkStr == "" {
+		return &Config{}, nil
+	}
+
+	parts := strings.SplitN(checkStr, ";", 2)
+	var skipSet []string
+	var errorOnWarn, skipAll bool
+	for _, p := range parts {
+		k, v, ok := strings.Cut(p, "=")
+		if !ok {
+			return nil, errors.Errorf("invalid check option %q", p)
+		}
+		k = strings.TrimSpace(k)
+		switch k {
+		case "skip":
+			v = strings.TrimSpace(v)
+			if v == "all" {
+				skipAll = true
+			} else {
+				skipSet = strings.Split(v, ",")
+				for i, rule := range skipSet {
+					skipSet[i] = strings.TrimSpace(rule)
+				}
+			}
+		case "error":
+			v, err := strconv.ParseBool(strings.TrimSpace(v))
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to parse check option %q", p)
+			}
+			errorOnWarn = v
+		default:
+			return nil, errors.Errorf("invalid check option %q", k)
+		}
+	}
+	return &Config{
+		SkipRules:     skipSet,
+		SkipAll:       skipAll,
+		ReturnAsError: errorOnWarn,
+	}, nil
+}

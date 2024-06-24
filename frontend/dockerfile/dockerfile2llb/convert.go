@@ -169,59 +169,17 @@ func ListTargets(ctx context.Context, dt []byte) (*targets.List, error) {
 	return l, nil
 }
 
-func parseLintOptions(checkStr string) (*linter.Config, error) {
-	checkStr = strings.TrimSpace(checkStr)
-	if checkStr == "" {
-		return &linter.Config{}, nil
-	}
-
-	parts := strings.SplitN(checkStr, ";", 2)
-	var skipSet []string
-	var errorOnWarn, skipAll bool
-	for _, p := range parts {
-		k, v, ok := strings.Cut(p, "=")
-		if !ok {
-			return nil, errors.Errorf("invalid check option %q", p)
-		}
-		k = strings.TrimSpace(k)
-		switch k {
-		case "skip":
-			v = strings.TrimSpace(v)
-			if v == "all" {
-				skipAll = true
-			} else {
-				skipSet = strings.Split(v, ",")
-				for i, rule := range skipSet {
-					skipSet[i] = strings.TrimSpace(rule)
-				}
-			}
-		case "error":
-			v, err := strconv.ParseBool(strings.TrimSpace(v))
-			if err != nil {
-				return nil, errors.Wrapf(err, "failed to parse check option %q", p)
-			}
-			errorOnWarn = v
-		default:
-			return nil, errors.Errorf("invalid check option %q", k)
-		}
-	}
-	return &linter.Config{
-		SkipRules:     skipSet,
-		SkipAll:       skipAll,
-		ReturnAsError: errorOnWarn,
-	}, nil
-}
-
 func newRuleLinter(dt []byte, opt *ConvertOpt) (*linter.Linter, error) {
-	var lintOptionStr string
+	var lintConfig *linter.Config
 	if opt.Client != nil && opt.Client.LinterConfig != nil {
-		lintOptionStr = *opt.Client.LinterConfig
+		lintConfig = opt.Client.LinterConfig
 	} else {
-		lintOptionStr, _, _, _ = parser.ParseDirective("check", dt)
-	}
-	lintConfig, err := parseLintOptions(lintOptionStr)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to parse check options")
+		var err error
+		lintOptionStr, _, _, _ := parser.ParseDirective("check", dt)
+		lintConfig, err = linter.ParseLintOptions(lintOptionStr)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to parse check options")
+		}
 	}
 	lintConfig.Warn = opt.Warn
 	return linter.New(lintConfig), nil
