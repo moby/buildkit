@@ -45,6 +45,7 @@ import (
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/converter"
+	"github.com/moby/buildkit/util/disk"
 	"github.com/moby/buildkit/util/iohelper"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/overlay"
@@ -2450,6 +2451,134 @@ func TestLoadBrokenParents(t *testing.T) {
 	refA, err = cm.Get(ctx, refAID, nil)
 	require.NoError(t, err)
 	require.Len(t, refA.(*immutableRef).refs, 1)
+}
+
+func TestCalculateKeepBytes(t *testing.T) {
+	ts := []struct {
+		name      string
+		totalSize int64
+		stat      disk.DiskStat
+		opt       client.PruneInfo
+		result    int64
+	}{
+		{
+			name:      "empty",
+			totalSize: 1000,
+			stat: disk.DiskStat{
+				Total: 10000,
+				Free:  9000,
+			},
+			opt:    client.PruneInfo{},
+			result: 0,
+		},
+		{
+			name:      "only buildkit max",
+			totalSize: 1000,
+			stat: disk.DiskStat{
+				Total: 10000,
+				Free:  9000,
+			},
+			opt: client.PruneInfo{
+				MaxStorage: 2000, // 20% of the disk
+			},
+			result: 2000,
+		},
+		{
+			name:      "only buildkit free",
+			totalSize: 7000,
+			stat: disk.DiskStat{
+				Total: 10000,
+				Free:  3000,
+			},
+			opt: client.PruneInfo{
+				Free: 5000, // 50% of the disk
+			},
+			result: 5000,
+		},
+		{
+			name:      "only buildkit free with min",
+			totalSize: 7000,
+			stat: disk.DiskStat{
+				Total: 10000,
+				Free:  3000,
+			},
+			opt: client.PruneInfo{
+				Free:       5000, // 50% of the disk
+				MinStorage: 6000, // 60% of the disk,
+			},
+			result: 6000,
+		},
+		{
+			name:      "only buildkit free all",
+			totalSize: 7000,
+			stat: disk.DiskStat{
+				Total: 10000,
+				Free:  3000,
+			},
+			opt: client.PruneInfo{
+				Free:       5000, // 50% of the disk
+				MinStorage: 2000, // 20% of the disk
+				MaxStorage: 4000, // 40% of the disk
+			},
+			result: 4000,
+		},
+		{
+			name:      "mixed max",
+			totalSize: 4000,
+			stat: disk.DiskStat{
+				Total: 10000,
+				Free:  2000, // something else is using 4000
+			},
+			opt: client.PruneInfo{
+				MaxStorage: 2000, // 20% of the disk
+			},
+			result: 2000,
+		},
+		{
+			name:      "mixed free",
+			totalSize: 4000,
+			stat: disk.DiskStat{
+				Total: 10000,
+				Free:  2000, // something else is using 4000
+			},
+			opt: client.PruneInfo{
+				Free: 5000, // 50% of the disk
+			},
+			result: 1000,
+		},
+		{
+			name:      "mixed free with min",
+			totalSize: 4000,
+			stat: disk.DiskStat{
+				Total: 10000,
+				Free:  2000, // something else is using 4000
+			},
+			opt: client.PruneInfo{
+				Free:       5000, // 50% of the disk
+				MinStorage: 2000, // 20% of the disk
+			},
+			result: 2000,
+		},
+		{
+			name:      "mixed free all",
+			totalSize: 4000,
+			stat: disk.DiskStat{
+				Total: 10000,
+				Free:  2000, // something else is using 4000
+			},
+			opt: client.PruneInfo{
+				Free:       5000, // 50% of the disk
+				MinStorage: 2000, // 20% of the disk
+				MaxStorage: 4000, // 40% of the disk
+			},
+			result: 2000,
+		},
+	}
+	for _, tc := range ts {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.result, calculateKeepBytes(tc.totalSize, tc.stat, tc.opt))
+		})
+	}
 }
 
 func checkDiskUsage(ctx context.Context, t *testing.T, cm Manager, inuse, unused int) {

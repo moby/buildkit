@@ -65,7 +65,9 @@ func fromAPIGCPolicy(in []*apitypes.GCPolicy) []PruneInfo {
 			All:          p.All,
 			Filter:       p.Filters,
 			KeepDuration: time.Duration(p.KeepDuration),
-			KeepBytes:    p.KeepBytes,
+			MinStorage:   p.MinStorage,
+			MaxStorage:   p.MaxStorage,
+			Free:         p.Free,
 		})
 	}
 	return out

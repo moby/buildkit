@@ -542,8 +542,10 @@ func setDefaultConfig(cfg *config.Config) {
 	}
 }
 
-var isRootlessConfigOnce sync.Once
-var isRootlessConfigValue bool
+var (
+	isRootlessConfigOnce  sync.Once
+	isRootlessConfigValue bool
+)
 
 // isRootlessConfig is true if we should be using the rootless config
 // defaults instead of the normal defaults.
@@ -923,11 +925,17 @@ func getGCPolicy(cfg config.GCConfig, root string) []client.PruneInfo {
 	}
 	out := make([]client.PruneInfo, 0, len(cfg.GCPolicy))
 	for _, rule := range cfg.GCPolicy {
+		//nolint:staticcheck
+		if rule.KeepBytes != (config.DiskSpace{}) {
+			rule.MaxStorage = rule.KeepBytes
+		}
 		out = append(out, client.PruneInfo{
 			Filter:       rule.Filters,
 			All:          rule.All,
-			KeepBytes:    rule.KeepBytes.AsBytes(root),
 			KeepDuration: rule.KeepDuration.Duration,
+			MinStorage:   rule.MinStorage.AsBytes(root),
+			MaxStorage:   rule.MaxStorage.AsBytes(root),
+			Free:         rule.Free.AsBytes(root),
 		})
 	}
 	return out

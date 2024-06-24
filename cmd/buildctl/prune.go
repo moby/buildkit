@@ -25,6 +25,14 @@ var pruneCommand = cli.Command{
 			Name:  "keep-storage",
 			Usage: "Keep data below this limit (in MB)",
 		},
+		cli.Float64Flag{
+			Name:  "keep-storage-min",
+			Usage: "Always allow data above this limit (in MB)",
+		},
+		cli.Float64Flag{
+			Name:  "free-storage",
+			Usage: "Keep free data below this limit (in MB)",
+		},
 		cli.StringSliceFlag{
 			Name:  "filter, f",
 			Usage: "Filter records",
@@ -56,7 +64,12 @@ func prune(clicontext *cli.Context) error {
 
 	opts := []client.PruneOption{
 		client.WithFilter(clicontext.StringSlice("filter")),
-		client.WithKeepOpt(clicontext.Duration("keep-duration"), int64(clicontext.Float64("keep-storage")*1e6)),
+		client.WithKeepOpt(
+			clicontext.Duration("keep-duration"),
+			int64(clicontext.Float64("keep-storage-min")*1e6),
+			int64(clicontext.Float64("keep-storage")*1e6),
+			int64(clicontext.Float64("free-storage")*1e6),
+		),
 	}
 
 	if clicontext.Bool("all") {
