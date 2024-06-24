@@ -216,6 +216,7 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 					All:          req.All,
 					KeepDuration: time.Duration(req.KeepDuration),
 					KeepBytes:    req.KeepBytes,
+					FreeBytes:    req.FreeBytes,
 				})
 			})
 		}(w)
@@ -629,6 +630,7 @@ func toPBGCPolicy(in []client.PruneInfo) []*apitypes.GCPolicy {
 			All:          p.All,
 			KeepBytes:    p.KeepBytes,
 			KeepDuration: int64(p.KeepDuration),
+			FreeBytes:    p.FreeBytes,
 			Filters:      p.Filter,
 		})
 	}

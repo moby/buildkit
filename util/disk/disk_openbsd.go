@@ -1,19 +1,18 @@
 //go:build openbsd
 // +build openbsd
 
-package config
+package disk
 
 import (
 	"syscall"
 )
 
-var DiskSpacePercentage int64 = 10
-
-func getDiskSize(root string) (int64, error) {
+func GetDiskSize(root string) (free int64, total int64, err error) {
 	var st syscall.Statfs_t
 	if err := syscall.Statfs(root, &st); err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	diskSize := int64(st.F_bsize) * int64(st.F_blocks)
-	return diskSize, nil
+	freeSize := int64(st.F_bsize) * int64(st.F_bfree)
+	return diskSize, freeSize, nil
 }

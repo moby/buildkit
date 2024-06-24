@@ -19,6 +19,7 @@ func (c *Client) Prune(ctx context.Context, ch chan UsageInfo, opts ...PruneOpti
 		Filter:       info.Filter,
 		KeepDuration: int64(info.KeepDuration),
 		KeepBytes:    int64(info.KeepBytes),
+		FreeBytes:    int64(info.FreeBytes),
 	}
 	if info.All {
 		req.All = true
@@ -63,6 +64,7 @@ type PruneInfo struct {
 	All          bool          `json:"all"`
 	KeepDuration time.Duration `json:"keepDuration"`
 	KeepBytes    int64         `json:"keepBytes"`
+	FreeBytes    int64         `json:"freeBytes"`
 }
 
 type pruneOptionFunc func(*PruneInfo)
@@ -75,9 +77,10 @@ var PruneAll = pruneOptionFunc(func(pi *PruneInfo) {
 	pi.All = true
 })
 
-func WithKeepOpt(duration time.Duration, bytes int64) PruneOption {
+func WithKeepOpt(duration time.Duration, bytes int64, freeBytes int64) PruneOption {
 	return pruneOptionFunc(func(pi *PruneInfo) {
 		pi.KeepDuration = duration
 		pi.KeepBytes = bytes
+		pi.FreeBytes = freeBytes
 	})
 }

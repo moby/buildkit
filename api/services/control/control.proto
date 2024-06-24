@@ -32,6 +32,7 @@ message PruneRequest {
 	bool all = 2;
 	int64 keepDuration = 3 [(gogoproto.nullable) = true];
 	int64 keepBytes = 4 [(gogoproto.nullable) = true];
+	int64 freeBytes = 5 [(gogoproto.nullable) = true];
 }
 
 message DiskUsageRequest {

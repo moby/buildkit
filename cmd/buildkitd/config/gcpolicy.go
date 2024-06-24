@@ -8,6 +8,7 @@ import (
 
 	"github.com/docker/go-units"
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/disk"
 	"github.com/pkg/errors"
 )
 
@@ -118,7 +119,7 @@ func (d DiskSpace) AsBytes(root string) int64 {
 		return 0
 	}
 
-	diskSize, err := getDiskSize(root)
+	_, diskSize, err := disk.GetDiskSize(root)
 	if err != nil {
 		bklog.L.Warnf("failed to get disk size: %v", err)
 		return defaultCap
