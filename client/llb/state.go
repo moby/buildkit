@@ -351,16 +351,12 @@ func (s State) GetEnv(ctx context.Context, key string, co ...ConstraintsOpt) (st
 
 // Env returns a new [State] with the provided environment variable set.
 // See [Env]
-func (s State) Env(ctx context.Context, co ...ConstraintsOpt) ([]string, error) {
+func (s State) Env(ctx context.Context, co ...ConstraintsOpt) (*EnvList, error) {
 	c := &Constraints{}
 	for _, f := range co {
 		f.SetConstraintsOption(c)
 	}
-	env, err := getEnv(s)(ctx, c)
-	if err != nil {
-		return nil, err
-	}
-	return env.ToArray(), nil
+	return getEnv(s)(ctx, c)
 }
 
 // GetDir returns the current working directory for the state.

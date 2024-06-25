@@ -1,12 +1,12 @@
 package build
 
 import (
-	"encoding/csv"
 	"strings"
 
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/pkg/errors"
+	"github.com/tonistiigi/go-csvvalue"
 )
 
 func parseExportCacheCSV(s string) (client.CacheOptionsEntry, error) {
@@ -14,8 +14,7 @@ func parseExportCacheCSV(s string) (client.CacheOptionsEntry, error) {
 		Type:  "",
 		Attrs: map[string]string{},
 	}
-	csvReader := csv.NewReader(strings.NewReader(s))
-	fields, err := csvReader.Read()
+	fields, err := csvvalue.Fields(s, nil)
 	if err != nil {
 		return ex, err
 	}

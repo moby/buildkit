@@ -1,12 +1,12 @@
 package build
 
 import (
-	"encoding/csv"
 	"strconv"
 	"strings"
 
 	"github.com/moby/buildkit/session/auth/authprovider"
 	"github.com/pkg/errors"
+	"github.com/tonistiigi/go-csvvalue"
 )
 
 type authTLSContextEntry struct {
@@ -19,8 +19,7 @@ type authTLSContextEntry struct {
 
 func parseRegistryAuthTLSContextCSV(s string) (authTLSContextEntry, error) {
 	authTLSContext := authTLSContextEntry{}
-	csvReader := csv.NewReader(strings.NewReader(s))
-	fields, err := csvReader.Read()
+	fields, err := csvvalue.Fields(s, nil)
 	if err != nil {
 		return authTLSContext, err
 	}

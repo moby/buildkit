@@ -1,7 +1,6 @@
 package build
 
 import (
-	"encoding/csv"
 	"io"
 	"os"
 	"strconv"
@@ -11,6 +10,7 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/pkg/errors"
+	"github.com/tonistiigi/go-csvvalue"
 )
 
 // parseOutputCSV parses a single --output CSV string
@@ -19,8 +19,7 @@ func parseOutputCSV(s string) (client.ExportEntry, error) {
 		Type:  "",
 		Attrs: map[string]string{},
 	}
-	csvReader := csv.NewReader(strings.NewReader(s))
-	fields, err := csvReader.Read()
+	fields, err := csvvalue.Fields(s, nil)
 	if err != nil {
 		return ex, err
 	}
