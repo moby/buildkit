@@ -2117,7 +2117,14 @@ func commonImageNames() []string {
 }
 
 func isHTTPSource(src string) bool {
-	return strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://")
+	if !strings.HasPrefix(src, "http://") && !strings.HasPrefix(src, "https://") {
+		return false
+	}
+	// https://github.com/ORG/REPO.git is a git source, not an http source
+	if gitRef, gitErr := gitutil.ParseGitRef(src); gitRef != nil && gitErr == nil {
+		return false
+	}
+	return true
 }
 
 func isEnabledForStage(stage string, value string) bool {
