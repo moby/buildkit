@@ -1,8 +1,13 @@
 # syntax=docker/dockerfile-upstream:master
+# check=error=true
 
 ARG GO_VERSION=1.22
 ARG ALPINE_VERSION=3.20
 ARG DEBIAN_VERSION=trixie
+
+ARG BUILD_LOONG64=${TARGETPLATFORM#linux/amd64}
+ARG BUILD_LOONG64=${BUILD_LOONG64:+"unsupported"}
+ARG BUILD_LOONG64=${BUILD_LOONG64:-"supported"}
 
 FROM debian:${DEBIAN_VERSION}-slim AS base
 RUN apt-get update && apt-get --no-install-recommends install -y git binutils \
@@ -15,8 +20,7 @@ RUN apt-get update && apt-get --no-install-recommends install -y git binutils \
   binutils-s390x-linux-gnu \
   binutils-powerpc64le-linux-gnu \
   binutils-mips64el-linux-gnuabi64 \
-  binutils-mips64-linux-gnuabi64 \
-  binutils-loongarch64-linux-gnu
+  binutils-mips64-linux-gnuabi64
 WORKDIR /src
 
 FROM base AS exit-amd64
@@ -59,9 +63,15 @@ FROM base AS exit-mips64
 COPY util/archutil/fixtures/exit.mips64.s .
 RUN mips64-linux-gnuabi64-as --noexecstack -o exit.o exit.mips64.s && mips64-linux-gnuabi64-ld -o exit -s exit.o && mips64-linux-gnuabi64-strip --strip-unneeded exit
 
-FROM base AS exit-loong64
+FROM base AS exit-loong64-base
+RUN apt-get --no-install-recommends install -y binutils-loongarch64-linux-gnu
 COPY util/archutil/fixtures/exit.loongarch64.s .
 RUN loongarch64-linux-gnu-as --noexecstack -o exit.o exit.loongarch64.s && loongarch64-linux-gnu-ld -o exit -s exit.o && loongarch64-linux-gnu-strip --strip-unneeded exit
+
+FROM scratch AS exit-loong64-unsupported
+FROM scratch AS exit-loong64-supported
+COPY --from=exit-loong64-base /src/exit loong64
+FROM exit-loong64-${BUILD_LOONG64} AS exit-loong64
 
 FROM scratch AS exits
 COPY --from=exit-amd64 /src/exit amd64
@@ -74,10 +84,11 @@ COPY --from=exit-ppc64 /src/exit ppc64
 COPY --from=exit-ppc64le /src/exit ppc64le
 COPY --from=exit-mips64le /src/exit mips64le
 COPY --from=exit-mips64 /src/exit mips64
-COPY --from=exit-loong64 /src/exit loong64
+COPY --from=exit-loong64 / /
 
 FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS generate
 WORKDIR /go/src/github.com/moby/buildkit
+ARG BUILD_LOONG64
 RUN --mount=type=bind,target=.,rw \
     --mount=from=exits,target=./bin/archutil,rw <<EOT
   set -ex
@@ -92,8 +103,8 @@ RUN --mount=type=bind,target=.,rw \
     bin/archutil/ppc64 \
     bin/archutil/ppc64le \
     bin/archutil/mips64le \
-    bin/archutil/mips64 \
-    bin/archutil/loong64
+    bin/archutil/mips64
+  [ "${BUILD_LOONG64}" = "unsupported" ] || go run ./util/archutil/generate.go bin/archutil/loong64
   tree -nh bin/archutil
   cp bin/archutil/*_binary.go /out
 EOT
@@ -109,7 +120,7 @@ RUN --mount=type=bind,target=.,rw \
   if [ "$(ls -A /generated-files)" ]; then
     cp -rf /generated-files/* ./util/archutil
   fi
-  diff=$(git status --porcelain)
+  diff=$(git status --porcelain -- util/archutil)
   if [ -n "$diff" ]; then
     echo >&2 'ERROR: The result of archutil differs. Please update with "make archutil"'
     echo "$diff"
