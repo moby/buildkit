@@ -60,24 +60,37 @@ type RuntimeInfo struct {
 	Options any
 }
 
+type ExecutorOptions struct {
+	Client           *containerd.Client
+	Root             string
+	CgroupParent     string
+	NetworkProviders map[pb.NetMode]network.Provider
+	DNSConfig        *oci.DNSConfig
+	ApparmorProfile  string
+	Selinux          bool
+	TraceSocket      string
+	Rootless         bool
+	Runtime          *RuntimeInfo
+}
+
 // New creates a new executor backed by connection to containerd API
-func New(client *containerd.Client, root, cgroup string, networkProviders map[pb.NetMode]network.Provider, dnsConfig *oci.DNSConfig, apparmorProfile string, selinux bool, traceSocket string, rootless bool, runtime *RuntimeInfo) executor.Executor {
+func New(executorOpts ExecutorOptions) executor.Executor {
 	// clean up old hosts/resolv.conf file. ignore errors
-	os.RemoveAll(filepath.Join(root, "hosts"))
-	os.RemoveAll(filepath.Join(root, "resolv.conf"))
+	os.RemoveAll(filepath.Join(executorOpts.Root, "hosts"))
+	os.RemoveAll(filepath.Join(executorOpts.Root, "resolv.conf"))
 
 	return &containerdExecutor{
-		client:           client,
-		root:             root,
-		networkProviders: networkProviders,
-		cgroupParent:     cgroup,
-		dnsConfig:        dnsConfig,
+		client:           executorOpts.Client,
+		root:             executorOpts.Root,
+		networkProviders: executorOpts.NetworkProviders,
+		cgroupParent:     executorOpts.CgroupParent,
+		dnsConfig:        executorOpts.DNSConfig,
 		running:          make(map[string]*containerState),
-		apparmorProfile:  apparmorProfile,
-		selinux:          selinux,
-		traceSocket:      traceSocket,
-		rootless:         rootless,
-		runtime:          runtime,
+		apparmorProfile:  executorOpts.ApparmorProfile,
+		selinux:          executorOpts.Selinux,
+		traceSocket:      executorOpts.TraceSocket,
+		rootless:         executorOpts.Rootless,
+		runtime:          executorOpts.Runtime,
 	}
 }
 
