@@ -527,7 +527,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		if err := os.MkdirAll(checkoutDir, 0711); err != nil {
 			return nil, err
 		}
-		checkoutGit := git.New(gitutil.WithWorkTree(checkoutDir), gitutil.WithGitDir(checkoutDirGit))
+		checkoutGit := git.New(gitutil.WithExec(runWithStandardUmask), gitutil.WithWorkTree(checkoutDir), gitutil.WithGitDir(checkoutDirGit))
 		_, err = checkoutGit.Run(ctx, "-c", "init.defaultBranch=master", "init")
 		if err != nil {
 			return nil, err
@@ -586,7 +586,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 				return nil, errors.Wrapf(err, "failed to create temporary checkout dir")
 			}
 		}
-		checkoutGit := git.New(gitutil.WithWorkTree(cd), gitutil.WithGitDir(gitDir))
+		checkoutGit := git.New(gitutil.WithExec(runWithStandardUmask), gitutil.WithWorkTree(cd), gitutil.WithGitDir(gitDir))
 		_, err = checkoutGit.Run(ctx, "checkout", ref, "--", ".")
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to checkout remote %s", urlutil.RedactCredentials(gs.src.Remote))
@@ -620,7 +620,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		}
 	}
 
-	git = git.New(gitutil.WithWorkTree(checkoutDir), gitutil.WithGitDir(gitDir))
+	git = git.New(gitutil.WithExec(runWithStandardUmask), gitutil.WithWorkTree(checkoutDir), gitutil.WithGitDir(gitDir))
 	_, err = git.Run(ctx, "submodule", "update", "--init", "--recursive", "--depth=1")
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to update submodules for %s", urlutil.RedactCredentials(gs.src.Remote))
