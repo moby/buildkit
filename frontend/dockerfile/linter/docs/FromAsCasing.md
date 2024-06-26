@@ -33,4 +33,4 @@ from debian:latest as deb-builder
 
 ## Related errors
 
-- [`FileConsistenCommandCasing`](./file-consistent-command-casing.md)
+- [`FileConsistentCommandCasing`](./file-consistent-command-casing.md)
