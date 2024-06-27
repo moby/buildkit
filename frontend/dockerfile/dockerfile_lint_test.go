@@ -786,6 +786,20 @@ ENV PATH=$PAHT:/tmp/bin
 			},
 		},
 	})
+
+	dockerfile = []byte(`
+FROM alpine
+ARG FOO
+ARG BAR=
+RUN env | grep 'BAR='
+RUN env | grep 'FOO='
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile:        dockerfile,
+		StreamBuildErr:    `failed to solve: process "/bin/sh -c env | grep 'FOO='" did not complete successfully: exit code: 1`,
+		UnmarshalBuildErr: `process "/bin/sh -c env | grep 'FOO='" did not complete successfully: exit code: 1`,
+		BuildErrLocation:  6,
+	})
 }
 
 func testMultipleInstructionsDisallowed(t *testing.T, sb integration.Sandbox) {
