@@ -39,7 +39,7 @@ func New(config *Config) *Linter {
 }
 
 func (lc *Linter) Run(rule LinterRuleI, location []parser.Range, txt ...string) {
-	if lc == nil || lc.Warn == nil || lc.SkipAll {
+	if lc == nil || lc.Warn == nil || lc.SkipAll || rule.IsDeprecated() {
 		return
 	}
 	rulename := rule.RuleName()
@@ -71,11 +71,13 @@ func (lc *Linter) Error() error {
 type LinterRuleI interface {
 	RuleName() string
 	Run(warn LintWarnFunc, location []parser.Range, txt ...string)
+	IsDeprecated() bool
 }
 
 type LinterRule[F any] struct {
 	Name        string
 	Description string
+	Deprecated  bool
 	URL         string
 	Format      F
 }
@@ -90,6 +92,10 @@ func (rule *LinterRule[F]) Run(warn LintWarnFunc, location []parser.Range, txt .
 	}
 	short := strings.Join(txt, " ")
 	warn(rule.Name, rule.Description, rule.URL, short, location)
+}
+
+func (rule *LinterRule[F]) IsDeprecated() bool {
+	return rule.Deprecated
 }
 
 func LintFormatShort(rulename, msg string, line int) string {
