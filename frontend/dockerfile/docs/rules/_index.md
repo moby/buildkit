@@ -80,5 +80,9 @@ $ docker build --check .
       <td><a href="./legacy-key-value-format/">LegacyKeyValueFormat</a></td>
       <td>Legacy key/value format with whitespace separator should not be used</td>
     </tr>
+    <tr>
+      <td><a href="./redundant-target-platform/">RedundantTargetPlatform</a></td>
+      <td>Setting platform to predefined $TARGETPLATFORM in FROM is redundant as this is the default behavior</td>
+    </tr>
   </tbody>
 </table>

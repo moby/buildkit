@@ -289,7 +289,8 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 
 	// set base state for every image
 	for i, st := range stages {
-		nameMatch, err := shlex.ProcessWordWithMatches(st.BaseName, metaArgsToEnvs(optMetaArgs))
+		env := metaArgsToEnvs(optMetaArgs)
+		nameMatch, err := shlex.ProcessWordWithMatches(st.BaseName, env)
 		reportUnusedFromArgs(metaArgsKeys(optMetaArgs), nameMatch.Unmatched, st.Location, lint)
 		used := nameMatch.Matched
 		if used == nil {
@@ -316,8 +317,10 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		}
 
 		if v := st.Platform; v != "" {
-			platMatch, err := shlex.ProcessWordWithMatches(v, metaArgsToEnvs(optMetaArgs))
+			platEnv := metaArgsToEnvs(optMetaArgs)
+			platMatch, err := shlex.ProcessWordWithMatches(v, platEnv)
 			reportUnusedFromArgs(metaArgsKeys(optMetaArgs), platMatch.Unmatched, st.Location, lint)
+			reportRedundantTargetPlatform(st.Platform, platMatch, st.Location, platEnv, lint)
 
 			if err != nil {
 				return nil, parser.WithLocation(errors.Wrapf(err, "failed to process arguments for platform %s", platMatch.Result), st.Location)
@@ -2275,6 +2278,26 @@ func reportUnusedFromArgs(values []string, unmatched map[string]struct{}, locati
 		suggest, _ := suggest.Search(arg, values, true)
 		msg := linter.RuleUndefinedArgInFrom.Format(arg, suggest)
 		lint.Run(&linter.RuleUndefinedArgInFrom, location, msg)
+	}
+}
+
+func reportRedundantTargetPlatform(platformVar string, nameMatch shell.ProcessWordResult, location []parser.Range, env shell.EnvGetter, lint *linter.Linter) {
+	// Only match this rule if there was only one matched name.
+	// It's psosible there were multiple args and that one of them expanded to an empty
+	// string and we don't want to report a warning when that happens.
+	if len(nameMatch.Matched) == 1 && len(nameMatch.Unmatched) == 0 {
+		const targetPlatform = "TARGETPLATFORM"
+		// If target platform is the only environment variable that was substituted and the result
+		// matches the target platform exactly, we can infer that the input was ${TARGETPLATFORM} or
+		// $TARGETPLATFORM.
+		if _, ok := nameMatch.Matched[targetPlatform]; !ok {
+			return
+		}
+
+		if result, _ := env.Get(targetPlatform); nameMatch.Result == result {
+			msg := linter.RuleRedundantTargetPlatform.Format(platformVar)
+			lint.Run(&linter.RuleRedundantTargetPlatform, location, msg)
+		}
 	}
 }
 
