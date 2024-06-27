@@ -23,16 +23,16 @@ Dockerfile, only the last occurrence is used. An image can only ever have one
 
 ```dockerfile
 FROM alpine
-CMD echo "Hello, Norway!"
-CMD echo "Hello, Sweden!"
+ENTRYPOINT ["echo", "Hello, Norway!"]
+ENTRYPOINT ["echo", "Hello, Sweden!"]
 # Only "Hello, Sweden!" will be printed
 ```
 
-✅ Good: only one `CMD` instruction.
+✅ Good: only one `ENTRYPOINT` instruction.
 
 ```dockerfile
 FROM alpine
-CMD echo "Hello, Norway!"; echo "Hello, Sweden!"
+ENTRYPOINT ["echo", "Hello, Norway!\nHello, Sweden!"]
 ```
 
 You can have both a regular, top-level `CMD`
@@ -44,7 +44,7 @@ and a separate `CMD` for a `HEALTHCHECK` instruction.
 FROM python:alpine
 RUN apk add curl
 HEALTHCHECK --interval=1s --timeout=3s \
-  CMD curl -f http://localhost:8080 || exit 1
-CMD python -m http.server 8080
+  CMD ["curl", "-f", "http://localhost:8080"]
+CMD ["python", "-m", "http.server", "8080"]
 ```
 
