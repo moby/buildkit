@@ -1,6 +1,7 @@
 package credentials
 
 import (
+	"net"
 	"net/url"
 	"strings"
 
@@ -74,7 +75,10 @@ func ConvertToHostname(maybeURL string) string {
 	if strings.Contains(stripped, "://") {
 		u, err := url.Parse(stripped)
 		if err == nil && u.Hostname() != "" {
-			return u.Hostname()
+			if u.Port() == "" {
+				return u.Hostname()
+			}
+			return net.JoinHostPort(u.Hostname(), u.Port())
 		}
 	}
 	hostName, _, _ := strings.Cut(stripped, "/")
