@@ -124,4 +124,12 @@ var (
 			return fmt.Sprintf("Base image %s was pulled with platform %q, expected %q for current build", image, actual, expected)
 		},
 	}
+	RuleInvalidDefaultArgInFrom = LinterRule[func(string) string]{
+		Name:        "InvalidDefaultArgInFrom",
+		Description: "Using ARG with default value results in an empty or invalid base image name",
+		URL:         "https://docs.docker.com/go/dockerfile/rule/invalid-default-arg-in-from/",
+		Format: func(baseName string) string {
+			return fmt.Sprintf("Using ARG for %v with default values results in empty or invalid base image name", baseName)
+		},
+	}
 )

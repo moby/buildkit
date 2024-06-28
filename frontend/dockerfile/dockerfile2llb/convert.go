@@ -257,27 +257,15 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	shlex := shell.NewLex(dockerfile.EscapeToken)
 	outline := newOutlineCapture()
 
-	for _, cmd := range metaArgs {
-		for _, metaArg := range cmd.Args {
-			info := argInfo{definition: metaArg, location: cmd.Location()}
-			if v, ok := opt.BuildArgs[metaArg.Key]; !ok {
-				if metaArg.Value != nil {
-					result, err := shlex.ProcessWordWithMatches(*metaArg.Value, metaArgsToEnvs(optMetaArgs))
-					if err != nil {
-						return nil, parser.WithLocation(err, cmd.Location())
-					}
-					*metaArg.Value = result.Result
-					info.deps = result.Matched
-				}
-			} else {
-				metaArg.Value = &v
-			}
-			optMetaArgs = append(optMetaArgs, metaArg)
-			if metaArg.Value != nil {
-				info.value = *metaArg.Value
-			}
-			outline.allArgs[metaArg.Key] = info
-		}
+	// Validate that base images continue to be valid even
+	// when no build arguments are used.
+	validateBaseImagesWithDefaultArgs(stages, shlex, metaArgs, optMetaArgs, lint)
+
+	// Rebuild the arguments using the provided build arguments
+	// for the remainder of the build.
+	optMetaArgs, outline.allArgs, err = buildMetaArgs(optMetaArgs, shlex, metaArgs, opt.BuildArgs)
+	if err != nil {
+		return nil, err
 	}
 
 	metaResolver := opt.MetaResolver
@@ -2316,6 +2304,59 @@ func validateBaseImagePlatform(name string, expected, actual ocispecs.Platform, 
 		msg := linter.RuleInvalidBaseImagePlatform.Format(name, expectedStr, actualStr)
 		lint.Run(&linter.RuleInvalidBaseImagePlatform, location, msg)
 	}
+}
+
+func validateBaseImagesWithDefaultArgs(stages []instructions.Stage, shlex *shell.Lex, metaArgs []instructions.ArgCommand, optMetaArgs []instructions.KeyValuePairOptional, lint *linter.Linter) {
+	// Build the arguments as if no build options were given
+	// and using only defaults.
+	optMetaArgs, _, err := buildMetaArgs(optMetaArgs, shlex, metaArgs, nil)
+	if err != nil {
+		// Abandon running the linter. We'll likely fail after this point
+		// with the same error but we shouldn't error here inside
+		// of the linting check.
+		return
+	}
+
+	for _, st := range stages {
+		nameMatch, err := shlex.ProcessWordWithMatches(st.BaseName, metaArgsToEnvs(optMetaArgs))
+		if err != nil {
+			return
+		}
+
+		// Verify the image spec is potentially valid.
+		if _, err := reference.ParseNormalizedNamed(nameMatch.Result); err != nil {
+			msg := linter.RuleInvalidDefaultArgInFrom.Format(st.BaseName)
+			lint.Run(&linter.RuleInvalidDefaultArgInFrom, st.Location, msg)
+		}
+	}
+}
+
+func buildMetaArgs(metaArgs []instructions.KeyValuePairOptional, shlex *shell.Lex, argCommands []instructions.ArgCommand, buildArgs map[string]string) ([]instructions.KeyValuePairOptional, map[string]argInfo, error) {
+	allArgs := make(map[string]argInfo)
+
+	for _, cmd := range argCommands {
+		for _, metaArg := range cmd.Args {
+			info := argInfo{definition: metaArg, location: cmd.Location()}
+			if v, ok := buildArgs[metaArg.Key]; !ok {
+				if metaArg.Value != nil {
+					result, err := shlex.ProcessWordWithMatches(*metaArg.Value, metaArgsToEnvs(metaArgs))
+					if err != nil {
+						return nil, nil, parser.WithLocation(err, cmd.Location())
+					}
+					metaArg.Value = &result.Result
+					info.deps = result.Matched
+				}
+			} else {
+				metaArg.Value = &v
+			}
+			metaArgs = append(metaArgs, metaArg)
+			if metaArg.Value != nil {
+				info.value = *metaArg.Value
+			}
+			allArgs[metaArg.Key] = info
+		}
+	}
+	return metaArgs, allArgs, nil
 }
 
 type emptyEnvs struct{}

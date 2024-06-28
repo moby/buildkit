@@ -80,5 +80,9 @@ $ docker build --check .
       <td><a href="./legacy-key-value-format/">LegacyKeyValueFormat</a></td>
       <td>Legacy key/value format with whitespace separator should not be used</td>
     </tr>
+    <tr>
+      <td><a href="./invalid-default-arg-in-from/">InvalidDefaultArgInFrom</a></td>
+      <td>Using ARG with default value results in an empty or invalid base image name</td>
+    </tr>
   </tbody>
 </table>
