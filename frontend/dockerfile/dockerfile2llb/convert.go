@@ -1755,9 +1755,6 @@ func pathRelativeToWorkingDir(s llb.State, p string, platform ocispecs.Platform)
 		return "", err
 	}
 
-	if len(p) == 0 {
-		return dir, nil
-	}
 	p, err = system.CheckSystemDriveAndRemoveDriveLetter(p, platform.OS)
 	if err != nil {
 		return "", errors.Wrap(err, "removing drive letter")
@@ -1765,6 +1762,12 @@ func pathRelativeToWorkingDir(s llb.State, p string, platform ocispecs.Platform)
 
 	if system.IsAbs(p, platform.OS) {
 		return system.NormalizePath("/", p, platform.OS, true)
+	}
+
+	// add slashes for "" and "." paths
+	// "" is treated as current directory and not necessariy root
+	if p == "." || p == "" {
+		p = "./"
 	}
 	return system.NormalizePath(dir, p, platform.OS, true)
 }
