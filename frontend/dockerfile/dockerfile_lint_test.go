@@ -1010,15 +1010,8 @@ func checkProgressStream(t *testing.T, sb integration.Sandbox, lintTest *lintTes
 
 	f := getFrontend(t, sb)
 
-	attrs := lintTest.FrontendAttrs
-	if attrs == nil {
-		attrs = map[string]string{
-			"platform": "linux/amd64,linux/arm64",
-		}
-	}
-
 	_, err := f.Solve(sb.Context(), lintTest.Client, client.SolveOpt{
-		FrontendAttrs: attrs,
+		FrontendAttrs: lintTest.FrontendAttrs,
 		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: lintTest.TmpDir,
 			dockerui.DefaultLocalNameContext:    lintTest.TmpDir,
@@ -1036,6 +1029,9 @@ func checkProgressStream(t *testing.T, sb integration.Sandbox, lintTest *lintTes
 		t.Fatalf("timed out waiting for statusDone")
 	}
 
+	if len(lintTest.Warnings) != len(warnings) {
+		printWarnings(t, warnings)
+	}
 	require.Equal(t, len(lintTest.Warnings), len(warnings))
 	sort.Slice(warnings, func(i, j int) bool {
 		w1 := warnings[i]
@@ -1098,6 +1094,18 @@ func checkLintWarning(t *testing.T, warning lint.Warning, expected expectedLintW
 	require.Equal(t, expected.Description, warning.Description)
 	require.Equal(t, expected.URL, warning.URL)
 	require.Equal(t, expected.Detail, warning.Detail)
+}
+
+func printWarnings(t *testing.T, warnings []*client.VertexWarning) {
+	t.Helper()
+
+	for _, w := range warnings {
+		details := make([]string, len(w.Detail))
+		for i, detail := range w.Detail {
+			details[i] = string(detail)
+		}
+		t.Logf("%s: %v", string(w.Short), details)
+	}
 }
 
 func unmarshalLintResults(res *gateway.Result) (*lint.LintResults, error) {
