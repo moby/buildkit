@@ -40,6 +40,7 @@ var lintTests = integration.TestFuncs(
 	testLegacyKeyValueFormat,
 	testBaseImagePlatformMismatch,
 	testAllTargetUnmarshal,
+	testInvalidDefaultArgInFrom,
 )
 
 func testAllTargetUnmarshal(t *testing.T, sb integration.Sandbox) {
@@ -919,6 +920,104 @@ FROM a AS c
 				Line:        4,
 				Level:       1,
 			},
+		},
+	})
+}
+
+func testInvalidDefaultArgInFrom(t *testing.T, sb integration.Sandbox) {
+	dockerfile := []byte(`
+ARG VERSION
+FROM busybox:$VERSION
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		FrontendAttrs: map[string]string{
+			"build-arg:VERSION": "latest",
+		},
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "InvalidDefaultArgInFrom",
+				Description: "Using ARG with default value results in an empty or invalid base image name",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/invalid-default-arg-in-from/",
+				Detail:      "Using ARG for busybox:$VERSION with default values results in empty or invalid base image name",
+				Line:        3,
+				Level:       1,
+			},
+		},
+	})
+
+	dockerfile = []byte(`
+ARG IMAGE
+FROM $IMAGE
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		FrontendAttrs: map[string]string{
+			"build-arg:IMAGE": "busybox:latest",
+		},
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "InvalidDefaultArgInFrom",
+				Description: "Using ARG with default value results in an empty or invalid base image name",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/invalid-default-arg-in-from/",
+				Detail:      "Using ARG for $IMAGE with default values results in empty or invalid base image name",
+				Line:        3,
+				Level:       1,
+			},
+		},
+	})
+
+	dockerfile = []byte(`
+ARG SFX="box:"
+FROM busy${SFX}
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		FrontendAttrs: map[string]string{
+			"build-arg:SFX": "box:latest",
+		},
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "InvalidDefaultArgInFrom",
+				Description: "Using ARG with default value results in an empty or invalid base image name",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/invalid-default-arg-in-from/",
+				Detail:      "Using ARG for busy${SFX} with default values results in empty or invalid base image name",
+				Line:        3,
+				Level:       1,
+			},
+		},
+	})
+
+	dockerfile = []byte(`
+ARG VERSION="latest"
+FROM busybox:${VERSION}
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		FrontendAttrs: map[string]string{
+			"build-arg:VERSION": "latest",
+		},
+	})
+
+	dockerfile = []byte(`
+ARG BUSYBOX_VARIANT=""
+FROM busybox:stable${BUSYBOX_VARIANT}
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		FrontendAttrs: map[string]string{
+			"build-arg:BUSYBOX_VARIANT": "-musl",
+		},
+	})
+
+	dockerfile = []byte(`
+ARG BUSYBOX_VARIANT
+FROM busybox:stable${BUSYBOX_VARIANT}
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		FrontendAttrs: map[string]string{
+			"build-arg:BUSYBOX_VARIANT": "-musl",
 		},
 	})
 }
