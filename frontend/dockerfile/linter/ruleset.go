@@ -124,4 +124,12 @@ var (
 			return fmt.Sprintf("Base image %s was pulled with platform %q, expected %q for current build", image, actual, expected)
 		},
 	}
+	RuleRedundantTargetPlatform = LinterRule[func(string) string]{
+		Name:        "RedundantTargetPlatform",
+		Description: "Setting platform to predefined $TARGETPLATFORM in FROM is redundant as this is the default behavior",
+		URL:         "https://docs.docker.com/go/dockerfile/rule/redundant-target-platform/",
+		Format: func(platformVar string) string {
+			return fmt.Sprintf("Setting platform to predefined %s in FROM is redundant as this is the default behavior", platformVar)
+		},
+	}
 )

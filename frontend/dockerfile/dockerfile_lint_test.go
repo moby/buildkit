@@ -40,6 +40,7 @@ var lintTests = integration.TestFuncs(
 	testLegacyKeyValueFormat,
 	testBaseImagePlatformMismatch,
 	testAllTargetUnmarshal,
+	testRedundantTargetPlatform,
 )
 
 func testAllTargetUnmarshal(t *testing.T, sb integration.Sandbox) {
@@ -917,6 +918,42 @@ FROM a AS c
 				URL:         "https://docs.docker.com/go/dockerfile/rule/legacy-key-value-format/",
 				Detail:      "\"LABEL key=value\" should be used instead of legacy \"LABEL key value\" format",
 				Line:        4,
+				Level:       1,
+			},
+		},
+	})
+}
+
+func testRedundantTargetPlatform(t *testing.T, sb integration.Sandbox) {
+	dockerfile := []byte(`
+FROM --platform=$TARGETPLATFORM scratch
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "RedundantTargetPlatform",
+				Description: "Setting platform to predefined $TARGETPLATFORM in FROM is redundant as this is the default behavior",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/redundant-target-platform/",
+				Detail:      "Setting platform to predefined $TARGETPLATFORM in FROM is redundant as this is the default behavior",
+				Line:        2,
+				Level:       1,
+			},
+		},
+	})
+
+	dockerfile = []byte(`
+FROM --platform=${TARGETPLATFORM} scratch
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "RedundantTargetPlatform",
+				Description: "Setting platform to predefined $TARGETPLATFORM in FROM is redundant as this is the default behavior",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/redundant-target-platform/",
+				Detail:      "Setting platform to predefined ${TARGETPLATFORM} in FROM is redundant as this is the default behavior",
+				Line:        2,
 				Level:       1,
 			},
 		},
