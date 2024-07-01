@@ -157,6 +157,7 @@ type GCPolicy struct {
 	All          bool      `toml:"all"`
 	KeepBytes    DiskSpace `toml:"keepBytes"`
 	KeepDuration Duration  `toml:"keepDuration"`
+	FreeBytes    DiskSpace `toml:"freeBytes"`
 	Filters      []string  `toml:"filters"`
 }
 

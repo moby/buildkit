@@ -22,6 +22,7 @@ message GCPolicy {
 	int64 keepDuration = 2;
 	int64 keepBytes = 3;
 	repeated string filters = 4;
+	int64 freeBytes = 5;
 }
 
 message BuildkitVersion {

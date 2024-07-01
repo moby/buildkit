@@ -928,6 +928,7 @@ func getGCPolicy(cfg config.GCConfig, root string) []client.PruneInfo {
 			All:          rule.All,
 			KeepBytes:    rule.KeepBytes.AsBytes(root),
 			KeepDuration: rule.KeepDuration.Duration,
+			FreeBytes:    rule.FreeBytes.AsBytes(root),
 		})
 	}
 	return out

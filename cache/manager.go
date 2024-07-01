@@ -22,6 +22,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/disk"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
@@ -1053,26 +1054,46 @@ func (cm *cacheManager) pruneOnce(ctx context.Context, ch chan client.UsageInfo,
 		}
 	}
 
+	// TODO: pick a better path here
+	totalFree, _, err := disk.GetDiskSize(cm.mountPool.tmpdirRoot)
+	if err != nil {
+		return err
+	}
+
 	return cm.prune(ctx, ch, pruneOpt{
-		filter:       filter,
-		all:          opt.All,
-		checkShared:  check,
-		keepDuration: opt.KeepDuration,
-		keepBytes:    opt.KeepBytes,
-		totalSize:    totalSize,
+		filter:         filter,
+		all:            opt.All,
+		checkShared:    check,
+		keepDuration:   opt.KeepDuration,
+		keepBytes:      opt.KeepBytes,
+		totalKeptBytes: totalSize,
+		freeBytes:      opt.FreeBytes,
+		totalFreeBytes: totalFree,
 	})
 }
 
 func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt pruneOpt) (err error) {
-	var toDelete []*deleteRecord
-
-	if opt.keepBytes != 0 && opt.totalSize < opt.keepBytes {
+	var gcMode, gcNeeded bool
+	if opt.keepBytes != 0 {
+		gcMode = true
+		if opt.totalKeptBytes >= opt.keepBytes {
+			gcNeeded = true
+		}
+	}
+	if opt.freeBytes != 0 {
+		gcMode = true
+		if opt.totalFreeBytes >= opt.freeBytes {
+			gcNeeded = true
+		}
+	}
+	if gcMode && !gcNeeded {
 		return nil
 	}
 
+	var toDelete []*deleteRecord
+
 	cm.mu.Lock()
 
-	gcMode := opt.keepBytes != 0
 	cutOff := time.Now().Add(-opt.keepDuration)
 
 	locked := map[*sync.Mutex]struct{}{}
@@ -1240,7 +1261,7 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt
 			c.Size = cr.equalImmutable.getSize() // benefit from DiskUsage calc
 		}
 
-		opt.totalSize -= c.Size
+		opt.totalKeptBytes -= c.Size
 
 		if cr.equalImmutable != nil {
 			if err1 := cr.equalImmutable.remove(ctx, false); err == nil {
@@ -1606,12 +1627,15 @@ func adaptUsageInfo(info *client.UsageInfo) filters.Adaptor {
 }
 
 type pruneOpt struct {
-	filter       filters.Filter
-	all          bool
-	checkShared  ExternalRefChecker
-	keepDuration time.Duration
-	keepBytes    int64
-	totalSize    int64
+	filter      filters.Filter
+	all         bool
+	checkShared ExternalRefChecker
+
+	keepDuration   time.Duration
+	keepBytes      int64
+	totalKeptBytes int64
+	freeBytes      int64
+	totalFreeBytes int64
 }
 
 type deleteRecord struct {

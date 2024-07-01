@@ -94,6 +94,9 @@ func printWorkersVerbose(tw *tabwriter.Writer, winfo []*client.WorkerInfo) {
 			if rule.KeepBytes > 0 {
 				fmt.Fprintf(tw, "\tKeep Bytes:\t%g\n", units.Bytes(rule.KeepBytes))
 			}
+			if rule.FreeBytes > 0 {
+				fmt.Fprintf(tw, "\tFree Bytes:\t%g\n", units.Bytes(rule.FreeBytes))
+			}
 		}
 		fmt.Fprintf(tw, "\n")
 	}
