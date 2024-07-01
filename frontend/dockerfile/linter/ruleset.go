@@ -132,4 +132,11 @@ var (
 			return fmt.Sprintf("Setting platform to predefined %s in FROM is redundant as this is the default behavior", platformVar)
 		},
 	}
+	RuleSecretsUsedInArgOrEnv = LinterRule[func(string) string]{
+		Name:        "SecretsUsedInArgOrEnv",
+		Description: "Potentially sensitive data should not be used in the ARG or ENV commands",
+		Format: func(secretKey string) string {
+			return fmt.Sprintf("Secrets should not be used in the ARG or ENV commands (key named %q)", secretKey)
+		},
+	}
 )

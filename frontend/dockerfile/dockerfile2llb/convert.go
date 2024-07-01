@@ -1122,6 +1122,7 @@ func dispatchEnv(d *dispatchState, c *instructions.EnvCommand, lint *linter.Lint
 			msg := linter.RuleLegacyKeyValueFormat.Format(c.Name())
 			lint.Run(&linter.RuleLegacyKeyValueFormat, c.Location(), msg)
 		}
+		validateNoSecretKey(e.Key, c.Location(), lint)
 		commitMessage.WriteString(" " + e.String())
 		d.state = d.state.AddEnv(e.Key, e.Value)
 		d.image.Config.Env = addEnv(d.image.Config.Env, e.Key, e.Value)
@@ -1700,6 +1701,7 @@ func dispatchShell(d *dispatchState, c *instructions.ShellCommand) error {
 func dispatchArg(d *dispatchState, c *instructions.ArgCommand, opt *dispatchOpt) error {
 	commitStrs := make([]string, 0, len(c.Args))
 	for _, arg := range c.Args {
+		validateNoSecretKey(arg.Key, c.Location(), opt.lint)
 		_, hasValue := opt.buildArgValues[arg.Key]
 		hasDefault := arg.Value != nil
 
@@ -2341,6 +2343,33 @@ func validateBaseImagePlatform(name string, expected, actual ocispecs.Platform, 
 		actualStr := platforms.Format(platforms.Normalize(actual))
 		msg := linter.RuleInvalidBaseImagePlatform.Format(name, expectedStr, actualStr)
 		lint.Run(&linter.RuleInvalidBaseImagePlatform, location, msg)
+	}
+}
+
+func validateNoSecretKey(key string, location []parser.Range, lint *linter.Linter) {
+	// Check for either full value or first/last word.
+	// Examples: api_key, DATABASE_PASSWORD, GITHUB_TOKEN, secret_MESSAGE, AUTH
+	// Case insensitive.
+	secretTokens := []string{
+		"apikey",
+		"auth",
+		"credential",
+		"credentials",
+		"key",
+		"password",
+		"pword",
+		"passwd",
+		"secret",
+		"token",
+	}
+
+	keyWords := strings.Split(strings.ToLower(key), "_")
+	for _, token := range secretTokens {
+		if token == keyWords[0] || token == keyWords[len(keyWords)-1] {
+			msg := linter.RuleSecretsUsedInArgOrEnv.Format(key)
+			lint.Run(&linter.RuleSecretsUsedInArgOrEnv, location, msg)
+			return
+		}
 	}
 }
 
