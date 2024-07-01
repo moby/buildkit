@@ -610,9 +610,14 @@ func runcProcessHandle(ctx context.Context, killer procKiller) (*procHandle, con
 	go func() {
 		// Wait for pid
 		select {
-		case <-ctx.Done():
+		case <-p.ended:
 			return // nothing to kill
 		case <-p.ready:
+			select {
+			case <-p.ended:
+				return
+			default:
+			}
 		}
 
 		for {
