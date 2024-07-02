@@ -408,6 +408,9 @@ func (s3Client *s3Client) getManifest(ctx context.Context, key string, config *v
 	if err := decoder.Decode(config); err != nil {
 		return false, errors.WithStack(err)
 	}
+	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
+		return false, errors.Errorf("unexpected data after JSON object")
+	}
 
 	return true, nil
 }

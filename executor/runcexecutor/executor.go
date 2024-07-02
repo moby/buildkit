@@ -422,8 +422,12 @@ func (w *runcExecutor) Exec(ctx context.Context, id string, process executor.Pro
 	defer f.Close()
 
 	spec := &specs.Spec{}
-	if err := json.NewDecoder(f).Decode(spec); err != nil {
+	dec := json.NewDecoder(f)
+	if err := dec.Decode(spec); err != nil {
 		return err
+	}
+	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
+		return errors.Errorf("unexpected data after JSON spec object")
 	}
 
 	if process.Meta.User != "" {
@@ -610,9 +614,14 @@ func runcProcessHandle(ctx context.Context, killer procKiller) (*procHandle, con
 	go func() {
 		// Wait for pid
 		select {
-		case <-ctx.Done():
+		case <-p.ended:
 			return // nothing to kill
 		case <-p.ready:
+			select {
+			case <-p.ended:
+				return
+			default:
+			}
 		}
 
 		for {
