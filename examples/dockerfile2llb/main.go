@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"io"
+	"log"
 	"os"
 
 	"github.com/moby/buildkit/client/llb"
@@ -13,7 +14,6 @@ import (
 	"github.com/moby/buildkit/frontend/dockerui"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/appcontext"
-	"github.com/sirupsen/logrus"
 )
 
 type buildOpt struct {
@@ -24,7 +24,7 @@ type buildOpt struct {
 
 func main() {
 	if err := xmain(); err != nil {
-		logrus.Fatal(err)
+		log.Fatal(err)
 	}
 }
 

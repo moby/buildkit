@@ -53,7 +53,7 @@ func GetLogger(ctx context.Context) (l *logrus.Entry) {
 
 	if logWithTraceID {
 		if spanContext := trace.SpanFromContext(ctx).SpanContext(); spanContext.IsValid() {
-			return l.WithFields(logrus.Fields{
+			return l.WithFields(map[string]any{
 				"traceID": spanContext.TraceID(),
 				"spanID":  spanContext.SpanID(),
 			})

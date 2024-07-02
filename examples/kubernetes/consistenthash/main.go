@@ -17,17 +17,17 @@ package main
 import (
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/serialx/hashring"
-	"github.com/sirupsen/logrus"
 )
 
 func main() {
 	if err := xmain(); err != nil {
-		logrus.Fatal(err)
+		log.Fatal(err)
 	}
 }
 

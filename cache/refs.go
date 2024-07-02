@@ -37,7 +37,6 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -483,7 +482,7 @@ type immutableRef struct {
 }
 
 // hold ref lock before calling
-func (sr *immutableRef) traceLogFields() logrus.Fields {
+func (sr *immutableRef) traceLogFields() map[string]any {
 	m := map[string]any{
 		"id":          sr.ID(),
 		"refID":       fmt.Sprintf("%p", sr),
@@ -623,7 +622,7 @@ type mutableRef struct {
 }
 
 // hold ref lock before calling
-func (sr *mutableRef) traceLogFields() logrus.Fields {
+func (sr *mutableRef) traceLogFields() map[string]any {
 	m := map[string]any{
 		"id":          sr.ID(),
 		"refID":       fmt.Sprintf("%p", sr),
