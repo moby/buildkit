@@ -2554,7 +2554,7 @@ func testBuildExportScratch(t *testing.T, sb integration.Sandbox) {
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
 	require.Len(t, imgs.Images, 1)
-	img := imgs.Find(platforms.DefaultString())
+	img := imgs.Find(platforms.Format(platforms.DefaultSpec()))
 	require.Empty(t, img.Layers)
 	require.Equal(t, platforms.DefaultSpec(), img.Img.Platform)
 

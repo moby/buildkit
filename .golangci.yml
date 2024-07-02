@@ -62,6 +62,7 @@ linters-settings:
       - '^ctx\.Err(# use context\.Cause instead)?$'
       - '^fmt\.Errorf(# use errors\.Errorf instead)?$'
       - '^logrus\.(Trace|Debug|Info|Warn|Warning|Error|Fatal)(f|ln)?(# use bklog\.G or bklog\.L instead of logrus directly)?$'
+      - '^platforms\.DefaultString(# use platforms\.Format(platforms\.DefaultSpec()) instead\. Be aware that DefaultSpec is for the local platform, so must be avoided when working cross-platform)?$'
   importas:
     alias:
       # Enforce alias to prevent it accidentally being used instead of our
