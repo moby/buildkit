@@ -22,13 +22,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/googleapis/google/rpc"
 	v1 "github.com/moby/buildkit/cache/remotecache/v1"
 	"github.com/tonistiigi/fsutil"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/content/local"
+	"github.com/containerd/containerd/content/proxy"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/snapshots"
@@ -49,6 +53,8 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/contentutil"
+	"github.com/moby/buildkit/util/grpcerrors"
+	"github.com/moby/buildkit/util/stack"
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
@@ -57,6 +63,7 @@ import (
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
+	statuspb "google.golang.org/genproto/googleapis/rpc/status"
 )
 
 func init() {
@@ -186,6 +193,7 @@ var allTests = integration.TestFuncs(
 	testDuplicateLayersProvenance,
 	testSourcePolicyWithNamedContext,
 	testInvalidJSONCommands,
+	testHistoryError,
 )
 
 // Tests that depend on the `security.*` entitlements
@@ -7398,6 +7406,119 @@ ENV foo=bar
 		},
 		FrontendAttrs: map[string]string{},
 	})
+}
+
+func testHistoryError(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM scratch
+COPY notexist /foo
+`)
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	ref := identity.NewID()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Ref: ref,
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.Error(t, err)
+
+	cl, err := c.ControlClient().ListenBuildHistory(sb.Context(), &controlapi.BuildHistoryRequest{
+		EarlyExit: true,
+		Ref:       ref,
+	})
+	require.NoError(t, err)
+
+	got := false
+	for {
+		resp, err := cl.Recv()
+		if err == io.EOF {
+			require.Equal(t, true, got)
+			break
+		}
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.Record.Error)
+		got = true
+
+		require.Len(t, resp.Record.Error.Details, 0)
+		require.Contains(t, resp.Record.Error.Message, "/notexist")
+
+		extErr := resp.Record.ExternalError
+		require.NotNil(t, extErr)
+
+		require.Greater(t, extErr.Size_, int64(0))
+		require.Equal(t, "application/vnd.googeapis.google.rpc.status+proto", extErr.MediaType)
+
+		bkstore := proxy.NewContentStore(c.ContentClient())
+
+		dt, err := content.ReadBlob(ctx, bkstore, ocispecs.Descriptor{
+			MediaType: extErr.MediaType,
+			Digest:    extErr.Digest,
+			Size:      extErr.Size_,
+		})
+		require.NoError(t, err)
+
+		var st rpc.Status
+		err = (&st).Unmarshal(dt)
+		require.NoError(t, err)
+
+		require.Equal(t, resp.Record.Error.Code, st.Code)
+		require.Equal(t, resp.Record.Error.Message, st.Message)
+
+		details := make([]*anypb.Any, len(st.Details))
+		for i, d := range st.Details {
+			details[i] = &anypb.Any{
+				TypeUrl: d.TypeUrl,
+				Value:   d.Value,
+			}
+		}
+
+		err = grpcerrors.FromGRPC(status.FromProto(&statuspb.Status{
+			Code:    int32(st.Code),
+			Message: st.Message,
+			Details: details,
+		}).Err())
+
+		require.Error(t, err)
+
+		// typed error has stacks
+		stacks := stack.Traces(err)
+		require.Greater(t, len(stacks), 1)
+
+		// contains vertex metadata
+		var ve *errdefs.VertexError
+		if errors.As(err, &ve) {
+			_, err := digest.Parse(ve.Digest)
+			require.NoError(t, err)
+		} else {
+			t.Fatalf("did not find vertex error")
+		}
+
+		// source points to Dockerfile
+		sources := errdefs.Sources(err)
+		require.Len(t, sources, 1)
+
+		src := sources[0]
+		require.Equal(t, "Dockerfile", src.Info.Filename)
+		require.Equal(t, dockerfile, src.Info.Data)
+		require.NotNil(t, src.Info.Definition)
+	}
 }
 
 func runShell(dir string, cmds ...string) error {
