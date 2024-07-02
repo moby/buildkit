@@ -5,19 +5,20 @@ import (
 	"strings"
 
 	"github.com/docker/go-units"
+	"github.com/moby/buildkit/frontend/dockerui/types"
 	"github.com/moby/buildkit/util/suggest"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/go-csvvalue"
 )
 
-type MountType string
+type MountType = types.MountType
 
 const (
-	MountTypeBind   MountType = "bind"
-	MountTypeCache  MountType = "cache"
-	MountTypeTmpfs  MountType = "tmpfs"
-	MountTypeSecret MountType = "secret"
-	MountTypeSSH    MountType = "ssh"
+	MountTypeBind   = types.MountTypeBind
+	MountTypeCache  = types.MountTypeCache
+	MountTypeTmpfs  = types.MountTypeTmpfs
+	MountTypeSecret = types.MountTypeSecret
+	MountTypeSSH    = types.MountTypeSSH
 )
 
 var allowedMountTypes = map[MountType]struct{}{
@@ -28,12 +29,12 @@ var allowedMountTypes = map[MountType]struct{}{
 	MountTypeSSH:    {},
 }
 
-type ShareMode string
+type ShareMode = types.ShareMode
 
 const (
-	MountSharingShared  ShareMode = "shared"
-	MountSharingPrivate ShareMode = "private"
-	MountSharingLocked  ShareMode = "locked"
+	MountSharingShared  = types.MountSharingShared
+	MountSharingPrivate = types.MountSharingPrivate
+	MountSharingLocked  = types.MountSharingLocked
 )
 
 var allowedSharingModes = map[ShareMode]struct{}{
@@ -83,13 +84,22 @@ func setMountState(cmd *RunCommand, expander SingleWordExpander) error {
 	if st == nil {
 		return errors.Errorf("no mount state")
 	}
-	mounts := make([]*Mount, len(st.flag.StringValues))
-	for i, str := range st.flag.StringValues {
+	var mounts []*Mount
+	if hook := cmd.GetInstructionHook(); hook != nil && hook.Run != nil {
+		for _, m := range hook.Run.Mounts {
+			m := m
+			if err := validateMount(&m, false); err != nil {
+				return err
+			}
+			mounts = append(mounts, &m)
+		}
+	}
+	for _, str := range st.flag.StringValues {
 		m, err := parseMount(str, expander)
 		if err != nil {
 			return err
 		}
-		mounts[i] = m
+		mounts = append(mounts, m)
 	}
 	st.mounts = mounts
 	return nil
@@ -112,20 +122,7 @@ type mountState struct {
 	mounts []*Mount
 }
 
-type Mount struct {
-	Type         MountType
-	From         string
-	Source       string
-	Target       string
-	ReadOnly     bool
-	SizeLimit    int64
-	CacheID      string
-	CacheSharing ShareMode
-	Required     bool
-	Mode         *uint64
-	UID          *uint64
-	GID          *uint64
-}
+type Mount = types.Mount
 
 func parseMount(val string, expander SingleWordExpander) (*Mount, error) {
 	fields, err := csvvalue.Fields(val, nil)
@@ -260,17 +257,24 @@ func parseMount(val string, expander SingleWordExpander) (*Mount, error) {
 		}
 	}
 
+	if err = validateMount(m, roAuto); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func validateMount(m *Mount, roAuto bool) error {
 	fileInfoAllowed := m.Type == MountTypeSecret || m.Type == MountTypeSSH || m.Type == MountTypeCache
 
 	if !fileInfoAllowed {
 		if m.Mode != nil {
-			return nil, errors.Errorf("mode not allowed for %q type mounts", m.Type)
+			return errors.Errorf("mode not allowed for %q type mounts", m.Type)
 		}
 		if m.UID != nil {
-			return nil, errors.Errorf("uid not allowed for %q type mounts", m.Type)
+			return errors.Errorf("uid not allowed for %q type mounts", m.Type)
 		}
 		if m.GID != nil {
-			return nil, errors.Errorf("gid not allowed for %q type mounts", m.Type)
+			return errors.Errorf("gid not allowed for %q type mounts", m.Type)
 		}
 	}
 
@@ -284,22 +288,22 @@ func parseMount(val string, expander SingleWordExpander) (*Mount, error) {
 
 	if m.Type == MountTypeSecret {
 		if m.From != "" {
-			return nil, errors.Errorf("secret mount should not have a from")
+			return errors.Errorf("secret mount should not have a from")
 		}
 		if m.CacheSharing != "" {
-			return nil, errors.Errorf("secret mount should not define sharing")
+			return errors.Errorf("secret mount should not define sharing")
 		}
 		if m.Source == "" && m.Target == "" && m.CacheID == "" {
-			return nil, errors.Errorf("invalid secret mount. one of source, target required")
+			return errors.Errorf("invalid secret mount. one of source, target required")
 		}
 		if m.Source != "" && m.CacheID != "" {
-			return nil, errors.Errorf("both source and id can't be set")
+			return errors.Errorf("both source and id can't be set")
 		}
 	}
 
 	if m.CacheSharing != "" && m.Type != MountTypeCache {
-		return nil, errors.Errorf("invalid cache sharing set for %v mount", m.Type)
+		return errors.Errorf("invalid cache sharing set for %v mount", m.Type)
 	}
 
-	return m, nil
+	return nil
 }

@@ -15,12 +15,17 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/command"
 	"github.com/moby/buildkit/frontend/dockerfile/linter"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
+	"github.com/moby/buildkit/frontend/dockerui/types"
 	"github.com/moby/buildkit/util/suggest"
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
 var excludePatternsEnabled = false
+
+type ParseOpts struct {
+	InstructionHook *types.InstructionHook
+}
 
 type parseRequest struct {
 	command    string
@@ -31,6 +36,7 @@ type parseRequest struct {
 	original   string
 	location   []parser.Range
 	comments   []string
+	opts       ParseOpts
 }
 
 var parseRunPreHooks []func(*RunCommand, parseRequest) error
@@ -66,18 +72,19 @@ func newParseRequestFromNode(node *parser.Node) parseRequest {
 	}
 }
 
-func ParseInstruction(node *parser.Node) (v interface{}, err error) {
-	return ParseInstructionWithLinter(node, nil)
+func ParseInstruction(node *parser.Node, opts ParseOpts) (v interface{}, err error) {
+	return ParseInstructionWithLinter(node, nil, opts)
 }
 
 // ParseInstruction converts an AST to a typed instruction (either a command or a build stage beginning when encountering a `FROM` statement)
-func ParseInstructionWithLinter(node *parser.Node, lint *linter.Linter) (v interface{}, err error) {
+func ParseInstructionWithLinter(node *parser.Node, lint *linter.Linter, opts ParseOpts) (v interface{}, err error) {
 	defer func() {
 		if err != nil {
 			err = parser.WithLocation(err, node.Location())
 		}
 	}()
 	req := newParseRequestFromNode(node)
+	req.opts = opts
 	switch strings.ToLower(node.Value) {
 	case command.Env:
 		return parseEnv(req)
@@ -130,8 +137,8 @@ func ParseInstructionWithLinter(node *parser.Node, lint *linter.Linter) (v inter
 }
 
 // ParseCommand converts an AST to a typed Command
-func ParseCommand(node *parser.Node) (Command, error) {
-	s, err := ParseInstruction(node)
+func ParseCommand(node *parser.Node, opts ParseOpts) (Command, error) {
+	s, err := ParseInstruction(node, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -166,9 +173,9 @@ func (e *parseError) Unwrap() error {
 
 // Parse a Dockerfile into a collection of buildable stages.
 // metaArgs is a collection of ARG instructions that occur before the first FROM.
-func Parse(ast *parser.Node, lint *linter.Linter) (stages []Stage, metaArgs []ArgCommand, err error) {
+func Parse(ast *parser.Node, lint *linter.Linter, opts ParseOpts) (stages []Stage, metaArgs []ArgCommand, err error) {
 	for _, n := range ast.Children {
-		cmd, err := ParseInstructionWithLinter(n, lint)
+		cmd, err := ParseInstructionWithLinter(n, lint, opts)
 		if err != nil {
 			return nil, nil, &parseError{inner: err, node: n}
 		}
@@ -489,6 +496,7 @@ func parseShellDependentCommand(req parseRequest, emptyAsNil bool) (ShellDependa
 
 func parseRun(req parseRequest) (*RunCommand, error) {
 	cmd := &RunCommand{}
+	cmd.SetInstructionHook(req.opts.InstructionHook)
 
 	for _, fn := range parseRunPreHooks {
 		if err := fn(cmd, req); err != nil {
