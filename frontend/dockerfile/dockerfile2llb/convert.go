@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -2362,14 +2363,10 @@ func validateNoSecretKey(key string, location []parser.Range, lint *linter.Linte
 		"secret",
 		"token",
 	}
-
-	keyWords := strings.Split(strings.ToLower(key), "_")
-	for _, token := range secretTokens {
-		if token == keyWords[0] || token == keyWords[len(keyWords)-1] {
-			msg := linter.RuleSecretsUsedInArgOrEnv.Format(key)
-			lint.Run(&linter.RuleSecretsUsedInArgOrEnv, location, msg)
-			return
-		}
+	pattern := `(?i)(?:_|^)(?:`+strings.Join(secretTokens, "|")+`)(?:_|$)`
+	if matched, _ := regexp.MatchString(pattern, key); matched {
+		msg := linter.RuleSecretsUsedInArgOrEnv.Format(key)
+		lint.Run(&linter.RuleSecretsUsedInArgOrEnv, location, msg)
 	}
 }
 
