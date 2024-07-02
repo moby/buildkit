@@ -35,7 +35,6 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/entitlements"
-	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/tracing"
@@ -44,8 +43,6 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 const (
@@ -380,12 +377,17 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 		}()
 
 		if err != nil {
-			st, ok := grpcerrors.AsGRPCStatus(grpcerrors.ToGRPC(ctx, err))
-			if !ok {
-				st = status.New(codes.Unknown, err.Error())
+			status, desc, release, err := s.history.ImportError(ctx, err)
+			if err != nil {
+				return err
 			}
-			rec.Error = grpcerrors.ToRPCStatus(st.Proto())
+			rec.ExternalError = desc
+			releasers = append(releasers, release)
+			rec.Error = status
 		}
+
+		ready, done := s.history.AcquireFinalizer(rec.Ref)
+
 		if err1 := s.history.Update(ctx, &controlapi.BuildHistoryEvent{
 			Type:   controlapi.BuildHistoryEventType_COMPLETE,
 			Record: rec,
@@ -397,10 +399,17 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 
 		if stopTrace == nil {
 			bklog.G(ctx).Warn("no trace recorder found, skipping")
+			done()
 			return err
 		}
 		go func() {
-			time.Sleep(3 * time.Second)
+			defer done()
+
+			// if there is no finalizer request then stop tracing after 3 seconds
+			select {
+			case <-time.After(3 * time.Second):
+			case <-ready:
+			}
 			spans := stopTrace()
 
 			if len(spans) == 0 {

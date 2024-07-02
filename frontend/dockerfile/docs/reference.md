@@ -1339,7 +1339,7 @@ The `--checksum` flag lets you verify the checksum of a remote resource:
 ADD --checksum=sha256:24454f830cdb571e2c4ad15481119c43b3cafd48dd869a9b2945d1036d1dc68d https://mirrors.edge.kernel.org/pub/linux/kernel/Historic/linux-0.01.tar.gz /
 ```
 
-The `--checksum` flag only supports HTTP sources currently.
+The `--checksum` flag only supports HTTP(S) sources.
 
 ### ADD --chown --chmod
 

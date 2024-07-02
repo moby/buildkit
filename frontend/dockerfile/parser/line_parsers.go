@@ -282,7 +282,7 @@ func parseJSON(rest string) (*Node, map[string]bool, error) {
 	}
 
 	var myJSON []interface{}
-	if err := json.NewDecoder(strings.NewReader(rest)).Decode(&myJSON); err != nil {
+	if err := json.Unmarshal([]byte(rest), &myJSON); err != nil {
 		return nil, nil, err
 	}
 

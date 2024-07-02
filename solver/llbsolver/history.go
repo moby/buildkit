@@ -16,17 +16,21 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/leases"
 	cerrdefs "github.com/containerd/errdefs"
+	"github.com/gogo/googleapis/google/rpc"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/identity"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
+	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/iohelper"
 	"github.com/moby/buildkit/util/leaseutil"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -48,10 +52,18 @@ type HistoryQueue struct {
 	opt           HistoryQueueOpt
 	ps            *pubsub[*controlapi.BuildHistoryEvent]
 	active        map[string]*controlapi.BuildHistoryRecord
+	finalizers    map[string]*finalizer
 	refs          map[string]int
 	deleted       map[string]struct{}
 	hContentStore *containerdsnapshot.Store
 	hLeaseManager *leaseutil.Manager
+}
+
+// finalizer controls completion of saving traces for a
+// record and making it immutable
+type finalizer struct {
+	trigger func()
+	done    chan struct{}
 }
 
 type StatusImportResult struct {
@@ -73,9 +85,10 @@ func NewHistoryQueue(opt HistoryQueueOpt) (*HistoryQueue, error) {
 		ps: &pubsub[*controlapi.BuildHistoryEvent]{
 			m: map[*channel[*controlapi.BuildHistoryEvent]]struct{}{},
 		},
-		active:  map[string]*controlapi.BuildHistoryRecord{},
-		refs:    map[string]int{},
-		deleted: map[string]struct{}{},
+		active:     map[string]*controlapi.BuildHistoryRecord{},
+		refs:       map[string]int{},
+		deleted:    map[string]struct{}{},
+		finalizers: map[string]*finalizer{},
 	}
 
 	ns := h.opt.ContentStore.Namespace()
@@ -528,6 +541,9 @@ func (h *HistoryQueue) update(ctx context.Context, rec controlapi.BuildHistoryRe
 		if err := h.addResource(ctx, l, rec.Trace, false); err != nil {
 			return err
 		}
+		if err := h.addResource(ctx, l, rec.ExternalError, false); err != nil {
+			return err
+		}
 		if rec.Result != nil {
 			if err := h.addResource(ctx, l, rec.Result.ResultDeprecated, true); err != nil {
 				return err
@@ -561,6 +577,40 @@ func (h *HistoryQueue) update(ctx context.Context, rec controlapi.BuildHistoryRe
 
 		return b.Put([]byte(rec.Ref), dt)
 	})
+}
+
+func (h *HistoryQueue) AcquireFinalizer(ref string) (<-chan struct{}, func()) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	trigger := make(chan struct{})
+	f := &finalizer{
+		trigger: sync.OnceFunc(func() {
+			close(trigger)
+		}),
+		done: make(chan struct{}),
+	}
+	h.finalizers[ref] = f
+	go func() {
+		<-f.done
+		h.mu.Lock()
+		delete(h.finalizers, ref)
+		h.mu.Unlock()
+	}()
+	return trigger, sync.OnceFunc(func() {
+		close(f.done)
+	})
+}
+
+func (h *HistoryQueue) Finalize(ctx context.Context, ref string) error {
+	h.mu.Lock()
+	f, ok := h.finalizers[ref]
+	h.mu.Unlock()
+	if !ok {
+		return nil
+	}
+	f.trigger()
+	<-f.done
+	return nil
 }
 
 func (h *HistoryQueue) Update(ctx context.Context, e *controlapi.BuildHistoryEvent) error {
@@ -658,6 +708,44 @@ func (w *Writer) Commit(ctx context.Context) (*ocispecs.Descriptor, func(), erro
 		func() {
 			w.lm.Delete(context.TODO(), w.l)
 		}, nil
+}
+
+func (h *HistoryQueue) ImportError(ctx context.Context, err error) (*rpc.Status, *controlapi.Descriptor, func(), error) {
+	st, ok := grpcerrors.AsGRPCStatus(grpcerrors.ToGRPC(ctx, err))
+	if !ok {
+		st = status.New(codes.Unknown, err.Error())
+	}
+	rpcStatus := grpcerrors.ToRPCStatus(st.Proto())
+
+	dt, err := rpcStatus.Marshal()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	w, err := h.OpenBlobWriter(ctx, "application/vnd.googeapis.google.rpc.status+proto")
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	defer w.Discard()
+
+	if _, err := w.Write(dt); err != nil {
+		return nil, nil, nil, err
+	}
+
+	desc, release, err := w.Commit(ctx)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// clear details part of the error that are saved to main record
+	rpcStatus.Details = nil
+
+	return rpcStatus, &controlapi.Descriptor{
+		Digest:    desc.Digest,
+		Size_:     desc.Size,
+		MediaType: desc.MediaType,
+	}, release, nil
 }
 
 func (h *HistoryQueue) ImportStatus(ctx context.Context, ch chan *client.SolveStatus) (_ *StatusImportResult, _ func(), err error) {

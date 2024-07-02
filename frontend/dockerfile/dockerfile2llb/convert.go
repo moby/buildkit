@@ -1354,7 +1354,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 			return errors.New("checksum can't be specified for multiple sources")
 		}
 		if !isHTTPSource(cfg.params.SourcePaths[0]) {
-			return errors.New("checksum can't be specified for non-HTTP sources")
+			return errors.New("checksum can't be specified for non-HTTP(S) sources")
 		}
 	}
 
