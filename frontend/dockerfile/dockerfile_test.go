@@ -194,6 +194,7 @@ var allTests = integration.TestFuncs(
 	testSourcePolicyWithNamedContext,
 	testInvalidJSONCommands,
 	testHistoryError,
+	testHistoryFinalizeTrace,
 )
 
 // Tests that depend on the `security.*` entitlements
@@ -7518,6 +7519,66 @@ COPY notexist /foo
 		require.Equal(t, "Dockerfile", src.Info.Filename)
 		require.Equal(t, dockerfile, src.Info.Data)
 		require.NotNil(t, src.Info.Definition)
+	}
+}
+
+func testHistoryFinalizeTrace(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM scratch
+COPY Dockerfile /foo
+`)
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	ref := identity.NewID()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Ref: ref,
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	_, err = c.ControlClient().UpdateBuildHistory(sb.Context(), &controlapi.UpdateBuildHistoryRequest{
+		Ref:      ref,
+		Finalize: true,
+	})
+	require.NoError(t, err)
+
+	cl, err := c.ControlClient().ListenBuildHistory(sb.Context(), &controlapi.BuildHistoryRequest{
+		EarlyExit: true,
+		Ref:       ref,
+	})
+	require.NoError(t, err)
+
+	got := false
+	for {
+		resp, err := cl.Recv()
+		if err == io.EOF {
+			require.Equal(t, true, got)
+			break
+		}
+		require.NoError(t, err)
+		got = true
+
+		trace := resp.Record.Trace
+		require.NotEmpty(t, trace)
+
+		require.NotEmpty(t, trace.Digest)
 	}
 }
 

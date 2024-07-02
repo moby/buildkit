@@ -385,6 +385,9 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 			releasers = append(releasers, release)
 			rec.Error = status
 		}
+
+		ready, done := s.history.AcquireFinalizer(rec.Ref)
+
 		if err1 := s.history.Update(ctx, &controlapi.BuildHistoryEvent{
 			Type:   controlapi.BuildHistoryEventType_COMPLETE,
 			Record: rec,
@@ -396,10 +399,17 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 
 		if stopTrace == nil {
 			bklog.G(ctx).Warn("no trace recorder found, skipping")
+			done()
 			return err
 		}
 		go func() {
-			time.Sleep(3 * time.Second)
+			defer done()
+
+			// if there is no finalizer request then stop tracing after 3 seconds
+			select {
+			case <-time.After(3 * time.Second):
+			case <-ready:
+			}
 			spans := stopTrace()
 
 			if len(spans) == 0 {
