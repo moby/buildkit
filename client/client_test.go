@@ -32,11 +32,11 @@ import (
 	"github.com/containerd/containerd/content/proxy"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/namespaces"
-	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/continuity/fs/fstest"
 	cerrdefs "github.com/containerd/errdefs"
+	"github.com/containerd/platforms"
 	"github.com/distribution/reference"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	controlapi "github.com/moby/buildkit/api/services/control"
@@ -2554,7 +2554,7 @@ func testBuildExportScratch(t *testing.T, sb integration.Sandbox) {
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
 	require.Len(t, imgs.Images, 1)
-	img := imgs.Find(platforms.DefaultString())
+	img := imgs.Find(platforms.Format(platforms.DefaultSpec()))
 	require.Empty(t, img.Layers)
 	require.Equal(t, platforms.DefaultSpec(), img.Img.Platform)
 

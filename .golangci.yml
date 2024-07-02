@@ -52,16 +52,19 @@ linters-settings:
             desc: The containerd errdefs package was migrated to a separate module. Use github.com/containerd/errdefs instead.
           - pkg: "github.com/containerd/containerd/log"
             desc: The containerd log package was migrated to a separate module. Use github.com/containerd/log instead.
+          - pkg: "github.com/containerd/containerd/platforms"
+            desc: The containerd platforms package was migrated to a separate module. Use github.com/containerd/platforms instead.
           - pkg: "io/ioutil"
             desc: The io/ioutil package has been deprecated.
   forbidigo:
     forbid:
+      - '^context\.WithCancel(# use context\.WithCancelCause instead)?$'
+      - '^context\.WithDeadline(# use context\.WithDeadline instead)?$'
+      - '^context\.WithTimeout(# use context\.WithTimeoutCause instead)?$'
+      - '^ctx\.Err(# use context\.Cause instead)?$'
       - '^fmt\.Errorf(# use errors\.Errorf instead)?$'
       - '^logrus\.(Trace|Debug|Info|Warn|Warning|Error|Fatal)(f|ln)?(# use bklog\.G or bklog\.L instead of logrus directly)?$'
-      - '^context\.WithCancel(# use context\.WithCancelCause instead)?$'
-      - '^context\.WithTimeout(# use context\.WithTimeoutCause instead)?$'
-      - '^context\.WithDeadline(# use context\.WithDeadline instead)?$'
-      - '^ctx\.Err(# use context\.Cause instead)?$'
+      - '^platforms\.DefaultString(# use platforms\.Format(platforms\.DefaultSpec()) instead\. Be aware that DefaultSpec is for the local platform, so must be avoided when working cross-platform)?$'
   importas:
     alias:
       # Enforce alias to prevent it accidentally being used instead of our

@@ -17,9 +17,9 @@ import (
 
 	"github.com/containerd/containerd/defaults"
 	"github.com/containerd/containerd/pkg/userns"
-	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/sys"
+	"github.com/containerd/platforms"
 	sddaemon "github.com/coreos/go-systemd/v22/daemon"
 	"github.com/docker/docker/pkg/reexec"
 	"github.com/gofrs/flock"

@@ -1,5 +1,3 @@
-//go:build !windows
-
 /*
    Copyright The containerd Authors.
 
@@ -18,17 +16,15 @@
 
 package platforms
 
-import (
-	specs "github.com/opencontainers/image-spec/specs-go/v1"
+import "errors"
+
+// These errors mirror the errors defined in [github.com/containerd/containerd/errdefs],
+// however, they are not exported as they are not expected to be used as sentinel
+// errors by consumers of this package.
+//
+//nolint:unused // not all errors are used on all platforms.
+var (
+	errNotFound        = errors.New("not found")
+	errInvalidArgument = errors.New("invalid argument")
+	errNotImplemented  = errors.New("not implemented")
 )
-
-// NewMatcher returns the default Matcher for containerd
-func newDefaultMatcher(platform specs.Platform) Matcher {
-	return &matcher{
-		Platform: Normalize(platform),
-	}
-}
-
-func GetWindowsOsVersion() string {
-	return ""
-}
