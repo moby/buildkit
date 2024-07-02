@@ -55,6 +55,11 @@ const (
 	sbomScanStage   = "BUILDKIT_SBOM_SCAN_STAGE"
 )
 
+var (
+	secretsRegexpOnce sync.Once
+	secretsRegexp     *regexp.Regexp
+)
+
 var nonEnvArgs = map[string]struct{}{
 	sbomScanContext: {},
 	sbomScanStage:   {},
@@ -2347,24 +2352,32 @@ func validateBaseImagePlatform(name string, expected, actual ocispecs.Platform, 
 	}
 }
 
-func validateNoSecretKey(key string, location []parser.Range, lint *linter.Linter) {
+func getSecretsRegex() *regexp.Regexp {
 	// Check for either full value or first/last word.
 	// Examples: api_key, DATABASE_PASSWORD, GITHUB_TOKEN, secret_MESSAGE, AUTH
 	// Case insensitive.
-	secretTokens := []string{
-		"apikey",
-		"auth",
-		"credential",
-		"credentials",
-		"key",
-		"password",
-		"pword",
-		"passwd",
-		"secret",
-		"token",
-	}
-	pattern := `(?i)(?:_|^)(?:`+strings.Join(secretTokens, "|")+`)(?:_|$)`
-	if matched, _ := regexp.MatchString(pattern, key); matched {
+	secretsRegexpOnce.Do(func() {
+		secretTokens := []string{
+			"apikey",
+			"auth",
+			"credential",
+			"credentials",
+			"key",
+			"password",
+			"pword",
+			"passwd",
+			"secret",
+			"token",
+		}
+		pattern := `(?i)(?:_|^)(?:` + strings.Join(secretTokens, "|") + `)(?:_|$)`
+		secretsRegexp = regexp.MustCompile(pattern)
+	})
+	return secretsRegexp
+}
+
+func validateNoSecretKey(key string, location []parser.Range, lint *linter.Linter) {
+	pattern := getSecretsRegex()
+	if pattern.MatchString(key) {
 		msg := linter.RuleSecretsUsedInArgOrEnv.Format(key)
 		lint.Run(&linter.RuleSecretsUsedInArgOrEnv, location, msg)
 	}
