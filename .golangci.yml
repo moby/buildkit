@@ -56,12 +56,12 @@ linters-settings:
             desc: The io/ioutil package has been deprecated.
   forbidigo:
     forbid:
+      - '^context\.WithCancel(# use context\.WithCancelCause instead)?$'
+      - '^context\.WithDeadline(# use context\.WithDeadline instead)?$'
+      - '^context\.WithTimeout(# use context\.WithTimeoutCause instead)?$'
+      - '^ctx\.Err(# use context\.Cause instead)?$'
       - '^fmt\.Errorf(# use errors\.Errorf instead)?$'
       - '^logrus\.(Trace|Debug|Info|Warn|Warning|Error|Fatal)(f|ln)?(# use bklog\.G or bklog\.L instead of logrus directly)?$'
-      - '^context\.WithCancel(# use context\.WithCancelCause instead)?$'
-      - '^context\.WithTimeout(# use context\.WithTimeoutCause instead)?$'
-      - '^context\.WithDeadline(# use context\.WithDeadline instead)?$'
-      - '^ctx\.Err(# use context\.Cause instead)?$'
   importas:
     alias:
       # Enforce alias to prevent it accidentally being used instead of our
