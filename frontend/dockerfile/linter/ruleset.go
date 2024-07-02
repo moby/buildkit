@@ -140,4 +140,12 @@ var (
 			return fmt.Sprintf("Do not use ARG or ENV instructions for sensitive data (%s %q)", instruction, secretKey)
 		},
 	}
+	RuleInvalidDefaultArgInFrom = LinterRule[func(string) string]{
+		Name:        "InvalidDefaultArgInFrom",
+		Description: "Default value for global ARG results in an empty or invalid base image name",
+		URL:         "https://docs.docker.com/go/dockerfile/rule/invalid-default-arg-in-from/",
+		Format: func(baseName string) string {
+			return fmt.Sprintf("Default value for ARG %v results in empty or invalid base image name", baseName)
+		},
+	}
 )
