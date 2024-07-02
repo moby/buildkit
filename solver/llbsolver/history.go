@@ -52,10 +52,18 @@ type HistoryQueue struct {
 	opt           HistoryQueueOpt
 	ps            *pubsub[*controlapi.BuildHistoryEvent]
 	active        map[string]*controlapi.BuildHistoryRecord
+	finalizers    map[string]*finalizer
 	refs          map[string]int
 	deleted       map[string]struct{}
 	hContentStore *containerdsnapshot.Store
 	hLeaseManager *leaseutil.Manager
+}
+
+// finalizer controls completion of saving traces for a
+// record and making it immutable
+type finalizer struct {
+	trigger func()
+	done    chan struct{}
 }
 
 type StatusImportResult struct {
@@ -77,9 +85,10 @@ func NewHistoryQueue(opt HistoryQueueOpt) (*HistoryQueue, error) {
 		ps: &pubsub[*controlapi.BuildHistoryEvent]{
 			m: map[*channel[*controlapi.BuildHistoryEvent]]struct{}{},
 		},
-		active:  map[string]*controlapi.BuildHistoryRecord{},
-		refs:    map[string]int{},
-		deleted: map[string]struct{}{},
+		active:     map[string]*controlapi.BuildHistoryRecord{},
+		refs:       map[string]int{},
+		deleted:    map[string]struct{}{},
+		finalizers: map[string]*finalizer{},
 	}
 
 	ns := h.opt.ContentStore.Namespace()
@@ -568,6 +577,40 @@ func (h *HistoryQueue) update(ctx context.Context, rec controlapi.BuildHistoryRe
 
 		return b.Put([]byte(rec.Ref), dt)
 	})
+}
+
+func (h *HistoryQueue) AcquireFinalizer(ref string) (<-chan struct{}, func()) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	trigger := make(chan struct{})
+	f := &finalizer{
+		trigger: sync.OnceFunc(func() {
+			close(trigger)
+		}),
+		done: make(chan struct{}),
+	}
+	h.finalizers[ref] = f
+	go func() {
+		<-f.done
+		h.mu.Lock()
+		delete(h.finalizers, ref)
+		h.mu.Unlock()
+	}()
+	return trigger, sync.OnceFunc(func() {
+		close(f.done)
+	})
+}
+
+func (h *HistoryQueue) Finalize(ctx context.Context, ref string) error {
+	h.mu.Lock()
+	f, ok := h.finalizers[ref]
+	h.mu.Unlock()
+	if !ok {
+		return nil
+	}
+	f.trigger()
+	<-f.done
+	return nil
 }
 
 func (h *HistoryQueue) Update(ctx context.Context, e *controlapi.BuildHistoryEvent) error {

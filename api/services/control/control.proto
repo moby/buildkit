@@ -220,6 +220,7 @@ message UpdateBuildHistoryRequest {
 	string Ref = 1;
 	bool Pinned = 2;
 	bool Delete = 3;
+	bool Finalize = 4;
 }
 
 message UpdateBuildHistoryResponse {}
