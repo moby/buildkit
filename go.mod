@@ -15,7 +15,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.15.15
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.48.1
 	github.com/containerd/console v1.0.4
-	github.com/containerd/containerd v1.7.18
+	github.com/containerd/containerd v1.7.19-0.20240626000957-b600181a9324 // release/1.7 (v1.7.19-dev)
+	github.com/containerd/containerd/api v1.7.19
 	github.com/containerd/continuity v0.4.3
 	github.com/containerd/errdefs v0.1.0
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.8
@@ -23,6 +24,7 @@ require (
 	github.com/containerd/go-runc v1.1.0
 	github.com/containerd/log v0.1.0
 	github.com/containerd/nydus-snapshotter v0.13.7
+	github.com/containerd/platforms v0.2.1
 	github.com/containerd/stargz-snapshotter v0.15.1
 	github.com/containerd/stargz-snapshotter/estargz v0.15.1
 	github.com/containerd/typeurl/v2 v2.1.1
