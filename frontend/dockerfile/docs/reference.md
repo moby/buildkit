@@ -1058,7 +1058,7 @@ the `-p` flag. For example
 $ docker run -p 80:80/tcp -p 80:80/udp ...
 ```
 
-To set up port redirection on the host system, see [using the -P flag](https://docs.docker.com/engine/reference/run/#expose-incoming-ports).
+To set up port redirection on the host system, see [using the -P flag](https://docs.docker.com/reference/cli/docker/container/run/#publish).
 The `docker network` command supports creating networks for communication among
 containers without the need to expose or publish specific ports, because the
 containers connected to the network can communicate with each other over any
@@ -1100,8 +1100,8 @@ from the resulting image. You can view the values using `docker inspect`, and
 change them using `docker run --env <key>=<value>`.
 
 A stage inherits any environment variables that were set using `ENV` by its
-parent stage or any ancestor. Refer [here](https://docs.docker.com/build/building/multi-stage/)
-for more on multi-staged builds.
+parent stage or any ancestor. Refer to the [multi-stage builds section](https://docs.docker.com/build/building/multi-stage/)
+in the manual for more information.
 
 Environment variable persistence can cause unexpected side effects. For example,
 setting `ENV DEBIAN_FRONTEND=noninteractive` changes the behavior of `apt-get`,
