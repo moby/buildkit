@@ -516,7 +516,7 @@ int __wrap_pthread_create(pthread_t *thread, const pthread_attr_t *attr,
     pthread_sigmask(SIG_BLOCK, &sigbit, NULL);
 
     int ret = __real_pthread_create(thread, attr, _psx_start_fn, starter);
-    if (ret == -1) {
+    if (ret > 0) {
 	psx_new_state(_PSX_CREATE, _PSX_IDLE);
 	memset(starter, 0, sizeof(*starter));
 	free(starter);
