@@ -134,7 +134,7 @@ var (
 	}
 	RuleSecretsUsedInArgOrEnv = LinterRule[func(string) string]{
 		Name:        "SecretsUsedInArgOrEnv",
-		Description: "Potentially sensitive data should not be used in the ARG or ENV commands",
+		Description: "Sensitive data should not be used in the ARG or ENV commands",
 		URL:         "https://docs.docker.com/go/dockerfile/rule/secrets-used-in-arg-or-env/",
 		Format: func(secretKey string) string {
 			return fmt.Sprintf("Secrets should not be used in the ARG or ENV commands (key named %q)", secretKey)
