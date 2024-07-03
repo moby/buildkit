@@ -42,6 +42,7 @@ var lintTests = integration.TestFuncs(
 	testAllTargetUnmarshal,
 	testRedundantTargetPlatform,
 	testSecretsUsedInArgOrEnv,
+	testInvalidDefaultArgInFrom,
 )
 
 func testSecretsUsedInArgOrEnv(t *testing.T, sb integration.Sandbox) {
@@ -643,9 +644,9 @@ LABEL org.opencontainers.image.authors="me@example.org"
 
 func testWarningsBeforeError(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
-# warning: stage name should be lowercase
 FROM scratch AS BadStageName
-FROM ${BAR} AS base
+MAINTAINER me@example.org
+BADCMD
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile: dockerfile,
@@ -655,20 +656,20 @@ FROM ${BAR} AS base
 				Description: "Stage names should be lowercase",
 				URL:         "https://docs.docker.com/go/dockerfile/rule/stage-name-casing/",
 				Detail:      "Stage name 'BadStageName' should be lowercase",
-				Line:        3,
+				Line:        2,
 				Level:       1,
 			},
 			{
-				RuleName:    "UndefinedArgInFrom",
-				Description: "FROM command must use declared ARGs",
-				URL:         "https://docs.docker.com/go/dockerfile/rule/undefined-arg-in-from/",
-				Detail:      "FROM argument 'BAR' is not declared",
+				RuleName:    "MaintainerDeprecated",
+				Description: "The MAINTAINER instruction is deprecated, use a label instead to define an image author",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/maintainer-deprecated/",
+				Detail:      "Maintainer instruction is deprecated in favor of using label",
 				Level:       1,
-				Line:        4,
+				Line:        3,
 			},
 		},
-		StreamBuildErr:    "failed to solve: base name (${BAR}) should not be blank",
-		UnmarshalBuildErr: "base name (${BAR}) should not be blank",
+		StreamBuildErr:    "failed to solve: dockerfile parse error on line 4: unknown instruction: BADCMD",
+		UnmarshalBuildErr: "dockerfile parse error on line 4: unknown instruction: BADCMD",
 		BuildErrLocation:  4,
 	})
 }
@@ -1038,6 +1039,104 @@ FROM --platform=${TARGETPLATFORM} scratch
 				Line:        2,
 				Level:       1,
 			},
+		},
+	})
+}
+
+func testInvalidDefaultArgInFrom(t *testing.T, sb integration.Sandbox) {
+	dockerfile := []byte(`
+ARG VERSION
+FROM busybox:$VERSION
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		FrontendAttrs: map[string]string{
+			"build-arg:VERSION": "latest",
+		},
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "InvalidDefaultArgInFrom",
+				Description: "Default value for global ARG results in an empty or invalid base image name",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/invalid-default-arg-in-from/",
+				Detail:      "Default value for ARG busybox:$VERSION results in empty or invalid base image name",
+				Line:        3,
+				Level:       1,
+			},
+		},
+	})
+
+	dockerfile = []byte(`
+ARG IMAGE
+FROM $IMAGE
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		FrontendAttrs: map[string]string{
+			"build-arg:IMAGE": "busybox:latest",
+		},
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "InvalidDefaultArgInFrom",
+				Description: "Default value for global ARG results in an empty or invalid base image name",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/invalid-default-arg-in-from/",
+				Detail:      "Default value for ARG $IMAGE results in empty or invalid base image name",
+				Line:        3,
+				Level:       1,
+			},
+		},
+	})
+
+	dockerfile = []byte(`
+ARG SFX="box:"
+FROM busy${SFX}
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		FrontendAttrs: map[string]string{
+			"build-arg:SFX": "box:latest",
+		},
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "InvalidDefaultArgInFrom",
+				Description: "Default value for global ARG results in an empty or invalid base image name",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/invalid-default-arg-in-from/",
+				Detail:      "Default value for ARG busy${SFX} results in empty or invalid base image name",
+				Line:        3,
+				Level:       1,
+			},
+		},
+	})
+
+	dockerfile = []byte(`
+ARG VERSION="latest"
+FROM busybox:${VERSION}
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		FrontendAttrs: map[string]string{
+			"build-arg:VERSION": "latest",
+		},
+	})
+
+	dockerfile = []byte(`
+ARG BUSYBOX_VARIANT=""
+FROM busybox:stable${BUSYBOX_VARIANT}
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		FrontendAttrs: map[string]string{
+			"build-arg:BUSYBOX_VARIANT": "-musl",
+		},
+	})
+
+	dockerfile = []byte(`
+ARG BUSYBOX_VARIANT
+FROM busybox:stable${BUSYBOX_VARIANT}
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		FrontendAttrs: map[string]string{
+			"build-arg:BUSYBOX_VARIANT": "-musl",
 		},
 	})
 }

@@ -88,5 +88,9 @@ $ docker build --check .
       <td><a href="./secrets-used-in-arg-or-env/">SecretsUsedInArgOrEnv</a></td>
       <td>Sensitive data should not be used in the ARG or ENV commands</td>
     </tr>
+    <tr>
+      <td><a href="./invalid-default-arg-in-from/">InvalidDefaultArgInFrom</a></td>
+      <td>Default value for global ARG results in an empty or invalid base image name</td>
+    </tr>
   </tbody>
 </table>
