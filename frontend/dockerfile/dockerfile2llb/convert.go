@@ -1128,7 +1128,7 @@ func dispatchEnv(d *dispatchState, c *instructions.EnvCommand, lint *linter.Lint
 			msg := linter.RuleLegacyKeyValueFormat.Format(c.Name())
 			lint.Run(&linter.RuleLegacyKeyValueFormat, c.Location(), msg)
 		}
-		validateNoSecretKey(e.Key, c.Location(), lint)
+		validateNoSecretKey("ENV", e.Key, c.Location(), lint)
 		commitMessage.WriteString(" " + e.String())
 		d.state = d.state.AddEnv(e.Key, e.Value)
 		d.image.Config.Env = addEnv(d.image.Config.Env, e.Key, e.Value)
@@ -1707,7 +1707,7 @@ func dispatchShell(d *dispatchState, c *instructions.ShellCommand) error {
 func dispatchArg(d *dispatchState, c *instructions.ArgCommand, opt *dispatchOpt) error {
 	commitStrs := make([]string, 0, len(c.Args))
 	for _, arg := range c.Args {
-		validateNoSecretKey(arg.Key, c.Location(), opt.lint)
+		validateNoSecretKey("ARG", arg.Key, c.Location(), opt.lint)
 		_, hasValue := opt.buildArgValues[arg.Key]
 		hasDefault := arg.Value != nil
 
@@ -2375,10 +2375,10 @@ func getSecretsRegex() *regexp.Regexp {
 	return secretsRegexp
 }
 
-func validateNoSecretKey(key string, location []parser.Range, lint *linter.Linter) {
+func validateNoSecretKey(instruction, key string, location []parser.Range, lint *linter.Linter) {
 	pattern := getSecretsRegex()
 	if pattern.MatchString(key) {
-		msg := linter.RuleSecretsUsedInArgOrEnv.Format(key)
+		msg := linter.RuleSecretsUsedInArgOrEnv.Format(instruction, key)
 		lint.Run(&linter.RuleSecretsUsedInArgOrEnv, location, msg)
 	}
 }
