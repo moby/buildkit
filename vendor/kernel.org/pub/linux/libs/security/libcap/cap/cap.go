@@ -17,7 +17,8 @@
 //
 //   // Read and display the capabilities of the running process
 //   c := cap.GetProc()
-//   log.Printf("this process has these caps:", c)
+//   iab := cap.IABGetProc()
+//   log.Printf("this process has these caps: %q [%v]", c, iab)
 //
 //   // Drop any privilege a process might have (including for root,
 //   // but note root 'owns' a lot of system files so a cap-limited
