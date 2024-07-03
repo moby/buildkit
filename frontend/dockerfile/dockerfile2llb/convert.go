@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -52,6 +53,11 @@ const (
 
 	sbomScanContext = "BUILDKIT_SBOM_SCAN_CONTEXT"
 	sbomScanStage   = "BUILDKIT_SBOM_SCAN_STAGE"
+)
+
+var (
+	secretsRegexpOnce sync.Once
+	secretsRegexp     *regexp.Regexp
 )
 
 var nonEnvArgs = map[string]struct{}{
@@ -1122,6 +1128,7 @@ func dispatchEnv(d *dispatchState, c *instructions.EnvCommand, lint *linter.Lint
 			msg := linter.RuleLegacyKeyValueFormat.Format(c.Name())
 			lint.Run(&linter.RuleLegacyKeyValueFormat, c.Location(), msg)
 		}
+		validateNoSecretKey("ENV", e.Key, c.Location(), lint)
 		commitMessage.WriteString(" " + e.String())
 		d.state = d.state.AddEnv(e.Key, e.Value)
 		d.image.Config.Env = addEnv(d.image.Config.Env, e.Key, e.Value)
@@ -1700,6 +1707,7 @@ func dispatchShell(d *dispatchState, c *instructions.ShellCommand) error {
 func dispatchArg(d *dispatchState, c *instructions.ArgCommand, opt *dispatchOpt) error {
 	commitStrs := make([]string, 0, len(c.Args))
 	for _, arg := range c.Args {
+		validateNoSecretKey("ARG", arg.Key, c.Location(), opt.lint)
 		_, hasValue := opt.buildArgValues[arg.Key]
 		hasDefault := arg.Value != nil
 
@@ -2341,6 +2349,37 @@ func validateBaseImagePlatform(name string, expected, actual ocispecs.Platform, 
 		actualStr := platforms.Format(platforms.Normalize(actual))
 		msg := linter.RuleInvalidBaseImagePlatform.Format(name, expectedStr, actualStr)
 		lint.Run(&linter.RuleInvalidBaseImagePlatform, location, msg)
+	}
+}
+
+func getSecretsRegex() *regexp.Regexp {
+	// Check for either full value or first/last word.
+	// Examples: api_key, DATABASE_PASSWORD, GITHUB_TOKEN, secret_MESSAGE, AUTH
+	// Case insensitive.
+	secretsRegexpOnce.Do(func() {
+		secretTokens := []string{
+			"apikey",
+			"auth",
+			"credential",
+			"credentials",
+			"key",
+			"password",
+			"pword",
+			"passwd",
+			"secret",
+			"token",
+		}
+		pattern := `(?i)(?:_|^)(?:` + strings.Join(secretTokens, "|") + `)(?:_|$)`
+		secretsRegexp = regexp.MustCompile(pattern)
+	})
+	return secretsRegexp
+}
+
+func validateNoSecretKey(instruction, key string, location []parser.Range, lint *linter.Linter) {
+	pattern := getSecretsRegex()
+	if pattern.MatchString(key) {
+		msg := linter.RuleSecretsUsedInArgOrEnv.Format(instruction, key)
+		lint.Run(&linter.RuleSecretsUsedInArgOrEnv, location, msg)
 	}
 }
 

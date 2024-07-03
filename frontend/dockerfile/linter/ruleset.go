@@ -132,4 +132,12 @@ var (
 			return fmt.Sprintf("Setting platform to predefined %s in FROM is redundant as this is the default behavior", platformVar)
 		},
 	}
+	RuleSecretsUsedInArgOrEnv = LinterRule[func(string, string) string]{
+		Name:        "SecretsUsedInArgOrEnv",
+		Description: "Sensitive data should not be used in the ARG or ENV commands",
+		URL:         "https://docs.docker.com/go/dockerfile/rule/secrets-used-in-arg-or-env/",
+		Format: func(instruction, secretKey string) string {
+			return fmt.Sprintf("Do not use ARG or ENV instructions for sensitive data (%s %q)", instruction, secretKey)
+		},
+	}
 )
