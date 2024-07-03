@@ -86,7 +86,7 @@ $ docker build --check .
     </tr>
     <tr>
       <td><a href="./secrets-used-in-arg-or-env/">SecretsUsedInArgOrEnv</a></td>
-      <td>Potentially sensitive data should not be used in the ARG or ENV commands</td>
+      <td>Sensitive data should not be used in the ARG or ENV commands</td>
     </tr>
   </tbody>
 </table>
