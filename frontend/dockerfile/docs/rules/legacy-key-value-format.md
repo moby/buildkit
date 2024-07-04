@@ -36,3 +36,21 @@ FROM alpine
 ARG foo=bar
 ```
 
+❌ Bad: multi-line variable declaration with a space separator.
+
+```dockerfile
+ENV DEPS \
+    curl \
+    git \
+    make
+```
+
+✅ Good: use an equals sign and wrap the value in quotes.
+
+```dockerfile
+ENV DEPS="\
+    curl \
+    git \
+    make"
+```
+
