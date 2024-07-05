@@ -18,6 +18,7 @@ on:
       - 'docs/attestations/slsa-definitions.md'
       - 'docs/attestations/attestation-storage.md'
       - 'frontend/dockerfile/docs/reference.md'
+      - 'frontend/dockerfile/docs/rules/**'
   pull_request:
     paths:
       - '.github/workflows/docs-upstream.yml'
@@ -25,6 +26,7 @@ on:
       - 'docs/attestations/slsa-definitions.md'
       - 'docs/attestations/attestation-storage.md'
       - 'frontend/dockerfile/docs/reference.md'
+      - 'frontend/dockerfile/docs/rules/**'
 
 jobs:
   validate:
