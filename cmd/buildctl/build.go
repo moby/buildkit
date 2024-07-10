@@ -16,6 +16,7 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/cmd/buildctl/build"
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
+	"github.com/moby/buildkit/frontend"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
@@ -363,6 +364,15 @@ func buildAction(clicontext *cli.Context) error {
 			Frontend:    solveOpt.Frontend,
 			FrontendOpt: solveOpt.FrontendAttrs,
 		}
+
+		sreq.CacheImports = make([]frontend.CacheOptionsEntry, len(solveOpt.CacheImports))
+		for i, e := range solveOpt.CacheImports {
+			sreq.CacheImports[i] = frontend.CacheOptionsEntry{
+				Type:  e.Type,
+				Attrs: e.Attrs,
+			}
+		}
+
 		if def != nil {
 			sreq.Definition = def.ToPB()
 		}
