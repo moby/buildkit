@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -161,10 +162,7 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 		o(&tc)
 	}
 
-	mirror, cleanup, err := runMirror(t, tc.mirroredImages)
-	require.NoError(t, err)
-
-	t.Cleanup(func() { _ = cleanup() })
+	getMirror := lazyMirrorRunnerFunc(t, tc.mirroredImages)
 
 	matrix := prepareValueMatrix(tc)
 
@@ -200,7 +198,7 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 						ctx, cancel := context.WithCancelCause(ctx)
 						defer cancel(errors.WithStack(context.Canceled))
 
-						sb, closer, err := newSandbox(ctx, br, mirror, mv)
+						sb, closer, err := newSandbox(ctx, br, getMirror(), mv)
 						require.NoError(t, err)
 						t.Cleanup(func() { _ = closer() })
 						defer func() {
@@ -238,6 +236,11 @@ func copyImagesLocal(t *testing.T, host string, images map[string]string) error 
 		}
 		localImageCache[host][to] = struct{}{}
 
+		// already exists check
+		if _, _, err := docker.NewResolver(docker.ResolverOptions{}).Resolve(context.TODO(), host+"/"+to); err == nil {
+			continue
+		}
+
 		var desc ocispecs.Descriptor
 		var provider content.Provider
 		var err error
@@ -255,12 +258,6 @@ func copyImagesLocal(t *testing.T, host string, images map[string]string) error 
 			if err != nil {
 				return err
 			}
-		}
-
-		// already exists check
-		_, _, err = docker.NewResolver(docker.ResolverOptions{}).Resolve(context.TODO(), host+"/"+to)
-		if err == nil {
-			continue
 		}
 
 		ingester, err := contentutil.IngesterFromRef(host + "/" + to)
@@ -327,6 +324,20 @@ func WriteConfig(updaters []ConfigUpdater) (string, error) {
 		return "", err
 	}
 	return filepath.Join(tmpdir, buildkitdConfigFile), nil
+}
+
+func lazyMirrorRunnerFunc(t *testing.T, images map[string]string) func() string {
+	var once sync.Once
+	var mirror string
+	return func() string {
+		once.Do(func() {
+			host, cleanup, err := runMirror(t, images)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = cleanup() })
+			mirror = host
+		})
+		return mirror
+	}
 }
 
 func runMirror(t *testing.T, mirroredImages map[string]string) (host string, _ func() error, err error) {
