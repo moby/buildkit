@@ -148,4 +148,12 @@ var (
 			return fmt.Sprintf("Default value for ARG %v results in empty or invalid base image name", baseName)
 		},
 	}
+	RuleFromPlatformFlagConstDisallowed = LinterRule[func(string) string]{
+		Name:        "FromPlatformFlagConstDisallowed",
+		Description: "FROM --platform flag should not use a constant value",
+		URL:         "https://docs.docker.com/go/dockerfile/rule/from-platform-flag-const-disallowed/",
+		Format: func(platform string) string {
+			return fmt.Sprintf("FROM --platform flag should not use constant value %q", platform)
+		},
+	}
 )

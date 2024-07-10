@@ -315,6 +315,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			platMatch, err := shlex.ProcessWordWithMatches(v, platEnv)
 			reportUnusedFromArgs(metaArgsKeys(optMetaArgs), platMatch.Unmatched, st.Location, lint)
 			reportRedundantTargetPlatform(st.Platform, platMatch, st.Location, platEnv, lint)
+			reportConstPlatformDisallowed(st.Name, platMatch, st.Location, lint)
 
 			if err != nil {
 				return nil, parser.WithLocation(errors.Wrapf(err, "failed to process arguments for platform %s", platMatch.Result), st.Location)
@@ -2298,6 +2299,31 @@ func reportRedundantTargetPlatform(platformVar string, nameMatch shell.ProcessWo
 			lint.Run(&linter.RuleRedundantTargetPlatform, location, msg)
 		}
 	}
+}
+
+func reportConstPlatformDisallowed(stageName string, nameMatch shell.ProcessWordResult, location []parser.Range, lint *linter.Linter) {
+	if len(nameMatch.Matched) > 0 || len(nameMatch.Unmatched) > 0 {
+		// Some substitution happened so the platform was not a constant.
+		// Disable checking for this warning.
+		return
+	}
+
+	// Attempt to parse the platform result. If this fails, then it will fail
+	// later so just ignore.
+	p, err := platforms.Parse(nameMatch.Result)
+	if err != nil {
+		return
+	}
+
+	// Check if the platform os or architecture is used in the stage name
+	// at all. If it is, then disable this warning.
+	if strings.Contains(stageName, p.OS) || strings.Contains(stageName, p.Architecture) {
+		return
+	}
+
+	// Report the linter warning.
+	msg := linter.RuleFromPlatformFlagConstDisallowed.Format(nameMatch.Result)
+	lint.Run(&linter.RuleFromPlatformFlagConstDisallowed, location, msg)
 }
 
 type instructionTracker struct {
