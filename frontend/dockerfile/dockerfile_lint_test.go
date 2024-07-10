@@ -43,6 +43,7 @@ var lintTests = integration.TestFuncs(
 	testRedundantTargetPlatform,
 	testSecretsUsedInArgOrEnv,
 	testInvalidDefaultArgInFrom,
+	testFromPlatformFlagConstDisallowed,
 )
 
 func testSecretsUsedInArgOrEnv(t *testing.T, sb integration.Sandbox) {
@@ -1138,6 +1139,39 @@ FROM busybox:stable${BUSYBOX_VARIANT}
 		FrontendAttrs: map[string]string{
 			"build-arg:BUSYBOX_VARIANT": "-musl",
 		},
+	})
+}
+
+func testFromPlatformFlagConstDisallowed(t *testing.T, sb integration.Sandbox) {
+	dockerfile := []byte(`
+FROM --platform=linux/amd64 scratch
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "FromPlatformFlagConstDisallowed",
+				Description: "FROM --platform flag should not use a constant value",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/from-platform-flag-const-disallowed/",
+				Detail:      "FROM --platform flag should not use constant value \"linux/amd64\"",
+				Line:        2,
+				Level:       1,
+			},
+		},
+	})
+
+	dockerfile = []byte(`
+FROM --platform=linux/amd64 scratch AS my_amd64_stage
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+	})
+
+	dockerfile = []byte(`
+FROM --platform=linux/amd64 scratch AS linux
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
 	})
 }
 

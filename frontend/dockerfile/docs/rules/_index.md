@@ -92,5 +92,9 @@ $ docker build --check .
       <td><a href="./invalid-default-arg-in-from/">InvalidDefaultArgInFrom</a></td>
       <td>Default value for global ARG results in an empty or invalid base image name</td>
     </tr>
+    <tr>
+      <td><a href="./from-platform-flag-const-disallowed/">FromPlatformFlagConstDisallowed</a></td>
+      <td>FROM --platform flag should not use a constant value</td>
+    </tr>
   </tbody>
 </table>
