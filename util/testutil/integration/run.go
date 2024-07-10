@@ -236,6 +236,11 @@ func copyImagesLocal(t *testing.T, host string, images map[string]string) error 
 		}
 		localImageCache[host][to] = struct{}{}
 
+		// already exists check
+		if _, _, err := docker.NewResolver(docker.ResolverOptions{}).Resolve(context.TODO(), host+"/"+to); err == nil {
+			continue
+		}
+
 		var desc ocispecs.Descriptor
 		var provider content.Provider
 		var err error
@@ -253,12 +258,6 @@ func copyImagesLocal(t *testing.T, host string, images map[string]string) error 
 			if err != nil {
 				return err
 			}
-		}
-
-		// already exists check
-		_, _, err = docker.NewResolver(docker.ResolverOptions{}).Resolve(context.TODO(), host+"/"+to)
-		if err == nil {
-			continue
 		}
 
 		ingester, err := contentutil.IngesterFromRef(host + "/" + to)
