@@ -96,5 +96,9 @@ $ docker build --check .
       <td><a href="./from-platform-flag-const-disallowed/">FromPlatformFlagConstDisallowed</a></td>
       <td>FROM --platform flag should not use a constant value</td>
     </tr>
+    <tr>
+      <td><a href="./copy-ignored-file/">CopyIgnoredFile</a></td>
+      <td>Attempting to Copy file that is excluded by .dockerignore</td>
+    </tr>
   </tbody>
 </table>

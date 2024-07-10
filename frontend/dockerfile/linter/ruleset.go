@@ -156,4 +156,12 @@ var (
 			return fmt.Sprintf("FROM --platform flag should not use constant value %q", platform)
 		},
 	}
+	RuleCopyIgnoredFile = LinterRule[func(string, string) string]{
+		Name:        "CopyIgnoredFile",
+		Description: "Attempting to Copy file that is excluded by .dockerignore",
+		URL:         "https://docs.docker.com/go/dockerfile/rule/copy-ignored-file/",
+		Format: func(cmd, file string) string {
+			return fmt.Sprintf("Attempting to %s file %q that is excluded by .dockerignore", cmd, file)
+		},
+	}
 )
