@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -161,10 +162,7 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 		o(&tc)
 	}
 
-	mirror, cleanup, err := runMirror(t, tc.mirroredImages)
-	require.NoError(t, err)
-
-	t.Cleanup(func() { _ = cleanup() })
+	getMirror := lazyMirrorRunnerFunc(t, tc.mirroredImages)
 
 	matrix := prepareValueMatrix(tc)
 
@@ -200,7 +198,7 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 						ctx, cancel := context.WithCancelCause(ctx)
 						defer cancel(errors.WithStack(context.Canceled))
 
-						sb, closer, err := newSandbox(ctx, br, mirror, mv)
+						sb, closer, err := newSandbox(ctx, br, getMirror(), mv)
 						require.NoError(t, err)
 						t.Cleanup(func() { _ = closer() })
 						defer func() {
@@ -327,6 +325,20 @@ func WriteConfig(updaters []ConfigUpdater) (string, error) {
 		return "", err
 	}
 	return filepath.Join(tmpdir, buildkitdConfigFile), nil
+}
+
+func lazyMirrorRunnerFunc(t *testing.T, images map[string]string) func() string {
+	var once sync.Once
+	var mirror string
+	return func() string {
+		once.Do(func() {
+			host, cleanup, err := runMirror(t, images)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = cleanup() })
+			mirror = host
+		})
+		return mirror
+	}
 }
 
 func runMirror(t *testing.T, mirroredImages map[string]string) (host string, _ func() error, err error) {
