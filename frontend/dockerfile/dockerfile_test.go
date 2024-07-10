@@ -7485,6 +7485,8 @@ COPY notexist /foo
 	}, nil)
 	require.Error(t, err)
 
+	expectedError := err
+
 	cl, err := c.ControlClient().ListenBuildHistory(sb.Context(), &controlapi.BuildHistoryRequest{
 		EarlyExit: true,
 		Ref:       ref,
@@ -7495,7 +7497,7 @@ COPY notexist /foo
 	for {
 		resp, err := cl.Recv()
 		if err == io.EOF {
-			require.Equal(t, true, got)
+			require.Equal(t, true, got, "expected error was %+v", expectedError)
 			break
 		}
 		require.NoError(t, err)
