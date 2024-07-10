@@ -3466,9 +3466,13 @@ COPY --chmod=0644 foo /
 COPY --chmod=777 bar /baz
 COPY --chmod=0 foo /foobis
 
+ARG mode
+COPY --chmod=${mode} foo /footer
+
 RUN stat -c "%04a" /foo  > /out/fooperm
 RUN stat -c "%04a" /baz  > /out/barperm
 RUN stat -c "%04a" /foobis  > /out/foobisperm
+RUN stat -c "%04a" /footer  > /out/footerperm
 FROM scratch
 COPY --from=base /out /
 `)
@@ -3493,6 +3497,9 @@ COPY --from=base /out /
 				OutputDir: destDir,
 			},
 		},
+		FrontendAttrs: map[string]string{
+			"build-arg:mode": "755",
+		},
 		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
@@ -3512,6 +3519,10 @@ COPY --from=base /out /
 	dt, err = os.ReadFile(filepath.Join(destDir, "foobisperm"))
 	require.NoError(t, err)
 	require.Equal(t, "0000\n", string(dt))
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "footerperm"))
+	require.NoError(t, err)
+	require.Equal(t, "0755\n", string(dt))
 }
 
 func testCopyOverrideFiles(t *testing.T, sb integration.Sandbox) {
@@ -3763,9 +3774,14 @@ FROM busybox AS build
 ADD --chmod=644 %[1]s /tmp/foo1
 ADD --chmod=755 %[1]s /tmp/foo2
 ADD --chmod=0413 %[1]s /tmp/foo3
+
+ARG mode
+ADD --chmod=${mode} %[1]s /tmp/foo4
+
 RUN stat -c "%%04a" /tmp/foo1 >> /dest && \
 	stat -c "%%04a" /tmp/foo2 >> /dest && \
-	stat -c "%%04a" /tmp/foo3 >> /dest
+	stat -c "%%04a" /tmp/foo3 >> /dest && \
+	stat -c "%%04a" /tmp/foo4 >> /dest
 
 FROM scratch
 COPY --from=build /dest /dest
@@ -3789,6 +3805,9 @@ COPY --from=build /dest /dest
 				OutputDir: destDir,
 			},
 		},
+		FrontendAttrs: map[string]string{
+			"build-arg:mode": "400",
+		},
 		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
@@ -3798,7 +3817,7 @@ COPY --from=build /dest /dest
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "dest"))
 	require.NoError(t, err)
-	require.Equal(t, []byte("0644\n0755\n0413\n"), dt)
+	require.Equal(t, []byte("0644\n0755\n0413\n0400\n"), dt)
 }
 
 func testDockerfileFromGit(t *testing.T, sb integration.Sandbox) {
