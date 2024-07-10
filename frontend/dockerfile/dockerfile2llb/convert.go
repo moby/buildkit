@@ -258,6 +258,9 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	if err != nil {
 		return nil, err
 	}
+	if len(stages) == 0 {
+		return nil, errors.New("dockerfile contains no stages to build")
+	}
 	validateStageNames(stages, lint)
 
 	shlex := shell.NewLex(dockerfile.EscapeToken)
