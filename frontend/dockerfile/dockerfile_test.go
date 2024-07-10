@@ -161,11 +161,13 @@ var allTests = integration.TestFuncs(
 	testCopySymlinks,
 	testCopyChown,
 	testCopyChmod,
+	testCopyInvalidChmod,
 	testCopyOverrideFiles,
 	testCopyVarSubstitution,
 	testCopyWildcards,
 	testCopyRelative,
 	testAddURLChmod,
+	testAddInvalidChmod,
 	testTarContext,
 	testTarContextExternalDockerfile,
 	testWorkdirUser,
@@ -3516,6 +3518,57 @@ COPY --from=base /out /
 	require.Equal(t, "0000\n", string(dt))
 }
 
+func testCopyInvalidChmod(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM scratch
+COPY --chmod=64a foo /
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte(`foo-contents`), 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.ErrorContains(t, err, "invalid chmod parameter: '64a'. it should be octal string and between 0 and 07777")
+
+	dockerfile = []byte(`
+FROM scratch
+COPY --chmod=10000 foo /
+`)
+
+	dir = integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte(`foo-contents`), 0600),
+	)
+
+	c, err = client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.ErrorContains(t, err, "invalid chmod parameter: '10000'. it should be octal string and between 0 and 07777")
+}
+
 func testCopyOverrideFiles(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
@@ -3801,6 +3854,57 @@ COPY --from=build /dest /dest
 	dt, err := os.ReadFile(filepath.Join(destDir, "dest"))
 	require.NoError(t, err)
 	require.Equal(t, []byte("0644\n0755\n0413\n"), dt)
+}
+
+func testAddInvalidChmod(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM scratch
+ADD --chmod=64a foo /
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte(`foo-contents`), 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.ErrorContains(t, err, "invalid chmod parameter: '64a'. it should be octal string and between 0 and 07777")
+
+	dockerfile = []byte(`
+FROM scratch
+ADD --chmod=10000 foo /
+`)
+
+	dir = integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte(`foo-contents`), 0600),
+	)
+
+	c, err = client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.ErrorContains(t, err, "invalid chmod parameter: '10000'. it should be octal string and between 0 and 07777")
 }
 
 func testDockerfileFromGit(t *testing.T, sb integration.Sandbox) {
