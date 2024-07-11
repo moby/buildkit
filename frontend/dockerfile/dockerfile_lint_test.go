@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"regexp"
 	"sort"
 	"testing"
 	"time"
@@ -43,7 +44,70 @@ var lintTests = integration.TestFuncs(
 	testRedundantTargetPlatform,
 	testSecretsUsedInArgOrEnv,
 	testInvalidDefaultArgInFrom,
+	testFromPlatformFlagConstDisallowed,
+	testCopyIgnoredFiles,
 )
+
+func testCopyIgnoredFiles(t *testing.T, sb integration.Sandbox) {
+	dockerignore := []byte(`
+Dockerfile
+`)
+	dockerfile := []byte(`
+FROM scratch
+COPY Dockerfile .
+ADD Dockerfile /windy
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile:           dockerfile,
+		DockerIgnore:         dockerignore,
+		BuildErrLocation:     3,
+		StreamBuildErrRegexp: regexp.MustCompile(`failed to solve: failed to compute cache key: failed to calculate checksum of ref [^\s]+ "/Dockerfile": not found`),
+	})
+
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile:   dockerfile,
+		DockerIgnore: dockerignore,
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_DOCKERFILE_CHECK_COPYIGNORED_EXPERIMENT": "true",
+		},
+		BuildErrLocation:     3,
+		StreamBuildErrRegexp: regexp.MustCompile(`failed to solve: failed to compute cache key: failed to calculate checksum of ref [^\s]+ "/Dockerfile": not found`),
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "CopyIgnoredFile",
+				Description: "Attempting to Copy file that is excluded by .dockerignore",
+				Detail:      `Attempting to Copy file "Dockerfile" that is excluded by .dockerignore`,
+				URL:         "https://docs.docker.com/go/dockerfile/rule/copy-ignored-file/",
+				Level:       1,
+				Line:        3,
+			},
+			{
+				RuleName:    "CopyIgnoredFile",
+				Description: "Attempting to Copy file that is excluded by .dockerignore",
+				Detail:      `Attempting to Add file "Dockerfile" that is excluded by .dockerignore`,
+				URL:         "https://docs.docker.com/go/dockerfile/rule/copy-ignored-file/",
+				Level:       1,
+				Line:        4,
+			},
+		},
+	})
+
+	dockerignore = []byte(`
+foobar
+`)
+	dockerfile = []byte(`
+FROM scratch AS base
+COPY Dockerfile /foobar
+ADD Dockerfile /windy
+
+FROM base
+COPY --from=base /foobar /Dockerfile
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile:   dockerfile,
+		DockerIgnore: dockerignore,
+	})
+}
 
 func testSecretsUsedInArgOrEnv(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
@@ -1141,6 +1205,39 @@ FROM busybox:stable${BUSYBOX_VARIANT}
 	})
 }
 
+func testFromPlatformFlagConstDisallowed(t *testing.T, sb integration.Sandbox) {
+	dockerfile := []byte(`
+FROM --platform=linux/amd64 scratch
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "FromPlatformFlagConstDisallowed",
+				Description: "FROM --platform flag should not use a constant value",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/from-platform-flag-const-disallowed/",
+				Detail:      "FROM --platform flag should not use constant value \"linux/amd64\"",
+				Line:        2,
+				Level:       1,
+			},
+		},
+	})
+
+	dockerfile = []byte(`
+FROM --platform=linux/amd64 scratch AS my_amd64_stage
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+	})
+
+	dockerfile = []byte(`
+FROM --platform=linux/amd64 scratch AS linux
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+	})
+}
+
 func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestParams) {
 	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
@@ -1172,11 +1269,19 @@ func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestPara
 		lintResults, err := unmarshalLintResults(res)
 		require.NoError(t, err)
 
-		if lintResults.Error != nil {
-			require.Equal(t, lintTest.UnmarshalBuildErr, lintResults.Error.Message)
+		if lintTest.UnmarshalBuildErr == "" && lintTest.UnmarshalBuildErrRegexp == nil {
+			require.Nil(t, lintResults.Error)
+		} else {
+			require.NotNil(t, lintResults.Error)
+			if lintTest.UnmarshalBuildErr != "" {
+				require.Equal(t, lintTest.UnmarshalBuildErr, lintResults.Error.Message)
+			} else if !lintTest.UnmarshalBuildErrRegexp.MatchString(lintResults.Error.Message) {
+				t.Fatalf("error %q does not match %q", lintResults.Error.Message, lintTest.UnmarshalBuildErrRegexp.String())
+			}
 			require.Greater(t, lintResults.Error.Location.SourceIndex, int32(-1))
 			require.Less(t, lintResults.Error.Location.SourceIndex, int32(len(lintResults.Sources)))
 		}
+
 		require.Equal(t, len(warnings), len(lintResults.Warnings))
 
 		sort.Slice(lintResults.Warnings, func(i, j int) bool {
@@ -1196,6 +1301,7 @@ func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestPara
 	_, err = lintTest.Client.Build(sb.Context(), client.SolveOpt{
 		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: lintTest.TmpDir,
+			dockerui.DefaultLocalNameContext:    lintTest.TmpDir,
 		},
 	}, "", frontend, nil)
 	require.NoError(t, err)
@@ -1242,10 +1348,14 @@ func checkProgressStream(t *testing.T, sb integration.Sandbox, lintTest *lintTes
 			dockerui.DefaultLocalNameContext:    lintTest.TmpDir,
 		},
 	}, status)
-	if lintTest.StreamBuildErr == "" {
+	if lintTest.StreamBuildErr == "" && lintTest.StreamBuildErrRegexp == nil {
 		require.NoError(t, err)
 	} else {
-		require.EqualError(t, err, lintTest.StreamBuildErr)
+		if lintTest.StreamBuildErr != "" {
+			require.EqualError(t, err, lintTest.StreamBuildErr)
+		} else if !lintTest.StreamBuildErrRegexp.MatchString(err.Error()) {
+			t.Fatalf("error %q does not match %q", err.Error(), lintTest.StreamBuildErrRegexp.String())
+		}
 	}
 
 	select {
@@ -1279,9 +1389,15 @@ func checkLinterWarnings(t *testing.T, sb integration.Sandbox, lintTest *lintTes
 	integration.SkipOnPlatform(t, "windows")
 
 	if lintTest.TmpDir == nil {
+		testfiles := []fstest.Applier{
+			fstest.CreateFile("Dockerfile", lintTest.Dockerfile, 0600),
+		}
+		if lintTest.DockerIgnore != nil {
+			testfiles = append(testfiles, fstest.CreateFile(".dockerignore", lintTest.DockerIgnore, 0600))
+		}
 		lintTest.TmpDir = integration.Tmpdir(
 			t,
-			fstest.CreateFile("Dockerfile", lintTest.Dockerfile, 0600),
+			testfiles...,
 		)
 	}
 
@@ -1340,13 +1456,16 @@ type expectedLintWarning struct {
 }
 
 type lintTestParams struct {
-	Client            *client.Client
-	TmpDir            *integration.TmpDirWithName
-	Dockerfile        []byte
-	Warnings          []expectedLintWarning
-	UnmarshalWarnings []expectedLintWarning
-	StreamBuildErr    string
-	UnmarshalBuildErr string
-	BuildErrLocation  int32
-	FrontendAttrs     map[string]string
+	Client                  *client.Client
+	TmpDir                  *integration.TmpDirWithName
+	Dockerfile              []byte
+	DockerIgnore            []byte
+	Warnings                []expectedLintWarning
+	UnmarshalWarnings       []expectedLintWarning
+	StreamBuildErr          string
+	StreamBuildErrRegexp    *regexp.Regexp
+	UnmarshalBuildErr       string
+	UnmarshalBuildErrRegexp *regexp.Regexp
+	BuildErrLocation        int32
+	FrontendAttrs           map[string]string
 }

@@ -196,6 +196,7 @@ var allTests = integration.TestFuncs(
 	testInvalidJSONCommands,
 	testHistoryError,
 	testHistoryFinalizeTrace,
+	testEmptyStages,
 )
 
 // Tests that depend on the `security.*` entitlements
@@ -5479,6 +5480,40 @@ RUN echo $(hostname) | grep foo
 	}
 }
 
+func testEmptyStages(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	f := getFrontend(t, sb)
+	dockerfile := []byte(`
+ARG foo=bar
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir := t.TempDir()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "dockerfile contains no stages to build")
+}
+
 func testShmSize(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
@@ -7485,6 +7520,8 @@ COPY notexist /foo
 	}, nil)
 	require.Error(t, err)
 
+	expectedError := err
+
 	cl, err := c.ControlClient().ListenBuildHistory(sb.Context(), &controlapi.BuildHistoryRequest{
 		EarlyExit: true,
 		Ref:       ref,
@@ -7495,7 +7532,7 @@ COPY notexist /foo
 	for {
 		resp, err := cl.Recv()
 		if err == io.EOF {
-			require.Equal(t, true, got)
+			require.Equal(t, true, got, "expected error was %+v", expectedError)
 			break
 		}
 		require.NoError(t, err)

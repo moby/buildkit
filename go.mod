@@ -72,7 +72,7 @@ require (
 	github.com/tonistiigi/fsutil v0.0.0-20240424095704-91a3fc46842c
 	github.com/tonistiigi/go-actions-cache v0.0.0-20240327122527-58651d5e11d6
 	github.com/tonistiigi/go-archvariant v1.0.0
-	github.com/tonistiigi/go-csvvalue v0.0.0-20240619222358-bb8dd5cba3c2
+	github.com/tonistiigi/go-csvvalue v0.0.0-20240710180619-ddb21b71c0b4
 	github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea
 	github.com/tonistiigi/vt100 v0.0.0-20240514184818-90bafcd6abab
 	github.com/urfave/cli v1.22.15
