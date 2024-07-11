@@ -456,25 +456,6 @@ type ArgCommand struct {
 	Args []KeyValuePairOptional
 }
 
-func (c *ArgCommand) Expand(expander SingleWordExpander) error {
-	for i, v := range c.Args {
-		p, err := expander(v.Key)
-		if err != nil {
-			return err
-		}
-		v.Key = p
-		if v.Value != nil {
-			p, err = expander(*v.Value)
-			if err != nil {
-				return err
-			}
-			v.Value = &p
-		}
-		c.Args[i] = v
-	}
-	return nil
-}
-
 // ShellCommand sets a custom shell to use.
 //
 //	SHELL bash -e -c

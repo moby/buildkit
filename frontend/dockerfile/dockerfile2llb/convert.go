@@ -877,9 +877,7 @@ func (e *envsFromState) Keys() []string {
 
 func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 	var err error
-	// ARG command value could be ignored, so defer handling the expansion error
-	_, isArg := cmd.Command.(*instructions.ArgCommand)
-	if ex, ok := cmd.Command.(instructions.SupportsSingleWordExpansion); ok && !isArg {
+	if ex, ok := cmd.Command.(instructions.SupportsSingleWordExpansion); ok {
 		err := ex.Expand(func(word string) (string, error) {
 			env := getEnv(d.state)
 			newword, unmatched, err := opt.shlex.ProcessWord(word, env)
@@ -1723,53 +1721,61 @@ func dispatchShell(d *dispatchState, c *instructions.ShellCommand) error {
 }
 
 func dispatchArg(d *dispatchState, c *instructions.ArgCommand, opt *dispatchOpt) error {
-	commitStrs := make([]string, 0, len(c.Args))
-	for _, arg := range c.Args {
-		validateNoSecretKey("ARG", arg.Key, c.Location(), opt.lint)
-		_, hasValue := opt.buildArgValues[arg.Key]
-		hasDefault := arg.Value != nil
-
-		skipArgInfo := false // skip the arg info if the arg is inherited from global scope
-		if !hasDefault && !hasValue {
-			for _, ma := range opt.metaArgs {
-				if ma.Key == arg.Key {
-					arg.Value = ma.Value
-					skipArgInfo = true
-					hasDefault = false
-				}
-			}
+	expand := func(word string) (string, error) {
+		env, err := d.state.Env(context.TODO())
+		if err != nil {
+			return "", err
 		}
 
-		if hasValue {
-			v := opt.buildArgValues[arg.Key]
+		newword, unmatched, err := opt.shlex.ProcessWord(word, env)
+		reportUnmatchedVariables(c, d.buildArgs, env, unmatched, opt)
+		return newword, err
+	}
+
+	commitStrs := make([]string, 0, len(c.Args))
+	for _, arg := range c.Args {
+		key, err := expand(arg.Key)
+		if err != nil {
+			return err
+		}
+		validateNoSecretKey("ARG", key, c.Location(), opt.lint)
+
+		skipArgInfo := false // skip the arg info if the arg is inherited from global scope
+
+		if v, ok := opt.buildArgValues[key]; ok {
 			arg.Value = &v
-		} else if hasDefault {
-			env := getEnv(d.state)
-			v, unmatched, err := opt.shlex.ProcessWord(*arg.Value, env)
-			reportUnmatchedVariables(c, d.buildArgs, env, unmatched, opt)
+		} else if arg.Value != nil {
+			v, err := expand(*arg.Value)
 			if err != nil {
 				return err
 			}
 			arg.Value = &v
+		} else {
+			for _, ma := range opt.metaArgs {
+				if ma.Key == key {
+					arg.Value = ma.Value
+					skipArgInfo = true
+				}
+			}
 		}
 
 		ai := argInfo{definition: arg, location: c.Location()}
 
 		if arg.Value != nil {
-			if _, ok := nonEnvArgs[arg.Key]; !ok {
-				d.state = d.state.AddEnv(arg.Key, *arg.Value)
+			if _, ok := nonEnvArgs[key]; !ok {
+				d.state = d.state.AddEnv(key, *arg.Value)
 			}
 			ai.value = *arg.Value
 		}
 
 		if !skipArgInfo {
-			d.outline.allArgs[arg.Key] = ai
+			d.outline.allArgs[key] = ai
 		}
-		d.outline.usedArgs[arg.Key] = struct{}{}
+		d.outline.usedArgs[key] = struct{}{}
 
 		d.buildArgs = append(d.buildArgs, arg)
 
-		commitStr := arg.Key
+		commitStr := key
 		if arg.Value != nil {
 			commitStr += "=" + *arg.Value
 		}
