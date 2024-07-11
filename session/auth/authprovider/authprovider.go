@@ -24,6 +24,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth"
 	"github.com/moby/buildkit/util/progress/progresswriter"
+	"github.com/moby/buildkit/util/resolver"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/nacl/sign"
 	"google.golang.org/grpc"
@@ -94,7 +95,7 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 		Secret:   creds.Secret,
 	}
 
-	var httpClient = http.DefaultClient()
+	var httpClient = resolver.NewInsecureDefaultClient()
 	if tc, err := ap.tlsConfig(req.Host); err == nil && tc != nil {
 		transport := http.DefaultTransport()
 		transport.TLSClientConfig = tc

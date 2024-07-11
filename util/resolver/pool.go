@@ -121,7 +121,7 @@ func (p *Pool) GetResolver(hosts docker.RegistryHosts, ref, scope string, sm *se
 func newResolver(hosts docker.RegistryHosts, handler *authHandlerNS, sm *session.Manager, g session.Group) *Resolver {
 	if hosts == nil {
 		hosts = docker.ConfigureDefaultRegistries(
-			docker.WithClient(newDefaultClient()),
+			docker.WithClient(NewInsecureDefaultClient()),
 			docker.WithPlainHTTP(docker.MatchLocalhost),
 		)
 	}

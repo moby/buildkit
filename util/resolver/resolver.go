@@ -153,7 +153,7 @@ func NewRegistryConfig(m map[string]config.RegistryConfig) docker.RegistryHosts 
 
 			h := docker.RegistryHost{
 				Scheme:       "https",
-				Client:       newDefaultClient(),
+				Client:       NewInsecureDefaultClient(),
 				Host:         host,
 				Path:         "/v2",
 				Capabilities: docker.HostCapabilityPush | docker.HostCapabilityPull | docker.HostCapabilityResolve,
@@ -169,7 +169,7 @@ func NewRegistryConfig(m map[string]config.RegistryConfig) docker.RegistryHosts 
 			return out, nil
 		},
 		docker.ConfigureDefaultRegistries(
-			docker.WithClient(newInsecureDefaultClient()),
+			docker.WithClient(NewInsecureDefaultClient()),
 			docker.WithPlainHTTP(isPlainHTTP),
 		),
 	)
@@ -244,7 +244,7 @@ func newMirrorRegistryHost(mirror string) docker.RegistryHost {
 	path := path.Join(defaultPath, mirrorPath)
 	h := docker.RegistryHost{
 		Scheme:       "https",
-		Client:       newDefaultClient(),
+		Client:       NewInsecureDefaultClient(),
 		Host:         mirrorHost,
 		Path:         path,
 		Capabilities: docker.HostCapabilityPull | docker.HostCapabilityResolve,
@@ -253,7 +253,7 @@ func newMirrorRegistryHost(mirror string) docker.RegistryHost {
 	return h
 }
 
-func newInsecureDefaultClient() *http.Client {
+func NewInsecureDefaultClient() *http.Client {
 	httpsTransport := newDefaultTransport()
 	httpsTransport.TLSClientConfig = &tls.Config{}
 	httpsTransport.TLSClientConfig.InsecureSkipVerify = true
