@@ -718,7 +718,7 @@ func TestSetBlob(t *testing.T) {
 	require.Equal(t, "", string(snapRef.getBlob()))
 	require.Equal(t, "", string(snapRef.getChainID()))
 	require.Equal(t, "", string(snapRef.getBlobChainID()))
-	require.Equal(t, !snapRef.getBlobOnly(), true)
+	require.Equal(t, true, !snapRef.getBlobOnly())
 
 	ctx, clean, err := leaseutil.WithLease(ctx, co.lm)
 	require.NoError(t, err)
@@ -750,7 +750,7 @@ func TestSetBlob(t *testing.T) {
 	require.Equal(t, snapRef.getDiffID(), snapRef.getChainID())
 	require.Equal(t, digest.FromBytes([]byte(desc.Digest+" "+snapRef.getDiffID())), snapRef.getBlobChainID())
 	require.Equal(t, snap.ID(), snapRef.getSnapshotID())
-	require.Equal(t, !snapRef.getBlobOnly(), true)
+	require.Equal(t, true, !snapRef.getBlobOnly())
 
 	active, err = cm.New(ctx, snap, nil)
 	require.NoError(t, err)
@@ -776,7 +776,7 @@ func TestSetBlob(t *testing.T) {
 	require.Equal(t, digest.FromBytes([]byte(snapRef.getChainID()+" "+snapRef2.getDiffID())), snapRef2.getChainID())
 	require.Equal(t, digest.FromBytes([]byte(snapRef.getBlobChainID()+" "+digest.FromBytes([]byte(desc2.Digest+" "+snapRef2.getDiffID())))), snapRef2.getBlobChainID())
 	require.Equal(t, snap2.ID(), snapRef2.getSnapshotID())
-	require.Equal(t, !snapRef2.getBlobOnly(), true)
+	require.Equal(t, true, !snapRef2.getBlobOnly())
 
 	b3, desc3, err := mapToBlob(map[string]string{"foo3": "bar3"}, true)
 	require.NoError(t, err)
@@ -794,7 +794,7 @@ func TestSetBlob(t *testing.T) {
 	require.Equal(t, digest.FromBytes([]byte(snapRef.getChainID()+" "+snapRef3.getDiffID())), snapRef3.getChainID())
 	require.Equal(t, digest.FromBytes([]byte(snapRef.getBlobChainID()+" "+digest.FromBytes([]byte(desc3.Digest+" "+snapRef3.getDiffID())))), snapRef3.getBlobChainID())
 	require.Equal(t, string(snapRef3.getChainID()), snapRef3.getSnapshotID())
-	require.Equal(t, !snapRef3.getBlobOnly(), false)
+	require.Equal(t, false, !snapRef3.getBlobOnly())
 
 	// snap4 is same as snap2
 	snap4, err := cm.GetByBlob(ctx, desc2, snap)
@@ -840,7 +840,7 @@ func TestSetBlob(t *testing.T) {
 	require.Equal(t, digest.FromBytes([]byte(snapRef3.getChainID()+" "+snapRef6.getDiffID())), snapRef6.getChainID())
 	require.Equal(t, digest.FromBytes([]byte(snapRef3.getBlobChainID()+" "+digest.FromBytes([]byte(snapRef6.getBlob()+" "+snapRef6.getDiffID())))), snapRef6.getBlobChainID())
 	require.Equal(t, string(snapRef6.getChainID()), snapRef6.getSnapshotID())
-	require.Equal(t, !snapRef6.getBlobOnly(), false)
+	require.Equal(t, false, !snapRef6.getBlobOnly())
 
 	_, err = cm.GetByBlob(ctx, ocispecs.Descriptor{
 		Digest: digest.FromBytes([]byte("notexist")),
@@ -901,7 +901,7 @@ func TestPrune(t *testing.T) {
 	require.NoError(t, err)
 
 	checkDiskUsage(ctx, t, cm, 2, 0)
-	require.Equal(t, len(buf.all), 0)
+	require.Equal(t, 0, len(buf.all))
 
 	dirs, err = os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
@@ -919,7 +919,7 @@ func TestPrune(t *testing.T) {
 	require.NoError(t, err)
 
 	checkDiskUsage(ctx, t, cm, 1, 0)
-	require.Equal(t, len(buf.all), 1)
+	require.Equal(t, 1, len(buf.all))
 
 	dirs, err = os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
@@ -946,7 +946,7 @@ func TestPrune(t *testing.T) {
 	require.NoError(t, err)
 
 	checkDiskUsage(ctx, t, cm, 2, 0)
-	require.Equal(t, len(buf.all), 0)
+	require.Equal(t, 0, len(buf.all))
 
 	// releasing last reference
 	err = snap2.Release(ctx)
@@ -959,7 +959,7 @@ func TestPrune(t *testing.T) {
 	require.NoError(t, err)
 
 	checkDiskUsage(ctx, t, cm, 0, 0)
-	require.Equal(t, len(buf.all), 2)
+	require.Equal(t, 2, len(buf.all))
 
 	dirs, err = os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
@@ -1848,7 +1848,7 @@ func TestGetRemotes(t *testing.T) {
 func checkVariantsCoverage(ctx context.Context, t *testing.T, variants idxToVariants, idx int, remotes []*solver.Remote, expectCompression *compression.Type) {
 	if idx < 0 {
 		for _, r := range remotes {
-			require.Equal(t, len(r.Descriptors), 0)
+			require.Equal(t, 0, len(r.Descriptors))
 		}
 		return
 	}
@@ -2081,7 +2081,7 @@ func TestMergeOp(t *testing.T) {
 	ms, unmount, err := m.Mount()
 	require.NoError(t, err)
 	require.Len(t, ms, 1)
-	require.Equal(t, ms[0].Type, "bind")
+	require.Equal(t, "bind", ms[0].Type)
 	err = fstest.CheckDirectoryEqualWithApplier(ms[0].Source, fstest.Apply(
 		fstest.CreateFile(strconv.Itoa(0), []byte(strconv.Itoa(0)), 0777),
 	))

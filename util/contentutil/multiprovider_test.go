@@ -32,11 +32,11 @@ func TestMultiProvider(t *testing.T) {
 
 	dt, err := content.ReadBlob(ctx, mp, ocispecs.Descriptor{Digest: digest.FromBytes([]byte("foo0"))})
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "foo0")
+	require.Equal(t, "foo0", string(dt))
 
 	dt, err = content.ReadBlob(ctx, mp, ocispecs.Descriptor{Digest: digest.FromBytes([]byte("foo1"))})
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "foo1")
+	require.Equal(t, "foo1", string(dt))
 
 	_, err = content.ReadBlob(ctx, mp, ocispecs.Descriptor{Digest: digest.FromBytes([]byte("foo2"))})
 	require.Error(t, err)

@@ -190,7 +190,7 @@ func TestCancelBoth(t *testing.T) {
 	assert.Equal(t, "", r2)
 	assert.Equal(t, int64(1), counter)
 	ret1, err := g.Do(context.TODO(), "foo", f)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "bar", ret1)
 
 	ret1, err = g.Do(context.TODO(), "abc", f)

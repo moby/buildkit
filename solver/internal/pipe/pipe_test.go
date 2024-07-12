@@ -33,20 +33,20 @@ func TestPipe(t *testing.T) {
 	require.Equal(t, false, p.Receiver.Receive())
 
 	st := p.Receiver.Status()
-	require.Equal(t, st.Completed, false)
-	require.Equal(t, st.Canceled, false)
+	require.Equal(t, false, st.Completed)
+	require.Equal(t, false, st.Canceled)
 	require.Nil(t, st.Value)
-	require.Equal(t, signalled, 0)
+	require.Equal(t, 0, signalled)
 
 	close(runCh)
 	<-waitSignal
 
 	p.Receiver.Receive()
 	st = p.Receiver.Status()
-	require.Equal(t, st.Completed, true)
-	require.Equal(t, st.Canceled, false)
+	require.Equal(t, true, st.Completed)
+	require.Equal(t, false, st.Canceled)
 	require.NoError(t, st.Err)
-	require.Equal(t, st.Value.(string), "res0")
+	require.Equal(t, "res0", st.Value.(string))
 }
 
 func TestPipeCancel(t *testing.T) {
@@ -75,18 +75,18 @@ func TestPipeCancel(t *testing.T) {
 	p.Receiver.Receive()
 
 	st := p.Receiver.Status()
-	require.Equal(t, st.Completed, false)
-	require.Equal(t, st.Canceled, false)
+	require.Equal(t, false, st.Completed)
+	require.Equal(t, false, st.Canceled)
 	require.Nil(t, st.Value)
-	require.Equal(t, signalled, 0)
+	require.Equal(t, 0, signalled)
 
 	p.Receiver.Cancel()
 	<-waitSignal
 
 	p.Receiver.Receive()
 	st = p.Receiver.Status()
-	require.Equal(t, st.Completed, true)
-	require.Equal(t, st.Canceled, true)
+	require.Equal(t, true, st.Completed)
+	require.Equal(t, true, st.Canceled)
 	require.Error(t, st.Err)
 	require.ErrorIs(t, st.Err, context.Canceled)
 }

@@ -1339,7 +1339,7 @@ COPY . /
 	fi, err := os.Lstat(filepath.Join(destDir, "socket.sock"))
 	require.NoError(t, err)
 	// make sure socket is converted to regular file.
-	require.Equal(t, fi.Mode().IsRegular(), true)
+	require.Equal(t, true, fi.Mode().IsRegular())
 }
 
 func testIgnoreEntrypoint(t *testing.T, sb integration.Sandbox) {
@@ -5168,7 +5168,7 @@ COPY foo bar
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "bar"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "contents")
+	require.Equal(t, "contents", string(dt))
 }
 
 func testFrontendUseForwardedSolveResults(t *testing.T, sb integration.Sandbox) {
@@ -5377,7 +5377,7 @@ COPY Dockerfile Dockerfile
 			if req.Name == "frontend.subrequests.describe" {
 				hasDescribe = true
 				require.Equal(t, subrequests.RequestType("rpc"), req.Type)
-				require.NotEqual(t, req.Version, "")
+				require.NotEqual(t, "", req.Version)
 				require.Greater(t, len(req.Metadata), 0)
 				require.Equal(t, "result.json", req.Metadata[0].Name)
 			}
@@ -6196,17 +6196,17 @@ COPY --from=imported /test/outfoo /
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
-	require.True(t, len(dt) > 0)
+	require.Greater(t, len(dt), 0)
 	require.Equal(t, []byte("first"), dt)
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "out2"))
 	require.NoError(t, err)
-	require.True(t, len(dt) > 0)
+	require.Greater(t, len(dt), 0)
 	require.Equal(t, []byte("second"), dt)
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "outfoo"))
 	require.NoError(t, err)
-	require.True(t, len(dt) > 0)
+	require.Greater(t, len(dt), 0)
 	require.Equal(t, []byte("bar"), dt)
 }
 
@@ -7723,7 +7723,7 @@ func checkAllReleasable(t *testing.T, c *client.Client, sb integration.Sandbox, 
 	retries := 0
 loop0:
 	for {
-		require.True(t, 20 > retries)
+		require.Less(t, retries, 20)
 		retries++
 		du, err := c.DiskUsage(sb.Context())
 		require.NoError(t, err)
@@ -7769,7 +7769,7 @@ loop0:
 		if count == 0 {
 			break
 		}
-		require.True(t, 20 > retries)
+		require.Less(t, retries, 20)
 		retries++
 		time.Sleep(500 * time.Millisecond)
 	}
@@ -7789,7 +7789,7 @@ loop0:
 		if count == 0 {
 			break
 		}
-		require.True(t, 20 > retries)
+		require.Less(t, retries, 20)
 		retries++
 		time.Sleep(500 * time.Millisecond)
 	}

@@ -357,7 +357,7 @@ func TestParseHeredocHelpers(t *testing.T) {
 	for _, src := range validHeredocs {
 		heredoc, err := ParseHeredoc(src)
 		require.NoError(t, err)
-		require.Equal(t, heredoc.Name, "EOF")
+		require.Equal(t, "EOF", heredoc.Name)
 	}
 	for _, src := range invalidHeredocs {
 		_, err := ParseHeredoc(src)

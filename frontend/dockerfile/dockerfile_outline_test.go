@@ -277,7 +277,7 @@ COPY Dockerfile Dockerfile
 			}
 			hasOutline = true
 			require.Equal(t, subrequests.RequestType("rpc"), req.Type)
-			require.NotEqual(t, req.Version, "")
+			require.NotEqual(t, "", req.Version)
 		}
 		require.True(t, hasOutline)
 

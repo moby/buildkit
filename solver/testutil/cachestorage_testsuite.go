@@ -68,7 +68,7 @@ func testResults(t *testing.T, st solver.CacheKeyStorage) {
 	})
 	require.NoError(t, err)
 
-	require.Equal(t, len(m), 2)
+	require.Equal(t, 2, len(m))
 	f0, ok := m["foo0"]
 	require.True(t, ok)
 	f1, ok := m["foo1"]
@@ -82,7 +82,7 @@ func testResults(t *testing.T, st solver.CacheKeyStorage) {
 	})
 	require.NoError(t, err)
 
-	require.Equal(t, len(m), 1)
+	require.Equal(t, 1, len(m))
 	_, ok = m["bar0"]
 	require.True(t, ok)
 
@@ -96,7 +96,7 @@ func testResults(t *testing.T, st solver.CacheKeyStorage) {
 	res, err := st.Load("foo", "foo1")
 	require.NoError(t, err)
 
-	require.Equal(t, res.ID, "foo1")
+	require.Equal(t, "foo1", res.ID)
 
 	_, err = st.Load("foo1", "foo1")
 	require.Error(t, err)
@@ -126,7 +126,7 @@ func testLinks(t *testing.T, st solver.CacheKeyStorage) {
 	})
 	require.NoError(t, err)
 
-	require.Equal(t, len(m), 1)
+	require.Equal(t, 1, len(m))
 	_, ok := m["target0"]
 	require.True(t, ok)
 
@@ -139,7 +139,7 @@ func testLinks(t *testing.T, st solver.CacheKeyStorage) {
 		return nil
 	})
 	require.NoError(t, err)
-	require.Equal(t, len(m), 0)
+	require.Equal(t, 0, len(m))
 
 	err = st.AddLink("foo", l1, "target1")
 	require.NoError(t, err)
@@ -150,7 +150,7 @@ func testLinks(t *testing.T, st solver.CacheKeyStorage) {
 		return nil
 	})
 	require.NoError(t, err)
-	require.Equal(t, len(m), 1)
+	require.Equal(t, 1, len(m))
 
 	_, ok = m["target1"]
 	require.True(t, ok)
@@ -164,7 +164,7 @@ func testLinks(t *testing.T, st solver.CacheKeyStorage) {
 		return nil
 	})
 	require.NoError(t, err)
-	require.Equal(t, len(m), 2)
+	require.Equal(t, 2, len(m))
 	_, ok = m["target1"]
 	require.True(t, ok)
 	_, ok = m["target1-second"]
@@ -195,7 +195,7 @@ func testResultReleaseSingleLevel(t *testing.T, st solver.CacheKeyStorage) {
 		return nil
 	})
 
-	require.Equal(t, len(m), 1)
+	require.Equal(t, 1, len(m))
 	_, ok := m["foo1"]
 	require.True(t, ok)
 
@@ -208,7 +208,7 @@ func testResultReleaseSingleLevel(t *testing.T, st solver.CacheKeyStorage) {
 		return nil
 	})
 
-	require.Equal(t, len(m), 0)
+	require.Equal(t, 0, len(m))
 
 	st.Walk(func(id string) error {
 		require.False(t, true, fmt.Sprintf("id %s should have been released", id))
@@ -239,13 +239,13 @@ func testBacklinks(t *testing.T, st solver.CacheKeyStorage) {
 
 	backlinks := 0
 	st.WalkBacklinks("sub0", func(id string, link solver.CacheInfoLink) error {
-		require.Equal(t, id, "foo")
-		require.Equal(t, link.Input, solver.Index(0))
+		require.Equal(t, "foo", id)
+		require.Equal(t, solver.Index(0), link.Input)
 		require.Equal(t, link.Digest, rootKey(digest.FromBytes([]byte("to-sub0")), 1))
 		backlinks++
 		return nil
 	})
-	require.Equal(t, backlinks, 1)
+	require.Equal(t, 1, backlinks)
 }
 
 func testResultReleaseMultiLevel(t *testing.T, st solver.CacheKeyStorage) {
@@ -290,7 +290,7 @@ func testResultReleaseMultiLevel(t *testing.T, st solver.CacheKeyStorage) {
 	})
 	require.NoError(t, err)
 
-	require.Equal(t, len(m), 1)
+	require.Equal(t, 1, len(m))
 	_, ok := m["foo-result"]
 	require.True(t, ok)
 
@@ -302,7 +302,7 @@ func testResultReleaseMultiLevel(t *testing.T, st solver.CacheKeyStorage) {
 		return nil
 	})
 	require.NoError(t, err)
-	require.Equal(t, len(m), 1)
+	require.Equal(t, 1, len(m))
 
 	_, ok = m["sub1"]
 	require.True(t, ok)
@@ -321,7 +321,7 @@ func testResultReleaseMultiLevel(t *testing.T, st solver.CacheKeyStorage) {
 	})
 	require.NoError(t, err)
 
-	require.Equal(t, len(m), 0)
+	require.Equal(t, 0, len(m))
 
 	m = map[string]struct{}{}
 	err = st.WalkLinks("foo", l0, func(id string) error {
@@ -329,7 +329,7 @@ func testResultReleaseMultiLevel(t *testing.T, st solver.CacheKeyStorage) {
 		return nil
 	})
 	require.NoError(t, err)
-	require.Equal(t, len(m), 1)
+	require.Equal(t, 1, len(m))
 
 	// release sub1 now releases foo as well
 	err = st.Release("sub1-result")

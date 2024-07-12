@@ -135,7 +135,7 @@ func testExcludedFilesOnCopy(t *testing.T, sb integration.Sandbox) {
 		for _, tc := range testCases {
 			dt, err := os.ReadFile(path.Join(destDir.Name, tc.filename))
 			if tc.excluded {
-				require.NotNilf(t, err, "File %s should not exist: %v", tc.filename, err)
+				require.Errorf(t, err, "File %s should not exist: %v", tc.filename, err)
 				continue
 			}
 

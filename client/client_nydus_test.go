@@ -84,7 +84,7 @@ func testBuildExportNydusWithHybrid(t *testing.T, sb integration.Sandbox) {
 		manifest, err := images.Manifest(ctx, contentStore, img.Target, nil)
 		require.NoError(t, err)
 
-		require.Equal(t, len(manifest.Layers), 3)
+		require.Len(t, manifest.Layers, 3)
 		require.Equal(t, "true", manifest.Layers[0].Annotations[converter.LayerAnnotationNydusBlob])
 		require.Equal(t, "true", manifest.Layers[1].Annotations[converter.LayerAnnotationNydusBlob])
 		require.Equal(t, "true", manifest.Layers[2].Annotations[converter.LayerAnnotationNydusBootstrap])

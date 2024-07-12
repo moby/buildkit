@@ -1120,7 +1120,7 @@ func TestChecksumUnorderedFiles(t *testing.T) {
 	dgst, err := cc.Checksum(context.TODO(), ref, "d0", ChecksumOpts{FollowLinks: true}, nil)
 	require.NoError(t, err)
 
-	require.Equal(t, dgst, digest.Digest("sha256:14276c302c940a80f82ca5477bf766c98a24702d6a9948ee71bb277cdad3ae05"))
+	require.Equal(t, digest.Digest("sha256:14276c302c940a80f82ca5477bf766c98a24702d6a9948ee71bb277cdad3ae05"), dgst)
 
 	// check regression from earier version that didn't track some files
 	ch = []string{
@@ -1328,19 +1328,19 @@ func TestSymlinkInPathHandleChange(t *testing.T) {
 
 	dgstFileData0, err := cc.Checksum(context.TODO(), ref, "sub/d0", ChecksumOpts{FollowLinks: true}, nil)
 	require.NoError(t, err)
-	require.Equal(t, dgstFileData0, dgstDirD0)
+	require.Equal(t, dgstDirD0, dgstFileData0)
 
 	dgstFileData0, err = cc.Checksum(context.TODO(), ref, "d1/def/baz", ChecksumOpts{FollowLinks: true}, nil)
 	require.NoError(t, err)
-	require.Equal(t, dgstFileData0, dgstDirD0)
+	require.Equal(t, dgstDirD0, dgstFileData0)
 
 	dgstFileData0, err = cc.Checksum(context.TODO(), ref, "d1/def/bay", ChecksumOpts{FollowLinks: true}, nil)
 	require.NoError(t, err)
-	require.Equal(t, dgstFileData0, dgstDirD0)
+	require.Equal(t, dgstDirD0, dgstFileData0)
 
 	dgstFileData0, err = cc.Checksum(context.TODO(), ref, "link", ChecksumOpts{FollowLinks: true}, nil)
 	require.NoError(t, err)
-	require.Equal(t, dgstFileData0, dgstDirD0)
+	require.Equal(t, dgstDirD0, dgstFileData0)
 
 	err = ref.Release(context.TODO())
 	require.NoError(t, err)

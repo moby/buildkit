@@ -60,7 +60,7 @@ func TestFileMkdirChain(t *testing.T) {
 	require.Equal(t, m[dgst], arr[1])
 
 	f := arr[1].Op.(*pb.Op_File).File
-	require.Equal(t, len(arr[1].Inputs), 1)
+	require.Equal(t, 1, len(arr[1].Inputs))
 	require.Equal(t, m[arr[1].Inputs[0].Digest], arr[0])
 	require.Equal(t, 0, int(arr[1].Inputs[0].Index))
 
@@ -513,7 +513,7 @@ func TestFileOwner(t *testing.T) {
 	require.Equal(t, m[dgst], arr[1])
 
 	f := arr[1].Op.(*pb.Op_File).File
-	require.Equal(t, len(arr[1].Inputs), 1)
+	require.Equal(t, 1, len(arr[1].Inputs))
 	require.Equal(t, m[arr[1].Inputs[0].Digest], arr[0])
 	require.Equal(t, 0, int(arr[1].Inputs[0].Index))
 
@@ -610,7 +610,7 @@ func TestFileCopyOwner(t *testing.T) {
 	require.Equal(t, m[dgst], arr[1])
 
 	f := arr[1].Op.(*pb.Op_File).File
-	require.Equal(t, len(arr[1].Inputs), 1)
+	require.Equal(t, 1, len(arr[1].Inputs))
 	require.Equal(t, m[arr[1].Inputs[0].Digest], arr[0])
 	require.Equal(t, 0, int(arr[1].Inputs[0].Index))
 

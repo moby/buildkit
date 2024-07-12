@@ -23,7 +23,7 @@ linters:
     - nolintlint
     - revive
     - staticcheck
-    # - testifylint
+    - testifylint
     - typecheck
     - unused
     - whitespace

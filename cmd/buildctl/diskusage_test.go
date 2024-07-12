@@ -4,12 +4,12 @@ import (
 	"testing"
 
 	"github.com/moby/buildkit/util/testutil/integration"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func testDiskUsage(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
 	cmd := sb.Cmd("du")
 	err := cmd.Run()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
