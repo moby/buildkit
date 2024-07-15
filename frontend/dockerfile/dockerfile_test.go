@@ -1062,11 +1062,10 @@ USER user
 WORKDIR /mydir
 RUN [ "$(stat -c "%U %G" /mydir)" == "user user" ]
 `,
-		`nanoserver
+		`From nanoserver
 USER ContainerAdministrator
-RUN mkdir \mydir
 WORKDIR \mydir
-RUN icacls C:\\mydir | findstr "Administrators">nul || exit /b 1
+RUN  icacls \mydir | findstr Administrators >nul || exit /b 1
 `}))
 
 	dir := integration.Tmpdir(
@@ -2457,13 +2456,15 @@ func testDockerfileInvalidCommand(t *testing.T, sb integration.Sandbox) {
 }
 
 func testDockerfileInvalidInstruction(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows([2]string{`
 	FROM scratch
 	FNTRYPOINT ["/bin/sh", "-c", "echo invalidinstruction"]
-`)
+	`, `
+	FROM nanoserver
+	FNTRYPOINT ["cmd", "/c", "echo invalidinstruction"]
+	`}))
 
 	dir := integration.Tmpdir(
 		t,
@@ -2487,7 +2488,7 @@ func testDockerfileInvalidInstruction(t *testing.T, sb integration.Sandbox) {
 }
 
 func testDockerfileADDFromURL(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	//integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
@@ -2511,7 +2512,7 @@ func testDockerfileADDFromURL(t *testing.T, sb integration.Sandbox) {
 	defer server.Close()
 
 	dockerfile := []byte(fmt.Sprintf(`
-FROM scratch
+FROM nanoserver
 ADD %s /dest/
 `, server.URL+"/foo"))
 
@@ -2535,7 +2536,7 @@ ADD %s /dest/
 
 	// test the default properties
 	dockerfile = []byte(fmt.Sprintf(`
-FROM scratch
+FROM nanoserver
 ADD %s /dest/
 `, server.URL+"/"))
 
@@ -2752,10 +2753,13 @@ func testDockerfileAddArchiveWildcard(t *testing.T, sb integration.Sandbox) {
 	err = tw.Close()
 	require.NoError(t, err)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows([2]string{`
 FROM scratch
 ADD *.tar /dest
-`)
+`, `
+FROM nanoserver
+ADD *.tar /dest
+`}))
 
 	dir := integration.Tmpdir(
 		t,
@@ -2794,16 +2798,20 @@ ADD *.tar /dest
 }
 
 func testDockerfileAddChownExpand(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows([2]string{`
 FROM busybox
 ARG group
 ENV owner 1000
 ADD --chown=${owner}:${group} foo /
 RUN [ "$(stat -c "%u %G" /foo)" == "1000 nobody" ]
-`)
+`, `
+FROM nanoserver
+USER ContainerAdministrator
+COPY foo C:/
+RUN icacls C:\foo /grant *S-1-5-32-544:F && icacls C:\foo | findstr Administrators >nul || exit /b 1
+`}))
 
 	dir := integration.Tmpdir(
 		t,
