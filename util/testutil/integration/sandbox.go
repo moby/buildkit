@@ -5,13 +5,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/google/shlex"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
-	"github.com/google/shlex"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/pkg/errors"
 )
@@ -59,10 +60,17 @@ func (sb *sandbox) NewRegistry() (string, error) {
 
 func (sb *sandbox) Cmd(args ...string) *exec.Cmd {
 	if len(args) == 1 {
-		if split, err := shlex.Split(args[0]); err == nil {
-			args = split
+		if runtime.GOOS == "windows" {
+			if len(strings.TrimSpace(args[0])) > 0 {
+				args = strings.Split(args[0], " ")
+			}
+		} else {
+			if split, err := shlex.Split(args[0]); err == nil {
+				args = split
+			}
 		}
 	}
+
 	cmd := exec.Command("buildctl", args...)
 	cmd.Env = append(cmd.Env, os.Environ()...)
 	cmd.Env = append(cmd.Env, "BUILDKIT_HOST="+sb.Address())
