@@ -117,7 +117,7 @@ func TestChownOpt(t *testing.T) {
 	inp2 := rb.NewRef("usermount")
 	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{inp, inp2}, fo.Actions, nil)
 	require.NoError(t, err)
-	require.Equal(t, len(outs), 1)
+	require.Equal(t, 1, len(outs))
 	rb.checkReleased(t, append(outs, inp, inp2))
 
 	o := outs[0].(*testFileRef)

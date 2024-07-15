@@ -36,7 +36,7 @@ func TestPaddingForReader(t *testing.T) {
 		hdr.ModTime = time.Unix(0, 0)
 	})
 	outB, err := io.ReadAll(r)
-	assert.NoError(t, err)
-	assert.NoError(t, r.Close())
+	require.NoError(t, err)
+	require.NoError(t, r.Close())
 	assert.Equal(t, len(inB), len(outB))
 }

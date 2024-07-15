@@ -26,5 +26,5 @@ func TestCopy(t *testing.T) {
 
 	dt, err := content.ReadBlob(ctx, b1, ocispecs.Descriptor{Digest: digest.FromBytes([]byte("foobar"))})
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "foobar")
+	require.Equal(t, "foobar", string(dt))
 }

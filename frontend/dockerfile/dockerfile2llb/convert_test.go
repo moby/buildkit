@@ -82,7 +82,7 @@ COPY --from=0 f2 /
 	COPY http://github.com/moby/buildkit/blob/master/README.md /
 		`
 	_, _, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
-	assert.EqualError(t, err, "source can't be a URL for COPY")
+	require.EqualError(t, err, "source can't be a URL for COPY")
 
 	df = `FROM "" AS foo`
 	_, _, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})

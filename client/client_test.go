@@ -2626,8 +2626,8 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	require.Equal(t, server.Stats("/foo").AllRequests, 2)
-	require.Equal(t, server.Stats("/foo").CachedRequests, 1)
+	require.Equal(t, 2, server.Stats("/foo").AllRequests)
+	require.Equal(t, 1, server.Stats("/foo").CachedRequests)
 
 	dt, err := os.ReadFile(filepath.Join(tmpdir, "foo"))
 	require.NoError(t, err)
@@ -4229,7 +4229,7 @@ func testBuildExportZstd(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, ocispecs.MediaTypeImageLayer+"+zstd", lastLayer.MediaType)
 
 	zstdLayerDigest := lastLayer.Digest.Hex()
-	require.Equal(t, m[ocispecs.ImageBlobsDir+"/sha256/"+zstdLayerDigest].Data[:4], []byte{0x28, 0xb5, 0x2f, 0xfd})
+	require.Equal(t, []byte{0x28, 0xb5, 0x2f, 0xfd}, m[ocispecs.ImageBlobsDir+"/sha256/"+zstdLayerDigest].Data[:4])
 
 	// repeat without oci mediatype
 	outW, err = os.Create(out)
@@ -4356,7 +4356,7 @@ func testPullZstdImage(t *testing.T, sb integration.Sandbox) {
 			}
 
 			zstdLayerDigest := firstLayer.Digest.Hex()
-			require.Equal(t, m[ocispecs.ImageBlobsDir+"/sha256/"+zstdLayerDigest].Data[:4], []byte{0x28, 0xb5, 0x2f, 0xfd})
+			require.Equal(t, []byte{0x28, 0xb5, 0x2f, 0xfd}, m[ocispecs.ImageBlobsDir+"/sha256/"+zstdLayerDigest].Data[:4])
 		})
 	}
 }
@@ -4520,16 +4520,16 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 
 	item, ok := m["foo/"]
 	require.True(t, ok)
-	require.Equal(t, int32(item.Header.Typeflag), tar.TypeDir)
+	require.Equal(t, tar.TypeDir, int32(item.Header.Typeflag))
 	require.Equal(t, 0741, int(item.Header.Mode&0777))
 
 	item, ok = m["foo/sub/"]
 	require.True(t, ok)
-	require.Equal(t, int32(item.Header.Typeflag), tar.TypeDir)
+	require.Equal(t, tar.TypeDir, int32(item.Header.Typeflag))
 
 	item, ok = m["foo/sub/bar"]
 	require.True(t, ok)
-	require.Equal(t, int32(item.Header.Typeflag), tar.TypeReg)
+	require.Equal(t, tar.TypeReg, int32(item.Header.Typeflag))
 	require.Equal(t, []byte("first"), item.Data)
 
 	_, ok = m["foo/sub/baz"]
@@ -4543,17 +4543,17 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 
 	item, ok = m["foo/sub/baz"]
 	require.True(t, ok)
-	require.Equal(t, int32(item.Header.Typeflag), tar.TypeReg)
+	require.Equal(t, tar.TypeReg, int32(item.Header.Typeflag))
 	require.Equal(t, []byte("second"), item.Data)
 
 	item, ok = m["foo/"]
 	require.True(t, ok)
-	require.Equal(t, int32(item.Header.Typeflag), tar.TypeDir)
+	require.Equal(t, tar.TypeDir, int32(item.Header.Typeflag))
 	require.Equal(t, 0741, int(item.Header.Mode&0777))
 
 	item, ok = m["foo/sub/"]
 	require.True(t, ok)
-	require.Equal(t, int32(item.Header.Typeflag), tar.TypeDir)
+	require.Equal(t, tar.TypeDir, int32(item.Header.Typeflag))
 
 	_, ok = m["foo/sub/bar"]
 	require.False(t, ok)
@@ -4667,7 +4667,7 @@ func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbo
 	require.NoError(t, err)
 
 	dgst, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
-	require.Equal(t, ok, true)
+	require.Equal(t, true, ok)
 
 	unique, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst, "/unique")
 	require.NoError(t, err)
@@ -4718,7 +4718,7 @@ func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbo
 	require.NoError(t, err)
 
 	dgst2, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
-	require.Equal(t, ok, true)
+	require.Equal(t, true, ok)
 
 	unique2, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst2, "/unique")
 	require.NoError(t, err)
@@ -4995,7 +4995,7 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	dgst, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
-	require.Equal(t, ok, true)
+	require.Equal(t, true, ok)
 
 	unique, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst, "/unique")
 	require.NoError(t, err)
@@ -5038,7 +5038,7 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	dgst2, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
-	require.Equal(t, ok, true)
+	require.Equal(t, true, ok)
 
 	unique2, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst2, "/unique")
 	require.NoError(t, err)
@@ -5271,7 +5271,7 @@ func testZstdLocalCacheExport(t *testing.T, sb integration.Sandbox) {
 	zstdLayerDigest := lastLayer.Digest.Hex()
 	dt, err = os.ReadFile(filepath.Join(destDir, ocispecs.ImageBlobsDir+"/sha256/"+zstdLayerDigest))
 	require.NoError(t, err)
-	require.Equal(t, dt[:4], []byte{0x28, 0xb5, 0x2f, 0xfd})
+	require.Equal(t, []byte{0x28, 0xb5, 0x2f, 0xfd}, dt[:4])
 }
 
 func testCacheExportIgnoreError(t *testing.T, sb integration.Sandbox) {
@@ -5563,7 +5563,7 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "const"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "foobar")
+	require.Equal(t, "foobar", string(dt))
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
@@ -5585,7 +5585,7 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 
 	dt2, err := os.ReadFile(filepath.Join(destDir, "const"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt2), "foobar")
+	require.Equal(t, "foobar", string(dt2))
 
 	dt2, err = os.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
@@ -5794,7 +5794,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	dgst, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
-	require.Equal(t, ok, true)
+	require.Equal(t, true, ok)
 
 	unique, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst, "/unique")
 	require.NoError(t, err)
@@ -5831,7 +5831,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	dgst2, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
-	require.Equal(t, ok, true)
+	require.Equal(t, true, ok)
 
 	require.Equal(t, dgst, dgst2)
 
@@ -5869,7 +5869,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	dgst2uncompress, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
-	require.Equal(t, ok, true)
+	require.Equal(t, true, ok)
 
 	// dgst2uncompress != dgst, because the compression type is different
 	unique2uncompress, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst2uncompress, "/unique")
@@ -5900,7 +5900,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	dgst3, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
-	require.Equal(t, ok, true)
+	require.Equal(t, true, ok)
 
 	// dgst3 != dgst, because inline cache is not exported for dgst3
 	unique3, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst3, "/unique")
@@ -6436,15 +6436,15 @@ func testCachedMounts(t *testing.T, sb integration.Sandbox) {
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "first")
+	require.Equal(t, "first", string(dt))
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "bar"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "second")
+	require.Equal(t, "second", string(dt))
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "baz"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "base")
+	require.Equal(t, "base", string(dt))
 
 	checkAllReleasable(t, c, sb, true)
 }
@@ -7109,7 +7109,7 @@ func testProxyEnv(t *testing.T, sb integration.Sandbox) {
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "env"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "httpvalue-httpsvalue-noproxyvalue-noproxyvalue-allproxyvalue-allproxyvalue")
+	require.Equal(t, "httpvalue-httpsvalue-noproxyvalue-noproxyvalue-allproxyvalue-allproxyvalue", string(dt))
 
 	// repeat to make sure proxy doesn't change cache
 	st = base.Run(llb.Shlex(cmd), llb.WithProxy(llb.ProxyEnv{
@@ -7135,7 +7135,7 @@ func testProxyEnv(t *testing.T, sb integration.Sandbox) {
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "env"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "httpvalue-httpsvalue-noproxyvalue-noproxyvalue-allproxyvalue-allproxyvalue")
+	require.Equal(t, "httpvalue-httpsvalue-noproxyvalue-noproxyvalue-allproxyvalue-allproxyvalue", string(dt))
 }
 
 func testMergeOp(t *testing.T, sb integration.Sandbox) {
@@ -8070,11 +8070,11 @@ func testPullWithLayerLimit(t *testing.T, sb integration.Sandbox) {
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "first"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "first")
+	require.Equal(t, "first", string(dt))
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "second"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "second")
+	require.Equal(t, "second", string(dt))
 
 	_, err = os.ReadFile(filepath.Join(destDir, "third"))
 	require.Error(t, err)
@@ -8082,7 +8082,7 @@ func testPullWithLayerLimit(t *testing.T, sb integration.Sandbox) {
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "forth"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "forth")
+	require.Equal(t, "forth", string(dt))
 
 	// pull 3rd layer only
 	st = llb.Diff(
@@ -8113,11 +8113,11 @@ func testPullWithLayerLimit(t *testing.T, sb integration.Sandbox) {
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "third"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "third")
+	require.Equal(t, "third", string(dt))
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "forth"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "forth")
+	require.Equal(t, "forth", string(dt))
 
 	// zero limit errors cleanly
 	st = llb.Image(target, llb.WithLayerLimit(0))
@@ -8692,7 +8692,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 			require.Equal(t, bases[i].Desc.Digest.String(), att.Desc.Annotations[attestation.DockerAnnotationReferenceDigest])
 			require.Equal(t, 2, len(att.Layers))
 			require.Equal(t, len(att.Layers), len(att.Img.RootFS.DiffIDs))
-			require.Equal(t, len(att.Img.History), 0)
+			require.Equal(t, 0, len(att.Img.History))
 
 			var attest intoto.Statement
 			require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
@@ -9748,9 +9748,9 @@ func testSBOMSupplements(t *testing.T, sb integration.Sandbox) {
 
 	require.Equal(t, "DOCUMENT", string(attest.Predicate.SPDXIdentifier))
 	require.Len(t, attest.Predicate.Files, 2)
-	require.Equal(t, attest.Predicate.Files[0].FileName, "/foo")
+	require.Equal(t, "/foo", attest.Predicate.Files[0].FileName)
 	require.Regexp(t, "^layerID: sha256:", attest.Predicate.Files[0].FileComment)
-	require.Equal(t, attest.Predicate.Files[1].FileName, "/bar")
+	require.Equal(t, "/bar", attest.Predicate.Files[1].FileName)
 	require.Empty(t, attest.Predicate.Files[1].FileComment)
 }
 

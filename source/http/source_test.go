@@ -55,8 +55,8 @@ func TestHTTPSource(t *testing.T) {
 
 	require.Equal(t, expectedContent1, k)
 	require.Equal(t, expectedPin1, p)
-	require.Equal(t, server.Stats("/foo").AllRequests, 1)
-	require.Equal(t, server.Stats("/foo").CachedRequests, 0)
+	require.Equal(t, 1, server.Stats("/foo").AllRequests)
+	require.Equal(t, 0, server.Stats("/foo").CachedRequests)
 
 	ref, err := h.Snapshot(ctx, nil)
 	require.NoError(t, err)
@@ -83,8 +83,8 @@ func TestHTTPSource(t *testing.T) {
 
 	require.Equal(t, expectedContent1, k)
 	require.Equal(t, expectedPin1, p)
-	require.Equal(t, server.Stats("/foo").AllRequests, 2)
-	require.Equal(t, server.Stats("/foo").CachedRequests, 1)
+	require.Equal(t, 2, server.Stats("/foo").AllRequests)
+	require.Equal(t, 1, server.Stats("/foo").CachedRequests)
 
 	ref, err = h.Snapshot(ctx, nil)
 	require.NoError(t, err)
@@ -121,8 +121,8 @@ func TestHTTPSource(t *testing.T) {
 
 	require.Equal(t, expectedContent2, k)
 	require.Equal(t, expectedPin2, p)
-	require.Equal(t, server.Stats("/foo").AllRequests, 4)
-	require.Equal(t, server.Stats("/foo").CachedRequests, 1)
+	require.Equal(t, 4, server.Stats("/foo").AllRequests)
+	require.Equal(t, 1, server.Stats("/foo").CachedRequests)
 
 	ref, err = h.Snapshot(ctx, nil)
 	require.NoError(t, err)
@@ -167,8 +167,8 @@ func TestHTTPDefaultName(t *testing.T) {
 
 	require.Equal(t, "sha256:146f16ec8810a62a57ce314aba391f95f7eaaf41b8b1ebaf2ab65fd63b1ad437", k)
 	require.Equal(t, "sha256:d0b425e00e15a0d36b9b361f02bab63563aed6cb4665083905386c55d5b679fa", p)
-	require.Equal(t, server.Stats("/").AllRequests, 1)
-	require.Equal(t, server.Stats("/").CachedRequests, 0)
+	require.Equal(t, 1, server.Stats("/").AllRequests)
+	require.Equal(t, 0, server.Stats("/").CachedRequests)
 
 	ref, err := h.Snapshot(ctx, nil)
 	require.NoError(t, err)
@@ -238,16 +238,16 @@ func TestHTTPChecksum(t *testing.T) {
 
 	require.Equal(t, expectedContentDifferent, k)
 	require.Equal(t, expectedPinDifferent, p)
-	require.Equal(t, server.Stats("/foo").AllRequests, 0)
-	require.Equal(t, server.Stats("/foo").CachedRequests, 0)
+	require.Equal(t, 0, server.Stats("/foo").AllRequests)
+	require.Equal(t, 0, server.Stats("/foo").CachedRequests)
 
 	_, err = h.Snapshot(ctx, nil)
 	require.Error(t, err)
 
 	require.Equal(t, expectedContentDifferent, k)
 	require.Equal(t, expectedPinDifferent, p)
-	require.Equal(t, server.Stats("/foo").AllRequests, 1)
-	require.Equal(t, server.Stats("/foo").CachedRequests, 0)
+	require.Equal(t, 1, server.Stats("/foo").AllRequests)
+	require.Equal(t, 0, server.Stats("/foo").CachedRequests)
 
 	id = &HTTPIdentifier{URL: server.URL + "/foo", Checksum: digest.FromBytes([]byte("content-correct"))}
 
@@ -259,8 +259,8 @@ func TestHTTPChecksum(t *testing.T) {
 
 	require.Equal(t, expectedContentCorrect, k)
 	require.Equal(t, expectedPinCorrect, p)
-	require.Equal(t, server.Stats("/foo").AllRequests, 1)
-	require.Equal(t, server.Stats("/foo").CachedRequests, 0)
+	require.Equal(t, 1, server.Stats("/foo").AllRequests)
+	require.Equal(t, 0, server.Stats("/foo").CachedRequests)
 
 	ref, err := h.Snapshot(ctx, nil)
 	require.NoError(t, err)
@@ -277,8 +277,8 @@ func TestHTTPChecksum(t *testing.T) {
 
 	require.Equal(t, expectedContentCorrect, k)
 	require.Equal(t, expectedPinCorrect, p)
-	require.Equal(t, server.Stats("/foo").AllRequests, 2)
-	require.Equal(t, server.Stats("/foo").CachedRequests, 0)
+	require.Equal(t, 2, server.Stats("/foo").AllRequests)
+	require.Equal(t, 0, server.Stats("/foo").CachedRequests)
 
 	ref.Release(context.TODO())
 	ref = nil

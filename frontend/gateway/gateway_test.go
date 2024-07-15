@@ -3,7 +3,7 @@ package gateway
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCheckSourceIsAllowed(t *testing.T) {
@@ -21,25 +21,25 @@ func TestCheckSourceIsAllowed(t *testing.T) {
 
 	// no restrictions
 	gw, err = makeGatewayFrontend([]string{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = gw.checkSourceIsAllowed("anything")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	gw, err = makeGatewayFrontend([]string{"docker-registry.wikimedia.org/repos/releng/blubber/buildkit:9.9.9"})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = gw.checkSourceIsAllowed("docker-registry.wikimedia.org/repos/releng/blubber/buildkit")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = gw.checkSourceIsAllowed("docker-registry.wikimedia.org/repos/releng/blubber/buildkit:v1.2.3")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = gw.checkSourceIsAllowed("docker-registry.wikimedia.org/something-else")
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	gw, err = makeGatewayFrontend([]string{"alpine"})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = gw.checkSourceIsAllowed("alpine")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = gw.checkSourceIsAllowed("library/alpine")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = gw.checkSourceIsAllowed("docker.io/library/alpine")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }

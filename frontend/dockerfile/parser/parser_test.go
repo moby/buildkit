@@ -128,7 +128,8 @@ func TestParseIncludesLineNumbers(t *testing.T) {
 	}
 	for i, child := range ast.Children {
 		msg := fmt.Sprintf("Child %d", i)
-		require.Equal(t, expected[i], []int{child.StartLine, child.EndLine}, msg)
+		res := []int{child.StartLine, child.EndLine}
+		require.Equal(t, expected[i], res, msg)
 	}
 }
 

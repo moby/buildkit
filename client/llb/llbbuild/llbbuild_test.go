@@ -27,7 +27,7 @@ func TestMarshal(t *testing.T) {
 	require.NotNil(t, buildop)
 
 	require.Equal(t, 1, len(op.Inputs))
-	require.Equal(t, buildop.Builder, pb.LLBBuilder)
+	require.Equal(t, pb.LLBBuilder, buildop.Builder)
 	require.Equal(t, 1, len(buildop.Inputs))
 	require.Equal(t, &pb.BuildInput{Input: pb.InputIndex(0)}, buildop.Inputs[pb.LLBDefinitionInput])
 
