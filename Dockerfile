@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile-upstream:master
 
-ARG RUNC_VERSION=v1.1.13
+ARG RUNC_VERSION=v1.2.0-rc.2
 ARG CONTAINERD_VERSION=v1.7.19
 # containerd v1.6 for integration tests
 ARG CONTAINERD_ALT_VERSION_16=v1.6.33
@@ -63,9 +63,22 @@ ARG TARGETPLATFORM
 # lld has issues building static binaries for ppc so prefer ld for it
 RUN set -e; xx-apk add musl-dev gcc libseccomp-dev libseccomp-static; \
   [ "$(xx-info arch)" != "ppc64le" ] || XX_CC_PREFER_LINKER=ld xx-clang --setup-target-triple
-RUN --mount=from=runc-src,src=/usr/src/runc,target=. \
+RUN --mount=from=runc-src,src=/usr/src/runc,target=. --mount=type=tmpfs,target=libcontainer/dmz/binary \
   --mount=target=/root/.cache,type=cache <<EOT
   set -ex
+  if [ -f libcontainer/dmz/_dmz.c ]; then
+  case "$(xx-info arch)" in
+    amd64|arm64|s390x|riscv64|386 )
+      CFLAGS="-fomit-frame-pointer -fno-unwind-tables -fno-ident -nostdlib -ffunction-sections -fdata-sections -Wl,--gc-sections"
+    ;;
+    * )
+      CFLAGS=-DRUNC_USE_STDLIB
+    ;;
+  esac
+  xx-clang $CFLAGS -Os -static -Wl,-s -o libcontainer/dmz/binary/runc-dmz libcontainer/dmz/_dmz.c
+  file libcontainer/dmz/binary/runc-dmz
+  xx-verify --static libcontainer/dmz/binary/runc-dmz
+  fi
   CGO_ENABLED=1 xx-go build -mod=vendor -ldflags '-extldflags -static' -tags 'apparmor seccomp netgo cgo static_build osusergo' -o /usr/bin/runc ./
   xx-verify --static /usr/bin/runc
   if [ "$(xx-info os)" = "linux" ]; then /usr/bin/runc --version; fi
