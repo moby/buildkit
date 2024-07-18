@@ -329,6 +329,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 			rec.NumCachedSteps = int32(st.NumCachedSteps)
 			rec.NumCompletedSteps = int32(st.NumCompletedSteps)
 			rec.NumTotalSteps = int32(st.NumTotalSteps)
+			rec.NumWarnings = int32(st.NumWarnings)
 			mu.Unlock()
 			return nil
 		})
