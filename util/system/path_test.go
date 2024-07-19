@@ -3,7 +3,6 @@ package system
 import (
 	"testing"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -77,7 +76,7 @@ func TestNormalizeWorkdir(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := NormalizeWorkdir(tc.currentWorkdir, tc.newWorkDir, "linux")
 			if tc.err != "" {
-				require.EqualError(t, errors.Cause(err), tc.err)
+				require.ErrorContains(t, err, tc.err)
 			} else {
 				require.NoError(t, err)
 			}
@@ -300,7 +299,7 @@ func TestNormalizeWorkdirWindows(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := NormalizeWorkdir(tc.currentWorkdir, tc.newWorkDir, "windows")
 			if tc.err != "" {
-				require.EqualError(t, errors.Cause(err), tc.err)
+				require.ErrorContains(t, err, tc.err)
 			} else {
 				require.NoError(t, err)
 			}
@@ -365,7 +364,7 @@ func TestNormalizeWorkdirUnix(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := NormalizeWorkdir(tc.currentWorkdir, tc.newWorkDir, "linux")
 			if tc.err != "" {
-				require.EqualError(t, errors.Cause(err), tc.err)
+				require.ErrorContains(t, err, tc.err)
 			} else {
 				require.NoError(t, err)
 			}
