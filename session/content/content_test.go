@@ -40,7 +40,7 @@ func TestContentAttachable(t *testing.T) {
 		}
 	}
 
-	s, err := session.NewSession(ctx, "foo", "bar")
+	s, err := session.NewSession(ctx, "bar")
 	require.NoError(t, err)
 
 	m, err := session.NewManager()

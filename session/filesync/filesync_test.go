@@ -30,7 +30,7 @@ func TestFileSyncIncludePatterns(t *testing.T) {
 	err = os.WriteFile(filepath.Join(tmpDir, "bar"), []byte("content2"), 0600)
 	require.NoError(t, err)
 
-	s, err := session.NewSession(ctx, "foo", "bar")
+	s, err := session.NewSession(ctx, "bar")
 	require.NoError(t, err)
 
 	m, err := session.NewManager()
