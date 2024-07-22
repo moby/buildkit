@@ -62,6 +62,7 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	statuspb "google.golang.org/genproto/googleapis/rpc/status"
 )
@@ -197,6 +198,7 @@ var allTests = integration.TestFuncs(
 	testHistoryError,
 	testHistoryFinalizeTrace,
 	testEmptyStages,
+	testLocalCustomSessionID,
 )
 
 // Tests that depend on the `security.*` entitlements
@@ -6071,6 +6073,79 @@ COPY --from=base /o* /
 	_, err = os.ReadFile(filepath.Join(destDir, "out2"))
 	require.Error(t, err)
 	require.True(t, errors.Is(err, os.ErrNotExist))
+}
+
+func testLocalCustomSessionID(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dockerfile := []byte(`
+FROM scratch AS base
+FROM scratch
+COPY out /out1
+COPY --from=base /another /out2
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	dir2 := integration.Tmpdir(
+		t,
+		fstest.CreateFile("out", []byte("contents1"), 0600),
+	)
+
+	dir3 := integration.Tmpdir(
+		t,
+		fstest.CreateFile("another", []byte("contents2"), 0600),
+	)
+
+	f := getFrontend(t, sb)
+
+	destDir := t.TempDir()
+
+	dirs := filesync.NewFSSyncProvider(filesync.StaticDirSource{
+		dockerui.DefaultLocalNameDockerfile: dir,
+		dockerui.DefaultLocalNameContext:    dir2,
+		"basedir":                           dir3,
+	})
+
+	s, err := session.NewSession(ctx, "hint")
+	require.NoError(t, err)
+	s.Allow(dirs)
+	go func() {
+		err := s.Run(ctx, c.Dialer())
+		assert.NoError(t, err)
+	}()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"context:base": "local:basedir",
+			"local-sessionid:" + dockerui.DefaultLocalNameDockerfile: s.ID(),
+			"local-sessionid:" + dockerui.DefaultLocalNameContext:    s.ID(),
+			"local-sessionid:basedir":                                s.ID(),
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "out1"))
+	require.NoError(t, err)
+	require.Equal(t, "contents1", string(dt))
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "out2"))
+	require.NoError(t, err)
+	require.Equal(t, "contents2", string(dt))
 }
 
 func testNamedOCILayoutContext(t *testing.T, sb integration.Sandbox) {
