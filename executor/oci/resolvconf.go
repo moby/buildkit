@@ -39,7 +39,7 @@ func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.Identity
 			fi, err := os.Stat(p)
 			if err != nil {
 				if !errors.Is(err, os.ErrNotExist) {
-					return struct{}{}, err
+					return struct{}{}, errors.WithStack(err)
 				}
 				generate = true
 			}
@@ -65,7 +65,7 @@ func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.Identity
 
 		dt, err := os.ReadFile(resolvconfPath())
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return struct{}{}, err
+			return struct{}{}, errors.WithStack(err)
 		}
 
 		tmpPath := p + ".tmp"
@@ -87,7 +87,7 @@ func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.Identity
 
 			f, err := resolvconf.Build(tmpPath, dnsNameservers, dnsSearchDomains, dnsOptions)
 			if err != nil {
-				return struct{}{}, err
+				return struct{}{}, errors.WithStack(err)
 			}
 			dt = f.Content
 		}
@@ -95,24 +95,24 @@ func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.Identity
 		if netMode != pb.NetMode_HOST || len(resolvconf.GetNameservers(dt, resolvconf.IP)) == 0 {
 			f, err := resolvconf.FilterResolvDNS(dt, true)
 			if err != nil {
-				return struct{}{}, err
+				return struct{}{}, errors.WithStack(err)
 			}
 			dt = f.Content
 		}
 
 		if err := os.WriteFile(tmpPath, dt, 0644); err != nil {
-			return struct{}{}, err
+			return struct{}{}, errors.WithStack(err)
 		}
 
 		if idmap != nil {
 			root := idmap.RootPair()
 			if err := os.Chown(tmpPath, root.UID, root.GID); err != nil {
-				return struct{}{}, err
+				return struct{}{}, errors.WithStack(err)
 			}
 		}
 
 		if err := os.Rename(tmpPath, p); err != nil {
-			return struct{}{}, err
+			return struct{}{}, errors.WithStack(err)
 		}
 		return struct{}{}, nil
 	})

@@ -219,7 +219,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 	bundle := filepath.Join(w.root, id)
 
 	if err := os.Mkdir(bundle, 0o711); err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	defer os.RemoveAll(bundle)
 
@@ -230,10 +230,10 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 
 	rootFSPath := filepath.Join(bundle, "rootfs")
 	if err := idtools.MkdirAllAndChown(rootFSPath, 0o700, identity); err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	if err := mount.All(rootMount, rootFSPath); err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	defer mount.Unmount(rootFSPath, 0)
 
@@ -241,12 +241,12 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 
 	uid, gid, sgids, err := oci.GetUser(rootFSPath, meta.User)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	f, err := os.Create(filepath.Join(bundle, "config.json"))
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	defer f.Close()
 
@@ -297,7 +297,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 	}
 
 	if err := json.NewEncoder(f).Encode(spec); err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	bklog.G(ctx).Debugf("> creating %s %v", id, meta.Args)
