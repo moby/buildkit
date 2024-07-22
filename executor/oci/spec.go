@@ -192,6 +192,12 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 			mount, err = sm.subMount(mount, m.Selector)
 			if err != nil {
 				releaseAll()
+				var os *os.PathError
+				if errors.As(err, &os) {
+					if strings.HasSuffix(os.Path, m.Selector) {
+						os.Path = m.Selector
+					}
+				}
 				return nil, nil, err
 			}
 			s.Mounts = append(s.Mounts, specs.Mount{
