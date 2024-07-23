@@ -24,6 +24,7 @@ env:
   GO_VERSION: "1.22"
   SETUP_BUILDX_VERSION: "latest"
   SETUP_BUILDKIT_IMAGE: "moby/buildkit:latest"
+  SCOUT_VERSION: "1.11.0"
   IMAGE_NAME: "moby/buildkit"
   PLATFORMS: "linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le,linux/riscv64"
   DESTDIR: "./bin"
@@ -188,6 +189,38 @@ jobs:
           CACHE_FROM: type=gha,scope=image${{ matrix.target-stage }}
           CACHE_TO: type=gha,scope=image${{ matrix.target-stage }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  scout:
+    runs-on: ubuntu-24.04
+    if: ${{ github.ref == 'refs/heads/master' && github.repository == 'moby/buildkit' }}
+    permissions:
+      # required to write sarif report
+      security-events: write
+    needs:
+      - image
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v4
+      -
+        name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      -
+        name: Scout
+        id: scout
+        uses: crazy-max/.github/.github/actions/docker-scout@ccae1c98f1237b5c19e4ef77ace44fa68b3bc7e4
+        with:
+          version: ${{ env.SCOUT_VERSION }}
+          format: sarif
+          image: registry://${{ env.IMAGE_NAME }}:master
+      -
+        name: Upload SARIF report
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ steps.scout.outputs.result-file }}
 
   release:
     runs-on: ubuntu-24.04
