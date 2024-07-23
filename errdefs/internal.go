@@ -1,6 +1,9 @@
 package errdefs
 
-import "errors"
+import (
+	"errors"
+	"syscall"
+)
 
 type internalErr struct {
 	error
@@ -27,5 +30,20 @@ func Internal(err error) error {
 
 func IsInternal(err error) bool {
 	var s system
-	return errors.As(err, &s)
+	if errors.As(err, &s) {
+		return true
+	}
+
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
+		if isInternalSyscall(errno) {
+			return true
+		}
+	}
+	return false
+}
+
+func isInternalSyscall(err syscall.Errno) bool {
+	_, ok := syscallErrors()[err]
+	return ok
 }
