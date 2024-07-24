@@ -32,10 +32,6 @@ FROM --platform=$BUILDPLATFORM tonistiigi/xx:${XX_VERSION} AS xx
 # go base image
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS golatest
 
-# git stage is used for checking out remote repository sources
-FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS git
-RUN apk add --no-cache git
-
 # gobuild is base stage for compiling go/cgo
 FROM golatest AS gobuild-base
 RUN apk add --no-cache file bash clang lld musl-dev pkgconfig git make
@@ -48,23 +44,17 @@ RUN --mount=target=/root/.cache,type=cache \
   --mount=target=/go/pkg/mod,type=cache \
   GOBIN=/usr/bin go install github.com/go-delve/delve/cmd/dlv@${DELVE_VERSION}
 
-# runc source
-FROM git AS runc-src
-ARG RUNC_VERSION
-WORKDIR /usr/src
-RUN git clone https://github.com/opencontainers/runc.git runc \
-  && cd runc && git checkout -q "$RUNC_VERSION"
-
 # build runc binary
 FROM gobuild-base AS runc
 WORKDIR $GOPATH/src/github.com/opencontainers/runc
+ARG RUNC_VERSION
+ADD --keep-git-dir=true "https://github.com/opencontainers/runc.git#$RUNC_VERSION" .
 ARG TARGETPLATFORM
 # gcc is only installed for libgcc
 # lld has issues building static binaries for ppc so prefer ld for it
 RUN set -e; xx-apk add musl-dev gcc libseccomp-dev libseccomp-static; \
   [ "$(xx-info arch)" != "ppc64le" ] || XX_CC_PREFER_LINKER=ld xx-clang --setup-target-triple
-RUN --mount=from=runc-src,src=/usr/src/runc,target=. \
-  --mount=target=/root/.cache,type=cache <<EOT
+RUN --mount=target=/root/.cache,type=cache <<EOT
   set -ex
   CGO_ENABLED=1 xx-go build -mod=vendor -ldflags '-extldflags -static' -tags 'apparmor seccomp netgo cgo static_build osusergo' -o /usr/bin/runc ./
   xx-verify --static /usr/bin/runc
@@ -139,19 +129,13 @@ RUN --mount=target=. --mount=target=/root/.cache,type=cache \
   fi
 EOT
 
-# dnsname source
-FROM git AS dnsname-src
-ARG DNSNAME_VERSION
-WORKDIR /usr/src
-RUN git clone https://github.com/containers/dnsname.git dnsname \
-  && cd dnsname && git checkout -q "$DNSNAME_VERSION"
-
 # build dnsname CNI plugin for testing
 FROM gobuild-base AS dnsname
 WORKDIR /go/src/github.com/containers/dnsname
+ARG DNSNAME_VERSION
+ADD --keep-git-dir=true "https://github.com/containers/dnsname.git#$DNSNAME_VERSION" .
 ARG TARGETPLATFORM
-RUN --mount=from=dnsname-src,src=/usr/src/dnsname,target=.,rw \
-    --mount=target=/root/.cache,type=cache \
+RUN --mount=target=/root/.cache,type=cache \
     CGO_ENABLED=0 xx-go build -o /usr/bin/dnsname ./plugins/meta/dnsname && \
     xx-verify --static /usr/bin/dnsname
 
@@ -216,23 +200,15 @@ RUN apk add --no-cache fuse3 git openssh pigz xz iptables ip6tables \
 COPY --link examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 VOLUME /var/lib/buildkit
 
-FROM git AS containerd-src
-WORKDIR /usr/src
-RUN git clone https://github.com/containerd/containerd.git containerd
-
-FROM gobuild-base AS containerd-base
+FROM gobuild-base AS containerd
 WORKDIR /go/src/github.com/containerd/containerd
+ARG CONTAINERD_VERSION
+ADD --keep-git-dir=true "https://github.com/containerd/containerd.git#$CONTAINERD_VERSION" .
 ARG TARGETPLATFORM
 ENV CGO_ENABLED=1 BUILDTAGS=no_btrfs GO111MODULE=off
 RUN xx-apk add musl-dev gcc && xx-go --wrap
-
-FROM containerd-base AS containerd
-ARG CONTAINERD_VERSION
-RUN --mount=from=containerd-src,src=/usr/src/containerd,rw \
-    --mount=target=/root/.cache,type=cache <<EOT
+RUN --mount=target=/root/.cache,type=cache <<EOT
   set -ex
-  git fetch origin
-  git checkout -q "$CONTAINERD_VERSION"
   mkdir /out
   ext=""
   if [ "$(xx-info os)" = "windows" ]; then
@@ -249,13 +225,15 @@ RUN --mount=from=containerd-src,src=/usr/src/containerd,rw \
 EOT
 
 # containerd v1.6 for integration tests
-FROM containerd-base AS containerd-alt-16
+FROM gobuild-base AS containerd-alt-16
+WORKDIR /go/src/github.com/containerd/containerd
 ARG CONTAINERD_ALT_VERSION_16
-RUN --mount=from=containerd-src,src=/usr/src/containerd,rw \
-    --mount=target=/root/.cache,type=cache <<EOT
+ADD --keep-git-dir=true "https://github.com/containerd/containerd.git#$CONTAINERD_ALT_VERSION_16" .
+ARG TARGETPLATFORM
+ENV CGO_ENABLED=1 BUILDTAGS=no_btrfs GO111MODULE=off
+RUN xx-apk add musl-dev gcc && xx-go --wrap
+RUN --mount=target=/root/.cache,type=cache <<EOT
   set -ex
-  git fetch origin
-  git checkout -q "$CONTAINERD_ALT_VERSION_16"
   mkdir /out
   ext=""
   if [ "$(xx-info os)" = "windows" ]; then
@@ -271,19 +249,13 @@ RUN --mount=from=containerd-src,src=/usr/src/containerd,rw \
   fi
 EOT
 
-FROM git AS registry-src
-WORKDIR /usr/src
-RUN git clone https://github.com/distribution/distribution.git distribution
-
 FROM gobuild-base AS registry
-ARG REGISTRY_VERSION
-ARG TARGETPLATFORM
 WORKDIR /go/src/github.com/docker/distribution
-RUN --mount=from=registry-src,src=/usr/src/distribution,rw \
-    --mount=target=/root/.cache,type=cache <<EOT
+ARG REGISTRY_VERSION
+ADD --keep-git-dir=true "https://github.com/distribution/distribution.git#$REGISTRY_VERSION" .
+ARG TARGETPLATFORM
+RUN --mount=target=/root/.cache,type=cache <<EOT
   set -ex
-  git fetch origin
-  git checkout -q "$REGISTRY_VERSION"
   mkdir /out
   export GOPATH="$(pwd)/Godeps/_workspace:$GOPATH"
   GO111MODULE=off CGO_ENABLED=0 xx-go build -o /out/registry ./cmd/registry
@@ -294,22 +266,20 @@ RUN --mount=from=registry-src,src=/usr/src/distribution,rw \
 EOT
 
 FROM gobuild-base AS rootlesskit
-ARG ROOTLESSKIT_VERSION
-RUN git clone https://github.com/rootless-containers/rootlesskit.git /go/src/github.com/rootless-containers/rootlesskit
 WORKDIR /go/src/github.com/rootless-containers/rootlesskit
+ARG ROOTLESSKIT_VERSION
+ADD --keep-git-dir=true "https://github.com/rootless-containers/rootlesskit.git#$ROOTLESSKIT_VERSION" .
 ARG TARGETPLATFORM
 RUN  --mount=target=/root/.cache,type=cache \
-  git checkout -q "$ROOTLESSKIT_VERSION"  && \
   CGO_ENABLED=0 xx-go build -o /rootlesskit ./cmd/rootlesskit && \
   xx-verify --static /rootlesskit
 
 FROM gobuild-base AS stargz-snapshotter
-ARG STARGZ_SNAPSHOTTER_VERSION
-RUN git clone https://github.com/containerd/stargz-snapshotter.git /go/src/github.com/containerd/stargz-snapshotter
 WORKDIR /go/src/github.com/containerd/stargz-snapshotter
+ARG STARGZ_SNAPSHOTTER_VERSION
+ADD --keep-git-dir=true "https://github.com/containerd/stargz-snapshotter.git#$STARGZ_SNAPSHOTTER_VERSION" .
 ARG TARGETPLATFORM
 RUN --mount=target=/root/.cache,type=cache \
-  git checkout -q "$STARGZ_SNAPSHOTTER_VERSION" && \
   xx-go --wrap && \
   mkdir /out && CGO_ENABLED=0 PREFIX=/out/ make && \
   xx-verify --static /out/containerd-stargz-grpc && \
