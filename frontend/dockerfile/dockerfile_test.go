@@ -2515,7 +2515,6 @@ func testDockerfileADDFromURL(t *testing.T, sb integration.Sandbox) {
 		ADD %s /dest/
 		`,
 		`FROM nanoserver
-USER ContainerAdministrator
 ADD %s /dest/`})
 
 	dockerfile := []byte(fmt.Sprintf(dockerfileContent, server.URL+"/foo"))
@@ -2533,7 +2532,8 @@ ADD %s /dest/`})
 	err := cmd.Run()
 	require.NoError(t, err)
 
-	dt, err := os.ReadFile(filepath.Join(destDir, "dest/foo"))
+	path_ := filepath.Join(destDir, "dest/foo")
+	dt, err := os.ReadFile(path_)
 	require.NoError(t, err)
 	require.Equal(t, []byte("content1"), dt)
 
@@ -2722,7 +2722,6 @@ ADD %s /newname.tar.gz
 }
 
 func testDockerfileAddArchiveWildcard(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	buf := bytes.NewBuffer(nil)
@@ -2899,7 +2898,6 @@ ENV foo=bar
 `, `
 FROM nanoserver
 ENV foo=bar
-WORKDIR /app
 `}))
 
 	dir := integration.Tmpdir(
@@ -2936,20 +2934,21 @@ WORKDIR /app
 
 	require.NotEqual(t, "", ociimg.OS)
 	require.NotEqual(t, "", ociimg.Architecture)
-	require.NotEqual(t, "", ociimg.Config.WorkingDir)
 	require.Equal(t, "layers", ociimg.RootFS.Type)
 	if runtime.GOOS == "windows" {
-		require.Equal(t, 2, len(ociimg.RootFS.DiffIDs))
-		require.Equal(t, 3, len(ociimg.History))
+		require.Equal(t, 1, len(ociimg.RootFS.DiffIDs))
+		require.Equal(t, 2, len(ociimg.History))
 		require.Contains(t, ociimg.History[1].CreatedBy, "ENV foo=bar")
 		require.Equal(t, false, ociimg.History[0].EmptyLayer)
 		require.Contains(t, ociimg.Config.Env[1], "foo=bar")
+		require.Equal(t, "", ociimg.Config.WorkingDir)
 	} else {
 		require.Equal(t, 0, len(ociimg.RootFS.DiffIDs))
 		require.Equal(t, 1, len(ociimg.History))
 		require.Contains(t, ociimg.History[0].CreatedBy, "ENV foo=bar")
 		require.Equal(t, true, ociimg.History[0].EmptyLayer)
 		require.Contains(t, ociimg.Config.Env, "foo=bar")
+		require.NotEqual(t, "", ociimg.Config.WorkingDir)
 	}
 
 	require.Condition(t, func() bool {
@@ -3186,7 +3185,6 @@ func testDockerfileLowercase(t *testing.T, sb integration.Sandbox) {
 }
 
 func testExportedHistory(t *testing.T, sb integration.Sandbox) {
-	//integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
@@ -3207,7 +3205,7 @@ ENV foo=bar
 COPY foo /foo2
 FROM nanoserver
 LABEL lbl=val
-COPY --from=base foo2 foo3
+COPY --from=base /foo2 /foo3
 WORKDIR /
 RUN ["cmd", "/c", "echo bar > foo4"]
 RUN ["cmd", "/c", "dir"]
@@ -4098,17 +4096,22 @@ COPY --from=golang /usr/bin/go go
 }
 
 func testMultiStageCaseInsensitive(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows([2]string{`
 FROM scratch AS STAge0
 COPY foo bar
 FROM scratch AS staGE1
 COPY --from=staGE0 bar baz
 FROM scratch
 COPY --from=stage1 baz bax
-`)
+`, `
+FROM nanoserver AS STAge0
+COPY foo bar
+FROM nanoserver AS staGE1
+COPY --from=staGE0 bar baz
+FROM nanoserver
+COPY --from=stage1 baz bax`}))
 	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
@@ -4144,14 +4147,16 @@ COPY --from=stage1 baz bax
 }
 
 func testLabels(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureImageExporter)
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows([2]string{`
 FROM scratch
 LABEL foo=bar
-`)
+`, `
+FROM nanoserver
+LABEL foo=bar
+`}))
 	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
@@ -4216,14 +4221,17 @@ LABEL foo=bar
 
 // #2008
 func testWildcardRenameCache(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
-
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows([2]string{`
 FROM alpine
 COPY file* /files/
 RUN ls /files/file1
-`)
+`,
+		`
+FROM nanoserver
+COPY file* /
+RUN dir file1
+`}))
 	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
@@ -4487,7 +4495,6 @@ COPY --from=base arch /
 }
 
 func testImageManifestCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport, workers.FeatureCacheBackendLocal)
 	f := getFrontend(t, sb)
 
@@ -4497,7 +4504,7 @@ func testImageManifestCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	}
 	require.NoError(t, err)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows([2]string{`
 FROM busybox AS base
 COPY foo const
 #RUN echo -n foobar > const
@@ -4505,7 +4512,14 @@ RUN cat /dev/urandom | head -c 100 | sha256sum > unique
 FROM scratch
 COPY --from=base const /
 COPY --from=base unique /
-`)
+`, `
+FROM nanoserver AS base
+RUN mkdir const
+COPY foo /const
+RUN echo ^"test data^" > unique
+FROM nanoserver
+COPY --from=base /const /
+COPY --from=base /unique /`}))
 
 	dir := integration.Tmpdir(
 		t,
@@ -4683,16 +4697,21 @@ COPY --from=base unique /
 }
 
 func testReproducibleIDs(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	//integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureImageExporter)
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows([2]string{`
 FROM busybox
 ENV foo=bar
 COPY foo /
 RUN echo bar > bar
-`)
+`, `
+FROM nanoserver
+ENV foo=bar
+COPY foo /
+RUN echo bar > bar
+`}))
 	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
@@ -4749,7 +4768,6 @@ RUN echo bar > bar
 }
 
 func testImportExportReproducibleIDs(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	cdAddress := sb.ContainerdAddress()
 	if cdAddress == "" {
 		t.Skip("test requires containerd worker")
@@ -4763,12 +4781,17 @@ func testImportExportReproducibleIDs(t *testing.T, sb integration.Sandbox) {
 	}
 	require.NoError(t, err)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows([2]string{`
 FROM busybox
 ENV foo=bar
 COPY foo /
 RUN echo bar > bar
-`)
+`, `
+FROM nanoserver
+ENV foo=bar
+COPY foo /
+RUN echo bar > bar
+`}))
 
 	dir := integration.Tmpdir(
 		t,
