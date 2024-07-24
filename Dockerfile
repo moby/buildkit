@@ -235,7 +235,7 @@ ARG CONTAINERD_VERSION
 RUN --mount=from=containerd-src,src=/usr/src/containerd,rw \
     --mount=target=/root/.cache,type=cache <<EOT
   set -ex
-  git switch -q -d "$CONTAINERD_VERSION"
+  git checkout -q "$CONTAINERD_VERSION"
   mkdir /out
   ext=""
   if [ "$(xx-info os)" = "windows" ]; then
@@ -257,7 +257,7 @@ ARG CONTAINERD_ALT_VERSION_16
 RUN --mount=from=containerd-src,src=/usr/src/containerd,rw \
     --mount=target=/root/.cache,type=cache <<EOT
   set -ex
-  git switch -q -d "$CONTAINERD_ALT_VERSION_16"
+  git checkout -q "$CONTAINERD_ALT_VERSION_16"
   mkdir /out
   ext=""
   if [ "$(xx-info os)" = "windows" ]; then
