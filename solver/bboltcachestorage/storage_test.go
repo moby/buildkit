@@ -16,7 +16,7 @@ func TestBoltCacheStorage(t *testing.T) {
 		st, err := NewStore(filepath.Join(tmpDir, "cache.db"))
 		require.NoError(t, err)
 		t.Cleanup(func() {
-			require.NoError(t, st.db.Close())
+			require.NoError(t, st.Close())
 		})
 
 		return st

@@ -22,6 +22,7 @@ import (
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/identity"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
+	"github.com/moby/buildkit/util/db"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/iohelper"
 	"github.com/moby/buildkit/util/leaseutil"
@@ -39,7 +40,7 @@ const (
 )
 
 type HistoryQueueOpt struct {
-	DB           *bolt.DB
+	DB           db.Transactor
 	LeaseManager *leaseutil.Manager
 	ContentStore *containerdsnapshot.Store
 	CleanConfig  *config.HistoryConfig
