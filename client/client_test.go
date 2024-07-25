@@ -6297,6 +6297,7 @@ func testExportLocalNoPlatformSplit(t *testing.T, sb integration.Sandbox) {
 }
 
 func testExportLocalNoPlatformSplitOverwrite(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureMultiPlatform)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -8131,6 +8132,7 @@ func testPullWithLayerLimit(t *testing.T, sb integration.Sandbox) {
 }
 
 func testCallInfo(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureInfo)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -10568,6 +10570,7 @@ func testLayerLimitOnMounts(t *testing.T, sb integration.Sandbox) {
 }
 
 func testClientCustomGRPCOpts(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	var interceptedMethods []string
 	intercept := func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		interceptedMethods = append(interceptedMethods, method)

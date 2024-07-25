@@ -189,7 +189,9 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 							t.Skip("rootless")
 						}
 						ctx := appcontext.Context()
-						if !strings.HasSuffix(fn, "NoParallel") {
+						// TODO(profnandaa): to revisit this to allow tests run
+						// in parallel on Windows in a stable way. Is flaky currently.
+						if !strings.HasSuffix(fn, "NoParallel") && runtime.GOOS != "windows" {
 							t.Parallel()
 						}
 						require.NoError(t, sandboxLimiter.Acquire(context.TODO(), 1))
@@ -273,23 +275,7 @@ func copyImagesLocal(t *testing.T, host string, images map[string]string) error 
 }
 
 func OfficialImages(names ...string) map[string]string {
-	ns := runtime.GOARCH
-	if ns == "arm64" {
-		ns = "arm64v8"
-	} else if ns != "amd64" {
-		ns = "library"
-	}
-	m := map[string]string{}
-	for _, name := range names {
-		ref := "docker.io/" + ns + "/" + name
-		if pns, ok := pins[name]; ok {
-			if dgst, ok := pns[ns]; ok {
-				ref += "@" + dgst
-			}
-		}
-		m["library/"+name] = ref
-	}
-	return m
+	return officialImages(names...)
 }
 
 func withMirrorConfig(mirror string) ConfigUpdater {
@@ -439,9 +425,19 @@ func prepareValueMatrix(tc testConf) []matrixValue {
 	return m
 }
 
-// Skips tests on Windows
+// Skips tests on platform
 func SkipOnPlatform(t *testing.T, goos string) {
 	if runtime.GOOS == goos {
 		t.Skipf("Skipped on %s", goos)
 	}
+}
+
+// Selects between two types, returns second
+// argument if on Windows or else first argument.
+// Typically used for selecting test cases.
+func UnixOrWindows[T any](unix, windows T) T {
+	if runtime.GOOS == "windows" {
+		return windows
+	}
+	return unix
 }
