@@ -14,7 +14,6 @@ import (
 
 	ctd "github.com/containerd/containerd"
 	"github.com/containerd/containerd/defaults"
-	"github.com/containerd/containerd/pkg/userns"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/network/cniprovider"
@@ -22,6 +21,7 @@ import (
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/containerd"
+	"github.com/moby/sys/user/userns"
 	"github.com/pelletier/go-toml"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
