@@ -94,8 +94,12 @@ func StartCmd(cmd *exec.Cmd, logs map[string]*bytes.Buffer) (func() error, error
 		case <-ctx.Done():
 		case <-stopped:
 		case <-stop:
+			// windows processes not responding to SIGTERM
+			signal := UnixOrWindows(syscall.SIGTERM, syscall.SIGKILL)
+			signalStr := UnixOrWindows("SIGTERM", "SIGKILL")
 			fmt.Fprintf(cmd.Stderr, "> sending sigterm %v\n", time.Now())
-			cmd.Process.Signal(syscall.SIGTERM)
+			fmt.Fprintf(cmd.Stderr, "> sending %s %v\n", signalStr, time.Now())
+			cmd.Process.Signal(signal)
 			go func() {
 				select {
 				case <-stopped:
