@@ -11,5 +11,5 @@ updates:
       # trigger a new version: https://github.com/docker/buildx/pull/2222#issuecomment-1919092153
       - dependency-name: "docker/docs"
     labels:
-      - "dependencies"
+      - "area/dependencies"
       - "bot"
