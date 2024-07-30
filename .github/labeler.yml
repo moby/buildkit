@@ -32,11 +32,12 @@ area/api:
 
 # area:storage
 area/storage:
-  - changed-files:
-      - any-glob-to-any-file:
-          - 'cache/**'
-          - 'snapshot/**'
-      - all-globs-to-all-files: '!cache/remotecache/**'
+  - all:
+      - changed-files:
+          - any-glob-to-any-file:
+              - 'cache/**'
+              - 'snapshot/**'
+          - all-globs-to-all-files: '!cache/remotecache/**'
 
 # area:remotecache
 area/remotecache:
