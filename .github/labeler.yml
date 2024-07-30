@@ -114,7 +114,9 @@ area/frontend:
 # area:hack
 area/hack:
   - changed-files:
-      - any-glob-to-any-file: 'hack/**'
+      - any-glob-to-any-file:
+          - 'hack/**'
+          - 'frontend/dockerfile/cmd/dockerfile-frontend/hack/**'
 
 # area:session
 area/session:
