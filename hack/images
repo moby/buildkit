@@ -52,6 +52,20 @@ if [ -n "$localmode" ]; then
   attestFlags=""
 fi
 
+if [ -z "$localmode" ] && [ "$GITHUB_ACTIONS" = "true" ]; then
+  outputFlag="${outputFlag},annotation.org.opencontainers.image.title=BuildKit"
+  if [ -n "$GITHUB_SHA" ]; then
+    outputFlag="${outputFlag},annotation.org.opencontainers.image.revision=$GITHUB_SHA"
+  fi
+  if [ -n "$GITHUB_REPOSITORY" ] && [ -n "$GITHUB_SERVER_URL" ]; then
+    outputFlag="${outputFlag},annotation.org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+    outputFlag="${outputFlag},annotation.org.opencontainers.image.url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+  fi
+  if [ -n "$versionTag" ]; then
+    outputFlag="${outputFlag},annotation.org.opencontainers.image.version=$versionTag"
+  fi
+fi
+
 targetFlag=""
 if [ -n "$TARGET" ]; then
   targetFlag="--target=$TARGET"
