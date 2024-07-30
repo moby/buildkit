@@ -3,153 +3,155 @@ area/project:
   - all:
       - changed-files:
           - any-glob-to-any-file:
-              - .github/**
-              - LICENSE
-              - AUTHORS
-              - MAINTAINERS
-              - PROJECT.md
-              - README.md
-              - .gitignore
-              - codecov.yml
-          - all-globs-to-all-files: "!.github/workflows/*"
+              - '.github/**'
+              - 'LICENSE'
+              - 'AUTHORS'
+              - 'MAINTAINERS'
+              - 'PROJECT.md'
+              - 'README.md'
+              - '.gitignore'
+              - 'codecov.yml'
+          - all-globs-to-all-files: '!.github/workflows/*'
 
 # Add 'ci' label to changes in the .github/workflows folder
 area/ci:
   - changed-files:
-      - any-glob-to-any-file: ".github/workflows/**"
+      - any-glob-to-any-file: '.github/workflows/**'
 
 # Add 'tests' label to changes in test files
 area/testing:
   - changed-files:
       - any-glob-to-any-file:
-          - tests/**
-          - "**/*_test.go"
+          - 'tests/**'
+          - '**/*_test.go'
 
 # area:api
 area/api:
   - changed-files:
-      - any-glob-to-any-file: "api/**"
+      - any-glob-to-any-file: 'api/**'
 
 # area:storage
 area/storage:
-  - changed-files:
-      - any-glob-to-any-file:
-          - "cache/**"
-          - "snapshot/**"
-      - all-globs-to-all-files: "!cache/remotecache/**"
+  - all:
+      - changed-files:
+          - any-glob-to-any-file:
+              - 'cache/**'
+              - 'snapshot/**'
+          - all-globs-to-all-files: '!cache/remotecache/**'
 
 # area:remotecache
 area/remotecache:
   - changed-files:
-      - any-glob-to-any-file: "cache/remotecache/**"
+      - any-glob-to-any-file: 'cache/remotecache/**'
 
 # area:client
 area/client:
   - changed-files:
-      - any-glob-to-any-file: "client/**"
+      - any-glob-to-any-file: 'client/**'
 
 # area:llb
 area/llb:
   - changed-files:
-      - any-glob-to-any-file: "client/llb/**"
+      - any-glob-to-any-file: 'client/llb/**'
 
 # area:buildctl
 area/buildctl:
   - changed-files:
-      - any-glob-to-any-file: "cmd/buildctl/**"
+      - any-glob-to-any-file: 'cmd/buildctl/**'
 
 # area:buildkitd
 area/buildkitd:
   - changed-files:
-      - any-glob-to-any-file: "cmd/buildkitd/**"
+      - any-glob-to-any-file: 'cmd/buildkitd/**'
 
 # area:dependencies
 area/dependencies:
   - changed-files:
       - any-glob-to-any-file:
-          - go.mod
-          - go.sum
-          - vendor/**
-          - tools/**
+          - 'go.mod'
+          - 'go.sum'
+          - 'vendor/**'
+          - 'tools/**'
 
 # area:docs
 area/docs:
   - changed-files:
       - any-glob-to-any-file:
-          - "docs/**"
-          - "frontend/dockerfile/docs/**"
+          - 'docs/**'
+          - 'frontend/dockerfile/docs/**'
 
 # area:dockerfile
 area/dockerfile:
   - changed-files:
-      - any-glob-to-any-file: "frontend/dockerfile/**"
+      - any-glob-to-any-file: 'frontend/dockerfile/**'
 
 # area:dockerfile/checks
 area/dockerfile/checks:
   - changed-files:
       - any-glob-to-any-file:
-          - "frontend/dockerfile/linter"
-          - "frontend/dockerfile/subrequests/lint"
+          - 'frontend/dockerfile/linter'
+          - 'frontend/dockerfile/subrequests/lint'
 
 # area:examples
 area/examples:
   - changed-files:
-      - any-glob-to-any-file: "examples/**"
+      - any-glob-to-any-file: 'examples/**'
 
 # area:executor
 area/executor:
   - changed-files:
-      - any-glob-to-any-file: "executor/**"
+      - any-glob-to-any-file: 'executor/**'
 
 # area:exporter
 area/exporter:
   - changed-files:
-      - any-glob-to-any-file: "exporter/**"
+      - any-glob-to-any-file: 'exporter/**'
 
 # area:frontend
 area/frontend:
   - changed-files:
-      - any-glob-to-any-file: "frontend/**"
+      - any-glob-to-any-file: 'frontend/**'
 
 # area:hack
 area/hack:
   - changed-files:
-      - any-glob-to-any-file: "hack/**"
+      - any-glob-to-any-file:
+          - 'hack/**'
+          - 'frontend/dockerfile/cmd/dockerfile-frontend/hack/**'
 
 # area:session
 area/session:
   - changed-files:
-      - any-glob-to-any-file: "session/**"
+      - any-glob-to-any-file: 'session/**'
 
 # area:solver
 area/solver:
   - changed-files:
       - any-glob-to-any-file:
-          - "control/**"
-          - "solver/**"
+          - 'control/**'
+          - 'solver/**'
 
 # area:source
 area/source:
   - changed-files:
-      - any-glob-to-any-file: "source/**"
+      - any-glob-to-any-file: 'source/**'
 
 # area:sourcepolicy
 area/sourcepolicy:
   - changed-files:
-      - any-glob-to-any-file: "sourcepolicy/**"
+      - any-glob-to-any-file: 'sourcepolicy/**'
 
 # area:util
 area/util:
   - changed-files:
-      - any-glob-to-any-file: "util/**"
+      - any-glob-to-any-file: 'util/**'
 
 # area:worker
 area/worker:
   - changed-files:
-      - any-glob-to-any-file: "worker/**"
+      - any-glob-to-any-file: 'worker/**'
 
 # area:windows
 area/windows:
   - changed-files:
-      - any-glob-to-any-file:
-          - "**/*_windows.go"
+      - any-glob-to-any-file: '**/*_windows.go'
