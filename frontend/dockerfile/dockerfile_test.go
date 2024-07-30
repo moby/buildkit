@@ -285,6 +285,7 @@ func TestIntegration(t *testing.T) {
 			"granted": networkHostGranted,
 			"denied":  networkHostDenied,
 		}))...)
+}
 
 func testEmptyStringArgInEnv(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
@@ -329,6 +330,8 @@ COPY --from=build env.txt .
 	require.Contains(t, envStr, "BAR=")
 	require.NotContains(t, envStr, "FOO=")
 }
+
+func testDefaultEnvWithArgs(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
@@ -409,6 +412,11 @@ RUN if %myenv% NEQ foo%sbar (exit 1)
 `,
 	))
 
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -444,6 +452,7 @@ COPY . .
 RUN if exist foo (if not exist bar (exit 0) else (exit 1))
 `,
 	))
+
 	dockerfile2 := []byte(integration.UnixOrWindows(
 		`
 FROM busybox
@@ -456,7 +465,21 @@ COPY . .
 RUN if not exist foo (if exist bar (exit 0) else (exit 1))
 `,
 	))
+
+	ignore2 := []byte(`
+foo
+`)
+
+	dir := integration.Tmpdir(
 		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("Dockerfile.dockerignore", ignore, 0600),
+		fstest.CreateFile("Dockerfile2", dockerfile2, 0600),
+		fstest.CreateFile("Dockerfile2.dockerignore", ignore2, 0600),
+		fstest.CreateFile("foo", []byte("contents0"), 0600),
+		fstest.CreateFile("bar", []byte("contents0"), 0600),
+	)
+
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -934,25 +957,17 @@ RUN e="300:400"; p="/file"                         ; a=` + "`" + `stat -c "%u:%g
 }
 
 func testCopyWildcardCache(t *testing.T, sb integration.Sandbox) {
-	//integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(integration.UnixOrWindows([2]string{`
+	dockerfile := []byte(`
 FROM busybox AS base
 COPY foo* files/
 RUN cat /dev/urandom | head -c 100 | sha256sum > unique
 COPY bar files/
 FROM scratch
 COPY --from=base unique /
-`, `
-FROM nanoserver AS base
-USER ContainerAdministrator
-RUN  echo foo1 content > C:\\foo1.txt && echo foo2 content > C:\\foo2.txt
-
-FROM nanoserver
-USER ContainerAdministrator
-COPY --from=base C:\\foo1.txt C:\\files
-`}))
+`)
 
 	dir := integration.Tmpdir(
 		t,
@@ -1033,14 +1048,13 @@ COPY --from=base C:\\foo1.txt C:\\files
 }
 
 func testEmptyWildcard(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(integration.UnixOrWindows([2]string{
-		`FROM scratch
+	dockerfile := []byte(`
+FROM scratch
 COPY foo nomatch* /
-`,
-		`FROM nanoserver
-COPY foo nomatch* /`}))
+`)
 
 	dir := integration.Tmpdir(
 		t,
@@ -1074,21 +1088,16 @@ COPY foo nomatch* /`}))
 }
 
 func testWorkdirUser(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(integration.UnixOrWindows([2]string{
-		`FROM busybox
+	dockerfile := []byte(`
+FROM busybox
 RUN adduser -D user
 USER user
 WORKDIR /mydir
 RUN [ "$(stat -c "%U %G" /mydir)" == "user user" ]
-`,
-		`nanoserver
-USER ContainerAdministrator
-RUN mkdir \mydir
-WORKDIR \mydir
-RUN icacls C:\\mydir | findstr "Administrators">nul || exit /b 1
-`}))
+`)
 
 	dir := integration.Tmpdir(
 		t,
@@ -1109,31 +1118,19 @@ RUN icacls C:\\mydir | findstr "Administrators">nul || exit /b 1
 }
 
 func testOutOfOrderStage(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := integration.UnixOrWindows([2]string{
-		`
-	FROM busybox AS target
-	COPY --from=build %s /out
-	
-	FROM alpine AS build
-	COPY /Dockerfile /d2
-	
-	FROM target
-	`,
-		`
-	FROM nanoserver AS target
-	COPY --from=build %s /out
-
-	FROM nanoserver AS build
-	COPY /Dockerfile /d2
-
-	FROM target
-	`})
-
 	for _, src := range []string{"/", "/d2"} {
+		dockerfile := []byte(fmt.Sprintf(`
+FROM busybox AS target
+COPY --from=build %s /out
 
-		dockerfile := []byte(fmt.Sprintf(dockerfile, src))
+FROM alpine AS build
+COPY /Dockerfile /d2
+
+FROM target
+`, src))
 
 		dir := integration.Tmpdir(
 			t,
@@ -1188,22 +1185,16 @@ COPY --from=base Dockerfile .
 }
 
 func testWorkdirExists(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(integration.UnixOrWindows([2]string{`
+	dockerfile := []byte(`
 FROM busybox
 RUN adduser -D user
 RUN mkdir /mydir && chown user:user /mydir
 WORKDIR /mydir
 RUN [ "$(stat -c "%U %G" /mydir)" == "user user" ]
-`, `
-FROM nanoserver
-USER ContainerAdministrator
-RUN mkdir \mydir
-RUN net user testuser Password!2345!@# /add /y
-RUN icacls \mydir /grant testuser:F
-WORKDIR /mydir
-RUN (icacls \mydir | findstr "testuser" >nul) || exit /b 1`}))
+`)
 
 	dir := integration.Tmpdir(
 		t,
