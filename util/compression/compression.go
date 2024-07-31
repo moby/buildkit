@@ -53,6 +53,16 @@ var (
 	Zstd = zstdType{}
 )
 
+// mediaTypeToCompressionType maps media-types to compression types.
+var mediaTypeToCompressionType = map[string]Type{
+	ocispecs.MediaTypeImageLayer:                     Uncompressed,
+	ocispecs.MediaTypeImageLayerNonDistributable:     Uncompressed, //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
+	ocispecs.MediaTypeImageLayerGzip:                 Gzip,
+	ocispecs.MediaTypeImageLayerNonDistributableGzip: Gzip, //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
+	ocispecs.MediaTypeImageLayerZstd:                 Zstd,
+	ocispecs.MediaTypeImageLayerNonDistributableZstd: Zstd, //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
+}
+
 type Config struct {
 	Type  Type
 	Force bool
@@ -96,17 +106,19 @@ func parse(t string) (Type, error) {
 	}
 }
 
-func fromMediaType(mediaType string) (Type, error) {
-	switch toOCILayerType[mediaType] {
-	case ocispecs.MediaTypeImageLayer, ocispecs.MediaTypeImageLayerNonDistributable: //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
-		return Uncompressed, nil
-	case ocispecs.MediaTypeImageLayerGzip, ocispecs.MediaTypeImageLayerNonDistributableGzip: //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
-		return Gzip, nil
-	case ocispecs.MediaTypeImageLayerZstd, ocispecs.MediaTypeImageLayerNonDistributableZstd: //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
-		return Zstd, nil
-	default:
+// FromMediaType returns the [Type] registered for the given mediaType.
+// It returns an error if the given mediaType is not supported or no
+// compression-type is registered for the given type.
+func FromMediaType(mediaType string) (Type, error) {
+	mt, ok := toOCILayerType[mediaType]
+	if !ok {
 		return nil, errors.Errorf("unsupported media type %s", mediaType)
 	}
+	ct, ok := mediaTypeToCompressionType[mt]
+	if !ok {
+		return nil, errors.Errorf("unsupported media type %s", mediaType)
+	}
+	return ct, nil
 }
 
 func IsMediaType(ct Type, mt string) bool {
