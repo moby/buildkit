@@ -25,14 +25,7 @@ func init() {
 	toDockerLayerType[nydusify.MediaTypeNydusBlob] = nydusify.MediaTypeNydusBlob
 	toOCILayerType[nydusify.MediaTypeNydusBlob] = nydusify.MediaTypeNydusBlob
 	mediaTypeToCompressionType[nydusify.MediaTypeNydusBlob] = Nydus
-}
-
-func Parse(t string) (Type, error) {
-	ct, err := parse(t)
-	if err != nil && t == Nydus.String() {
-		return Nydus, nil
-	}
-	return ct, err
+	toCompressionType[Nydus.String()] = Nydus
 }
 
 func (c nydusType) Compress(ctx context.Context, comp Config) (compressorFunc Compressor, finalize Finalizer) {

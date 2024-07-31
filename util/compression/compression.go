@@ -53,6 +53,13 @@ var (
 	Zstd = zstdType{}
 )
 
+var toCompressionType = map[string]Type{
+	Uncompressed.String(): Uncompressed,
+	Gzip.String():         Gzip,
+	EStargz.String():      EStargz,
+	Zstd.String():         Zstd,
+}
+
 // mediaTypeToCompressionType maps media-types to compression types.
 var mediaTypeToCompressionType = map[string]Type{
 	ocispecs.MediaTypeImageLayer:                     Uncompressed,
@@ -91,19 +98,14 @@ const (
 
 var Default = Gzip
 
-func parse(t string) (Type, error) {
-	switch t {
-	case Uncompressed.String():
-		return Uncompressed, nil
-	case Gzip.String():
-		return Gzip, nil
-	case EStargz.String():
-		return EStargz, nil
-	case Zstd.String():
-		return Zstd, nil
-	default:
-		return nil, errors.Errorf("unsupported compression type %s", t)
+// Parse returns the [Type] registered for the given name. It returns an error
+// if no compression-type is registered for the given name.
+func Parse(name string) (Type, error) {
+	ct, ok := toCompressionType[name]
+	if !ok {
+		return nil, errors.Errorf("unsupported compression type %s", name)
 	}
+	return ct, nil
 }
 
 // FromMediaType returns the [Type] registered for the given mediaType.
