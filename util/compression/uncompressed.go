@@ -10,6 +10,8 @@ import (
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
+type uncompressedType struct{}
+
 func (c uncompressedType) Compress(ctx context.Context, comp Config) (compressorFunc Compressor, finalize Finalizer) {
 	return func(dest io.Writer, mediaType string) (io.WriteCloser, error) {
 		return &iohelper.NopWriteCloser{Writer: dest}, nil

@@ -17,8 +17,6 @@ import (
 	nydusify "github.com/containerd/nydus-snapshotter/pkg/converter"
 )
 
-type nydusType struct{}
-
 var Nydus = nydusType{}
 
 func init() {
@@ -27,6 +25,8 @@ func init() {
 	mediaTypeToCompressionType[nydusify.MediaTypeNydusBlob] = Nydus
 	toCompressionType[Nydus.String()] = Nydus
 }
+
+type nydusType struct{}
 
 func (c nydusType) Compress(ctx context.Context, comp Config) (compressorFunc Compressor, finalize Finalizer) {
 	digester := digest.Canonical.Digester()

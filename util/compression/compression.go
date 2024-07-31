@@ -32,13 +32,6 @@ type Type interface {
 	String() string
 }
 
-type (
-	uncompressedType struct{}
-	gzipType         struct{}
-	estargzType      struct{}
-	zstdType         struct{}
-)
-
 var (
 	// Uncompressed indicates no compression.
 	Uncompressed = uncompressedType{}
