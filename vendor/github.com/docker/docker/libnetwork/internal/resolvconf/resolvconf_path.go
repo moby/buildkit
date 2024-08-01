@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/containerd/log"
+	"github.com/moby/buildkit/solver/pb"
 )
 
 const (
@@ -35,11 +36,15 @@ var (
 //
 // TODO(robmry) - alternatePath is only needed for legacy networking ...
 //
-//	Host networking can use the host's resolv.conf as-is, and with an internal
+//	Host networking can use the host's resolv.conf (defaultPath) as-is, and with an internal
 //	resolver it's also possible to use nameservers on the host's loopback
 //	interface. Once legacy networking is removed, this can always return
 //	defaultPath.
-func Path() string {
+func Path(netMode pb.NetMode) string {
+	if netMode == pb.NetMode_HOST {
+		return defaultPath
+	}
+
 	detectSystemdResolvConfOnce.Do(func() {
 		rc, err := Load(defaultPath)
 		if err != nil {

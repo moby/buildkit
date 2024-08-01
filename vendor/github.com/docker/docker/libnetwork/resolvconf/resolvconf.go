@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/docker/docker/libnetwork/internal/resolvconf"
+	"github.com/moby/buildkit/solver/pb"
 	"github.com/opencontainers/go-digest"
 )
 
@@ -24,13 +25,13 @@ type File struct {
 	Hash    []byte
 }
 
-func Path() string {
-	return resolvconf.Path()
+func Path(netMode pb.NetMode) string {
+	return resolvconf.Path(netMode)
 }
 
 // Get returns the contents of /etc/resolv.conf and its hash
-func Get() (*File, error) {
-	return GetSpecific(Path())
+func Get(netMode pb.NetMode) (*File, error) {
+	return GetSpecific(Path(netMode))
 }
 
 // GetSpecific returns the contents of the user specified resolv.conf file and its hash
