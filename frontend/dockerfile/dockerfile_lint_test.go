@@ -46,7 +46,78 @@ var lintTests = integration.TestFuncs(
 	testInvalidDefaultArgInFrom,
 	testFromPlatformFlagConstDisallowed,
 	testCopyIgnoredFiles,
+	testDefinitionDescription,
 )
+
+func testDefinitionDescription(t *testing.T, sb integration.Sandbox) {
+	dockerfile := []byte(`
+# foo this is the foo
+ARG foo=bar
+
+# base this is the base image
+FROM scratch AS base
+
+# version this is the version number
+ARG version=latest
+
+# baz this is the baz
+ARG foo=baz bar=qux baz=quux
+#
+ARG bit=bat
+
+# comment for something other than ARG or FROM
+COPY Dockerfile .
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`
+# bar this is the bar
+ARG foo=bar
+# BasE this is the BasE image
+FROM scratch AS base
+# definitely a bad comment
+ARG version=latest
+# definitely a bad comment
+ARG foo=baz bar=qux baz=quux
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "InvalidDefinitionDescription",
+				Description: "Comment for build stage or argument should follow the format: `# <arg/stage name> <description>`. If this is not intended to be a description comment, add an empty line or comment between the instruction and the comment.",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/invalid-definition-description/",
+				Detail:      "Comment for ARG should follow the format: `# foo <description>`",
+				Level:       1,
+				Line:        3,
+			},
+			{
+				RuleName:    "InvalidDefinitionDescription",
+				Description: "Comment for build stage or argument should follow the format: `# <arg/stage name> <description>`. If this is not intended to be a description comment, add an empty line or comment between the instruction and the comment.",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/invalid-definition-description/",
+				Detail:      "Comment for FROM should follow the format: `# base <description>`",
+				Level:       1,
+				Line:        5,
+			},
+			{
+				RuleName:    "InvalidDefinitionDescription",
+				Description: "Comment for build stage or argument should follow the format: `# <arg/stage name> <description>`. If this is not intended to be a description comment, add an empty line or comment between the instruction and the comment.",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/invalid-definition-description/",
+				Detail:      "Comment for ARG should follow the format: `# version <description>`",
+				Level:       1,
+				Line:        7,
+			},
+			{
+				RuleName:    "InvalidDefinitionDescription",
+				Description: "Comment for build stage or argument should follow the format: `# <arg/stage name> <description>`. If this is not intended to be a description comment, add an empty line or comment between the instruction and the comment.",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/invalid-definition-description/",
+				Detail:      "Comment for ARG should follow the format: `# <arg_key> <description>`",
+				Level:       1,
+				Line:        9,
+			},
+		},
+	})
+}
 
 func testCopyIgnoredFiles(t *testing.T, sb integration.Sandbox) {
 	dockerignore := []byte(`
@@ -267,30 +338,35 @@ COPY $bar .
 
 func testRuleCheckOption(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`#check=skip=all
+#
 FROM scratch as base
 copy Dockerfile .
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 
 	dockerfile = []byte(`#check=skip=all;error=true
+#
 FROM scratch as base
 copy Dockerfile .
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 
 	dockerfile = []byte(`#check=skip=ConsistentInstructionCasing,FromAsCasing
+#
 FROM scratch as base
 copy Dockerfile .
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 
 	dockerfile = []byte(`#check=skip=ConsistentInstructionCasing,FromAsCasing;error=true
+#
 FROM scratch as base
 copy Dockerfile .
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 
 	dockerfile = []byte(`#check=skip=ConsistentInstructionCasing
+#
 FROM scratch as base
 copy Dockerfile .
 `)
@@ -302,13 +378,14 @@ copy Dockerfile .
 				Description: "The 'as' keyword should match the case of the 'from' keyword",
 				URL:         "https://docs.docker.com/go/dockerfile/rule/from-as-casing/",
 				Detail:      "'as' and 'FROM' keywords' casing do not match",
-				Line:        2,
+				Line:        3,
 				Level:       1,
 			},
 		},
 	})
 
 	dockerfile = []byte(`#check=skip=ConsistentInstructionCasing;error=true
+#
 FROM scratch as base
 copy Dockerfile .
 `)
@@ -320,7 +397,7 @@ copy Dockerfile .
 				Description: "The 'as' keyword should match the case of the 'from' keyword",
 				URL:         "https://docs.docker.com/go/dockerfile/rule/from-as-casing/",
 				Detail:      "'as' and 'FROM' keywords' casing do not match",
-				Line:        2,
+				Line:        3,
 				Level:       1,
 			},
 		},
@@ -330,6 +407,7 @@ copy Dockerfile .
 	})
 
 	dockerfile = []byte(`#check=skip=all
+#
 FROM scratch as base
 copy Dockerfile .
 `)
@@ -341,7 +419,7 @@ copy Dockerfile .
 				Description: "The 'as' keyword should match the case of the 'from' keyword",
 				URL:         "https://docs.docker.com/go/dockerfile/rule/from-as-casing/",
 				Detail:      "'as' and 'FROM' keywords' casing do not match",
-				Line:        2,
+				Line:        3,
 				Level:       1,
 			},
 		},
@@ -354,6 +432,7 @@ copy Dockerfile .
 	})
 
 	dockerfile = []byte(`#check=error=true
+#
 FROM scratch as base
 copy Dockerfile .
 `)
@@ -368,9 +447,11 @@ copy Dockerfile .
 func testStageName(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
 # warning: stage name should be lowercase
+#
 FROM scratch AS BadStageName
 
 # warning: 'as' should match 'FROM' cmd casing.
+#
 FROM scratch as base2
 
 FROM scratch AS base3
@@ -383,7 +464,7 @@ FROM scratch AS base3
 				Description: "Stage names should be lowercase",
 				URL:         "https://docs.docker.com/go/dockerfile/rule/stage-name-casing/",
 				Detail:      "Stage name 'BadStageName' should be lowercase",
-				Line:        3,
+				Line:        4,
 				Level:       1,
 			},
 			{
@@ -391,7 +472,7 @@ FROM scratch AS base3
 				Description: "The 'as' keyword should match the case of the 'from' keyword",
 				URL:         "https://docs.docker.com/go/dockerfile/rule/from-as-casing/",
 				Detail:      "'as' and 'FROM' keywords' casing do not match",
-				Line:        6,
+				Line:        8,
 				Level:       1,
 			},
 		},
@@ -399,6 +480,7 @@ FROM scratch AS base3
 
 	dockerfile = []byte(`
 # warning: 'AS' should match 'from' cmd casing.
+#
 from scratch AS base
 
 from scratch as base2
@@ -412,7 +494,7 @@ from scratch as base2
 				Description: "The 'as' keyword should match the case of the 'from' keyword",
 				URL:         "https://docs.docker.com/go/dockerfile/rule/from-as-casing/",
 				Detail:      "'AS' and 'from' keywords' casing do not match",
-				Line:        3,
+				Line:        4,
 				Level:       1,
 			},
 		},
@@ -448,6 +530,7 @@ COPY Dockerfile \
 func testConsistentInstructionCasing(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
 # warning: 'FROM' should be either lowercased or uppercased
+#
 From scratch as base
 FROM scratch AS base2
 `)
@@ -460,7 +543,7 @@ FROM scratch AS base2
 				URL:         "https://docs.docker.com/go/dockerfile/rule/consistent-instruction-casing/",
 				Detail:      "Command 'From' should match the case of the command majority (uppercase)",
 				Level:       1,
-				Line:        3,
+				Line:        4,
 			},
 		},
 	})
@@ -488,6 +571,7 @@ COPY Dockerfile /bar
 
 	dockerfile = []byte(`
 # warning: 'frOM' should be either lowercased or uppercased
+#
 frOM scratch as base
 from scratch as base2
 `)
@@ -499,7 +583,7 @@ from scratch as base2
 				Description: "All commands within the Dockerfile should use the same casing (either upper or lower)",
 				URL:         "https://docs.docker.com/go/dockerfile/rule/consistent-instruction-casing/",
 				Detail:      "Command 'frOM' should match the case of the command majority (lowercase)",
-				Line:        3,
+				Line:        4,
 				Level:       1,
 			},
 		},
@@ -527,6 +611,7 @@ copy Dockerfile /bar
 
 	dockerfile = []byte(`
 # warning: 'from' should match command majority's casing (uppercase)
+#
 from scratch
 COPY Dockerfile /foo
 COPY Dockerfile /bar
@@ -540,7 +625,7 @@ COPY Dockerfile /baz
 				Description: "All commands within the Dockerfile should use the same casing (either upper or lower)",
 				URL:         "https://docs.docker.com/go/dockerfile/rule/consistent-instruction-casing/",
 				Detail:      "Command 'from' should match the case of the command majority (uppercase)",
-				Line:        3,
+				Line:        4,
 				Level:       1,
 			},
 		},
@@ -548,6 +633,7 @@ COPY Dockerfile /baz
 
 	dockerfile = []byte(`
 # warning: 'FROM' should match command majority's casing (lowercase)
+#
 FROM scratch
 copy Dockerfile /foo
 copy Dockerfile /bar
@@ -561,7 +647,7 @@ copy Dockerfile /baz
 				Description: "All commands within the Dockerfile should use the same casing (either upper or lower)",
 				URL:         "https://docs.docker.com/go/dockerfile/rule/consistent-instruction-casing/",
 				Detail:      "Command 'FROM' should match the case of the command majority (lowercase)",
-				Line:        3,
+				Line:        4,
 				Level:       1,
 			},
 		},
@@ -1380,6 +1466,12 @@ func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestPara
 			}
 			require.Greater(t, lintResults.Error.Location.SourceIndex, int32(-1))
 			require.Less(t, lintResults.Error.Location.SourceIndex, int32(len(lintResults.Sources)))
+		}
+
+		if len(warnings) != len(lintResults.Warnings) {
+			for _, w := range lintResults.Warnings {
+				t.Logf("Warning Received: %s\n", w.Detail)
+			}
 		}
 
 		require.Equal(t, len(warnings), len(lintResults.Warnings))
