@@ -122,6 +122,7 @@ type Mount struct {
 	CacheID      string
 	CacheSharing ShareMode
 	Required     bool
+	SecretAsEnv  bool
 	Mode         *uint64
 	UID          *uint64
 	GID          *uint64
@@ -153,6 +154,9 @@ func parseMount(val string, expander SingleWordExpander) (*Mount, error) {
 			case "readwrite", "rw":
 				m.ReadOnly = false
 				roAuto = false
+				continue
+			case "env":
+				m.SecretAsEnv = true
 				continue
 			case "required":
 				if m.Type == MountTypeSecret || m.Type == MountTypeSSH {
@@ -252,9 +256,15 @@ func parseMount(val string, expander SingleWordExpander) (*Mount, error) {
 				return nil, errors.Errorf("invalid value %s for gid", value)
 			}
 			m.GID = &gid
+		case "env":
+			env, err := strconv.ParseBool(value)
+			if err != nil {
+				return nil, errors.Errorf("invalid value for %q: %q", key, value)
+			}
+			m.SecretAsEnv = env
 		default:
 			allKeys := []string{
-				"type", "from", "source", "target", "readonly", "id", "sharing", "required", "mode", "uid", "gid", "src", "dst", "ro", "rw", "readwrite",
+				"type", "from", "source", "target", "readonly", "id", "sharing", "required", "mode", "uid", "gid", "src", "dst", "ro", "rw", "readwrite", "env",
 			}
 			return nil, suggest.WrapError(errors.Errorf("unexpected key '%s' in '%s'", key, field), key, allKeys, true)
 		}
