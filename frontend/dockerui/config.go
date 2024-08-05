@@ -46,30 +46,28 @@ const (
 
 	// Don't forget to update frontend documentation if you add
 	// a new build-arg: frontend/dockerfile/docs/reference.md
-	keyCacheNSArg              = "build-arg:BUILDKIT_CACHE_MOUNT_NS"
-	keyMultiPlatformArg        = "build-arg:BUILDKIT_MULTI_PLATFORM"
-	keyHostnameArg             = "build-arg:BUILDKIT_SANDBOX_HOSTNAME"
-	keyDockerfileLintArg       = "build-arg:BUILDKIT_DOCKERFILE_CHECK"
-	keyContextKeepGitDirArg    = "build-arg:BUILDKIT_CONTEXT_KEEP_GIT_DIR"
-	keySourceDateEpoch         = "build-arg:SOURCE_DATE_EPOCH"
-	keyCopyIgnoredCheckEnabled = "build-arg:BUILDKIT_DOCKERFILE_CHECK_COPYIGNORED_EXPERIMENT"
+	keyCacheNSArg           = "build-arg:BUILDKIT_CACHE_MOUNT_NS"
+	keyMultiPlatformArg     = "build-arg:BUILDKIT_MULTI_PLATFORM"
+	keyHostnameArg          = "build-arg:BUILDKIT_SANDBOX_HOSTNAME"
+	keyDockerfileLintArg    = "build-arg:BUILDKIT_DOCKERFILE_CHECK"
+	keyContextKeepGitDirArg = "build-arg:BUILDKIT_CONTEXT_KEEP_GIT_DIR"
+	keySourceDateEpoch      = "build-arg:SOURCE_DATE_EPOCH"
 )
 
 type Config struct {
-	BuildArgs               map[string]string
-	CacheIDNamespace        string
-	CgroupParent            string
-	Epoch                   *time.Time
-	ExtraHosts              []llb.HostIP
-	Hostname                string
-	ImageResolveMode        llb.ResolveMode
-	Labels                  map[string]string
-	NetworkMode             pb.NetMode
-	ShmSize                 int64
-	Target                  string
-	Ulimits                 []pb.Ulimit
-	LinterConfig            *linter.Config
-	CopyIgnoredCheckEnabled bool
+	BuildArgs        map[string]string
+	CacheIDNamespace string
+	CgroupParent     string
+	Epoch            *time.Time
+	ExtraHosts       []llb.HostIP
+	Hostname         string
+	ImageResolveMode llb.ResolveMode
+	Labels           map[string]string
+	NetworkMode      pb.NetMode
+	ShmSize          int64
+	Target           string
+	Ulimits          []pb.Ulimit
+	LinterConfig     *linter.Config
 
 	CacheImports           []client.CacheOptionsEntry
 	TargetPlatforms        []ocispecs.Platform // nil means default
@@ -288,16 +286,6 @@ func (bc *Client) init() error {
 		bc.LinterConfig, err = linter.ParseLintOptions(v)
 		if err != nil {
 			return errors.Wrapf(err, "failed to parse %s", keyDockerfileLintArg)
-		}
-	}
-
-	// CopyIgnoredCheckEnabled is an experimental feature to check if COPY is ignored by .dockerignore,
-	// and it is disabled by default. It is expected that this feature will be enabled by default in a future
-	// release, and this build-arg will be removed.
-	if v, ok := opts[keyCopyIgnoredCheckEnabled]; ok {
-		bc.CopyIgnoredCheckEnabled, err = strconv.ParseBool(v)
-		if err != nil {
-			return errors.Wrapf(err, "failed to parse %s", keyCopyIgnoredCheckEnabled)
 		}
 	}
 

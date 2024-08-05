@@ -64,12 +64,46 @@ ADD Dockerfile /windy
 		StreamBuildErrRegexp: regexp.MustCompile(`failed to solve: failed to compute cache key: failed to calculate checksum of ref [^\s]+ "/Dockerfile": not found`),
 	})
 
+	dockerfile = []byte(`# check=experimental=CopyIgnoredFile
+FROM scratch
+COPY Dockerfile .
+ADD Dockerfile /windy
+`)
+
 	checkLinterWarnings(t, sb, &lintTestParams{
-		Dockerfile:   dockerfile,
-		DockerIgnore: dockerignore,
-		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DOCKERFILE_CHECK_COPYIGNORED_EXPERIMENT": "true",
+		Dockerfile:           dockerfile,
+		DockerIgnore:         dockerignore,
+		BuildErrLocation:     3,
+		StreamBuildErrRegexp: regexp.MustCompile(`failed to solve: failed to compute cache key: failed to calculate checksum of ref [^\s]+ "/Dockerfile": not found`),
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "CopyIgnoredFile",
+				Description: "Attempting to Copy file that is excluded by .dockerignore",
+				Detail:      `Attempting to Copy file "Dockerfile" that is excluded by .dockerignore`,
+				URL:         "https://docs.docker.com/go/dockerfile/rule/copy-ignored-file/",
+				Level:       1,
+				Line:        3,
+			},
+			{
+				RuleName:    "CopyIgnoredFile",
+				Description: "Attempting to Copy file that is excluded by .dockerignore",
+				Detail:      `Attempting to Add file "Dockerfile" that is excluded by .dockerignore`,
+				URL:         "https://docs.docker.com/go/dockerfile/rule/copy-ignored-file/",
+				Level:       1,
+				Line:        4,
+			},
 		},
+	})
+
+	dockerfile = []byte(`# check=skip=all;experimental=CopyIgnoredFile
+FROM scratch
+COPY Dockerfile .
+ADD Dockerfile /windy
+`)
+
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile:           dockerfile,
+		DockerIgnore:         dockerignore,
 		BuildErrLocation:     3,
 		StreamBuildErrRegexp: regexp.MustCompile(`failed to solve: failed to compute cache key: failed to calculate checksum of ref [^\s]+ "/Dockerfile": not found`),
 		Warnings: []expectedLintWarning{
