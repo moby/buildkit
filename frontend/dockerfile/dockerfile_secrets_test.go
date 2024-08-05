@@ -16,6 +16,8 @@ import (
 var secretsTests = integration.TestFuncs(
 	testSecretFileParams,
 	testSecretRequiredWithoutValue,
+	testSecretAsEnviron,
+	testSecretAsEnvironWithFileMount,
 )
 
 func init() {
@@ -79,4 +81,64 @@ RUN --mount=type=secret,required,id=mysecret foo
 	}, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "secret mysecret: not found")
+}
+
+func testSecretAsEnviron(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox
+RUN --mount=type=secret,id=mysecret,env=SECRET_ENV [ "$SECRET_ENV" == "pw" ] && [ ! -f /run/secrets/mysecret ] || false
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		Session: []session.Attachable{secretsprovider.FromMap(map[string][]byte{
+			"mysecret": []byte("pw"),
+		})},
+	}, nil)
+	require.NoError(t, err)
+}
+
+func testSecretAsEnvironWithFileMount(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox
+RUN --mount=type=secret,id=mysecret,target=/run/secrets/secret,env=SECRET_ENV [ "$SECRET_ENV" == "pw" ] && [ -f /run/secrets/secret ] || false
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		Session: []session.Attachable{secretsprovider.FromMap(map[string][]byte{
+			"mysecret": []byte("pw"),
+		})},
+	}, nil)
+	require.NoError(t, err)
 }
