@@ -17,3 +17,5 @@ jobs:
       -
         name: Run
         uses: actions/labeler@v5
+        with:
+          sync-labels: true
