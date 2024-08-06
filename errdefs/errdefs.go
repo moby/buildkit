@@ -2,6 +2,8 @@ package errdefs
 
 import "errors"
 
+//go:generate protoc -I=. -I=../vendor/ -I=../../../../ --go_out=. --go_opt=paths=source_relative errdefs.proto
+
 type internalErr struct {
 	error
 }
