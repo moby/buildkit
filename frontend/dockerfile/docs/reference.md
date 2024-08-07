@@ -1646,6 +1646,18 @@ If the container root filesystem doesn't contain either `/etc/passwd` or
 flag, the build will fail on the `COPY` operation. Using numeric IDs requires
 no lookup and does not depend on container root filesystem content.
 
+With the Dockerfile syntax version 1.10.0 and later,
+the `--chmod` flag supports variable interpolation,
+which lets you define the permission bits using build arguments:
+
+```dockerfile
+# syntax=docker/dockerfile:1.10
+FROM alpine
+WORKDIR /src
+ARG MODE=440
+COPY --chmod=$MODE . .
+```
+
 ### COPY --link
 
 ```dockerfile
