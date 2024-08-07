@@ -17,7 +17,18 @@ var notFirstRun bool
 var lastNotEmpty bool
 
 // overridden by tests
-var resolvconfPath = resolvconf.Path
+var resolvconfPath = func(netMode pb.NetMode) string {
+	// The implementation of resolvconf.Path checks if systemd resolved is activated and chooses the internal
+	// resolv.conf (/run/systemd/resolve/resolv.conf) in such a case - see resolvconf_path.go of libnetwork.
+	// This, however, can be problematic, see https://github.com/moby/buildkit/issues/2404 and is not necessary
+	// in case the networking mode is set to host since the locally (127.0.0.53) running resolved daemon is
+	// accessible from inside a host networked container.
+	// For details of the implementation see https://github.com/moby/buildkit/pull/5207#discussion_r1705362230.
+	if netMode == pb.NetMode_HOST {
+		return "/etc/resolv.conf"
+	}
+	return resolvconf.Path()
+}
 
 type DNSConfig struct {
 	Nameservers   []string
@@ -44,7 +55,7 @@ func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.Identity
 				generate = true
 			}
 			if !generate {
-				fiMain, err := os.Stat(resolvconfPath())
+				fiMain, err := os.Stat(resolvconfPath(netMode))
 				if err != nil {
 					if !errors.Is(err, os.ErrNotExist) {
 						return struct{}{}, err
@@ -63,7 +74,7 @@ func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.Identity
 			return struct{}{}, nil
 		}
 
-		dt, err := os.ReadFile(resolvconfPath())
+		dt, err := os.ReadFile(resolvconfPath(netMode))
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return struct{}{}, err
 		}

@@ -111,15 +111,16 @@ func TestResolvConf(t *testing.T) {
 			t.Cleanup(func() {
 				resolvconfPath = oldResolvconfPath
 			})
-			resolvconfPath = func() string {
-				if tt.dt == nil {
-					return "no-such-file"
-				}
-				rpath := path.Join(t.TempDir(), "resolv.conf")
-				require.NoError(t, os.WriteFile(rpath, tt.dt, 0600))
-				return rpath
-			}
 			for i := 0; i < tt.execution; i++ {
+				resolvconfPath = func(netMode pb.NetMode) string {
+					if tt.dt == nil {
+						return "no-such-file"
+					}
+					rpath := path.Join(t.TempDir(), "resolv.conf")
+					require.NoError(t, os.WriteFile(rpath, tt.dt, 0600))
+					require.Equal(t, tt.networkMode[i], netMode)
+					return rpath
+				}
 				if i > 0 {
 					time.Sleep(100 * time.Millisecond)
 				}
