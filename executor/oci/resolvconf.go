@@ -44,7 +44,7 @@ func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.Identity
 				generate = true
 			}
 			if !generate {
-				fiMain, err := os.Stat(resolvconfPath(netMode))
+				fiMain, err := os.Stat(resolvconfPath())
 				if err != nil {
 					if !errors.Is(err, os.ErrNotExist) {
 						return struct{}{}, err
@@ -63,7 +63,7 @@ func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.Identity
 			return struct{}{}, nil
 		}
 
-		dt, err := os.ReadFile(resolvconfPath(netMode))
+		dt, err := os.ReadFile(resolvconfPath())
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return struct{}{}, err
 		}

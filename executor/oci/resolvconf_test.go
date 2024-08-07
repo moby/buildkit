@@ -111,7 +111,7 @@ func TestResolvConf(t *testing.T) {
 			t.Cleanup(func() {
 				resolvconfPath = oldResolvconfPath
 			})
-			resolvconfPath = func(netMode pb.NetMode) string {
+			resolvconfPath = func() string {
 				if tt.dt == nil {
 					return "no-such-file"
 				}
