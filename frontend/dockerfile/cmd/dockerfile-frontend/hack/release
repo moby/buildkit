@@ -76,7 +76,7 @@ if [[ "$RELEASE" = "true" ]] && [[ "$GITHUB_ACTIONS" = "true" ]]; then
 fi
 
 outputFlag="type=image,$pushFlag"
-if [ "$PUSH" = "push" ] && [ "$GITHUB_ACTIONS" = "true" ]; then
+if [ "$GITHUB_ACTIONS" = "true" ]; then
   outputFlag="${outputFlag},\"annotation.org.opencontainers.image.title=Dockerfile Frontend\""
   if [ -n "$GITHUB_SHA" ]; then
     outputFlag="${outputFlag},annotation.org.opencontainers.image.revision=$GITHUB_SHA"
