@@ -16,6 +16,10 @@ var windowsImagesMirrorMap = map[string]string{
 	"nanoserver:latest": "mcr.microsoft.com/windows/nanoserver:ltsc2022",
 	"servercore:latest": "mcr.microsoft.com/windows/servercore:ltsc2022",
 	"busybox:latest":    "registry.k8s.io/e2e-test-images/busybox@sha256:6d854ffad9666d2041b879a1c128c9922d77faced7745ad676639b07111ab650",
+	// nanoserver with extra binaries, like fc.exe
+	// TODO: get a properly approved regitry, placeholder for now
+	"nanoserver:plus":         "docker.io/wintools/nanoserver:ltsc2022",
+	"nanoserver:plus-busybox": "docker.io/wintools/nanoserver:ltsc2022",
 }
 
 // abstracted function to handle pipe dialing on windows.
