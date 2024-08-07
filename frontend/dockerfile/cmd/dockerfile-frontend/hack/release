@@ -118,7 +118,7 @@ case $TYP in
   fi
   buildTags=$(cat $tagf)
   outputFlag="${outputFlag},\"name=$publishedNames\""
-  if [ "$PUSH" = "push" ] && [ "$GITHUB_ACTIONS" = "true" ]; then
+  if [ "$GITHUB_ACTIONS" = "true" ]; then
     outputFlag="${outputFlag},annotation.org.opencontainers.image.version=$TAG"
   fi
 
