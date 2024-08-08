@@ -723,8 +723,7 @@ func SecretAsEnv(v bool) SecretOption {
 			si.Env = nil
 			return
 		}
-		envDefault := ""
-		si.Env = &envDefault
+		si.Env = &si.Target
 	})
 }
 
