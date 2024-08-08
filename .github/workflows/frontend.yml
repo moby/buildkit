@@ -121,7 +121,7 @@ jobs:
         run: |
           ./frontend/dockerfile/cmd/dockerfile-frontend/hack/release "${{ needs.prepare.outputs.typ }}" "${{ matrix.tag }}" "$IMAGE_NAME" "${{ needs.prepare.outputs.push }}"
         env:
-          RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          RELEASE: ${{ github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v') }}
           CACHE_FROM: type=gha,scope=${{ env.CACHE_SCOPE }}
           CACHE_TO: type=gha,scope=${{ env.CACHE_SCOPE }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -134,6 +134,12 @@ jobs:
       security-events: write
     needs:
       - image
+    strategy:
+      fail-fast: false
+      matrix:
+        tag:
+          - master
+          - master-labs
     steps:
       -
         name: Checkout
@@ -151,7 +157,7 @@ jobs:
         with:
           version: ${{ env.SCOUT_VERSION }}
           format: sarif
-          image: registry://${{ env.IMAGE_NAME }}:master
+          image: registry://${{ env.IMAGE_NAME }}:${{ matrix.tag }}
       -
         name: Upload SARIF report
         uses: github/codeql-action/upload-sarif@v3
