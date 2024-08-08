@@ -10,8 +10,8 @@ import (
 	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/golang/protobuf/proto" //nolint:staticcheck
 	"github.com/golang/protobuf/ptypes/any"
-	"github.com/moby/buildkit/errdefs"
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/errutil"
 	"github.com/moby/buildkit/util/stack"
 	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc/codes"
@@ -95,31 +95,26 @@ func withDetails(ctx context.Context, s *status.Status, details ...proto.Message
 }
 
 func Code(err error) codes.Code {
-	if errdefs.IsInternal(err) {
-		return codes.Internal
-	}
+	for i := errutil.Iterate(err); i.IsValid(); i.Next() {
+		switch err := i.Err().(type) {
+		case interface{ System() }:
+			return codes.Internal
+		case interface{ GRPCStatus() *status.Status }:
+			if st := err.GRPCStatus(); st != nil {
+				return st.Code()
+			}
+		case interface{ Code() codes.Code }:
+			return err.Code()
+		}
 
-	if se, ok := err.(interface {
-		Code() codes.Code
-	}); ok {
-		return se.Code()
-	}
-
-	if se, ok := err.(interface {
-		GRPCStatus() *status.Status
-	}); ok {
-		return se.GRPCStatus().Code()
-	}
-
-	wrapped, ok := err.(interface {
-		Unwrap() error
-	})
-	if ok {
-		if err := wrapped.Unwrap(); err != nil {
-			return Code(err)
+		switch i.Err() {
+		case context.Canceled:
+			return codes.Canceled
+		case context.DeadlineExceeded:
+			return codes.DeadlineExceeded
 		}
 	}
-	return status.FromContextError(err).Code()
+	return codes.Unknown
 }
 
 func WrapCode(err error, code codes.Code) error {
