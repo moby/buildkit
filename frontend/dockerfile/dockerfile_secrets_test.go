@@ -89,7 +89,7 @@ func testSecretAsEnviron(t *testing.T, sb integration.Sandbox) {
 
 	dockerfile := []byte(`
 FROM busybox
-RUN --mount=type=secret,id=mysecret,env=true [ "$mysecret" == "pw" ] || false
+RUN --mount=type=secret,id=mysecret,env [ "$mysecret" == "pw" ] && [ -f /run/secrets/mysecret ] || false
 `)
 
 	dir := integration.Tmpdir(
@@ -119,7 +119,7 @@ func testSecretAsEnvironWithOverride(t *testing.T, sb integration.Sandbox) {
 
 	dockerfile := []byte(`
 FROM busybox
-RUN --mount=type=secret,id=mysecret,target=MY_SECRET,env [ "$MY_SECRET" == "pw" ] || false
+RUN --mount=type=secret,id=mysecret,env=MY_SECRET [ "$MY_SECRET" == "pw" ] || false
 `)
 
 	dir := integration.Tmpdir(

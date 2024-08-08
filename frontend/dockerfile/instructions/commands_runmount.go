@@ -122,10 +122,12 @@ type Mount struct {
 	CacheID      string
 	CacheSharing ShareMode
 	Required     bool
-	SecretAsEnv  bool
-	Mode         *uint64
-	UID          *uint64
-	GID          *uint64
+	// Env optionally specifies the name of the environment variable for a secret.
+	// A pointer to an empty value uses the default
+	Env  *string
+	Mode *uint64
+	UID  *uint64
+	GID  *uint64
 }
 
 func parseMount(val string, expander SingleWordExpander) (*Mount, error) {
@@ -137,6 +139,7 @@ func parseMount(val string, expander SingleWordExpander) (*Mount, error) {
 	m := &Mount{Type: MountTypeBind}
 
 	roAuto := true
+	envDefault := ""
 
 	for _, field := range fields {
 		key, value, ok := strings.Cut(field, "=")
@@ -156,7 +159,7 @@ func parseMount(val string, expander SingleWordExpander) (*Mount, error) {
 				roAuto = false
 				continue
 			case "env":
-				m.SecretAsEnv = true
+				m.Env = &envDefault
 				continue
 			case "required":
 				if m.Type == MountTypeSecret || m.Type == MountTypeSSH {
@@ -257,11 +260,7 @@ func parseMount(val string, expander SingleWordExpander) (*Mount, error) {
 			}
 			m.GID = &gid
 		case "env":
-			env, err := strconv.ParseBool(value)
-			if err != nil {
-				return nil, errors.Errorf("invalid value for %q: %q", key, value)
-			}
-			m.SecretAsEnv = env
+			m.Env = &value
 		default:
 			allKeys := []string{
 				"type", "from", "source", "target", "readonly", "id", "sharing", "required", "mode", "uid", "gid", "src", "dst", "ro", "rw", "readwrite", "env",

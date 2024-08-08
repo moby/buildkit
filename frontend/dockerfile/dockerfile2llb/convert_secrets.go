@@ -39,11 +39,12 @@ func dispatchSecret(d *dispatchState, m *instructions.Mount, loc []parser.Range)
 	if !m.Required {
 		opts = append(opts, llb.SecretOptional)
 	}
-	if m.SecretAsEnv {
-		if m.Target == "" {
-			target = path.Base(id)
+	if m.Env != nil {
+		env := *m.Env
+		if env == "" {
+			env = path.Base(id)
 		}
-		opts = append(opts, llb.SecretAsEnv(true))
+		opts = append(opts, llb.SecretAsEnvName(env))
 	}
 
 	if m.UID != nil || m.GID != nil || m.Mode != nil {
