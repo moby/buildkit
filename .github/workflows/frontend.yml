@@ -159,6 +159,10 @@ jobs:
           format: sarif
           image: registry://${{ env.IMAGE_NAME }}:${{ matrix.tag }}
       -
+        name: Result output
+        run: |
+          jq . ${{ steps.scout.outputs.result-file }}
+      -
         name: Upload SARIF report
         uses: github/codeql-action/upload-sarif@v3
         with:
