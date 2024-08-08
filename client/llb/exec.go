@@ -719,6 +719,10 @@ func SecretID(id string) SecretOption {
 // SecretAsEnv defines if the secret should be added as an environment variable
 func SecretAsEnv(v bool) SecretOption {
 	return secretOptionFunc(func(si *SecretInfo) {
+		if !v {
+			si.Env = nil
+			return
+		}
 		envDefault := ""
 		si.Env = &envDefault
 	})
