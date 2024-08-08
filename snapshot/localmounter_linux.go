@@ -7,7 +7,7 @@ import (
 
 	"github.com/containerd/containerd/mount"
 	rootlessmountopts "github.com/moby/buildkit/util/rootless/mountopts"
-	"github.com/moby/sys/user/userns"
+	"github.com/moby/sys/userns"
 	"github.com/pkg/errors"
 )
 
