@@ -9,7 +9,7 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/leaseutil"
-	"github.com/moby/sys/user/userns"
+	"github.com/moby/sys/userns"
 	"github.com/pkg/errors"
 )
 

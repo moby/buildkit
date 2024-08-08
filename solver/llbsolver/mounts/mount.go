@@ -22,7 +22,7 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/locker"
-	"github.com/moby/sys/user/userns"
+	"github.com/moby/sys/userns"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 )

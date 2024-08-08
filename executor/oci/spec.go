@@ -20,7 +20,7 @@ import (
 	"github.com/moby/buildkit/util/network"
 	rootlessmountopts "github.com/moby/buildkit/util/rootless/mountopts"
 	traceexec "github.com/moby/buildkit/util/tracing/exec"
-	"github.com/moby/sys/user/userns"
+	"github.com/moby/sys/userns"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/opencontainers/selinux/go-selinux"
 	"github.com/pkg/errors"

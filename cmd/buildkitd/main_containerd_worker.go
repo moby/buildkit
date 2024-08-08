@@ -21,7 +21,7 @@ import (
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/containerd"
-	"github.com/moby/sys/user/userns"
+	"github.com/moby/sys/userns"
 	"github.com/pelletier/go-toml"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
