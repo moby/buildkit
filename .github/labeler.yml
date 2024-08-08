@@ -119,6 +119,16 @@ area/hack:
           - 'hack/**'
           - 'frontend/dockerfile/cmd/dockerfile-frontend/hack/**'
 
+# area:project
+area/project:
+  - changed-files:
+      - any-glob-to-any-file: 
+        - '.dockerignore'
+        - 'codecov.yml'
+        - 'docker-bake.hcl'
+        - 'Dockerfile'
+        - 'Makefile'
+
 # area:session
 area/session:
   - changed-files:
