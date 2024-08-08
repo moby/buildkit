@@ -8,4 +8,5 @@ import (
 type Transactor interface {
 	View(fn func(*bolt.Tx) error) error
 	Update(fn func(*bolt.Tx) error) error
+	Begin(writable bool) (*bolt.Tx, error)
 }

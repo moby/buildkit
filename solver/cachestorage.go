@@ -29,6 +29,16 @@ type CacheKeyStorage interface {
 	WalkBacklinks(id string, fn func(id string, link CacheInfoLink) error) error
 }
 
+type PersistentCacheKeyStorage interface {
+	CacheKeyStorage
+	Update(fn func(tx CacheKeyStorageUpdate) error) error
+}
+
+type CacheKeyStorageUpdate interface {
+	AddResult(id string, res CacheResult) error
+	AddLink(id string, link CacheInfoLink, target string) error
+}
+
 // CacheResult is a record for a single solve result
 type CacheResult struct {
 	CreatedAt time.Time
