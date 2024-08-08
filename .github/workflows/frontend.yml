@@ -134,6 +134,12 @@ jobs:
       security-events: write
     needs:
       - image
+    strategy:
+      fail-fast: false
+      matrix:
+        tag:
+          - master
+          - master-labs
     steps:
       -
         name: Checkout
@@ -151,7 +157,7 @@ jobs:
         with:
           version: ${{ env.SCOUT_VERSION }}
           format: sarif
-          image: registry://${{ env.IMAGE_NAME }}:master
+          image: registry://${{ env.IMAGE_NAME }}:${{ matrix.tag }}
       -
         name: Upload SARIF report
         uses: github/codeql-action/upload-sarif@v3
