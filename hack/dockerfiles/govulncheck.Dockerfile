@@ -6,6 +6,7 @@ ARG FORMAT="text"
 
 FROM golang:${GO_VERSION}-alpine AS base
 WORKDIR /go/src/github.com/moby/buildkit
+RUN apk add --no-cache jq moreutils
 ARG GOVULNCHECK_VERSION
 RUN --mount=type=cache,target=/root/.cache \
     --mount=type=cache,target=/go/pkg/mod \
@@ -17,6 +18,12 @@ RUN --mount=type=bind,target=. <<EOT
   set -ex
   mkdir /out
   govulncheck -format ${FORMAT} ./... | tee /out/govulncheck.out
+  if [ "${FORMAT}" = "sarif" ]; then
+    # Make sure "results" field is defined in SARIF output otherwise GitHub Code Scanning
+    # will fail when uploading report with "Invalid SARIF. Missing 'results' array in run."
+    # Relates to https://github.com/golang/vuln/blob/ffdef74cc44d7eb71931d8d414c478b966812488/internal/sarif/sarif.go#L69
+    jq '(.runs[] | select(.results == null) | .results) |= []' /out/govulncheck.out | tee >(sponge /out/govulncheck.out)
+  fi
 EOT
 
 FROM scratch AS output
