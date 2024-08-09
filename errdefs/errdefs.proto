@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package moby.buildkit.errdefs.v1;
+
+option go_package = "github.com/moby/buildkit/errdefs";
+
+import "google/protobuf/any.proto";
+
+message Error {
+	string message = 1;
+	google.protobuf.Any details = 2;
+	repeated Error errors = 3;
+}
