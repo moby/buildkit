@@ -4,6 +4,10 @@ description: Attempting to Copy file that is excluded by .dockerignore
 aliases:
   - /go/dockerfile/rule/copy-ignored-file/
 ---
+> **Note**
+>
+> This check is experimental and is not enabled by default. To enable it, see
+> [Experimental checks](https://docs.docker.com/go/build-checks-experimental/).
 
 ## Output
 

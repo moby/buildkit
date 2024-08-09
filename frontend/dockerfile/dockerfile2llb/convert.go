@@ -596,7 +596,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	ctxPaths := map[string]struct{}{}
 
 	var dockerIgnoreMatcher *patternmatcher.PatternMatcher
-	if opt.Client != nil && opt.Client.CopyIgnoredCheckEnabled {
+	if opt.Client != nil {
 		dockerIgnorePatterns, err := opt.Client.DockerIgnorePatterns(ctx)
 		if err != nil {
 			return nil, err
