@@ -164,4 +164,12 @@ var (
 			return fmt.Sprintf("Attempting to %s file %q that is excluded by .dockerignore", cmd, file)
 		},
 	}
+	RuleInvalidDefinitionDescription = LinterRule[func(string, string) string]{
+		Name:        "InvalidDefinitionDescription",
+		Description: "Comment for build stage or argument should follow the format: `# <arg/stage name> <description>`. If this is not intended to be a description comment, add an empty line or comment between the instruction and the comment.",
+		URL:         "https://docs.docker.com/go/dockerfile/rule/invalid-definition-description/",
+		Format: func(instruction, defName string) string {
+			return fmt.Sprintf("Comment for %s should follow the format: `# %s <description>`", instruction, defName)
+		},
+	}
 )
