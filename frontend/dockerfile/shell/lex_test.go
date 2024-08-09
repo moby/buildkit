@@ -498,6 +498,26 @@ func TestProcessWithMatches(t *testing.T) {
 			matches:  map[string]struct{}{"FOO": {}, "BAR": {}},
 		},
 		{
+			input:       "${FOO:#}",
+			envs:        map[string]string{},
+			expectedErr: true,
+		},
+		{
+			input:       "${FOO:##}",
+			envs:        map[string]string{},
+			expectedErr: true,
+		},
+		{
+			input:       "${FOO:%}",
+			envs:        map[string]string{},
+			expectedErr: true,
+		},
+		{
+			input:       "${FOO:%%}",
+			envs:        map[string]string{},
+			expectedErr: true,
+		},
+		{
 			// test: wildcards
 			input:    "${FOO/$NEEDLE/.} - ${FOO//$NEEDLE/.}",
 			envs:     map[string]string{"FOO": "/foo*/*/*.txt", "NEEDLE": "\\*/"},
