@@ -10,14 +10,14 @@ import (
 	"github.com/pkg/errors"
 )
 
-func NewInMemoryCacheStorage() CacheKeyStorage {
-	return &inMemoryStore{
+func NewInMemoryCacheStorage() *InMemoryCacheStorage {
+	return &InMemoryCacheStorage{
 		byID:     map[string]*inMemoryKey{},
 		byResult: map[string]map[string]struct{}{},
 	}
 }
 
-type inMemoryStore struct {
+type InMemoryCacheStorage struct {
 	mu       sync.RWMutex
 	byID     map[string]*inMemoryKey
 	byResult map[string]map[string]struct{}
@@ -30,7 +30,7 @@ type inMemoryKey struct {
 	backlinks map[string]struct{}
 }
 
-func (s *inMemoryStore) Exists(id string) bool {
+func (s *InMemoryCacheStorage) Exists(id string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if k, ok := s.byID[id]; ok {
@@ -48,7 +48,7 @@ func newInMemoryKey(id string) *inMemoryKey {
 	}
 }
 
-func (s *inMemoryStore) Walk(fn func(string) error) error {
+func (s *InMemoryCacheStorage) Walk(fn func(string) error) error {
 	s.mu.RLock()
 	ids := make([]string, 0, len(s.byID))
 	for id := range s.byID {
@@ -64,7 +64,7 @@ func (s *inMemoryStore) Walk(fn func(string) error) error {
 	return nil
 }
 
-func (s *inMemoryStore) WalkResults(id string, fn func(CacheResult) error) error {
+func (s *InMemoryCacheStorage) WalkResults(id string, fn func(CacheResult) error) error {
 	s.mu.RLock()
 
 	k, ok := s.byID[id]
@@ -86,7 +86,7 @@ func (s *inMemoryStore) WalkResults(id string, fn func(CacheResult) error) error
 	return nil
 }
 
-func (s *inMemoryStore) Load(id string, resultID string) (CacheResult, error) {
+func (s *InMemoryCacheStorage) Load(id string, resultID string) (CacheResult, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	k, ok := s.byID[id]
@@ -100,7 +100,7 @@ func (s *inMemoryStore) Load(id string, resultID string) (CacheResult, error) {
 	return r, nil
 }
 
-func (s *inMemoryStore) AddResult(id string, res CacheResult) error {
+func (s *InMemoryCacheStorage) AddResult(id string, res CacheResult) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	k, ok := s.byID[id]
@@ -118,7 +118,7 @@ func (s *inMemoryStore) AddResult(id string, res CacheResult) error {
 	return nil
 }
 
-func (s *inMemoryStore) WalkIDsByResult(resultID string, fn func(string) error) error {
+func (s *InMemoryCacheStorage) WalkIDsByResult(resultID string, fn func(string) error) error {
 	s.mu.Lock()
 
 	ids := map[string]struct{}{}
@@ -136,7 +136,7 @@ func (s *inMemoryStore) WalkIDsByResult(resultID string, fn func(string) error) 
 	return nil
 }
 
-func (s *inMemoryStore) Release(resultID string) error {
+func (s *InMemoryCacheStorage) Release(resultID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -163,7 +163,7 @@ func (s *inMemoryStore) Release(resultID string) error {
 	return nil
 }
 
-func (s *inMemoryStore) emptyBranchWithParents(k *inMemoryKey) {
+func (s *InMemoryCacheStorage) emptyBranchWithParents(k *inMemoryKey) {
 	if len(k.results) != 0 || len(k.links) != 0 {
 		return
 	}
@@ -184,7 +184,7 @@ func (s *inMemoryStore) emptyBranchWithParents(k *inMemoryKey) {
 	delete(s.byID, k.id)
 }
 
-func (s *inMemoryStore) AddLink(id string, link CacheInfoLink, target string) error {
+func (s *InMemoryCacheStorage) AddLink(id string, link CacheInfoLink, target string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	k, ok := s.byID[id]
@@ -208,7 +208,7 @@ func (s *inMemoryStore) AddLink(id string, link CacheInfoLink, target string) er
 	return nil
 }
 
-func (s *inMemoryStore) WalkLinks(id string, link CacheInfoLink, fn func(id string) error) error {
+func (s *InMemoryCacheStorage) WalkLinks(id string, link CacheInfoLink, fn func(id string) error) error {
 	s.mu.RLock()
 	k, ok := s.byID[id]
 	if !ok {
@@ -229,7 +229,7 @@ func (s *inMemoryStore) WalkLinks(id string, link CacheInfoLink, fn func(id stri
 	return nil
 }
 
-func (s *inMemoryStore) HasLink(id string, link CacheInfoLink, target string) bool {
+func (s *InMemoryCacheStorage) HasLink(id string, link CacheInfoLink, target string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if k, ok := s.byID[id]; ok {
@@ -242,7 +242,7 @@ func (s *inMemoryStore) HasLink(id string, link CacheInfoLink, target string) bo
 	return false
 }
 
-func (s *inMemoryStore) WalkBacklinks(id string, fn func(id string, link CacheInfoLink) error) error {
+func (s *InMemoryCacheStorage) WalkBacklinks(id string, fn func(id string, link CacheInfoLink) error) error {
 	s.mu.RLock()
 	k, ok := s.byID[id]
 	if !ok {
@@ -276,6 +276,18 @@ func (s *inMemoryStore) WalkBacklinks(id string, fn func(id string, link CacheIn
 		}
 	}
 	return nil
+}
+
+func (s *InMemoryCacheStorage) Reset() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for k := range s.byID {
+		delete(s.byID, k)
+	}
+	for k := range s.byResult {
+		delete(s.byResult, k)
+	}
 }
 
 func NewInMemoryResultStorage() CacheResultStorage {

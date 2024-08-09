@@ -2,17 +2,20 @@ package bboltcachestorage
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/solver/wal"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/db"
 	"github.com/moby/buildkit/util/db/boltutil"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -24,32 +27,89 @@ const (
 )
 
 type Store struct {
-	db db.DB
+	wal *wal.WAL
+}
+
+func (s *Store) Exists(id string) bool {
+	return s.wal.Exists(id)
+}
+
+func (s *Store) Walk(fn func(id string) error) error {
+	return s.wal.Walk(fn)
+}
+
+func (s *Store) WalkResults(id string, fn func(solver.CacheResult) error) error {
+	return s.wal.WalkResults(id, fn)
+}
+
+func (s *Store) Load(id string, resultID string) (solver.CacheResult, error) {
+	return s.wal.Load(id, resultID)
+}
+
+func (s *Store) AddResult(id string, res solver.CacheResult) error {
+	return s.wal.AddResult(id, res)
+}
+
+func (s *Store) Release(resultID string) error {
+	return s.wal.Release(resultID)
+}
+
+func (s *Store) WalkIDsByResult(resultID string, fn func(string) error) error {
+	return s.wal.WalkIDsByResult(resultID, fn)
+}
+
+func (s *Store) AddLink(id string, link solver.CacheInfoLink, target string) error {
+	return s.wal.AddLink(id, link, target)
+}
+
+func (s *Store) WalkLinks(id string, link solver.CacheInfoLink, fn func(id string) error) error {
+	return s.wal.WalkLinks(id, link, fn)
+}
+
+func (s *Store) HasLink(id string, link solver.CacheInfoLink, target string) bool {
+	return s.wal.HasLink(id, link, target)
+}
+
+func (s *Store) WalkBacklinks(id string, fn func(id string, link solver.CacheInfoLink) error) error {
+	return s.wal.WalkBacklinks(id, fn)
+}
+
+func (s *Store) Close() error {
+	return s.wal.Close()
 }
 
 func NewStore(dbPath string) (*Store, error) {
-	db, err := safeOpenDB(dbPath, &bolt.Options{
-		NoSync: true,
-	})
+	db, err := safeOpenDB(dbPath, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	// Initialize the database with the needed buckets if they do not exist.
-	if err := db.Update(func(tx *bolt.Tx) error {
+	s := &store{db: db}
+	if err := s.AutoMigrate(); err != nil {
+		return nil, err
+	}
+	return &Store{
+		wal: wal.New(s),
+	}, nil
+}
+
+type store struct {
+	db db.DB
+}
+
+// AutoMigrate will initialize the database with the needed buckets if they do not exist.
+func (s *store) AutoMigrate() error {
+	return s.db.Update(func(tx *bolt.Tx) error {
 		for _, b := range []string{resultBucket, linksBucket, byResultBucket, backlinksBucket} {
 			if _, err := tx.CreateBucketIfNotExists([]byte(b)); err != nil {
 				return err
 			}
 		}
 		return nil
-	}); err != nil {
-		return nil, err
-	}
-	return &Store{db: db}, nil
+	})
 }
 
-func (s *Store) Exists(id string) bool {
+func (s *store) Exists(id string) bool {
 	exists := false
 	err := s.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(linksBucket)).Bucket([]byte(id))
@@ -62,11 +122,11 @@ func (s *Store) Exists(id string) bool {
 	return exists
 }
 
-func (s *Store) Close() error {
+func (s *store) Close() error {
 	return s.db.Close()
 }
 
-func (s *Store) Walk(fn func(id string) error) error {
+func (s *store) Walk(fn func(id string) error) error {
 	ids := make([]string, 0)
 	if err := s.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(linksBucket))
@@ -88,7 +148,7 @@ func (s *Store) Walk(fn func(id string) error) error {
 	return nil
 }
 
-func (s *Store) WalkResults(id string, fn func(solver.CacheResult) error) error {
+func (s *store) WalkResults(id string, fn func(solver.CacheResult) error) error {
 	var list []solver.CacheResult
 	if err := s.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(resultBucket))
@@ -119,7 +179,7 @@ func (s *Store) WalkResults(id string, fn func(solver.CacheResult) error) error 
 	return nil
 }
 
-func (s *Store) Load(id string, resultID string) (solver.CacheResult, error) {
+func (s *store) Load(id string, resultID string) (solver.CacheResult, error) {
 	var res solver.CacheResult
 	if err := s.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(resultBucket))
@@ -143,37 +203,13 @@ func (s *Store) Load(id string, resultID string) (solver.CacheResult, error) {
 	return res, nil
 }
 
-func (s *Store) AddResult(id string, res solver.CacheResult) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.Bucket([]byte(linksBucket)).CreateBucketIfNotExists([]byte(id))
-		if err != nil {
-			return err
-		}
-
-		b, err := tx.Bucket([]byte(resultBucket)).CreateBucketIfNotExists([]byte(id))
-		if err != nil {
-			return err
-		}
-		dt, err := json.Marshal(res)
-		if err != nil {
-			return err
-		}
-		if err := b.Put([]byte(res.ID), dt); err != nil {
-			return err
-		}
-		b, err = tx.Bucket([]byte(byResultBucket)).CreateBucketIfNotExists([]byte(res.ID))
-		if err != nil {
-			return err
-		}
-		if err := b.Put([]byte(id), []byte{}); err != nil {
-			return err
-		}
-
-		return nil
+func (s *store) AddResult(id string, res solver.CacheResult) error {
+	return s.Update(func(tx solver.CacheKeyStorageUpdate) error {
+		return tx.AddResult(id, res)
 	})
 }
 
-func (s *Store) WalkIDsByResult(resultID string, fn func(string) error) error {
+func (s *store) WalkIDsByResult(resultID string, fn func(string) error) error {
 	ids := map[string]struct{}{}
 	if err := s.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(byResultBucket))
@@ -199,7 +235,7 @@ func (s *Store) WalkIDsByResult(resultID string, fn func(string) error) error {
 	return nil
 }
 
-func (s *Store) Release(resultID string) error {
+func (s *store) Release(resultID string) error {
 	return s.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(byResultBucket))
 		if b == nil {
@@ -218,7 +254,7 @@ func (s *Store) Release(resultID string) error {
 	})
 }
 
-func (s *Store) releaseHelper(tx *bolt.Tx, id, resultID string) error {
+func (s *store) releaseHelper(tx *bolt.Tx, id, resultID string) error {
 	results := tx.Bucket([]byte(resultBucket)).Bucket([]byte(id))
 	if results == nil {
 		return nil
@@ -248,7 +284,7 @@ func (s *Store) releaseHelper(tx *bolt.Tx, id, resultID string) error {
 	return s.emptyBranchWithParents(tx, []byte(id))
 }
 
-func (s *Store) emptyBranchWithParents(tx *bolt.Tx, id []byte) error {
+func (s *store) emptyBranchWithParents(tx *bolt.Tx, id []byte) error {
 	results := tx.Bucket([]byte(resultBucket)).Bucket(id)
 	if results == nil {
 		return nil
@@ -304,36 +340,13 @@ func (s *Store) emptyBranchWithParents(tx *bolt.Tx, id []byte) error {
 	return nil
 }
 
-func (s *Store) AddLink(id string, link solver.CacheInfoLink, target string) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.Bucket([]byte(linksBucket)).CreateBucketIfNotExists([]byte(id))
-		if err != nil {
-			return err
-		}
-
-		dt, err := json.Marshal(link)
-		if err != nil {
-			return err
-		}
-
-		if err := b.Put(bytes.Join([][]byte{dt, []byte(target)}, []byte("@")), []byte{}); err != nil {
-			return err
-		}
-
-		b, err = tx.Bucket([]byte(backlinksBucket)).CreateBucketIfNotExists([]byte(target))
-		if err != nil {
-			return err
-		}
-
-		if err := b.Put([]byte(id), []byte{}); err != nil {
-			return err
-		}
-
-		return nil
+func (s *store) AddLink(id string, link solver.CacheInfoLink, target string) error {
+	return s.Update(func(tx solver.CacheKeyStorageUpdate) error {
+		return tx.AddLink(id, link, target)
 	})
 }
 
-func (s *Store) WalkLinks(id string, link solver.CacheInfoLink, fn func(id string) error) error {
+func (s *store) WalkLinks(id string, link solver.CacheInfoLink, fn func(id string) error) error {
 	var links []string
 	if err := s.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(linksBucket))
@@ -374,7 +387,7 @@ func (s *Store) WalkLinks(id string, link solver.CacheInfoLink, fn func(id strin
 	return nil
 }
 
-func (s *Store) HasLink(id string, link solver.CacheInfoLink, target string) bool {
+func (s *store) HasLink(id string, link solver.CacheInfoLink, target string) bool {
 	var v bool
 	if err := s.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(linksBucket))
@@ -398,7 +411,7 @@ func (s *Store) HasLink(id string, link solver.CacheInfoLink, target string) boo
 	return v
 }
 
-func (s *Store) WalkBacklinks(id string, fn func(id string, link solver.CacheInfoLink) error) error {
+func (s *store) WalkBacklinks(id string, fn func(id string, link solver.CacheInfoLink) error) error {
 	var outIDs []string
 	var outLinks []solver.CacheInfoLink
 
@@ -454,6 +467,77 @@ func (s *Store) WalkBacklinks(id string, fn func(id string, link solver.CacheInf
 		if err := fn(outIDs[i], outLinks[i]); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+type updateTx struct {
+	*bolt.Tx
+}
+
+func (s *store) Update(fn func(solver.CacheKeyStorageUpdate) error) error {
+	tx, err := s.db.Begin(true)
+	if err != nil {
+		return err
+	}
+
+	if err := fn(updateTx{tx}); err != nil {
+		if rerr := tx.Rollback(); rerr != nil {
+			bklog.G(context.TODO()).Warn("wal rollback error", logrus.WithError(rerr))
+		}
+		return err
+	}
+	return tx.Commit()
+}
+
+func (tx updateTx) AddLink(id string, link solver.CacheInfoLink, target string) error {
+	b, err := tx.Bucket([]byte(linksBucket)).CreateBucketIfNotExists([]byte(id))
+	if err != nil {
+		return err
+	}
+
+	dt, err := json.Marshal(link)
+	if err != nil {
+		return err
+	}
+
+	if err := b.Put(bytes.Join([][]byte{dt, []byte(target)}, []byte("@")), []byte{}); err != nil {
+		return err
+	}
+
+	b, err = tx.Bucket([]byte(backlinksBucket)).CreateBucketIfNotExists([]byte(target))
+	if err != nil {
+		return err
+	}
+
+	if err := b.Put([]byte(id), []byte{}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (tx updateTx) AddResult(id string, res solver.CacheResult) error {
+	if _, err := tx.Bucket([]byte(linksBucket)).CreateBucketIfNotExists([]byte(id)); err != nil {
+		return err
+	}
+
+	b, err := tx.Bucket([]byte(resultBucket)).CreateBucketIfNotExists([]byte(id))
+	if err != nil {
+		return err
+	}
+	dt, err := json.Marshal(res)
+	if err != nil {
+		return err
+	}
+	if err := b.Put([]byte(res.ID), dt); err != nil {
+		return err
+	}
+	b, err = tx.Bucket([]byte(byResultBucket)).CreateBucketIfNotExists([]byte(res.ID))
+	if err != nil {
+		return err
+	}
+	if err := b.Put([]byte(id), []byte{}); err != nil {
+		return err
 	}
 	return nil
 }
