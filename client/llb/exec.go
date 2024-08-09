@@ -290,7 +290,7 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 	if len(e.secrets) > 0 {
 		addCap(&e.constraints, pb.CapExecMountSecret)
 		for _, s := range e.secrets {
-			if s.IsEnv {
+			if s.Env != nil {
 				addCap(&e.constraints, pb.CapExecSecretEnv)
 				break
 			}
@@ -388,26 +388,25 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 	}
 
 	for _, s := range e.secrets {
-		if s.IsEnv {
+		if s.Env != nil {
 			peo.Secretenv = append(peo.Secretenv, &pb.SecretEnv{
 				ID:       s.ID,
-				Name:     s.Target,
+				Name:     *s.Env,
 				Optional: s.Optional,
 			})
-		} else {
-			pm := &pb.Mount{
-				Dest:      s.Target,
-				MountType: pb.MountType_SECRET,
-				SecretOpt: &pb.SecretOpt{
-					ID:       s.ID,
-					Uid:      uint32(s.UID),
-					Gid:      uint32(s.GID),
-					Optional: s.Optional,
-					Mode:     uint32(s.Mode),
-				},
-			}
-			peo.Mounts = append(peo.Mounts, pm)
 		}
+		pm := &pb.Mount{
+			Dest:      s.Target,
+			MountType: pb.MountType_SECRET,
+			SecretOpt: &pb.SecretOpt{
+				ID:       s.ID,
+				Uid:      uint32(s.UID),
+				Gid:      uint32(s.GID),
+				Optional: s.Optional,
+				Mode:     uint32(s.Mode),
+			},
+		}
+		peo.Mounts = append(peo.Mounts, pm)
 	}
 
 	for _, s := range e.ssh {
@@ -697,13 +696,14 @@ func (fn secretOptionFunc) SetSecretOption(si *SecretInfo) {
 }
 
 type SecretInfo struct {
-	ID       string
-	Target   string
+	ID     string
+	Target string
+	// Env optionally names the environment variable for the secret
+	Env      *string
 	Mode     int
 	UID      int
 	GID      int
 	Optional bool
-	IsEnv    bool
 }
 
 var SecretOptional = secretOptionFunc(func(si *SecretInfo) {
@@ -719,7 +719,19 @@ func SecretID(id string) SecretOption {
 // SecretAsEnv defines if the secret should be added as an environment variable
 func SecretAsEnv(v bool) SecretOption {
 	return secretOptionFunc(func(si *SecretInfo) {
-		si.IsEnv = v
+		if !v {
+			si.Env = nil
+			return
+		}
+		si.Env = &si.Target
+	})
+}
+
+// SecretAsEnvName defines if the secret should be added as an environment variable
+// with the specified name
+func SecretAsEnvName(v string) SecretOption {
+	return secretOptionFunc(func(si *SecretInfo) {
+		si.Env = &v
 	})
 }
 
