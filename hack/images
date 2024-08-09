@@ -109,7 +109,7 @@ done
 
 nocacheFilterFlag=""
 if [[ "$RELEASE" = "true" ]] && [[ "$GITHUB_ACTIONS" = "true" ]]; then
-  nocacheFilterFlag="--no-cache-filter=git,buildkit-export,gobuild-base"
+  nocacheFilterFlag="--no-cache-filter=buildkit-export,gobuild-base"
 fi
 
 buildxCmd build --build-arg BUILDKIT_DEBUG $platformFlag $targetFlag $importCacheFlags $exportCacheFlags $tagFlags $outputFlag $nocacheFilterFlag $attestFlags \

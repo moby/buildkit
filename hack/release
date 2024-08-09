@@ -52,7 +52,7 @@ if ${BUILDX_CMD} build --help 2>&1 | grep -- '--attest' >/dev/null; then
   setFlags+=(--set "*.attest=type=provenance,$prvattrs")
 fi
 if [[ "$RELEASE" = "true" ]] && [[ "$GITHUB_ACTIONS" = "true" ]]; then
-  setFlags+=(--set "*.no-cache-filter=git,gobuild-base")
+  setFlags+=(--set "*.no-cache-filter=gobuild-base")
 fi
 
 output=$(mktemp -d -t buildkit-output.XXXXXXXXXX)
