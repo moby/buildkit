@@ -84,11 +84,7 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 		ctx = namespaces.WithNamespace(ctx, "buildkit")
 	}
 
-	if mountOpts, err := generateMountOpts(resolvConf, hostsFile); err == nil {
-		opts = append(opts, mountOpts...)
-	} else {
-		return nil, nil, err
-	}
+	opts = append(opts, generateMountOpts(resolvConf, hostsFile)...)
 
 	if securityOpts, err := generateSecurityOpts(meta.SecurityMode, apparmorProfile, selinuxB); err == nil {
 		opts = append(opts, securityOpts...)
@@ -135,7 +131,7 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 
 	s, err := oci.GenerateSpec(ctx, nil, c, opts...)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.WithStack(err)
 	}
 
 	if cgroupV2NamespaceSupported() {
@@ -151,7 +147,7 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 
 	// set the networking information on the spec
 	if err := namespace.Set(s); err != nil {
-		return nil, nil, err
+		return nil, nil, errors.WithStack(err)
 	}
 
 	sm := &submounts{}
@@ -196,6 +192,12 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 			mount, err = sm.subMount(mount, m.Selector)
 			if err != nil {
 				releaseAll()
+				var os *os.PathError
+				if errors.As(err, &os) {
+					if strings.HasSuffix(os.Path, m.Selector) {
+						os.Path = m.Selector
+					}
+				}
 				return nil, nil, err
 			}
 			s.Mounts = append(s.Mounts, specs.Mount{
@@ -248,7 +250,7 @@ func (s *submounts) subMount(m mount.Mount, subPath string) (mount.Mount, error)
 	}
 	h, err := hashstructure.Hash(m, hashstructure.FormatV2, nil)
 	if err != nil {
-		return mount.Mount{}, err
+		return mount.Mount{}, errors.WithStack(err)
 	}
 	if mr, ok := s.m[h]; ok {
 		if sm, ok := mr.subRefs[subPath]; ok {
