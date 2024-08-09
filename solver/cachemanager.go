@@ -10,7 +10,6 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/bklog"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/sirupsen/logrus"
 )
 
 // NewInMemoryCacheManager creates a new in-memory cache manager
@@ -61,7 +60,7 @@ func (c *cacheManager) Query(deps []CacheKeyWithSelector, input Index, dgst dige
 	for i, dep := range deps {
 		depsField[i] = dep.TraceFields()
 	}
-	lg := bklog.G(context.TODO()).WithFields(logrus.Fields{
+	lg := bklog.G(context.TODO()).WithFields(map[string]any{
 		"cache_manager": c.id,
 		"op":            "query",
 		"deps":          depsField,
@@ -135,7 +134,7 @@ func (c *cacheManager) Query(deps []CacheKeyWithSelector, input Index, dgst dige
 }
 
 func (c *cacheManager) Records(ctx context.Context, ck *CacheKey) (rrecs []*CacheRecord, rerr error) {
-	lg := bklog.G(context.TODO()).WithFields(logrus.Fields{
+	lg := bklog.G(context.TODO()).WithFields(map[string]any{
 		"cache_manager": c.id,
 		"op":            "records",
 		"cachekey":      ck.TraceFields(),
@@ -169,7 +168,7 @@ func (c *cacheManager) Records(ctx context.Context, ck *CacheKey) (rrecs []*Cach
 }
 
 func (c *cacheManager) Load(ctx context.Context, rec *CacheRecord) (rres Result, rerr error) {
-	lg := bklog.G(context.TODO()).WithFields(logrus.Fields{
+	lg := bklog.G(context.TODO()).WithFields(map[string]any{
 		"cache_manager": c.id,
 		"op":            "load",
 		"record":        rec.TraceFields(),
@@ -246,7 +245,7 @@ func (c *cacheManager) filterResults(m map[string]Result, ck *CacheKey, visited 
 }
 
 func (c *cacheManager) LoadWithParents(ctx context.Context, rec *CacheRecord) (rres []LoadedResult, rerr error) {
-	lg := bklog.G(context.TODO()).WithFields(logrus.Fields{
+	lg := bklog.G(context.TODO()).WithFields(map[string]any{
 		"cache_manager": c.id,
 		"op":            "load_with_parents",
 		"record":        rec.TraceFields(),
@@ -299,7 +298,7 @@ func (c *cacheManager) LoadWithParents(ctx context.Context, rec *CacheRecord) (r
 }
 
 func (c *cacheManager) Save(k *CacheKey, r Result, createdAt time.Time) (rck *ExportableCacheKey, rerr error) {
-	lg := bklog.G(context.TODO()).WithFields(logrus.Fields{
+	lg := bklog.G(context.TODO()).WithFields(map[string]any{
 		"cache_manager": c.id,
 		"op":            "save",
 		"result":        r.ID(),
