@@ -254,7 +254,7 @@ func parseMount(val string, expander SingleWordExpander) (*Mount, error) {
 			m.GID = &gid
 		default:
 			allKeys := []string{
-				"type", "from", "source", "target", "readonly", "id", "sharing", "required", "mode", "uid", "gid", "src", "dst", "ro", "rw", "readwrite",
+				"type", "from", "source", "target", "readonly", "id", "sharing", "required", "size", "mode", "uid", "gid", "src", "dst", "destination", "ro", "rw", "readwrite",
 			}
 			return nil, suggest.WrapError(errors.Errorf("unexpected key '%s' in '%s'", key, field), key, allKeys, true)
 		}
