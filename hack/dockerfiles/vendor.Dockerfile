@@ -38,7 +38,9 @@ RUN --mount=target=/context \
   fi
 EOT
 
-FROM psampaz/go-mod-outdated:${MODOUTDATED_VERSION} AS go-mod-outdated
+FROM --platform=linux/amd64 psampaz/go-mod-outdated:${MODOUTDATED_VERSION} AS go-mod-outdated-amd64
+
+FROM go-mod-outdated-amd64 AS go-mod-outdated
 FROM base AS outdated
 RUN --mount=target=.,rw \
   --mount=target=/go/pkg/mod,type=cache \
