@@ -354,7 +354,7 @@ exec dlv exec /usr/bin/buildkitd \\
   --continue \\
   -- "\$@"
 EOF
-ENV DELVE_PORT 5000
+ENV DELVE_PORT=5000
 ENTRYPOINT ["/docker-entrypoint.sh"]
 
 FROM binaries AS buildkit-darwin
