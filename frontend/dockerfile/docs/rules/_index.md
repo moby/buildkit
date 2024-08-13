@@ -97,7 +97,7 @@ $ docker build --check .
       <td>FROM --platform flag should not use a constant value</td>
     </tr>
     <tr>
-      <td><a href="./copy-ignored-file/">CopyIgnoredFile</a></td>
+      <td><a href="./copy-ignored-file/">CopyIgnoredFile (experimental)</a></td>
       <td>Attempting to Copy file that is excluded by .dockerignore</td>
     </tr>
   </tbody>

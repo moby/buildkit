@@ -20,11 +20,12 @@ import (
 )
 
 type Rule struct {
-	Name        string
-	Description string
-	URL         *url.URL
-	PageName    string
-	URLAlias    string
+	Name         string
+	Description  string
+	URL          *url.URL
+	PageName     string
+	URLAlias     string
+	Experimental bool
 }
 
 const tmplStr = `---
@@ -35,6 +36,13 @@ aliases:
   - {{ .Rule.URLAlias }}
 {{- end }}
 ---
+{{- if .Rule.Experimental }}
+
+> **Note**
+>
+> This check is experimental and is not enabled by default. To enable it, see
+> [Experimental checks](https://docs.docker.com/go/build-checks-experimental/).
+{{- end }}
 
 {{ .Content }}
 `
@@ -159,6 +167,10 @@ func listRules() ([]Rule, error) {
 											return false
 										}
 										rule.URL = u
+									}
+								case "Experimental":
+									if basicLit, ok := kv.Value.(*ast.Ident); ok {
+										rule.Experimental = basicLit.Name == "true"
 									}
 								}
 							}
