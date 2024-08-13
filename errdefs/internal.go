@@ -36,14 +36,24 @@ func IsInternal(err error) bool {
 
 	var errno syscall.Errno
 	if errors.As(err, &errno) {
-		if isInternalSyscall(errno) {
+		if _, ok := isInternalSyscall(errno); ok {
 			return true
 		}
 	}
 	return false
 }
 
-func isInternalSyscall(err syscall.Errno) bool {
-	_, ok := syscallErrors()[err]
-	return ok
+func IsResourceExhausted(err error) bool {
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
+		if v, ok := isInternalSyscall(errno); ok && v {
+			return v
+		}
+	}
+	return false
+}
+
+func isInternalSyscall(err syscall.Errno) (bool, bool) {
+	v, ok := syscallErrors()[err]
+	return v, ok
 }
