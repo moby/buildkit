@@ -68,10 +68,16 @@ ENV GOFLAGS=-mod=vendor
 # scan the version/revision info
 FROM buildkit-base AS buildkit-version
 # TODO: PKG should be inferred from go modules
-RUN --mount=target=. \
-  PKG=github.com/moby/buildkit VERSION=$(git describe --match 'v[0-9]*' --dirty='.m' --always --tags) REVISION=$(git rev-parse HEAD)$(if ! git diff --no-ext-diff --quiet --exit-code; then echo .m; fi); \
-  echo "-X ${PKG}/version.Version=${VERSION} -X ${PKG}/version.Revision=${REVISION} -X ${PKG}/version.Package=${PKG}" | tee /tmp/.ldflags; \
-  echo -n "${VERSION}" | tee /tmp/.version;
+RUN --mount=target=. <<'EOT'
+  git rev-parse HEAD 2>/dev/null || {
+    echo >&2 "Failed to get git revision, make sure --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 is set when building from Git directly"
+    exit 1
+  }
+  set -ex
+  export PKG=github.com/moby/buildkit VERSION=$(git describe --match 'v[0-9]*' --dirty='.m' --always --tags) REVISION=$(git rev-parse HEAD)$(if ! git diff --no-ext-diff --quiet --exit-code; then echo .m; fi);
+  echo "-X ${PKG}/version.Version=${VERSION} -X ${PKG}/version.Revision=${REVISION} -X ${PKG}/version.Package=${PKG}" > /tmp/.ldflags;
+  echo -n "${VERSION}" > /tmp/.version;
+EOT
 
 # build buildctl binary
 FROM buildkit-base AS buildctl
