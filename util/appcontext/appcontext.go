@@ -38,7 +38,7 @@ func Context() context.Context {
 				err := errors.Errorf("got %d SIGTERM/SIGINTs, forcing shutdown", retries)
 				cancel(err)
 				if retries >= exitLimit {
-					bklog.G(ctx).Errorf(err.Error())
+					bklog.G(ctx).Error(err.Error())
 					os.Exit(1)
 				}
 			}

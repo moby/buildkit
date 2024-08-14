@@ -151,7 +151,7 @@ func FormatLogs(m map[string]*bytes.Buffer) string {
 func CheckFeatureCompat(t *testing.T, sb Sandbox, features map[string]struct{}, reason ...string) {
 	t.Helper()
 	if err := HasFeatureCompat(t, sb, features, reason...); err != nil {
-		t.Skipf(err.Error())
+		t.Skip(err.Error())
 	}
 }
 
