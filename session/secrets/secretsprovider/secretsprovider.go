@@ -32,7 +32,7 @@ func (sp *secretProvider) GetSecret(ctx context.Context, req *secrets.GetSecretR
 	dt, err := sp.store.GetSecret(ctx, req.ID)
 	if err != nil {
 		if errors.Is(err, secrets.ErrNotFound) {
-			return nil, status.Errorf(codes.NotFound, err.Error())
+			return nil, status.Error(codes.NotFound, err.Error())
 		}
 		return nil, err
 	}

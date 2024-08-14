@@ -57,7 +57,7 @@ func TestReadPressureFile(t *testing.T) {
 full avg10=0.12 avg60=0.34 avg300=0.56 total=9876`
 
 	tmpFile := filepath.Join(t.TempDir(), "pressure_test")
-	err := os.WriteFile(tmpFile, []byte(pressureContents), os.ModePerm)
+	err := os.WriteFile(tmpFile, []byte(pressureContents), os.ModePerm) //nolint:gosec
 	require.NoError(t, err)
 
 	pressure, err := parsePressureFile(tmpFile)
