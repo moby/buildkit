@@ -5256,7 +5256,7 @@ COPY foo /
 	defer c.Close()
 
 	up := uploadprovider.New()
-	url := up.Add(buf)
+	url := up.Add(io.NopCloser(buf))
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
@@ -5301,7 +5301,7 @@ COPY foo bar
 	defer c.Close()
 
 	up := uploadprovider.New()
-	url := up.Add(buf)
+	url := up.Add(io.NopCloser(buf))
 
 	// repeat with changed default args should match the old cache
 	destDir := t.TempDir()

@@ -13,15 +13,15 @@ import (
 )
 
 func New() *Uploader {
-	return &Uploader{m: map[string]io.Reader{}}
+	return &Uploader{m: map[string]io.ReadCloser{}}
 }
 
 type Uploader struct {
 	mu sync.Mutex
-	m  map[string]io.Reader
+	m  map[string]io.ReadCloser
 }
 
-func (hp *Uploader) Add(r io.Reader) string {
+func (hp *Uploader) Add(r io.ReadCloser) string {
 	id := identity.NewID()
 	hp.m[id] = r
 	return "http://buildkit-session/" + id
@@ -51,6 +51,11 @@ func (hp *Uploader) Pull(stream upload.Upload_PullServer) error {
 	hp.mu.Unlock()
 
 	_, err := io.Copy(&writer{stream}, r)
+
+	if err1 := r.Close(); err == nil {
+		err = err1
+	}
+
 	return err
 }
 
