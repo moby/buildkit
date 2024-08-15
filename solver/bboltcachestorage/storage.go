@@ -46,6 +46,7 @@ func NewStore(dbPath string) (*Store, error) {
 	}); err != nil {
 		return nil, err
 	}
+
 	return &Store{db: db}, nil
 }
 
