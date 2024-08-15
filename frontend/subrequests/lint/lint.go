@@ -39,6 +39,24 @@ type Warning struct {
 	Location    pb.Location `json:"location,omitempty"`
 }
 
+func (w *Warning) PrintTo(wr io.Writer, sources []*pb.SourceInfo) error {
+	fmt.Fprintf(wr, "\nWARNING: %s", w.RuleName)
+	if w.URL != "" {
+		fmt.Fprintf(wr, " - %s", w.URL)
+	}
+	fmt.Fprintf(wr, "\n%s\n", w.Detail)
+
+	if w.Location.SourceIndex < 0 {
+		return nil
+	}
+	sourceInfo := sources[w.Location.SourceIndex]
+	source := errdefs.Source{
+		Info:   sourceInfo,
+		Ranges: w.Location.Ranges,
+	}
+	return source.Print(wr)
+}
+
 type BuildError struct {
 	Message  string      `json:"message"`
 	Location pb.Location `json:"location"`
@@ -117,28 +135,7 @@ func (results *LintResults) ToResult() (*client.Result, error) {
 	return res, nil
 }
 
-func (results *LintResults) validateWarnings() error {
-	for _, warning := range results.Warnings {
-		if int(warning.Location.SourceIndex) >= len(results.Sources) {
-			return errors.Errorf("sourceIndex is out of range")
-		}
-		if warning.Location.SourceIndex > 0 {
-			warningSource := results.Sources[warning.Location.SourceIndex]
-			if warningSource == nil {
-				return errors.Errorf("sourceIndex points to nil source")
-			}
-		}
-	}
-	return nil
-}
-
-func PrintLintViolations(dt []byte, w io.Writer) error {
-	var results LintResults
-
-	if err := json.Unmarshal(dt, &results); err != nil {
-		return err
-	}
-
+func (results *LintResults) PrintTo(w io.Writer) error {
 	if err := results.validateWarnings(); err != nil {
 		return err
 	}
@@ -169,27 +166,54 @@ func PrintLintViolations(dt []byte, w io.Writer) error {
 	})
 
 	for _, warning := range results.Warnings {
-		fmt.Fprintf(w, "\nWARNING: %s", warning.RuleName)
-		if warning.URL != "" {
-			fmt.Fprintf(w, " - %s", warning.URL)
-		}
-		fmt.Fprintf(w, "\n%s\n", warning.Detail)
-
-		if warning.Location.SourceIndex < 0 {
-			continue
-		}
-		sourceInfo := results.Sources[warning.Location.SourceIndex]
-		source := errdefs.Source{
-			Info:   sourceInfo,
-			Ranges: warning.Location.Ranges,
-		}
-		err := source.Print(w)
+		err := warning.PrintTo(w, results.Sources)
 		if err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+func (results *LintResults) PrintErrorTo(w io.Writer) {
+	// This prints out the error in LintResults to the writer in a format that
+	// is consistent with the warnings for easier downstream consumption.
+	if results.Error == nil {
+		return
+	}
+
+	fmt.Fprintln(w, results.Error.Message)
+	sourceInfo := results.Sources[results.Error.Location.SourceIndex]
+	source := errdefs.Source{
+		Info:   sourceInfo,
+		Ranges: results.Error.Location.Ranges,
+	}
+	source.Print(w)
+}
+
+func (results *LintResults) validateWarnings() error {
+	for _, warning := range results.Warnings {
+		if int(warning.Location.SourceIndex) >= len(results.Sources) {
+			return errors.Errorf("sourceIndex is out of range")
+		}
+		if warning.Location.SourceIndex > 0 {
+			warningSource := results.Sources[warning.Location.SourceIndex]
+			if warningSource == nil {
+				return errors.Errorf("sourceIndex points to nil source")
+			}
+		}
+	}
+	return nil
+}
+
+func PrintLintViolations(dt []byte, w io.Writer) error {
+	var results LintResults
+
+	if err := json.Unmarshal(dt, &results); err != nil {
+		return err
+	}
+
+	return results.PrintTo(w)
 }
 
 func sourceInfoEqual(a, b *pb.SourceInfo) bool {
