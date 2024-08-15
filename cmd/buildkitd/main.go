@@ -41,6 +41,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/bboltcachestorage"
+	"github.com/moby/buildkit/solver/sqlcachestorage"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/appdefaults"
@@ -540,10 +541,16 @@ func setDefaultConfig(cfg *config.Config) {
 	if cfg.OTEL.SocketPath == "" {
 		cfg.OTEL.SocketPath = appdefaults.TraceSocketPath(isRootlessConfig())
 	}
+
+	if cfg.Cache.IndexFormat == "" {
+		cfg.Cache.IndexFormat = appdefaults.CacheIndexFormat
+	}
 }
 
-var isRootlessConfigOnce sync.Once
-var isRootlessConfigValue bool
+var (
+	isRootlessConfigOnce  sync.Once
+	isRootlessConfigValue bool
+)
 
 // isRootlessConfig is true if we should be using the rootless config
 // defaults instead of the normal defaults.
@@ -799,7 +806,7 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 		frontends["gateway.v0"] = gwfe
 	}
 
-	cacheStorage, err := bboltcachestorage.NewStore(filepath.Join(cfg.Root, "cache.db"))
+	cacheStorage, err := newCacheKeyStorage(cfg.Root, cfg.Cache)
 	if err != nil {
 		return nil, err
 	}
@@ -960,6 +967,17 @@ func parseBoolOrAuto(s string) (*bool, error) {
 	}
 	b, err := strconv.ParseBool(s)
 	return &b, err
+}
+
+func newCacheKeyStorage(root string, cfg config.CacheConfig) (solver.PersistentCacheKeyStorage, error) {
+	switch cfg.IndexFormat {
+	case "bolt":
+		return bboltcachestorage.NewStore(filepath.Join(root, "cache.db"))
+	case "sqlite":
+		return sqlcachestorage.NewStore(filepath.Join(root, "cache.db"))
+	default:
+		return nil, errors.Errorf("invalid cache index format: %s", cfg.IndexFormat)
+	}
 }
 
 func runTraceController(p string, exp sdktrace.SpanExporter) error {

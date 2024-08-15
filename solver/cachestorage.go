@@ -2,6 +2,7 @@ package solver
 
 import (
 	"context"
+	"io"
 	"time"
 
 	"github.com/moby/buildkit/session"
@@ -27,6 +28,11 @@ type CacheKeyStorage interface {
 	WalkLinks(id string, link CacheInfoLink, fn func(id string) error) error
 	HasLink(id string, link CacheInfoLink, target string) bool
 	WalkBacklinks(id string, fn func(id string, link CacheInfoLink) error) error
+}
+
+type PersistentCacheKeyStorage interface {
+	CacheKeyStorage
+	io.Closer
 }
 
 // CacheResult is a record for a single solve result

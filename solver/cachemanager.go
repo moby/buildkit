@@ -306,7 +306,11 @@ func (c *cacheManager) Save(k *CacheKey, r Result, createdAt time.Time) (rck *Ex
 		"stack":         bklog.TraceLevelOnlyStack(),
 	})
 	defer func() {
-		lg.WithError(rerr).WithField("return_cachekey", rck.TraceFields()).Trace("cache manager")
+		l := lg.WithError(rerr)
+		if rck != nil {
+			l = l.WithField("return_cachekey", rck.TraceFields())
+		}
+		l.Trace("cache manager")
 	}()
 
 	c.mu.Lock()
