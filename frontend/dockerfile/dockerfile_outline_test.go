@@ -240,7 +240,6 @@ FROM second
 }
 
 func testOutlineDescribeDefinition(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureFrontendOutline)
 	f := getFrontend(t, sb)
 	if _, ok := f.(*clientFrontend); !ok {
@@ -251,10 +250,16 @@ func testOutlineDescribeDefinition(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM scratch
 COPY Dockerfile Dockerfile
-`)
+`,
+		`
+FROM nanoserver
+COPY Dockerfile Dockerfile
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
