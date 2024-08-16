@@ -1549,11 +1549,11 @@ relative to the root of the current build stage.
 
 ```dockerfile
 # create /abs/test.txt
-ADD test.txt /abs/
+COPY test.txt /abs/
 ```
 
-Trailing slashes are significant. For example, `ADD test.txt /abs` creates a
-file at `/abs`, whereas `ADD test.txt /abs/` creates `/abs/test.txt`.
+Trailing slashes are significant. For example, `COPY test.txt /abs` creates a
+file at `/abs`, whereas `COPY test.txt /abs/` creates `/abs/test.txt`.
 
 If the destination path doesn't begin with a leading slash, it's interpreted as
 relative to the working directory of the build container.
@@ -1561,7 +1561,7 @@ relative to the working directory of the build container.
 ```dockerfile
 WORKDIR /usr/src/app
 # create /usr/src/app/rel/test.txt
-ADD test.txt rel/
+COPY test.txt rel/
 ```
 
 If destination doesn't exist, it's created, along with all missing directories
