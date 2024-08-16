@@ -151,8 +151,7 @@ for its inputs.
   after it has completed. In LLB this is used for calculating a cache key based
   on the checksum of file contents of the input snapshots.
   
-> **Note**
->
+> [!NOTE]
 > For example, in the case of LLB, if a vertex is a FileOp that copies a file
 > from one snapshot to another, the selector can be set to the path of the
 > source file in the input snapshot, while the content-based cache function can

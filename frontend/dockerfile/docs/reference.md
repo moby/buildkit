@@ -80,6 +80,7 @@ world
 
 Comments don't support line continuation characters.
 
+> [!NOTE]
 > **Note on whitespace**
 >
 > For backward compatibility, leading whitespace before comments (`#`) and
@@ -857,8 +858,7 @@ can be controlled by an earlier build stage.
 The command is run in the host's network environment (similar to
 `docker build --network=host`, but on a per-instruction basis)
 
-> **Warning**
->
+> [!WARNING]
 > The use of `--network=host` is protected by the `network.host` entitlement,
 > which needs to be enabled when starting the buildkitd daemon with
 > `--allow-insecure-entitlement network.host` flag or in [buildkitd config](https://github.com/moby/buildkit/blob/master/docs/buildkitd.toml.md),
@@ -867,8 +867,7 @@ The command is run in the host's network environment (similar to
 
 ### RUN --security
 
-> **Note**
->
+> [!NOTE]
 > Not yet available in stable syntax, use [`docker/dockerfile:1-labs`](#syntax) version.
 
 ```dockerfile
@@ -880,8 +879,7 @@ With `--security=insecure`, the builder runs the command without sandbox in inse
 mode, which allows to run flows requiring elevated privileges (e.g. containerd).
 This is equivalent to running `docker run --privileged`.
 
-> **Warning**
->
+> [!WARNING]
 > In order to access this feature, entitlement `security.insecure` should be
 > enabled when starting the buildkitd daemon with
 > `--allow-insecure-entitlement security.insecure` flag or in [buildkitd config](https://github.com/moby/buildkit/blob/master/docs/buildkitd.toml.md),
@@ -931,8 +929,7 @@ If `CMD` is used to provide default arguments for the `ENTRYPOINT` instruction,
 both the `CMD` and `ENTRYPOINT` instructions should be specified in the
 [exec form](#exec-form).
 
-> **Note**
->
+> [!NOTE]
 > Don't confuse `RUN` with `CMD`. `RUN` actually runs a command and commits
 > the result; `CMD` doesn't execute anything at build time, but specifies
 > the intended command for the image.
@@ -970,8 +967,7 @@ LABEL multi.label1="value1" \
       other="value3"
 ```
 
-> **Note**
->
+> [!NOTE]
 > Be sure to use double quotes and not single quotes. Particularly when you are
 > using string interpolation (e.g. `LABEL example="foo-$ENV_VAR"`), single
 > quotes will take the string as is without unpacking the variable's value.
@@ -1121,6 +1117,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y ...
 ```
 
+> [!NOTE]
 > **Alternative syntax**
 >
 > The `ENV` instruction also allows an alternative syntax `ENV <key> <value>`,
@@ -1275,8 +1272,7 @@ The result is the union of:
 2. The contents of the source tree, with conflicts resolved in favor of the
    content being added, on a file-by-file basis.
 
-> **Note**
->
+> [!NOTE]
 > Whether a file is identified as a recognized compression format or not is
 > done solely based on the contents of the file, not the name of the file. For
 > example, if an empty file happens to end with `.tar.gz` this isn't recognized
@@ -1609,8 +1605,7 @@ image or stage that you specify.
 
 ### COPY --chown --chmod
 
-> **Note**
->
+> [!NOTE]
 > Only octal notation is currently supported. Non-octal support is tracked in
 > [moby/buildkit#1951](https://github.com/moby/buildkit/issues/1951).
 
@@ -1731,8 +1726,7 @@ conditions for cache reuse.
 
 ### COPY --parents
 
-> **Note**
->
+> [!NOTE]
 > Not yet available in stable syntax, use [`docker/dockerfile:1.7-labs`](#syntax) version.
 
 ```dockerfile
@@ -1789,8 +1783,7 @@ with the `--parents` flag, the Buildkit is capable of packing multiple
 
 ### COPY --exclude
 
-> **Note**
->
+> [!NOTE]
 > Not yet available in stable syntax, use [`docker/dockerfile:1.7-labs`](#syntax) version.
 
 ```dockerfile
@@ -1987,8 +1980,7 @@ user	0m 0.03s
 sys	0m 0.03s
 ```
 
-> **Note**
->
+> [!NOTE]
 > You can override the `ENTRYPOINT` setting using `--entrypoint`,
 > but this can only set the binary to exec (no `sh -c` will be used).
 
@@ -2095,8 +2087,7 @@ The table below shows what command is executed for different `ENTRYPOINT` / `CMD
 | **CMD ["exec_cmd", "p1_cmd"]** | exec_cmd p1_cmd            | /bin/sh -c exec_entry p1_entry | exec_entry p1_entry exec_cmd p1_cmd            |
 | **CMD exec_cmd p1_cmd**        | /bin/sh -c exec_cmd p1_cmd | /bin/sh -c exec_entry p1_entry | exec_entry p1_entry /bin/sh -c exec_cmd p1_cmd |
 
-> **Note**
->
+> [!NOTE]
 > If `CMD` is defined from the base image, setting `ENTRYPOINT` will
 > reset `CMD` to an empty value. In this scenario, `CMD` must be defined in the
 > current image to have a value.
@@ -2174,8 +2165,7 @@ runtime, runs the relevant `ENTRYPOINT` and `CMD` commands.
 > Note that when specifying a group for the user, the user will have _only_ the
 > specified group membership. Any other configured group memberships will be ignored.
 
-> **Warning**
->
+> [!WARNING]
 > When the user doesn't have a primary group then the image (or the next
 > instructions) will be run with the `root` group.
 >
@@ -2243,8 +2233,7 @@ The `ARG` instruction defines a variable that users can pass at build-time to
 the builder with the `docker build` command using the `--build-arg <varname>=<value>`
 flag.
 
-> **Warning**
->
+> [!WARNING]
 > It isn't recommended to use build arguments for passing secrets such as
 > user credentials, API tokens, etc. Build arguments are visible in the
 > `docker history` command and in `max` mode provenance attestations,

@@ -30,14 +30,12 @@ Introductory blog post https://blog.mobyproject.org/introducing-buildkit-17e056c
 
 Join `#buildkit` channel on [Docker Community Slack](https://dockr.ly/comm-slack)
 
-> **Note**
->
+> [!NOTE]
 > If you are visiting this repo for the usage of BuildKit-only Dockerfile features
 > like `RUN --mount=type=(bind|cache|tmpfs|secret|ssh)`, please refer to the
 > [Dockerfile reference](https://docs.docker.com/engine/reference/builder/).
 
-> **Note**
->
+> [!NOTE]
 > `docker build` [uses Buildx and BuildKit by default](https://docs.docker.com/build/architecture/) since Docker Engine 23.0.
 > You don't need to read this document unless you want to use the full-featured
 > standalone version of BuildKit.
@@ -614,8 +612,7 @@ There are 2 options supported for Azure Blob Storage authentication:
 * Any system using environment variables supported by the [Azure SDK for Go](https://docs.microsoft.com/en-us/azure/developer/go/azure-sdk-authentication). The configuration must be available for the buildkit daemon, not for the client.
 * Secret Access Key, using the `secret_access_key` attribute to specify the primary or secondary account key for your Azure Blob Storage account. [Azure Blob Storage account keys](https://docs.microsoft.com/en-us/azure/storage/common/storage-account-keys-manage)
 
-> **Note**
->
+> [!NOTE]
 > Account name can also be specified with `account_name` attribute (or `$BUILDKIT_AZURE_STORAGE_ACCOUNT_NAME`)
 > if it is not part of the account URL host.
 
