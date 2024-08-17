@@ -30,6 +30,9 @@ linters:
   disable-all: true
 
 linters-settings:
+  staticcheck:
+    checks:
+      - "all"
   gocritic:
     disabled-checks:
       - "ifElseChain"
@@ -98,6 +101,7 @@ linters-settings:
       - "empty"
       - "bool-compare"
       - "len"
+      - "negative-positive"
 
 issues:
   exclude-files:

@@ -371,7 +371,7 @@ func exitError(ctx context.Context, err error) error {
 		)
 		select {
 		case <-ctx.Done():
-			exitErr.Err = errors.Wrapf(context.Cause(ctx), exitErr.Error())
+			exitErr.Err = errors.Wrap(context.Cause(ctx), exitErr.Error())
 			return exitErr
 		default:
 			return stack.Enable(exitErr)
