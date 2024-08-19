@@ -3,8 +3,7 @@
 These are the BuildKit developer docs, designed to be read by technical users
 interested in contributing to or integrating with BuildKit.
 
-> **Warning**
->
+> [!WARNING]
 > While these docs attempt to keep up with the current state of our `master`
 > development branch, the code is constantly changing and updating, as bugs are
 > fixed, and features are added. Remember, the ultimate source of truth is

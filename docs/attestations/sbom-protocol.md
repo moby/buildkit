@@ -10,8 +10,7 @@ mount, writes its SBOM scan data to a specified directory.
 The SBOM generator image is expected to follow the rules of the BuildKit SBOM
 generator protocol, defined in this document.
 
-> **Note**
->
+> [!NOTE]
 > Currently, only SBOMs in the [SPDX](https://spdx.dev) JSON format are
 > supported.
 >

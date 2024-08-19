@@ -38,8 +38,7 @@ aliases:
 ---
 {{- if .Rule.Experimental }}
 
-> **Note**
->
+> [!NOTE]
 > This check is experimental and is not enabled by default. To enable it, see
 > [Experimental checks](https://docs.docker.com/go/build-checks-experimental/).
 {{- end }}
