@@ -514,7 +514,7 @@ They're equivalent to the following line:
 RUN source $HOME/.bashrc && echo $HOME
 ```
 
-You can also use heredocs with the shell form to break up a command:
+You can also use heredocs with the shell form to break up supported commands.
 
 ```dockerfile
 RUN <<EOF
