@@ -2052,6 +2052,8 @@ func uppercaseCmd(str string) string {
 }
 
 func processCmdEnv(shlex *shell.Lex, cmd string, env shell.EnvGetter) string {
+	// since shlex is tripping off backslashes
+	cmd = strings.ReplaceAll(cmd, "\\", "\\\\")
 	w, _, err := shlex.ProcessWord(cmd, env)
 	if err != nil {
 		return cmd
