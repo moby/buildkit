@@ -111,6 +111,7 @@ BuildKit is used by the following projects:
 -   [Depot](https://depot.dev)
 -   [Namespace](https://namespace.so)
 -   [Unikraft](https://unikraft.org)
+-   [DevZero](https://devzero.io)
 
 ## Quick start
 
