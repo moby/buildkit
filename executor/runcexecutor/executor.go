@@ -335,7 +335,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 	}
 	doReleaseNetwork = false
 
-	err = exitError(ctx, err)
+	err = exitError(ctx, cgroupPath, err)
 	if err != nil {
 		if rec != nil {
 			rec.Close()
@@ -351,7 +351,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 	return rec, rec.CloseAsync(releaseContainer)
 }
 
-func exitError(ctx context.Context, err error) error {
+func exitError(ctx context.Context, cgroupPath string, err error) error {
 	if err != nil {
 		exitErr := &gatewayapi.ExitError{
 			ExitCode: gatewayapi.UnknownExitStatus,
@@ -363,6 +363,9 @@ func exitError(ctx context.Context, err error) error {
 				ExitCode: uint32(runcExitError.Status),
 			}
 		}
+
+		detectOOM(ctx, cgroupPath, exitErr)
+
 		trace.SpanFromContext(ctx).AddEvent(
 			"Container exited",
 			trace.WithAttributes(
@@ -453,7 +456,7 @@ func (w *runcExecutor) Exec(ctx context.Context, id string, process executor.Pro
 	}
 
 	err = w.exec(ctx, id, spec.Process, process, nil)
-	return exitError(ctx, err)
+	return exitError(ctx, "", err)
 }
 
 type forwardIO struct {
