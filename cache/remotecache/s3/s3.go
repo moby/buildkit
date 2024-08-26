@@ -35,6 +35,7 @@ import (
 const (
 	attrBucket          = "bucket"
 	attrRegion          = "region"
+	attrACL             = "acl"
 	attrPrefix          = "prefix"
 	attrManifestsPrefix = "manifests_prefix"
 	attrBlobsPrefix     = "blobs_prefix"
@@ -53,6 +54,7 @@ type Config struct {
 	Region          string
 	Prefix          string
 	ManifestsPrefix string
+	ACL             string
 	BlobsPrefix     string
 	Names           []string
 	TouchRefresh    time.Duration
@@ -78,6 +80,12 @@ func getConfig(attrs map[string]string) (Config, error) {
 		if !ok {
 			return Config{}, errors.Errorf("region ($AWS_REGION) not set for s3 cache")
 		}
+	}
+
+	acl, ok := attrs[attrACL]
+	if !ok {
+		//TODO: whats the sane default?
+		acl = ""
 	}
 
 	prefix := attrs[attrPrefix]
