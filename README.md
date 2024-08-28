@@ -578,6 +578,7 @@ Other options are:
   * Multiple manifest names can be specified at the same time, separated by `;`. The standard use case is to use the git sha1 as name, and the branch name as duplicate, and load both with 2 `import-cache` commands.
 * `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
 * `touch_refresh=24h`: Instead of being uploaded again when not changed, blobs files will be "touched" on s3 every `touch_refresh`, default is 24h. Due to this, an expiration policy can be set on the S3 bucket to cleanup useless files automatically. Manifests files are systematically rewritten, there is no need to touch them.
+* `upload_parallelism=4`: This parameter changes the number of layers uploaded to s3 in parallel. Each individual layer is uploaded with 5 threads, using the Upload manager provided by the AWS SDK.
 
 `--import-cache` options:
 * `type=s3`
