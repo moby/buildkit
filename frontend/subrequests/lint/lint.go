@@ -16,6 +16,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+type SourceInfoMap func(*pb.SourceInfo) *pb.SourceInfo
+
 const RequestLint = "frontend.lint"
 
 var SubrequestLintDefinition = subrequests.Request{
@@ -39,7 +41,7 @@ type Warning struct {
 	Location    pb.Location `json:"location,omitempty"`
 }
 
-func (w *Warning) PrintTo(wr io.Writer, sources []*pb.SourceInfo) error {
+func (w *Warning) PrintTo(wr io.Writer, sources []*pb.SourceInfo, scb SourceInfoMap) error {
 	fmt.Fprintf(wr, "\nWARNING: %s", w.RuleName)
 	if w.URL != "" {
 		fmt.Fprintf(wr, " - %s", w.URL)
@@ -50,6 +52,9 @@ func (w *Warning) PrintTo(wr io.Writer, sources []*pb.SourceInfo) error {
 		return nil
 	}
 	sourceInfo := sources[w.Location.SourceIndex]
+	if scb != nil {
+		sourceInfo = scb(sourceInfo)
+	}
 	source := errdefs.Source{
 		Info:   sourceInfo,
 		Ranges: w.Location.Ranges,
@@ -111,7 +116,7 @@ func (results *LintResults) AddWarning(rulename, description, url, fmtmsg string
 	})
 }
 
-func (results *LintResults) ToResult() (*client.Result, error) {
+func (results *LintResults) ToResult(scb SourceInfoMap) (*client.Result, error) {
 	res := client.NewResult()
 	dt, err := json.MarshalIndent(results, "", "  ")
 	if err != nil {
@@ -120,7 +125,7 @@ func (results *LintResults) ToResult() (*client.Result, error) {
 	res.AddMeta("result.json", dt)
 
 	b := bytes.NewBuffer(nil)
-	if err := PrintLintViolations(dt, b); err != nil {
+	if err := PrintLintViolations(dt, b, scb); err != nil {
 		return nil, err
 	}
 	res.AddMeta("result.txt", b.Bytes())
@@ -135,7 +140,7 @@ func (results *LintResults) ToResult() (*client.Result, error) {
 	return res, nil
 }
 
-func (results *LintResults) PrintTo(w io.Writer) error {
+func (results *LintResults) PrintTo(w io.Writer, scb SourceInfoMap) error {
 	if err := results.validateWarnings(); err != nil {
 		return err
 	}
@@ -166,7 +171,7 @@ func (results *LintResults) PrintTo(w io.Writer) error {
 	})
 
 	for _, warning := range results.Warnings {
-		err := warning.PrintTo(w, results.Sources)
+		err := warning.PrintTo(w, results.Sources, scb)
 		if err != nil {
 			return err
 		}
@@ -206,14 +211,14 @@ func (results *LintResults) validateWarnings() error {
 	return nil
 }
 
-func PrintLintViolations(dt []byte, w io.Writer) error {
+func PrintLintViolations(dt []byte, w io.Writer, scb SourceInfoMap) error {
 	var results LintResults
 
 	if err := json.Unmarshal(dt, &results); err != nil {
 		return err
 	}
 
-	return results.PrintTo(w)
+	return results.PrintTo(w, scb)
 }
 
 func sourceInfoEqual(a, b *pb.SourceInfo) bool {
