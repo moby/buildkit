@@ -13,8 +13,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-var helpers map[string]struct{}
-var helpersMu sync.RWMutex
+var (
+	helpers   map[string]struct{}
+	helpersMu sync.RWMutex
+)
 
 func init() {
 	typeurl.Register((*Stack)(nil), "github.com/moby/buildkit", "stack.Stack+json")
@@ -22,8 +24,10 @@ func init() {
 	helpers = map[string]struct{}{}
 }
 
-var version string
-var revision string
+var (
+	version  string
+	revision string
+)
 
 func SetVersionInfo(v, r string) {
 	version = v
@@ -130,6 +134,10 @@ func (w *formatter) Format(s fmt.State, verb rune) {
 	case 'q':
 		fmt.Fprintf(s, "%q", w.Error())
 	}
+}
+
+func Convert(s errors.StackTrace) *Stack {
+	return convertStack(s)
 }
 
 func convertStack(s errors.StackTrace) *Stack {
