@@ -107,7 +107,7 @@ func getContentStore(ctx context.Context, sm *session.Manager, g session.Group, 
 	}
 	timeoutCtx, cancel := context.WithCancelCause(ctx)
 	timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, errors.WithStack(context.DeadlineExceeded))
-	defer cancel(errors.WithStack(context.Canceled))
+	defer cancel(errors.Wrap(context.Canceled, "local cache import/export get content store done"))
 
 	caller, err := sm.Get(timeoutCtx, sessionID, false)
 	if err != nil {

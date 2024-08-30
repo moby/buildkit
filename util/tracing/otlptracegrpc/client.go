@@ -70,10 +70,10 @@ func (c *client) UploadTraces(ctx context.Context, protoSpans []*tracepb.Resourc
 	}
 
 	ctx, cancel := c.connection.ContextWithStop(ctx)
-	defer cancel(errors.WithStack(context.Canceled))
+	defer cancel(errors.Wrap(context.Canceled, "upload traces done"))
 	ctx, tCancel := context.WithCancelCause(ctx)
 	ctx, _ = context.WithTimeoutCause(ctx, 30*time.Second, errors.WithStack(context.DeadlineExceeded))
-	defer tCancel(errors.WithStack(context.Canceled))
+	defer tCancel(errors.Wrap(context.Canceled, "upload traces timeout"))
 
 	ctx = c.connection.ContextWithMetadata(ctx)
 	err := func() error {

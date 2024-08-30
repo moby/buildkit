@@ -543,7 +543,7 @@ func (k procKiller) Kill(ctx context.Context) (err error) {
 	// shorter timeout but here as a fail-safe for future refactoring.
 	ctx, cancel := context.WithCancelCause(ctx)
 	ctx, _ = context.WithTimeoutCause(ctx, 10*time.Second, errors.WithStack(context.DeadlineExceeded))
-	defer cancel(errors.WithStack(context.Canceled))
+	defer cancel(errors.Wrap(context.Canceled, "runc kill process done"))
 
 	if k.pidfile == "" {
 		// for `runc run` process we use `runc kill` to terminate the process
@@ -640,7 +640,7 @@ func runcProcessHandle(ctx context.Context, killer procKiller) (*procHandle, con
 					default:
 					}
 				}
-				timeout(errors.WithStack(context.Canceled))
+				timeout(errors.Wrap(context.Canceled, "killing process done"))
 				select {
 				case <-time.After(50 * time.Millisecond):
 				case <-p.ended:
@@ -668,7 +668,7 @@ func (p *procHandle) Release() {
 // goroutines.
 func (p *procHandle) Shutdown() {
 	if p.shutdown != nil {
-		p.shutdown(errors.WithStack(context.Canceled))
+		p.shutdown(errors.Wrap(context.Canceled, "runc process shutdown"))
 	}
 }
 
@@ -690,7 +690,7 @@ func (p *procHandle) WaitForReady(ctx context.Context) error {
 func (p *procHandle) WaitForStart(ctx context.Context, startedCh <-chan int, started func()) error {
 	ctx, cancel := context.WithCancelCause(ctx)
 	ctx, _ = context.WithTimeoutCause(ctx, 10*time.Second, errors.WithStack(context.DeadlineExceeded))
-	defer cancel(errors.WithStack(context.Canceled))
+	defer cancel(errors.Wrap(context.Canceled, "runc process wait for start done"))
 	select {
 	case <-ctx.Done():
 		return errors.New("go-runc started message never received")

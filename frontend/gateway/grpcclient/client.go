@@ -48,7 +48,7 @@ type GrpcClient interface {
 func New(ctx context.Context, opts map[string]string, session, product string, c pb.LLBBridgeClient, w []client.WorkerInfo) (GrpcClient, error) {
 	pingCtx, pingCancel := context.WithCancelCause(ctx)
 	pingCtx, _ = context.WithTimeoutCause(pingCtx, 15*time.Second, errors.WithStack(context.DeadlineExceeded))
-	defer pingCancel(errors.WithStack(context.Canceled))
+	defer pingCancel(errors.Wrap(context.Canceled, "new grpc client ping done"))
 	resp, err := c.Ping(pingCtx, &pb.PingRequest{})
 	if err != nil {
 		return nil, err
@@ -832,7 +832,7 @@ func (m *messageForwarder) Send(msg *pb.ExecMessage) error {
 }
 
 func (m *messageForwarder) Release() error {
-	m.cancel(errors.WithStack(context.Canceled))
+	m.cancel(errors.Wrap(context.Canceled, "message forwarder released"))
 	return m.eg.Wait()
 }
 

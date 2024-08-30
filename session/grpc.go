@@ -68,7 +68,7 @@ func grpcClientConn(ctx context.Context, conn net.Conn) (context.Context, *grpc.
 }
 
 func monitorHealth(ctx context.Context, cc *grpc.ClientConn, cancelConn func(error)) {
-	defer cancelConn(errors.WithStack(context.Canceled))
+	defer cancelConn(errors.Wrap(context.Canceled, "monitorHealth done"))
 	defer cc.Close()
 
 	ticker := time.NewTicker(5 * time.Second)
@@ -95,7 +95,7 @@ func monitorHealth(ctx context.Context, cc *grpc.ClientConn, cancelConn func(err
 			ctx, cancel := context.WithCancelCause(ctx)
 			ctx, _ = context.WithTimeoutCause(ctx, timeout, errors.WithStack(context.DeadlineExceeded))
 			_, err := healthClient.Check(ctx, &grpc_health_v1.HealthCheckRequest{})
-			cancel(errors.WithStack(context.Canceled))
+			cancel(errors.Wrap(context.Canceled, "healthcheck done"))
 
 			lastHealthcheckDuration = time.Since(healthcheckStart)
 			logFields := logrus.Fields{

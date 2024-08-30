@@ -205,7 +205,7 @@ func FSSync(ctx context.Context, c session.Caller, opt FSSendRequestOpt) error {
 	opts[keyDirName] = []string{opt.Name}
 
 	ctx, cancel := context.WithCancelCause(ctx)
-	defer cancel(errors.WithStack(context.Canceled))
+	defer cancel(errors.Wrap(context.Canceled, "FSSync done"))
 
 	client := NewFileSyncClient(c.Conn())
 

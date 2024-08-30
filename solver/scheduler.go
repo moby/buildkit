@@ -282,7 +282,7 @@ func (s *scheduler) build(ctx context.Context, edge Edge) (CachedResult, error) 
 	s.mu.Unlock()
 
 	ctx, cancel := context.WithCancelCause(ctx)
-	defer cancel(errors.WithStack(context.Canceled))
+	defer cancel(errors.Wrap(context.Canceled, "scheduler build done"))
 
 	go func() {
 		<-ctx.Done()

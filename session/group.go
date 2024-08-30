@@ -74,7 +74,7 @@ func (sm *Manager) Any(ctx context.Context, g Group, f func(context.Context, str
 
 		timeoutCtx, cancel := context.WithCancelCause(ctx)
 		timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, errors.WithStack(context.DeadlineExceeded))
-		defer cancel(errors.WithStack(context.Canceled))
+		defer cancel(errors.Wrapf(context.Canceled, "session manager get %s done", id))
 		c, err := sm.Get(timeoutCtx, id, false)
 		if err != nil {
 			lastErr = err

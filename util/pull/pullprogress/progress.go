@@ -45,7 +45,7 @@ type readerAtWithCancel struct {
 }
 
 func (ra readerAtWithCancel) Close() error {
-	ra.cancel(errors.WithStack(context.Canceled))
+	ra.cancel(errors.Wrap(context.Canceled, "readerAtWithCancel closed"))
 	select {
 	case <-ra.doneCh:
 	case <-time.After(time.Second):
@@ -79,7 +79,7 @@ type readerWithCancel struct {
 }
 
 func (r readerWithCancel) Close() error {
-	r.cancel(errors.WithStack(context.Canceled))
+	r.cancel(errors.Wrap(context.Canceled, "readerWithCancel closed"))
 	select {
 	case <-r.doneCh:
 	case <-time.After(time.Second):

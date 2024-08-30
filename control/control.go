@@ -530,7 +530,7 @@ func (c *Controller) Session(stream controlapi.Control_SessionServer) error {
 	ctx, cancel := context.WithCancelCause(stream.Context())
 	go func() {
 		<-closeCh
-		cancel(errors.WithStack(context.Canceled))
+		cancel(errors.Wrap(context.Canceled, "controller session conn closed"))
 	}()
 
 	err := c.opt.SessionManager.HandleConn(ctx, conn, opts)

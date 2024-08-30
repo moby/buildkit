@@ -81,7 +81,7 @@ func (e *localExporter) Config() *exporter.Config {
 func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source, _ exptypes.InlineCache, sessionID string) (map[string]string, exporter.DescriptorReference, error) {
 	timeoutCtx, cancel := context.WithCancelCause(ctx)
 	timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, errors.WithStack(context.DeadlineExceeded))
-	defer cancel(errors.WithStack(context.Canceled))
+	defer cancel(errors.Wrap(context.Canceled, "local export done"))
 
 	if e.opts.Epoch == nil {
 		if tm, ok, err := epoch.ParseSource(inp); err != nil {

@@ -626,7 +626,7 @@ func (jl *Solver) NewJob(id string) (*Job, error) {
 func (jl *Solver) Get(id string) (*Job, error) {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	ctx, _ = context.WithTimeoutCause(ctx, 6*time.Second, errors.WithStack(context.DeadlineExceeded))
-	defer cancel(errors.WithStack(context.Canceled))
+	defer cancel(errors.Wrap(context.Canceled, "solver get job done"))
 
 	go func() {
 		<-ctx.Done()
@@ -751,7 +751,7 @@ func (j *Job) walkProvenance(ctx context.Context, e Edge, f func(ProvenanceProvi
 }
 
 func (j *Job) CloseProgress() {
-	j.progressCloser(errors.WithStack(context.Canceled))
+	j.progressCloser(errors.WithStack(errors.Wrap(context.Canceled, "job progress closed")))
 	j.pw.Close()
 }
 

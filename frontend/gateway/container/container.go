@@ -407,7 +407,7 @@ func (gwCtr *gatewayContainer) loadSecretEnv(ctx context.Context, secretEnv []*p
 func (gwCtr *gatewayContainer) Release(ctx context.Context) error {
 	gwCtr.mu.Lock()
 	defer gwCtr.mu.Unlock()
-	gwCtr.cancel(errors.WithStack(context.Canceled))
+	gwCtr.cancel(errors.Wrap(context.Canceled, "container released"))
 	err1 := gwCtr.errGroup.Wait()
 
 	var err2 error

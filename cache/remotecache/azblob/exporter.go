@@ -152,7 +152,7 @@ func (ce *exporter) uploadManifest(ctx context.Context, manifestKey string, read
 
 	ctx, cnclFn := context.WithCancelCause(ctx)
 	ctx, _ = context.WithTimeoutCause(ctx, time.Minute*5, errors.WithStack(context.DeadlineExceeded))
-	defer cnclFn(errors.WithStack(context.Canceled))
+	defer cnclFn(errors.Wrap(context.Canceled, "upload manifest done"))
 
 	_, err = blobClient.Upload(ctx, reader, &azblob.BlockBlobUploadOptions{})
 	if err != nil {
@@ -173,7 +173,7 @@ func (ce *exporter) uploadBlobIfNotExists(ctx context.Context, blobKey string, r
 
 	uploadCtx, cnclFn := context.WithCancelCause(ctx)
 	uploadCtx, _ = context.WithTimeoutCause(uploadCtx, time.Minute*5, errors.WithStack(context.DeadlineExceeded))
-	defer cnclFn(errors.WithStack(context.Canceled))
+	defer cnclFn(errors.Wrap(context.Canceled, "upload blob done"))
 
 	// Only upload if the blob doesn't exist
 	eTagAny := azblob.ETagAny

@@ -152,7 +152,7 @@ func (r *TraceRecorder) ExportSpans(ctx context.Context, spans []sdktrace.ReadOn
 
 func (r *TraceRecorder) Shutdown(ctx context.Context) error {
 	// Initiate the shutdown of the gc loop.
-	r.shutdownGC(errors.WithStack(context.Canceled))
+	r.shutdownGC(errors.Wrap(context.Canceled, "trace recorder shutdown"))
 
 	// Wait for it to be done or the context is canceled.
 	select {

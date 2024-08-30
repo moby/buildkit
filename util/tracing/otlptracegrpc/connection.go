@@ -211,7 +211,7 @@ func (c *Connection) ContextWithStop(ctx context.Context) (context.Context, cont
 			// Nothing to do, either cancelled or deadline
 			// happened.
 		case <-c.stopCh:
-			cancel(errors.WithStack(context.Canceled))
+			cancel(errors.Wrap(context.Canceled, "connection stopped"))
 		}
 	}(ctx, cancel)
 	return ctx, cancel

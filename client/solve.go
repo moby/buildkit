@@ -107,7 +107,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	eg, ctx := errgroup.WithContext(ctx)
 
 	statusContext, cancelStatus := context.WithCancelCause(context.Background())
-	defer cancelStatus(errors.WithStack(context.Canceled))
+	defer cancelStatus(errors.Wrap(context.Canceled, "solve status done"))
 
 	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
 		statusContext = trace.ContextWithSpan(statusContext, span)
@@ -226,12 +226,12 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	var res *SolveResponse
 	eg.Go(func() error {
 		ctx := solveCtx
-		defer cancelSolve(errors.WithStack(context.Canceled))
+		defer cancelSolve(errors.Wrap(context.Canceled, "solve done"))
 
 		defer func() { // make sure the Status ends cleanly on build errors
 			go func() {
 				<-time.After(3 * time.Second)
-				cancelStatus(errors.WithStack(context.Canceled))
+				cancelStatus(errors.Wrap(context.Canceled, "solve status done after timeout"))
 			}()
 			if !opt.SessionPreInitialized {
 				bklog.G(ctx).Debugf("stopping session")
@@ -305,7 +305,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			select {
 			case <-solveCtx.Done():
 			case <-time.After(5 * time.Second):
-				cancelSolve(errors.WithStack(context.Canceled))
+				cancelSolve(errors.Wrap(context.Canceled, "solve done after timeout"))
 			}
 
 			return err

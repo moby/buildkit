@@ -99,7 +99,7 @@ func (sm *Manager) HandleConn(ctx context.Context, conn net.Conn, opts map[strin
 // caller needs to take lock, this function will release it
 func (sm *Manager) handleConn(ctx context.Context, conn net.Conn, opts map[string][]string) error {
 	ctx, cancel := context.WithCancelCause(ctx)
-	defer cancel(errors.WithStack(context.Canceled))
+	defer cancel(errors.Wrap(context.Canceled, "session manager handleConn done"))
 
 	opts = canonicalHeaders(opts)
 
@@ -154,7 +154,7 @@ func (sm *Manager) Get(ctx context.Context, id string, noWait bool) (Caller, err
 	}
 
 	ctx, cancel := context.WithCancelCause(ctx)
-	defer cancel(errors.WithStack(context.Canceled))
+	defer cancel(errors.Wrapf(context.Canceled, "session manager get %s done", id))
 
 	go func() {
 		<-ctx.Done()

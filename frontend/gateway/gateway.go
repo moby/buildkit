@@ -515,7 +515,7 @@ func serveLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLB
 		default:
 			lbf.isErrServerClosed = true
 		}
-		cancel(errors.WithStack(context.Canceled))
+		cancel(errors.Wrap(context.Canceled, "llb bridge forwarder grpc server done"))
 	}()
 
 	return lbf, ctx
@@ -1444,7 +1444,7 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 				}
 
 				initCtx, initCancel := context.WithCancelCause(context.Background())
-				defer initCancel(errors.WithStack(context.Canceled))
+				defer initCancel(errors.Wrap(context.Canceled, "llb bridge exec process init done"))
 
 				pio := newProcessIO(pid, init.Fds)
 				pios[pid] = pio

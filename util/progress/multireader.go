@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"sync"
+
+	"github.com/pkg/errors"
 )
 
 type MultiReader struct {
@@ -49,7 +51,7 @@ func (mr *MultiReader) Reader(ctx context.Context) Reader {
 		if isBehind {
 			close := func(err error) {
 				w.Close()
-				closeWriter(err)
+				closeWriter(errors.Wrap(err, "multi reader writer done after behind"))
 			}
 			i := 0
 			for {
@@ -95,7 +97,7 @@ func (mr *MultiReader) Reader(ctx context.Context) Reader {
 		mr.mu.Lock()
 		defer mr.mu.Unlock()
 		delete(mr.writers, w)
-		closeWriter(context.Cause(ctx))
+		closeWriter(errors.Wrap(context.Cause(ctx), "multi reader writer done"))
 	}()
 
 	if !mr.initialized {
@@ -112,7 +114,7 @@ func (mr *MultiReader) handle() error {
 		if err != nil {
 			if err == io.EOF {
 				mr.mu.Lock()
-				cancelErr := context.Canceled
+				cancelErr := errors.Wrap(context.Canceled, "multi reader handle EOF")
 				for w, c := range mr.writers {
 					w.Close()
 					c(cancelErr)

@@ -210,6 +210,7 @@ func (sm *sshMountInstance) Mount() ([]mount.Mount, func() error, error) {
 			GID: gid,
 		})
 		if err != nil {
+			err = errors.Wrap(err, "ssh mount failed to map identity")
 			cancel(err)
 			return nil, nil, err
 		}
@@ -224,6 +225,7 @@ func (sm *sshMountInstance) Mount() ([]mount.Mount, func() error, error) {
 		Mode: int(sm.sm.mount.SSHOpt.Mode & 0777),
 	})
 	if err != nil {
+		err = errors.Wrap(err, "ssh mount failed to mount socket")
 		cancel(err)
 		return nil, nil, err
 	}
@@ -232,7 +234,7 @@ func (sm *sshMountInstance) Mount() ([]mount.Mount, func() error, error) {
 		if cleanup != nil {
 			err = cleanup()
 		}
-		cancel(err)
+		cancel(errors.Wrap(err, "ssh mount cleanup"))
 		return err
 	}
 

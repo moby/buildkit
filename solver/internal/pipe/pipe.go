@@ -74,7 +74,7 @@ func NewWithFunction(f func(context.Context) (interface{}, error)) (*Pipe, func(
 
 	p.OnReceiveCompletion = func() {
 		if req := p.Sender.Request(); req.Canceled {
-			cancel(errors.WithStack(context.Canceled))
+			cancel(errors.Wrap(context.Canceled, "pipe sender request canceled"))
 		}
 	}
 

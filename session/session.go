@@ -96,7 +96,7 @@ func (s *Session) Run(ctx context.Context, dialer Dialer) error {
 	s.cancelCtx = cancel
 	s.done = make(chan struct{})
 
-	defer cancel(errors.WithStack(context.Canceled))
+	defer cancel(errors.Wrap(context.Canceled, "session run done"))
 	defer close(s.done)
 
 	meta := make(map[string][]string)
