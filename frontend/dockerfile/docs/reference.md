@@ -638,9 +638,11 @@ EOF
 
 The available `[OPTIONS]` for the `RUN` instruction are:
 
-- [`--mount`](#run---mount)
-- [`--network`](#run---network)
-- [`--security`](#run---security)
+| Option                          | Minimum Dockerfile version |
+| ------------------------------- | -------------------------- |
+| [`--mount`](#run---mount)       | 1.2                        |
+| [`--network`](#run---network)   | 1.3                        |
+| [`--security`](#run---security) | 1.1.2-labs                 |
 
 ### Cache invalidation for RUN instructions
 
@@ -1150,12 +1152,14 @@ ADD [OPTIONS] ["<src>", ... "<dest>"]
 
 The available `[OPTIONS]` are:
 
-- [`--keep-git-dir`](#add---keep-git-dir)
-- [`--checksum`](#add---checksum)
-- [`--chown`](#add---chown---chmod)
-- [`--chmod`](#add---chown---chmod)
-- [`--link`](#add---link)
-- [`--exclude`](#add---exclude)
+| Option                                  | Minimum Dockerfile version |
+| --------------------------------------- | -------------------------- |
+| [`--keep-git-dir`](#add---keep-git-dir) | 1.1                        |
+| [`--checksum`](#add---checksum)         | 1.6                        |
+| [`--chown`](#add---chown---chmod)       |                            |
+| [`--chmod`](#add---chown---chmod)       | 1.2                        |
+| [`--link`](#add---link)                 | 1.4                        |
+| [`--exclude`](#add---exclude)           | 1.7                        |
 
 The `ADD` instruction copies new files or directories from `<src>` and adds
 them to the filesystem of the image at the path `<dest>`. Files and directories
@@ -1434,12 +1438,14 @@ COPY [OPTIONS] ["<src>", ... "<dest>"]
 
 The available `[OPTIONS]` are:
 
-- [`--from`](#copy---from)
-- [`--chown`](#copy---chown---chmod)
-- [`--chmod`](#copy---chown---chmod)
-- [`--link`](#copy---link)
-- [`--parents`](#copy---parents)
-- [`--exclude`](#copy---exclude)
+| Option                             | Minimum Dockerfile version |
+| ---------------------------------- | -------------------------- |
+| [`--from`](#copy---from)           |                            |
+| [`--chown`](#copy---chown---chmod) |                            |
+| [`--chmod`](#copy---chown---chmod) | 1.2                        |
+| [`--link`](#copy---link)           | 1.4                        |
+| [`--parents`](#copy---parents)     | 1.7                        |
+| [`--exclude`](#copy---exclude)     | 1.7                        |
 
 The `COPY` instruction copies new files or directories from `<src>` and adds
 them to the filesystem of the image at the path `<dest>`. Files and directories
