@@ -1,6 +1,7 @@
 package gitutil
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -89,6 +90,10 @@ func TestParseGitRef(t *testing.T) {
 			},
 		},
 		{
+			ref:      "github.com:moby/buildkit",
+			expected: nil,
+		},
+		{
 			ref: "git@github.com:moby/buildkit",
 			expected: &GitRef{
 				Remote:    "git@github.com:moby/buildkit",
@@ -141,7 +146,7 @@ func TestParseGitRef(t *testing.T) {
 	}
 	for _, tt := range cases {
 		tt := tt
-		t.Run(tt.ref, func(t *testing.T) {
+		t.Run(strings.ReplaceAll(tt.ref, "/", "_"), func(t *testing.T) {
 			got, err := ParseGitRef(tt.ref)
 			if tt.expected == nil {
 				require.Nil(t, got)

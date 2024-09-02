@@ -17,8 +17,9 @@ const (
 )
 
 var (
-	ErrUnknownProtocol = errors.New("unknown protocol")
-	ErrInvalidProtocol = errors.New("invalid protocol")
+	ErrUnknownProtocol  = errors.New("unknown protocol")
+	ErrInvalidProtocol  = errors.New("invalid protocol")
+	ErrImplicitUsername = errors.New("implicit username not permitted")
 )
 
 var supportedProtos = map[string]struct{}{
@@ -53,6 +54,12 @@ type GitURL struct {
 	// Remote is a valid URL remote to pass into the Git CLI tooling (i.e.
 	// without the fragment metadata)
 	Remote string
+	// RemoteURL is the original URL parsed from a standard URL (but only if it
+	// was parsed from one)
+	RemoteURL *url.URL
+	// RemoteSCPStyleURL is the original URL parsed from an scyp-style URL (but
+	// only if it was parsed from one)
+	RemoteSCPStyleURL *sshutil.SCPStyleURL
 }
 
 // GitURLFragment is the buildkit-specific metadata extracted from the fragment
@@ -74,9 +81,26 @@ func splitGitFragment(fragment string) *GitURLFragment {
 	return &GitURLFragment{Ref: ref, Subdir: subdir}
 }
 
+type parseURLOpts struct {
+	noImplicitSCPUsername bool
+}
+type ParseURLOpt func(*parseURLOpts)
+
+// NoImplicitSCPUsername prevents parsing a URL that has no username specified.
+func NoImplicitSCPUsername() ParseURLOpt {
+	return func(opts *parseURLOpts) {
+		opts.noImplicitSCPUsername = true
+	}
+}
+
 // ParseURL parses a BuildKit-style Git URL (that may contain additional
 // fragment metadata) and returns a parsed GitURL object.
-func ParseURL(remote string) (*GitURL, error) {
+func ParseURL(remote string, opts ...ParseURLOpt) (*GitURL, error) {
+	opt := parseURLOpts{}
+	for _, f := range opts {
+		f(&opt)
+	}
+
 	if proto := protoRegexp.FindString(remote); proto != "" {
 		proto = strings.ToLower(strings.TrimSuffix(proto, "://"))
 		if _, ok := supportedProtos[proto]; !ok {
@@ -90,31 +114,31 @@ func ParseURL(remote string) (*GitURL, error) {
 	}
 
 	if url, err := sshutil.ParseSCPStyleURL(remote); err == nil {
+		if opt.noImplicitSCPUsername && url.User == nil {
+			return nil, ErrImplicitUsername
+		}
 		return fromSCPStyleURL(url), nil
 	}
 
 	return nil, ErrUnknownProtocol
 }
 
-func IsGitTransport(remote string) bool {
-	if proto := protoRegexp.FindString(remote); proto != "" {
-		proto = strings.ToLower(strings.TrimSuffix(proto, "://"))
-		_, ok := supportedProtos[proto]
-		return ok
-	}
-	return sshutil.IsImplicitSSHTransport(remote)
+func IsGitTransport(remote string, opts ...ParseURLOpt) bool {
+	_, err := ParseURL(remote, opts...)
+	return err == nil
 }
 
 func fromURL(url *url.URL) *GitURL {
 	withoutFragment := *url
 	withoutFragment.Fragment = ""
 	return &GitURL{
-		Scheme:   url.Scheme,
-		User:     url.User,
-		Host:     url.Host,
-		Path:     url.Path,
-		Fragment: splitGitFragment(url.Fragment),
-		Remote:   withoutFragment.String(),
+		Scheme:    url.Scheme,
+		User:      url.User,
+		Host:      url.Host,
+		Path:      url.Path,
+		Fragment:  splitGitFragment(url.Fragment),
+		Remote:    withoutFragment.String(),
+		RemoteURL: url,
 	}
 }
 
@@ -122,11 +146,12 @@ func fromSCPStyleURL(url *sshutil.SCPStyleURL) *GitURL {
 	withoutFragment := *url
 	withoutFragment.Fragment = ""
 	return &GitURL{
-		Scheme:   SSHProtocol,
-		User:     url.User,
-		Host:     url.Host,
-		Path:     url.Path,
-		Fragment: splitGitFragment(url.Fragment),
-		Remote:   withoutFragment.String(),
+		Scheme:            SSHProtocol,
+		User:              url.User,
+		Host:              url.Host,
+		Path:              url.Path,
+		Fragment:          splitGitFragment(url.Fragment),
+		Remote:            withoutFragment.String(),
+		RemoteSCPStyleURL: url,
 	}
 }

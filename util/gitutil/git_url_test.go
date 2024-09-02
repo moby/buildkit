@@ -2,6 +2,7 @@ package gitutil
 
 import (
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -73,6 +74,15 @@ func TestParseURL(t *testing.T) {
 				Host:   "github.com:22",
 				Path:   "/moby/buildkit.git",
 				User:   url.User("git"),
+			},
+		},
+		{
+			url: "github.com:moby/buildkit.git",
+			result: GitURL{
+				Scheme: SSHProtocol,
+				Host:   "github.com",
+				Path:   "moby/buildkit.git",
+				User:   nil,
 			},
 		},
 		{
@@ -153,7 +163,7 @@ func TestParseURL(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		t.Run(test.url, func(t *testing.T) {
+		t.Run(strings.ReplaceAll(test.url, "/", "_"), func(t *testing.T) {
 			remote, err := ParseURL(test.url)
 			if test.err {
 				require.Error(t, err)
