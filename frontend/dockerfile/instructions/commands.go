@@ -506,6 +506,7 @@ type ShellCommand struct {
 type Stage struct {
 	Name     string    // name of the stage
 	Commands []Command // commands contained within the stage
+	OrigCmd  string    // original FROM command, used for rule checks
 	BaseName string    // name of the base stage or source
 	Platform string    // platform of base source to use
 

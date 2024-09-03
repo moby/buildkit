@@ -580,6 +580,14 @@ COPY Dockerfile /foo
 COPY Dockerfile /bar
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`
+FROM alpine
+RUN <<'EOT'
+env
+EOT
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 }
 
 func testDuplicateStageName(t *testing.T, sb integration.Sandbox) {
