@@ -118,15 +118,25 @@ and don't show up as build steps. Parser directives are written as a
 special type of comment in the form `# directive=value`. A single directive
 may only be used once.
 
+The following parser directives are supported:
+
+- [`syntax`](#syntax)
+- [`escape`](#escape)
+- [`check`](#check) (since Dockerfile v1.8.0)
+
 Once a comment, empty line or builder instruction has been processed, BuildKit
 no longer looks for parser directives. Instead it treats anything formatted
 as a parser directive as a comment and doesn't attempt to validate if it might
 be a parser directive. Therefore, all parser directives must be at the
 top of a Dockerfile.
 
-Parser directives aren't case-sensitive, but they're lowercase by convention.
-It's also conventional to include a blank line following any parser directives.
-Line continuation characters aren't supported in parser directives.
+Parser directive keys, such as `syntax` or `check`, aren't case-sensitive, but
+they're lowercase by convention. Values for a directive are case-sensitive and
+must be written in the appropriate case for the directive. For example,
+`#check=skip=jsonargsrecommended` is invalid because the check name must use
+Pascal case, not lowercase. It's also conventional to include a blank line
+following any parser directives. Line continuation characters aren't supported
+in parser directives.
 
 Due to these rules, the following examples are all invalid:
 
@@ -307,6 +317,46 @@ Removing intermediate container a2c157f842f5
 Successfully built 01c7f3bef04f
 PS E:\myproject>
 ```
+
+### check
+
+```dockerfile
+# check=skip=<checks|all>
+# check=error=<boolean>
+```
+
+The `check` directive is used to configure how [build checks](https://docs.docker.com/build/checks/)
+are evaluated. By default, all checks are run, and failures are treated as
+warnings.
+
+You can disable specific checks using `#check=skip=<check-name>`. To specify
+multiple checks to skip, separate them with a comma:
+
+```dockerfile
+# check=skip=JSONArgsRecommended,StageNameCasing
+```
+
+To disable all checks, use `#check=skip=all`.
+
+By default, builds with failing build checks exit with a zero status code
+despite warnings. To make the build fail on warnings, set `#check=error=true`.
+
+```dockerfile
+# check=error=true
+```
+
+To combine both the `skip` and `error` options, use a semi-colon to separate
+them:
+
+```dockerfile
+# check=skip=JSONArgsRecommended;error=true
+```
+
+To see all available checks, see the [build checks reference](https://docs.docker.com/reference/build-checks/).
+Note that the checks available depend on the Dockerfile syntax version. To make
+sure you're getting the most up-to-date checks, use the [`syntax`](#syntax)
+directive to specify the Dockerfile syntax version to the latest stable
+version.
 
 ## Environment replacement
 

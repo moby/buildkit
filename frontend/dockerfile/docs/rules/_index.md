@@ -20,6 +20,9 @@ the rules. To run a check, use the `--check` flag:
 $ docker build --check .
 ```
 
+To learn more about how to use build checks, see
+[Checking your build configuration](https://docs.docker.com/build/checks/).
+
 <table>
   <thead>
     <tr>
