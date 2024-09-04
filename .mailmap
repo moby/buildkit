@@ -7,9 +7,13 @@
 # For explanation on this file format: man git-shortlog
 
 Aaron L. Xu <likexu@harmonycloud.cn>
+Ahmon Dancy <adancy@wikimedia.org>
+Ahmon Dancy <adancy@wikimedia.org> <dancy@dancysoft.com>
 Akihiro Suda <akihiro.suda.cz@hco.ntt.co.jp>
 Akihiro Suda <akihiro.suda.cz@hco.ntt.co.jp> <suda.kyoto@gmail.com>
 Akihiro Suda <akihiro.suda.cz@hco.ntt.co.jp> <suda.akihiro@lab.ntt.co.jp>
+Alex Couture-Beil <alex@earthly.dev>
+Alex Couture-Beil <alex@earthly.dev> <alex@mofo.ca>
 Allen Sun <allen.sun@daocloud.io>
 Andrey Smirnov <smirnov.andrey@gmail.com>
 Andrey Smirnov <smirnov.andrey@gmail.com> <andrey.smirnov@talos-systems.com>
@@ -21,15 +25,24 @@ Daniel Nephin <dnephin@gmail.com>
 Daniel Nephin <dnephin@gmail.com> <dnephin@docker.com>
 David Gageot <david.gageot@docker.com>
 David Gageot <david.gageot@docker.com> <david.gageot@doctolib.com>
+David Karlsson <david.karlsson@docker.com>
+David Karlsson <david.karlsson@docker.com> <35727626+dvdksn@users.noreply.github.com>
+Derek McGowan <derek@mcg.dev>
+Derek McGowan <derek@mcg.dev> <derek@mcgstyle.net>
 Edgar Lee <edgarhinshunlee@gmail.com>
 Edgar Lee <edgarhinshunlee@gmail.com> <edgarl@netflix.com>
 Fernando Miguel <github@FernandoMiguel.net>
 Fernando Miguel <github@FernandoMiguel.net> <FernandoMiguel@users.noreply.github.com>
+Gabriel-Adrian Samfira <samfiragabriel@gmail.com>
+Gabriel-Adrian Samfira <samfiragabriel@gmail.com> <gsamfira@cloudbasesolutions.com>
+Guilhem Charles <guilhem.charles@gmail.com>
 Helen Xie <chenjg@harmonycloud.cn>
 Himanshu Pandey <hpandey@pivotal.io>
 Hiromu Nakamura <abctail30@gmail.com>
 Jessica Frazelle <acidburn@microsoft.com>
 Jessica Frazelle <acidburn@microsoft.com> <acidburn@docker.com>
+Ignas Mikalajūnas <ignas@devzero.io>
+Ignas Mikalajūnas <ignas@devzero.io> <ignas@pow.lt>
 Kohei Tokunaga <ktokunaga.mail@gmail.com>
 Kohei Tokunaga <ktokunaga.mail@gmail.com> <43872416+ktock@users.noreply.github.com>
 Natasha Jarus <linuxmercedes@gmail.com>
@@ -38,8 +51,13 @@ Nick Santos <nick.santos@docker.com> <nicholas.j.santos@gmail.com>
 Nick Santos <nick.santos@docker.com> <nick@tilt.dev>
 Sebastiaan van Stijn <github@gone.nl>
 Sebastiaan van Stijn <github@gone.nl> <thaJeztah@users.noreply.github.com>
+Talon Bowler <talon.bowler@docker.com>
+Talon Bowler <talon.bowler@docker.com> <nolat301@gmail.com>
 Tibor Vass <tibor@docker.com>
 Tibor Vass <tibor@docker.com> <tiborvass@users.noreply.github.com>
+Tibor Vass <tibor@docker.com> <teabee89@gmail.com>
+Shaun Thompson <shaun.thompson@docker.com>
+Shaun Thompson <shaun.thompson@docker.com> <shaun.b.thompson@gmail.com>
 Tomohiro Kusumoto <zabio1192@gmail.com>
 Tõnis Tiigi <tonistiigi@gmail.com>
 Victor Vieux <victorvieux@gmail.com>
