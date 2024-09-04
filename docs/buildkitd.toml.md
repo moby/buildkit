@@ -1,4 +1,6 @@
-# buildkitd.toml
+---
+title: buildkitd.toml
+---
 
 The TOML file used to configure the buildkitd daemon settings has a short
 list of global settings followed by a series of sections for specific areas
