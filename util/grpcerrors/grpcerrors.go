@@ -96,6 +96,9 @@ func withDetails(ctx context.Context, s *status.Status, details ...proto.Message
 
 func Code(err error) codes.Code {
 	if errdefs.IsInternal(err) {
+		if errdefs.IsResourceExhausted(err) {
+			return codes.ResourceExhausted
+		}
 		return codes.Internal
 	}
 
