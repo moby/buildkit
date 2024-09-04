@@ -803,17 +803,21 @@ This mount type allows mounting `tmpfs` in the build container.
 
 ### RUN --mount=type=secret
 
-This mount type allows the build container to access secure files such as
-private keys without baking them into the image.
+This mount type allows the build container to access secret values, such as
+tokens or private keys, without baking them into the image.
 
-| Option                         | Description                                                                                       |
-| ----------                     | ------------------------------------------------------------------------------------------------- |
-| `id`                           | ID of the secret. Defaults to basename of the target path.                                        |
-| `target`, `dst`, `destination` | Mount path. Defaults to `/run/secrets/` + `id`.                                                   |
-| `required`                     | If set to `true`, the instruction errors out when the secret is unavailable. Defaults to `false`. |
-| `mode`                         | File mode for secret file in octal. Default `0400`.                                               |
-| `uid`                          | User ID for secret file. Default `0`.                                                             |
-| `gid`                          | Group ID for secret file. Default `0`.                                                            |
+By default, the secret is mounted as a file. You can also mount the secret as
+an environment variable by setting the `env` option.
+
+| Option                         | Description                                                                                                     |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `id`                           | ID of the secret. Defaults to basename of the target path.                                                      |
+| `target`, `dst`, `destination` | Mount the secret to the specified path. Defaults to `/run/secrets/` + `id` if unset and if `env` is also unset. |
+| `env`                          | Mount the secret to an environment variable instead of a file, or both. (since Dockerfile v1.10.0)              |
+| `required`                     | If set to `true`, the instruction errors out when the secret is unavailable. Defaults to `false`.               |
+| `mode`                         | File mode for secret file in octal. Default `0400`.                                                             |
+| `uid`                          | User ID for secret file. Default `0`.                                                                           |
+| `gid`                          | Group ID for secret file. Default `0`.                                                                          |
 
 #### Example: access to S3
 
@@ -827,6 +831,25 @@ RUN --mount=type=secret,id=aws,target=/root/.aws/credentials \
 
 ```console
 $ docker buildx build --secret id=aws,src=$HOME/.aws/credentials .
+```
+
+#### Example: Mount as environment variable
+
+The following example takes the secret `API_KEY` and mounts it as an
+environment variable with the same name.
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM alpine
+RUN --mount=type=secret,id=API_KEY,env=API_KEY \
+    some-command --token-from-env API_KEY
+```
+
+Assuming that the `API_KEY` environment variable is set in the build
+environment, you can build this with the following command:
+
+```console
+$ docker buildx build --secret id=API_KEY .
 ```
 
 ### RUN --mount=type=ssh
