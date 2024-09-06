@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile-upstream:master
 
-ARG GO_VERSION=1.22
+ARG GO_VERSION=1.23
 ARG DEBIAN_VERSION=bookworm
 ARG PROTOC_VERSION=3.11.4
 
