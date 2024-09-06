@@ -100,6 +100,7 @@ var allTests = integration.TestFuncs(
 	testReproducibleIDs,
 	testImportExportReproducibleIDs,
 	testNoCache,
+	testCacheMountModeNoCache,
 	testDockerfileFromHTTP,
 	testBuiltinArgs,
 	testPullScratch,
@@ -5063,6 +5064,74 @@ COPY --from=s1 unique2 /
 
 	require.Equal(t, string(unique1Dir2), string(unique1Dir3))
 	require.NotEqual(t, string(unique2Dir1), string(unique2Dir3))
+}
+
+// moby/buildkit#5305
+func testCacheMountModeNoCache(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox AS base
+ARG FOO=abc
+RUN --mount=type=cache,target=/cache,mode=0773 touch /cache/$FOO && ls -l /cache | wc -l > /out
+
+FROM scratch
+COPY --from=base /out /
+`)
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir := t.TempDir()
+
+	opt := client.SolveOpt{
+		FrontendAttrs: map[string]string{},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}
+
+	_, err = f.Solve(sb.Context(), c, opt, nil)
+	require.NoError(t, err)
+
+	opt.FrontendAttrs["no-cache"] = ""
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
+	require.NoError(t, err)
+	require.Equal(t, "2\n", string(dt))
+
+	opt.FrontendAttrs["build-arg:FOO"] = "def"
+
+	_, err = f.Solve(sb.Context(), c, opt, nil)
+	require.NoError(t, err)
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "out"))
+	require.NoError(t, err)
+	require.Equal(t, "2\n", string(dt))
+
+	// safety check without no-cache
+	delete(opt.FrontendAttrs, "no-cache")
+	opt.FrontendAttrs["build-arg:FOO"] = "ghi"
+
+	_, err = f.Solve(sb.Context(), c, opt, nil)
+	require.NoError(t, err)
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "out"))
+	require.NoError(t, err)
+	require.Equal(t, "3\n", string(dt))
 }
 
 func testPlatformArgsImplicit(t *testing.T, sb integration.Sandbox) {
