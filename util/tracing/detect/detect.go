@@ -87,6 +87,9 @@ func detectExporter[T any](envVar string, fn func(d ExporterDetector) (T, bool, 
 func NewSpanExporter(_ context.Context) (sdktrace.SpanExporter, error) {
 	return detectExporter("OTEL_TRACES_EXPORTER", func(d ExporterDetector) (sdktrace.SpanExporter, bool, error) {
 		exp, err := d.DetectTraceExporter()
+		if exp != nil {
+			bklog.EnableLogWithTraceID(true)
+		}
 		return exp, exp != nil, err
 	})
 }
