@@ -4,7 +4,7 @@ ARG GO_VERSION=1.22
 ARG ALPINE_VERSION=3.20
 ARG XX_VERSION=1.4.0
 ARG PROTOLINT_VERSION=0.45.0
-ARG GOLANGCI_LINT_VERSION=1.60.1
+ARG GOLANGCI_LINT_VERSION=1.61.0
 ARG GOPLS_VERSION=v0.20.0
 # disabled: deprecated unusedvariable simplifyrange
 ARG GOPLS_ANALYZERS="embeddirective fillreturns infertypeargs nonewvars noresultvalues simplifycompositelit simplifyslice stubmethods undeclaredname unusedparams useany"

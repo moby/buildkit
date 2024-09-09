@@ -93,6 +93,7 @@ linters-settings:
       - G402  # TLS MinVersion too low
       - G504  # Import blocklist: net/http/cgi
       - G601  # Implicit memory aliasing in for loop (false positives)
+      - G115  # integer overflow conversion (TODO: verify these)
     config:
       G306: "0644"
   testifylint:
