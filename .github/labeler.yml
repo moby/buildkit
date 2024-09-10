@@ -157,6 +157,7 @@ area/worker:
 
 # area:windows
 area/windows:
-  - changed-files:
-      - any-glob-to-any-file: "**/*_windows.go"
-      - all-globs-to-all-files: "!vendor/**/*_windows.go"
+  - all:
+      - changed-files:
+          - any-glob-to-any-file: "**/*_windows.go"
+          - all-globs-to-all-files: "!vendor/**/*_windows.go"
