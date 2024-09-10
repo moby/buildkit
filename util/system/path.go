@@ -193,9 +193,10 @@ func CheckSystemDriveAndRemoveDriveLetter(path string, inputOS string) (string, 
 	}
 
 	parts := strings.SplitN(path, ":", 2)
+
 	// Path does not have a drive letter. Just return it.
 	if len(parts) < 2 {
-		return ToSlash(filepath.Clean(path), inputOS), nil
+		return ToSlash(cleanPath(path, inputOS), inputOS), nil
 	}
 
 	// We expect all paths to be in C:
@@ -220,5 +221,27 @@ func CheckSystemDriveAndRemoveDriveLetter(path string, inputOS string) (string, 
 	//
 	// We must return the second element of the split path, as is, without attempting to convert
 	// it to an absolute path. We have no knowledge of the CWD; that is treated elsewhere.
-	return ToSlash(filepath.Clean(parts[1]), inputOS), nil
+	return ToSlash(cleanPath(parts[1], inputOS), inputOS), nil
+}
+
+// An adaptation of filepath.Clean to allow an option to
+// retain the trailing slash, on either of the platforms.
+// Returns path with platform specific separators.
+// See https://github.com/moby/buildkit/issues/5249
+func cleanPath(origPath, inputOS string) string {
+	// so as to handle cases like \\a\\b\\..\\c\\
+	// on Linux, when inputOS is Windows
+	origPath = ToSlash(origPath, inputOS)
+
+	cleanedPath := filepath.Clean(origPath)
+	// Windows supports both \\ and / as path separator.
+	// This || check will produce a duplicate predicate on non-Windows
+	// as a trade-off for having a platform-specific hasTrailingSlash func.
+	hasTrailingSlash := strings.HasSuffix(origPath, string(filepath.Separator)) ||
+		strings.HasSuffix(origPath, "/")
+
+	if len(cleanedPath) > 1 && hasTrailingSlash {
+		return cleanedPath + "/"
+	}
+	return cleanedPath
 }
