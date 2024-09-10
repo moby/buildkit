@@ -1562,7 +1562,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		commitMessage.WriteString(" <<" + src.Path)
 
 		data := src.Data
-		f, err := system.CheckSystemDriveAndRemoveDriveLetter(src.Path, d.platform.OS)
+		f, err := system.CheckSystemDriveAndRemoveDriveLetter(src.Path, d.platform.OS, false)
 		if err != nil {
 			return errors.Wrap(err, "removing drive letter")
 		}
@@ -1830,7 +1830,7 @@ func pathRelativeToWorkingDir(s llb.State, p string, platform ocispecs.Platform)
 		return "", err
 	}
 
-	p, err = system.CheckSystemDriveAndRemoveDriveLetter(p, platform.OS)
+	p, err = system.CheckSystemDriveAndRemoveDriveLetter(p, platform.OS, true)
 	if err != nil {
 		return "", errors.Wrap(err, "removing drive letter")
 	}
