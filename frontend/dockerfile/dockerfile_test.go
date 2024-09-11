@@ -120,7 +120,8 @@ var allTests = integration.TestFuncs(
 	testCopyChownExistingDir,
 	testCopyWildcardCache,
 	testDockerignoreOverride,
-	testTarExporter,
+	testTarExporterMulti,
+	testTarExporterBasic,
 	testDefaultEnvWithArgs,
 	testEnvEmptyFormatting,
 	testCacheMultiPlatformImportExport,
@@ -685,7 +686,54 @@ COPY --from=base2 /foo /f
 	require.NoError(t, err)
 }
 
-func testTarExporter(t *testing.T, sb integration.Sandbox) {
+func testTarExporterBasic(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
+FROM scratch
+COPY foo foo
+`,
+		`
+FROM nanoserver
+COPY foo foo
+`,
+	))
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte("data"), 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	buf := &bytes.Buffer{}
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:   client.ExporterTar,
+				Output: fixedWriteCloser(&nopWriteCloser{buf}),
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(buf.Bytes(), false)
+	require.NoError(t, err)
+
+	mi, ok := m["foo"]
+	require.Equal(t, true, ok)
+	require.Equal(t, "data", string(mi.Data))
+}
+
+func testTarExporterMulti(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
@@ -764,14 +812,20 @@ FROM stage-$TARGETOS
 }
 
 func testWorkdirCreatesDir(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM scratch
 WORKDIR /foo
 WORKDIR /
-`)
+`,
+		`
+FROM nanoserver
+WORKDIR /foo
+WORKDIR /
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -804,12 +858,16 @@ WORKDIR /
 }
 
 func testCacheReleased(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM busybox
-`)
+`,
+		`
+FROM nanoserver
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -840,13 +898,18 @@ FROM busybox
 }
 
 func testSymlinkedDockerfile(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM scratch
 ENV foo bar
-`)
+`,
+		`
+FROM nanoserver
+ENV foo bar
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -1547,10 +1610,10 @@ ARG BAR=${FOO:?"foo missing"}
 }
 
 func testMultiArgs(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 ARG a1="foo bar" a2=box
 ARG a3="$a2-foo"
 FROM busy$a2 AS build
@@ -1558,7 +1621,16 @@ ARG a3 a4="123 456" a1
 RUN echo -n "$a1:$a3:$a4" > /out
 FROM scratch
 COPY --from=build /out .
-`)
+`,
+		`
+ARG a1="foo bar" a2=server
+ARG a3="$a2-foo"
+FROM nano$a2 AS build
+USER ContainerAdministrator
+ARG a3 a4="123 456" a1
+RUN echo %a1%:%a3%:%a4%> /out
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -1587,7 +1659,12 @@ COPY --from=build /out .
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
-	require.Equal(t, "foo bar:box-foo:123 456", string(dt))
+	// On Windows, echo adds \r\n on the output
+	out := integration.UnixOrWindows(
+		"foo bar:box-foo:123 456",
+		"foo bar:server-foo:123 456\r\n",
+	)
+	require.Equal(t, out, string(dt))
 }
 
 func testDefaultShellAndPath(t *testing.T, sb integration.Sandbox) {
@@ -1816,13 +1893,18 @@ COPY arch-$TARGETARCH whoami
 
 // tonistiigi/fsutil#46
 func testContextChangeDirToFile(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM scratch
 COPY foo /
-`)
+`,
+		`
+FROM nanoserver
+COPY foo /
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -1870,13 +1952,18 @@ COPY foo /
 }
 
 func testNoSnapshotLeak(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM scratch
 COPY foo /
-`)
+`,
+		`
+FROM nanoserver
+COPY foo /
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -1915,14 +2002,20 @@ COPY foo /
 
 // #1197
 func testCopyFollowAllSymlinks(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM scratch
 COPY foo /
 COPY foo/sub bar
-`)
+`,
+		`
+FROM nanoserver
+COPY foo /
+COPY foo/sub bar
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -1946,14 +2039,21 @@ COPY foo/sub bar
 }
 
 func testCopySymlinks(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM scratch
 COPY foo /
 COPY sub/l* alllinks/
-`)
+`,
+		`
+FROM nanoserver
+RUN mkdir alllinks
+COPY foo /
+COPY sub/l* alllinks/
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -2007,15 +2107,21 @@ COPY sub/l* alllinks/
 }
 
 func testHTTPDockerfile(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM busybox
 RUN echo -n "foo-contents" > /foo
 FROM scratch
 COPY --from=0 /foo /foo
-`)
+`,
+		`
+FROM nanoserver
+USER ContainerAdministrator
+RUN echo foo-contents> /foo
+`,
+	))
 
 	srcDir := t.TempDir()
 
@@ -2054,11 +2160,14 @@ COPY --from=0 /foo /foo
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
-	require.Equal(t, "foo-contents", string(dt))
+	foo := integration.UnixOrWindows(
+		"foo-contents",
+		"foo-contents\r\n", // Windows echo command adds \r\n
+	)
+	require.Equal(t, foo, string(dt))
 }
 
 func testCmdShell(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	cdAddress := sb.ContainerdAddress()
@@ -2066,10 +2175,16 @@ func testCmdShell(t *testing.T, sb integration.Sandbox) {
 		t.Skip("test is only for containerd worker")
 	}
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM scratch
 CMD ["test"]
-`)
+`,
+		`
+FROM nanoserver
+CMD ["test"]
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -2097,11 +2212,11 @@ CMD ["test"]
 	}, nil)
 	require.NoError(t, err)
 
-	dockerfile = []byte(`
-FROM docker.io/moby/cmdoverridetest:latest
+	dockerfile = []byte(fmt.Sprintf(`
+FROM %s
 SHELL ["ls"]
 ENTRYPOINT my entrypoint
-`)
+`, target))
 
 	dir = integration.Tmpdir(
 		t,
@@ -2149,13 +2264,18 @@ ENTRYPOINT my entrypoint
 }
 
 func testInvalidJSONCommands(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM alpine
 RUN ["echo", "hello"]this is invalid
-`)
+`,
+		`
+FROM nanoserver
+RUN ["echo", "hello"]this is invalid
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -2187,10 +2307,16 @@ RUN ["echo", "hello"]this is invalid
 
 	target := registry + "/buildkit/testexportdf:multi"
 
-	dockerfile = []byte(`
+	dockerfile = []byte(integration.UnixOrWindows(
+		`
 FROM alpine
 ENTRYPOINT []random string
-`)
+`,
+		`
+FROM nanoserver
+ENTRYPOINT []random string
+`,
+	))
 
 	dir = integration.Tmpdir(
 		t,
@@ -2223,7 +2349,11 @@ ENTRYPOINT []random string
 	require.Len(t, imgs.Images, 1)
 	img := imgs.Images[0].Img
 
-	require.Equal(t, []string{"/bin/sh", "-c", "[]random string"}, img.Config.Entrypoint)
+	entrypoint := integration.UnixOrWindows(
+		[]string{"/bin/sh", "-c", "[]random string"},
+		[]string{"cmd", "/S", "/C", "[]random string"},
+	)
+	require.Equal(t, entrypoint, img.Config.Entrypoint)
 }
 
 func testPullScratch(t *testing.T, sb integration.Sandbox) {
@@ -2352,13 +2482,18 @@ COPY foo .
 }
 
 func testGlobalArg(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 ARG tag=nosuchtag
 FROM busybox:${tag}
-`)
+`,
+		`
+ARG tag=nosuchtag
+FROM nanoserver:${tag}
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -3646,17 +3781,26 @@ COPY --chmod=10000 foo /
 }
 
 func testCopyOverrideFiles(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM scratch AS base
 COPY sub sub
 COPY sub sub
 COPY files/foo.go dest/foo.go
 COPY files/foo.go dest/foo.go
 COPY files dest
-`)
+`,
+		`
+FROM nanoserver AS base
+COPY sub sub
+COPY sub sub
+COPY files/foo.go dest/foo.go
+COPY files/foo.go dest/foo.go
+COPY files dest
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -3699,14 +3843,20 @@ COPY files dest
 }
 
 func testCopyVarSubstitution(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM scratch AS base
 ENV FOO bar
 COPY $FOO baz
-`)
+`,
+		`
+FROM nanoserver AS base
+ENV FOO bar
+COPY $FOO baz
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -3740,10 +3890,10 @@ COPY $FOO baz
 }
 
 func testCopyWildcards(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM scratch AS base
 COPY *.go /gofiles/
 COPY f*.go foo2.go
@@ -3754,7 +3904,24 @@ COPY . all/
 COPY sub/dir1/ subdest4
 COPY sub/dir1/. subdest5
 COPY sub/dir1 subdest6
-`)
+`,
+		`
+FROM nanoserver AS base
+USER ContainerAdministrator
+RUN mkdir \gofiles
+RUN mkdir \subdest2
+RUN mkdir \subdest3
+COPY *.go /gofiles/
+COPY f*.go foo2.go
+COPY sub/* /subdest/
+COPY sub/*/dir2/foo /subdest2/
+COPY sub/*/dir2/foo /subdest3/bar
+COPY . all/
+COPY sub/dir1/ subdest4
+COPY sub/dir1/. subdest5
+COPY sub/dir1 subdest6
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -8164,7 +8331,9 @@ loop0:
 	defer client.Close()
 
 	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
-	snapshotService := client.SnapshotService("overlayfs")
+	// pick default snapshotter on Windows, hence ""
+	snapshotName := integration.UnixOrWindows("overlayfs", "")
+	snapshotService := client.SnapshotService(snapshotName)
 
 	retries = 0
 	for {
