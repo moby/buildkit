@@ -12,6 +12,11 @@ func TestParseScopes(t *testing.T) {
 		expected scopes
 	}{
 		{
+			name:     "InvalidScope",
+			input:    []string{""},
+			expected: nil,
+		},
+		{
 			name: "SeparateStrings",
 			input: []string{
 				"repository:foo/bar:pull",
