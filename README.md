@@ -112,6 +112,7 @@ BuildKit is used by the following projects:
 -   [Namespace](https://namespace.so)
 -   [Unikraft](https://unikraft.org)
 -   [DevZero](https://devzero.io)
+-   [dacc](https://github.com/r2d4/dacc)
 
 ## Quick start
 
@@ -203,6 +204,7 @@ Currently, the following high-level languages have been implemented for LLB:
 -   [Blubber](https://gitlab.wikimedia.org/repos/releng/blubber)
 -   [Bass](https://github.com/vito/bass)
 -   [kraft.yaml (Unikraft)](https://github.com/unikraft/kraftkit/tree/staging/tools/dockerfile-llb-frontend)
+-   [r2d4/llb (JSON Gateway)](https://github.com/r2d4/llb)
 -   (open a PR to add your own language)
 
 ### Exploring Dockerfiles
