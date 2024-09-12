@@ -11,10 +11,10 @@ func TestPipe(t *testing.T) {
 	t.Parallel()
 
 	runCh := make(chan struct{})
-	f := func(ctx context.Context) (interface{}, error) {
+	f := func(ctx context.Context) (string, error) {
 		select {
 		case <-ctx.Done():
-			return nil, context.Cause(ctx)
+			return "", context.Cause(ctx)
 		case <-runCh:
 			return "res0", nil
 		}
@@ -27,7 +27,7 @@ func TestPipe(t *testing.T) {
 		waitSignal <- struct{}{}
 	}
 
-	p, start := NewWithFunction(f)
+	p, start := NewWithFunction[any](f)
 	p.OnSendCompletion = signal
 	go start()
 	require.Equal(t, false, p.Receiver.Receive())
@@ -35,7 +35,7 @@ func TestPipe(t *testing.T) {
 	st := p.Receiver.Status()
 	require.Equal(t, false, st.Completed)
 	require.Equal(t, false, st.Canceled)
-	require.Nil(t, st.Value)
+	require.Zero(t, st.Value)
 	require.Equal(t, 0, signalled)
 
 	close(runCh)
@@ -46,17 +46,17 @@ func TestPipe(t *testing.T) {
 	require.Equal(t, true, st.Completed)
 	require.Equal(t, false, st.Canceled)
 	require.NoError(t, st.Err)
-	require.Equal(t, "res0", st.Value.(string))
+	require.Equal(t, "res0", st.Value)
 }
 
 func TestPipeCancel(t *testing.T) {
 	t.Parallel()
 
 	runCh := make(chan struct{})
-	f := func(ctx context.Context) (interface{}, error) {
+	f := func(ctx context.Context) (string, error) {
 		select {
 		case <-ctx.Done():
-			return nil, context.Cause(ctx)
+			return "", context.Cause(ctx)
 		case <-runCh:
 			return "res0", nil
 		}
@@ -69,7 +69,7 @@ func TestPipeCancel(t *testing.T) {
 		waitSignal <- struct{}{}
 	}
 
-	p, start := NewWithFunction(f)
+	p, start := NewWithFunction[any](f)
 	p.OnSendCompletion = signal
 	go start()
 	p.Receiver.Receive()
@@ -77,7 +77,7 @@ func TestPipeCancel(t *testing.T) {
 	st := p.Receiver.Status()
 	require.Equal(t, false, st.Completed)
 	require.Equal(t, false, st.Canceled)
-	require.Nil(t, st.Value)
+	require.Zero(t, st.Value)
 	require.Equal(t, 0, signalled)
 
 	p.Receiver.Cancel()
