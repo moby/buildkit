@@ -13,9 +13,11 @@ import (
 	"github.com/tonistiigi/go-csvvalue"
 )
 
-var debugScheduler = false // TODO: replace with logs in build trace
-var debugSchedulerSteps []string
-var debugSchedulerStepsParseOnce sync.Once
+var (
+	debugScheduler               = false // TODO: replace with logs in build trace
+	debugSchedulerSteps          []string
+	debugSchedulerStepsParseOnce sync.Once
+)
 
 func init() {
 	if os.Getenv("BUILDKIT_SCHEDULER_DEBUG") == "1" {
@@ -121,17 +123,17 @@ func (s *scheduler) loop() {
 
 // dispatch schedules an edge to be processed
 func (s *scheduler) dispatch(e *edge) {
-	inc := make([]pipe.Sender, len(s.incoming[e]))
+	inc := make([]pipeSender, len(s.incoming[e]))
 	for i, p := range s.incoming[e] {
 		inc[i] = p.Sender
 	}
-	out := make([]pipe.Receiver, len(s.outgoing[e]))
+	out := make([]pipeReceiver, len(s.outgoing[e]))
 	for i, p := range s.outgoing[e] {
 		out[i] = p.Receiver
 	}
 
 	e.hasActiveOutgoing = false
-	updates := []pipe.Receiver{}
+	updates := []pipeReceiver{}
 	for _, p := range out {
 		if ok := p.Receive(); ok {
 			updates = append(updates, p)
@@ -272,7 +274,7 @@ func (s *scheduler) build(ctx context.Context, edge Edge) (CachedResult, error) 
 
 	wait := make(chan struct{})
 
-	p := s.newPipe(e, nil, pipe.Request{Payload: &edgeRequest{desiredState: edgeStatusComplete}})
+	p := s.newPipe(e, nil, pipeRequest{Payload: &edgeRequest{desiredState: edgeStatusComplete}})
 	p.OnSendCompletion = func() {
 		p.Receiver.Receive()
 		if p.Receiver.Status().Completed {
@@ -298,9 +300,9 @@ func (s *scheduler) build(ctx context.Context, edge Edge) (CachedResult, error) 
 }
 
 // newPipe creates a new request pipe between two edges
-func (s *scheduler) newPipe(target, from *edge, req pipe.Request) *pipe.Pipe {
+func (s *scheduler) newPipe(target, from *edge, req pipeRequest) *pipe.Pipe[*edgeRequest, any] {
 	p := &edgePipe{
-		Pipe:   pipe.New(req),
+		Pipe:   newPipe(req),
 		Target: target,
 		From:   from,
 	}
@@ -324,8 +326,8 @@ func (s *scheduler) newPipe(target, from *edge, req pipe.Request) *pipe.Pipe {
 }
 
 // newRequestWithFunc creates a new request pipe that invokes a async function
-func (s *scheduler) newRequestWithFunc(e *edge, f func(context.Context) (interface{}, error)) pipe.Receiver {
-	pp, start := pipe.NewWithFunction(f)
+func (s *scheduler) newRequestWithFunc(e *edge, f func(context.Context) (any, error)) pipeReceiver {
+	pp, start := pipe.NewWithFunction[*edgeRequest](f)
 	p := &edgePipe{
 		Pipe: pp,
 		From: e,
@@ -395,7 +397,7 @@ type pipeFactory struct {
 	s *scheduler
 }
 
-func (pf *pipeFactory) NewInputRequest(ee Edge, req *edgeRequest) pipe.Receiver {
+func (pf *pipeFactory) NewInputRequest(ee Edge, req *edgeRequest) pipeReceiver {
 	target := pf.s.ef.getEdge(ee)
 	if target == nil {
 		bklog.G(context.TODO()).
@@ -407,14 +409,14 @@ func (pf *pipeFactory) NewInputRequest(ee Edge, req *edgeRequest) pipe.Receiver 
 			return nil, errdefs.Internal(errors.Errorf("failed to get edge: inconsistent graph state in edge %s %s %d", ee.Vertex.Name(), ee.Vertex.Digest(), ee.Index))
 		})
 	}
-	p := pf.s.newPipe(target, pf.e, pipe.Request{Payload: req})
+	p := pf.s.newPipe(target, pf.e, pipeRequest{Payload: req})
 	if pf.e.debug {
 		bklog.G(context.TODO()).Debugf("> newPipe %s %p desiredState=%s", ee.Vertex.Name(), p, req.desiredState)
 	}
 	return p.Receiver
 }
 
-func (pf *pipeFactory) NewFuncRequest(f func(context.Context) (interface{}, error)) pipe.Receiver {
+func (pf *pipeFactory) NewFuncRequest(f func(context.Context) (interface{}, error)) pipeReceiver {
 	p := pf.s.newRequestWithFunc(pf.e, f)
 	if pf.e.debug {
 		bklog.G(context.TODO()).Debugf("> newFunc %p", p)
@@ -422,7 +424,7 @@ func (pf *pipeFactory) NewFuncRequest(f func(context.Context) (interface{}, erro
 	return p
 }
 
-func debugSchedulerPreUnpark(e *edge, inc []pipe.Sender, updates, allPipes []pipe.Receiver) {
+func debugSchedulerPreUnpark(e *edge, inc []pipeSender, updates, allPipes []pipeReceiver) {
 	log := bklog.G(context.TODO()).
 		WithField("edge_vertex_name", e.edge.Vertex.Name()).
 		WithField("edge_vertex_digest", e.edge.Vertex.Digest()).
@@ -438,7 +440,7 @@ func debugSchedulerPreUnpark(e *edge, inc []pipe.Sender, updates, allPipes []pip
 	for i, dep := range e.deps {
 		des := edgeStatusInitial
 		if dep.req != nil {
-			des = dep.req.Request().(*edgeRequest).desiredState
+			des = dep.req.Request().desiredState
 		}
 		log.
 			WithField("dep_index", i).
@@ -457,7 +459,7 @@ func debugSchedulerPreUnpark(e *edge, inc []pipe.Sender, updates, allPipes []pip
 		log.
 			WithField("incoming_index", i).
 			WithField("incoming_pointer", in).
-			WithField("incoming_desired_state", req.Payload.(*edgeRequest).desiredState).
+			WithField("incoming_desired_state", req.Payload.desiredState).
 			WithField("incoming_canceled", req.Canceled).
 			Debug("> incoming")
 	}
@@ -499,7 +501,7 @@ func debugSchedulerPreUnpark(e *edge, inc []pipe.Sender, updates, allPipes []pip
 	}
 }
 
-func debugSchedulerPostUnpark(e *edge, inc []pipe.Sender) {
+func debugSchedulerPostUnpark(e *edge, inc []pipeSender) {
 	log := bklog.G(context.TODO())
 	for i, in := range inc {
 		log.
