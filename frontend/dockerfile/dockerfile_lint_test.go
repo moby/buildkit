@@ -581,12 +581,16 @@ COPY Dockerfile /bar
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 
-	dockerfile = []byte(`
-FROM alpine
+	dockerfile = []byte(fmt.Sprintf(
+		`
+FROM %s
 RUN <<'EOT'
-env
+%s
 EOT
-`)
+`,
+		integration.UnixOrWindows("alpine", "nanoserver"),
+		integration.UnixOrWindows("env", "set"),
+	))
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 }
 
@@ -822,12 +826,24 @@ COPY Dockerfile .
 		BuildErrLocation:  2,
 	})
 
-	dockerfile = []byte(`
-ARG MY_OS=linux
+	osName := integration.UnixOrWindows("linux", "windows")
+	baseImg := integration.UnixOrWindows("busybox", "nanoserver")
+	dockerfile = []byte(fmt.Sprintf(
+		`
+ARG MY_OS=%s
 ARG MY_ARCH=amd64
-FROM --platform=linux/${MYARCH} busybox
+FROM --platform=%s/${MYARCH} %s
 COPY Dockerfile .
-	`)
+	`,
+		osName, osName, baseImg))
+
+	osStr := integration.UnixOrWindows("linux", "windows")
+	streamBuildErr := fmt.Sprintf(
+		"failed to solve: failed to parse platform %s/${MYARCH}: \"\" is an invalid component of \"%s/\": platform specifier component must match \"^[A-Za-z0-9_-]+$\": invalid argument (did you mean MY_ARCH?)",
+		osStr, osStr)
+	unmarshalBuildErr := fmt.Sprintf(
+		"failed to parse platform %s/${MYARCH}: \"\" is an invalid component of \"%s/\": platform specifier component must match \"^[A-Za-z0-9_-]+$\": invalid argument (did you mean MY_ARCH?)",
+		osStr, osStr)
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
@@ -840,16 +856,18 @@ COPY Dockerfile .
 				Line:        4,
 			},
 		},
-		StreamBuildErr:    "failed to solve: failed to parse platform linux/${MYARCH}: \"\" is an invalid component of \"linux/\": platform specifier component must match \"^[A-Za-z0-9_-]+$\": invalid argument (did you mean MY_ARCH?)",
-		UnmarshalBuildErr: "failed to parse platform linux/${MYARCH}: \"\" is an invalid component of \"linux/\": platform specifier component must match \"^[A-Za-z0-9_-]+$\": invalid argument (did you mean MY_ARCH?)",
+		StreamBuildErr:    streamBuildErr,
+		UnmarshalBuildErr: unmarshalBuildErr,
 		BuildErrLocation:  4,
 	})
 
-	dockerfile = []byte(`
+	dockerfile = []byte(fmt.Sprintf(
+		`
 ARG tag=latest
-FROM busybox:${tag}${version} AS b
+FROM %s:${tag}${version} AS b
 COPY Dockerfile .
-`)
+`,
+		baseImg))
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
@@ -902,27 +920,34 @@ COPY Dockerfile${foo} .
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 
-	dockerfile = []byte(`
-FROM alpine AS base
+	baseImg := integration.UnixOrWindows("alpine", "nanoserver")
+	dockerfile = []byte(fmt.Sprintf(
+		`
+FROM %s AS base
 ARG foo=Dockerfile
 
 FROM base
 COPY $foo .
-`)
+`,
+		baseImg))
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 
-	dockerfile = []byte(`
-FROM alpine
+	dockerfile = []byte(fmt.Sprintf(
+		`
+FROM %s
 RUN echo $PATH
-`)
+`,
+		baseImg))
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 
-	dockerfile = []byte(`
-FROM alpine
+	dockerfile = []byte(fmt.Sprintf(
+		`
+FROM %s
 COPY $foo .
 ARG foo=bar
 RUN echo $foo
-`)
+`,
+		baseImg))
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
@@ -937,13 +962,15 @@ RUN echo $foo
 		},
 	})
 
-	dockerfile = []byte(`
-FROM alpine
+	dockerfile = []byte(fmt.Sprintf(
+		`
+FROM %s
 ARG DIR_BINARIES=binaries/
 ARG DIR_ASSETS=assets/
 ARG DIR_CONFIG=config/
 COPY $DIR_ASSET .
-	`)
+	`,
+		baseImg))
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
@@ -958,10 +985,12 @@ COPY $DIR_ASSET .
 		},
 	})
 
-	dockerfile = []byte(`
-FROM alpine
+	dockerfile = []byte(fmt.Sprintf(
+		`
+FROM %s
 ENV PATH=$PAHT:/tmp/bin
-		`)
+		`,
+		baseImg))
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
@@ -1150,10 +1179,13 @@ FROM --platform=${TARGETPLATFORM} scratch
 }
 
 func testInvalidDefaultArgInFrom(t *testing.T, sb integration.Sandbox) {
-	dockerfile := []byte(`
+	baseImg := integration.UnixOrWindows("busybox", "nanoserver")
+	dockerfile := []byte(fmt.Sprintf(
+		`
 ARG VERSION
-FROM busybox:$VERSION
-`)
+FROM %s:$VERSION
+`,
+		baseImg))
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile: dockerfile,
 		FrontendAttrs: map[string]string{
@@ -1164,9 +1196,12 @@ FROM busybox:$VERSION
 				RuleName:    "InvalidDefaultArgInFrom",
 				Description: "Default value for global ARG results in an empty or invalid base image name",
 				URL:         "https://docs.docker.com/go/dockerfile/rule/invalid-default-arg-in-from/",
-				Detail:      "Default value for ARG busybox:$VERSION results in empty or invalid base image name",
-				Line:        3,
-				Level:       1,
+				Detail: fmt.Sprintf(
+					"Default value for ARG %s:$VERSION results in empty or invalid base image name",
+					integration.UnixOrWindows("busybox", "nanoserver"),
+				),
+				Line:  3,
+				Level: 1,
 			},
 		},
 	})
@@ -1178,7 +1213,7 @@ FROM $IMAGE
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile: dockerfile,
 		FrontendAttrs: map[string]string{
-			"build-arg:IMAGE": "busybox:latest",
+			"build-arg:IMAGE": integration.UnixOrWindows("busybox:latest", "nanoserver:latest"),
 		},
 		Warnings: []expectedLintWarning{
 			{
@@ -1192,31 +1227,42 @@ FROM $IMAGE
 		},
 	})
 
-	dockerfile = []byte(`
+	dockerfile = []byte(integration.UnixOrWindows(
+		`
 ARG SFX="box:"
 FROM busy${SFX}
-`)
+`,
+		`
+ARG SFX="server:"
+FROM nano${SFX}
+`,
+	))
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile: dockerfile,
 		FrontendAttrs: map[string]string{
-			"build-arg:SFX": "box:latest",
+			"build-arg:SFX": integration.UnixOrWindows("box:latest", "server:latest"),
 		},
 		Warnings: []expectedLintWarning{
 			{
 				RuleName:    "InvalidDefaultArgInFrom",
 				Description: "Default value for global ARG results in an empty or invalid base image name",
 				URL:         "https://docs.docker.com/go/dockerfile/rule/invalid-default-arg-in-from/",
-				Detail:      "Default value for ARG busy${SFX} results in empty or invalid base image name",
-				Line:        3,
-				Level:       1,
+				Detail: fmt.Sprintf(
+					"Default value for ARG %s${SFX} results in empty or invalid base image name",
+					integration.UnixOrWindows("busy", "nano"),
+				),
+				Line:  3,
+				Level: 1,
 			},
 		},
 	})
 
-	dockerfile = []byte(`
+	dockerfile = []byte(fmt.Sprintf(
+		`
 ARG VERSION="latest"
-FROM busybox:${VERSION}
-`)
+FROM %s:${VERSION}
+`,
+		baseImg))
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile: dockerfile,
 		FrontendAttrs: map[string]string{
@@ -1224,25 +1270,37 @@ FROM busybox:${VERSION}
 		},
 	})
 
-	dockerfile = []byte(`
+	dockerfile = []byte(integration.UnixOrWindows(
+		`
 ARG BUSYBOX_VARIANT=""
 FROM busybox:stable${BUSYBOX_VARIANT}
-`)
+`,
+		`
+ARG BUSYBOX_VARIANT=""
+FROM nanoserver:plus${BUSYBOX_VARIANT}
+`,
+	))
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile: dockerfile,
 		FrontendAttrs: map[string]string{
-			"build-arg:BUSYBOX_VARIANT": "-musl",
+			"build-arg:BUSYBOX_VARIANT": integration.UnixOrWindows("-musl", "-busybox"),
 		},
 	})
 
-	dockerfile = []byte(`
-ARG BUSYBOX_VARIANT
-FROM busybox:stable${BUSYBOX_VARIANT}
-`)
+	dockerfile = []byte(integration.UnixOrWindows(
+		`
+	ARG BUSYBOX_VARIANT
+	FROM busybox:stable${BUSYBOX_VARIANT}
+	`,
+		`
+	ARG BUSYBOX_VARIANT
+	FROM nanoserver:plus${BUSYBOX_VARIANT}
+	`,
+	))
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile: dockerfile,
 		FrontendAttrs: map[string]string{
-			"build-arg:BUSYBOX_VARIANT": "-musl",
+			"build-arg:BUSYBOX_VARIANT": integration.UnixOrWindows("-musl", "-busybox"),
 		},
 	})
 }
@@ -1376,10 +1434,14 @@ func checkProgressStream(t *testing.T, sb integration.Sandbox, lintTest *lintTes
 
 	f := getFrontend(t, sb)
 
+	platformStr := integration.UnixOrWindows(
+		"linux/amd64,linux/arm64",
+		"windows/amd64",
+	)
 	attrs := lintTest.FrontendAttrs
 	if attrs == nil {
 		attrs = map[string]string{
-			"platform": "linux/amd64,linux/arm64",
+			"platform": platformStr,
 		}
 	}
 
@@ -1427,8 +1489,6 @@ func checkLinterWarnings(t *testing.T, sb integration.Sandbox, lintTest *lintTes
 	sort.Slice(lintTest.Warnings, func(i, j int) bool {
 		return lintTest.Warnings[i].Line < lintTest.Warnings[j].Line
 	})
-
-	integration.SkipOnPlatform(t, "windows")
 
 	if lintTest.TmpDir == nil {
 		testfiles := []fstest.Applier{

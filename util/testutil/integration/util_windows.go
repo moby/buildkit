@@ -19,7 +19,8 @@ var windowsImagesMirrorMap = map[string]string{
 	// nanoserver with extra binaries, like fc.exe
 	// TODO(profnandaa): get an approved/compliant repo, placeholder for now
 	// see dockerfile here - https://github.com/microsoft/windows-container-tools/pull/178
-	"nanoserver:plus": "docker.io/wintools/nanoserver:ltsc2022",
+	"nanoserver:plus":         "docker.io/wintools/nanoserver:ltsc2022",
+	"nanoserver:plus-busybox": "docker.io/wintools/nanoserver:ltsc2022",
 }
 
 // abstracted function to handle pipe dialing on windows.

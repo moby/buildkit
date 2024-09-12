@@ -236,7 +236,7 @@ func init() {
 
 	images := integration.UnixOrWindows(
 		[]string{"busybox:latest", "alpine:latest"},
-		[]string{"nanoserver:latest", "nanoserver:plus"})
+		[]string{"nanoserver:latest", "nanoserver:plus", "nanoserver:plus-busybox"})
 	opts = []integration.TestOpt{
 		integration.WithMirroredImages(integration.OfficialImages(images...)),
 		integration.WithMatrix("frontend", frontends),
