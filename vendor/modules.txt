@@ -447,14 +447,14 @@ github.com/dimchansky/utfbom
 # github.com/distribution/reference v0.6.0
 ## explicit; go 1.20
 github.com/distribution/reference
-# github.com/docker/cli v27.2.1+incompatible
+# github.com/docker/cli v27.2.2-0.20240912223434-c85c3df6b5b7+incompatible
 ## explicit
 github.com/docker/cli/cli/config
 github.com/docker/cli/cli/config/configfile
 github.com/docker/cli/cli/config/credentials
 github.com/docker/cli/cli/config/types
 github.com/docker/cli/cli/connhelper/commandconn
-# github.com/docker/docker v27.2.1+incompatible
+# github.com/docker/docker v27.2.2-0.20240912213415-bf60e5cced83+incompatible
 ## explicit
 github.com/docker/docker/api
 github.com/docker/docker/api/types
