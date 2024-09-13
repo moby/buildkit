@@ -45,7 +45,7 @@ child processes.
 
 Alternatively, if you want to ignore this lint rule because you do want your
 executable to be invoked via a shell, you can use the
-[`SHELL`](https://docs.docker.com/reference/dockerfile.md#shell) Dockerfile
+[`SHELL`](https://docs.docker.com/reference/dockerfile/#shell) Dockerfile
 instruction to explicitly specify a shell to use.
 
 ✅ Good: shell is explicitly defined.
