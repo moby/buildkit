@@ -1,4 +1,7 @@
 debug = true
 
 [grpc]
-  debugAddress = "0.0.0.0:6060"
+debugAddress = "0.0.0.0:6060"
+
+[cache]
+index-format = "sqlite"
