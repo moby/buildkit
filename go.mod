@@ -1,6 +1,6 @@
 module github.com/moby/buildkit
 
-go 1.21.0
+go 1.22.0
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0
@@ -95,9 +95,10 @@ require (
 	go.opentelemetry.io/otel/trace v1.21.0
 	go.opentelemetry.io/proto/otlp v1.0.0
 	golang.org/x/crypto v0.23.0
-	golang.org/x/mod v0.17.0
+	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0
+	golang.org/x/mod v0.21.0
 	golang.org/x/net v0.25.0
-	golang.org/x/sync v0.7.0
+	golang.org/x/sync v0.8.0
 	golang.org/x/sys v0.22.0
 	golang.org/x/time v0.3.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240123012728-ef4313101c80
