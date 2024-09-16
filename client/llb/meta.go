@@ -18,14 +18,15 @@ import (
 type contextKeyT string
 
 var (
-	keyArgs         = contextKeyT("llb.exec.args")
-	keyDir          = contextKeyT("llb.exec.dir")
-	keyEnv          = contextKeyT("llb.exec.env")
-	keyExtraHost    = contextKeyT("llb.exec.extrahost")
-	keyHostname     = contextKeyT("llb.exec.hostname")
-	keyUlimit       = contextKeyT("llb.exec.ulimit")
-	keyCgroupParent = contextKeyT("llb.exec.cgroup.parent")
-	keyUser         = contextKeyT("llb.exec.user")
+	keyArgs           = contextKeyT("llb.exec.args")
+	keyDir            = contextKeyT("llb.exec.dir")
+	keyEnv            = contextKeyT("llb.exec.env")
+	keyExtraHost      = contextKeyT("llb.exec.extrahost")
+	keyHostname       = contextKeyT("llb.exec.hostname")
+	keyUlimit         = contextKeyT("llb.exec.ulimit")
+	keyCgroupParent   = contextKeyT("llb.exec.cgroup.parent")
+	keyUser           = contextKeyT("llb.exec.user")
+	keyValidExitCodes = contextKeyT("llb.exec.validexitcodes")
 
 	keyPlatform = contextKeyT("llb.platform")
 	keyNetwork  = contextKeyT("llb.network")
@@ -162,6 +163,25 @@ func getUser(s State) func(context.Context, *Constraints) (string, error) {
 			return v.(string), nil
 		}
 		return "", nil
+	}
+}
+
+func validExitCodes(codes ...int) StateOption {
+	return func(s State) State {
+		return s.WithValue(keyValidExitCodes, codes)
+	}
+}
+
+func getValidExitCodes(s State) func(context.Context, *Constraints) ([]int, error) {
+	return func(ctx context.Context, c *Constraints) ([]int, error) {
+		v, err := s.getValue(keyValidExitCodes)(ctx, c)
+		if err != nil {
+			return nil, err
+		}
+		if v != nil {
+			return v.([]int), nil
+		}
+		return nil, nil
 	}
 }
 
@@ -312,6 +332,7 @@ func Network(v pb.NetMode) StateOption {
 		return s.WithValue(keyNetwork, v)
 	}
 }
+
 func getNetwork(s State) func(context.Context, *Constraints) (pb.NetMode, error) {
 	return func(ctx context.Context, c *Constraints) (pb.NetMode, error) {
 		v, err := s.getValue(keyNetwork)(ctx, c)
@@ -334,6 +355,7 @@ func Security(v pb.SecurityMode) StateOption {
 		return s.WithValue(keySecurity, v)
 	}
 }
+
 func getSecurity(s State) func(context.Context, *Constraints) (pb.SecurityMode, error) {
 	return func(ctx context.Context, c *Constraints) (pb.SecurityMode, error) {
 		v, err := s.getValue(keySecurity)(ctx, c)

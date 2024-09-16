@@ -472,6 +472,13 @@ func (e *ExecOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 	}
 	meta.Env = append(meta.Env, secretEnv...)
 
+	if e.op.Meta.ValidExitCodes != nil {
+		meta.ValidExitCodes = make([]int, len(e.op.Meta.ValidExitCodes))
+		for i, code := range e.op.Meta.ValidExitCodes {
+			meta.ValidExitCodes[i] = int(code)
+		}
+	}
+
 	stdout, stderr, flush := logs.NewLogStreams(ctx, os.Getenv("BUILDKIT_DEBUG_EXEC_OUTPUT") == "1")
 	defer stdout.Close()
 	defer stderr.Close()

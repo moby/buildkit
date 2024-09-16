@@ -193,6 +193,17 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		return "", nil, nil, nil, err
 	}
 
+	var validExitCodes []int32
+	if codes, err := getValidExitCodes(e.base)(ctx, c); err != nil {
+		return "", nil, nil, nil, err
+	} else if codes != nil {
+		validExitCodes = make([]int32, len(codes))
+		for i, code := range codes {
+			validExitCodes[i] = int32(code)
+		}
+		addCap(&e.constraints, pb.CapExecValidExitCode)
+	}
+
 	meta := &pb.Meta{
 		Args:                      args,
 		Env:                       env.ToArray(),
@@ -201,6 +212,7 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		Hostname:                  hostname,
 		CgroupParent:              cgrpParent,
 		RemoveMountStubsRecursive: true,
+		ValidExitCodes:            validExitCodes,
 	}
 
 	extraHosts, err := getExtraHosts(e.base)(ctx, c)
@@ -581,6 +593,7 @@ func Shlex(str string) RunOption {
 		ei.State = shlexf(str, false)(ei.State)
 	})
 }
+
 func Shlexf(str string, v ...interface{}) RunOption {
 	return runOptionFunc(func(ei *ExecInfo) {
 		ei.State = shlexf(str, true, v...)(ei.State)
@@ -602,6 +615,12 @@ func AddExtraHost(host string, ip net.IP) RunOption {
 func AddUlimit(name UlimitName, soft int64, hard int64) RunOption {
 	return runOptionFunc(func(ei *ExecInfo) {
 		ei.State = ei.State.AddUlimit(name, soft, hard)
+	})
+}
+
+func ValidExitCodes(codes ...int) RunOption {
+	return runOptionFunc(func(ei *ExecInfo) {
+		ei.State = validExitCodes(codes...)(ei.State)
 	})
 }
 
