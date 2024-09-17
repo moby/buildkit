@@ -60,6 +60,7 @@ const (
 	CapExecMountContentCache             apicaps.CapID = "exec.mount.cache.content"
 	CapExecCgroupsMounted                apicaps.CapID = "exec.cgroup"
 	CapExecSecretEnv                     apicaps.CapID = "exec.secretenv"
+	CapExecValidExitCode                 apicaps.CapID = "exec.validexitcode"
 
 	CapFileBase                               apicaps.CapID = "file.base"
 	CapFileRmWildcard                         apicaps.CapID = "file.rm.wildcard"
@@ -353,6 +354,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapExecSecretEnv,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapExecValidExitCode,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

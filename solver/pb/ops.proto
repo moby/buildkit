@@ -65,6 +65,7 @@ message Meta {
 	repeated Ulimit ulimit = 9;
 	string cgroupParent = 10;
 	bool removeMountStubsRecursive = 11;
+	repeated int32 validExitCodes = 12;
 }
 
 message HostIP {

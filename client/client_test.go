@@ -220,6 +220,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testOCIIndexMediatype,
 	testLayerLimitOnMounts,
 	testFrontendVerifyPlatforms,
+	testRunValidExitCodes,
 }
 
 func TestIntegration(t *testing.T) {
@@ -10587,4 +10588,48 @@ func testClientCustomGRPCOpts(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	require.Contains(t, interceptedMethods, "/moby.buildkit.v1.Control/Solve")
+}
+
+func testRunValidExitCodes(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	// no exit codes specified, equivalent to [0]
+	out := llb.Image("busybox:latest")
+	out = out.Run(llb.Shlex(`sh -c "exit 0"`)).Root()
+	out = out.Run(llb.Shlex(`sh -c "exit 1"`)).Root()
+	def, err := out.Marshal(sb.Context())
+	require.NoError(t, err)
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "exit code: 1")
+
+	// empty exit codes, equivalent to [0]
+	out = llb.Image("busybox:latest")
+	out = out.Run(llb.Shlex(`sh -c "exit 0"`), llb.ValidExitCodes()).Root()
+	def, err = out.Marshal(sb.Context())
+	require.NoError(t, err)
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+
+	// if we expect non-zero, those non-zero codes should succeed
+	out = llb.Image("busybox:latest")
+	out = out.Run(llb.Shlex(`sh -c "exit 1"`), llb.ValidExitCodes(1)).Root()
+	out = out.Run(llb.Shlex(`sh -c "exit 2"`), llb.ValidExitCodes(2, 3)).Root()
+	out = out.Run(llb.Shlex(`sh -c "exit 3"`), llb.ValidExitCodes(2, 3)).Root()
+	def, err = out.Marshal(sb.Context())
+	require.NoError(t, err)
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+
+	// if we expect non-zero, returning zero should fail
+	out = llb.Image("busybox:latest")
+	out = out.Run(llb.Shlex(`sh -c "exit 0"`), llb.ValidExitCodes(1)).Root()
+	def, err = out.Marshal(sb.Context())
+	require.NoError(t, err)
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "exit code: 0")
 }
