@@ -338,35 +338,30 @@ COPY $bar .
 
 func testRuleCheckOption(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`#check=skip=all
-#
 FROM scratch as base
 copy Dockerfile .
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 
 	dockerfile = []byte(`#check=skip=all;error=true
-#
 FROM scratch as base
 copy Dockerfile .
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 
 	dockerfile = []byte(`#check=skip=ConsistentInstructionCasing,FromAsCasing
-#
 FROM scratch as base
 copy Dockerfile .
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 
 	dockerfile = []byte(`#check=skip=ConsistentInstructionCasing,FromAsCasing;error=true
-#
 FROM scratch as base
 copy Dockerfile .
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 
 	dockerfile = []byte(`#check=skip=ConsistentInstructionCasing
-#
 FROM scratch as base
 copy Dockerfile .
 `)
@@ -378,14 +373,13 @@ copy Dockerfile .
 				Description: "The 'as' keyword should match the case of the 'from' keyword",
 				URL:         "https://docs.docker.com/go/dockerfile/rule/from-as-casing/",
 				Detail:      "'as' and 'FROM' keywords' casing do not match",
-				Line:        3,
+				Line:        2,
 				Level:       1,
 			},
 		},
 	})
 
 	dockerfile = []byte(`#check=skip=ConsistentInstructionCasing;error=true
-#
 FROM scratch as base
 copy Dockerfile .
 `)
@@ -397,7 +391,7 @@ copy Dockerfile .
 				Description: "The 'as' keyword should match the case of the 'from' keyword",
 				URL:         "https://docs.docker.com/go/dockerfile/rule/from-as-casing/",
 				Detail:      "'as' and 'FROM' keywords' casing do not match",
-				Line:        3,
+				Line:        2,
 				Level:       1,
 			},
 		},
@@ -407,7 +401,6 @@ copy Dockerfile .
 	})
 
 	dockerfile = []byte(`#check=skip=all
-#
 FROM scratch as base
 copy Dockerfile .
 `)
@@ -419,7 +412,7 @@ copy Dockerfile .
 				Description: "The 'as' keyword should match the case of the 'from' keyword",
 				URL:         "https://docs.docker.com/go/dockerfile/rule/from-as-casing/",
 				Detail:      "'as' and 'FROM' keywords' casing do not match",
-				Line:        3,
+				Line:        2,
 				Level:       1,
 			},
 		},
@@ -432,7 +425,6 @@ copy Dockerfile .
 	})
 
 	dockerfile = []byte(`#check=error=true
-#
 FROM scratch as base
 copy Dockerfile .
 `)
