@@ -842,7 +842,7 @@ environment variable with the same name.
 # syntax=docker/dockerfile:1
 FROM alpine
 RUN --mount=type=secret,id=API_KEY,env=API_KEY \
-    some-command --token-from-env API_KEY
+    some-command --token-from-env $API_KEY
 ```
 
 Assuming that the `API_KEY` environment variable is set in the build
