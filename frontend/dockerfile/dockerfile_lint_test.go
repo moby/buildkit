@@ -191,7 +191,7 @@ ENV git_key=
 			{
 				RuleName:    "SecretsUsedInArgOrEnv",
 				Description: "Sensitive data should not be used in the ARG or ENV commands",
-				Detail:      `Do not use ARG or ENV instructions for sensitive data (ARG "super_duper_secret_token")`,
+				Detail:      `Do not use ARG or ENV instructions for sensitive data (ARG "auth")`,
 				URL:         "https://docs.docker.com/go/dockerfile/rule/secrets-used-in-arg-or-env/",
 				Level:       1,
 				Line:        6,
@@ -199,7 +199,7 @@ ENV git_key=
 			{
 				RuleName:    "SecretsUsedInArgOrEnv",
 				Description: "Sensitive data should not be used in the ARG or ENV commands",
-				Detail:      `Do not use ARG or ENV instructions for sensitive data (ARG "auth")`,
+				Detail:      `Do not use ARG or ENV instructions for sensitive data (ARG "super_duper_secret_token")`,
 				URL:         "https://docs.docker.com/go/dockerfile/rule/secrets-used-in-arg-or-env/",
 				Level:       1,
 				Line:        6,
@@ -1388,6 +1388,9 @@ func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestPara
 			// sort by line number in ascending order
 			firstRange := lintResults.Warnings[i].Location.Ranges[0]
 			secondRange := lintResults.Warnings[j].Location.Ranges[0]
+			if firstRange.Start.Line == secondRange.Start.Line {
+				return lintResults.Warnings[i].Detail < lintResults.Warnings[j].Detail
+			}
 			return firstRange.Start.Line < secondRange.Start.Line
 		})
 		// Compare expectedLintWarning with actual lint results
@@ -1477,6 +1480,9 @@ func checkProgressStream(t *testing.T, sb integration.Sandbox, lintTest *lintTes
 		} else if len(w2.Range) == 0 {
 			return false
 		}
+		if w1.Range[0].Start.Line == w2.Range[0].Start.Line {
+			return string(w1.Short) < string(w2.Short)
+		}
 		return w1.Range[0].Start.Line < w2.Range[0].Start.Line
 	})
 	for i, w := range warnings {
@@ -1487,6 +1493,9 @@ func checkProgressStream(t *testing.T, sb integration.Sandbox, lintTest *lintTes
 func checkLinterWarnings(t *testing.T, sb integration.Sandbox, lintTest *lintTestParams) {
 	t.Helper()
 	sort.Slice(lintTest.Warnings, func(i, j int) bool {
+		if lintTest.Warnings[i].Line == lintTest.Warnings[j].Line {
+			return lintTest.Warnings[i].Detail < lintTest.Warnings[j].Detail
+		}
 		return lintTest.Warnings[i].Line < lintTest.Warnings[j].Line
 	})
 
