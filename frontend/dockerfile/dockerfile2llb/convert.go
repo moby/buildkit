@@ -228,10 +228,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 
 	platformOpt := buildPlatformOpt(&opt)
 
-	optMetaArgs := getPlatformArgs(platformOpt)
-	for i, arg := range optMetaArgs {
-		optMetaArgs[i] = setKVValue(arg, opt.BuildArgs)
-	}
+	globalArgs := platformArgs(platformOpt, opt.BuildArgs)
 
 	dockerfile, err := parser.Parse(bytes.NewReader(dt))
 	if err != nil {
@@ -253,7 +250,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 
 	proxyEnv := proxyEnvFromBuildArgs(opt.BuildArgs)
 
-	stages, metaArgs, err := instructions.Parse(dockerfile.AST, lint)
+	stages, argCmds, err := instructions.Parse(dockerfile.AST, lint)
 	if err != nil {
 		return nil, err
 	}
@@ -268,11 +265,11 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 
 	// Validate that base images continue to be valid even
 	// when no build arguments are used.
-	validateBaseImagesWithDefaultArgs(stages, shlex, metaArgs, optMetaArgs, lint)
+	validateBaseImagesWithDefaultArgs(stages, shlex, argCmds, globalArgs, lint)
 
 	// Rebuild the arguments using the provided build arguments
 	// for the remainder of the build.
-	optMetaArgs, outline.allArgs, err = buildMetaArgs(optMetaArgs, shlex, metaArgs, opt.BuildArgs)
+	globalArgs, outline.allArgs, err = buildMetaArgs(globalArgs, shlex, argCmds, opt.BuildArgs)
 	if err != nil {
 		return nil, err
 	}
@@ -286,9 +283,8 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 
 	// set base state for every image
 	for i, st := range stages {
-		env := metaArgsToEnvs(optMetaArgs)
-		nameMatch, err := shlex.ProcessWordWithMatches(st.BaseName, env)
-		reportUnusedFromArgs(metaArgsKeys(optMetaArgs), nameMatch.Unmatched, st.Location, lint)
+		nameMatch, err := shlex.ProcessWordWithMatches(st.BaseName, globalArgs)
+		reportUnusedFromArgs(globalArgs, nameMatch.Unmatched, st.Location, lint)
 		used := nameMatch.Matched
 		if used == nil {
 			used = map[string]struct{}{}
@@ -314,10 +310,9 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		}
 
 		if v := st.Platform; v != "" {
-			platEnv := metaArgsToEnvs(optMetaArgs)
-			platMatch, err := shlex.ProcessWordWithMatches(v, platEnv)
-			reportUnusedFromArgs(metaArgsKeys(optMetaArgs), platMatch.Unmatched, st.Location, lint)
-			reportRedundantTargetPlatform(st.Platform, platMatch, st.Location, platEnv, lint)
+			platMatch, err := shlex.ProcessWordWithMatches(v, globalArgs)
+			reportUnusedFromArgs(globalArgs, platMatch.Unmatched, st.Location, lint)
+			reportRedundantTargetPlatform(st.Platform, platMatch, st.Location, globalArgs, lint)
 			reportConstPlatformDisallowed(st.Name, platMatch, st.Location, lint)
 
 			if err != nil {
@@ -327,14 +322,14 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			if platMatch.Result == "" {
 				err := errors.Errorf("empty platform value from expression %s", v)
 				err = parser.WithLocation(err, st.Location)
-				err = wrapSuggestAny(err, platMatch.Unmatched, metaArgsKeys(optMetaArgs))
+				err = wrapSuggestAny(err, platMatch.Unmatched, globalArgs.Keys())
 				return nil, err
 			}
 
 			p, err := platforms.Parse(platMatch.Result)
 			if err != nil {
 				err = parser.WithLocation(err, st.Location)
-				err = wrapSuggestAny(err, platMatch.Unmatched, metaArgsKeys(optMetaArgs))
+				err = wrapSuggestAny(err, platMatch.Unmatched, globalArgs.Keys())
 				return nil, parser.WithLocation(errors.Wrapf(err, "failed to parse platform %s", v), st.Location)
 			}
 
@@ -653,7 +648,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 
 		opt := dispatchOpt{
 			allDispatchStates:   allDispatchStates,
-			metaArgs:            optMetaArgs,
+			globalArgs:          globalArgs,
 			buildArgValues:      opt.BuildArgs,
 			shlex:               shlex,
 			buildContext:        llb.NewState(buildContext),
@@ -687,15 +682,22 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			ctxPaths[p] = struct{}{}
 		}
 
-		locals := []instructions.KeyValuePairOptional{}
-		locals = append(locals, d.opt.metaArgs...)
-		locals = append(locals, d.buildArgs...)
-		for _, a := range locals {
-			switch a.Key {
-			case sbomScanStage:
-				d.scanStage = isEnabledForStage(d.stageName, a.ValueString())
-			case sbomScanContext:
-				d.scanContext = isEnabledForStage(d.stageName, a.ValueString())
+		for _, name := range []string{sbomScanContext, sbomScanStage} {
+			var b bool
+			if v, ok := d.opt.globalArgs.Get(name); ok {
+				b = isEnabledForStage(d.stageName, v)
+			}
+			for _, kv := range d.buildArgs {
+				if kv.Key == name && kv.Value != nil {
+					b = isEnabledForStage(d.stageName, *kv.Value)
+				}
+			}
+			if b {
+				if name == sbomScanContext {
+					d.scanContext = true
+				} else {
+					d.scanStage = true
+				}
 			}
 		}
 	}
@@ -751,48 +753,6 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	return target, nil
 }
 
-func metaArgsToEnvs(metaArgs []instructions.KeyValuePairOptional) shell.EnvGetter {
-	return &envsFromKeyValuePairs{in: metaArgs}
-}
-
-type envsFromKeyValuePairs struct {
-	in   []instructions.KeyValuePairOptional
-	once sync.Once
-	m    map[string]string
-}
-
-func (e *envsFromKeyValuePairs) init() {
-	if len(e.in) == 0 {
-		return
-	}
-	e.m = make(map[string]string, len(e.in))
-	for _, kv := range e.in {
-		e.m[kv.Key] = kv.ValueString()
-	}
-}
-
-func (e *envsFromKeyValuePairs) Get(key string) (string, bool) {
-	e.once.Do(e.init)
-	v, ok := e.m[key] // windows: case-insensitive
-	return v, ok
-}
-
-func (e *envsFromKeyValuePairs) Keys() []string {
-	keys := make([]string, len(e.in))
-	for i, kp := range e.in {
-		keys[i] = kp.Key
-	}
-	return keys
-}
-
-func metaArgsKeys(metaArgs []instructions.KeyValuePairOptional) []string {
-	s := make([]string, 0, len(metaArgs))
-	for _, arg := range metaArgs {
-		s = append(s, arg.Key)
-	}
-	return s
-}
-
 func toCommand(ic instructions.Command, allDispatchStates *dispatchStates) (command, error) {
 	cmd := command{Command: ic}
 	if c, ok := ic.(*instructions.CopyCommand); ok {
@@ -828,7 +788,7 @@ func toCommand(ic instructions.Command, allDispatchStates *dispatchStates) (comm
 
 type dispatchOpt struct {
 	allDispatchStates   *dispatchStates
-	metaArgs            []instructions.KeyValuePairOptional
+	globalArgs          shell.EnvGetter
 	buildArgValues      map[string]string
 	shlex               *shell.Lex
 	buildContext        llb.State
@@ -1731,12 +1691,10 @@ func dispatchArg(d *dispatchState, c *instructions.ArgCommand, opt *dispatchOpt)
 
 		skipArgInfo := false // skip the arg info if the arg is inherited from global scope
 		if !hasDefault && !hasValue {
-			for _, ma := range opt.metaArgs {
-				if ma.Key == arg.Key {
-					arg.Value = ma.Value
-					skipArgInfo = true
-					hasDefault = false
-				}
+			if v, ok := opt.globalArgs.Get(arg.Key); ok {
+				arg.Value = &v
+				skipArgInfo = true
+				hasDefault = false
 			}
 		}
 
@@ -1825,13 +1783,6 @@ func parseKeyValue(env string) (string, string) {
 	}
 
 	return parts[0], v
-}
-
-func setKVValue(kvpo instructions.KeyValuePairOptional, values map[string]string) instructions.KeyValuePairOptional {
-	if v, ok := values[kvpo.Key]; ok {
-		kvpo.Value = &v
-	}
-	return kvpo
 }
 
 func dfCmd(cmd interface{}) llb.ConstraintsOpt {
@@ -2278,8 +2229,7 @@ func reportUnmatchedVariables(cmd instructions.Command, buildArgs []instructions
 	if len(unmatched) == 0 {
 		return
 	}
-	options := metaArgsKeys(opt.metaArgs)
-	options = append(options, env.Keys()...)
+	options := env.Keys()
 	for cmdVar := range unmatched {
 		if _, nonEnvOk := nonEnvArgs[cmdVar]; nonEnvOk {
 			continue
@@ -2340,9 +2290,9 @@ func toPBLocation(sourceIndex int, location []parser.Range) pb.Location {
 	}
 }
 
-func reportUnusedFromArgs(values []string, unmatched map[string]struct{}, location []parser.Range, lint *linter.Linter) {
+func reportUnusedFromArgs(args shell.EnvGetter, unmatched map[string]struct{}, location []parser.Range, lint *linter.Linter) {
 	for arg := range unmatched {
-		suggest, _ := suggest.Search(arg, values, true)
+		suggest, _ := suggest.Search(arg, args.Keys(), true)
 		msg := linter.RuleUndefinedArgInFrom.Format(arg, suggest)
 		lint.Run(&linter.RuleUndefinedArgInFrom, location, msg)
 	}
@@ -2464,10 +2414,10 @@ func validateNoSecretKey(instruction, key string, location []parser.Range, lint 
 	}
 }
 
-func validateBaseImagesWithDefaultArgs(stages []instructions.Stage, shlex *shell.Lex, metaArgs []instructions.ArgCommand, optMetaArgs []instructions.KeyValuePairOptional, lint *linter.Linter) {
+func validateBaseImagesWithDefaultArgs(stages []instructions.Stage, shlex *shell.Lex, argsCmds []instructions.ArgCommand, args *llb.EnvList, lint *linter.Linter) {
 	// Build the arguments as if no build options were given
 	// and using only defaults.
-	optMetaArgs, _, err := buildMetaArgs(optMetaArgs, shlex, metaArgs, nil)
+	args, _, err := buildMetaArgs(args, shlex, argsCmds, nil)
 	if err != nil {
 		// Abandon running the linter. We'll likely fail after this point
 		// with the same error but we shouldn't error here inside
@@ -2476,7 +2426,7 @@ func validateBaseImagesWithDefaultArgs(stages []instructions.Stage, shlex *shell
 	}
 
 	for _, st := range stages {
-		nameMatch, err := shlex.ProcessWordWithMatches(st.BaseName, metaArgsToEnvs(optMetaArgs))
+		nameMatch, err := shlex.ProcessWordWithMatches(st.BaseName, args)
 		if err != nil {
 			return
 		}
@@ -2489,32 +2439,32 @@ func validateBaseImagesWithDefaultArgs(stages []instructions.Stage, shlex *shell
 	}
 }
 
-func buildMetaArgs(metaArgs []instructions.KeyValuePairOptional, shlex *shell.Lex, argCommands []instructions.ArgCommand, buildArgs map[string]string) ([]instructions.KeyValuePairOptional, map[string]argInfo, error) {
+func buildMetaArgs(args *llb.EnvList, shlex *shell.Lex, argCommands []instructions.ArgCommand, buildArgs map[string]string) (*llb.EnvList, map[string]argInfo, error) {
 	allArgs := make(map[string]argInfo)
 
 	for _, cmd := range argCommands {
-		for _, metaArg := range cmd.Args {
-			info := argInfo{definition: metaArg, location: cmd.Location()}
-			if v, ok := buildArgs[metaArg.Key]; !ok {
-				if metaArg.Value != nil {
-					result, err := shlex.ProcessWordWithMatches(*metaArg.Value, metaArgsToEnvs(metaArgs))
+		for _, kp := range cmd.Args {
+			info := argInfo{definition: kp, location: cmd.Location()}
+			if v, ok := buildArgs[kp.Key]; !ok {
+				if kp.Value != nil {
+					result, err := shlex.ProcessWordWithMatches(*kp.Value, args)
 					if err != nil {
 						return nil, nil, parser.WithLocation(err, cmd.Location())
 					}
-					metaArg.Value = &result.Result
+					kp.Value = &result.Result
 					info.deps = result.Matched
 				}
 			} else {
-				metaArg.Value = &v
+				kp.Value = &v
 			}
-			metaArgs = append(metaArgs, metaArg)
-			if metaArg.Value != nil {
-				info.value = *metaArg.Value
+			if kp.Value != nil {
+				args = args.AddOrReplace(kp.Key, *kp.Value)
+				info.value = *kp.Value
 			}
-			allArgs[metaArg.Key] = info
+			allArgs[kp.Key] = info
 		}
 	}
-	return metaArgs, allArgs, nil
+	return args, allArgs, nil
 }
 
 type emptyEnvs struct{}
