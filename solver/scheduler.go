@@ -2,28 +2,13 @@ package solver
 
 import (
 	"context"
-	"os"
 	"sync"
 
 	"github.com/moby/buildkit/errdefs"
 	"github.com/moby/buildkit/solver/internal/pipe"
-	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/cond"
 	"github.com/pkg/errors"
-	"github.com/tonistiigi/go-csvvalue"
 )
-
-var (
-	debugScheduler               = false // TODO: replace with logs in build trace
-	debugSchedulerSteps          []string
-	debugSchedulerStepsParseOnce sync.Once
-)
-
-func init() {
-	if os.Getenv("BUILDKIT_SCHEDULER_DEBUG") == "1" {
-		debugScheduler = true
-	}
-}
 
 func newScheduler(ef edgeFactory) *scheduler {
 	s := &scheduler{
@@ -74,16 +59,6 @@ func (s *scheduler) Stop() {
 }
 
 func (s *scheduler) loop() {
-	debugSchedulerStepsParseOnce.Do(func() {
-		if s := os.Getenv("BUILDKIT_SCHEDULER_DEBUG_STEPS"); s != "" {
-			fields, err := csvvalue.Fields(s, nil)
-			if err != nil {
-				return
-			}
-			debugSchedulerSteps = fields
-		}
-	})
-
 	defer func() {
 		close(s.closed)
 	}()
@@ -146,13 +121,9 @@ func (s *scheduler) dispatch(e *edge) {
 	pf := &pipeFactory{s: s, e: e}
 
 	// unpark the edge
-	if e.debug {
-		debugSchedulerPreUnpark(e, inc, updates, out)
-	}
+	debugSchedulerPreUnpark(e, inc, updates, out)
 	e.unpark(inc, updates, out, pf)
-	if e.debug {
-		debugSchedulerPostUnpark(e, inc)
-	}
+	debugSchedulerPostUnpark(e, inc)
 
 	// set up new requests that didn't complete/were added by this run
 	openIncoming := make([]*edgePipe, 0, len(inc))
@@ -186,47 +157,19 @@ func (s *scheduler) dispatch(e *edge) {
 			origEdge := e.index.LoadOrStore(k, e)
 			if origEdge != nil {
 				if e.isDep(origEdge) || origEdge.isDep(e) {
-					bklog.G(context.TODO()).
-						WithField("edge_vertex_name", e.edge.Vertex.Name()).
-						WithField("edge_vertex_digest", e.edge.Vertex.Digest()).
-						WithField("edge_index", e.edge.Index).
-						WithField("origEdge_vertex_name", origEdge.edge.Vertex.Name()).
-						WithField("origEdge_vertex_digest", origEdge.edge.Vertex.Digest()).
-						WithField("origEdge_index", origEdge.edge.Index).
-						Debug("skip merge due to dependency")
+					debugSchedulerSkipMergeDueToDependency(e, origEdge)
 				} else {
 					dest, src := origEdge, e
 					if s.ef.hasOwner(origEdge.edge, e.edge) {
-						bklog.G(context.TODO()).
-							WithField("edge_vertex_name", e.edge.Vertex.Name()).
-							WithField("edge_vertex_digest", e.edge.Vertex.Digest()).
-							WithField("edge_index", e.edge.Index).
-							WithField("origEdge_vertex_name", origEdge.edge.Vertex.Name()).
-							WithField("origEdge_vertex_digest", origEdge.edge.Vertex.Digest()).
-							WithField("origEdge_index", origEdge.edge.Index).
-							Debug("swap merge due to owner")
+						debugSchedulerSwapMergeDueToOwner(e, origEdge)
 						dest, src = src, dest
 					}
 
-					bklog.G(context.TODO()).
-						WithField("source_edge_vertex_name", src.edge.Vertex.Name()).
-						WithField("source_edge_vertex_digest", src.edge.Vertex.Digest()).
-						WithField("source_edge_index", src.edge.Index).
-						WithField("dest_vertex_name", dest.edge.Vertex.Name()).
-						WithField("dest_vertex_digest", dest.edge.Vertex.Digest()).
-						WithField("dest_index", dest.edge.Index).
-						Debug("merging edges")
+					debugSchedulerMergingEdges(src, dest)
 					if s.mergeTo(dest, src) {
 						s.ef.setEdge(src.edge, dest)
 					} else {
-						bklog.G(context.TODO()).
-							WithField("source_edge_vertex_name", src.edge.Vertex.Name()).
-							WithField("source_edge_vertex_digest", src.edge.Vertex.Digest()).
-							WithField("source_edge_index", src.edge.Index).
-							WithField("dest_vertex_name", dest.edge.Vertex.Name()).
-							WithField("dest_vertex_digest", dest.edge.Vertex.Digest()).
-							WithField("dest_index", dest.edge.Index).
-							Debug("merging edges skipped")
+						debugSchedulerMergingEdgesSkipped(src, dest)
 					}
 				}
 			}
@@ -400,120 +343,18 @@ type pipeFactory struct {
 func (pf *pipeFactory) NewInputRequest(ee Edge, req *edgeRequest) pipeReceiver {
 	target := pf.s.ef.getEdge(ee)
 	if target == nil {
-		bklog.G(context.TODO()).
-			WithField("edge_vertex_name", ee.Vertex.Name()).
-			WithField("edge_vertex_digest", ee.Vertex.Digest()).
-			WithField("edge_index", ee.Index).
-			Error("failed to get edge: inconsistent graph state")
+		debugSchedulerInconsistentGraphState(ee)
 		return pf.NewFuncRequest(func(_ context.Context) (interface{}, error) {
 			return nil, errdefs.Internal(errors.Errorf("failed to get edge: inconsistent graph state in edge %s %s %d", ee.Vertex.Name(), ee.Vertex.Digest(), ee.Index))
 		})
 	}
 	p := pf.s.newPipe(target, pf.e, pipeRequest{Payload: req})
-	if pf.e.debug {
-		bklog.G(context.TODO()).Debugf("> newPipe %s %p desiredState=%s", ee.Vertex.Name(), p, req.desiredState)
-	}
+	debugSchedulerNewPipe(pf.e, p, req)
 	return p.Receiver
 }
 
 func (pf *pipeFactory) NewFuncRequest(f func(context.Context) (interface{}, error)) pipeReceiver {
 	p := pf.s.newRequestWithFunc(pf.e, f)
-	if pf.e.debug {
-		bklog.G(context.TODO()).Debugf("> newFunc %p", p)
-	}
+	debugSchedulerNewFunc(pf.e, p)
 	return p
-}
-
-func debugSchedulerPreUnpark(e *edge, inc []pipeSender, updates, allPipes []pipeReceiver) {
-	log := bklog.G(context.TODO()).
-		WithField("edge_vertex_name", e.edge.Vertex.Name()).
-		WithField("edge_vertex_digest", e.edge.Vertex.Digest()).
-		WithField("edge_index", e.edge.Index)
-
-	log.
-		WithField("edge_state", e.state).
-		WithField("req", len(inc)).
-		WithField("upt", len(updates)).
-		WithField("out", len(allPipes)).
-		Debug(">> unpark")
-
-	for i, dep := range e.deps {
-		des := edgeStatusInitial
-		if dep.req != nil {
-			des = dep.req.Request().desiredState
-		}
-		log.
-			WithField("dep_index", i).
-			WithField("dep_vertex_name", e.edge.Vertex.Inputs()[i].Vertex.Name()).
-			WithField("dep_vertex_digest", e.edge.Vertex.Inputs()[i].Vertex.Digest()).
-			WithField("dep_state", dep.state).
-			WithField("dep_desired_state", des).
-			WithField("dep_keys", len(dep.keys)).
-			WithField("dep_has_slow_cache", e.slowCacheFunc(dep) != nil).
-			WithField("dep_preprocess_func", e.preprocessFunc(dep) != nil).
-			Debug(":: dep")
-	}
-
-	for i, in := range inc {
-		req := in.Request()
-		log.
-			WithField("incoming_index", i).
-			WithField("incoming_pointer", in).
-			WithField("incoming_desired_state", req.Payload.desiredState).
-			WithField("incoming_canceled", req.Canceled).
-			Debug("> incoming")
-	}
-
-	for i, up := range updates {
-		if up == e.cacheMapReq {
-			log.
-				WithField("update_index", i).
-				WithField("update_pointer", up).
-				WithField("update_complete", up.Status().Completed).
-				Debug("> update cacheMapReq")
-		} else if up == e.execReq {
-			log.
-				WithField("update_index", i).
-				WithField("update_pointer", up).
-				WithField("update_complete", up.Status().Completed).
-				Debug("> update execReq")
-		} else {
-			st, ok := up.Status().Value.(*edgeState)
-			if ok {
-				index := -1
-				if dep, ok := e.depRequests[up]; ok {
-					index = int(dep.index)
-				}
-				log.
-					WithField("update_index", i).
-					WithField("update_pointer", up).
-					WithField("update_complete", up.Status().Completed).
-					WithField("update_input_index", index).
-					WithField("update_keys", len(st.keys)).
-					WithField("update_state", st.state).
-					Debugf("> update edgeState")
-			} else {
-				log.
-					WithField("update_index", i).
-					Debug("> update unknown")
-			}
-		}
-	}
-}
-
-func debugSchedulerPostUnpark(e *edge, inc []pipeSender) {
-	log := bklog.G(context.TODO())
-	for i, in := range inc {
-		log.
-			WithField("incoming_index", i).
-			WithField("incoming_pointer", in).
-			WithField("incoming_complete", in.Status().Completed).
-			Debug("< incoming")
-	}
-	log.
-		WithField("edge_vertex_name", e.edge.Vertex.Name()).
-		WithField("edge_vertex_digest", e.edge.Vertex.Digest()).
-		WithField("edge_index", e.edge.Index).
-		WithField("edge_state", e.state).
-		Debug("<< unpark")
 }
