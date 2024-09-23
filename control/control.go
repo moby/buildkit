@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"fmt"
+	"runtime/trace"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -343,6 +344,8 @@ func translateLegacySolveRequest(req *controlapi.SolveRequest) {
 }
 
 func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*controlapi.SolveResponse, error) {
+	defer trace.StartRegion(ctx, "Solve").End()
+	trace.Logf(ctx, "Request", "solve request: %v", req.Ref)
 	atomic.AddInt64(&c.buildCount, 1)
 	defer atomic.AddInt64(&c.buildCount, -1)
 
