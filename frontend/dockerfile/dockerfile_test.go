@@ -126,6 +126,9 @@ var allTests = integration.TestFuncs(
 	testEnvEmptyFormatting,
 	testCacheMultiPlatformImportExport,
 	testOnBuildCleared,
+	testOnBuildNewDeps,
+	testOnBuildNamedContext,
+	testOnBuildWithCacheMount,
 	testFrontendUseForwardedSolveResults,
 	testFrontendEvaluate,
 	testFrontendInputs,
@@ -4672,6 +4675,325 @@ ONBUILD RUN mkdir -p /out && echo -n 11 >> /out/foo
 	dt, err := os.ReadFile(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, "11", string(dt))
+}
+
+func testOnBuildNamedContext(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureOCILayout)
+	// create an image with onbuild that relies on "otherstage" when imported
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	// create a tempdir where we will store the OCI layout
+	ocidir := t.TempDir()
+
+	ociDockerfile := []byte(`
+	FROM busybox:latest
+	ONBUILD COPY --from=otherstage /testfile /out/foo
+	`)
+	inDir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", ociDockerfile, 0600),
+	)
+
+	f := getFrontend(t, sb)
+
+	outW := bytes.NewBuffer(nil)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: inDir,
+			dockerui.DefaultLocalNameContext:    inDir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:   client.ExporterOCI,
+				Output: fixedWriteCloser(nopWriteCloser{outW}),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// extract the tar stream to the directory as OCI layout
+	m, err := testutil.ReadTarToMap(outW.Bytes(), false)
+	require.NoError(t, err)
+
+	for filename, content := range m {
+		fullFilename := path.Join(ocidir, filename)
+		err = os.MkdirAll(path.Dir(fullFilename), 0755)
+		require.NoError(t, err)
+		if content.Header.FileInfo().IsDir() {
+			err = os.MkdirAll(fullFilename, 0755)
+			require.NoError(t, err)
+		} else {
+			err = os.WriteFile(fullFilename, content.Data, 0644)
+			require.NoError(t, err)
+		}
+	}
+
+	var index ocispecs.Index
+	err = json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &index)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(index.Manifests))
+	digest := index.Manifests[0].Digest.Hex()
+
+	store, err := local.NewStore(ocidir)
+	ociID := "ocione"
+	require.NoError(t, err)
+
+	dockerfile := []byte(`
+	FROM alpine AS otherstage
+	RUN echo -n "hello" > /testfile
+	
+	FROM base AS inputstage
+	
+	FROM scratch
+	COPY --from=inputstage /out/foo /bar
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	destDir := t.TempDir()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"context:base": fmt.Sprintf("oci-layout:%s@sha256:%s", ociID, digest),
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		OCIStores: map[string]content.Store{
+			ociID: store,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "bar"))
+	require.NoError(t, err)
+	require.Equal(t, []byte("hello"), dt)
+}
+
+func testOnBuildNewDeps(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
+	f := getFrontend(t, sb)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	dockerfile := []byte(`
+FROM busybox
+ONBUILD COPY --from=alpine /etc/alpine-release /out/alpine-release2
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	target := registry + "/buildkit/testonbuilddeps:base"
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"push": "true",
+					"name": target,
+				},
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dockerfile = []byte(fmt.Sprintf(`
+	FROM %s AS base
+	RUN cat /out/alpine-release2 > /out/alpine-release3
+	FROM scratch
+	COPY --from=base /out /
+	`, target))
+
+	dir = integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	destDir := t.TempDir()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "alpine-release3"))
+	require.NoError(t, err)
+	require.Greater(t, len(dt), 5)
+
+	// build another onbuild image to test nested case
+	dockerfile = []byte(`
+FROM alpine
+ONBUILD RUN --mount=type=bind,target=/in,from=inputstage mkdir /out && cat /in/foo > /out/bar && cat /in/out/alpine-release2 > /out/bar2
+`)
+
+	dir = integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	target2 := registry + "/buildkit/testonbuilddeps:base2"
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"push": "true",
+					"name": target2,
+				},
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dockerfile = []byte(fmt.Sprintf(`
+	FROM %s AS inputstage
+	RUN cat /out/alpine-release2 > /out/alpine-release4
+	RUN echo -n foo > /foo
+	FROM %s AS base
+	RUN echo -n bar3 > /out/bar3
+	FROM scratch
+	COPY --from=base /out /
+	`, target, target2))
+
+	dir = integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	destDir = t.TempDir()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "bar"))
+	require.NoError(t, err)
+	require.Equal(t, "foo", string(dt))
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "bar2"))
+	require.NoError(t, err)
+	require.Greater(t, len(dt), 5)
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "bar3"))
+	require.NoError(t, err)
+	require.Equal(t, "bar3", string(dt))
+}
+
+func testOnBuildWithCacheMount(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
+	f := getFrontend(t, sb)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	dockerfile := []byte(`
+FROM busybox
+ONBUILD RUN --mount=type=cache,target=/cache echo -n 42 >> /cache/foo && echo -n 11 >> /bar
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	target := registry + "/buildkit/testonbuild:base"
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"push": "true",
+					"name": target,
+				},
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dockerfile = []byte(fmt.Sprintf(`FROM %s
+RUN --mount=type=cache,target=/cache [ "$(cat /cache/foo)" = "42" ] && [ "$(cat /bar)" = "11" ]
+	`, target))
+
+	dir = integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
 }
 
 func testCacheMultiPlatformImportExport(t *testing.T, sb integration.Sandbox) {
