@@ -204,7 +204,11 @@ jobs:
           set -x
           brew tap hashicorp/tap
           brew install hashicorp/tap/hashicorp-vagrant
-          brew install --cask virtualbox
+          #brew install --cask virtualbox
+          curl -LO https://download.virtualbox.org/virtualbox/7.0.20/VirtualBox-7.0.20-163906-OSX.dmg
+          hdiutil mount VirtualBox-7.0.20-163906-OSX.dmg
+          sudo installer -pkg /Volumes/VirtualBox/VirtualBox.pkg -target /
+          hdiutil unmount /Volumes/VirtualBox
       -
         name: Check versions
         run: |
