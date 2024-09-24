@@ -2,14 +2,18 @@ package sshutil
 
 import (
 	"errors"
-	"fmt"
 	"net/url"
 	"regexp"
 )
 
-var gitSSHRegex = regexp.MustCompile("^([a-zA-Z0-9-_]+)@([a-zA-Z0-9-.]+):(.*?)(?:#(.*))?$")
+var gitSSHRegex = regexp.MustCompile("^(?:([a-zA-Z0-9-_]+)@)?([a-zA-Z0-9-.]+):(.*?)(?:#(.*))?$")
 
 func IsImplicitSSHTransport(s string) bool {
+	if u, _ := url.Parse(s); u != nil && u.Scheme != "" && u.Opaque == "" {
+		// valid scp-urls do have an explicit scheme
+		return false
+	}
+
 	return gitSSHRegex.MatchString(s)
 }
 
@@ -22,12 +26,21 @@ type SCPStyleURL struct {
 }
 
 func ParseSCPStyleURL(raw string) (*SCPStyleURL, error) {
+	if u, _ := url.Parse(raw); u != nil && u.Scheme != "" && u.Opaque == "" {
+		return nil, errors.New("invalid scp-style url: scheme found")
+	}
+
 	matches := gitSSHRegex.FindStringSubmatch(raw)
 	if matches == nil {
-		return nil, errors.New("invalid scp-style url")
+		return nil, errors.New("invalid scp-style url: no match")
+	}
+
+	var user *url.Userinfo
+	if matches[1] != "" {
+		user = url.User(matches[1])
 	}
 	return &SCPStyleURL{
-		User:     url.User(matches[1]),
+		User:     user,
 		Host:     matches[2],
 		Path:     matches[3],
 		Fragment: matches[4],
@@ -35,7 +48,10 @@ func ParseSCPStyleURL(raw string) (*SCPStyleURL, error) {
 }
 
 func (url *SCPStyleURL) String() string {
-	base := fmt.Sprintf("%s@%s:%s", url.User.String(), url.Host, url.Path)
+	base := url.Host + ":" + url.Path
+	if url.User != nil {
+		base = url.User.String() + "@" + base
+	}
 	if url.Fragment == "" {
 		return base
 	}
