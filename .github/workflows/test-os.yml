@@ -174,11 +174,10 @@ jobs:
         uses: crazy-max/ghaction-dump-context@v2
 
   test-freebsd-amd64:
-    runs-on: macos-13
+    runs-on: ubuntu-22.04
     needs:
       - build
     env:
-      VAGRANT_VAGRANTFILE: hack/Vagrantfile.freebsd13
       GOOS: freebsd
     steps:
       -
@@ -195,25 +194,23 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.vagrant.d/boxes
-          key: ${{ runner.os }}-vagrant-${{ hashFiles('hack/Vagrantfile.freebsd13') }}
+          key: ${{ runner.os }}-vagrant-${{ hashFiles('hack/Vagrantfile.freebsd') }}
           restore-keys: |
             ${{ runner.os }}-vagrant-
       -
-        name: Install vagrant and VirtualBox
+        name: Install vagrant
         run: |
           set -x
-          brew tap hashicorp/tap
-          brew install hashicorp/tap/hashicorp-vagrant
-          brew install --cask virtualbox
-      -
-        name: Check versions
-        run: |
-          set -x
+          sudo apt-get update
+          sudo apt-get install -y libvirt-daemon libvirt-daemon-system vagrant vagrant-libvirt ruby-libvirt
+          sudo systemctl enable --now libvirtd
+          sudo chmod a+rw /var/run/libvirt/libvirt-sock
+          vagrant plugin install vagrant-libvirt
           vagrant --version
-          VBoxManage -v
       -
         name: Set up vagrant
         run: |
+          ln -sf hack/Vagrantfile.freebsd Vagrantfile
           vagrant up --no-tty
       -
         name: Smoke test
@@ -233,7 +230,3 @@ jobs:
         if: always()
         run: |
           vagrant ssh -- "sudo cat /vagrant/.tmp/logs/containerd"
-      -
-        name: Dump context
-        if: failure()
-        uses: crazy-max/ghaction-dump-context@v2
