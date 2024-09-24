@@ -2,10 +2,7 @@
 # vi: set ft=ruby :
 
 Vagrant.configure("2") do |config|
-  config.vm.define "fbsd_13_2" do |fbsd_13_2|
-    fbsd_13_2.vm.box = "freebsd/FreeBSD-13.2-RELEASE"
-  end
-
+  config.vm.box = "generic/freebsd14"
   config.vm.boot_timeout = 900
   config.vm.synced_folder ".", "/vagrant", type: "rsync"
   config.ssh.keep_alive = true
