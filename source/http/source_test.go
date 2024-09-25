@@ -355,6 +355,7 @@ func newHTTPSource(t *testing.T) (source.Source, error) {
 		Applier:        applier,
 		Differ:         differ,
 		GarbageCollect: mdb.GarbageCollect,
+		Root:           tmpdir,
 		MountPoolRoot:  filepath.Join(tmpdir, "cachemounts"),
 	})
 	if err != nil {

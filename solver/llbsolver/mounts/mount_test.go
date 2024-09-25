@@ -109,6 +109,7 @@ func newCacheManager(ctx context.Context, t *testing.T, opt cmOpt) (co *cmOut, e
 		Differ:         differ,
 		LeaseManager:   lm,
 		GarbageCollect: mdb.GarbageCollect,
+		Root:           tmpdir,
 		MountPoolRoot:  filepath.Join(tmpdir, "cachemounts"),
 	})
 	if err != nil {

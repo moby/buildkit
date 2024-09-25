@@ -49,6 +49,7 @@ type ManagerOpt struct {
 	Applier         diff.Applier
 	Differ          diff.Comparer
 	MetadataStore   *metadata.Store
+	Root            string
 	MountPoolRoot   string
 }
 
@@ -94,6 +95,8 @@ type cacheManager struct {
 	Differ          diff.Comparer
 	MetadataStore   *metadata.Store
 
+	root string
+
 	mountPool sharableMountPool
 
 	muPrune sync.Mutex // make sure parallel prune is not allowed so there will not be inconsistent results
@@ -110,6 +113,7 @@ func NewManager(opt ManagerOpt) (Manager, error) {
 		Applier:         opt.Applier,
 		Differ:          opt.Differ,
 		MetadataStore:   opt.MetadataStore,
+		root:            opt.Root,
 		records:         make(map[string]*cacheRecord),
 	}
 
@@ -1054,8 +1058,7 @@ func (cm *cacheManager) pruneOnce(ctx context.Context, ch chan client.UsageInfo,
 		}
 	}
 
-	// TODO: pick a better path here
-	dstat, err := disk.GetDiskStat(cm.mountPool.tmpdirRoot)
+	dstat, err := disk.GetDiskStat(cm.root)
 	if err != nil {
 		if opt.Free != 0 {
 			// if we are pruning based on disk space, failing to get info on it
