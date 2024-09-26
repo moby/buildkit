@@ -78,7 +78,8 @@ func pruneHistories(clicontext *cli.Context) error {
 }
 
 func pruneHistoriesWithTableOutput(ctx context.Context, w io.Writer, controlClient controlapi.ControlClient,
-	eventReceiver controlapi.Control_ListenBuildHistoryClient) error {
+	eventReceiver controlapi.Control_ListenBuildHistoryClient,
+) error {
 	tw := tabwriter.NewWriter(w, 1, 8, 1, '\t', 0)
 	fmt.Fprintln(tw, "TYPE\tREF\tCREATED\tCOMPLETED\tGENERATION")
 	var rerr error
@@ -105,10 +106,10 @@ func pruneHistoriesWithTableOutput(ctx context.Context, w io.Writer, controlClie
 			completedAt string
 		)
 		if r.CreatedAt != nil {
-			createdAt = r.CreatedAt.Local().Format(time.RFC3339)
+			createdAt = r.CreatedAt.AsTime().Local().Format(time.RFC3339)
 		}
 		if r.CompletedAt != nil {
-			completedAt = r.CompletedAt.Local().Format(time.RFC3339)
+			completedAt = r.CompletedAt.AsTime().Local().Format(time.RFC3339)
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\n", ev.Type, r.Ref, createdAt, completedAt, r.Generation)
 		tw.Flush()

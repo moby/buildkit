@@ -35,7 +35,7 @@ func (b *build) ToInput(ctx context.Context, c *llb.Constraints) (*pb.Input, err
 	if err != nil {
 		return nil, err
 	}
-	return &pb.Input{Digest: dgst, Index: pb.OutputIndex(0)}, nil
+	return &pb.Input{Digest: string(dgst), Index: 0}, nil
 }
 
 func (b *build) Vertex(context.Context, *llb.Constraints) llb.Vertex {
@@ -51,9 +51,10 @@ func (b *build) Marshal(ctx context.Context, c *llb.Constraints) (digest.Digest,
 		return b.Load()
 	}
 	pbo := &pb.BuildOp{
-		Builder: pb.LLBBuilder,
+		Builder: int64(pb.LLBBuilder),
 		Inputs: map[string]*pb.BuildInput{
-			pb.LLBDefinitionInput: {Input: pb.InputIndex(0)}},
+			pb.LLBDefinitionInput: {Input: 0},
+		},
 	}
 
 	pbo.Attrs = map[string]string{}

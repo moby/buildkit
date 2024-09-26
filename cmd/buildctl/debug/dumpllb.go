@@ -12,6 +12,7 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
+	"google.golang.org/protobuf/proto"
 )
 
 var DumpLLBCommand = cli.Command{
@@ -57,9 +58,9 @@ func dumpLLB(clicontext *cli.Context) error {
 }
 
 type llbOp struct {
-	Op         pb.Op
+	Op         *pb.Op
 	Digest     digest.Digest
-	OpMetadata pb.OpMetadata
+	OpMetadata *pb.OpMetadata
 }
 
 func loadLLB(r io.Reader) ([]llbOp, error) {
@@ -70,11 +71,11 @@ func loadLLB(r io.Reader) ([]llbOp, error) {
 	var ops []llbOp
 	for _, dt := range def.Def {
 		var op pb.Op
-		if err := (&op).Unmarshal(dt); err != nil {
+		if err := proto.Unmarshal(dt, &op); err != nil {
 			return nil, errors.Wrap(err, "failed to parse op")
 		}
 		dgst := digest.FromBytes(dt)
-		ent := llbOp{Op: op, Digest: dgst, OpMetadata: def.Metadata[dgst]}
+		ent := llbOp{Op: &op, Digest: dgst, OpMetadata: def.Metadata[dgst].ToPB()}
 		ops = append(ops, ent)
 	}
 	return ops, nil
@@ -103,7 +104,7 @@ func writeDot(ops []llbOp, w io.Writer) {
 	}
 }
 
-func attr(dgst digest.Digest, op pb.Op) (string, string) {
+func attr(dgst digest.Digest, op *pb.Op) (string, string) {
 	switch op := op.Op.(type) {
 	case *pb.Op_Source:
 		return op.Source.Identifier, "ellipse"

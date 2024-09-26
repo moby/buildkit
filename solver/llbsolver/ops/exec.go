@@ -31,6 +31,7 @@ import (
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/semaphore"
+	"google.golang.org/protobuf/proto"
 )
 
 const execCacheType = "buildkit.exec.v0"
@@ -78,27 +79,8 @@ func (e *ExecOp) Proto() *pb.ExecOp {
 	return e.op
 }
 
-func cloneExecOp(old *pb.ExecOp) pb.ExecOp {
-	n := *old
-	meta := *n.Meta
-	meta.ExtraHosts = nil
-	for i := range n.Meta.ExtraHosts {
-		h := *n.Meta.ExtraHosts[i]
-		meta.ExtraHosts = append(meta.ExtraHosts, &h)
-	}
-	n.Meta = &meta
-	n.Mounts = nil
-	for i := range old.Mounts {
-		m := *old.Mounts[i]
-
-		if m.CacheOpt != nil {
-			co := *m.CacheOpt
-			m.CacheOpt = &co
-		}
-
-		n.Mounts = append(n.Mounts, &m)
-	}
-	return n
+func cloneExecOp(old *pb.ExecOp) *pb.ExecOp {
+	return proto.Clone(old).(*pb.ExecOp)
 }
 
 func checkShouldClearCacheOpts(m *pb.Mount) bool {
@@ -179,7 +161,7 @@ func (e *ExecOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 		OSFeatures []string `json:",omitempty"`
 	}{
 		Type:       execCacheType,
-		Exec:       &op,
+		Exec:       op,
 		OS:         p.OS,
 		Arch:       p.Architecture,
 		Variant:    p.Variant,
@@ -290,7 +272,7 @@ func (e *ExecOp) getMountDeps() ([]dep, error) {
 			continue
 		}
 
-		if m.Input == pb.Empty {
+		if m.Input == int64(pb.Empty) {
 			continue
 		}
 		if int(m.Input) >= len(deps) {
@@ -314,7 +296,7 @@ func (e *ExecOp) getMountDeps() ([]dep, error) {
 		//   run, since we only select "bar"
 		// - But this cached result is incorrect - "foo/sneaky.txt" isn't in
 		//   our cached result, but it is in our input.
-		if m.Output == pb.SkipOutput {
+		if m.Output == int64(pb.SkipOutput) {
 			// if the mount has no outputs, it's safe to enable content-based
 			// caching, since it's guaranteed to not be used as an input for
 			// any future steps

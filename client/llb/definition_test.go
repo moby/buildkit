@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/containerd/platforms"
-	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -108,7 +107,7 @@ func TestDefinitionInputCache(t *testing.T) {
 
 	st2 := NewState(op.Output())
 	marshalDef := &Definition{
-		Metadata: make(map[digest.Digest]pb.OpMetadata, 0),
+		Metadata: make(map[digest.Digest]OpMetadata, 0),
 	}
 	constraints := &Constraints{}
 	smc := newSourceMapCollector()

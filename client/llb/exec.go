@@ -12,6 +12,7 @@ import (
 	"github.com/moby/buildkit/util/system"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
+	"google.golang.org/protobuf/proto"
 )
 
 func NewExecOp(base State, proxyEnv *ProxyEnv, readOnly bool, c Constraints) *ExecOp {
@@ -342,7 +343,7 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 			newInput := true
 
 			for i, inp2 := range pop.Inputs {
-				if *inp == *inp2 {
+				if proto.Equal(inp, inp2) {
 					inputIndex = pb.InputIndex(i)
 					newInput = false
 					break
@@ -363,10 +364,10 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		}
 
 		pm := &pb.Mount{
-			Input:    inputIndex,
+			Input:    int64(inputIndex),
 			Dest:     m.target,
 			Readonly: m.readonly,
-			Output:   outputIndex,
+			Output:   int64(outputIndex),
 			Selector: m.selector,
 		}
 		if m.cacheID != "" {
@@ -394,7 +395,7 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		if m.tmpfs {
 			pm.MountType = pb.MountType_TMPFS
 			pm.TmpfsOpt = &pb.TmpfsOpt{
-				Size_: m.tmpfsOpt.Size,
+				Size: m.tmpfsOpt.Size,
 			}
 		}
 		peo.Mounts = append(peo.Mounts, pm)
@@ -410,7 +411,7 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		}
 		if s.Target != nil {
 			pm := &pb.Mount{
-				Input:     pb.Empty,
+				Input:     int64(pb.Empty),
 				Dest:      *s.Target,
 				MountType: pb.MountType_SECRET,
 				SecretOpt: &pb.SecretOpt{
@@ -427,7 +428,7 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 
 	for _, s := range e.ssh {
 		pm := &pb.Mount{
-			Input:     pb.Empty,
+			Input:     int64(pb.Empty),
 			Dest:      s.Target,
 			MountType: pb.MountType_SSH,
 			SSHOpt: &pb.SSHOpt{
@@ -441,7 +442,7 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		peo.Mounts = append(peo.Mounts, pm)
 	}
 
-	dt, err := pop.Marshal()
+	dt, err := proto.Marshal(pop)
 	if err != nil {
 		return "", nil, nil, nil, err
 	}

@@ -200,7 +200,7 @@ func testWarnings(t *testing.T, sb integration.Sandbox) {
 				Data:     []byte("filedata"),
 			},
 			Range: []*pb.Range{
-				{Start: pb.Position{Line: 2}, End: pb.Position{Line: 4}},
+				{Start: &pb.Position{Line: 2}, End: &pb.Position{Line: 4}},
 			},
 			Detail: [][]byte{[]byte("this is detail"), []byte("and more detail")},
 			URL:    "https://example.com",
@@ -422,7 +422,6 @@ func testClientGatewayContainerExecPipe(t *testing.T, sb integration.Sandbox) {
 				Ref:       r.Ref,
 			}},
 		})
-
 		if err != nil {
 			return nil, err
 		}
@@ -453,7 +452,6 @@ func testClientGatewayContainerExecPipe(t *testing.T, sb integration.Sandbox) {
 			Stdin:  io.NopCloser(stdin2),
 			Stdout: stdout2,
 		})
-
 		if err != nil {
 			return nil, err
 		}
@@ -546,7 +544,6 @@ func testClientGatewayContainerPID1Fail(t *testing.T, sb integration.Sandbox) {
 				Ref:       r.Ref,
 			}},
 		})
-
 		if err != nil {
 			return nil, err
 		}
@@ -610,7 +607,6 @@ func testClientGatewayContainerPID1Exit(t *testing.T, sb integration.Sandbox) {
 				Ref:       r.Ref,
 			}},
 		})
-
 		if err != nil {
 			return nil, err
 		}
@@ -1432,28 +1428,32 @@ func testClientGatewayExecError(t *testing.T, sb integration.Sandbox) {
 			llb.Image("busybox:latest").Run(
 				llb.Shlexf(`sh -c "echo %s > /data && fail"`, id),
 			).Root(),
-			1, []string{"/data"},
+			1,
+			[]string{"/data"},
 		}, {
 			"rootfs and readwrite scratch mount",
 			llb.Image("busybox:latest").Run(
 				llb.Shlexf(`sh -c "echo %s > /data && echo %s > /rw/data && fail"`, id, id),
 				llb.AddMount("/rw", llb.Scratch()),
 			).Root(),
-			2, []string{"/data", "/rw/data"},
+			2,
+			[]string{"/data", "/rw/data"},
 		}, {
 			"rootfs and readwrite mount",
 			llb.Image("busybox:latest").Run(
 				llb.Shlexf(`sh -c "echo %s > /data && echo %s > /rw/data && fail"`, id, id),
 				llb.AddMount("/rw", llb.Scratch().File(llb.Mkfile("foo", 0700, []byte(id)))),
 			).Root(),
-			2, []string{"/data", "/rw/data", "/rw/foo"},
+			2,
+			[]string{"/data", "/rw/data", "/rw/foo"},
 		}, {
 			"rootfs and readonly scratch mount",
 			llb.Image("busybox:latest").Run(
 				llb.Shlexf(`sh -c "echo %s > /data && echo %s > /readonly/foo"`, id, id),
 				llb.AddMount("/readonly", llb.Scratch(), llb.Readonly),
 			).Root(),
-			2, []string{"/data"},
+			2,
+			[]string{"/data"},
 		}, {
 			"rootfs and readwrite force no output mount",
 			llb.Image("busybox:latest").Run(
@@ -1464,7 +1464,8 @@ func testClientGatewayExecError(t *testing.T, sb integration.Sandbox) {
 					llb.ForceNoOutput,
 				),
 			).Root(),
-			2, []string{"/data", "/rw/data", "/rw/foo"},
+			2,
+			[]string{"/data", "/rw/data", "/rw/foo"},
 		}}
 
 		for _, tt := range tests {
@@ -1896,7 +1897,6 @@ func testClientGatewayContainerSecurityMode(t *testing.T, sb integration.Sandbox
 				Ref:       r.Ref,
 			}},
 		})
-
 		if err != nil {
 			return nil, err
 		}
@@ -1988,7 +1988,6 @@ func testClientGatewayContainerExtraHosts(t *testing.T, sb integration.Sandbox) 
 				IP:   "169.254.11.22",
 			}},
 		})
-
 		if err != nil {
 			return nil, err
 		}
@@ -2088,7 +2087,6 @@ func testClientGatewayContainerHostNetworking(t *testing.T, sb integration.Sandb
 			}},
 			NetMode: netMode,
 		})
-
 		if err != nil {
 			return nil, err
 		}

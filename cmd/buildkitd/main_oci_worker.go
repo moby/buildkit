@@ -358,6 +358,7 @@ func snapshotterFactory(commonRoot string, cfg config.OCIConfig, sm *session.Man
 				grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(defaults.DefaultMaxRecvMsgSize)),
 				grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(defaults.DefaultMaxSendMsgSize)),
 			}
+			//nolint:staticcheck // ignore SA1019 NewClient has different behavior and needs to be tested
 			conn, err := grpc.Dial(dialer.DialAddress(address), gopts...)
 			if err != nil {
 				return nil, errors.Wrapf(err, "failed to dial %q", address)

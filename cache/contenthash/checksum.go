@@ -23,12 +23,15 @@ import (
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
+	proto "google.golang.org/protobuf/proto"
 )
 
 var errNotFound = errors.Errorf("not found")
 
-var defaultManager *cacheManager
-var defaultManagerOnce sync.Once
+var (
+	defaultManager     *cacheManager
+	defaultManagerOnce sync.Once
+)
 
 func getDefaultManager() *cacheManager {
 	defaultManagerOnce.Do(func() {
@@ -37,6 +40,13 @@ func getDefaultManager() *cacheManager {
 	})
 	return defaultManager
 }
+
+const (
+	CacheRecordTypeFile      = CacheRecordType_FILE
+	CacheRecordTypeDir       = CacheRecordType_DIR
+	CacheRecordTypeDirHeader = CacheRecordType_DIR_HEADER
+	CacheRecordTypeSymlink   = CacheRecordType_SYMLINK
+)
 
 // Layout in the radix tree: Every path is saved by cleaned absolute unix path.
 // Directories have 2 records, one contains digest for directory header, other
@@ -242,7 +252,7 @@ func (cc *cacheContext) load() error {
 	}
 
 	var l CacheRecords
-	if err := l.Unmarshal(dt); err != nil {
+	if err := proto.Unmarshal(dt, &l); err != nil {
 		return err
 	}
 
@@ -272,7 +282,7 @@ func (cc *cacheContext) save() error {
 		return false
 	})
 
-	dt, err := l.Marshal()
+	dt, err := proto.Marshal(&l)
 	if err != nil {
 		return err
 	}
@@ -312,7 +322,7 @@ func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.Fil
 		if _, ok := cc.node.Get([]byte{0}); !ok {
 			cc.txn.Insert([]byte{0}, &CacheRecord{
 				Type:   CacheRecordTypeDirHeader,
-				Digest: digest.FromBytes(nil),
+				Digest: string(digest.FromBytes(nil)),
 			})
 			cc.txn.Insert([]byte(""), &CacheRecord{
 				Type: CacheRecordTypeDir,
@@ -364,7 +374,7 @@ func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.Fil
 		k = append(k, 0)
 		p += "/"
 	}
-	cr.Digest = h.Digest()
+	cr.Digest = string(h.Digest())
 
 	// if we receive a hardlink just use the digest of the source
 	// note that the source may be called later because data writing is async
@@ -372,8 +382,7 @@ func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.Fil
 		ln := path.Join("/", filepath.ToSlash(stat.Linkname))
 		v, ok := cc.txn.Get(convertPathToKey(ln))
 		if ok {
-			cp := *v
-			cr = &cp
+			cr = proto.Clone(v).(*CacheRecord)
 		}
 		cc.linkMap[ln] = append(cc.linkMap[ln], k)
 	}
@@ -423,7 +432,7 @@ func (cc *cacheContext) Checksum(ctx context.Context, mountable cache.Mountable,
 				if err != nil {
 					return "", err
 				}
-				includedPaths[i].record = &CacheRecord{Digest: dgst}
+				includedPaths[i].record = &CacheRecord{Digest: string(dgst)}
 			}
 		}
 	}
@@ -432,7 +441,7 @@ func (cc *cacheContext) Checksum(ctx context.Context, mountable cache.Mountable,
 	}
 
 	if len(includedPaths) == 1 && path.Base(p) == path.Base(includedPaths[0].path) {
-		return includedPaths[0].record.Digest, nil
+		return digest.Digest(includedPaths[0].record.Digest), nil
 	}
 
 	digester := digest.Canonical.Digester()
@@ -784,7 +793,7 @@ func (cc *cacheContext) lazyChecksum(ctx context.Context, m *mount, p string, fo
 			return "", err
 		}
 		if cr != nil && cr.Digest != "" {
-			return cr.Digest, nil
+			return digest.Digest(cr.Digest), nil
 		}
 	} else {
 		cc.mu.RUnlock()
@@ -808,7 +817,7 @@ func (cc *cacheContext) lazyChecksum(ctx context.Context, m *mount, p string, fo
 	if err != nil {
 		return "", err
 	}
-	return cr.Digest, nil
+	return digest.Digest(cr.Digest), nil
 }
 
 func (cc *cacheContext) commitActiveTransaction() {
@@ -919,7 +928,7 @@ func (cc *cacheContext) checksum(ctx context.Context, root *iradix.Node[*CacheRe
 	}
 
 	cr2 := &CacheRecord{
-		Digest:   dgst,
+		Digest:   string(dgst),
 		Type:     cr.Type,
 		Linkname: cr.Linkname,
 	}

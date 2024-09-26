@@ -43,14 +43,20 @@ func (c *Client) Prune(ctx context.Context, ch chan UsageInfo, opts ...PruneOpti
 				ID:          d.ID,
 				Mutable:     d.Mutable,
 				InUse:       d.InUse,
-				Size:        d.Size_,
+				Size:        d.Size,
 				Parents:     d.Parents,
-				CreatedAt:   d.CreatedAt,
+				CreatedAt:   d.CreatedAt.AsTime(),
 				Description: d.Description,
 				UsageCount:  int(d.UsageCount),
-				LastUsedAt:  d.LastUsedAt,
-				RecordType:  UsageRecordType(d.RecordType),
-				Shared:      d.Shared,
+				LastUsedAt: func() *time.Time {
+					if d.LastUsedAt != nil {
+						ts := d.LastUsedAt.AsTime()
+						return &ts
+					}
+					return nil
+				}(),
+				RecordType: UsageRecordType(d.RecordType),
+				Shared:     d.Shared,
 			}
 		}
 	}

@@ -254,7 +254,7 @@ func withNewMount(p string, opts ...func(*pb.Mount)) func(*ExecOp) {
 	return func(op *ExecOp) {
 		m := &pb.Mount{
 			Dest:  p,
-			Input: pb.InputIndex(op.numInputs),
+			Input: int64(op.numInputs),
 			// Generate a new selector for each mount since this should not effect the cache key.
 			// This helps exercise that code path.
 			Selector: identity.NewID(),
@@ -288,6 +288,6 @@ func withReadonly() func(*pb.Mount) {
 
 func withoutOutput() func(*pb.Mount) {
 	return func(m *pb.Mount) {
-		m.Output = pb.SkipOutput
+		m.Output = int64(pb.SkipOutput)
 	}
 }

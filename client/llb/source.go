@@ -17,6 +17,7 @@ import (
 	"github.com/moby/buildkit/util/sshutil"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
+	protobuf "google.golang.org/protobuf/proto"
 )
 
 type SourceOp struct {
@@ -76,7 +77,7 @@ func (s *SourceOp) Marshal(ctx context.Context, constraints *Constraints) (diges
 		proto.Platform = nil
 	}
 
-	dt, err := proto.Marshal()
+	dt, err := protobuf.Marshal(proto)
 	if err != nil {
 		return "", nil, nil, nil, err
 	}

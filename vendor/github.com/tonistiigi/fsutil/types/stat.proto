@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package fsutil.types;
 
-option go_package = "types";
+option go_package = "github.com/tonistiigi/fsutil/types";
 
 message Stat {
   string path = 1;

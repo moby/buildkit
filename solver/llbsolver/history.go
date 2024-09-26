@@ -16,7 +16,6 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/leases"
 	cerrdefs "github.com/containerd/errdefs"
-	"github.com/gogo/googleapis/google/rpc"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
@@ -30,8 +29,10 @@ import (
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
+	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -291,7 +292,7 @@ func (h *HistoryQueue) gc() error {
 		}
 		return b.ForEach(func(key, dt []byte) error {
 			var br controlapi.BuildHistoryRecord
-			if err := br.Unmarshal(dt); err != nil {
+			if err := proto.Unmarshal(dt, &br); err != nil {
 				return errors.Wrapf(err, "failed to unmarshal build record %s", key)
 			}
 			if br.Pinned {
@@ -311,7 +312,7 @@ func (h *HistoryQueue) gc() error {
 
 	// sort array by newest records first
 	sort.Slice(records, func(i, j int) bool {
-		return records[i].CompletedAt.After(*records[j].CompletedAt)
+		return records[i].CompletedAt.AsTime().After(records[j].CompletedAt.AsTime())
 	})
 
 	h.mu.Lock()
@@ -319,7 +320,7 @@ func (h *HistoryQueue) gc() error {
 
 	now := time.Now()
 	for _, r := range records[h.opt.CleanConfig.MaxEntries:] {
-		if now.Add(-h.opt.CleanConfig.MaxAge.Duration).After(*r.CompletedAt) {
+		if now.Add(-h.opt.CleanConfig.MaxAge.Duration).After(r.CompletedAt.AsTime()) {
 			if err := h.delete(r.Ref, false); err != nil {
 				return err
 			}
@@ -379,7 +380,7 @@ func (h *HistoryQueue) addResource(ctx context.Context, l leases.Lease, desc *co
 	if desc == nil {
 		return nil
 	}
-	if _, err := h.hContentStore.Info(ctx, desc.Digest); err != nil {
+	if _, err := h.hContentStore.Info(ctx, digest.Digest(desc.Digest)); err != nil {
 		if cerrdefs.IsNotFound(err) {
 			lr, ctx, err := leaseutil.NewLease(ctx, h.hLeaseManager, leases.WithID("history_migration_"+identity.NewID()), leaseutil.MakeTemporary)
 			if err != nil {
@@ -416,7 +417,7 @@ func (h *HistoryQueue) UpdateRef(ctx context.Context, ref string, upt func(r *co
 			return errors.Wrapf(os.ErrNotExist, "failed to retrieve ref %s", ref)
 		}
 
-		if err := br.Unmarshal(dt); err != nil {
+		if err := proto.Unmarshal(dt, &br); err != nil {
 			return errors.Wrapf(err, "failed to unmarshal build record %s", ref)
 		}
 		return nil
@@ -433,7 +434,7 @@ func (h *HistoryQueue) UpdateRef(ctx context.Context, ref string, upt func(r *co
 		return errors.Errorf("invalid ref change")
 	}
 
-	if err := h.update(ctx, br); err != nil {
+	if err := h.update(ctx, &br); err != nil {
 		return err
 	}
 	h.ps.Send(&controlapi.BuildHistoryEvent{
@@ -456,7 +457,7 @@ func (h *HistoryQueue) Status(ctx context.Context, ref string, st chan<- *client
 			return errors.Wrapf(os.ErrNotExist, "failed to retrieve ref %s", ref)
 		}
 
-		if err := br.Unmarshal(dt); err != nil {
+		if err := proto.Unmarshal(dt, &br); err != nil {
 			return errors.Wrapf(err, "failed to unmarshal build record %s", ref)
 		}
 		return nil
@@ -469,8 +470,8 @@ func (h *HistoryQueue) Status(ctx context.Context, ref string, st chan<- *client
 	}
 
 	ra, err := h.hContentStore.ReaderAt(ctx, ocispecs.Descriptor{
-		Digest:    br.Logs.Digest,
-		Size:      br.Logs.Size_,
+		Digest:    digest.Digest(br.Logs.Digest),
+		Size:      br.Logs.Size,
 		MediaType: br.Logs.MediaType,
 	})
 	if err != nil {
@@ -501,7 +502,7 @@ func (h *HistoryQueue) Status(ctx context.Context, ref string, st chan<- *client
 			return err
 		}
 		var sr controlapi.StatusResponse
-		if err := sr.Unmarshal(buf[:sz]); err != nil {
+		if err := proto.Unmarshal(buf[:sz], &sr); err != nil {
 			return err
 		}
 		st <- client.NewSolveStatus(&sr)
@@ -510,13 +511,13 @@ func (h *HistoryQueue) Status(ctx context.Context, ref string, st chan<- *client
 	return nil
 }
 
-func (h *HistoryQueue) update(ctx context.Context, rec controlapi.BuildHistoryRecord) error {
+func (h *HistoryQueue) update(ctx context.Context, rec *controlapi.BuildHistoryRecord) error {
 	return h.opt.DB.Update(func(tx *bolt.Tx) (err error) {
 		b := tx.Bucket([]byte(recordsBucket))
 		if b == nil {
 			return nil
 		}
-		dt, err := rec.Marshal()
+		dt, err := proto.Marshal(rec)
 		if err != nil {
 			return err
 		}
@@ -627,7 +628,7 @@ func (h *HistoryQueue) Update(ctx context.Context, e *controlapi.BuildHistoryEve
 
 	if e.Type == controlapi.BuildHistoryEventType_COMPLETE {
 		delete(h.active, e.Record.Ref)
-		if err := h.update(ctx, *e.Record); err != nil {
+		if err := h.update(ctx, e.Record); err != nil {
 			return err
 		}
 		h.ps.Send(e)
@@ -712,14 +713,14 @@ func (w *Writer) Commit(ctx context.Context) (*ocispecs.Descriptor, func(), erro
 		}, nil
 }
 
-func (h *HistoryQueue) ImportError(ctx context.Context, err error) (_ *rpc.Status, _ *controlapi.Descriptor, _ func(), retErr error) {
+func (h *HistoryQueue) ImportError(ctx context.Context, err error) (_ *spb.Status, _ *controlapi.Descriptor, _ func(), retErr error) {
 	st, ok := grpcerrors.AsGRPCStatus(grpcerrors.ToGRPC(ctx, err))
 	if !ok {
 		st = status.New(codes.Unknown, err.Error())
 	}
-	rpcStatus := grpcerrors.ToRPCStatus(st.Proto())
 
-	dt, err := rpcStatus.Marshal()
+	stpb := st.Proto()
+	dt, err := proto.Marshal(stpb)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -745,11 +746,11 @@ func (h *HistoryQueue) ImportError(ctx context.Context, err error) (_ *rpc.Statu
 	}
 
 	// clear details part of the error that are saved to main record
-	rpcStatus.Details = nil
+	stpb.Details = nil
 
-	return rpcStatus, &controlapi.Descriptor{
-		Digest:    desc.Digest,
-		Size_:     desc.Size,
+	return stpb, &controlapi.Descriptor{
+		Digest:    string(desc.Digest),
+		Size:      desc.Size,
 		MediaType: desc.MediaType,
 	}, release, nil
 }
@@ -800,14 +801,15 @@ func (h *HistoryQueue) ImportStatus(ctx context.Context, ch chan *client.SolveSt
 
 		hdr := make([]byte, 4)
 		for _, pst := range st.Marshal() {
-			sz := pst.Size()
+			sz := proto.Size(pst)
 			if len(buf) < sz {
 				buf = make([]byte, sz)
 			}
-			n, err := pst.MarshalTo(buf)
+			buf, err := proto.MarshalOptions{}.MarshalAppend(buf[:0], pst)
 			if err != nil {
 				return nil, nil, err
 			}
+			n := uint32(len(buf))
 			binary.LittleEndian.PutUint32(hdr, uint32(n))
 			if _, err := bufW.Write(hdr); err != nil {
 				return nil, nil, err
@@ -908,7 +910,7 @@ func (h *HistoryQueue) Listen(ctx context.Context, req *controlapi.BuildHistoryR
 					return nil
 				}
 				var br controlapi.BuildHistoryRecord
-				if err := br.Unmarshal(dt); err != nil {
+				if err := proto.Unmarshal(dt, &br); err != nil {
 					return errors.Wrapf(err, "failed to unmarshal build record %s", key)
 				}
 				events = append(events, &controlapi.BuildHistoryEvent{

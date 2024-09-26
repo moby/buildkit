@@ -22,11 +22,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/googleapis/google/rpc"
 	v1 "github.com/moby/buildkit/cache/remotecache/v1"
 	"github.com/tonistiigi/fsutil"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/containerd/containerd"
@@ -8217,20 +8217,20 @@ COPY notexist /foo
 		extErr := resp.Record.ExternalError
 		require.NotNil(t, extErr)
 
-		require.Greater(t, extErr.Size_, int64(0))
+		require.Greater(t, extErr.Size, int64(0))
 		require.Equal(t, "application/vnd.googeapis.google.rpc.status+proto", extErr.MediaType)
 
 		bkstore := proxy.NewContentStore(c.ContentClient())
 
 		dt, err := content.ReadBlob(ctx, bkstore, ocispecs.Descriptor{
 			MediaType: extErr.MediaType,
-			Digest:    extErr.Digest,
-			Size:      extErr.Size_,
+			Digest:    digest.Digest(extErr.Digest),
+			Size:      extErr.Size,
 		})
 		require.NoError(t, err)
 
-		var st rpc.Status
-		err = (&st).Unmarshal(dt)
+		var st statuspb.Status
+		err = proto.Unmarshal(dt, &st)
 		require.NoError(t, err)
 
 		require.Equal(t, resp.Record.Error.Code, st.Code)
