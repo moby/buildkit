@@ -8,6 +8,7 @@ import (
 
 	"github.com/docker/go-units"
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/disk"
 	"github.com/pkg/errors"
 )
 
@@ -77,21 +78,21 @@ func DefaultGCPolicy(keep DiskSpace) []GCPolicy {
 		{
 			Filters:      []string{"type==source.local,type==exec.cachemount,type==source.git.checkout"},
 			KeepDuration: Duration{Duration: time.Duration(48) * time.Hour}, // 48h
-			KeepBytes:    DiskSpace{Bytes: 512 * 1e6},                       // 512MB
+			MaxStorage:   DiskSpace{Bytes: 512 * 1e6},                       // 512MB
 		},
 		// remove any data not used for 60 days
 		{
 			KeepDuration: Duration{Duration: time.Duration(60) * 24 * time.Hour}, // 60d
-			KeepBytes:    keep,
+			MaxStorage:   keep,
 		},
 		// keep the unshared build cache under cap
 		{
-			KeepBytes: keep,
+			MaxStorage: keep,
 		},
 		// if previous policies were insufficient start deleting internal data to keep build cache under cap
 		{
-			All:       true,
-			KeepBytes: keep,
+			All:        true,
+			MaxStorage: keep,
 		},
 	}
 }
@@ -118,12 +119,12 @@ func (d DiskSpace) AsBytes(root string) int64 {
 		return 0
 	}
 
-	diskSize, err := getDiskSize(root)
+	dstat, err := disk.GetDiskStat(root)
 	if err != nil {
 		bklog.L.Warnf("failed to get disk size: %v", err)
 		return defaultCap
 	}
-	avail := diskSize * d.Percentage / 100
+	avail := dstat.Total * d.Percentage / 100
 	rounded := (avail/(1<<30) + 1) * 1e9 // round up
 	return rounded
 }

@@ -216,7 +216,9 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 					Filter:       req.Filter,
 					All:          req.All,
 					KeepDuration: time.Duration(req.KeepDuration),
-					KeepBytes:    req.KeepBytes,
+					MinStorage:   req.MinStorage,
+					MaxStorage:   req.MaxStorage,
+					Free:         req.Free,
 				})
 			})
 		}(w)
@@ -635,9 +637,11 @@ func toPBGCPolicy(in []client.PruneInfo) []*apitypes.GCPolicy {
 	for _, p := range in {
 		policy = append(policy, &apitypes.GCPolicy{
 			All:          p.All,
-			KeepBytes:    p.KeepBytes,
-			KeepDuration: int64(p.KeepDuration),
 			Filters:      p.Filter,
+			KeepDuration: int64(p.KeepDuration),
+			MinStorage:   p.MinStorage,
+			MaxStorage:   p.MaxStorage,
+			Free:         p.Free,
 		})
 	}
 	return policy
@@ -676,7 +680,7 @@ func cacheOptKey(opt controlapi.CacheOptionsEntry) (string, error) {
 	if opt.Type == "registry" && opt.Attrs["ref"] != "" {
 		return opt.Attrs["ref"], nil
 	}
-	var rawOpt = struct {
+	rawOpt := struct {
 		Type  string
 		Attrs map[string]string
 	}{

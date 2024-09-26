@@ -184,6 +184,7 @@ func newContainerd(client *containerd.Client, workerOpts WorkerOptions) (base.Wo
 
 	opt := base.WorkerOpt{
 		ID:               id,
+		Root:             root,
 		Labels:           xlabels,
 		MetadataStore:    md,
 		NetworkProviders: np,

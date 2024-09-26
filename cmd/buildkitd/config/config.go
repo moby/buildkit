@@ -154,10 +154,29 @@ type ContainerdRuntime struct {
 }
 
 type GCPolicy struct {
-	All          bool      `toml:"all"`
-	KeepBytes    DiskSpace `toml:"keepBytes"`
-	KeepDuration Duration  `toml:"keepDuration"`
-	Filters      []string  `toml:"filters"`
+	All     bool     `toml:"all"`
+	Filters []string `toml:"filters"`
+
+	KeepDuration Duration `toml:"keepDuration"`
+
+	// KeepBytes is the maximum amount of storage this policy is ever allowed
+	// to consume. Any storage above this mark can be cleared during a gc
+	// sweep.
+	//
+	// Deprecated: use MaxStorage instead
+	KeepBytes DiskSpace `toml:"keepBytes"`
+
+	// MinStorage is the minimum amount of storage this policy is always
+	// allowed to consume. Any amount of storage below this mark will not be
+	// cleared by this policy.
+	MinStorage DiskSpace `toml:"minStorage"`
+	// MaxStorage is the maximum amount of storage this policy is ever allowed
+	// to consume. Any storage above this mark can be cleared during a gc
+	// sweep.
+	MaxStorage DiskSpace `toml:"maxStorage"`
+	// Free is the amount of storage the gc will attempt to leave free on the
+	// disk. However, it will never attempt to bring it below MinStorage.
+	Free DiskSpace `toml:"free"`
 }
 
 type DNSConfig struct {
