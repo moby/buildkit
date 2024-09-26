@@ -27,9 +27,9 @@ func TestMarshal(t *testing.T) {
 	require.NotNil(t, buildop)
 
 	require.Equal(t, 1, len(op.Inputs))
-	require.Equal(t, pb.LLBBuilder, buildop.Builder)
+	require.Equal(t, pb.LLBBuilder, pb.InputIndex(buildop.Builder))
 	require.Equal(t, 1, len(buildop.Inputs))
-	require.Equal(t, &pb.BuildInput{Input: pb.InputIndex(0)}, buildop.Inputs[pb.LLBDefinitionInput])
+	require.Equal(t, &pb.BuildInput{Input: 0}, buildop.Inputs[string(pb.LLBDefinitionInput)])
 
 	require.Equal(t, "myfilename", buildop.Attrs[pb.AttrLLBDefinitionFilename])
 }
@@ -45,10 +45,11 @@ type dummyOutput struct {
 
 func (d *dummyOutput) ToInput(context.Context, *llb.Constraints) (*pb.Input, error) {
 	return &pb.Input{
-		Digest: d.dgst,
-		Index:  pb.OutputIndex(7), // random constant
+		Digest: string(d.dgst),
+		Index:  7, // random constant
 	}, nil
 }
+
 func (d *dummyOutput) Vertex(context.Context, *llb.Constraints) llb.Vertex {
 	return nil
 }

@@ -63,9 +63,9 @@ func TestStateSourceMapMarshal(t *testing.T) {
 
 	s := Image(
 		"myimage",
-		sm1.Location([]*pb.Range{{Start: pb.Position{Line: 7}}}),
-		sm2.Location([]*pb.Range{{Start: pb.Position{Line: 8}}}),
-		sm1.Location([]*pb.Range{{Start: pb.Position{Line: 9}}}),
+		sm1.Location([]*pb.Range{{Start: &pb.Position{Line: 7}}}),
+		sm2.Location([]*pb.Range{{Start: &pb.Position{Line: 8}}}),
+		sm1.Location([]*pb.Range{{Start: &pb.Position{Line: 9}}}),
 	)
 
 	def, err := s.Marshal(context.TODO())
@@ -103,7 +103,7 @@ func TestStateSourceMapMarshal(t *testing.T) {
 	require.Equal(t, int32(9), def.Source.Locations[dgst.String()].Locations[2].Ranges[0].Start.Line)
 
 	s = Merge([]State{s, Image("myimage",
-		sm1.Location([]*pb.Range{{Start: pb.Position{Line: 10}}}),
+		sm1.Location([]*pb.Range{{Start: &pb.Position{Line: 10}}}),
 	)})
 	def, err = s.Marshal(context.TODO())
 	require.NoError(t, err)

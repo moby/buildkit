@@ -838,7 +838,7 @@ type dispatchOpt struct {
 	buildPlatforms      []ocispecs.Platform
 	extraHosts          []llb.HostIP
 	shmSize             int64
-	ulimit              []pb.Ulimit
+	ulimit              []*pb.Ulimit
 	cgroupParent        string
 	llbCaps             *apicaps.CapSet
 	sourceMap           *llb.SourceMap
@@ -2135,11 +2135,11 @@ func location(sm *llb.SourceMap, locations []parser.Range) llb.ConstraintsOpt {
 	loc := make([]*pb.Range, 0, len(locations))
 	for _, l := range locations {
 		loc = append(loc, &pb.Range{
-			Start: pb.Position{
+			Start: &pb.Position{
 				Line:      int32(l.Start.Line),
 				Character: int32(l.Start.Character),
 			},
-			End: pb.Position{
+			End: &pb.Position{
 				Line:      int32(l.End.Line),
 				Character: int32(l.End.Character),
 			},
@@ -2324,11 +2324,11 @@ func toPBLocation(sourceIndex int, location []parser.Range) pb.Location {
 	loc := make([]*pb.Range, 0, len(location))
 	for _, l := range location {
 		loc = append(loc, &pb.Range{
-			Start: pb.Position{
+			Start: &pb.Position{
 				Line:      int32(l.Start.Line),
 				Character: int32(l.Start.Character),
 			},
-			End: pb.Position{
+			End: &pb.Position{
 				Line:      int32(l.End.Line),
 				Character: int32(l.End.Character),
 			},

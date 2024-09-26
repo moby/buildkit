@@ -83,10 +83,10 @@ func printRecordsTable(w io.Writer, eventReceiver controlapi.Control_ListenBuild
 		if r := ev.Record; r != nil {
 			ref = r.Ref
 			if r.CreatedAt != nil {
-				createdAt = r.CreatedAt.Local().Format(time.RFC3339)
+				createdAt = r.CreatedAt.AsTime().Local().Format(time.RFC3339)
 			}
 			if r.CompletedAt != nil {
-				completedAt = r.CompletedAt.Local().Format(time.RFC3339)
+				completedAt = r.CompletedAt.AsTime().Local().Format(time.RFC3339)
 			}
 			generation = r.Generation
 			if r.Pinned {

@@ -6933,9 +6933,9 @@ func testSourceMap(t *testing.T, sb integration.Sandbox) {
 
 	st := llb.Scratch().Run(
 		llb.Shlex("not-exist"),
-		sm1.Location([]*pb.Range{{Start: pb.Position{Line: 7}}}),
-		sm2.Location([]*pb.Range{{Start: pb.Position{Line: 8}}}),
-		sm1.Location([]*pb.Range{{Start: pb.Position{Line: 9}}}),
+		sm1.Location([]*pb.Range{{Start: &pb.Position{Line: 7}}}),
+		sm2.Location([]*pb.Range{{Start: &pb.Position{Line: 8}}}),
+		sm1.Location([]*pb.Range{{Start: &pb.Position{Line: 9}}}),
 	)
 
 	def, err := st.Marshal(sb.Context())
@@ -6988,7 +6988,7 @@ func testSourceMapFromRef(t *testing.T, sb integration.Sandbox) {
 	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 		st := llb.Scratch().File(
 			llb.Mkdir("foo/bar", 0600), // fails because /foo doesn't exist
-			sm.Location([]*pb.Range{{Start: pb.Position{Line: 3, Character: 1}}}),
+			sm.Location([]*pb.Range{{Start: &pb.Position{Line: 3, Character: 1}}}),
 		)
 
 		def, err := st.Marshal(sb.Context())
@@ -8615,24 +8615,24 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 				return nil, err
 			}
 			res.AddAttestation(pk, gateway.Attestation{
-				Kind: gatewaypb.AttestationKindInToto,
+				Kind: gatewaypb.AttestationKind_InToto,
 				Ref:  refAttest,
 				Path: "/attestation.json",
 				InToto: result.InTotoAttestation{
 					PredicateType: "https://example.com/attestations/v1.0",
 					Subjects: []result.InTotoSubject{{
-						Kind: gatewaypb.InTotoSubjectKindSelf,
+						Kind: gatewaypb.InTotoSubjectKind_Self,
 					}},
 				},
 			})
 			res.AddAttestation(pk, gateway.Attestation{
-				Kind: gatewaypb.AttestationKindInToto,
+				Kind: gatewaypb.AttestationKind_InToto,
 				Ref:  refAttest,
 				Path: "/attestation2.json",
 				InToto: result.InTotoAttestation{
 					PredicateType: "https://example.com/attestations2/v1.0",
 					Subjects: []result.InTotoSubject{{
-						Kind:   gatewaypb.InTotoSubjectKindRaw,
+						Kind:   gatewaypb.InTotoSubjectKind_Raw,
 						Name:   "/attestation.json",
 						Digest: []digest.Digest{successDigest},
 					}},
@@ -8942,7 +8942,7 @@ func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
 				return nil, err
 			}
 			res.AddAttestation(pk, gateway.Attestation{
-				Kind: gatewaypb.AttestationKindInToto,
+				Kind: gatewaypb.AttestationKind_InToto,
 				Ref:  refAttest,
 				Path: "/attestation.json",
 				InToto: result.InTotoAttestation{
@@ -9097,7 +9097,7 @@ func testAttestationBundle(t *testing.T, sb integration.Sandbox) {
 				return nil, err
 			}
 			res.AddAttestation(pk, gateway.Attestation{
-				Kind: gatewaypb.AttestationKindBundle,
+				Kind: gatewaypb.AttestationKind_Bundle,
 				Ref:  refAttest,
 				Path: "/bundle",
 			})
@@ -9303,7 +9303,7 @@ EOF
 				}
 
 				res.AddAttestation(pk, gateway.Attestation{
-					Kind: gatewaypb.AttestationKindInToto,
+					Kind: gatewaypb.AttestationKind_InToto,
 					Ref:  refAttest,
 					Path: "/result.spdx",
 					InToto: result.InTotoAttestation{
@@ -9701,7 +9701,7 @@ func testSBOMSupplements(t *testing.T, sb integration.Sandbox) {
 		}
 
 		res.AddAttestation(pk, gateway.Attestation{
-			Kind: gatewaypb.AttestationKindInToto,
+			Kind: gatewaypb.AttestationKind_InToto,
 			Ref:  refAttest,
 			Path: "/result.spdx",
 			InToto: result.InTotoAttestation{

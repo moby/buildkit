@@ -89,7 +89,7 @@ func CreateSBOMScanner(ctx context.Context, resolver sourceresolver.MetaResolver
 
 		stsbom := runscan.AddMount(outDir, llb.Scratch())
 		return result.Attestation[*llb.State]{
-			Kind: gatewaypb.AttestationKindBundle,
+			Kind: gatewaypb.AttestationKind_Bundle,
 			Ref:  &stsbom,
 			Metadata: map[string][]byte{
 				result.AttestationReasonKey: []byte(result.AttestationReasonSBOM),

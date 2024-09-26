@@ -31,9 +31,11 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const defaultExpiration = 60
-const dockerHubConfigfileKey = "https://index.docker.io/v1/"
-const dockerHubRegistryHost = "registry-1.docker.io"
+const (
+	defaultExpiration      = 60
+	dockerHubConfigfileKey = "https://index.docker.io/v1/"
+	dockerHubRegistryHost  = "registry-1.docker.io"
+)
 
 func NewDockerAuthProvider(cfg *configfile.ConfigFile, tlsConfigs map[string]*AuthTLSConfig) session.Attachable {
 	return &authProvider{
@@ -94,7 +96,7 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 		Secret:   creds.Secret,
 	}
 
-	var httpClient = http.DefaultClient()
+	httpClient := http.DefaultClient()
 	if tc, err := ap.tlsConfig(req.Host); err == nil && tc != nil {
 		transport := http.DefaultTransport()
 		transport.TLSClientConfig = tc

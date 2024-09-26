@@ -29,7 +29,7 @@ func TestRecomputeDigests(t *testing.T) {
 
 	op2 := &pb.Op{
 		Inputs: []*pb.Input{
-			{Digest: oldDigest}, // Input is the old digest, this should be updated after recomputeDigests
+			{Digest: string(oldDigest)}, // Input is the old digest, this should be updated after recomputeDigests
 		},
 	}
 	op2Data, err := op2.Marshal()
@@ -50,6 +50,6 @@ func TestRecomputeDigests(t *testing.T) {
 	require.Equal(t, newDigest, visited[oldDigest])
 	require.Equal(t, op1, all[newDigest])
 	assert.Equal(t, op2, all[updated])
-	require.Equal(t, newDigest, op2.Inputs[0].Digest)
+	require.Equal(t, newDigest, digest.Digest(op2.Inputs[0].Digest))
 	assert.NotEqual(t, op2Digest, updated)
 }

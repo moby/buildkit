@@ -5,6 +5,7 @@ import (
 
 	digest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
+	proto "google.golang.org/protobuf/proto"
 )
 
 // Buf is used to prevent the benchmark from being optimized away.
@@ -14,7 +15,7 @@ func BenchmarkMarshalCacheRecords(b *testing.B) {
 	v := sampleCacheRecords()
 	for i := 0; i < b.N; i++ {
 		var err error
-		Buf, err = v.Marshal()
+		Buf, err = proto.Marshal(v)
 		require.NoError(b, err)
 	}
 }
@@ -23,11 +24,11 @@ var CacheRecordsOutput CacheRecords
 
 func BenchmarkUnmarshalCacheRecords(b *testing.B) {
 	v := sampleCacheRecords()
-	buf, err := v.Marshal()
+	buf, err := proto.Marshal(v)
 	require.NoError(b, err)
 
 	for i := 0; i < b.N; i++ {
-		err := CacheRecordsOutput.Unmarshal(buf)
+		err := proto.Unmarshal(buf, &CacheRecordsOutput)
 		require.NoError(b, err)
 	}
 }
@@ -38,28 +39,28 @@ func sampleCacheRecords() *CacheRecords {
 			{
 				Path: "/foo",
 				Record: &CacheRecord{
-					Digest: digest.FromString("/foo"),
+					Digest: digest.FromString("/foo").String(),
 					Type:   CacheRecordTypeDir,
 				},
 			},
 			{
 				Path: "/foo/",
 				Record: &CacheRecord{
-					Digest: digest.FromString("/foo/"),
+					Digest: digest.FromString("/foo/").String(),
 					Type:   CacheRecordTypeDirHeader,
 				},
 			},
 			{
 				Path: "/foo/bar.txt",
 				Record: &CacheRecord{
-					Digest: digest.FromString("/foo/bar.txt"),
+					Digest: digest.FromString("/foo/bar.txt").String(),
 					Type:   CacheRecordTypeFile,
 				},
 			},
 			{
 				Path: "/foo/link",
 				Record: &CacheRecord{
-					Digest:   digest.FromString("/foo/link"),
+					Digest:   digest.FromString("/foo/link").String(),
 					Type:     CacheRecordTypeSymlink,
 					Linkname: "/foo/bar.txt",
 				},

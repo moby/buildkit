@@ -185,8 +185,7 @@ func toOp(e solver.Edge) *pb.Op {
 }
 
 func platform(e solver.Edge) ocispecs.Platform {
-	op := toOp(e)
-	p := *op.Platform
+	p := toOp(e).Platform
 	return ocispecs.Platform{
 		OS:           p.OS,
 		Architecture: p.Architecture,

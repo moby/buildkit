@@ -10,7 +10,7 @@ import (
 func TestMatch(t *testing.T) {
 	type testCase struct {
 		name    string
-		src     spb.Selector
+		src     *spb.Selector
 		ref     string
 		attrs   map[string]string
 		matches bool
@@ -20,43 +20,44 @@ func TestMatch(t *testing.T) {
 	cases := []testCase{
 		{
 			name:    "basic exact match",
-			src:     spb.Selector{Identifier: "docker-image://docker.io/library/busybox:1.34.1-uclibc"},
+			src:     &spb.Selector{Identifier: "docker-image://docker.io/library/busybox:1.34.1-uclibc"},
 			ref:     "docker-image://docker.io/library/busybox:1.34.1-uclibc",
 			matches: true,
 		},
 		{
 			name:    "docker-image scheme matches with only wildcard",
-			src:     spb.Selector{Identifier: "*"},
+			src:     &spb.Selector{Identifier: "*"},
 			ref:     "docker-image://docker.io/library/busybox:latest",
 			matches: true,
 		},
 		{
 			name:    "docker-image scheme matches with wildcard",
-			src:     spb.Selector{Identifier: "docker-image://docker.io/library/busybox:*"},
+			src:     &spb.Selector{Identifier: "docker-image://docker.io/library/busybox:*"},
 			ref:     "docker-image://docker.io/library/busybox:latest",
 			matches: true,
 		},
 		{
 			name:    "mis-matching scheme does not match",
-			src:     spb.Selector{Identifier: "docker-image://docker.io/library/busybox:*"},
+			src:     &spb.Selector{Identifier: "docker-image://docker.io/library/busybox:*"},
 			ref:     "http://docker.io/library/busybox:latest",
 			matches: false,
 		},
 		{
 			name:    "http scheme matches with wildcard",
-			src:     spb.Selector{Identifier: "http://docker.io/library/busybox:*"},
+			src:     &spb.Selector{Identifier: "http://docker.io/library/busybox:*"},
 			ref:     "http://docker.io/library/busybox:latest",
 			matches: true,
 		},
 		{
 			name:    "http scheme matches https URL",
-			src:     spb.Selector{Identifier: "https://docker.io/library/busybox:*"},
+			src:     &spb.Selector{Identifier: "https://docker.io/library/busybox:*"},
 			ref:     "https://docker.io/library/busybox:latest",
 			matches: true,
 		},
 		{
 			name: "attr match with default constraint (equals) matches",
-			src: spb.Selector{Identifier: "docker-image://docker.io/library/busybox:*",
+			src: &spb.Selector{
+				Identifier: "docker-image://docker.io/library/busybox:*",
 				Constraints: []*spb.AttrConstraint{
 					{
 						Key:   "foo",
@@ -71,7 +72,8 @@ func TestMatch(t *testing.T) {
 		},
 		{
 			name: "attr match with default constraint (equals) does not match",
-			src: spb.Selector{Identifier: "docker-image://docker.io/library/busybox:*",
+			src: &spb.Selector{
+				Identifier: "docker-image://docker.io/library/busybox:*",
 				Constraints: []*spb.AttrConstraint{
 					{
 						Key:   "foo",
@@ -86,7 +88,8 @@ func TestMatch(t *testing.T) {
 		},
 		{
 			name: "attr match with explicit equals matches",
-			src: spb.Selector{Identifier: "docker-image://docker.io/library/busybox:*",
+			src: &spb.Selector{
+				Identifier: "docker-image://docker.io/library/busybox:*",
 				Constraints: []*spb.AttrConstraint{
 					{
 						Key:       "foo",
@@ -101,7 +104,8 @@ func TestMatch(t *testing.T) {
 		},
 		{
 			name: "attr match with explicit equals does not match",
-			src: spb.Selector{Identifier: "docker-image://docker.io/library/busybox:*",
+			src: &spb.Selector{
+				Identifier: "docker-image://docker.io/library/busybox:*",
 				Constraints: []*spb.AttrConstraint{
 					{
 						Key:       "foo",
@@ -116,7 +120,8 @@ func TestMatch(t *testing.T) {
 		},
 		{
 			name: "attr match not equal does not match",
-			src: spb.Selector{Identifier: "docker-image://docker.io/library/busybox:*",
+			src: &spb.Selector{
+				Identifier: "docker-image://docker.io/library/busybox:*",
 				Constraints: []*spb.AttrConstraint{
 					{
 						Key:       "foo",
@@ -131,7 +136,8 @@ func TestMatch(t *testing.T) {
 		},
 		{
 			name: "attr match not equal does match",
-			src: spb.Selector{Identifier: "docker-image://docker.io/library/busybox:*",
+			src: &spb.Selector{
+				Identifier: "docker-image://docker.io/library/busybox:*",
 				Constraints: []*spb.AttrConstraint{
 					{
 						Key:       "foo",
@@ -146,7 +152,8 @@ func TestMatch(t *testing.T) {
 		},
 		{
 			name: "matching attach match with simple strings",
-			src: spb.Selector{Identifier: "docker-image://docker.io/library/busybox:*",
+			src: &spb.Selector{
+				Identifier: "docker-image://docker.io/library/busybox:*",
 				Constraints: []*spb.AttrConstraint{
 					{
 						Key:       "foo",
@@ -161,7 +168,8 @@ func TestMatch(t *testing.T) {
 		},
 		{
 			name: "non-matching attr match constraint simple strings",
-			src: spb.Selector{Identifier: "docker-image://docker.io/library/busybox:*",
+			src: &spb.Selector{
+				Identifier: "docker-image://docker.io/library/busybox:*",
 				Constraints: []*spb.AttrConstraint{
 					{
 						Key:       "foo",
@@ -176,7 +184,8 @@ func TestMatch(t *testing.T) {
 		},
 		{
 			name: "complex regex attr match",
-			src: spb.Selector{Identifier: "docker-image://docker.io/library/busybox:*",
+			src: &spb.Selector{
+				Identifier: "docker-image://docker.io/library/busybox:*",
 				Constraints: []*spb.AttrConstraint{
 					{
 						Key:       "foo",
@@ -191,7 +200,8 @@ func TestMatch(t *testing.T) {
 		},
 		{
 			name: "attr constraint with non-matching regex",
-			src: spb.Selector{Identifier: "docker-image://docker.io/library/busybox:*",
+			src: &spb.Selector{
+				Identifier: "docker-image://docker.io/library/busybox:*",
 				Constraints: []*spb.AttrConstraint{
 					{
 						Key:       "foo",
@@ -206,7 +216,8 @@ func TestMatch(t *testing.T) {
 		},
 		{
 			name: "attr constraint with regex match",
-			src: spb.Selector{Identifier: "docker-image://docker.io/library/busybox:*",
+			src: &spb.Selector{
+				Identifier: "docker-image://docker.io/library/busybox:*",
 				Constraints: []*spb.AttrConstraint{
 					{
 						Key:       "foo",
@@ -221,7 +232,8 @@ func TestMatch(t *testing.T) {
 		},
 		{
 			name: "unknown attr match condition type",
-			src: spb.Selector{Identifier: "docker-image://docker.io/library/busybox:*",
+			src: &spb.Selector{
+				Identifier: "docker-image://docker.io/library/busybox:*",
 				Constraints: []*spb.AttrConstraint{
 					{
 						Key:       "foo",
@@ -237,7 +249,8 @@ func TestMatch(t *testing.T) {
 		},
 		{
 			name: "matching constraint with extra attrs",
-			src: spb.Selector{Identifier: "docker-image://docker.io/library/busybox:*",
+			src: &spb.Selector{
+				Identifier: "docker-image://docker.io/library/busybox:*",
 				Constraints: []*spb.AttrConstraint{
 					{
 						Key:       "foo",
@@ -252,7 +265,8 @@ func TestMatch(t *testing.T) {
 		},
 		{
 			name: "multiple attrs with failed constraint",
-			src: spb.Selector{Identifier: "docker-image://docker.io/library/busybox:*",
+			src: &spb.Selector{
+				Identifier: "docker-image://docker.io/library/busybox:*",
 				Constraints: []*spb.AttrConstraint{
 					{
 						Key:       "foo",
@@ -272,7 +286,8 @@ func TestMatch(t *testing.T) {
 		},
 		{
 			name: "non-existent constraint key",
-			src: spb.Selector{Identifier: "docker-image://docker.io/library/busybox:*",
+			src: &spb.Selector{
+				Identifier: "docker-image://docker.io/library/busybox:*",
 				Constraints: []*spb.AttrConstraint{
 					{
 						Key:       "foo",
@@ -286,7 +301,8 @@ func TestMatch(t *testing.T) {
 		},
 		{
 			name: "non-existent constraint key w/ non-nill attr",
-			src: spb.Selector{Identifier: "docker-image://docker.io/library/busybox:*",
+			src: &spb.Selector{
+				Identifier: "docker-image://docker.io/library/busybox:*",
 				Constraints: []*spb.AttrConstraint{
 					{
 						Key:       "foo",
@@ -304,7 +320,7 @@ func TestMatch(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			matches, err := match(&selectorCache{Selector: &tc.src}, tc.ref, tc.attrs)
+			matches, err := match(&selectorCache{Selector: tc.src}, tc.ref, tc.attrs)
 			if !tc.xErr {
 				require.NoError(t, err)
 			} else {
