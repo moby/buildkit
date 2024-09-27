@@ -7,7 +7,7 @@ func (m *Definition) IsNil() bool {
 }
 
 func (m *Definition) Marshal() ([]byte, error) {
-	return proto.Marshal(m)
+	return proto.MarshalOptions{Deterministic: true}.Marshal(m)
 }
 
 func (m *Definition) Unmarshal(dAtA []byte) error {
@@ -15,7 +15,7 @@ func (m *Definition) Unmarshal(dAtA []byte) error {
 }
 
 func (m *Op) Marshal() ([]byte, error) {
-	return proto.Marshal(m)
+	return proto.MarshalOptions{Deterministic: true}.Marshal(m)
 }
 
 func (m *Op) Unmarshal(dAtA []byte) error {

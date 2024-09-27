@@ -228,11 +228,10 @@ func recomputeDigests(ctx context.Context, all map[digest.Digest]*pb.Op, visited
 		return dgst, nil
 	}
 
-	dt, err := proto.Marshal(op)
+	newDgst, err := opDigest(op)
 	if err != nil {
 		return "", err
 	}
-	newDgst := digest.FromBytes(dt)
 	visited[dgst] = newDgst
 	all[newDgst] = op
 	delete(all, dgst)
@@ -263,11 +262,10 @@ func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEval
 				return solver.Edge{}, errors.Wrap(err, "error evaluating the source policy")
 			}
 			if mutated {
-				dtMutated, err := proto.Marshal(&op)
+				dgstMutated, err := opDigest(&op)
 				if err != nil {
 					return solver.Edge{}, err
 				}
-				dgstMutated := digest.FromBytes(dtMutated)
 				mutatedDigests[dgst] = dgstMutated
 				dgst = dgstMutated
 			}
@@ -396,4 +394,15 @@ func fileOpName(actions []*pb.FileAction) string {
 	}
 
 	return strings.Join(names, ", ")
+}
+
+func opDigest(op *pb.Op) (digest.Digest, error) {
+	// TODO: relying on a consistent byte order for protobuf serialization
+	// isn't reliable and isn't guaranteed by the specification. This works
+	// with this specific implementation but is subject to change.
+	dt, err := proto.MarshalOptions{Deterministic: true}.Marshal(op)
+	if err != nil {
+		return "", err
+	}
+	return digest.FromBytes(dt), nil
 }
