@@ -19,9 +19,9 @@ message GCPolicy {
 	int64 keepDuration = 2;
 	repeated string filters = 4;
 
-	int64 minStorage = 5;
-	// maxStorage was renamed from freeBytes
-	int64 maxStorage = 3;
+	// minStorage was renamed from freeBytes
+	int64 minStorage = 3;
+	int64 maxStorage = 5;
 	int64 free = 6;
 }
 

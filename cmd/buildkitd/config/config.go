@@ -75,8 +75,12 @@ type OTELConfig struct {
 }
 
 type GCConfig struct {
-	GC            *bool      `toml:"gc"`
+	GC *bool `toml:"gc"`
+	// Deprecated: use GCMinStorage instead
 	GCKeepStorage DiskSpace  `toml:"gckeepstorage"`
+	GCMaxStorage  DiskSpace  `toml:"gcmaxstorage"`
+	GCMinStorage  DiskSpace  `toml:"gcminstorage"`
+	GCFreeStorage DiskSpace  `toml:"gcfreestorage"`
 	GCPolicy      []GCPolicy `toml:"gcpolicy"`
 }
 

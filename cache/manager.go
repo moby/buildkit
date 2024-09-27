@@ -1058,14 +1058,12 @@ func (cm *cacheManager) pruneOnce(ctx context.Context, ch chan client.UsageInfo,
 		}
 	}
 
-	dstat, err := disk.GetDiskStat(cm.root)
-	if err != nil {
-		if opt.Free != 0 {
-			// if we are pruning based on disk space, failing to get info on it
-			// is fatal
+	var dstat disk.DiskStat
+	if opt.Free != 0 {
+		dstat, err = disk.GetDiskStat(cm.root)
+		if err != nil {
 			return err
 		}
-		bklog.L.Warnf("failed to get disk size: %v", err)
 	}
 
 	return cm.prune(ctx, ch, pruneOpt{
