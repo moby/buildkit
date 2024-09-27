@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile-upstream:master
+# syntax=docker/dockerfile-upstream:master@sha256:df54e73548d586209f6fc6d34d61edf8277e1b9d2704aff8fe75294a17c6a29b
 
 ARG NODE_VERSION=19
 
