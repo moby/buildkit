@@ -203,7 +203,10 @@ func recomputeDigests(ctx context.Context, all map[digest.Digest]*pb.Op, visited
 	if dgst, ok := visited[dgst]; ok {
 		return dgst, nil
 	}
-	op := all[dgst]
+	op, ok := all[dgst]
+	if !ok {
+		return "", errors.Errorf("invalid missing input digest %s", dgst)
+	}
 
 	var mutated bool
 	for _, input := range op.Inputs {
