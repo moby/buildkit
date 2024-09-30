@@ -115,7 +115,7 @@ RUN --mont=target=/mytmp,type=tmpfs /bin/true
 		},
 	}, nil)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "unknown flag: mont")
+	require.Contains(t, err.Error(), "unknown flag: --mont")
 	require.Contains(t, err.Error(), "did you mean mount?")
 
 	dockerfile = []byte(`
