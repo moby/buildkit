@@ -148,12 +148,19 @@ func (bf *BFlags) Parse() error {
 	}
 
 	for _, arg := range bf.Args {
-		if !strings.HasPrefix(arg, "--") {
-			return errors.Errorf("arg should start with -- : %s", arg)
+		if arg == "--" {
+			// Stop processing further arguments as flags. We're matching
+			// the POSIX Utility Syntax Guidelines here;
+			// https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html#tag_12_02
+			//
+			// > The first -- argument that is not an option-argument should be accepted
+			// > as a delimiter indicating the end of options. Any following arguments
+			// > should be treated as operands, even if they begin with the '-' character.
+			return nil
 		}
 
-		if arg == "--" {
-			return nil
+		if !strings.HasPrefix(arg, "--") {
+			return errors.Errorf("arg should start with -- : %s", arg)
 		}
 
 		arg, value, hasValue := strings.Cut(arg[2:], "=")
