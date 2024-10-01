@@ -3002,10 +3002,9 @@ hello world
 
 For examples of Dockerfiles, refer to:
 
-- The ["build images" section](https://docs.docker.com/develop/develop-images/dockerfile_best-practices/)
-- The ["get started" tutorial](https://docs.docker.com/get-started/)
-- The [language-specific getting started guides](https://docs.docker.com/language/)
-- The [build guide](https://docs.docker.com/build/guide/)
+- The [building best practices page](https://docs.docker.com/build/building/best-practices/)
+- The ["get started" tutorials](https://docs.docker.com/get-started/)
+- The [language-specific getting started guides](https://docs.docker.com/guides/language/)
 
 [^1]: Value required
 [^2]: For Docker-integrated [BuildKit](https://docs.docker.com/build/buildkit/#getting-started) and `docker buildx build`
