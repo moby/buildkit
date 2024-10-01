@@ -67,6 +67,7 @@ const (
 	CapFileCopyIncludeExcludePatterns         apicaps.CapID = "file.copy.includeexcludepatterns"
 	CapFileRmNoFollowSymlink                  apicaps.CapID = "file.rm.nofollowsymlink"
 	CapFileCopyAlwaysReplaceExistingDestPaths apicaps.CapID = "file.copy.alwaysreplaceexistingdestpaths"
+	CapFileCopyModeStringFormat               apicaps.CapID = "file.copy.modestring"
 
 	CapConstraints apicaps.CapID = "constraints"
 	CapPlatform    apicaps.CapID = "platform"

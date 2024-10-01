@@ -264,6 +264,15 @@ func WithUIDGID(uid, gid int) ChownOption {
 	}
 }
 
+type ChmodOpt struct {
+	Mode    os.FileMode
+	ModeStr string
+}
+
+func (co ChmodOpt) SetCopyOption(mi *CopyInfo) {
+	mi.Mode = &co
+}
+
 type ChownOpt struct {
 	User  *UserOpt
 	Group *UserOpt
@@ -492,7 +501,7 @@ type CopyOption interface {
 }
 
 type CopyInfo struct {
-	Mode                           *os.FileMode
+	Mode                           *ChmodOpt
 	FollowSymlinks                 bool
 	CopyDirContentsOnly            bool
 	IncludePatterns                []string
@@ -541,7 +550,11 @@ func (a *fileActionCopy) toProtoAction(ctx context.Context, parent string, base 
 		AlwaysReplaceExistingDestPaths:   a.info.AlwaysReplaceExistingDestPaths,
 	}
 	if a.info.Mode != nil {
-		c.Mode = int32(*a.info.Mode)
+		if a.info.Mode.ModeStr != "" {
+			c.ModeStr = a.info.Mode.ModeStr
+		} else {
+			c.Mode = int32(a.info.Mode.Mode)
+		}
 	} else {
 		c.Mode = -1
 	}
@@ -573,6 +586,9 @@ func (a *fileActionCopy) addCaps(f *FileOp) {
 	}
 	if a.info.AlwaysReplaceExistingDestPaths {
 		addCap(&f.constraints, pb.CapFileCopyAlwaysReplaceExistingDestPaths)
+	}
+	if a.info.Mode.ModeStr != "" {
+		addCap(&f.constraints, pb.CapFileCopyModeStringFormat)
 	}
 }
 
