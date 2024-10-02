@@ -152,7 +152,7 @@ func init() {
 	}
 	flags = append(flags, cli.StringFlag{
 		Name:  "oci-worker-gc-keepstorage",
-		Usage: "Amount of storage GC keep locally, format \"Reserve[,Free[,Maximum]]\" (MB)",
+		Usage: "Amount of storage GC keep locally, format \"Reserved[,Free[,Maximum]]\" (MB)",
 		Value: func() string {
 			cfg := defaultConf.Workers.OCI.GCConfig
 			dstat, _ := disk.GetDiskStat(defaultConf.Root)
@@ -225,9 +225,9 @@ func applyOCIFlags(c *cli.Context, cfg *config.Config) error {
 		if err != nil {
 			return err
 		}
-		cfg.Workers.OCI.GCMinStorage = gc.GCMinStorage
-		cfg.Workers.OCI.GCFreeStorage = gc.GCFreeStorage
-		cfg.Workers.OCI.GCMaxStorage = gc.GCMaxStorage
+		cfg.Workers.OCI.GCReservedSpace = gc.GCReservedSpace
+		cfg.Workers.OCI.GCMaxUsedSpace = gc.GCMaxUsedSpace
+		cfg.Workers.OCI.GCMinFreeSpace = gc.GCMinFreeSpace
 	}
 
 	if c.GlobalIsSet("oci-worker-net") {

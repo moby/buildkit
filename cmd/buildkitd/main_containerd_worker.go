@@ -152,7 +152,7 @@ func init() {
 	}
 	flags = append(flags, cli.StringFlag{
 		Name:  "containerd-worker-gc-keepstorage",
-		Usage: "Amount of storage GC keep locally, format \"Reserve[,Free[,Maximum]]\" (MB)",
+		Usage: "Amount of storage GC keep locally, format \"Reserved[,Free[,Maximum]]\" (MB)",
 		Value: func() string {
 			cfg := defaultConf.Workers.Containerd.GCConfig
 			dstat, _ := disk.GetDiskStat(defaultConf.Root)
@@ -232,9 +232,9 @@ func applyContainerdFlags(c *cli.Context, cfg *config.Config) error {
 		if err != nil {
 			return err
 		}
-		cfg.Workers.Containerd.GCMinStorage = gc.GCMinStorage
-		cfg.Workers.Containerd.GCFreeStorage = gc.GCFreeStorage
-		cfg.Workers.Containerd.GCMaxStorage = gc.GCMaxStorage
+		cfg.Workers.Containerd.GCReservedSpace = gc.GCReservedSpace
+		cfg.Workers.Containerd.GCMinFreeSpace = gc.GCMinFreeSpace
+		cfg.Workers.Containerd.GCMaxUsedSpace = gc.GCMaxUsedSpace
 	}
 
 	if c.GlobalIsSet("containerd-worker-net") {

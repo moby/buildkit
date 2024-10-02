@@ -12,14 +12,14 @@ import (
 func gcConfigToString(cfg config.GCConfig, dstat disk.DiskStat) string {
 	if cfg.IsUnset() {
 		//nolint:staticcheck // used for backward compatibility
-		cfg.GCMinStorage = cfg.GCKeepStorage
+		cfg.GCReservedSpace = cfg.GCKeepStorage
 	}
 	if cfg.IsUnset() {
 		cfg = config.DetectDefaultGCCap(dstat)
 	}
-	out := []int64{cfg.GCMinStorage.AsBytes(disk.DiskStat{}) / 1e6}
-	free := cfg.GCFreeStorage.AsBytes(dstat) / 1e6
-	max := cfg.GCMaxStorage.AsBytes(dstat) / 1e6
+	out := []int64{cfg.GCReservedSpace.AsBytes(disk.DiskStat{}) / 1e6}
+	free := cfg.GCMinFreeSpace.AsBytes(dstat) / 1e6
+	max := cfg.GCMaxUsedSpace.AsBytes(dstat) / 1e6
 	if free != 0 || max != 0 {
 		out = append(out, free)
 		if max != 0 {
@@ -43,11 +43,11 @@ func stringToGCConfig(in string) (config.GCConfig, error) {
 		return cfg, nil
 	}
 	parts := strings.SplitN(in, ",", 3)
-	min, err := strconv.ParseInt(parts[0], 10, 64)
+	reserved, err := strconv.ParseInt(parts[0], 10, 64)
 	if err != nil {
 		return cfg, errors.Wrapf(err, "failed to parse storage %q", in)
 	}
-	cfg.GCMinStorage = config.DiskSpace{Bytes: min * 1e6}
+	cfg.GCReservedSpace = config.DiskSpace{Bytes: reserved * 1e6}
 	if len(parts) == 1 {
 		return cfg, nil
 	}
@@ -55,7 +55,7 @@ func stringToGCConfig(in string) (config.GCConfig, error) {
 	if err != nil {
 		return cfg, errors.Wrapf(err, "failed to parse free storage %q", in)
 	}
-	cfg.GCFreeStorage = config.DiskSpace{Bytes: free * 1e6}
+	cfg.GCMinFreeSpace = config.DiskSpace{Bytes: free * 1e6}
 	if len(parts) == 2 {
 		return cfg, nil
 	}
@@ -63,6 +63,6 @@ func stringToGCConfig(in string) (config.GCConfig, error) {
 	if err != nil {
 		return cfg, errors.Wrapf(err, "failed to parse max storage %q", in)
 	}
-	cfg.GCMaxStorage = config.DiskSpace{Bytes: max * 1e6}
+	cfg.GCMaxUsedSpace = config.DiskSpace{Bytes: max * 1e6}
 	return cfg, nil
 }

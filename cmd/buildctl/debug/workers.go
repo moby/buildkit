@@ -91,14 +91,14 @@ func printWorkersVerbose(tw *tabwriter.Writer, winfo []*client.WorkerInfo) {
 			if rule.KeepDuration > 0 {
 				fmt.Fprintf(tw, "\tKeep duration:\t%v\n", rule.KeepDuration.String())
 			}
-			if rule.MinStorage > 0 {
-				fmt.Fprintf(tw, "\tReserved storage:\t%g\n", units.Bytes(rule.MinStorage))
+			if rule.ReservedSpace > 0 {
+				fmt.Fprintf(tw, "\tReserved space:\t%g\n", units.Bytes(rule.ReservedSpace))
 			}
-			if rule.Free > 0 {
-				fmt.Fprintf(tw, "\tMaintain free storage:\t%g\n", units.Bytes(rule.Free))
+			if rule.MinFreeSpace > 0 {
+				fmt.Fprintf(tw, "\tMinimum free space:\t%g\n", units.Bytes(rule.MinFreeSpace))
 			}
-			if rule.MaxStorage > 0 {
-				fmt.Fprintf(tw, "\tMaximum storage:\t%g\n", units.Bytes(rule.MaxStorage))
+			if rule.MaxUsedSpace > 0 {
+				fmt.Fprintf(tw, "\tMaximum used space:\t%g\n", units.Bytes(rule.MaxUsedSpace))
 			}
 		}
 		fmt.Fprintf(tw, "\n")

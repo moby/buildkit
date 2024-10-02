@@ -928,16 +928,16 @@ func getGCPolicy(cfg config.GCConfig, root string) []client.PruneInfo {
 	out := make([]client.PruneInfo, 0, len(cfg.GCPolicy))
 	for _, rule := range cfg.GCPolicy {
 		//nolint:staticcheck
-		if rule.MinStorage == (config.DiskSpace{}) && rule.KeepBytes != (config.DiskSpace{}) {
-			rule.MinStorage = rule.KeepBytes
+		if rule.ReservedSpace == (config.DiskSpace{}) && rule.KeepBytes != (config.DiskSpace{}) {
+			rule.ReservedSpace = rule.KeepBytes
 		}
 		out = append(out, client.PruneInfo{
-			Filter:       rule.Filters,
-			All:          rule.All,
-			KeepDuration: rule.KeepDuration.Duration,
-			MinStorage:   rule.MinStorage.AsBytes(dstat),
-			MaxStorage:   rule.MaxStorage.AsBytes(dstat),
-			Free:         rule.Free.AsBytes(dstat),
+			Filter:        rule.Filters,
+			All:           rule.All,
+			KeepDuration:  rule.KeepDuration.Duration,
+			ReservedSpace: rule.ReservedSpace.AsBytes(dstat),
+			MaxUsedSpace:  rule.MaxUsedSpace.AsBytes(dstat),
+			MinFreeSpace:  rule.MinFreeSpace.AsBytes(dstat),
 		})
 	}
 	return out

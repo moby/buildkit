@@ -93,7 +93,7 @@ const (
 
 	CapSourcePolicy apicaps.CapID = "source.policy"
 
-	// GC/Prune controls allow FreeStorage and MaxStorage to be set
+	// GC/Prune controls allow MinFreeSpace and MaxUsedSpace to be set
 	CapGCFreeSpaceFilter apicaps.CapID = "gc.freespacefilter"
 )
 

@@ -70,7 +70,7 @@ const defaultCap int64 = 2e9 // 2GB
 
 func DefaultGCPolicy(cfg GCConfig, dstat disk.DiskStat) []GCPolicy {
 	if cfg.IsUnset() {
-		cfg.GCMinStorage = cfg.GCKeepStorage
+		cfg.GCReservedSpace = cfg.GCKeepStorage
 	}
 	if cfg.IsUnset() {
 		cfg = DetectDefaultGCCap(dstat)
@@ -80,27 +80,27 @@ func DefaultGCPolicy(cfg GCConfig, dstat disk.DiskStat) []GCPolicy {
 		{
 			Filters:      []string{"type==source.local,type==exec.cachemount,type==source.git.checkout"},
 			KeepDuration: Duration{Duration: time.Duration(48) * time.Hour}, // 48h
-			MaxStorage:   DiskSpace{Bytes: 512 * 1e6},                       // 512MB
+			MaxUsedSpace: DiskSpace{Bytes: 512 * 1e6},                       // 512MB
 		},
 		// remove any data not used for 60 days
 		{
-			KeepDuration: Duration{Duration: time.Duration(60) * 24 * time.Hour}, // 60d
-			Free:         cfg.GCFreeStorage,
-			MinStorage:   cfg.GCMinStorage,
-			MaxStorage:   cfg.GCMaxStorage,
+			KeepDuration:  Duration{Duration: time.Duration(60) * 24 * time.Hour}, // 60d
+			MinFreeSpace:  cfg.GCMinFreeSpace,
+			ReservedSpace: cfg.GCReservedSpace,
+			MaxUsedSpace:  cfg.GCMaxUsedSpace,
 		},
 		// keep the unshared build cache under cap
 		{
-			Free:       cfg.GCFreeStorage,
-			MinStorage: cfg.GCMinStorage,
-			MaxStorage: cfg.GCMaxStorage,
+			MinFreeSpace:  cfg.GCMinFreeSpace,
+			ReservedSpace: cfg.GCReservedSpace,
+			MaxUsedSpace:  cfg.GCMaxUsedSpace,
 		},
 		// if previous policies were insufficient start deleting internal data to keep build cache under cap
 		{
-			All:        true,
-			Free:       cfg.GCFreeStorage,
-			MinStorage: cfg.GCMinStorage,
-			MaxStorage: cfg.GCMaxStorage,
+			All:           true,
+			MinFreeSpace:  cfg.GCMinFreeSpace,
+			ReservedSpace: cfg.GCReservedSpace,
+			MaxUsedSpace:  cfg.GCMaxUsedSpace,
 		},
 	}
 }
@@ -125,9 +125,9 @@ func DetectDefaultGCCap(dstat disk.DiskStat) GCConfig {
 		max = DiskSpace{Bytes: DiskSpaceMaxBytes}
 	}
 	return GCConfig{
-		GCMinStorage:  reserve,
-		GCMaxStorage:  max,
-		GCFreeStorage: DiskSpace{Percentage: DiskSpaceFreePercentage},
+		GCReservedSpace: reserve,
+		GCMinFreeSpace:  DiskSpace{Percentage: DiskSpaceFreePercentage},
+		GCMaxUsedSpace:  max,
 	}
 }
 
@@ -149,5 +149,5 @@ func (d DiskSpace) AsBytes(dstat disk.DiskStat) int64 {
 }
 
 func (cfg *GCConfig) IsUnset() bool {
-	return cfg.GCMinStorage == DiskSpace{} && cfg.GCMaxStorage == DiskSpace{} && cfg.GCFreeStorage == DiskSpace{}
+	return cfg.GCReservedSpace == DiskSpace{} && cfg.GCMaxUsedSpace == DiskSpace{} && cfg.GCMinFreeSpace == DiskSpace{}
 }

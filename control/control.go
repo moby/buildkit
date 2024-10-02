@@ -220,12 +220,12 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 		func(w worker.Worker) {
 			eg.Go(func() error {
 				return w.Prune(ctx, ch, client.PruneInfo{
-					Filter:       req.Filter,
-					All:          req.All,
-					KeepDuration: time.Duration(req.KeepDuration),
-					MinStorage:   req.MinStorage,
-					MaxStorage:   req.MaxStorage,
-					Free:         req.Free,
+					Filter:        req.Filter,
+					All:           req.All,
+					KeepDuration:  time.Duration(req.KeepDuration),
+					ReservedSpace: req.ReservedSpace,
+					MaxUsedSpace:  req.MaxUsedSpace,
+					MinFreeSpace:  req.MinFreeSpace,
 				})
 			})
 		}(w)
@@ -655,12 +655,12 @@ func toPBGCPolicy(in []client.PruneInfo) []*apitypes.GCPolicy {
 	policy := make([]*apitypes.GCPolicy, 0, len(in))
 	for _, p := range in {
 		policy = append(policy, &apitypes.GCPolicy{
-			All:          p.All,
-			Filters:      p.Filter,
-			KeepDuration: int64(p.KeepDuration),
-			MinStorage:   p.MinStorage,
-			MaxStorage:   p.MaxStorage,
-			Free:         p.Free,
+			All:           p.All,
+			Filters:       p.Filter,
+			KeepDuration:  int64(p.KeepDuration),
+			ReservedSpace: p.ReservedSpace,
+			MaxUsedSpace:  p.MaxUsedSpace,
+			MinFreeSpace:  p.MinFreeSpace,
 		})
 	}
 	return policy
