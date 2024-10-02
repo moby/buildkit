@@ -21,6 +21,7 @@ import (
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/identity"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/db"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/iohelper"
@@ -128,6 +129,7 @@ func NewHistoryQueue(opt HistoryQueueOpt) (*HistoryQueue, error) {
 	}
 
 	go func() {
+		h.clearOrphans()
 		for {
 			h.gc()
 			time.Sleep(120 * time.Second)
@@ -324,6 +326,47 @@ func (h *HistoryQueue) gc() error {
 			if err := h.delete(r.Ref, false); err != nil {
 				return err
 			}
+		}
+	}
+
+	return nil
+}
+
+func (h *HistoryQueue) clearOrphans() error {
+	ctx := context.Background()
+	var records []*controlapi.BuildHistoryRecord
+
+	if err := h.opt.DB.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(recordsBucket))
+		if b == nil {
+			return nil
+		}
+		return b.ForEach(func(key, dt []byte) error {
+			var br controlapi.BuildHistoryRecord
+			if err := proto.Unmarshal(dt, &br); err != nil {
+				return errors.Wrapf(err, "failed to unmarshal build record %s", key)
+			}
+			recs, err := h.hLeaseManager.ListResources(ctx, leases.Lease{ID: h.leaseID(string(key))})
+			if (err != nil && cerrdefs.IsNotFound(err)) || len(recs) == 0 {
+				records = append(records, &br)
+			}
+			return nil
+		})
+	}); err != nil {
+		return err
+	}
+
+	if len(records) == 0 {
+		return nil
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	for _, r := range records {
+		bklog.G(ctx).Warnf("deleting build record %s due to missing blobs", r.Ref)
+		if err := h.delete(r.Ref, false); err != nil {
+			return err
 		}
 	}
 
