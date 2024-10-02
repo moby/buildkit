@@ -17,7 +17,6 @@ import (
 	"github.com/moby/buildkit/util/sshutil"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
-	protobuf "google.golang.org/protobuf/proto"
 )
 
 type SourceOp struct {
@@ -50,9 +49,10 @@ func (s *SourceOp) Validate(ctx context.Context, c *Constraints) error {
 }
 
 func (s *SourceOp) Marshal(ctx context.Context, constraints *Constraints) (digest.Digest, []byte, *pb.OpMetadata, []*SourceLocation, error) {
-	if s.Cached(constraints) {
-		return s.Load()
+	if dgst, dt, md, srcs, err := s.Load(constraints); err == nil {
+		return dgst, dt, md, srcs, nil
 	}
+
 	if err := s.Validate(ctx, constraints); err != nil {
 		return "", nil, nil, nil, err
 	}
@@ -77,13 +77,12 @@ func (s *SourceOp) Marshal(ctx context.Context, constraints *Constraints) (diges
 		proto.Platform = nil
 	}
 
-	dt, err := protobuf.Marshal(proto)
+	dt, err := deterministicMarshal(proto)
 	if err != nil {
 		return "", nil, nil, nil, err
 	}
 
-	s.Store(dt, md, s.constraints.SourceLocations, constraints)
-	return s.Load()
+	return s.Store(dt, md, s.constraints.SourceLocations, constraints)
 }
 
 func (s *SourceOp) Output() Output {

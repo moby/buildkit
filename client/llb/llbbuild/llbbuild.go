@@ -47,9 +47,10 @@ func (b *build) Validate(context.Context, *llb.Constraints) error {
 }
 
 func (b *build) Marshal(ctx context.Context, c *llb.Constraints) (digest.Digest, []byte, *pb.OpMetadata, []*llb.SourceLocation, error) {
-	if b.Cached(c) {
-		return b.Load()
+	if dgst, dt, md, srcs, err := b.Load(c); err == nil {
+		return dgst, dt, md, srcs, nil
 	}
+
 	pbo := &pb.BuildOp{
 		Builder: int64(pb.LLBBuilder),
 		Inputs: map[string]*pb.BuildInput{
@@ -84,8 +85,7 @@ func (b *build) Marshal(ctx context.Context, c *llb.Constraints) (digest.Digest,
 	if err != nil {
 		return "", nil, nil, nil, err
 	}
-	b.Store(dt, md, b.constraints.SourceLocations, c)
-	return b.Load()
+	return b.Store(dt, md, b.constraints.SourceLocations, c)
 }
 
 func (b *build) Output() llb.Output {

@@ -2,7 +2,9 @@ package llb
 
 import (
 	"io"
+	"sync"
 
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/containerd/platforms"
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
@@ -115,25 +117,37 @@ func MarshalConstraints(base, override *Constraints) (*pb.Op, *pb.OpMetadata) {
 }
 
 type MarshalCache struct {
-	digest      digest.Digest
-	dt          []byte
-	md          *pb.OpMetadata
-	srcs        []*SourceLocation
-	constraints *Constraints
+	cache sync.Map
 }
 
-func (mc *MarshalCache) Cached(c *Constraints) bool {
-	return mc.dt != nil && mc.constraints == c
+func (mc *MarshalCache) Load(c *Constraints) (digest.Digest, []byte, *pb.OpMetadata, []*SourceLocation, error) {
+	v, ok := mc.cache.Load(c)
+	if !ok {
+		return "", nil, nil, nil, cerrdefs.ErrNotFound
+	}
+
+	res := v.(*marshalCacheResult)
+	return res.digest, res.dt, res.md, res.srcs, nil
 }
 
-func (mc *MarshalCache) Load() (digest.Digest, []byte, *pb.OpMetadata, []*SourceLocation, error) {
-	return mc.digest, mc.dt, mc.md, mc.srcs, nil
+func (mc *MarshalCache) Store(dt []byte, md *pb.OpMetadata, srcs []*SourceLocation, c *Constraints) (digest.Digest, []byte, *pb.OpMetadata, []*SourceLocation, error) {
+	res := &marshalCacheResult{
+		digest: digest.FromBytes(dt),
+		dt:     dt,
+		md:     md,
+		srcs:   srcs,
+	}
+	mc.cache.Store(c, res)
+	return res.digest, res.dt, res.md, res.srcs, nil
 }
 
-func (mc *MarshalCache) Store(dt []byte, md *pb.OpMetadata, srcs []*SourceLocation, c *Constraints) {
-	mc.digest = digest.FromBytes(dt)
-	mc.dt = dt
-	mc.md = md
-	mc.constraints = c
-	mc.srcs = srcs
+type marshalCacheResult struct {
+	digest digest.Digest
+	dt     []byte
+	md     *pb.OpMetadata
+	srcs   []*SourceLocation
+}
+
+func deterministicMarshal[Message proto.Message](m Message) ([]byte, error) {
+	return proto.MarshalOptions{Deterministic: true}.Marshal(m)
 }
