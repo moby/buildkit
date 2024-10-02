@@ -265,7 +265,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 
 	// Validate that base images continue to be valid even
 	// when no build arguments are used.
-	validateBaseImagesWithDefaultArgs(stages, shlex, argCmds, globalArgs, lint)
+	validateBaseImagesWithDefaultArgs(stages, shlex, globalArgs, argCmds, lint)
 
 	// Rebuild the arguments using the provided build arguments
 	// for the remainder of the build.
@@ -284,7 +284,8 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	// set base state for every image
 	for i, st := range stages {
 		nameMatch, err := shlex.ProcessWordWithMatches(st.BaseName, globalArgs)
-		reportUnusedFromArgs(globalArgs, nameMatch.Unmatched, st.Location, lint)
+		argKeys := unusedFromArgsCheckKeys(globalArgs, outline.allArgs)
+		reportUnusedFromArgs(argKeys, nameMatch.Unmatched, st.Location, lint)
 		used := nameMatch.Matched
 		if used == nil {
 			used = map[string]struct{}{}
@@ -311,7 +312,8 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 
 		if v := st.Platform; v != "" {
 			platMatch, err := shlex.ProcessWordWithMatches(v, globalArgs)
-			reportUnusedFromArgs(globalArgs, platMatch.Unmatched, st.Location, lint)
+			argKeys := unusedFromArgsCheckKeys(globalArgs, outline.allArgs)
+			reportUnusedFromArgs(argKeys, platMatch.Unmatched, st.Location, lint)
 			reportRedundantTargetPlatform(st.Platform, platMatch, st.Location, globalArgs, lint)
 			reportConstPlatformDisallowed(st.Name, platMatch, st.Location, lint)
 
@@ -2332,9 +2334,27 @@ func toPBLocation(sourceIndex int, location []parser.Range) pb.Location {
 	}
 }
 
-func reportUnusedFromArgs(args shell.EnvGetter, unmatched map[string]struct{}, location []parser.Range, lint *linter.Linter) {
+func unusedFromArgsCheckKeys(env shell.EnvGetter, args map[string]argInfo) map[string]struct{} {
+	matched := make(map[string]struct{})
+	for _, arg := range args {
+		matched[arg.definition.Key] = struct{}{}
+	}
+	for _, k := range env.Keys() {
+		matched[k] = struct{}{}
+	}
+	return matched
+}
+
+func reportUnusedFromArgs(testArgKeys map[string]struct{}, unmatched map[string]struct{}, location []parser.Range, lint *linter.Linter) {
+	var argKeys []string
+	for arg := range testArgKeys {
+		argKeys = append(argKeys, arg)
+	}
 	for arg := range unmatched {
-		suggest, _ := suggest.Search(arg, args.Keys(), true)
+		if _, ok := testArgKeys[arg]; ok {
+			continue
+		}
+		suggest, _ := suggest.Search(arg, argKeys, true)
 		msg := linter.RuleUndefinedArgInFrom.Format(arg, suggest)
 		lint.Run(&linter.RuleUndefinedArgInFrom, location, msg)
 	}
@@ -2456,10 +2476,10 @@ func validateNoSecretKey(instruction, key string, location []parser.Range, lint 
 	}
 }
 
-func validateBaseImagesWithDefaultArgs(stages []instructions.Stage, shlex *shell.Lex, argsCmds []instructions.ArgCommand, args *llb.EnvList, lint *linter.Linter) {
+func validateBaseImagesWithDefaultArgs(stages []instructions.Stage, shlex *shell.Lex, env *llb.EnvList, argCmds []instructions.ArgCommand, lint *linter.Linter) {
 	// Build the arguments as if no build options were given
 	// and using only defaults.
-	args, _, err := buildMetaArgs(args, shlex, argsCmds, nil)
+	args, _, err := buildMetaArgs(env, shlex, argCmds, nil)
 	if err != nil {
 		// Abandon running the linter. We'll likely fail after this point
 		// with the same error but we shouldn't error here inside
