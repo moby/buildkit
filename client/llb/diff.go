@@ -5,7 +5,6 @@ import (
 
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
-	protobuf "google.golang.org/protobuf/proto"
 )
 
 type DiffOp struct {
@@ -32,8 +31,8 @@ func (m *DiffOp) Validate(ctx context.Context, constraints *Constraints) error {
 }
 
 func (m *DiffOp) Marshal(ctx context.Context, constraints *Constraints) (digest.Digest, []byte, *pb.OpMetadata, []*SourceLocation, error) {
-	if m.Cached(constraints) {
-		return m.Load()
+	if dgst, dt, md, srcs, err := m.Load(constraints); err == nil {
+		return dgst, dt, md, srcs, nil
 	}
 	if err := m.Validate(ctx, constraints); err != nil {
 		return "", nil, nil, nil, err
@@ -68,13 +67,12 @@ func (m *DiffOp) Marshal(ctx context.Context, constraints *Constraints) (digest.
 
 	proto.Op = &pb.Op_Diff{Diff: op}
 
-	dt, err := protobuf.Marshal(proto)
+	dt, err := deterministicMarshal(proto)
 	if err != nil {
 		return "", nil, nil, nil, err
 	}
 
-	m.Store(dt, md, m.constraints.SourceLocations, constraints)
-	return m.Load()
+	return m.Store(dt, md, m.constraints.SourceLocations, constraints)
 }
 
 func (m *DiffOp) Output() Output {

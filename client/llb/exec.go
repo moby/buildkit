@@ -129,9 +129,10 @@ func (e *ExecOp) Validate(ctx context.Context, c *Constraints) error {
 }
 
 func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []byte, *pb.OpMetadata, []*SourceLocation, error) {
-	if e.Cached(c) {
-		return e.Load()
+	if dgst, dt, md, srcs, err := e.Load(c); err == nil {
+		return dgst, dt, md, srcs, nil
 	}
+
 	if err := e.Validate(ctx, c); err != nil {
 		return "", nil, nil, nil, err
 	}
@@ -442,12 +443,11 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		peo.Mounts = append(peo.Mounts, pm)
 	}
 
-	dt, err := proto.Marshal(pop)
+	dt, err := deterministicMarshal(pop)
 	if err != nil {
 		return "", nil, nil, nil, err
 	}
-	e.Store(dt, md, e.constraints.SourceLocations, c)
-	return e.Load()
+	return e.Store(dt, md, e.constraints.SourceLocations, c)
 }
 
 func (e *ExecOp) Output() Output {

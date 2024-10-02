@@ -730,9 +730,10 @@ func (ms *marshalState) add(fa *FileAction, c *Constraints) (*fileActionState, e
 }
 
 func (f *FileOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []byte, *pb.OpMetadata, []*SourceLocation, error) {
-	if f.Cached(c) {
-		return f.Load()
+	if dgst, dt, md, srcs, err := f.Load(c); err == nil {
+		return dgst, dt, md, srcs, nil
 	}
+
 	if err := f.Validate(ctx, c); err != nil {
 		return "", nil, nil, nil, err
 	}
@@ -795,12 +796,11 @@ func (f *FileOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		})
 	}
 
-	dt, err := proto.Marshal(pop)
+	dt, err := deterministicMarshal(pop)
 	if err != nil {
 		return "", nil, nil, nil, err
 	}
-	f.Store(dt, md, f.constraints.SourceLocations, c)
-	return f.Load()
+	return f.Store(dt, md, f.constraints.SourceLocations, c)
 }
 
 func normalizePath(parent, p string, keepSlash bool) string {

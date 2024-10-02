@@ -228,7 +228,7 @@ func recomputeDigests(ctx context.Context, all map[digest.Digest]*pb.Op, visited
 		return dgst, nil
 	}
 
-	dt, err := proto.Marshal(op)
+	dt, err := deterministicMarshal(op)
 	if err != nil {
 		return "", err
 	}
@@ -263,7 +263,7 @@ func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEval
 				return solver.Edge{}, errors.Wrap(err, "error evaluating the source policy")
 			}
 			if mutated {
-				dtMutated, err := proto.Marshal(&op)
+				dtMutated, err := deterministicMarshal(&op)
 				if err != nil {
 					return solver.Edge{}, err
 				}
@@ -396,4 +396,8 @@ func fileOpName(actions []*pb.FileAction) string {
 	}
 
 	return strings.Join(names, ", ")
+}
+
+func deterministicMarshal[Message proto.Message](m Message) ([]byte, error) {
+	return proto.MarshalOptions{Deterministic: true}.Marshal(m)
 }
