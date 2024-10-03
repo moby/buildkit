@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v3.11.4
-// source: auth.proto
+// source: github.com/moby/buildkit/session/auth/auth.proto
 
 package auth
 
@@ -229,5 +229,5 @@ var Auth_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "auth.proto",
+	Metadata: "github.com/moby/buildkit/session/auth/auth.proto",
 }

@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v3.11.4
-// source: control.proto
+// source: github.com/moby/buildkit/api/services/control/control.proto
 
 package moby_buildkit_v1
 
@@ -423,5 +423,5 @@ var Control_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "control.proto",
+	Metadata: "github.com/moby/buildkit/api/services/control/control.proto",
 }

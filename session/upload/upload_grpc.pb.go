@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v3.11.4
-// source: upload.proto
+// source: github.com/moby/buildkit/session/upload/upload.proto
 
 package upload
 
@@ -109,5 +109,5 @@ var Upload_ServiceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 	},
-	Metadata: "upload.proto",
+	Metadata: "github.com/moby/buildkit/session/upload/upload.proto",
 }
