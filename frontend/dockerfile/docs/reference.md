@@ -2349,9 +2349,8 @@ at build-time, the builder uses the default.
 
 ### Scope
 
-An `ARG` variable definition comes into effect from the line on which it is
-defined in the Dockerfile not from the argument's use on the command-line or
-elsewhere. For example, consider this Dockerfile:
+An `ARG` variable comes into effect from the line on which it is declared in
+the Dockerfile. For example, consider this Dockerfile:
 
 ```dockerfile
 FROM busybox
@@ -2367,24 +2366,22 @@ A user builds this file by calling:
 $ docker build --build-arg username=what_user .
 ```
 
-The `USER` at line 2 evaluates to `some_user` as the `username` variable is defined on the
-subsequent line 3. The `USER` at line 4 evaluates to `what_user`, as the `username` argument is
-defined and the `what_user` value was passed on the command line. Prior to its definition by an
-`ARG` instruction, any use of a variable results in an empty string.
+- The `USER` instruction on line 2 evaluates to the `some_user` fallback,
+  because the `username` variable is not yet declared.
+- The `username` variable is declared on line 3, and available for reference in
+  Dockerfile instruction from that point onwards.
+- The `USER` instruction on line 4 evaluates to `what_user`, since at that
+  point the `username` argument has a value of `what_user` which was passed on
+  the command line. Prior to its definition by an `ARG` instruction, any use of
+  a variable results in an empty string.
 
-An `ARG` instruction goes out of scope at the end of the build
-stage where it was defined. To use an argument in multiple stages, each stage must
-include the `ARG` instruction.
+An `ARG` variable declared within a build stage is automatically inherited by
+other stages based on that stage. Unrelated build stages do not have access to
+the variable. To use an argument in multiple distinct stages, each stage must
+include the `ARG` instruction, or they must both be based on a shared base
+stage in the same Dockerfile where the variable is declared.
 
-```dockerfile
-FROM busybox
-ARG SETTINGS
-RUN ./run/setup $SETTINGS
-
-FROM busybox
-ARG SETTINGS
-RUN ./run/other $SETTINGS
-```
+For more information, refer to [variable scoping](https://docs.docker.com/build/building/variables/#scoping).
 
 ### Using ARG variables
 
