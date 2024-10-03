@@ -2622,8 +2622,6 @@ another build. The trigger will be executed in the context of the
 downstream build, as if it had been inserted immediately after the
 `FROM` instruction in the downstream Dockerfile.
 
-Any build instruction can be registered as a trigger.
-
 This is useful if you are building an image which will be used as a base
 to build other images, for example an application build environment or a
 daemon which may be customized with user-specific configuration.
@@ -2666,11 +2664,26 @@ ONBUILD ADD . /app/src
 ONBUILD RUN /usr/local/bin/python-build --dir /app/src
 ```
 
+### Copy or mount from stage, image, or context
+
+As of Dockerfile syntax 1.11, you can use `ONBUILD` with instructions that copy
+or mount files from other stages, images, or build contexts. For example:
+
+```dockerfile
+# syntax=docker/dockerfile:1.11
+FROM alpine AS baseimage
+ONBUILD COPY --from=build /usr/bin/app /app
+ONBUILD RUN --mount=from=config,target=/opt/appconfig ...
+```
+
+If the source of `from` is a build stage, the stage must be defined in the
+Dockerfile where `ONBUILD` gets triggered. If it's a named context, that
+context must be passed to the downstream build.
+
 ### ONBUILD limitations
 
 - Chaining `ONBUILD` instructions using `ONBUILD ONBUILD` isn't allowed.
 - The `ONBUILD` instruction may not trigger `FROM` or `MAINTAINER` instructions.
-- `ONBUILD COPY --from` is [not supported](https://github.com/moby/buildkit/issues/816).
 
 ## STOPSIGNAL
 
