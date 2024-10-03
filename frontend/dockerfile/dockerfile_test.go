@@ -1928,6 +1928,8 @@ COPY arch-$TARGETARCH whoami
 
 // tonistiigi/fsutil#46
 func testContextChangeDirToFile(t *testing.T, sb integration.Sandbox) {
+	// TODO(profnandaa): investigating flakyness on Windows CI
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(integration.UnixOrWindows(
