@@ -62,13 +62,14 @@ require (
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.7.0
+	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10
 	github.com/prometheus/client_golang v1.17.0
 	github.com/prometheus/procfs v0.15.1
 	github.com/serialx/hashring v0.0.0-20200727003509-22c0c7ab6b1b
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spdx/tools-golang v0.5.3
 	github.com/stretchr/testify v1.9.0
-	github.com/tonistiigi/fsutil v0.0.0-20241001141129-e98dfb603c6f
+	github.com/tonistiigi/fsutil v0.0.0-20241003195857-3f140a1299b0
 	github.com/tonistiigi/go-actions-cache v0.0.0-20240327122527-58651d5e11d6
 	github.com/tonistiigi/go-archvariant v1.0.0
 	github.com/tonistiigi/go-csvvalue v0.0.0-20240710180619-ddb21b71c0b4

@@ -294,7 +294,7 @@ func (h *HistoryQueue) gc() error {
 		}
 		return b.ForEach(func(key, dt []byte) error {
 			var br controlapi.BuildHistoryRecord
-			if err := proto.Unmarshal(dt, &br); err != nil {
+			if err := br.UnmarshalVT(dt); err != nil {
 				return errors.Wrapf(err, "failed to unmarshal build record %s", key)
 			}
 			if br.Pinned {
@@ -460,7 +460,7 @@ func (h *HistoryQueue) UpdateRef(ctx context.Context, ref string, upt func(r *co
 			return errors.Wrapf(os.ErrNotExist, "failed to retrieve ref %s", ref)
 		}
 
-		if err := proto.Unmarshal(dt, &br); err != nil {
+		if err := br.UnmarshalVT(dt); err != nil {
 			return errors.Wrapf(err, "failed to unmarshal build record %s", ref)
 		}
 		return nil
@@ -500,7 +500,7 @@ func (h *HistoryQueue) Status(ctx context.Context, ref string, st chan<- *client
 			return errors.Wrapf(os.ErrNotExist, "failed to retrieve ref %s", ref)
 		}
 
-		if err := proto.Unmarshal(dt, &br); err != nil {
+		if err := br.UnmarshalVT(dt); err != nil {
 			return errors.Wrapf(err, "failed to unmarshal build record %s", ref)
 		}
 		return nil
@@ -545,7 +545,7 @@ func (h *HistoryQueue) Status(ctx context.Context, ref string, st chan<- *client
 			return err
 		}
 		var sr controlapi.StatusResponse
-		if err := proto.Unmarshal(buf[:sz], &sr); err != nil {
+		if err := sr.UnmarshalVT(buf[:sz]); err != nil {
 			return err
 		}
 		st <- client.NewSolveStatus(&sr)
@@ -560,7 +560,7 @@ func (h *HistoryQueue) update(ctx context.Context, rec *controlapi.BuildHistoryR
 		if b == nil {
 			return nil
 		}
-		dt, err := proto.Marshal(rec)
+		dt, err := rec.MarshalVT()
 		if err != nil {
 			return err
 		}
@@ -844,15 +844,14 @@ func (h *HistoryQueue) ImportStatus(ctx context.Context, ch chan *client.SolveSt
 
 		hdr := make([]byte, 4)
 		for _, pst := range st.Marshal() {
-			sz := proto.Size(pst)
+			sz := pst.SizeVT()
 			if len(buf) < sz {
 				buf = make([]byte, sz)
 			}
-			buf, err := proto.MarshalOptions{}.MarshalAppend(buf[:0], pst)
+			n, err := pst.MarshalToVT(buf)
 			if err != nil {
 				return nil, nil, err
 			}
-			n := uint32(len(buf))
 			binary.LittleEndian.PutUint32(hdr, uint32(n))
 			if _, err := bufW.Write(hdr); err != nil {
 				return nil, nil, err
@@ -953,7 +952,7 @@ func (h *HistoryQueue) Listen(ctx context.Context, req *controlapi.BuildHistoryR
 					return nil
 				}
 				var br controlapi.BuildHistoryRecord
-				if err := proto.Unmarshal(dt, &br); err != nil {
+				if err := br.UnmarshalVT(dt); err != nil {
 					return errors.Wrapf(err, "failed to unmarshal build record %s", key)
 				}
 				events = append(events, &controlapi.BuildHistoryEvent{

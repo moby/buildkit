@@ -8,7 +8,6 @@ import (
 	pb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/pkg/errors"
-	"google.golang.org/protobuf/proto"
 )
 
 func WithSource(err error, src *Source) error {
@@ -36,7 +35,7 @@ func Sources(err error) []*Source {
 	var es *ErrorSource
 	if errors.As(err, &es) {
 		out = Sources(es.Unwrap())
-		out = append(out, proto.Clone(es.Source).(*Source))
+		out = append(out, es.Source.CloneVT())
 	}
 	return out
 }

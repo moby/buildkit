@@ -31,7 +31,6 @@ import (
 	fstypes "github.com/tonistiigi/fsutil/types"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
-	"google.golang.org/protobuf/proto"
 )
 
 type SolveOpt struct {
@@ -395,7 +394,7 @@ func prepareSyncedFiles(def *llb.Definition, localMounts map[string]fsutil.FS) (
 	} else {
 		for _, dt := range def.Def {
 			var op pb.Op
-			if err := proto.Unmarshal(dt, &op); err != nil {
+			if err := op.UnmarshalVT(dt); err != nil {
 				return nil, errors.Wrap(err, "failed to parse llb proto op")
 			}
 			if src := op.GetSource(); src != nil {

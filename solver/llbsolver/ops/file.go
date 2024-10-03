@@ -24,7 +24,6 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
-	"google.golang.org/protobuf/proto"
 )
 
 const fileCacheType = "buildkit.file.v0"
@@ -70,7 +69,7 @@ func (f *fileOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 		var err error
 		switch a := action.Action.(type) {
 		case *pb.FileAction_Mkdir:
-			p := proto.Clone(a.Mkdir).(*pb.FileActionMkDir)
+			p := a.Mkdir.CloneVT()
 			markInvalid(action.Input)
 			processOwner(p.Owner, selectors)
 			dt, err = json.Marshal(p)
@@ -78,7 +77,7 @@ func (f *fileOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 				return nil, false, err
 			}
 		case *pb.FileAction_Mkfile:
-			p := proto.Clone(a.Mkfile).(*pb.FileActionMkFile)
+			p := a.Mkfile.CloneVT()
 			markInvalid(action.Input)
 			processOwner(p.Owner, selectors)
 			dt, err = json.Marshal(p)
@@ -86,14 +85,14 @@ func (f *fileOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 				return nil, false, err
 			}
 		case *pb.FileAction_Rm:
-			p := proto.Clone(a.Rm).(*pb.FileActionRm)
+			p := a.Rm.CloneVT()
 			markInvalid(action.Input)
 			dt, err = json.Marshal(p)
 			if err != nil {
 				return nil, false, err
 			}
 		case *pb.FileAction_Copy:
-			p := proto.Clone(a.Copy).(*pb.FileActionCopy)
+			p := a.Copy.CloneVT()
 			markInvalid(action.Input)
 			processOwner(p.Owner, selectors)
 			if action.SecondaryInput != -1 && int(action.SecondaryInput) < f.numInputs {

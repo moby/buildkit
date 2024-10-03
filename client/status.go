@@ -5,7 +5,6 @@ import (
 
 	controlapi "github.com/moby/buildkit/api/services/control"
 	digest "github.com/opencontainers/go-digest"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -13,7 +12,7 @@ var emptyLogVertexSize int
 
 func init() {
 	emptyLogVertex := controlapi.VertexLog{}
-	emptyLogVertexSize = proto.Size(&emptyLogVertex)
+	emptyLogVertexSize = emptyLogVertex.SizeVT()
 }
 
 func NewSolveStatus(resp *controlapi.StatusResponse) *SolveStatus {

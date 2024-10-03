@@ -1,7 +1,5 @@
 package types
 
-import "google.golang.org/protobuf/proto"
-
 const (
 	PACKET_STAT = Packet_PACKET_STAT
 	PACKET_REQ  = Packet_PACKET_REQ
@@ -11,13 +9,13 @@ const (
 )
 
 func (p *Packet) Marshal() ([]byte, error) {
-	return proto.MarshalOptions{Deterministic: true}.Marshal(p)
+	return p.MarshalVTStrict()
 }
 
 func (p *Packet) Unmarshal(dAtA []byte) error {
-	return proto.UnmarshalOptions{Merge: true}.Unmarshal(dAtA, p)
+	return p.UnmarshalVT(dAtA)
 }
 
 func (p *Packet) Size() int {
-	return proto.Size(p)
+	return p.SizeVT()
 }
