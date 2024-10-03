@@ -101,6 +101,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testFileOpCopyAlwaysReplaceExistingDestPaths,
 	testFileOpRmWildcard,
 	testFileOpCopyUIDCache,
+	testFileOpCopyChmodText,
 	testCallDiskUsage,
 	testBuildMultiMount,
 	testBuildHTTPSource,
@@ -1703,6 +1704,48 @@ func testFileOpCopyRm(t *testing.T, sb integration.Sandbox) {
 	dt, err = os.ReadFile(filepath.Join(destDir, "file2"))
 	require.NoError(t, err)
 	require.Equal(t, []byte("file2"), dt)
+}
+
+func testFileOpCopyChmodText(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	tcases := []struct {
+		src  string
+		dest string
+		mode string
+	}{
+		{"file", "f1", "go-w"},
+		{"file", "f2", "o-rwx,g+x"},
+		{"file", "f3", "u=rwx,g=,o="},
+		{"file", "f4", "u+rw,g+r,o-x,o+w"},
+		{"dir", "d1", "a+X"},
+		{"dir", "d2", "g+rw,o+rw"},
+	}
+
+	st := llb.Image("alpine").
+		Run(llb.Shlex(`sh -c "mkdir /input && touch /input/file && mkdir /input/dir && chmod 0400 /input/dir && mkdir /expected"`))
+
+	for _, tc := range tcases {
+		st = st.Run(llb.Shlex(`sh -c "cp -a /input/` + tc.src + ` /expected/` + tc.dest + ` && chmod ` + tc.mode + ` /expected/` + tc.dest + `"`))
+	}
+	cp := llb.Scratch()
+
+	for _, tc := range tcases {
+		cp = cp.File(llb.Copy(st.Root(), "/input/"+tc.src, "/"+tc.dest, llb.ChmodOpt{ModeStr: tc.mode}))
+	}
+
+	for _, tc := range tcases {
+		st = st.Run(llb.Shlex(`sh -c '[ "$(stat -c '%A' /expected/`+tc.dest+`)" == "$(stat -c '%A' /actual/`+tc.dest+`)" ]'`), llb.AddMount("/actual", cp, llb.Readonly))
+	}
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
 }
 
 // moby/buildkit#3291

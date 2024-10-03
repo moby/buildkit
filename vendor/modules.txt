@@ -733,8 +733,11 @@ github.com/spdx/tools-golang/spdx/v2/v2_3
 ## explicit; go 1.17
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
-# github.com/tonistiigi/fsutil v0.0.0-20240926161958-8754824c3c4f
-## explicit; go 1.20
+# github.com/tonistiigi/dchapes-mode v0.0.0-20241001053921-ca0759fec205
+## explicit; go 1.21
+github.com/tonistiigi/dchapes-mode
+# github.com/tonistiigi/fsutil v0.0.0-20241001141129-e98dfb603c6f
+## explicit; go 1.21
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy
 github.com/tonistiigi/fsutil/types
