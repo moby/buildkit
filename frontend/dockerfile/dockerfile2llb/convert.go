@@ -602,7 +602,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 
 			if len(d.image.Config.OnBuild) > 0 {
 				if b, err := initOnBuildTriggers(d, d.image.Config.OnBuild, allDispatchStates); err != nil {
-					return nil, err
+					return nil, parser.SetLocation(err, d.stage.Location)
 				} else if b {
 					newDeps = true
 				}
@@ -788,7 +788,7 @@ func toCommand(ic instructions.Command, allDispatchStates *dispatchStates) (comm
 				stn, ok = allDispatchStates.findStateByName(c.From)
 				if !ok {
 					stn = &dispatchState{
-						stage:        instructions.Stage{BaseName: c.From, Location: ic.Location()},
+						stage:        instructions.Stage{BaseName: c.From, Location: c.Location()},
 						deps:         make(map[*dispatchState]instructions.Command),
 						paths:        make(map[string]struct{}),
 						unregistered: true,
@@ -1113,6 +1113,9 @@ func initOnBuildTriggers(d *dispatchState, triggers []string, allDispatchStates 
 		if len(ast.AST.Children) != 1 {
 			return false, errors.New("onbuild trigger should be a single expression")
 		}
+		node := ast.AST.Children[0]
+		// reset the location to the onbuild trigger
+		node.StartLine, node.EndLine = rangeStartEnd(d.stage.Location)
 		ic, err := instructions.ParseCommand(ast.AST.Children[0])
 		if err != nil {
 			return false, err
@@ -2515,6 +2518,23 @@ func buildMetaArgs(args *llb.EnvList, shlex *shell.Lex, argCommands []instructio
 		}
 	}
 	return args, allArgs, nil
+}
+
+func rangeStartEnd(r []parser.Range) (int, int) {
+	if len(r) == 0 {
+		return 0, 0
+	}
+	start := math.MaxInt32
+	end := 0
+	for _, rng := range r {
+		if rng.Start.Line < start {
+			start = rng.Start.Line
+		}
+		if rng.End.Line > end {
+			end = rng.End.Line
+		}
+	}
+	return start, end
 }
 
 type emptyEnvs struct{}
