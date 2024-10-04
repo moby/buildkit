@@ -1134,6 +1134,7 @@ func initOnBuildTriggers(d *dispatchState, triggers []string, allDispatchStates 
 		}
 	}
 	d.commands = append(commands, d.commands...)
+	d.cmdTotal += len(commands)
 
 	return hasNewDeps, nil
 }
