@@ -1371,12 +1371,21 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 
 	var mode *llb.ChmodOpt
 	if cfg.chmod != "" {
+		mode = &llb.ChmodOpt{}
 		p, err := strconv.ParseUint(cfg.chmod, 8, 32)
-		if err != nil || p > 0o7777 {
-			return errors.Errorf("invalid chmod parameter: '%v'. it should be octal string and between 0 and 07777", cfg.chmod)
+		nonOctalErr := errors.Errorf("invalid chmod parameter: '%v'. it should be octal string and between 0 and 07777", cfg.chmod)
+		if err == nil {
+			if p > 0o7777 {
+				return nonOctalErr
+			}
+			mode.Mode = os.FileMode(p)
+		} else {
+			if featureCopyChmodNonOctalEnabled {
+				mode.ModeStr = cfg.chmod
+			} else {
+				return nonOctalErr
+			}
 		}
-		perm := os.FileMode(p)
-		mode = &llb.ChmodOpt{Mode: perm}
 	}
 
 	if cfg.checksum != "" {
