@@ -9256,7 +9256,13 @@ cat <<EOF > $BUILDKIT_SCAN_DESTINATION/spdx.json
 {
   "_type": "https://in-toto.io/Statement/v0.1",
   "predicateType": "https://spdx.dev/Document",
-  "predicate": {"name": "fallback"}
+  "predicate": {
+	"name": "fallback",
+	"extraParams": {
+	  "ARG1": "$BUILDKIT_SCAN_ARG1",
+	  "ARG2": "$BUILDKIT_SCAN_ARG2"
+	}
+  }
 }
 EOF
 `
@@ -9479,6 +9485,74 @@ EOF
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
 	require.Subset(t, attest.Predicate, map[string]interface{}{"name": "frontend"})
+
+	// test configuring the scanner (simple)
+	target = registry + "/buildkit/testsbom4:latest"
+	_, err = c.Build(sb.Context(), SolveOpt{
+		FrontendAttrs: map[string]string{
+			"attest:sbom": "generator=" + scannerTarget + ",ARG1=foo,ARG2=bar",
+		},
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, "", makeTargetFrontend(false), nil)
+	require.NoError(t, err)
+
+	desc, provider, err = contentutil.ProviderFromRef(target)
+	require.NoError(t, err)
+
+	imgs, err = testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(imgs.Images))
+
+	att = imgs.Find("unknown/unknown")
+	attest = intoto.Statement{}
+	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
+	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
+	require.Subset(t, attest.Predicate, map[string]interface{}{
+		"extraParams": map[string]interface{}{"ARG1": "foo", "ARG2": "bar"},
+	})
+
+	// test configuring the scanner (complex)
+	target = registry + "/buildkit/testsbom4:latest"
+	_, err = c.Build(sb.Context(), SolveOpt{
+		FrontendAttrs: map[string]string{
+			"attest:sbom": "\"generator=" + scannerTarget + "\",\"ARG1=foo\",\"ARG2=hello,world\"",
+		},
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, "", makeTargetFrontend(false), nil)
+	require.NoError(t, err)
+
+	desc, provider, err = contentutil.ProviderFromRef(target)
+	require.NoError(t, err)
+
+	imgs, err = testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(imgs.Images))
+
+	att = imgs.Find("unknown/unknown")
+	attest = intoto.Statement{}
+	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
+	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
+	require.Subset(t, attest.Predicate, map[string]interface{}{
+		"extraParams": map[string]interface{}{"ARG1": "foo", "ARG2": "hello,world"},
+	})
 }
 
 func testSBOMScanSingleRef(t *testing.T, sb integration.Sandbox) {

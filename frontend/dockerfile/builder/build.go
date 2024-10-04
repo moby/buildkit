@@ -118,7 +118,7 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 			ImageOpt: &sourceresolver.ResolveImageOpt{
 				ResolveMode: opts["image-resolve-mode"],
 			},
-		})
+		}, bc.SBOM.Parameters)
 		if err != nil {
 			return nil, err
 		}

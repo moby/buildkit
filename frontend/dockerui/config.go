@@ -89,7 +89,8 @@ type Client struct {
 }
 
 type SBOM struct {
-	Generator string
+	Generator  string
+	Parameters map[string]string
 }
 
 type Source struct {
@@ -257,17 +258,26 @@ func (bc *Client) init() error {
 		return err
 	}
 	if attrs, ok := attests[attestations.KeyTypeSbom]; ok {
-		src, ok := attrs["generator"]
-		if !ok {
+		params := make(map[string]string)
+		var ref reference.Named
+		for k, v := range attrs {
+			if k == "generator" {
+				ref, err = reference.ParseNormalizedNamed(v)
+				if err != nil {
+					return errors.Wrapf(err, "failed to parse sbom scanner %s", v)
+				}
+				ref = reference.TagNameOnly(ref)
+			} else {
+				params[k] = v
+			}
+		}
+		if ref == nil {
 			return errors.Errorf("sbom scanner cannot be empty")
 		}
-		ref, err := reference.ParseNormalizedNamed(src)
-		if err != nil {
-			return errors.Wrapf(err, "failed to parse sbom scanner %s", src)
-		}
-		ref = reference.TagNameOnly(ref)
+
 		bc.SBOM = &SBOM{
-			Generator: ref.String(),
+			Generator:  ref.String(),
+			Parameters: params,
 		}
 	}
 

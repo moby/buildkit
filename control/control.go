@@ -460,15 +460,22 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	var procs []llbsolver.Processor
 
 	if attrs, ok := attests["sbom"]; ok {
-		src := attrs["generator"]
-		if src == "" {
-			return nil, errors.Errorf("sbom generator cannot be empty")
+		var ref reference.Named
+		params := make(map[string]string)
+		for k, v := range attrs {
+			if k == "generator" {
+				if v == "" {
+					return nil, errors.Errorf("sbom generator cannot be empty")
+				}
+				ref, err = reference.ParseNormalizedNamed(v)
+				if err != nil {
+					return nil, errors.Wrapf(err, "failed to parse sbom generator %s", v)
+				}
+				ref = reference.TagNameOnly(ref)
+			} else {
+				params[k] = v
+			}
 		}
-		ref, err := reference.ParseNormalizedNamed(src)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to parse sbom generator %s", src)
-		}
-		ref = reference.TagNameOnly(ref)
 
 		useCache := true
 		if v, ok := req.FrontendAttrs["no-cache"]; ok && v == "" {
@@ -480,7 +487,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 			resolveMode = v
 		}
 
-		procs = append(procs, proc.SBOMProcessor(ref.String(), useCache, resolveMode))
+		procs = append(procs, proc.SBOMProcessor(ref.String(), useCache, resolveMode, params))
 	}
 
 	if attrs, ok := attests["provenance"]; ok {
