@@ -860,6 +860,7 @@ func (e *envsFromState) Keys() []string {
 }
 
 func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
+	d.cmdIsOnBuild = cmd.isOnBuild
 	var err error
 	// ARG command value could be ignored, so defer handling the expansion error
 	_, isArg := cmd.Command.(*instructions.ArgCommand)
@@ -1015,6 +1016,7 @@ type dispatchState struct {
 	unregistered   bool
 	stageName      string
 	cmdIndex       int
+	cmdIsOnBuild   bool
 	cmdTotal       int
 	prefixPlatform bool
 	outline        outlineCapture
@@ -1093,7 +1095,8 @@ func (dss *dispatchStates) lastTarget() *dispatchState {
 
 type command struct {
 	instructions.Command
-	sources []*dispatchState
+	sources   []*dispatchState
+	isOnBuild bool
 }
 
 // initOnBuildTriggers initializes the onbuild triggers and creates the commands and dependecies for them.
@@ -1118,6 +1121,7 @@ func initOnBuildTriggers(d *dispatchState, triggers []string, allDispatchStates 
 		if err != nil {
 			return false, err
 		}
+		cmd.isOnBuild = true
 		if len(cmd.sources) > 0 {
 			hasNewDeps = true
 		}
@@ -2066,6 +2070,9 @@ func prefixCommand(ds *dispatchState, str string, prefixPlatform bool, platform 
 	}
 	ds.cmdIndex++
 	out += fmt.Sprintf("%*d/%d] ", int(1+math.Log10(float64(ds.cmdTotal))), ds.cmdIndex, ds.cmdTotal)
+	if ds.cmdIsOnBuild {
+		out += "ONBUILD "
+	}
 	return out + str
 }
 
