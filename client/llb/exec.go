@@ -49,6 +49,7 @@ type mount struct {
 	cacheSharing CacheMountSharingMode
 	noOutput     bool
 	contentCache MountContentCache
+	hostPath     string
 }
 
 type ExecOp struct {
@@ -371,6 +372,10 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 			Output:   int64(outputIndex),
 			Selector: m.selector,
 		}
+		if m.hostPath != "" {
+			pm.MountType = pb.MountType_HOST_BIND
+			pm.HostPath = m.hostPath
+		}
 		if m.cacheID != "" {
 			pm.MountType = pb.MountType_CACHE
 			pm.CacheOpt = &pb.CacheOpt{
@@ -503,6 +508,19 @@ type ExecState struct {
 
 func (e ExecState) AddMount(target string, source State, opt ...MountOption) State {
 	return source.WithOutput(e.exec.AddMount(target, source.Output(), opt...))
+}
+
+func AddHostBindMount(dest string, hostPath string, opts ...MountOption) RunOption {
+	return runOptionFunc(func(ei *ExecInfo) {
+		mountOpts := append(opts, func(m *mount) {
+			m.target = dest
+			m.hostPath = hostPath
+			m.noOutput = true
+			m.source = nil
+			m.output = nil
+		})
+		ei.Mounts = append(ei.Mounts, MountInfo{dest, nil, mountOpts})
+	})
 }
 
 func (e ExecState) GetMount(target string) State {
