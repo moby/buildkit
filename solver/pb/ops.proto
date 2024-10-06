@@ -103,6 +103,7 @@ message Mount {
 	int64 output = 4;
 	bool readonly = 5;
 	MountType mountType = 6;
+	string hostPath = 9;
 	TmpfsOpt TmpfsOpt = 19;
 	CacheOpt cacheOpt = 20;
 	SecretOpt secretOpt = 21;
@@ -118,6 +119,7 @@ enum MountType {
 	SSH = 2;
 	CACHE = 3;
 	TMPFS = 4;
+	HOST_BIND = 6;
 }
 
 // MountContentCache ...
