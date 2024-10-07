@@ -1355,13 +1355,18 @@ RUN [ "$(stat -c "%U %G" /dest01)" == "user01 user" ]
 }
 
 func testCopyThroughSymlinkContext(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM scratch
 COPY link/foo .
-`)
+`,
+		`	
+FROM nanoserver AS build
+COPY link/foo .
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -1480,14 +1485,20 @@ COPY . /
 }
 
 func testIgnoreEntrypoint(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM busybox
 ENTRYPOINT ["/nosuchcmd"]
 RUN ["ls"]
-`)
+`,
+		`
+FROM nanoserver AS build
+ENTRYPOINT ["nosuchcmd.exe"]
+RUN dir
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -1553,13 +1564,19 @@ COPY --from=build /out .
 }
 
 func testGlobalArgErrors(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 ARG FOO=${FOO:?"custom error"}
 FROM busybox
-`)
+`,
+		`
+FROM nanoserver AS build
+ARG FOO
+RUN if not defined FOO (set FOO="FOO: custom error" && exit 1)
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -1593,14 +1610,21 @@ FROM busybox
 }
 
 func testArgDefaultExpansion(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM scratch
 ARG FOO
 ARG BAR=${FOO:?"foo missing"}
-`)
+`,
+		`
+FROM nanoserver AS build
+ARG FOO
+ARG BAR
+RUN if not defined FOO if not defined BAR (set BAR="FOO: foo missing" && exit 1)
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -6297,14 +6321,19 @@ COPY Dockerfile Dockerfile
 
 // moby/buildkit#1301
 func testDockerfileCheckHostname(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM busybox
 RUN cat /etc/hosts | grep foo
 RUN echo $HOSTNAME | grep foo
 RUN echo $(hostname) | grep foo
-`)
+`,
+		`	
+FROM mcr.microsoft.com/windows/nanoserver:ltsc2022
+RUN echo %COMPUTERNAME% | findstr "FOO"
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -6355,11 +6384,15 @@ RUN echo $(hostname) | grep foo
 }
 
 func testEmptyStages(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 ARG foo=bar
-`)
+`,
+		`	
+ARG foo=bar
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -6693,7 +6726,8 @@ func testNamedImageContextPlatform(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	// Build a base image and force buildkit to generate a manifest list.
-	dockerfile := []byte(`FROM --platform=$BUILDPLATFORM alpine:latest`)
+	dockerfile := []byte(integration.UnixOrWindows(`FROM --platform=$BUILDPLATFORM alpine:latest`,
+		`FROM --platform=$BUILDPLATFORM nanoserver:latest`))
 	target := registry + "/buildkit/testnamedimagecontextplatform:latest"
 
 	dir := integration.Tmpdir(
@@ -6723,10 +6757,12 @@ func testNamedImageContextPlatform(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dockerfile = []byte(`
+	dockerfile = []byte(integration.UnixOrWindows(`
 FROM --platform=$BUILDPLATFORM busybox AS target
-RUN echo hello
-`)
+RUN echo hello`,
+		`
+FROM --platform=$BUILDPLATFORM nanoserver AS target
+RUN echo hello`))
 
 	dir = integration.Tmpdir(
 		t,
@@ -6837,19 +6873,27 @@ RUN echo foo >> /test
 }
 
 func testNamedImageContextScratch(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM busybox
 COPY <<EOF /out
 hello world!
 EOF
-`)
+`,
+		`	
+FROM nanoserver AS build
+FROM busybox
+COPY <<EOF /out
+hello world!
+EOF
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
