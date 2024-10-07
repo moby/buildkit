@@ -1043,7 +1043,7 @@ func (cc *cacheContext) scanPath(ctx context.Context, m *mount, p string, follow
 		scanPath = resolvedPath
 	}
 
-	err = filepath.Walk(scanPath, func(itemPath string, fi os.FileInfo, err error) error {
+	walkFunc := func(itemPath string, fi os.FileInfo, err error) error {
 		if scanCounterEnable {
 			scanCounter.Add(1)
 		}
@@ -1082,7 +1082,10 @@ func (cc *cacheContext) scanPath(ctx context.Context, m *mount, p string, follow
 			txn.Insert(k, cr)
 		}
 		return nil
-	})
+	}
+
+	err = cc.walk(scanPath, walkFunc)
+
 	if err != nil {
 		return err
 	}
