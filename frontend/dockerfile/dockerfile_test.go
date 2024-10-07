@@ -1028,17 +1028,27 @@ RUN e="300:400"; p="/file"                         ; a=` + "`" + `stat -c "%u:%g
 }
 
 func testCopyWildcardCache(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM busybox AS base
 COPY foo* files/
 RUN cat /dev/urandom | head -c 100 | sha256sum > unique
 COPY bar files/
 FROM scratch
 COPY --from=base unique /
-`)
+`, `
+FROM nanoserver AS base
+USER ContainerAdministrator
+WORKDIR /files
+COPY foo* /files/
+RUN echo test> /unique
+COPY bar /files/
+FROM nanoserver
+COPY --from=base /unique /
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -1114,8 +1124,9 @@ COPY --from=base unique /
 	require.NoError(t, err)
 
 	dt2, err = os.ReadFile(filepath.Join(destDir, "unique"))
+	expectedStr := string(dt)
 	require.NoError(t, err)
-	require.NotEqual(t, string(dt), string(dt2))
+	require.NotEqual(t, integration.UnixOrWindows(expectedStr, expectedStr+"\r\n"), string(dt2))
 }
 
 func testEmptyWildcard(t *testing.T, sb integration.Sandbox) {
@@ -2788,7 +2799,6 @@ ADD %s /dest/
 }
 
 func testDockerfileAddArchive(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
@@ -2807,10 +2817,12 @@ func testDockerfileAddArchive(t *testing.T, sb integration.Sandbox) {
 	err = tw.Close()
 	require.NoError(t, err)
 
-	dockerfile := []byte(`
-FROM scratch
+	baseImage := integration.UnixOrWindows("scratch", "nanoserver")
+
+	dockerfile := []byte(fmt.Sprintf(`
+FROM %s
 ADD t.tar /
-`)
+`, baseImage))
 
 	dir := integration.Tmpdir(
 		t,
@@ -2838,10 +2850,10 @@ ADD t.tar /
 	err = gz.Close()
 	require.NoError(t, err)
 
-	dockerfile = []byte(`
-FROM scratch
+	dockerfile = []byte(fmt.Sprintf(`
+FROM %s
 ADD t.tar.gz /
-`)
+`, baseImage))
 
 	dir = integration.Tmpdir(
 		t,
@@ -2862,10 +2874,10 @@ ADD t.tar.gz /
 	require.Equal(t, expectedContent, dt)
 
 	// COPY doesn't extract
-	dockerfile = []byte(`
-FROM scratch
+	dockerfile = []byte(fmt.Sprintf(`
+FROM %s
 COPY t.tar.gz /
-`)
+`, baseImage))
 
 	dir = integration.Tmpdir(
 		t,
@@ -2897,9 +2909,9 @@ COPY t.tar.gz /
 	defer server.Close()
 
 	dockerfile = []byte(fmt.Sprintf(`
-FROM scratch
+FROM %s
 ADD %s /
-`, server.URL+"/t.tar.gz"))
+`, baseImage, server.URL+"/t.tar.gz"))
 
 	dir = integration.Tmpdir(
 		t,
@@ -2920,9 +2932,9 @@ ADD %s /
 
 	// https://github.com/moby/buildkit/issues/386
 	dockerfile = []byte(fmt.Sprintf(`
-FROM scratch
+FROM %s
 ADD %s /newname.tar.gz
-`, server.URL+"/t.tar.gz"))
+`, baseImage, server.URL+"/t.tar.gz"))
 
 	dir = integration.Tmpdir(
 		t,
@@ -3023,16 +3035,25 @@ ADD *.tar /dest
 }
 
 func testDockerfileAddChownExpand(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM busybox
 ARG group
 ENV owner 1000
 ADD --chown=${owner}:${group} foo /
 RUN [ "$(stat -c "%u %G" /foo)" == "1000 nobody" ]
-`)
+`,
+		`
+FROM nanoserver
+ARG group
+ENV owner=1000
+ADD foo \bar
+RUN if not exist \bar (exit 1)
+RUN if "%owner%"=="" if "%group%"=="" (exit 1)
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -4409,13 +4430,21 @@ COPY foo bar
 }
 
 func testMultiStageImplicitFrom(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM scratch
 COPY --from=busybox /etc/passwd test
-`)
+`, `
+FROM nanoserver AS build
+USER ContainerAdministrator
+RUN echo test> test
+
+FROM nanoserver
+COPY --from=build /test /test
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -4444,17 +4473,26 @@ COPY --from=busybox /etc/passwd test
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "test"))
 	require.NoError(t, err)
-	require.Contains(t, string(dt), "root")
+	require.Contains(t, string(dt), integration.UnixOrWindows("root", "test"))
 
 	// testing masked image will load actual stage
 
-	dockerfile = []byte(`
+	dockerfile = []byte(integration.UnixOrWindows(
+		`
 FROM busybox AS golang
 RUN mkdir -p /usr/bin && echo -n foo > /usr/bin/go
 
 FROM scratch
 COPY --from=golang /usr/bin/go go
-`)
+`, `
+FROM nanoserver AS golang
+USER ContainerAdministrator
+RUN  echo foo> go
+
+FROM nanoserver
+COPY --from=golang /go /go
+`,
+	))
 
 	dir = integration.Tmpdir(
 		t,
@@ -4482,17 +4520,18 @@ COPY --from=golang /usr/bin/go go
 }
 
 func testMultiStageCaseInsensitive(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
-FROM scratch AS STAge0
+	dockerfileStr := `
+FROM %s AS STAge0
 COPY foo bar
-FROM scratch AS staGE1
+FROM %s AS staGE1
 COPY --from=staGE0 bar baz
-FROM scratch
+FROM %s
 COPY --from=stage1 baz bax
-`)
+`
+	baseImage := integration.UnixOrWindows("scratch", "nanoserver")
+	dockerfile := []byte(fmt.Sprintf(dockerfileStr, baseImage, baseImage, baseImage))
 	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
@@ -4652,7 +4691,6 @@ RUN dir file1
 }
 
 func testOnBuildCleared(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	f := getFrontend(t, sb)
 
@@ -4662,10 +4700,16 @@ func testOnBuildCleared(t *testing.T, sb integration.Sandbox) {
 	}
 	require.NoError(t, err)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM busybox
 ONBUILD RUN mkdir -p /out && echo -n 11 >> /out/foo
-`)
+`, `
+FROM nanoserver
+USER ContainerAdministrator
+ONBUILD RUN mkdir \out && echo 11>> \out\foo
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -4725,9 +4769,9 @@ ONBUILD RUN mkdir -p /out && echo -n 11 >> /out/foo
 
 	dockerfile = []byte(fmt.Sprintf(`
 	FROM %s AS base
-	FROM scratch
+	FROM %s
 	COPY --from=base /out /
-	`, target2))
+	`, target2, integration.UnixOrWindows("scratch", "nanoserver")))
 
 	dir = integration.Tmpdir(
 		t,
@@ -4751,7 +4795,7 @@ ONBUILD RUN mkdir -p /out && echo -n 11 >> /out/foo
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
-	require.Equal(t, "11", string(dt))
+	require.Equal(t, integration.UnixOrWindows("11", "11\r\n"), string(dt))
 }
 
 func testOnBuildNamedContext(t *testing.T, sb integration.Sandbox) {
@@ -5820,10 +5864,10 @@ COPY --from=build out .
 }
 
 func testBuiltinArgs(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM busybox AS build
 ARG FOO
 ARG BAR
@@ -5832,7 +5876,18 @@ RUN echo -n $HTTP_PROXY::$NO_PROXY::$FOO::$BAR::$BAZ > /out
 FROM scratch
 COPY --from=build /out /
 
-`)
+`, `
+FROM nanoserver AS build
+USER ContainerAdministrator
+ARG FOO
+ARG BAR
+ARG BAZ=bazcontent
+RUN echo %HTTP_PROXY%::%NO_PROXY%::%FOO%::%BAR%::%BAZ%> out
+FROM nanoserver
+COPY --from=build out /
+`,
+	))
+
 	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
@@ -5867,7 +5922,9 @@ COPY --from=build /out /
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
-	require.Equal(t, "hpvalue::npvalue::foocontents::::bazcontent", string(dt))
+	// Windows can't interpret empty env variables, %BAR% handles empty values.
+	expectedStr := integration.UnixOrWindows(`hpvalue::npvalue::foocontents::::bazcontent`, "hpvalue::npvalue::foocontents::%BAR%::bazcontent\r\n")
+	require.Equal(t, expectedStr, string(dt))
 
 	// repeat with changed default args should match the old cache
 	destDir = t.TempDir()
@@ -5894,7 +5951,8 @@ COPY --from=build /out /
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
-	require.Equal(t, "hpvalue::npvalue::foocontents::::bazcontent", string(dt))
+	expectedStr = integration.UnixOrWindows("hpvalue::npvalue::foocontents::::bazcontent", "hpvalue::npvalue::foocontents::%BAR%::bazcontent\r\n")
+	require.Equal(t, expectedStr, string(dt))
 
 	// changing actual value invalidates cache
 	destDir = t.TempDir()
@@ -5921,7 +5979,8 @@ COPY --from=build /out /
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
-	require.Equal(t, "hpvalue2::::foocontents2::::bazcontent", string(dt))
+	expectedStr = integration.UnixOrWindows("hpvalue2::::foocontents2::::bazcontent", "hpvalue2::%NO_PROXY%::foocontents2::%BAR%::bazcontent\r\n")
+	require.Equal(t, expectedStr, string(dt))
 }
 
 func testTarContext(t *testing.T, sb integration.Sandbox) {
@@ -6037,15 +6096,15 @@ COPY foo bar
 }
 
 func testFrontendUseForwardedSolveResults(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	dockerfile := []byte(`
-FROM scratch
+	dockerfileStr := `
+FROM %s
 COPY foo foo2
-`)
+`
+	dockerfile := []byte(fmt.Sprintf(dockerfileStr, integration.UnixOrWindows("scratch", "nanoserver")))
 	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
