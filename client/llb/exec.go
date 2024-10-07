@@ -12,7 +12,6 @@ import (
 	"github.com/moby/buildkit/util/system"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
-	"google.golang.org/protobuf/proto"
 )
 
 func NewExecOp(base State, proxyEnv *ProxyEnv, readOnly bool, c Constraints) *ExecOp {
@@ -344,7 +343,7 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 			newInput := true
 
 			for i, inp2 := range pop.Inputs {
-				if proto.Equal(inp, inp2) {
+				if inp.EqualVT(inp2) {
 					inputIndex = pb.InputIndex(i)
 					newInput = false
 					break

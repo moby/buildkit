@@ -31,7 +31,6 @@ import (
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/semaphore"
-	"google.golang.org/protobuf/proto"
 )
 
 const execCacheType = "buildkit.exec.v0"
@@ -80,7 +79,7 @@ func (e *ExecOp) Proto() *pb.ExecOp {
 }
 
 func cloneExecOp(old *pb.ExecOp) *pb.ExecOp {
-	return proto.Clone(old).(*pb.ExecOp)
+	return old.CloneVT()
 }
 
 func checkShouldClearCacheOpts(m *pb.Mount) bool {

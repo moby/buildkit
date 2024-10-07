@@ -14,7 +14,6 @@ import (
 	"github.com/moby/buildkit/util/apicaps"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	protobuf "google.golang.org/protobuf/proto"
 )
 
 type StateOption func(State) State
@@ -158,7 +157,7 @@ func (s State) Marshal(ctx context.Context, co ...ConstraintsOpt) (*Definition, 
 		return def, err
 	}
 	proto := &pb.Op{Inputs: []*pb.Input{inp}}
-	dt, err := protobuf.Marshal(proto)
+	dt, err := proto.MarshalVT()
 	if err != nil {
 		return def, err
 	}

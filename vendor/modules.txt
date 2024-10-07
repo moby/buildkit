@@ -683,6 +683,21 @@ github.com/pkg/errors
 # github.com/pkg/profile v1.7.0
 ## explicit; go 1.13
 github.com/pkg/profile
+# github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10
+## explicit; go 1.20
+github.com/planetscale/vtprotobuf/cmd/protoc-gen-go-vtproto
+github.com/planetscale/vtprotobuf/features/clone
+github.com/planetscale/vtprotobuf/features/equal
+github.com/planetscale/vtprotobuf/features/grpc
+github.com/planetscale/vtprotobuf/features/marshal
+github.com/planetscale/vtprotobuf/features/pool
+github.com/planetscale/vtprotobuf/features/size
+github.com/planetscale/vtprotobuf/features/unmarshal
+github.com/planetscale/vtprotobuf/generator
+github.com/planetscale/vtprotobuf/generator/pattern
+github.com/planetscale/vtprotobuf/protohelpers
+github.com/planetscale/vtprotobuf/types/known/timestamppb
+github.com/planetscale/vtprotobuf/vtproto
 # github.com/pmezard/go-difflib v1.0.0
 ## explicit
 github.com/pmezard/go-difflib/difflib
@@ -737,7 +752,7 @@ github.com/stretchr/testify/require
 # github.com/tonistiigi/dchapes-mode v0.0.0-20241001053921-ca0759fec205
 ## explicit; go 1.21
 github.com/tonistiigi/dchapes-mode
-# github.com/tonistiigi/fsutil v0.0.0-20241001141129-e98dfb603c6f
+# github.com/tonistiigi/fsutil v0.0.0-20241003195857-3f140a1299b0
 ## explicit; go 1.21
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy

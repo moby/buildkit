@@ -25,7 +25,6 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"google.golang.org/protobuf/proto"
 )
 
 type resultWithBridge struct {
@@ -622,7 +621,7 @@ func toBuildSteps(def *pb.Definition, c *provenance.Capture, withUsage bool) ([]
 	var dgst digest.Digest
 	for _, dt := range def.Def {
 		var op pb.Op
-		if err := proto.Unmarshal(dt, &op); err != nil {
+		if err := op.UnmarshalVT(dt); err != nil {
 			return nil, nil, errors.Wrap(err, "failed to parse llb proto op")
 		}
 		if src := op.GetSource(); src != nil {
@@ -665,7 +664,7 @@ func toBuildSteps(def *pb.Definition, c *provenance.Capture, withUsage bool) ([]
 
 	out := make([]provenancetypes.BuildStep, 0, len(dgsts))
 	for i, dgst := range dgsts {
-		op := proto.Clone(ops[dgst]).(*pb.Op)
+		op := ops[dgst].CloneVT()
 		inputs := make([]string, len(op.Inputs))
 		for i, inp := range op.Inputs {
 			inputs[i] = fmt.Sprintf("step%d:%d", indexes[digest.Digest(inp.Digest)], inp.Index)

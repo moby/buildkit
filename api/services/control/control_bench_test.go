@@ -6,7 +6,7 @@ import (
 
 	digest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/proto"
+	proto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -17,7 +17,7 @@ func BenchmarkMarshalVertex(b *testing.B) {
 	v := sampleVertex()
 	for i := 0; i < b.N; i++ {
 		var err error
-		Buf, err = proto.Marshal(v)
+		Buf, err = v.MarshalVT()
 		require.NoError(b, err)
 	}
 }
@@ -26,7 +26,7 @@ func BenchmarkMarshalVertexStatus(b *testing.B) {
 	v := sampleVertexStatus()
 	for i := 0; i < b.N; i++ {
 		var err error
-		Buf, err = proto.Marshal(v)
+		Buf, err = v.MarshalVT()
 		require.NoError(b, err)
 	}
 }
@@ -35,7 +35,7 @@ func BenchmarkMarshalVertexLog(b *testing.B) {
 	v := sampleVertexLog()
 	for i := 0; i < b.N; i++ {
 		var err error
-		Buf, err = proto.Marshal(v)
+		Buf, err = v.MarshalVT()
 		require.NoError(b, err)
 	}
 }
@@ -48,7 +48,7 @@ func BenchmarkUnmarshalVertex(b *testing.B) {
 	require.NoError(b, err)
 
 	for i := 0; i < b.N; i++ {
-		err := proto.Unmarshal(buf, &VertexOutput)
+		err := VertexOutput.UnmarshalVT(buf)
 		require.NoError(b, err)
 	}
 }
@@ -61,7 +61,7 @@ func BenchmarkUnmarshalVertexStatus(b *testing.B) {
 	require.NoError(b, err)
 
 	for i := 0; i < b.N; i++ {
-		err := proto.Unmarshal(buf, &VertexStatusOutput)
+		err := VertexStatusOutput.UnmarshalVT(buf)
 		require.NoError(b, err)
 	}
 }
@@ -74,7 +74,7 @@ func BenchmarkUnmarshalVertexLog(b *testing.B) {
 	require.NoError(b, err)
 
 	for i := 0; i < b.N; i++ {
-		err := proto.Unmarshal(buf, &VertexLogOutput)
+		err := VertexLogOutput.UnmarshalVT(buf)
 		require.NoError(b, err)
 	}
 }

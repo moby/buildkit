@@ -49,7 +49,7 @@ func (def *Definition) Head() (digest.Digest, error) {
 	last := def.Def[len(def.Def)-1]
 
 	var pop pb.Op
-	if err := proto.Unmarshal(last, &pop); err != nil {
+	if err := pop.UnmarshalVT(last); err != nil {
 		return "", err
 	}
 	if len(pop.Inputs) == 0 {
@@ -74,7 +74,7 @@ func ReadFrom(r io.Reader) (*Definition, error) {
 		return nil, err
 	}
 	var pbDef pb.Definition
-	if err := proto.Unmarshal(b, &pbDef); err != nil {
+	if err := pbDef.UnmarshalVT(b); err != nil {
 		return nil, err
 	}
 	var def Definition

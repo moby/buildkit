@@ -44,7 +44,6 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -1144,7 +1143,7 @@ func loadSourcePolicy(b solver.Builder) (*spb.Policy, error) {
 			if f == nil {
 				return errors.Errorf("invalid nil policy rule")
 			}
-			srcPol.Rules = append(srcPol.Rules, proto.Clone(f).(*spb.Rule))
+			srcPol.Rules = append(srcPol.Rules, f.CloneVT())
 		}
 		srcPol.Version = x.Version
 		return nil

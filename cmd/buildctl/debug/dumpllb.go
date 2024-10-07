@@ -12,7 +12,6 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
-	"google.golang.org/protobuf/proto"
 )
 
 var DumpLLBCommand = cli.Command{
@@ -71,7 +70,7 @@ func loadLLB(r io.Reader) ([]llbOp, error) {
 	var ops []llbOp
 	for _, dt := range def.Def {
 		var op pb.Op
-		if err := proto.Unmarshal(dt, &op); err != nil {
+		if err := op.UnmarshalVT(dt); err != nil {
 			return nil, errors.Wrap(err, "failed to parse op")
 		}
 		dgst := digest.FromBytes(dt)

@@ -15,7 +15,7 @@ func BenchmarkMarshalCacheRecords(b *testing.B) {
 	v := sampleCacheRecords()
 	for i := 0; i < b.N; i++ {
 		var err error
-		Buf, err = proto.Marshal(v)
+		Buf, err = v.MarshalVT()
 		require.NoError(b, err)
 	}
 }
@@ -28,7 +28,7 @@ func BenchmarkUnmarshalCacheRecords(b *testing.B) {
 	require.NoError(b, err)
 
 	for i := 0; i < b.N; i++ {
-		err := proto.Unmarshal(buf, &CacheRecordsOutput)
+		err := CacheRecordsOutput.UnmarshalVT(buf)
 		require.NoError(b, err)
 	}
 }

@@ -33,7 +33,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
 )
 
 const frontendPrefix = "BUILDKIT_FRONTEND_OPT_"
@@ -644,7 +643,7 @@ func (c *grpcClient) CurrentFrontend() (*llb.State, error) {
 		return nil, err
 	}
 	var def opspb.Definition
-	if err := proto.Unmarshal(dt, &def); err != nil {
+	if err := def.UnmarshalVT(dt); err != nil {
 		return nil, err
 	}
 	op, err := llb.NewDefinitionOp(&def)

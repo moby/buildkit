@@ -23,7 +23,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
-	proto "google.golang.org/protobuf/proto"
 )
 
 var errNotFound = errors.Errorf("not found")
@@ -252,7 +251,7 @@ func (cc *cacheContext) load() error {
 	}
 
 	var l CacheRecords
-	if err := proto.Unmarshal(dt, &l); err != nil {
+	if err := l.UnmarshalVT(dt); err != nil {
 		return err
 	}
 
@@ -282,7 +281,7 @@ func (cc *cacheContext) save() error {
 		return false
 	})
 
-	dt, err := proto.Marshal(&l)
+	dt, err := l.MarshalVT()
 	if err != nil {
 		return err
 	}
@@ -382,7 +381,7 @@ func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.Fil
 		ln := path.Join("/", filepath.ToSlash(stat.Linkname))
 		v, ok := cc.txn.Get(convertPathToKey(ln))
 		if ok {
-			cr = proto.Clone(v).(*CacheRecord)
+			cr = v.CloneVT()
 		}
 		cc.linkMap[ln] = append(cc.linkMap[ln], k)
 	}

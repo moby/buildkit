@@ -12,7 +12,6 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
-	"google.golang.org/protobuf/proto"
 )
 
 // Examples:
@@ -668,7 +667,7 @@ func (ms *marshalState) addInput(c *Constraints, o Output) (pb.InputIndex, error
 		return 0, err
 	}
 	for i, inp2 := range ms.inputs {
-		if proto.Equal(inp, inp2) {
+		if inp.EqualVT(inp2) {
 			return pb.InputIndex(i), nil
 		}
 	}

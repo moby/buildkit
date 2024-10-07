@@ -59,7 +59,6 @@ import (
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -362,7 +361,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 }
 
 func metadataMount(def *opspb.Definition) (*executor.Mount, func(), error) {
-	dt, err := proto.Marshal(def)
+	dt, err := def.MarshalVT()
 	if err != nil {
 		return nil, nil, err
 	}
