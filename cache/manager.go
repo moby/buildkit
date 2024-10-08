@@ -1045,7 +1045,7 @@ func (cm *cacheManager) pruneOnce(ctx context.Context, ch chan client.UsageInfo,
 	}
 
 	totalSize := int64(0)
-	if opt.MaxStorage != 0 {
+	if opt.MaxUsedSpace != 0 || opt.ReservedSpace != 0 || opt.MinFreeSpace != 0 {
 		du, err := cm.DiskUsage(ctx, client.DiskUsageInfo{})
 		if err != nil {
 			return err
@@ -1058,14 +1058,12 @@ func (cm *cacheManager) pruneOnce(ctx context.Context, ch chan client.UsageInfo,
 		}
 	}
 
-	dstat, err := disk.GetDiskStat(cm.root)
-	if err != nil {
-		if opt.Free != 0 {
-			// if we are pruning based on disk space, failing to get info on it
-			// is fatal
+	var dstat disk.DiskStat
+	if opt.MinFreeSpace != 0 {
+		dstat, err = disk.GetDiskStat(cm.root)
+		if err != nil {
 			return err
 		}
-		bklog.L.Warnf("failed to get disk size: %v", err)
 	}
 
 	return cm.prune(ctx, ch, pruneOpt{
@@ -1080,15 +1078,15 @@ func (cm *cacheManager) pruneOnce(ctx context.Context, ch chan client.UsageInfo,
 
 func calculateKeepBytes(totalSize int64, dstat disk.DiskStat, opt client.PruneInfo) int64 {
 	// 0 values are special, and means we have no keep cap
-	if opt.MaxStorage == 0 && opt.MinStorage == 0 && opt.Free == 0 {
+	if opt.MaxUsedSpace == 0 && opt.ReservedSpace == 0 && opt.MinFreeSpace == 0 {
 		return 0
 	}
 
 	// try and keep as many bytes as we can
-	keepBytes := opt.MaxStorage
+	keepBytes := opt.MaxUsedSpace
 
 	// if we need to free up space, then decrease to that
-	if excess := opt.Free - dstat.Free; excess > 0 {
+	if excess := opt.MinFreeSpace - dstat.Free; excess > 0 {
 		if keepBytes == 0 {
 			keepBytes = totalSize - excess
 		} else {
@@ -1096,8 +1094,8 @@ func calculateKeepBytes(totalSize int64, dstat disk.DiskStat, opt client.PruneIn
 		}
 	}
 
-	// but make sure we don't take the total below the minimum
-	keepBytes = max(keepBytes, opt.MinStorage)
+	// but make sure we don't take the total below the reserved space
+	keepBytes = max(keepBytes, opt.ReservedSpace)
 
 	return keepBytes
 }

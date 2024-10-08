@@ -13,6 +13,7 @@ import (
 	"github.com/containerd/containerd/defaults"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/disk"
 	"github.com/moby/buildkit/util/network/cniprovider"
 	"github.com/moby/buildkit/util/network/netproviders"
 	"github.com/moby/buildkit/worker"
@@ -149,15 +150,13 @@ func init() {
 			Usage: "Enable automatic garbage collection on worker",
 		})
 	}
-	flags = append(flags, cli.Int64Flag{
+	flags = append(flags, cli.StringFlag{
 		Name:  "containerd-worker-gc-keepstorage",
-		Usage: "Amount of storage GC keep locally (MB)",
-		Value: func() int64 {
-			keep := defaultConf.Workers.Containerd.GCKeepStorage.AsBytes(defaultConf.Root)
-			if keep == 0 {
-				keep = config.DetectDefaultGCCap().AsBytes(defaultConf.Root)
-			}
-			return keep / 1e6
+		Usage: "Amount of storage GC keep locally, format \"Reserved[,Free[,Maximum]]\" (MB)",
+		Value: func() string {
+			cfg := defaultConf.Workers.Containerd.GCConfig
+			dstat, _ := disk.GetDiskStat(defaultConf.Root)
+			return gcConfigToString(cfg, dstat)
 		}(),
 		Hidden: len(defaultConf.Workers.Containerd.GCPolicy) != 0,
 	})
@@ -229,7 +228,13 @@ func applyContainerdFlags(c *cli.Context, cfg *config.Config) error {
 	}
 
 	if c.GlobalIsSet("containerd-worker-gc-keepstorage") {
-		cfg.Workers.Containerd.GCKeepStorage = config.DiskSpace{Bytes: c.GlobalInt64("containerd-worker-gc-keepstorage") * 1e6}
+		gc, err := stringToGCConfig(c.GlobalString("containerd-worker-gc-keepstorage"))
+		if err != nil {
+			return err
+		}
+		cfg.Workers.Containerd.GCReservedSpace = gc.GCReservedSpace
+		cfg.Workers.Containerd.GCMinFreeSpace = gc.GCMinFreeSpace
+		cfg.Workers.Containerd.GCMaxUsedSpace = gc.GCMaxUsedSpace
 	}
 
 	if c.GlobalIsSet("containerd-worker-net") {

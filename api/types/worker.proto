@@ -19,10 +19,10 @@ message GCPolicy {
 	int64 keepDuration = 2;
 	repeated string filters = 4;
 
-	int64 minStorage = 5;
-	// maxStorage was renamed from freeBytes
-	int64 maxStorage = 3;
-	int64 free = 6;
+	// reservedSpace was renamed from freeBytes
+	int64 reservedSpace = 3;
+	int64 maxUsedSpace = 5;
+	int64 minFreeSpace = 6;
 }
 
 message BuildkitVersion {

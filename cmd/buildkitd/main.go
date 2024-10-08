@@ -47,6 +47,7 @@ import (
 	"github.com/moby/buildkit/util/archutil"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/db/boltutil"
+	"github.com/moby/buildkit/util/disk"
 	"github.com/moby/buildkit/util/grpcerrors"
 	_ "github.com/moby/buildkit/util/grpcutil/encoding/proto"
 	"github.com/moby/buildkit/util/profiler"
@@ -921,22 +922,23 @@ func getGCPolicy(cfg config.GCConfig, root string) []client.PruneInfo {
 	if cfg.GC != nil && !*cfg.GC {
 		return nil
 	}
+	dstat, _ := disk.GetDiskStat(root)
 	if len(cfg.GCPolicy) == 0 {
-		cfg.GCPolicy = config.DefaultGCPolicy(cfg.GCKeepStorage)
+		cfg.GCPolicy = config.DefaultGCPolicy(cfg, dstat)
 	}
 	out := make([]client.PruneInfo, 0, len(cfg.GCPolicy))
 	for _, rule := range cfg.GCPolicy {
 		//nolint:staticcheck
-		if rule.KeepBytes != (config.DiskSpace{}) {
-			rule.MaxStorage = rule.KeepBytes
+		if rule.ReservedSpace == (config.DiskSpace{}) && rule.KeepBytes != (config.DiskSpace{}) {
+			rule.ReservedSpace = rule.KeepBytes
 		}
 		out = append(out, client.PruneInfo{
-			Filter:       rule.Filters,
-			All:          rule.All,
-			KeepDuration: rule.KeepDuration.Duration,
-			MinStorage:   rule.MinStorage.AsBytes(root),
-			MaxStorage:   rule.MaxStorage.AsBytes(root),
-			Free:         rule.Free.AsBytes(root),
+			Filter:        rule.Filters,
+			All:           rule.All,
+			KeepDuration:  rule.KeepDuration.Duration,
+			ReservedSpace: rule.ReservedSpace.AsBytes(dstat),
+			MaxUsedSpace:  rule.MaxUsedSpace.AsBytes(dstat),
+			MinFreeSpace:  rule.MinFreeSpace.AsBytes(dstat),
 		})
 	}
 	return out

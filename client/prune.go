@@ -16,11 +16,11 @@ func (c *Client) Prune(ctx context.Context, ch chan UsageInfo, opts ...PruneOpti
 	}
 
 	req := &controlapi.PruneRequest{
-		Filter:       info.Filter,
-		KeepDuration: int64(info.KeepDuration),
-		MinStorage:   int64(info.MinStorage),
-		MaxStorage:   int64(info.MaxStorage),
-		Free:         int64(info.Free),
+		Filter:        info.Filter,
+		KeepDuration:  int64(info.KeepDuration),
+		ReservedSpace: int64(info.ReservedSpace),
+		MaxUsedSpace:  int64(info.MaxUsedSpace),
+		MinFreeSpace:  int64(info.MinFreeSpace),
 	}
 	if info.All {
 		req.All = true
@@ -71,9 +71,9 @@ type PruneInfo struct {
 	Filter       []string      `json:"filter"`
 	KeepDuration time.Duration `json:"keepDuration"`
 
-	MinStorage int64 `json:"minStorage"`
-	MaxStorage int64 `json:"maxStorage"`
-	Free       int64 `json:"free"`
+	ReservedSpace int64 `json:"reservedSpace"`
+	MaxUsedSpace  int64 `json:"maxUsedSpace"`
+	MinFreeSpace  int64 `json:"minFreeSpace"`
 }
 
 type pruneOptionFunc func(*PruneInfo)
@@ -86,11 +86,11 @@ var PruneAll = pruneOptionFunc(func(pi *PruneInfo) {
 	pi.All = true
 })
 
-func WithKeepOpt(duration time.Duration, minStorage int64, maxStorage int64, free int64) PruneOption {
+func WithKeepOpt(duration time.Duration, reserved int64, max int64, free int64) PruneOption {
 	return pruneOptionFunc(func(pi *PruneInfo) {
 		pi.KeepDuration = duration
-		pi.MinStorage = minStorage
-		pi.MaxStorage = maxStorage
-		pi.Free = free
+		pi.ReservedSpace = reserved
+		pi.MaxUsedSpace = max
+		pi.MinFreeSpace = free
 	})
 }

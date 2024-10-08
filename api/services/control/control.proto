@@ -29,9 +29,9 @@ message PruneRequest {
 	bool all = 2;
 	int64 keepDuration = 3;
 
-	int64 minStorage = 5;
-	int64 maxStorage = 4;
-	int64 free = 6;
+	int64 reservedSpace = 4;
+	int64 maxUsedSpace = 5;
+	int64 minFreeSpace = 6;
 }
 
 message DiskUsageRequest {

@@ -2480,7 +2480,7 @@ func TestCalculateKeepBytes(t *testing.T) {
 				Free:  9000,
 			},
 			opt: client.PruneInfo{
-				MaxStorage: 2000, // 20% of the disk
+				MaxUsedSpace: 2000, // 20% of the disk
 			},
 			result: 2000,
 		},
@@ -2492,7 +2492,7 @@ func TestCalculateKeepBytes(t *testing.T) {
 				Free:  3000,
 			},
 			opt: client.PruneInfo{
-				Free: 5000, // 50% of the disk
+				MinFreeSpace: 5000, // 50% of the disk
 			},
 			result: 5000,
 		},
@@ -2504,8 +2504,8 @@ func TestCalculateKeepBytes(t *testing.T) {
 				Free:  3000,
 			},
 			opt: client.PruneInfo{
-				Free:       5000, // 50% of the disk
-				MinStorage: 6000, // 60% of the disk,
+				MinFreeSpace:  5000, // 50% of the disk
+				ReservedSpace: 6000, // 60% of the disk,
 			},
 			result: 6000,
 		},
@@ -2517,9 +2517,9 @@ func TestCalculateKeepBytes(t *testing.T) {
 				Free:  3000,
 			},
 			opt: client.PruneInfo{
-				Free:       5000, // 50% of the disk
-				MinStorage: 2000, // 20% of the disk
-				MaxStorage: 4000, // 40% of the disk
+				MinFreeSpace:  5000, // 50% of the disk
+				ReservedSpace: 2000, // 20% of the disk
+				MaxUsedSpace:  4000, // 40% of the disk
 			},
 			result: 4000,
 		},
@@ -2531,7 +2531,7 @@ func TestCalculateKeepBytes(t *testing.T) {
 				Free:  2000, // something else is using 4000
 			},
 			opt: client.PruneInfo{
-				MaxStorage: 2000, // 20% of the disk
+				MaxUsedSpace: 2000, // 20% of the disk
 			},
 			result: 2000,
 		},
@@ -2543,7 +2543,7 @@ func TestCalculateKeepBytes(t *testing.T) {
 				Free:  2000, // something else is using 4000
 			},
 			opt: client.PruneInfo{
-				Free: 5000, // 50% of the disk
+				MinFreeSpace: 5000, // 50% of the disk
 			},
 			result: 1000,
 		},
@@ -2555,8 +2555,8 @@ func TestCalculateKeepBytes(t *testing.T) {
 				Free:  2000, // something else is using 4000
 			},
 			opt: client.PruneInfo{
-				Free:       5000, // 50% of the disk
-				MinStorage: 2000, // 20% of the disk
+				MinFreeSpace:  5000, // 50% of the disk
+				ReservedSpace: 2000, // 20% of the disk
 			},
 			result: 2000,
 		},
@@ -2568,9 +2568,9 @@ func TestCalculateKeepBytes(t *testing.T) {
 				Free:  2000, // something else is using 4000
 			},
 			opt: client.PruneInfo{
-				Free:       5000, // 50% of the disk
-				MinStorage: 2000, // 20% of the disk
-				MaxStorage: 4000, // 40% of the disk
+				MinFreeSpace:  5000, // 50% of the disk
+				ReservedSpace: 2000, // 20% of the disk
+				MaxUsedSpace:  4000, // 40% of the disk
 			},
 			result: 2000,
 		},

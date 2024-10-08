@@ -75,9 +75,13 @@ type OTELConfig struct {
 }
 
 type GCConfig struct {
-	GC            *bool      `toml:"gc"`
-	GCKeepStorage DiskSpace  `toml:"gckeepstorage"`
-	GCPolicy      []GCPolicy `toml:"gcpolicy"`
+	GC *bool `toml:"gc"`
+	// Deprecated: use GCReservedSpace instead
+	GCKeepStorage   DiskSpace  `toml:"gckeepstorage"`
+	GCReservedSpace DiskSpace  `toml:"reservedSpace"`
+	GCMaxUsedSpace  DiskSpace  `toml:"maxUsedSpace"`
+	GCMinFreeSpace  DiskSpace  `toml:"minFreeSpace"`
+	GCPolicy        []GCPolicy `toml:"gcpolicy"`
 }
 
 type NetworkConfig struct {
@@ -163,20 +167,20 @@ type GCPolicy struct {
 	// to consume. Any storage above this mark can be cleared during a gc
 	// sweep.
 	//
-	// Deprecated: use MaxStorage instead
+	// Deprecated: use ReservedSpace instead
 	KeepBytes DiskSpace `toml:"keepBytes"`
 
-	// MinStorage is the minimum amount of storage this policy is always
-	// allowed to consume. Any amount of storage below this mark will not be
-	// cleared by this policy.
-	MinStorage DiskSpace `toml:"minStorage"`
-	// MaxStorage is the maximum amount of storage this policy is ever allowed
-	// to consume. Any storage above this mark can be cleared during a gc
-	// sweep.
-	MaxStorage DiskSpace `toml:"maxStorage"`
-	// Free is the amount of storage the gc will attempt to leave free on the
-	// disk. However, it will never attempt to bring it below MinStorage.
-	Free DiskSpace `toml:"free"`
+	// ReservedSpace is the minimum amount of disk space this policy is guaranteed to retain.
+	// Any usage below this threshold will not be reclaimed during garbage collection.
+	ReservedSpace DiskSpace `toml:"reservedSpace"`
+
+	// MaxUsedSpace is the maximum amount of disk space this policy is allowed to use.
+	// Any usage exceeding this limit will be cleaned up during a garbage collection sweep.
+	MaxUsedSpace DiskSpace `toml:"maxUsedSpace"`
+
+	// MinFreeSpace is the target amount of free disk space the garbage collector will attempt to leave.
+	// However, it will never let the available space fall below ReservedSpace.
+	MinFreeSpace DiskSpace `toml:"minFreeSpace"`
 }
 
 type DNSConfig struct {
