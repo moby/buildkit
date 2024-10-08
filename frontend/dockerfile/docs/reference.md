@@ -345,6 +345,11 @@ despite warnings. To make the build fail on warnings, set `#check=error=true`.
 # check=error=true
 ```
 
+> [!NOTE]
+> When using the `check` directive, with `error=true` option, it is recommended
+> to pin the [Dockerfile syntax]((#syntax)) to a specific version. Otherwise, your build may
+> start to fail when new checks are added in the future versions.
+
 To combine both the `skip` and `error` options, use a semi-colon to separate
 them:
 
