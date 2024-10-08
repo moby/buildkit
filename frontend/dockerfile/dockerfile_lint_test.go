@@ -886,6 +886,27 @@ COPY Dockerfile .
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 
 	dockerfile = []byte(`
+ARG DEBUG
+FROM scratch${DEBUG}
+COPY Dockerfile .
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`
+ARG DEBUG
+FROM scra${DEBUG:-tch}
+COPY Dockerfile .
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`
+ARG DEBUG=""
+FROM scratch${DEBUG-@bogus}
+COPY Dockerfile .
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`
 FROM --platform=$BULIDPLATFORM scratch
 COPY Dockerfile .
 `)
@@ -1542,6 +1563,9 @@ func checkProgressStream(t *testing.T, sb integration.Sandbox, lintTest *lintTes
 		},
 	}, status)
 	if lintTest.StreamBuildErr == "" && lintTest.StreamBuildErrRegexp == nil {
+		if err != nil {
+			t.Logf("expected no error, received: %v", err)
+		}
 		require.NoError(t, err)
 	} else {
 		if lintTest.StreamBuildErr != "" {
@@ -1557,6 +1581,18 @@ func checkProgressStream(t *testing.T, sb integration.Sandbox, lintTest *lintTes
 		t.Fatalf("timed out waiting for statusDone")
 	}
 
+	if len(lintTest.Warnings) != len(warnings) {
+		t.Logf("expected %d warnings, received:", len(lintTest.Warnings))
+		t.Logf("\texpected:")
+		for i, w := range lintTest.Warnings {
+			t.Logf("\t\t%d: %s", i, w.Detail)
+		}
+
+		t.Logf("\treceived:")
+		for i, w := range warnings {
+			t.Logf("\t%d: %s", i, w.Short)
+		}
+	}
 	require.Equal(t, len(lintTest.Warnings), len(warnings))
 	sort.Slice(warnings, func(i, j int) bool {
 		w1 := warnings[i]
