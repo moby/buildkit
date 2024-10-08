@@ -32,9 +32,9 @@ func (m *PruneRequest) CloneVT() *PruneRequest {
 	r := new(PruneRequest)
 	r.All = m.All
 	r.KeepDuration = m.KeepDuration
-	r.MinStorage = m.MinStorage
-	r.MaxStorage = m.MaxStorage
-	r.Free = m.Free
+	r.ReservedSpace = m.ReservedSpace
+	r.MaxUsedSpace = m.MaxUsedSpace
+	r.MinFreeSpace = m.MinFreeSpace
 	if rhs := m.Filter; rhs != nil {
 		tmpContainer := make([]string, len(rhs))
 		copy(tmpContainer, rhs)
@@ -790,13 +790,13 @@ func (this *PruneRequest) EqualVT(that *PruneRequest) bool {
 	if this.KeepDuration != that.KeepDuration {
 		return false
 	}
-	if this.MaxStorage != that.MaxStorage {
+	if this.ReservedSpace != that.ReservedSpace {
 		return false
 	}
-	if this.MinStorage != that.MinStorage {
+	if this.MaxUsedSpace != that.MaxUsedSpace {
 		return false
 	}
-	if this.Free != that.Free {
+	if this.MinFreeSpace != that.MinFreeSpace {
 		return false
 	}
 	return string(this.unknownFields) == string(that.unknownFields)
@@ -1925,18 +1925,18 @@ func (m *PruneRequest) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
 	}
-	if m.Free != 0 {
-		i = protohelpers.EncodeVarint(dAtA, i, uint64(m.Free))
+	if m.MinFreeSpace != 0 {
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(m.MinFreeSpace))
 		i--
 		dAtA[i] = 0x30
 	}
-	if m.MinStorage != 0 {
-		i = protohelpers.EncodeVarint(dAtA, i, uint64(m.MinStorage))
+	if m.MaxUsedSpace != 0 {
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(m.MaxUsedSpace))
 		i--
 		dAtA[i] = 0x28
 	}
-	if m.MaxStorage != 0 {
-		i = protohelpers.EncodeVarint(dAtA, i, uint64(m.MaxStorage))
+	if m.ReservedSpace != 0 {
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(m.ReservedSpace))
 		i--
 		dAtA[i] = 0x20
 	}
@@ -3920,14 +3920,14 @@ func (m *PruneRequest) SizeVT() (n int) {
 	if m.KeepDuration != 0 {
 		n += 1 + protohelpers.SizeOfVarint(uint64(m.KeepDuration))
 	}
-	if m.MaxStorage != 0 {
-		n += 1 + protohelpers.SizeOfVarint(uint64(m.MaxStorage))
+	if m.ReservedSpace != 0 {
+		n += 1 + protohelpers.SizeOfVarint(uint64(m.ReservedSpace))
 	}
-	if m.MinStorage != 0 {
-		n += 1 + protohelpers.SizeOfVarint(uint64(m.MinStorage))
+	if m.MaxUsedSpace != 0 {
+		n += 1 + protohelpers.SizeOfVarint(uint64(m.MaxUsedSpace))
 	}
-	if m.Free != 0 {
-		n += 1 + protohelpers.SizeOfVarint(uint64(m.Free))
+	if m.MinFreeSpace != 0 {
+		n += 1 + protohelpers.SizeOfVarint(uint64(m.MinFreeSpace))
 	}
 	n += len(m.unknownFields)
 	return n
@@ -4810,9 +4810,9 @@ func (m *PruneRequest) UnmarshalVT(dAtA []byte) error {
 			}
 		case 4:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field MaxStorage", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ReservedSpace", wireType)
 			}
-			m.MaxStorage = 0
+			m.ReservedSpace = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return protohelpers.ErrIntOverflow
@@ -4822,16 +4822,16 @@ func (m *PruneRequest) UnmarshalVT(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.MaxStorage |= int64(b&0x7F) << shift
+				m.ReservedSpace |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
 		case 5:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field MinStorage", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field MaxUsedSpace", wireType)
 			}
-			m.MinStorage = 0
+			m.MaxUsedSpace = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return protohelpers.ErrIntOverflow
@@ -4841,16 +4841,16 @@ func (m *PruneRequest) UnmarshalVT(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.MinStorage |= int64(b&0x7F) << shift
+				m.MaxUsedSpace |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
 		case 6:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Free", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field MinFreeSpace", wireType)
 			}
-			m.Free = 0
+			m.MinFreeSpace = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return protohelpers.ErrIntOverflow
@@ -4860,7 +4860,7 @@ func (m *PruneRequest) UnmarshalVT(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Free |= int64(b&0x7F) << shift
+				m.MinFreeSpace |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
