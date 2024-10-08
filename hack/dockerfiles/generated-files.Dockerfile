@@ -6,6 +6,8 @@ ARG PROTOC_VERSION=3.11.4
 ARG PROTOC_GOOGLEAPIS_VERSION=2af421884dd468d565137215c946ebe4e245ae26
 
 # protoc is dynamically linked to glibc so can't use alpine base
+
+# base defines common stage with Go tools
 FROM golang:${GO_VERSION}-${DEBIAN_VERSION} AS base
 RUN apt-get update && apt-get --no-install-recommends install -y git unzip
 
