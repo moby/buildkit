@@ -152,6 +152,8 @@ ENV password=bar secret=baz
 ARG super_duper_secret_token=foo auth=bar
 ENV apikey=bar sunflower=foo
 ENV git_key=
+ENV PUBLIC_KEY=
+ARG public_token
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile: dockerfile,

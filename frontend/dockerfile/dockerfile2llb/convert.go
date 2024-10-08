@@ -57,8 +57,9 @@ const (
 )
 
 var (
-	secretsRegexpOnce sync.Once
-	secretsRegexp     *regexp.Regexp
+	secretsRegexpOnce  sync.Once
+	secretsRegexp      *regexp.Regexp
+	secretsAllowRegexp *regexp.Regexp
 )
 
 var nonEnvArgs = map[string]struct{}{
@@ -2445,7 +2446,7 @@ func validateBaseImagePlatform(name string, expected, actual ocispecs.Platform, 
 	}
 }
 
-func getSecretsRegex() *regexp.Regexp {
+func getSecretsRegex() (*regexp.Regexp, *regexp.Regexp) {
 	// Check for either full value or first/last word.
 	// Examples: api_key, DATABASE_PASSWORD, GITHUB_TOKEN, secret_MESSAGE, AUTH
 	// Case insensitive.
@@ -2464,13 +2465,19 @@ func getSecretsRegex() *regexp.Regexp {
 		}
 		pattern := `(?i)(?:_|^)(?:` + strings.Join(secretTokens, "|") + `)(?:_|$)`
 		secretsRegexp = regexp.MustCompile(pattern)
+
+		allowTokens := []string{
+			"public",
+		}
+		allowPattern := `(?i)(?:_|^)(?:` + strings.Join(allowTokens, "|") + `)(?:_|$)`
+		secretsAllowRegexp = regexp.MustCompile(allowPattern)
 	})
-	return secretsRegexp
+	return secretsRegexp, secretsAllowRegexp
 }
 
 func validateNoSecretKey(instruction, key string, location []parser.Range, lint *linter.Linter) {
-	pattern := getSecretsRegex()
-	if pattern.MatchString(key) {
+	deny, allow := getSecretsRegex()
+	if deny.MatchString(key) && !allow.MatchString(key) {
 		msg := linter.RuleSecretsUsedInArgOrEnv.Format(instruction, key)
 		lint.Run(&linter.RuleSecretsUsedInArgOrEnv, location, msg)
 	}
