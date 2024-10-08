@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile-upstream:master@sha256:df54e73548d586209f6fc6d34d61edf8277e1b9d2704aff8fe75294a17c6a29b
+# syntax=docker/dockerfile-upstream:master
 
 ARG GO_VERSION=1.22
 ARG ALPINE_VERSION=3.20
@@ -6,7 +6,7 @@ ARG XX_VERSION=1.4.0
 ARG PROTOLINT_VERSION=0.45.0
 ARG GOLANGCI_LINT_VERSION=1.61.0
 ARG GOPLS_VERSION=v0.20.0
-# disabled: deprecated unusedvariable simplifyrange
+# GOPLS_ANALYZERS defines gopls analyzers to be run. disabled by default: deprecated unusedvariable simplifyrange
 ARG GOPLS_ANALYZERS="embeddirective fillreturns infertypeargs nonewvars noresultvalues simplifycompositelit simplifyslice stubmethods undeclaredname unusedparams useany"
 
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS golang-base

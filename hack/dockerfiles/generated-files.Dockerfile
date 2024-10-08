@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile-upstream:master@sha256:df54e73548d586209f6fc6d34d61edf8277e1b9d2704aff8fe75294a17c6a29b
+# syntax=docker/dockerfile-upstream:master
 
 ARG GO_VERSION=1.22
 ARG DEBIAN_VERSION=bookworm
@@ -6,6 +6,8 @@ ARG PROTOC_VERSION=3.11.4
 ARG PROTOC_GOOGLEAPIS_VERSION=2af421884dd468d565137215c946ebe4e245ae26
 
 # protoc is dynamically linked to glibc so can't use alpine base
+
+# base defines common stage with Go tools
 FROM golang:${GO_VERSION}-${DEBIAN_VERSION} AS base
 RUN apt-get update && apt-get --no-install-recommends install -y git unzip
 
