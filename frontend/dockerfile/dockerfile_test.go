@@ -196,6 +196,7 @@ var allTests = integration.TestFuncs(
 	testCommandSourceMapping,
 	testSBOMScannerArgs,
 	testNilContextInSolveGateway,
+	testMultiNilRefsInSolveGateway,
 	testCopyUnicodePath,
 	testFrontendDeduplicateSources,
 	testDuplicateLayersProvenance,
@@ -8295,6 +8296,41 @@ func testNilContextInSolveGateway(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	// should not cause buildkitd to panic
 	require.ErrorContains(t, err, "invalid nil input definition to definition op")
+}
+
+func testMultiNilRefsInSolveGateway(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureMultiPlatform)
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	f := getFrontend(t, sb)
+
+	_, err = c.Build(sb.Context(), client.SolveOpt{}, "", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		localDockerfile, err := llb.Scratch().
+			File(llb.Mkfile("Dockerfile", 0644, []byte(`FROM scratch`))).
+			Marshal(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		res, err := f.SolveGateway(ctx, c, gateway.SolveRequest{
+			Frontend: "dockerfile.v0",
+			FrontendOpt: map[string]string{
+				"platform": "linux/amd64,linux/arm64",
+			},
+			FrontendInputs: map[string]*pb.Definition{
+				dockerui.DefaultLocalNameDockerfile: localDockerfile.ToPB(),
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		return res, nil
+	}, nil)
+	require.NoError(t, err)
 }
 
 func testCopyUnicodePath(t *testing.T, sb integration.Sandbox) {

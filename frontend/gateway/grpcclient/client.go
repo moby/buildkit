@@ -429,28 +429,21 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (res *
 			}
 		case *pb.Result_RefsDeprecated:
 			for k, v := range pbRes.RefsDeprecated.Refs {
-				ref := &reference{id: v, c: c}
-				if v == "" {
-					ref = nil
+				var ref client.Reference
+				if v != "" {
+					ref = &reference{id: v, c: c}
 				}
 				res.AddRef(k, ref)
 			}
 		case *pb.Result_Ref:
 			if pbRes.Ref.Id != "" {
-				ref, err := newReference(c, pbRes.Ref)
-				if err != nil {
-					return nil, err
-				}
-				res.SetRef(ref)
+				res.SetRef(newReference(c, pbRes.Ref))
 			}
 		case *pb.Result_Refs:
 			for k, v := range pbRes.Refs.Refs {
-				var ref *reference
+				var ref client.Reference
 				if v.Id != "" {
-					ref, err = newReference(c, v)
-					if err != nil {
-						return nil, err
-					}
+					ref = newReference(c, v)
 				}
 				res.AddRef(k, ref)
 			}
@@ -464,11 +457,7 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (res *
 						return nil, err
 					}
 					if a.Ref.Id != "" {
-						ref, err := newReference(c, a.Ref)
-						if err != nil {
-							return nil, err
-						}
-						att.Ref = ref
+						att.Ref = newReference(c, a.Ref)
 					}
 					res.AddAttestation(p, *att)
 				}
@@ -1168,8 +1157,8 @@ type reference struct {
 	def *opspb.Definition
 }
 
-func newReference(c *grpcClient, ref *pb.Ref) (*reference, error) {
-	return &reference{c: c, id: ref.Id, def: ref.Def}, nil
+func newReference(c *grpcClient, ref *pb.Ref) *reference {
+	return &reference{c: c, id: ref.Id, def: ref.Def}
 }
 
 func (r *reference) ToState() (st llb.State, err error) {
