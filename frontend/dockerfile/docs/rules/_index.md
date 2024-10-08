@@ -103,5 +103,9 @@ To learn more about how to use build checks, see
       <td><a href="./copy-ignored-file/">CopyIgnoredFile (experimental)</a></td>
       <td>Attempting to Copy file that is excluded by .dockerignore</td>
     </tr>
+    <tr>
+      <td><a href="./invalid-definition-description/">InvalidDefinitionDescription</a></td>
+      <td>Comment for build stage or argument should follow the format: `# <arg/stage name> <description>`. If this is not intended to be a description comment, add an empty line or comment between the instruction and the comment.</td>
+    </tr>
   </tbody>
 </table>
