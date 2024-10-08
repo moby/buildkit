@@ -2757,6 +2757,11 @@ ADD %s /dest/
 	require.NoError(t, err)
 	require.Equal(t, []byte("content1"), dt)
 
+	// run again to test HEAD request
+	cmd = sb.Cmd(args)
+	err = cmd.Run()
+	require.NoError(t, err)
+
 	// test the default properties
 	dockerfile = []byte(fmt.Sprintf(`
 FROM scratch
@@ -2785,6 +2790,13 @@ ADD %s /dest/
 	fi, err := os.Stat(destFile)
 	require.NoError(t, err)
 	require.Equal(t, modTime.Format(http.TimeFormat), fi.ModTime().Format(http.TimeFormat))
+
+	stats := server.Stats("/foo")
+	require.Len(t, stats.Requests, 2)
+	require.Equal(t, "GET", stats.Requests[0].Method)
+	require.Contains(t, stats.Requests[0].Header.Get("User-Agent"), "buildkit/v")
+	require.Equal(t, "HEAD", stats.Requests[1].Method)
+	require.Contains(t, stats.Requests[1].Header.Get("User-Agent"), "buildkit/v")
 }
 
 func testDockerfileAddArchive(t *testing.T, sb integration.Sandbox) {
