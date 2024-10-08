@@ -26,6 +26,7 @@ import (
 	srctypes "github.com/moby/buildkit/source/types"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/tracing"
+	"github.com/moby/buildkit/version"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
@@ -181,6 +182,7 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, inde
 		return "", "", nil, false, err
 	}
 	req = req.WithContext(ctx)
+	req.Header.Add("User-Agent", version.UserAgent())
 	m := map[string]cacheRefMetadata{}
 
 	// If we request a single ETag in 'If-None-Match', some servers omit the
