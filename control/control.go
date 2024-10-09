@@ -54,6 +54,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"tags.cncf.io/container-device-interface/pkg/cdi"
 )
 
 type Opt struct {
@@ -586,6 +587,7 @@ func (c *Controller) ListWorkers(ctx context.Context, r *controlapi.ListWorkersR
 			Platforms:       pb.PlatformsFromSpec(w.Platforms(true)),
 			GCPolicy:        toPBGCPolicy(w.GCPolicy()),
 			BuildkitVersion: toPBBuildkitVersion(w.BuildkitVersion()),
+			CDIDevices:      toPBCDIDevices(w.CDIManager()),
 		})
 	}
 	return resp, nil
@@ -682,6 +684,20 @@ func toPBBuildkitVersion(in client.BuildkitVersion) *apitypes.BuildkitVersion {
 		Version:  in.Version,
 		Revision: in.Revision,
 	}
+}
+
+func toPBCDIDevices(manager *cdi.Cache) []*apitypes.CDIDevice {
+	devs := manager.ListDevices()
+	out := make([]*apitypes.CDIDevice, 0, len(devs))
+	for _, dev := range devs {
+		spec := manager.GetDevice(dev).GetSpec()
+		out = append(out, &apitypes.CDIDevice{
+			Name:        dev,
+			AutoAllow:   true, // TODO
+			Annotations: spec.Annotations,
+		})
+	}
+	return out
 }
 
 func findDuplicateCacheOptions(cacheOpts []*controlapi.CacheOptionsEntry) ([]*controlapi.CacheOptionsEntry, error) {

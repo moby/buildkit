@@ -82,6 +82,18 @@ func printWorkersVerbose(tw *tabwriter.Writer, winfo []*client.WorkerInfo) {
 			v := wi.Labels[k]
 			fmt.Fprintf(tw, "\t%s:\t%s\n", k, v)
 		}
+		if len(wi.CDIDevices) > 0 {
+			fmt.Fprint(tw, "Devices:\n")
+			for _, d := range wi.CDIDevices {
+				fmt.Fprintf(tw, "\tName:\t%s\n", d.Name)
+				fmt.Fprintf(tw, "\tAutoAllow:\t%v\n", d.AutoAllow)
+				for _, k := range sortedKeys(d.Annotations) {
+					v := d.Annotations[k]
+					fmt.Fprintf(tw, "\t\t%s:\t%s\n", k, v)
+				}
+			}
+			fmt.Fprint(tw, "\n")
+		}
 		for i, rule := range wi.GCPolicy {
 			fmt.Fprintf(tw, "GC Policy rule#%d:\n", i)
 			fmt.Fprintf(tw, "\tAll:\t%v\n", rule.All)
