@@ -110,6 +110,12 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 		return nil, nil, err
 	}
 
+	if cdiOpts, err := generateCDIOpts(ctx, meta.CDIDevices); err == nil {
+		opts = append(opts, cdiOpts...)
+	} else {
+		return nil, nil, err
+	}
+
 	hostname := defaultHostname
 	if meta.Hostname != "" {
 		hostname = meta.Hostname

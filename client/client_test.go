@@ -274,6 +274,15 @@ func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sa
 			"dns": bridgeDNSNetwork,
 		}),
 	)
+
+	integration.Run(t, integration.TestFuncs(
+		testCDI,
+	),
+		mirrors,
+		integration.WithMatrix("cdi", map[string]interface{}{
+			"enabled": enableCDI,
+		}),
+	)
 }
 
 func newContainerd(cdAddress string) (*ctd.Client, error) {
@@ -7436,8 +7445,8 @@ func testMergeOp(t *testing.T, sb integration.Sandbox) {
 		File(llb.Mkfile("bar/D", 0644, []byte("D"))).
 		File(llb.Mkfile("bar/E", 0755, nil)).
 		File(llb.Mkfile("qaz", 0644, nil)),
-	// /foo from stateE is not here because it is deleted in stateB, which is part of a submerge of mergeD
 	)
+	// /foo from stateE is not here because it is deleted in stateB, which is part of a submerge of mergeD
 }
 
 func testMergeOpCacheInline(t *testing.T, sb integration.Sandbox) {
@@ -10985,4 +10994,80 @@ func (w warningsListOutput) String() string {
 		_, _ = b.Write(warn.Short)
 	}
 	return b.String()
+}
+
+type cdiEnabled struct{}
+
+func (*cdiEnabled) UpdateConfigFile(in string) string {
+	return in + `
+[cdi]
+enabled = true
+`
+}
+
+var (
+	enableCDI integration.ConfigUpdater = &cdiEnabled{}
+)
+
+func testCDI(t *testing.T, sb integration.Sandbox) {
+	if sb.Rootless() {
+		t.SkipNow()
+	}
+
+	integration.SkipOnPlatform(t, "windows")
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	require.NoError(t, os.WriteFile(filepath.Join(sb.CDISpecDir(), "vendor1-device.yaml"), []byte(`
+cdiVersion: "0.3.0"
+kind: "vendor1.com/device"
+devices:
+- name: foo
+  containerEdits:
+    env:
+    - FOO=injected
+`), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(sb.CDISpecDir(), "vendor2-device.yaml"), []byte(`
+cdiVersion: "0.3.0"
+kind: "vendor2.com/device"
+devices:
+- name: bar
+  containerEdits:
+    env:
+    - BAR=injected
+`), 0600))
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+
+	run := func(cmd string, ro ...llb.RunOption) {
+		st = busybox.Run(append(ro, llb.Shlex(cmd), llb.Dir("/wd"))...).AddMount("/wd", st)
+	}
+
+	run(`sh -c 'env|sort | tee foo.env'`, llb.AddCDIDevice("vendor1.com/device=foo"))
+	run(`sh -c 'env|sort | tee bar.env'`, llb.AddCDIDevice("vendor2.com/device=bar"))
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "foo.env"))
+	require.NoError(t, err)
+	require.Contains(t, strings.TrimSpace(string(dt)), `FOO=injected`)
+
+	dt2, err := os.ReadFile(filepath.Join(destDir, "bar.env"))
+	require.NoError(t, err)
+	require.Contains(t, strings.TrimSpace(string(dt2)), `BAR=injected`)
 }

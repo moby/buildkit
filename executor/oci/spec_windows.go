@@ -110,3 +110,11 @@ func sub(m mount.Mount, subPath string) (mount.Mount, func() error, error) {
 	m.Source = src
 	return m, func() error { return nil }, nil
 }
+
+func generateCDIOpts(ctx context.Context, devices []*pb.CDIDevice) ([]oci.SpecOpts, error) {
+	if len(devices) == 0 {
+		return nil, nil
+	}
+	// https://github.com/cncf-tags/container-device-interface/issues/28
+	return nil, errors.New("no support for CDI on Windows")
+}

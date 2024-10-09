@@ -266,6 +266,22 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		Network:  network,
 		Security: security,
 	}
+
+	cdiDevices, err := getCDIDevice(e.base)(ctx, c)
+	if err != nil {
+		return "", nil, nil, nil, err
+	}
+	if len(cdiDevices) > 0 {
+		addCap(&e.constraints, pb.CapExecMetaCDI)
+		cd := make([]*pb.CDIDevice, len(cdiDevices))
+		for i, d := range cdiDevices {
+			cd[i] = &pb.CDIDevice{
+				Name: d.Name,
+			}
+		}
+		peo.CdiDevices = cd
+	}
+
 	if network != NetModeSandbox {
 		addCap(&e.constraints, pb.CapExecMetaNetwork)
 	}
@@ -621,6 +637,12 @@ func AddExtraHost(host string, ip net.IP) RunOption {
 func AddUlimit(name UlimitName, soft int64, hard int64) RunOption {
 	return runOptionFunc(func(ei *ExecInfo) {
 		ei.State = ei.State.AddUlimit(name, soft, hard)
+	})
+}
+
+func AddCDIDevice(name string) RunOption {
+	return runOptionFunc(func(ei *ExecInfo) {
+		ei.State = ei.State.AddCDIDevice(name)
 	})
 }
 

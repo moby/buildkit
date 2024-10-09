@@ -24,6 +24,7 @@ var (
 	keyExtraHost      = contextKeyT("llb.exec.extrahost")
 	keyHostname       = contextKeyT("llb.exec.hostname")
 	keyUlimit         = contextKeyT("llb.exec.ulimit")
+	keyDevice         = contextKeyT("llb.exec.device")
 	keyCgroupParent   = contextKeyT("llb.exec.cgroup.parent")
 	keyUser           = contextKeyT("llb.exec.user")
 	keyValidExitCodes = contextKeyT("llb.exec.validexitcodes")
@@ -300,6 +301,33 @@ func getUlimit(s State) func(context.Context, *Constraints) ([]*pb.Ulimit, error
 		}
 		if v != nil {
 			return v.([]*pb.Ulimit), nil
+		}
+		return nil, nil
+	}
+}
+
+func cdiDevice(name string) StateOption {
+	return func(s State) State {
+		return s.withValue(keyDevice, func(ctx context.Context, c *Constraints) (interface{}, error) {
+			v, err := getCDIDevice(s)(ctx, c)
+			if err != nil {
+				return nil, err
+			}
+			return append(v, &pb.CDIDevice{
+				Name: name,
+			}), nil
+		})
+	}
+}
+
+func getCDIDevice(s State) func(context.Context, *Constraints) ([]*pb.CDIDevice, error) {
+	return func(ctx context.Context, c *Constraints) ([]*pb.CDIDevice, error) {
+		v, err := s.getValue(keyDevice)(ctx, c)
+		if err != nil {
+			return nil, err
+		}
+		if v != nil {
+			return v.([]*pb.CDIDevice), nil
 		}
 		return nil, nil
 	}

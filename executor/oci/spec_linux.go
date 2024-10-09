@@ -14,16 +14,20 @@ import (
 	"github.com/containerd/containerd/v2/pkg/oci"
 	cdseccomp "github.com/containerd/containerd/v2/pkg/seccomp"
 	"github.com/containerd/continuity/fs"
+	"github.com/containerd/log"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/docker/docker/profiles/seccomp"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/entitlements/security"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	selinux "github.com/opencontainers/selinux/go-selinux"
 	"github.com/opencontainers/selinux/go-selinux/label"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
+	"tags.cncf.io/container-device-interface/pkg/cdi"
+	"tags.cncf.io/container-device-interface/pkg/parser"
 )
 
 var (
@@ -145,6 +149,72 @@ func generateRlimitOpts(ulimits []*pb.Ulimit) ([]oci.SpecOpts, error) {
 			s.Process.Rlimits = rlimits
 			return nil
 		},
+	}, nil
+}
+
+// genereateCDIOptions creates the OCI runtime spec options for injecting CDI
+// devices. Two options are returned: The first ensures that the CDI registry
+// is initialized with refresh disabled, and the second injects the devices
+// into the container.
+func generateCDIOpts(ctx context.Context, devices []*pb.CDIDevice) ([]oci.SpecOpts, error) {
+	if len(devices) == 0 {
+		return nil, nil
+	}
+	var dd []string
+	for _, d := range devices {
+		if d == nil {
+			continue
+		}
+		if _, _, _, err := parser.ParseQualifiedName(d.Name); err != nil {
+			return nil, errors.Wrapf(err, "invalid CDI device name %s", d.Name)
+		}
+		dd = append(dd, d.Name)
+	}
+
+	// withStaticCDIRegistry inits the CDI registry and disables auto-refresh.
+	// This is used from the `run` command to avoid creating a registry with
+	// auto-refresh enabled. It also provides a way to override the CDI spec
+	// file paths if required.
+	withStaticCDIRegistry := func() oci.SpecOpts {
+		return func(ctx context.Context, _ oci.Client, _ *containers.Container, s *oci.Spec) error {
+			_ = cdi.Configure(cdi.WithAutoRefresh(false))
+			if err := cdi.Refresh(); err != nil {
+				// We don't consider registry refresh failure a fatal error.
+				// For instance, a dynamically generated invalid CDI Spec file
+				// for any particular vendor shouldn't prevent injection of
+				// devices of different vendors. CDI itself knows better, and
+				// it will fail the injection if necessary.
+				bklog.G(ctx).Warnf("CDI registry refresh failed: %v", err)
+			}
+			return nil
+		}
+	}
+
+	// withCDIDevices injects the requested CDI devices into the OCI specification.
+	// FIXME: Use oci.WithCDIDevices once we switch to containerd 2.0.
+	withCDIDevices := func(devices ...string) oci.SpecOpts {
+		return func(ctx context.Context, _ oci.Client, c *containers.Container, s *specs.Spec) error {
+			if len(devices) == 0 {
+				return nil
+			}
+			if err := cdi.Refresh(); err != nil {
+				log.G(ctx).Warnf("CDI registry refresh failed: %v", err)
+			}
+			bklog.G(ctx).Debugf("Injecting CDI devices %v", devices)
+			if _, err := cdi.InjectDevices(s, devices...); err != nil {
+				return errors.Wrapf(err, "CDI device injection failed")
+			}
+			// One crucial thing to keep in mind is that CDI device injection
+			// might add OCI Spec environment variables, hooks, and mounts as
+			// well. Therefore, it is important that none of the corresponding
+			// OCI Spec fields are reset up in the call stack once we return.
+			return nil
+		}
+	}
+
+	return []oci.SpecOpts{
+		withStaticCDIRegistry(),
+		withCDIDevices(dd...),
 	}, nil
 }
 
