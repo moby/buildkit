@@ -1305,11 +1305,16 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 		}
 	}
 
-	// TODO: use entitlements and put this on labs
+	// TODO: use entitlements
 	if dopt.llbCaps != nil && dopt.llbCaps.Supports(pb.CapExecMetaCDI) == nil {
 		for _, u := range dopt.devices {
 			opt = append(opt, llb.AddCDIDevice(u.Name))
 		}
+		runDevices, err := dispatchRunDevices(c)
+		if err != nil {
+			return err
+		}
+		opt = append(opt, runDevices...)
 	}
 
 	shlex := *dopt.shlex
