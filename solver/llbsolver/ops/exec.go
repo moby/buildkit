@@ -267,7 +267,7 @@ func (e *ExecOp) getMountDeps() ([]dep, error) {
 	deps := make([]dep, e.numInputs)
 	for _, m := range e.op.Mounts {
 		switch m.MountType {
-		case pb.MountType_SECRET, pb.MountType_SSH, pb.MountType_TMPFS:
+		case pb.MountType_SECRET, pb.MountType_SSH, pb.MountType_TMPFS, pb.MountType_HOST_BIND:
 			continue
 		}
 
