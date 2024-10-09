@@ -24,6 +24,8 @@ var EStargzAnnotations = []string{estargz.TOCJSONDigestAnnotation, estargz.Store
 
 const estargzLabel = "buildkit.io/compression/estargz"
 
+type estargzType struct{}
+
 func (c estargzType) Compress(ctx context.Context, comp Config) (compressorFunc Compressor, finalize Finalizer) {
 	var cInfo *compressionInfo
 	var writeErr error
