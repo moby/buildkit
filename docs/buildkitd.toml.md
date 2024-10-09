@@ -46,6 +46,13 @@ insecure-entitlements = [ "network.host", "security.insecure" ]
   # OTEL collector trace socket path
   socketPath = "/run/buildkit/otel-grpc.sock"
 
+[cdi]
+  # Enables support of the Container Device Interface (CDI).
+  enabled = true
+  # List of directories to scan for CDI spec files. For more details about CDI
+  # specification, please refer to https://github.com/cncf-tags/container-device-interface/blob/main/SPEC.md#cdi-json-specification
+  specDirs = ["/etc/cdi", "/var/run/cdi"]
+
 # config for build history API that stores information about completed build commands
 [history]
   # maxAge is the maximum age of history entries to keep, in seconds.

@@ -17,6 +17,7 @@ const (
 
 var (
 	UserCNIConfigPath = filepath.Join(UserConfigDir(), "cni.json")
+	CDISpecDirs       = []string{"/etc/buildkit/cdi"}
 )
 
 // UserAddress typically returns /run/user/$UID/buildkit/buildkitd.sock
