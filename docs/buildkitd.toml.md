@@ -51,7 +51,7 @@ insecure-entitlements = [ "network.host", "security.insecure" ]
   enabled = true
   # List of directories to scan for CDI spec files. For more details about CDI
   # specification, please refer to https://github.com/cncf-tags/container-device-interface/blob/main/SPEC.md#cdi-json-specification
-  specDirs = ["/etc/cdi", "/var/run/cdi"]
+  specDirs = ["/etc/cdi", "/var/run/cdi", "/etc/buildkit/cdi"]
 
 # config for build history API that stores information about completed build commands
 [history]
