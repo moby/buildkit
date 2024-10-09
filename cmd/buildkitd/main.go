@@ -74,7 +74,6 @@ import (
 	"google.golang.org/grpc/health"
 	healthv1 "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
-	"tags.cncf.io/container-device-interface/pkg/cdi"
 )
 
 func init() {
@@ -289,12 +288,6 @@ func main() {
 			return err
 		}
 		closers = append(closers, mp.Shutdown)
-
-		if cfg.CDI.Enabled != nil && *cfg.CDI.Enabled {
-			if err := cdi.Configure(cdi.WithSpecDirs(cfg.CDI.SpecDirs...)); err != nil {
-				return errors.Wrap(err, "failed to configure CDI registry")
-			}
-		}
 
 		statsHandler := tracing.ServerStatsHandler(
 			otelgrpc.WithTracerProvider(tp),

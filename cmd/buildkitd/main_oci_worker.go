@@ -48,6 +48,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials/insecure"
+	"tags.cncf.io/container-device-interface/pkg/cdi"
 )
 
 func init() {
@@ -322,6 +323,17 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 	opt.GCPolicy = getGCPolicy(cfg.GCConfig, common.config.Root)
 	opt.BuildkitVersion = getBuildkitVersion()
 	opt.RegistryHosts = hosts
+
+	if common.config.CDI.Enabled != nil && *common.config.CDI.Enabled {
+		if len(common.config.CDI.SpecDirs) == 0 {
+			return nil, errors.New("No CDI specification directories specified")
+		}
+		cdiCache, err := cdi.NewCache(cdi.WithSpecDirs(common.config.CDI.SpecDirs...))
+		if err != nil {
+			return nil, errors.Wrapf(err, "CDI registry initialization failure")
+		}
+		opt.CDIManager = cdiCache
+	}
 
 	if platformsStr := cfg.Platforms; len(platformsStr) != 0 {
 		platforms, err := parsePlatforms(platformsStr)
