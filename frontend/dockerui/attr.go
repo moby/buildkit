@@ -1,6 +1,7 @@
 package dockerui
 
 import (
+	"encoding/csv"
 	"net"
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/go-csvvalue"
+	"tags.cncf.io/container-device-interface/pkg/parser"
 )
 
 func parsePlatforms(v string) ([]ocispecs.Platform, error) {
@@ -92,6 +94,27 @@ func parseUlimits(v string) ([]*pb.Ulimit, error) {
 			Name: ulimit.Name,
 			Soft: ulimit.Soft,
 			Hard: ulimit.Hard,
+		})
+	}
+	return out, nil
+}
+
+func parseDevices(v string) ([]*pb.CDIDevice, error) {
+	if v == "" {
+		return nil, nil
+	}
+	out := make([]*pb.CDIDevice, 0)
+	csvReader := csv.NewReader(strings.NewReader(v))
+	names, err := csvReader.Read()
+	if err != nil {
+		return nil, err
+	}
+	for _, name := range names {
+		if _, _, _, err := parser.ParseQualifiedName(name); err != nil {
+			return nil, errors.Wrapf(err, "invalid CDI device name %q", name)
+		}
+		out = append(out, &pb.CDIDevice{
+			Name: name,
 		})
 	}
 	return out, nil

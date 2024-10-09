@@ -724,6 +724,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			extraHosts:          opt.ExtraHosts,
 			shmSize:             opt.ShmSize,
 			ulimit:              opt.Ulimits,
+			devices:             opt.Devices,
 			cgroupParent:        opt.CgroupParent,
 			llbCaps:             opt.LLBCaps,
 			sourceMap:           opt.SourceMap,
@@ -859,6 +860,7 @@ type dispatchOpt struct {
 	extraHosts          []llb.HostIP
 	shmSize             int64
 	ulimit              []*pb.Ulimit
+	devices             []*pb.CDIDevice
 	cgroupParent        string
 	llbCaps             *apicaps.CapSet
 	sourceMap           *llb.SourceMap
@@ -1300,6 +1302,13 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 	if dopt.llbCaps != nil && dopt.llbCaps.Supports(pb.CapExecMetaUlimit) == nil {
 		for _, u := range dopt.ulimit {
 			opt = append(opt, llb.AddUlimit(llb.UlimitName(u.Name), u.Soft, u.Hard))
+		}
+	}
+
+	// TODO: use entitlements and put this on labs
+	if dopt.llbCaps != nil && dopt.llbCaps.Supports(pb.CapExecMetaCDI) == nil {
+		for _, u := range dopt.devices {
+			opt = append(opt, llb.AddCDIDevice(u.Name))
 		}
 	}
 

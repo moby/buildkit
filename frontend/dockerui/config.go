@@ -40,6 +40,7 @@ const (
 	keyShmSize          = "shm-size"
 	keyTargetPlatform   = "platform"
 	keyUlimit           = "ulimit"
+	keyDevice           = "device"
 	keyCacheFrom        = "cache-from"    // for registry only. deprecated in favor of keyCacheImports
 	keyCacheImports     = "cache-imports" // JSON representation of []CacheOptionsEntry
 
@@ -66,6 +67,7 @@ type Config struct {
 	ShmSize          int64
 	Target           string
 	Ulimits          []*pb.Ulimit
+	Devices          []*pb.CDIDevice
 	LinterConfig     *linter.Config
 
 	CacheImports           []client.CacheOptionsEntry
@@ -186,6 +188,12 @@ func (bc *Client) init() error {
 		return errors.Wrap(err, "failed to parse ulimit")
 	}
 	bc.Ulimits = ulimits
+
+	devices, err := parseDevices(opts[keyDevice])
+	if err != nil {
+		return errors.Wrap(err, "failed to parse device")
+	}
+	bc.Devices = devices
 
 	defaultNetMode, err := parseNetMode(opts[keyForceNetwork])
 	if err != nil {
