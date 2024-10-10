@@ -36,12 +36,18 @@ func (m NeedsRemoteProviderError) Error() string {
 	return fmt.Sprintf("missing descriptor handlers for lazy blobs %+v", []digest.Digest(m))
 }
 
-type Unlazy session.Group
+func Unlazy(s session.Group) RefOption {
+	return UnlazyOpt{Session: s}
+}
+
+type UnlazyOpt struct {
+	Session session.Group
+}
 
 func unlazySessionOf(opts ...RefOption) session.Group {
 	for _, opt := range opts {
-		if opt, ok := opt.(session.Group); ok {
-			return opt
+		if opt, ok := opt.(UnlazyOpt); ok {
+			return opt.Session
 		}
 	}
 	return nil
