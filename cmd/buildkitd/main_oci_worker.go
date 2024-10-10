@@ -324,7 +324,7 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 	opt.BuildkitVersion = getBuildkitVersion()
 	opt.RegistryHosts = hosts
 
-	if common.config.CDI.Enabled != nil && *common.config.CDI.Enabled {
+	if common.config.CDI.Disabled == nil || !*common.config.CDI.Disabled {
 		if len(common.config.CDI.SpecDirs) == 0 {
 			return nil, errors.New("No CDI specification directories specified")
 		}

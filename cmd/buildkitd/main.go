@@ -633,7 +633,7 @@ func applyMainFlags(c *cli.Context, cfg *config.Config) error {
 
 	if c.IsSet("cdi-enabled") {
 		cdiEnabled := c.Bool("cdi-enabled")
-		cfg.CDI.Enabled = &cdiEnabled
+		cfg.CDI.Disabled = &cdiEnabled
 	}
 	if c.IsSet("cdi-spec-dir") {
 		cfg.CDI.SpecDirs = c.StringSlice("cdi-spec-dir")

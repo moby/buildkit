@@ -687,6 +687,9 @@ func toPBBuildkitVersion(in client.BuildkitVersion) *apitypes.BuildkitVersion {
 }
 
 func toPBCDIDevices(manager *cdi.Cache) []*apitypes.CDIDevice {
+	if manager == nil {
+		return nil
+	}
 	devs := manager.ListDevices()
 	out := make([]*apitypes.CDIDevice, 0, len(devs))
 	for _, dev := range devs {

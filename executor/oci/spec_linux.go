@@ -178,6 +178,7 @@ func generateCDIOpts(ctx context.Context, devices []*pb.CDIDevice) ([]oci.SpecOp
 	withStaticCDIRegistry := func() oci.SpecOpts {
 		return func(ctx context.Context, _ oci.Client, _ *containers.Container, s *oci.Spec) error {
 			_ = cdi.Configure(cdi.WithAutoRefresh(false))
+			// TODO: this should use worker CDIManager
 			if err := cdi.Refresh(); err != nil {
 				// We don't consider registry refresh failure a fatal error.
 				// For instance, a dynamically generated invalid CDI Spec file
