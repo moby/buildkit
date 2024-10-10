@@ -163,6 +163,23 @@ func TestCheckSystemDriveAndRemoveDriveLetter(t *testing.T) {
 	if _, err = CheckSystemDriveAndRemoveDriveLetter(`\\.\C$\test`, "windows"); err == nil {
 		t.Fatalf("UNC path should fail")
 	}
+
+	if path, err = CheckSystemDriveAndRemoveDriveLetter("\\a\\b\\..\\c\\", "windows"); err != nil {
+		t.Fatalf("windows relative paths should be cleaned and should pass")
+	}
+	// When input OS is Windows, the path should be properly cleaned
+	if path != "/a/c/" {
+		t.Fatalf("Path was not cleaned successfully")
+	}
+
+	// windows-style relative paths on linux
+	if path, err = CheckSystemDriveAndRemoveDriveLetter("\\a\\b\\..\\c\\", "linux"); err != nil {
+		t.Fatalf("windows style relative paths should be considered a valid path element in linux and should pass")
+	}
+	// When input OS is Linux, this is a valid path element name.
+	if path != "\\a\\b\\..\\c\\" {
+		t.Fatalf("Path was not cleaned successfully")
+	}
 }
 
 // TestNormalizeWorkdir tests NormalizeWorkdir
