@@ -5,6 +5,10 @@ aliases:
   - /go/dockerfile/rule/invalid-definition-description/
 ---
 
+> [!NOTE]
+> This check is experimental and is not enabled by default. To enable it, see
+> [Experimental checks](https://docs.docker.com/go/build-checks-experimental/).
+
 ## Output
 
 ```text

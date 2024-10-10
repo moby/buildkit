@@ -50,7 +50,7 @@ var lintTests = integration.TestFuncs(
 )
 
 func testDefinitionDescription(t *testing.T, sb integration.Sandbox) {
-	dockerfile := []byte(`
+	dockerfile := []byte(`# check=experimental=InvalidDefinitionDescription
 # foo this is the foo
 ARG foo=bar
 
@@ -70,7 +70,7 @@ COPY Dockerfile .
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 
-	dockerfile = []byte(`
+	dockerfile = []byte(`# check=experimental=InvalidDefinitionDescription
 # bar this is the bar
 ARG foo=bar
 # BasE this is the BasE image
