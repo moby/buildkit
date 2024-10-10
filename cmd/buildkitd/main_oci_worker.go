@@ -332,6 +332,9 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 		if err != nil {
 			return nil, errors.Wrapf(err, "CDI registry initialization failure")
 		}
+		if err := cdiCache.Refresh(); err != nil {
+			return nil, errors.Wrapf(err, "CDI registry initialization failure")
+		}
 		opt.CDIManager = cdiCache
 	}
 
