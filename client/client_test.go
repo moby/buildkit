@@ -31,6 +31,7 @@ import (
 	"github.com/containerd/containerd/content/local"
 	"github.com/containerd/containerd/content/proxy"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/snapshots"
@@ -7792,6 +7793,15 @@ func ensurePruneAll(t *testing.T, c *Client, sb integration.Sandbox) {
 	t.Fatalf("failed to ensure prune")
 }
 
+func garbageCollectContainerd(ctx context.Context, client *containerd.Client) error {
+	lm := client.LeasesService()
+	l, err := lm.Create(ctx)
+	if err != nil {
+		return nil
+	}
+	return lm.Delete(ctx, leases.Lease{ID: l.ID}, leases.SynchronousDelete)
+}
+
 func checkAllReleasable(t *testing.T, c *Client, sb integration.Sandbox, checkContent bool) {
 	cl, err := c.ControlClient().ListenBuildHistory(sb.Context(), &controlapi.BuildHistoryRequest{
 		EarlyExit: true,
@@ -7884,6 +7894,9 @@ loop0:
 		if count == 0 {
 			break
 		}
+		// Sometimes, a saved trace is still in the content store
+		garbageCollectContainerd(ctx, client)
+
 		if retries >= 50 {
 			for _, info := range infos {
 				t.Logf("content: %v %v %+v", info.Digest, info.Size, info.Labels)
