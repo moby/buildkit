@@ -45,7 +45,8 @@ You will be asked to restart your machine, do so, and then continue with the res
 1. Start the `containerd` service, if not yet started.
 1. Download and extract:
     ```powershell
-    $version = "v0.13.0-rc2" # specify the release version, v0.13+
+    $url = "https://api.github.com/repos/moby/buildkit/releases/latest"
+    $version = (Invoke-RestMethod -Uri $url -UseBasicParsing).tag_name
     $arch = "amd64" # arm64 binary available too
     curl.exe -LO https://github.com/moby/buildkit/releases/download/$version/buildkit-$version.windows-$arch.tar.gz
     # there could be another `.\bin` directory from containerd instructions
