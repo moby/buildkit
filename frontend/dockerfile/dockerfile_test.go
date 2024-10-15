@@ -1356,13 +1356,18 @@ RUN [ "$(stat -c "%U %G" /dest01)" == "user01 user" ]
 }
 
 func testCopyThroughSymlinkContext(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM scratch
 COPY link/foo .
-`)
+`,
+		`	
+FROM nanoserver AS build
+COPY link/foo .
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -1481,14 +1486,20 @@ COPY . /
 }
 
 func testIgnoreEntrypoint(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM busybox
 ENTRYPOINT ["/nosuchcmd"]
 RUN ["ls"]
-`)
+`,
+		`
+FROM nanoserver AS build
+ENTRYPOINT ["nosuchcmd.exe"]
+RUN dir
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -1509,10 +1520,10 @@ RUN ["ls"]
 }
 
 func testQuotedMetaArgs(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 ARG a1="box"
 ARG a2="$a1-foo"
 FROM busy$a1 AS build
@@ -1521,7 +1532,19 @@ ARG a3="bar-$a2"
 RUN echo -n $a3 > /out
 FROM scratch
 COPY --from=build /out .
-`)
+`,
+		`
+ARG a1="server"
+ARG a2="$a1-foo"
+FROM nano$a1 AS build
+USER ContainerAdministrator
+ARG a2
+ARG a3="bar-$a2"
+RUN echo %a3% > /out
+FROM nanoserver
+COPY --from=build /out .
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -1550,7 +1573,10 @@ COPY --from=build /out .
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
-	require.Equal(t, "bar-box-foo", string(dt))
+
+	testString := string([]byte(integration.UnixOrWindows("bar-box-foo", "bar-server-foo \r\n")))
+
+	require.Equal(t, testString, string(dt))
 }
 
 func testGlobalArgErrors(t *testing.T, sb integration.Sandbox) {
@@ -6312,14 +6338,19 @@ COPY Dockerfile Dockerfile
 
 // moby/buildkit#1301
 func testDockerfileCheckHostname(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM busybox
 RUN cat /etc/hosts | grep foo
 RUN echo $HOSTNAME | grep foo
 RUN echo $(hostname) | grep foo
-`)
+`,
+		`	
+FROM nanoserver
+RUN  reg query "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" /v Hostname | findstr "foo"
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -6370,11 +6401,8 @@ RUN echo $(hostname) | grep foo
 }
 
 func testEmptyStages(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
-	dockerfile := []byte(`
-ARG foo=bar
-`)
+	dockerfile := []byte(`ARG foo=bar`)
 
 	dir := integration.Tmpdir(
 		t,
@@ -6693,7 +6721,6 @@ COPY --from=base /env_foobar /
 }
 
 func testNamedImageContextPlatform(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	ctx := sb.Context()
 
@@ -6708,7 +6735,13 @@ func testNamedImageContextPlatform(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	// Build a base image and force buildkit to generate a manifest list.
-	dockerfile := []byte(`FROM --platform=$BUILDPLATFORM alpine:latest`)
+	baseImage := integration.UnixOrWindows(
+		"alpine",
+		"nanoserver",
+	)
+
+	dockerfile := []byte(fmt.Sprintf(`FROM --platform=$BUILDPLATFORM %s:latest`, baseImage))
+
 	target := registry + "/buildkit/testnamedimagecontextplatform:latest"
 
 	dir := integration.Tmpdir(
@@ -6738,10 +6771,10 @@ func testNamedImageContextPlatform(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dockerfile = []byte(`
-FROM --platform=$BUILDPLATFORM busybox AS target
-RUN echo hello
-`)
+	dockerfile = []byte(fmt.Sprintf(`
+		FROM --platform=$BUILDPLATFORM %s AS target
+		RUN echo hello
+		`, baseImage))
 
 	dir = integration.Tmpdir(
 		t,
@@ -6852,19 +6885,20 @@ RUN echo foo >> /test
 }
 
 func testNamedImageContextScratch(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	dockerfile := []byte(`
-FROM busybox
+	dockerfile := []byte(fmt.Sprintf(
+		`	
+FROM %s AS build
 COPY <<EOF /out
 hello world!
 EOF
-`)
+`,
+		integration.UnixOrWindows("busybox", "nanoserver")))
 
 	dir := integration.Tmpdir(
 		t,
@@ -6893,9 +6927,18 @@ EOF
 	require.NoError(t, err)
 
 	items, err := os.ReadDir(destDir)
+
+	fileNames := []string{}
+
+	for _, item := range items {
+		if item.Name() == "out" {
+			fileNames = append(fileNames, item.Name())
+		}
+	}
+
 	require.NoError(t, err)
-	require.Equal(t, 1, len(items))
-	require.Equal(t, "out", items[0].Name())
+	require.Equal(t, 1, len(fileNames))
+	require.Equal(t, "out", fileNames[0])
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
