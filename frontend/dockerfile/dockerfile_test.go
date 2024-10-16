@@ -207,6 +207,7 @@ var allTests = integration.TestFuncs(
 	testHistoryFinalizeTrace,
 	testEmptyStages,
 	testLocalCustomSessionID,
+	testTargetStageNameArg,
 )
 
 // Tests that depend on the `security.*` entitlements
@@ -1789,6 +1790,121 @@ COPY Dockerfile .
 			require.Equal(t, exp.env, img.Config.Env)
 		})
 	}
+}
+
+func testTargetStageNameArg(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM alpine AS base
+WORKDIR /out
+RUN echo -n "value:$TARGETSTAGE" > /out/first
+ARG TARGETSTAGE
+RUN echo -n "value:$TARGETSTAGE" > /out/second
+
+FROM scratch AS foo
+COPY --from=base /out/ /
+
+FROM scratch
+COPY --from=base /out/ /
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	destDir := t.TempDir()
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"target": "foo",
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "first"))
+	require.NoError(t, err)
+	require.Equal(t, "value:", string(dt))
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "second"))
+	require.NoError(t, err)
+	require.Equal(t, "value:foo", string(dt))
+
+	destDir = t.TempDir()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "first"))
+	require.NoError(t, err)
+	require.Equal(t, "value:", string(dt))
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "second"))
+	require.NoError(t, err)
+	require.Equal(t, "value:default", string(dt))
+
+	// stage name defined in Dockerfile but not passed in request
+	dockerfile = append(dockerfile, []byte(`
+	
+	FROM scratch AS final
+	COPY --from=base /out/ /
+	`)...)
+
+	dir = integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	destDir = t.TempDir()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "first"))
+	require.NoError(t, err)
+	require.Equal(t, "value:", string(dt))
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "second"))
+	require.NoError(t, err)
+	require.Equal(t, "value:final", string(dt))
 }
 
 func testExportMultiPlatform(t *testing.T, sb integration.Sandbox) {
