@@ -1,4 +1,6 @@
-# SBOM Scanning Protocol
+---
+title: SBOM scanning protocol
+---
 
 BuildKit supports automatic creation of [SBOMs](https://en.wikipedia.org/wiki/Software_supply_chain)
 for builds, attaching them as [image attestations](./attestation-storage.md).

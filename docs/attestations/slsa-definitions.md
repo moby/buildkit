@@ -1,4 +1,6 @@
-# SLSA definitions
+---
+title: SLSA definitions
+---
 
 BuildKit supports the [creation of SLSA Provenance](./slsa-provenance.md) for builds that
 it runs.
