@@ -1,4 +1,6 @@
-# Image Attestation Storage
+---
+title: Image attestation storage
+---
 
 Buildkit supports creating and attaching attestations to build artifacts. These
 attestations can provide valuable information from the build process,

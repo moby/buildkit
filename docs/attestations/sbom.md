@@ -1,4 +1,6 @@
-# SBOMs
+---
+title: SBOMs
+---
 
 BuildKit supports automatic creation of [SBOMs](https://en.wikipedia.org/wiki/Software_supply_chain)
 to record the software components that make up the final image. These consist

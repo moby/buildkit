@@ -1,4 +1,6 @@
-# SLSA provenance
+---
+title: SLSA provenance
+---
 
 BuildKit supports automatic creation of provenance attestations for the build
 process. Provenance attestations record information describing how a build was
