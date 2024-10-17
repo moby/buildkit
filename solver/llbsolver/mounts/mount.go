@@ -582,3 +582,55 @@ func (md CacheRefMetadata) setCacheDirIndex(id string) error {
 func (md CacheRefMetadata) ClearCacheDirIndex() error {
 	return md.ClearValueAndIndex(keyCacheDir, cacheDirIndex)
 }
+
+func (mm *MountManager) MountableHostBind(ctx context.Context, m *pb.Mount, g session.Group) (cache.Mountable, error) {
+	return mm.getHostBindMountable(ctx, m, g)
+}
+
+func (mm *MountManager) getHostBindMountable(ctx context.Context, m *pb.Mount, g session.Group) (cache.Mountable, error) {
+	if m.HostPath == "" {
+		return nil, errors.Errorf("hostPath must be specified for HOST_BIND mount")
+	}
+	return &hostBindMount{
+		hostPath: m.HostPath,
+		readonly: m.Readonly,
+	}, nil
+}
+
+type hostBindMount struct {
+	hostPath string
+	readonly bool
+}
+
+func (hbm *hostBindMount) Mount(ctx context.Context, readonly bool, g session.Group) (snapshot.Mountable, error) {
+	return &hostBindMountInstance{
+		hostPath: hbm.hostPath,
+		readonly: hbm.readonly || readonly,
+	}, nil
+}
+
+type hostBindMountInstance struct {
+	hostPath string
+	readonly bool
+}
+
+func (hbm *hostBindMountInstance) Mount() ([]mount.Mount, func() error, error) {
+	options := []string{"rbind"}
+	if hbm.readonly {
+		options = append(options, "ro")
+	}
+
+	return []mount.Mount{
+		{
+			Type:	"bind",
+			Source:  hbm.hostPath,
+			Options: options,
+		},
+	}, func() error { return nil }, nil
+
+}
+
+// Implement IdentityMapping method
+func (hbm *hostBindMountInstance) IdentityMapping() *idtools.IdentityMapping {
+	return nil
+}
