@@ -74,7 +74,7 @@ func (ap *authProvider) Register(server *grpc.Server) {
 }
 
 func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequest) (rr *auth.FetchTokenResponse, err error) {
-	ac, err := ap.getAuthConfig(req.Host)
+	ac, err := ap.getAuthConfig(ctx, req.Host)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 		return toTokenResponse(ac.RegistryToken, time.Time{}, 0), nil
 	}
 
-	creds, err := ap.credentials(req.Host)
+	creds, err := ap.credentials(ctx, req.Host)
 	if err != nil {
 		return nil, err
 	}
@@ -187,8 +187,8 @@ func (ap *authProvider) tlsConfig(host string) (*tls.Config, error) {
 	return tc, nil
 }
 
-func (ap *authProvider) credentials(host string) (*auth.CredentialsResponse, error) {
-	ac, err := ap.getAuthConfig(host)
+func (ap *authProvider) credentials(ctx context.Context, host string) (*auth.CredentialsResponse, error) {
+	ac, err := ap.getAuthConfig(ctx, host)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +203,7 @@ func (ap *authProvider) credentials(host string) (*auth.CredentialsResponse, err
 }
 
 func (ap *authProvider) Credentials(ctx context.Context, req *auth.CredentialsRequest) (*auth.CredentialsResponse, error) {
-	resp, err := ap.credentials(req.Host)
+	resp, err := ap.credentials(ctx, req.Host)
 	if err != nil || resp.Secret != "" {
 		ap.mu.Lock()
 		defer ap.mu.Unlock()
@@ -219,7 +219,7 @@ func (ap *authProvider) Credentials(ctx context.Context, req *auth.CredentialsRe
 }
 
 func (ap *authProvider) GetTokenAuthority(ctx context.Context, req *auth.GetTokenAuthorityRequest) (*auth.GetTokenAuthorityResponse, error) {
-	key, err := ap.getAuthorityKey(req.Host, req.Salt)
+	key, err := ap.getAuthorityKey(ctx, req.Host, req.Salt)
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +228,7 @@ func (ap *authProvider) GetTokenAuthority(ctx context.Context, req *auth.GetToke
 }
 
 func (ap *authProvider) VerifyTokenAuthority(ctx context.Context, req *auth.VerifyTokenAuthorityRequest) (*auth.VerifyTokenAuthorityResponse, error) {
-	key, err := ap.getAuthorityKey(req.Host, req.Salt)
+	key, err := ap.getAuthorityKey(ctx, req.Host, req.Salt)
 	if err != nil {
 		return nil, err
 	}
@@ -239,7 +239,7 @@ func (ap *authProvider) VerifyTokenAuthority(ctx context.Context, req *auth.Veri
 	return &auth.VerifyTokenAuthorityResponse{Signed: sign.Sign(nil, req.Payload, priv)}, nil
 }
 
-func (ap *authProvider) getAuthConfig(host string) (*types.AuthConfig, error) {
+func (ap *authProvider) getAuthConfig(ctx context.Context, host string) (*types.AuthConfig, error) {
 	ap.mu.Lock()
 	defer ap.mu.Unlock()
 
@@ -248,7 +248,9 @@ func (ap *authProvider) getAuthConfig(host string) (*types.AuthConfig, error) {
 	}
 
 	if _, exists := ap.authConfigCache[host]; !exists {
+		span, _ := tracing.StartSpan(ctx, fmt.Sprintf("load credentials for %s", host))
 		ac, err := ap.config.GetAuthConfig(host)
+		tracing.FinishWithError(span, err)
 		if err != nil {
 			return nil, err
 		}
@@ -258,12 +260,12 @@ func (ap *authProvider) getAuthConfig(host string) (*types.AuthConfig, error) {
 	return ap.authConfigCache[host], nil
 }
 
-func (ap *authProvider) getAuthorityKey(host string, salt []byte) (ed25519.PrivateKey, error) {
+func (ap *authProvider) getAuthorityKey(ctx context.Context, host string, salt []byte) (ed25519.PrivateKey, error) {
 	if v, err := strconv.ParseBool(os.Getenv("BUILDKIT_NO_CLIENT_TOKEN")); err == nil && v {
 		return nil, status.Errorf(codes.Unavailable, "client side tokens disabled")
 	}
 
-	creds, err := ap.credentials(host)
+	creds, err := ap.credentials(ctx, host)
 	if err != nil {
 		return nil, err
 	}
