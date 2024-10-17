@@ -1536,7 +1536,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		commitMessage.WriteString(" <<" + src.Path)
 
 		data := src.Data
-		f, err := system.CheckSystemDriveAndRemoveDriveLetter(src.Path, d.platform.OS)
+		f, err := system.CheckSystemDriveAndRemoveDriveLetter(src.Path, d.platform.OS, false)
 		if err != nil {
 			return errors.Wrap(err, "removing drive letter")
 		}
@@ -1804,13 +1804,15 @@ func pathRelativeToWorkingDir(s llb.State, p string, platform ocispecs.Platform)
 		return "", err
 	}
 
-	p, err = system.CheckSystemDriveAndRemoveDriveLetter(p, platform.OS)
+	keepSlash := true
+
+	p, err = system.CheckSystemDriveAndRemoveDriveLetter(p, platform.OS, keepSlash)
 	if err != nil {
 		return "", errors.Wrap(err, "removing drive letter")
 	}
 
 	if system.IsAbs(p, platform.OS) {
-		return system.NormalizePath("/", p, platform.OS, true)
+		return system.NormalizePath("/", p, platform.OS, keepSlash)
 	}
 
 	// add slashes for "" and "." paths
@@ -1818,7 +1820,7 @@ func pathRelativeToWorkingDir(s llb.State, p string, platform ocispecs.Platform)
 	if p == "." || p == "" {
 		p = "./"
 	}
-	return system.NormalizePath(dir, p, platform.OS, true)
+	return system.NormalizePath(dir, p, platform.OS, keepSlash)
 }
 
 func addEnv(env []string, k, v string) []string {

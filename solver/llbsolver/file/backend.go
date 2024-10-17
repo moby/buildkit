@@ -380,19 +380,10 @@ func (fb *Backend) readUserWrapper(owner *pb.ChownOpt, user, group fileoptypes.M
 }
 
 func cleanPath(s string) (string, error) {
-	s, err := system.CheckSystemDriveAndRemoveDriveLetter(s, runtime.GOOS)
-	if err != nil {
-		return "", errors.Wrap(err, "removing drive letter")
+	// calls the new system.cleanPath
+	keepSlash := false
+	if runtime.GOOS == "windows" {
+		keepSlash = true
 	}
-	s = filepath.FromSlash(s)
-	s2 := filepath.Join("/", s)
-	if strings.HasSuffix(s, string(filepath.Separator)+".") {
-		if s2 != string(filepath.Separator) {
-			s2 += string(filepath.Separator)
-		}
-		s2 += "."
-	} else if strings.HasSuffix(s, string(filepath.Separator)) && s2 != string(filepath.Separator) {
-		s2 += string(filepath.Separator)
-	}
-	return s2, nil
+	return system.CheckSystemDriveAndRemoveDriveLetter(s, runtime.GOOS, keepSlash)
 }
