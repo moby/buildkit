@@ -24,6 +24,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth"
 	"github.com/moby/buildkit/util/progress/progresswriter"
+	"github.com/moby/buildkit/util/tracing"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/nacl/sign"
 	"google.golang.org/grpc"
@@ -96,11 +97,11 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 		Secret:   creds.Secret,
 	}
 
-	httpClient := http.DefaultClient()
+	httpClient := tracing.DefaultClient
 	if tc, err := ap.tlsConfig(req.Host); err == nil && tc != nil {
 		transport := http.DefaultTransport()
 		transport.TLSClientConfig = tc
-		httpClient.Transport = transport
+		httpClient.Transport = tracing.NewTransport(transport)
 	}
 
 	if creds.Secret != "" {
