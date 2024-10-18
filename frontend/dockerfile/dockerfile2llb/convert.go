@@ -229,7 +229,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 
 	platformOpt := buildPlatformOpt(&opt)
 
-	globalArgs := platformArgs(platformOpt, opt.BuildArgs)
+	globalArgs := defaultArgs(platformOpt, opt.BuildArgs, opt.Target)
 
 	dockerfile, err := parser.Parse(bytes.NewReader(dt))
 	if err != nil {
