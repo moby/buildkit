@@ -1144,7 +1144,7 @@ port. For detailed information, see the
 ## ENV
 
 ```dockerfile
-ENV <key>=<value> ...
+ENV <key>=<value> [<key>=<value>...]
 ```
 
 The `ENV` instruction sets the environment variable `<key>` to the value
@@ -2310,7 +2310,7 @@ Therefore, to avoid unintended operations in unknown directories, it's best prac
 ## ARG
 
 ```dockerfile
-ARG <name>[=<default value>] ...
+ARG <name>[=<default value>] [<name>[=<default value>]...]
 ```
 
 The `ARG` instruction defines a variable that users can pass at build-time to
