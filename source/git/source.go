@@ -475,7 +475,9 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 			}
 		}
 		args = append(args, "origin")
-		if !gitutil.IsCommitSHA(ref) {
+		if gitutil.IsCommitSHA(ref) {
+			args = append(args, ref)
+		} else {
 			// local refs are needed so they would be advertised on next fetches. Force is used
 			// in case the ref is a branch and it now points to a different commit sha
 			// TODO: is there a better way to do this?

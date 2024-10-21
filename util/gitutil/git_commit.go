@@ -1,9 +1,19 @@
 package gitutil
 
-import "regexp"
-
-var validHex = regexp.MustCompile(`^[a-f0-9]{40}$`)
-
 func IsCommitSHA(str string) bool {
-	return validHex.MatchString(str)
+	if len(str) != 40 {
+		return false
+	}
+
+	for _, ch := range str {
+		if ch >= '0' && ch <= '9' {
+			continue
+		}
+		if ch >= 'a' && ch <= 'f' {
+			continue
+		}
+		return false
+	}
+
+	return true
 }
