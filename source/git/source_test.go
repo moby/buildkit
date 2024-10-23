@@ -218,15 +218,31 @@ func testFetchBySHA(t *testing.T, keepGitDir bool) {
 }
 
 func TestFetchUnreferencedTagSha(t *testing.T) {
-	testFetchUnreferencedTagSha(t, false)
+	testFetchUnreferencedRefSha(t, "v1.2.3-special", false)
 }
 
 func TestFetchUnreferencedTagShaKeepGitDir(t *testing.T) {
-	testFetchUnreferencedTagSha(t, true)
+	testFetchUnreferencedRefSha(t, "v1.2.3-special", true)
 }
 
-// testFetchUnreferencedTagSha tests fetching a SHA that points to a tag that is not reachable from any branch.
-func testFetchUnreferencedTagSha(t *testing.T, keepGitDir bool) {
+func TestFetchUnreferencedRefSha(t *testing.T) {
+	testFetchUnreferencedRefSha(t, "refs/special", false)
+}
+
+func TestFetchUnreferencedRefShaKeepGitDir(t *testing.T) {
+	testFetchUnreferencedRefSha(t, "refs/special", true)
+}
+
+func TestFetchUnadvertisedRefSha(t *testing.T) {
+	testFetchUnreferencedRefSha(t, "refs/special~", false)
+}
+
+func TestFetchUnadvertisedRefShaKeepGitDir(t *testing.T) {
+	testFetchUnreferencedRefSha(t, "refs/special~", true)
+}
+
+// testFetchUnreferencedRefSha tests fetching a SHA that points to a ref that is not reachable from any branch.
+func testFetchUnreferencedRefSha(t *testing.T, ref string, keepGitDir bool) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
 	}
@@ -239,7 +255,7 @@ func testFetchUnreferencedTagSha(t *testing.T, keepGitDir bool) {
 
 	repo := setupGitRepo(t)
 
-	cmd := exec.Command("git", "rev-parse", "v1.2.3-special")
+	cmd := exec.Command("git", "rev-parse", ref)
 	cmd.Dir = repo.mainPath
 
 	out, err := cmd.Output()
@@ -691,6 +707,8 @@ func setupGitRepo(t *testing.T) gitRepoFixture {
 	// * (refs/heads/feature) withsub
 	// * feature
 	// * (HEAD -> refs/heads/master, tag: refs/tags/lightweight-tag) third
+	// | * ref only
+	// | * commit only
 	// | * (tag: refs/tags/v1.2.3-special) tagonly-leaf
 	// |/
 	// * (tag: refs/tags/v1.2.3) second
@@ -699,35 +717,53 @@ func setupGitRepo(t *testing.T) gitRepoFixture {
 		"git -c init.defaultBranch=master init",
 		"git config --local user.email test",
 		"git config --local user.name test",
+
 		"echo foo > abc",
 		"git add abc",
 		"git commit -m initial",
 		"git tag --no-sign a/v1.2.3",
+
 		"echo bar > def",
 		"mkdir subdir",
 		"echo subcontents > subdir/subfile",
 		"git add def subdir",
 		"git commit -m second",
 		"git tag -a -m \"this is an annotated tag\" v1.2.3",
+
 		"echo foo > bar",
 		"git add bar",
 		"git commit -m tagonly-leaf",
 		"git tag --no-sign v1.2.3-special",
+
+		"echo foo2 > bar2",
+		"git add bar2",
+		"git commit -m \"commit only\"",
+		"echo foo3 > bar3",
+		"git add bar3",
+		"git commit -m \"ref only\"",
+		"git update-ref refs/special $(git rev-parse HEAD)",
+
 		// switch master back to v1.2.3
 		"git checkout -B master v1.2.3",
+
 		"echo sbb > foo13",
 		"git add foo13",
 		"git commit -m third",
 		"git tag --no-sign lightweight-tag",
+
 		"git checkout -B feature",
+
 		"echo baz > ghi",
 		"git add ghi",
 		"git commit -m feature",
 		"git update-ref refs/test $(git rev-parse HEAD)",
+
 		"git submodule add "+fixture.subURL+" sub",
 		"git add -A",
 		"git commit -m withsub",
+
 		"git checkout master",
+
 		// "git log --oneline --graph --decorate=full --all",
 	)
 	return fixture
@@ -785,6 +821,7 @@ func runShell(t *testing.T, dir string, cmds ...string) {
 			cmd = exec.Command("sh", "-c", args)
 		}
 		cmd.Dir = dir
+		// cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		require.NoErrorf(t, cmd.Run(), "error running %v", args)
 	}
