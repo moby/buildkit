@@ -17,6 +17,8 @@ const (
 	keyRequestID = "requestid"
 )
 
+type PlatformCtxKey struct{}
+
 type RequestHandler struct {
 	Outline     func(context.Context) (*outline.Outline, error)
 	ListTargets func(context.Context) (*targets.List, error)
@@ -59,14 +61,44 @@ func (bc *Client) HandleSubrequest(ctx context.Context, h RequestHandler) (*clie
 		}
 	case lint.SubrequestLintDefinition.Name:
 		if f := h.Lint; f != nil {
-			warnings, err := f(ctx)
-			if err != nil {
-				return nil, false, err
+			type warningKey struct {
+				detail    string
+				startLine int32
 			}
-			if warnings == nil {
-				return nil, true, nil
+			lintResults := lint.LintResults{}
+			uniqueWarnings := map[warningKey]lint.Warning{}
+			if len(bc.Config.TargetPlatforms) == 0 {
+				if len(bc.Config.BuildPlatforms) != 0 {
+					bc.Config.TargetPlatforms = append(bc.Config.TargetPlatforms, bc.Config.BuildPlatforms[0])
+				}
 			}
-			res, err := warnings.ToResult(nil)
+			for _, tp := range bc.Config.TargetPlatforms {
+				ctx := context.WithValue(ctx, PlatformCtxKey{}, &tp)
+				results, err := f(ctx)
+				if err != nil {
+					return nil, false, err
+				}
+				sourceStart := len(lintResults.Sources)
+				lintResults.Sources = append(lintResults.Sources, results.Sources...)
+				for _, warning := range results.Warnings {
+					var startLine int32
+					if len(warning.Location.Ranges) > 0 || warning.Location.Ranges[0] != nil {
+						startLine = warning.Location.Ranges[0].Start.Line
+					}
+					key := warningKey{warning.Detail, startLine}
+					if _, ok := uniqueWarnings[key]; !ok {
+						uniqueWarnings[key] = warning
+						// Update the location to be relative to the combined source infos
+						warning.Location.SourceIndex += int32(sourceStart)
+						lintResults.Warnings = append(lintResults.Warnings, warning)
+					}
+				}
+				if results.Error != nil {
+					lintResults.Error = results.Error
+					break
+				}
+			}
+			res, err := lintResults.ToResult(nil)
 			return res, true, err
 		}
 	}
