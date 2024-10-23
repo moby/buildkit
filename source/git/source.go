@@ -196,10 +196,13 @@ type gitSourceHandler struct {
 	authArgs []string
 }
 
-func (gs *gitSourceHandler) shaToCacheKey(sha string) string {
+func (gs *gitSourceHandler) shaToCacheKey(sha, ref string) string {
 	key := sha
 	if gs.src.KeepGitDir {
 		key += ".git"
+		if ref != "" {
+			key += "#" + ref
+		}
 	}
 	if gs.src.Subdir != "" {
 		key += ":" + gs.src.Subdir
@@ -341,7 +344,7 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 	defer gs.locker.Unlock(remote)
 
 	if ref := gs.src.Ref; ref != "" && gitutil.IsCommitSHA(ref) {
-		cacheKey := gs.shaToCacheKey(ref)
+		cacheKey := gs.shaToCacheKey(ref, "")
 		gs.cacheKey = cacheKey
 		return cacheKey, ref, nil, true, nil
 	}
@@ -377,6 +380,7 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 		annotatedTagRef = tagRef + "^{}"
 	)
 	var sha, headSha, tagSha string
+	var usedRef string
 	for _, line := range lines {
 		lineSha, lineRef, _ := strings.Cut(line, "\t")
 		switch lineRef {
@@ -386,15 +390,18 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 			tagSha = lineSha
 		case partialRef:
 			sha = lineSha
+			usedRef = lineRef
 		}
 	}
 
 	// git-checkout prefers branches in case of ambiguity
 	if sha == "" {
 		sha = headSha
+		usedRef = headRef
 	}
 	if sha == "" {
 		sha = tagSha
+		usedRef = tagRef
 	}
 	if sha == "" {
 		return "", "", nil, false, errors.Errorf("repository does not contain ref %s, output: %q", ref, string(buf))
@@ -403,7 +410,7 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 		return "", "", nil, false, errors.Errorf("invalid commit sha %q", sha)
 	}
 
-	cacheKey := gs.shaToCacheKey(sha)
+	cacheKey := gs.shaToCacheKey(sha, usedRef)
 	gs.cacheKey = cacheKey
 	return cacheKey, sha, nil, true, nil
 }
