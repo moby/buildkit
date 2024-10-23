@@ -1522,8 +1522,8 @@ The available `[OPTIONS]` are:
 | [`--chown`](#copy---chown---chmod) |                            |
 | [`--chmod`](#copy---chown---chmod) | 1.2                        |
 | [`--link`](#copy---link)           | 1.4                        |
-| [`--parents`](#copy---parents)     | 1.7                        |
-| [`--exclude`](#copy---exclude)     | 1.7                        |
+| [`--parents`](#copy---parents)     | 1.7-labs                   |
+| [`--exclude`](#copy---exclude)     | 1.7-labs                   |
 
 The `COPY` instruction copies new files or directories from `<src>` and adds
 them to the filesystem of the image at the path `<dest>`. Files and directories
@@ -1882,6 +1882,9 @@ supporting wildcards and matching using Go's
 For example, to add all files starting with "hom", excluding files with a `.txt` extension:
 
 ```dockerfile
+# syntax=docker/dockerfile:1.7-labs
+FROM scratch
+
 COPY --exclude=*.txt hom* /mydir/
 ```
 
@@ -1891,6 +1894,9 @@ even if the files paths match the pattern specified in `<src>`.
 To add all files starting with "hom", excluding files with either `.txt` or `.md` extensions:
 
 ```dockerfile
+# syntax=docker/dockerfile:1.7-labs
+FROM scratch
+
 COPY --exclude=*.txt --exclude=*.md hom* /mydir/
 ```
 
