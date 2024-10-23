@@ -427,7 +427,16 @@ func prepareValueMatrix(tc testConf) []matrixValue {
 
 // Skips tests on platform
 func SkipOnPlatform(t *testing.T, goos string) {
-	if runtime.GOOS == goos {
+	skip := false
+	// support for negation
+	if strings.HasPrefix(goos, "!") {
+		goos = strings.TrimPrefix(goos, "!")
+		skip = runtime.GOOS != goos
+	} else {
+		skip = runtime.GOOS == goos
+	}
+
+	if skip {
 		t.Skipf("Skipped on %s", goos)
 	}
 }
