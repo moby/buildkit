@@ -1237,7 +1237,7 @@ The available `[OPTIONS]` are:
 | [`--chown`](#add---chown---chmod)       |                            |
 | [`--chmod`](#add---chown---chmod)       | 1.2                        |
 | [`--link`](#add---link)                 | 1.4                        |
-| [`--exclude`](#add---exclude)           | 1.7                        |
+| [`--exclude`](#add---exclude)           | 1.7-labs                   |
 
 The `ADD` instruction copies new files or directories from `<src>` and adds
 them to the filesystem of the image at the path `<dest>`. Files and directories
@@ -1820,7 +1820,7 @@ COPY [--parents[=<boolean>]] <src> ... <dest>
 The `--parents` flag preserves parent directories for `src` entries. This flag defaults to `false`.
 
 ```dockerfile
-# syntax=docker/dockerfile:1.7-labs
+# syntax=docker/dockerfile:1-labs
 FROM scratch
 
 COPY ./x/a.txt ./y/a.txt /no_parents/
@@ -1840,7 +1840,7 @@ directories after it will be preserved. This may be especially useful copies bet
 with `--from` where the source paths need to be absolute.
 
 ```dockerfile
-# syntax=docker/dockerfile:1.7-labs
+# syntax=docker/dockerfile:1-labs
 FROM scratch
 
 COPY --parents ./x/./y/*.txt /parents/
@@ -1882,7 +1882,7 @@ supporting wildcards and matching using Go's
 For example, to add all files starting with "hom", excluding files with a `.txt` extension:
 
 ```dockerfile
-# syntax=docker/dockerfile:1.7-labs
+# syntax=docker/dockerfile:1-labs
 FROM scratch
 
 COPY --exclude=*.txt hom* /mydir/
@@ -1894,7 +1894,7 @@ even if the files paths match the pattern specified in `<src>`.
 To add all files starting with "hom", excluding files with either `.txt` or `.md` extensions:
 
 ```dockerfile
-# syntax=docker/dockerfile:1.7-labs
+# syntax=docker/dockerfile:1-labs
 FROM scratch
 
 COPY --exclude=*.txt --exclude=*.md hom* /mydir/
