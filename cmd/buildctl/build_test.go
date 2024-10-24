@@ -140,7 +140,7 @@ func testBuildMetadataFile(t *testing.T, sb integration.Sandbox) {
 	metadataBytes, err := os.ReadFile(metadataFile)
 	require.NoError(t, err)
 
-	var metadata map[string]interface{}
+	var metadata map[string]json.RawMessage
 	err = json.Unmarshal(metadataBytes, &metadata)
 	require.NoError(t, err)
 
@@ -153,12 +153,16 @@ func testBuildMetadataFile(t *testing.T, sb integration.Sandbox) {
 
 	require.Contains(t, metadata, exptypes.ExporterImageDescriptorKey)
 	var desc *ocispecs.Descriptor
-	dtdesc, err := json.Marshal(metadata[exptypes.ExporterImageDescriptorKey])
-	require.NoError(t, err)
-	err = json.Unmarshal(dtdesc, &desc)
+	err = json.Unmarshal(metadata[exptypes.ExporterImageDescriptorKey], &desc)
 	require.NoError(t, err)
 	require.NotEmpty(t, desc.MediaType)
 	require.NotEmpty(t, desc.Digest.String())
+
+	require.Contains(t, metadata, exptypes.ExporterImageDescriptorsKey)
+	var descList []*ocispecs.Descriptor
+	require.NoError(t, err)
+	err = json.Unmarshal(metadata[exptypes.ExporterImageDescriptorsKey], &descList)
+	require.NoError(t, err)
 
 	cdAddress := sb.ContainerdAddress()
 	if cdAddress == "" {
