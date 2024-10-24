@@ -243,7 +243,7 @@ $networkName = 'nat'
 # Get-HnsNetwork is available once you have enabled the 'Hyper-V Host Compute Service' feature
 # which must have been done at the Quick setup above
 # Enable-WindowsOptionalFeature -Online -FeatureName containers -All
-# Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All -All
+# Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All
 # the default one named `nat` should be available
 $natInfo = Get-HnsNetwork -ErrorAction Ignore | Where-Object { $_.Name -eq $networkName }
 if ($null -eq $natInfo) {
