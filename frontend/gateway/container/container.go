@@ -236,6 +236,16 @@ func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manage
 			if mountable == nil {
 				continue
 			}
+		case opspb.MountType_HOST_BIND:
+			mountable, err = mm.MountableHostBind(ctx, m, g)
+			if err != nil {
+				return p, err
+			}
+			if mountable == nil {
+				continue // or handle error if necessary
+			}
+        // Since this is a direct host mount, we may not need to handle outputs or cache.
+        // Proceed to add this mountable to the list of mounts.
 
 		default:
 			return p, errors.Errorf("mount type %s not implemented", m.MountType)
