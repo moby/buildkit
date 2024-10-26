@@ -29,9 +29,8 @@ func (c *Controller) Close() error {
 // The first worker becomes the default.
 //
 // Add is not thread-safe.
-func (c *Controller) Add(w Worker) error {
+func (c *Controller) Add(w Worker) {
 	c.workers = append(c.workers, w)
-	return nil
 }
 
 // List lists workers
