@@ -752,7 +752,7 @@ github.com/stretchr/testify/require
 # github.com/tonistiigi/dchapes-mode v0.0.0-20241001053921-ca0759fec205
 ## explicit; go 1.21
 github.com/tonistiigi/dchapes-mode
-# github.com/tonistiigi/fsutil v0.0.0-20241003195857-3f140a1299b0
+# github.com/tonistiigi/fsutil v0.0.0-20241028165955-397af5306b5c
 ## explicit; go 1.21
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy
