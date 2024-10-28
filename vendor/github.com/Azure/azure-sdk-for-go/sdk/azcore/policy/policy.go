@@ -7,10 +7,14 @@
 package policy
 
 import (
+	"context"
+	"net/http"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/exported"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/tracing"
 )
 
 // Policy represents an extensibility point for the Pipeline that can mutate the specified
@@ -25,10 +29,20 @@ type Transporter = exported.Transporter
 type Request = exported.Request
 
 // ClientOptions contains optional settings for a client's pipeline.
-// All zero-value fields will be initialized with default values.
+// Instances can be shared across calls to SDK client constructors when uniform configuration is desired.
+// Zero-value fields will have their specified default values applied during use.
 type ClientOptions struct {
+	// APIVersion overrides the default version requested of the service.
+	// Set with caution as this package version has not been tested with arbitrary service versions.
+	APIVersion string
+
 	// Cloud specifies a cloud for the client. The default is Azure Public Cloud.
 	Cloud cloud.Configuration
+
+	// InsecureAllowCredentialWithHTTP enables authenticated requests over HTTP.
+	// By default, authenticated requests to an HTTP endpoint are rejected by the client.
+	// WARNING: setting this to true will allow sending the credential in clear text. Use with caution.
+	InsecureAllowCredentialWithHTTP bool
 
 	// Logging configures the built-in logging policy.
 	Logging LogOptions
@@ -38,6 +52,10 @@ type ClientOptions struct {
 
 	// Telemetry configures the built-in telemetry policy.
 	Telemetry TelemetryOptions
+
+	// TracingProvider configures the tracing provider.
+	// It defaults to a no-op tracer.
+	TracingProvider tracing.Provider
 
 	// Transport sets the transport for HTTP requests.
 	Transport Transporter
@@ -69,7 +87,8 @@ type LogOptions struct {
 }
 
 // RetryOptions configures the retry policy's behavior.
-// Call NewRetryOptions() to create an instance with default values.
+// Zero-value fields will have their specified default values applied during use.
+// This allows for modification of a subset of fields.
 type RetryOptions struct {
 	// MaxRetries specifies the maximum number of attempts a failed operation will be retried
 	// before producing an error.
@@ -82,19 +101,36 @@ type RetryOptions struct {
 	TryTimeout time.Duration
 
 	// RetryDelay specifies the initial amount of delay to use before retrying an operation.
+	// The value is used only if the HTTP response does not contain a Retry-After header.
 	// The delay increases exponentially with each retry up to the maximum specified by MaxRetryDelay.
 	// The default value is four seconds.  A value less than zero means no delay between retries.
 	RetryDelay time.Duration
 
 	// MaxRetryDelay specifies the maximum delay allowed before retrying an operation.
 	// Typically the value is greater than or equal to the value specified in RetryDelay.
-	// The default Value is 120 seconds.  A value less than zero means there is no cap.
+	// The default Value is 60 seconds.  A value less than zero means there is no cap.
 	MaxRetryDelay time.Duration
 
 	// StatusCodes specifies the HTTP status codes that indicate the operation should be retried.
-	// The default value is the status codes in StatusCodesForRetry.
-	// Specifying an empty slice will cause retries to happen only for transport errors.
+	// A nil slice will use the following values.
+	//   http.StatusRequestTimeout      408
+	//   http.StatusTooManyRequests     429
+	//   http.StatusInternalServerError 500
+	//   http.StatusBadGateway          502
+	//   http.StatusServiceUnavailable  503
+	//   http.StatusGatewayTimeout      504
+	// Specifying values will replace the default values.
+	// Specifying an empty slice will disable retries for HTTP status codes.
 	StatusCodes []int
+
+	// ShouldRetry evaluates if the retry policy should retry the request.
+	// When specified, the function overrides comparison against the list of
+	// HTTP status codes and error checking within the retry policy. Context
+	// and NonRetriable errors remain evaluated before calling ShouldRetry.
+	// The *http.Response and error parameters are mutually exclusive, i.e.
+	// if one is nil, the other is not nil.
+	// A return value of true means the retry policy should retry.
+	ShouldRetry func(*http.Response, error) bool
 }
 
 // TelemetryOptions configures the telemetry policy's behavior.
@@ -108,12 +144,54 @@ type TelemetryOptions struct {
 }
 
 // TokenRequestOptions contain specific parameter that may be used by credentials types when attempting to get a token.
-type TokenRequestOptions struct {
-	// Scopes contains the list of permission scopes required for the token.
-	Scopes []string
-}
+type TokenRequestOptions = exported.TokenRequestOptions
 
 // BearerTokenOptions configures the bearer token policy's behavior.
 type BearerTokenOptions struct {
-	// placeholder for future options
+	// AuthorizationHandler allows SDK developers to run client-specific logic when BearerTokenPolicy must authorize a request.
+	// When this field isn't set, the policy follows its default behavior of authorizing every request with a bearer token from
+	// its given credential.
+	AuthorizationHandler AuthorizationHandler
+
+	// InsecureAllowCredentialWithHTTP enables authenticated requests over HTTP.
+	// By default, authenticated requests to an HTTP endpoint are rejected by the client.
+	// WARNING: setting this to true will allow sending the bearer token in clear text. Use with caution.
+	InsecureAllowCredentialWithHTTP bool
+}
+
+// AuthorizationHandler allows SDK developers to insert custom logic that runs when BearerTokenPolicy must authorize a request.
+type AuthorizationHandler struct {
+	// OnRequest is called each time the policy receives a request. Its func parameter authorizes the request with a token
+	// from the policy's given credential. Implementations that need to perform I/O should use the Request's context,
+	// available from Request.Raw().Context(). When OnRequest returns an error, the policy propagates that error and doesn't
+	// send the request. When OnRequest is nil, the policy follows its default behavior, authorizing the request with a
+	// token from its credential according to its configuration.
+	OnRequest func(*Request, func(TokenRequestOptions) error) error
+
+	// OnChallenge is called when the policy receives a 401 response, allowing the AuthorizationHandler to re-authorize the
+	// request according to an authentication challenge (the Response's WWW-Authenticate header). OnChallenge is responsible
+	// for parsing parameters from the challenge. Its func parameter will authorize the request with a token from the policy's
+	// given credential. Implementations that need to perform I/O should use the Request's context, available from
+	// Request.Raw().Context(). When OnChallenge returns nil, the policy will send the request again. When OnChallenge is nil,
+	// the policy will return any 401 response to the client.
+	OnChallenge func(*Request, *http.Response, func(TokenRequestOptions) error) error
+}
+
+// WithCaptureResponse applies the HTTP response retrieval annotation to the parent context.
+// The resp parameter will contain the HTTP response after the request has completed.
+func WithCaptureResponse(parent context.Context, resp **http.Response) context.Context {
+	return context.WithValue(parent, shared.CtxWithCaptureResponse{}, resp)
+}
+
+// WithHTTPHeader adds the specified http.Header to the parent context.
+// Use this to specify custom HTTP headers at the API-call level.
+// Any overlapping headers will have their values replaced with the values specified here.
+func WithHTTPHeader(parent context.Context, header http.Header) context.Context {
+	return context.WithValue(parent, shared.CtxWithHTTPHeaderKey{}, header)
+}
+
+// WithRetryOptions adds the specified RetryOptions to the parent context.
+// Use this to specify custom RetryOptions at the API-call level.
+func WithRetryOptions(parent context.Context, options RetryOptions) context.Context {
+	return context.WithValue(parent, shared.CtxWithRetryOptionsKey{}, options)
 }
