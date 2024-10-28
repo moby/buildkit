@@ -15,10 +15,10 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.15.15
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.48.1
 	github.com/containerd/console v1.0.4
-	github.com/containerd/containerd v1.7.22
+	github.com/containerd/containerd v1.7.23
 	github.com/containerd/containerd/api v1.7.19
-	github.com/containerd/continuity v0.4.3
-	github.com/containerd/errdefs v0.1.0
+	github.com/containerd/continuity v0.4.4
+	github.com/containerd/errdefs v0.3.0
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.8
 	github.com/containerd/go-cni v1.1.10
 	github.com/containerd/go-runc v1.1.0
@@ -98,12 +98,12 @@ require (
 	golang.org/x/mod v0.21.0
 	golang.org/x/net v0.29.0
 	golang.org/x/sync v0.8.0
-	golang.org/x/sys v0.25.0
+	golang.org/x/sys v0.26.0
 	golang.org/x/time v0.6.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240604185151-ef581f913117
 	google.golang.org/grpc v1.66.2
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.5.1
-	google.golang.org/protobuf v1.34.1
+	google.golang.org/protobuf v1.35.1
 	kernel.org/pub/linux/libs/security/libcap/cap v1.2.70
 )
 
