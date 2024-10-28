@@ -135,11 +135,12 @@ func (c *Containerd) New(ctx context.Context, cfg *integration.BackendConfig) (b
 	deferF.Append(func() error { return os.RemoveAll(tmpdir) })
 
 	address := getContainerdSock(tmpdir)
-	config := fmt.Sprintf(`root = %q
+	config := fmt.Sprintf(`version = 2
+root = %q
 state = %q
 # CRI plugins listens on 10010/tcp for stream server.
 # We disable CRI plugin so that multiple instance can run simultaneously.
-disabled_plugins = ["cri"]
+disabled_plugins = ["io.containerd.grpc.v1.cri"]
 
 [grpc]
   address = %q
