@@ -21,9 +21,8 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/containerd/errdefs"
 	"github.com/containerd/log"
-
-	"github.com/containerd/containerd/errdefs"
 )
 
 const maxRetry = 3

@@ -28,11 +28,6 @@ import (
 	"path"
 	"strings"
 
-	"github.com/containerd/log"
-	"github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-
-	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/reference"
 	"github.com/containerd/containerd/remotes"
@@ -40,6 +35,10 @@ import (
 	remoteerrors "github.com/containerd/containerd/remotes/errors"
 	"github.com/containerd/containerd/tracing"
 	"github.com/containerd/containerd/version"
+	"github.com/containerd/errdefs"
+	"github.com/containerd/log"
+	"github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 var (
