@@ -52,7 +52,7 @@ func Marshal(i interface{}) ([]byte, error) {
 	if v.Kind() != reflect.Ptr && v.CanAddr() {
 		v = v.Addr()
 	}
-	err := marshalStruct(reflect.ValueOf(i), &buff, enc)
+	err := marshalStruct(v, &buff, enc)
 	if err != nil {
 		return nil, err
 	}

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var okPage = []byte(`
@@ -84,7 +85,7 @@ func New(reqState string, port int) (*Server, error) {
 
 	serv := &Server{
 		Addr:     fmt.Sprintf("http://localhost:%s", portStr),
-		s:        &http.Server{Addr: "localhost:0"},
+		s:        &http.Server{Addr: "localhost:0", ReadHeaderTimeout: time.Second},
 		reqState: reqState,
 		resultCh: make(chan Result, 1),
 	}
