@@ -47,8 +47,8 @@ be UPPERCASE to distinguish them from arguments more easily.
 Docker runs instructions in a Dockerfile in order. A Dockerfile **must
 begin with a `FROM` instruction**. This may be after [parser
 directives](#parser-directives), [comments](#format), and globally scoped
-[ARGs](#arg). The `FROM` instruction specifies the [parent
-image](https://docs.docker.com/glossary/#parent-image) from which you are
+[ARGs](#arg). The `FROM` instruction specifies the [base
+image](https://docs.docker.com/glossary/#base-image) from which you are
 building. `FROM` may only be preceded by one or more `ARG` instructions, which
 declare arguments that are used in `FROM` lines in the Dockerfile.
 
@@ -1052,9 +1052,9 @@ LABEL multi.label1="value1" \
 > using string interpolation (e.g. `LABEL example="foo-$ENV_VAR"`), single
 > quotes will take the string as is without unpacking the variable's value.
 
-Labels included in base or parent images (images in the `FROM` line) are
-inherited by your image. If a label already exists but with a different value,
-the most-recently-applied value overrides any previously-set value.
+Labels included in base images (images in the `FROM` line) are inherited by
+your image. If a label already exists but with a different value, the
+most-recently-applied value overrides any previously-set value.
 
 To view an image's labels, use the `docker image inspect` command. You can use
 the `--format` option to show just the labels;
