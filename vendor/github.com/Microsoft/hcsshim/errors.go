@@ -115,7 +115,6 @@ func (e *ContainerError) Error() string {
 		s += " encountered an error during " + e.Operation
 	}
 
-	//nolint:errorlint // legacy code
 	switch e.Err.(type) {
 	case nil:
 		break
@@ -146,7 +145,6 @@ func (e *ProcessError) Error() string {
 		s += " encountered an error during " + e.Operation
 	}
 
-	//nolint:errorlint // legacy code
 	switch e.Err.(type) {
 	case nil:
 		break
@@ -168,10 +166,10 @@ func (e *ProcessError) Error() string {
 // already exited, or does not exist. Both IsAlreadyStopped and IsNotExist
 // will currently return true when the error is ErrElementNotFound.
 func IsNotExist(err error) bool {
-	if _, ok := err.(EndpointNotFoundError); ok { //nolint:errorlint // legacy code
+	if _, ok := err.(EndpointNotFoundError); ok {
 		return true
 	}
-	if _, ok := err.(NetworkNotFoundError); ok { //nolint:errorlint // legacy code
+	if _, ok := err.(NetworkNotFoundError); ok {
 		return true
 	}
 	return hcs.IsNotExist(getInnerError(err))
@@ -226,7 +224,6 @@ func IsAccessIsDenied(err error) bool {
 }
 
 func getInnerError(err error) error {
-	//nolint:errorlint // legacy code
 	switch pe := err.(type) {
 	case nil:
 		return nil
@@ -239,14 +236,14 @@ func getInnerError(err error) error {
 }
 
 func convertSystemError(err error, c *container) error {
-	if serr, ok := err.(*hcs.SystemError); ok { //nolint:errorlint // legacy code
+	if serr, ok := err.(*hcs.SystemError); ok {
 		return &ContainerError{Container: c, Operation: serr.Op, Err: serr.Err, Events: serr.Events}
 	}
 	return err
 }
 
 func convertProcessError(err error, p *process) error {
-	if perr, ok := err.(*hcs.ProcessError); ok { //nolint:errorlint // legacy code
+	if perr, ok := err.(*hcs.ProcessError); ok {
 		return &ProcessError{Process: p, Operation: perr.Op, Err: perr.Err, Events: perr.Events}
 	}
 	return err

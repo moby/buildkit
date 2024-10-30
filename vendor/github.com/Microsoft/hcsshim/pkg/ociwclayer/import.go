@@ -6,7 +6,6 @@ import (
 	"archive/tar"
 	"bufio"
 	"context"
-	"errors"
 	"io"
 	"os"
 	"path"
@@ -18,7 +17,7 @@ import (
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 )
 
-const WhiteoutPrefix = ".wh."
+const whiteoutPrefix = ".wh."
 
 var (
 	// mutatedFiles is a list of files that are mutated by the import process
@@ -61,8 +60,6 @@ func ImportLayerFromTar(ctx context.Context, r io.Reader, path string, parentLay
 
 func writeLayerFromTar(ctx context.Context, r io.Reader, w wclayer.LayerWriter, root string) (int64, error) {
 	t := tar.NewReader(r)
-	// CodeQL [SM03409] False positive, `internal/safefile` package ensures tar extractions are always
-	// bound to the layer root directory.
 	hdr, err := t.Next()
 	totalSize := int64(0)
 	buf := bufio.NewWriter(nil)
@@ -74,22 +71,18 @@ func writeLayerFromTar(ctx context.Context, r io.Reader, w wclayer.LayerWriter, 
 		}
 
 		base := path.Base(hdr.Name)
-		if strings.HasPrefix(base, WhiteoutPrefix) {
-			name := path.Join(path.Dir(hdr.Name), base[len(WhiteoutPrefix):])
+		if strings.HasPrefix(base, whiteoutPrefix) {
+			name := path.Join(path.Dir(hdr.Name), base[len(whiteoutPrefix):])
 			err = w.Remove(filepath.FromSlash(name))
 			if err != nil {
 				return 0, err
 			}
-			// CodeQL [SM03409] False positive, `internal/safefile` package ensures tar extractions are always
-			// bound to the layer root directory.
 			hdr, err = t.Next()
 		} else if hdr.Typeflag == tar.TypeLink {
 			err = w.AddLink(filepath.FromSlash(hdr.Name), filepath.FromSlash(hdr.Linkname))
 			if err != nil {
 				return 0, err
 			}
-			// CodeQL [SM03409] False positive, `internal/safefile` package ensures tar extractions are always
-			// bound to the layer root directory.
 			hdr, err = t.Next()
 		} else {
 			var (
@@ -109,7 +102,7 @@ func writeLayerFromTar(ctx context.Context, r io.Reader, w wclayer.LayerWriter, 
 			totalSize += size
 		}
 	}
-	if !errors.Is(err, io.EOF) {
+	if err != io.EOF {
 		return 0, err
 	}
 	return totalSize, nil

@@ -9,8 +9,6 @@
 
 package hcsschema
 
-import "github.com/Microsoft/hcsshim/internal/protocol/guestrequest"
-
 type CloseHandle struct {
-	Handle guestrequest.STDIOHandle `json:"Handle,omitempty"` // NOTE: Swagger generated as string. Locally updated.
+	Handle string `json:"Handle,omitempty"`
 }

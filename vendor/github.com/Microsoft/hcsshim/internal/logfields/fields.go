@@ -46,7 +46,6 @@ const (
 
 	ExpectedType = "expected-type"
 	Bool         = "bool"
-	Int32        = "int32"
 	Uint32       = "uint32"
 	Uint64       = "uint64"
 

@@ -9,11 +9,8 @@
 
 package hcsschema
 
-// NOTE: Swagger generated fields as int32. Locally updated to uint16 to match documentation.
-// https://learn.microsoft.com/en-us/virtualization/api/hcs/schemareference#ConsoleSize
-
 type ConsoleSize struct {
-	Height uint16 `json:"Height,omitempty"`
+	Height int32 `json:"Height,omitempty"`
 
-	Width uint16 `json:"Width,omitempty"`
+	Width int32 `json:"Width,omitempty"`
 }

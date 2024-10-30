@@ -5,7 +5,6 @@ package ociwclayer
 import (
 	"archive/tar"
 	"context"
-	"errors"
 	"io"
 	"path/filepath"
 
@@ -63,7 +62,7 @@ func writeTarFromLayer(ctx context.Context, r wclayer.LayerReader, w io.Writer) 
 		}
 
 		name, size, fileInfo, err := r.Next()
-		if errors.Is(err, io.EOF) {
+		if err == io.EOF {
 			break
 		}
 		if err != nil {
@@ -72,7 +71,7 @@ func writeTarFromLayer(ctx context.Context, r wclayer.LayerReader, w io.Writer) 
 		if fileInfo == nil {
 			// Write a whiteout file.
 			hdr := &tar.Header{
-				Name: filepath.ToSlash(filepath.Join(filepath.Dir(name), WhiteoutPrefix+filepath.Base(name))),
+				Name: filepath.ToSlash(filepath.Join(filepath.Dir(name), whiteoutPrefix+filepath.Base(name))),
 			}
 			err := t.WriteHeader(hdr)
 			if err != nil {

@@ -9,13 +9,6 @@
 
 package hcsschema
 
-type FileSystemFilterType string
-
-const (
-	UnionFS FileSystemFilterType = "UnionFS"
-	WCIFS   FileSystemFilterType = "WCIFS"
-)
-
 type Layer struct {
 	Id string `json:"Id,omitempty"`
 

@@ -9,16 +9,13 @@
 
 package hcsschema
 
-// NOTE: Swagger generated fields as int32. Locally updated to uint16 to match documentation.
-// https://learn.microsoft.com/en-us/virtualization/api/hcs/schemareference#ConsoleSize
-
-// Status of a process running in a container
+//  Status of a process running in a container
 type ProcessStatus struct {
-	ProcessId uint32 `json:"ProcessId,omitempty"` // NOTE: Swagger generated as int32. Locally updated to match documentation.
+	ProcessId int32 `json:"ProcessId,omitempty"`
 
 	Exited bool `json:"Exited,omitempty"`
 
-	ExitCode uint32 `json:"ExitCode,omitempty"` // NOTE: Swagger generated as int32. Locally updated to match documentation.
+	ExitCode int32 `json:"ExitCode,omitempty"`
 
 	LastWaitResult int32 `json:"LastWaitResult,omitempty"`
 }

@@ -1,5 +1,3 @@
-//go:build windows
-
 package wclayer
 
 import (
@@ -7,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"github.com/Microsoft/hcsshim/internal/hcserror"
 	"github.com/Microsoft/hcsshim/internal/longpath"
@@ -38,7 +37,7 @@ func ensureHive(path string, root *os.File) (err error) {
 		return fmt.Errorf("getting path: %w", err)
 	}
 
-	var key winapi.ORHKey
+	var key syscall.Handle
 	err = winapi.ORCreateHive(&key)
 	if err != nil {
 		return fmt.Errorf("creating hive: %w", err)
@@ -73,7 +72,7 @@ func ensureBaseLayer(root *os.File) (hasUtilityVM bool, err error) {
 		}
 	}
 
-	stat, err := safefile.LstatRelative(UtilityVMFilesPath, root)
+	stat, err := safefile.LstatRelative(utilityVMFilesPath, root)
 
 	if os.IsNotExist(err) {
 		return false, nil
@@ -84,7 +83,7 @@ func ensureBaseLayer(root *os.File) (hasUtilityVM bool, err error) {
 	}
 
 	if !stat.Mode().IsDir() {
-		fullPath := filepath.Join(root.Name(), UtilityVMFilesPath)
+		fullPath := filepath.Join(root.Name(), utilityVMFilesPath)
 		return false, errors.Errorf("%s has unexpected file mode %s", fullPath, stat.Mode().String())
 	}
 
@@ -93,7 +92,7 @@ func ensureBaseLayer(root *os.File) (hasUtilityVM bool, err error) {
 	// Just check that this exists as a regular file. If it exists but is not a valid registry hive,
 	// ProcessUtilityVMImage will complain:
 	// "The registry could not read in, or write out, or flush, one of the files that contain the system's image of the registry."
-	bcdPath := filepath.Join(UtilityVMFilesPath, bcdRelativePath)
+	bcdPath := filepath.Join(utilityVMFilesPath, bcdRelativePath)
 
 	stat, err = safefile.LstatRelative(bcdPath, root)
 	if err != nil {
@@ -123,12 +122,12 @@ func convertToBaseLayer(ctx context.Context, root *os.File) error {
 		return nil
 	}
 
-	err = safefile.EnsureNotReparsePointRelative(UtilityVMPath, root)
+	err = safefile.EnsureNotReparsePointRelative(utilityVMPath, root)
 	if err != nil {
 		return err
 	}
 
-	utilityVMPath := filepath.Join(root.Name(), UtilityVMPath)
+	utilityVMPath := filepath.Join(root.Name(), utilityVMPath)
 	return ProcessUtilityVMImage(ctx, utilityVMPath)
 }
 

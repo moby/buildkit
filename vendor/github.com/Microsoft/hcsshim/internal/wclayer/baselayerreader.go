@@ -1,5 +1,3 @@
-//go:build windows
-
 package wclayer
 
 import (
@@ -66,7 +64,7 @@ func (r *baseLayerReader) walkUntilCancelled() error {
 		return nil
 	})
 
-	if err == errorIterationCanceled { //nolint:errorlint // explicitly returned
+	if err == errorIterationCanceled {
 		return nil
 	}
 
@@ -74,8 +72,8 @@ func (r *baseLayerReader) walkUntilCancelled() error {
 		return err
 	}
 
-	utilityVMAbsPath := filepath.Join(r.root, UtilityVMPath)
-	utilityVMFilesAbsPath := filepath.Join(r.root, UtilityVMFilesPath)
+	utilityVMAbsPath := filepath.Join(r.root, utilityVMPath)
+	utilityVMFilesAbsPath := filepath.Join(r.root, utilityVMFilesPath)
 
 	// Ignore a UtilityVM without Files, that's not _really_ a UtiltyVM
 	if _, err = os.Lstat(utilityVMFilesAbsPath); err != nil {
@@ -105,7 +103,7 @@ func (r *baseLayerReader) walkUntilCancelled() error {
 		return nil
 	})
 
-	if err == errorIterationCanceled { //nolint:errorlint // explicitly returned
+	if err == errorIterationCanceled {
 		return nil
 	}
 

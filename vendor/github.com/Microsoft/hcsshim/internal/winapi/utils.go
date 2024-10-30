@@ -4,6 +4,7 @@ package winapi
 
 import (
 	"errors"
+	"reflect"
 	"syscall"
 	"unsafe"
 
@@ -13,7 +14,11 @@ import (
 // Uint16BufferToSlice wraps a uint16 pointer-and-length into a slice
 // for easier interop with Go APIs
 func Uint16BufferToSlice(buffer *uint16, bufferLength int) (result []uint16) {
-	result = unsafe.Slice(buffer, bufferLength)
+	hdr := (*reflect.SliceHeader)(unsafe.Pointer(&result))
+	hdr.Data = uintptr(unsafe.Pointer(buffer))
+	hdr.Cap = bufferLength
+	hdr.Len = bufferLength
+
 	return
 }
 
@@ -74,10 +79,4 @@ func ConvertStringSetToSlice(buf []byte) ([]string, error) {
 		}
 	}
 	return nil, errors.New("string set malformed: missing null terminator at end of buffer")
-}
-
-// ParseUtf16LE parses a UTF-16LE byte array into a string (without passing
-// through a uint16 or rune array).
-func ParseUtf16LE(b []byte) string {
-	return windows.UTF16PtrToString((*uint16)(unsafe.Pointer(&b[0])))
 }
