@@ -15,10 +15,10 @@ var (
 	}
 	RuleFromAsCasing = LinterRule[func(string, string) string]{
 		Name:        "FromAsCasing",
-		Description: "The 'as' keyword should match the case of the 'from' keyword",
+		Description: "The AS keyword should match the case of the FROM keyword",
 		URL:         "https://docs.docker.com/go/dockerfile/rule/from-as-casing/",
 		Format: func(from, as string) string {
-			return fmt.Sprintf("'%s' and '%s' keywords' casing do not match", as, from)
+			return fmt.Sprintf("'%s' and '%s' keywords casing do not match", as, from)
 		},
 	}
 	RuleNoEmptyContinuation = LinterRule[func() string]{
@@ -34,7 +34,7 @@ var (
 		Description: "All commands within the Dockerfile should use the same casing (either upper or lower)",
 		URL:         "https://docs.docker.com/go/dockerfile/rule/consistent-instruction-casing/",
 		Format: func(violatingCommand, correctCasing string) string {
-			return fmt.Sprintf("Command '%s' should match the case of the command majority (%s)", violatingCommand, correctCasing)
+			return fmt.Sprintf("Command '%s' should match the case of the majority of commands (%s)", violatingCommand, correctCasing)
 		},
 	}
 	RuleDuplicateStageName = LinterRule[func(string) string]{
@@ -42,7 +42,7 @@ var (
 		Description: "Stage names should be unique",
 		URL:         "https://docs.docker.com/go/dockerfile/rule/duplicate-stage-name/",
 		Format: func(stageName string) string {
-			return fmt.Sprintf("Duplicate stage name %q, stage names should be unique", stageName)
+			return fmt.Sprintf("Duplicate stage name '%q', stage names should be unique", stageName)
 		},
 	}
 	RuleReservedStageName = LinterRule[func(string) string]{
@@ -50,7 +50,7 @@ var (
 		Description: "Reserved words should not be used as stage names",
 		URL:         "https://docs.docker.com/go/dockerfile/rule/reserved-stage-name/",
 		Format: func(reservedStageName string) string {
-			return fmt.Sprintf("Stage name should not use the same name as reserved stage %q", reservedStageName)
+			return fmt.Sprintf("Stage name should not use the same name as the reserved stage '%q'", reservedStageName)
 		},
 	}
 	RuleJSONArgsRecommended = LinterRule[func(instructionName string) string]{
@@ -74,19 +74,19 @@ var (
 		Description: "FROM command must use declared ARGs",
 		URL:         "https://docs.docker.com/go/dockerfile/rule/undefined-arg-in-from/",
 		Format: func(baseArg, suggest string) string {
-			out := fmt.Sprintf("FROM argument '%s' is not declared", baseArg)
+			out := fmt.Sprintf("FROM argument $%s is not declared", baseArg)
 			if suggest != "" {
-				out += fmt.Sprintf(" (did you mean %s?)", suggest)
+				out += fmt.Sprintf(" (did you mean $%s?)", suggest)
 			}
 			return out
 		},
 	}
 	RuleWorkdirRelativePath = LinterRule[func(workdir string) string]{
 		Name:        "WorkdirRelativePath",
-		Description: "Relative workdir without an absolute workdir declared within the build can have unexpected results if the base image changes",
+		Description: "Relative WORKDIR without an absolute WORKDIR declared within the build can have unexpected results if the base image changes",
 		URL:         "https://docs.docker.com/go/dockerfile/rule/workdir-relative-path/",
 		Format: func(workdir string) string {
-			return fmt.Sprintf("Relative workdir %q can have unexpected results if the base image changes", workdir)
+			return fmt.Sprintf("Relative WORKDIR %q can have unexpected results if the base image changes", workdir)
 		},
 	}
 	RuleUndefinedVar = LinterRule[func(string, string) string]{
@@ -94,7 +94,7 @@ var (
 		Description: "Variables should be defined before their use",
 		URL:         "https://docs.docker.com/go/dockerfile/rule/undefined-var/",
 		Format: func(arg, suggest string) string {
-			out := fmt.Sprintf("Usage of undefined variable '$%s'", arg)
+			out := fmt.Sprintf("Usage of undefined variable $%s", arg)
 			if suggest != "" {
 				out += fmt.Sprintf(" (did you mean $%s?)", suggest)
 			}
@@ -114,14 +114,14 @@ var (
 		Description: "Legacy key/value format with whitespace separator should not be used",
 		URL:         "https://docs.docker.com/go/dockerfile/rule/legacy-key-value-format/",
 		Format: func(cmdName string) string {
-			return fmt.Sprintf("\"%s key=value\" should be used instead of legacy \"%s key value\" format", cmdName, cmdName)
+			return fmt.Sprintf("`%s key=value` should be used instead of legacy `%s key value` format", cmdName, cmdName)
 		},
 	}
 	RuleInvalidBaseImagePlatform = LinterRule[func(string, string, string) string]{
 		Name:        "InvalidBaseImagePlatform",
 		Description: "Base image platform does not match expected target platform",
 		Format: func(image, expected, actual string) string {
-			return fmt.Sprintf("Base image %s was pulled with platform %q, expected %q for current build", image, actual, expected)
+			return fmt.Sprintf("Base image '%s' was pulled with platform '%q', expected '%q' for current build", image, actual, expected)
 		},
 	}
 	RuleRedundantTargetPlatform = LinterRule[func(string) string]{
@@ -129,7 +129,7 @@ var (
 		Description: "Setting platform to predefined $TARGETPLATFORM in FROM is redundant as this is the default behavior",
 		URL:         "https://docs.docker.com/go/dockerfile/rule/redundant-target-platform/",
 		Format: func(platformVar string) string {
-			return fmt.Sprintf("Setting platform to predefined %s in FROM is redundant as this is the default behavior", platformVar)
+			return fmt.Sprintf("Setting platform to predefined $%s in FROM is redundant as this is the default behavior", platformVar)
 		},
 	}
 	RuleSecretsUsedInArgOrEnv = LinterRule[func(string, string) string]{
@@ -153,15 +153,15 @@ var (
 		Description: "FROM --platform flag should not use a constant value",
 		URL:         "https://docs.docker.com/go/dockerfile/rule/from-platform-flag-const-disallowed/",
 		Format: func(platform string) string {
-			return fmt.Sprintf("FROM --platform flag should not use constant value %q", platform)
+			return fmt.Sprintf("FROM --platform flag should not use constant value '%q'", platform)
 		},
 	}
 	RuleCopyIgnoredFile = LinterRule[func(string, string) string]{
 		Name:        "CopyIgnoredFile",
-		Description: "Attempting to Copy file that is excluded by .dockerignore",
+		Description: "Attempting to COPY/ADD file that is excluded by .dockerignore",
 		URL:         "https://docs.docker.com/go/dockerfile/rule/copy-ignored-file/",
 		Format: func(cmd, file string) string {
-			return fmt.Sprintf("Attempting to %s file %q that is excluded by .dockerignore", cmd, file)
+			return fmt.Sprintf("Attempting to %s file '%q' that is excluded by .dockerignore", cmd, file)
 		},
 		Experimental: true,
 	}
