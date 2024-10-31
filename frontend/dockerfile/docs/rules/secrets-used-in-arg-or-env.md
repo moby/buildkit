@@ -1,6 +1,7 @@
 ---
 title: SecretsUsedInArgOrEnv
-description: Sensitive data should not be used in the ARG or ENV commands
+description: >-
+  Sensitive data should not be used in the ARG or ENV commands
 aliases:
   - /go/dockerfile/rule/secrets-used-in-arg-or-env/
 ---

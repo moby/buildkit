@@ -1,6 +1,7 @@
 ---
 title: FromPlatformFlagConstDisallowed
-description: FROM --platform flag should not use a constant value
+description: >-
+  FROM --platform flag should not use a constant value
 aliases:
   - /go/dockerfile/rule/from-platform-flag-const-disallowed/
 ---
