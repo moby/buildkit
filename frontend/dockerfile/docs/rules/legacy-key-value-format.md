@@ -8,7 +8,7 @@ aliases:
 ## Output
 
 ```text
-"ENV key=value" should be used instead of legacy "ENV key value" format
+`ENV key=value` should be used instead of legacy `ENV key value` format
 ```
 
 ## Description

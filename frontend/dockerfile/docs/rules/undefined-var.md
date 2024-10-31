@@ -8,7 +8,7 @@ aliases:
 ## Output
 
 ```text
-Usage of undefined variable '$foo'
+Usage of undefined variable $foo
 ```
 
 ## Description
@@ -34,7 +34,7 @@ ENV PATH=$PAHT:/app/bin
 The check identifies that `$PAHT` is undefined and likely a typo for `$PATH`:
 
 ```text
-Usage of undefined variable '$PAHT' (did you mean $PATH?)
+Usage of undefined variable $PAHT (did you mean $PATH?)
 ```
 
 ## Examples

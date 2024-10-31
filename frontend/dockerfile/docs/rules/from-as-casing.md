@@ -1,6 +1,6 @@
 ---
 title: FromAsCasing
-description: The 'as' keyword should match the case of the 'from' keyword
+description: The AS keyword should match the case of the FROM keyword
 aliases:
   - /go/dockerfile/rule/from-as-casing/
 ---
@@ -8,7 +8,7 @@ aliases:
 ## Output
 
 ```text
-'as' and 'FROM' keywords' casing do not match
+'as' and 'FROM' keywords' casing does not match
 ```
 
 ## Description
@@ -41,4 +41,3 @@ from debian:latest as deb-builder
 ## Related errors
 
 - [`FileConsistentCommandCasing`](./consistent-instruction-casing.md)
-

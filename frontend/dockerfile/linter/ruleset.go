@@ -18,7 +18,7 @@ var (
 		Description: "The AS keyword should match the case of the FROM keyword",
 		URL:         "https://docs.docker.com/go/dockerfile/rule/from-as-casing/",
 		Format: func(from, as string) string {
-			return fmt.Sprintf("'%s' and '%s' keywords casing do not match", as, from)
+			return fmt.Sprintf("'%s' and '%s' keywords' casing does not match", as, from)
 		},
 	}
 	RuleNoEmptyContinuation = LinterRule[func() string]{
@@ -50,7 +50,7 @@ var (
 		Description: "Reserved words should not be used as stage names",
 		URL:         "https://docs.docker.com/go/dockerfile/rule/reserved-stage-name/",
 		Format: func(reservedStageName string) string {
-			return fmt.Sprintf("Stage name should not use the same name as the reserved stage '%q'", reservedStageName)
+			return fmt.Sprintf("Stage name should not use the same name as the reserved stage %q", reservedStageName)
 		},
 	}
 	RuleJSONArgsRecommended = LinterRule[func(instructionName string) string]{
@@ -129,7 +129,7 @@ var (
 		Description: "Setting platform to predefined $TARGETPLATFORM in FROM is redundant as this is the default behavior",
 		URL:         "https://docs.docker.com/go/dockerfile/rule/redundant-target-platform/",
 		Format: func(platformVar string) string {
-			return fmt.Sprintf("Setting platform to predefined $%s in FROM is redundant as this is the default behavior", platformVar)
+			return fmt.Sprintf("Setting platform to predefined %s in FROM is redundant as this is the default behavior", platformVar)
 		},
 	}
 	RuleSecretsUsedInArgOrEnv = LinterRule[func(string, string) string]{

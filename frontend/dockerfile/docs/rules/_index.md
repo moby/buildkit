@@ -37,7 +37,7 @@ To learn more about how to use build checks, see
     </tr>
     <tr>
       <td><a href="./from-as-casing/">FromAsCasing</a></td>
-      <td>The 'as' keyword should match the case of the 'from' keyword</td>
+      <td>The AS keyword should match the case of the FROM keyword</td>
     </tr>
     <tr>
       <td><a href="./no-empty-continuation/">NoEmptyContinuation</a></td>

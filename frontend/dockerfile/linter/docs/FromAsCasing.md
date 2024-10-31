@@ -1,7 +1,7 @@
 ## Output
 
 ```text
-'as' and 'FROM' keywords' casing do not match
+'as' and 'FROM' keywords' casing does not match
 ```
 
 ## Description
