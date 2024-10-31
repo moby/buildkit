@@ -1,6 +1,7 @@
 ---
 title: ConsistentInstructionCasing
-description: All commands within the Dockerfile should use the same casing (either upper or lower)
+description: >-
+  All commands within the Dockerfile should use the same casing (either upper or lower)
 aliases:
   - /go/dockerfile/rule/consistent-instruction-casing/
 ---

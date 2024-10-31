@@ -1,6 +1,7 @@
 ---
 title: RedundantTargetPlatform
-description: Setting platform to predefined $TARGETPLATFORM in FROM is redundant as this is the default behavior
+description: >-
+  Setting platform to predefined $TARGETPLATFORM in FROM is redundant as this is the default behavior
 aliases:
   - /go/dockerfile/rule/redundant-target-platform/
 ---

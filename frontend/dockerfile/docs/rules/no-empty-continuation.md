@@ -1,6 +1,7 @@
 ---
 title: NoEmptyContinuation
-description: Empty continuation lines will become errors in a future release
+description: >-
+  Empty continuation lines will become errors in a future release
 aliases:
   - /go/dockerfile/rule/no-empty-continuation/
 ---
