@@ -19,7 +19,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -229,14 +228,20 @@ func TestIntegration(t *testing.T) {
 }
 
 func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sandbox)) {
-	mirroredImages := integration.OfficialImages("busybox:latest", "alpine:latest")
-	mirroredImages["tonistiigi/test:nolayers"] = "docker.io/tonistiigi/test:nolayers"
-	mirroredImages["cpuguy83/buildkit-foreign:latest"] = "docker.io/cpuguy83/buildkit-foreign:latest"
+	mirroredImagesUnix := integration.OfficialImages("busybox:latest", "alpine:latest")
+	mirroredImagesUnix["tonistiigi/test:nolayers"] = "docker.io/tonistiigi/test:nolayers"
+	mirroredImagesUnix["cpuguy83/buildkit-foreign:latest"] = "docker.io/cpuguy83/buildkit-foreign:latest"
+	mirroredImagesWin := integration.OfficialImages("nanoserver:latest", "nanoserver:plus")
+
+	mirroredImages := integration.UnixOrWindows(mirroredImagesUnix, mirroredImagesWin)
 	mirrors := integration.WithMirroredImages(mirroredImages)
 
 	tests := integration.TestFuncs(funcs...)
 	tests = append(tests, diffOpTestCases()...)
 	integration.Run(t, tests, mirrors)
+
+	// the rest of the tests are meant for non-Windows, skipping on Windows.
+	integration.SkipOnPlatform(t, "windows")
 
 	integration.Run(t, integration.TestFuncs(
 		testSecurityMode,
@@ -260,16 +265,14 @@ func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sa
 		}),
 	)
 
-	if runtime.GOOS != "windows" {
-		integration.Run(
-			t,
-			integration.TestFuncs(testBridgeNetworkingDNSNoRootless),
-			mirrors,
-			integration.WithMatrix("netmode", map[string]interface{}{
-				"dns": bridgeDNSNetwork,
-			}),
-		)
-	}
+	integration.Run(
+		t,
+		integration.TestFuncs(testBridgeNetworkingDNSNoRootless),
+		mirrors,
+		integration.WithMatrix("netmode", map[string]interface{}{
+			"dns": bridgeDNSNetwork,
+		}),
+	)
 }
 
 func newContainerd(cdAddress string) (*containerd.Client, error) {
@@ -414,7 +417,6 @@ func testHostNetworking(t *testing.T, sb integration.Sandbox) {
 }
 
 func testExportedImageLabels(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -426,7 +428,14 @@ func testExportedImageLabels(t *testing.T, sb integration.Sandbox) {
 
 	ctx := sb.Context()
 
-	def, err := llb.Image("busybox").Run(llb.Shlexf("echo foo > /foo")).Marshal(ctx)
+	imgName := integration.UnixOrWindows("busybox", "nanoserver")
+	prefix := integration.UnixOrWindows(
+		"",
+		"cmd /C ", // TODO(profnandaa): currently needs the shell prefix, to be fixed
+	)
+	def, err := llb.Image(imgName).
+		Run(llb.Shlexf(fmt.Sprintf("%secho foo > /foo", prefix))).
+		Marshal(ctx)
 	require.NoError(t, err)
 
 	target := "docker.io/buildkit/build/exporter:labels"
@@ -7766,9 +7775,7 @@ func chainRunShells(base llb.State, cmdss ...[]string) llb.State {
 }
 
 func requiresLinux(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skipf("unsupported GOOS: %s", runtime.GOOS)
-	}
+	integration.SkipOnPlatform(t, "!linux")
 }
 
 // ensurePruneAll tries to ensure Prune completes with retries.
