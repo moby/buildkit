@@ -1,6 +1,7 @@
 ---
 title: InvalidDefaultArgInFrom
-description: Default value for global ARG results in an empty or invalid base image name
+description: >-
+  Default value for global ARG results in an empty or invalid base image name
 aliases:
   - /go/dockerfile/rule/invalid-default-arg-in-from/
 ---

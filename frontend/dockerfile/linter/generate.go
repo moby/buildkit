@@ -30,7 +30,8 @@ type Rule struct {
 
 const tmplStr = `---
 title: {{ .Rule.Name }}
-description: {{ .Rule.Description }}
+description: >-
+  {{ .Rule.Description }}
 {{- if .Rule.URLAlias }}
 aliases:
   - {{ .Rule.URLAlias }}

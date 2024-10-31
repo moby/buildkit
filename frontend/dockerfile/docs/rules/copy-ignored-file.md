@@ -1,6 +1,7 @@
 ---
 title: CopyIgnoredFile
-description: Attempting to Copy file that is excluded by .dockerignore
+description: >-
+  Attempting to Copy file that is excluded by .dockerignore
 aliases:
   - /go/dockerfile/rule/copy-ignored-file/
 ---
