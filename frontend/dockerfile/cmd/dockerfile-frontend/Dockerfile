@@ -2,7 +2,7 @@
 
 ARG GO_VERSION=1.22
 ARG ALPINE_VERSION=3.20
-ARG XX_VERSION=1.4.0
+ARG XX_VERSION=1.5.0
 
 # xx is a helper for cross-compilation
 FROM --platform=$BUILDPLATFORM tonistiigi/xx:${XX_VERSION} AS xx
