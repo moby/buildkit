@@ -126,6 +126,8 @@ var allTests = integration.TestFuncs(
 	testEnvEmptyFormatting,
 	testCacheMultiPlatformImportExport,
 	testOnBuildCleared,
+	testOnBuildInheritedStageRun,
+	testOnBuildInheritedStageWithFrom,
 	testOnBuildNewDeps,
 	testOnBuildNamedContext,
 	testOnBuildWithCacheMount,
@@ -5026,6 +5028,101 @@ func testOnBuildNamedContext(t *testing.T, sb integration.Sandbox) {
 	dt, err := os.ReadFile(filepath.Join(destDir, "bar"))
 	require.NoError(t, err)
 	require.Equal(t, []byte("hello"), dt)
+}
+
+func testOnBuildInheritedStageRun(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox AS base
+ONBUILD RUN mkdir -p /out && echo -n 11 >> /out/foo
+
+FROM base AS mid
+RUN cp /out/foo /out/bar
+
+FROM scratch
+COPY --from=mid /out/bar /
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir := t.TempDir()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "bar"))
+	require.NoError(t, err)
+	require.Equal(t, "11", string(dt))
+}
+
+func testOnBuildInheritedStageWithFrom(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM alpine AS src
+RUN mkdir -p /in && echo -n 12 > /in/file
+
+FROM busybox AS base
+ONBUILD COPY --from=src /in/file /out/foo
+
+FROM base AS mid
+RUN cp /out/foo /out/bar
+
+FROM scratch
+COPY --from=mid /out/bar /
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir := t.TempDir()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "bar"))
+	require.NoError(t, err)
+	require.Equal(t, "12", string(dt))
 }
 
 func testOnBuildNewDeps(t *testing.T, sb integration.Sandbox) {
