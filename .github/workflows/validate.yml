@@ -67,9 +67,6 @@ jobs:
 
   archutil-arm64:
     runs-on: ubuntu-24.04
-    # TODO: enable when binutils-loongarch64-linux-gnu pkg is available for aarch64 arch
-    # https://github.com/moby/buildkit/pull/4392#issuecomment-1938223235
-    if: false
     steps:
       -
         name: Checkout
