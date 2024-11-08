@@ -65,7 +65,7 @@ spec:
             - commit=$(build.git.lastCommit.id)
         - name: build-extra-args
           value: >-
-            --build-arg app_version=$(build.git.version.docker) 
+            --build-arg app_version=$(build.git.version.docker)
             --build-arg commit_id=$(build.git.lastCommit.id)
             --build-arg GIT_REVISION=$(build.git.lastCommit.id)
             --build-arg GIT_VERSION=$(build.git.version.docker)
