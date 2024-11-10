@@ -24,10 +24,11 @@ package remote
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
 	"io"
-	"math/rand"
+	"math/big"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -37,9 +38,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/containerd/containerd/errdefs"
-	"github.com/containerd/containerd/reference"
-	"github.com/containerd/containerd/remotes/docker"
+	"github.com/containerd/containerd/v2/core/remotes/docker"
+	"github.com/containerd/containerd/v2/pkg/reference"
+	"github.com/containerd/errdefs"
 	"github.com/containerd/log"
 	"github.com/containerd/stargz-snapshotter/cache"
 	"github.com/containerd/stargz-snapshotter/fs/config"
@@ -165,7 +166,11 @@ func jitter(duration time.Duration) time.Duration {
 	if duration <= 0 {
 		return duration
 	}
-	return time.Duration(rand.Int63n(int64(duration)) + int64(duration))
+	b, err := rand.Int(rand.Reader, big.NewInt(int64(duration)))
+	if err != nil {
+		panic(err)
+	}
+	return time.Duration(b.Int64() + int64(duration))
 }
 
 // backoffStrategy extends retryablehttp's DefaultBackoff to add a random jitter to avoid overwhelming the repository

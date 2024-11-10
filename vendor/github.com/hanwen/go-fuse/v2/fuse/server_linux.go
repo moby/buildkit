@@ -8,6 +8,8 @@ import (
 	"syscall"
 )
 
+const useSingleReader = false
+
 func (ms *Server) systemWrite(req *request, header []byte) Status {
 	if req.flatDataSize() == 0 {
 		err := handleEINTR(func() error {

@@ -24,7 +24,6 @@ import (
 	"github.com/containerd/log"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -130,7 +129,7 @@ var (
 )
 
 var register sync.Once
-var logLevel logrus.Level = logrus.DebugLevel
+var logLevel = log.DebugLevel
 
 // sinceInMilliseconds gets the time since the specified start in milliseconds.
 // The division by 1e6 is made to have the milliseconds value as floating point number, since the native method
@@ -147,7 +146,7 @@ func sinceInMicroseconds(start time.Time) float64 {
 }
 
 // Register registers metrics. This is always called only once.
-func Register(l logrus.Level) {
+func Register(l log.Level) {
 	register.Do(func() {
 		logLevel = l
 		prometheus.MustRegister(operationLatencyMilliseconds)

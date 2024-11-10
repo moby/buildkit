@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"strings"
 	"syscall"
-	"unsafe"
 )
 
 func unixgramSocketpair() (l, r *os.File, err error) {
@@ -88,33 +87,6 @@ func mount(mountPoint string, opts *MountOptions, ready chan<- error) (fd int, e
 
 func unmount(dir string, opts *MountOptions) error {
 	return syscall.Unmount(dir, 0)
-}
-
-func getConnection(local *os.File) (int, error) {
-	var data [4]byte
-	control := make([]byte, 4*256)
-
-	// n, oobn, recvflags, from, errno  - todo: error checking.
-	_, oobn, _, _,
-		err := syscall.Recvmsg(
-		int(local.Fd()), data[:], control[:], 0)
-	if err != nil {
-		return 0, err
-	}
-
-	message := *(*syscall.Cmsghdr)(unsafe.Pointer(&control[0]))
-	fd := *(*int32)(unsafe.Pointer(uintptr(unsafe.Pointer(&control[0])) + syscall.SizeofCmsghdr))
-
-	if message.Type != syscall.SCM_RIGHTS {
-		return 0, fmt.Errorf("getConnection: recvmsg returned wrong control type: %d", message.Type)
-	}
-	if oobn <= syscall.SizeofCmsghdr {
-		return 0, fmt.Errorf("getConnection: too short control message. Length: %d", oobn)
-	}
-	if fd < 0 {
-		return 0, fmt.Errorf("getConnection: fd < 0: %d", fd)
-	}
-	return int(fd), nil
 }
 
 func fusermountBinary() (string, error) {

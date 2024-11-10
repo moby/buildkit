@@ -17,7 +17,7 @@
 package testutil
 
 import (
-	"math/rand"
+	"crypto/rand"
 	"testing"
 )
 

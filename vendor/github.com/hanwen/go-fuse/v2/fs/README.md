@@ -45,16 +45,10 @@ Decisions
      invalidated, and the notification doesn't have to happen under
      lock.
 
-   * Directory reading uses the DirStream. Semantics for rewinding
-     directory reads, and adding files after opening (but before
-     reading) are handled automatically. No support for directory
-     seeks.
-
+   * Directory reading uses the FileHandles as well, the API for read
+     is one DirEntry at a time. FileHandles may implement seeking, and we
+     call the Seek if we see Offsets change in the incoming request.
+   
    * Method names are based on syscall names. Where there is no
      syscall (eg. "open directory"), we bias towards writing
      everything together (Opendir)
-
-To do/To decide
-=========
-
-   * Symlink []byte vs string.

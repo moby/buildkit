@@ -127,6 +127,10 @@ baseCreateFlags="--rm --privileged \
 -e GORACE \
 -e GO_TEST_COVERPROFILE"
 
+# containerd-2.0 disabled schema v1 support by default
+# This needs to be fixed properly for containerd-2.1 that will drop schema v1 support completely
+baseCreateFlags="$baseCreateFlags -e CONTAINERD_ENABLE_DEPRECATED_PULL_SCHEMA_1_IMAGE=1"
+
 if [ "$TEST_INTEGRATION" == 1 ]; then
   cid=$(dockerCmd create $baseCreateFlags \
     ${BUILDKIT_INTEGRATION_SNAPSHOTTER:+"-eBUILDKIT_INTEGRATION_SNAPSHOTTER"} \

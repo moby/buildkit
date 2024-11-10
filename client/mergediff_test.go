@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/containerd/containerd/images"
-	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/containerd/v2/core/images"
+	"github.com/containerd/containerd/v2/pkg/namespaces"
 	"github.com/containerd/continuity/fs/fstest"
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/buildkit/client/llb"

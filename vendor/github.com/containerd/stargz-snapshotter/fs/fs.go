@@ -44,8 +44,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/containerd/containerd/reference"
-	"github.com/containerd/containerd/remotes/docker"
+	"github.com/containerd/containerd/v2/core/remotes/docker"
+	"github.com/containerd/containerd/v2/pkg/reference"
 	"github.com/containerd/log"
 	"github.com/containerd/stargz-snapshotter/estargz"
 	"github.com/containerd/stargz-snapshotter/fs/config"
@@ -63,7 +63,6 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 )
 
@@ -80,7 +79,7 @@ type options struct {
 	getSources              source.GetSources
 	resolveHandlers         map[string]remote.Handler
 	metadataStore           metadata.Store
-	metricsLogLevel         *logrus.Level
+	metricsLogLevel         *log.Level
 	overlayOpaqueType       layer.OverlayOpaqueType
 	additionalDecompressors func(context.Context, source.RegistryHosts, reference.Spec, ocispec.Descriptor) []metadata.Decompressor
 }
@@ -106,7 +105,7 @@ func WithMetadataStore(metadataStore metadata.Store) Option {
 	}
 }
 
-func WithMetricsLogLevel(logLevel logrus.Level) Option {
+func WithMetricsLogLevel(logLevel log.Level) Option {
 	return func(opts *options) {
 		opts.metricsLogLevel = &logLevel
 	}
@@ -164,7 +163,7 @@ func NewFilesystem(root string, cfg config.Config, opts ...Option) (_ snapshot.F
 	var ns *metrics.Namespace
 	if !cfg.NoPrometheus {
 		ns = metrics.NewNamespace("stargz", "fs", nil)
-		logLevel := logrus.DebugLevel
+		logLevel := log.DebugLevel
 		if fsOpts.metricsLogLevel != nil {
 			logLevel = *fsOpts.metricsLogLevel
 		}
@@ -382,10 +381,13 @@ func (fs *filesystem) Check(ctx context.Context, mountpoint string, labels map[s
 		return fmt.Errorf("layer not registered")
 	}
 
-	// Check the blob connectivity and try to refresh the connection on failure
-	if err := fs.check(ctx, l, labels); err != nil {
-		log.G(ctx).WithError(err).Warn("check failed")
-		return err
+	if l.Info().FetchedSize < l.Info().Size {
+		// Image contents hasn't fully cached yet.
+		// Check the blob connectivity and try to refresh the connection on failure
+		if err := fs.check(ctx, l, labels); err != nil {
+			log.G(ctx).WithError(err).Warn("check failed")
+			return err
+		}
 	}
 
 	// Wait for prefetch compeletion

@@ -33,22 +33,47 @@ const (
 	TargetPrefetchSizeLabel = "containerd.io/snapshot/remote/stargz.prefetch"
 )
 
+// Config is configuration for stargz snapshotter filesystem.
 type Config struct {
+	// Type of cache for compressed contents fetched from the registry. "memory" stores them on memory.
+	// Other values default to cache them on disk.
 	HTTPCacheType string `toml:"http_cache_type"`
-	FSCacheType   string `toml:"filesystem_cache_type"`
+
+	// Type of cache for uncompressed files contents. "memory" stores them on memory. Other values
+	// default to cache them on disk.
+	FSCacheType string `toml:"filesystem_cache_type"`
+
 	// ResolveResultEntryTTLSec is TTL (in sec) to cache resolved layers for
 	// future use. (default 120s)
-	ResolveResultEntryTTLSec int   `toml:"resolve_result_entry_ttl_sec"`
-	ResolveResultEntry       int   `toml:"resolve_result_entry"` // deprecated
-	PrefetchSize             int64 `toml:"prefetch_size"`
-	PrefetchTimeoutSec       int64 `toml:"prefetch_timeout_sec"`
-	NoPrefetch               bool  `toml:"noprefetch"`
-	NoBackgroundFetch        bool  `toml:"no_background_fetch"`
-	Debug                    bool  `toml:"debug"`
-	AllowNoVerification      bool  `toml:"allow_no_verification"`
-	DisableVerification      bool  `toml:"disable_verification"`
-	MaxConcurrency           int64 `toml:"max_concurrency"`
-	NoPrometheus             bool  `toml:"no_prometheus"`
+	ResolveResultEntryTTLSec int `toml:"resolve_result_entry_ttl_sec"`
+
+	// PrefetchSize is the default size (in bytes) to prefetch when mounting a layer. Default is 0. Stargz-snapshotter still
+	// uses the value specified by the image using "containerd.io/snapshot/remote/stargz.prefetch" or the landmark file.
+	PrefetchSize int64 `toml:"prefetch_size"`
+
+	// PrefetchTimeoutSec is the default timeout (in seconds) when the prefetching takes long. Default is 10s.
+	PrefetchTimeoutSec int64 `toml:"prefetch_timeout_sec"`
+
+	// NoPrefetch disables prefetching. Default is false.
+	NoPrefetch bool `toml:"noprefetch"`
+
+	// NoBackgroundFetch disables the behaviour of fetching the entire layer contents in background. Default is false.
+	NoBackgroundFetch bool `toml:"no_background_fetch"`
+
+	// Debug enables filesystem debug log.
+	Debug bool `toml:"debug"`
+
+	// AllowNoVerification allows mouting images without verification. Default is false.
+	AllowNoVerification bool `toml:"allow_no_verification"`
+
+	// DisableVerification disables verifying layer contents. Default is false.
+	DisableVerification bool `toml:"disable_verification"`
+
+	// MaxConcurrency is max number of concurrent background tasks for fetching layer contents. Default is 2.
+	MaxConcurrency int64 `toml:"max_concurrency"`
+
+	// NoPrometheus disables exposing filesystem-related metrics. Default is false.
+	NoPrometheus bool `toml:"no_prometheus"`
 
 	// BlobConfig is config for layer blob management.
 	BlobConfig `toml:"blob"`
@@ -56,35 +81,67 @@ type Config struct {
 	// DirectoryCacheConfig is config for directory-based cache.
 	DirectoryCacheConfig `toml:"directory_cache"`
 
+	// FuseConfig is configurations for FUSE fs.
 	FuseConfig `toml:"fuse"`
+
+	// ResolveResultEntry is a deprecated field.
+	ResolveResultEntry int `toml:"resolve_result_entry"` // deprecated
 }
 
+// BlobConfig is configuration for the logic to fetching blobs.
 type BlobConfig struct {
+	// ValidInterval specifies a duration (in seconds) during which the layer can be reused without
+	// checking the connection to the registry. Default is 60.
 	ValidInterval int64 `toml:"valid_interval"`
-	CheckAlways   bool  `toml:"check_always"`
-	// ChunkSize is the granularity at which background fetch and on-demand reads
-	// are fetched from the remote registry.
-	ChunkSize            int64 `toml:"chunk_size"`
-	FetchTimeoutSec      int64 `toml:"fetching_timeout_sec"`
-	ForceSingleRangeMode bool  `toml:"force_single_range_mode"`
+
+	// CheckAlways overwrites ValidInterval to 0 if it's true. Default is false.
+	CheckAlways bool `toml:"check_always"`
+
+	// ChunkSize is the granularity (in bytes) at which background fetch and on-demand reads
+	// are fetched from the remote registry. Default is 50000.
+	ChunkSize int64 `toml:"chunk_size"`
+
+	// FetchTimeoutSec is a timeout duration (in seconds) for fetching chunks from the registry. Default is 300.
+	FetchTimeoutSec int64 `toml:"fetching_timeout_sec"`
+
+	// ForceSingleRangeMode disables using of multiple ranges in a Range Request and always specifies one larger
+	// region that covers them. Default is false.
+	ForceSingleRangeMode bool `toml:"force_single_range_mode"`
+
 	// PrefetchChunkSize is the maximum bytes transferred per http GET from remote registry
 	// during prefetch. It is recommended to have PrefetchChunkSize > ChunkSize.
 	// If PrefetchChunkSize < ChunkSize prefetch bytes will be fetched as a single http GET,
 	// else total GET requests for prefetch = ceil(PrefetchSize / PrefetchChunkSize).
+	// Default is 0.
 	PrefetchChunkSize int64 `toml:"prefetch_chunk_size"`
 
-	MaxRetries  int `toml:"max_retries"`
+	// MaxRetries is a max number of reries of a HTTP request. Default is 5.
+	MaxRetries int `toml:"max_retries"`
+
+	// MinWaitMSec is minimal delay (in seconds) for the next retrying after a request failure. Default is 30.
 	MinWaitMSec int `toml:"min_wait_msec"`
+
+	// MinWaitMSec is maximum delay (in seconds) for the next retrying after a request failure. Default is 30.
 	MaxWaitMSec int `toml:"max_wait_msec"`
 }
 
+// DirectoryCacheConfig is configuration for the disk-based cache.
 type DirectoryCacheConfig struct {
-	MaxLRUCacheEntry int  `toml:"max_lru_cache_entry"`
-	MaxCacheFds      int  `toml:"max_cache_fds"`
-	SyncAdd          bool `toml:"sync_add"`
-	Direct           bool `toml:"direct" default:"true"`
+	// MaxLRUCacheEntry is the number of entries of LRU cache to cache data on memory. Default is 10.
+	MaxLRUCacheEntry int `toml:"max_lru_cache_entry"`
+
+	// MaxCacheFds is the number of entries of LRU cache to hold fds of files of cached contents. Default is 10.
+	MaxCacheFds int `toml:"max_cache_fds"`
+
+	// SyncAdd being true means that each adding of data to the cache blocks until the data is fully written to the
+	// cache directory. Default is false.
+	SyncAdd bool `toml:"sync_add"`
+
+	// Direct disables on-memory data cache. Default is true for saving memory usage.
+	Direct bool `toml:"direct" default:"true"`
 }
 
+// FuseConfig is configuration for FUSE fs.
 type FuseConfig struct {
 	// AttrTimeout defines overall timeout attribute for a file system in seconds.
 	AttrTimeout int64 `toml:"attr_timeout"`

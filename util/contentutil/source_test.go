@@ -3,8 +3,8 @@ package contentutil
 import (
 	"testing"
 
-	"github.com/containerd/containerd/content"
-	"github.com/containerd/containerd/reference"
+	"github.com/containerd/containerd/v2/core/content"
+	"github.com/containerd/containerd/v2/pkg/reference"
 	"github.com/stretchr/testify/require"
 )
 

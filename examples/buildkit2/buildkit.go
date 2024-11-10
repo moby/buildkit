@@ -59,7 +59,7 @@ func containerd(version string) llb.State {
 	return goRepo(
 		goBuildBase().
 			Run(llb.Shlex("apk add --no-cache btrfs-progs-dev")).Root(),
-		"github.com/containerd/containerd", version, llb.KeepGitDir())(
+		"github.com/containerd/containerd/v2/client", version, llb.KeepGitDir())(
 		llb.Shlex("make bin/containerd"),
 	)
 }

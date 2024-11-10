@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/containerd/containerd"
-	"github.com/containerd/containerd/namespaces"
+	ctd "github.com/containerd/containerd/v2/client"
+	"github.com/containerd/containerd/v2/pkg/namespaces"
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
@@ -93,7 +93,7 @@ func testBuildContainerdExporter(t *testing.T, sb integration.Sandbox) {
 	err = cmd.Run()
 	require.NoError(t, err)
 
-	client, err := containerd.New(cdAddress, containerd.WithTimeout(60*time.Second))
+	client, err := ctd.New(cdAddress, ctd.WithTimeout(60*time.Second))
 	require.NoError(t, err)
 	defer client.Close()
 
@@ -164,7 +164,7 @@ func testBuildMetadataFile(t *testing.T, sb integration.Sandbox) {
 	if cdAddress == "" {
 		t.Log("no containerd worker, skipping digest verification")
 	} else {
-		client, err := containerd.New(cdAddress, containerd.WithTimeout(60*time.Second))
+		client, err := ctd.New(cdAddress, ctd.WithTimeout(60*time.Second))
 		require.NoError(t, err)
 		defer client.Close()
 

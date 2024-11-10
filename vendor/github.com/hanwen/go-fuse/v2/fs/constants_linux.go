@@ -4,7 +4,7 @@
 
 package fs
 
-import "syscall"
+import "golang.org/x/sys/unix"
 
 // ENOATTR indicates that an extended attribute was not present.
-var ENOATTR = syscall.ENODATA
+const ENOATTR = unix.ENODATA

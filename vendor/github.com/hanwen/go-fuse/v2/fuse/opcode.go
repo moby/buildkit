@@ -62,6 +62,12 @@ const (
 	_OP_LSEEK           = uint32(46) // protocol version 24
 	_OP_COPY_FILE_RANGE = uint32(47) // protocol version 28.
 
+	_OP_SETUPMAPPING  = 48
+	_OP_REMOVEMAPPING = 49
+	_OP_SYNCFS        = 50
+	_OP_TMPFILE       = 51
+	_OP_STATX         = 52
+
 	// The following entries don't have to be compatible across Go-FUSE versions.
 	_OP_NOTIFY_INVAL_ENTRY    = uint32(100)
 	_OP_NOTIFY_INVAL_INODE    = uint32(101)
@@ -93,40 +99,41 @@ func doInit(server *Server, req *request) {
 		return
 	}
 
+	kernelFlags := input.Flags64()
 	server.reqMu.Lock()
 	server.kernelSettings = *input
-	server.kernelSettings.Flags = input.Flags & (CAP_ASYNC_READ | CAP_BIG_WRITES | CAP_FILE_OPS |
-		CAP_READDIRPLUS | CAP_NO_OPEN_SUPPORT | CAP_PARALLEL_DIROPS | CAP_MAX_PAGES)
+	kernelFlags &= (CAP_ASYNC_READ | CAP_BIG_WRITES | CAP_FILE_OPS |
+		CAP_READDIRPLUS | CAP_NO_OPEN_SUPPORT | CAP_PARALLEL_DIROPS | CAP_MAX_PAGES | CAP_RENAME_SWAP | CAP_PASSTHROUGH)
 
 	if server.opts.EnableLocks {
-		server.kernelSettings.Flags |= CAP_FLOCK_LOCKS | CAP_POSIX_LOCKS
+		kernelFlags |= CAP_FLOCK_LOCKS | CAP_POSIX_LOCKS
 	}
 	if server.opts.EnableSymlinkCaching {
-		server.kernelSettings.Flags |= CAP_CACHE_SYMLINKS
+		kernelFlags |= CAP_CACHE_SYMLINKS
 	}
 	if server.opts.EnableAcl {
-		server.kernelSettings.Flags |= CAP_POSIX_ACL
+		kernelFlags |= CAP_POSIX_ACL
 	}
 	if server.opts.SyncRead {
 		// Clear CAP_ASYNC_READ
-		server.kernelSettings.Flags &= ^uint32(CAP_ASYNC_READ)
+		kernelFlags &= ^uint64(CAP_ASYNC_READ)
 	}
 	if server.opts.DisableReadDirPlus {
 		// Clear CAP_READDIRPLUS
-		server.kernelSettings.Flags &= ^uint32(CAP_READDIRPLUS)
+		kernelFlags &= ^uint64(CAP_READDIRPLUS)
 	}
 
-	dataCacheMode := input.Flags & CAP_AUTO_INVAL_DATA
+	dataCacheMode := kernelFlags & CAP_AUTO_INVAL_DATA
 	if server.opts.ExplicitDataCacheControl {
 		// we don't want CAP_AUTO_INVAL_DATA even if we cannot go into fully explicit mode
 		dataCacheMode = 0
 
-		explicit := input.Flags & CAP_EXPLICIT_INVAL_DATA
+		explicit := kernelFlags & CAP_EXPLICIT_INVAL_DATA
 		if explicit != 0 {
 			dataCacheMode = explicit
 		}
 	}
-	server.kernelSettings.Flags |= dataCacheMode
+	kernelFlags |= dataCacheMode
 
 	if input.Minor >= 13 {
 		server.setSplice()
@@ -143,13 +150,13 @@ func doInit(server *Server, req *request) {
 		Major:               _FUSE_KERNEL_VERSION,
 		Minor:               _OUR_MINOR_VERSION,
 		MaxReadAhead:        input.MaxReadAhead,
-		Flags:               server.kernelSettings.Flags,
 		MaxWrite:            uint32(server.opts.MaxWrite),
 		CongestionThreshold: uint16(server.opts.MaxBackground * 3 / 4),
 		MaxBackground:       uint16(server.opts.MaxBackground),
 		MaxPages:            uint16(maxPages),
+		MaxStackDepth:       1,
 	}
-
+	out.setFlags(kernelFlags)
 	if server.opts.MaxReadAhead != 0 && uint32(server.opts.MaxReadAhead) < out.MaxReadAhead {
 		out.MaxReadAhead = uint32(server.opts.MaxReadAhead)
 	}
@@ -437,6 +444,10 @@ func doSymlink(server *Server, req *request) {
 }
 
 func doRename(server *Server, req *request) {
+	if server.kernelSettings.supportsRenameSwap() {
+		doRename2(server, req)
+		return
+	}
 	in1 := (*Rename1In)(req.inData)
 	in := RenameIn{
 		InHeader: in1.InHeader,
@@ -692,6 +703,10 @@ func init() {
 		_OP_RENAME2:               "RENAME2",
 		_OP_LSEEK:                 "LSEEK",
 		_OP_COPY_FILE_RANGE:       "COPY_FILE_RANGE",
+		_OP_SETUPMAPPING:          "SETUPMAPPING",
+		_OP_REMOVEMAPPING:         "REMOVEMAPPING",
+		_OP_SYNCFS:                "SYNCFS",
+		_OP_TMPFILE:               "TMPFILE",
 	} {
 		operationHandlers[op].Name = v
 	}
@@ -781,6 +796,7 @@ func init() {
 		_OP_INIT:            func(ptr unsafe.Pointer) interface{} { return (*InitIn)(ptr) },
 		_OP_IOCTL:           func(ptr unsafe.Pointer) interface{} { return (*_IoctlIn)(ptr) },
 		_OP_OPEN:            func(ptr unsafe.Pointer) interface{} { return (*OpenIn)(ptr) },
+		_OP_OPENDIR:         func(ptr unsafe.Pointer) interface{} { return (*OpenIn)(ptr) },
 		_OP_MKNOD:           func(ptr unsafe.Pointer) interface{} { return (*MknodIn)(ptr) },
 		_OP_CREATE:          func(ptr unsafe.Pointer) interface{} { return (*CreateIn)(ptr) },
 		_OP_READ:            func(ptr unsafe.Pointer) interface{} { return (*ReadIn)(ptr) },

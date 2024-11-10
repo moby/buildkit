@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	ctd "github.com/containerd/containerd"
-	"github.com/containerd/containerd/defaults"
+	ctd "github.com/containerd/containerd/v2/client"
+	"github.com/containerd/containerd/v2/defaults"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/disk"
@@ -114,7 +114,7 @@ func init() {
 		cli.StringFlag{
 			Name:  "containerd-worker-snapshotter",
 			Usage: "snapshotter name to use",
-			Value: ctd.DefaultSnapshotter,
+			Value: defaults.DefaultSnapshotter,
 		},
 		cli.StringFlag{
 			Name:  "containerd-worker-apparmor-profile",
@@ -299,7 +299,7 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 		parallelismSem = semaphore.NewWeighted(int64(cfg.MaxParallelism))
 	}
 
-	snapshotter := ctd.DefaultSnapshotter
+	snapshotter := defaults.DefaultSnapshotter
 	if cfg.Snapshotter != "" {
 		snapshotter = cfg.Snapshotter
 	}

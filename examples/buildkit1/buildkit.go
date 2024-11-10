@@ -51,7 +51,7 @@ func runc(version string) llb.State {
 func containerd(version string) llb.State {
 	return goBuildBase().
 		Run(llb.Shlex("apk add --no-cache btrfs-progs-dev")).
-		With(goFromGit("github.com/containerd/containerd", version)).
+		With(goFromGit("github.com/containerd/containerd/v2/client", version)).
 		Run(llb.Shlex("make bin/containerd")).Root()
 }
 

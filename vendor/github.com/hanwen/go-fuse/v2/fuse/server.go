@@ -76,6 +76,7 @@ type Server struct {
 	singleReader bool
 	canSplice    bool
 	loops        sync.WaitGroup
+	serving      bool // for preventing duplicate Serve() calls
 
 	ready chan error
 
@@ -195,14 +196,11 @@ func NewServer(fs RawFileSystem, mountPoint string, opts *MountOptions) (*Server
 	}
 
 	ms := &Server{
-		fileSystem:  fs,
-		opts:        &o,
-		maxReaders:  maxReaders,
-		retrieveTab: make(map[uint64]*retrieveCacheRequest),
-		// OSX has races when multiple routines read from the
-		// FUSE device: on unmount, sometime some reads do not
-		// error-out, meaning that unmount will hang.
-		singleReader: runtime.GOOS == "darwin",
+		fileSystem:   fs,
+		opts:         &o,
+		maxReaders:   maxReaders,
+		retrieveTab:  make(map[uint64]*retrieveCacheRequest),
+		singleReader: useSingleReader,
 		ready:        make(chan error, 1),
 	}
 	ms.reqPool.New = func() interface{} {
@@ -325,8 +323,10 @@ func (ms *Server) readRequest(exitIdle bool) (req *request, code Status) {
 	ms.reqReaders++
 	ms.reqMu.Unlock()
 
-	req = ms.reqPool.Get().(*request)
-	dest := ms.readPool.Get().([]byte)
+	reqIface := ms.reqPool.Get()
+	req = reqIface.(*request)
+	destIface := ms.readPool.Get()
+	dest := destIface.([]byte)
 
 	var n int
 	err := handleEINTR(func() error {
@@ -336,7 +336,7 @@ func (ms *Server) readRequest(exitIdle bool) (req *request, code Status) {
 	})
 	if err != nil {
 		code = ToStatus(err)
-		ms.reqPool.Put(req)
+		ms.reqPool.Put(reqIface)
 		ms.reqMu.Lock()
 		ms.reqReaders--
 		ms.reqMu.Unlock()
@@ -357,8 +357,7 @@ func (ms *Server) readRequest(exitIdle bool) (req *request, code Status) {
 	req.inflightIndex = len(ms.reqInflight)
 	ms.reqInflight = append(ms.reqInflight, req)
 	if !gobbled {
-		ms.readPool.Put(dest)
-		dest = nil
+		ms.readPool.Put(destIface)
 	}
 	ms.reqReaders--
 	if !ms.singleReader && ms.reqReaders <= 0 {
@@ -418,6 +417,14 @@ func (ms *Server) recordStats(req *request) {
 //
 // Each filesystem operation executes in a separate goroutine.
 func (ms *Server) Serve() {
+	if ms.serving {
+		// Calling Serve() multiple times leads to a panic on unmount and fun
+		// debugging sessions ( https://github.com/hanwen/go-fuse/issues/512 ).
+		// Catch it early.
+		log.Panic("Serve() must only be called once, you have called it a second time")
+	}
+	ms.serving = true
+
 	ms.loop(false)
 	ms.loops.Wait()
 
@@ -470,6 +477,33 @@ func (ms *Server) handleInit() Status {
 	return OK
 }
 
+// loop is the FUSE event loop. The simplistic way of calling this is
+// with singleReader=true, which has a single goroutine reading the
+// device, and spawning a new goroutine for each request. It is
+// however 2x slower than processing the request inline with the
+// reader. The latter requires more logic, because whenever we start
+// processing the request, we have to make sure a new routine is
+// spawned to read the device.
+//
+// Benchmark results i5-8350 pinned at 2Ghz:
+//
+// singleReader = true
+//
+// BenchmarkGoFuseRead            	     954	   1137408 ns/op	1843.80 MB/s	    5459 B/op	     173 allocs/op
+// BenchmarkGoFuseRead-2          	    1327	    798635 ns/op	2625.92 MB/s	    5072 B/op	     169 allocs/op
+// BenchmarkGoFuseStat            	    1530	    750944 ns/op
+// BenchmarkGoFuseStat-2          	    8455	    120091 ns/op
+// BenchmarkGoFuseReaddir         	     741	   1561004 ns/op
+// BenchmarkGoFuseReaddir-2       	    2508	    599821 ns/op
+//
+// singleReader = false
+//
+// BenchmarkGoFuseRead            	    1890	    671576 ns/op	3122.73 MB/s	    5393 B/op	     136 allocs/op
+// BenchmarkGoFuseRead-2          	    2948	    429578 ns/op	4881.88 MB/s	   32235 B/op	     157 allocs/op
+// BenchmarkGoFuseStat            	    7886	    153546 ns/op
+// BenchmarkGoFuseStat-2          	    9310	    121332 ns/op
+// BenchmarkGoFuseReaddir         	    4074	    361568 ns/op
+// BenchmarkGoFuseReaddir-2       	    3511	    319765 ns/op
 func (ms *Server) loop(exitIdle bool) {
 	defer ms.loops.Done()
 exit:
@@ -507,7 +541,7 @@ func (ms *Server) handleRequest(req *request) Status {
 		defer ms.requestProcessingMu.Unlock()
 	}
 
-	req.parse()
+	req.parse(ms.kernelSettings)
 	if req.handler == nil {
 		req.status = ENOSYS
 	}
@@ -528,15 +562,22 @@ func (ms *Server) handleRequest(req *request) Status {
 
 	errNo := ms.write(req)
 	if errNo != 0 {
-		// Unless debugging is enabled, ignore ENOENT for INTERRUPT responses
-		// which indicates that the referred request is no longer known by the
-		// kernel. This is a normal if the referred request already has
-		// completed.
-		if ms.opts.Debug || !(req.inHeader.Opcode == _OP_INTERRUPT && errNo == ENOENT) {
+		// Ignore ENOENT for INTERRUPT responses which
+		// indicates that the referred request is no longer
+		// known by the kernel. This is a normal if the
+		// referred request already has completed.
+		//
+		// Ignore ENOENT for RELEASE responses.  When the FS
+		// is unmounted directly after a file close, the
+		// device can go away while we are still processing
+		// RELEASE. This is because RELEASE is analogous to
+		// FORGET, and is not synchronized with the calling
+		// process, but does require a response.
+		if ms.opts.Debug || !(errNo == ENOENT && (req.inHeader.Opcode == _OP_INTERRUPT ||
+			req.inHeader.Opcode == _OP_RELEASE)) {
 			ms.opts.Logger.Printf("writer: Write/Writev failed, err: %v. opcode: %v",
 				errNo, operationName(req.inHeader.Opcode))
 		}
-
 	}
 	ms.returnRequest(req)
 	return Status(errNo)
@@ -903,6 +944,12 @@ func (in *InitIn) SupportsNotify(notifyType int) bool {
 		return in.SupportsVersion(7, 18)
 	}
 	return false
+}
+
+// supportsRenameSwap returns whether the kernel supports the
+// renamex_np(2) syscall. This is only supported on OS X.
+func (in *InitIn) supportsRenameSwap() bool {
+	return in.Flags&CAP_RENAME_SWAP != 0
 }
 
 // WaitMount waits for the first request to be served. Use this to

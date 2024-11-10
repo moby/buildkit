@@ -940,10 +940,10 @@ COPY Dockerfile .
 
 	osStr := integration.UnixOrWindows("linux", "windows")
 	streamBuildErr := fmt.Sprintf(
-		"failed to solve: failed to parse platform %s/${MYARCH}: \"\" is an invalid component of \"%s/\": platform specifier component must match \"^[A-Za-z0-9_-]+$\": invalid argument (did you mean MY_ARCH?)",
+		"failed to solve: failed to parse platform %s/${MYARCH}: \"\" is an invalid component of \"%s/\": platform specifier component must match \"^[A-Za-z0-9_.-]+$\": invalid argument (did you mean MY_ARCH?)",
 		osStr, osStr)
 	unmarshalBuildErr := fmt.Sprintf(
-		"failed to parse platform %s/${MYARCH}: \"\" is an invalid component of \"%s/\": platform specifier component must match \"^[A-Za-z0-9_-]+$\": invalid argument (did you mean MY_ARCH?)",
+		"failed to parse platform %s/${MYARCH}: \"\" is an invalid component of \"%s/\": platform specifier component must match \"^[A-Za-z0-9_.-]+$\": invalid argument (did you mean MY_ARCH?)",
 		osStr, osStr)
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile: dockerfile,
