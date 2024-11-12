@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile-upstream:master
 
-ARG RUNC_VERSION=v1.2.1
+# Do not update runc to v1.2.x until https://github.com/opencontainers/runc/issues/4518 is resolved
+ARG RUNC_VERSION=v1.1.15
 ARG CONTAINERD_VERSION=v1.7.23
 # CONTAINERD_ALT_VERSION_16 defines fallback containerd version for integration tests
 ARG CONTAINERD_ALT_VERSION_16=v1.6.36
