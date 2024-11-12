@@ -38,6 +38,17 @@ import (
 	"github.com/containerd/platforms"
 	"github.com/distribution/reference"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
+	digest "github.com/opencontainers/go-digest"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/pkg/errors"
+	"github.com/spdx/tools-golang/spdx"
+	"github.com/stretchr/testify/require"
+	"github.com/tonistiigi/fsutil"
+	"golang.org/x/crypto/ssh/agent"
+	"golang.org/x/mod/semver"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
+
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
@@ -64,16 +75,6 @@ import (
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/moby/buildkit/util/testutil/workers"
-	digest "github.com/opencontainers/go-digest"
-	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
-	"github.com/spdx/tools-golang/spdx"
-	"github.com/stretchr/testify/require"
-	"github.com/tonistiigi/fsutil"
-	"golang.org/x/crypto/ssh/agent"
-	"golang.org/x/mod/semver"
-	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
 )
 
 func init() {
@@ -477,7 +478,7 @@ func testExportedImageLabels(t *testing.T, sb integration.Sandbox) {
 
 	hasLabel := func(dgst digest.Digest) bool {
 		for k, v := range info.Labels {
-			if strings.HasPrefix(k, "ctd.io/gc.ref.content.") && v == dgst.String() {
+			if strings.HasPrefix(k, "containerd.io/gc.ref.content.") && v == dgst.String() {
 				return true
 			}
 		}
@@ -6901,6 +6902,9 @@ func testMoveParentDir(t *testing.T, sb integration.Sandbox) {
 // #296
 func testSchema1Image(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
+	if sb.Rootless() { // Rootless runs in a separate process which may not have schema1 enabled
+		t.SkipNow()
+	}
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
