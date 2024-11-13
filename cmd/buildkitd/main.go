@@ -850,6 +850,7 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 		LeaseManager:              w.LeaseManager(),
 		ContentStore:              w.ContentStore(),
 		HistoryConfig:             cfg.History,
+		GarbageCollect:            w.GarbageCollect,
 	})
 }
 
