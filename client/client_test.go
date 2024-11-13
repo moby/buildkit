@@ -7844,6 +7844,16 @@ loop0:
 	// examine contents of exported tars (requires containerd)
 	cdAddress := sb.ContainerdAddress()
 	if cdAddress == "" {
+		if checkContent {
+			store := proxy.NewContentStore(c.ContentClient())
+			count := 0
+			err := store.Walk(sb.Context(), func(info content.Info) error {
+				count++
+				return nil
+			})
+			require.NoError(t, err)
+			require.Equal(t, 0, count)
+		}
 		t.Logf("checkAllReleasable: skipping check for exported tars in non-containerd test")
 		return
 	}
@@ -7854,60 +7864,85 @@ loop0:
 	require.NoError(t, err)
 	defer client.Close()
 
-	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
-	snapshotterName := sb.Snapshotter()
-	snapshotService := client.SnapshotService(snapshotterName)
+	for _, ns := range []string{"buildkit", "buildkit_history"} {
+		ctx := namespaces.WithNamespace(sb.Context(), ns)
+		snapshotterName := sb.Snapshotter()
+		snapshotService := client.SnapshotService(snapshotterName)
 
-	retries = 0
-	for {
-		count := 0
-		err = snapshotService.Walk(ctx, func(context.Context, snapshots.Info) error {
-			count++
-			return nil
-		})
+		leases, err := client.LeasesService().List(ctx)
 		require.NoError(t, err)
-		if count == 0 {
-			break
-		}
-		require.Less(t, retries, 20)
-		retries++
-		time.Sleep(500 * time.Millisecond)
-	}
-
-	if !checkContent {
-		return
-	}
-
-	retries = 0
-	for {
 		count := 0
-		var infos []content.Info
-		err = client.ContentStore().Walk(ctx, func(info content.Info) error {
-			count++
-			infos = append(infos, info)
-			return nil
-		})
-		require.NoError(t, err)
-		if count == 0 {
-			break
-		}
-		if retries >= 50 {
-			for _, info := range infos {
-				t.Logf("content: %v %v %+v", info.Digest, info.Size, info.Labels)
-				ra, err := client.ContentStore().ReaderAt(ctx, ocispecs.Descriptor{
-					Digest: info.Digest,
-					Size:   info.Size,
-				})
-				if err == nil {
-					dt := make([]byte, 1024)
-					n, err := ra.ReadAt(dt, 0)
-					t.Logf("data: %+v %q", err, string(dt[:n]))
-				}
+		for _, l := range leases {
+			_, isTemp := l.Labels["buildkit/lease.temporary"]
+			_, isExpire := l.Labels["containerd.io/gc.expire"]
+			if isTemp && isExpire {
+				continue
 			}
-			require.FailNowf(t, "content still exists", "%+v", infos)
+			count++
+			t.Logf("lease: %v", l)
 		}
-		retries++
-		time.Sleep(500 * time.Millisecond)
+		require.Equal(t, 0, count)
+
+		if checkContent {
+			images, err := client.ImageService().List(ctx)
+			require.NoError(t, err)
+			for _, img := range images {
+				err := client.ImageService().Delete(ctx, img.Name)
+				require.NoError(t, err)
+			}
+		}
+
+		retries = 0
+		for {
+			count := 0
+			err = snapshotService.Walk(ctx, func(context.Context, snapshots.Info) error {
+				count++
+				return nil
+			})
+			require.NoError(t, err)
+			if count == 0 {
+				break
+			}
+			require.Less(t, retries, 20)
+			retries++
+			time.Sleep(500 * time.Millisecond)
+		}
+
+		if !checkContent {
+			return
+		}
+
+		retries = 0
+		for {
+			count := 0
+			var infos []content.Info
+			err = client.ContentStore().Walk(ctx, func(info content.Info) error {
+				count++
+				infos = append(infos, info)
+				return nil
+			})
+			require.NoError(t, err)
+			if count == 0 {
+				break
+			}
+			if retries >= 50 {
+				for _, info := range infos {
+					t.Logf("content: %v %v %+v", info.Digest, info.Size, info.Labels)
+					ra, err := client.ContentStore().ReaderAt(ctx, ocispecs.Descriptor{
+						Digest: info.Digest,
+						Size:   info.Size,
+					})
+					if err == nil {
+						dt := make([]byte, 1024)
+						n, err := ra.ReadAt(dt, 0)
+						t.Logf("data: %+v %q", err, string(dt[:n]))
+					}
+				}
+				require.FailNowf(t, "content still exists", "%+v", infos)
+			}
+			retries++
+			time.Sleep(500 * time.Millisecond)
+		}
 	}
 }
 
@@ -9880,7 +9915,7 @@ func testSBOMSupplements(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, "/bar", attest.Predicate.Files[1].FileName)
 	require.Empty(t, attest.Predicate.Files[1].FileComment)
 
-	checkAllReleasable(t, c, sb, false)
+	checkAllReleasable(t, c, sb, true)
 }
 
 func testMultipleCacheExports(t *testing.T, sb integration.Sandbox) {
