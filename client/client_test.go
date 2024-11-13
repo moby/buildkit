@@ -9879,6 +9879,8 @@ func testSBOMSupplements(t *testing.T, sb integration.Sandbox) {
 	require.Regexp(t, "^layerID: sha256:", attest.Predicate.Files[0].FileComment)
 	require.Equal(t, "/bar", attest.Predicate.Files[1].FileName)
 	require.Empty(t, attest.Predicate.Files[1].FileComment)
+
+	checkAllReleasable(t, c, sb, false)
 }
 
 func testMultipleCacheExports(t *testing.T, sb integration.Sandbox) {
