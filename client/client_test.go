@@ -222,6 +222,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testLayerLimitOnMounts,
 	testFrontendVerifyPlatforms,
 	testRunValidExitCodes,
+	testFileOpSymlink,
 }
 
 func TestIntegration(t *testing.T) {
@@ -2424,6 +2425,95 @@ func testOCILayoutPlatformSource(t *testing.T, sb integration.Sandbox) {
 		require.NoError(t, err)
 		require.Equal(t, []byte(platform), dt)
 	}
+}
+
+func testFileOpSymlink(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+
+	const (
+		fileOwner = 7777
+		fileGroup = 8888
+		linkOwner = 1111
+		linkGroup = 2222
+
+		dummyTimestamp = 42
+	)
+
+	dummyTime := time.Unix(dummyTimestamp, 0)
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Scratch().
+		File(llb.Mkdir("/foo", 0700).Mkfile("bar", 0600, []byte("contents"), llb.ChownOpt{
+			User: &llb.UserOpt{
+				UID: fileOwner,
+			},
+			Group: &llb.UserOpt{
+				UID: fileGroup,
+			},
+		})).
+		File(llb.Symlink("bar", "/baz", llb.WithCreatedTime(dummyTime), llb.ChownOpt{
+			User: &llb.UserOpt{
+				UID: linkOwner,
+			},
+			Group: &llb.UserOpt{
+				UID: linkGroup,
+			},
+		}))
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+
+	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+	defer outW.Close()
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterTar,
+				Output: fixedWriteCloser(outW),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(out)
+	require.NoError(t, err)
+	m, err := testutil.ReadTarToMap(dt, false)
+	require.NoError(t, err)
+
+	entry, ok := m["bar"]
+	require.True(t, ok)
+
+	dt = entry.Data
+	header := entry.Header
+	require.NoError(t, err)
+
+	require.Equal(t, []byte("contents"), dt)
+	require.Equal(t, fileOwner, header.Uid)
+	require.Equal(t, fileGroup, header.Gid)
+
+	entry, ok = m["baz"]
+	require.Equal(t, true, ok)
+
+	header = entry.Header
+	// ensure it is a symlink
+	require.Equal(t, tar.TypeSymlink, rune(header.Typeflag))
+	// ensure it is a symlink to the proper location
+	require.Equal(t, "bar", header.Linkname)
+
+	// make sure it was chowned properly
+	require.Equal(t, linkOwner, header.Uid)
+	require.Equal(t, linkGroup, header.Gid)
+
+	// ensure it was timestamped properly
+	require.Equal(t, dummyTime, header.ModTime)
 }
 
 func testFileOpRmWildcard(t *testing.T, sb integration.Sandbox) {
