@@ -32,13 +32,6 @@ type Type interface {
 	String() string
 }
 
-type (
-	uncompressedType struct{}
-	gzipType         struct{}
-	estargzType      struct{}
-	zstdType         struct{}
-)
-
 var (
 	// Uncompressed indicates no compression.
 	Uncompressed = uncompressedType{}
@@ -52,6 +45,23 @@ var (
 	// Zstd is used for Zstandard data.
 	Zstd = zstdType{}
 )
+
+var toCompressionType = map[string]Type{
+	Uncompressed.String(): Uncompressed,
+	Gzip.String():         Gzip,
+	EStargz.String():      EStargz,
+	Zstd.String():         Zstd,
+}
+
+// mediaTypeToCompressionType maps media-types to compression types.
+var mediaTypeToCompressionType = map[string]Type{
+	ocispecs.MediaTypeImageLayer:                     Uncompressed,
+	ocispecs.MediaTypeImageLayerNonDistributable:     Uncompressed, //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
+	ocispecs.MediaTypeImageLayerGzip:                 Gzip,
+	ocispecs.MediaTypeImageLayerNonDistributableGzip: Gzip, //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
+	ocispecs.MediaTypeImageLayerZstd:                 Zstd,
+	ocispecs.MediaTypeImageLayerNonDistributableZstd: Zstd, //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
+}
 
 type Config struct {
 	Type  Type
@@ -81,32 +91,29 @@ const (
 
 var Default = Gzip
 
-func parse(t string) (Type, error) {
-	switch t {
-	case Uncompressed.String():
-		return Uncompressed, nil
-	case Gzip.String():
-		return Gzip, nil
-	case EStargz.String():
-		return EStargz, nil
-	case Zstd.String():
-		return Zstd, nil
-	default:
-		return nil, errors.Errorf("unsupported compression type %s", t)
+// Parse returns the [Type] registered for the given name. It returns an error
+// if no compression-type is registered for the given name.
+func Parse(name string) (Type, error) {
+	ct, ok := toCompressionType[name]
+	if !ok {
+		return nil, errors.Errorf("unsupported compression type %s", name)
 	}
+	return ct, nil
 }
 
-func fromMediaType(mediaType string) (Type, error) {
-	switch toOCILayerType[mediaType] {
-	case ocispecs.MediaTypeImageLayer, ocispecs.MediaTypeImageLayerNonDistributable: //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
-		return Uncompressed, nil
-	case ocispecs.MediaTypeImageLayerGzip, ocispecs.MediaTypeImageLayerNonDistributableGzip: //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
-		return Gzip, nil
-	case ocispecs.MediaTypeImageLayerZstd, ocispecs.MediaTypeImageLayerNonDistributableZstd: //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
-		return Zstd, nil
-	default:
+// FromMediaType returns the [Type] registered for the given mediaType.
+// It returns an error if the given mediaType is not supported or no
+// compression-type is registered for the given type.
+func FromMediaType(mediaType string) (Type, error) {
+	mt, ok := toOCILayerType[mediaType]
+	if !ok {
 		return nil, errors.Errorf("unsupported media type %s", mediaType)
 	}
+	ct, ok := mediaTypeToCompressionType[mt]
+	if !ok {
+		return nil, errors.Errorf("unsupported media type %s", mediaType)
+	}
+	return ct, nil
 }
 
 func IsMediaType(ct Type, mt string) bool {
