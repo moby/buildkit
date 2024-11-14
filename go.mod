@@ -27,7 +27,7 @@ require (
 	github.com/containerd/platforms v0.2.1
 	github.com/containerd/stargz-snapshotter v0.15.1
 	github.com/containerd/stargz-snapshotter/estargz v0.15.1
-	github.com/containerd/typeurl/v2 v2.2.0
+	github.com/containerd/typeurl/v2 v2.2.3
 	github.com/containernetworking/plugins v1.4.0
 	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/distribution/reference v0.6.0
