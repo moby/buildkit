@@ -47,6 +47,7 @@ type HistoryQueueOpt struct {
 	ContentStore   *containerdsnapshot.Store
 	CleanConfig    *config.HistoryConfig
 	GarbageCollect func(context.Context) error
+	GracefulStop   <-chan struct{}
 }
 
 type HistoryQueue struct {
@@ -134,6 +135,16 @@ func NewHistoryQueue(opt HistoryQueueOpt) (*HistoryQueue, error) {
 		for {
 			h.gc()
 			time.Sleep(120 * time.Second)
+		}
+	}()
+
+	go func() {
+		<-h.opt.GracefulStop
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		// if active builds then close will happen in finalizer
+		if len(h.finalizers) == 0 && len(h.active) == 0 {
+			go h.ps.Close()
 		}
 	}()
 
@@ -637,6 +648,14 @@ func (h *HistoryQueue) AcquireFinalizer(ref string) (<-chan struct{}, func()) {
 		<-f.done
 		h.mu.Lock()
 		delete(h.finalizers, ref)
+		// if gracefulstop then release listeners after finalize
+		if len(h.finalizers) == 0 {
+			select {
+			case <-h.opt.GracefulStop:
+				go h.ps.Close()
+			default:
+			}
+		}
 		h.mu.Unlock()
 	}()
 	return trigger, sync.OnceFunc(func() {
@@ -1030,6 +1049,18 @@ func (p *pubsub[T]) Send(v T) {
 		go c.send(v)
 	}
 	p.mu.Unlock()
+}
+
+func (p *pubsub[T]) Close() {
+	p.mu.Lock()
+	channels := make([]*channel[T], 0, len(p.m))
+	for c := range p.m {
+		channels = append(channels, c)
+	}
+	p.mu.Unlock()
+	for _, c := range channels {
+		c.close()
+	}
 }
 
 type channel[T any] struct {

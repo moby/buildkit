@@ -341,7 +341,7 @@ func main() {
 			return err
 		}
 
-		controller, err := newController(c, &cfg)
+		controller, err := newController(ctx, c, &cfg)
 		if err != nil {
 			return err
 		}
@@ -758,7 +758,7 @@ func serverCredentials(cfg config.TLSConfig) (*tls.Config, error) {
 	return tlsConf, nil
 }
 
-func newController(c *cli.Context, cfg *config.Config) (*control.Controller, error) {
+func newController(ctx context.Context, c *cli.Context, cfg *config.Config) (*control.Controller, error) {
 	sessionManager, err := session.NewManager()
 	if err != nil {
 		return nil, err
@@ -851,6 +851,7 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 		ContentStore:              w.ContentStore(),
 		HistoryConfig:             cfg.History,
 		GarbageCollect:            w.GarbageCollect,
+		GracefulStop:              ctx.Done(),
 	})
 }
 
