@@ -7,10 +7,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestOp_UnmarshalJSON(t *testing.T) {
+func TestJSON_Op(t *testing.T) {
 	for _, tt := range []struct {
 		name string
 		op   *Op
+		json string
 	}{
 		{
 			name: "exec",
@@ -26,6 +27,7 @@ func TestOp_UnmarshalJSON(t *testing.T) {
 					},
 				},
 			},
+			json: `{"Op":{"exec":{"meta":{"args":["echo","Hello","World"]},"mounts":[{"dest":"/","readonly":true}]}}}`,
 		},
 		{
 			name: "source",
@@ -37,6 +39,7 @@ func TestOp_UnmarshalJSON(t *testing.T) {
 				},
 				Constraints: &WorkerConstraints{},
 			},
+			json: `{"Op":{"source":{"identifier":"local://context"}},"constraints":{}}`,
 		},
 		{
 			name: "file",
@@ -58,6 +61,7 @@ func TestOp_UnmarshalJSON(t *testing.T) {
 					},
 				},
 			},
+			json: `{"Op":{"file":{"actions":[{"Action":{"copy":{"src":"/foo","dest":"/bar"}},"input":1,"secondaryInput":0,"output":2}]}}}`,
 		},
 		{
 			name: "build",
@@ -68,6 +72,7 @@ func TestOp_UnmarshalJSON(t *testing.T) {
 					},
 				},
 			},
+			json: `{"Op":{"build":{"def":{}}}}`,
 		},
 		{
 			name: "merge",
@@ -81,6 +86,7 @@ func TestOp_UnmarshalJSON(t *testing.T) {
 					},
 				},
 			},
+			json: `{"Op":{"merge":{"inputs":[{}, {"input":1}]}}}`,
 		},
 		{
 			name: "diff",
@@ -92,27 +98,43 @@ func TestOp_UnmarshalJSON(t *testing.T) {
 					},
 				},
 			},
+			json: `{"Op":{"diff":{"lower":{},"upper":{"input":1}}}}`,
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
+			// Marshal the operation.
 			out, err := json.Marshal(tt.op)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 
-			exp, got := tt.op, &Op{}
-			if err := json.Unmarshal(out, got); err != nil {
-				t.Fatal(err)
-			}
-			require.Equal(t, exp, got)
+			// Test that we received the correct json object.
+			t.Run("Marshal", func(t *testing.T) {
+				var act any
+				err := json.Unmarshal(out, &act)
+				require.NoError(t, err)
+
+				var exp any
+				err = json.Unmarshal([]byte(tt.json), &exp)
+				require.NoError(t, err)
+				require.Equal(t, exp, act)
+			})
+
+			// Verify that unmarshaling the same JSON results in the
+			// same operation.
+			t.Run("Unmarshal", func(t *testing.T) {
+				exp, got := tt.op, &Op{}
+				err := json.Unmarshal(out, got)
+				require.NoError(t, err)
+				require.Equal(t, exp, got)
+			})
 		})
 	}
 }
 
-func TestFileAction_UnmarshalJSON(t *testing.T) {
+func TestJSON_FileAction(t *testing.T) {
 	for _, tt := range []struct {
 		name       string
 		fileAction *FileAction
+		json       string
 	}{
 		{
 			name: "copy",
@@ -124,6 +146,7 @@ func TestFileAction_UnmarshalJSON(t *testing.T) {
 					},
 				},
 			},
+			json: `{"Action":{"copy":{"src":"/foo","dest":"/bar"}},"input":0,"secondaryInput":0,"output":0}`,
 		},
 		{
 			name: "mkfile",
@@ -135,6 +158,7 @@ func TestFileAction_UnmarshalJSON(t *testing.T) {
 					},
 				},
 			},
+			json: `{"Action":{"mkfile":{"path":"/foo","data":"SGVsbG8sIFdvcmxkIQ=="}},"input":0,"secondaryInput":0,"output":0}`,
 		},
 		{
 			name: "mkdir",
@@ -146,6 +170,7 @@ func TestFileAction_UnmarshalJSON(t *testing.T) {
 					},
 				},
 			},
+			json: `{"Action":{"mkdir":{"path":"/foo/bar","makeParents":true}},"input":0,"secondaryInput":0,"output":0}`,
 		},
 		{
 			name: "rm",
@@ -157,27 +182,42 @@ func TestFileAction_UnmarshalJSON(t *testing.T) {
 					},
 				},
 			},
+			json: `{"Action":{"rm":{"path":"/foo","allowNotFound":true}},"input":0,"secondaryInput":0,"output":0}`,
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			out, err := json.Marshal(tt.fileAction)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 
-			exp, got := tt.fileAction, &FileAction{}
-			if err := json.Unmarshal(out, got); err != nil {
-				t.Fatal(err)
-			}
-			require.Equal(t, exp, got)
+			// Test that we received the correct json object.
+			t.Run("Marshal", func(t *testing.T) {
+				var act any
+				err := json.Unmarshal(out, &act)
+				require.NoError(t, err)
+
+				var exp any
+				err = json.Unmarshal([]byte(tt.json), &exp)
+				require.NoError(t, err)
+				require.Equal(t, exp, act)
+			})
+
+			// Verify that unmarshaling the same JSON results in the
+			// same file action.
+			t.Run("Unmarshal", func(t *testing.T) {
+				exp, got := tt.fileAction, &FileAction{}
+				err := json.Unmarshal(out, got)
+				require.NoError(t, err)
+				require.Equal(t, exp, got)
+			})
 		})
 	}
 }
 
-func TestUserOpt_UnmarshalJSON(t *testing.T) {
+func TestJSON_UserOpt(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
 		userOpt *UserOpt
+		json    string
 	}{
 		{
 			name: "byName",
@@ -188,6 +228,7 @@ func TestUserOpt_UnmarshalJSON(t *testing.T) {
 					},
 				},
 			},
+			json: `{"User":{"byName":{"name":"foo"}}}`,
 		},
 		{
 			name: "byId",
@@ -196,19 +237,33 @@ func TestUserOpt_UnmarshalJSON(t *testing.T) {
 					ByID: 2,
 				},
 			},
+			json: `{"User":{"byId":2}}`,
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			out, err := json.Marshal(tt.userOpt)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 
-			exp, got := tt.userOpt, &UserOpt{}
-			if err := json.Unmarshal(out, got); err != nil {
-				t.Fatal(err)
-			}
-			require.Equal(t, exp, got)
+			// Test that we received the correct json object.
+			t.Run("Marshal", func(t *testing.T) {
+				var act any
+				err := json.Unmarshal(out, &act)
+				require.NoError(t, err)
+
+				var exp any
+				err = json.Unmarshal([]byte(tt.json), &exp)
+				require.NoError(t, err)
+				require.Equal(t, exp, act)
+			})
+
+			// Verify that unmarshaling the same JSON results in the
+			// same user option.
+			t.Run("Unmarshal", func(t *testing.T) {
+				exp, got := tt.userOpt, &UserOpt{}
+				err := json.Unmarshal(out, got)
+				require.NoError(t, err)
+				require.Equal(t, exp, got)
+			})
 		})
 	}
 }
