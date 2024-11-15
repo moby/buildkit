@@ -4491,7 +4491,6 @@ COPY --from=build foo bar2
 }
 
 func testDockerfileFromHTTP(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	buf := bytes.NewBuffer(nil)
@@ -4509,9 +4508,10 @@ func testDockerfileFromHTTP(t *testing.T, sb integration.Sandbox) {
 		require.NoError(t, err)
 	}
 
-	writeFile("mydockerfile", `FROM scratch
+	dockerfile := fmt.Sprintf(`FROM %s
 COPY foo bar
-`)
+`, integration.UnixOrWindows("scratch", "nanoserver"))
+	writeFile("mydockerfile", dockerfile)
 
 	writeFile("foo", "foo-contents")
 
