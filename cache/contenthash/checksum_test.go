@@ -1400,6 +1400,84 @@ func TestPersistence(t *testing.T) {
 	require.Equal(t, dgstFileData0, dgst)
 }
 
+func TestChecksumUpdateDirectory(t *testing.T) {
+	t.Parallel()
+	tmpdir := t.TempDir()
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+
+	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
+	t.Cleanup(cleanup)
+
+	ch := []string{
+		"ADD d0 dir",
+		"ADD d0/foo dir",
+		"ADD d0/foo/bar file data0",
+		"ADD d0/foo/subdir1 dir",
+		"ADD d0/foo/subdir1/baz file data1",
+		"ADD d0/foo/subdir2 dir",
+	}
+
+	ref := createRef(t, cm, nil)
+
+	cc, err := newCacheContext(ref)
+	require.NoError(t, err)
+
+	err = emit(cc.HandleChange, changeStream(ch))
+	require.NoError(t, err)
+
+	fooDgst1, err := cc.Checksum(context.TODO(), ref, "d0/foo", ChecksumOpts{}, nil)
+	require.NoError(t, err)
+	require.Equal(t, digest.Digest("sha256:e76717544f71725bd759a981554ca17c286b3d222598f46a671b983fd2b8172d"), fooDgst1)
+
+	barDgst1, err := cc.Checksum(context.TODO(), ref, "d0/foo/bar", ChecksumOpts{}, nil)
+	require.NoError(t, err)
+	require.Equal(t, digest.Digest("sha256:cd8e75bca50f2d695f220d0cb0997d8ead387e4f926e8669a92d7f104cc9885b"), barDgst1)
+
+	// change d0/foo's permissions
+	updateFooCh := parseChange("CHG d0/foo dir")
+	fi, ok := updateFooCh.fi.(*fsutil.StatInfo)
+	require.True(t, ok)
+	prevMode := fi.Stat.Mode
+	fi.Stat.Mode = uint32(os.ModeDir) | 0700
+	require.NotEqual(t, prevMode, fi.Stat.Mode) // sanity check we actually changed something
+
+	err = emit(cc.HandleChange, []*change{updateFooCh})
+	require.NoError(t, err)
+
+	// d0/foo should have a different digest now
+	fooDgst2, err := cc.Checksum(context.TODO(), ref, "d0/foo", ChecksumOpts{}, nil)
+	require.NoError(t, err)
+	require.NotEqual(t, fooDgst1, fooDgst2)
+	require.Equal(t, digest.Digest("sha256:3a729f6ba0d3d74c6ade7d118b08b46e37e447afdad7fc6e258dbba12fa80141"), fooDgst2)
+
+	// but files under the dir should be the same as before
+	barDgst2, err := cc.Checksum(context.TODO(), ref, "d0/foo/bar", ChecksumOpts{}, nil)
+	require.NoError(t, err)
+	require.Equal(t, barDgst1, barDgst2)
+
+	// replace d0/foo with a file
+	err = emit(cc.HandleChange, changeStream([]string{
+		"CHG d0/foo file data2",
+	}))
+	require.NoError(t, err)
+
+	// d0/foo should again have a different digest now
+	fooDgst3, err := cc.Checksum(context.TODO(), ref, "d0/foo", ChecksumOpts{}, nil)
+	require.NoError(t, err)
+	require.NotEqual(t, fooDgst1, fooDgst3)
+	require.NotEqual(t, fooDgst2, fooDgst3)
+	require.Equal(t, digest.Digest("sha256:1c67653c3cf95b12a0014e2c4cd1d776b474b3218aee54155d6ae27b9b999c54"), fooDgst3)
+
+	// files under the old dir should not exist anymore
+	_, err = cc.Checksum(context.TODO(), ref, "d0/foo/bar", ChecksumOpts{}, nil)
+	require.ErrorContains(t, err, "not found")
+}
+
 func createRef(t *testing.T, cm cache.Manager, files []string) cache.ImmutableRef {
 	if runtime.GOOS == "windows" && len(files) > 0 {
 		// lm.Mount() will fail
