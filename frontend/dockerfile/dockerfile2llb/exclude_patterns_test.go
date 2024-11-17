@@ -1,5 +1,4 @@
 //go:build dfexcludepatterns
-// +build dfexcludepatterns
 
 package dockerfile2llb
 
