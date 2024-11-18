@@ -192,11 +192,6 @@ following lines are all treated identically:
 #	  dIrEcTiVe=value
 ```
 
-The following parser directives are supported:
-
-- `syntax`
-- `escape`
-
 ### syntax
 
 <a name="external-implementation-features"><!-- included for deep-links to old section --></a>
