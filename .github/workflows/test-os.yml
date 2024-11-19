@@ -147,7 +147,7 @@ jobs:
       -
         name: Send to Codecov
         if: always()
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           directory: ./bin/testreports
           env_vars: RUNNER_OS
