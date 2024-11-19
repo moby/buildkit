@@ -39,13 +39,6 @@ FROM golatest AS gobuild-base
 RUN apk add --no-cache file bash clang lld musl-dev pkgconfig git make
 COPY --link --from=xx / /
 
-# dlv builds delve for debug variant images
-FROM gobuild-base AS dlv
-ARG DELVE_VERSION
-RUN --mount=target=/root/.cache,type=cache \
-  --mount=target=/go/pkg/mod,type=cache \
-  GOBIN=/usr/bin go install github.com/go-delve/delve/cmd/dlv@${DELVE_VERSION}
-
 # runc builds runc binary
 FROM gobuild-base AS runc
 WORKDIR $GOPATH/src/github.com/opencontainers/runc
@@ -337,6 +330,27 @@ rmdir "$coverdir/helpers"
 exit $ecode
 EOF
 
+# dlv builds delve for debug variant images
+FROM gobuild-base AS dlv
+ARG DELVE_VERSION
+ARG TARGETPLATFORM
+RUN --mount=target=/root/.cache,type=cache\
+    --mount=target=/go/pkg/mod,type=cache <<EOT
+  set -ex
+  mkdir /out
+  if [ "$(xx-info os)" = "freebsd" ]; then
+    echo "WARN: dlv requires cgo enabled on FreeBSD, skipping: https://github.com/moby/buildkit/pull/5497#issuecomment-2462031339"
+    exit 0
+  fi
+  xx-go install "github.com/go-delve/delve/cmd/dlv@${DELVE_VERSION}"
+  if ! xx-info is-cross; then
+    /go/bin/dlv version
+    mv /go/bin/dlv /out
+  else
+    mv /go/bin/*/dlv* /out
+  fi
+EOT
+
 FROM buildkit-export AS buildkit-linux
 COPY --link --from=binaries / /usr/bin/
 ENV BUILDKIT_SETUP_CGROUPV2_ROOT=1
@@ -366,6 +380,7 @@ FROM binaries AS buildkit-windows
 
 FROM scratch AS binaries-for-test
 COPY --link --from=gotestsum /out /
+COPY --link --from=dlv /out /
 COPY --link --from=registry /out /
 COPY --link --from=containerd /out /
 COPY --link --from=binaries / /
