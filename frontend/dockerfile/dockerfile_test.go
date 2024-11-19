@@ -85,6 +85,7 @@ var allTests = integration.TestFuncs(
 	testDockerfileAddArchive,
 	testDockerfileScratchConfig,
 	testExportedHistory,
+	testExportedHistoryFlattenArgs,
 	testExposeExpansion,
 	testUser,
 	testUserAdditionalGids,
@@ -3623,6 +3624,70 @@ RUN ["ls"]
 	require.Contains(t, ociimg.History[6].CreatedBy, "RUN ls")
 	require.Equal(t, false, ociimg.History[6].EmptyLayer)
 	require.NotNil(t, ociimg.History[6].Created)
+}
+
+// moby/buildkit#5505
+func testExportedHistoryFlattenArgs(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	f := getFrontend(t, sb)
+	f.RequiresBuildctl(t)
+
+	dockerfile := []byte(`
+FROM busybox
+ARG foo=bar
+ARG bar=123
+ARG foo=bar2
+RUN ls /etc/
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	args, trace := f.DFCmdArgs(dir.Name, dir.Name)
+	defer os.RemoveAll(trace)
+
+	workers.CheckFeatureCompat(t, sb, workers.FeatureImageExporter)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	target := registry + "/buildkit/testargduplicate:latest"
+	cmd := sb.Cmd(args + " --output type=image,push=true,name=" + target)
+	require.NoError(t, cmd.Run())
+
+	desc, provider, err := contentutil.ProviderFromRef(target)
+	require.NoError(t, err)
+
+	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, len(imgs.Images))
+
+	history := imgs.Images[0].Img.History
+
+	firstNonBase := -1
+	for i, h := range history {
+		if h.CreatedBy == "ARG foo=bar" {
+			firstNonBase = i
+			break
+		}
+	}
+	require.Greater(t, firstNonBase, 0)
+
+	require.Len(t, history, firstNonBase+4)
+	require.Contains(t, history[firstNonBase+1].CreatedBy, "ARG bar=123")
+	require.Contains(t, history[firstNonBase+2].CreatedBy, "ARG foo=bar2")
+
+	runLine := history[firstNonBase+3].CreatedBy
+	require.Contains(t, runLine, "ls /etc/")
+	require.NotContains(t, runLine, "ARG foo=bar")
+	require.Contains(t, runLine, "RUN |2 foo=bar2 bar=123 ")
 }
 
 func testUser(t *testing.T, sb integration.Sandbox) {
