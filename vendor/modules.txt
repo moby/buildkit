@@ -538,9 +538,6 @@ github.com/gofrs/flock
 # github.com/gogo/protobuf v1.3.2
 ## explicit; go 1.15
 github.com/gogo/protobuf/proto
-# github.com/golang-jwt/jwt/v4 v4.5.0
-## explicit; go 1.16
-github.com/golang-jwt/jwt/v4
 # github.com/golang-jwt/jwt/v5 v5.2.1
 ## explicit; go 1.18
 github.com/golang-jwt/jwt/v5
@@ -768,8 +765,8 @@ github.com/tonistiigi/dchapes-mode
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy
 github.com/tonistiigi/fsutil/types
-# github.com/tonistiigi/go-actions-cache v0.0.0-20240327122527-58651d5e11d6
-## explicit; go 1.20
+# github.com/tonistiigi/go-actions-cache v0.0.0-20241108014124-394979b8119e
+## explicit; go 1.22
 github.com/tonistiigi/go-actions-cache
 # github.com/tonistiigi/go-archvariant v1.0.0
 ## explicit; go 1.17
