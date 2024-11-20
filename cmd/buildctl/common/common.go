@@ -86,7 +86,7 @@ func ResolveClient(c *cli.Context) (*client.Client, error) {
 		ctx2, cancel := context.WithCancelCause(ctx)
 		ctx2, _ = context.WithTimeoutCause(ctx2, timeout*time.Second, errors.WithStack(context.DeadlineExceeded))
 		ctx = ctx2
-		defer cancel(errors.WithStack(context.Canceled))
+		defer func() { cancel(errors.WithStack(context.Canceled)) }()
 	}
 
 	cl, err := client.New(ctx, c.GlobalString("addr"), opts...)
