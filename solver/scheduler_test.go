@@ -580,7 +580,7 @@ func TestSingleCancelParallel(t *testing.T) {
 		}()
 
 		ctx, cancel := context.WithCancelCause(ctx)
-		defer cancel(errors.WithStack(context.Canceled))
+		defer func() { cancel(errors.WithStack(context.Canceled)) }()
 
 		g := Edge{
 			Vertex: vtx(vtxOpt{

@@ -8018,7 +8018,7 @@ func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
 func testParallelLocalBuilds(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
 	ctx, cancel := context.WithCancelCause(sb.Context())
-	defer cancel(errors.WithStack(context.Canceled))
+	defer func() { cancel(errors.WithStack(context.Canceled)) }()
 
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)

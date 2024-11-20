@@ -198,7 +198,7 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 						defer sandboxLimiter.Release(1)
 
 						ctx, cancel := context.WithCancelCause(ctx)
-						defer cancel(errors.WithStack(context.Canceled))
+						defer func() { cancel(errors.WithStack(context.Canceled)) }()
 
 						sb, closer, err := newSandbox(ctx, br, getMirror(), mv)
 						require.NoError(t, err)
