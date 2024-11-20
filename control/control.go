@@ -71,6 +71,7 @@ type Opt struct {
 	ContentStore              *containerdsnapshot.Store
 	HistoryConfig             *config.HistoryConfig
 	GarbageCollect            func(context.Context) error
+	GracefulStop              <-chan struct{}
 }
 
 type Controller struct { // TODO: ControlService
@@ -95,6 +96,7 @@ func NewController(opt Opt) (*Controller, error) {
 		ContentStore:   opt.ContentStore,
 		CleanConfig:    opt.HistoryConfig,
 		GarbageCollect: opt.GarbageCollect,
+		GracefulStop:   opt.GracefulStop,
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create history queue")
