@@ -7845,14 +7845,16 @@ loop0:
 	cdAddress := sb.ContainerdAddress()
 	if cdAddress == "" {
 		if checkContent {
-			store := proxy.NewContentStore(c.ContentClient())
-			count := 0
-			err := store.Walk(sb.Context(), func(info content.Info) error {
-				count++
-				return nil
-			})
-			require.NoError(t, err)
-			require.Equal(t, 0, count)
+			if err := workers.HasFeatureCompat(t, sb, workers.FeatureContentCheck); err == nil {
+				store := proxy.NewContentStore(c.ContentClient())
+				count := 0
+				err := store.Walk(sb.Context(), func(info content.Info) error {
+					count++
+					return nil
+				})
+				require.NoError(t, err)
+				require.Equal(t, 0, count)
+			}
 		}
 		t.Logf("checkAllReleasable: skipping check for exported tars in non-containerd test")
 		return
