@@ -50,6 +50,7 @@ func InitDockerdWorker() {
 		Unsupported: []string{
 			FeatureSecurityMode,
 			FeatureCNINetwork,
+			FeatureContentCheck,
 		},
 	})
 }
