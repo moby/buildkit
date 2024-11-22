@@ -112,7 +112,6 @@ jobs:
           - containerd
           - containerd-rootless
           - containerd-1.6
-          - containerd-1.7
           - containerd-snapshotter-stargz
           - oci
           - oci-rootless

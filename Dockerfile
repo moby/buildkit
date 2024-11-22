@@ -1,9 +1,7 @@
 # syntax=docker/dockerfile-upstream:master
 
 ARG RUNC_VERSION=v1.2.2
-ARG CONTAINERD_VERSION=v2.0.0
-# CONTAINERD_ALT_VERSION_... defines fallback containerd version for integration tests
-ARG CONTAINERD_ALT_VERSION_17=v1.7.23
+ARG CONTAINERD_VERSION=v1.7.23
 ARG CONTAINERD_ALT_VERSION_16=v1.6.36
 ARG REGISTRY_VERSION=v2.8.3
 ARG ROOTLESSKIT_VERSION=v2.3.1
@@ -200,52 +198,54 @@ RUN apk add --no-cache fuse3 git openssh pigz xz iptables ip6tables \
 COPY --link examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 VOLUME /var/lib/buildkit
 
-FROM gobuild-base AS containerd-build
-WORKDIR /go/src/github.com/containerd/containerd
-ARG TARGETPLATFORM
-ENV CGO_ENABLED=1 BUILDTAGS=no_btrfs GO111MODULE=off
-RUN xx-apk add musl-dev gcc && xx-go --wrap
-COPY --chmod=755 <<-EOT /build.sh
-#!/bin/sh
-set -ex
-mkdir /out
-if [ "$(xx-info os)" = "linux" ]; then
-  make bin/containerd
-  make bin/containerd-shim-runc-v2
-  mv bin/containerd bin/containerd-shim* /out
-else
-  CGO_ENABLED=0 make STATIC=1 binaries
-  if [ "$(xx-info os)" = "windows" ]; then
-    mv bin/containerd.exe /out
-  else
-    mv bin/containerd /out
-  fi
-  # No shim binary is built for FreeBSD, since containerd v2.0.
-  if ls bin/containerd-shim* >/dev/null 2>&1; then
-    mv bin/containerd-shim* /out
-  fi
-fi
-EOT
-
-FROM containerd-build AS containerd
+FROM gobuild-base AS containerd
 WORKDIR /go/src/github.com/containerd/containerd
 ARG CONTAINERD_VERSION
 ADD --keep-git-dir=true "https://github.com/containerd/containerd.git#$CONTAINERD_VERSION" .
-RUN /build.sh
-
-# containerd-alt-17 builds containerd v1.7 for integration tests
-FROM containerd-build AS containerd-alt-17
-WORKDIR /go/src/github.com/containerd/containerd
-ARG CONTAINERD_ALT_VERSION_17
-ADD --keep-git-dir=true "https://github.com/containerd/containerd.git#$CONTAINERD_ALT_VERSION_17" .
-RUN /build.sh
+ARG TARGETPLATFORM
+ENV CGO_ENABLED=1 BUILDTAGS=no_btrfs GO111MODULE=off
+RUN xx-apk add musl-dev gcc && xx-go --wrap
+RUN --mount=target=/root/.cache,type=cache <<EOT
+  set -ex
+  mkdir /out
+  ext=""
+  if [ "$(xx-info os)" = "windows" ]; then
+    ext=".exe"
+  fi
+  if [ "$(xx-info os)" = "linux" ]; then
+    make bin/containerd
+    make bin/containerd-shim-runc-v2
+    mv bin/containerd bin/containerd-shim* /out
+  else
+    CGO_ENABLED=0 make STATIC=1 binaries
+    mv bin/containerd${ext} bin/containerd-shim* /out
+  fi
+EOT
 
 # containerd-alt-16 builds containerd v1.6 for integration tests
-FROM containerd-build AS containerd-alt-16
+FROM gobuild-base AS containerd-alt-16
 WORKDIR /go/src/github.com/containerd/containerd
 ARG CONTAINERD_ALT_VERSION_16
 ADD --keep-git-dir=true "https://github.com/containerd/containerd.git#$CONTAINERD_ALT_VERSION_16" .
-RUN /build.sh
+ARG TARGETPLATFORM
+ENV CGO_ENABLED=1 BUILDTAGS=no_btrfs GO111MODULE=off
+RUN xx-apk add musl-dev gcc && xx-go --wrap
+RUN --mount=target=/root/.cache,type=cache <<EOT
+  set -ex
+  mkdir /out
+  ext=""
+  if [ "$(xx-info os)" = "windows" ]; then
+    ext=".exe"
+  fi
+  if [ "$(xx-info os)" = "linux" ]; then
+    make bin/containerd
+    make bin/containerd-shim-runc-v2
+    mv bin/containerd bin/containerd-shim* /out
+  else
+    CGO_ENABLED=0 make STATIC=1 binaries
+    mv bin/containerd${ext} bin/containerd-shim* /out
+  fi
+EOT
 
 FROM gobuild-base AS registry
 WORKDIR /go/src/github.com/docker/distribution
@@ -404,7 +404,7 @@ RUN curl -Ls https://raw.githubusercontent.com/moby/moby/v25.0.1/hack/dind > /do
   && chmod 0755 /docker-entrypoint.sh
 ENTRYPOINT ["/docker-entrypoint.sh"]
 # musl is needed to directly use the registry binary that is built on alpine
-ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.7=/opt/containerd-alt-17/bin,containerd-1.6=/opt/containerd-alt-16/bin"
+ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.6=/opt/containerd-alt-16/bin"
 ENV BUILDKIT_INTEGRATION_SNAPSHOTTER=stargz
 ENV BUILDKIT_SETUP_CGROUPV2_ROOT=1
 ENV CGO_ENABLED=0
@@ -415,7 +415,6 @@ COPY --link --from=minio-mc /usr/bin/mc /usr/bin/
 COPY --link --from=nydus /out/nydus-static/* /usr/bin/
 COPY --link --from=stargz-snapshotter /out/* /usr/bin/
 COPY --link --from=rootlesskit /rootlesskit /usr/bin/
-COPY --link --from=containerd-alt-17 /out/containerd* /opt/containerd-alt-17/bin/
 COPY --link --from=containerd-alt-16 /out/containerd* /opt/containerd-alt-16/bin/
 COPY --link --from=registry /out /usr/bin/
 COPY --link --from=runc /usr/bin/runc /usr/bin/
