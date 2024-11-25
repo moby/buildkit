@@ -203,7 +203,7 @@ VOLUME /var/lib/buildkit
 FROM gobuild-base AS containerd-build
 WORKDIR /go/src/github.com/containerd/containerd
 ARG TARGETPLATFORM
-ENV CGO_ENABLED=1 BUILDTAGS=no_btrfs GO111MODULE=off
+ENV CGO_ENABLED=1 CGO_LDFLAGS="-fuse-ld=lld" BUILDTAGS=no_btrfs GO111MODULE=off
 RUN xx-apk add musl-dev gcc && xx-go --wrap
 COPY --chmod=755 <<-EOT /build.sh
 #!/bin/sh
