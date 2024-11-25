@@ -104,6 +104,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testCallDiskUsage,
 	testBuildMultiMount,
 	testBuildHTTPSource,
+	testBuildHTTPSourceEtagScope,
 	testBuildPushAndValidate,
 	testBuildExportWithUncompressed,
 	testBuildExportScratch,
@@ -2767,6 +2768,104 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	checkAllReleasable(t, c, sb, true)
 
 	// TODO: check that second request was marked as cached
+}
+
+// docker/buildx#2803
+func testBuildHTTPSourceEtagScope(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	modTime := time.Now().Add(-24 * time.Hour) // avoid falso positive with current time
+
+	sharedEtag := identity.NewID()
+	resp := httpserver.Response{
+		Etag:         sharedEtag,
+		Content:      []byte("content1"),
+		LastModified: &modTime,
+	}
+	resp2 := httpserver.Response{
+		Etag:         sharedEtag,
+		Content:      []byte("another"),
+		LastModified: &modTime,
+	}
+
+	server := httpserver.NewTestServer(map[string]httpserver.Response{
+		"/one/foo": resp,
+		"/two/foo": resp2,
+	})
+	defer server.Close()
+
+	// first correct request
+	st := llb.HTTP(server.URL + "/one/foo")
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	out1 := t.TempDir()
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: out1,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, server.Stats("/one/foo").AllRequests)
+	require.Equal(t, 0, server.Stats("/one/foo").CachedRequests)
+
+	dt, err := os.ReadFile(filepath.Join(out1, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, []byte("content1"), dt)
+
+	st = llb.HTTP(server.URL + "/two/foo")
+
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	out2 := t.TempDir()
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: out2,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, server.Stats("/two/foo").AllRequests)
+	require.Equal(t, 0, server.Stats("/two/foo").CachedRequests)
+
+	dt, err = os.ReadFile(filepath.Join(out2, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, []byte("another"), dt)
+
+	out2 = t.TempDir()
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: out2,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	require.Equal(t, 2, server.Stats("/two/foo").AllRequests)
+	require.Equal(t, 1, server.Stats("/two/foo").CachedRequests)
+
+	allReqs := server.Stats("/two/foo").Requests
+	require.Equal(t, 2, len(allReqs))
+	require.Equal(t, http.MethodGet, allReqs[0].Method)
+	require.Equal(t, "gzip", allReqs[0].Header.Get("Accept-Encoding"))
+	require.Equal(t, http.MethodHead, allReqs[1].Method)
+	require.Equal(t, "gzip", allReqs[1].Header.Get("Accept-Encoding"))
+
+	require.NoError(t, os.RemoveAll(filepath.Join(out2, "foo")))
 }
 
 func testResolveAndHosts(t *testing.T, sb integration.Sandbox) {
