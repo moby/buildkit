@@ -356,7 +356,7 @@ ENV BUILDKIT_SETUP_CGROUPV2_ROOT=1
 ENTRYPOINT ["buildkitd"]
 
 FROM buildkit-linux AS buildkit-linux-debug
-COPY --link --from=dlv /usr/bin/dlv /usr/bin/dlv
+COPY --link --from=dlv /out/dlv /usr/bin/dlv
 COPY --link --chmod=755 <<EOF /docker-entrypoint.sh
 #!/bin/sh
 exec dlv exec /usr/bin/buildkitd \\
@@ -424,6 +424,7 @@ COPY --link --from=cni-plugins /opt/cni/bin/bridge /opt/cni/bin/host-local /opt/
 COPY --link hack/fixtures/cni.json /etc/buildkit/cni.json
 COPY --link hack/fixtures/dns-cni.conflist /etc/buildkit/dns-cni.conflist
 COPY --link --from=binaries / /usr/bin/
+COPY --link --from=dlv /out/dlv /usr/bin/dlv
 
 # integration-tests prepares an image suitable for running all tests
 FROM integration-tests-base AS integration-tests
