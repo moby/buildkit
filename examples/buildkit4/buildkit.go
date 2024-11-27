@@ -65,7 +65,7 @@ func runc(version string) llb.State {
 }
 
 func containerd(version string) llb.State {
-	repo := "github.com/containerd/containerd"
+	repo := "github.com/containerd/containerd/v2/client"
 	src := llb.Git(repo, version, llb.KeepGitDir())
 	if version == "local" {
 		src = llb.Local("containerd-src")

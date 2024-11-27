@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/containerd/containerd/content"
-	"github.com/containerd/containerd/content/local"
+	"github.com/containerd/containerd/v2/core/content"
+	"github.com/containerd/containerd/v2/plugins/content/local"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/testutil"
 	digest "github.com/opencontainers/go-digest"
