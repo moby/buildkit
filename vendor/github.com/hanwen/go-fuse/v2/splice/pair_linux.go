@@ -40,7 +40,7 @@ func (p *Pair) WriteTo(fd uintptr, n int) (int, error) {
 const _SPLICE_F_NONBLOCK = 0x2
 
 func (p *Pair) discard() {
-	_, err := syscall.Splice(p.r, nil, int(devNullFD), nil, int(p.size), _SPLICE_F_NONBLOCK)
+	_, err := syscall.Splice(p.r, nil, devNullFD(), nil, int(p.size), _SPLICE_F_NONBLOCK)
 	if err == syscall.EAGAIN {
 		// all good.
 	} else if err != nil {

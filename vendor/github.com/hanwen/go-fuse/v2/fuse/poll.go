@@ -14,7 +14,7 @@ func doPollHackLookup(ms *Server, req *request) {
 		Mode:  S_IFREG | 0644,
 		Nlink: 1,
 	}
-	switch req.inHeader.Opcode {
+	switch req.inHeader().Opcode {
 	case _OP_LOOKUP:
 		out := (*EntryOut)(req.outData())
 		*out = EntryOut{

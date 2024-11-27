@@ -24,15 +24,14 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/containerd/containerd/errdefs"
-	"github.com/containerd/containerd/mount"
-	"github.com/containerd/containerd/snapshots"
-	"github.com/containerd/containerd/snapshots/overlay/overlayutils"
-	"github.com/containerd/containerd/snapshots/storage"
+	"github.com/containerd/containerd/v2/core/mount"
+	"github.com/containerd/containerd/v2/core/snapshots"
+	"github.com/containerd/containerd/v2/core/snapshots/storage"
+	"github.com/containerd/containerd/v2/plugins/snapshots/overlay/overlayutils"
 	"github.com/containerd/continuity/fs"
+	"github.com/containerd/errdefs"
 	"github.com/containerd/log"
 	"github.com/moby/sys/mountinfo"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -147,7 +146,7 @@ func NewSnapshotter(ctx context.Context, root string, targetFs FileSystem, opts 
 
 	userxattr, err := overlayutils.NeedsUserXAttr(root)
 	if err != nil {
-		logrus.WithError(err).Warnf("cannot detect whether \"userxattr\" option needs to be used, assuming to be %v", userxattr)
+		log.G(ctx).WithError(err).Warnf("cannot detect whether \"userxattr\" option needs to be used, assuming to be %v", userxattr)
 	}
 
 	o := &snapshotter{
@@ -684,8 +683,7 @@ func (o *snapshotter) prepareRemoteSnapshot(ctx context.Context, key string, lab
 // checkAvailability checks avaiability of the specified layer and all lower
 // layers using filesystem's checking functionality.
 func (o *snapshotter) checkAvailability(ctx context.Context, key string) bool {
-	ctx = log.WithLogger(ctx, log.G(ctx).WithField("key", key))
-	log.G(ctx).Debug("checking layer availability")
+	log.G(ctx).WithField("key", key).Debug("checking layer availability")
 
 	ctx, t, err := o.ms.TransactionContext(ctx, false)
 	if err != nil {
@@ -752,7 +750,7 @@ func (o *snapshotter) restoreRemoteSnapshot(ctx context.Context) error {
 	for _, info := range task {
 		if err := o.prepareRemoteSnapshot(ctx, info.Name, info.Labels); err != nil {
 			if o.allowInvalidMountsOnRestart {
-				logrus.WithError(err).Warnf("failed to restore remote snapshot %s; remove this snapshot manually", info.Name)
+				log.G(ctx).WithError(err).Warnf("failed to restore remote snapshot %s; remove this snapshot manually", info.Name)
 				// This snapshot mount is invalid but allow this.
 				// NOTE: snapshotter.Mount() will fail to return the mountpoint of these invalid snapshots so
 				//       containerd cannot use them anymore. User needs to manually remove the snapshots from

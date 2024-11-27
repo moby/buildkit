@@ -25,14 +25,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/containerd/containerd"
-	"github.com/containerd/containerd/content"
-	"github.com/containerd/containerd/content/local"
-	"github.com/containerd/containerd/content/proxy"
-	"github.com/containerd/containerd/images"
-	"github.com/containerd/containerd/namespaces"
-	"github.com/containerd/containerd/remotes/docker"
-	"github.com/containerd/containerd/snapshots"
+	ctd "github.com/containerd/containerd/v2/client"
+	"github.com/containerd/containerd/v2/core/content"
+	"github.com/containerd/containerd/v2/core/content/proxy"
+	"github.com/containerd/containerd/v2/core/images"
+	"github.com/containerd/containerd/v2/core/remotes/docker"
+	"github.com/containerd/containerd/v2/core/snapshots"
+	"github.com/containerd/containerd/v2/pkg/namespaces"
+	"github.com/containerd/containerd/v2/plugins/content/local"
 	"github.com/containerd/continuity/fs/fstest"
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/containerd/platforms"
@@ -277,8 +277,8 @@ func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sa
 	)
 }
 
-func newContainerd(cdAddress string) (*containerd.Client, error) {
-	return containerd.New(cdAddress, containerd.WithTimeout(60*time.Second))
+func newContainerd(cdAddress string) (*ctd.Client, error) {
+	return ctd.New(cdAddress, ctd.WithTimeout(60*time.Second))
 }
 
 // moby/buildkit#1336
@@ -1257,7 +1257,7 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 
 			// TODO: make public pull helper function so this can be checked for standalone as well
 
-			client, err := containerd.New(cdAddress)
+			client, err := ctd.New(cdAddress)
 			require.NoError(t, err)
 			defer client.Close()
 
@@ -4287,7 +4287,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 
 	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
 	cdAddress := sb.ContainerdAddress()
-	var client *containerd.Client
+	var client *ctd.Client
 	if cdAddress != "" {
 		client, err = newContainerd(cdAddress)
 		require.NoError(t, err)
@@ -6267,7 +6267,7 @@ func testRegistryEmptyCacheExport(t *testing.T, sb integration.Sandbox) {
 
 				ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
 				cdAddress := sb.ContainerdAddress()
-				var client *containerd.Client
+				var client *ctd.Client
 				if cdAddress != "" {
 					client, err = newContainerd(cdAddress)
 					require.NoError(t, err)
@@ -9050,7 +9050,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 		if cdAddress == "" {
 			return
 		}
-		client, err := containerd.New(cdAddress)
+		client, err := ctd.New(cdAddress)
 		require.NoError(t, err)
 		defer client.Close()
 		ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
