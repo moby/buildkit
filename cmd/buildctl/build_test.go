@@ -114,70 +114,128 @@ func testBuildContainerdExporter(t *testing.T, sb integration.Sandbox) {
 
 func testBuildMetadataFile(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
-	st := llb.Image("busybox").
-		Run(llb.Shlex("sh -c 'echo -n bar > /foo'"))
-
-	rdr, err := marshal(sb.Context(), st.Root())
-	require.NoError(t, err)
 
 	tmpDir := t.TempDir()
 
 	imageName := "example.com/moby/metadata:test"
 	metadataFile := filepath.Join(tmpDir, "metadata.json")
+	output := filepath.Join(tmpDir, "output.tar")
 
-	buildCmd := []string{
-		"build", "--progress=plain",
-		"--output type=image,name=" + imageName + ",push=false",
-		"--metadata-file", metadataFile,
+	cases := []struct {
+		name     string
+		buildCmd []string
+		// TODO: Add descriptors counts
+	}{
+		{
+			name: "single architecture",
+			buildCmd: []string{
+				"build",
+				"--progress=plain",
+				"--output type=image,name=" + imageName + ",push=false",
+			},
+		},
+		{
+			name: "multiple architecture",
+			buildCmd: []string{
+				"build",
+				"--progress=plain",
+				"--output type=oci,name=" + imageName + ",dest=" + output,
+				"--opt", "platform=linux/amd64,linux/arm64v8",
+			},
+		},
+		{
+			name: "single architecture attestation",
+			buildCmd: []string{
+				"build",
+				"--progress=plain",
+				"--output type=oci,name=" + imageName + ",dest=" + output,
+				"--opt", "attest:provenance=mode=max",
+			},
+		},
+		{
+			name: "multi architecture attestations",
+			buildCmd: []string{
+				"build",
+				"--progress=plain",
+				"--output type=oci,name=" + imageName + ",dest=" + output,
+				"--opt", "platform=linux/amd64,linux/arm64v8",
+				"--opt", "attest:provenance=mode=max",
+			},
+		},
 	}
 
-	cmd := sb.Cmd(strings.Join(buildCmd, " "))
-	cmd.Stdin = rdr
-	err = cmd.Run()
-	require.NoError(t, err)
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			st := llb.Image("busybox").
+				Run(llb.Shlex("sh -c 'echo -n bar > /foo'"))
 
-	require.FileExists(t, metadataFile)
-	metadataBytes, err := os.ReadFile(metadataFile)
-	require.NoError(t, err)
+			rdr, err := marshal(sb.Context(), st.Root())
+			require.NoError(t, err)
 
-	var metadata map[string]json.RawMessage
-	err = json.Unmarshal(metadataBytes, &metadata)
-	require.NoError(t, err)
+			buildCmd := append(
+				tt.buildCmd,
+				"--metadata-file", metadataFile,
+			)
+			cmd := sb.Cmd(strings.Join(buildCmd, " "))
+			cmd.Stdin = rdr
+			err = cmd.Run()
+			require.NoError(t, err)
 
-	require.Contains(t, metadata, "image.name")
-	require.Equal(t, imageName, metadata["image.name"])
+			require.FileExists(t, metadataFile)
+			metadataBytes, err := os.ReadFile(metadataFile)
+			require.NoError(t, err)
 
-	require.Contains(t, metadata, exptypes.ExporterImageDigestKey)
-	digest := metadata[exptypes.ExporterImageDigestKey]
-	require.NotEmpty(t, digest)
+			var metadata map[string]json.RawMessage
+			err = json.Unmarshal(metadataBytes, &metadata)
+			require.NoError(t, err)
 
-	require.Contains(t, metadata, exptypes.ExporterImageDescriptorKey)
-	var desc *ocispecs.Descriptor
-	err = json.Unmarshal(metadata[exptypes.ExporterImageDescriptorKey], &desc)
-	require.NoError(t, err)
-	require.NotEmpty(t, desc.MediaType)
-	require.NotEmpty(t, desc.Digest.String())
+			require.Contains(t, metadata, "image.name")
+			var name string
+			err = json.Unmarshal(metadata["image.name"], &name)
+			require.NoError(t, err)
+			require.Equal(t, imageName, string(name))
 
-	require.Contains(t, metadata, exptypes.ExporterImageDescriptorsKey)
-	var descList []*ocispecs.Descriptor
-	require.NoError(t, err)
-	err = json.Unmarshal(metadata[exptypes.ExporterImageDescriptorsKey], &descList)
-	require.NoError(t, err)
+			var digest string
+			require.Contains(t, metadata, exptypes.ExporterImageDigestKey)
+			err = json.Unmarshal(metadata[exptypes.ExporterImageDigestKey], &digest)
+			require.NoError(t, err)
+			require.NotEmpty(t, digest)
 
-	cdAddress := sb.ContainerdAddress()
-	if cdAddress == "" {
-		t.Log("no containerd worker, skipping digest verification")
-	} else {
-		client, err := containerd.New(cdAddress, containerd.WithTimeout(60*time.Second))
-		require.NoError(t, err)
-		defer client.Close()
+			require.Contains(t, metadata, exptypes.ExporterImageDescriptorKey)
+			var desc *ocispecs.Descriptor
+			err = json.Unmarshal(metadata[exptypes.ExporterImageDescriptorKey], &desc)
+			require.NoError(t, err)
+			require.NotEmpty(t, desc.MediaType)
+			require.NotEmpty(t, desc.Digest.String())
 
-		ctx := namespaces.WithNamespace(context.Background(), "buildkit")
+			require.Contains(t, metadata, exptypes.ExporterImageDescriptorsKey)
+			var descList []*ocispecs.Descriptor
+			require.NoError(t, err)
+			err = json.Unmarshal(metadata[exptypes.ExporterImageDescriptorsKey], &descList)
+			require.NoError(t, err)
+			for _, desc := range descList {
+				require.NotEmpty(t, desc.MediaType)
+				require.NotEmpty(t, desc.Digest.String())
+			}
 
-		img, err := client.GetImage(ctx, imageName)
-		require.NoError(t, err)
+			if tt.name == "single architecture" {
+				cdAddress := sb.ContainerdAddress()
+				if cdAddress == "" {
+					t.Log("no containerd worker, skipping digest verification")
+				} else {
+					client, err := containerd.New(cdAddress, containerd.WithTimeout(60*time.Second))
+					require.NoError(t, err)
+					defer client.Close()
 
-		require.Equal(t, img.Metadata().Target.Digest.String(), digest)
+					ctx := namespaces.WithNamespace(context.Background(), "buildkit")
+
+					img, err := client.GetImage(ctx, imageName)
+					require.NoError(t, err)
+
+					require.Equal(t, img.Metadata().Target.Digest.String(), digest)
+				}
+			}
+		})
 	}
 }
 
