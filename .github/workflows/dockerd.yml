@@ -10,7 +10,7 @@ on:
         default: '25.0.2'
 
 env:
-  SETUP_BUILDX_VERSION: "latest"
+  SETUP_BUILDX_VERSION: "edge"
   SETUP_BUILDKIT_IMAGE: "moby/buildkit:latest"
   TESTFLAGS: "-v --parallel=1 --timeout=30m"
 
