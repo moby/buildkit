@@ -30,7 +30,7 @@ on:
         default: 'true'
 
 env:
-  SETUP_BUILDX_VERSION: "latest"
+  SETUP_BUILDX_VERSION: "edge"
   REPO_SLUG_TARGET: "moby/buildkit"
 
 jobs:
