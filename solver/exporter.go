@@ -117,6 +117,13 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 			return nil, err
 		}
 
+		if e.edge != nil {
+			op, ok := e.edge.op.(*sharedOp)
+			if ok && op != nil && op.st != nil {
+				ctx = withAncestorCacheOpts(ctx, op.st)
+			}
+		}
+
 		remotes, err := cm.results.LoadRemotes(ctx, res, opt.CompressionOpt, opt.Session)
 		if err != nil {
 			return nil, err

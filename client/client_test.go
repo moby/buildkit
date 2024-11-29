@@ -222,6 +222,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testLayerLimitOnMounts,
 	testFrontendVerifyPlatforms,
 	testRunValidExitCodes,
+	testSameChainIDWithLazyBlobs,
 }
 
 func TestIntegration(t *testing.T) {
@@ -10894,4 +10895,145 @@ func testRunValidExitCodes(t *testing.T, sb integration.Sandbox) {
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "exit code: 0")
+}
+
+func testSameChainIDWithLazyBlobs(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb,
+		workers.FeatureCacheExport,
+		workers.FeatureCacheImport,
+		workers.FeatureCacheBackendRegistry,
+	)
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	// push the base busybox image, ensuring it uses gzip
+
+	def, err := llb.Image("busybox:latest").
+		Marshal(sb.Context())
+	require.NoError(t, err)
+	busyboxGzipRef := registry + "/buildkit/busyboxgzip:latest"
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":              busyboxGzipRef,
+					"push":              "true",
+					"compression":       "gzip",
+					"force-compression": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// push the base busybox image plus an extra layer, ensuring it uses zstd
+	// the extra layer allows us to avoid edge merge later
+	def, err = llb.Image("busybox:latest").
+		Run(llb.Shlex(`touch /foo`)).Root().
+		Marshal(sb.Context())
+	require.NoError(t, err)
+	busyboxZstdRef := registry + "/buildkit/busyboxzstd:latest"
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":              busyboxZstdRef,
+					"push":              "true",
+					"compression":       "zstd",
+					"force-compression": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	ensurePruneAll(t, c, sb)
+
+	// create non-lazy cache refs for the zstd image
+	def, err = llb.Image(busyboxZstdRef).
+		Run(llb.Shlex(`true`)).Root().
+		Marshal(sb.Context())
+	require.NoError(t, err)
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+
+	// Create lazy cache refs for the gzip layers that will be deduped by chainID with
+	// the zstd layers made in the previous solve.
+	// Put a random file in the rootfs, run a cache invalidation step and then copy
+	// the random file to a r/w mnt.
+	def, err = llb.Image(busyboxGzipRef).
+		Run(llb.Shlex(`sh -c "cat /dev/urandom | head -c 100 > /rand"`)).Root().
+		Run(llb.Shlex(`echo `+identity.NewID())).Root().
+		Run(llb.Shlex(`cp /rand /mnt/rand`)).AddMount("/mnt", llb.Scratch()).
+		Marshal(sb.Context())
+	require.NoError(t, err)
+
+	outDir := t.TempDir()
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: outDir,
+			},
+		},
+		CacheExports: []CacheOptionsEntry{
+			{
+				Type: "registry",
+				Attrs: map[string]string{
+					"ref":  registry + "/buildkit/idc:latest",
+					"mode": "max",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	rand1, err := os.ReadFile(filepath.Join(outDir, "rand"))
+	require.NoError(t, err)
+
+	ensurePruneAll(t, c, sb)
+
+	// Run the same steps as before but with a different cache invalidation step in the middle
+	// The random file should still be cached from earlier and thus the output should be the same
+	def, err = llb.Image(busyboxGzipRef).
+		Run(llb.Shlex(`sh -c "cat /dev/urandom | head -c 100 > /rand"`)).Root().
+		Run(llb.Shlex(`echo `+identity.NewID())).Root().
+		Run(llb.Shlex(`cp /rand /mnt/rand`)).AddMount("/mnt", llb.Scratch()).
+		Marshal(sb.Context())
+	require.NoError(t, err)
+
+	outDir = t.TempDir()
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: outDir,
+			},
+		},
+		CacheImports: []CacheOptionsEntry{
+			{
+				Type: "registry",
+				Attrs: map[string]string{
+					"ref":  registry + "/buildkit/idc:latest",
+					"mode": "max",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	rand2, err := os.ReadFile(filepath.Join(outDir, "rand"))
+	require.NoError(t, err)
+
+	require.Equal(t, string(rand1), string(rand2))
 }
