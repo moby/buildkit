@@ -222,7 +222,8 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testLayerLimitOnMounts,
 	testFrontendVerifyPlatforms,
 	testRunValidExitCodes,
-	testSameChainIDWithLazyBlobs,
+	testSameChainIDWithLazyBlobsCacheExport,
+	testSameChainIDWithLazyBlobsCacheMountBase,
 }
 
 func TestIntegration(t *testing.T) {
@@ -10897,7 +10898,7 @@ func testRunValidExitCodes(t *testing.T, sb integration.Sandbox) {
 	require.ErrorContains(t, err, "exit code: 0")
 }
 
-func testSameChainIDWithLazyBlobs(t *testing.T, sb integration.Sandbox) {
+func testSameChainIDWithLazyBlobsCacheExport(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureCacheExport,
 		workers.FeatureCacheImport,
@@ -10936,7 +10937,7 @@ func testSameChainIDWithLazyBlobs(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	// push the base busybox image plus an extra layer, ensuring it uses zstd
-	// the extra layer allows us to avoid edge merge later
+	// the extra layer allows us to avoid edge-merge/cache-load later
 	def, err = llb.Image("busybox:latest").
 		Run(llb.Shlex(`touch /foo`)).Root().
 		Marshal(sb.Context())
@@ -11036,4 +11037,101 @@ func testSameChainIDWithLazyBlobs(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	require.Equal(t, string(rand1), string(rand2))
+}
+
+func testSameChainIDWithLazyBlobsCacheMountBase(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb,
+		workers.FeatureCacheExport,
+		workers.FeatureCacheImport,
+		workers.FeatureCacheBackendRegistry,
+	)
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	// push the base busybox image, ensuring it uses gzip
+
+	def, err := llb.Image("busybox:latest").
+		Marshal(sb.Context())
+	require.NoError(t, err)
+	busyboxGzipRef := registry + "/buildkit/busyboxgzip:latest"
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":              busyboxGzipRef,
+					"push":              "true",
+					"compression":       "gzip",
+					"force-compression": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// push the base busybox image plus an extra layer, ensuring it uses zstd
+	// the extra layer allows us to avoid edge-merge/cache-load later
+	def, err = llb.Image("busybox:latest").
+		Run(llb.Shlex(`touch /foo`)).Root().
+		Marshal(sb.Context())
+	require.NoError(t, err)
+	busyboxZstdRef := registry + "/buildkit/busyboxzstd:latest"
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":              busyboxZstdRef,
+					"push":              "true",
+					"compression":       "zstd",
+					"force-compression": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	ensurePruneAll(t, c, sb)
+
+	// create non-lazy cache refs for the zstd image
+	def, err = llb.Image(busyboxZstdRef).
+		Run(llb.Shlex(`true`)).Root().
+		Marshal(sb.Context())
+	require.NoError(t, err)
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+
+	// use the gzip image as a cache mount base, the cache ref will be deduped by
+	// chainID with the zstd layers made in the previous solve
+	def, err = llb.Image(busyboxZstdRef).Run(
+		llb.Shlex(`touch /mnt/bar`),
+		llb.AddMount("/mnt",
+			llb.Image(busyboxGzipRef),
+			llb.AsPersistentCacheDir("idc", llb.CacheMountShared),
+		),
+	).Root().Marshal(sb.Context())
+	require.NoError(t, err)
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+
+	// try to re-use the cache mount from before, ensure we successfully get
+	// the same one writen to in previous step
+	def, err = llb.Image(busyboxZstdRef).Run(
+		llb.Shlex(`stat /mnt/bar`),
+		llb.AddMount("/mnt",
+			llb.Image(busyboxGzipRef),
+			llb.AsPersistentCacheDir("idc", llb.CacheMountShared),
+		),
+	).Root().Marshal(sb.Context())
+	require.NoError(t, err)
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
 }
