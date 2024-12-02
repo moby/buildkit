@@ -172,12 +172,11 @@ func NewRegistryConfig(m map[string]config.RegistryConfig) docker.RegistryHosts 
 
 func newMirrorRegistryHost(mirror string) docker.RegistryHost {
 	mirrorHost, mirrorPath := extractMirrorHostAndPath(mirror)
-	path := path.Join(defaultPath, mirrorPath)
 	h := docker.RegistryHost{
 		Scheme:       "https",
 		Client:       newDefaultClient(),
 		Host:         mirrorHost,
-		Path:         path,
+		Path:         path.Join(defaultPath, mirrorPath),
 		Capabilities: docker.HostCapabilityPull | docker.HostCapabilityResolve,
 	}
 
