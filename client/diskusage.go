@@ -30,7 +30,7 @@ func (c *Client) DiskUsage(ctx context.Context, opts ...DiskUsageOption) ([]*Usa
 		o.SetDiskUsageOption(info)
 	}
 
-	req := &controlapi.DiskUsageRequest{Filter: info.Filter}
+	req := &controlapi.DiskUsageRequest{Filter: info.Filter, AgeLimit: int64(info.AgeLimit)}
 	resp, err := c.ControlClient().DiskUsage(ctx, req)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to call diskusage")
@@ -75,7 +75,8 @@ type DiskUsageOption interface {
 }
 
 type DiskUsageInfo struct {
-	Filter []string
+	Filter   []string
+	AgeLimit time.Duration
 }
 
 type UsageRecordType string
@@ -88,3 +89,15 @@ const (
 	UsageRecordTypeCacheMount  UsageRecordType = "exec.cachemount"
 	UsageRecordTypeRegular     UsageRecordType = "regular"
 )
+
+type diskUsageOptionFunc func(*DiskUsageInfo)
+
+func (f diskUsageOptionFunc) SetDiskUsageOption(info *DiskUsageInfo) {
+	f(info)
+}
+
+func WithAgeLimit(age time.Duration) DiskUsageOption {
+	return diskUsageOptionFunc(func(info *DiskUsageInfo) {
+		info.AgeLimit = age
+	})
+}
