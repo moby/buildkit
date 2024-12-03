@@ -156,7 +156,7 @@ func (dpc *detectPrunedCacheID) Load(op *pb.Op, md *pb.OpMetadata, opt *solver.V
 
 func Load(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluator, opts ...LoadOpt) (solver.Edge, error) {
 	return loadLLB(ctx, def, polEngine, func(dgst digest.Digest, op *op, load func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error) {
-		vtx, err := newVertex(dgst, &op.Op, op.Metadata, load, opts...)
+		vtx, err := newVertex(dgst, op.Op, op.Metadata, load, opts...)
 		if err != nil {
 			return nil, err
 		}
@@ -234,13 +234,10 @@ func recomputeDigests(ctx context.Context, all map[digest.Digest]*op, visited ma
 	return newDgst, nil
 }
 
+// op is a private wrapper around pb.Op that includes its metadata.
 type op struct {
-	pb.Op
+	*pb.Op
 	Metadata *pb.OpMetadata
-}
-
-func (o *op) Unmarshal(data []byte) error {
-	return o.Op.UnmarshalVT(data)
 }
 
 // loadLLB loads LLB.
@@ -255,19 +252,20 @@ func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEval
 	var lastDgst digest.Digest
 
 	for _, dt := range def.Def {
-		var op op
-		if err := op.Unmarshal(dt); err != nil {
+		var pbop pb.Op
+		if err := pbop.Unmarshal(dt); err != nil {
 			return solver.Edge{}, errors.Wrap(err, "failed to parse llb proto op")
 		}
 		dgst := digest.FromBytes(dt)
 		if polEngine != nil {
-			if _, err := polEngine.Evaluate(ctx, op.GetSource()); err != nil {
+			if _, err := polEngine.Evaluate(ctx, pbop.GetSource()); err != nil {
 				return solver.Edge{}, errors.Wrap(err, "error evaluating the source policy")
 			}
 		}
-		op.Metadata = def.Metadata[string(dgst)]
-
-		allOps[dgst] = &op
+		allOps[dgst] = &op{
+			Op:       &pbop,
+			Metadata: def.Metadata[string(dgst)],
+		}
 		lastDgst = dgst
 	}
 
@@ -309,7 +307,7 @@ func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEval
 			return nil, errors.Errorf("invalid missing input digest %s", dgst)
 		}
 
-		if err := opsutils.Validate(&op.Op); err != nil {
+		if err := opsutils.Validate(op.Op); err != nil {
 			return nil, err
 		}
 
