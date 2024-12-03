@@ -155,9 +155,8 @@ func (dpc *detectPrunedCacheID) Load(op *pb.Op, md *pb.OpMetadata, opt *solver.V
 }
 
 func Load(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluator, opts ...LoadOpt) (solver.Edge, error) {
-	return loadLLB(ctx, def, polEngine, func(dgst digest.Digest, pbOp *pb.Op, load func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error) {
-		opMetadata := def.Metadata[string(dgst)]
-		vtx, err := newVertex(dgst, pbOp, opMetadata, load, opts...)
+	return loadLLB(ctx, def, polEngine, func(dgst digest.Digest, op *op, load func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error) {
+		vtx, err := newVertex(dgst, &op.Op, op.Metadata, load, opts...)
 		if err != nil {
 			return nil, err
 		}
@@ -198,7 +197,7 @@ func newVertex(dgst digest.Digest, op *pb.Op, opMeta *pb.OpMetadata, load func(d
 	return vtx, nil
 }
 
-func recomputeDigests(ctx context.Context, all map[digest.Digest]*pb.Op, visited map[digest.Digest]digest.Digest, dgst digest.Digest) (digest.Digest, error) {
+func recomputeDigests(ctx context.Context, all map[digest.Digest]*op, visited map[digest.Digest]digest.Digest, dgst digest.Digest) (digest.Digest, error) {
 	if dgst, ok := visited[dgst]; ok {
 		return dgst, nil
 	}
@@ -235,20 +234,29 @@ func recomputeDigests(ctx context.Context, all map[digest.Digest]*pb.Op, visited
 	return newDgst, nil
 }
 
+type op struct {
+	pb.Op
+	Metadata *pb.OpMetadata
+}
+
+func (o *op) Unmarshal(data []byte) error {
+	return o.Op.UnmarshalVT(data)
+}
+
 // loadLLB loads LLB.
 // fn is executed sequentially.
-func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluator, fn func(digest.Digest, *pb.Op, func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error)) (solver.Edge, error) {
+func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluator, fn func(digest.Digest, *op, func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error)) (solver.Edge, error) {
 	if len(def.Def) == 0 {
 		return solver.Edge{}, errors.New("invalid empty definition")
 	}
 
-	allOps := make(map[digest.Digest]*pb.Op)
+	allOps := make(map[digest.Digest]*op)
 
 	var lastDgst digest.Digest
 
 	for _, dt := range def.Def {
-		var op pb.Op
-		if err := op.UnmarshalVT(dt); err != nil {
+		var op op
+		if err := op.Unmarshal(dt); err != nil {
 			return solver.Edge{}, errors.Wrap(err, "failed to parse llb proto op")
 		}
 		dgst := digest.FromBytes(dt)
@@ -257,6 +265,7 @@ func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEval
 				return solver.Edge{}, errors.Wrap(err, "error evaluating the source policy")
 			}
 		}
+		op.Metadata = def.Metadata[string(dgst)]
 
 		allOps[dgst] = &op
 		lastDgst = dgst
@@ -300,7 +309,7 @@ func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEval
 			return nil, errors.Errorf("invalid missing input digest %s", dgst)
 		}
 
-		if err := opsutils.Validate(op); err != nil {
+		if err := opsutils.Validate(&op.Op); err != nil {
 			return nil, err
 		}
 
