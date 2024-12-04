@@ -38,9 +38,9 @@ func TestRecomputeDigests(t *testing.T) {
 	require.NoError(t, err)
 	op2Digest := digest.FromBytes(op2Data)
 
-	all := map[digest.Digest]*pb.Op{
-		newDigest: op1,
-		op2Digest: op2,
+	all := map[digest.Digest]*op{
+		newDigest: {Op: op1},
+		op2Digest: {Op: op2},
 	}
 	visited := map[digest.Digest]digest.Digest{oldDigest: newDigest}
 
@@ -48,10 +48,10 @@ func TestRecomputeDigests(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, visited, 2)
 	require.Len(t, all, 2)
-	assert.Equal(t, op1, all[newDigest])
+	assert.Equal(t, op1, all[newDigest].Op)
 	require.Equal(t, newDigest, visited[oldDigest])
-	require.Equal(t, op1, all[newDigest])
-	assert.Equal(t, op2, all[updated])
+	require.Equal(t, op1, all[newDigest].Op)
+	assert.Equal(t, op2, all[updated].Op)
 	require.Equal(t, newDigest, digest.Digest(op2.Inputs[0].Digest))
 	assert.NotEqual(t, op2Digest, updated)
 }
@@ -88,14 +88,14 @@ func TestIngestDigest(t *testing.T) {
 	// Read the definition from the test data and ensure it uses the
 	// canonical digests after recompute.
 	var lastDgst digest.Digest
-	all := map[digest.Digest]*pb.Op{}
+	all := map[digest.Digest]*op{}
 	for _, in := range def.Def {
-		op := new(pb.Op)
-		err := op.Unmarshal(in)
+		opNew := new(pb.Op)
+		err := opNew.Unmarshal(in)
 		require.NoError(t, err)
 
 		lastDgst = digest.FromBytes(in)
-		all[lastDgst] = op
+		all[lastDgst] = &op{Op: opNew}
 	}
 	fmt.Println(all, lastDgst)
 
