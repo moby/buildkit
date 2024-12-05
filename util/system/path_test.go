@@ -165,7 +165,7 @@ func TestCheckSystemDriveAndRemoveDriveLetter(t *testing.T) {
 	}
 }
 
-// TestNormalizeWorkdir tests NormalizeWorkdir
+// TestNormalizeWorkdirWindows tests NormalizeWorkdir
 func TestNormalizeWorkdirWindows(t *testing.T) {
 	testCases := []struct {
 		name           string
