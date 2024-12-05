@@ -22,6 +22,10 @@ func getBuildkitdAddr(tmpdir string) string {
 	return "npipe:////./pipe/buildkitd-" + filepath.Base(tmpdir)
 }
 
+func getBuildkitdDebugAddr(tmpdir string) string {
+	return "npipe:////./pipe/buildkitd-debug-" + filepath.Base(tmpdir)
+}
+
 func getTraceSocketPath(tmpdir string) string {
 	return `\\.\pipe\buildkit-otel-grpc-` + filepath.Base(tmpdir)
 }

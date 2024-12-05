@@ -9,6 +9,7 @@ type backend struct {
 	address             string
 	dockerAddress       string
 	containerdAddress   string
+	debugAddress        string
 	rootless            bool
 	netnsDetached       bool
 	snapshotter         string
@@ -27,6 +28,10 @@ func (b backend) DockerAddress() string {
 
 func (b backend) ContainerdAddress() string {
 	return b.containerdAddress
+}
+
+func (b backend) DebugAddress() string {
+	return b.debugAddress
 }
 
 func (b backend) Rootless() bool {

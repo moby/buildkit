@@ -34,6 +34,10 @@ func getBuildkitdAddr(tmpdir string) string {
 	return "unix://" + filepath.Join(tmpdir, "buildkitd.sock")
 }
 
+func getBuildkitdDebugAddr(tmpdir string) string {
+	return "unix://" + filepath.Join(tmpdir, "buildkitd-debug.sock")
+}
+
 func getTraceSocketPath(tmpdir string) string {
 	return filepath.Join(tmpdir, "otel-grpc.sock")
 }

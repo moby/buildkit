@@ -77,7 +77,7 @@ func (s *OCI) New(ctx context.Context, cfg *integration.BackendConfig) (integrat
 	if runtime.GOOS != "windows" && s.Snapshotter != "native" {
 		extraEnv = append(extraEnv, "BUILDKIT_DEBUG_FORCE_OVERLAY_DIFF=true")
 	}
-	buildkitdSock, stop, err := runBuildkitd(cfg, buildkitdArgs, cfg.Logs, s.UID, s.GID, extraEnv)
+	buildkitdSock, debugSock, stop, err := runBuildkitd(cfg, buildkitdArgs, cfg.Logs, s.UID, s.GID, extraEnv)
 	if err != nil {
 		integration.PrintLogs(cfg.Logs, log.Println)
 		return nil, nil, err
@@ -85,6 +85,7 @@ func (s *OCI) New(ctx context.Context, cfg *integration.BackendConfig) (integrat
 
 	return backend{
 		address:       buildkitdSock,
+		debugAddress:  debugSock,
 		rootless:      s.UID != 0,
 		netnsDetached: s.NetNSDetached(),
 		snapshotter:   s.Snapshotter,
