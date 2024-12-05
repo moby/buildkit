@@ -2,10 +2,11 @@ package main
 
 import (
 	"expvar"
-	"net"
 	"net/http"
 	"net/http/pprof"
+	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/moby/buildkit/util/bklog"
@@ -38,7 +39,10 @@ func setupDebugHandlers(addr string) error {
 		return true, true
 	}
 
-	l, err := net.Listen("tcp", addr)
+	if !strings.Contains(addr, "://") {
+		addr = "tcp://" + addr
+	}
+	l, err := getListener(addr, os.Getuid(), os.Getgid(), "", nil, false)
 	if err != nil {
 		return err
 	}

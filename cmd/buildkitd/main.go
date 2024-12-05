@@ -431,7 +431,7 @@ func newGRPCListeners(cfg config.GRPCConfig) ([]net.Listener, error) {
 
 	listeners := make([]net.Listener, 0, len(addrs))
 	for _, addr := range addrs {
-		l, err := getListener(addr, *cfg.UID, *cfg.GID, sd, tlsConfig)
+		l, err := getListener(addr, *cfg.UID, *cfg.GID, sd, tlsConfig, true)
 		if err != nil {
 			for _, l := range listeners {
 				l.Close()
@@ -670,7 +670,7 @@ func groupToGid(group string) (int, error) {
 	return id, nil
 }
 
-func getListener(addr string, uid, gid int, secDescriptor string, tlsConfig *tls.Config) (net.Listener, error) {
+func getListener(addr string, uid, gid int, secDescriptor string, tlsConfig *tls.Config, warnTLS bool) (net.Listener, error) {
 	addrSlice := strings.SplitN(addr, "://", 2)
 	if len(addrSlice) < 2 {
 		return nil, errors.Errorf("address %s does not contain proto, you meant unix://%s ?",
@@ -696,7 +696,9 @@ func getListener(addr string, uid, gid int, secDescriptor string, tlsConfig *tls
 		}
 
 		if tlsConfig == nil {
-			bklog.L.Warnf("TLS is not enabled for %s. enabling mutual TLS authentication is highly recommended", addr)
+			if warnTLS {
+				bklog.L.Warnf("TLS is not enabled for %s. enabling mutual TLS authentication is highly recommended", addr)
+			}
 			return l, nil
 		}
 		return tls.NewListener(l, tlsConfig), nil
