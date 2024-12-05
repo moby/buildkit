@@ -10899,6 +10899,7 @@ func testRunValidExitCodes(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSameChainIDWithLazyBlobsCacheExport(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureCacheExport,
 		workers.FeatureCacheImport,
@@ -11040,6 +11041,7 @@ func testSameChainIDWithLazyBlobsCacheExport(t *testing.T, sb integration.Sandbo
 }
 
 func testSameChainIDWithLazyBlobsCacheMountBase(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureCacheExport,
 		workers.FeatureCacheImport,
@@ -11123,7 +11125,7 @@ func testSameChainIDWithLazyBlobsCacheMountBase(t *testing.T, sb integration.San
 	require.NoError(t, err)
 
 	// try to re-use the cache mount from before, ensure we successfully get
-	// the same one writen to in previous step
+	// the same one written to in previous step
 	def, err = llb.Image(busyboxZstdRef).Run(
 		llb.Shlex(`stat /mnt/bar`),
 		llb.AddMount("/mnt",

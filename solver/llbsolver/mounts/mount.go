@@ -128,9 +128,9 @@ func (g *cacheRefGetter) getRefCacheDirNoCache(ctx context.Context, key string, 
 			var needsRemoteProviders cache.NeedsRemoteProviderError
 			if errors.As(err, &needsRemoteProviders) && ref != nil {
 				descHandlers := cache.DescHandlers(make(map[digest.Digest]*cache.DescHandler))
-				for _, dgst := range needsRemoteProviders {
-					if handler := ref.DescHandler(dgst); handler != nil {
-						descHandlers[dgst] = handler
+				for _, dgstDescPair := range needsRemoteProviders {
+					if handler := ref.DescHandler(dgstDescPair.Digest); handler != nil {
+						descHandlers[dgstDescPair.Digest] = handler
 					}
 				}
 				mRef, err = g.cm.GetMutable(ctx, si.ID(), descHandlers)

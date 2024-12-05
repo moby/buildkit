@@ -49,6 +49,7 @@ type Ref interface {
 	RefMetadata
 	Release(context.Context) error
 	IdentityMapping() *idtools.IdentityMapping
+	DescHandlers() DescHandlers
 	DescHandler(digest.Digest) *DescHandler
 }
 
@@ -612,6 +613,13 @@ func (sr *immutableRef) LayerChain() RefList {
 	return l
 }
 
+func (sr *immutableRef) DescHandlers() DescHandlers {
+	// clone to prevent mutation of internal state
+	dhs := make(DescHandlers)
+	maps.Copy(dhs, sr.descHandlers)
+	return dhs
+}
+
 func (sr *immutableRef) DescHandler(dgst digest.Digest) *DescHandler {
 	return sr.descHandlers[dgst]
 }
@@ -638,6 +646,13 @@ func (sr *mutableRef) traceLogFields() logrus.Fields {
 		m["equalImmutableID"] = sr.equalImmutable.ID()
 	}
 	return m
+}
+
+func (sr *mutableRef) DescHandlers() DescHandlers {
+	// clone to prevent mutation of internal state
+	dhs := make(DescHandlers)
+	maps.Copy(dhs, sr.descHandlers)
+	return dhs
 }
 
 func (sr *mutableRef) DescHandler(dgst digest.Digest) *DescHandler {
