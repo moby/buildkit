@@ -232,7 +232,7 @@ disabled_plugins = ["io.containerd.grpc.v1.cri"]
 			"nsenter", "-U", "--preserve-credentials", "-m", "-t", fmt.Sprintf("%d", pid)},
 			append(buildkitdArgs, "--containerd-worker-snapshotter=native")...)
 	}
-	buildkitdSock, stop, err := runBuildkitd(cfg, buildkitdArgs, cfg.Logs, c.UID, c.GID, c.ExtraEnv)
+	buildkitdSock, debugSock, stop, err := runBuildkitd(cfg, buildkitdArgs, cfg.Logs, c.UID, c.GID, c.ExtraEnv)
 	if err != nil {
 		integration.PrintLogs(cfg.Logs, log.Println)
 		return nil, nil, err
@@ -242,6 +242,7 @@ disabled_plugins = ["io.containerd.grpc.v1.cri"]
 	return backend{
 		address:           buildkitdSock,
 		containerdAddress: address,
+		debugAddress:      debugSock,
 		rootless:          rootless,
 		netnsDetached:     false,
 		snapshotter:       c.Snapshotter,

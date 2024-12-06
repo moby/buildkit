@@ -39,6 +39,7 @@ type Backend interface {
 	Address() string
 	DockerAddress() string
 	ContainerdAddress() string
+	DebugAddress() string
 
 	Rootless() bool
 	NetNSDetached() bool
@@ -200,7 +201,7 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 						ctx, cancel := context.WithCancelCause(ctx)
 						defer func() { cancel(errors.WithStack(context.Canceled)) }()
 
-						sb, closer, err := newSandbox(ctx, br, getMirror(), mv)
+						sb, closer, err := newSandbox(ctx, t, br, getMirror(), mv)
 						require.NoError(t, err)
 						t.Cleanup(func() { _ = closer() })
 						defer func() {

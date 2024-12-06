@@ -5,11 +5,15 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/shlex"
 	"github.com/moby/buildkit/util/bklog"
@@ -17,6 +21,8 @@ import (
 )
 
 const buildkitdConfigFile = "buildkitd.toml"
+
+const maxSandboxTimeout = 5 * time.Minute
 
 type sandbox struct {
 	Backend
@@ -79,7 +85,7 @@ func (sb *sandbox) Value(k string) interface{} {
 	return sb.mv.values[k].value
 }
 
-func newSandbox(ctx context.Context, w Worker, mirror string, mv matrixValue) (s Sandbox, cl func() error, err error) {
+func newSandbox(ctx context.Context, t *testing.T, w Worker, mirror string, mv matrixValue) (s Sandbox, cl func() error, err error) {
 	cfg := &BackendConfig{
 		Logs: make(map[string]*bytes.Buffer),
 	}
@@ -110,6 +116,28 @@ func newSandbox(ctx context.Context, w Worker, mirror string, mv matrixValue) (s
 	}
 	deferF.Append(closer)
 
+	ctx, cancel := context.WithCancelCause(ctx)
+
+	go func() {
+		timeout := maxSandboxTimeout
+		if strings.Contains(t.Name(), "ExtraTimeout") {
+			timeout *= 3
+		}
+		timeoutContext, cancelTimeout := context.WithTimeoutCause(ctx, timeout, errors.WithStack(context.DeadlineExceeded))
+		defer cancelTimeout()
+		<-timeoutContext.Done()
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			t.Logf("sandbox timeout reached, stopping worker")
+			if addr := b.DebugAddress(); addr != "" {
+				printBuildkitdDebugLogs(t, addr)
+			}
+			cancel(errors.WithStack(context.Canceled))
+		}
+	}()
+
 	return &sandbox{
 		Backend: b,
 		logs:    cfg.Logs,
@@ -118,6 +146,30 @@ func newSandbox(ctx context.Context, w Worker, mirror string, mv matrixValue) (s
 		ctx:     ctx,
 		name:    w.Name(),
 	}, cl, nil
+}
+
+func printBuildkitdDebugLogs(t *testing.T, addr string) {
+	if !strings.HasPrefix(addr, socketScheme) {
+		t.Logf("invalid debug address %q", addr)
+		return
+	}
+
+	client := &http.Client{Transport: &http.Transport{DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+		return dialPipe(strings.TrimPrefix(addr, socketScheme))
+	}}}
+
+	resp, err := client.Get("http://localhost/debug/pprof/goroutine?debug=2") //nolint:noctx // never cancel
+	if err != nil {
+		t.Fatalf("failed to get debug logs: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+	dt, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("failed to read debug logs: %v", err)
+		return
+	}
+	t.Logf("buildkitd debug logs:\n%s", dt)
 }
 
 func RootlessSupported(uid int) bool {
