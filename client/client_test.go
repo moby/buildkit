@@ -584,7 +584,6 @@ func testExportBusyboxLocal(t *testing.T, sb integration.Sandbox) {
 }
 
 func testHostnameLookup(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	if sb.Rootless() { // bridge is not used by default, even with detach-netns
 		t.SkipNow()
 	}
@@ -593,7 +592,12 @@ func testHostnameLookup(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	st := llb.Image("busybox:latest").Run(llb.Shlex(`sh -c "ping -c 1 $(hostname)"`))
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	cmdStr := integration.UnixOrWindows(
+		`sh -c "ping -c 1 $(hostname)"`,
+		"cmd /C ping -n 1 %COMPUTERNAME%",
+	)
+	st := llb.Image(imgName).Run(llb.Shlex(cmdStr))
 
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -604,7 +608,6 @@ func testHostnameLookup(t *testing.T, sb integration.Sandbox) {
 
 // moby/buildkit#1301
 func testHostnameSpecifying(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	if sb.Rootless() { // bridge is not used by default, even with detach-netns
 		t.SkipNow()
 	}
@@ -614,9 +617,21 @@ func testHostnameSpecifying(t *testing.T, sb integration.Sandbox) {
 	defer c.Close()
 
 	hostname := "testtest"
-	st := llb.Image("busybox:latest").With(llb.Hostname(hostname)).
-		Run(llb.Shlexf("sh -c 'echo $HOSTNAME | grep %s'", hostname)).
-		Run(llb.Shlexf("sh -c 'echo $(hostname) | grep %s'", hostname))
+	// NOTE: Windows capitalizes the hostname hence
+	// case insensitive findstr (findstr /I)
+	// testtest --> TESTTEST
+	cmdStr1 := integration.UnixOrWindows(
+		"sh -c 'echo $HOSTNAME | grep %s'",
+		"cmd /C echo %%COMPUTERNAME%% | findstr /I %s",
+	)
+	cmdStr2 := integration.UnixOrWindows(
+		"sh -c 'echo $(hostname) | grep %s'",
+		"cmd /C echo %%COMPUTERNAME%% | findstr /I %s",
+	)
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	st := llb.Image(imgName).With(llb.Hostname(hostname)).
+		Run(llb.Shlexf(cmdStr1, hostname)).
+		Run(llb.Shlexf(cmdStr2, hostname))
 
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -629,12 +644,13 @@ func testHostnameSpecifying(t *testing.T, sb integration.Sandbox) {
 
 // moby/buildkit#614
 func testStdinClosed(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	st := llb.Image("busybox:latest").Run(llb.Shlex("cat"))
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	cmdStr := integration.UnixOrWindows("cat", "cmd /C more")
+	st := llb.Image(imgName).Run(llb.Shlex(cmdStr))
 
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -1186,7 +1202,6 @@ func testSecurityModeErrors(t *testing.T, sb integration.Sandbox) {
 }
 
 func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -1918,7 +1933,6 @@ func testFileOpCopyIncludeExclude(t *testing.T, sb integration.Sandbox) {
 }
 
 func testFileOpCopyAlwaysReplaceExistingDestPaths(t *testing.T, sb integration.Sandbox) {
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -1993,7 +2007,6 @@ func testFileOpCopyAlwaysReplaceExistingDestPaths(t *testing.T, sb integration.S
 
 // testFileOpInputSwap is a regression test that cache is invalidated when subset of fileop is built
 func testFileOpInputSwap(t *testing.T, sb integration.Sandbox) {
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -2018,7 +2031,11 @@ func testFileOpInputSwap(t *testing.T, sb integration.Sandbox) {
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "bar: no such file")
+	errStr := integration.UnixOrWindows(
+		"bar: no such file",
+		"bar: The system cannot find the file specified",
+	)
+	require.Contains(t, err.Error(), errStr)
 }
 
 func testLocalSourceDiffer(t *testing.T, sb integration.Sandbox) {
@@ -2030,7 +2047,6 @@ func testLocalSourceDiffer(t *testing.T, sb integration.Sandbox) {
 }
 
 func testLocalSourceWithDiffer(t *testing.T, sb integration.Sandbox, d llb.DiffType) {
-	requiresLinux(t)
 	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -2628,7 +2644,6 @@ func testBuildExportScratch(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -2738,8 +2753,11 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, "gzip", allReqs[3].Header.Get("Accept-Encoding"))
 
 	// test extra options
-	st = llb.HTTP(server.URL+"/foo", llb.Filename("bar"), llb.Chmod(0741), llb.Chown(1000, 1000))
-
+	// llb.Chown not supported on Windows
+	st = integration.UnixOrWindows(
+		llb.HTTP(server.URL+"/foo", llb.Filename("bar"), llb.Chmod(0741), llb.Chown(1000, 1000)),
+		llb.HTTP(server.URL+"/foo", llb.Filename("bar"), llb.Chmod(0741)),
+	)
 	def, err = st.Marshal(sb.Context())
 	require.NoError(t, err)
 
@@ -2763,7 +2781,10 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	fi, err := os.Stat(filepath.Join(tmpdir, "bar"))
 	require.NoError(t, err)
 	require.Equal(t, fi.ModTime().Format(http.TimeFormat), modTime.Format(http.TimeFormat))
-	require.Equal(t, 0741, int(fi.Mode()&0777))
+
+	// no support for llb.Chmod on Windows, default is returned
+	fMode := integration.UnixOrWindows(0741, 0666)
+	require.Equal(t, fMode, int(fi.Mode()&0777))
 
 	checkAllReleasable(t, c, sb, true)
 
@@ -2772,7 +2793,6 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 
 // docker/buildx#2803
 func testBuildHTTPSourceEtagScope(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -3304,12 +3324,16 @@ func testOCIExporterContentStore(t *testing.T, sb integration.Sandbox) {
 
 func testNoTarOCIIndexMediaType(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter)
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	st := llb.Image("busybox:latest").Run(llb.Shlex(`sh -c "echo -n hello > hello"`))
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	cmdStr := integration.UnixOrWindows(
+		`sh -c "echo -n hello > hello"`,
+		`cmd /C "echo hello> hello"`,
+	)
+	st := llb.Image(imgName).Run(llb.Shlex(cmdStr))
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
@@ -3347,12 +3371,16 @@ func testNoTarOCIIndexMediaType(t *testing.T, sb integration.Sandbox) {
 
 func testOCIIndexMediatype(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter)
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	st := llb.Image("busybox:latest").Run(llb.Shlex(`sh -c "echo -n hello > hello"`))
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	cmdStr := integration.UnixOrWindows(
+		`sh -c "echo -n hello > hello"`,
+		`cmd /C "echo hello> hello"`,
+	)
+	st := llb.Image(imgName).Run(llb.Shlex(cmdStr))
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
@@ -3798,7 +3826,6 @@ func testSourceDateEpochImageExporter(t *testing.T, sb integration.Sandbox) {
 }
 
 func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -3839,7 +3866,6 @@ func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
 }
 
 func testFrontendUseSolveResults(t *testing.T, sb integration.Sandbox) {
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -3904,12 +3930,12 @@ func testFrontendUseSolveResults(t *testing.T, sb integration.Sandbox) {
 
 func testExporterTargetExists(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter)
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	st := llb.Image("busybox:latest")
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	st := llb.Image(imgName)
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
@@ -5229,7 +5255,6 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 
 func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
-	requiresLinux(t)
 	cdAddress := sb.ContainerdAddress()
 	if cdAddress == "" {
 		t.Skip("test requires containerd worker")
@@ -5252,7 +5277,7 @@ func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
 	defer c.Close()
 
 	// push the busybox image to the mutable registry
-	sourceImage := "busybox:latest"
+	sourceImage := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
 	def, err := llb.Image(sourceImage).Marshal(sb.Context())
 	require.NoError(t, err)
 
@@ -5359,7 +5384,8 @@ func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
 	}
 
 	// check that a subsequent build can use the previously lazy image in an exec
-	def, err = llb.Image(target2).Run(llb.Args([]string{"true"})).Marshal(sb.Context())
+	cmdStr := integration.UnixOrWindows("true", "cmd /C exit 0")
+	def, err = llb.Image(target2).Run(llb.Args([]string{cmdStr})).Marshal(sb.Context())
 	require.NoError(t, err)
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
@@ -6104,8 +6130,6 @@ func testBasicGhaCacheImportExportExtraTimeout(t *testing.T, sb integration.Sand
 }
 
 func testRegistryEmptyCacheExport(t *testing.T, sb integration.Sandbox) {
-	requiresLinux(t)
-
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureCacheExport,
 		workers.FeatureCacheBackendRegistry,
@@ -6371,7 +6395,6 @@ func testSnapshotWithMultipleBlobs(t *testing.T, sb integration.Sandbox) {
 }
 
 func testExportLocalNoPlatformSplit(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureMultiPlatform)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -6449,7 +6472,6 @@ func testExportLocalNoPlatformSplit(t *testing.T, sb integration.Sandbox) {
 }
 
 func testExportLocalNoPlatformSplitOverwrite(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureMultiPlatform)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -6999,7 +7021,6 @@ func testMoveParentDir(t *testing.T, sb integration.Sandbox) {
 
 // #296
 func testSchema1Image(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -7127,7 +7148,6 @@ func testSourceMap(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSourceMapFromRef(t *testing.T, sb integration.Sandbox) {
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
