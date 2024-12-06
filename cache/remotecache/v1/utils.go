@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sort"
 
-	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/bklog"
 	digest "github.com/opencontainers/go-digest"
@@ -275,20 +274,6 @@ type marshalState struct {
 }
 
 func marshalRemote(ctx context.Context, r *solver.Remote, state *marshalState) string {
-	if len(r.Descriptors) == 0 {
-		return ""
-	}
-
-	if r.Provider != nil {
-		for _, d := range r.Descriptors {
-			if _, err := r.Provider.Info(ctx, d.Digest); err != nil {
-				if !cerrdefs.IsNotImplemented(err) {
-					return ""
-				}
-			}
-		}
-	}
-
 	var parentID string
 	if len(r.Descriptors) > 1 {
 		r2 := &solver.Remote{

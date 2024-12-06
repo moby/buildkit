@@ -503,7 +503,7 @@ type cacheRecord struct {
 	ce *cacheExporter
 }
 
-func (c *cacheRecord) AddResult(dgst digest.Digest, idx int, createdAt time.Time, result *solver.Remote) {
+func (c *cacheRecord) AddResult(_ context.Context, dgst digest.Digest, idx int, createdAt time.Time, result *solver.Remote) {
 	if result == nil || dgst == "" {
 		return
 	}

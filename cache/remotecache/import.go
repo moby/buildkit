@@ -117,7 +117,7 @@ func (ci *contentCacheImporter) Resolve(ctx context.Context, desc ocispecs.Descr
 	}
 
 	cc := v1.NewCacheChains()
-	if err := v1.Parse(dt, allLayers, cc); err != nil {
+	if err := v1.Parse(ctx, dt, allLayers, cc); err != nil {
 		return nil, err
 	}
 
@@ -238,7 +238,7 @@ func (ci *contentCacheImporter) importInlineCache(ctx context.Context, dt []byte
 					return errors.WithStack(err)
 				}
 				cc := v1.NewCacheChains()
-				if err := v1.ParseConfig(config, layers, cc); err != nil {
+				if err := v1.ParseConfig(ctx, config, layers, cc); err != nil {
 					return err
 				}
 				mu.Lock()

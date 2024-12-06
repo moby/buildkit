@@ -10974,7 +10974,7 @@ func testSameChainIDWithLazyBlobsCacheExport(t *testing.T, sb integration.Sandbo
 	// Put a random file in the rootfs, run a cache invalidation step and then copy
 	// the random file to a r/w mnt.
 	def, err = llb.Image(busyboxGzipRef).
-		Run(llb.Shlex(`sh -c "cat /dev/urandom | head -c 100 > /rand"`)).Root().
+		Run(llb.Shlex(`sh -c "cat /dev/urandom | head -c 100 | sha256sum > /rand"`)).Root().
 		Run(llb.Shlex(`echo `+identity.NewID())).Root().
 		Run(llb.Shlex(`cp /rand /mnt/rand`)).AddMount("/mnt", llb.Scratch()).
 		Marshal(sb.Context())
@@ -11008,7 +11008,7 @@ func testSameChainIDWithLazyBlobsCacheExport(t *testing.T, sb integration.Sandbo
 	// Run the same steps as before but with a different cache invalidation step in the middle
 	// The random file should still be cached from earlier and thus the output should be the same
 	def, err = llb.Image(busyboxGzipRef).
-		Run(llb.Shlex(`sh -c "cat /dev/urandom | head -c 100 > /rand"`)).Root().
+		Run(llb.Shlex(`sh -c "cat /dev/urandom | head -c 100 | sha256sum > /rand"`)).Root().
 		Run(llb.Shlex(`echo `+identity.NewID())).Root().
 		Run(llb.Shlex(`cp /rand /mnt/rand`)).AddMount("/mnt", llb.Scratch()).
 		Marshal(sb.Context())

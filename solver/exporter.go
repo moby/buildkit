@@ -133,7 +133,7 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		if opt.CompressionOpt != nil {
 			for _, r := range remotes { // record all remaining remotes as well
 				rec := t.Add(recKey)
-				rec.AddResult(k.vtx, int(k.output), v.CreatedAt, r)
+				rec.AddResult(ctx, k.vtx, int(k.output), v.CreatedAt, r)
 				variants = append(variants, rec)
 			}
 		}
@@ -154,7 +154,7 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 			if opt.CompressionOpt != nil {
 				for _, r := range remotes { // record all remaining remotes as well
 					rec := t.Add(recKey)
-					rec.AddResult(k.vtx, int(k.output), v.CreatedAt, r)
+					rec.AddResult(ctx, k.vtx, int(k.output), v.CreatedAt, r)
 					variants = append(variants, rec)
 				}
 			}
@@ -162,7 +162,7 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 
 		if remote != nil {
 			for _, rec := range allRec {
-				rec.AddResult(k.vtx, int(k.output), v.CreatedAt, remote)
+				rec.AddResult(ctx, k.vtx, int(k.output), v.CreatedAt, remote)
 			}
 		}
 		allRec = append(allRec, variants...)

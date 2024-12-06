@@ -365,7 +365,7 @@ func (i *importer) load(ctx context.Context) (*v1.CacheChains, error) {
 	}
 
 	cc := v1.NewCacheChains()
-	if err := v1.ParseConfig(config, allLayers, cc); err != nil {
+	if err := v1.ParseConfig(ctx, config, allLayers, cc); err != nil {
 		return nil, err
 	}
 	return cc, nil

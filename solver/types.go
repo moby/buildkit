@@ -137,7 +137,7 @@ type CacheExporterTarget interface {
 
 // CacheExporterRecord is a single object being exported
 type CacheExporterRecord interface {
-	AddResult(vtx digest.Digest, index int, createdAt time.Time, result *Remote)
+	AddResult(ctx context.Context, vtx digest.Digest, index int, createdAt time.Time, result *Remote)
 	LinkFrom(src CacheExporterRecord, index int, selector string)
 }
 
