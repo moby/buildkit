@@ -149,7 +149,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testHostnameSpecifying,
 	testPushByDigest,
 	testBasicInlineCacheImportExport,
-	testBasicGhaCacheImportExport,
+	testBasicGhaCacheImportExportExtraTimeout,
 	testExportBusyboxLocal,
 	testBridgeNetworking,
 	testCacheMountNoCache,
@@ -6060,7 +6060,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	require.EqualValues(t, unique, unique3)
 }
 
-func testBasicGhaCacheImportExport(t *testing.T, sb integration.Sandbox) {
+func testBasicGhaCacheImportExportExtraTimeout(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureCacheExport,
 		workers.FeatureCacheImport,

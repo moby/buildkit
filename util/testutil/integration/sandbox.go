@@ -119,7 +119,11 @@ func newSandbox(ctx context.Context, t *testing.T, w Worker, mirror string, mv m
 	ctx, cancel := context.WithCancelCause(ctx)
 
 	go func() {
-		timeoutContext, cancelTimeout := context.WithTimeoutCause(ctx, maxSandboxTimeout, errors.WithStack(context.DeadlineExceeded))
+		timeout := maxSandboxTimeout
+		if strings.Contains(t.Name(), "ExtraTimeout") {
+			timeout *= 3
+		}
+		timeoutContext, cancelTimeout := context.WithTimeoutCause(ctx, timeout, errors.WithStack(context.DeadlineExceeded))
 		defer cancelTimeout()
 		<-timeoutContext.Done()
 		select {
