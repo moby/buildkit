@@ -674,7 +674,9 @@ func defaultImageConfig() ([]byte, error) {
 	img.Variant = pl.Variant
 	img.RootFS.Type = "layers"
 	img.Config.WorkingDir = "/"
-	img.Config.Env = []string{"PATH=" + system.DefaultPathEnv(pl.OS)}
+	if env, ok := system.DefaultPathEnv(pl.OS); ok {
+		img.Config.Env = []string{"PATH=" + env}
+	}
 	dt, err := json.Marshal(img)
 	return dt, errors.Wrap(err, "failed to create empty image config")
 }

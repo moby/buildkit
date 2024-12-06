@@ -327,7 +327,9 @@ func (gwCtr *gatewayContainer) Start(ctx context.Context, req client.StartReques
 	if procInfo.Meta.Cwd == "" {
 		procInfo.Meta.Cwd = "/"
 	}
-	procInfo.Meta.Env = addDefaultEnvvar(procInfo.Meta.Env, "PATH", utilsystem.DefaultPathEnv(gwCtr.platform.OS))
+	if env, ok := utilsystem.DefaultPathEnv(gwCtr.platform.OS); ok {
+		procInfo.Meta.Env = addDefaultEnvvar(procInfo.Meta.Env, "PATH", env)
+	}
 	if req.Tty {
 		procInfo.Meta.Env = addDefaultEnvvar(procInfo.Meta.Env, "TERM", "xterm")
 	}
