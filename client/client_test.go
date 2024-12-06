@@ -192,7 +192,8 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testPullWithLayerLimit,
 	testExportAnnotations,
 	testExportAnnotationsMediaTypes,
-	testExportAttestations,
+	testExportAttestationsOCIArtifact,
+	testExportAttestationsImageManifest,
 	testExportedImageLabels,
 	testAttestationDefaultSubject,
 	testSourceDateEpochLayerTimestamps,
@@ -8725,7 +8726,15 @@ func testExportAnnotationsMediaTypes(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, ocispecs.MediaTypeImageIndex, imgs2.Index.MediaType)
 }
 
-func testExportAttestations(t *testing.T, sb integration.Sandbox) {
+func testExportAttestationsOCIArtifact(t *testing.T, sb integration.Sandbox) {
+	testExportAttestations(t, sb, true)
+}
+
+func testExportAttestationsImageManifest(t *testing.T, sb integration.Sandbox) {
+	testExportAttestations(t, sb, false)
+}
+
+func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bool) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
@@ -8845,8 +8854,9 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 				{
 					Type: ExporterImage,
 					Attrs: map[string]string{
-						"name": strings.Join(targets, ","),
-						"push": "true",
+						"name":         strings.Join(targets, ","),
+						"push":         "true",
+						"oci-artifact": strconv.FormatBool(ociArtifact),
 					},
 				},
 			},
@@ -8876,12 +8886,25 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox) {
 		for i, att := range atts.Images {
 			require.Equal(t, ocispecs.MediaTypeImageManifest, att.Desc.MediaType)
 			require.Equal(t, "unknown/unknown", platforms.Format(*att.Desc.Platform))
-			require.Equal(t, "unknown/unknown", att.Img.OS+"/"+att.Img.Architecture)
 			require.Equal(t, attestation.DockerAnnotationReferenceTypeDefault, att.Desc.Annotations[attestation.DockerAnnotationReferenceType])
 			require.Equal(t, bases[i].Desc.Digest.String(), att.Desc.Annotations[attestation.DockerAnnotationReferenceDigest])
 			require.Equal(t, 2, len(att.Layers))
-			require.Equal(t, len(att.Layers), len(att.Img.RootFS.DiffIDs))
-			require.Equal(t, 0, len(att.Img.History))
+
+			if ociArtifact {
+				subject := att.Manifest.Subject
+				require.NotNil(t, subject)
+				require.Equal(t, bases[i].Desc, *subject)
+				require.Equal(t, "application/vnd.docker.attestation.manifest.v1+json", att.Manifest.ArtifactType)
+				require.Equal(t, ocispecs.DescriptorEmptyJSON, att.Manifest.Config)
+			} else {
+				require.Nil(t, att.Manifest.Subject)
+				require.Empty(t, att.Manifest.ArtifactType)
+
+				// image config is not included in the OCI artifact
+				require.Equal(t, "unknown/unknown", att.Img.OS+"/"+att.Img.Architecture)
+				require.Equal(t, len(att.Layers), len(att.Img.RootFS.DiffIDs))
+				require.Equal(t, 0, len(att.Img.History))
+			}
 
 			var attest intoto.Statement
 			require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
