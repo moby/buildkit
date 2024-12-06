@@ -15,9 +15,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/containerd/containerd/defaults"
-	"github.com/containerd/containerd/remotes/docker"
-	"github.com/containerd/containerd/sys"
+	"github.com/containerd/containerd/v2/core/remotes/docker"
+	"github.com/containerd/containerd/v2/defaults"
+	"github.com/containerd/containerd/v2/pkg/sys"
 	"github.com/containerd/platforms"
 	sddaemon "github.com/coreos/go-systemd/v22/daemon"
 	"github.com/docker/docker/pkg/reexec"
