@@ -8048,12 +8048,12 @@ loop0:
 }
 
 func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	def, err := llb.Image("busybox:latest").Marshal(sb.Context())
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	def, err := llb.Image(imgName).Marshal(sb.Context())
 	require.NoError(t, err)
 
 	destDir := t.TempDir()
@@ -8117,7 +8117,6 @@ func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
 
 // moby/buildkit#492
 func testParallelLocalBuilds(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	ctx, cancel := context.WithCancelCause(sb.Context())
 	defer func() { cancel(errors.WithStack(context.Canceled)) }()
 
@@ -8319,7 +8318,6 @@ func testPullWithLayerLimit(t *testing.T, sb integration.Sandbox) {
 }
 
 func testCallInfo(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureInfo)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -10268,7 +10266,6 @@ func testMountStubsTimestamp(t *testing.T, sb integration.Sandbox) {
 }
 
 func testFrontendVerifyPlatforms(t *testing.T, sb integration.Sandbox) {
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -10833,9 +10830,15 @@ func testLayerLimitOnMounts(t *testing.T, sb integration.Sandbox) {
 }
 
 func testClientCustomGRPCOpts(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	var interceptedMethods []string
-	intercept := func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	intercept := func(
+		ctx context.Context,
+		method string,
+		req,
+		reply interface{},
+		cc *grpc.ClientConn,
+		invoker grpc.UnaryInvoker,
+		opts ...grpc.CallOption) error {
 		interceptedMethods = append(interceptedMethods, method)
 		return invoker(ctx, method, req, reply, cc, opts...)
 	}
@@ -10843,7 +10846,8 @@ func testClientCustomGRPCOpts(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	st := llb.Image("busybox:latest")
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	st := llb.Image(imgName)
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
@@ -10853,15 +10857,17 @@ func testClientCustomGRPCOpts(t *testing.T, sb integration.Sandbox) {
 }
 
 func testRunValidExitCodes(t *testing.T, sb integration.Sandbox) {
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
 	// no exit codes specified, equivalent to [0]
-	out := llb.Image("busybox:latest")
-	out = out.Run(llb.Shlex(`sh -c "exit 0"`)).Root()
-	out = out.Run(llb.Shlex(`sh -c "exit 1"`)).Root()
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	out := llb.Image(imgName)
+	shellPrefix := integration.UnixOrWindows("sh -c", "cmd /C")
+
+	out = out.Run(llb.Shlexf(`%s "exit 0"`, shellPrefix)).Root()
+	out = out.Run(llb.Shlexf(`%s "exit 1"`, shellPrefix)).Root()
 	def, err := out.Marshal(sb.Context())
 	require.NoError(t, err)
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
@@ -10869,26 +10875,26 @@ func testRunValidExitCodes(t *testing.T, sb integration.Sandbox) {
 	require.ErrorContains(t, err, "exit code: 1")
 
 	// empty exit codes, equivalent to [0]
-	out = llb.Image("busybox:latest")
-	out = out.Run(llb.Shlex(`sh -c "exit 0"`), llb.ValidExitCodes()).Root()
+	out = llb.Image(imgName)
+	out = out.Run(llb.Shlexf(`%s "exit 0"`, shellPrefix), llb.ValidExitCodes()).Root()
 	def, err = out.Marshal(sb.Context())
 	require.NoError(t, err)
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
 	require.NoError(t, err)
 
 	// if we expect non-zero, those non-zero codes should succeed
-	out = llb.Image("busybox:latest")
-	out = out.Run(llb.Shlex(`sh -c "exit 1"`), llb.ValidExitCodes(1)).Root()
-	out = out.Run(llb.Shlex(`sh -c "exit 2"`), llb.ValidExitCodes(2, 3)).Root()
-	out = out.Run(llb.Shlex(`sh -c "exit 3"`), llb.ValidExitCodes(2, 3)).Root()
+	out = llb.Image(imgName)
+	out = out.Run(llb.Shlexf(`%s "exit 1"`, shellPrefix), llb.ValidExitCodes(1)).Root()
+	out = out.Run(llb.Shlexf(`%s "exit 2"`, shellPrefix), llb.ValidExitCodes(2, 3)).Root()
+	out = out.Run(llb.Shlexf(`%s "exit 3"`, shellPrefix), llb.ValidExitCodes(2, 3)).Root()
 	def, err = out.Marshal(sb.Context())
 	require.NoError(t, err)
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
 	require.NoError(t, err)
 
 	// if we expect non-zero, returning zero should fail
-	out = llb.Image("busybox:latest")
-	out = out.Run(llb.Shlex(`sh -c "exit 0"`), llb.ValidExitCodes(1)).Root()
+	out = llb.Image(imgName)
+	out = out.Run(llb.Shlexf(`%s "exit 0"`, shellPrefix), llb.ValidExitCodes(1)).Root()
 	def, err = out.Marshal(sb.Context())
 	require.NoError(t, err)
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
