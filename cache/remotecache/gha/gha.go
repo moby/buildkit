@@ -356,7 +356,7 @@ func (ci *importer) loadScope(ctx context.Context, scope string) (*v1.CacheChain
 	}
 
 	cc := v1.NewCacheChains()
-	if err := v1.ParseConfig(config, allLayers, cc); err != nil {
+	if err := v1.ParseConfig(ctx, config, allLayers, cc); err != nil {
 		return nil, err
 	}
 	return cc, nil

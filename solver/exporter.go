@@ -117,6 +117,12 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 			return nil, err
 		}
 
+		if e.edge != nil {
+			if op := e.edge.op; op != nil && op.st != nil {
+				ctx = withAncestorCacheOpts(ctx, op)
+			}
+		}
+
 		remotes, err := cm.results.LoadRemotes(ctx, res, opt.CompressionOpt, opt.Session)
 		if err != nil {
 			return nil, err
@@ -127,7 +133,7 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		if opt.CompressionOpt != nil {
 			for _, r := range remotes { // record all remaining remotes as well
 				rec := t.Add(recKey)
-				rec.AddResult(k.vtx, int(k.output), v.CreatedAt, r)
+				rec.AddResult(ctx, k.vtx, int(k.output), v.CreatedAt, r)
 				variants = append(variants, rec)
 			}
 		}
@@ -148,7 +154,7 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 			if opt.CompressionOpt != nil {
 				for _, r := range remotes { // record all remaining remotes as well
 					rec := t.Add(recKey)
-					rec.AddResult(k.vtx, int(k.output), v.CreatedAt, r)
+					rec.AddResult(ctx, k.vtx, int(k.output), v.CreatedAt, r)
 					variants = append(variants, rec)
 				}
 			}
@@ -156,7 +162,7 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 
 		if remote != nil {
 			for _, rec := range allRec {
-				rec.AddResult(k.vtx, int(k.output), v.CreatedAt, remote)
+				rec.AddResult(ctx, k.vtx, int(k.output), v.CreatedAt, remote)
 			}
 		}
 		allRec = append(allRec, variants...)
@@ -172,7 +178,7 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		for _, dep := range deps {
 			recs, err := dep.CacheKey.Exporter.ExportTo(ctx, t, opt)
 			if err != nil {
-				return nil, nil
+				return nil, err
 			}
 			for _, r := range recs {
 				srcs[i] = append(srcs[i], expr{r: r, selector: dep.Selector})
@@ -184,7 +190,7 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		for _, de := range e.edge.secondaryExporters {
 			recs, err := de.cacheKey.CacheKey.Exporter.ExportTo(ctx, t, opt)
 			if err != nil {
-				return nil, nil
+				return nil, err
 			}
 			for _, r := range recs {
 				srcs[de.index] = append(srcs[de.index], expr{r: r, selector: de.cacheKey.Selector})
