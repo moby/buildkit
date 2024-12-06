@@ -24,7 +24,6 @@ import (
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/locker"
 	"github.com/moby/sys/userns"
-	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 )
@@ -124,17 +123,11 @@ func (g *cacheRefGetter) getRefCacheDirNoCache(ctx context.Context, key string, 
 		}
 		locked := false
 		for _, si := range sis {
-			mRef, err := g.cm.GetMutable(ctx, si.ID())
-			var needsRemoteProviders cache.NeedsRemoteProviderError
-			if errors.As(err, &needsRemoteProviders) && ref != nil {
-				descHandlers := cache.DescHandlers(make(map[digest.Digest]*cache.DescHandler))
-				for _, dgstDescPair := range needsRemoteProviders {
-					if handler := ref.DescHandler(dgstDescPair.Digest); handler != nil {
-						descHandlers[dgstDescPair.Digest] = handler
-					}
-				}
-				mRef, err = g.cm.GetMutable(ctx, si.ID(), descHandlers)
+			var opts []cache.RefOption
+			if ref != nil {
+				opts = append(opts, ref.DescHandlers())
 			}
+			mRef, err := g.cm.GetMutable(ctx, si.ID(), opts...)
 			if err == nil {
 				bklog.G(ctx).Debugf("reusing ref for cache dir %q: %s", id, mRef.ID())
 				return mRef, nil
