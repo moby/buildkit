@@ -439,8 +439,11 @@ func writeMetadataFile(filename string, exporterResponse map[string]string) erro
 		}
 		var raw map[string]interface{}
 		if err = json.Unmarshal(dt, &raw); err != nil || len(raw) == 0 {
-			out[k] = v
-			continue
+			var rawList []map[string]interface{}
+			if err = json.Unmarshal(dt, &rawList); err != nil || len(rawList) == 0 {
+				out[k] = v
+				continue
+			}
 		}
 		out[k] = json.RawMessage(dt)
 	}

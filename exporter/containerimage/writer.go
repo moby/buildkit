@@ -61,7 +61,7 @@ type ImageWriter struct {
 	opt WriterOpt
 }
 
-func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, sessionID string, inlineCache exptypes.InlineCache, opts *ImageCommitOpts) (*ocispecs.Descriptor, error) {
+func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, sessionID string, inlineCache exptypes.InlineCache, opts *ImageCommitOpts) ([]*ocispecs.Descriptor, error) {
 	if _, ok := inp.Metadata[exptypes.ExporterPlatformsKey]; len(inp.Refs) > 0 && !ok {
 		return nil, errors.Errorf("unable to export multiple refs, missing platforms mapping")
 	}
@@ -180,7 +180,10 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		}
 		mfstDesc.Annotations[exptypes.ExporterConfigDigestKey] = configDesc.Digest.String()
 
-		return mfstDesc, nil
+		return []*ocispecs.Descriptor{
+			mfstDesc,
+			configDesc,
+		}, nil
 	}
 
 	if len(inp.Attestations) > 0 {
@@ -225,6 +228,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 
 	labels := map[string]string{}
 
+	var descriptors []*ocispecs.Descriptor
 	var attestationManifests []ocispecs.Descriptor
 
 	for i, p := range ps.Platforms {
@@ -261,15 +265,16 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 			inlineCacheEntry, _ = inlineCacheResult.FindRef(p.ID)
 		}
 
-		desc, _, err := ic.commitDistributionManifest(ctx, opts, r, config, remote, opts.Annotations.Platform(&p.Platform), inlineCacheEntry, opts.Epoch, session.NewGroup(sessionID), baseImg)
+		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, opts, r, config, remote, opts.Annotations.Platform(&p.Platform), inlineCacheEntry, opts.Epoch, session.NewGroup(sessionID), baseImg)
 		if err != nil {
 			return nil, err
 		}
 		dp := p.Platform
-		desc.Platform = &dp
-		idx.Manifests = append(idx.Manifests, *desc)
+		mfstDesc.Platform = &dp
+		idx.Manifests = append(idx.Manifests, *mfstDesc)
+		descriptors = append(descriptors, mfstDesc, configDesc)
 
-		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i)] = desc.Digest.String()
+		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i)] = mfstDesc.Digest.String()
 
 		if attestations, ok := inp.Attestations[p.ID]; ok {
 			attestations, err := attestation.Unbundle(ctx, session.NewGroup(sessionID), attestations)
@@ -304,7 +309,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 				}
 				defaultSubjects = append(defaultSubjects, intoto.Subject{
 					Name:   pl,
-					Digest: result.ToDigestMap(desc.Digest),
+					Digest: result.ToDigestMap(mfstDesc.Digest),
 				})
 			}
 			stmts, err := attestation.MakeInTotoStatements(ctx, session.NewGroup(sessionID), attestations, defaultSubjects)
@@ -312,7 +317,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 				return nil, err
 			}
 
-			desc, err := ic.commitAttestationsManifest(ctx, opts, desc.Digest.String(), stmts)
+			desc, err := ic.commitAttestationsManifest(ctx, opts, mfstDesc.Digest.String(), stmts)
 			if err != nil {
 				return nil, err
 			}
@@ -323,6 +328,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 
 	for i, mfst := range attestationManifests {
 		idx.Manifests = append(idx.Manifests, mfst)
+		descriptors = append(descriptors, &mfst)
 		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", len(ps.Platforms)+i)] = mfst.Digest.String()
 	}
 
@@ -344,8 +350,9 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		return nil, idxDone(errors.Wrapf(err, "error writing manifest list blob %s", idxDigest))
 	}
 	idxDone(nil)
+	descriptors = append([]*ocispecs.Descriptor{&idxDesc}, descriptors...)
 
-	return &idxDesc, nil
+	return descriptors, nil
 }
 
 func (ic *ImageWriter) exportLayers(ctx context.Context, refCfg cacheconfig.RefConfig, s session.Group, refs ...cache.ImmutableRef) ([]solver.Remote, error) {
