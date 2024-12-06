@@ -118,8 +118,7 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		}
 
 		if e.edge != nil {
-			op, ok := e.edge.op.(*sharedOp)
-			if ok && op != nil && op.st != nil {
+			if op := e.edge.op; op != nil && op.st != nil {
 				ctx = withAncestorCacheOpts(ctx, op)
 			}
 		}
