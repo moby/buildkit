@@ -7422,7 +7422,6 @@ COPY --from=base /another /out2
 }
 
 func testNamedOCILayoutContext(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureOCILayout)
 	// how this test works:
 	// 1- we use a regular builder with a dockerfile to create an image two files: "out" with content "first", "out2" with content "second"
@@ -7438,13 +7437,22 @@ func testNamedOCILayoutContext(t *testing.T, sb integration.Sandbox) {
 	// create a tempdir where we will store the OCI layout
 	ocidir := t.TempDir()
 
-	ociDockerfile := []byte(`
+	ociDockerfile := []byte(integration.UnixOrWindows(
+		`
 	FROM busybox:latest
 	WORKDIR /test
 	RUN sh -c "echo -n first > out"
 	RUN sh -c "echo -n second > out2"
 	ENV foo=bar
-	`)
+	`,
+		`
+	FROM nanoserver
+	WORKDIR /test
+	RUN echo first> out"
+	RUN echo second> out2"
+	ENV foo=bar
+	`,
+	))
 	inDir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", ociDockerfile, 0600),
@@ -7502,7 +7510,8 @@ func testNamedOCILayoutContext(t *testing.T, sb integration.Sandbox) {
 	// 2. we override the context for `foo` to be our local OCI store, which has an `ENV foo=bar` override.
 	//    As such, the `RUN echo $foo` step should have `$foo` set to `"bar"`, and so
 	//    when we `COPY --from=imported`, it should have the content of `/outfoo` as `"bar"`
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM busybox AS base
 RUN cat /etc/alpine-release > out
 
@@ -7512,7 +7521,20 @@ RUN echo -n $foo > outfoo
 FROM scratch
 COPY --from=base /test/o* /
 COPY --from=imported /test/outfoo /
-`)
+`,
+		`
+FROM nanoserver AS base
+USER ContainerAdministrator
+RUN ver > out
+
+FROM foo AS imported
+RUN echo %foo%> outfoo
+
+FROM nanoserver
+COPY --from=base /test/o* /
+COPY --from=imported /test/outfoo /
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -7542,20 +7564,23 @@ COPY --from=imported /test/outfoo /
 	}, nil)
 	require.NoError(t, err)
 
+	// echo for Windows adds a \n
+	newLine := integration.UnixOrWindows("", "\r\n")
+
 	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
 	require.Greater(t, len(dt), 0)
-	require.Equal(t, []byte("first"), dt)
+	require.Equal(t, []byte("first"+newLine), dt)
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "out2"))
 	require.NoError(t, err)
 	require.Greater(t, len(dt), 0)
-	require.Equal(t, []byte("second"), dt)
+	require.Equal(t, []byte("second"+newLine), dt)
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "outfoo"))
 	require.NoError(t, err)
 	require.Greater(t, len(dt), 0)
-	require.Equal(t, []byte("bar"), dt)
+	require.Equal(t, []byte("bar"+newLine), dt)
 }
 
 func testNamedOCILayoutContextExport(t *testing.T, sb integration.Sandbox) {
