@@ -8,6 +8,7 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestFileMkdir(t *testing.T) {
@@ -736,4 +737,16 @@ func TestFileOpMarshalConsistency(t *testing.T) {
 
 		prevDef = def.Def
 	}
+}
+
+func TestParallelMarshal(t *testing.T) {
+	st := Scratch().File(Mkfile("/tmp", 0644, []byte("tmp 1")))
+	eg, ctx := errgroup.WithContext(context.Background())
+	for i := 0; i < 100; i++ {
+		eg.Go(func() error {
+			_, err := st.Marshal(ctx)
+			return err
+		})
+	}
+	require.NoError(t, eg.Wait())
 }
