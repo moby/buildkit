@@ -24,7 +24,7 @@ func NewBuildOp(source llb.Output, opt ...BuildOption) llb.Vertex {
 }
 
 type build struct {
-	llb.MarshalCache
+	cache       llb.MarshalCache
 	source      llb.Output
 	info        *BuildInfo
 	constraints llb.Constraints
@@ -47,7 +47,10 @@ func (b *build) Validate(context.Context, *llb.Constraints) error {
 }
 
 func (b *build) Marshal(ctx context.Context, c *llb.Constraints) (digest.Digest, []byte, *pb.OpMetadata, []*llb.SourceLocation, error) {
-	if dgst, dt, md, srcs, err := b.Load(c); err == nil {
+	cache := b.cache.Acquire()
+	defer cache.Release()
+
+	if dgst, dt, md, srcs, err := cache.Load(c); err == nil {
 		return dgst, dt, md, srcs, nil
 	}
 
@@ -85,7 +88,7 @@ func (b *build) Marshal(ctx context.Context, c *llb.Constraints) (digest.Digest,
 	if err != nil {
 		return "", nil, nil, nil, err
 	}
-	return b.Store(dt, md, b.constraints.SourceLocations, c)
+	return cache.Store(dt, md, b.constraints.SourceLocations, c)
 }
 
 func (b *build) Output() llb.Output {
