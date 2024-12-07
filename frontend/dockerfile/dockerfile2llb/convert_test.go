@@ -230,3 +230,54 @@ RUN echo bar
 	assert.Equal(t, []digest.Digest{"sha256:2e112031b4b923a873c8b3d685d48037e4d5ccd967b658743d93a6e56c3064b9"}, baseImg.RootFS.DiffIDs)
 	assert.Equal(t, "2024-01-17 21:49:12 +0000 UTC", baseImg.Created.String())
 }
+
+// MockEnvGetter is a mock implementation of shell.EnvGetter for testing purposes.
+type MockEnvGetter struct{}
+
+func (m *MockEnvGetter) Get(key string) (string, bool) {
+	return "", false
+}
+
+func (m *MockEnvGetter) Keys() []string {
+	return []string{}
+}
+
+func TestProcessCmdEnv(t *testing.T) {
+	tests := []struct {
+		name     string
+		cmd      string
+		expected string
+	}{
+		{
+			name:     "basic command without backslashes",
+			cmd:      "echo hello world",
+			expected: "echo hello world",
+		},
+		{
+			name:     "command with single backslashes",
+			cmd:      `echo C:\hello\world`,
+			expected: `echo C:\hello\world`,
+		},
+		{
+			name:     "command with multiple backslashes",
+			cmd:      `echo C:\\hello\\world`,
+			expected: `echo C:\\hello\\world`,
+		},
+		{
+			name:     "command with mixed content",
+			cmd:      `echo "C:\hello\world" && dir C:\test\path`,
+			expected: `echo "C:\hello\world" && dir C:\test\path`,
+		},
+	}
+
+	shlex := shell.NewLex('\\')
+	shlex.RawQuotes = true
+	env := &MockEnvGetter{}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := processCmdEnv(shlex, tt.cmd, env)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
