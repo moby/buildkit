@@ -8,6 +8,7 @@ import (
 	"maps"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,24 +35,38 @@ import (
 )
 
 type SolveOpt struct {
-	Exports               []ExportEntry
+	Exports             []ExportEntry
 	EnableSessionExporter bool
-	LocalDirs             map[string]string // Deprecated: use LocalMounts
-	LocalMounts           map[string]fsutil.FS
-	OCIStores             map[string]content.Store
-	SharedKey             string
-	Frontend              string
-	FrontendAttrs         map[string]string
-	FrontendInputs        map[string]llb.State
-	CacheExports          []CacheOptionsEntry
-	CacheImports          []CacheOptionsEntry
-	Session               []session.Attachable
-	AllowedEntitlements   []string
+	LocalDirs           map[string]string // Deprecated: use LocalMounts
+	LocalMounts         map[string]fsutil.FS
+	OCIStores           map[string]content.Store
+	SharedKey           string
+	Frontend            string
+	FrontendAttrs       map[string]string
+	FrontendInputs      map[string]llb.State
+	CacheExports        []CacheOptionsEntry
+	CacheImports        []CacheOptionsEntry
+	Session             []session.Attachable
+	AllowedEntitlements []string
+	// When the session is custom-initialized, SetupExporters need to be used to correctly
+	// set up the session for export.
 	SharedSession         *session.Session // TODO: refactor to better session syncing
 	SessionPreInitialized bool             // TODO: refactor to better session syncing
 	Internal              bool
 	SourcePolicy          *spb.Policy
 	Ref                   string
+
+	// internal exporter state
+	s exporterState
+}
+
+type exporterState struct {
+	// storesToUpdate maps exporter ID -> oci store
+	storesToUpdate map[string]ociStore
+}
+
+type ociStore struct {
+	path string
 }
 
 type ExportEntry struct {
@@ -87,18 +102,100 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 
 type runGatewayCB func(ref string, s *session.Session, opts map[string]string) error
 
-func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runGatewayCB, opt SolveOpt, statusChan chan *SolveStatus) (*SolveResponse, error) {
-	if def != nil && runGateway != nil {
-		return nil, errors.New("invalid with def and cb")
-	}
-
-	mounts, err := prepareMounts(&opt)
+// SetupExporters configures the specified session with the underlying exporter configuration.
+// localContentStores is the optional list of local content stores derived from SolveOpt.CacheImports and SolveOpt.CacheExports.
+func SetupExporters(opt *SolveOpt, localContentStores map[string]content.Store, def *llb.Definition, s *session.Session) error {
+	mounts, err := prepareMounts(opt)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	syncedDirs, err := prepareSyncedFiles(def, mounts)
 	if err != nil {
-		return nil, err
+		return err
+	}
+
+	if len(syncedDirs) > 0 {
+		s.Allow(filesync.NewFSSyncProvider(syncedDirs))
+	}
+
+	for _, a := range opt.Session {
+		s.Allow(a)
+	}
+
+		contentStores := map[string]content.Store{}
+		maps.Copy(contentStores, cacheOpt.contentStores)
+		for key, store := range opt.OCIStores {
+			key2 := "oci:" + key
+			if _, ok := contentStores[key2]; ok {
+				return nil, errors.Errorf("oci store key %q already exists", key)
+			}
+			contentStores[key2] = store
+		}
+
+	var syncTargets []filesync.FSSyncTarget
+	for exID, ex := range opt.Exports {
+		var supportFile bool
+		var supportDir bool
+		switch ex.Type {
+		case ExporterLocal:
+			supportDir = true
+		case ExporterTar:
+			supportFile = true
+		case ExporterOCI, ExporterDocker:
+			supportDir = ex.OutputDir != ""
+			supportFile = ex.Output != nil
+		}
+		if supportFile && supportDir {
+			return errors.Errorf("both file and directory output is not supported by %s exporter", ex.Type)
+		}
+		if !supportFile && ex.Output != nil {
+			return errors.Errorf("output file writer is not supported by %s exporter", ex.Type)
+		}
+		if !supportDir && ex.OutputDir != "" {
+			return errors.Errorf("output directory is not supported by %s exporter", ex.Type)
+		}
+		if supportFile {
+			if ex.Output == nil {
+				return errors.Errorf("output file writer is required for %s exporter", ex.Type)
+			}
+			syncTargets = append(syncTargets, filesync.WithFSSync(exID, ex.Output))
+		}
+		if supportDir {
+			if ex.OutputDir == "" {
+				return errors.Errorf("output directory is required for %s exporter", ex.Type)
+			}
+			switch ex.Type {
+			case ExporterOCI, ExporterDocker:
+				if err := os.MkdirAll(ex.OutputDir, 0755); err != nil {
+					return err
+				}
+				cs, err := contentlocal.NewStore(ex.OutputDir)
+				if err != nil {
+					return err
+				}
+				contentStores["export"] = cs
+				if opt.s.storesToUpdate == nil {
+					opt.s.storesToUpdate = make(map[string]ociStore)
+				}
+				opt.s.storesToUpdate[strconv.Itoa(exID)] = ociStore{path: ex.OutputDir}
+			default:
+				syncTargets = append(syncTargets, filesync.WithFSSyncDir(exID, ex.OutputDir))
+			}
+		}
+	}
+	if len(contentStores) > 0 {
+		s.Allow(sessioncontent.NewAttachable(contentStores))
+	}
+
+	if len(syncTargets) > 0 {
+		s.Allow(filesync.NewFSSyncTarget(syncTargets...))
+	}
+	return nil
+}
+
+func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runGatewayCB, opt SolveOpt, statusChan chan *SolveStatus) (*SolveResponse, error) {
+	if def != nil && runGateway != nil {
+		return nil, errors.New("invalid with def and cb")
 	}
 
 	ref := identity.NewID()
@@ -115,11 +212,11 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	}
 
 	s := opt.SharedSession
-
 	if s == nil {
 		if opt.SessionPreInitialized {
 			return nil, errors.Errorf("no session provided for preinitialized option")
 		}
+		var err error
 		s, err = session.NewSession(statusContext, opt.SharedKey)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create session")
@@ -131,82 +228,9 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		return nil, err
 	}
 
-	storesToUpdate := []string{}
-
 	if !opt.SessionPreInitialized {
-		if len(syncedDirs) > 0 {
-			s.Allow(filesync.NewFSSyncProvider(syncedDirs))
-		}
-
-		for _, a := range opt.Session {
-			s.Allow(a)
-		}
-
-		contentStores := map[string]content.Store{}
-		maps.Copy(contentStores, cacheOpt.contentStores)
-		for key, store := range opt.OCIStores {
-			key2 := "oci:" + key
-			if _, ok := contentStores[key2]; ok {
-				return nil, errors.Errorf("oci store key %q already exists", key)
-			}
-			contentStores[key2] = store
-		}
-
-		var syncTargets []filesync.FSSyncTarget
-		for exID, ex := range opt.Exports {
-			var supportFile bool
-			var supportDir bool
-			switch ex.Type {
-			case ExporterLocal:
-				supportDir = true
-			case ExporterTar:
-				supportFile = true
-			case ExporterOCI, ExporterDocker:
-				supportDir = ex.OutputDir != ""
-				supportFile = ex.Output != nil
-			}
-			if supportFile && supportDir {
-				return nil, errors.Errorf("both file and directory output is not supported by %s exporter", ex.Type)
-			}
-			if !supportFile && ex.Output != nil {
-				return nil, errors.Errorf("output file writer is not supported by %s exporter", ex.Type)
-			}
-			if !supportDir && ex.OutputDir != "" {
-				return nil, errors.Errorf("output directory is not supported by %s exporter", ex.Type)
-			}
-			if supportFile {
-				if ex.Output == nil {
-					return nil, errors.Errorf("output file writer is required for %s exporter", ex.Type)
-				}
-				syncTargets = append(syncTargets, filesync.WithFSSync(exID, ex.Output))
-			}
-			if supportDir {
-				if ex.OutputDir == "" {
-					return nil, errors.Errorf("output directory is required for %s exporter", ex.Type)
-				}
-				switch ex.Type {
-				case ExporterOCI, ExporterDocker:
-					if err := os.MkdirAll(ex.OutputDir, 0755); err != nil {
-						return nil, err
-					}
-					cs, err := contentlocal.NewStore(ex.OutputDir)
-					if err != nil {
-						return nil, err
-					}
-					contentStores["export"] = cs
-					storesToUpdate = append(storesToUpdate, ex.OutputDir)
-				default:
-					syncTargets = append(syncTargets, filesync.WithFSSyncDir(exID, ex.OutputDir))
-				}
-			}
-		}
-
-		if len(contentStores) > 0 {
-			s.Allow(sessioncontent.NewAttachable(contentStores))
-		}
-
-		if len(syncTargets) > 0 {
-			s.Allow(filesync.NewFSSyncTarget(syncTargets...))
+		if err := SetupExporters(&opt, cacheOpt.contentStores, def, s); err != nil {
+			return nil, err
 		}
 
 		eg.Go(func() error {
@@ -262,6 +286,8 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			exports = append(exports, &controlapi.Exporter{
 				Type:  exp.Type,
 				Attrs: exp.Attrs,
+				// Keep this in sync with SetupExporters id assignment
+				ID: strconv.Itoa(i),
 			})
 		}
 
@@ -285,7 +311,15 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			return errors.Wrap(err, "failed to solve")
 		}
 		res = &SolveResponse{
-			ExporterResponse: resp.ExporterResponse,
+			ExporterResponse:  resp.ExporterResponseDeprecated,
+			ExporterResponses: make([]ExporterResponse, 0, len(resp.ExporterResponses)),
+		}
+
+		for _, resp := range resp.ExporterResponses {
+			res.ExporterResponses = append(res.ExporterResponses, ExporterResponse{
+				ID:   resp.Metadata.ID,
+				Data: resp.Data,
+			})
 		}
 		return nil
 	})
@@ -350,14 +384,17 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			}
 		}
 	}
-	if manifestDescDt := res.ExporterResponse[exptypes.ExporterImageDescriptorKey]; manifestDescDt != "" {
-		manifestDescDt, err := base64.StdEncoding.DecodeString(manifestDescDt)
+
+	if len(opt.s.storesToUpdate) == 0 {
+		return res, nil
+	}
+	for id, store := range opt.s.storesToUpdate {
+		manifestDesc, err := getManifestDescriptor(id, res)
 		if err != nil {
 			return nil, err
 		}
-		var manifestDesc ocispecs.Descriptor
-		if err = json.Unmarshal([]byte(manifestDescDt), &manifestDesc); err != nil {
-			return nil, err
+		if manifestDesc == nil {
+			continue
 		}
 		for _, storePath := range storesToUpdate {
 			names := []ociindex.NameOrTag{ociindex.Tag("latest")}
@@ -375,6 +412,33 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		}
 	}
 	return res, nil
+}
+
+func getManifestDescriptor(exporterID string, resp *SolveResponse) (*ocispecs.Descriptor, error) {
+	for _, exp := range resp.ExporterResponses {
+		if exp.ID != exporterID {
+			continue
+		}
+		if manifestDescDt := exp.Data[exptypes.ExporterImageDescriptorKey]; manifestDescDt != "" {
+			return unmarshalManifestDescriptor(manifestDescDt)
+		}
+	}
+	if manifestDescDt := resp.ExporterResponse[exptypes.ExporterImageDescriptorKey]; manifestDescDt != "" {
+		return unmarshalManifestDescriptor(manifestDescDt)
+	}
+	return nil, nil
+}
+
+func unmarshalManifestDescriptor(manifestDesc string) (*ocispecs.Descriptor, error) {
+	manifestDescDt, err := base64.StdEncoding.DecodeString(manifestDesc)
+	if err != nil {
+		return nil, err
+	}
+	var desc ocispecs.Descriptor
+	if err = json.Unmarshal([]byte(manifestDescDt), &desc); err != nil {
+		return nil, err
+	}
+	return &desc, nil
 }
 
 func prepareSyncedFiles(def *llb.Definition, localMounts map[string]fsutil.FS) (filesync.StaticDirSource, error) {
