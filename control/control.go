@@ -4,6 +4,7 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"io"
 	"runtime/trace"
 	"strconv"
 	"sync"
@@ -28,6 +29,7 @@ import (
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/attestations"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/session/grpchijack"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/solver"
@@ -48,6 +50,7 @@ import (
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
+	"github.com/tonistiigi/fsutil"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"golang.org/x/sync/errgroup"
@@ -411,18 +414,22 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		}
 	}
 
-	var expis []exporter.ExporterInstance
-	for i, ex := range req.Exporters {
+	var expis []llbsolver.Exporter
+	for _, ex := range req.Exporters {
 		exp, err := w.Exporter(ex.Type, c.opt.SessionManager)
 		if err != nil {
 			return nil, err
 		}
 		bklog.G(ctx).Debugf("resolve exporter %s with %v", ex.Type, ex.Attrs)
-		expi, err := exp.Resolve(ctx, i, ex.Attrs)
+		expi, err := exp.Resolve(ctx, ex.Attrs)
 		if err != nil {
 			return nil, err
 		}
-		expis = append(expis, expi)
+		expis = append(expis, llbsolver.Exporter{
+			ID:               ex.ID,
+			ExporterAPIs:     newExporterAPIs(ex.ID),
+			ExporterInstance: expi,
+		})
 	}
 
 	rest, dupes, err := findDuplicateCacheOptions(req.Cache.Exports)
@@ -545,9 +552,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	return &controlapi.SolveResponse{
-		ExporterResponse: resp.ExporterResponse,
-	}, nil
+	return resp, nil
 }
 
 func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Control_StatusServer) error {
@@ -809,4 +814,24 @@ func entitlementsFromPB(elems []string) []entitlements.Entitlement {
 		clone[i] = entitlements.Entitlement(e)
 	}
 	return clone
+}
+
+func newExporterAPIs(id string) exporter.ExporterAPIs {
+	apis := exporterAPIs{exporterID: id}
+	return exporter.ExporterAPIs{
+		CopyToCaller:   apis.CopyToCaller,
+		CopyFileWriter: apis.CopyFileWriter,
+	}
+}
+
+func (r exporterAPIs) CopyToCaller(ctx context.Context, fs fsutil.FS, c session.Caller, progress func(int, bool)) error {
+	return filesync.CopyToCaller(ctx, fs, r.exporterID, c, progress)
+}
+
+func (r exporterAPIs) CopyFileWriter(ctx context.Context, md map[string]string, c session.Caller) (io.WriteCloser, error) {
+	return filesync.CopyFileWriter(ctx, md, r.exporterID, c)
+}
+
+type exporterAPIs struct {
+	exporterID string
 }

@@ -35,7 +35,7 @@ message PruneRequest {
 }
 
 message DiskUsageRequest {
-	repeated string filter = 1; 
+	repeated string filter = 1;
 	int64 ageLimit = 2;
 }
 
@@ -108,7 +108,12 @@ message CacheOptionsEntry {
 }
 
 message SolveResponse {
-	map<string, string> ExporterResponse = 1;
+	// ExporterResponseDeprecated is a combined exporter response - it aggregates
+	// responses from all exporters running in parallel.
+	// It is deprecated in favor of the structured exporter response but will be
+	// populated as long as it is supported.
+	map<string, string> ExporterResponseDeprecated = 1;
+	repeated ExporterResponse exporterResponses = 2;
 }
 
 message StatusRequest {
@@ -250,4 +255,21 @@ message Exporter {
 	string Type = 1;
 	// Attrs specifies exporter configuration
 	map<string, string> Attrs = 2;
+	// ID identifies this exporter.
+	// ID should be treated by the exporter as opaque.
+	string ID = 3;
+}
+
+// ExporterResponse describes the output of an exporter
+message ExporterResponse {
+	// Metadata describes the exporter
+	ExporterMetadata metadata = 1;
+	// Data is the exporter's output
+	map<string, string> data = 2;
+}
+
+// ExporterMetadata describes the output exporter
+message ExporterMetadata {
+	// ID identifies the exporter
+	string ID = 1;
 }
