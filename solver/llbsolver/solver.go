@@ -57,9 +57,17 @@ const (
 )
 
 type ExporterRequest struct {
-	Exporters             []exporter.ExporterInstance
+	Exporters             []Exporter
 	CacheExporters        []RemoteCacheExporter
 	EnableSessionExporter bool
+}
+
+type Exporter struct {
+	exporter.ExporterAPIs
+	exporter.ExporterInstance
+
+	// ID identifies the exporter
+	ID string
 }
 
 type RemoteCacheExporter struct {
@@ -177,7 +185,7 @@ func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 	return s.bridge(b)
 }
 
-func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend.SolveRequest, exp ExporterRequest, j *solver.Job, usage *resources.SysSampler) (func(context.Context, *Result, []exporter.DescriptorReference, error) error, error) {
+func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend.SolveRequest, exps []Exporter, j *solver.Job, usage *resources.SysSampler) (func(context.Context, *Result, []exporter.DescriptorReference, error) error, error) {
 	stopTrace, err := detect.Recorder.Record(ctx)
 	if err != nil {
 		return nil, errdefs.Internal(err)
@@ -190,7 +198,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 		CreatedAt:     timestamppb.Now(),
 	}
 
-	for _, e := range exp.Exporters {
+	for _, e := range exps {
 		rec.Exporters = append(rec.Exporters, &controlapi.Exporter{
 			Type:  e.Type(),
 			Attrs: e.Attrs(),
@@ -489,7 +497,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 	}, nil
 }
 
-func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement, post []Processor, internal bool, srcPol *spb.Policy) (_ *client.SolveResponse, err error) {
+func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement, post []Processor, internal bool, srcPol *spb.Policy) (_ *controlapi.SolveResponse, err error) {
 	j, err := s.solver.NewJob(id)
 	if err != nil {
 		return nil, err
@@ -554,7 +562,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	}
 
 	if !internal {
-		rec, err1 := s.recordBuildHistory(ctx, id, req, exp, j, usage)
+		rec, err1 := s.recordBuildHistory(ctx, id, req, exp.Exporters, j, usage)
 		if err1 != nil {
 			defer j.CloseProgress()
 			return nil, err1
@@ -666,7 +674,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		exp.Exporters = append(exp.Exporters, exporters...)
 	}
 
-	var exporterResponse map[string]string
+	var exporterResponse *controlapi.SolveResponse
 	exporterResponse, descrefs, err = s.runExporters(ctx, exp.Exporters, inlineCacheExporter, j, cached, inp)
 	if err != nil {
 		return nil, err
@@ -677,24 +685,25 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		return nil, err
 	}
 
-	if exporterResponse == nil {
-		exporterResponse = make(map[string]string)
+	if exporterResponse.ExporterResponseDeprecated == nil {
+		exporterResponse.ExporterResponseDeprecated = make(map[string]string)
 	}
 
 	for k, v := range res.Metadata {
 		if strings.HasPrefix(k, "frontend.") {
-			exporterResponse[k] = string(v)
-		}
-	}
-	for k, v := range cacheExporterResponse {
-		if strings.HasPrefix(k, "cache.") {
-			exporterResponse[k] = v
+			exporterResponse.ExporterResponseDeprecated[k] = string(v)
 		}
 	}
 
-	return &client.SolveResponse{
-		ExporterResponse: exporterResponse,
-	}, nil
+	// TODO: separate these out, and return multiple cache exporter responses to the
+	// client
+	for k, v := range cacheExporterResponse {
+		if strings.HasPrefix(k, "cache.") {
+			exporterResponse.ExporterResponseDeprecated[k] = v
+		}
+	}
+
+	return exporterResponse, nil
 }
 
 func (s *Solver) getSessionExporters(ctx context.Context, sessionID string, id int, inp *exporter.Source) ([]exporter.ExporterInstance, error) {
@@ -838,14 +847,14 @@ func runInlineCacheExporter(ctx context.Context, e exporter.ExporterInstance, in
 	return res, done(err)
 }
 
-func (s *Solver) runExporters(ctx context.Context, exporters []exporter.ExporterInstance, inlineCacheExporter inlineCacheExporter, job *solver.Job, cached *result.Result[solver.CachedResult], inp *exporter.Source) (exporterResponse map[string]string, descrefs []exporter.DescriptorReference, err error) {
+func (s *Solver) runExporters(ctx context.Context, exporters []Exporter, inlineCacheExporter inlineCacheExporter, job *solver.Job, cached *result.Result[solver.CachedResult], inp *exporter.Source) (exporterResponse *controlapi.SolveResponse, descrefs []exporter.DescriptorReference, err error) {
 	warnings, err := verifier.CheckInvalidPlatforms(ctx, inp)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	eg, ctx := errgroup.WithContext(ctx)
-	resps := make([]map[string]string, len(exporters))
+	resps := make([]*controlapi.ExporterResponse, len(exporters))
 	descs := make([]exporter.DescriptorReference, len(exporters))
 	var inlineCacheMu sync.Mutex
 	for i, exp := range exporters {
@@ -871,9 +880,14 @@ func (s *Solver) runExporters(ctx context.Context, exporters []exporter.Exporter
 					return runInlineCacheExporter(ctx, exp, inlineCacheExporter, job, cached)
 				})
 
-				resps[i], descs[i], err = exp.Export(ctx, inp, inlineCache, job.SessionID)
+				var md map[string]string
+				md, descs[i], err = exp.Export(ctx, inp, inlineCache, job.SessionID, exp.ExporterAPIs)
 				if err != nil {
 					return err
+				}
+				resps[i] = &controlapi.ExporterResponse{
+					Metadata: &controlapi.ExporterMetadata{ID: exp.ID},
+					Data:     md,
 				}
 				return nil
 			})
@@ -896,14 +910,15 @@ func (s *Solver) runExporters(ctx context.Context, exporters []exporter.Exporter
 		}
 	}
 
-	// TODO: separate these out, and return multiple exporter responses to the
-	// client
+	exporterResponse = &controlapi.SolveResponse{
+		ExporterResponses: resps,
+	}
 	for _, resp := range resps {
-		for k, v := range resp {
-			if exporterResponse == nil {
-				exporterResponse = make(map[string]string)
+		for k, v := range resp.Data {
+			if exporterResponse.ExporterResponseDeprecated == nil {
+				exporterResponse.ExporterResponseDeprecated = make(map[string]string)
 			}
-			exporterResponse[k] = v
+			exporterResponse.ExporterResponseDeprecated[k] = v
 		}
 	}
 
