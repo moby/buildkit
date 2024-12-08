@@ -340,7 +340,7 @@ func (sp *fsSyncAttachable) DiffCopy(stream FileSend_DiffCopyServer) (err error)
 	return writeTargetFile(stream, wc)
 }
 
-func CopyToCaller(ctx context.Context, fs fsutil.FS, id int, c session.Caller, progress func(int, bool)) error {
+func CopyToCaller(ctx context.Context, fs fsutil.FS, id string, c session.Caller, progress func(int, bool)) error {
 	method := session.MethodURL(FileSend_ServiceDesc.ServiceName, "diffcopy")
 	if !c.Supports(method) {
 		return errors.Errorf("method %s not supported by the client", method)
@@ -355,7 +355,7 @@ func CopyToCaller(ctx context.Context, fs fsutil.FS, id int, c session.Caller, p
 	if existingVal, ok := opts[keyExporterID]; ok {
 		bklog.G(ctx).Warnf("overwriting grpc metadata key %q from value %+v to %+v", keyExporterID, existingVal, id)
 	}
-	opts[keyExporterID] = []string{fmt.Sprint(id)}
+	opts[keyExporterID] = []string{id}
 	ctx = metadata.NewOutgoingContext(ctx, opts)
 
 	cc, err := client.DiffCopy(ctx)
@@ -366,7 +366,7 @@ func CopyToCaller(ctx context.Context, fs fsutil.FS, id int, c session.Caller, p
 	return sendDiffCopy(cc, fs, progress)
 }
 
-func CopyFileWriter(ctx context.Context, md map[string]string, id int, c session.Caller) (io.WriteCloser, error) {
+func CopyFileWriter(ctx context.Context, md map[string]string, id string, c session.Caller) (io.WriteCloser, error) {
 	method := session.MethodURL(FileSend_ServiceDesc.ServiceName, "diffcopy")
 	if !c.Supports(method) {
 		return nil, errors.Errorf("method %s not supported by the client", method)
@@ -388,7 +388,7 @@ func CopyFileWriter(ctx context.Context, md map[string]string, id int, c session
 	if existingVal, ok := opts[keyExporterID]; ok {
 		bklog.G(ctx).Warnf("overwriting grpc metadata key %q from value %+v to %+v", keyExporterID, existingVal, id)
 	}
-	opts[keyExporterID] = []string{fmt.Sprint(id)}
+	opts[keyExporterID] = []string{id}
 	ctx = metadata.NewOutgoingContext(ctx, opts)
 
 	cc, err := client.DiffCopy(ctx)
