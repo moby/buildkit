@@ -7,6 +7,11 @@ import (
 	"strings"
 	"time"
 
+	digest "github.com/opencontainers/go-digest"
+	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
+
+	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/client"
@@ -27,15 +32,17 @@ import (
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
-	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
 )
 
 type ExporterRequest struct {
-	Exporters             []exporter.ExporterInstance
+	Exporters             []Exporter
 	CacheExporters        []RemoteCacheExporter
 	EnableSessionExporter bool
+}
+
+type Exporter struct {
+	exporter.ExporterIO
+	exporter.ExporterInstance
 }
 
 type RemoteCacheExporter struct {
@@ -153,7 +160,7 @@ func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 	return s.bridge(b)
 }
 
-func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement, post []Processor, internal bool, srcPol *spb.Policy, policySession string) (_ *client.SolveResponse, err error) {
+func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement, post []Processor, internal bool, srcPol *spb.Policy, policySession string) (_ *controlapi.SolveResponse, err error) {
 	hasNamedDockerfileContext := false
 	for k := range req.FrontendOpt {
 		if k == "context:dockerfile.v0" || strings.HasPrefix(k, "context:dockerfile.v0::") {
@@ -235,7 +242,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	}
 
 	if !internal {
-		rec, err1 := s.recordBuildHistory(ctx, id, req, exp, j, usage)
+		rec, err1 := s.recordBuildHistory(ctx, id, req, exp.Exporters, j, usage)
 		if err1 != nil {
 			defer j.CloseProgress()
 			return nil, err1
@@ -349,9 +356,9 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		exp.Exporters = append(exp.Exporters, exporters...)
 	}
 
-	var exporterResponse map[string]string
+	var exporterResponses []*controlapi.ExporterResponse
 	var finalizers []exporter.FinalizeFunc
-	exporterResponse, finalizers, descrefs, err = s.runExporters(ctx, id, exp.Exporters, inlineCacheExporter, j, cached, inp)
+	exporterResponses, finalizers, descrefs, err = s.runExporters(ctx, id, exp.Exporters, inlineCacheExporter, j, cached, inp)
 	if err != nil {
 		return nil, err
 	}
@@ -372,34 +379,40 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 			})
 		})
 	}
-	var cacheExporterResponse map[string]string
+	var cacheExporterResponses []*controlapi.ExporterResponse
 	eg.Go(func() error {
 		var err error
-		cacheExporterResponse, err = runCacheExporters(egCtx, cacheExporters, j, cached, inp)
+		cacheExporterResponses, err = runCacheExporters(egCtx, cacheExporters, j, cached, inp)
 		return err
 	})
 	if err := eg.Wait(); err != nil {
 		return nil, err
 	}
 
-	if exporterResponse == nil {
-		exporterResponse = make(map[string]string)
+	exporterResponse := &controlapi.SolveResponse{
+		ExporterResponseDeprecated: make(map[string]string),
+		ExporterResponses:          exporterResponses,
+		CacheExporterResponses:     cacheExporterResponses,
 	}
 
 	for k, v := range res.Metadata {
 		if strings.HasPrefix(k, "frontend.") {
-			exporterResponse[k] = string(v)
-		}
-	}
-	for k, v := range cacheExporterResponse {
-		if strings.HasPrefix(k, "cache.") {
-			exporterResponse[k] = v
+			exporterResponse.ExporterResponseDeprecated[k] = string(v)
 		}
 	}
 
-	return &client.SolveResponse{
-		ExporterResponse: exporterResponse,
-	}, nil
+	for _, resp := range exporterResponses {
+		maps.Copy(exporterResponse.ExporterResponseDeprecated, resp.Data)
+	}
+	for _, resp := range cacheExporterResponses {
+		for k, v := range resp.Data {
+			if strings.HasPrefix(k, "cache.") {
+				exporterResponse.ExporterResponseDeprecated[k] = v
+			}
+		}
+	}
+
+	return exporterResponse, nil
 }
 
 func (s *Solver) leaseManager() (*leaseutil.Manager, error) {

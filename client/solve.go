@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"maps"
 	"os"
@@ -13,6 +14,14 @@ import (
 
 	"github.com/containerd/containerd/v2/core/content"
 	contentlocal "github.com/containerd/containerd/v2/plugins/content/local"
+	digest "github.com/opencontainers/go-digest"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/pkg/errors"
+	"github.com/tonistiigi/fsutil"
+	fstypes "github.com/tonistiigi/fsutil/types"
+	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/sync/errgroup"
+
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/ociindex"
@@ -25,13 +34,6 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/bklog"
-	digest "github.com/opencontainers/go-digest"
-	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
-	"github.com/tonistiigi/fsutil"
-	fstypes "github.com/tonistiigi/fsutil/types"
-	"go.opentelemetry.io/otel/trace"
-	"golang.org/x/sync/errgroup"
 )
 
 type SolveOpt struct {
@@ -53,6 +55,11 @@ type SolveOpt struct {
 	SourcePolicy          *spb.Policy
 	SourcePolicyProvider  session.Attachable
 	Ref                   string
+}
+
+type ociStore struct {
+	path string
+	tag  string
 }
 
 type ExportEntry struct {
@@ -129,7 +136,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		return nil, err
 	}
 
-	storesToUpdate := []string{}
+	var storesToUpdate map[int]ociStore // exporter index -> store config
 
 	if !opt.SessionPreInitialized {
 		if len(syncedDirs) > 0 {
@@ -174,17 +181,18 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			if !supportStore && ex.OutputStore != nil {
 				return nil, errors.Errorf("output store is not supported by %s exporter", ex.Type)
 			}
+			id := fmt.Sprint(exID)
 			if supportFile {
 				if ex.Output == nil {
 					return nil, errors.Errorf("output file writer is required for %s exporter", ex.Type)
 				}
-				syncTargets = append(syncTargets, filesync.WithFSSync(exID, ex.Output))
+				syncTargets = append(syncTargets, filesync.WithFSSync(id, ex.Output))
 			}
 			if supportDir {
 				if ex.OutputDir == "" {
 					return nil, errors.Errorf("output directory is required for %s exporter", ex.Type)
 				}
-				syncTargets = append(syncTargets, filesync.WithFSSyncDir(exID, ex.OutputDir))
+				syncTargets = append(syncTargets, filesync.WithFSSyncDir(id, ex.OutputDir))
 			}
 			if supportStore {
 				store := ex.OutputStore
@@ -196,7 +204,10 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 					if err != nil {
 						return nil, err
 					}
-					storesToUpdate = append(storesToUpdate, ex.OutputDir)
+					if storesToUpdate == nil {
+						storesToUpdate = make(map[int]ociStore)
+					}
+					storesToUpdate[exID] = ociStore{path: ex.OutputDir}
 				}
 
 				// TODO: this should be dependent on the exporter id (to allow multiple oci exporters)
@@ -317,7 +328,21 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			return errors.Wrap(err, "failed to solve")
 		}
 		res = &SolveResponse{
-			ExporterResponse: resp.ExporterResponse,
+			ExporterResponse:       resp.ExporterResponseDeprecated,
+			ExporterResponses:      make([]ExporterResponse, 0, len(resp.ExporterResponses)),
+			CacheExporterResponses: make([]ExporterResponse, 0, len(resp.CacheExporterResponses)),
+		}
+		for _, resp := range resp.ExporterResponses {
+			res.ExporterResponses = append(res.ExporterResponses, ExporterResponse{
+				Type: resp.Metadata.Type,
+				Data: resp.Data,
+			})
+		}
+		for _, resp := range resp.CacheExporterResponses {
+			res.CacheExporterResponses = append(res.CacheExporterResponses, ExporterResponse{
+				Type: resp.Metadata.Type,
+				Data: resp.Data,
+			})
 		}
 		return nil
 	})
@@ -377,45 +402,91 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	if err := eg.Wait(); err != nil {
 		return nil, err
 	}
-	// Update index.json of exported cache content store
-	// FIXME(AkihiroSuda): dedupe const definition of cache/remotecache.ExporterResponseManifestDesc = "cache.manifest"
-	if manifestDescJSON := res.ExporterResponse["cache.manifest"]; manifestDescJSON != "" {
-		var manifestDesc ocispecs.Descriptor
-		if err = json.Unmarshal([]byte(manifestDescJSON), &manifestDesc); err != nil {
-			return nil, err
-		}
-		for storePath, tag := range cacheOpt.storesToUpdate {
-			idx := ociindex.NewStoreIndex(storePath)
-			if err := idx.Put(manifestDesc, ociindex.Tag(tag)); err != nil {
-				return nil, err
-			}
-		}
-	}
-	if manifestDescDt := res.ExporterResponse[exptypes.ExporterImageDescriptorKey]; manifestDescDt != "" {
-		manifestDescDt, err := base64.StdEncoding.DecodeString(manifestDescDt)
+
+	for id, store := range cacheOpt.storesToUpdate {
+		// Update index.json of exported cache content store
+		manifestDesc, err := getCacheManifestDescriptor(id, res)
 		if err != nil {
 			return nil, err
 		}
-		var manifestDesc ocispecs.Descriptor
-		if err = json.Unmarshal(manifestDescDt, &manifestDesc); err != nil {
+		if manifestDesc == nil {
+			continue
+		}
+		idxStore := ociindex.NewStoreIndex(store.path)
+		if err := idxStore.Put(*manifestDesc, ociindex.Tag(store.tag)); err != nil {
 			return nil, err
 		}
-		for _, storePath := range storesToUpdate {
-			names := []ociindex.NameOrTag{ociindex.Tag("latest")}
-			if t, ok := res.ExporterResponse[exptypes.ExporterImageNameKey]; ok {
+	}
+
+	if len(storesToUpdate) == 0 {
+		return res, nil
+	}
+
+	for id, store := range storesToUpdate {
+		manifestDesc, err := getImageManifestDescriptor(id, res)
+		if err != nil {
+			return nil, err
+		}
+		if manifestDesc == nil {
+			continue
+		}
+		names := []ociindex.NameOrTag{ociindex.Tag("latest")}
+		if id < len(res.ExporterResponses) {
+			resp := res.ExporterResponses[id]
+			if t, ok := resp.Data[exptypes.ExporterImageNameKey]; ok {
 				inp := strings.Split(t, ",")
 				names = make([]ociindex.NameOrTag, len(inp))
 				for i, n := range inp {
 					names[i] = ociindex.Name(n)
 				}
 			}
-			idx := ociindex.NewStoreIndex(storePath)
-			if err := idx.Put(manifestDesc, names...); err != nil {
-				return nil, err
-			}
+		}
+		idxStore := ociindex.NewStoreIndex(store.path)
+		if err := idxStore.Put(*manifestDesc, names...); err != nil {
+			return nil, err
 		}
 	}
 	return res, nil
+}
+
+func getCacheManifestDescriptor(exporterIdx int, resp *SolveResponse) (*ocispecs.Descriptor, error) {
+	if exporterIdx < len(resp.CacheExporterResponses) {
+		if manifestDescDt := resp.CacheExporterResponses[exporterIdx].Data[exporterResponseManifestDesc]; manifestDescDt != "" {
+			return unmarshalManifestDescriptor(manifestDescDt)
+		}
+	}
+	if manifestDescDt := resp.ExporterResponse[exporterResponseManifestDesc]; manifestDescDt != "" {
+		return unmarshalManifestDescriptor(manifestDescDt)
+	}
+	return nil, nil
+}
+
+func getImageManifestDescriptor(exporterIdx int, resp *SolveResponse) (*ocispecs.Descriptor, error) {
+	if exporterIdx < len(resp.ExporterResponses) {
+		if manifestDescDt := resp.ExporterResponses[exporterIdx].Data[exptypes.ExporterImageDescriptorKey]; manifestDescDt != "" {
+			return unmarshalEncodedManifestDescriptor(manifestDescDt)
+		}
+	}
+	if manifestDescDt := resp.ExporterResponse[exptypes.ExporterImageDescriptorKey]; manifestDescDt != "" {
+		return unmarshalEncodedManifestDescriptor(manifestDescDt)
+	}
+	return nil, nil
+}
+
+func unmarshalEncodedManifestDescriptor(base64Payload string) (*ocispecs.Descriptor, error) {
+	manifestDescDt, err := base64.StdEncoding.DecodeString(base64Payload)
+	if err != nil {
+		return nil, err
+	}
+	return unmarshalManifestDescriptor(string(manifestDescDt))
+}
+
+func unmarshalManifestDescriptor(manifestDescJSON string) (*ocispecs.Descriptor, error) {
+	var desc ocispecs.Descriptor
+	if err := json.Unmarshal([]byte(manifestDescJSON), &desc); err != nil {
+		return nil, err
+	}
+	return &desc, nil
 }
 
 func prepareSyncedFiles(def *llb.Definition, localMounts map[string]fsutil.FS) (filesync.StaticDirSource, error) {
@@ -465,7 +536,7 @@ func prepareSyncedFiles(def *llb.Definition, localMounts map[string]fsutil.FS) (
 type cacheOptions struct {
 	options        controlapi.CacheOptions
 	contentStores  map[string]content.Store // key: ID of content store ("local:" + csDir)
-	storesToUpdate map[string]string        // key: path to content store, value: tag
+	storesToUpdate map[int]ociStore         // key: exporter index
 	frontendAttrs  map[string]string
 }
 
@@ -475,10 +546,10 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 		cacheImports []*controlapi.CacheOptionsEntry
 	)
 	contentStores := make(map[string]content.Store)
-	storesToUpdate := make(map[string]string)
+	storesToUpdate := make(map[int]ociStore, len(opt.CacheExports))
 	frontendAttrs := make(map[string]string)
-	for _, ex := range opt.CacheExports {
-		if ex.Type == "local" {
+	for exID, ex := range opt.CacheExports {
+		if ex.Type == CacheExporterLocal {
 			csDir := ex.Attrs["dest"]
 			if csDir == "" {
 				return nil, errors.New("local cache exporter requires dest")
@@ -496,10 +567,9 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 			if t, ok := ex.Attrs["tag"]; ok {
 				tag = t
 			}
-			// TODO(AkihiroSuda): support custom index JSON path and tag
-			storesToUpdate[csDir] = tag
+			storesToUpdate[exID] = ociStore{path: csDir, tag: tag}
 		}
-		if ex.Type == "registry" {
+		if ex.Type == CacheExporterRegistry {
 			regRef := ex.Attrs["ref"]
 			if regRef == "" {
 				return nil, errors.New("registry cache exporter requires ref")
@@ -511,7 +581,7 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 		})
 	}
 	for _, im := range opt.CacheImports {
-		if im.Type == "local" {
+		if im.Type == CacheExporterLocal {
 			csDir := im.Attrs["src"]
 			if csDir == "" {
 				return nil, errors.New("local cache importer requires src")
@@ -550,7 +620,7 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 			}
 			contentStores["local:"+csDir] = cs
 		}
-		if im.Type == "registry" {
+		if im.Type == CacheExporterRegistry {
 			regRef := im.Attrs["ref"]
 			if regRef == "" {
 				return nil, errors.New("registry cache importer requires ref")
@@ -570,7 +640,7 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 			frontendAttrs["cache-imports"] = string(s)
 		}
 	}
-	res := cacheOptions{
+	return &cacheOptions{
 		options: controlapi.CacheOptions{
 			Exports: cacheExports,
 			Imports: cacheImports,
@@ -578,6 +648,7 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 		contentStores:  contentStores,
 		storesToUpdate: storesToUpdate,
 		frontendAttrs:  frontendAttrs,
-	}
-	return &res, nil
+	}, nil
 }
+
+const exporterResponseManifestDesc = "cache.manifest"

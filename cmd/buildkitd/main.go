@@ -849,19 +849,19 @@ func newController(ctx context.Context, c *cli.Context, cfg *config.Config) (*co
 	}
 
 	remoteCacheExporterFuncs := map[string]remotecache.ResolveCacheExporterFunc{
-		"registry": registryremotecache.ResolveCacheExporterFunc(sessionManager, resolverFn),
-		"local":    localremotecache.ResolveCacheExporterFunc(sessionManager),
-		"inline":   inlineremotecache.ResolveCacheExporterFunc(),
-		"gha":      gha.ResolveCacheExporterFunc(cfg.Cache.GHA, verifierProvider),
-		"s3":       s3remotecache.ResolveCacheExporterFunc(),
-		"azblob":   azblob.ResolveCacheExporterFunc(),
+		remotecache.ExporterRegistry:      registryremotecache.ResolveCacheExporterFunc(sessionManager, resolverFn),
+		remotecache.ExporterLocal:         localremotecache.ResolveCacheExporterFunc(sessionManager),
+		remotecache.ExporterInline:        inlineremotecache.ResolveCacheExporterFunc(),
+		remotecache.ExporterGithubActions: gha.ResolveCacheExporterFunc(cfg.Cache.GHA, verifierProvider),
+		remotecache.ExporterS3:            s3remotecache.ResolveCacheExporterFunc(),
+		remotecache.ExporterAzureBlob:     azblob.ResolveCacheExporterFunc(),
 	}
 	remoteCacheImporterFuncs := map[string]remotecache.ResolveCacheImporterFunc{
-		"registry": registryremotecache.ResolveCacheImporterFunc(sessionManager, w.ContentStore(), resolverFn),
-		"local":    localremotecache.ResolveCacheImporterFunc(sessionManager),
-		"gha":      gha.ResolveCacheImporterFunc(cfg.Cache.GHA, verifierProvider),
-		"s3":       s3remotecache.ResolveCacheImporterFunc(),
-		"azblob":   azblob.ResolveCacheImporterFunc(),
+		remotecache.ExporterRegistry:      registryremotecache.ResolveCacheImporterFunc(sessionManager, w.ContentStore(), resolverFn),
+		remotecache.ExporterLocal:         localremotecache.ResolveCacheImporterFunc(sessionManager),
+		remotecache.ExporterGithubActions: gha.ResolveCacheImporterFunc(cfg.Cache.GHA, verifierProvider),
+		remotecache.ExporterS3:            s3remotecache.ResolveCacheImporterFunc(),
+		remotecache.ExporterAzureBlob:     azblob.ResolveCacheImporterFunc(),
 	}
 
 	if cfg.CDI.Disabled == nil || !*cfg.CDI.Disabled {
