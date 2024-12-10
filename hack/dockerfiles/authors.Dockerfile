@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile-upstream:master
 
-ARG ALPINE_VERSION=3.20
+ARG ALPINE_VERSION=3.21
 
 FROM alpine:${ALPINE_VERSION} AS gen
 RUN apk add --no-cache git
