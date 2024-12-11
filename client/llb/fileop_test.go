@@ -178,6 +178,41 @@ func TestFileMkfile(t *testing.T) {
 	require.Equal(t, int64(-1), mkdir.Timestamp)
 }
 
+func TestFileSymlink(t *testing.T) {
+	t.Parallel()
+
+	st := Scratch().
+		File(Mkfile("/foo", 0700, []byte("data"))).
+		File(Symlink("foo", "/bar"))
+	def, err := st.Marshal(context.TODO())
+
+	require.NoError(t, err)
+
+	m, arr := parseDef(t, def.Def)
+	require.Equal(t, 3, len(arr))
+
+	dgst, idx := last(t, arr)
+	require.Equal(t, 0, idx)
+	require.Equal(t, m[dgst], arr[1])
+
+	f := arr[1].Op.(*pb.Op_File).File
+	require.Equal(t, 1, len(arr[1].Inputs))
+	require.Equal(t, m[arr[1].Inputs[0].Digest], arr[0])
+	require.Equal(t, 0, int(arr[1].Inputs[0].Index))
+
+	require.Equal(t, 1, len(f.Actions))
+
+	action := f.Actions[0]
+	require.Equal(t, 0, int(action.Input))
+	require.Equal(t, -1, int(action.SecondaryInput))
+	require.Equal(t, 0, int(action.Output))
+
+	symlink := action.Action.(*pb.FileAction_Symlink).Symlink
+
+	require.Equal(t, "foo", symlink.Oldpath)
+	require.Equal(t, "/bar", symlink.Newpath)
+}
+
 func TestFileRm(t *testing.T) {
 	t.Parallel()
 
