@@ -1,6 +1,7 @@
 package cacheimport
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/moby/buildkit/solver"
@@ -9,27 +10,27 @@ import (
 	"github.com/pkg/errors"
 )
 
-func Parse(configJSON []byte, provider DescriptorProvider, t solver.CacheExporterTarget) error {
+func Parse(ctx context.Context, configJSON []byte, provider DescriptorProvider, t solver.CacheExporterTarget) error {
 	var config CacheConfig
 	if err := json.Unmarshal(configJSON, &config); err != nil {
 		return errors.WithStack(err)
 	}
 
-	return ParseConfig(config, provider, t)
+	return ParseConfig(ctx, config, provider, t)
 }
 
-func ParseConfig(config CacheConfig, provider DescriptorProvider, t solver.CacheExporterTarget) error {
+func ParseConfig(ctx context.Context, config CacheConfig, provider DescriptorProvider, t solver.CacheExporterTarget) error {
 	cache := map[int]solver.CacheExporterRecord{}
 
 	for i := range config.Records {
-		if _, err := parseRecord(config, i, provider, t, cache); err != nil {
+		if _, err := parseRecord(ctx, config, i, provider, t, cache); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func parseRecord(cc CacheConfig, idx int, provider DescriptorProvider, t solver.CacheExporterTarget, cache map[int]solver.CacheExporterRecord) (solver.CacheExporterRecord, error) {
+func parseRecord(ctx context.Context, cc CacheConfig, idx int, provider DescriptorProvider, t solver.CacheExporterTarget, cache map[int]solver.CacheExporterRecord) (solver.CacheExporterRecord, error) {
 	if r, ok := cache[idx]; ok {
 		if r == nil {
 			return nil, errors.Errorf("invalid looping record")
@@ -46,7 +47,7 @@ func parseRecord(cc CacheConfig, idx int, provider DescriptorProvider, t solver.
 	cache[idx] = nil
 	for i, inputs := range rec.Inputs {
 		for _, inp := range inputs {
-			src, err := parseRecord(cc, inp.LinkIndex, provider, t, cache)
+			src, err := parseRecord(ctx, cc, inp.LinkIndex, provider, t, cache)
 			if err != nil {
 				return nil, err
 			}
@@ -61,7 +62,7 @@ func parseRecord(cc CacheConfig, idx int, provider DescriptorProvider, t solver.
 			return nil, err
 		}
 		if remote != nil {
-			r.AddResult("", 0, res.CreatedAt, remote)
+			r.AddResult(ctx, "", 0, res.CreatedAt, remote)
 		}
 	}
 
@@ -86,7 +87,7 @@ func parseRecord(cc CacheConfig, idx int, provider DescriptorProvider, t solver.
 		}
 		if remote != nil {
 			remote.Provider = mp
-			r.AddResult("", 0, res.CreatedAt, remote)
+			r.AddResult(ctx, "", 0, res.CreatedAt, remote)
 		}
 	}
 

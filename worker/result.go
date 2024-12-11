@@ -33,6 +33,16 @@ func (wr *WorkerRef) Release(ctx context.Context) error {
 	return wr.ImmutableRef.Release(ctx)
 }
 
+func (wr *WorkerRef) CacheOpts() solver.CacheOpts {
+	opts := solver.CacheOpts{}
+	if wr.ImmutableRef != nil {
+		for k, v := range wr.ImmutableRef.DescHandlers() {
+			opts[cache.DescHandlerKey(k)] = v
+		}
+	}
+	return opts
+}
+
 // GetRemotes method abstracts ImmutableRef's GetRemotes to allow a Worker to override.
 // This is needed for moby integration.
 // Use this method instead of calling ImmutableRef.GetRemotes() directly.
