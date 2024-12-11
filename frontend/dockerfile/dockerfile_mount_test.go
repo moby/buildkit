@@ -28,6 +28,7 @@ var mountTests = integration.TestFuncs(
 	testMountTmpfsSize,
 	testMountDuplicate,
 	testCacheMountUser,
+	testCacheMountParallel,
 )
 
 func init() {
@@ -535,4 +536,44 @@ COPY --from=base /combined.txt /
 
 	test("foo\n")
 	test("updated\n")
+}
+
+// moby/buildkit#5566
+func testCacheMountParallel(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM alpine AS b1
+RUN --mount=type=cache,target=/foo/bar --mount=type=cache,target=/foo/bar/baz echo 1
+
+FROM alpine AS b2
+RUN --mount=type=cache,target=/foo/bar --mount=type=cache,target=/foo/bar/baz echo 2
+
+FROM scratch
+COPY --from=b1 /etc/passwd p1
+COPY --from=b2 /etc/passwd p2
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	for i := 0; i < 20; i++ {
+		_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+			FrontendAttrs: map[string]string{
+				"no-cache": "",
+			},
+			LocalMounts: map[string]fsutil.FS{
+				dockerui.DefaultLocalNameDockerfile: dir,
+				dockerui.DefaultLocalNameContext:    dir,
+			},
+		}, nil)
+		require.NoError(t, err)
+	}
 }
