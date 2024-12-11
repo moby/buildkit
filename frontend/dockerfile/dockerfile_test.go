@@ -211,6 +211,7 @@ var allTests = integration.TestFuncs(
 	testEmptyStages,
 	testLocalCustomSessionID,
 	testTargetStageNameArg,
+	testStepNames,
 )
 
 // Tests that depend on the `security.*` entitlements
@@ -6913,6 +6914,74 @@ COPY --from=base /out /
 	dt, err = os.ReadFile(filepath.Join(destDir, "error"))
 	require.NoError(t, err)
 	require.Contains(t, strings.TrimSpace(string(dt)), `Resource temporarily unavailable`)
+}
+
+func testStepNames(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dockerfile := []byte(`
+FROM busybox AS base
+WORKDIR /out
+RUN echo "base" > base
+FROM scratch
+COPY --from=base --chmod=0644 /out /out
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	f := getFrontend(t, sb)
+
+	ch := make(chan *client.SolveStatus)
+
+	eg, ctx := errgroup.WithContext(ctx)
+
+	eg.Go(func() error {
+		_, err = f.Solve(ctx, c, client.SolveOpt{
+			LocalMounts: map[string]fsutil.FS{
+				dockerui.DefaultLocalNameDockerfile: dir,
+				dockerui.DefaultLocalNameContext:    dir,
+			},
+		}, ch)
+		return err
+	})
+
+	eg.Go(func() error {
+		hasCopy := false
+		hasRun := false
+		visited := make(map[string]struct{})
+		for status := range ch {
+			for _, vtx := range status.Vertexes {
+				if _, ok := visited[vtx.Name]; ok {
+					continue
+				}
+				visited[vtx.Name] = struct{}{}
+				t.Logf("step: %q", vtx.Name)
+				if vtx.Name == `[base 3/3] RUN echo "base" > base` {
+					hasRun = true
+				} else if vtx.Name == `[stage-1 1/1] COPY --from=base --chmod=0644 /out /out` {
+					hasCopy = true
+				}
+			}
+		}
+		if !hasCopy {
+			return errors.New("missing copy step")
+		}
+		if !hasRun {
+			return errors.New("missing run step")
+		}
+		return nil
+	})
+
+	err = eg.Wait()
+	require.NoError(t, err)
 }
 
 func testNamedImageContext(t *testing.T, sb integration.Sandbox) {
