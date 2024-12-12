@@ -127,6 +127,7 @@ var allTests = integration.TestFuncs(
 	testEnvEmptyFormatting,
 	testCacheMultiPlatformImportExport,
 	testOnBuildCleared,
+	testOnBuildWithChildStage,
 	testOnBuildInheritedStageRun,
 	testOnBuildInheritedStageWithFrom,
 	testOnBuildNewDeps,
@@ -4984,6 +4985,96 @@ ONBUILD RUN mkdir \out && echo 11>> \out\foo
 	dt, err := os.ReadFile(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, integration.UnixOrWindows("11", "11\r\n"), string(dt))
+}
+
+// testOnBuildWithChildStage tests that ONBUILD rules from the parent image do
+// not run again if another stage inherits from current stage.
+// moby/buildkit#5578
+func testOnBuildWithChildStage(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
+	f := getFrontend(t, sb)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	dockerfile := []byte(`
+FROM busybox
+ONBUILD RUN mkdir -p /out && echo -n yes >> /out/didrun
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	target := registry + "/buildkit/testonbuildstage:base"
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"push": "true",
+					"name": target,
+				},
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dockerfile = []byte(fmt.Sprintf(`
+FROM %s AS base
+RUN [ -f /out/didrun ] && touch /step1
+RUN rm /out/didrun
+RUN [ ! -f /out/didrun ] && touch /step2
+
+FROM base AS child
+RUN [ ! -f /out/didrun ] && touch /step3
+
+FROM scratch
+COPY --from=child /step* /
+	`, target))
+
+	dir = integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	destDir := t.TempDir()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(destDir, "step1"))
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(destDir, "step2"))
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(destDir, "step3"))
+	require.NoError(t, err)
 }
 
 func testOnBuildNamedContext(t *testing.T, sb integration.Sandbox) {
