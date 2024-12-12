@@ -159,10 +159,11 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 		}
 	}()
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, sessionID, inlineCache, &opts)
+	descriptors, err := e.opt.ImageWriter.Commit(ctx, src, sessionID, inlineCache, &opts)
 	if err != nil {
 		return nil, nil, err
 	}
+	desc := descriptors[0]
 	defer func() {
 		if err == nil {
 			descref = containerimage.NewDescriptorReference(*desc, done)
@@ -193,6 +194,12 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 		return nil, nil, err
 	}
 	resp[exptypes.ExporterImageDescriptorKey] = base64.StdEncoding.EncodeToString(dtdesc)
+
+	dtdesclist, err := json.Marshal(descriptors)
+	if err != nil {
+		return nil, nil, err
+	}
+	resp[exptypes.ExporterImageDescriptorsKey] = base64.StdEncoding.EncodeToString(dtdesclist)
 
 	if n, ok := src.Metadata["image.name"]; e.opts.ImageName == "*" && ok {
 		e.opts.ImageName = string(n)
