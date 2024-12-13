@@ -51,6 +51,24 @@ variable "TEST_COVERAGE" {
   default = null
 }
 
+variable "TEST_IMAGE_NAME" {
+  default = "buildkit-tests"
+}
+
+variable "TEST_CONTEXT" {
+  default = "."
+  description = "Context for building the test image"
+}
+
+variable "TEST_BINARIES_CONTEXT" {
+  default = TEST_CONTEXT
+  description = "Context for building the buildkitd for test image"
+}
+
+variable "BUILDKIT_SYNTAX" {
+  default = null
+}
+
 function "bindir" {
   params = [defaultdir]
   result = DESTDIR != "" ? DESTDIR : "./bin/${defaultdir}"
@@ -117,12 +135,26 @@ target "integration-tests-base" {
   output = ["type=cacheonly"]
 }
 
+target "integration-tests-binaries" {
+  inherits = ["_common"]
+  target = "binaries"
+  context = TEST_BINARIES_CONTEXT
+}
+
 target "integration-tests" {
   inherits = ["integration-tests-base"]
   target = "integration-tests"
+  context = TEST_CONTEXT
+  contexts = TEST_CONTEXT != TEST_BINARIES_CONTEXT ? {
+    "binaries" = "target:integration-tests-binaries"
+  } : null
   args = {
     GOBUILDFLAGS = TEST_COVERAGE == "1" ? "-cover" : null
+    BUILDKIT_SYNTAX = BUILDKIT_SYNTAX
   }
+  output = [
+    "type=docker,name=${TEST_IMAGE_NAME}",
+  ]
 }
 
 group "validate" {
