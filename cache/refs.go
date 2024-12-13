@@ -848,6 +848,11 @@ func getBlobWithCompression(ctx context.Context, cs content.Store, desc ocispecs
 }
 
 func walkBlob(ctx context.Context, cs content.Store, desc ocispecs.Descriptor, f func(ocispecs.Descriptor) bool) error {
+	if _, err := cs.Info(ctx, desc.Digest); errors.Is(err, cerrdefs.ErrNotFound) {
+		return nil // this blob doesn't exist in the content store. Don't call the callback.
+	} else if err != nil {
+		return err
+	}
 	if !f(desc) {
 		return nil
 	}
