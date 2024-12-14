@@ -7110,6 +7110,44 @@ COPY --from=base /env_foobar /
 	dt, err = os.ReadFile(filepath.Join(destDir, "env_path"))
 	require.NoError(t, err)
 	require.Contains(t, string(dt), "/foobar:")
+
+	// this case checks replacing stage that is based on another stage.
+	// moby/buildkit#5578-2539397486
+
+	dockerfile = []byte(`
+FROM busybox AS parent
+FROM parent AS base
+RUN echo base > /out
+FROM base
+RUN [ -f /etc/alpine-release ]
+RUN [ ! -f /out ]
+`)
+
+	dir = integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	f = getFrontend(t, sb)
+
+	destDir = t.TempDir()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"context:base": "docker-image://" + target,
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
 }
 
 func testNamedImageContextPlatform(t *testing.T, sb integration.Sandbox) {
