@@ -376,6 +376,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 					}
 				}
 				allDispatchStates.addState(ds)
+				ds.base = nil // reset base set by addState
 				continue
 			}
 		}
