@@ -174,6 +174,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testTarExporterSymlink,
 	testMultipleRegistryCacheImportExport,
 	testMultipleExporters,
+	testMultipleImageExporters,
 	testSourceMap,
 	testSourceMapFromRef,
 	testLazyImagePush,
@@ -3849,6 +3850,87 @@ func testMultipleExporters(t *testing.T, sb integration.Sandbox) {
 		}
 		require.Equal(t, ev.Record.Result.Results[0], ev.Record.Result.ResultDeprecated)
 	}
+}
+
+func testMultipleImageExporters(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter)
+	requiresLinux(t)
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	def, err := llb.Scratch().Marshal(context.TODO())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+	ociTar := filepath.Join(destDir, "oci.tar")
+	ociOut, err := os.Create(ociTar)
+	require.NoError(t, err)
+	defer ociOut.Close()
+
+	dockerTar := filepath.Join(destDir, "docker.tar")
+	dockerOut, err := os.Create(dockerTar)
+	require.NoError(t, err)
+	defer dockerOut.Close()
+
+	exporters := []ExportEntry{
+		{
+			Type: ExporterOCI,
+			Attrs: map[string]string{
+				"dest": ociTar,
+			},
+			Output: fixedWriteCloser(ociOut),
+		},
+		{
+			Type: ExporterDocker,
+			Attrs: map[string]string{
+				"dest": dockerTar,
+			},
+			Output: fixedWriteCloser(dockerOut),
+		},
+	}
+
+	ref := identity.NewID()
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Ref:     ref,
+		Exports: exporters,
+	}, nil)
+	require.NoError(t, err)
+
+	require.FileExists(t, filepath.Join(destDir, "oci.tar"))
+	require.FileExists(t, filepath.Join(destDir, "docker.tar"))
+
+	ociConfig := extractImageConfig(t, ociTar)
+	dockerConfig := extractImageConfig(t, dockerTar)
+	// Validate that the image configurtion is not empty
+	require.NotEmpty(t, ociConfig.Architecture, "architecture is missing")
+	require.NotEmpty(t, dockerConfig.Architecture, "architecture is missing")
+}
+
+func extractImageConfig(t *testing.T, path string) ocispecs.Image {
+	t.Helper()
+
+	dt, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(dt, false)
+	require.NoError(t, err)
+
+	var index ocispecs.Index
+	err = json.Unmarshal(m["index.json"].Data, &index)
+	require.NoError(t, err)
+	require.NotEmpty(t, index.Manifests, "index is missing platform manifests")
+
+	var manifest ocispecs.Manifest
+	err = json.Unmarshal(m[filepath.Join("blobs", "sha256", index.Manifests[0].Digest.Encoded())].Data, &manifest)
+	require.NoError(t, err)
+
+	var config ocispecs.Image
+	err = json.Unmarshal(m[filepath.Join("blobs", "sha256", manifest.Config.Digest.Encoded())].Data, &config)
+	require.NoError(t, err)
+
+	return config
 }
 
 func testOCIExporter(t *testing.T, sb integration.Sandbox) {

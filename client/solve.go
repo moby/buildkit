@@ -48,7 +48,7 @@ type SolveOpt struct {
 	CacheImports        []CacheOptionsEntry
 	Session             []session.Attachable
 	AllowedEntitlements []string
-	// When the session is custom-initialized, SetupExporters need to be used to correctly
+	// When the session is custom-initialized, ParseExporterOpts need to be used to correctly
 	// set up the session for export.
 	SharedSession         *session.Session // TODO: refactor to better session syncing
 	SessionPreInitialized bool             // TODO: refactor to better session syncing
@@ -58,12 +58,25 @@ type SolveOpt struct {
 	Ref                   string
 
 	// internal exporter state
-	s exporterState
+	s solverState
 }
 
-type exporterState struct {
+type solverState struct {
 	// storesToUpdate maps exporter ID -> oci store
 	storesToUpdate map[string]ociStore
+	cacheOpt       *cacheOptions
+	// Only one of runGateway or def can be set.
+	// runGateway optionally defines the gateway callback
+	runGateway runGatewayCB
+	// def optionally defines the LLB definition for the client
+	def *llb.Definition
+}
+
+type cacheOptions struct {
+	options        controlapi.CacheOptions
+	contentStores  map[string]content.Store // key: ID of content store ("local:" + csDir)
+	storesToUpdate map[string]string        // key: path to content store, value: tag
+	frontendAttrs  map[string]string
 }
 
 type ociStore struct {
@@ -98,20 +111,21 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 	if opt.Frontend != "" && def != nil {
 		return nil, errors.Errorf("invalid definition for frontend %s", opt.Frontend)
 	}
+	opt.s.def = def
 
-	return c.solve(ctx, def, nil, opt, statusChan)
+	return c.solve(ctx, opt, statusChan)
 }
 
 type runGatewayCB func(ref string, s *session.Session, opts map[string]string) error
 
-// SetupExporters configures the specified session with the underlying exporter configuration.
-// localContentStores is the optional list of local content stores derived from SolveOpt.CacheImports and SolveOpt.CacheExports.
-func SetupExporters(opt *SolveOpt, localContentStores map[string]content.Store, def *llb.Definition, s *session.Session) error {
+// ParseExporterOpts configures the specified session with the underlying exporter configuration.
+// It needs to be invoked *after* ParseCacheOpts
+func ParseExporterOpts(opt *SolveOpt, s *session.Session) error {
 	mounts, err := prepareMounts(opt)
 	if err != nil {
 		return err
 	}
-	syncedDirs, err := prepareSyncedFiles(def, mounts)
+	syncedDirs, err := prepareSyncedFiles(opt.s.def, mounts)
 	if err != nil {
 		return err
 	}
@@ -124,15 +138,15 @@ func SetupExporters(opt *SolveOpt, localContentStores map[string]content.Store, 
 		s.Allow(a)
 	}
 
-		contentStores := map[string]content.Store{}
-		maps.Copy(contentStores, cacheOpt.contentStores)
-		for key, store := range opt.OCIStores {
-			key2 := "oci:" + key
-			if _, ok := contentStores[key2]; ok {
-				return nil, errors.Errorf("oci store key %q already exists", key)
-			}
-			contentStores[key2] = store
+	contentStores := map[string]content.Store{}
+	maps.Copy(contentStores, opt.s.cacheOpt.contentStores)
+	for key, store := range opt.OCIStores {
+		key2 := "oci:" + key
+		if _, ok := contentStores[key2]; ok {
+			return errors.Errorf("oci store key %q already exists", key)
 		}
+		contentStores[key2] = store
+	}
 
 		var syncTargets []filesync.FSSyncTarget
 		for exID, ex := range opt.Exports {
@@ -205,8 +219,8 @@ func SetupExporters(opt *SolveOpt, localContentStores map[string]content.Store, 
 	return nil
 }
 
-func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runGatewayCB, opt SolveOpt, statusChan chan *SolveStatus) (*SolveResponse, error) {
-	if def != nil && runGateway != nil {
+func (c *Client) solve(ctx context.Context, opt SolveOpt, statusChan chan *SolveStatus) (*SolveResponse, error) {
+	if opt.s.def != nil && opt.s.runGateway != nil {
 		return nil, errors.New("invalid with def and cb")
 	}
 
@@ -235,13 +249,13 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		}
 	}
 
-	cacheOpt, err := parseCacheOptions(ctx, runGateway != nil, opt)
+	err := ParseCacheOptions(ctx, &opt)
 	if err != nil {
 		return nil, err
 	}
 
 	if !opt.SessionPreInitialized {
-		if err := SetupExporters(&opt, cacheOpt.contentStores, def, s); err != nil {
+		if err := ParseExporterOpts(&opt, s); err != nil {
 			return nil, err
 		}
 
@@ -259,7 +273,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	}
 
 	frontendAttrs := maps.Clone(opt.FrontendAttrs)
-	maps.Copy(frontendAttrs, cacheOpt.frontendAttrs)
+	maps.Copy(frontendAttrs, opt.s.cacheOpt.frontendAttrs)
 
 	const statusInactivityTimeout = 5 * time.Second
 	statusActivity := make(chan struct{}, 1)
@@ -294,8 +308,8 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			}
 		}()
 		var pbd *pb.Definition
-		if def != nil {
-			pbd = def.ToPB()
+		if opt.s.def != nil {
+			pbd = opt.s.def.ToPB()
 		}
 
 		frontendInputs := make(map[string]*pb.Definition)
@@ -334,7 +348,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			Frontend:                opt.Frontend,
 			FrontendAttrs:           frontendAttrs,
 			FrontendInputs:          frontendInputs,
-			Cache:                   &cacheOpt.options,
+			Cache:                   &opt.s.cacheOpt.options,
 			Entitlements:            slices.Clone(opt.AllowedEntitlements),
 			Internal:                opt.Internal,
 			SourcePolicy:            opt.SourcePolicy,
@@ -348,22 +362,28 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			return errors.Wrap(err, "failed to solve")
 		}
 		res = &SolveResponse{
-			ExporterResponse:  resp.ExporterResponseDeprecated,
-			ExporterResponses: make([]ExporterResponse, 0, len(resp.ExporterResponses)),
+			ExporterResponse:       resp.ExporterResponseDeprecated,
+			ExporterResponses:      make([]ExporterResponse, 0, len(resp.ExporterResponses)),
+			CacheExporterResponses: make([]ExporterResponse, 0, len(resp.CacheExporterResponses)),
 		}
-
 		for _, resp := range resp.ExporterResponses {
 			res.ExporterResponses = append(res.ExporterResponses, ExporterResponse{
 				ID:   resp.Metadata.ID,
 				Data: resp.Data,
 			})
 		}
+		for _, resp := range resp.CacheExporterResponses {
+			res.CacheExporterResponses = append(res.CacheExporterResponses, ExporterResponse{
+				ID:   resp.Metadata.Name,
+				Data: resp.Data,
+			})
+		}
 		return nil
 	})
 
-	if runGateway != nil {
+	if opt.s.runGateway != nil {
 		eg.Go(func() error {
-			err := runGateway(ref, s, frontendAttrs)
+			err := opt.s.runGateway(ref, s, frontendAttrs)
 			if err == nil {
 				return nil
 			}
@@ -423,7 +443,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		if err = json.Unmarshal([]byte(manifestDescJSON), &manifestDesc); err != nil {
 			return nil, err
 		}
-		for storePath, tag := range cacheOpt.storesToUpdate {
+		for storePath, tag := range opt.s.cacheOpt.storesToUpdate {
 			idx := ociindex.NewStoreIndex(storePath)
 			if err := idx.Put(manifestDesc, ociindex.Tag(tag)); err != nil {
 				return nil, err
@@ -442,30 +462,27 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		if manifestDesc == nil {
 			continue
 		}
-		for _, storePath := range storesToUpdate {
-			names := []ociindex.NameOrTag{ociindex.Tag("latest")}
-			if t, ok := res.ExporterResponse[exptypes.ExporterImageNameKey]; ok {
+		names := []ociindex.NameOrTag{ociindex.Tag("latest")}
+		if resp := res.exporter(id); resp != nil {
+			if t, ok := resp.Data[exptypes.ExporterImageNameKey]; ok {
 				inp := strings.Split(t, ",")
 				names = make([]ociindex.NameOrTag, len(inp))
 				for i, n := range inp {
 					names[i] = ociindex.Name(n)
 				}
 			}
-			idx := ociindex.NewStoreIndex(storePath)
-			if err := idx.Put(manifestDesc, names...); err != nil {
-				return nil, err
-			}
+		}
+		idx := ociindex.NewStoreIndex(store.path)
+		if err := idx.Put(*manifestDesc, names...); err != nil {
+			return nil, err
 		}
 	}
 	return res, nil
 }
 
 func getManifestDescriptor(exporterID string, resp *SolveResponse) (*ocispecs.Descriptor, error) {
-	for _, exp := range resp.ExporterResponses {
-		if exp.ID != exporterID {
-			continue
-		}
-		if manifestDescDt := exp.Data[exptypes.ExporterImageDescriptorKey]; manifestDescDt != "" {
+	if resp := resp.exporter(exporterID); resp != nil {
+		if manifestDescDt := resp.Data[exptypes.ExporterImageDescriptorKey]; manifestDescDt != "" {
 			return unmarshalManifestDescriptor(manifestDescDt)
 		}
 	}
@@ -531,14 +548,7 @@ func prepareSyncedFiles(def *llb.Definition, localMounts map[string]fsutil.FS) (
 	return result, nil
 }
 
-type cacheOptions struct {
-	options        controlapi.CacheOptions
-	contentStores  map[string]content.Store // key: ID of content store ("local:" + csDir)
-	storesToUpdate map[string]string        // key: path to content store, value: tag
-	frontendAttrs  map[string]string
-}
-
-func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cacheOptions, error) {
+func ParseCacheOptions(ctx context.Context, opt *SolveOpt) error {
 	var (
 		cacheExports []*controlapi.CacheOptionsEntry
 		cacheImports []*controlapi.CacheOptionsEntry
@@ -550,14 +560,14 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 		if ex.Type == "local" {
 			csDir := ex.Attrs["dest"]
 			if csDir == "" {
-				return nil, errors.New("local cache exporter requires dest")
+				return errors.New("local cache exporter requires dest")
 			}
 			if err := os.MkdirAll(csDir, 0755); err != nil {
-				return nil, err
+				return err
 			}
 			cs, err := contentlocal.NewStore(csDir)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			contentStores["local:"+csDir] = cs
 
@@ -571,7 +581,7 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 		if ex.Type == "registry" {
 			regRef := ex.Attrs["ref"]
 			if regRef == "" {
-				return nil, errors.New("registry cache exporter requires ref")
+				return errors.New("registry cache exporter requires ref")
 			}
 		}
 		cacheExports = append(cacheExports, &controlapi.CacheOptionsEntry{
@@ -583,7 +593,7 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 		if im.Type == "local" {
 			csDir := im.Attrs["src"]
 			if csDir == "" {
-				return nil, errors.New("local cache importer requires src")
+				return errors.New("local cache importer requires src")
 			}
 			cs, err := contentlocal.NewStore(csDir)
 			if err != nil {
@@ -608,14 +618,14 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 				}
 			}
 			if im.Attrs["digest"] == "" {
-				return nil, errors.New("local cache importer requires either explicit digest, \"latest\" tag or custom tag on index.json")
+				return errors.New("local cache importer requires either explicit digest, \"latest\" tag or custom tag on index.json")
 			}
 			contentStores["local:"+csDir] = cs
 		}
 		if im.Type == "registry" {
 			regRef := im.Attrs["ref"]
 			if regRef == "" {
-				return nil, errors.New("registry cache importer requires ref")
+				return errors.New("registry cache importer requires ref")
 			}
 		}
 		cacheImports = append(cacheImports, &controlapi.CacheOptionsEntry{
@@ -623,16 +633,16 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 			Attrs: im.Attrs,
 		})
 	}
-	if opt.Frontend != "" || isGateway {
+	if opt.Frontend != "" || opt.s.runGateway != nil {
 		if len(cacheImports) > 0 {
 			s, err := json.Marshal(cacheImports)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			frontendAttrs["cache-imports"] = string(s)
 		}
 	}
-	res := cacheOptions{
+	opt.s.cacheOpt = &cacheOptions{
 		options: controlapi.CacheOptions{
 			Exports: cacheExports,
 			Imports: cacheImports,
@@ -641,7 +651,7 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 		storesToUpdate: storesToUpdate,
 		frontendAttrs:  frontendAttrs,
 	}
-	return &res, nil
+	return nil
 }
 
 func prepareMounts(opt *SolveOpt) (map[string]fsutil.FS, error) {

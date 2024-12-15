@@ -109,11 +109,12 @@ message CacheOptionsEntry {
 
 message SolveResponse {
 	// ExporterResponseDeprecated is a combined exporter response - it aggregates
-	// responses from all exporters running in parallel.
-	// It is deprecated in favor of the structured exporter response but will be
+	// responses from all exporters (including cache exporters) running in parallel.
+	// It is deprecated in favor of the structured exporter responses but will be
 	// populated as long as it is supported.
 	map<string, string> ExporterResponseDeprecated = 1;
 	repeated ExporterResponse exporterResponses = 2;
+	repeated CacheExporterResponse cacheExporterResponses = 3;
 }
 
 message StatusRequest {
@@ -272,4 +273,18 @@ message ExporterResponse {
 message ExporterMetadata {
 	// ID identifies the exporter
 	string ID = 1;
+}
+
+// CacheExporterResponse describes the output of an exporter
+message CacheExporterResponse {
+	// Metadata describes the exporter
+	CacheExporterMetadata metadata = 1;
+	// Data is the exporter's output
+	map<string, string> data = 2;
+}
+
+// CacheExporterMetadata describes the cache exporter
+message CacheExporterMetadata {
+	// Name uniquely identifies the exporter
+	string name = 1;
 }
