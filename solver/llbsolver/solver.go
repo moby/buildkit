@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"maps"
 	"os"
 	"strings"
 	"sync"
@@ -639,19 +638,21 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 
 	cacheExporters, inlineCacheExporter := splitCacheExporters(exp.CacheExporters)
 
-	var exporterResponse *controlapi.SolveResponse
-	exporterResponse, descrefs, err = s.runExporters(ctx, exp.Exporters, inlineCacheExporter, j, cached, inp)
+	var exporterResponses []*controlapi.ExporterResponse
+	exporterResponses, descrefs, err = s.runExporters(ctx, exp.Exporters, inlineCacheExporter, j, cached, inp)
 	if err != nil {
 		return nil, err
 	}
 
-	cacheExporterResponse, err := runCacheExporters(ctx, cacheExporters, j, cached, inp)
+	cacheExporterResponses, err := runCacheExporters(ctx, cacheExporters, j, cached, inp)
 	if err != nil {
 		return nil, err
 	}
 
-	if exporterResponse.ExporterResponseDeprecated == nil {
-		exporterResponse.ExporterResponseDeprecated = make(map[string]string)
+	exporterResponse := &controlapi.SolveResponse{
+		ExporterResponseDeprecated: make(map[string]string),
+		ExporterResponses:          exporterResponses,
+		CacheExporterResponses:     cacheExporterResponses,
 	}
 
 	for k, v := range res.Metadata {
@@ -660,11 +661,16 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		}
 	}
 
-	// TODO: separate these out, and return multiple cache exporter responses to the
-	// client
-	for k, v := range cacheExporterResponse {
-		if strings.HasPrefix(k, "cache.") {
+	for _, resp := range exporterResponses {
+		for k, v := range resp.Data {
 			exporterResponse.ExporterResponseDeprecated[k] = v
+		}
+	}
+	for _, resp := range cacheExporterResponses {
+		for k, v := range resp.Data {
+			if strings.HasPrefix(k, "cache.") {
+				exporterResponse.ExporterResponseDeprecated[k] = v
+			}
 		}
 	}
 
@@ -688,11 +694,10 @@ func validateSourcePolicy(pol *spb.Policy) error {
 	return nil
 }
 
-func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult], inp *result.Result[cache.ImmutableRef]) (map[string]string, error) {
+func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult], inp *result.Result[cache.ImmutableRef]) (exporterResponses []*controlapi.CacheExporterResponse, err error) {
 	eg, ctx := errgroup.WithContext(ctx)
 	g := session.NewGroup(j.SessionID)
-	var cacheExporterResponse map[string]string
-	resps := make([]map[string]string, len(exporters))
+	exporterResponses = make([]*controlapi.CacheExporterResponse, len(exporters))
 	for i, exp := range exporters {
 		i, exp := i, exp
 		eg.Go(func() (err error) {
@@ -716,7 +721,15 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 				}); err != nil {
 					return prepareDone(err)
 				}
-				resps[i], err = exp.Finalize(ctx)
+				resp, err := exp.Finalize(ctx)
+				exporterResponses[i] = &controlapi.CacheExporterResponse{
+					// FIXME(dima): this needs proper disambiguation with IDs similar to output exporters
+					// as the same type cache exporters can potentially be specified multiple times (e.g. local
+					// cache exports/imports).
+					// This, it should be possible to reuse controlapi.ExporterResponse for both
+					Metadata: &controlapi.CacheExporterMetadata{Name: exp.Name()},
+					Data:     resp,
+				}
 				return prepareDone(err)
 			})
 			if exp.IgnoreError {
@@ -729,15 +742,7 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 		return nil, err
 	}
 
-	// TODO: separate these out, and return multiple cache exporter responses
-	// to the client
-	for _, resp := range resps {
-		if cacheExporterResponse == nil {
-			cacheExporterResponse = make(map[string]string)
-		}
-		maps.Copy(cacheExporterResponse, resp)
-	}
-	return cacheExporterResponse, nil
+	return exporterResponses, nil
 }
 
 func runInlineCacheExporter(ctx context.Context, e exporter.ExporterInstance, inlineExporter inlineCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult]) (*result.Result[*exptypes.InlineCacheEntry], error) {
@@ -759,14 +764,14 @@ func runInlineCacheExporter(ctx context.Context, e exporter.ExporterInstance, in
 	return res, done(err)
 }
 
-func (s *Solver) runExporters(ctx context.Context, exporters []Exporter, inlineCacheExporter inlineCacheExporter, job *solver.Job, cached *result.Result[solver.CachedResult], inp *result.Result[cache.ImmutableRef]) (exporterResponse *controlapi.SolveResponse, descrefs []exporter.DescriptorReference, err error) {
+func (s *Solver) runExporters(ctx context.Context, exporters []Exporter, inlineCacheExporter inlineCacheExporter, job *solver.Job, cached *result.Result[solver.CachedResult], inp *result.Result[cache.ImmutableRef]) (exporterResponses []*controlapi.ExporterResponse, descrefs []exporter.DescriptorReference, err error) {
 	warnings, err := verifier.CheckInvalidPlatforms(ctx, inp)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	eg, ctx := errgroup.WithContext(ctx)
-	resps := make([]*controlapi.ExporterResponse, len(exporters))
+	exporterResponses = make([]*controlapi.ExporterResponse, len(exporters))
 	descs := make([]exporter.DescriptorReference, len(exporters))
 	for i, exp := range exporters {
 		i, exp := i, exp
@@ -794,7 +799,7 @@ func (s *Solver) runExporters(ctx context.Context, exporters []Exporter, inlineC
 				if err != nil {
 					return err
 				}
-				resps[i] = &controlapi.ExporterResponse{
+				exporterResponses[i] = &controlapi.ExporterResponse{
 					Metadata: &controlapi.ExporterMetadata{ID: exp.ID},
 					Data:     md,
 				}
@@ -819,19 +824,7 @@ func (s *Solver) runExporters(ctx context.Context, exporters []Exporter, inlineC
 		}
 	}
 
-	exporterResponse = &controlapi.SolveResponse{
-		ExporterResponses: resps,
-	}
-	for _, resp := range resps {
-		for k, v := range resp.Data {
-			if exporterResponse.ExporterResponseDeprecated == nil {
-				exporterResponse.ExporterResponseDeprecated = make(map[string]string)
-			}
-			exporterResponse.ExporterResponseDeprecated[k] = v
-		}
-	}
-
-	return exporterResponse, descs, nil
+	return exporterResponses, descs, nil
 }
 
 func (s *Solver) leaseManager() (*leaseutil.Manager, error) {
