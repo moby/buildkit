@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile-upstream:master
 
-ARG RUNC_VERSION=v1.2.2
+ARG RUNC_VERSION=v1.2.3
 ARG CONTAINERD_VERSION=v2.0.0
 # CONTAINERD_ALT_VERSION_... defines fallback containerd version for integration tests
 ARG CONTAINERD_ALT_VERSION_17=v1.7.23
@@ -20,7 +20,7 @@ ARG DELVE_VERSION=v1.23.1
 
 ARG GO_VERSION=1.23
 ARG ALPINE_VERSION=3.20
-ARG XX_VERSION=1.5.0
+ARG XX_VERSION=1.6.1
 ARG BUILDKIT_DEBUG
 
 # minio for s3 integration tests
