@@ -213,6 +213,7 @@ var allTests = integration.TestFuncs(
 	testLocalCustomSessionID,
 	testTargetStageNameArg,
 	testStepNames,
+	testPowershellInDefaultPathOnWindows,
 )
 
 // Tests that depend on the `security.*` entitlements
@@ -1813,7 +1814,7 @@ COPY Dockerfile .
 		entrypoint []string
 		env        []string
 	}{
-		{p: "windows/amd64", entrypoint: []string{"cmd", "/S", "/C", "foo bar"}, env: []string{"PATH=c:\\Windows\\System32;c:\\Windows"}},
+		{p: "windows/amd64", entrypoint: []string{"cmd", "/S", "/C", "foo bar"}, env: []string{"PATH=c:\\Windows\\System32;c:\\Windows;C:\\Windows\\System32\\WindowsPowerShell\\v1.0"}},
 		{p: "linux/amd64", entrypoint: []string{"/bin/sh", "-c", "foo bar"}, env: []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}},
 	} {
 		t.Run(exp.p, func(t *testing.T) {
@@ -1948,6 +1949,49 @@ COPY --from=base /out/ /
 	dt, err = os.ReadFile(filepath.Join(destDir, "second"))
 	require.NoError(t, err)
 	require.Equal(t, "value:final", string(dt))
+}
+
+func testPowershellInDefaultPathOnWindows(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "!windows")
+
+	f := getFrontend(t, sb)
+
+	// just testing that the powershell path is in PATH
+	// but not testing powershell itself since it will need
+	// servercore image that is too bulky for just one single test.
+	dockerfile := []byte(`
+FROM nanoserver
+USER ContainerAdministrator
+RUN echo %PATH% > env_path.txt
+`)
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir := t.TempDir()
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "env_path.txt"))
+	require.NoError(t, err)
+
+	envPath := string(dt)
+	require.Contains(t, envPath, "C:\\Windows\\System32\\WindowsPowerShell\\v1.0")
 }
 
 func testExportMultiPlatform(t *testing.T, sb integration.Sandbox) {
