@@ -143,7 +143,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 	descHandlers := descHandlersOf(opts...)
 	if desc.Digest != "" && (descHandlers == nil || descHandlers[desc.Digest] == nil) {
 		if _, err := cm.ContentStore.Info(ctx, desc.Digest); errors.Is(err, cerrdefs.ErrNotFound) {
-			return nil, NeedsRemoteProviderError([]digest.Digest{desc.Digest})
+			return nil, NeedsRemoteProviderError([]DigestDescriptionPair{{Digest: desc.Digest}})
 		} else if err != nil {
 			return nil, err
 		}
@@ -396,7 +396,7 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 			if isLazy, err := cr.isLazy(ctx); err != nil {
 				return err
 			} else if isLazy && dhs[blob] == nil {
-				missing = append(missing, blob)
+				missing = append(missing, DigestDescriptionPair{Digest: blob, Description: cr.GetDescription()})
 			}
 			return nil
 		}); err != nil {

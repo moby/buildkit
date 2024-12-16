@@ -123,7 +123,12 @@ func (g *cacheRefGetter) getRefCacheDirNoCache(ctx context.Context, key string, 
 		}
 		locked := false
 		for _, si := range sis {
-			if mRef, err := g.cm.GetMutable(ctx, si.ID()); err == nil {
+			var opts []cache.RefOption
+			if ref != nil {
+				opts = append(opts, ref.DescHandlers())
+			}
+			mRef, err := g.cm.GetMutable(ctx, si.ID(), opts...)
+			if err == nil {
 				bklog.G(ctx).Debugf("reusing ref for cache dir %q: %s", id, mRef.ID())
 				return mRef, nil
 			} else if errors.Is(err, cache.ErrLocked) {

@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/content"
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/util/bklog"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -215,7 +217,26 @@ func (c *item) removeLink(src *item) bool {
 	return found
 }
 
-func (c *item) AddResult(_ digest.Digest, _ int, createdAt time.Time, result *solver.Remote) {
+func (c *item) AddResult(ctx context.Context, _ digest.Digest, _ int, createdAt time.Time, result *solver.Remote) {
+	if result == nil {
+		return
+	}
+
+	if len(result.Descriptors) == 0 {
+		bklog.G(ctx).Warnf("no descriptors for item %s result, skipping", c.dgst)
+		return
+	}
+
+	if result.Provider != nil {
+		for _, desc := range result.Descriptors {
+			_, err := result.Provider.Info(ctx, desc.Digest)
+			if err != nil && !cerrdefs.IsNotFound(err) {
+				bklog.G(ctx).Warnf("failed to get info for item %s descriptor %s, skipping item result: %v", c.dgst, desc.Digest, err)
+				return
+			}
+		}
+	}
+
 	c.resultTime = createdAt
 	c.result = result
 }
@@ -305,7 +326,7 @@ func (c *item) walkAllResults(fn func(i *item) error, visited map[*item]struct{}
 type nopRecord struct {
 }
 
-func (c *nopRecord) AddResult(_ digest.Digest, _ int, createdAt time.Time, result *solver.Remote) {
+func (c *nopRecord) AddResult(_ context.Context, _ digest.Digest, _ int, createdAt time.Time, result *solver.Remote) {
 }
 
 func (c *nopRecord) LinkFrom(rec solver.CacheExporterRecord, index int, selector string) {

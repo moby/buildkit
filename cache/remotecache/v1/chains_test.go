@@ -29,7 +29,7 @@ func TestSimpleMarshal(t *testing.T) {
 				Digest: dgst("d1"),
 			}},
 		}
-		baz.AddResult("", 0, time.Now(), r0)
+		baz.AddResult(context.TODO(), "", 0, time.Now(), r0)
 	}
 
 	addRecords()
@@ -76,7 +76,7 @@ func TestSimpleMarshal(t *testing.T) {
 	require.NoError(t, err)
 
 	newChains := NewCacheChains()
-	err = Parse(dt, descPairs, newChains)
+	err = Parse(context.TODO(), dt, descPairs, newChains)
 	require.NoError(t, err)
 
 	cfg3, _, err := cc.Marshal(context.TODO())

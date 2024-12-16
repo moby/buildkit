@@ -76,7 +76,7 @@ func (ce *exporter) ExportForLayers(ctx context.Context, layers []digest.Digest)
 	}
 
 	cc := v1.NewCacheChains()
-	if err := v1.ParseConfig(*config, descs2, cc); err != nil {
+	if err := v1.ParseConfig(ctx, *config, descs2, cc); err != nil {
 		return nil, err
 	}
 
