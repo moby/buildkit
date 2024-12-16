@@ -120,6 +120,8 @@ RUN --mount=type=bind,target=.,rw \
   if [ "$(ls -A /generated-files)" ]; then
     cp -rf /generated-files/* ./util/archutil
   fi
+  # loong64 is not stable atm
+  git checkout -- util/archutil/loong64_binary.go
   diff=$(git status --porcelain -- util/archutil)
   if [ -n "$diff" ]; then
     echo >&2 'ERROR: The result of archutil differs. Please update with "make archutil"'
