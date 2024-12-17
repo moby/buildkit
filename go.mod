@@ -2,6 +2,11 @@ module github.com/moby/buildkit
 
 go 1.22.0
 
+// FIXME(thaJeztah): testing https://github.com/moby/moby/pull/49072
+replace github.com/docker/docker => github.com/dmcgowan/docker v1.1.3-0.20241217181958-95a218fd37d3
+
+replace github.com/docker/cli => github.com/docker/cli v27.0.2-0.20241216164627-8454e012cade+incompatible
+
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.6.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.4.1
