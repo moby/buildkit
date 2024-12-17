@@ -9,26 +9,27 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/containerd/log"
 	"github.com/docker/docker/pkg/idtools"
-	"github.com/docker/docker/pkg/ioutils"
 	"github.com/docker/docker/pkg/pools"
 	"github.com/docker/docker/pkg/system"
 	"github.com/klauspost/compress/zstd"
 	"github.com/moby/patternmatcher"
 	"github.com/moby/sys/sequential"
-	"github.com/pkg/errors"
 )
 
 // ImpliedDirectoryMode represents the mode (Unix permissions) applied to directories that are implied by files in a
@@ -215,11 +216,22 @@ func gzDecompress(ctx context.Context, buf io.Reader) (io.ReadCloser, error) {
 	return cmdStream(exec.CommandContext(ctx, unpigzPath, "-d", "-c"), buf)
 }
 
-func wrapReadCloser(readBuf io.ReadCloser, cancel context.CancelFunc) io.ReadCloser {
-	return ioutils.NewReadCloserWrapper(readBuf, func() error {
-		cancel()
-		return readBuf.Close()
-	})
+type readCloserWrapper struct {
+	io.Reader
+	closer func() error
+	closed atomic.Bool
+}
+
+func (r *readCloserWrapper) Close() error {
+	if !r.closed.CompareAndSwap(false, true) {
+		log.G(context.TODO()).Error("subsequent attempt to close readCloserWrapper")
+		if log.GetLevel() >= log.DebugLevel {
+			log.G(context.TODO()).Errorf("stack trace: %s", string(debug.Stack()))
+		}
+
+		return nil
+	}
+	return r.closer()
 }
 
 // DecompressStream decompresses the archive and returns a ReaderCloser with the decompressed archive.
@@ -237,11 +249,26 @@ func DecompressStream(archive io.Reader) (io.ReadCloser, error) {
 		return nil, err
 	}
 
+	wrapReader := func(r io.Reader, cancel context.CancelFunc) io.ReadCloser {
+		return &readCloserWrapper{
+			Reader: r,
+			closer: func() error {
+				if cancel != nil {
+					cancel()
+				}
+				if readCloser, ok := r.(io.ReadCloser); ok {
+					readCloser.Close()
+				}
+				p.Put(buf)
+				return nil
+			},
+		}
+	}
+
 	compression := DetectCompression(bs)
 	switch compression {
 	case Uncompressed:
-		readBufWrapper := p.NewReadCloserWrapper(buf, buf)
-		return readBufWrapper, nil
+		return wrapReader(buf, nil), nil
 	case Gzip:
 		ctx, cancel := context.WithCancel(context.Background())
 
@@ -250,12 +277,10 @@ func DecompressStream(archive io.Reader) (io.ReadCloser, error) {
 			cancel()
 			return nil, err
 		}
-		readBufWrapper := p.NewReadCloserWrapper(buf, gzReader)
-		return wrapReadCloser(readBufWrapper, cancel), nil
+		return wrapReader(gzReader, cancel), nil
 	case Bzip2:
 		bz2Reader := bzip2.NewReader(buf)
-		readBufWrapper := p.NewReadCloserWrapper(buf, bz2Reader)
-		return readBufWrapper, nil
+		return wrapReader(bz2Reader, nil), nil
 	case Xz:
 		ctx, cancel := context.WithCancel(context.Background())
 
@@ -264,15 +289,13 @@ func DecompressStream(archive io.Reader) (io.ReadCloser, error) {
 			cancel()
 			return nil, err
 		}
-		readBufWrapper := p.NewReadCloserWrapper(buf, xzReader)
-		return wrapReadCloser(readBufWrapper, cancel), nil
+		return wrapReader(xzReader, cancel), nil
 	case Zstd:
 		zstdReader, err := zstd.NewReader(buf)
 		if err != nil {
 			return nil, err
 		}
-		readBufWrapper := p.NewReadCloserWrapper(buf, zstdReader)
-		return readBufWrapper, nil
+		return wrapReader(zstdReader, nil), nil
 	default:
 		return nil, fmt.Errorf("Unsupported compression format %s", (&compression).Extension())
 	}
@@ -531,15 +554,6 @@ func newTarAppender(idMapping idtools.IdentityMapping, writer io.Writer, chownOp
 	}
 }
 
-// CanonicalTarNameForPath canonicalizes relativePath to a POSIX-style path using
-// forward slashes. It is an alias for [filepath.ToSlash], which is a no-op on
-// Linux and Unix.
-//
-// Deprecated: use [filepath.ToSlash]. This function will be removed in the next release.
-func CanonicalTarNameForPath(relativePath string) string {
-	return filepath.ToSlash(relativePath)
-}
-
 // canonicalTarName provides a platform-independent and consistent POSIX-style
 // path for files and directories to be archived regardless of the platform.
 func canonicalTarName(name string, isDir bool) string {
@@ -654,7 +668,7 @@ func (ta *tarAppender) addTarFile(path, name string) error {
 
 		ta.Buffer.Reset(ta.TarWriter)
 		defer ta.Buffer.Reset(nil)
-		_, err = io.Copy(ta.Buffer, file)
+		_, err = pools.Copy(ta.Buffer, file)
 		file.Close()
 		if err != nil {
 			return err
@@ -705,7 +719,7 @@ func createTarFile(path, extractDir string, hdr *tar.Header, reader io.Reader, o
 		if err != nil {
 			return err
 		}
-		if _, err := io.Copy(file, reader); err != nil {
+		if _, err := pools.Copy(file, reader); err != nil {
 			file.Close()
 			return err
 		}
@@ -771,11 +785,11 @@ func createTarFile(path, extractDir string, hdr *tar.Header, reader io.Reader, o
 			chownOpts = &idtools.Identity{UID: hdr.Uid, GID: hdr.Gid}
 		}
 		if err := os.Lchown(path, chownOpts.UID, chownOpts.GID); err != nil {
-			msg := "failed to Lchown %q for UID %d, GID %d"
+			var msg string
 			if inUserns && errors.Is(err, syscall.EINVAL) {
-				msg += " (try increasing the number of subordinate IDs in /etc/subuid and /etc/subgid)"
+				msg = " (try increasing the number of subordinate IDs in /etc/subuid and /etc/subgid)"
 			}
-			return errors.Wrapf(err, msg, path, hdr.Uid, hdr.Gid)
+			return fmt.Errorf("failed to Lchown %q for UID %d, GID %d%s: %w", path, hdr.Uid, hdr.Gid, msg, err)
 		}
 	}
 
@@ -1375,7 +1389,7 @@ func (archiver *Archiver) CopyFileWithTar(src, dst string) (err error) {
 			if err := tw.WriteHeader(hdr); err != nil {
 				return err
 			}
-			if _, err := io.Copy(tw, srcF); err != nil {
+			if _, err := pools.Copy(tw, srcF); err != nil {
 				return err
 			}
 			return nil
@@ -1433,68 +1447,14 @@ func cmdStream(cmd *exec.Cmd, input io.Reader) (io.ReadCloser, error) {
 		close(done)
 	}()
 
-	return ioutils.NewReadCloserWrapper(pipeR, func() error {
-		// Close pipeR, and then wait for the command to complete before returning. We have to close pipeR first, as
-		// cmd.Wait waits for any non-file stdout/stderr/stdin to close.
-		err := pipeR.Close()
-		<-done
-		return err
-	}), nil
-}
-
-// NewTempArchive reads the content of src into a temporary file, and returns the contents
-// of that file as an archive. The archive can only be read once - as soon as reading completes,
-// the file will be deleted.
-//
-// Deprecated: NewTempArchive is only used in tests and will be removed in the next release.
-func NewTempArchive(src io.Reader, dir string) (*TempArchive, error) {
-	f, err := os.CreateTemp(dir, "")
-	if err != nil {
-		return nil, err
-	}
-	if _, err := io.Copy(f, src); err != nil {
-		return nil, err
-	}
-	if _, err := f.Seek(0, 0); err != nil {
-		return nil, err
-	}
-	st, err := f.Stat()
-	if err != nil {
-		return nil, err
-	}
-	size := st.Size()
-	return &TempArchive{File: f, Size: size}, nil
-}
-
-// TempArchive is a temporary archive. The archive can only be read once - as soon as reading completes,
-// the file will be deleted.
-//
-// Deprecated: TempArchive is only used in tests and will be removed in the next release.
-type TempArchive struct {
-	*os.File
-	Size   int64 // Pre-computed from Stat().Size() as a convenience
-	read   int64
-	closed bool
-}
-
-// Close closes the underlying file if it's still open, or does a no-op
-// to allow callers to try to close the TempArchive multiple times safely.
-func (archive *TempArchive) Close() error {
-	if archive.closed {
-		return nil
-	}
-
-	archive.closed = true
-
-	return archive.File.Close()
-}
-
-func (archive *TempArchive) Read(data []byte) (int, error) {
-	n, err := archive.File.Read(data)
-	archive.read += int64(n)
-	if err != nil || archive.read == archive.Size {
-		archive.Close()
-		os.Remove(archive.File.Name())
-	}
-	return n, err
+	return &readCloserWrapper{
+		Reader: pipeR,
+		closer: func() error {
+			// Close pipeR, and then wait for the command to complete before returning. We have to close pipeR first, as
+			// cmd.Wait waits for any non-file stdout/stderr/stdin to close.
+			err := pipeR.Close()
+			<-done
+			return err
+		},
+	}, nil
 }
