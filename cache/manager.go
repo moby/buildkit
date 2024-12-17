@@ -1437,6 +1437,7 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 	if err := cm.markShared(m); err != nil {
 		return nil, err
 	}
+	cutOff := time.Now().Add(-opt.AgeLimit)
 
 	var du []*client.UsageInfo
 	for id, cr := range m {
@@ -1453,9 +1454,15 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 			RecordType:  cr.recordType,
 			Shared:      cr.shared,
 		}
-		if filter.Match(adaptUsageInfo(c)) {
-			du = append(du, c)
+		if !filter.Match(adaptUsageInfo(c)) {
+			continue
 		}
+		if opt.AgeLimit > 0 {
+			if c.LastUsedAt != nil && c.LastUsedAt.After(cutOff) {
+				continue
+			}
+		}
+		du = append(du, c)
 	}
 
 	eg, ctx := errgroup.WithContext(ctx)
