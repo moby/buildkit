@@ -17,13 +17,23 @@ func (cli *Client) BuildCachePrune(ctx context.Context, opts types.BuildCachePru
 		return nil, err
 	}
 
-	report := types.BuildCachePruneReport{}
-
 	query := url.Values{}
 	if opts.All {
 		query.Set("all", "1")
 	}
-	query.Set("keep-storage", strconv.Itoa(int(opts.KeepStorage)))
+
+	if opts.KeepStorage != 0 {
+		query.Set("keep-storage", strconv.Itoa(int(opts.KeepStorage)))
+	}
+	if opts.ReservedSpace != 0 {
+		query.Set("reserved-space", strconv.Itoa(int(opts.ReservedSpace)))
+	}
+	if opts.MaxUsedSpace != 0 {
+		query.Set("max-used-space", strconv.Itoa(int(opts.MaxUsedSpace)))
+	}
+	if opts.MinFreeSpace != 0 {
+		query.Set("min-free-space", strconv.Itoa(int(opts.MinFreeSpace)))
+	}
 	f, err := filters.ToJSON(opts.Filters)
 	if err != nil {
 		return nil, errors.Wrap(err, "prune could not marshal filters option")
@@ -37,6 +47,7 @@ func (cli *Client) BuildCachePrune(ctx context.Context, opts types.BuildCachePru
 		return nil, err
 	}
 
+	report := types.BuildCachePruneReport{}
 	if err := json.NewDecoder(serverResp.body).Decode(&report); err != nil {
 		return nil, errors.Wrap(err, "error retrieving disk usage")
 	}

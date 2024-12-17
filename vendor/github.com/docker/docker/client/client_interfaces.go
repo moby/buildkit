@@ -20,17 +20,23 @@ import (
 )
 
 // CommonAPIClient is the common methods between stable and experimental versions of APIClient.
-type CommonAPIClient interface {
+//
+// Deprecated: use [APIClient] instead. This type will be an alias for [APIClient] in the next release, and removed after.
+type CommonAPIClient = stableAPIClient
+
+// APIClient is an interface that clients that talk with a docker server must implement.
+type APIClient interface {
+	stableAPIClient
+	CheckpointAPIClient // CheckpointAPIClient is still experimental.
+}
+
+type stableAPIClient interface {
 	ConfigAPIClient
 	ContainerAPIClient
 	DistributionAPIClient
 	ImageAPIClient
-	NodeAPIClient
 	NetworkAPIClient
 	PluginAPIClient
-	ServiceAPIClient
-	SwarmAPIClient
-	SecretAPIClient
 	SystemAPIClient
 	VolumeAPIClient
 	ClientVersion() string
@@ -39,9 +45,25 @@ type CommonAPIClient interface {
 	ServerVersion(ctx context.Context) (types.Version, error)
 	NegotiateAPIVersion(ctx context.Context)
 	NegotiateAPIVersionPing(types.Ping)
-	DialHijack(ctx context.Context, url, proto string, meta map[string][]string) (net.Conn, error)
+	HijackDialer
 	Dialer() func(context.Context) (net.Conn, error)
 	Close() error
+	SwarmManagementAPIClient
+}
+
+// SwarmManagementAPIClient defines all methods for managing Swarm-specific
+// objects.
+type SwarmManagementAPIClient interface {
+	SwarmAPIClient
+	NodeAPIClient
+	ServiceAPIClient
+	SecretAPIClient
+	ConfigAPIClient
+}
+
+// HijackDialer defines methods for a hijack dialer.
+type HijackDialer interface {
+	DialHijack(ctx context.Context, url, proto string, meta map[string][]string) (net.Conn, error)
 }
 
 // ContainerAPIClient defines API client methods for the containers
@@ -56,10 +78,10 @@ type ContainerAPIClient interface {
 	ContainerExecResize(ctx context.Context, execID string, options container.ResizeOptions) error
 	ContainerExecStart(ctx context.Context, execID string, options container.ExecStartOptions) error
 	ContainerExport(ctx context.Context, container string) (io.ReadCloser, error)
-	ContainerInspect(ctx context.Context, container string) (types.ContainerJSON, error)
-	ContainerInspectWithRaw(ctx context.Context, container string, getSize bool) (types.ContainerJSON, []byte, error)
+	ContainerInspect(ctx context.Context, container string) (container.InspectResponse, error)
+	ContainerInspectWithRaw(ctx context.Context, container string, getSize bool) (container.InspectResponse, []byte, error)
 	ContainerKill(ctx context.Context, container, signal string) error
-	ContainerList(ctx context.Context, options container.ListOptions) ([]types.Container, error)
+	ContainerList(ctx context.Context, options container.ListOptions) ([]container.Summary, error)
 	ContainerLogs(ctx context.Context, container string, options container.LogsOptions) (io.ReadCloser, error)
 	ContainerPause(ctx context.Context, container string) error
 	ContainerRemove(ctx context.Context, container string, options container.RemoveOptions) error
@@ -91,16 +113,19 @@ type ImageAPIClient interface {
 	BuildCachePrune(ctx context.Context, opts types.BuildCachePruneOptions) (*types.BuildCachePruneReport, error)
 	BuildCancel(ctx context.Context, id string) error
 	ImageCreate(ctx context.Context, parentReference string, options image.CreateOptions) (io.ReadCloser, error)
-	ImageHistory(ctx context.Context, image string) ([]image.HistoryResponseItem, error)
+	ImageHistory(ctx context.Context, image string, opts image.HistoryOptions) ([]image.HistoryResponseItem, error)
 	ImageImport(ctx context.Context, source image.ImportSource, ref string, options image.ImportOptions) (io.ReadCloser, error)
-	ImageInspectWithRaw(ctx context.Context, image string) (types.ImageInspect, []byte, error)
+	// Deprecated: Use [Client.ImageInspect] instead.
+	// Raw response can be obtained by [ImageInspectWithRawResponse] option.
+	ImageInspectWithRaw(ctx context.Context, image string) (image.InspectResponse, []byte, error)
+	ImageInspect(ctx context.Context, image string, _ ...ImageInspectOption) (image.InspectResponse, error)
 	ImageList(ctx context.Context, options image.ListOptions) ([]image.Summary, error)
-	ImageLoad(ctx context.Context, input io.Reader, quiet bool) (image.LoadResponse, error)
+	ImageLoad(ctx context.Context, input io.Reader, opts image.LoadOptions) (image.LoadResponse, error)
 	ImagePull(ctx context.Context, ref string, options image.PullOptions) (io.ReadCloser, error)
 	ImagePush(ctx context.Context, ref string, options image.PushOptions) (io.ReadCloser, error)
 	ImageRemove(ctx context.Context, image string, options image.RemoveOptions) ([]image.DeleteResponse, error)
+	ImageSave(ctx context.Context, images []string, opts image.SaveOptions) (io.ReadCloser, error)
 	ImageSearch(ctx context.Context, term string, options registry.SearchOptions) ([]registry.SearchResult, error)
-	ImageSave(ctx context.Context, images []string) (io.ReadCloser, error)
 	ImageTag(ctx context.Context, image, ref string) error
 	ImagesPrune(ctx context.Context, pruneFilter filters.Args) (image.PruneReport, error)
 }
