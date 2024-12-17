@@ -49,6 +49,7 @@ type Ref interface {
 	RefMetadata
 	Release(context.Context) error
 	IdentityMapping() *idtools.IdentityMapping
+	DescHandlers() DescHandlers
 	DescHandler(digest.Digest) *DescHandler
 }
 
@@ -612,6 +613,13 @@ func (sr *immutableRef) LayerChain() RefList {
 	return l
 }
 
+func (sr *immutableRef) DescHandlers() DescHandlers {
+	// clone to prevent mutation of internal state
+	dhs := make(DescHandlers)
+	maps.Copy(dhs, sr.descHandlers)
+	return dhs
+}
+
 func (sr *immutableRef) DescHandler(dgst digest.Digest) *DescHandler {
 	return sr.descHandlers[dgst]
 }
@@ -638,6 +646,13 @@ func (sr *mutableRef) traceLogFields() logrus.Fields {
 		m["equalImmutableID"] = sr.equalImmutable.ID()
 	}
 	return m
+}
+
+func (sr *mutableRef) DescHandlers() DescHandlers {
+	// clone to prevent mutation of internal state
+	dhs := make(DescHandlers)
+	maps.Copy(dhs, sr.descHandlers)
+	return dhs
 }
 
 func (sr *mutableRef) DescHandler(dgst digest.Digest) *DescHandler {
@@ -833,6 +848,11 @@ func getBlobWithCompression(ctx context.Context, cs content.Store, desc ocispecs
 }
 
 func walkBlob(ctx context.Context, cs content.Store, desc ocispecs.Descriptor, f func(ocispecs.Descriptor) bool) error {
+	if _, err := cs.Info(ctx, desc.Digest); errors.Is(err, cerrdefs.ErrNotFound) {
+		return nil // this blob doesn't exist in the content store. Don't call the callback.
+	} else if err != nil {
+		return err
+	}
 	if !f(desc) {
 		return nil
 	}

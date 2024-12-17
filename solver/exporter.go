@@ -117,6 +117,12 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 			return nil, err
 		}
 
+		if e.edge != nil {
+			if op := e.edge.op; op != nil && op.st != nil {
+				ctx = withAncestorCacheOpts(ctx, op)
+			}
+		}
+
 		remotes, err := cm.results.LoadRemotes(ctx, res, opt.CompressionOpt, opt.Session)
 		if err != nil {
 			return nil, err
@@ -172,7 +178,7 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		for _, dep := range deps {
 			recs, err := dep.CacheKey.Exporter.ExportTo(ctx, t, opt)
 			if err != nil {
-				return nil, nil
+				return nil, err
 			}
 			for _, r := range recs {
 				srcs[i] = append(srcs[i], expr{r: r, selector: dep.Selector})
@@ -184,7 +190,7 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		for _, de := range e.edge.secondaryExporters {
 			recs, err := de.cacheKey.CacheKey.Exporter.ExportTo(ctx, t, opt)
 			if err != nil {
-				return nil, nil
+				return nil, err
 			}
 			for _, r := range recs {
 				srcs[de.index] = append(srcs[de.index], expr{r: r, selector: de.cacheKey.Selector})
