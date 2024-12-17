@@ -2,6 +2,9 @@ module github.com/moby/buildkit
 
 go 1.22.0
 
+// FIXME(thaJeztah): testing moby master
+replace github.com/docker/docker => github.com/docker/docker v27.0.2-0.20241228144932-f5af46d4d5db+incompatible
+
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.6.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.4.1
