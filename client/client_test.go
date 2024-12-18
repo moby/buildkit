@@ -2483,14 +2483,17 @@ func testFileOpSymlink(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, fileGroup, header.Gid)
 
 	entry, ok = m["baz"]
+	require.Equal(t, true, ok)
+
 	header = entry.Header
-	require.NoError(t, err)
+	// ensure it is a symlink to the proper location
+	require.Equal(t, header.Linkname, "bar")
 
 	// make sure it was chowned properly
-	require.Equal(t, true, ok)
 	require.Equal(t, linkOwner, header.Uid)
 	require.Equal(t, linkGroup, header.Gid)
 
+	// ensure it was timestamped properly
 	require.Equal(t, dummyTime, header.ModTime)
 }
 
