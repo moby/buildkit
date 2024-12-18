@@ -805,10 +805,10 @@ func validateSourcePolicy(pol *spb.Policy) error {
 	return nil
 }
 
-func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult], inp *result.Result[cache.ImmutableRef]) (exporterResponses []*controlapi.CacheExporterResponse, err error) {
+func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult], inp *result.Result[cache.ImmutableRef]) (exporterResponses []*controlapi.ExporterResponse, err error) {
 	eg, ctx := errgroup.WithContext(ctx)
 	g := session.NewGroup(j.SessionID)
-	exporterResponses = make([]*controlapi.CacheExporterResponse, len(exporters))
+	exporterResponses = make([]*controlapi.ExporterResponse, len(exporters))
 	for i, exp := range exporters {
 		id := fmt.Sprint(j.SessionID, "-cache-", i)
 		eg.Go(func() (err error) {
@@ -835,12 +835,12 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 				prepareDone(nil)
 				finalizeDone := progress.OneOff(ctx, "sending cache export")
 				resp, err := exp.Finalize(ctx)
-				exporterResponses[i] = &controlapi.CacheExporterResponse{
+				exporterResponses[i] = &controlapi.ExporterResponse{
 					// FIXME(dima): this needs proper disambiguation with IDs similar to output exporters
 					// as the same type cache exporters can potentially be specified multiple times (e.g. local
 					// cache exports/imports).
 					// Then, it should be possible to reuse controlapi.ExporterResponse for both
-					Metadata: &controlapi.CacheExporterMetadata{Name: exp.Name()},
+					Metadata: &controlapi.ExporterMetadata{ID: exp.Name()},
 					Data:     resp,
 				}
 				return finalizeDone(err)

@@ -374,7 +374,8 @@ func (c *Client) solve(ctx context.Context, opt SolveOpt, statusChan chan *Solve
 		}
 		for _, resp := range resp.CacheExporterResponses {
 			res.CacheExporterResponses = append(res.CacheExporterResponses, ExporterResponse{
-				ID:   resp.Metadata.Name,
+				ID:   resp.Metadata.ID,
+				Type: resp.Metadata.Type,
 				Data: resp.Data,
 			})
 		}
