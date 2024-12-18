@@ -130,6 +130,8 @@ func attr(dgst digest.Digest, op *pb.Op) (string, string) {
 				name = fmt.Sprintf("mkdir{path=%s}", act.Mkdir.Path)
 			case *pb.FileAction_Rm:
 				name = fmt.Sprintf("rm{path=%s}", act.Rm.Path)
+			case *pb.FileAction_Symlink:
+				name = fmt.Sprintf("symlink{oldpath=%s, newpath=%s}", act.Symlink.Oldpath, act.Symlink.Newpath)
 			}
 
 			names = append(names, name)
