@@ -82,5 +82,6 @@ type exporterResponses []ExporterResponse
 
 type ExporterResponse struct {
 	ID   string
+	Type string
 	Data map[string]string
 }
