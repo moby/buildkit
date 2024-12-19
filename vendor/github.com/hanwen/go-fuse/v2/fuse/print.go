@@ -12,73 +12,82 @@ import (
 )
 
 var (
-	writeFlagNames = newFlagNames(map[int64]string{
-		WRITE_CACHE:     "CACHE",
-		WRITE_LOCKOWNER: "LOCKOWNER",
+	isTest         bool
+	writeFlagNames = newFlagNames([]flagNameEntry{
+		{WRITE_CACHE, "CACHE"},
+		{WRITE_LOCKOWNER, "LOCKOWNER"},
 	})
-	readFlagNames = newFlagNames(map[int64]string{
-		READ_LOCKOWNER: "LOCKOWNER",
+	readFlagNames = newFlagNames([]flagNameEntry{
+		{READ_LOCKOWNER, "LOCKOWNER"},
 	})
-	initFlagNames = newFlagNames(map[int64]string{
-		CAP_ASYNC_READ:          "ASYNC_READ",
-		CAP_POSIX_LOCKS:         "POSIX_LOCKS",
-		CAP_FILE_OPS:            "FILE_OPS",
-		CAP_ATOMIC_O_TRUNC:      "ATOMIC_O_TRUNC",
-		CAP_EXPORT_SUPPORT:      "EXPORT_SUPPORT",
-		CAP_BIG_WRITES:          "BIG_WRITES",
-		CAP_DONT_MASK:           "DONT_MASK",
-		CAP_SPLICE_WRITE:        "SPLICE_WRITE",
-		CAP_SPLICE_MOVE:         "SPLICE_MOVE",
-		CAP_SPLICE_READ:         "SPLICE_READ",
-		CAP_FLOCK_LOCKS:         "FLOCK_LOCKS",
-		CAP_IOCTL_DIR:           "IOCTL_DIR",
-		CAP_AUTO_INVAL_DATA:     "AUTO_INVAL_DATA",
-		CAP_READDIRPLUS:         "READDIRPLUS",
-		CAP_READDIRPLUS_AUTO:    "READDIRPLUS_AUTO",
-		CAP_ASYNC_DIO:           "ASYNC_DIO",
-		CAP_WRITEBACK_CACHE:     "WRITEBACK_CACHE",
-		CAP_NO_OPEN_SUPPORT:     "NO_OPEN_SUPPORT",
-		CAP_PARALLEL_DIROPS:     "PARALLEL_DIROPS",
-		CAP_POSIX_ACL:           "POSIX_ACL",
-		CAP_HANDLE_KILLPRIV:     "HANDLE_KILLPRIV",
-		CAP_ABORT_ERROR:         "ABORT_ERROR",
-		CAP_MAX_PAGES:           "MAX_PAGES",
-		CAP_CACHE_SYMLINKS:      "CACHE_SYMLINKS",
-		CAP_NO_OPENDIR_SUPPORT:  "NO_OPENDIR_SUPPORT",
-		CAP_EXPLICIT_INVAL_DATA: "EXPLICIT_INVAL_DATA",
+	initFlagNames = newFlagNames([]flagNameEntry{
+		{CAP_ASYNC_READ, "ASYNC_READ"},
+		{CAP_POSIX_LOCKS, "POSIX_LOCKS"},
+		{CAP_FILE_OPS, "FILE_OPS"},
+		{CAP_ATOMIC_O_TRUNC, "ATOMIC_O_TRUNC"},
+		{CAP_EXPORT_SUPPORT, "EXPORT_SUPPORT"},
+		{CAP_BIG_WRITES, "BIG_WRITES"},
+		{CAP_DONT_MASK, "DONT_MASK"},
+		{CAP_SPLICE_WRITE, "SPLICE_WRITE"},
+		{CAP_SPLICE_MOVE, "SPLICE_MOVE"},
+		{CAP_SPLICE_READ, "SPLICE_READ"},
+		{CAP_FLOCK_LOCKS, "FLOCK_LOCKS"},
+		{CAP_IOCTL_DIR, "IOCTL_DIR"},
+		{CAP_AUTO_INVAL_DATA, "AUTO_INVAL_DATA"},
+		{CAP_READDIRPLUS, "READDIRPLUS"},
+		{CAP_READDIRPLUS_AUTO, "READDIRPLUS_AUTO"},
+		{CAP_ASYNC_DIO, "ASYNC_DIO"},
+		{CAP_WRITEBACK_CACHE, "WRITEBACK_CACHE"},
+		{CAP_NO_OPEN_SUPPORT, "NO_OPEN_SUPPORT"},
+		{CAP_PARALLEL_DIROPS, "PARALLEL_DIROPS"},
+		{CAP_POSIX_ACL, "POSIX_ACL"},
+		{CAP_HANDLE_KILLPRIV, "HANDLE_KILLPRIV"},
+		{CAP_ABORT_ERROR, "ABORT_ERROR"},
+		{CAP_MAX_PAGES, "MAX_PAGES"},
+		{CAP_CACHE_SYMLINKS, "CACHE_SYMLINKS"},
+		{CAP_SECURITY_CTX, "SECURITY_CTX"},
+		{CAP_HAS_INODE_DAX, "HAS_INODE_DAX"},
+		{CAP_CREATE_SUPP_GROUP, "CREATE_SUPP_GROUP"},
+		{CAP_HAS_EXPIRE_ONLY, "HAS_EXPIRE_ONLY"},
+		{CAP_DIRECT_IO_ALLOW_MMAP, "DIRECT_IO_ALLOW_MMAP"},
+		{CAP_PASSTHROUGH, "PASSTHROUGH"},
+		{CAP_NO_EXPORT_SUPPORT, "NO_EXPORT_SUPPORT"},
+		{CAP_HAS_RESEND, "HAS_RESEND"},
 	})
-	releaseFlagNames = newFlagNames(map[int64]string{
-		RELEASE_FLUSH: "FLUSH",
+	releaseFlagNames = newFlagNames([]flagNameEntry{
+		{RELEASE_FLUSH, "FLUSH"},
 	})
-	openFlagNames = newFlagNames(map[int64]string{
-		int64(os.O_WRONLY):        "WRONLY",
-		int64(os.O_RDWR):          "RDWR",
-		int64(os.O_APPEND):        "APPEND",
-		int64(syscall.O_ASYNC):    "ASYNC",
-		int64(os.O_CREATE):        "CREAT",
-		int64(os.O_EXCL):          "EXCL",
-		int64(syscall.O_NOCTTY):   "NOCTTY",
-		int64(syscall.O_NONBLOCK): "NONBLOCK",
-		int64(os.O_SYNC):          "SYNC",
-		int64(os.O_TRUNC):         "TRUNC",
-
-		int64(syscall.O_CLOEXEC):   "CLOEXEC",
-		int64(syscall.O_DIRECTORY): "DIRECTORY",
+	openFlagNames = newFlagNames([]flagNameEntry{
+		{int64(os.O_WRONLY), "WRONLY"},
+		{int64(os.O_RDWR), "RDWR"},
+		{int64(os.O_APPEND), "APPEND"},
+		{int64(syscall.O_ASYNC), "ASYNC"},
+		{int64(os.O_CREATE), "CREAT"},
+		{int64(os.O_EXCL), "EXCL"},
+		{int64(syscall.O_NOCTTY), "NOCTTY"},
+		{int64(syscall.O_NONBLOCK), "NONBLOCK"},
+		{int64(os.O_SYNC), "SYNC"},
+		{int64(os.O_TRUNC), "TRUNC"},
+		{int64(syscall.O_CLOEXEC), "CLOEXEC"},
+		{int64(syscall.O_DIRECTORY), "DIRECTORY"},
 	})
-	fuseOpenFlagNames = newFlagNames(map[int64]string{
-		FOPEN_DIRECT_IO:   "DIRECT",
-		FOPEN_KEEP_CACHE:  "CACHE",
-		FOPEN_NONSEEKABLE: "NONSEEK",
-		FOPEN_CACHE_DIR:   "CACHE_DIR",
-		FOPEN_STREAM:      "STREAM",
+	fuseOpenFlagNames = newFlagNames([]flagNameEntry{
+		{FOPEN_DIRECT_IO, "DIRECT"},
+		{FOPEN_KEEP_CACHE, "CACHE"},
+		{FOPEN_NONSEEKABLE, "NONSEEK"},
+		{FOPEN_CACHE_DIR, "CACHE_DIR"},
+		{FOPEN_STREAM, "STREAM"},
+		{FOPEN_NOFLUSH, "NOFLUSH"},
+		{FOPEN_PARALLEL_DIRECT_WRITES, "PARALLEL_DIRECT_WRITES"},
+		{FOPEN_PASSTHROUGH, "PASSTHROUGH"},
 	})
-	accessFlagName = newFlagNames(map[int64]string{
-		X_OK: "x",
-		W_OK: "w",
-		R_OK: "r",
+	accessFlagName = newFlagNames([]flagNameEntry{
+		{X_OK, "x"},
+		{W_OK, "w"},
+		{R_OK, "r"},
 	})
-	getAttrFlagNames = newFlagNames(map[int64]string{
-		FUSE_GETATTR_FH: "FH",
+	getAttrFlagNames = newFlagNames([]flagNameEntry{
+		{FUSE_GETATTR_FH, "FH"},
 	})
 )
 
@@ -96,10 +105,10 @@ type flagNameEntry struct {
 }
 
 // newFlagNames creates flagNames from flag->name map.
-func newFlagNames(names map[int64]string) *flagNames {
+func newFlagNames(names []flagNameEntry) *flagNames {
 	var v flagNames
-	for flag, name := range names {
-		v.set(flag, name)
+	for _, e := range names {
+		v.set(e.bits, e.name)
 	}
 	return &v
 }
@@ -109,7 +118,7 @@ func (names *flagNames) set(flag int64, name string) {
 	entry := flagNameEntry{bits: flag, name: name}
 	for i := 0; i < 64; i++ {
 		if flag&(1<<i) != 0 {
-			if ie := names[i]; ie.bits != 0 {
+			if ie := names[i]; ie.bits != 0 && isTest {
 				panic(fmt.Sprintf("%s (%x) overlaps with %s (%x)", name, flag, ie.name, ie.bits))
 			}
 			names[i] = entry
@@ -202,22 +211,26 @@ func (in *OpenIn) string() string {
 }
 
 func (in *OpenOut) string() string {
-	return fmt.Sprintf("{Fh %d %s}", in.Fh,
+	backing := ""
+	if in.BackingID != 0 {
+		backing = fmt.Sprintf("backing=%d ", in.BackingID)
+	}
+	return fmt.Sprintf("{Fh %d %s%s}", in.Fh, backing,
 		flagString(fuseOpenFlagNames, int64(in.OpenFlags), ""))
 }
 
 func (in *InitIn) string() string {
 	return fmt.Sprintf("{%d.%d Ra %d %s}",
 		in.Major, in.Minor, in.MaxReadAhead,
-		flagString(initFlagNames, int64(in.Flags), ""))
+		flagString(initFlagNames, int64(in.Flags64()), ""))
 }
 
 func (o *InitOut) string() string {
-	return fmt.Sprintf("{%d.%d Ra %d %s %d/%d Wr %d Tg %d MaxPages %d}",
+	return fmt.Sprintf("{%d.%d Ra %d %s %d/%d Wr %d Tg %d MaxPages %d MaxStack %d}",
 		o.Major, o.Minor, o.MaxReadAhead,
-		flagString(initFlagNames, int64(o.Flags), ""),
+		flagString(initFlagNames, int64(o.Flags64()), ""),
 		o.CongestionThreshold, o.MaxBackground, o.MaxWrite,
-		o.TimeGran, o.MaxPages)
+		o.TimeGran, o.MaxPages, o.MaxStackDepth)
 }
 
 func (s *FsyncIn) string() string {
@@ -266,7 +279,7 @@ func (o *EntryOut) string() string {
 }
 
 func (o *CreateOut) string() string {
-	return fmt.Sprintf("{n%d g%d %v %v}", o.NodeId, o.Generation, &o.EntryOut, &o.OpenOut)
+	return fmt.Sprintf("{n%d g%d %v %v}", o.NodeId, o.Generation, &o.EntryOut, o.OpenOut.string())
 }
 
 func (o *StatfsOut) string() string {
@@ -339,6 +352,10 @@ func (o *LseekOut) string() string {
 	return fmt.Sprintf("{%d}", o.Offset)
 }
 
+func (p *_PollIn) string() string {
+	return fmt.Sprintf("Fh %d Kh %d Flags 0x%x", p.Fh, p.Kh, p.Flags)
+}
+
 // Print pretty prints FUSE data types for kernel communication
 func Print(obj interface{}) string {
 	t, ok := obj.(interface {
@@ -348,4 +365,23 @@ func Print(obj interface{}) string {
 		return t.string()
 	}
 	return fmt.Sprintf("%T: %v", obj, obj)
+}
+
+func (a *Attr) string() string {
+	return fmt.Sprintf(
+		"{M0%o SZ=%d L=%d "+
+			"%d:%d "+
+			"B%d*%d i%d:%d "+
+			"A %f "+
+			"M %f "+
+			"C %f}",
+		a.Mode, a.Size, a.Nlink,
+		a.Uid, a.Gid,
+		a.Blocks, a.Blksize,
+		a.Rdev, a.Ino, ft(a.Atime, a.Atimensec), ft(a.Mtime, a.Mtimensec),
+		ft(a.Ctime, a.Ctimensec))
+}
+
+func (m *BackingMap) string() string {
+	return fmt.Sprintf("{fd %d, flags 0x%x}", m.Fd, m.Flags)
 }

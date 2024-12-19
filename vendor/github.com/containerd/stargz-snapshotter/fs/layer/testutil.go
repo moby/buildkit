@@ -26,11 +26,13 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/rand"
+	"math"
+	"math/big"
 	"net/http"
 	"os"
 	"path"
@@ -40,7 +42,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/containerd/containerd/reference"
+	"github.com/containerd/containerd/v2/pkg/reference"
 	"github.com/containerd/stargz-snapshotter/cache"
 	"github.com/containerd/stargz-snapshotter/estargz"
 	"github.com/containerd/stargz-snapshotter/fs/reader"
@@ -979,8 +981,11 @@ func hasStateFile(t *testing.T, id string) check {
 		}
 
 		// wanted data
-		rand.Seed(time.Now().UnixNano())
-		wantErr := fmt.Errorf("test-%d", rand.Int63())
+		b, err := rand.Int(rand.Reader, big.NewInt(math.MaxInt64))
+		if err != nil {
+			panic(err)
+		}
+		wantErr := fmt.Errorf("test-%d", b.Int64())
 
 		// report the data
 		root.fs.s.report(wantErr)

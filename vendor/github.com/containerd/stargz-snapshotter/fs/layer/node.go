@@ -45,7 +45,6 @@ import (
 	fusefs "github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 )
 
@@ -612,7 +611,7 @@ func (sf *statFile) Statfs(ctx context.Context, out *fuse.StatfsOut) syscall.Err
 // The entries naming is kept to be consistend with the field naming in statJSON.
 func (sf *statFile) logContents() {
 	ctx := context.Background()
-	log.G(ctx).WithFields(logrus.Fields{
+	log.G(ctx).WithFields(log.Fields{
 		"digest": sf.statJSON.Digest, "size": sf.statJSON.Size,
 		"fetchedSize": sf.statJSON.FetchedSize, "fetchedPercent": sf.statJSON.FetchedPercent,
 	}).WithError(errors.New(sf.statJSON.Error)).Error("statFile error")
