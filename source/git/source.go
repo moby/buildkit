@@ -547,6 +547,14 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		if err != nil {
 			return nil, err
 		}
+		_, err = checkoutGit.Run(ctx, "lfs", "install", "--local")
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to install lfs for repo at %s", checkoutDir)
+		}
+		_, err = checkoutGit.Run(ctx, "config", "lfs.url", gs.src.Remote+"/info/lfs")
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to set lfs.url for remote %s", urlutil.RedactCredentials(gs.src.Remote))
+		}
 
 		gitCatFileBuf, err := git.Run(ctx, "cat-file", "-t", ref)
 		if err != nil {
@@ -595,6 +603,10 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 			}
 		}
 		checkoutGit := git.New(gitutil.WithWorkTree(cd), gitutil.WithGitDir(gitDir))
+		_, err = checkoutGit.Run(ctx, "lfs", "install", "--local")
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to install lfs for repo at %s", cd)
+		}
 		_, err = checkoutGit.Run(ctx, "checkout", ref, "--", ".")
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to checkout remote %s", urlutil.RedactCredentials(gs.src.Remote))
