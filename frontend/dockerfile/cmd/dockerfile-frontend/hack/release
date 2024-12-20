@@ -104,6 +104,7 @@ case $TYP in
   buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags $nocacheFilterFlag $(buildAttestFlags) \
     --build-arg "CHANNEL=$TAG" \
     --build-arg "BUILDTAGS=$buildTags" \
+    --build-arg "BUILDKIT_CONTEXT_KEEP_GIT_DIR=1" \
     --output "${outputFlag},name=$REPO:$pushTag" \
     --file "./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile" \
     $currentcontext
@@ -125,6 +126,7 @@ case $TYP in
   buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags $nocacheFilterFlag $(buildAttestFlags) \
     --build-arg "CHANNEL=$TAG" \
     --build-arg "BUILDTAGS=$buildTags" \
+    --build-arg "BUILDKIT_CONTEXT_KEEP_GIT_DIR=1" \
     --output "$outputFlag" \
     --file "./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile" \
     $currentcontext
