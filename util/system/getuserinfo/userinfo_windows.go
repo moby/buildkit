@@ -8,7 +8,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"github.com/docker/docker/pkg/idtools"
-	"github.com/docker/docker/pkg/reexec"
+	"github.com/moby/sys/reexec"
 )
 
 const (
