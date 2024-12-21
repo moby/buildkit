@@ -22,7 +22,8 @@ var pageSize = os.Getpagesize()
 
 func (p *bufferPool) getPool(pageCount int) *sync.Pool {
 	p.lock.Lock()
-	for len(p.buffersBySize) < pageCount+1 {
+	defer p.lock.Unlock()
+	for len(p.buffersBySize) <= pageCount {
 		p.buffersBySize = append(p.buffersBySize, nil)
 	}
 	if p.buffersBySize[pageCount] == nil {
@@ -30,9 +31,7 @@ func (p *bufferPool) getPool(pageCount int) *sync.Pool {
 			New: func() interface{} { return make([]byte, pageSize*pageCount) },
 		}
 	}
-	pool := p.buffersBySize[pageCount]
-	p.lock.Unlock()
-	return pool
+	return p.buffersBySize[pageCount]
 }
 
 // AllocBuffer creates a buffer of at least the given size. After use,

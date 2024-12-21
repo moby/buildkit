@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/containerd/containerd/content"
-	"github.com/containerd/containerd/content/local"
-	"github.com/containerd/containerd/content/proxy"
+	"github.com/containerd/containerd/v2/core/content"
+	"github.com/containerd/containerd/v2/core/content/proxy"
+	"github.com/containerd/containerd/v2/plugins/content/local"
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/containerd/platforms"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"

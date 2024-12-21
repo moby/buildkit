@@ -1,3 +1,5 @@
+//go:build linux
+
 // Copyright 2016 the Go-FUSE Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
@@ -8,9 +10,9 @@ package splice
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
+	"sync"
 	"syscall"
 )
 
@@ -30,11 +32,13 @@ func MaxPipeSize() int {
 // Since Linux 2.6.11, the pipe capacity is 65536 bytes.
 const DefaultPipeSize = 16 * 4096
 
-// We empty pipes by splicing to /dev/null.
-var devNullFD uintptr
+var (
+	devNullFDOnce  sync.Once
+	devNullFDValue int
+)
 
 func init() {
-	content, err := ioutil.ReadFile("/proc/sys/fs/pipe-max-size")
+	content, err := os.ReadFile("/proc/sys/fs/pipe-max-size")
 	if err != nil {
 		maxPipeSize = DefaultPipeSize
 	} else {
@@ -51,13 +55,18 @@ func init() {
 	resizable = resizable && (errNo == 0)
 	r.Close()
 	w.Close()
+}
 
-	fd, err := syscall.Open("/dev/null", os.O_WRONLY, 0)
-	if err != nil {
-		log.Panicf("splice: %v", err)
-	}
-
-	devNullFD = uintptr(fd)
+// We empty pipes by splicing to /dev/null.
+func devNullFD() int {
+	devNullFDOnce.Do(func() {
+		fd, err := syscall.Open("/dev/null", os.O_WRONLY, 0)
+		if err != nil {
+			panic(fmt.Sprintf("failed to open /dev/null: %s", err))
+		}
+		devNullFDValue = fd
+	})
+	return devNullFDValue
 }
 
 // copy & paste from syscall.

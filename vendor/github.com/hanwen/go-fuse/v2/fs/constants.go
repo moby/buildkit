@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/hanwen/go-fuse/v2/fuse"
+	"github.com/hanwen/go-fuse/v2/internal/xattr"
 )
 
 // OK is the Errno return value to indicate absense of errors.
@@ -27,3 +28,6 @@ const _SEEK_DATA = 3
 
 // seek to the next hole
 const _SEEK_HOLE = 4
+
+// ENOATTR indicates that an extended attribute was not present.
+const ENOATTR = xattr.ENOATTR

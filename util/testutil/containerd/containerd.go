@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	containerdpkg "github.com/containerd/containerd"
+	containerdpkg "github.com/containerd/containerd/v2/client"
 )
 
 func GetVersion(t *testing.T, cdAddress string) string {

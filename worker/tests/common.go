@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/containerd/v2/pkg/namespaces"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/identity"
