@@ -2,6 +2,11 @@ module github.com/moby/buildkit
 
 go 1.22.0
 
+// FIXME(thaJeztah): testing https://github.com/moby/moby/pull/49162 (pkg_system_volume_uuid branch)
+replace github.com/docker/docker => github.com/thaJeztah/docker v24.0.0-rc.1.0.20241221133943-c759fb20d64a+incompatible
+
+replace github.com/docker/cli => github.com/docker/cli v27.0.2-0.20241218124108-2f67b2f3ff3a+incompatible
+
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.6.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.4.1

@@ -19,10 +19,10 @@ produces:
 consumes:
   - "application/json"
   - "text/plain"
-basePath: "/v1.47"
+basePath: "/v1.48"
 info:
   title: "Docker Engine API"
-  version: "1.47"
+  version: "1.48"
   x-logo:
     url: "https://docs.docker.com/assets/images/logo-docker-main.png"
   description: |
@@ -55,8 +55,8 @@ info:
     the URL is not supported by the daemon, a HTTP `400 Bad Request` error message
     is returned.
 
-    If you omit the version-prefix, the current version of the API (v1.47) is used.
-    For example, calling `/info` is the same as calling `/v1.47/info`. Using the
+    If you omit the version-prefix, the current version of the API (v1.48) is used.
+    For example, calling `/info` is the same as calling `/v1.48/info`. Using the
     API without a version-prefix is deprecated and will be removed in a future release.
 
     Engine releases in the near future should support this version of the API,
@@ -1195,6 +1195,7 @@ definitions:
               - "default"
               - "process"
               - "hyperv"
+              - ""
           MaskedPaths:
             type: "array"
             description: |
@@ -1917,7 +1918,7 @@ definitions:
         type: "string"
         example: "4443"
 
-  GraphDriverData:
+  DriverData:
     description: |
       Information about the storage driver used to store the container's and
       image's filesystem.
@@ -1991,6 +1992,18 @@ definitions:
         type: "string"
         x-nullable: false
         example: "sha256:ec3f0931a6e6b6855d76b2d7b0be30e81860baccd891b2e243280bf1cd8ad710"
+      Descriptor:
+        description: |
+          Descriptor is an OCI descriptor of the image target.
+          In case of a multi-platform image, this descriptor points to the OCI index
+          or a manifest list.
+
+          This field is only present if the daemon provides a multi-platform image store.
+
+          WARNING: This is experimental and may change at any time without any backward
+          compatibility.
+        x-nullable: true
+        $ref: "#/definitions/OCIDescriptor"
       RepoTags:
         description: |
           List of image names/tags in the local image cache that reference this
@@ -2107,7 +2120,7 @@ definitions:
         format: "int64"
         example: 1239828
       GraphDriver:
-        $ref: "#/definitions/GraphDriverData"
+        $ref: "#/definitions/DriverData"
       RootFS:
         description: |
           Information about the image's RootFS, including the layer IDs.
@@ -2278,6 +2291,18 @@ definitions:
         x-omitempty: true
         items:
           $ref: "#/definitions/ImageManifestSummary"
+      Descriptor:
+        description: |
+          Descriptor is an OCI descriptor of the image target.
+          In case of a multi-platform image, this descriptor points to the OCI index
+          or a manifest list.
+
+          This field is only present if the daemon provides a multi-platform image store.
+
+          WARNING: This is experimental and may change at any time without any backward
+          compatibility.
+        x-nullable: true
+        $ref: "#/definitions/OCIDescriptor"
 
   AuthConfig:
     type: "object"
@@ -2497,6 +2522,11 @@ definitions:
           `overlay`).
         type: "string"
         example: "overlay"
+      EnableIPv4:
+        description: |
+          Whether the network was created with IPv4 enabled.
+        type: "boolean"
+        example: true
       EnableIPv6:
         description: |
           Whether the network was created with IPv6 enabled.
@@ -2898,6 +2928,16 @@ definitions:
         example:
           com.example.some-label: "some-value"
           com.example.some-other-label: "some-other-value"
+      GwPriority:
+        description: |
+          This property determines which endpoint will provide the default
+          gateway for a container. The endpoint with the highest priority will
+          be used. If multiple endpoints have the same priority, endpoints are
+          lexicographically sorted based on their network name, and the one
+          that sorts first is picked.
+        type: "number"
+        example:
+          - 10
 
       # Operational data
       NetworkID:
@@ -4180,6 +4220,7 @@ definitions:
               - "default"
               - "process"
               - "hyperv"
+              - ""
           Init:
             description: |
               Run an init inside the container that forwards signals and reaps
@@ -5507,13 +5548,28 @@ definitions:
         type: "boolean"
         example: true
       BridgeNfIptables:
-        description: "Indicates if `bridge-nf-call-iptables` is available on the host."
+        description: |
+          Indicates if `bridge-nf-call-iptables` is available on the host when
+          the daemon was started.
+
+          <p><br /></p>
+
+          > **Deprecated**: netfilter module is now loaded on-demand and no longer
+          > during daemon startup, making this field obsolete. This field is always
+          > `false` and will be removed in a API v1.49.
         type: "boolean"
-        example: true
+        example: false
       BridgeNfIp6tables:
-        description: "Indicates if `bridge-nf-call-ip6tables` is available on the host."
+        description: |
+          Indicates if `bridge-nf-call-ip6tables` is available on the host.
+
+          <p><br /></p>
+
+          > **Deprecated**: netfilter module is now loaded on-demand, and no longer
+          > during daemon startup, making this field obsolete. This field is always
+          > `false` and will be removed in a API v1.49.
         type: "boolean"
-        example: true
+        example: false
       Debug:
         description: |
           Indicates if the daemon is running in debug-mode / with debug-level
@@ -5750,6 +5806,7 @@ definitions:
           - "default"
           - "hyperv"
           - "process"
+          - ""
       InitBinary:
         description: |
           Name and, optional, path of the `docker-init` binary.
@@ -5820,8 +5877,6 @@ definitions:
           type: "string"
         example:
           - "WARNING: No memory limit support"
-          - "WARNING: bridge-nf-call-iptables is disabled"
-          - "WARNING: bridge-nf-call-ip6tables is disabled"
       CDISpecDirs:
         description: |
           List of directories where (Container Device Interface) CDI
@@ -5944,55 +5999,27 @@ definitions:
           List of IP ranges to which nondistributable artifacts can be pushed,
           using the CIDR syntax [RFC 4632](https://tools.ietf.org/html/4632).
 
-          Some images (for example, Windows base images) contain artifacts
-          whose distribution is restricted by license. When these images are
-          pushed to a registry, restricted artifacts are not included.
+          <p><br /></p>
 
-          This configuration override this behavior, and enables the daemon to
-          push nondistributable artifacts to all registries whose resolved IP
-          address is within the subnet described by the CIDR syntax.
-
-          This option is useful when pushing images containing
-          nondistributable artifacts to a registry on an air-gapped network so
-          hosts on that network can pull the images without connecting to
-          another server.
-
-          > **Warning**: Nondistributable artifacts typically have restrictions
-          > on how and where they can be distributed and shared. Only use this
-          > feature to push artifacts to private registries and ensure that you
-          > are in compliance with any terms that cover redistributing
-          > nondistributable artifacts.
-
+          > **Deprecated**: Pushing nondistributable artifacts is now always enabled
+          > and this field is always `null`. This field will be removed in a API v1.49.
         type: "array"
         items:
           type: "string"
-        example: ["::1/128", "127.0.0.0/8"]
+        example: []
       AllowNondistributableArtifactsHostnames:
         description: |
           List of registry hostnames to which nondistributable artifacts can be
           pushed, using the format `<hostname>[:<port>]` or `<IP address>[:<port>]`.
 
-          Some images (for example, Windows base images) contain artifacts
-          whose distribution is restricted by license. When these images are
-          pushed to a registry, restricted artifacts are not included.
+          <p><br /></p>
 
-          This configuration override this behavior for the specified
-          registries.
-
-          This option is useful when pushing images containing
-          nondistributable artifacts to a registry on an air-gapped network so
-          hosts on that network can pull the images without connecting to
-          another server.
-
-          > **Warning**: Nondistributable artifacts typically have restrictions
-          > on how and where they can be distributed and shared. Only use this
-          > feature to push artifacts to private registries and ensure that you
-          > are in compliance with any terms that cover redistributing
-          > nondistributable artifacts.
+          > **Deprecated**: Pushing nondistributable artifacts is now always enabled
+          > and this field is always `null`. This field will be removed in a API v1.49.
         type: "array"
         items:
           type: "string"
-        example: ["registry.internal.corp.example.com:3000", "[2001:db8:a0b:12f0::1]:443"]
+        example: []
       InsecureRegistryCIDRs:
         description: |
           List of IP ranges of insecure registries, using the CIDR syntax
@@ -6000,7 +6027,7 @@ definitions:
           accept un-encrypted (HTTP) and/or untrusted (HTTPS with certificates
           from unknown CAs) communication.
 
-          By default, local registries (`127.0.0.0/8`) are configured as
+          By default, local registries (`::1/128` and `127.0.0.0/8`) are configured as
           insecure. All other registries are secure. Communicating with an
           insecure registry is not possible if the daemon assumes that registry
           is secure.
@@ -6165,6 +6192,8 @@ definitions:
       Expected:
         description: |
           Commit ID of external tool expected by dockerd as set at build time.
+
+          **Deprecated**: This field is deprecated and will be omitted in a API v1.49.
         type: "string"
         example: "2d41c047c83e09a6d61d464906feb2a2f3c52aa4"
 
@@ -7235,6 +7264,14 @@ paths:
                 type: "string"
               Platform:
                 type: "string"
+              ImageManifestDescriptor:
+                $ref: "#/definitions/OCIDescriptor"
+                description: |
+                  OCI descriptor of the platform-specific manifest of the image
+                  the container was created from.
+
+                  Note: Only available if the daemon provides a multi-platform
+                  image store.
               MountLabel:
                 type: "string"
               ProcessLabel:
@@ -7250,7 +7287,7 @@ paths:
               HostConfig:
                 $ref: "#/definitions/HostConfig"
               GraphDriver:
-                $ref: "#/definitions/GraphDriverData"
+                $ref: "#/definitions/DriverData"
               SizeRw:
                 description: |
                   The size of files that have been created or changed by this
@@ -9199,6 +9236,20 @@ paths:
           description: "Image name or ID"
           type: "string"
           required: true
+        - name: "platform"
+          type: "string"
+          in: "query"
+          description: |
+            JSON-encoded OCI platform to select the platform-variant.
+            If omitted, it defaults to any locally available platform,
+            prioritizing the daemon's host platform.
+
+            If the daemon provides a multi-platform image store, this selects
+            the platform-variant to show the history for. If the image is
+            a single-platform image, or if the multi-platform image does not
+            provide a variant matching the given platform, an error is returned.
+
+            Example: `{"os": "linux", "architecture": "arm", "variant": "v5"}`
       tags: ["Image"]
   /images/{name}/push:
     post:
@@ -9563,7 +9614,7 @@ paths:
             type: "string"
             example: "OK"
           headers:
-            API-Version:
+            Api-Version:
               type: "string"
               description: "Max API Version the server supports"
             Builder-Version:
@@ -9619,7 +9670,7 @@ paths:
             type: "string"
             example: "(empty)"
           headers:
-            API-Version:
+            Api-Version:
               type: "string"
               description: "Max API Version the server supports"
             Builder-Version:
@@ -9952,7 +10003,16 @@ paths:
           description: "Image name or ID"
           type: "string"
           required: true
-      tags: ["Image"]
+        - name: "platform"
+          type: "string"
+          in: "query"
+          description: |
+            JSON encoded OCI platform describing a platform which will be used
+            to select a platform-specific image to be saved if the image is
+            multi-platform.
+            If not provided, the full multi-platform image will be saved.
+
+            Example: `{"os": "linux", "architecture": "arm", "variant": "v5"}`
   /images/get:
     get:
       summary: "Export several images"
@@ -10019,6 +10079,16 @@ paths:
           description: "Suppress progress details during load."
           type: "boolean"
           default: false
+        - name: "platform"
+          type: "string"
+          in: "query"
+          description: |
+            JSON encoded OCI platform describing a platform which will be used
+            to select a platform-specific image to be load if the image is
+            multi-platform.
+            If not provided, the full multi-platform image will be loaded.
+
+            Example: `{"os": "linux", "architecture": "arm", "variant": "v5"}`
       tags: ["Image"]
   /containers/{id}/exec:
     post:
@@ -10532,6 +10602,7 @@ paths:
                 Created: "2016-10-19T06:21:00.416543526Z"
                 Scope: "local"
                 Driver: "bridge"
+                EnableIPv4: true
                 EnableIPv6: false
                 Internal: false
                 Attachable: false
@@ -10553,6 +10624,7 @@ paths:
                 Created: "0001-01-01T00:00:00Z"
                 Scope: "local"
                 Driver: "null"
+                EnableIPv4: false
                 EnableIPv6: false
                 Internal: false
                 Attachable: false
@@ -10567,6 +10639,7 @@ paths:
                 Created: "0001-01-01T00:00:00Z"
                 Scope: "local"
                 Driver: "host"
+                EnableIPv4: false
                 EnableIPv6: false
                 Internal: false
                 Attachable: false
@@ -10752,6 +10825,12 @@ paths:
               IPAM:
                 description: "Optional custom IP scheme for the network."
                 $ref: "#/definitions/IPAM"
+              EnableIPv4:
+                description: |
+                  Enable IPv4 on the network.
+                  To disable IPv4, the daemon must be started with experimental features enabled.
+                type: "boolean"
+                example: true
               EnableIPv6:
                 description: "Enable IPv6 on the network."
                 type: "boolean"
@@ -10829,6 +10908,7 @@ paths:
                   IPv4Address: "172.24.56.89"
                   IPv6Address: "2001:db8::5689"
                 MacAddress: "02:42:ac:12:05:02"
+                Priority: 100
       tags: ["Network"]
 
   /networks/{id}/disconnect:
@@ -11634,6 +11714,7 @@ paths:
             example:
               ListenAddr: "0.0.0.0:2377"
               AdvertiseAddr: "192.168.1.1:2377"
+              DataPathAddr: "192.168.1.1"
               RemoteAddrs:
                 - "node1:2377"
               JoinToken: "SWMTKN-1-3pu6hszjas19xyp7ghgosyx9k8atbfcr8p2is99znpy26u2lkl-7p73s1dx5in4tatdymyhg9hu2"

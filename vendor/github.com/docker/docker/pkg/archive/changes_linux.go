@@ -1,4 +1,4 @@
-package archive // import "github.com/docker/docker/pkg/archive"
+package archive
 
 import (
 	"bytes"
@@ -9,7 +9,6 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/docker/docker/pkg/system"
 	"golang.org/x/sys/unix"
 )
 
@@ -74,12 +73,8 @@ func walkchunk(path string, fi os.FileInfo, dir string, root *FileInfo) error {
 		parent:   parent,
 	}
 	cpath := filepath.Join(dir, path)
-	stat, err := system.FromStatT(fi.Sys().(*syscall.Stat_t))
-	if err != nil {
-		return err
-	}
-	info.stat = stat
-	info.capability, _ = system.Lgetxattr(cpath, "security.capability") // lgetxattr(2): fs access
+	info.stat = fi
+	info.capability, _ = lgetxattr(cpath, "security.capability") // lgetxattr(2): fs access
 	parent.children[info.name] = info
 	return nil
 }
@@ -261,13 +256,13 @@ func readdirnames(dirname string) (names []nameIno, err error) {
 func parseDirent(buf []byte, names []nameIno) (consumed int, newnames []nameIno) {
 	origlen := len(buf)
 	for len(buf) > 0 {
-		dirent := (*unix.Dirent)(unsafe.Pointer(&buf[0]))
+		dirent := (*unix.Dirent)(unsafe.Pointer(&buf[0])) // #nosec G103 -- Ignore "G103: Use of unsafe calls should be audited"
 		buf = buf[dirent.Reclen:]
 		if dirent.Ino == 0 { // File absent in directory.
 			continue
 		}
-		bytes := (*[10000]byte)(unsafe.Pointer(&dirent.Name[0]))
-		name := string(bytes[0:clen(bytes[:])])
+		b := (*[10000]byte)(unsafe.Pointer(&dirent.Name[0])) // #nosec G103 -- Ignore "G103: Use of unsafe calls should be audited"
+		name := string(b[0:clen(b[:])])
 		if name == "." || name == ".." { // Useless names
 			continue
 		}
