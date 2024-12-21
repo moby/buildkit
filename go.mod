@@ -2,8 +2,8 @@ module github.com/moby/buildkit
 
 go 1.22.0
 
-// FIXME(thaJeztah): testing moby master
-replace github.com/docker/docker => github.com/docker/docker v27.0.2-0.20241228144932-f5af46d4d5db+incompatible
+// FIXME(thaJeztah): testing https://github.com/moby/moby/pull/49087 (split-idtools-internal branch)
+replace github.com/docker/docker => github.com/dmcgowan/docker v1.1.3-0.20241228145041-1823ba552b1a
 
 replace github.com/docker/cli => github.com/docker/cli v27.0.2-0.20241227143339-07aca45f5ead+incompatible
 
