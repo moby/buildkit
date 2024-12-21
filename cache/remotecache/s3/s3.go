@@ -175,6 +175,20 @@ func ResolveCacheExporterFunc() remotecache.ResolveCacheExporterFunc {
 	}
 }
 
+type readerFromReaderAt struct {
+	ra  io.ReaderAt
+	off int64
+}
+
+func (r *readerFromReaderAt) Read(p []byte) (n int, err error) {
+	n, err = r.ra.ReadAt(p, r.off)
+	if err != nil {
+		return n, err
+	}
+	r.off += int64(n)
+	return n, nil
+}
+
 type exporter struct {
 	solver.CacheExporterTarget
 	chains   *v1.CacheChains
@@ -191,12 +205,6 @@ func (e *exporter) Config() remotecache.Config {
 		Compression: compression.New(compression.Default),
 	}
 }
-
-type nopCloserSectionReader struct {
-	*io.SectionReader
-}
-
-func (*nopCloserSectionReader) Close() error { return nil }
 
 func (e *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 	cacheConfig, descs, err := e.chains.Marshal(ctx)
@@ -256,7 +264,7 @@ func (e *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 						return layerDone(errors.Wrap(err, "error reading layer blob from provider"))
 					}
 					defer ra.Close()
-					if err := e.s3Client.saveMutableAt(groupCtx, key, &nopCloserSectionReader{io.NewSectionReader(ra, 0, ra.Size())}); err != nil {
+					if err := e.s3Client.saveMutableAt(groupCtx, key, &readerFromReaderAt{ra, 0}); err != nil {
 						return layerDone(errors.Wrap(err, "error writing layer blob"))
 					}
 					layerDone(nil)
