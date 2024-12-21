@@ -111,7 +111,7 @@ func rm(d string, action *pb.FileActionRm) (err error) {
 	}()
 
 	if action.AllowWildcard {
-		src, err := cleanPath(action.Path)
+		src, err := cleanAndNormalizePath(action.Path)
 		if err != nil {
 			return errors.Wrap(err, "cleaning path")
 		}
@@ -156,11 +156,11 @@ func rmPath(root, src string, allowNotFound bool) error {
 }
 
 func docopy(ctx context.Context, src, dest string, action *pb.FileActionCopy, u *copy.User, idmap *idtools.IdentityMapping) (err error) {
-	srcPath, err := cleanPath(action.Src)
+	srcPath, err := cleanAndNormalizePath(action.Src)
 	if err != nil {
 		return errors.Wrap(err, "cleaning source path")
 	}
-	destPath, err := cleanPath(action.Dest)
+	destPath, err := cleanAndNormalizePath(action.Dest)
 	if err != nil {
 		return errors.Wrap(err, "cleaning destination path")
 	}
@@ -379,20 +379,7 @@ func (fb *Backend) readUserWrapper(owner *pb.ChownOpt, user, group fileoptypes.M
 	return u, nil
 }
 
-func cleanPath(s string) (string, error) {
-	s, err := system.CheckSystemDriveAndRemoveDriveLetter(s, runtime.GOOS)
-	if err != nil {
-		return "", errors.Wrap(err, "removing drive letter")
-	}
-	s = filepath.FromSlash(s)
-	s2 := filepath.Join("/", s)
-	if strings.HasSuffix(s, string(filepath.Separator)+".") {
-		if s2 != string(filepath.Separator) {
-			s2 += string(filepath.Separator)
-		}
-		s2 += "."
-	} else if strings.HasSuffix(s, string(filepath.Separator)) && s2 != string(filepath.Separator) {
-		s2 += string(filepath.Separator)
-	}
-	return s2, nil
+func cleanAndNormalizePath(s string) (string, error) {
+	// calls the new system.cleanPath
+	return system.CheckSystemDriveAndRemoveDriveLetter(s, runtime.GOOS, true)
 }
