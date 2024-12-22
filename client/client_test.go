@@ -2710,7 +2710,7 @@ func testSessionExporter(t *testing.T, sb integration.Sandbox) {
 		require.Equal(t, "foo", resp.Entries[1].Path)
 
 		exporterCalled = true
-		target.Add(filesync.WithFSSync(0, fixedWriteCloser(nopWriteCloser{outW})))
+		target.Add(filesync.WithFSSync("0", fixedWriteCloser(nopWriteCloser{outW})))
 		return []*exporter.ExporterRequest{
 			{
 				Type: ExporterOCI,

@@ -105,6 +105,9 @@ message CacheOptionsEntry {
 	// Attrs are like mode=(min,max), ref=example.com:5000/foo/bar .
 	// See cache importer/exporter implementations' documentation.
 	map<string, string> Attrs = 2;
+	// ID identifies this exporter.
+	// ID should be treated by the exporter as opaque.
+	string ID = 3;
 }
 
 message SolveResponse {

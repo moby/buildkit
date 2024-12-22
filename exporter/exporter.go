@@ -34,6 +34,7 @@ type ExportBuildInfo struct {
 	InlineCache exptypes.InlineCache
 	SessionID   string
 }
+// ExporterAPIs encapsulates the APIs for exporters that stream results to clients
 type ExporterAPIs struct {
 	CopyFileWriter func(_ context.Context, md map[string]string, c session.Caller) (io.WriteCloser, error)
 	CopyToCaller   func(_ context.Context, fs fsutil.FS, c session.Caller, progress func(int, bool)) error
