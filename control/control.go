@@ -436,7 +436,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		if !ok {
 			return nil, errors.Errorf("unknown cache exporter: %q", e.Type)
 		}
-		var exp llbsolver.RemoteCacheExporter
+		exp := llbsolver.RemoteCacheExporter{ID: e.ID}
 		exp.Exporter, err = cacheExporterFunc(ctx, session.NewGroup(req.Session), e.Attrs)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to configure %v cache exporter", e.Type)
