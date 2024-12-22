@@ -241,7 +241,7 @@ type FSSyncTarget interface {
 }
 
 type fsSyncTarget struct {
-	id     int
+	id     string
 	outdir string
 	f      FileOutputFunc
 }
@@ -250,14 +250,14 @@ func (target *fsSyncTarget) target() *fsSyncTarget {
 	return target
 }
 
-func WithFSSync(id int, f FileOutputFunc) FSSyncTarget {
+func WithFSSync(id string, f FileOutputFunc) FSSyncTarget {
 	return &fsSyncTarget{
 		id: id,
 		f:  f,
 	}
 }
 
-func WithFSSyncDir(id int, outdir string) FSSyncTarget {
+func WithFSSyncDir(id, outdir string) FSSyncTarget {
 	return &fsSyncTarget{
 		id:     id,
 		outdir: outdir,
@@ -265,8 +265,8 @@ func WithFSSyncDir(id int, outdir string) FSSyncTarget {
 }
 
 func NewFSSyncTarget(targets ...FSSyncTarget) session.Attachable {
-	fs := make(map[int]FileOutputFunc)
-	outdirs := make(map[int]string)
+	fs := make(map[string]FileOutputFunc)
+	outdirs := make(map[string]string)
 	for _, t := range targets {
 		t := t.target()
 		if t.f != nil {
@@ -283,28 +283,26 @@ func NewFSSyncTarget(targets ...FSSyncTarget) session.Attachable {
 }
 
 type fsSyncAttachable struct {
-	fs      map[int]FileOutputFunc
-	outdirs map[int]string
+	// maps exporter id -> file output handler
+	fs map[string]FileOutputFunc
+	// maps exporter id -> output directory
+	outdirs map[string]string
 }
 
 func (sp *fsSyncAttachable) Register(server *grpc.Server) {
 	RegisterFileSendServer(server, sp)
 }
 
-func (sp *fsSyncAttachable) chooser(ctx context.Context) int {
+func (sp *fsSyncAttachable) chooser(ctx context.Context) string {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
-		return 0
+		return ""
 	}
 	values := md[keyExporterID]
 	if len(values) == 0 {
-		return 0
+		return ""
 	}
-	id, err := strconv.ParseInt(values[0], 10, 64)
-	if err != nil {
-		return 0
-	}
-	return int(id)
+	return values[0]
 }
 
 func (sp *fsSyncAttachable) DiffCopy(stream FileSend_DiffCopyServer) (err error) {
@@ -314,7 +312,7 @@ func (sp *fsSyncAttachable) DiffCopy(stream FileSend_DiffCopyServer) (err error)
 	}
 	f, ok := sp.fs[id]
 	if !ok {
-		return errors.Errorf("exporter %d not found", id)
+		return errors.Errorf("exporter %s not found", id)
 	}
 
 	opts, _ := metadata.FromIncomingContext(stream.Context()) // if no metadata continue with empty object
