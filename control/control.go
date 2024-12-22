@@ -4,7 +4,6 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
-	"io"
 	"runtime/trace"
 	"strconv"
 	"sync"
@@ -23,13 +22,11 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	controlgateway "github.com/moby/buildkit/control/gateway"
-	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/exporter/util/epoch"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/attestations"
 	"github.com/moby/buildkit/session"
-	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/session/grpchijack"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/solver"
@@ -50,7 +47,6 @@ import (
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
-	"github.com/tonistiigi/fsutil"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"golang.org/x/sync/errgroup"
@@ -427,7 +423,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		}
 		expis = append(expis, llbsolver.Exporter{
 			ID:               ex.ID,
-			ExporterAPIs:     newExporterAPIs(ex.ID),
+			ExporterAPIs:     llbsolver.NewExporterAPIs(ex.ID),
 			ExporterInstance: expi,
 		})
 	}
@@ -449,7 +445,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		if !ok {
 			return nil, errors.Errorf("unknown cache exporter: %q", e.Type)
 		}
-		var exp llbsolver.RemoteCacheExporter
+		exp := llbsolver.RemoteCacheExporter{ID: e.ID}
 		exp.Exporter, err = cacheExporterFunc(ctx, session.NewGroup(req.Session), e.Attrs)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to configure %v cache exporter", e.Type)
@@ -814,24 +810,4 @@ func entitlementsFromPB(elems []string) []entitlements.Entitlement {
 		clone[i] = entitlements.Entitlement(e)
 	}
 	return clone
-}
-
-func newExporterAPIs(id string) exporter.ExporterAPIs {
-	apis := exporterAPIs{exporterID: id}
-	return exporter.ExporterAPIs{
-		CopyToCaller:   apis.CopyToCaller,
-		CopyFileWriter: apis.CopyFileWriter,
-	}
-}
-
-func (r exporterAPIs) CopyToCaller(ctx context.Context, fs fsutil.FS, c session.Caller, progress func(int, bool)) error {
-	return filesync.CopyToCaller(ctx, fs, r.exporterID, c, progress)
-}
-
-func (r exporterAPIs) CopyFileWriter(ctx context.Context, md map[string]string, c session.Caller) (io.WriteCloser, error) {
-	return filesync.CopyFileWriter(ctx, md, r.exporterID, c)
-}
-
-type exporterAPIs struct {
-	exporterID string
 }

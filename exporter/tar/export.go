@@ -69,7 +69,7 @@ func (e *localExporterInstance) Config() *exporter.Config {
 	return exporter.NewConfig()
 }
 
-func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source, buildInfo exporter.ExportBuildInfo, apis exporter.ExporterAPIs) (map[string]string, exporter.FinalizeFunc, exporter.DescriptorReference, error) {
+func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source, buildInfo exporter.ExportBuildInfo) (map[string]string, exporter.FinalizeFunc, exporter.DescriptorReference, error) {
 	var defers []func() error
 
 	defer func() {
@@ -164,7 +164,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 		return nil, nil, nil, err
 	}
 
-	w, err := apis.CopyFileWriter(ctx, nil, caller)
+	w, err := buildInfo.IO.CopyFileWriter(ctx, nil, caller)
 	if err != nil {
 		return nil, nil, nil, err
 	}

@@ -236,6 +236,7 @@ func (m *CacheOptionsEntry) CloneVT() *CacheOptionsEntry {
 	}
 	r := new(CacheOptionsEntry)
 	r.Type = m.Type
+	r.ID = m.ID
 	if rhs := m.Attrs; rhs != nil {
 		tmpContainer := make(map[string]string, len(rhs))
 		for k, v := range rhs {
@@ -1204,6 +1205,9 @@ func (this *CacheOptionsEntry) EqualVT(that *CacheOptionsEntry) bool {
 		if vx != vy {
 			return false
 		}
+	}
+	if this.ID != that.ID {
+		return false
 	}
 	return string(this.unknownFields) == string(that.unknownFields)
 }
@@ -2686,6 +2690,13 @@ func (m *CacheOptionsEntry) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 	if m.unknownFields != nil {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
+	}
+	if len(m.ID) > 0 {
+		i -= len(m.ID)
+		copy(dAtA[i:], m.ID)
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(m.ID)))
+		i--
+		dAtA[i] = 0x1a
 	}
 	if len(m.Attrs) > 0 {
 		for k := range m.Attrs {
@@ -4522,6 +4533,10 @@ func (m *CacheOptionsEntry) SizeVT() (n int) {
 			mapEntrySize := 1 + len(k) + protohelpers.SizeOfVarint(uint64(len(k))) + 1 + len(v) + protohelpers.SizeOfVarint(uint64(len(v)))
 			n += mapEntrySize + 1 + protohelpers.SizeOfVarint(uint64(mapEntrySize))
 		}
+	}
+	l = len(m.ID)
+	if l > 0 {
+		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
 	}
 	n += len(m.unknownFields)
 	return n
@@ -7188,6 +7203,38 @@ func (m *CacheOptionsEntry) UnmarshalVT(dAtA []byte) error {
 				}
 			}
 			m.Attrs[mapkey] = mapvalue
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ID", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ID = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

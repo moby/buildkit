@@ -124,7 +124,7 @@ func (e *imageExporterInstance) Config() *exporter.Config {
 	return exporter.NewConfigWithCompression(e.opts.RefCfg.Compression)
 }
 
-func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source, buildInfo exporter.ExportBuildInfo, apis exporter.ExporterAPIs) (_ map[string]string, _ exporter.FinalizeFunc, descref exporter.DescriptorReference, err error) {
+func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source, buildInfo exporter.ExportBuildInfo) (_ map[string]string, _ exporter.FinalizeFunc, descref exporter.DescriptorReference, err error) {
 	if e.opt.Variant == VariantDocker && len(src.Refs) > 0 {
 		return nil, nil, nil, errors.Errorf("docker exporter does not currently support exporting manifest lists")
 	}
@@ -253,7 +253,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	}
 
 	if e.tar {
-		w, err := apis.CopyFileWriter(ctx, resp, caller)
+		w, err := buildInfo.IO.CopyFileWriter(ctx, resp, caller)
 		if err != nil {
 			return nil, nil, nil, err
 		}

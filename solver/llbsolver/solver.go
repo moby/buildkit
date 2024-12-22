@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"maps"
 	"os"
 	"strconv"
 	"strings"
@@ -29,6 +31,7 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	sessionexporter "github.com/moby/buildkit/session/exporter"
+	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver/provenance"
 	provenancetypes "github.com/moby/buildkit/solver/llbsolver/provenance/types"
@@ -45,6 +48,7 @@ import (
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
+	"github.com/tonistiigi/fsutil"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -74,6 +78,9 @@ type RemoteCacheExporter struct {
 	remotecache.Exporter
 	solver.CacheExportMode
 	IgnoreError bool
+
+	// ID identifies the exporter
+	ID string
 }
 
 // ResolveWorkerFunc returns default worker for the temporary default non-distributed use cases
@@ -679,7 +686,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 
 	var exporterResponses []*controlapi.ExporterResponse
 	var finalizers []exporter.FinalizeFunc
-	exporterResponses, descrefs, err = s.runExporters(ctx, exp.Exporters, inlineCacheExporter, j, cached, inp)
+	exporterResponses, finalizers, descrefs, err = s.runExporters(ctx, id, exp.Exporters, inlineCacheExporter, j, cached, inp)
 	if err != nil {
 		return nil, err
 	}
@@ -696,11 +703,10 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 			return finalize(egCtx)
 		})
 	}
-	// FIXME(dima): fix the cache exporter type
-	var cacheExporterResponse map[string]string
+	var cacheExporterResponses []*controlapi.ExporterResponse
 	eg.Go(func() error {
 		var err error
-		cacheExporterResponse, err = runCacheExporters(egCtx, cacheExporters, j, cached, inp)
+		cacheExporterResponses, err = runCacheExporters(egCtx, cacheExporters, j, cached, inp)
 		return err
 	})
 	if err := eg.Wait(); err != nil {
@@ -720,9 +726,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	}
 
 	for _, resp := range exporterResponses {
-		for k, v := range resp.Data {
-			exporterResponse.ExporterResponseDeprecated[k] = v
-		}
+		maps.Copy(exporterResponse.ExporterResponseDeprecated, resp.Data)
 	}
 	for _, resp := range cacheExporterResponses {
 		for k, v := range resp.Data {
@@ -735,7 +739,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	return exporterResponse, nil
 }
 
-func (s *Solver) getSessionExporters(ctx context.Context, sessionID string, id int, inp *exporter.Source) ([]exporter.ExporterInstance, error) {
+func (s *Solver) getSessionExporters(ctx context.Context, sessionID string, id int, inp *exporter.Source) ([]Exporter, error) {
 	timeoutCtx, cancel := context.WithCancelCause(ctx)
 	timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
 	defer func() { cancel(errors.WithStack(context.Canceled)) }()
@@ -773,17 +777,22 @@ func (s *Solver) getSessionExporters(ctx context.Context, sessionID string, id i
 		return nil, err
 	}
 
-	var out []exporter.ExporterInstance
+	var out []Exporter
 	for i, req := range res.Exporters {
 		exp, err := w.Exporter(req.Type, s.sm)
 		if err != nil {
 			return nil, err
 		}
-		expi, err := exp.Resolve(ctx, id+i, req.Attrs)
+		expi, err := exp.Resolve(ctx, req.Attrs)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, expi)
+		id := fmt.Sprint(id + i)
+		out = append(out, Exporter{
+			ExporterInstance: expi,
+			ExporterAPIs:     NewExporterAPIs(id),
+			ID:               id,
+		})
 	}
 	return out, nil
 }
@@ -812,7 +821,6 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 	for i, exp := range exporters {
 		id := fmt.Sprint(j.SessionID, "-cache-", i)
 		eg.Go(func() (err error) {
-			id := fmt.Sprint(j.SessionID, "-cache-", i)
 			err = inBuilderContext(ctx, j, exp.Name(), id, func(ctx context.Context, _ solver.JobContext) error {
 				prepareDone := progress.OneOff(ctx, "preparing build cache for export")
 				if err := result.EachRef(cached, inp, func(res solver.CachedResult, ref cache.ImmutableRef) error {
@@ -836,11 +844,7 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 				finalizeDone := progress.OneOff(ctx, "sending cache export")
 				resp, err := exp.Finalize(ctx)
 				exporterResponses[i] = &controlapi.ExporterResponse{
-					// FIXME(dima): this needs proper disambiguation with IDs similar to output exporters
-					// as the same type cache exporters can potentially be specified multiple times (e.g. local
-					// cache exports/imports).
-					// Then, it should be possible to reuse controlapi.ExporterResponse for both
-					Metadata: &controlapi.ExporterMetadata{ID: exp.Name()},
+					Metadata: &controlapi.ExporterMetadata{ID: exp.ID},
 					Data:     resp,
 				}
 				return finalizeDone(err)
@@ -884,7 +888,7 @@ func (s *Solver) runExporters(ctx context.Context, ref string, exporters []Expor
 	}
 
 	eg, ctx := errgroup.WithContext(ctx)
-	resps = make([]*controlapi.ExporterResponse, len(exporters))
+	exporterResponses = make([]*controlapi.ExporterResponse, len(exporters))
 	finalizeFuncs := make([]exporter.FinalizeFunc, len(exporters))
 	descs := make([]exporter.DescriptorReference, len(exporters))
 	var inlineCacheMu sync.Mutex
@@ -911,12 +915,13 @@ func (s *Solver) runExporters(ctx context.Context, ref string, exporters []Expor
 				})
 
 				var md map[string]string
-				md, finalizeFuncs[i], descs[i], err = exp.Export(ctx, inp, inlineCache, job.SessionID, exporter.ExportBuildInfo{
+				md, finalizeFuncs[i], descs[i], err = exp.Export(ctx, inp, exporter.ExportBuildInfo{
 					Ref:         ref,
 					SessionID:   job.SessionID,
 					InlineCache: inlineCache,
-				}, exp.ExporterAPIs)
-				resps[i] = &controlapi.ExporterResponse{
+					IO:          exp.ExporterAPIs,
+				})
+				exporterResponses[i] = &controlapi.ExporterResponse{
 					Metadata: &controlapi.ExporterMetadata{ID: exp.ID},
 					Data:     md,
 				}
@@ -1303,4 +1308,29 @@ func loadSourcePolicySession(b solver.Builder) (string, error) {
 		return "", err
 	}
 	return session, nil
+}
+
+// ResolveWorkerFunc returns default worker for the temporary default non-distributed use cases
+// Opt defines options for new Solver.
+// Processor defines a processing function to be applied after solving, but
+// before exporting
+// NewExporterAPIs creates a new exporter API for the specified id
+func NewExporterAPIs(id string) exporter.ExporterAPIs {
+	apis := exporterAPIs{exporterID: id}
+	return exporter.ExporterAPIs{
+		CopyToCaller:   apis.CopyToCaller,
+		CopyFileWriter: apis.CopyFileWriter,
+	}
+}
+
+func (r exporterAPIs) CopyToCaller(ctx context.Context, fs fsutil.FS, c session.Caller, progress func(int, bool)) error {
+	return filesync.CopyToCaller(ctx, fs, r.exporterID, c, progress)
+}
+
+func (r exporterAPIs) CopyFileWriter(ctx context.Context, md map[string]string, c session.Caller) (io.WriteCloser, error) {
+	return filesync.CopyFileWriter(ctx, md, r.exporterID, c)
+}
+
+type exporterAPIs struct {
+	exporterID string
 }

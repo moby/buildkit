@@ -71,7 +71,7 @@ func (e *localExporter) Config() *exporter.Config {
 	return exporter.NewConfig()
 }
 
-func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source, buildInfo exporter.ExportBuildInfo, apis exporter.ExporterAPIs) (map[string]string, exporter.FinalizeFunc, exporter.DescriptorReference, error) {
+func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source, buildInfo exporter.ExportBuildInfo) (map[string]string, exporter.FinalizeFunc, exporter.DescriptorReference, error) {
 	timeoutCtx, cancel := context.WithCancelCause(ctx)
 	timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
 	defer func() { cancel(errors.WithStack(context.Canceled)) }()
@@ -155,7 +155,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 			}
 
 			progress := NewProgressHandler(ctx, lbl)
-			if err := apis.CopyToCaller(ctx, outputFS, caller, progress); err != nil {
+			if err := buildInfo.IO.CopyToCaller(ctx, outputFS, caller, progress); err != nil {
 				return err
 			}
 			return nil

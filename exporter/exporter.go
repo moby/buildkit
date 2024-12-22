@@ -43,7 +43,7 @@ type ExporterInstance interface {
 	//
 	// For exporters that complete all work during Export (tar, local),
 	// return nil for the finalize callback.
-	Export(ctx context.Context, src *Source, buildInfo ExportBuildInfo, apis ExporterAPIs) (
+	Export(ctx context.Context, src *Source, buildInfo ExportBuildInfo) (
 		response map[string]string,
 		finalize FinalizeFunc,
 		ref DescriptorReference,
@@ -55,7 +55,10 @@ type ExportBuildInfo struct {
 	Ref         string
 	InlineCache exptypes.InlineCache
 	SessionID   string
+	IO          ExporterAPIs
 }
+
+// ExporterAPIs encapsulates the APIs for exporters that stream results to clients
 type ExporterAPIs struct {
 	CopyFileWriter func(_ context.Context, md map[string]string, c session.Caller) (io.WriteCloser, error)
 	CopyToCaller   func(_ context.Context, fs fsutil.FS, c session.Caller, progress func(int, bool)) error
