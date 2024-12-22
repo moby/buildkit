@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"maps"
 	"os"
 	"strconv"
 	"strings"
@@ -29,6 +31,7 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	sessionexporter "github.com/moby/buildkit/session/exporter"
+	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver/provenance"
 	provenancetypes "github.com/moby/buildkit/solver/llbsolver/provenance/types"
@@ -45,6 +48,7 @@ import (
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
+	"github.com/tonistiigi/fsutil"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -73,6 +77,9 @@ type RemoteCacheExporter struct {
 	remotecache.Exporter
 	solver.CacheExportMode
 	IgnoreError bool
+
+	// ID identifies the exporter
+	ID string
 }
 
 // ResolveWorkerFunc returns default worker for the temporary default non-distributed use cases
@@ -682,9 +689,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	}
 
 	for _, resp := range exporterResponses {
-		for k, v := range resp.Data {
-			exporterResponse.ExporterResponseDeprecated[k] = v
-		}
+		maps.Copy(exporterResponse.ExporterResponseDeprecated, resp.Data)
 	}
 	for _, resp := range cacheExporterResponses {
 		for k, v := range resp.Data {
@@ -697,7 +702,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	return exporterResponse, nil
 }
 
-func (s *Solver) getSessionExporters(ctx context.Context, sessionID string, id int, inp *exporter.Source) ([]exporter.ExporterInstance, error) {
+func (s *Solver) getSessionExporters(ctx context.Context, sessionID string, id int, inp *exporter.Source) ([]Exporter, error) {
 	timeoutCtx, cancel := context.WithCancelCause(ctx)
 	timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
 	defer func() { cancel(errors.WithStack(context.Canceled)) }()
@@ -735,17 +740,22 @@ func (s *Solver) getSessionExporters(ctx context.Context, sessionID string, id i
 		return nil, err
 	}
 
-	var out []exporter.ExporterInstance
+	var out []Exporter
 	for i, req := range res.Exporters {
 		exp, err := w.Exporter(req.Type, s.sm)
 		if err != nil {
 			return nil, err
 		}
-		expi, err := exp.Resolve(ctx, id+i, req.Attrs)
+		expi, err := exp.Resolve(ctx, req.Attrs)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, expi)
+		id := fmt.Sprint(id + i)
+		out = append(out, Exporter{
+			ExporterInstance: expi,
+			ExporterAPIs:     NewExporterAPIs(id),
+			ID:               id,
+		})
 	}
 	return out, nil
 }
@@ -796,11 +806,7 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 				}
 				resp, err := exp.Finalize(ctx)
 				exporterResponses[i] = &controlapi.ExporterResponse{
-					// FIXME(dima): this needs proper disambiguation with IDs similar to output exporters
-					// as the same type cache exporters can potentially be specified multiple times (e.g. local
-					// cache exports/imports).
-					// This, it should be possible to reuse controlapi.ExporterResponse for both
-					Metadata: &controlapi.ExporterMetadata{ID: exp.Name()},
+					Metadata: &controlapi.ExporterMetadata{ID: exp.ID},
 					Data:     resp,
 				}
 				return prepareDone(err)
@@ -1241,4 +1247,25 @@ func loadSourcePolicy(b solver.Builder) (*spb.Policy, error) {
 		return nil, err
 	}
 	return &srcPol, nil
+}
+
+// NewExporterAPIs creates a new exporter API for the specified id
+func NewExporterAPIs(id string) exporter.ExporterAPIs {
+	apis := exporterAPIs{exporterID: id}
+	return exporter.ExporterAPIs{
+		CopyToCaller:   apis.CopyToCaller,
+		CopyFileWriter: apis.CopyFileWriter,
+	}
+}
+
+func (r exporterAPIs) CopyToCaller(ctx context.Context, fs fsutil.FS, c session.Caller, progress func(int, bool)) error {
+	return filesync.CopyToCaller(ctx, fs, r.exporterID, c, progress)
+}
+
+func (r exporterAPIs) CopyFileWriter(ctx context.Context, md map[string]string, c session.Caller) (io.WriteCloser, error) {
+	return filesync.CopyFileWriter(ctx, md, r.exporterID, c)
+}
+
+type exporterAPIs struct {
+	exporterID string
 }
