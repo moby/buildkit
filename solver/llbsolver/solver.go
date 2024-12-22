@@ -68,6 +68,9 @@ type RemoteCacheExporter struct {
 	remotecache.Exporter
 	solver.CacheExportMode
 	IgnoreError bool
+
+	// ID identifies the exporter
+	ID string
 }
 
 // ResolveWorkerFunc returns default worker for the temporary default non-distributed use cases
@@ -723,11 +726,7 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 				}
 				resp, err := exp.Finalize(ctx)
 				exporterResponses[i] = &controlapi.ExporterResponse{
-					// FIXME(dima): this needs proper disambiguation with IDs similar to output exporters
-					// as the same type cache exporters can potentially be specified multiple times (e.g. local
-					// cache exports/imports).
-					// This, it should be possible to reuse controlapi.ExporterResponse for both
-					Metadata: &controlapi.ExporterMetadata{ID: exp.Name()},
+					Metadata: &controlapi.ExporterMetadata{ID: exp.ID},
 					Data:     resp,
 				}
 				return prepareDone(err)
