@@ -29,6 +29,7 @@ type ExporterInstance interface {
 	Export(ctx context.Context, src *Source, inlineCache exptypes.InlineCache, sessionID string, apis ExporterAPIs) (map[string]string, DescriptorReference, error)
 }
 
+// ExporterAPIs encapsulates the APIs for exporters that stream results to clients
 type ExporterAPIs struct {
 	CopyFileWriter func(_ context.Context, md map[string]string, c session.Caller) (io.WriteCloser, error)
 	CopyToCaller   func(_ context.Context, fs fsutil.FS, c session.Caller, progress func(int, bool)) error
