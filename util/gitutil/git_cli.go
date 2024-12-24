@@ -189,6 +189,12 @@ func (cli *GitCLI) Run(ctx context.Context, args ...string) (_ []byte, err error
 			"GIT_CONFIG_NOSYSTEM=1", // Disable reading from system gitconfig.
 			"HOME=/dev/null",        // Disable reading from user gitconfig.
 			"LC_ALL=C",              // Ensure consistent output.
+			"HTTP_PROXY=" + os.Getenv("HTTP_PROXY"),
+			"HTTPS_PROXY=" + os.Getenv("HTTPS_PROXY"),
+			"NO_PROXY=" + os.Getenv("NO_PROXY"),
+			"http_proxy=" + os.Getenv("http_proxy"),
+			"https_proxy=" + os.Getenv("https_proxy"),
+			"no_proxy=" + os.Getenv("no_proxy"),
 		}
 		if cli.sshAuthSock != "" {
 			cmd.Env = append(cmd.Env, "SSH_AUTH_SOCK="+cli.sshAuthSock)
