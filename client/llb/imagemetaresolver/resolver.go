@@ -107,7 +107,7 @@ func (imr *imageMetaResolver) ResolveImageConfig(ctx context.Context, ref string
 
 func (imr *imageMetaResolver) key(ref string, platform *ocispecs.Platform) string {
 	if platform != nil {
-		ref += platforms.Format(*platform)
+		ref += platforms.FormatAll(*platform)
 	}
 	return ref
 }

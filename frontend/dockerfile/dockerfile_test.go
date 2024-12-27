@@ -214,6 +214,7 @@ var allTests = integration.TestFuncs(
 	testTargetStageNameArg,
 	testStepNames,
 	testPowershellInDefaultPathOnWindows,
+	testPlatformWithOSVersion,
 )
 
 // Tests that depend on the `security.*` entitlements
@@ -5000,7 +5001,7 @@ ONBUILD RUN mkdir \out && echo 11>> \out\foo
 	require.NoError(t, err)
 
 	dockerfile = []byte(fmt.Sprintf(`
-	FROM %s 
+	FROM %s
 	`, target))
 
 	dir = integration.Tmpdir(
@@ -5218,9 +5219,9 @@ func testOnBuildNamedContext(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
 	FROM alpine AS otherstage
 	RUN echo -n "hello" > /testfile
-	
+
 	FROM base AS inputstage
-	
+
 	FROM scratch
 	COPY --from=inputstage /out/foo /bar
 `)
@@ -6811,7 +6812,7 @@ RUN cat /etc/hosts | grep foo
 RUN echo $HOSTNAME | grep foo
 RUN echo $(hostname) | grep foo
 `,
-		`	
+		`
 FROM nanoserver
 RUN  reg query "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" /v Hostname | findstr "foo"
 `,
@@ -7463,7 +7464,7 @@ func testNamedImageContextScratch(t *testing.T, sb integration.Sandbox) {
 	defer c.Close()
 
 	dockerfile := []byte(fmt.Sprintf(
-		`	
+		`
 FROM %s AS build
 COPY <<EOF /out
 hello world!
@@ -9325,6 +9326,140 @@ COPY Dockerfile /foo
 
 		require.NotEmpty(t, trace.Digest)
 	}
+}
+
+func testPlatformWithOSVersion(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	f := getFrontend(t, sb)
+	p1 := ocispecs.Platform{
+		OS:           "foo",
+		OSVersion:    "1.2.3",
+		Architecture: "bar",
+	}
+	p2 := ocispecs.Platform{
+		OS:           "foo",
+		OSVersion:    "1.1.0",
+		Architecture: "bar",
+	}
+
+	p1Str := platforms.FormatAll(p1)
+	p2Str := platforms.FormatAll(p2)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+	target := registry + "/buildkit/testplatformwithosversion:latest"
+
+	dockerfile := []byte(`
+ARG TARGETOS TARGETOSVERSION TARGETARCH
+FROM --platform=${TARGETOS}(${TARGETOSVERSION})/${TARGETARCH} ` + target + ` AS reg
+
+FROM scratch AS base
+ARG TARGETOSVERSION
+COPY <<EOF /osversion
+${TARGETOSVERSION}
+EOF
+`)
+
+	destDir := t.TempDir()
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	// build the base target as a multi-platform image and push to the registry
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"platform": p1Str + "," + p2Str,
+			"target":   "base",
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, strings.Replace(p1Str, "/", "_", 1), "osversion"))
+	require.NoError(t, err)
+	require.Equal(t, p1.OSVersion+"\n", string(dt))
+
+	dt, err = os.ReadFile(filepath.Join(destDir, strings.Replace(p2Str, "/", "_", 1), "osversion"))
+	require.NoError(t, err)
+	require.Equal(t, p2.OSVersion+"\n", string(dt))
+
+	// Now build the "reg" target, which should pull the base image from the registry
+	// This should select the image with the requested os version.
+	destDir = t.TempDir()
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"platform": p1Str,
+			"target":   "reg",
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "osversion"))
+	require.NoError(t, err)
+	require.Equal(t, p1.OSVersion+"\n", string(dt))
+
+	// And again with the other os version
+	destDir = t.TempDir()
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"platform": p2Str,
+			"target":   "reg",
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "osversion"))
+	require.NoError(t, err)
+	require.Equal(t, p2.OSVersion+"\n", string(dt))
 }
 
 func runShell(dir string, cmds ...string) error {
