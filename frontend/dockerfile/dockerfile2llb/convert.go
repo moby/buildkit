@@ -520,7 +520,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 						if reachable {
 							prefix := "["
 							if opt.MultiPlatformRequested && platform != nil {
-								prefix += platforms.Format(*platform) + " "
+								prefix += platforms.FormatAll(*platform) + " "
 							}
 							prefix += "internal]"
 							mutRef, dgst, dt, err := metaResolver.ResolveImageConfig(ctx, d.stage.BaseName, sourceresolver.Opt{
@@ -2110,7 +2110,7 @@ func prefixCommand(ds *dispatchState, str string, prefixPlatform bool, platform 
 	}
 	out := "["
 	if prefixPlatform && platform != nil {
-		out += platforms.Format(*platform) + formatTargetPlatform(*platform, platformFromEnv(env)) + " "
+		out += platforms.FormatAll(*platform) + formatTargetPlatform(*platform, platformFromEnv(env)) + " "
 	}
 	if ds.stageName != "" {
 		out += ds.stageName + " "
@@ -2144,7 +2144,7 @@ func formatTargetPlatform(base ocispecs.Platform, target *ocispecs.Platform) str
 		return "->" + archVariant
 	}
 	if p.OS != base.OS {
-		return "->" + platforms.Format(p)
+		return "->" + platforms.FormatAll(p)
 	}
 	return ""
 }
@@ -2491,8 +2491,8 @@ func wrapSuggestAny(err error, keys map[string]struct{}, options []string) error
 
 func validateBaseImagePlatform(name string, expected, actual ocispecs.Platform, location []parser.Range, lint *linter.Linter) {
 	if expected.OS != actual.OS || expected.Architecture != actual.Architecture {
-		expectedStr := platforms.Format(platforms.Normalize(expected))
-		actualStr := platforms.Format(platforms.Normalize(actual))
+		expectedStr := platforms.FormatAll(platforms.Normalize(expected))
+		actualStr := platforms.FormatAll(platforms.Normalize(actual))
 		msg := linter.RuleInvalidBaseImagePlatform.Format(name, expectedStr, actualStr)
 		lint.Run(&linter.RuleInvalidBaseImagePlatform, location, msg)
 	}
