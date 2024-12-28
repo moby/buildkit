@@ -104,7 +104,6 @@ jobs:
       TESTFLAGS: "-v --parallel=6 --timeout=30m"
       GOTESTSUM_FORMAT: "standard-verbose"
       TEST_IMAGE_BUILD: "0"
-      TEST_IMAGE_ID: "buildkit-tests"
     strategy:
       fail-fast: false
       matrix:
@@ -161,7 +160,6 @@ jobs:
           targets: integration-tests
           set: |
             *.cache-from=type=gha,scope=${{ inputs.cache_scope }}
-            *.output=type=docker,name=${{ env.TEST_IMAGE_ID }}
         env:
           BUILDKITD_TAGS: ${{ matrix.tags }}
           TEST_COVERAGE: 1
