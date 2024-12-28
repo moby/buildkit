@@ -789,7 +789,7 @@ github.com/urfave/cli
 # github.com/vbatts/tar-split v0.11.5
 ## explicit; go 1.17
 github.com/vbatts/tar-split/archive/tar
-# github.com/vishvananda/netlink v1.3.0
+# github.com/vishvananda/netlink v1.3.1-0.20240922070040-084abd93d350
 ## explicit; go 1.12
 github.com/vishvananda/netlink
 github.com/vishvananda/netlink/nl
