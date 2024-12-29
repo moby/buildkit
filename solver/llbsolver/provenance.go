@@ -398,17 +398,8 @@ func NewProvenanceCreator(ctx context.Context, cp *provenance.Capture, res solve
 			return nil, err
 		}
 
-		wref, ok := r.Sys().(*worker.WorkerRef)
-		if !ok {
-			return nil, errors.Errorf("invalid worker ref %T", r.Sys())
-		}
-
 		addLayers = func() error {
 			e := newCacheExporter()
-
-			if wref.ImmutableRef != nil {
-				ctx = withDescHandlerCacheOpts(ctx, wref.ImmutableRef)
-			}
 
 			if _, err := r.CacheKeys()[0].Exporter.ExportTo(ctx, e, solver.CacheExportOpt{
 				ResolveRemotes:  resolveRemotes,
@@ -512,7 +503,7 @@ type cacheRecord struct {
 	ce *cacheExporter
 }
 
-func (c *cacheRecord) AddResult(dgst digest.Digest, idx int, createdAt time.Time, result *solver.Remote) {
+func (c *cacheRecord) AddResult(_ context.Context, dgst digest.Digest, idx int, createdAt time.Time, result *solver.Remote) {
 	if result == nil || dgst == "" {
 		return
 	}

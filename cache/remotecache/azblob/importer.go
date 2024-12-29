@@ -134,7 +134,7 @@ func (ci *importer) loadManifest(ctx context.Context, name string) (*v1.CacheCha
 	progress.OneOff(ctx, fmt.Sprintf("found %d layers in cache", len(allLayers)))(nil)
 
 	cc := v1.NewCacheChains()
-	if err := v1.ParseConfig(config, allLayers, cc); err != nil {
+	if err := v1.ParseConfig(ctx, config, allLayers, cc); err != nil {
 		return nil, err
 	}
 

@@ -691,8 +691,6 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 			err = inBuilderContext(ctx, j, exp.Exporter.Name(), id, func(ctx context.Context, _ session.Group) error {
 				prepareDone := progress.OneOff(ctx, "preparing build cache for export")
 				if err := result.EachRef(cached, inp, func(res solver.CachedResult, ref cache.ImmutableRef) error {
-					ctx = withDescHandlerCacheOpts(ctx, ref)
-
 					// Configure compression
 					compressionConfig := exp.Config().Compression
 
@@ -998,7 +996,6 @@ func inlineCache(ctx context.Context, ie inlineCacheExporter, res solver.CachedR
 		digests = append(digests, desc.Digest)
 	}
 
-	ctx = withDescHandlerCacheOpts(ctx, workerRef.ImmutableRef)
 	refCfg := cacheconfig.RefConfig{Compression: compressionopt}
 	if _, err := res.CacheKeys()[0].Exporter.ExportTo(ctx, ie, solver.CacheExportOpt{
 		ResolveRemotes: workerRefResolver(refCfg, true, g), // load as many compression blobs as possible
@@ -1009,20 +1006,6 @@ func inlineCache(ctx context.Context, ie inlineCacheExporter, res solver.CachedR
 		return nil, err
 	}
 	return ie.ExportForLayers(ctx, digests)
-}
-
-func withDescHandlerCacheOpts(ctx context.Context, ref cache.ImmutableRef) context.Context {
-	return solver.WithCacheOptGetter(ctx, func(includeAncestors bool, keys ...interface{}) map[interface{}]interface{} {
-		vals := make(map[interface{}]interface{})
-		for _, k := range keys {
-			if key, ok := k.(cache.DescHandlerKey); ok {
-				if handler := ref.DescHandler(digest.Digest(key)); handler != nil {
-					vals[k] = handler
-				}
-			}
-		}
-		return vals
-	})
 }
 
 func (s *Solver) Status(ctx context.Context, id string, statusChan chan *client.SolveStatus) error {

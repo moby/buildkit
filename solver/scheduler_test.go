@@ -3947,6 +3947,7 @@ func (r *dummyResult) ID() string                    { return r.id }
 func (r *dummyResult) Release(context.Context) error { return nil }
 func (r *dummyResult) Sys() interface{}              { return r }
 func (r *dummyResult) Clone() Result                 { return r }
+func (r *dummyResult) CacheOpts() CacheOpts          { return nil }
 
 func testOpResolver(v Vertex, b Builder) (Op, error) {
 	if op, ok := v.Sys().(Op); ok {
@@ -4077,7 +4078,7 @@ type testExporterRecord struct {
 	linkMap map[digest.Digest]struct{}
 }
 
-func (r *testExporterRecord) AddResult(_ digest.Digest, _ int, createdAt time.Time, result *Remote) {
+func (r *testExporterRecord) AddResult(_ context.Context, _ digest.Digest, _ int, createdAt time.Time, result *Remote) {
 	r.results++
 }
 
