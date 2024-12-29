@@ -24,7 +24,7 @@ func (t edgeStatusType) String() string {
 	return []string{"initial", "cache-fast", "cache-slow", "complete"}[t]
 }
 
-func newEdge(ed Edge, op activeOp, index *edgeIndex) *edge {
+func newEdge(ed Edge, op *sharedOp, index *edgeIndex) *edge {
 	e := &edge{
 		edge:               ed,
 		op:                 op,
@@ -40,7 +40,7 @@ func newEdge(ed Edge, op activeOp, index *edgeIndex) *edge {
 
 type edge struct {
 	edge Edge
-	op   activeOp
+	op   *sharedOp
 
 	edgeState
 	depRequests map[pipeReceiver]*dep

@@ -827,15 +827,6 @@ type cacheMapResp struct {
 	complete bool
 }
 
-type activeOp interface {
-	CacheMap(context.Context, int) (*cacheMapResp, error)
-	LoadCache(ctx context.Context, rec *CacheRecord) (Result, error)
-	Exec(ctx context.Context, inputs []Result) (outputs []Result, exporters []ExportableCacheKey, err error)
-	IgnoreCache() bool
-	Cache() CacheManager
-	CalcSlowCache(context.Context, Index, PreprocessFunc, ResultBasedCacheFunc, Result) (digest.Digest, error)
-}
-
 func newSharedOp(resolver ResolveOpFunc, st *state) *sharedOp {
 	so := &sharedOp{
 		resolver:     resolver,
@@ -871,6 +862,8 @@ type sharedOp struct {
 	cacheDone bool
 	cacheErr  error
 
+	loadCacheOpts CacheOpts
+
 	slowMu       sync.Mutex
 	slowCacheRes map[Index]digest.Digest
 	slowCacheErr map[Index]error
@@ -881,18 +874,18 @@ func (s *sharedOp) IgnoreCache() bool {
 }
 
 func (s *sharedOp) Cache() CacheManager {
-	return &cacheWithCacheOpts{s.st.combinedCacheManager(), s.st}
+	return &cacheWithCacheOpts{s.st.combinedCacheManager(), s}
 }
 
 type cacheWithCacheOpts struct {
 	CacheManager
-	st *state
+	op *sharedOp
 }
 
 func (c cacheWithCacheOpts) Records(ctx context.Context, ck *CacheKey) ([]*CacheRecord, error) {
 	// Allow Records accessing to cache opts through ctx. This enable to use remote provider
 	// during checking the cache existence.
-	return c.CacheManager.Records(withAncestorCacheOpts(ctx, c.st), ck)
+	return c.CacheManager.Records(withAncestorCacheOpts(ctx, c.op), ck)
 }
 
 func (s *sharedOp) LoadCache(ctx context.Context, rec *CacheRecord) (Result, error) {
@@ -903,9 +896,12 @@ func (s *sharedOp) LoadCache(ctx context.Context, rec *CacheRecord) (Result, err
 	// no cache hit. start evaluating the node
 	span, ctx := tracing.StartSpan(ctx, "load cache: "+s.st.vtx.Name(), trace.WithAttributes(attribute.String("vertex", s.st.vtx.Digest().String())))
 	notifyCompleted := notifyStarted(ctx, &s.st.clientVertex, true)
-	res, err := s.Cache().Load(withAncestorCacheOpts(ctx, s.st), rec)
+	res, err := s.Cache().Load(withAncestorCacheOpts(ctx, s), rec)
 	tracing.FinishWithError(span, err)
 	notifyCompleted(err, true)
+	if err == nil {
+		s.loadCacheOpts = res.CacheOpts()
+	}
 	return res, err
 }
 
@@ -954,7 +950,7 @@ func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, p PreprocessF
 			if s.st.mspan.Span != nil {
 				ctx = trace.ContextWithSpan(ctx, s.st.mspan)
 			}
-			key, err = f(withAncestorCacheOpts(ctx, s.st), res, s.st)
+			key, err = f(withAncestorCacheOpts(ctx, s), res, s.st)
 		}
 		if err != nil {
 			select {
@@ -1010,7 +1006,7 @@ func (s *sharedOp) CacheMap(ctx context.Context, index int) (resp *cacheMapResp,
 		if s.st.mspan.Span != nil {
 			ctx = trace.ContextWithSpan(ctx, s.st.mspan)
 		}
-		ctx = withAncestorCacheOpts(ctx, s.st)
+		ctx = withAncestorCacheOpts(ctx, s)
 		if len(s.st.vtx.Inputs()) == 0 {
 			// no cache hit. start evaluating the node
 			span, ctx := tracing.StartSpan(ctx, "cache request: "+s.st.vtx.Name(), trace.WithAttributes(attribute.String("vertex", s.st.vtx.Digest().String())))
@@ -1089,7 +1085,7 @@ func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result,
 		if s.st.mspan.Span != nil {
 			ctx = trace.ContextWithSpan(ctx, s.st.mspan)
 		}
-		ctx = withAncestorCacheOpts(ctx, s.st)
+		ctx = withAncestorCacheOpts(ctx, s)
 
 		// no cache hit. start evaluating the node
 		span, ctx := tracing.StartSpan(ctx, s.st.vtx.Name(), trace.WithAttributes(attribute.String("vertex", s.st.vtx.Digest().String())))

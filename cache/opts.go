@@ -30,10 +30,19 @@ func descHandlersOf(opts ...RefOption) DescHandlers {
 
 type DescHandlerKey digest.Digest
 
-type NeedsRemoteProviderError []digest.Digest //nolint:errname
+type NeedsRemoteProviderError []DigestDescriptionPair //nolint:errname
+
+type DigestDescriptionPair struct {
+	Digest      digest.Digest
+	Description string
+}
+
+func (d DigestDescriptionPair) String() string {
+	return fmt.Sprintf("%s: %s", d.Digest, d.Description)
+}
 
 func (m NeedsRemoteProviderError) Error() string {
-	return fmt.Sprintf("missing descriptor handlers for lazy blobs %+v", []digest.Digest(m))
+	return fmt.Sprintf("missing descriptor handlers for lazy blobs %+v", []DigestDescriptionPair(m))
 }
 
 type Unlazy session.Group
