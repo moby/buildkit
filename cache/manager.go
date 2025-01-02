@@ -25,10 +25,13 @@ import (
 	"github.com/moby/buildkit/util/disk"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/progress"
+	"github.com/moby/buildkit/util/tracing"
 	digest "github.com/opencontainers/go-digest"
 	imagespecidentity "github.com/opencontainers/image-spec/identity"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -36,6 +39,17 @@ var (
 	ErrLocked   = errors.New("locked")
 	errNotFound = errors.New("not found")
 	errInvalid  = errors.New("invalid")
+)
+
+var (
+	PruneFilterAttribute       = attribute.Key("moby.buildkit.prune.filter")
+	PruneAllAttribute          = attribute.Key("moby.buildkit.prune.all")
+	PruneGCPolicyKeepDuration  = attribute.Key("moby.buildkit.prune.gcpolicy.keepduration")
+	PruneGCPolicyReservedSpace = attribute.Key("moby.buildkit.prune.gcpolicy.reservedspace")
+	PruneGCPolicyMaxUsedSpace  = attribute.Key("moby.buildkit.prune.gcpolicy.maxusedspace")
+	PruneGCPolicyMinFreeSpace  = attribute.Key("moby.buildkit.prune.gcpolicy.minfreespace")
+	PruneDeleteSizeAttribute   = attribute.Key("moby.buildkit.prune.delete.size")
+	PruneDeleteCountAttribute  = attribute.Key("moby.buildkit.prune.delete.count")
 )
 
 const maxPruneBatch = 10 // maximum number of refs to prune while holding the manager lock
@@ -51,6 +65,7 @@ type ManagerOpt struct {
 	MetadataStore   *metadata.Store
 	Root            string
 	MountPoolRoot   string
+	TracerProvider  trace.TracerProvider
 }
 
 type Accessor interface {
@@ -95,7 +110,8 @@ type cacheManager struct {
 	Differ          diff.Comparer
 	MetadataStore   *metadata.Store
 
-	root string
+	root   string
+	tracer trace.Tracer
 
 	mountPool sharableMountPool
 
@@ -114,6 +130,7 @@ func NewManager(opt ManagerOpt) (Manager, error) {
 		Differ:          opt.Differ,
 		MetadataStore:   opt.MetadataStore,
 		root:            opt.Root,
+		tracer:          tracing.Tracer(opt.TracerProvider),
 		records:         make(map[string]*cacheRecord),
 	}
 
@@ -1009,10 +1026,13 @@ func (cm *cacheManager) createDiffRef(ctx context.Context, parents parentRefs, d
 }
 
 func (cm *cacheManager) Prune(ctx context.Context, ch chan client.UsageInfo, opts ...client.PruneInfo) error {
+	ctx, span := cm.tracer.Start(ctx, "cacheManager.Prune")
+	defer span.End()
+
 	cm.muPrune.Lock()
 
 	for _, opt := range opts {
-		if err := cm.pruneOnce(ctx, ch, opt); err != nil {
+		if err := cm.prune(ctx, ch, opt); err != nil {
 			cm.muPrune.Unlock()
 			return err
 		}
@@ -1029,7 +1049,19 @@ func (cm *cacheManager) Prune(ctx context.Context, ch chan client.UsageInfo, opt
 	return nil
 }
 
-func (cm *cacheManager) pruneOnce(ctx context.Context, ch chan client.UsageInfo, opt client.PruneInfo) error {
+func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt client.PruneInfo) error {
+	ctx, span := cm.tracer.Start(ctx, "cacheManager.prune",
+		trace.WithAttributes(
+			PruneFilterAttribute.StringSlice(opt.Filter),
+			PruneAllAttribute.Bool(opt.All),
+			PruneGCPolicyKeepDuration.Int64(int64(opt.KeepDuration)),
+			PruneGCPolicyReservedSpace.Int64(opt.ReservedSpace),
+			PruneGCPolicyMaxUsedSpace.Int64(opt.MaxUsedSpace),
+			PruneGCPolicyMinFreeSpace.Int64(opt.MinFreeSpace),
+		),
+	)
+	defer span.End()
+
 	filter, err := filters.ParseAll(opt.Filter...)
 	if err != nil {
 		return errors.Wrapf(err, "failed to parse prune filters %v", opt.Filter)
@@ -1066,14 +1098,38 @@ func (cm *cacheManager) pruneOnce(ctx context.Context, ch chan client.UsageInfo,
 		}
 	}
 
-	return cm.prune(ctx, ch, pruneOpt{
+	var (
+		totalReleasedSize  int64
+		totalReleasedCount int64
+	)
+	defer func() {
+		span.SetAttributes(
+			PruneDeleteSizeAttribute.Int64(totalReleasedSize),
+			PruneDeleteCountAttribute.Int64(totalReleasedCount),
+		)
+	}()
+
+	popt := pruneOpt{
 		filter:       filter,
 		all:          opt.All,
 		checkShared:  check,
 		keepDuration: opt.KeepDuration,
 		keepBytes:    calculateKeepBytes(totalSize, dstat, opt),
 		totalSize:    totalSize,
-	})
+	}
+	for {
+		releasedSize, releasedCount, err := cm.pruneOnce(ctx, ch, popt)
+		if err != nil {
+			return err
+		}
+		totalReleasedSize += releasedSize
+		totalReleasedCount += releasedCount
+
+		if releasedCount == 0 {
+			return nil
+		}
+		popt.totalSize -= releasedSize
+	}
 }
 
 func calculateKeepBytes(totalSize int64, dstat disk.DiskStat, opt client.PruneInfo) int64 {
@@ -1100,9 +1156,9 @@ func calculateKeepBytes(totalSize int64, dstat disk.DiskStat, opt client.PruneIn
 	return keepBytes
 }
 
-func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt pruneOpt) (err error) {
+func (cm *cacheManager) pruneOnce(ctx context.Context, ch chan client.UsageInfo, opt pruneOpt) (releasedSize, releasedCount int64, err error) {
 	if opt.keepBytes != 0 && opt.totalSize < opt.keepBytes {
-		return nil
+		return
 	}
 
 	var toDelete []*deleteRecord
@@ -1206,11 +1262,11 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt
 			// mark metadata as deleted in case we crash before cleanup finished
 			if err := cr.queueDeleted(); err != nil {
 				releaseLocks()
-				return err
+				return 0, 0, err
 			}
 			if err := cr.commitMetadata(); err != nil {
 				releaseLocks()
-				return err
+				return 0, 0, err
 			}
 		}
 		cr.mu.Unlock()
@@ -1221,7 +1277,7 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt
 	cm.mu.Unlock()
 
 	if len(toDelete) == 0 {
-		return nil
+		return 0, 0, nil
 	}
 
 	// calculate sizes here so that lock does not need to be held for slow process
@@ -1234,7 +1290,7 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt
 		if size == sizeUnknown {
 			// calling size will warm cache for next call
 			if _, err := cr.size(ctx); err != nil {
-				return err
+				return 0, 0, err
 			}
 		}
 	}
@@ -1277,15 +1333,18 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt
 			c.Size = cr.equalImmutable.getSize() // benefit from DiskUsage calc
 		}
 
-		opt.totalSize -= c.Size
+		releasedSize += c.Size
 
 		if cr.equalImmutable != nil {
 			if err1 := cr.equalImmutable.remove(ctx, false); err == nil {
 				err = err1
 			}
 		}
-		if err1 := cr.remove(ctx, true); err == nil {
+
+		if err1 := cr.remove(ctx, true); err1 != nil && err == nil {
 			err = err1
+		} else if err1 == nil {
+			releasedCount++
 		}
 
 		if err == nil && ch != nil {
@@ -1294,16 +1353,17 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt
 		cr.mu.Unlock()
 	}
 	cm.mu.Unlock()
+
 	if err != nil {
-		return err
+		return releasedSize, releasedCount, err
 	}
 
 	select {
 	case <-ctx.Done():
-		return context.Cause(ctx)
+		err = context.Cause(ctx)
 	default:
-		return cm.prune(ctx, ch, opt)
 	}
+	return releasedSize, releasedCount, err
 }
 
 func (cm *cacheManager) markShared(m map[string]*cacheUsageInfo) error {
