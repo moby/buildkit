@@ -46,6 +46,7 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	mode "github.com/tonistiigi/dchapes-mode"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -1390,19 +1391,26 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		copyOpt = append(copyOpt, llb.WithExcludePatterns(cfg.excludePatterns))
 	}
 
-	var mode *llb.ChmodOpt
+	var chopt *llb.ChmodOpt
 	if cfg.chmod != "" {
-		mode = &llb.ChmodOpt{}
+		chopt = &llb.ChmodOpt{}
 		p, err := strconv.ParseUint(cfg.chmod, 8, 32)
 		nonOctalErr := errors.Errorf("invalid chmod parameter: '%v'. it should be octal string and between 0 and 07777", cfg.chmod)
 		if err == nil {
 			if p > 0o7777 {
 				return nonOctalErr
 			}
-			mode.Mode = os.FileMode(p)
+			chopt.Mode = os.FileMode(p)
 		} else {
 			if featureCopyChmodNonOctalEnabled {
-				mode.ModeStr = cfg.chmod
+				if _, err := mode.Parse(cfg.chmod); err != nil {
+					var ne *strconv.NumError
+					if errors.As(err, &ne) {
+						return nonOctalErr // return nonOctalErr for compatibility if the value looks numeric
+					}
+					return err
+				}
+				chopt.ModeStr = cfg.chmod
 			} else {
 				return nonOctalErr
 			}
@@ -1467,7 +1475,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 			}
 			st := llb.Git(gitRef.Remote, commit, gitOptions...)
 			opts := append([]llb.CopyOption{&llb.CopyInfo{
-				Mode:           mode,
+				Mode:           chopt,
 				CreateDestPath: true,
 			}}, copyOpt...)
 			if a == nil {
@@ -1496,7 +1504,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 			st := llb.HTTP(src, llb.Filename(f), llb.WithCustomName(pgName), llb.Checksum(cfg.checksum), dfCmd(cfg.params))
 
 			opts := append([]llb.CopyOption{&llb.CopyInfo{
-				Mode:           mode,
+				Mode:           chopt,
 				CreateDestPath: true,
 			}}, copyOpt...)
 
@@ -1532,7 +1540,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 			}
 
 			opts := append([]llb.CopyOption{&llb.CopyInfo{
-				Mode:                mode,
+				Mode:                chopt,
 				FollowSymlinks:      true,
 				CopyDirContentsOnly: true,
 				IncludePatterns:     patterns,
@@ -1565,7 +1573,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		)
 
 		opts := append([]llb.CopyOption{&llb.CopyInfo{
-			Mode:           mode,
+			Mode:           chopt,
 			CreateDestPath: true,
 		}}, copyOpt...)
 
