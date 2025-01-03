@@ -13,7 +13,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/containerd/containerd/defaults"
 	"github.com/containerd/containerd/remotes/docker"
@@ -544,26 +543,18 @@ func setDefaultConfig(cfg *config.Config) {
 	}
 }
 
-var (
-	isRootlessConfigOnce  sync.Once
-	isRootlessConfigValue bool
-)
-
 // isRootlessConfig is true if we should be using the rootless config
 // defaults instead of the normal defaults.
 func isRootlessConfig() bool {
-	isRootlessConfigOnce.Do(func() {
-		if !userns.RunningInUserNS() {
-			// Default value is false so keep it that way.
-			return
-		}
-		// if buildkitd is being executed as the mapped-root (not only EUID==0 but also $USER==root)
-		// in a user namespace, we don't want to load the rootless changes in the
-		// configuration.
-		u := os.Getenv("USER")
-		isRootlessConfigValue = u != "" && u != "root"
-	})
-	return isRootlessConfigValue
+	if !userns.RunningInUserNS() {
+		// Default value is false so keep it that way.
+		return false
+	}
+	// if buildkitd is being executed as the mapped-root (not only EUID==0 but also $USER==root)
+	// in a user namespace, we don't want to load the rootless changes in the
+	// configuration.
+	u := os.Getenv("USER")
+	return u != "" && u != "root"
 }
 
 func applyMainFlags(c *cli.Context, cfg *config.Config) error {
