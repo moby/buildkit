@@ -1,210 +1,109 @@
 package types
 
 import (
+	"context"
+
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/events"
 	"github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/api/types/registry"
-	"github.com/docker/docker/api/types/volume"
+	"github.com/docker/docker/api/types/storage"
 )
 
-// ImagesPruneReport contains the response for Engine API:
-// POST "/images/prune"
+// ContainerJSONBase contains response of Engine API GET "/containers/{name:.*}/json"
+// for API version 1.18 and older.
 //
-// Deprecated: use [image.PruneReport].
-type ImagesPruneReport = image.PruneReport
+// Deprecated: use [container.InspectResponse] or [container.ContainerJSONBase]. It will be removed in the next release.
+type ContainerJSONBase = container.ContainerJSONBase
 
-// VolumesPruneReport contains the response for Engine API:
-// POST "/volumes/prune".
+// ContainerJSON is the response for the GET "/containers/{name:.*}/json"
+// endpoint.
 //
-// Deprecated: use [volume.PruneReport].
-type VolumesPruneReport = volume.PruneReport
+// Deprecated: use [container.InspectResponse]. It will be removed in the next release.
+type ContainerJSON = container.InspectResponse
 
-// NetworkCreateRequest is the request message sent to the server for network create call.
+// Container contains response of Engine API:
+// GET "/containers/json"
 //
-// Deprecated: use [network.CreateRequest].
-type NetworkCreateRequest = network.CreateRequest
+// Deprecated: use [container.Summary].
+type Container = container.Summary
 
-// NetworkCreate is the expected body of the "create network" http request message
+// ContainerState stores container's running state
 //
-// Deprecated: use [network.CreateOptions].
-type NetworkCreate = network.CreateOptions
+// Deprecated: use [container.State].
+type ContainerState = container.State
 
-// NetworkListOptions holds parameters to filter the list of networks with.
+// NetworkSettings exposes the network settings in the api.
 //
-// Deprecated: use [network.ListOptions].
-type NetworkListOptions = network.ListOptions
+// Deprecated: use [container.NetworkSettings].
+type NetworkSettings = container.NetworkSettings
 
-// NetworkCreateResponse is the response message sent by the server for network create call.
+// NetworkSettingsBase holds networking state for a container when inspecting it.
 //
-// Deprecated: use [network.CreateResponse].
-type NetworkCreateResponse = network.CreateResponse
+// Deprecated: use [container.NetworkSettingsBase].
+type NetworkSettingsBase = container.NetworkSettingsBase
 
-// NetworkInspectOptions holds parameters to inspect network.
+// DefaultNetworkSettings holds network information
+// during the 2 release deprecation period.
+// It will be removed in Docker 1.11.
 //
-// Deprecated: use [network.InspectOptions].
-type NetworkInspectOptions = network.InspectOptions
+// Deprecated: use [container.DefaultNetworkSettings].
+type DefaultNetworkSettings = container.DefaultNetworkSettings
 
-// NetworkConnect represents the data to be used to connect a container to the network
+// SummaryNetworkSettings provides a summary of container's networks
+// in /containers/json.
 //
-// Deprecated: use [network.ConnectOptions].
-type NetworkConnect = network.ConnectOptions
+// Deprecated: use [container.NetworkSettingsSummary].
+type SummaryNetworkSettings = container.NetworkSettingsSummary
 
-// NetworkDisconnect represents the data to be used to disconnect a container from the network
-//
-// Deprecated: use [network.DisconnectOptions].
-type NetworkDisconnect = network.DisconnectOptions
+// Health states
+const (
+	NoHealthcheck = container.NoHealthcheck // Deprecated: use [container.NoHealthcheck].
+	Starting      = container.Starting      // Deprecated: use [container.Starting].
+	Healthy       = container.Healthy       // Deprecated: use [container.Healthy].
+	Unhealthy     = container.Unhealthy     // Deprecated: use [container.Unhealthy].
+)
 
-// EndpointResource contains network resources allocated and used for a container in a network.
+// Health stores information about the container's healthcheck results.
 //
-// Deprecated: use [network.EndpointResource].
-type EndpointResource = network.EndpointResource
+// Deprecated: use [container.Health].
+type Health = container.Health
 
-// NetworkResource is the body of the "get network" http response message/
+// HealthcheckResult stores information about a single run of a healthcheck probe.
 //
-// Deprecated: use [network.Inspect] or [network.Summary] (for list operations).
-type NetworkResource = network.Inspect
+// Deprecated: use [container.HealthcheckResult].
+type HealthcheckResult = container.HealthcheckResult
 
-// NetworksPruneReport contains the response for Engine API:
-// POST "/networks/prune"
+// MountPoint represents a mount point configuration inside the container.
+// This is used for reporting the mountpoints in use by a container.
 //
-// Deprecated: use [network.PruneReport].
-type NetworksPruneReport = network.PruneReport
+// Deprecated: use [container.MountPoint].
+type MountPoint = container.MountPoint
 
-// ExecConfig is a small subset of the Config struct that holds the configuration
-// for the exec feature of docker.
+// Port An open port on a container
 //
-// Deprecated: use [container.ExecOptions].
-type ExecConfig = container.ExecOptions
+// Deprecated: use [container.Port].
+type Port = container.Port
 
-// ExecStartCheck is a temp struct used by execStart
-// Config fields is part of ExecConfig in runconfig package
+// GraphDriverData Information about the storage driver used to store the container's and
+// image's filesystem.
 //
-// Deprecated: use [container.ExecStartOptions] or [container.ExecAttachOptions].
-type ExecStartCheck = container.ExecStartOptions
+// Deprecated: use [storage.DriverData].
+type GraphDriverData = storage.DriverData
 
-// ContainerExecInspect holds information returned by exec inspect.
+// RootFS returns Image's RootFS description including the layer IDs.
 //
-// Deprecated: use [container.ExecInspect].
-type ContainerExecInspect = container.ExecInspect
+// Deprecated: use [image.RootFS].
+type RootFS = image.RootFS
 
-// ContainersPruneReport contains the response for Engine API:
-// POST "/containers/prune"
+// ImageInspect contains response of Engine API:
+// GET "/images/{name:.*}/json"
 //
-// Deprecated: use [container.PruneReport].
-type ContainersPruneReport = container.PruneReport
+// Deprecated: use [image.InspectResponse].
+type ImageInspect = image.InspectResponse
 
-// ContainerPathStat is used to encode the header from
-// GET "/containers/{name:.*}/archive"
-// "Name" is the file or directory name.
+// RequestPrivilegeFunc is a function interface that clients can supply to
+// retry operations after getting an authorization error.
+// This function returns the registry authentication header value in base64
+// format, or an error if the privilege request fails.
 //
-// Deprecated: use [container.PathStat].
-type ContainerPathStat = container.PathStat
-
-// CopyToContainerOptions holds information
-// about files to copy into a container.
-//
-// Deprecated: use [container.CopyToContainerOptions],
-type CopyToContainerOptions = container.CopyToContainerOptions
-
-// ContainerStats contains response of Engine API:
-// GET "/stats"
-//
-// Deprecated: use [container.StatsResponseReader].
-type ContainerStats = container.StatsResponseReader
-
-// ThrottlingData stores CPU throttling stats of one running container.
-// Not used on Windows.
-//
-// Deprecated: use [container.ThrottlingData].
-type ThrottlingData = container.ThrottlingData
-
-// CPUUsage stores All CPU stats aggregated since container inception.
-//
-// Deprecated: use [container.CPUUsage].
-type CPUUsage = container.CPUUsage
-
-// CPUStats aggregates and wraps all CPU related info of container
-//
-// Deprecated: use [container.CPUStats].
-type CPUStats = container.CPUStats
-
-// MemoryStats aggregates all memory stats since container inception on Linux.
-// Windows returns stats for commit and private working set only.
-//
-// Deprecated: use [container.MemoryStats].
-type MemoryStats = container.MemoryStats
-
-// BlkioStatEntry is one small entity to store a piece of Blkio stats
-// Not used on Windows.
-//
-// Deprecated: use [container.BlkioStatEntry].
-type BlkioStatEntry = container.BlkioStatEntry
-
-// BlkioStats stores All IO service stats for data read and write.
-// This is a Linux specific structure as the differences between expressing
-// block I/O on Windows and Linux are sufficiently significant to make
-// little sense attempting to morph into a combined structure.
-//
-// Deprecated: use [container.BlkioStats].
-type BlkioStats = container.BlkioStats
-
-// StorageStats is the disk I/O stats for read/write on Windows.
-//
-// Deprecated: use [container.StorageStats].
-type StorageStats = container.StorageStats
-
-// NetworkStats aggregates the network stats of one container
-//
-// Deprecated: use [container.NetworkStats].
-type NetworkStats = container.NetworkStats
-
-// PidsStats contains the stats of a container's pids
-//
-// Deprecated: use [container.PidsStats].
-type PidsStats = container.PidsStats
-
-// Stats is Ultimate struct aggregating all types of stats of one container
-//
-// Deprecated: use [container.Stats].
-type Stats = container.Stats
-
-// StatsJSON is newly used Networks
-//
-// Deprecated: use [container.StatsResponse].
-type StatsJSON = container.StatsResponse
-
-// EventsOptions holds parameters to filter events with.
-//
-// Deprecated: use [events.ListOptions].
-type EventsOptions = events.ListOptions
-
-// ImageSearchOptions holds parameters to search images with.
-//
-// Deprecated: use [registry.SearchOptions].
-type ImageSearchOptions = registry.SearchOptions
-
-// ImageImportSource holds source information for ImageImport
-//
-// Deprecated: use [image.ImportSource].
-type ImageImportSource image.ImportSource
-
-// ImageLoadResponse returns information to the client about a load process.
-//
-// Deprecated: use [image.LoadResponse].
-type ImageLoadResponse = image.LoadResponse
-
-// ContainerNode stores information about the node that a container
-// is running on.  It's only used by the Docker Swarm standalone API.
-//
-// Deprecated: ContainerNode was used for the classic Docker Swarm standalone API. It will be removed in the next release.
-type ContainerNode struct {
-	ID        string
-	IPAddress string `json:"IP"`
-	Addr      string
-	Name      string
-	Cpus      int
-	Memory    int64
-	Labels    map[string]string
-}
+// Deprecated: moved to [github.com/docker/docker/api/types/registry.RequestAuthConfig].
+type RequestPrivilegeFunc func(context.Context) (string, error)

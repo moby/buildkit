@@ -2,6 +2,11 @@ module github.com/moby/buildkit
 
 go 1.22.0
 
+// FIXME(thaJeztah): testing https://github.com/moby/moby/pull/49087 (split-idtools-internal branch)
+replace github.com/docker/docker => github.com/dmcgowan/docker v1.1.3-0.20241228145041-1823ba552b1a
+
+replace github.com/docker/cli => github.com/docker/cli v27.0.2-0.20241227143339-07aca45f5ead+incompatible
+
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.6.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.4.1
@@ -31,8 +36,8 @@ require (
 	github.com/containernetworking/plugins v1.4.0
 	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/distribution/reference v0.6.0
-	github.com/docker/cli v27.4.1+incompatible
-	github.com/docker/docker v27.4.1+incompatible
+	github.com/docker/cli v27.5.0-rc.1+incompatible
+	github.com/docker/docker v27.5.0-rc.1+incompatible
 	github.com/docker/go-connections v0.5.0
 	github.com/docker/go-units v0.5.0
 	github.com/gofrs/flock v0.12.1
@@ -64,7 +69,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.7.0
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10
-	github.com/prometheus/client_golang v1.20.2
+	github.com/prometheus/client_golang v1.20.5
 	github.com/prometheus/procfs v0.15.1
 	github.com/serialx/hashring v0.0.0-20200727003509-22c0c7ab6b1b
 	github.com/sirupsen/logrus v1.9.3
@@ -77,15 +82,15 @@ require (
 	github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea
 	github.com/tonistiigi/vt100 v0.0.0-20240514184818-90bafcd6abab
 	github.com/urfave/cli v1.22.16
-	github.com/vishvananda/netlink v1.3.0
+	github.com/vishvananda/netlink v1.3.1-0.20240922070040-084abd93d350
 	go.etcd.io/bbolt v1.3.11
-	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.46.1
-	go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace v0.46.1
+	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.53.0
+	go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace v0.53.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.53.0
 	go.opentelemetry.io/otel v1.28.0
 	go.opentelemetry.io/otel/exporters/jaeger v1.17.0
-	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v0.44.0
-	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v0.44.0
+	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.28.0
+	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.28.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.28.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.28.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.28.0
