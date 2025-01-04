@@ -179,6 +179,67 @@ func TestFileMkfile(t *testing.T) {
 	require.Equal(t, int64(-1), mkdir.Timestamp)
 }
 
+func TestFileSymlink(t *testing.T) {
+	t.Parallel()
+
+	st := Image("foo").Dir("/src").File(
+		Mkdir("dir", 0o755).
+			Symlink("/src/dir", "/srcdir").
+			Mkfile("/srcdir/file", 0700, []byte("asdfjkl;")).
+			Symlink("dir/file", "/srcdirfile").
+			Mkdir("/src/dir/subdir", 0o755).
+			Symlink("/src/dir/subdir", "/src/dir/subdir/nested"))
+
+	const numOps = 2
+	const numActions = 6
+	def, err := st.Marshal(context.TODO())
+
+	require.NoError(t, err)
+
+	m, arr := parseDef(t, def.Def)
+	require.Equal(t, numOps+1, len(arr))
+
+	dgst, idx := last(t, arr)
+	require.Equal(t, 0, idx)
+	require.Equal(t, m[dgst], arr[numOps-1])
+
+	fileOpNode := arr[1]
+	fileOp := fileOpNode.Op.(*pb.Op_File).File
+	require.Equal(t, numActions, len(fileOp.Actions))
+	require.Equal(t, 1, len(fileOpNode.Inputs))
+	require.Equal(t, m[fileOpNode.Inputs[0].Digest], arr[0])
+	require.Equal(t, 0, int(fileOpNode.Inputs[0].Index))
+
+	symlinkTests := []*pb.FileActionSymlink{
+		nil,
+		{Oldpath: "/src/dir", Newpath: "/srcdir"},
+		nil,
+		{Oldpath: "dir/file", Newpath: "/srcdirfile"},
+		nil,
+		{Oldpath: "/src/dir/subdir", Newpath: "/src/dir/subdir/nested"},
+	}
+
+	for i := 0; i < numActions; i++ {
+		expectedOutput := -1
+		if i == numActions-1 {
+			expectedOutput = 0
+		}
+
+		require.Equal(t, int(fileOp.Actions[i].Input), i)
+		require.Equal(t, -1, int(fileOp.Actions[i].SecondaryInput))
+		require.Equal(t, expectedOutput, int(fileOp.Actions[i].Output))
+
+		if symlinkTests[i] == nil {
+			continue
+		}
+
+		symlink := fileOp.Actions[i].Action.(*pb.FileAction_Symlink).Symlink
+
+		require.Equal(t, symlink.Oldpath, symlinkTests[i].Oldpath)
+		require.Equal(t, symlink.Newpath, symlinkTests[i].Newpath)
+	}
+}
+
 func TestFileRm(t *testing.T) {
 	t.Parallel()
 
