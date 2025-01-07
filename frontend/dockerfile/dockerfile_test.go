@@ -214,6 +214,7 @@ var allTests = integration.TestFuncs(
 	testTargetStageNameArg,
 	testStepNames,
 	testPowershellInDefaultPathOnWindows,
+	testOCILayoutMultiname,
 )
 
 // Tests that depend on the `security.*` entitlements
@@ -8688,6 +8689,103 @@ ARG BUILDKIT_SBOM_SCAN_STAGE=true
 
 	att = imgs.Find("unknown/unknown")
 	require.Equal(t, 1, len(att.LayersRaw))
+}
+
+// moby/buildkit#5572
+func testOCILayoutMultiname(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter)
+
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM scratch
+COPY <<EOF /foo
+hello
+EOF
+`)
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	dest := t.TempDir()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterOCI,
+				OutputDir: dest,
+				Attrs: map[string]string{
+					"tar":  "false",
+					"name": "org/repo:tag1,org/repo:tag2",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	var idx ocispecs.Index
+	dt, err := os.ReadFile(filepath.Join(dest, "index.json"))
+	require.NoError(t, err)
+
+	err = json.Unmarshal(dt, &idx)
+	require.NoError(t, err)
+
+	validateIdx := func(idx ocispecs.Index) {
+		require.Equal(t, 2, len(idx.Manifests))
+
+		require.Equal(t, idx.Manifests[0].Digest, idx.Manifests[1].Digest)
+		require.Equal(t, idx.Manifests[0].Platform, idx.Manifests[1].Platform)
+		require.Equal(t, idx.Manifests[0].MediaType, idx.Manifests[1].MediaType)
+		require.Equal(t, idx.Manifests[0].Size, idx.Manifests[1].Size)
+
+		require.Equal(t, "docker.io/org/repo:tag1", idx.Manifests[0].Annotations["io.containerd.image.name"])
+		require.Equal(t, "docker.io/org/repo:tag2", idx.Manifests[1].Annotations["io.containerd.image.name"])
+
+		require.Equal(t, "tag1", idx.Manifests[0].Annotations["org.opencontainers.image.ref.name"])
+		require.Equal(t, "tag2", idx.Manifests[1].Annotations["org.opencontainers.image.ref.name"])
+	}
+	validateIdx(idx)
+
+	// test that tar variant matches
+	buf := &bytes.Buffer{}
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:   client.ExporterOCI,
+				Output: fixedWriteCloser(&nopWriteCloser{buf}),
+				Attrs: map[string]string{
+					"name": "org/repo:tag1,org/repo:tag2",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(buf.Bytes(), false)
+	require.NoError(t, err)
+
+	var idx2 ocispecs.Index
+	err = json.Unmarshal(m["index.json"].Data, &idx2)
+	require.NoError(t, err)
+
+	validateIdx(idx2)
 }
 
 func testReproSourceDateEpoch(t *testing.T, sb integration.Sandbox) {
