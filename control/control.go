@@ -31,7 +31,6 @@ import (
 	"github.com/moby/buildkit/session/grpchijack"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/solver"
-	"github.com/moby/buildkit/solver/bboltcachestorage"
 	"github.com/moby/buildkit/solver/llbsolver"
 	"github.com/moby/buildkit/solver/llbsolver/proc"
 	"github.com/moby/buildkit/solver/pb"
@@ -66,7 +65,7 @@ type Opt struct {
 	Entitlements              []string
 	TraceCollector            sdktrace.SpanExporter
 	HistoryDB                 db.DB
-	CacheStore                *bboltcachestorage.Store
+	CacheStore                solver.PersistentCacheKeyStorage
 	LeaseManager              *leaseutil.Manager
 	ContentStore              *containerdsnapshot.Store
 	HistoryConfig             *config.HistoryConfig

@@ -45,6 +45,7 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/in-toto/in-toto-golang v0.5.0
 	github.com/klauspost/compress v1.17.11
+	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/moby/docker-image-spec v1.3.1
 	github.com/moby/locker v1.0.1
