@@ -600,6 +600,7 @@ type mod struct {
 	rm      *pb.FileActionRm
 	mkfile  *pb.FileActionMkFile
 	copy    *pb.FileActionCopy
+	symlink *pb.FileActionSymlink
 	copySrc []mod
 }
 
@@ -640,6 +641,13 @@ func (b *testFileBackend) Mkfile(_ context.Context, m, user, group fileoptypes.M
 	mm.id += "-mkfile"
 	mm.addUser(user, group)
 	mm.chain = append(mm.chain, mod{mkfile: a})
+	return nil
+}
+
+func (b *testFileBackend) Symlink(_ context.Context, m, user, group fileoptypes.Mount, a *pb.FileActionSymlink) error {
+	mm := m.(*testMount)
+	mm.id += "-symlink"
+	mm.chain = append(mm.chain, mod{symlink: a})
 	return nil
 }
 
