@@ -268,6 +268,7 @@ target "validate-dockerfile" {
     ]
   }
   name = "validate-dockerfile-${md5(dockerfile)}"
+  inherits = ["_common"]
   dockerfile = dockerfile
   call = "check"
 }
