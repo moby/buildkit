@@ -40,6 +40,8 @@ type Config struct {
 	} `toml:"frontend"`
 
 	System *SystemConfig `toml:"system"`
+
+	Cache CacheConfig `toml:"cache"`
 }
 
 type SystemConfig struct {
@@ -201,4 +203,8 @@ type DockerfileFrontendConfig struct {
 type GatewayFrontendConfig struct {
 	Enabled             *bool    `toml:"enabled"`
 	AllowedRepositories []string `toml:"allowedRepositories"`
+}
+
+type CacheConfig struct {
+	IndexFormat string `toml:"index-format"`
 }
