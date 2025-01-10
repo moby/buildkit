@@ -375,8 +375,8 @@ github.com/tonistiigi/dchapes-mode v0.0.0-20241001053921-ca0759fec205 h1:eUk79E1
 github.com/tonistiigi/dchapes-mode v0.0.0-20241001053921-ca0759fec205/go.mod h1:3Iuxbr0P7D3zUzBMAZB+ois3h/et0shEz0qApgHYGpY=
 github.com/tonistiigi/fsutil v0.0.0-20241121093142-31cf1f437184 h1:RgyoSI38Y36zjQaszel/0RAcIehAnjA1B0RiUV9SDO4=
 github.com/tonistiigi/fsutil v0.0.0-20241121093142-31cf1f437184/go.mod h1:Dl/9oEjK7IqnjAm21Okx/XIxUCFJzvh+XdVHUlBwXTw=
-github.com/tonistiigi/go-actions-cache v0.0.0-20241108014124-394979b8119e h1:SdcAL/tmv2mIfNhRygmeRrcci3aJQFqNughD7rcV170=
-github.com/tonistiigi/go-actions-cache v0.0.0-20241108014124-394979b8119e/go.mod h1:xsu+XeKT9piH/5f9Y1Zsv5krQqI34CWkIusbs5027IM=
+github.com/tonistiigi/go-actions-cache v0.0.0-20241210095730-017636a73805 h1:l2x1Ubj8f5xhPzZI428ZQ6+BDafGovpdk2ITnD3twTw=
+github.com/tonistiigi/go-actions-cache v0.0.0-20241210095730-017636a73805/go.mod h1:xsu+XeKT9piH/5f9Y1Zsv5krQqI34CWkIusbs5027IM=
 github.com/tonistiigi/go-archvariant v1.0.0 h1:5LC1eDWiBNflnTF1prCiX09yfNHIxDC/aukdhCdTyb0=
 github.com/tonistiigi/go-archvariant v1.0.0/go.mod h1:TxFmO5VS6vMq2kvs3ht04iPXtu2rUT/erOnGFYfk5Ho=
 github.com/tonistiigi/go-csvvalue v0.0.0-20240710180619-ddb21b71c0b4 h1:7I5c2Ig/5FgqkYOh/N87NzoyI9U15qUPXhDD8uCupv8=

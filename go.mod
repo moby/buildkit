@@ -72,7 +72,7 @@ require (
 	github.com/stretchr/testify v1.9.0
 	github.com/tonistiigi/dchapes-mode v0.0.0-20241001053921-ca0759fec205
 	github.com/tonistiigi/fsutil v0.0.0-20241121093142-31cf1f437184
-	github.com/tonistiigi/go-actions-cache v0.0.0-20241108014124-394979b8119e
+	github.com/tonistiigi/go-actions-cache v0.0.0-20241210095730-017636a73805
 	github.com/tonistiigi/go-archvariant v1.0.0
 	github.com/tonistiigi/go-csvvalue v0.0.0-20240710180619-ddb21b71c0b4
 	github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea
