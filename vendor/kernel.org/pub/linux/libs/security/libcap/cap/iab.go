@@ -109,11 +109,11 @@ func (iab *IAB) Dup() (*IAB, error) {
 //
 // Example, replace this:
 //
-//    iab := IABInit()
+//	iab := IABInit()
 //
 // with this:
 //
-//    iab := NewIAB()
+//	iab := NewIAB()
 func IABInit() *IAB {
 	return NewIAB()
 }
@@ -212,25 +212,44 @@ func (iab *IAB) String() string {
 // The iab is known to be locked by the caller.
 func (sc *syscaller) iabSetProc(iab *IAB) (err error) {
 	temp := GetProc()
-	var raising uint32
+	raising := false
+	bounder := false
 	for i := 0; i < words; i++ {
 		newI := iab.i[i]
 		oldIP := temp.flat[i][Inheritable] | temp.flat[i][Permitted]
-		raising |= (newI & ^oldIP) | iab.a[i] | iab.nb[i]
+		raising = raising || (newI & ^oldIP != 0)
+		if iab.nb[i] != 0 {
+			bounder = true
+		}
 		temp.flat[i][Inheritable] = newI
+	}
+	if bounder {
+		bounder = false
+		for c := Value(maxValues); c > 0; {
+			c--
+			offset, mask := omask(c)
+			if iab.nb[offset]&mask == 0 {
+				continue
+			}
+			if b, _ := GetBound(c); b {
+				bounder = true
+				raising = true
+				break
+			}
+		}
 	}
 	working, err2 := temp.Dup()
 	if err2 != nil {
 		err = err2
 		return
 	}
-	if raising != 0 {
+	if raising {
 		if err = working.SetFlag(Effective, true, SETPCAP); err != nil {
 			return
 		}
-		if err = sc.setProc(working); err != nil {
-			return
-		}
+	}
+	if err = sc.setProc(working); err != nil {
+		return
 	}
 	defer func() {
 		if err2 := sc.setProc(temp); err == nil {
@@ -246,7 +265,7 @@ func (sc *syscaller) iabSetProc(iab *IAB) (err error) {
 		if iab.a[offset]&mask != 0 {
 			err = sc.setAmbient(true, c)
 		}
-		if err == nil && iab.nb[offset]&mask != 0 {
+		if bounder && err == nil && iab.nb[offset]&mask != 0 {
 			err = sc.dropBound(c)
 		}
 		if err != nil {
@@ -260,7 +279,9 @@ func (sc *syscaller) iabSetProc(iab *IAB) (err error) {
 // capability vectors of the current process using the content,
 // iab. The Bounding vector strongly affects the potential for setting
 // other bits, so this function carefully performs the combined
-// operation in the most flexible manner.
+// operation in the most flexible manner. If the desired IAB value
+// will change the Bounding value, cap.SETPCAP must be a Permitted
+// value.
 func (iab *IAB) SetProc() error {
 	if err := iab.good(); err != nil {
 		return err

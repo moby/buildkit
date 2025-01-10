@@ -1,5 +1,5 @@
-// +build linux,!cgo
-// +build go1.16
+//go:build linux && !cgo && go1.16
+// +build linux,!cgo,go1.16
 
 package psx // import "kernel.org/pub/linux/libs/security/libcap/psx"
 

@@ -1121,10 +1121,10 @@ google.golang.org/protobuf/types/pluginpb
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
-# kernel.org/pub/linux/libs/security/libcap/cap v1.2.70
+# kernel.org/pub/linux/libs/security/libcap/cap v1.2.73
 ## explicit; go 1.11
 kernel.org/pub/linux/libs/security/libcap/cap
-# kernel.org/pub/linux/libs/security/libcap/psx v1.2.70
+# kernel.org/pub/linux/libs/security/libcap/psx v1.2.73
 ## explicit; go 1.11
 kernel.org/pub/linux/libs/security/libcap/psx
 # sigs.k8s.io/yaml v1.4.0

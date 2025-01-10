@@ -1,3 +1,4 @@
+//go:build linux && cgo
 // +build linux,cgo
 
 package psx // import "kernel.org/pub/linux/libs/security/libcap/psx"
@@ -8,8 +9,6 @@ import (
 	"syscall"
 )
 
-// #cgo LDFLAGS: -lpthread -Wl,-wrap,pthread_create
-//
 // #include <errno.h>
 // #include "psx_syscall.h"
 //
@@ -46,14 +45,21 @@ func forceFatal() {
 
 // Syscall3 performs a 3 argument syscall. Syscall3 differs from
 // syscall.[Raw]Syscall() insofar as it is simultaneously executed on
-// every thread of the combined Go and CGo runtimes. It works
-// differently depending on whether CGO_ENABLED is 1 or 0 at compile
-// time.
+// every thread of the combined Go and CGo runtimes. If any of the
+// return values of these sumultaneous system calls differs, the
+// runtime will cause the program to exit.
 //
-// If CGO_ENABLED=1 it uses the libpsx function C.psx_syscall3().
+// Syscall3 works differently depending on whether CGO_ENABLED is 1 or
+// 0 at compile time.
+//
+// If CGO_ENABLED=1 it uses the libpsx function C.psx_syscall3(), with
+// libpsx:psx_set_sensitivity(PSX_ERROR) - which means the program
+// will be SIGSYS killed when inconsistent return values are returned
+// for any pthread.
 //
 // If CGO_ENABLED=0 it redirects to the go1.16+
-// syscall.AllThreadsSyscall() function.
+// syscall.AllThreadsSyscall() function. This function panics if
+// inconsistent return values are returned for any pthread.
 func Syscall3(syscallnr, arg1, arg2, arg3 uintptr) (uintptr, uintptr, syscall.Errno) {
 	forceFatal()
 	// We lock to the OSThread here because we may need errno to
