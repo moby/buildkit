@@ -41,12 +41,6 @@ jobs:
       includes: ${{ steps.set.outputs.includes }}
     steps:
       -
-        name: Checkout
-        uses: actions/checkout@v4
-      -
-        name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v3
-      -
         name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       -
@@ -89,7 +83,7 @@ jobs:
             });
       -
         name: Build
-        uses: docker/bake-action@v5
+        uses: docker/bake-action@v6
         with:
           targets: integration-tests-base
           set: |
@@ -155,7 +149,7 @@ jobs:
           buildkitd-flags: --debug
       -
         name: Build test image
-        uses: docker/bake-action@v5
+        uses: docker/bake-action@v6
         with:
           targets: integration-tests
           set: |
