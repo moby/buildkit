@@ -116,6 +116,7 @@ func DetectSyntax(dt []byte) (string, string, []Range, bool) {
 }
 
 func ParseDirective(key string, dt []byte) (string, string, []Range, bool) {
+	dt = discardBOM(dt)
 	dt, hadShebang, err := discardShebang(dt)
 	if err != nil {
 		return "", "", nil, false
@@ -170,4 +171,8 @@ func discardShebang(dt []byte) ([]byte, bool, error) {
 		return rest, true, nil
 	}
 	return dt, false, nil
+}
+
+func discardBOM(dt []byte) []byte {
+	return bytes.TrimPrefix(dt, []byte{0xEF, 0xBB, 0xBF})
 }
