@@ -105,7 +105,7 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240701130421-f6361c86f094
 	google.golang.org/grpc v1.66.3
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.5.1
-	google.golang.org/protobuf v1.35.1
+	google.golang.org/protobuf v1.35.2
 	kernel.org/pub/linux/libs/security/libcap/cap v1.2.70
 )
 
