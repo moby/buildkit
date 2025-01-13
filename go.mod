@@ -16,7 +16,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.48.1
 	github.com/containerd/console v1.0.4
 	github.com/containerd/containerd v1.7.24
-	github.com/containerd/containerd/api v1.7.19
+	github.com/containerd/containerd/api v1.8.0
 	github.com/containerd/continuity v0.4.5
 	github.com/containerd/errdefs v0.3.0
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.8
