@@ -162,7 +162,7 @@ func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt source
 		err   error
 	)
 	if platform := opt.Platform; platform != nil {
-		key += platforms.Format(*platform)
+		key += platforms.FormatAll(*platform)
 	}
 
 	switch is.ResolverType {

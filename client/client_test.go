@@ -10419,7 +10419,7 @@ func testFrontendVerifyPlatforms(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	warnings = wc.wait()
-	require.Len(t, warnings, 0)
+	require.Len(t, warnings, 0, warningsListOutput(warnings))
 
 	frontend = func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 		res := gateway.NewResult()
@@ -11015,4 +11015,18 @@ func testRunValidExitCodes(t *testing.T, sb integration.Sandbox) {
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "exit code: 0")
+}
+
+type warningsListOutput []*VertexWarning
+
+func (w warningsListOutput) String() string {
+	if len(w) == 0 {
+		return ""
+	}
+	var b strings.Builder
+
+	for _, warn := range w {
+		_, _ = b.Write(warn.Short)
+	}
+	return b.String()
 }
