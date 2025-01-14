@@ -140,7 +140,7 @@ require (
 	github.com/containerd/ttrpc v1.2.7 // indirect
 	github.com/containernetworking/cni v1.2.3 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.5 // indirect
-	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/docker/docker-credential-helpers v0.8.2 // indirect
 	github.com/docker/go-metrics v0.0.1 // indirect
@@ -165,7 +165,7 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/opencontainers/runtime-tools v0.9.1-0.20221107090550-2e043c6bd626 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
-	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.55.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
@@ -183,4 +183,21 @@ require (
 	sigs.k8s.io/yaml v1.4.0 // indirect
 	tags.cncf.io/container-device-interface v0.8.0 // indirect
 	tags.cncf.io/container-device-interface/specs-go v0.8.0 // indirect
+)
+
+exclude (
+	// TODO(thaJeztah): remove once fuse-overlayfs-snapshotter, nydus-snapshotter, and stargz-snapshotter updated to containerd v2.0.2 and downgraded these dependencies.
+	//
+	// These dependencies were updated to "master" in some modules we depend on,
+	// but have no code-changes since their last release. Unfortunately, this also
+	// causes a ripple effect, forcing all users of the containerd module to also
+	// update these dependencies to an unrelease / un-tagged version.
+	//
+	// Both these dependencies will unlikely do a new release in the near future,
+	// so exclude these versions so that we can downgrade to the current release.
+	//
+	// For additional details, see this PR and links mentioned in that PR:
+	// https://github.com/kubernetes-sigs/kustomize/pull/5830#issuecomment-2569960859
+	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
+	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 )
