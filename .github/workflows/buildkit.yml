@@ -106,7 +106,7 @@ jobs:
           RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
           PLATFORMS: ${{ matrix.platform }}
           CACHE_FROM: type=gha,scope=binaries-${{ env.PLATFORM_PAIR }}
-          CACHE_TO: type=gha,scope=binaries-${{ env.PLATFORM_PAIR }}
+          CACHE_TO: type=gha,scope=binaries-${{ env.PLATFORM_PAIR }},ignore-error=true
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       -
         name: Upload artifacts
@@ -216,7 +216,7 @@ jobs:
           RELEASE: ${{ github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v') }}
           TARGET: ${{ matrix.target-stage }}
           CACHE_FROM: type=gha,scope=image${{ matrix.target-stage }}
-          CACHE_TO: type=gha,scope=image${{ matrix.target-stage }}
+          CACHE_TO: type=gha,scope=image${{ matrix.target-stage }},ignore-error=true
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   scout:

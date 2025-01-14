@@ -128,7 +128,7 @@ jobs:
           TESTPKGS: "${{ matrix.pkg }}"
           TESTFLAGS: "${{ env.TESTFLAGS }} --run=//worker=${{ matrix.worker }}$"
           SKIP_INTEGRATION_TESTS: "${{ matrix.skip-integration-tests }}"
-          CACHE_FROM: "type=gha,scope=build-integration-tests"
+          CACHE_FROM: "type=gha,scope=build-integration-tests,ignore-error=true"
           BUILDKIT_INTEGRATION_DOCKERD_FLAGS: |
             --bip=10.66.66.1/24
             --default-address-pool=base=10.66.66.0/16,size=24
