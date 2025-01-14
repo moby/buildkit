@@ -228,6 +228,13 @@ func resolveBaseEndpoint(cfg aws.Config, o *Options) {
 	}
 }
 
+func bindRegion(region string) *string {
+	if region == "" {
+		return nil
+	}
+	return aws.String(endpoints.MapFIPSRegion(region))
+}
+
 // EndpointParameters provides the parameters that influence how endpoints are
 // resolved.
 type EndpointParameters struct {
@@ -318,6 +325,13 @@ type EndpointParameters struct {
 	// Parameter
 	// is required.
 	Prefix *string
+
+	// The Copy Source used for Copy Object request. This is an optional parameter that
+	// will be set automatically for operations that are scoped to Copy
+	// Source.
+	//
+	// Parameter is required.
+	CopySource *string
 
 	// Internal parameter to disable Access Point Buckets
 	//
@@ -410,6 +424,17 @@ func (p EndpointParameters) WithDefaults() EndpointParameters {
 		p.UseGlobalEndpoint = ptr.Bool(false)
 	}
 	return p
+}
+
+type stringSlice []string
+
+func (s stringSlice) Get(i int) *string {
+	if i < 0 || i >= len(s) {
+		return nil
+	}
+
+	v := s[i]
+	return &v
 }
 
 // EndpointResolverV2 provides the interface for resolving service endpoints.
@@ -1346,6 +1371,19 @@ func (r *resolver) ResolveEndpoint(
 																var out smithy.Properties
 																smithyauth.SetAuthOptions(&out, []*smithyauth.Option{
 																	{
+																		SchemeID: "aws.auth#sigv4a",
+																		SignerProperties: func() smithy.Properties {
+																			var sp smithy.Properties
+																			smithyhttp.SetDisableDoubleEncoding(&sp, true)
+
+																			smithyhttp.SetSigV4SigningName(&sp, "s3-outposts")
+																			smithyhttp.SetSigV4ASigningName(&sp, "s3-outposts")
+
+																			smithyhttp.SetSigV4ASigningRegions(&sp, []string{"*"})
+																			return sp
+																		}(),
+																	},
+																	{
 																		SchemeID: "aws.auth#sigv4",
 																		SignerProperties: func() smithy.Properties {
 																			var sp smithy.Properties
@@ -1388,6 +1426,19 @@ func (r *resolver) ResolveEndpoint(
 												Properties: func() smithy.Properties {
 													var out smithy.Properties
 													smithyauth.SetAuthOptions(&out, []*smithyauth.Option{
+														{
+															SchemeID: "aws.auth#sigv4a",
+															SignerProperties: func() smithy.Properties {
+																var sp smithy.Properties
+																smithyhttp.SetDisableDoubleEncoding(&sp, true)
+
+																smithyhttp.SetSigV4SigningName(&sp, "s3-outposts")
+																smithyhttp.SetSigV4ASigningName(&sp, "s3-outposts")
+
+																smithyhttp.SetSigV4ASigningRegions(&sp, []string{"*"})
+																return sp
+															}(),
+														},
 														{
 															SchemeID: "aws.auth#sigv4",
 															SignerProperties: func() smithy.Properties {
@@ -1440,6 +1491,19 @@ func (r *resolver) ResolveEndpoint(
 																var out smithy.Properties
 																smithyauth.SetAuthOptions(&out, []*smithyauth.Option{
 																	{
+																		SchemeID: "aws.auth#sigv4a",
+																		SignerProperties: func() smithy.Properties {
+																			var sp smithy.Properties
+																			smithyhttp.SetDisableDoubleEncoding(&sp, true)
+
+																			smithyhttp.SetSigV4SigningName(&sp, "s3-outposts")
+																			smithyhttp.SetSigV4ASigningName(&sp, "s3-outposts")
+
+																			smithyhttp.SetSigV4ASigningRegions(&sp, []string{"*"})
+																			return sp
+																		}(),
+																	},
+																	{
 																		SchemeID: "aws.auth#sigv4",
 																		SignerProperties: func() smithy.Properties {
 																			var sp smithy.Properties
@@ -1484,6 +1548,19 @@ func (r *resolver) ResolveEndpoint(
 												Properties: func() smithy.Properties {
 													var out smithy.Properties
 													smithyauth.SetAuthOptions(&out, []*smithyauth.Option{
+														{
+															SchemeID: "aws.auth#sigv4a",
+															SignerProperties: func() smithy.Properties {
+																var sp smithy.Properties
+																smithyhttp.SetDisableDoubleEncoding(&sp, true)
+
+																smithyhttp.SetSigV4SigningName(&sp, "s3-outposts")
+																smithyhttp.SetSigV4ASigningName(&sp, "s3-outposts")
+
+																smithyhttp.SetSigV4ASigningRegions(&sp, []string{"*"})
+																return sp
+															}(),
+														},
 														{
 															SchemeID: "aws.auth#sigv4",
 															SignerProperties: func() smithy.Properties {
@@ -3749,6 +3826,19 @@ func (r *resolver) ResolveEndpoint(
 																						var out smithy.Properties
 																						smithyauth.SetAuthOptions(&out, []*smithyauth.Option{
 																							{
+																								SchemeID: "aws.auth#sigv4a",
+																								SignerProperties: func() smithy.Properties {
+																									var sp smithy.Properties
+																									smithyhttp.SetDisableDoubleEncoding(&sp, true)
+
+																									smithyhttp.SetSigV4SigningName(&sp, "s3-outposts")
+																									smithyhttp.SetSigV4ASigningName(&sp, "s3-outposts")
+
+																									smithyhttp.SetSigV4ASigningRegions(&sp, []string{"*"})
+																									return sp
+																								}(),
+																							},
+																							{
 																								SchemeID: "aws.auth#sigv4",
 																								SignerProperties: func() smithy.Properties {
 																									var sp smithy.Properties
@@ -3793,6 +3883,19 @@ func (r *resolver) ResolveEndpoint(
 																			Properties: func() smithy.Properties {
 																				var out smithy.Properties
 																				smithyauth.SetAuthOptions(&out, []*smithyauth.Option{
+																					{
+																						SchemeID: "aws.auth#sigv4a",
+																						SignerProperties: func() smithy.Properties {
+																							var sp smithy.Properties
+																							smithyhttp.SetDisableDoubleEncoding(&sp, true)
+
+																							smithyhttp.SetSigV4SigningName(&sp, "s3-outposts")
+																							smithyhttp.SetSigV4ASigningName(&sp, "s3-outposts")
+
+																							smithyhttp.SetSigV4ASigningRegions(&sp, []string{"*"})
+																							return sp
+																						}(),
+																					},
 																					{
 																						SchemeID: "aws.auth#sigv4",
 																						SignerProperties: func() smithy.Properties {
@@ -5665,10 +5768,10 @@ type endpointParamsBinder interface {
 	bindEndpointParams(*EndpointParameters)
 }
 
-func bindEndpointParams(input interface{}, options Options) *EndpointParameters {
+func bindEndpointParams(ctx context.Context, input interface{}, options Options) *EndpointParameters {
 	params := &EndpointParameters{}
 
-	params.Region = aws.String(endpoints.MapFIPSRegion(options.Region))
+	params.Region = bindRegion(options.Region)
 	params.UseFIPS = aws.Bool(options.EndpointOptions.UseFIPSEndpoint == aws.FIPSEndpointStateEnabled)
 	params.UseDualStack = aws.Bool(options.EndpointOptions.UseDualStackEndpoint == aws.DualStackEndpointStateEnabled)
 	params.Endpoint = options.BaseEndpoint
@@ -5701,6 +5804,10 @@ func (m *resolveEndpointV2Middleware) HandleFinalize(ctx context.Context, in mid
 		return next.HandleFinalize(ctx, in)
 	}
 
+	if err := checkAccountID(getIdentity(ctx), m.options.AccountIDEndpointMode); err != nil {
+		return out, metadata, fmt.Errorf("invalid accountID set: %w", err)
+	}
+
 	req, ok := in.Request.(*smithyhttp.Request)
 	if !ok {
 		return out, metadata, fmt.Errorf("unknown transport type %T", in.Request)
@@ -5710,7 +5817,7 @@ func (m *resolveEndpointV2Middleware) HandleFinalize(ctx context.Context, in mid
 		return out, metadata, fmt.Errorf("expected endpoint resolver to not be nil")
 	}
 
-	params := bindEndpointParams(getOperationInput(ctx), m.options)
+	params := bindEndpointParams(ctx, getOperationInput(ctx), m.options)
 	endpt, err := m.options.EndpointResolverV2.ResolveEndpoint(ctx, *params)
 	if err != nil {
 		return out, metadata, fmt.Errorf("failed to resolve service endpoint, %w", err)

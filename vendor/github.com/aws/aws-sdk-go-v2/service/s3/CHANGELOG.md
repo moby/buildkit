@@ -1,3 +1,131 @@
+# v1.58.2 (2024-07-10.2)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.58.1 (2024-07-10)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.58.0 (2024-07-02)
+
+* **Feature**: Added response overrides to Head Object requests.
+
+# v1.57.1 (2024-06-28)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.57.0 (2024-06-26)
+
+* **Feature**: Support list-of-string endpoint parameter.
+
+# v1.56.1 (2024-06-19)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.56.0 (2024-06-18)
+
+* **Feature**: Track usage of various AWS SDK features in user-agent string.
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.55.2 (2024-06-17)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.55.1 (2024-06-07)
+
+* **Bug Fix**: Add clock skew correction on all service clients
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.55.0 (2024-06-05)
+
+* **Feature**: Added new params copySource and key to copyObject API for supporting S3 Access Grants plugin. These changes will not change any of the existing S3 API functionality.
+* **Bug Fix**: Add S3-specific smithy protocol tests.
+
+# v1.54.4 (2024-06-03)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.54.3 (2024-05-23)
+
+* **Bug Fix**: Prevent parsing failures for nonstandard `Expires` values in responses. If the SDK cannot parse the value set in the response header for this field it will now be returned as `nil`. A new field, `ExpiresString`, has been added that will retain the unparsed value from the response (regardless of whether it came back in a format recognized by the SDK).
+
+# v1.54.2 (2024-05-16)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.54.1 (2024-05-15)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.54.0 (2024-05-14)
+
+* **Feature**: Updated a few x-id in the http uri traits
+
+# v1.53.2 (2024-05-08)
+
+* **Bug Fix**: GoDoc improvement
+
+# v1.53.1 (2024-03-29)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.53.0 (2024-03-18)
+
+* **Feature**: Fix two issues with response root node names.
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.52.1 (2024-03-15)
+
+* **Documentation**: Documentation updates for Amazon S3.
+
+# v1.52.0 (2024-03-13)
+
+* **Feature**: This release makes the default option for S3 on Outposts request signing to use the SigV4A algorithm when using AWS Common Runtime (CRT).
+
+# v1.51.4 (2024-03-07)
+
+* **Bug Fix**: Remove dependency on go-cmp.
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.51.3 (2024-03-05)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.51.2 (2024-03-04)
+
+* **Bug Fix**: Update internal/presigned-url dependency for corrected API name.
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.51.1 (2024-02-23)
+
+* **Bug Fix**: Move all common, SDK-side middleware stack ops into the service client module to prevent cross-module compatibility issues in the future.
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.51.0 (2024-02-22)
+
+* **Feature**: Add middleware stack snapshot tests.
+
+# v1.50.3 (2024-02-21)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.50.2 (2024-02-20)
+
+* **Bug Fix**: When sourcing values for a service's `EndpointParameters`, the lack of a configured region (i.e. `options.Region == ""`) will now translate to a `nil` value for `EndpointParameters.Region` instead of a pointer to the empty string `""`. This will result in a much more explicit error when calling an operation instead of an obscure hostname lookup failure.
+
+# v1.50.1 (2024-02-19)
+
+* **Bug Fix**: Prevent potential panic caused by invalid comparison of credentials.
+
+# v1.50.0 (2024-02-16)
+
+* **Feature**: Add new ClientOptions field to waiter config which allows you to extend the config for operation calls made by waiters.
+
+# v1.49.0 (2024-02-13)
+
+* **Feature**: Bump minimum Go version to 1.20 per our language support policy.
+* **Dependency Update**: Updated to the latest SDK module versions
+
 # v1.48.1 (2024-01-24)
 
 * No change notes available for this release.

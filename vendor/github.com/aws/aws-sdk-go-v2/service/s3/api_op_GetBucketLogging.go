@@ -14,11 +14,19 @@ import (
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 )
 
-// This operation is not supported by directory buckets. Returns the logging
-// status of a bucket and the permissions users have to view and modify that
-// status. The following operations are related to GetBucketLogging :
-//   - CreateBucket (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html)
-//   - PutBucketLogging (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketLogging.html)
+// This operation is not supported by directory buckets.
+//
+// Returns the logging status of a bucket and the permissions users have to view
+// and modify that status.
+//
+// The following operations are related to GetBucketLogging :
+//
+// [CreateBucket]
+//
+// [PutBucketLogging]
+//
+// [PutBucketLogging]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketLogging.html
+// [CreateBucket]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html
 func (c *Client) GetBucketLogging(ctx context.Context, params *GetBucketLoggingInput, optFns ...func(*Options)) (*GetBucketLoggingOutput, error) {
 	if params == nil {
 		params = &GetBucketLoggingInput{}
@@ -50,6 +58,7 @@ type GetBucketLoggingInput struct {
 }
 
 func (in *GetBucketLoggingInput) bindEndpointParams(p *EndpointParameters) {
+
 	p.Bucket = in.Bucket
 	p.UseS3ExpressControlEndpoint = ptr.Bool(true)
 }
@@ -57,8 +66,10 @@ func (in *GetBucketLoggingInput) bindEndpointParams(p *EndpointParameters) {
 type GetBucketLoggingOutput struct {
 
 	// Describes where logs are stored and the prefix that Amazon S3 assigns to all
-	// log object keys for a bucket. For more information, see PUT Bucket logging (https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketPUTlogging.html)
-	// in the Amazon S3 API Reference.
+	// log object keys for a bucket. For more information, see [PUT Bucket logging]in the Amazon S3 API
+	// Reference.
+	//
+	// [PUT Bucket logging]: https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketPUTlogging.html
 	LoggingEnabled *types.LoggingEnabled
 
 	// Metadata pertaining to the operation's result.
@@ -89,25 +100,25 @@ func (c *Client) addOperationGetBucketLoggingMiddlewares(stack *middleware.Stack
 	if err = addSetLoggerMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = awsmiddleware.AddClientRequestIDMiddleware(stack); err != nil {
+	if err = addClientRequestID(stack); err != nil {
 		return err
 	}
-	if err = smithyhttp.AddComputeContentLengthMiddleware(stack); err != nil {
+	if err = addComputeContentLength(stack); err != nil {
 		return err
 	}
 	if err = addResolveEndpointMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = v4.AddComputePayloadSHA256Middleware(stack); err != nil {
+	if err = addComputePayloadSHA256(stack); err != nil {
 		return err
 	}
-	if err = addRetryMiddlewares(stack, options); err != nil {
+	if err = addRetry(stack, options); err != nil {
 		return err
 	}
-	if err = awsmiddleware.AddRawResponseToMetadata(stack); err != nil {
+	if err = addRawResponseToMetadata(stack); err != nil {
 		return err
 	}
-	if err = awsmiddleware.AddRecordResponseTiming(stack); err != nil {
+	if err = addRecordResponseTiming(stack); err != nil {
 		return err
 	}
 	if err = addClientUserAgent(stack, options); err != nil {
@@ -125,6 +136,15 @@ func (c *Client) addOperationGetBucketLoggingMiddlewares(stack *middleware.Stack
 	if err = addPutBucketContextMiddleware(stack); err != nil {
 		return err
 	}
+	if err = addTimeOffsetBuild(stack, c); err != nil {
+		return err
+	}
+	if err = addUserAgentRetryMode(stack, options); err != nil {
+		return err
+	}
+	if err = addIsExpressUserAgent(stack); err != nil {
+		return err
+	}
 	if err = addOpGetBucketLoggingValidationMiddleware(stack); err != nil {
 		return err
 	}
@@ -134,7 +154,7 @@ func (c *Client) addOperationGetBucketLoggingMiddlewares(stack *middleware.Stack
 	if err = addMetadataRetrieverMiddleware(stack); err != nil {
 		return err
 	}
-	if err = awsmiddleware.AddRecursionDetection(stack); err != nil {
+	if err = addRecursionDetection(stack); err != nil {
 		return err
 	}
 	if err = addGetBucketLoggingUpdateEndpoint(stack, options); err != nil {

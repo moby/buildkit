@@ -14,15 +14,27 @@ import (
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 )
 
-// This operation is not supported by directory buckets. Returns the versioning
-// state of a bucket. To retrieve the versioning state of a bucket, you must be the
-// bucket owner. This implementation also returns the MFA Delete status of the
-// versioning state. If the MFA Delete status is enabled , the bucket owner must
-// use an authentication device to change the versioning state of the bucket. The
-// following operations are related to GetBucketVersioning :
-//   - GetObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html)
-//   - PutObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html)
-//   - DeleteObject (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteObject.html)
+// This operation is not supported by directory buckets.
+//
+// Returns the versioning state of a bucket.
+//
+// To retrieve the versioning state of a bucket, you must be the bucket owner.
+//
+// This implementation also returns the MFA Delete status of the versioning state.
+// If the MFA Delete status is enabled , the bucket owner must use an
+// authentication device to change the versioning state of the bucket.
+//
+// The following operations are related to GetBucketVersioning :
+//
+// [GetObject]
+//
+// [PutObject]
+//
+// [DeleteObject]
+//
+// [DeleteObject]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteObject.html
+// [PutObject]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html
+// [GetObject]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html
 func (c *Client) GetBucketVersioning(ctx context.Context, params *GetBucketVersioningInput, optFns ...func(*Options)) (*GetBucketVersioningOutput, error) {
 	if params == nil {
 		params = &GetBucketVersioningInput{}
@@ -54,6 +66,7 @@ type GetBucketVersioningInput struct {
 }
 
 func (in *GetBucketVersioningInput) bindEndpointParams(p *EndpointParameters) {
+
 	p.Bucket = in.Bucket
 	p.UseS3ExpressControlEndpoint = ptr.Bool(true)
 }
@@ -96,25 +109,25 @@ func (c *Client) addOperationGetBucketVersioningMiddlewares(stack *middleware.St
 	if err = addSetLoggerMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = awsmiddleware.AddClientRequestIDMiddleware(stack); err != nil {
+	if err = addClientRequestID(stack); err != nil {
 		return err
 	}
-	if err = smithyhttp.AddComputeContentLengthMiddleware(stack); err != nil {
+	if err = addComputeContentLength(stack); err != nil {
 		return err
 	}
 	if err = addResolveEndpointMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = v4.AddComputePayloadSHA256Middleware(stack); err != nil {
+	if err = addComputePayloadSHA256(stack); err != nil {
 		return err
 	}
-	if err = addRetryMiddlewares(stack, options); err != nil {
+	if err = addRetry(stack, options); err != nil {
 		return err
 	}
-	if err = awsmiddleware.AddRawResponseToMetadata(stack); err != nil {
+	if err = addRawResponseToMetadata(stack); err != nil {
 		return err
 	}
-	if err = awsmiddleware.AddRecordResponseTiming(stack); err != nil {
+	if err = addRecordResponseTiming(stack); err != nil {
 		return err
 	}
 	if err = addClientUserAgent(stack, options); err != nil {
@@ -132,6 +145,15 @@ func (c *Client) addOperationGetBucketVersioningMiddlewares(stack *middleware.St
 	if err = addPutBucketContextMiddleware(stack); err != nil {
 		return err
 	}
+	if err = addTimeOffsetBuild(stack, c); err != nil {
+		return err
+	}
+	if err = addUserAgentRetryMode(stack, options); err != nil {
+		return err
+	}
+	if err = addIsExpressUserAgent(stack); err != nil {
+		return err
+	}
 	if err = addOpGetBucketVersioningValidationMiddleware(stack); err != nil {
 		return err
 	}
@@ -141,7 +163,7 @@ func (c *Client) addOperationGetBucketVersioningMiddlewares(stack *middleware.St
 	if err = addMetadataRetrieverMiddleware(stack); err != nil {
 		return err
 	}
-	if err = awsmiddleware.AddRecursionDetection(stack); err != nil {
+	if err = addRecursionDetection(stack); err != nil {
 		return err
 	}
 	if err = addGetBucketVersioningUpdateEndpoint(stack, options); err != nil {

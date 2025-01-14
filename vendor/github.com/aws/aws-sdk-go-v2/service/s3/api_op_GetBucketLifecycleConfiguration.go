@@ -14,31 +14,51 @@ import (
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 )
 
-// This operation is not supported by directory buckets. Bucket lifecycle
-// configuration now supports specifying a lifecycle rule using an object key name
-// prefix, one or more object tags, or a combination of both. Accordingly, this
-// section describes the latest API. The response describes the new filter element
-// that you can use to specify a filter to select a subset of objects to which the
-// rule applies. If you are using a previous version of the lifecycle
-// configuration, it still works. For the earlier action, see GetBucketLifecycle (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketLifecycle.html)
-// . Returns the lifecycle configuration information set on the bucket. For
-// information about lifecycle configuration, see Object Lifecycle Management (https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lifecycle-mgmt.html)
-// . To use this operation, you must have permission to perform the
+// This operation is not supported by directory buckets.
+//
+// Bucket lifecycle configuration now supports specifying a lifecycle rule using
+// an object key name prefix, one or more object tags, object size, or any
+// combination of these. Accordingly, this section describes the latest API. The
+// previous version of the API supported filtering based only on an object key name
+// prefix, which is supported for backward compatibility. For the related API
+// description, see [GetBucketLifecycle]. Accordingly, this section describes the latest API. The
+// response describes the new filter element that you can use to specify a filter
+// to select a subset of objects to which the rule applies. If you are using a
+// previous version of the lifecycle configuration, it still works. For the earlier
+// action,
+//
+// Returns the lifecycle configuration information set on the bucket. For
+// information about lifecycle configuration, see [Object Lifecycle Management].
+//
+// To use this operation, you must have permission to perform the
 // s3:GetLifecycleConfiguration action. The bucket owner has this permission, by
 // default. The bucket owner can grant this permission to others. For more
-// information about permissions, see Permissions Related to Bucket Subresource
-// Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources)
-// and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html)
-// . GetBucketLifecycleConfiguration has the following special error:
+// information about permissions, see [Permissions Related to Bucket Subresource Operations]and [Managing Access Permissions to Your Amazon S3 Resources].
+//
+// GetBucketLifecycleConfiguration has the following special error:
+//
 //   - Error code: NoSuchLifecycleConfiguration
+//
 //   - Description: The lifecycle configuration does not exist.
+//
 //   - HTTP Status Code: 404 Not Found
+//
 //   - SOAP Fault Code Prefix: Client
 //
 // The following operations are related to GetBucketLifecycleConfiguration :
-//   - GetBucketLifecycle (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketLifecycle.html)
-//   - PutBucketLifecycle (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketLifecycle.html)
-//   - DeleteBucketLifecycle (https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketLifecycle.html)
+//
+// [GetBucketLifecycle]
+//
+// [PutBucketLifecycle]
+//
+// [DeleteBucketLifecycle]
+//
+// [GetBucketLifecycle]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketLifecycle.html
+// [Object Lifecycle Management]: https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lifecycle-mgmt.html
+// [Permissions Related to Bucket Subresource Operations]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources
+// [PutBucketLifecycle]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketLifecycle.html
+// [Managing Access Permissions to Your Amazon S3 Resources]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html
+// [DeleteBucketLifecycle]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketLifecycle.html
 func (c *Client) GetBucketLifecycleConfiguration(ctx context.Context, params *GetBucketLifecycleConfigurationInput, optFns ...func(*Options)) (*GetBucketLifecycleConfigurationOutput, error) {
 	if params == nil {
 		params = &GetBucketLifecycleConfigurationInput{}
@@ -70,6 +90,7 @@ type GetBucketLifecycleConfigurationInput struct {
 }
 
 func (in *GetBucketLifecycleConfigurationInput) bindEndpointParams(p *EndpointParameters) {
+
 	p.Bucket = in.Bucket
 	p.UseS3ExpressControlEndpoint = ptr.Bool(true)
 }
@@ -107,25 +128,25 @@ func (c *Client) addOperationGetBucketLifecycleConfigurationMiddlewares(stack *m
 	if err = addSetLoggerMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = awsmiddleware.AddClientRequestIDMiddleware(stack); err != nil {
+	if err = addClientRequestID(stack); err != nil {
 		return err
 	}
-	if err = smithyhttp.AddComputeContentLengthMiddleware(stack); err != nil {
+	if err = addComputeContentLength(stack); err != nil {
 		return err
 	}
 	if err = addResolveEndpointMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = v4.AddComputePayloadSHA256Middleware(stack); err != nil {
+	if err = addComputePayloadSHA256(stack); err != nil {
 		return err
 	}
-	if err = addRetryMiddlewares(stack, options); err != nil {
+	if err = addRetry(stack, options); err != nil {
 		return err
 	}
-	if err = awsmiddleware.AddRawResponseToMetadata(stack); err != nil {
+	if err = addRawResponseToMetadata(stack); err != nil {
 		return err
 	}
-	if err = awsmiddleware.AddRecordResponseTiming(stack); err != nil {
+	if err = addRecordResponseTiming(stack); err != nil {
 		return err
 	}
 	if err = addClientUserAgent(stack, options); err != nil {
@@ -143,6 +164,15 @@ func (c *Client) addOperationGetBucketLifecycleConfigurationMiddlewares(stack *m
 	if err = addPutBucketContextMiddleware(stack); err != nil {
 		return err
 	}
+	if err = addTimeOffsetBuild(stack, c); err != nil {
+		return err
+	}
+	if err = addUserAgentRetryMode(stack, options); err != nil {
+		return err
+	}
+	if err = addIsExpressUserAgent(stack); err != nil {
+		return err
+	}
 	if err = addOpGetBucketLifecycleConfigurationValidationMiddleware(stack); err != nil {
 		return err
 	}
@@ -152,7 +182,7 @@ func (c *Client) addOperationGetBucketLifecycleConfigurationMiddlewares(stack *m
 	if err = addMetadataRetrieverMiddleware(stack); err != nil {
 		return err
 	}
-	if err = awsmiddleware.AddRecursionDetection(stack); err != nil {
+	if err = addRecursionDetection(stack); err != nil {
 		return err
 	}
 	if err = addGetBucketLifecycleConfigurationUpdateEndpoint(stack, options); err != nil {

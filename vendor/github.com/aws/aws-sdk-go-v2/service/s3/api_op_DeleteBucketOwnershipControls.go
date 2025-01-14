@@ -13,14 +13,22 @@ import (
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 )
 
-// This operation is not supported by directory buckets. Removes OwnershipControls
-// for an Amazon S3 bucket. To use this operation, you must have the
-// s3:PutBucketOwnershipControls permission. For more information about Amazon S3
-// permissions, see Specifying Permissions in a Policy (https://docs.aws.amazon.com/AmazonS3/latest/dev/using-with-s3-actions.html)
-// . For information about Amazon S3 Object Ownership, see Using Object Ownership (https://docs.aws.amazon.com/AmazonS3/latest/dev/about-object-ownership.html)
-// . The following operations are related to DeleteBucketOwnershipControls :
-//   - GetBucketOwnershipControls
-//   - PutBucketOwnershipControls
+// This operation is not supported by directory buckets.
+//
+// Removes OwnershipControls for an Amazon S3 bucket. To use this operation, you
+// must have the s3:PutBucketOwnershipControls permission. For more information
+// about Amazon S3 permissions, see [Specifying Permissions in a Policy].
+//
+// For information about Amazon S3 Object Ownership, see [Using Object Ownership].
+//
+// The following operations are related to DeleteBucketOwnershipControls :
+//
+// # GetBucketOwnershipControls
+//
+// # PutBucketOwnershipControls
+//
+// [Using Object Ownership]: https://docs.aws.amazon.com/AmazonS3/latest/dev/about-object-ownership.html
+// [Specifying Permissions in a Policy]: https://docs.aws.amazon.com/AmazonS3/latest/dev/using-with-s3-actions.html
 func (c *Client) DeleteBucketOwnershipControls(ctx context.Context, params *DeleteBucketOwnershipControlsInput, optFns ...func(*Options)) (*DeleteBucketOwnershipControlsOutput, error) {
 	if params == nil {
 		params = &DeleteBucketOwnershipControlsInput{}
@@ -52,6 +60,7 @@ type DeleteBucketOwnershipControlsInput struct {
 }
 
 func (in *DeleteBucketOwnershipControlsInput) bindEndpointParams(p *EndpointParameters) {
+
 	p.Bucket = in.Bucket
 	p.UseS3ExpressControlEndpoint = ptr.Bool(true)
 }
@@ -85,25 +94,25 @@ func (c *Client) addOperationDeleteBucketOwnershipControlsMiddlewares(stack *mid
 	if err = addSetLoggerMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = awsmiddleware.AddClientRequestIDMiddleware(stack); err != nil {
+	if err = addClientRequestID(stack); err != nil {
 		return err
 	}
-	if err = smithyhttp.AddComputeContentLengthMiddleware(stack); err != nil {
+	if err = addComputeContentLength(stack); err != nil {
 		return err
 	}
 	if err = addResolveEndpointMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = v4.AddComputePayloadSHA256Middleware(stack); err != nil {
+	if err = addComputePayloadSHA256(stack); err != nil {
 		return err
 	}
-	if err = addRetryMiddlewares(stack, options); err != nil {
+	if err = addRetry(stack, options); err != nil {
 		return err
 	}
-	if err = awsmiddleware.AddRawResponseToMetadata(stack); err != nil {
+	if err = addRawResponseToMetadata(stack); err != nil {
 		return err
 	}
-	if err = awsmiddleware.AddRecordResponseTiming(stack); err != nil {
+	if err = addRecordResponseTiming(stack); err != nil {
 		return err
 	}
 	if err = addClientUserAgent(stack, options); err != nil {
@@ -121,6 +130,15 @@ func (c *Client) addOperationDeleteBucketOwnershipControlsMiddlewares(stack *mid
 	if err = addPutBucketContextMiddleware(stack); err != nil {
 		return err
 	}
+	if err = addTimeOffsetBuild(stack, c); err != nil {
+		return err
+	}
+	if err = addUserAgentRetryMode(stack, options); err != nil {
+		return err
+	}
+	if err = addIsExpressUserAgent(stack); err != nil {
+		return err
+	}
 	if err = addOpDeleteBucketOwnershipControlsValidationMiddleware(stack); err != nil {
 		return err
 	}
@@ -130,7 +148,7 @@ func (c *Client) addOperationDeleteBucketOwnershipControlsMiddlewares(stack *mid
 	if err = addMetadataRetrieverMiddleware(stack); err != nil {
 		return err
 	}
-	if err = awsmiddleware.AddRecursionDetection(stack); err != nil {
+	if err = addRecursionDetection(stack); err != nil {
 		return err
 	}
 	if err = addDeleteBucketOwnershipControlsUpdateEndpoint(stack, options); err != nil {

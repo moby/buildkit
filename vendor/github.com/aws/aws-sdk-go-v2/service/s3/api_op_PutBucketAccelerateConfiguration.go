@@ -15,30 +15,45 @@ import (
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 )
 
-// This operation is not supported by directory buckets. Sets the accelerate
-// configuration of an existing bucket. Amazon S3 Transfer Acceleration is a
-// bucket-level feature that enables you to perform faster data transfers to Amazon
-// S3. To use this operation, you must have permission to perform the
+// This operation is not supported by directory buckets.
+//
+// Sets the accelerate configuration of an existing bucket. Amazon S3 Transfer
+// Acceleration is a bucket-level feature that enables you to perform faster data
+// transfers to Amazon S3.
+//
+// To use this operation, you must have permission to perform the
 // s3:PutAccelerateConfiguration action. The bucket owner has this permission by
 // default. The bucket owner can grant this permission to others. For more
-// information about permissions, see Permissions Related to Bucket Subresource
-// Operations (https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources)
-// and Managing Access Permissions to Your Amazon S3 Resources (https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html)
-// . The Transfer Acceleration state of a bucket can be set to one of the following
+// information about permissions, see [Permissions Related to Bucket Subresource Operations]and [Managing Access Permissions to Your Amazon S3 Resources].
+//
+// The Transfer Acceleration state of a bucket can be set to one of the following
 // two values:
+//
 //   - Enabled – Enables accelerated data transfers to the bucket.
+//
 //   - Suspended – Disables accelerated data transfers to the bucket.
 //
-// The GetBucketAccelerateConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketAccelerateConfiguration.html)
-// action returns the transfer acceleration state of a bucket. After setting the
-// Transfer Acceleration state of a bucket to Enabled, it might take up to thirty
-// minutes before the data transfer rates to the bucket increase. The name of the
-// bucket used for Transfer Acceleration must be DNS-compliant and must not contain
-// periods ("."). For more information about transfer acceleration, see Transfer
-// Acceleration (https://docs.aws.amazon.com/AmazonS3/latest/dev/transfer-acceleration.html)
-// . The following operations are related to PutBucketAccelerateConfiguration :
-//   - GetBucketAccelerateConfiguration (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketAccelerateConfiguration.html)
-//   - CreateBucket (https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html)
+// The [GetBucketAccelerateConfiguration] action returns the transfer acceleration state of a bucket.
+//
+// After setting the Transfer Acceleration state of a bucket to Enabled, it might
+// take up to thirty minutes before the data transfer rates to the bucket increase.
+//
+// The name of the bucket used for Transfer Acceleration must be DNS-compliant and
+// must not contain periods (".").
+//
+// For more information about transfer acceleration, see [Transfer Acceleration].
+//
+// The following operations are related to PutBucketAccelerateConfiguration :
+//
+// [GetBucketAccelerateConfiguration]
+//
+// [CreateBucket]
+//
+// [Permissions Related to Bucket Subresource Operations]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources
+// [Transfer Acceleration]: https://docs.aws.amazon.com/AmazonS3/latest/dev/transfer-acceleration.html
+// [GetBucketAccelerateConfiguration]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketAccelerateConfiguration.html
+// [Managing Access Permissions to Your Amazon S3 Resources]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html
+// [CreateBucket]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html
 func (c *Client) PutBucketAccelerateConfiguration(ctx context.Context, params *PutBucketAccelerateConfigurationInput, optFns ...func(*Options)) (*PutBucketAccelerateConfigurationOutput, error) {
 	if params == nil {
 		params = &PutBucketAccelerateConfigurationInput{}
@@ -70,10 +85,13 @@ type PutBucketAccelerateConfigurationInput struct {
 	// the SDK. This header will not provide any additional functionality if you don't
 	// use the SDK. When you send this header, there must be a corresponding
 	// x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the
-	// request with the HTTP status code 400 Bad Request . For more information, see
-	// Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html)
-	// in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3
-	// ignores any provided ChecksumAlgorithm parameter.
+	// request with the HTTP status code 400 Bad Request . For more information, see [Checking object integrity]
+	// in the Amazon S3 User Guide.
+	//
+	// If you provide an individual checksum, Amazon S3 ignores any provided
+	// ChecksumAlgorithm parameter.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
 	ChecksumAlgorithm types.ChecksumAlgorithm
 
 	// The account ID of the expected bucket owner. If the account ID that you provide
@@ -85,6 +103,7 @@ type PutBucketAccelerateConfigurationInput struct {
 }
 
 func (in *PutBucketAccelerateConfigurationInput) bindEndpointParams(p *EndpointParameters) {
+
 	p.Bucket = in.Bucket
 	p.UseS3ExpressControlEndpoint = ptr.Bool(true)
 }
@@ -118,25 +137,25 @@ func (c *Client) addOperationPutBucketAccelerateConfigurationMiddlewares(stack *
 	if err = addSetLoggerMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = awsmiddleware.AddClientRequestIDMiddleware(stack); err != nil {
+	if err = addClientRequestID(stack); err != nil {
 		return err
 	}
-	if err = smithyhttp.AddComputeContentLengthMiddleware(stack); err != nil {
+	if err = addComputeContentLength(stack); err != nil {
 		return err
 	}
 	if err = addResolveEndpointMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = v4.AddComputePayloadSHA256Middleware(stack); err != nil {
+	if err = addComputePayloadSHA256(stack); err != nil {
 		return err
 	}
-	if err = addRetryMiddlewares(stack, options); err != nil {
+	if err = addRetry(stack, options); err != nil {
 		return err
 	}
-	if err = awsmiddleware.AddRawResponseToMetadata(stack); err != nil {
+	if err = addRawResponseToMetadata(stack); err != nil {
 		return err
 	}
-	if err = awsmiddleware.AddRecordResponseTiming(stack); err != nil {
+	if err = addRecordResponseTiming(stack); err != nil {
 		return err
 	}
 	if err = addClientUserAgent(stack, options); err != nil {
@@ -154,6 +173,15 @@ func (c *Client) addOperationPutBucketAccelerateConfigurationMiddlewares(stack *
 	if err = addPutBucketContextMiddleware(stack); err != nil {
 		return err
 	}
+	if err = addTimeOffsetBuild(stack, c); err != nil {
+		return err
+	}
+	if err = addUserAgentRetryMode(stack, options); err != nil {
+		return err
+	}
+	if err = addIsExpressUserAgent(stack); err != nil {
+		return err
+	}
 	if err = addOpPutBucketAccelerateConfigurationValidationMiddleware(stack); err != nil {
 		return err
 	}
@@ -163,7 +191,7 @@ func (c *Client) addOperationPutBucketAccelerateConfigurationMiddlewares(stack *
 	if err = addMetadataRetrieverMiddleware(stack); err != nil {
 		return err
 	}
-	if err = awsmiddleware.AddRecursionDetection(stack); err != nil {
+	if err = addRecursionDetection(stack); err != nil {
 		return err
 	}
 	if err = addPutBucketAccelerateConfigurationInputChecksumMiddlewares(stack, options); err != nil {
