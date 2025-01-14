@@ -148,7 +148,6 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testHostnameSpecifying,
 	testPushByDigest,
 	testBasicInlineCacheImportExport,
-	testBasicGhaCacheImportExportExtraTimeout,
 	testExportBusyboxLocal,
 	testBridgeNetworking,
 	testCacheMountNoCache,
@@ -6174,49 +6173,6 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	unique3, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst3, "/unique")
 	require.NoError(t, err)
 	require.EqualValues(t, unique, unique3)
-}
-
-func testBasicGhaCacheImportExportExtraTimeout(t *testing.T, sb integration.Sandbox) {
-	workers.CheckFeatureCompat(t, sb,
-		workers.FeatureCacheExport,
-		workers.FeatureCacheImport,
-		workers.FeatureCacheBackendGha,
-	)
-	runtimeToken := os.Getenv("ACTIONS_RUNTIME_TOKEN")
-	cacheURL := os.Getenv("ACTIONS_CACHE_URL")
-	if runtimeToken == "" || cacheURL == "" {
-		t.Skip("ACTIONS_RUNTIME_TOKEN and ACTIONS_CACHE_URL must be set")
-	}
-
-	scope := "buildkit-" + t.Name()
-	if ref := os.Getenv("GITHUB_REF"); ref != "" {
-		if strings.HasPrefix(ref, "refs/heads/") {
-			scope += "-" + strings.TrimPrefix(ref, "refs/heads/")
-		} else if strings.HasPrefix(ref, "refs/tags/") {
-			scope += "-" + strings.TrimPrefix(ref, "refs/tags/")
-		} else if strings.HasPrefix(ref, "refs/pull/") {
-			scope += "-pr" + strings.TrimPrefix(strings.TrimSuffix(strings.TrimSuffix(ref, "/head"), "/merge"), "refs/pull/")
-		}
-	}
-
-	im := CacheOptionsEntry{
-		Type: "gha",
-		Attrs: map[string]string{
-			"url":   cacheURL,
-			"token": runtimeToken,
-			"scope": scope,
-		},
-	}
-	ex := CacheOptionsEntry{
-		Type: "gha",
-		Attrs: map[string]string{
-			"url":   cacheURL,
-			"token": runtimeToken,
-			"scope": scope,
-			"mode":  "max",
-		},
-	}
-	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
 }
 
 func testRegistryEmptyCacheExport(t *testing.T, sb integration.Sandbox) {

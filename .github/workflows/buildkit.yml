@@ -143,6 +143,9 @@ jobs:
           tags: nydus
           skip-integration-tests: 1
           typ: integration
+        - pkg: ./cache/remotecache/gha
+          worker: oci
+          typ: integration
 
   govulncheck:
     runs-on: ubuntu-24.04
