@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/pkg/errors"
 	fstypes "github.com/tonistiigi/fsutil/types"
 )
 
@@ -46,7 +47,7 @@ func NewFromStat(stat *fstypes.Stat) (hash.Hash, error) {
 	fi := &statInfo{stat}
 	hdr, err := tar.FileInfoHeader(fi, stat.Linkname)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "failed to checksum file %s", stat.Path)
 	}
 	hdr.Name = "" // note: empty name is different from current has in docker build. Name is added on recursive directory scan instead
 	hdr.Devmajor = stat.Devmajor
