@@ -58,7 +58,6 @@ import (
 	"github.com/moby/buildkit/util/tracing/transform"
 	"github.com/moby/buildkit/version"
 	"github.com/moby/buildkit/worker"
-	"github.com/moby/sys/reexec"
 	"github.com/moby/sys/userns"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -80,10 +79,6 @@ import (
 func init() {
 	apicaps.ExportedProduct = "buildkit"
 	stack.SetVersionInfo(version.Version, version.Revision)
-
-	if reexec.Init() {
-		os.Exit(0)
-	}
 
 	// enable in memory recording for buildkitd traces
 	detect.Recorder = detect.NewTraceRecorder()
