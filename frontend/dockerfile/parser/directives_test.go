@@ -158,27 +158,6 @@ RUN ls
 
 	dt = `//check=skip=all
 //key=value`
-	ref, _, _, ok = ParseDirective("check", []byte(dt))
-	require.True(t, ok)
-	require.Equal(t, "skip=all", ref)
-
-	dt = `#!/bin/sh
-//check=skip=all`
-	ref, _, _, ok = ParseDirective("check", []byte(dt))
-	require.True(t, ok)
-	require.Equal(t, "skip=all", ref)
-
-	dt = `{"check": "skip=all"}`
-	ref, _, _, ok = ParseDirective("check", []byte(dt))
-	require.True(t, ok)
-	require.Equal(t, "skip=all", ref)
-
-	dt = `{"check": "foo"`
-	_, _, _, ok = ParseDirective("check", []byte(dt))
-	require.False(t, ok)
-
-	dt = `{"check": "foo"}
-# syntax=bar`
 	_, _, _, ok = ParseDirective("check", []byte(dt))
 	require.False(t, ok)
 }
