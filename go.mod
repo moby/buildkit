@@ -71,7 +71,7 @@ require (
 	github.com/spdx/tools-golang v0.5.3
 	github.com/stretchr/testify v1.9.0
 	github.com/tonistiigi/dchapes-mode v0.0.0-20241001053921-ca0759fec205
-	github.com/tonistiigi/fsutil v0.0.0-20241121093142-31cf1f437184
+	github.com/tonistiigi/fsutil v0.0.0-20250113203817-b14e27f4135a
 	github.com/tonistiigi/go-actions-cache v0.0.0-20241210095730-017636a73805
 	github.com/tonistiigi/go-archvariant v1.0.0
 	github.com/tonistiigi/go-csvvalue v0.0.0-20240710180619-ddb21b71c0b4
