@@ -44,9 +44,6 @@ const (
 	// ENOSYS Function not implemented
 	ENOSYS = Status(syscall.ENOSYS)
 
-	// ENODATA No data available
-	ENODATA = Status(syscall.ENODATA)
-
 	// ENOTDIR Not a directory
 	ENOTDIR = Status(syscall.ENOTDIR)
 
@@ -126,17 +123,18 @@ type Owner struct {
 }
 
 const ( // SetAttrIn.Valid
-	FATTR_MODE      = (1 << 0)
-	FATTR_UID       = (1 << 1)
-	FATTR_GID       = (1 << 2)
-	FATTR_SIZE      = (1 << 3)
-	FATTR_ATIME     = (1 << 4)
-	FATTR_MTIME     = (1 << 5)
-	FATTR_FH        = (1 << 6)
-	FATTR_ATIME_NOW = (1 << 7)
-	FATTR_MTIME_NOW = (1 << 8)
-	FATTR_LOCKOWNER = (1 << 9)
-	FATTR_CTIME     = (1 << 10)
+	FATTR_MODE         = (1 << 0)
+	FATTR_UID          = (1 << 1)
+	FATTR_GID          = (1 << 2)
+	FATTR_SIZE         = (1 << 3)
+	FATTR_ATIME        = (1 << 4)
+	FATTR_MTIME        = (1 << 5)
+	FATTR_FH           = (1 << 6)
+	FATTR_ATIME_NOW    = (1 << 7)
+	FATTR_MTIME_NOW    = (1 << 8)
+	FATTR_LOCKOWNER    = (1 << 9)
+	FATTR_CTIME        = (1 << 10)
+	FATTR_KILL_SUIDGID = (1 << 11)
 )
 
 type SetAttrInCommon struct {
@@ -251,17 +249,20 @@ type OpenIn struct {
 
 const (
 	// OpenOut.Flags
-	FOPEN_DIRECT_IO   = (1 << 0)
-	FOPEN_KEEP_CACHE  = (1 << 1)
-	FOPEN_NONSEEKABLE = (1 << 2)
-	FOPEN_CACHE_DIR   = (1 << 3)
-	FOPEN_STREAM      = (1 << 4)
+	FOPEN_DIRECT_IO              = (1 << 0)
+	FOPEN_KEEP_CACHE             = (1 << 1)
+	FOPEN_NONSEEKABLE            = (1 << 2)
+	FOPEN_CACHE_DIR              = (1 << 3)
+	FOPEN_STREAM                 = (1 << 4)
+	FOPEN_NOFLUSH                = (1 << 5)
+	FOPEN_PARALLEL_DIRECT_WRITES = (1 << 6)
+	FOPEN_PASSTHROUGH            = (1 << 7)
 )
 
 type OpenOut struct {
 	Fh        uint64
 	OpenFlags uint32
-	Padding   uint32
+	BackingID int32
 }
 
 // To be set in InitIn/InitOut.Flags.
@@ -273,32 +274,41 @@ type OpenOut struct {
 // * https://github.com/libfuse/libfuse/blob/master/include/fuse_common.h
 // This file has CAP_HANDLE_KILLPRIV and CAP_POSIX_ACL reversed!
 const (
-	CAP_ASYNC_READ          = (1 << 0)
-	CAP_POSIX_LOCKS         = (1 << 1)
-	CAP_FILE_OPS            = (1 << 2)
-	CAP_ATOMIC_O_TRUNC      = (1 << 3)
-	CAP_EXPORT_SUPPORT      = (1 << 4)
-	CAP_BIG_WRITES          = (1 << 5)
-	CAP_DONT_MASK           = (1 << 6)
-	CAP_SPLICE_WRITE        = (1 << 7)
-	CAP_SPLICE_MOVE         = (1 << 8)
-	CAP_SPLICE_READ         = (1 << 9)
-	CAP_FLOCK_LOCKS         = (1 << 10)
-	CAP_IOCTL_DIR           = (1 << 11)
-	CAP_AUTO_INVAL_DATA     = (1 << 12)
-	CAP_READDIRPLUS         = (1 << 13)
-	CAP_READDIRPLUS_AUTO    = (1 << 14)
-	CAP_ASYNC_DIO           = (1 << 15)
-	CAP_WRITEBACK_CACHE     = (1 << 16)
-	CAP_NO_OPEN_SUPPORT     = (1 << 17)
-	CAP_PARALLEL_DIROPS     = (1 << 18)
-	CAP_HANDLE_KILLPRIV     = (1 << 19)
-	CAP_POSIX_ACL           = (1 << 20)
-	CAP_ABORT_ERROR         = (1 << 21)
-	CAP_MAX_PAGES           = (1 << 22)
-	CAP_CACHE_SYMLINKS      = (1 << 23)
-	CAP_NO_OPENDIR_SUPPORT  = (1 << 24)
-	CAP_EXPLICIT_INVAL_DATA = (1 << 25)
+	CAP_ASYNC_READ       = (1 << 0)
+	CAP_POSIX_LOCKS      = (1 << 1)
+	CAP_FILE_OPS         = (1 << 2)
+	CAP_ATOMIC_O_TRUNC   = (1 << 3)
+	CAP_EXPORT_SUPPORT   = (1 << 4)
+	CAP_BIG_WRITES       = (1 << 5)
+	CAP_DONT_MASK        = (1 << 6)
+	CAP_SPLICE_WRITE     = (1 << 7)
+	CAP_SPLICE_MOVE      = (1 << 8)
+	CAP_SPLICE_READ      = (1 << 9)
+	CAP_FLOCK_LOCKS      = (1 << 10)
+	CAP_IOCTL_DIR        = (1 << 11)
+	CAP_AUTO_INVAL_DATA  = (1 << 12)
+	CAP_READDIRPLUS      = (1 << 13)
+	CAP_READDIRPLUS_AUTO = (1 << 14)
+	CAP_ASYNC_DIO        = (1 << 15)
+	CAP_WRITEBACK_CACHE  = (1 << 16)
+	CAP_NO_OPEN_SUPPORT  = (1 << 17)
+	CAP_PARALLEL_DIROPS  = (1 << 18)
+	CAP_HANDLE_KILLPRIV  = (1 << 19)
+	CAP_POSIX_ACL        = (1 << 20)
+	CAP_ABORT_ERROR      = (1 << 21)
+	CAP_MAX_PAGES        = (1 << 22)
+	CAP_CACHE_SYMLINKS   = (1 << 23)
+
+	/* bits 24..31 differ across linux and mac */
+	/* bits 32..63 get shifted down 32 bits into the Flags2 field */
+	CAP_SECURITY_CTX         = (1 << 32)
+	CAP_HAS_INODE_DAX        = (1 << 33)
+	CAP_CREATE_SUPP_GROUP    = (1 << 34)
+	CAP_HAS_EXPIRE_ONLY      = (1 << 35)
+	CAP_DIRECT_IO_ALLOW_MMAP = (1 << 36)
+	CAP_PASSTHROUGH          = (1 << 37)
+	CAP_NO_EXPORT_SUPPORT    = (1 << 38)
+	CAP_HAS_RESEND           = (1 << 39)
 )
 
 type InitIn struct {
@@ -308,6 +318,12 @@ type InitIn struct {
 	Minor        uint32
 	MaxReadAhead uint32
 	Flags        uint32
+	Flags2       uint32
+	Unused       [11]uint32
+}
+
+func (i *InitIn) Flags64() uint64 {
+	return uint64(i.Flags) | uint64(i.Flags2)<<32
 }
 
 type InitOut struct {
@@ -321,7 +337,13 @@ type InitOut struct {
 	TimeGran            uint32
 	MaxPages            uint16
 	Padding             uint16
-	Unused              [8]uint32
+	Flags2              uint32
+	MaxStackDepth       uint32
+	Unused              [6]uint32
+}
+
+func (o *InitOut) Flags64() uint64 {
+	return uint64(o.Flags) | uint64(o.Flags2)<<32
 }
 
 type _CuseInitIn struct {
@@ -508,6 +530,7 @@ const (
 	NOTIFY_STORE_CACHE    = -4 // store data into kernel cache of an inode
 	NOTIFY_RETRIEVE_CACHE = -5 // retrieve data from kernel cache of an inode
 	NOTIFY_DELETE         = -6 // notify kernel that a directory entry has been deleted
+	NOTIFY_RESEND         = -7
 
 // NOTIFY_CODE_MAX     = -6
 )
@@ -557,27 +580,32 @@ type EntryOut struct {
 	Attr
 }
 
-// EntryTimeout returns entry timeout currently
+// EntryTimeout returns the timeout in nanoseconds for a directory
+// entry (existence or non-existence of a file within a directory).
 func (o *EntryOut) EntryTimeout() time.Duration {
 	return time.Duration(uint64(o.EntryValidNsec) + o.EntryValid*1e9)
 }
 
+// AttrTimeout returns the TTL in nanoseconds of the attribute data.
 func (o *EntryOut) AttrTimeout() time.Duration {
 	return time.Duration(uint64(o.AttrValidNsec) + o.AttrValid*1e9)
 }
 
+// SetEntryTimeout sets the entry TTL.
 func (o *EntryOut) SetEntryTimeout(dt time.Duration) {
 	ns := int64(dt)
 	o.EntryValidNsec = uint32(ns % 1e9)
 	o.EntryValid = uint64(ns / 1e9)
 }
 
+// SetAttrTimeout sets the attribute TTL.
 func (o *EntryOut) SetAttrTimeout(dt time.Duration) {
 	ns := int64(dt)
 	o.AttrValidNsec = uint32(ns % 1e9)
 	o.AttrValid = uint64(ns / 1e9)
 }
 
+// AttrOut is the type returned by the Getattr call.
 type AttrOut struct {
 	AttrValid     uint64
 	AttrValidNsec uint32
@@ -645,8 +673,9 @@ const (
 )
 
 const (
-	WRITE_CACHE     = (1 << 0)
-	WRITE_LOCKOWNER = (1 << 1)
+	WRITE_CACHE        = (1 << 0)
+	WRITE_LOCKOWNER    = (1 << 1)
+	WRITE_KILL_SUIDGID = (1 << 2)
 )
 
 type FallocateIn struct {
@@ -680,4 +709,80 @@ func (lk *FileLock) FromFlockT(flockT *syscall.Flock_t) {
 		}
 	}
 	lk.Pid = uint32(flockT.Pid)
+}
+
+const (
+	// Mask for GetAttrIn.Flags. If set, GetAttrIn has a file handle set.
+	FUSE_GETATTR_FH = (1 << 0)
+)
+
+type GetAttrIn struct {
+	InHeader
+
+	Flags_ uint32
+	Dummy  uint32
+	Fh_    uint64
+}
+
+// Flags accesses the flags. This is a method, because OSXFuse does not
+// have GetAttrIn flags.
+func (g *GetAttrIn) Flags() uint32 {
+	return g.Flags_
+}
+
+// Fh accesses the file handle. This is a method, because OSXFuse does not
+// have GetAttrIn flags.
+func (g *GetAttrIn) Fh() uint64 {
+	return g.Fh_
+}
+
+type MknodIn struct {
+	InHeader
+
+	// Mode to use, including the Umask value
+	Mode    uint32
+	Rdev    uint32
+	Umask   uint32
+	Padding uint32
+}
+
+type CreateIn struct {
+	InHeader
+	Flags uint32
+
+	// Mode for the new file; already takes Umask into account.
+	Mode uint32
+
+	// Umask used for this create call.
+	Umask   uint32
+	Padding uint32
+}
+
+type ReadIn struct {
+	InHeader
+	Fh        uint64
+	Offset    uint64
+	Size      uint32
+	ReadFlags uint32
+	LockOwner uint64
+	Flags     uint32
+	Padding   uint32
+}
+
+type WriteIn struct {
+	InHeader
+	Fh         uint64
+	Offset     uint64
+	Size       uint32
+	WriteFlags uint32
+	LockOwner  uint64
+	Flags      uint32
+	Padding    uint32
+}
+
+// Data for registering a file as backing an inode.
+type BackingMap struct {
+	Fd      int32
+	Flags   uint32
+	padding uint64
 }

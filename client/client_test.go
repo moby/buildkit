@@ -25,14 +25,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/containerd/containerd"
-	"github.com/containerd/containerd/content"
-	"github.com/containerd/containerd/content/local"
-	"github.com/containerd/containerd/content/proxy"
-	"github.com/containerd/containerd/images"
-	"github.com/containerd/containerd/namespaces"
-	"github.com/containerd/containerd/remotes/docker"
-	"github.com/containerd/containerd/snapshots"
+	ctd "github.com/containerd/containerd/v2/client"
+	"github.com/containerd/containerd/v2/core/content"
+	"github.com/containerd/containerd/v2/core/content/proxy"
+	"github.com/containerd/containerd/v2/core/images"
+	"github.com/containerd/containerd/v2/core/remotes/docker"
+	"github.com/containerd/containerd/v2/core/snapshots"
+	"github.com/containerd/containerd/v2/pkg/namespaces"
+	"github.com/containerd/containerd/v2/plugins/content/local"
 	"github.com/containerd/continuity/fs/fstest"
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/containerd/platforms"
@@ -115,7 +115,6 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testWhiteoutParentDir,
 	testFrontendImageNaming,
 	testDuplicateWhiteouts,
-	testSchema1Image,
 	testMountWithNoSource,
 	testInvalidExporter,
 	testReadonlyRootFS,
@@ -278,8 +277,8 @@ func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sa
 	)
 }
 
-func newContainerd(cdAddress string) (*containerd.Client, error) {
-	return containerd.New(cdAddress, containerd.WithTimeout(60*time.Second))
+func newContainerd(cdAddress string) (*ctd.Client, error) {
+	return ctd.New(cdAddress, ctd.WithTimeout(60*time.Second))
 }
 
 // moby/buildkit#1336
@@ -1258,7 +1257,7 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 
 			// TODO: make public pull helper function so this can be checked for standalone as well
 
-			client, err := containerd.New(cdAddress)
+			client, err := ctd.New(cdAddress)
 			require.NoError(t, err)
 			defer client.Close()
 
@@ -4288,7 +4287,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 
 	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
 	cdAddress := sb.ContainerdAddress()
-	var client *containerd.Client
+	var client *ctd.Client
 	if cdAddress != "" {
 		client, err = newContainerd(cdAddress)
 		require.NoError(t, err)
@@ -6268,7 +6267,7 @@ func testRegistryEmptyCacheExport(t *testing.T, sb integration.Sandbox) {
 
 				ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
 				cdAddress := sb.ContainerdAddress()
-				var client *containerd.Client
+				var client *ctd.Client
 				if cdAddress != "" {
 					client, err = newContainerd(cdAddress)
 					require.NoError(t, err)
@@ -7108,23 +7107,6 @@ func testMoveParentDir(t *testing.T, sb integration.Sandbox) {
 
 	_, ok = m["foo2/bar"]
 	require.True(t, ok)
-}
-
-// #296
-func testSchema1Image(t *testing.T, sb integration.Sandbox) {
-	c, err := New(sb.Context(), sb.Address())
-	require.NoError(t, err)
-	defer c.Close()
-
-	st := llb.Image("gcr.io/google_containers/pause:3.0@sha256:0d093c962a6c2dd8bb8727b661e2b5f13e9df884af9945b4cc7088d9350cd3ee")
-
-	def, err := st.Marshal(sb.Context())
-	require.NoError(t, err)
-
-	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
-	require.NoError(t, err)
-
-	checkAllReleasable(t, c, sb, true)
 }
 
 // #319
@@ -9068,7 +9050,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 		if cdAddress == "" {
 			return
 		}
-		client, err := containerd.New(cdAddress)
+		client, err := ctd.New(cdAddress)
 		require.NoError(t, err)
 		defer client.Close()
 		ctx := namespaces.WithNamespace(sb.Context(), "buildkit")

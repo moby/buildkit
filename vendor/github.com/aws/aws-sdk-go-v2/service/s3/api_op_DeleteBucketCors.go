@@ -13,14 +13,25 @@ import (
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 )
 
-// This operation is not supported by directory buckets. Deletes the cors
-// configuration information set for the bucket. To use this operation, you must
-// have permission to perform the s3:PutBucketCORS action. The bucket owner has
-// this permission by default and can grant this permission to others. For
-// information about cors , see Enabling Cross-Origin Resource Sharing (https://docs.aws.amazon.com/AmazonS3/latest/dev/cors.html)
-// in the Amazon S3 User Guide. Related Resources
-//   - PutBucketCors (https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketCors.html)
-//   - RESTOPTIONSobject (https://docs.aws.amazon.com/AmazonS3/latest/API/RESTOPTIONSobject.html)
+// This operation is not supported by directory buckets.
+//
+// Deletes the cors configuration information set for the bucket.
+//
+// To use this operation, you must have permission to perform the s3:PutBucketCORS
+// action. The bucket owner has this permission by default and can grant this
+// permission to others.
+//
+// For information about cors , see [Enabling Cross-Origin Resource Sharing] in the Amazon S3 User Guide.
+//
+// # Related Resources
+//
+// [PutBucketCors]
+//
+// [RESTOPTIONSobject]
+//
+// [PutBucketCors]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketCors.html
+// [Enabling Cross-Origin Resource Sharing]: https://docs.aws.amazon.com/AmazonS3/latest/dev/cors.html
+// [RESTOPTIONSobject]: https://docs.aws.amazon.com/AmazonS3/latest/API/RESTOPTIONSobject.html
 func (c *Client) DeleteBucketCors(ctx context.Context, params *DeleteBucketCorsInput, optFns ...func(*Options)) (*DeleteBucketCorsOutput, error) {
 	if params == nil {
 		params = &DeleteBucketCorsInput{}
@@ -52,6 +63,7 @@ type DeleteBucketCorsInput struct {
 }
 
 func (in *DeleteBucketCorsInput) bindEndpointParams(p *EndpointParameters) {
+
 	p.Bucket = in.Bucket
 	p.UseS3ExpressControlEndpoint = ptr.Bool(true)
 }
@@ -85,25 +97,25 @@ func (c *Client) addOperationDeleteBucketCorsMiddlewares(stack *middleware.Stack
 	if err = addSetLoggerMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = awsmiddleware.AddClientRequestIDMiddleware(stack); err != nil {
+	if err = addClientRequestID(stack); err != nil {
 		return err
 	}
-	if err = smithyhttp.AddComputeContentLengthMiddleware(stack); err != nil {
+	if err = addComputeContentLength(stack); err != nil {
 		return err
 	}
 	if err = addResolveEndpointMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = v4.AddComputePayloadSHA256Middleware(stack); err != nil {
+	if err = addComputePayloadSHA256(stack); err != nil {
 		return err
 	}
-	if err = addRetryMiddlewares(stack, options); err != nil {
+	if err = addRetry(stack, options); err != nil {
 		return err
 	}
-	if err = awsmiddleware.AddRawResponseToMetadata(stack); err != nil {
+	if err = addRawResponseToMetadata(stack); err != nil {
 		return err
 	}
-	if err = awsmiddleware.AddRecordResponseTiming(stack); err != nil {
+	if err = addRecordResponseTiming(stack); err != nil {
 		return err
 	}
 	if err = addClientUserAgent(stack, options); err != nil {
@@ -121,6 +133,15 @@ func (c *Client) addOperationDeleteBucketCorsMiddlewares(stack *middleware.Stack
 	if err = addPutBucketContextMiddleware(stack); err != nil {
 		return err
 	}
+	if err = addTimeOffsetBuild(stack, c); err != nil {
+		return err
+	}
+	if err = addUserAgentRetryMode(stack, options); err != nil {
+		return err
+	}
+	if err = addIsExpressUserAgent(stack); err != nil {
+		return err
+	}
 	if err = addOpDeleteBucketCorsValidationMiddleware(stack); err != nil {
 		return err
 	}
@@ -130,7 +151,7 @@ func (c *Client) addOperationDeleteBucketCorsMiddlewares(stack *middleware.Stack
 	if err = addMetadataRetrieverMiddleware(stack); err != nil {
 		return err
 	}
-	if err = awsmiddleware.AddRecursionDetection(stack); err != nil {
+	if err = addRecursionDetection(stack); err != nil {
 		return err
 	}
 	if err = addDeleteBucketCorsUpdateEndpoint(stack, options); err != nil {

@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"reflect"
 	"strings"
 	"time"
 	"unsafe"
@@ -21,22 +22,24 @@ type request struct {
 
 	cancel chan struct{}
 
-	// written under Server.reqMu
+	// written under Server.interruptMu
 	interrupted bool
 
+	// inHeader + opcode specific data
 	inputBuf []byte
 
-	// These split up inputBuf.
-	inHeader *InHeader      // generic header
-	inData   unsafe.Pointer // per op data
-	arg      []byte         // flat data.
+	// outHeader + opcode specific data.
+	outputBuf []byte
 
-	filenames []string // filename arguments
+	// Unstructured input (filenames, data for WRITE call)
+	inPayload []byte
 
 	// Output data.
-	status   Status
-	flatData []byte
-	fdData   *readResultFd
+	status Status
+
+	// Unstructured output. Only one of these is non-nil.
+	outPayload []byte
+	fdData     *readResultFd
 
 	// In case of read, keep read result here so we can call
 	// Done() on it.
@@ -44,9 +47,12 @@ type request struct {
 
 	// Start timestamp for timing info.
 	startTime time.Time
+}
 
-	// All information pertaining to opcode of this request.
-	handler *operationHandler
+// requestAlloc holds the request, plus I/O buffers, which are
+// reused across requests.
+type requestAlloc struct {
+	request
 
 	// Request storage. For large inputs and outputs, use data
 	// obtained through bufferpool.
@@ -63,81 +69,94 @@ type request struct {
 	smallInputBuf [128]byte
 }
 
+func (r *request) inHeader() *InHeader {
+	return (*InHeader)(r.inData())
+}
+
+func (r *request) outHeader() *OutHeader {
+	return (*OutHeader)(unsafe.Pointer(&r.outputBuf[0]))
+}
+
 func (r *request) clear() {
 	r.inputBuf = nil
-	r.inHeader = nil
-	r.inData = nil
-	r.arg = nil
-	r.filenames = nil
+	r.outputBuf = nil
+	r.inPayload = nil
 	r.status = OK
-	r.flatData = nil
+	r.outPayload = nil
 	r.fdData = nil
 	r.startTime = time.Time{}
-	r.handler = nil
 	r.readResult = nil
+}
+
+func asType(ptr unsafe.Pointer, typ interface{}) interface{} {
+	return reflect.NewAt(reflect.ValueOf(typ).Type(), ptr).Interface()
+}
+
+func typSize(typ interface{}) uintptr {
+	return reflect.ValueOf(typ).Type().Size()
 }
 
 func (r *request) InputDebug() string {
 	val := ""
-	if r.handler != nil && r.handler.DecodeIn != nil {
-		val = fmt.Sprintf("%v ", Print(r.handler.DecodeIn(r.inData)))
+
+	hdr := r.inHeader()
+	h := getHandler(hdr.Opcode)
+	if h != nil && h.InType != nil {
+		val = Print(asType(r.inData(), h.InType))
 	}
 
 	names := ""
-	if r.filenames != nil {
-		names = fmt.Sprintf("%q", r.filenames)
-	}
-
-	if l := len(r.arg); l > 0 {
-		data := ""
-		if len(r.filenames) == 0 {
-			dots := ""
-			if l > 8 {
-				l = 8
-				dots = "..."
-			}
-
-			data = fmt.Sprintf("%q%s", r.arg[:l], dots)
+	if h.FileNames == 1 {
+		names = fmt.Sprintf("%q", r.filename())
+	} else if h.FileNames == 2 {
+		n1, n2 := r.filenames()
+		names = fmt.Sprintf("%q %q", n1, n2)
+	} else if l := len(r.inPayload); l > 0 {
+		dots := ""
+		if l > 8 {
+			l = 8
+			dots = "..."
 		}
 
-		names += fmt.Sprintf("%s %db", data, len(r.arg))
+		names = fmt.Sprintf("%q%s %db", r.inPayload[:l], dots, len(r.inPayload))
 	}
 
-	return fmt.Sprintf("rx %d: %s n%d %s%s",
-		r.inHeader.Unique, operationName(r.inHeader.Opcode), r.inHeader.NodeId,
-		val, names)
+	return fmt.Sprintf("rx %d: %s n%d %s%s p%d",
+		hdr.Unique, operationName(hdr.Opcode), hdr.NodeId,
+		val, names, hdr.Caller.Pid)
 }
 
 func (r *request) OutputDebug() string {
 	var dataStr string
-	if r.handler != nil && r.handler.DecodeOut != nil && r.handler.OutputSize > 0 {
-		dataStr = Print(r.handler.DecodeOut(r.outData()))
+	h := getHandler(r.inHeader().Opcode)
+	if h != nil && h.OutType != nil && len(r.outputBuf) > int(sizeOfOutHeader) {
+		dataStr = Print(asType(r.outData(), h.OutType))
 	}
 
 	max := 1024
 	if len(dataStr) > max {
-		dataStr = dataStr[:max] + fmt.Sprintf(" ...trimmed")
+		dataStr = dataStr[:max] + " ...trimmed"
 	}
 
 	flatStr := ""
-	if r.flatDataSize() > 0 {
-		if r.handler != nil && r.handler.FileNameOut {
-			s := strings.TrimRight(string(r.flatData), "\x00")
+	if r.outPayloadSize() > 0 {
+		if h != nil && h.FileNameOut {
+			s := strings.TrimRight(string(r.outPayload), "\x00")
 			flatStr = fmt.Sprintf(" %q", s)
 		} else {
 			spl := ""
 			if r.fdData != nil {
 				spl = " (fd data)"
 			} else {
-				l := len(r.flatData)
+				l := len(r.outPayload)
 				s := ""
 				if l > 8 {
 					l = 8
 					s = "..."
 				}
-				spl = fmt.Sprintf(" %q%s", r.flatData[:l], s)
+				spl = fmt.Sprintf(" %q%s", r.outPayload[:l], s)
 			}
-			flatStr = fmt.Sprintf(" %db data%s", r.flatDataSize(), spl)
+			flatStr = fmt.Sprintf(" %db data%s", r.outPayloadSize(), spl)
 		}
 	}
 
@@ -146,11 +165,11 @@ func (r *request) OutputDebug() string {
 		extraStr = ", " + extraStr
 	}
 	return fmt.Sprintf("tx %d:     %v%s",
-		r.inHeader.Unique, r.status, extraStr)
+		r.inHeader().Unique, r.status, extraStr)
 }
 
 // setInput returns true if it takes ownership of the argument, false if not.
-func (r *request) setInput(input []byte) bool {
+func (r *requestAlloc) setInput(input []byte) bool {
 	if len(input) < len(r.smallInputBuf) {
 		copy(r.smallInputBuf[:], input)
 		r.inputBuf = r.smallInputBuf[:len(input)]
@@ -162,104 +181,106 @@ func (r *request) setInput(input []byte) bool {
 	return true
 }
 
-func (r *request) parseHeader() Status {
-	if len(r.inputBuf) < int(unsafe.Sizeof(InHeader{})) {
-		log.Printf("Short read for input header: %v", r.inputBuf)
-		return EINVAL
-	}
-
-	r.inHeader = (*InHeader)(unsafe.Pointer(&r.inputBuf[0]))
-	return OK
+func (r *request) inData() unsafe.Pointer {
+	return unsafe.Pointer(&r.inputBuf[0])
 }
 
-func (r *request) parse() {
-	r.arg = r.inputBuf[:]
-	r.handler = getHandler(r.inHeader.Opcode)
-	if r.handler == nil {
-		log.Printf("Unknown opcode %d", r.inHeader.Opcode)
-		r.status = ENOSYS
+func parseRequest(in []byte, kernelSettings *InitIn) (h *operationHandler, inSize, outSize, payloadSize int, errno Status) {
+	inSize = int(unsafe.Sizeof(InHeader{}))
+	if len(in) < inSize {
+		errno = EIO
+		return
+	}
+	inData := unsafe.Pointer(&in[0])
+	hdr := (*InHeader)(inData)
+	h = getHandler(hdr.Opcode)
+	if h == nil {
+		log.Printf("Unknown opcode %d", hdr.Opcode)
+		errno = ENOSYS
+		return
+	}
+	if h.InputSize > 0 {
+		inSize = int(h.InputSize)
+	}
+	if hdr.Opcode == _OP_RENAME && kernelSettings.supportsRenameSwap() {
+		inSize = int(unsafe.Sizeof(RenameIn{}))
+	}
+	if hdr.Opcode == _OP_INIT && inSize > len(in) {
+		// Minor version 36 extended the size of InitIn struct
+		inSize = len(in)
+	}
+	if len(in) < inSize {
+		log.Printf("Short read for %v: %q", h.Name, in)
+		errno = EIO
 		return
 	}
 
-	if len(r.arg) < int(r.handler.InputSize) {
-		log.Printf("Short read for %v: %v", operationName(r.inHeader.Opcode), r.arg)
-		r.status = EIO
-		return
+	switch hdr.Opcode {
+	case _OP_READDIR, _OP_READDIRPLUS, _OP_READ:
+		payloadSize = int(((*ReadIn)(inData)).Size)
+	case _OP_GETXATTR, _OP_LISTXATTR:
+		payloadSize = int(((*GetXAttrIn)(inData)).Size)
 	}
 
-	if r.handler.InputSize > 0 {
-		r.inData = unsafe.Pointer(&r.arg[0])
-		r.arg = r.arg[r.handler.InputSize:]
-	} else {
-		r.arg = r.arg[unsafe.Sizeof(InHeader{}):]
-	}
-
-	count := r.handler.FileNames
-	if count > 0 {
-		if count == 1 && r.inHeader.Opcode == _OP_SETXATTR {
-			// SETXATTR is special: the only opcode with a file name AND a
-			// binary argument.
-			splits := bytes.SplitN(r.arg, []byte{0}, 2)
-			r.filenames = []string{string(splits[0])}
-		} else if count == 1 {
-			r.filenames = []string{string(r.arg[:len(r.arg)-1])}
-		} else {
-			names := bytes.SplitN(r.arg[:len(r.arg)-1], []byte{0}, count)
-			r.filenames = make([]string, len(names))
-			for i, n := range names {
-				r.filenames[i] = string(n)
-			}
-			if len(names) != count {
-				log.Println("filename argument mismatch", names, count)
-				r.status = EIO
-			}
-		}
-	}
-
-	copy(r.outBuf[:r.handler.OutputSize+sizeOfOutHeader],
-		zeroOutBuf[:r.handler.OutputSize+sizeOfOutHeader])
-
+	outSize = int(h.OutputSize)
+	return
 }
 
 func (r *request) outData() unsafe.Pointer {
-	return unsafe.Pointer(&r.outBuf[sizeOfOutHeader])
+	return unsafe.Pointer(&r.outputBuf[sizeOfOutHeader])
+}
+
+func (r *request) filename() string {
+	return string(r.inPayload[:len(r.inPayload)-1])
+}
+
+func (r *request) filenames() (string, string) {
+	i1 := bytes.IndexByte(r.inPayload, 0)
+	s1 := string(r.inPayload[:i1])
+	s2 := string(r.inPayload[i1+1 : len(r.inPayload)-1])
+	return s1, s2
 }
 
 // serializeHeader serializes the response header. The header points
 // to an internal buffer of the receiver.
-func (r *request) serializeHeader(flatDataSize int) (header []byte) {
+func (r *request) serializeHeader(outPayloadSize int) {
 	var dataLength uintptr
 
-	if r.handler != nil {
-		dataLength = r.handler.OutputSize
+	h := getHandler(r.inHeader().Opcode)
+	if h != nil {
+		dataLength = h.OutputSize
 	}
 	if r.status > OK {
 		// only do this for positive status; negative status
 		// is used for notification.
 		dataLength = 0
+		outPayloadSize = 0
 	}
 
 	// [GET|LIST]XATTR is two opcodes in one: get/list xattr size (return
 	// structured GetXAttrOut, no flat data) and get/list xattr data
 	// (return no structured data, but only flat data)
-	if r.inHeader.Opcode == _OP_GETXATTR || r.inHeader.Opcode == _OP_LISTXATTR {
-		if (*GetXAttrIn)(r.inData).Size != 0 {
+	if r.inHeader().Opcode == _OP_GETXATTR || r.inHeader().Opcode == _OP_LISTXATTR {
+		if (*GetXAttrIn)(r.inData()).Size != 0 {
 			dataLength = 0
 		}
 	}
 
-	header = r.outBuf[:sizeOfOutHeader+dataLength]
-	o := (*OutHeader)(unsafe.Pointer(&header[0]))
-	o.Unique = r.inHeader.Unique
+	o := r.outHeader()
+	o.Unique = r.inHeader().Unique
 	o.Status = int32(-r.status)
 	o.Length = uint32(
-		int(sizeOfOutHeader) + int(dataLength) + flatDataSize)
-	return header
+		int(sizeOfOutHeader) + int(dataLength) + outPayloadSize)
+
+	r.outputBuf = r.outputBuf[:dataLength+sizeOfOutHeader]
+	if r.outPayload != nil {
+		r.outPayload = r.outPayload[:outPayloadSize]
+	}
 }
 
-func (r *request) flatDataSize() int {
+func (r *request) outPayloadSize() int {
 	if r.fdData != nil {
 		return r.fdData.Size()
 	}
-	return len(r.flatData)
+	return len(r.outPayload)
 }

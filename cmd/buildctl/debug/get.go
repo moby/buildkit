@@ -4,8 +4,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/containerd/containerd/content"
-	"github.com/containerd/containerd/content/proxy"
+	"github.com/containerd/containerd/v2/core/content"
+	"github.com/containerd/containerd/v2/core/content/proxy"
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
 	"github.com/moby/buildkit/util/appcontext"
 	digest "github.com/opencontainers/go-digest"

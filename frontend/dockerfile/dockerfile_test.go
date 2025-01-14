@@ -29,12 +29,12 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	"github.com/containerd/containerd"
-	"github.com/containerd/containerd/content"
-	"github.com/containerd/containerd/content/local"
-	"github.com/containerd/containerd/content/proxy"
-	"github.com/containerd/containerd/namespaces"
-	"github.com/containerd/containerd/snapshots"
+	ctd "github.com/containerd/containerd/v2/client"
+	"github.com/containerd/containerd/v2/core/content"
+	"github.com/containerd/containerd/v2/core/content/proxy"
+	"github.com/containerd/containerd/v2/core/snapshots"
+	"github.com/containerd/containerd/v2/pkg/namespaces"
+	"github.com/containerd/containerd/v2/plugins/content/local"
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/containerd/platforms"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
@@ -6774,7 +6774,7 @@ COPY Dockerfile Dockerfile
 		})
 		require.Error(t, err)
 		var reqErr *errdefs.UnsupportedSubrequestError
-		require.True(t, errors.As(err, &reqErr))
+		require.ErrorAs(t, err, &reqErr)
 		require.Equal(t, "frontend.subrequests.notexist", reqErr.GetName())
 
 		_, err = c.Solve(ctx, gateway.SolveRequest{
@@ -6785,7 +6785,7 @@ COPY Dockerfile Dockerfile
 		})
 		require.Error(t, err)
 		var capErr *errdefs.UnsupportedFrontendCapError
-		require.True(t, errors.As(err, &capErr))
+		require.ErrorAs(t, err, &capErr)
 		require.Equal(t, "moby.buildkit.frontend.notexistcap", capErr.GetName())
 
 		called = true
@@ -9558,8 +9558,8 @@ loop0:
 	}
 }
 
-func newContainerd(cdAddress string) (*containerd.Client, error) {
-	return containerd.New(cdAddress, containerd.WithTimeout(60*time.Second))
+func newContainerd(cdAddress string) (*ctd.Client, error) {
+	return ctd.New(cdAddress, ctd.WithTimeout(60*time.Second))
 }
 
 func dfCmdArgs(ctx, dockerfile, args string) (string, string) {

@@ -5,57 +5,27 @@
 package fuse
 
 import (
-	"fmt"
+	"runtime"
+	"strings"
 	"syscall"
 )
 
 func init() {
+	// syscall.O_LARGEFILE is 0x0 on x86_64, but the kernel
+	// supplies 0x8000 anyway, except on mips64el, where 0x8000 is
+	// used for O_DIRECT.
+	if !strings.Contains(runtime.GOARCH, "mips64") {
+		openFlagNames.set(0x8000, "LARGEFILE")
+	}
+
 	openFlagNames.set(syscall.O_DIRECT, "DIRECT")
-	openFlagNames.set(syscall.O_LARGEFILE, "LARGEFILE")
 	openFlagNames.set(syscall_O_NOATIME, "NOATIME")
-}
-
-func (a *Attr) string() string {
-	return fmt.Sprintf(
-		"{M0%o SZ=%d L=%d "+
-			"%d:%d "+
-			"B%d*%d i%d:%d "+
-			"A %f "+
-			"M %f "+
-			"C %f}",
-		a.Mode, a.Size, a.Nlink,
-		a.Uid, a.Gid,
-		a.Blocks, a.Blksize,
-		a.Rdev, a.Ino, ft(a.Atime, a.Atimensec), ft(a.Mtime, a.Mtimensec),
-		ft(a.Ctime, a.Ctimensec))
-}
-
-func (in *CreateIn) string() string {
-	return fmt.Sprintf(
-		"{0%o [%s] (0%o)}", in.Mode,
-		flagString(openFlagNames, int64(in.Flags), "O_RDONLY"), in.Umask)
-}
-
-func (in *GetAttrIn) string() string {
-	return fmt.Sprintf("{Fh %d %s}", in.Fh_, flagString(getAttrFlagNames, int64(in.Flags_), ""))
-}
-
-func (in *MknodIn) string() string {
-	return fmt.Sprintf("{0%o (0%o), %d}", in.Mode, in.Umask, in.Rdev)
-}
-
-func (in *ReadIn) string() string {
-	return fmt.Sprintf("{Fh %d [%d +%d) %s L %d %s}",
-		in.Fh, in.Offset, in.Size,
-		flagString(readFlagNames, int64(in.ReadFlags), ""),
-		in.LockOwner,
-		flagString(openFlagNames, int64(in.Flags), "RDONLY"))
-}
-
-func (in *WriteIn) string() string {
-	return fmt.Sprintf("{Fh %d [%d +%d) %s L %d %s}",
-		in.Fh, in.Offset, in.Size,
-		flagString(writeFlagNames, int64(in.WriteFlags), ""),
-		in.LockOwner,
-		flagString(openFlagNames, int64(in.Flags), "RDONLY"))
+	initFlagNames.set(CAP_NO_OPENDIR_SUPPORT, "NO_OPENDIR_SUPPORT")
+	initFlagNames.set(CAP_EXPLICIT_INVAL_DATA, "EXPLICIT_INVAL_DATA")
+	initFlagNames.set(CAP_MAP_ALIGNMENT, "MAP_ALIGNMENT")
+	initFlagNames.set(CAP_SUBMOUNTS, "SUBMOUNTS")
+	initFlagNames.set(CAP_HANDLE_KILLPRIV_V2, "HANDLE_KILLPRIV_V2")
+	initFlagNames.set(CAP_SETXATTR_EXT, "SETXATTR_EXT")
+	initFlagNames.set(CAP_INIT_EXT, "INIT_EXT")
+	initFlagNames.set(CAP_INIT_RESERVED, "INIT_RESERVED")
 }

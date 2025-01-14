@@ -12,6 +12,9 @@ import (
 type childEntry struct {
 	Name  string
 	Inode *Inode
+
+	// TODO: store int64 changeCounter of the parent, so we can
+	// use the changeCounter as a directory offset.
 }
 
 // inodeChildren is a hashmap with deterministic ordering. It is
@@ -58,7 +61,7 @@ func (c *inodeChildren) get(name string) *Inode {
 
 func (c *inodeChildren) compact() {
 	nc := make([]childEntry, 0, 2*len(c.childrenMap)+1)
-	nm := make(map[string]int, len(nc))
+	nm := make(map[string]int, len(c.childrenMap))
 	for _, e := range c.children {
 		if e.Inode == nil {
 			continue
