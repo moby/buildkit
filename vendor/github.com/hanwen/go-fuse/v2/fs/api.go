@@ -402,6 +402,10 @@ type NodeCopyFileRanger interface {
 	// Ugh. should have been called Copyfilerange
 }
 
+type NodeStatxer interface {
+	Statx(ctx context.Context, f FileHandle, flags uint32, mask uint32, out *fuse.StatxOut) syscall.Errno
+}
+
 // Lseek is used to implement holes: it should return the
 // first offset beyond `off` where there is data (SEEK_DATA)
 // or where there is a hole (SEEK_HOLE).
@@ -602,6 +606,10 @@ type FileReleaser interface {
 // See NodeGetattrer.
 type FileGetattrer interface {
 	Getattr(ctx context.Context, out *fuse.AttrOut) syscall.Errno
+}
+
+type FileStatxer interface {
+	Statx(ctx context.Context, flags uint32, mask uint32, out *fuse.StatxOut) syscall.Errno
 }
 
 // See NodeReader.

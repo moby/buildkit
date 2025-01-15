@@ -10,7 +10,7 @@ import (
 
 const useSingleReader = false
 
-func (ms *Server) systemWrite(req *request) Status {
+func (ms *Server) write(req *request) Status {
 	if req.outPayloadSize() == 0 {
 		err := handleEINTR(func() error {
 			_, err := syscall.Write(ms.mountFd, req.outputBuf)

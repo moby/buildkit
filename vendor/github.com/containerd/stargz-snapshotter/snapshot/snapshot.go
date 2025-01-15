@@ -73,6 +73,7 @@ type SnapshotterConfig struct {
 	asyncRemove                 bool
 	noRestore                   bool
 	allowInvalidMountsOnRestart bool
+	detach                      bool
 }
 
 // Opt is an option to configure the remote snapshotter
@@ -97,6 +98,11 @@ func AllowInvalidMountsOnRestart(config *SnapshotterConfig) error {
 	return nil
 }
 
+func SetDetachFlag(config *SnapshotterConfig) error {
+	config.detach = true
+	return nil
+}
+
 type snapshotter struct {
 	root        string
 	ms          *storage.MetaStore
@@ -107,6 +113,7 @@ type snapshotter struct {
 	userxattr                   bool // whether to enable "userxattr" mount option
 	noRestore                   bool
 	allowInvalidMountsOnRestart bool
+	detach                      bool
 }
 
 // NewSnapshotter returns a Snapshotter which can use unpacked remote layers
@@ -157,6 +164,7 @@ func NewSnapshotter(ctx context.Context, root string, targetFs FileSystem, opts 
 		userxattr:                   userxattr,
 		noRestore:                   config.noRestore,
 		allowInvalidMountsOnRestart: config.allowInvalidMountsOnRestart,
+		detach:                      config.detach,
 	}
 
 	if err := o.restoreRemoteSnapshot(ctx); err != nil {
@@ -425,6 +433,15 @@ func (o *snapshotter) cleanup(ctx context.Context, cleanupCommitted bool) error 
 	return nil
 }
 
+func (o *snapshotter) cleanupMetadataDB() error {
+	metadataDBPath := filepath.Join(o.root, "metadata.db")
+	err := os.Remove(metadataDBPath)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (o *snapshotter) cleanupDirectories(ctx context.Context, cleanupCommitted bool) ([]string, error) {
 	// Get a write transaction to ensure no other write transaction can be entered
 	// while the cleanup is scanning.
@@ -658,6 +675,11 @@ func (o *snapshotter) Close() error {
 	if err := o.cleanup(ctx, cleanupCommitted); err != nil {
 		log.G(ctx).WithError(err).Warn("failed to cleanup")
 	}
+
+	if err := o.cleanupMetadataDB(); err != nil {
+		log.G(ctx).WithError(err).Warn("failed to cleanup metadata.db")
+	}
+
 	return o.ms.Close()
 }
 
@@ -722,6 +744,10 @@ func (o *snapshotter) checkAvailability(ctx context.Context, key string) bool {
 }
 
 func (o *snapshotter) restoreRemoteSnapshot(ctx context.Context) error {
+	if o.detach {
+		return nil
+	}
+
 	mounts, err := mountinfo.GetMounts(nil)
 	if err != nil {
 		return err

@@ -22,6 +22,8 @@ type request struct {
 
 	cancel chan struct{}
 
+	suppressReply bool
+
 	// written under Server.interruptMu
 	interrupted bool
 
@@ -77,7 +79,9 @@ func (r *request) outHeader() *OutHeader {
 	return (*OutHeader)(unsafe.Pointer(&r.outputBuf[0]))
 }
 
+// TODO - benchmark to see if this is necessary?
 func (r *request) clear() {
+	r.suppressReply = false
 	r.inputBuf = nil
 	r.outputBuf = nil
 	r.inPayload = nil
@@ -107,10 +111,10 @@ func (r *request) InputDebug() string {
 
 	names := ""
 	if h.FileNames == 1 {
-		names = fmt.Sprintf("%q", r.filename())
+		names = fmt.Sprintf(" %q", r.filename())
 	} else if h.FileNames == 2 {
 		n1, n2 := r.filenames()
-		names = fmt.Sprintf("%q %q", n1, n2)
+		names = fmt.Sprintf(" %q %q", n1, n2)
 	} else if l := len(r.inPayload); l > 0 {
 		dots := ""
 		if l > 8 {
@@ -185,7 +189,8 @@ func (r *request) inData() unsafe.Pointer {
 	return unsafe.Pointer(&r.inputBuf[0])
 }
 
-func parseRequest(in []byte, kernelSettings *InitIn) (h *operationHandler, inSize, outSize, payloadSize int, errno Status) {
+// note: outSize is without OutHeader
+func parseRequest(in []byte, kernelSettings *InitIn) (h *operationHandler, inSize, outSize, outPayloadSize int, errno Status) {
 	inSize = int(unsafe.Sizeof(InHeader{}))
 	if len(in) < inSize {
 		errno = EIO
@@ -202,7 +207,7 @@ func parseRequest(in []byte, kernelSettings *InitIn) (h *operationHandler, inSiz
 	if h.InputSize > 0 {
 		inSize = int(h.InputSize)
 	}
-	if hdr.Opcode == _OP_RENAME && kernelSettings.supportsRenameSwap() {
+	if kernelSettings != nil && hdr.Opcode == _OP_RENAME && kernelSettings.supportsRenameSwap() {
 		inSize = int(unsafe.Sizeof(RenameIn{}))
 	}
 	if hdr.Opcode == _OP_INIT && inSize > len(in) {
@@ -217,9 +222,9 @@ func parseRequest(in []byte, kernelSettings *InitIn) (h *operationHandler, inSiz
 
 	switch hdr.Opcode {
 	case _OP_READDIR, _OP_READDIRPLUS, _OP_READ:
-		payloadSize = int(((*ReadIn)(inData)).Size)
+		outPayloadSize = int(((*ReadIn)(inData)).Size)
 	case _OP_GETXATTR, _OP_LISTXATTR:
-		payloadSize = int(((*GetXAttrIn)(inData)).Size)
+		outPayloadSize = int(((*GetXAttrIn)(inData)).Size)
 	}
 
 	outSize = int(h.OutputSize)

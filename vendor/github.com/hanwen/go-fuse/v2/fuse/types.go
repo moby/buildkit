@@ -309,6 +309,7 @@ const (
 	CAP_PASSTHROUGH          = (1 << 37)
 	CAP_NO_EXPORT_SUPPORT    = (1 << 38)
 	CAP_HAS_RESEND           = (1 << 39)
+	CAP_ALLOW_IDMAP          = (1 << 40)
 )
 
 type InitIn struct {
@@ -785,4 +786,70 @@ type BackingMap struct {
 	Fd      int32
 	Flags   uint32
 	padding uint64
+}
+
+type SxTime struct {
+	Sec       uint64
+	Nsec      uint32
+	_reserved uint32
+}
+
+func (t *SxTime) Seconds() float64 {
+	return ft(t.Sec, t.Nsec)
+}
+
+type Statx struct {
+	Mask       uint32
+	Blksize    uint32
+	Attributes uint64
+	Nlink      uint32
+
+	Uid            uint32
+	Gid            uint32
+	Mode           uint16
+	_spare0        uint16
+	Ino            uint64
+	Size           uint64
+	Blocks         uint64
+	AttributesMask uint64
+
+	Atime SxTime
+	Btime SxTime
+	Ctime SxTime
+	Mtime SxTime
+
+	RdevMajor uint32
+	RdevMinor uint32
+	DevMajor  uint32
+	DevMinor  uint32
+	_spare2   [14]uint64
+}
+
+type StatxIn struct {
+	InHeader
+
+	GetattrFlags uint32
+	_reserved    uint32
+	Fh           uint64
+	SxFlags      uint32
+	SxMask       uint32
+}
+
+type StatxOut struct {
+	AttrValid     uint64
+	AttrValidNsec uint32
+	Flags         uint32
+	_spare        [2]uint64
+
+	Statx
+}
+
+func (o *StatxOut) Timeout() time.Duration {
+	return time.Duration(uint64(o.AttrValidNsec) + o.AttrValid*1e9)
+}
+
+func (o *StatxOut) SetTimeout(dt time.Duration) {
+	ns := int64(dt)
+	o.AttrValidNsec = uint32(ns % 1e9)
+	o.AttrValid = uint64(ns / 1e9)
 }
