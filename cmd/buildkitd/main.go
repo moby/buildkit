@@ -193,9 +193,10 @@ func main() {
 			Value: groupValue(defaultConf.GRPC.GID),
 		},
 		cli.StringFlag{
-			Name:  "debugaddr",
-			Usage: "debugging address (eg. 0.0.0.0:6060)",
-			Value: defaultConf.GRPC.DebugAddress,
+			Name:   "debugaddr",
+			Usage:  "debugging address (eg. 0.0.0.0:6060)",
+			Value:  defaultConf.GRPC.DebugAddress,
+			EnvVar: "BUILDKITD_DEBUGADDR",
 		},
 		cli.StringFlag{
 			Name:  "tlscert",

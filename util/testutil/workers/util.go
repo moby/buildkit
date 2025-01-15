@@ -73,12 +73,13 @@ func runBuildkitd(
 	address := getBuildkitdAddr(tmpdir)
 	debugAddress := getBuildkitdDebugAddr(tmpdir)
 
-	args = append(args, "--root", tmpdir, "--addr", address, "--debugaddr", debugAddress, "--debug")
+	args = append(args, "--root", tmpdir, "--addr", address, "--debug")
 	cmd := exec.Command(args[0], args[1:]...) //nolint:gosec // test utility
 	cmd.Env = append(
 		os.Environ(),
 		"BUILDKIT_DEBUG_EXEC_OUTPUT=1",
 		"BUILDKIT_DEBUG_PANIC_ON_ERROR=1",
+		"BUILDKITD_DEBUGADDR="+debugAddress,
 		"TMPDIR="+filepath.Join(tmpdir, "tmp"))
 	if v := os.Getenv("GO_TEST_COVERPROFILE"); v != "" {
 		coverDir := filepath.Join(filepath.Dir(v), "helpers")
