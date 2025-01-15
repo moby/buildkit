@@ -9430,6 +9430,7 @@ func testPlatformWithOSVersion(t *testing.T, sb integration.Sandbox) {
 	// This test cannot be run on Windows currently due to `FROM scratch` and
 	// layer formatting not being supported on Windows.
 	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 
 	ctx := sb.Context()
 
