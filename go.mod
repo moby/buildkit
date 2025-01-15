@@ -186,20 +186,3 @@ require (
 	tags.cncf.io/container-device-interface v0.8.0 // indirect
 	tags.cncf.io/container-device-interface/specs-go v0.8.0 // indirect
 )
-
-exclude (
-	// TODO(thaJeztah): remove once fuse-overlayfs-snapshotter, nydus-snapshotter, and stargz-snapshotter updated to containerd v2.0.2 and downgraded these dependencies.
-	//
-	// These dependencies were updated to "master" in some modules we depend on,
-	// but have no code-changes since their last release. Unfortunately, this also
-	// causes a ripple effect, forcing all users of the containerd module to also
-	// update these dependencies to an unrelease / un-tagged version.
-	//
-	// Both these dependencies will unlikely do a new release in the near future,
-	// so exclude these versions so that we can downgrade to the current release.
-	//
-	// For additional details, see this PR and links mentioned in that PR:
-	// https://github.com/kubernetes-sigs/kustomize/pull/5830#issuecomment-2569960859
-	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
-	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
-)
