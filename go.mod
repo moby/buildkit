@@ -23,7 +23,7 @@ require (
 	github.com/containerd/go-cni v1.1.12
 	github.com/containerd/go-runc v1.1.0
 	github.com/containerd/log v0.1.0
-	github.com/containerd/nydus-snapshotter v0.15.0
+	github.com/containerd/nydus-snapshotter v0.15.1-0.20250126020009-9089ad11ad05
 	github.com/containerd/platforms v1.0.0-rc.1
 	github.com/containerd/stargz-snapshotter v0.16.2-0.20250126124854-1281fc2cd2ea
 	github.com/containerd/stargz-snapshotter/estargz v0.16.2-0.20250126124854-1281fc2cd2ea

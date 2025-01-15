@@ -403,7 +403,7 @@ github.com/containerd/go-runc
 # github.com/containerd/log v0.1.0
 ## explicit; go 1.20
 github.com/containerd/log
-# github.com/containerd/nydus-snapshotter v0.15.0
+# github.com/containerd/nydus-snapshotter v0.15.1-0.20250126020009-9089ad11ad05
 ## explicit; go 1.22.0
 github.com/containerd/nydus-snapshotter/pkg/converter
 github.com/containerd/nydus-snapshotter/pkg/converter/tool
