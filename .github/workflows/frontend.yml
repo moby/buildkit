@@ -178,7 +178,7 @@ jobs:
     steps:
       -
         name: GitHub Release
-        uses: softprops/action-gh-release@7b4da11513bf3f43f9999e90eabced41ab8bb048  # v2.2.0
+        uses: softprops/action-gh-release@67b6c38432c171b8aa64dc6f3f152d12da2d99fa  # v2.2.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
