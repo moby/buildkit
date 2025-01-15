@@ -391,7 +391,7 @@ github.com/containerd/errdefs/pkg/internal/types
 # github.com/containerd/fifo v1.1.0
 ## explicit; go 1.18
 github.com/containerd/fifo
-# github.com/containerd/fuse-overlayfs-snapshotter/v2 v2.1.0
+# github.com/containerd/fuse-overlayfs-snapshotter/v2 v2.1.1
 ## explicit; go 1.22.0
 github.com/containerd/fuse-overlayfs-snapshotter/v2
 # github.com/containerd/go-cni v1.1.11

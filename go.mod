@@ -19,7 +19,7 @@ require (
 	github.com/containerd/containerd/v2 v2.0.2
 	github.com/containerd/continuity v0.4.5
 	github.com/containerd/errdefs v1.0.0
-	github.com/containerd/fuse-overlayfs-snapshotter/v2 v2.1.0
+	github.com/containerd/fuse-overlayfs-snapshotter/v2 v2.1.1
 	github.com/containerd/go-cni v1.1.11
 	github.com/containerd/go-runc v1.1.0
 	github.com/containerd/log v0.1.0
