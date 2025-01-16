@@ -9511,6 +9511,15 @@ EOF
 
 	require.NoError(t, err)
 
+	desc, provider, err := contentutil.ProviderFromRef(target)
+	require.NoError(t, err)
+
+	info, err := testutil.ReadImages(ctx, provider, desc)
+	require.NoError(t, err)
+	require.Len(t, info.Images, 2)
+	require.Equal(t, info.Images[0].Img.Platform.OSVersion, p1.OSVersion)
+	require.Equal(t, info.Images[1].Img.Platform.OSVersion, p2.OSVersion)
+
 	dt, err := os.ReadFile(filepath.Join(destDir, strings.Replace(p1Str, "/", "_", 1), "osversion"))
 	require.NoError(t, err)
 	require.Equal(t, p1.OSVersion+"\n", string(dt))
