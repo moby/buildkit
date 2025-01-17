@@ -152,6 +152,7 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 					labels = make(map[string]string)
 				}
 				maps.Copy(labels, estargz.SnapshotLabels(p.manifest.Ref, p.manifest.Descriptors, i))
+				labels["containerd.io/snapshot/image-ref"] = p.manifest.Ref
 
 				p.descHandlers[desc.Digest] = &cache.DescHandler{
 					Provider:       p.manifest.Provider,
