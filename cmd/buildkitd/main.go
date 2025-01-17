@@ -68,6 +68,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -90,6 +91,7 @@ type workerInitializerOpt struct {
 	config         *config.Config
 	sessionManager *session.Manager
 	traceSocket    string
+	tracerProvider trace.TracerProvider
 }
 
 type workerInitializer struct {
@@ -336,7 +338,7 @@ func main() {
 			return err
 		}
 
-		controller, err := newController(ctx, c, &cfg)
+		controller, err := newController(ctx, c, &cfg, tp)
 		if err != nil {
 			return err
 		}
@@ -747,7 +749,7 @@ func serverCredentials(cfg config.TLSConfig) (*tls.Config, error) {
 	return tlsConf, nil
 }
 
-func newController(ctx context.Context, c *cli.Context, cfg *config.Config) (*control.Controller, error) {
+func newController(ctx context.Context, c *cli.Context, cfg *config.Config, tp trace.TracerProvider) (*control.Controller, error) {
 	sessionManager, err := session.NewManager()
 	if err != nil {
 		return nil, err
@@ -776,6 +778,7 @@ func newController(ctx context.Context, c *cli.Context, cfg *config.Config) (*co
 		config:         cfg,
 		sessionManager: sessionManager,
 		traceSocket:    traceSocket,
+		tracerProvider: tp,
 	})
 	if err != nil {
 		return nil, err

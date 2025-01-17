@@ -25,10 +25,13 @@ import (
 	"github.com/moby/buildkit/util/disk"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/progress"
+	"github.com/moby/buildkit/util/tracing"
 	digest "github.com/opencontainers/go-digest"
 	imagespecidentity "github.com/opencontainers/image-spec/identity"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -36,6 +39,17 @@ var (
 	ErrLocked   = errors.New("locked")
 	errNotFound = errors.New("not found")
 	errInvalid  = errors.New("invalid")
+)
+
+var (
+	PruneFilterAttribute       = attribute.Key("moby.buildkit.prune.filter")
+	PruneAllAttribute          = attribute.Key("moby.buildkit.prune.all")
+	PruneGCPolicyKeepDuration  = attribute.Key("moby.buildkit.prune.gcpolicy.keepduration")
+	PruneGCPolicyReservedSpace = attribute.Key("moby.buildkit.prune.gcpolicy.reservedspace")
+	PruneGCPolicyMaxUsedSpace  = attribute.Key("moby.buildkit.prune.gcpolicy.maxusedspace")
+	PruneGCPolicyMinFreeSpace  = attribute.Key("moby.buildkit.prune.gcpolicy.minfreespace")
+	PruneDeleteSizeAttribute   = attribute.Key("moby.buildkit.prune.delete.size")
+	PruneDeleteCountAttribute  = attribute.Key("moby.buildkit.prune.delete.count")
 )
 
 const maxPruneBatch = 10 // maximum number of refs to prune while holding the manager lock
@@ -51,6 +65,7 @@ type ManagerOpt struct {
 	MetadataStore   *metadata.Store
 	Root            string
 	MountPoolRoot   string
+	TracerProvider  trace.TracerProvider
 }
 
 type Accessor interface {
@@ -95,7 +110,8 @@ type cacheManager struct {
 	Differ          diff.Comparer
 	MetadataStore   *metadata.Store
 
-	root string
+	root   string
+	tracer trace.Tracer
 
 	mountPool sharableMountPool
 
@@ -114,6 +130,7 @@ func NewManager(opt ManagerOpt) (Manager, error) {
 		Differ:          opt.Differ,
 		MetadataStore:   opt.MetadataStore,
 		root:            opt.Root,
+		tracer:          tracing.Tracer(opt.TracerProvider),
 		records:         make(map[string]*cacheRecord),
 	}
 
@@ -1009,6 +1026,9 @@ func (cm *cacheManager) createDiffRef(ctx context.Context, parents parentRefs, d
 }
 
 func (cm *cacheManager) Prune(ctx context.Context, ch chan client.UsageInfo, opts ...client.PruneInfo) error {
+	ctx, span := cm.tracer.Start(ctx, "(*cacheManager).Prune")
+	defer span.End()
+
 	cm.muPrune.Lock()
 
 	for _, opt := range opts {
@@ -1030,6 +1050,18 @@ func (cm *cacheManager) Prune(ctx context.Context, ch chan client.UsageInfo, opt
 }
 
 func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt client.PruneInfo) error {
+	ctx, span := cm.tracer.Start(ctx, "(*cacheManager).prune",
+		trace.WithAttributes(
+			PruneFilterAttribute.StringSlice(opt.Filter),
+			PruneAllAttribute.Bool(opt.All),
+			PruneGCPolicyKeepDuration.Int64(int64(opt.KeepDuration)),
+			PruneGCPolicyReservedSpace.Int64(opt.ReservedSpace),
+			PruneGCPolicyMaxUsedSpace.Int64(opt.MaxUsedSpace),
+			PruneGCPolicyMinFreeSpace.Int64(opt.MinFreeSpace),
+		),
+	)
+	defer span.End()
+
 	filter, err := filters.ParseAll(opt.Filter...)
 	if err != nil {
 		return errors.Wrapf(err, "failed to parse prune filters %v", opt.Filter)
@@ -1066,6 +1098,17 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt
 		}
 	}
 
+	var (
+		totalReleasedSize  int64
+		totalReleasedCount int64
+	)
+	defer func() {
+		span.SetAttributes(
+			PruneDeleteSizeAttribute.Int64(totalReleasedSize),
+			PruneDeleteCountAttribute.Int64(totalReleasedCount),
+		)
+	}()
+
 	popt := pruneOpt{
 		filter:       filter,
 		all:          opt.All,
@@ -1076,8 +1119,14 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt
 	}
 	for {
 		releasedSize, releasedCount, err := cm.pruneOnce(ctx, ch, popt)
-		if err != nil || releasedCount == 0 {
+		if err != nil {
 			return err
+		}
+		totalReleasedSize += releasedSize
+		totalReleasedCount += releasedCount
+
+		if releasedCount == 0 {
+			return nil
 		}
 		popt.totalSize -= releasedSize
 	}
