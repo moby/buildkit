@@ -7,7 +7,7 @@
 // from code. You can read more about how Capabilities are intended to
 // work here:
 //
-//   https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/33528.pdf
+//	https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/33528.pdf
 //
 // This package supports native Go bindings for all the features
 // described in that paper as well as supporting subsequent changes to
@@ -15,23 +15,23 @@
 //
 // Some simple things you can do with this package are:
 //
-//   // Read and display the capabilities of the running process
-//   c := cap.GetProc()
-//   iab := cap.IABGetProc()
-//   log.Printf("this process has these caps: %q [%v]", c, iab)
+//	// Read and display the capabilities of the running process
+//	c := cap.GetProc()
+//	iab := cap.IABGetProc()
+//	log.Printf("this process has these caps: %q [%v]", c, iab)
 //
-//   // Drop any privilege a process might have (including for root,
-//   // but note root 'owns' a lot of system files so a cap-limited
-//   // root can still do considerable damage to a running system).
-//   old := cap.GetProc()
-//   empty := cap.NewSet()
-//   if err := empty.SetProc(); err != nil {
-//       log.Fatalf("failed to drop privilege: %q -> %q: %v", old, empty, err)
-//   }
-//   now := cap.GetProc()
-//   if cf, _ := now.Cf(empty); cf != 0 {
-//       log.Fatalf("failed to fully drop privilege: have=%q, wanted=%q", now, empty)
-//   }
+//	// Drop any privilege a process might have (including for root,
+//	// but note root 'owns' a lot of system files so a cap-limited
+//	// root can still do considerable damage to a running system).
+//	old := cap.GetProc()
+//	empty := cap.NewSet()
+//	if err := empty.SetProc(); err != nil {
+//	    log.Fatalf("failed to drop privilege: %q -> %q: %v", old, empty, err)
+//	}
+//	now := cap.GetProc()
+//	if cf, _ := now.Cf(empty); cf != 0 {
+//	    log.Fatalf("failed to fully drop privilege: have=%q, wanted=%q", now, empty)
+//	}
 //
 // The "cap" package operates with POSIX semantics for security
 // state. That is all OS threads are kept in sync at all times. The
@@ -195,6 +195,7 @@ type syscaller struct {
 
 // caprcall provides a pointer etc wrapper for the system calls
 // associated with getcap.
+//
 //go:uintptrescapes
 func (sc *syscaller) caprcall(call uintptr, h *header, d []data) error {
 	x := uintptr(0)
@@ -210,6 +211,7 @@ func (sc *syscaller) caprcall(call uintptr, h *header, d []data) error {
 
 // capwcall provides a pointer etc wrapper for the system calls
 // associated with setcap.
+//
 //go:uintptrescapes
 func (sc *syscaller) capwcall(call uintptr, h *header, d []data) error {
 	x := uintptr(0)
@@ -467,9 +469,10 @@ func (sc *syscaller) setAmbient(enable bool, val ...Value) error {
 // permission is available to perform this task. The settings are
 // performed in order and the function returns immediately an error is
 // detected. Use GetAmbient() to unravel where things went
-// wrong. Note, the cap package manages an abstraction IAB that
-// captures all three inheritable vectors in a single type. Consider
-// using that.
+// wrong.
+//
+// Note, the cap package manages an abstraction IAB that captures all
+// three inheritable vectors in a single type. Consider using that.
 func SetAmbient(enable bool, val ...Value) error {
 	state, sc := scwStateSC()
 	defer scwSetState(launchBlocked, state, -1)
