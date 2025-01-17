@@ -165,6 +165,7 @@ func (dsl *withDistributionSourceLabel) SnapshotLabels(descs []ocispecs.Descript
 		labels = make(map[string]string)
 	}
 	maps.Copy(labels, estargz.SnapshotLabels(dsl.ref, descs, index))
+	labels["containerd.io/snapshot/image-ref"] = dsl.ref
 	return labels
 }
 
