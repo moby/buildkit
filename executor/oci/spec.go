@@ -20,6 +20,7 @@ import (
 	"github.com/moby/buildkit/solver/llbsolver/cdidevices"
 	"github.com/moby/buildkit/util/network"
 	rootlessmountopts "github.com/moby/buildkit/util/rootless/mountopts"
+	"github.com/moby/buildkit/util/system"
 	traceexec "github.com/moby/buildkit/util/tracing/exec"
 	"github.com/moby/sys/userns"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -210,8 +211,8 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 				return nil, nil, err
 			}
 			s.Mounts = append(s.Mounts, specs.Mount{
-				Destination: m.Dest,
-				Type:        mount.Type,
+				Destination: system.GetAbsolutePath(m.Dest),
+				Type:        getMountType(mount.Type),
 				Source:      mount.Source,
 				Options:     mount.Options,
 			})
@@ -252,6 +253,10 @@ type submounts struct {
 
 func (s *submounts) subMount(m mount.Mount, subPath string) (mount.Mount, error) {
 	if path.Join("/", subPath) == "/" {
+		// for Windows, the mounting by HCS doesn't go through
+		// WCIFS, hence we have to give the direct path of the
+		// mount, which is in the /Files subdirectory.
+		m.Source = getCompleteSourcePath(m.Source)
 		return m, nil
 	}
 	if s.m == nil {
