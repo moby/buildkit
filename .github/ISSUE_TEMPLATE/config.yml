@@ -1,9 +1,6 @@
 # https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/configuring-issue-templates-for-your-repository#configuring-the-template-chooser
 blank_issues_enabled: true
 contact_links:
-  - name: Security and Vulnerabilities
-    url: https://github.com/moby/buildkit/blob/master/.github/SECURITY.md
-    about: Please report any security issues or vulnerabilities responsibly to the Docker security team. Please do not use the public issue tracker.
   - name: Questions and Discussions
     url: https://github.com/moby/buildkit/discussions/new
     about: Use Github Discussions to ask questions and/or open discussion topics.
