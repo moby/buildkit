@@ -33,7 +33,7 @@ const (
 	CapSourceHTTP         apicaps.CapID = "source.http"
 	CapSourceHTTPChecksum apicaps.CapID = "source.http.checksum"
 	CapSourceHTTPPerm     apicaps.CapID = "source.http.perm"
-	CapSourceHTTPUIDGID   apicaps.CapID = "soruce.http.uidgid"
+	CapSourceHTTPUIDGID   apicaps.CapID = "source.http.uidgid"
 
 	CapSourceOCILayout apicaps.CapID = "source.ocilayout"
 
