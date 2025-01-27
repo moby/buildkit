@@ -187,7 +187,11 @@ func buildAction(clicontext *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	attachable := []session.Attachable{authprovider.NewDockerAuthProvider(dockerConfig, tlsConfigs)}
+
+	attachable := []session.Attachable{authprovider.NewDockerAuthProvider(authprovider.DockerAuthProviderConfig{
+		ConfigFile: dockerConfig,
+		TLSConfigs: tlsConfigs,
+	})}
 
 	if ssh := clicontext.StringSlice("ssh"); len(ssh) > 0 {
 		configs, err := build.ParseSSH(ssh)
