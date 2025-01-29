@@ -205,6 +205,7 @@ var allTests = integration.TestFuncs(
 	testFrontendDeduplicateSources,
 	testDuplicateLayersProvenance,
 	testSourcePolicyWithNamedContext,
+	testEagerNamedContextLookup,
 	testEmptyStringArgInEnv,
 	testInvalidJSONCommands,
 	testHistoryError,
@@ -9165,6 +9166,51 @@ func testSourcePolicyWithNamedContext(t *testing.T, sb integration.Sandbox) {
 	dt, err := os.ReadFile(filepath.Join(out, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, "foo", string(dt))
+}
+
+// testEagerNamedContextLookup tests that named context are not loaded if
+// they are not used by current build.
+func testEagerNamedContextLookup(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+
+	f := getFrontend(t, sb)
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dockerfile := []byte(`
+FROM broken AS notused
+
+FROM alpine AS base
+RUN echo "base" > /foo
+
+FROM busybox AS otherstage
+
+FROM scratch
+COPY --from=base /foo /foo
+	`)
+
+	dir := integration.Tmpdir(t, fstest.CreateFile("Dockerfile", dockerfile, 0600))
+
+	out := t.TempDir()
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{Type: client.ExporterLocal, OutputDir: out},
+		},
+		FrontendAttrs: map[string]string{
+			"context:notused": "docker-image://docker.io/library/nosuchimage:latest",
+			"context:busybox": "docker-image://docker.io/library/dontexist:latest",
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(out, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, "base\n", string(dt))
 }
 
 func testBaseImagePlatformMismatch(t *testing.T, sb integration.Sandbox) {
