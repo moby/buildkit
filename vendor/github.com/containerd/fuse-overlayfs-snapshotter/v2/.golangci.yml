@@ -1,0 +1,25 @@
+linters:
+  enable:
+    - copyloopvar
+    - depguard
+    - gofmt
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - nolintlint
+    - staticcheck
+    - tenv
+    - unconvert
+    - unused
+  disable:
+    - errcheck
+    - revive
+
+linters-settings:
+  depguard:
+    rules:
+      main:
+        deny:
+          - pkg: "io/ioutil"
+            desc: use "io" or "os" instead

@@ -21,7 +21,6 @@ package fuseoverlayfs
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -33,7 +32,7 @@ import (
 // supportsReadonlyMultipleLowerDir checks if read-only multiple lowerdirs can be mounted with fuse-overlayfs.
 // https://github.com/containers/fuse-overlayfs/pull/133
 func supportsReadonlyMultipleLowerDir(d string) error {
-	td, err := ioutil.TempDir(d, "fuseoverlayfs-check")
+	td, err := os.MkdirTemp(d, "fuseoverlayfs-check")
 	if err != nil {
 		return err
 	}
