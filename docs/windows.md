@@ -242,9 +242,8 @@ _containers_ and _Hyper-V_ features.
 $networkName = 'nat'
 # Get-HnsNetwork is available once you have enabled the 'Hyper-V Host Compute Service' feature
 # which must have been done at the Quick setup above
-# Enable-WindowsOptionalFeature -Online -FeatureName containers -All
-# Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All -All
-# the default one named `nat` should be available
+# Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V, Containers -All
+# the default one named `nat` should be available, except for WS2019, see notes below.
 $natInfo = Get-HnsNetwork -ErrorAction Ignore | Where-Object { $_.Name -eq $networkName }
 if ($null -eq $natInfo) {
     throw "NAT network not found, check if you enabled containers, Hyper-V features and restarted the machine"
@@ -254,12 +253,13 @@ $subnet = $natInfo.Subnets[0].AddressPrefix
 
 $cniConfPath = "$env:ProgramFiles\containerd\cni\conf\0-containerd-nat.conf"
 $cniBinDir = "$env:ProgramFiles\containerd\cni\bin"
-$cniVersion = "0.3.0"
+$cniVersion = "1.0.0"
+$cniPluginVersion = "0.3.1"
 
 # get the CNI plugins (binaries)
 mkdir $cniBinDir -Force
-curl.exe -LO https://github.com/microsoft/windows-container-networking/releases/download/v$cniVersion/windows-container-networking-cni-amd64-v$cniVersion.zip
-tar xvf windows-container-networking-cni-amd64-v$cniVersion.zip -C $cniBinDir
+curl.exe -LO https://github.com/microsoft/windows-container-networking/releases/download/v$cniPluginVersion/windows-container-networking-cni-amd64-v$cniPluginVersion.zip
+tar xvf windows-container-networking-cni-amd64-v$cniPluginVersion.zip -C $cniBinDir
 
 $natConfig = @"
 {
@@ -282,4 +282,29 @@ $natConfig = @"
 }
 "@
 Set-Content -Path $cniConfPath -Value $natConfig
+# take a look
+cat $cniConfPath
+
+# quick test with nanoserver:ltsc20YY (YMMV)
+$YY = 22
+ctr i pull mcr.microsoft.com/windows/nanoserver:ltsc20$YY
+ctr run --rm --cni mcr.microsoft.com/windows/nanoserver:ltsc20$YY cni-test cmd /C curl -I example.com
+```
+
+> [!NOTE]
+> **Notes for WS2019:**
+> For cases where there is no default NAT network, like in WS2019 or even when you delete one
+> and you would like to recreate. You can set this up with the following:
+
+```powershell
+# Assumption: you have enabled Hyper-V and Containers features and restarted
+# Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V, Containers -All
+
+# get the HNS module that has the New-HnsNetwork function.
+curl.exe -LO https://raw.githubusercontent.com/microsoft/SDN/master/Kubernetes/windows/hns.psm1
+Import-Module -Force ./hns.psm1
+
+$adapter = Get-NetAdapter | where { $_.InterfaceDescription -eq 'Microsoft Hyper-V Network Adapter' }
+
+New-HnsNetwork -Type NAT -Name nat -AdapterName $adapter.Name
 ```
