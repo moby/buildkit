@@ -1,5 +1,9 @@
 name: dockerd
 
+# https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#permissions
+permissions:
+  contents: read
+
 on:
   # TODO: add event to build on command in PR (e.g., /test-dockerd)
   workflow_dispatch:

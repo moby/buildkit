@@ -4,6 +4,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#permissions
+permissions:
+  contents: read
+
 on:
   schedule:
     - cron: '0 10 * * *'
@@ -150,10 +154,10 @@ jobs:
   govulncheck:
     runs-on: ubuntu-24.04
     permissions:
+      # same as global permission
+      contents: read
       # required to write sarif report
       security-events: write
-      # required to check out the repository
-      contents: read
     steps:
       -
         name: Set up Docker Buildx
@@ -226,6 +230,8 @@ jobs:
     runs-on: ubuntu-24.04
     if: ${{ github.ref == 'refs/heads/master' && github.repository == 'moby/buildkit' }}
     permissions:
+      # same as global permission
+      contents: read
       # required to write sarif report
       security-events: write
     needs:
@@ -266,6 +272,9 @@ jobs:
 
   release:
     runs-on: ubuntu-24.04
+    permissions:
+      # required to create GitHub release
+      contents: write
     needs:
       - prepare
       - test
