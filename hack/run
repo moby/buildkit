@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+
+set -e
+
+if ! command -v $1 &>/dev/null; then
+  echo >&2 'error: binary-daemon or dynbinary-daemon must be run before run'
+  false
+fi
+
+COMMAND="$(command -v $1)"
+
+if [ -n "$DELVE_PORT" ]; then
+  delve_listen_port="${DELVE_PORT##*:}"
+fi
+
+command=("$COMMAND")
+
+if [ -n "$DELVE_PORT" ]; then
+  command=(
+    dlv
+    --listen="0.0.0.0:$delve_listen_port"
+    --headless=true
+    --log
+    --api-version=2
+    --only-same-user=false
+    --check-go-version=false
+    --accept-multiclient
+    exec "${command[@]}" --
+  )
+fi
+
+set -x
+# shellcheck disable=SC2086
+exec "${command[@]}"
