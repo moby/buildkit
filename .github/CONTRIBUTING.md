@@ -164,6 +164,10 @@ CGO_ENABLED=1 GOBUILDFLAGS="-race" ./hack/test integration
 Set `TEST_KEEP_CACHE=1` for the test framework to keep external dependant images in a docker volume
 if you are repeatedly calling `./hack/test` script. This helps to avoid rate limiting on the remote registry side.
 
+You can also set `MOUNT_BUILDKIT_DOCKER_CONFIG_PATH` to forward docker config that will be used to pull
+test images into the container. Don't use your personal docker config, create a new one with a dedicated
+token that only has public read-only access.
+
 If you are working behind a proxy, you can set some of or all
 `HTTP_PROXY=http://ip:port`, `HTTPS_PROXY=http://ip:port`, `NO_PROXY=http://ip:port` for the test framework
 to specify the proxy build args.

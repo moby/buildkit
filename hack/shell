@@ -20,5 +20,12 @@ if [ -n "$MOUNT_BUILDKIT_SOURCE" ]; then
   volumes="-v $(pwd):/src"
 fi
 
+config=
+if [ -n "$MOUNT_BUILDKIT_DOCKER_CONFIG_PATH" ]; then
+  if [ -f "$MOUNT_BUILDKIT_DOCKER_CONFIG_PATH" ]; then
+    config="-v $MOUNT_BUILDKIT_DOCKER_CONFIG_PATH:/root/.docker/config.json:ro"
+  fi
+fi
+
 set -x
-docker run $SSH $volumes -it --privileged -v /tmp -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry --rm $(cat $iidfile) ash
+docker run $SSH $volumes $config -it --privileged -v /tmp -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry --rm $(cat $iidfile) ash
