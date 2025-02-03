@@ -29,6 +29,7 @@ set -eu -o pipefail
 : "${DOCKERFILE_RELEASES=}"
 : "${BUILDKIT_WORKER_RANDOM=}"
 : "${BUILDKIT_TEST_DISABLE_FEATURES=}"
+: "${MOUNT_BUILDKIT_DOCKER_CONFIG_PATH=}"
 
 if [ "$TEST_DOCKERD" == "1" ]; then
   if [ ! -f "$TEST_DOCKERD_BINARY" ]; then
@@ -107,7 +108,18 @@ if [ "$TEST_KEEP_CACHE" != "1" ]; then
   trap 'docker rm -v $cacheVolume' EXIT
 fi
 
-baseCreateFlags="--rm --privileged \
+dockerConfigMount=""
+if [ "$GITHUB_ACTIONS" = "true" ] || [ -n "$MOUNT_BUILDKIT_DOCKER_CONFIG_PATH" ]; then
+  dockerConfigPath="$HOME/.docker/config.json"
+  if [ -n "$MOUNT_BUILDKIT_DOCKER_CONFIG_PATH" ]; then
+    dockerConfigPath="$MOUNT_BUILDKIT_DOCKER_CONFIG_PATH"
+  fi
+  if [ -f "$dockerConfigPath" ]; then
+    dockerConfigMount="-v $dockerConfigPath:/root/.docker/config.json:ro"
+  fi
+fi
+
+baseCreateFlags="--rm --privileged $dockerConfigMount \
 -v /tmp $testReportsVol \
 --volumes-from=$cacheVolume \
 -e CGO_ENABLED \
