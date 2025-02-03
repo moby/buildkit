@@ -302,10 +302,7 @@ func TestIntegration(t *testing.T) {
 			"denied":  networkHostDenied,
 		}))...)
 
-	integration.Run(t, deviceTests, append(opts,
-		integration.WithMatrix("cdi", map[string]interface{}{
-			"enabled": enableCDI,
-		}))...)
+	integration.Run(t, deviceTests, opts...)
 }
 
 func testEmptyStringArgInEnv(t *testing.T, sb integration.Sandbox) {
@@ -9900,19 +9897,6 @@ func (*networkModeSandbox) UpdateConfigFile(in string) string {
 var (
 	networkHostGranted integration.ConfigUpdater = &networkModeHost{}
 	networkHostDenied  integration.ConfigUpdater = &networkModeSandbox{}
-)
-
-type cdiEnabled struct{}
-
-func (*cdiEnabled) UpdateConfigFile(in string) string {
-	return in + `
-[cdi]
-enabled = true
-`
-}
-
-var (
-	enableCDI integration.ConfigUpdater = &cdiEnabled{}
 )
 
 func fixedWriteCloser(wc io.WriteCloser) filesync.FileOutputFunc {

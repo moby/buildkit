@@ -277,12 +277,7 @@ func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sa
 
 	integration.Run(t, integration.TestFuncs(
 		testCDI,
-	),
-		mirrors,
-		integration.WithMatrix("cdi", map[string]interface{}{
-			"enabled": enableCDI,
-		}),
-	)
+	), mirrors)
 }
 
 func newContainerd(cdAddress string) (*ctd.Client, error) {
@@ -10995,19 +10990,6 @@ func (w warningsListOutput) String() string {
 	}
 	return b.String()
 }
-
-type cdiEnabled struct{}
-
-func (*cdiEnabled) UpdateConfigFile(in string) string {
-	return in + `
-[cdi]
-enabled = true
-`
-}
-
-var (
-	enableCDI integration.ConfigUpdater = &cdiEnabled{}
-)
 
 func testCDI(t *testing.T, sb integration.Sandbox) {
 	if sb.Rootless() {

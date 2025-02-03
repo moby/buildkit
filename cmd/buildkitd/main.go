@@ -217,8 +217,8 @@ func main() {
 			Usage: "OTEL collector trace socket path",
 		},
 		cli.BoolFlag{
-			Name:  "cdi-enabled",
-			Usage: "enables support of the Container Device Interface (CDI)",
+			Name:  "cdi-disabled",
+			Usage: "disables support of the Container Device Interface (CDI)",
 		},
 		cli.StringSliceFlag{
 			Name:  "cdi-spec-dir",
@@ -631,9 +631,9 @@ func applyMainFlags(c *cli.Context, cfg *config.Config) error {
 		cfg.OTEL.SocketPath = c.String("otel-socket-path")
 	}
 
-	if c.IsSet("cdi-enabled") {
-		cdiEnabled := c.Bool("cdi-enabled")
-		cfg.CDI.Disabled = &cdiEnabled
+	if c.IsSet("cdi-disabled") {
+		cdiDisabled := c.Bool("cdi-disabled")
+		cfg.CDI.Disabled = &cdiDisabled
 	}
 	if c.IsSet("cdi-spec-dir") {
 		cfg.CDI.SpecDirs = c.StringSlice("cdi-spec-dir")
