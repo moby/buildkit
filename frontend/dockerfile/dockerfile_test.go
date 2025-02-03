@@ -301,8 +301,6 @@ func TestIntegration(t *testing.T) {
 			"granted": networkHostGranted,
 			"denied":  networkHostDenied,
 		}))...)
-
-	integration.Run(t, deviceTests, opts...)
 }
 
 func testEmptyStringArgInEnv(t *testing.T, sb integration.Sandbox) {

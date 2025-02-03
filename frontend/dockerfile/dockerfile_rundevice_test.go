@@ -1,3 +1,5 @@
+//go:build dfrundevice
+
 package dockerfile
 
 import (
@@ -13,10 +15,12 @@ import (
 	"github.com/tonistiigi/fsutil"
 )
 
-var deviceTests = integration.TestFuncs(
-	testDeviceEnv,
-	testDeviceRunEnv,
-)
+func init() {
+	allTests = append(allTests, integration.TestFuncs(
+		testDeviceEnv,
+		testDeviceRunEnv,
+	)...)
+}
 
 func testDeviceEnv(t *testing.T, sb integration.Sandbox) {
 	if sb.Rootless() {

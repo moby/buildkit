@@ -1,6 +1,6 @@
-package dockerfile2llb
+//go:build dfrundevice
 
-// TODO: move in labs with dfrundevice tag
+package dockerfile2llb
 
 import (
 	"github.com/moby/buildkit/client/llb"
