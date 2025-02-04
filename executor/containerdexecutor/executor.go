@@ -13,6 +13,7 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+	"tags.cncf.io/container-device-interface/pkg/cdi"
 
 	ctd "github.com/containerd/containerd/v2/client"
 	"github.com/containerd/containerd/v2/core/mount"
@@ -40,6 +41,7 @@ type containerdExecutor struct {
 	traceSocket      string
 	rootless         bool
 	runtime          *RuntimeInfo
+	cdiManager       *cdi.Cache
 }
 
 // OnCreateRuntimer provides an alternative to OCI hooks for applying network
@@ -72,6 +74,7 @@ type ExecutorOptions struct {
 	TraceSocket      string
 	Rootless         bool
 	Runtime          *RuntimeInfo
+	CDIManager       *cdi.Cache
 }
 
 // New creates a new executor backed by connection to containerd API
@@ -92,6 +95,7 @@ func New(executorOpts ExecutorOptions) executor.Executor {
 		traceSocket:      executorOpts.TraceSocket,
 		rootless:         executorOpts.Rootless,
 		runtime:          executorOpts.Runtime,
+		cdiManager:       executorOpts.CDIManager,
 	}
 }
 

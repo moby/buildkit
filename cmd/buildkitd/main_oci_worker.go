@@ -48,7 +48,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials/insecure"
-	"tags.cncf.io/container-device-interface/pkg/cdi"
 )
 
 func init() {
@@ -299,6 +298,11 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 
 	dns := getDNSConfig(common.config.DNS)
 
+	cdiManager, err := getCDIManager(common.config.CDI.Disabled, common.config.CDI.SpecDirs)
+	if err != nil {
+		return nil, err
+	}
+
 	nc := netproviders.Opt{
 		Mode: common.config.Workers.OCI.NetworkConfig.Mode,
 		CNI: cniprovider.Opt{
@@ -316,27 +320,13 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 		parallelismSem = semaphore.NewWeighted(int64(cfg.MaxParallelism))
 	}
 
-	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping, nc, dns, cfg.Binary, cfg.ApparmorProfile, cfg.SELinux, parallelismSem, common.traceSocket, cfg.DefaultCgroupParent)
+	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping, nc, dns, cfg.Binary, cfg.ApparmorProfile, cfg.SELinux, parallelismSem, common.traceSocket, cfg.DefaultCgroupParent, cdiManager)
 	if err != nil {
 		return nil, err
 	}
 	opt.GCPolicy = getGCPolicy(cfg.GCConfig, common.config.Root)
 	opt.BuildkitVersion = getBuildkitVersion()
 	opt.RegistryHosts = hosts
-
-	if common.config.CDI.Disabled == nil || !*common.config.CDI.Disabled {
-		if len(common.config.CDI.SpecDirs) == 0 {
-			return nil, errors.New("No CDI specification directories specified")
-		}
-		cdiCache, err := cdi.NewCache(cdi.WithSpecDirs(common.config.CDI.SpecDirs...))
-		if err != nil {
-			return nil, errors.Wrapf(err, "CDI registry initialization failure")
-		}
-		if err := cdiCache.Refresh(); err != nil {
-			return nil, errors.Wrapf(err, "CDI registry initialization failure")
-		}
-		opt.CDIManager = cdiCache
-	}
 
 	if platformsStr := cfg.Platforms; len(platformsStr) != 0 {
 		platforms, err := parsePlatforms(platformsStr)

@@ -18,6 +18,7 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+	"tags.cncf.io/container-device-interface/pkg/cdi"
 
 	"github.com/containerd/containerd/v2/core/mount"
 	containerdoci "github.com/containerd/containerd/v2/pkg/oci"
@@ -57,6 +58,7 @@ type Opt struct {
 	SELinux         bool
 	TracingSocket   string
 	ResourceMonitor *resources.Monitor
+	CDIManager      *cdi.Cache
 }
 
 var defaultCommandCandidates = []string{"buildkit-runc", "runc"}
@@ -78,6 +80,7 @@ type runcExecutor struct {
 	selinux          bool
 	tracingSocket    string
 	resmon           *resources.Monitor
+	cdiManager       *cdi.Cache
 }
 
 func New(opt Opt, networkProviders map[pb.NetMode]network.Provider) (executor.Executor, error) {
@@ -144,6 +147,7 @@ func New(opt Opt, networkProviders map[pb.NetMode]network.Provider) (executor.Ex
 		selinux:          opt.SELinux,
 		tracingSocket:    opt.TracingSocket,
 		resmon:           opt.ResourceMonitor,
+		cdiManager:       opt.CDIManager,
 	}
 	return w, nil
 }
@@ -267,7 +271,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 		}
 	}
 
-	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, namespace, w.cgroupParent, w.processMode, w.idmap, w.apparmorProfile, w.selinux, w.tracingSocket, opts...)
+	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, namespace, w.cgroupParent, w.processMode, w.idmap, w.apparmorProfile, w.selinux, w.tracingSocket, w.cdiManager, opts...)
 	if err != nil {
 		return nil, err
 	}

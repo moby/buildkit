@@ -74,6 +74,7 @@ import (
 	"google.golang.org/grpc/health"
 	healthv1 "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
+	"tags.cncf.io/container-device-interface/pkg/cdi"
 )
 
 func init() {
@@ -1043,4 +1044,31 @@ func newMeterProvider(ctx context.Context) (*sdkmetric.MeterProvider, error) {
 		opts = append(opts, sdkmetric.WithReader(r))
 	}
 	return sdkmetric.NewMeterProvider(opts...), nil
+}
+
+// getCDIManager returns a new CDI registry with disabled auto-refresh.
+func getCDIManager(disabled *bool, specDirs []string) (*cdi.Cache, error) {
+	if disabled != nil && *disabled {
+		return nil, nil
+	}
+	if len(specDirs) == 0 {
+		return nil, errors.New("No CDI specification directories specified")
+	}
+	cdiCache, err := func() (*cdi.Cache, error) {
+		cdiCache, err := cdi.NewCache(
+			cdi.WithSpecDirs(specDirs...),
+			cdi.WithAutoRefresh(false),
+		)
+		if err != nil {
+			return nil, err
+		}
+		if err := cdiCache.Refresh(); err != nil {
+			return nil, err
+		}
+		return cdiCache, nil
+	}()
+	if err != nil {
+		return nil, errors.Wrapf(err, "CDI registry initialization failure")
+	}
+	return cdiCache, nil
 }

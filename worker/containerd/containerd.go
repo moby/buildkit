@@ -24,6 +24,7 @@ import (
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/semaphore"
+	"tags.cncf.io/container-device-interface/pkg/cdi"
 )
 
 type RuntimeInfo = containerdexecutor.RuntimeInfo
@@ -43,6 +44,7 @@ type WorkerOptions struct {
 	ParallelismSem  *semaphore.Weighted
 	TraceSocket     string
 	Runtime         *RuntimeInfo
+	CDIManager      *cdi.Cache
 }
 
 // NewWorkerOpt creates a WorkerOpt.
@@ -162,6 +164,7 @@ func newContainerd(client *ctd.Client, workerOpts WorkerOptions) (base.WorkerOpt
 		TraceSocket:      workerOpts.TraceSocket,
 		Rootless:         workerOpts.Rootless,
 		Runtime:          workerOpts.Runtime,
+		CDIManager:       workerOpts.CDIManager,
 		NetworkProviders: np,
 	}
 
@@ -182,6 +185,7 @@ func newContainerd(client *ctd.Client, workerOpts WorkerOptions) (base.WorkerOpt
 		GarbageCollect:   gc,
 		ParallelismSem:   workerOpts.ParallelismSem,
 		MountPoolRoot:    filepath.Join(root, "cachemounts"),
+		CDIManager:       workerOpts.CDIManager,
 	}
 	return opt, nil
 }

@@ -24,6 +24,7 @@ import (
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/opencontainers/selinux/go-selinux"
 	"github.com/pkg/errors"
+	"tags.cncf.io/container-device-interface/pkg/cdi"
 )
 
 // ProcessMode configures PID namespaces
@@ -59,7 +60,7 @@ func (pm ProcessMode) String() string {
 
 // GenerateSpec generates spec using containerd functionality.
 // opts are ignored for s.Process, s.Hostname, and s.Mounts .
-func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mount, id, resolvConf, hostsFile string, namespace network.Namespace, cgroupParent string, processMode ProcessMode, idmap *idtools.IdentityMapping, apparmorProfile string, selinuxB bool, tracingSocket string, opts ...oci.SpecOpts) (*specs.Spec, func(), error) {
+func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mount, id, resolvConf, hostsFile string, namespace network.Namespace, cgroupParent string, processMode ProcessMode, idmap *idtools.IdentityMapping, apparmorProfile string, selinuxB bool, tracingSocket string, cdiManager *cdi.Cache, opts ...oci.SpecOpts) (*specs.Spec, func(), error) {
 	c := &containers.Container{
 		ID: id,
 	}
@@ -110,12 +111,6 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 		return nil, nil, err
 	}
 
-	if cdiOpts, err := generateCDIOpts(ctx, meta.CDIDevices); err == nil {
-		opts = append(opts, cdiOpts...)
-	} else {
-		return nil, nil, err
-	}
-
 	hostname := defaultHostname
 	if meta.Hostname != "" {
 		hostname = meta.Hostname
@@ -134,6 +129,14 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 		oci.WithNewPrivileges,
 		oci.WithHostname(hostname),
 	)
+
+	if cdiManager != nil {
+		if cdiOpts, err := generateCDIOpts(cdiManager, meta.CDIDevices); err == nil {
+			opts = append(opts, cdiOpts...)
+		} else {
+			return nil, nil, err
+		}
+	}
 
 	s, err := oci.GenerateSpec(ctx, nil, c, opts...)
 	if err != nil {
