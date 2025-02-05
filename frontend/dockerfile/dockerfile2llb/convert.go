@@ -1305,10 +1305,15 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 		}
 	}
 
-	// TODO: use entitlements
 	if dopt.llbCaps != nil && dopt.llbCaps.Supports(pb.CapExecMetaCDI) == nil {
-		for _, u := range dopt.devices {
-			opt = append(opt, llb.AddCDIDevice(u.Name))
+		for _, device := range dopt.devices {
+			deviceOpts := []llb.CDIDeviceOption{
+				llb.CDIDeviceName(device.Name),
+			}
+			if device.Optional {
+				deviceOpts = append(deviceOpts, llb.CDIDeviceOptional)
+			}
+			opt = append(opt, llb.AddCDIDevice(deviceOpts...))
 		}
 		runDevices, err := dispatchRunDevices(c)
 		if err != nil {

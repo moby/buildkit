@@ -60,6 +60,7 @@ type ExecOp struct {
 	isValidated bool
 	secrets     []SecretInfo
 	ssh         []SSHInfo
+	cdiDevices  []CDIDeviceInfo
 }
 
 func (e *ExecOp) AddMount(target string, source Output, opt ...MountOption) Output {
@@ -267,21 +268,6 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		Security: security,
 	}
 
-	cdiDevices, err := getCDIDevice(e.base)(ctx, c)
-	if err != nil {
-		return "", nil, nil, nil, err
-	}
-	if len(cdiDevices) > 0 {
-		addCap(&e.constraints, pb.CapExecMetaCDI)
-		cd := make([]*pb.CDIDevice, len(cdiDevices))
-		for i, d := range cdiDevices {
-			cd[i] = &pb.CDIDevice{
-				Name: d.Name,
-			}
-		}
-		peo.CdiDevices = cd
-	}
-
 	if network != NetModeSandbox {
 		addCap(&e.constraints, pb.CapExecMetaNetwork)
 	}
@@ -335,6 +321,18 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 
 	if len(e.ssh) > 0 {
 		addCap(&e.constraints, pb.CapExecMountSSH)
+	}
+
+	if len(e.cdiDevices) > 0 {
+		addCap(&e.constraints, pb.CapExecMetaCDI)
+		cd := make([]*pb.CDIDevice, len(e.cdiDevices))
+		for i, d := range e.cdiDevices {
+			cd[i] = &pb.CDIDevice{
+				Name:     d.Name,
+				Optional: d.Optional,
+			}
+		}
+		peo.CdiDevices = cd
 	}
 
 	if e.constraints.Platform == nil {
@@ -640,10 +638,39 @@ func AddUlimit(name UlimitName, soft int64, hard int64) RunOption {
 	})
 }
 
-func AddCDIDevice(name string) RunOption {
+func AddCDIDevice(opts ...CDIDeviceOption) RunOption {
 	return runOptionFunc(func(ei *ExecInfo) {
-		ei.State = ei.State.AddCDIDevice(name)
+		c := &CDIDeviceInfo{}
+		for _, opt := range opts {
+			opt.SetCDIDeviceOption(c)
+		}
+		ei.CDIDevices = append(ei.CDIDevices, *c)
 	})
+}
+
+type CDIDeviceOption interface {
+	SetCDIDeviceOption(*CDIDeviceInfo)
+}
+
+type cdiDeviceOptionFunc func(*CDIDeviceInfo)
+
+func (fn cdiDeviceOptionFunc) SetCDIDeviceOption(ci *CDIDeviceInfo) {
+	fn(ci)
+}
+
+func CDIDeviceName(name string) CDIDeviceOption {
+	return cdiDeviceOptionFunc(func(ci *CDIDeviceInfo) {
+		ci.Name = name
+	})
+}
+
+var CDIDeviceOptional = cdiDeviceOptionFunc(func(ci *CDIDeviceInfo) {
+	ci.Optional = true
+})
+
+type CDIDeviceInfo struct {
+	Name     string
+	Optional bool
 }
 
 func ValidExitCodes(codes ...int) RunOption {
@@ -837,6 +864,7 @@ type ExecInfo struct {
 	ProxyEnv       *ProxyEnv
 	Secrets        []SecretInfo
 	SSH            []SSHInfo
+	CDIDevices     []CDIDeviceInfo
 }
 
 type MountInfo struct {

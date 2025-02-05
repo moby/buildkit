@@ -157,29 +157,43 @@ func generateCDIOpts(manager *cdi.Cache, devices []*pb.CDIDevice) ([]oci.SpecOpt
 	if len(devices) == 0 {
 		return nil, nil
 	}
-	var dd []string
-	for _, d := range devices {
-		if d == nil {
-			continue
-		}
-		if _, _, _, err := parser.ParseQualifiedName(d.Name); err != nil {
-			return nil, errors.Wrapf(err, "invalid CDI device name %s", d.Name)
-		}
-		dd = append(dd, d.Name)
-	}
 
-	withCDIDevices := func(devices ...string) oci.SpecOpts {
+	withCDIDevices := func(devices []*pb.CDIDevice) oci.SpecOpts {
 		return func(ctx context.Context, _ oci.Client, c *containers.Container, s *specs.Spec) error {
-			if len(devices) == 0 {
-				return nil
-			}
 			if err := manager.Refresh(); err != nil {
 				bklog.G(ctx).Warnf("CDI registry refresh failed: %v", err)
 			}
-			bklog.G(ctx).Debugf("Injecting CDI devices %v", devices)
-			if _, err := manager.InjectDevices(s, devices...); err != nil {
+
+			registeredDevices := manager.ListDevices()
+			isDeviceRegistered := func(device *pb.CDIDevice) bool {
+				for _, name := range registeredDevices {
+					if device.Name == name {
+						return true
+					}
+				}
+				return false
+			}
+
+			var dd []string
+			for _, d := range devices {
+				if d == nil {
+					continue
+				}
+				if _, _, _, err := parser.ParseQualifiedName(d.Name); err != nil {
+					return errors.Wrapf(err, "invalid CDI device name %s", d.Name)
+				}
+				if !isDeviceRegistered(d) && d.Optional {
+					bklog.G(ctx).Warnf("Optional CDI device %q is not registered", d.Name)
+					continue
+				}
+				dd = append(dd, d.Name)
+			}
+
+			bklog.G(ctx).Debugf("Injecting CDI devices %v", dd)
+			if _, err := manager.InjectDevices(s, dd...); err != nil {
 				return errors.Wrapf(err, "CDI device injection failed")
 			}
+
 			// One crucial thing to keep in mind is that CDI device injection
 			// might add OCI Spec environment variables, hooks, and mounts as
 			// well. Therefore, it is important that none of the corresponding
@@ -189,7 +203,7 @@ func generateCDIOpts(manager *cdi.Cache, devices []*pb.CDIDevice) ([]oci.SpecOpt
 	}
 
 	return []oci.SpecOpts{
-		withCDIDevices(dd...),
+		withCDIDevices(devices),
 	}, nil
 }
 

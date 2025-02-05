@@ -11,7 +11,7 @@ func dispatchRunDevices(c *instructions.RunCommand) ([]llb.RunOption, error) {
 	var out []llb.RunOption
 	devices := instructions.GetDevices(c)
 	for _, device := range devices {
-		out = append(out, llb.AddCDIDevice(device))
+		out = append(out, llb.AddCDIDevice(llb.CDIDeviceName(device), llb.CDIDeviceOptional))
 	}
 	return out, nil
 }

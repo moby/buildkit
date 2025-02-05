@@ -101,6 +101,8 @@ message CDIDevice {
 	// Fully qualified CDI device name (e.g., vendor.com/gpu=gpudevice1)
 	// https://github.com/cncf-tags/container-device-interface/blob/main/SPEC.md
 	string name = 1;
+	// Optional defines if CDI device is required.
+	bool optional = 2;
 }
 
 // Mount specifies how to mount an input Op as a filesystem.

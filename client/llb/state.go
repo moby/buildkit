@@ -295,6 +295,7 @@ func (s State) Run(ro ...RunOption) ExecState {
 	}
 	exec.secrets = ei.Secrets
 	exec.ssh = ei.SSH
+	exec.cdiDevices = ei.CDIDevices
 
 	return ExecState{
 		State: s.WithOutput(exec.Output()),
@@ -474,12 +475,6 @@ func (s State) AddExtraHost(host string, ip net.IP) State {
 // Ulimits do not apply to image configs.
 func (s State) AddUlimit(name UlimitName, soft int64, hard int64) State {
 	return ulimit(name, soft, hard)(s)
-}
-
-// AddCDIDevice sets the fully qualified CDI device name.
-// https://github.com/cncf-tags/container-device-interface/blob/main/SPEC.md
-func (s State) AddCDIDevice(name string) State {
-	return cdiDevice(name)(s)
 }
 
 // WithCgroupParent sets the parent cgroup for any containers created from this state.
