@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/leases"
+	"github.com/containerd/containerd/v2/pkg/filters"
 	cerrdefs "github.com/containerd/errdefs"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client"
@@ -997,6 +999,12 @@ func (h *HistoryQueue) Listen(ctx context.Context, req *controlapi.BuildHistoryR
 			}
 		}
 		h.mu.Unlock()
+
+		events, err := filterHistoryEvents(events, req.Filter, req.Limit)
+		if err != nil {
+			return err
+		}
+
 		for _, e := range events {
 			if e == nil || e.Record == nil {
 				continue
@@ -1027,6 +1035,104 @@ func (h *HistoryQueue) Listen(ctx context.Context, req *controlapi.BuildHistoryR
 		}
 	}
 }
+
+func filterHistoryEvents(in []*controlapi.BuildHistoryEvent, filters []string, limit int32) ([]*controlapi.BuildHistoryEvent, error) {
+	f, err := parseFilters(filters)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]*controlapi.BuildHistoryEvent, 0, len(in))
+
+loop0:
+	for _, ev := range in {
+		for _, fn := range f {
+			if !fn(ev) {
+				continue loop0
+			}
+		}
+		out = append(out, ev)
+	}
+
+	if limit != 0 {
+		if limit < 0 {
+			return nil, errors.Errorf("invalid limit %d", limit)
+		}
+		slices.SortFunc(out, func(a, b *controlapi.BuildHistoryEvent) int {
+			if a.Record == nil || b.Record == nil {
+				return 0
+			}
+			if a.Record == nil {
+				return 1
+			}
+			return b.Record.CreatedAt.AsTime().Compare(a.Record.CreatedAt.AsTime())
+		})
+		if int32(len(out)) > limit {
+			out = out[:limit]
+		}
+	}
+	return out, nil
+}
+
+func parseFilters(in []string) ([]func(*controlapi.BuildHistoryEvent) bool, error) {
+	if len(in) == 0 {
+		return nil, nil
+	}
+
+	// ref == ~= !=
+	// createdAt > < >= <=
+	// completedAt > < >= <=
+	// status == ~= != (running, complete, error)
+	// duration > < >= <=
+	// repository == ~= !=
+
+	var out []func(*controlapi.BuildHistoryEvent) bool
+
+	filter, err := filters.ParseAll(in...)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to parse history filters %v", in)
+	}
+
+	out = append(out, func(ev *controlapi.BuildHistoryEvent) bool {
+		if ev.Record == nil {
+			return false
+		}
+		return filter.Match(adaptHistoryRecord(ev.Record))
+	})
+	return out, nil
+}
+
+func adaptHistoryRecord(rec *controlapi.BuildHistoryRecord) filters.Adaptor {
+	return filters.AdapterFunc(func(fieldpath []string) (string, bool) {
+		if len(fieldpath) == 0 {
+			return "", false
+		}
+
+		switch fieldpath[0] {
+		case "ref":
+			return rec.Ref, rec.Ref != ""
+		case "status":
+			if rec.CompletedAt != nil {
+				if rec.Error != nil {
+					if strings.Contains(rec.Error.Message, "context canceled") {
+						return "canceled", true
+					}
+					return "error", true
+				} else {
+					return "complete", true
+				}
+			} else {
+				return "running", true
+			}
+		case "repository":
+			v, ok := rec.FrontendAttrs["vcs:source"]
+			return v, ok
+		}
+		return "", false
+	})
+}
+
+type constFilter[T comparable] struct{}
 
 type pubsub[T any] struct {
 	mu sync.Mutex
