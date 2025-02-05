@@ -31,6 +31,7 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/tonistiigi/go-csvvalue"
 	bolt "go.etcd.io/bbolt"
 	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc/codes"
@@ -1044,14 +1045,18 @@ func filterHistoryEvents(in []*controlapi.BuildHistoryEvent, filters []string, l
 
 	out := make([]*controlapi.BuildHistoryEvent, 0, len(in))
 
-loop0:
-	for _, ev := range in {
-		for _, fn := range f {
-			if !fn(ev) {
-				continue loop0
+	if len(f) == 0 {
+		out = in
+	} else {
+	loop0:
+		for _, ev := range in {
+			for _, fn := range f {
+				if fn(ev) {
+					out = append(out, ev)
+					continue loop0
+				}
 			}
 		}
-		out = append(out, ev)
 	}
 
 	if limit != 0 {
@@ -1079,16 +1084,102 @@ func parseFilters(in []string) ([]func(*controlapi.BuildHistoryEvent) bool, erro
 		return nil, nil
 	}
 
-	// ref == ~= !=
-	// createdAt > < >= <=
-	// completedAt > < >= <=
-	// status == ~= != (running, complete, error)
-	// duration > < >= <=
-	// repository == ~= !=
+	var out []func(*controlapi.BuildHistoryEvent) bool
+	for _, in := range in {
+		fns, err := parseFilter(in)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, func(ev *controlapi.BuildHistoryEvent) bool {
+			for _, fn := range fns {
+				if !fn(ev) {
+					return false
+				}
+			}
+			return true
+		})
+	}
+	return out, nil
+}
 
+func timeBasedFilter(f string) (func(*controlapi.BuildHistoryEvent) bool, error) {
+	key, sep, value, _ := cutAny(f, []string{">=", "<=", ">", "<"})
+	var cmp int64
+	switch key {
+	case "startedAt", "completedAt":
+		v, err := time.ParseDuration(value)
+		if err == nil {
+			tm := time.Now().Add(-v)
+			cmp = tm.Unix()
+		} else {
+			tm, err := time.Parse(time.RFC3339, value)
+			if err != nil {
+				return nil, errors.Errorf("invalid time %s", value)
+			}
+			cmp = tm.Unix()
+		}
+	case "duration":
+		v, err := time.ParseDuration(value)
+		if err != nil {
+			return nil, errors.Errorf("invalid duration %s", value)
+		}
+		cmp = int64(v)
+	default:
+		return nil, nil
+	}
+
+	return func(ev *controlapi.BuildHistoryEvent) bool {
+		if ev.Record == nil {
+			return false
+		}
+		var val int64
+		switch key {
+		case "startedAt":
+			val = ev.Record.CreatedAt.AsTime().Unix()
+		case "completedAt":
+			if ev.Record.CompletedAt != nil {
+				val = ev.Record.CompletedAt.AsTime().Unix()
+			}
+		case "duration":
+			if ev.Record.CompletedAt != nil {
+				val = int64(ev.Record.CompletedAt.AsTime().Sub(ev.Record.CreatedAt.AsTime()))
+			}
+		}
+		switch sep {
+		case ">=":
+			return val >= cmp
+		case "<=":
+			return val <= cmp
+		case ">":
+			return val > cmp
+		default:
+			return val < cmp
+		}
+	}, nil
+}
+
+func parseFilter(in string) ([]func(*controlapi.BuildHistoryEvent) bool, error) {
 	var out []func(*controlapi.BuildHistoryEvent) bool
 
-	filter, err := filters.ParseAll(in...)
+	fields, err := csvvalue.Fields(in, nil)
+	if err != nil {
+		return nil, err
+	}
+	var staticFilters []string
+
+	for _, f := range fields {
+		fn, err := timeBasedFilter(f)
+		if err != nil {
+			return nil, err
+		}
+		if fn == nil {
+			staticFilters = append(staticFilters, f)
+			continue
+		}
+		out = append(out, fn)
+	}
+
+	filter, err := filters.ParseAll(strings.Join(staticFilters, ","))
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to parse history filters %v", in)
 	}
@@ -1118,12 +1209,10 @@ func adaptHistoryRecord(rec *controlapi.BuildHistoryRecord) filters.Adaptor {
 						return "canceled", true
 					}
 					return "error", true
-				} else {
-					return "complete", true
 				}
-			} else {
-				return "running", true
+				return "complete", true
 			}
+			return "running", true
 		case "repository":
 			v, ok := rec.FrontendAttrs["vcs:source"]
 			return v, ok
@@ -1132,7 +1221,14 @@ func adaptHistoryRecord(rec *controlapi.BuildHistoryRecord) filters.Adaptor {
 	})
 }
 
-type constFilter[T comparable] struct{}
+func cutAny(in string, opt []string) (before string, sep string, after string, found bool) {
+	for _, s := range opt {
+		if i := strings.Index(in, s); i >= 0 {
+			return in[:i], s, in[i+len(s):], true
+		}
+	}
+	return "", "", "", false
+}
 
 type pubsub[T any] struct {
 	mu sync.Mutex
