@@ -60,7 +60,8 @@ COPY --from=base /foo.env /
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
-			"device": "vendor1.com/device=foo",
+			"device:0": "vendor1.com/device=foo,required",
+			"device:1": "vendor2.com/device=bar",
 		},
 		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
@@ -100,7 +101,9 @@ devices:
 
 	dockerfile := []byte(`
 FROM busybox AS base
-RUN --device=vendor1.com/device=foo env|sort | tee foo.env
+RUN --device=vendor1.com/device=foo,required \
+    --device=vendor2.com/device=bar \
+    env|sort | tee foo.env
 FROM scratch
 COPY --from=base /foo.env /
 `)

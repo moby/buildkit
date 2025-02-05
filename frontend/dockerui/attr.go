@@ -1,7 +1,6 @@
 package dockerui
 
 import (
-	"encoding/csv"
 	"net"
 	"strconv"
 	"strings"
@@ -10,11 +9,11 @@ import (
 	"github.com/containerd/platforms"
 	"github.com/docker/go-units"
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	"github.com/moby/buildkit/solver/pb"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/go-csvvalue"
-	"tags.cncf.io/container-device-interface/pkg/parser"
 )
 
 func parsePlatforms(v string) ([]ocispecs.Platform, error) {
@@ -99,22 +98,19 @@ func parseUlimits(v string) ([]*pb.Ulimit, error) {
 	return out, nil
 }
 
-func parseDevices(v string) ([]*pb.CDIDevice, error) {
-	if v == "" {
+func parseDevices(v map[string]string) ([]*pb.CDIDevice, error) {
+	if v == nil {
 		return nil, nil
 	}
 	out := make([]*pb.CDIDevice, 0)
-	csvReader := csv.NewReader(strings.NewReader(v))
-	names, err := csvReader.Read()
-	if err != nil {
-		return nil, err
-	}
-	for _, name := range names {
-		if _, _, _, err := parser.ParseQualifiedName(name); err != nil {
-			return nil, errors.Wrapf(err, "invalid CDI device name %q", name)
+	for _, attrs := range v {
+		device, err := instructions.ParseDevice(attrs)
+		if err != nil {
+			return nil, err
 		}
 		out = append(out, &pb.CDIDevice{
-			Name: name,
+			Name:     device.Name,
+			Optional: !device.Required,
 		})
 	}
 	return out, nil

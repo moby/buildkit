@@ -9,9 +9,14 @@ import (
 
 func dispatchRunDevices(c *instructions.RunCommand) ([]llb.RunOption, error) {
 	var out []llb.RunOption
-	devices := instructions.GetDevices(c)
-	for _, device := range devices {
-		out = append(out, llb.AddCDIDevice(llb.CDIDeviceName(device), llb.CDIDeviceOptional))
+	for _, device := range instructions.GetDevices(c) {
+		deviceOpts := []llb.CDIDeviceOption{
+			llb.CDIDeviceName(device.Name),
+		}
+		if !device.Required {
+			deviceOpts = append(deviceOpts, llb.CDIDeviceOptional)
+		}
+		out = append(out, llb.AddCDIDevice(deviceOpts...))
 	}
 	return out, nil
 }
