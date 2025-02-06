@@ -6,7 +6,10 @@ import (
 
 // Config provides containerd configuration data for the server
 type Config struct {
+	// Debug is boolean
 	Debug bool `toml:"debug"`
+
+	// Trace is boolean
 	Trace bool `toml:"trace"`
 
 	// Root is the path to a directory where buildkit will store persistent data
@@ -21,17 +24,22 @@ type Config struct {
 	// GRPC configuration settings
 	GRPC GRPCConfig `toml:"grpc"`
 
+	// OTEL is OTEL
 	OTEL OTELConfig `toml:"otel"`
 
+	// Worker is Worker
 	Workers struct {
 		OCI        OCIConfig        `toml:"oci"`
 		Containerd ContainerdConfig `toml:"containerd"`
 	} `toml:"worker"`
 
+	// Registry is Registry
 	Registries map[string]resolverconfig.RegistryConfig `toml:"registry"`
 
+	// DNS is DNS
 	DNS *DNSConfig `toml:"dns"`
 
+	// History is a config for build history API that stores information about completed build commands
 	History *HistoryConfig `toml:"history"`
 
 	Frontends struct {
@@ -190,8 +198,10 @@ type DNSConfig struct {
 }
 
 type HistoryConfig struct {
-	MaxAge     Duration `toml:"maxAge"`
-	MaxEntries int64    `toml:"maxEntries"`
+	// maxAge is the maximum age of history entries to keep, in seconds.
+	MaxAge Duration `toml:"maxAge"`
+	// maxEntries is the maximum number of history entries to keep.
+	MaxEntries int64 `toml:"maxEntries"`
 }
 
 type DockerfileFrontendConfig struct {
