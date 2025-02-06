@@ -109,6 +109,7 @@ var allTests = integration.TestFuncs(
 	testHTTPDockerfile,
 	testPlatformArgsImplicit,
 	testPlatformArgsExplicit,
+	testPlatformArgsExplicitContext,
 	testExportMultiPlatform,
 	testQuotedMetaArgs,
 	testGlobalArgErrors,
@@ -6291,6 +6292,61 @@ COPY --from=build out .
 		FrontendAttrs: map[string]string{
 			"platform":           "darwin/ppc64le",
 			"build-arg:TARGETOS": "freebsd",
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}
+
+	_, err = f.Solve(sb.Context(), c, opt, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "platform"))
+	require.NoError(t, err)
+	require.Equal(t, "darwin/ppc64le", string(dt))
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "os"))
+	require.NoError(t, err)
+	require.Equal(t, "freebsd", string(dt))
+}
+
+func testPlatformArgsExplicitContext(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM --platform=$BUILDPLATFORM scratch AS build
+COPY --from=bb . /
+ARG TARGETPLATFORM
+ARG TARGETOS
+RUN mkdir /out && echo -n $TARGETPLATFORM > /out/platform && echo -n $TARGETOS > /out/os
+FROM scratch
+COPY --from=build out .
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir := t.TempDir()
+
+	opt := client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		FrontendAttrs: map[string]string{
+			"platform":           "darwin/ppc64le",
+			"build-arg:TARGETOS": "freebsd",
+			"context:bb":         "docker-image://busybox",
 		},
 		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,

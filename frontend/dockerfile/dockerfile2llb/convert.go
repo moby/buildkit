@@ -468,9 +468,11 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			if d.base == nil && !d.dispatched && !d.resolved {
 				d.resolved = reachable // avoid re-resolving if called again after onbuild
 				if d.stage.BaseName == emptyImageName {
-					d.state = llb.Scratch()
-					d.image = emptyImage(platformOpt.targetPlatform)
-					d.platform = &platformOpt.targetPlatform
+					if d.platform == nil {
+						d.platform = &platformOpt.targetPlatform
+					}
+					d.state = llb.Scratch().Platform(*d.platform)
+					d.image = emptyImage(*d.platform)
 					if d.unregistered {
 						d.dispatched = true
 					}
@@ -511,7 +513,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 							if img != nil {
 								d.image = *img
 							} else {
-								d.image = emptyImage(platformOpt.targetPlatform)
+								d.image = emptyImage(*platform)
 							}
 							d.state = st.Platform(*platform)
 							d.platform = platform

@@ -9,6 +9,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerui"
 	"github.com/moby/buildkit/util/appcontext"
 	digest "github.com/opencontainers/go-digest"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -224,9 +225,43 @@ RUN echo foo
 FROM foo AS bar
 RUN echo bar
 `
-	_, _, baseImg, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	state, _, baseImg, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{TargetPlatform: &ocispecs.Platform{OS: "targetos", Architecture: "targetarch"}})
 	require.NoError(t, err)
+
+	platform, err := state.GetPlatform(context.TODO())
+	require.NoError(t, err)
+	assert.Equal(t, "linux", platform.OS)
+	assert.Equal(t, "amd64", platform.Architecture)
+
 	t.Logf("baseImg=%+v", baseImg)
+	assert.Equal(t, "linux", baseImg.Platform.OS)
+	assert.Equal(t, "amd64", baseImg.Platform.Architecture)
 	assert.Equal(t, []digest.Digest{"sha256:2e112031b4b923a873c8b3d685d48037e4d5ccd967b658743d93a6e56c3064b9"}, baseImg.RootFS.DiffIDs)
 	assert.Equal(t, "2024-01-17 21:49:12 +0000 UTC", baseImg.Created.String())
+}
+
+func TestBaseImageScratchPlatform(t *testing.T) {
+	// Defaults to targetplatform
+	df := `FROM scratch`
+	state, _, baseImg, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{TargetPlatform: &ocispecs.Platform{OS: "targetos", Architecture: "targetarch"}})
+	require.NoError(t, err)
+
+	platform, err := state.GetPlatform(context.TODO())
+	require.NoError(t, err)
+	assert.Equal(t, "targetos", platform.OS)
+	assert.Equal(t, "targetarch", platform.Architecture)
+
+	assert.Nil(t, baseImg)
+
+	// Cross-compilation scenario
+	df = `FROM --platform=linux/ppc64le scratch`
+	state, _, baseImg, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{TargetPlatform: &ocispecs.Platform{OS: "targetos", Architecture: "targetarch"}})
+	require.NoError(t, err)
+
+	platform, err = state.GetPlatform(context.TODO())
+	require.NoError(t, err)
+	assert.Equal(t, "linux", platform.OS)
+	assert.Equal(t, "ppc64le", platform.Architecture)
+
+	assert.Nil(t, baseImg)
 }
