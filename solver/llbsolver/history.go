@@ -25,6 +25,7 @@ import (
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/db"
+	"github.com/moby/buildkit/util/gitutil"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/iohelper"
 	"github.com/moby/buildkit/util/leaseutil"
@@ -42,6 +43,13 @@ import (
 const (
 	recordsBucket = "_records"
 	versionBucket = "_version"
+)
+
+const (
+	statusRunning   = "running"
+	statusCompleted = "completed"
+	statusError     = "error"
+	statusCanceled  = "canceled"
 )
 
 type HistoryQueueOpt struct {
@@ -1206,16 +1214,24 @@ func adaptHistoryRecord(rec *controlapi.BuildHistoryRecord) filters.Adaptor {
 			if rec.CompletedAt != nil {
 				if rec.Error != nil {
 					if strings.Contains(rec.Error.Message, "context canceled") {
-						return "canceled", true
+						return statusCanceled, true
 					}
-					return "error", true
+					return statusError, true
 				}
-				return "complete", true
+				return statusCompleted, true
 			}
-			return "running", true
+			return statusRunning, true
 		case "repository":
 			v, ok := rec.FrontendAttrs["vcs:source"]
-			return v, ok
+			if ok {
+				return v, true
+			}
+			if context, ok := rec.FrontendAttrs["context"]; ok {
+				if ref, err := gitutil.ParseGitRef(context); err == nil {
+					return ref.Remote, true
+				}
+			}
+			return "", false
 		}
 		return "", false
 	})

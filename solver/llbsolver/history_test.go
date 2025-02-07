@@ -21,7 +21,10 @@ func TestHistoryFilters(t *testing.T) {
 		},
 		{
 			Record: &controlapi.BuildHistoryRecord{
-				Ref:       "bar456",
+				Ref: "bar456",
+				FrontendAttrs: map[string]string{
+					"context": "https://github.com/user/repo.git#abcdef123",
+				},
 				CreatedAt: timestamppb.New(epoch.Add(time.Hour)),
 			},
 		},
@@ -60,6 +63,12 @@ func TestHistoryFilters(t *testing.T) {
 			filters:  []string{"repository!=testrepo"},
 			limit:    2,
 			expected: []string{"bar456", "foo123"},
+		},
+		{
+			name:     "git context repo",
+			filters:  []string{"repository==https://github.com/user/repo.git"},
+			limit:    2,
+			expected: []string{"bar456"},
 		},
 		{
 			name:     "limit",
