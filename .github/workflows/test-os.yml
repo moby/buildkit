@@ -70,7 +70,7 @@ jobs:
           retention-days: 1
 
   test-windows-amd64:
-    runs-on: windows-2022
+    runs-on: ${{ matrix.os }}
     needs:
       - build
     env:
@@ -79,6 +79,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        os: [windows-2022, windows-2025]
         worker:
           - containerd
         pkg:
@@ -89,7 +90,12 @@ jobs:
           - ./frontend
           - ./frontend/dockerfile
         include:
-          -
+          - os: windows-2022
+            worker: containerd
+            pkg: ./...
+            skip-integration-tests: 1
+          - os: windows-2025
+            worker: containerd
             pkg: ./...
             skip-integration-tests: 1
     steps:
@@ -162,7 +168,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-reports-${{ env.TEST_REPORT_NAME }}
+          name: test-reports-${{ matrix.os }}-${{ env.TEST_REPORT_NAME }}
           path: ./bin/testreports
           retention-days: 1
       -
