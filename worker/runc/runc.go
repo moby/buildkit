@@ -21,6 +21,7 @@ import (
 	"github.com/moby/buildkit/executor/resources"
 	"github.com/moby/buildkit/executor/runcexecutor"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
+	"github.com/moby/buildkit/solver/llbsolver/cdidevices"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/network/netproviders"
 	"github.com/moby/buildkit/util/winlayers"
@@ -79,7 +80,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		TracingSocket:       traceSocket,
 		DefaultCgroupParent: defaultCgroupParent,
 		ResourceMonitor:     rm,
-		CDIManager:          cdiManager,
+		CDIManager:          cdidevices.NewManager(cdiManager),
 	}, np)
 	if err != nil {
 		return opt, err
@@ -168,7 +169,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		ParallelismSem:   parallelismSem,
 		MountPoolRoot:    filepath.Join(root, "cachemounts"),
 		ResourceMonitor:  rm,
-		CDIManager:       cdiManager,
+		CDIManager:       cdidevices.NewManager(cdiManager),
 	}
 	return opt, nil
 }

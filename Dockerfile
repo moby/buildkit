@@ -22,6 +22,7 @@ ARG GO_VERSION=1.23
 ARG ALPINE_VERSION=3.21
 ARG XX_VERSION=1.6.1
 ARG BUILDKIT_DEBUG
+ARG EXPORT_BASE=alpine
 
 # minio for s3 integration tests
 FROM minio/minio:${MINIO_VERSION} AS minio
@@ -194,11 +195,27 @@ RUN --mount=from=binaries \
 FROM scratch AS release
 COPY --link --from=releaser /out/ /
 
-FROM alpine:${ALPINE_VERSION} AS buildkit-export
+FROM alpine:${ALPINE_VERSION} AS buildkit-export-alpine
 RUN apk add --no-cache fuse3 git openssh pigz xz iptables ip6tables \
   && ln -s fusermount3 /usr/bin/fusermount
 COPY --link examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 VOLUME /var/lib/buildkit
+
+FROM ubuntu:24.04 AS buildkit-export-ubuntu
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    fuse3 \
+    git \
+    openssh-client \
+    pigz \
+    xz-utils \
+    iptables \
+    ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+COPY --link examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
+VOLUME /var/lib/buildkit
+
+FROM buildkit-export-${EXPORT_BASE} AS buildkit-export
 
 FROM gobuild-base AS containerd-build
 WORKDIR /go/src/github.com/containerd/containerd

@@ -118,6 +118,7 @@ func (m *CDIDevice) CloneVT() *CDIDevice {
 	r := new(CDIDevice)
 	r.Name = m.Name
 	r.AutoAllow = m.AutoAllow
+	r.OnDemand = m.OnDemand
 	if rhs := m.Annotations; rhs != nil {
 		tmpContainer := make(map[string]string, len(rhs))
 		for k, v := range rhs {
@@ -309,6 +310,9 @@ func (this *CDIDevice) EqualVT(that *CDIDevice) bool {
 		if vx != vy {
 			return false
 		}
+	}
+	if this.OnDemand != that.OnDemand {
+		return false
 	}
 	return string(this.unknownFields) == string(that.unknownFields)
 }
@@ -581,6 +585,16 @@ func (m *CDIDevice) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
 	}
+	if m.OnDemand {
+		i--
+		if m.OnDemand {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x20
+	}
 	if len(m.Annotations) > 0 {
 		for k := range m.Annotations {
 			v := m.Annotations[k]
@@ -737,6 +751,9 @@ func (m *CDIDevice) SizeVT() (n int) {
 			mapEntrySize := 1 + len(k) + protohelpers.SizeOfVarint(uint64(len(k))) + 1 + len(v) + protohelpers.SizeOfVarint(uint64(len(v)))
 			n += mapEntrySize + 1 + protohelpers.SizeOfVarint(uint64(mapEntrySize))
 		}
+	}
+	if m.OnDemand {
+		n += 2
 	}
 	n += len(m.unknownFields)
 	return n
@@ -1624,6 +1641,26 @@ func (m *CDIDevice) UnmarshalVT(dAtA []byte) error {
 			}
 			m.Annotations[mapkey] = mapvalue
 			iNdEx = postIndex
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OnDemand", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.OnDemand = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := protohelpers.Skip(dAtA[iNdEx:])

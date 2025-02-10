@@ -12,6 +12,7 @@ import (
 	ctd "github.com/containerd/containerd/v2/client"
 	"github.com/containerd/containerd/v2/defaults"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
+	"github.com/moby/buildkit/solver/llbsolver/cdidevices"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/disk"
 	"github.com/moby/buildkit/util/network/cniprovider"
@@ -344,7 +345,7 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 		ParallelismSem:  parallelismSem,
 		TraceSocket:     common.traceSocket,
 		Runtime:         runtime,
-		CDIManager:      cdiManager,
+		CDIManager:      cdidevices.NewManager(cdiManager),
 	}
 
 	opt, err := containerd.NewWorkerOpt(workerOpts, ctd.WithTimeout(60*time.Second))

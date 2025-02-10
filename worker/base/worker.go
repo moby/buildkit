@@ -33,6 +33,7 @@ import (
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/snapshot/imagerefchecker"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/solver/llbsolver/cdidevices"
 	"github.com/moby/buildkit/solver/llbsolver/mounts"
 	"github.com/moby/buildkit/solver/llbsolver/ops"
 	"github.com/moby/buildkit/solver/pb"
@@ -52,7 +53,6 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
-	"tags.cncf.io/container-device-interface/pkg/cdi"
 )
 
 const labelCreatedAt = "buildkit/createdat"
@@ -83,7 +83,7 @@ type WorkerOpt struct {
 	MetadataStore    *metadata.Store
 	MountPoolRoot    string
 	ResourceMonitor  *resources.Monitor
-	CDIManager       *cdi.Cache
+	CDIManager       *cdidevices.Manager
 }
 
 // Worker is a local worker instance with dedicated snapshotter, cache, and so on.
@@ -247,7 +247,7 @@ func (w *Worker) LeaseManager() *leaseutil.Manager {
 	return w.WorkerOpt.LeaseManager
 }
 
-func (w *Worker) CDIManager() *cdi.Cache {
+func (w *Worker) CDIManager() *cdidevices.Manager {
 	return w.WorkerOpt.CDIManager
 }
 

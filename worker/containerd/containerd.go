@@ -16,6 +16,7 @@ import (
 	"github.com/moby/buildkit/executor/containerdexecutor"
 	"github.com/moby/buildkit/executor/oci"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
+	"github.com/moby/buildkit/solver/llbsolver/cdidevices"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/network/netproviders"
 	"github.com/moby/buildkit/util/winlayers"
@@ -24,7 +25,6 @@ import (
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/semaphore"
-	"tags.cncf.io/container-device-interface/pkg/cdi"
 )
 
 type RuntimeInfo = containerdexecutor.RuntimeInfo
@@ -44,7 +44,7 @@ type WorkerOptions struct {
 	ParallelismSem  *semaphore.Weighted
 	TraceSocket     string
 	Runtime         *RuntimeInfo
-	CDIManager      *cdi.Cache
+	CDIManager      *cdidevices.Manager
 }
 
 // NewWorkerOpt creates a WorkerOpt.

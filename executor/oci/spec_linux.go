@@ -17,6 +17,7 @@ import (
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/docker/docker/profiles/seccomp"
 	"github.com/moby/buildkit/snapshot"
+	"github.com/moby/buildkit/solver/llbsolver/cdidevices"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/entitlements/security"
@@ -25,7 +26,6 @@ import (
 	"github.com/opencontainers/selinux/go-selinux/label"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
-	"tags.cncf.io/container-device-interface/pkg/cdi"
 	"tags.cncf.io/container-device-interface/pkg/parser"
 )
 
@@ -153,7 +153,7 @@ func generateRlimitOpts(ulimits []*pb.Ulimit) ([]oci.SpecOpts, error) {
 
 // genereateCDIOptions creates the OCI runtime spec options for injecting CDI
 // devices.
-func generateCDIOpts(manager *cdi.Cache, devices []*pb.CDIDevice) ([]oci.SpecOpts, error) {
+func generateCDIOpts(manager *cdidevices.Manager, devices []*pb.CDIDevice) ([]oci.SpecOpts, error) {
 	if len(devices) == 0 {
 		return nil, nil
 	}
@@ -166,8 +166,8 @@ func generateCDIOpts(manager *cdi.Cache, devices []*pb.CDIDevice) ([]oci.SpecOpt
 
 			registeredDevices := manager.ListDevices()
 			isDeviceRegistered := func(device *pb.CDIDevice) bool {
-				for _, name := range registeredDevices {
-					if device.Name == name {
+				for _, d := range registeredDevices {
+					if device.Name == d.Name {
 						return true
 					}
 				}
@@ -190,7 +190,7 @@ func generateCDIOpts(manager *cdi.Cache, devices []*pb.CDIDevice) ([]oci.SpecOpt
 			}
 
 			bklog.G(ctx).Debugf("Injecting CDI devices %v", dd)
-			if _, err := manager.InjectDevices(s, dd...); err != nil {
+			if err := manager.InjectDevices(s, dd...); err != nil {
 				return errors.Wrapf(err, "CDI device injection failed")
 			}
 

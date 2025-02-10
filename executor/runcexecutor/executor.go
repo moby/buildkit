@@ -18,7 +18,6 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
-	"tags.cncf.io/container-device-interface/pkg/cdi"
 
 	"github.com/containerd/containerd/v2/core/mount"
 	containerdoci "github.com/containerd/containerd/v2/pkg/oci"
@@ -31,6 +30,7 @@ import (
 	resourcestypes "github.com/moby/buildkit/executor/resources/types"
 	gatewayapi "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/solver/llbsolver/cdidevices"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/network"
 	rootlessspecconv "github.com/moby/buildkit/util/rootless/specconv"
@@ -58,7 +58,7 @@ type Opt struct {
 	SELinux         bool
 	TracingSocket   string
 	ResourceMonitor *resources.Monitor
-	CDIManager      *cdi.Cache
+	CDIManager      *cdidevices.Manager
 }
 
 var defaultCommandCandidates = []string{"buildkit-runc", "runc"}
@@ -80,7 +80,7 @@ type runcExecutor struct {
 	selinux          bool
 	tracingSocket    string
 	resmon           *resources.Monitor
-	cdiManager       *cdi.Cache
+	cdiManager       *cdidevices.Manager
 }
 
 func New(opt Opt, networkProviders map[pb.NetMode]network.Provider) (executor.Executor, error) {

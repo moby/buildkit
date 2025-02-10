@@ -5,10 +5,10 @@ import (
 	"github.com/containerd/containerd/v2/pkg/oci"
 	"github.com/containerd/continuity/fs"
 	"github.com/docker/docker/pkg/idtools"
+	"github.com/moby/buildkit/solver/llbsolver/cdidevices"
 	"github.com/moby/buildkit/solver/pb"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
-	"tags.cncf.io/container-device-interface/pkg/cdi"
 )
 
 func withProcessArgs(args ...string) oci.SpecOpts {
@@ -72,7 +72,7 @@ func sub(m mount.Mount, subPath string) (mount.Mount, func() error, error) {
 	return m, func() error { return nil }, nil
 }
 
-func generateCDIOpts(_ *cdi.Cache, devices []*pb.CDIDevice) ([]oci.SpecOpts, error) {
+func generateCDIOpts(_ *cdidevices.Manager, devices []*pb.CDIDevice) ([]oci.SpecOpts, error) {
 	if len(devices) == 0 {
 		return nil, nil
 	}

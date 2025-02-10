@@ -22,6 +22,7 @@ type CDIDevice struct {
 	Name        string            `json:"name"`
 	AutoAllow   bool              `json:"autoAllow"`
 	Annotations map[string]string `json:"annotations"`
+	OnDemand    bool              `json:"onDemand"`
 }
 
 func (c *Client) Info(ctx context.Context) (*Info, error) {
@@ -52,6 +53,7 @@ func fromAPICDIDevices(in []*apitypes.CDIDevice) []CDIDevice {
 			Name:        d.Name,
 			AutoAllow:   d.AutoAllow,
 			Annotations: d.Annotations,
+			OnDemand:    d.OnDemand,
 		})
 	}
 	return out
