@@ -28,7 +28,6 @@ const (
 	buildArgPrefix       = "build-arg:"
 	labelPrefix          = "label:"
 	localSessionIDPrefix = "local-sessionid:"
-	devicePrefix         = "device:"
 
 	keyTarget           = "target"
 	keyCgroupParent     = "cgroup-parent"
@@ -188,12 +187,6 @@ func (bc *Client) init() error {
 		return errors.Wrap(err, "failed to parse ulimit")
 	}
 	bc.Ulimits = ulimits
-
-	devices, err := parseDevices(filter(opts, devicePrefix))
-	if err != nil {
-		return errors.Wrap(err, "failed to parse devices")
-	}
-	bc.Devices = devices
 
 	defaultNetMode, err := parseNetMode(opts[keyForceNetwork])
 	if err != nil {

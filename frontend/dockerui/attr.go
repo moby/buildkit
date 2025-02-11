@@ -9,7 +9,6 @@ import (
 	"github.com/containerd/platforms"
 	"github.com/docker/go-units"
 	"github.com/moby/buildkit/client/llb"
-	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	"github.com/moby/buildkit/solver/pb"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -93,24 +92,6 @@ func parseUlimits(v string) ([]*pb.Ulimit, error) {
 			Name: ulimit.Name,
 			Soft: ulimit.Soft,
 			Hard: ulimit.Hard,
-		})
-	}
-	return out, nil
-}
-
-func parseDevices(v map[string]string) ([]*pb.CDIDevice, error) {
-	if v == nil {
-		return nil, nil
-	}
-	out := make([]*pb.CDIDevice, 0)
-	for _, attrs := range v {
-		device, err := instructions.ParseDevice(attrs)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, &pb.CDIDevice{
-			Name:     device.Name,
-			Optional: !device.Required,
 		})
 	}
 	return out, nil
