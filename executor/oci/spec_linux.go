@@ -26,7 +26,6 @@ import (
 	"github.com/opencontainers/selinux/go-selinux/label"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
-	"tags.cncf.io/container-device-interface/pkg/parser"
 )
 
 var (
@@ -153,47 +152,19 @@ func generateRlimitOpts(ulimits []*pb.Ulimit) ([]oci.SpecOpts, error) {
 
 // genereateCDIOptions creates the OCI runtime spec options for injecting CDI
 // devices.
-func generateCDIOpts(manager *cdidevices.Manager, devices []*pb.CDIDevice) ([]oci.SpecOpts, error) {
-	if len(devices) == 0 {
+func generateCDIOpts(manager *cdidevices.Manager, devs []*pb.CDIDevice) ([]oci.SpecOpts, error) {
+	if len(devs) == 0 {
 		return nil, nil
 	}
 
-	withCDIDevices := func(devices []*pb.CDIDevice) oci.SpecOpts {
+	withCDIDevices := func(devs []*pb.CDIDevice) oci.SpecOpts {
 		return func(ctx context.Context, _ oci.Client, c *containers.Container, s *specs.Spec) error {
 			if err := manager.Refresh(); err != nil {
 				bklog.G(ctx).Warnf("CDI registry refresh failed: %v", err)
 			}
-
-			registeredDevices := manager.ListDevices()
-			isDeviceRegistered := func(device *pb.CDIDevice) bool {
-				for _, d := range registeredDevices {
-					if device.Name == d.Name {
-						return true
-					}
-				}
-				return false
-			}
-
-			var dd []string
-			for _, d := range devices {
-				if d == nil {
-					continue
-				}
-				if _, _, _, err := parser.ParseQualifiedName(d.Name); err != nil {
-					return errors.Wrapf(err, "invalid CDI device name %s", d.Name)
-				}
-				if !isDeviceRegistered(d) && d.Optional {
-					bklog.G(ctx).Warnf("Optional CDI device %q is not registered", d.Name)
-					continue
-				}
-				dd = append(dd, d.Name)
-			}
-
-			bklog.G(ctx).Debugf("Injecting CDI devices %v", dd)
-			if err := manager.InjectDevices(s, dd...); err != nil {
+			if err := manager.InjectDevices(s, devs...); err != nil {
 				return errors.Wrapf(err, "CDI device injection failed")
 			}
-
 			// One crucial thing to keep in mind is that CDI device injection
 			// might add OCI Spec environment variables, hooks, and mounts as
 			// well. Therefore, it is important that none of the corresponding
@@ -203,7 +174,7 @@ func generateCDIOpts(manager *cdidevices.Manager, devices []*pb.CDIDevice) ([]oc
 	}
 
 	return []oci.SpecOpts{
-		withCDIDevices(devices),
+		withCDIDevices(devs),
 	}, nil
 }
 

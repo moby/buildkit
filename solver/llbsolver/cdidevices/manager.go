@@ -4,11 +4,16 @@ import (
 	"context"
 	"strings"
 
+	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/locker"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"tags.cncf.io/container-device-interface/pkg/cdi"
+	"tags.cncf.io/container-device-interface/pkg/parser"
 )
+
+const deviceAnnotationClass = "org.mobyproject.buildkit.device.class"
 
 var installers = map[string]Setup{}
 
@@ -76,9 +81,95 @@ func (m *Manager) Refresh() error {
 	return m.cache.Refresh()
 }
 
-func (m *Manager) InjectDevices(spec *specs.Spec, devs ...string) error {
-	_, err := m.cache.InjectDevices(spec, devs...)
+func (m *Manager) InjectDevices(spec *specs.Spec, devs ...*pb.CDIDevice) error {
+	pdevs, err := m.parseDevices(devs...)
+	if err != nil {
+		return err
+	} else if len(pdevs) == 0 {
+		return nil
+	}
+	bklog.G(context.TODO()).Debugf("Injecting devices %v", pdevs)
+	_, err = m.cache.InjectDevices(spec, pdevs...)
 	return err
+}
+
+func (m *Manager) parseDevices(devs ...*pb.CDIDevice) ([]string, error) {
+	var out []string
+	for _, dev := range devs {
+		if dev == nil {
+			continue
+		}
+		pdev, err := m.parseDevice(dev)
+		if err != nil {
+			return nil, err
+		} else if len(pdev) == 0 {
+			continue
+		}
+		out = append(out, pdev...)
+	}
+	return dedupSlice(out), nil
+}
+
+func (m *Manager) parseDevice(dev *pb.CDIDevice) ([]string, error) {
+	var out []string
+
+	kind, name, _ := strings.Cut(dev.Name, "=")
+
+	// validate kind
+	if vendor, class := parser.ParseQualifier(kind); vendor == "" {
+		return nil, errors.Errorf("invalid device %q", dev.Name)
+	} else if err := parser.ValidateVendorName(vendor); err != nil {
+		return nil, errors.Wrapf(err, "invalid device %q", dev.Name)
+	} else if err := parser.ValidateClassName(class); err != nil {
+		return nil, errors.Wrapf(err, "invalid device %q", dev.Name)
+	}
+
+	switch name {
+	case "":
+		// first device of kind if no name is specified
+		for _, d := range m.cache.ListDevices() {
+			if strings.HasPrefix(d, kind+"=") {
+				out = append(out, d)
+				break
+			}
+		}
+	case "*":
+		// all devices of kind if the name is a wildcard
+		for _, d := range m.cache.ListDevices() {
+			if strings.HasPrefix(d, kind+"=") {
+				out = append(out, d)
+			}
+		}
+	default:
+		// the specified device
+		for _, d := range m.cache.ListDevices() {
+			if d == dev.Name {
+				out = append(out, d)
+				break
+			}
+		}
+		if len(out) == 0 {
+			// check class annotation if name unknown
+			for _, d := range m.cache.ListDevices() {
+				if !strings.HasPrefix(d, kind+"=") {
+					continue
+				}
+				if dd := m.cache.GetDevice(d).Device; dd != nil {
+					if class, ok := dd.Annotations[deviceAnnotationClass]; ok && class == name {
+						out = append(out, d)
+					}
+				}
+			}
+		}
+	}
+
+	if len(out) == 0 {
+		if !dev.Optional {
+			return nil, errors.Errorf("required device %q is not registered", dev.Name)
+		}
+		bklog.G(context.TODO()).Warnf("Optional device %q is not registered", dev.Name)
+	}
+	return out, nil
 }
 
 func (m *Manager) hasDevice(name string) bool {
@@ -125,4 +216,19 @@ func (m *Manager) OnDemandInstaller(name string) (func(context.Context) error, b
 
 		return nil
 	}, true
+}
+
+func dedupSlice(s []string) []string {
+	if len(s) == 0 {
+		return s
+	}
+	var res []string
+	seen := make(map[string]struct{})
+	for _, val := range s {
+		if _, ok := seen[val]; !ok {
+			res = append(res, val)
+			seen[val] = struct{}{}
+		}
+	}
+	return res
 }

@@ -7,7 +7,6 @@ import (
 	"github.com/moby/buildkit/util/suggest"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/go-csvvalue"
-	"tags.cncf.io/container-device-interface/pkg/parser"
 )
 
 var devicesKey = "dockerfile/run/devices"
@@ -75,28 +74,20 @@ func ParseDevice(val string) (*Device, error) {
 
 	d := &Device{}
 
-	for i, field := range fields {
-		// check if the first field is a valid device name
-		var firstFieldErr error
-		if i == 0 {
-			if _, _, _, firstFieldErr = parser.ParseQualifiedName(field); firstFieldErr == nil {
-				d.Name = field
-				continue
-			}
-		}
-
+	for _, field := range fields {
 		key, value, ok := strings.Cut(field, "=")
 		key = strings.ToLower(key)
 
 		if !ok {
-			if len(fields) == 1 && firstFieldErr != nil {
-				return nil, errors.Wrapf(firstFieldErr, "invalid device name %s", field)
-			}
 			switch key {
 			case "required":
 				d.Required = true
 				continue
 			default:
+				if d.Name == "" {
+					d.Name = field
+					continue
+				}
 				// any other option requires a value.
 				return nil, errors.Errorf("invalid field '%s' must be a key=value pair", field)
 			}
@@ -114,13 +105,13 @@ func ParseDevice(val string) (*Device, error) {
 				return nil, errors.Errorf("invalid value for %s: %s", key, value)
 			}
 		default:
+			if d.Name == "" {
+				d.Name = field
+				continue
+			}
 			allKeys := []string{"name", "required"}
 			return nil, suggest.WrapError(errors.Errorf("unexpected key '%s' in '%s'", key, field), key, allKeys, true)
 		}
-	}
-
-	if _, _, _, err := parser.ParseQualifiedName(d.Name); err != nil {
-		return nil, errors.Wrapf(err, "invalid device name %s", d.Name)
 	}
 
 	return d, nil

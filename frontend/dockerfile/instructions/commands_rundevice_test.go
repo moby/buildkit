@@ -19,6 +19,11 @@ func TestParseDevice(t *testing.T) {
 			expectedErr: nil,
 		},
 		{
+			input:       "vendor1.com/device",
+			expected:    &Device{Name: "vendor1.com/device", Required: false},
+			expectedErr: nil,
+		},
+		{
 			input:       "vendor1.com/device=foo,required",
 			expected:    &Device{Name: "vendor1.com/device=foo", Required: true},
 			expectedErr: nil,
@@ -47,16 +52,6 @@ func TestParseDevice(t *testing.T) {
 			input:       "vendor1.com/device=foo,name=vendor2.com/device=bar",
 			expected:    nil,
 			expectedErr: errors.New("device name already set to vendor1.com/device=foo"),
-		},
-		{
-			input:       "invalid-device-name",
-			expected:    nil,
-			expectedErr: errors.New(`invalid device name invalid-device-name: unqualified device "invalid-device-name", missing vendor`),
-		},
-		{
-			input:       "name=invalid-device-name",
-			expected:    nil,
-			expectedErr: errors.New(`invalid device name invalid-device-name: unqualified device "invalid-device-name", missing vendor`),
 		},
 	}
 	for _, tt := range cases {
