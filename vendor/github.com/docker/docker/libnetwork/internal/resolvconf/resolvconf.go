@@ -31,7 +31,8 @@ import (
 	"text/template"
 
 	"github.com/containerd/log"
-	"github.com/docker/docker/pkg/atomicwriter"
+	"github.com/docker/docker/errdefs"
+	"github.com/docker/docker/pkg/ioutils"
 	"github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
@@ -119,7 +120,7 @@ func Parse(reader io.Reader, path string) (ResolvConf, error) {
 		rc.processLine(scanner.Text())
 	}
 	if err := scanner.Err(); err != nil {
-		return ResolvConf{}, errSystem{err}
+		return ResolvConf{}, errdefs.System(err)
 	}
 	if _, ok := rc.Option("ndots"); ok {
 		rc.md.NDotsFrom = "host"
@@ -238,30 +239,46 @@ func (rc *ResolvConf) TransformForLegacyNw(ipv6 bool) {
 //   - Add internalNS as a nameserver.
 //   - Remove other nameservers, stashing them as ExtNameServers for the
 //     internal resolver to use.
-//   - Mark ExtNameServers that must be accessed from the host namespace.
+//   - Mark ExtNameServers that must be used in the host namespace.
 //   - If no ExtNameServer addresses are found, use the defaults.
+//   - Return an error if an "ndots" option inherited from the host's config, or
+//     supplied in an override is not valid.
 //   - Ensure there's an 'options' value for each entry in reqdOptions. If the
 //     option includes a ':', and an option with a matching prefix exists, it
 //     is not modified.
 func (rc *ResolvConf) TransformForIntNS(
+	ipv6 bool,
 	internalNS netip.Addr,
 	reqdOptions []string,
 ) ([]ExtDNSEntry, error) {
-	// Add each of the nameservers read from the host's /etc/hosts or supplied as an
-	// override to ExtNameServers, for the internal resolver to talk to. Addresses
-	// read from host config should be accessed from the host's network namespace
-	// (HostLoopback=true). Addresses supplied as overrides are accessed from the
-	// container's namespace.
+	// The transformed config must list the internal nameserver.
+	newNSs := []netip.Addr{internalNS}
+	// Filter out other nameservers, keeping them for use as upstream nameservers by the
+	// internal nameserver.
 	rc.md.ExtNameServers = nil
 	for _, addr := range rc.nameServers {
+		// Extract this NS. Mark addresses that did not come from an override, but will
+		// definitely not work in the container's namespace as 'HostLoopback'. Upstream
+		// requests for these servers will be made in the host's network namespace. (So,
+		// '--dns 127.0.0.53' means use a nameserver listening on the container's
+		// loopback interface. But, if the host's resolv.conf contains 'nameserver
+		// 127.0.0.53', the host's resolver will be used.)
 		rc.md.ExtNameServers = append(rc.md.ExtNameServers, ExtDNSEntry{
 			Addr:         addr,
-			HostLoopback: !rc.md.NSOverride,
+			HostLoopback: !rc.md.NSOverride && (addr.IsLoopback() || (addr.Is6() && !ipv6) || addr.Zone() != ""),
 		})
 	}
+	rc.nameServers = newNSs
 
-	// The transformed config only lists the internal nameserver.
-	rc.nameServers = []netip.Addr{internalNS}
+	// If there are no external nameservers, and the only nameserver left is the
+	// internal resolver, use the defaults as ext nameservers.
+	if len(rc.md.ExtNameServers) == 0 && len(rc.nameServers) == 1 {
+		log.G(context.TODO()).Info("No non-localhost DNS nameservers are left in resolv.conf. Using default external servers")
+		for _, addr := range defaultNSAddrs(ipv6) {
+			rc.md.ExtNameServers = append(rc.md.ExtNameServers, ExtDNSEntry{Addr: addr})
+		}
+		rc.md.UsedDefaultNS = true
+	}
 
 	// For each option required by the nameserver, add it if not already present. If
 	// the option is already present, don't override it. Apart from ndots - if the
@@ -345,10 +362,10 @@ options {{join . " "}}
 	var buf bytes.Buffer
 	templ, err := template.New("summary").Funcs(funcs).Parse(templateText)
 	if err != nil {
-		return nil, errSystem{err}
+		return nil, errdefs.System(err)
 	}
 	if err := templ.Execute(&buf, s); err != nil {
-		return nil, errSystem{err}
+		return nil, errdefs.System(err)
 	}
 	return buf.Bytes(), nil
 }
@@ -365,18 +382,19 @@ func (rc *ResolvConf) WriteFile(path, hashPath string, perm os.FileMode) error {
 	// Write the resolv.conf file - it's bind-mounted into the container, so can't
 	// move a temp file into place, just have to truncate and write it.
 	if err := os.WriteFile(path, content, perm); err != nil {
-		return errSystem{err}
+		return errdefs.System(err)
 	}
 
 	// Write the hash file.
 	if hashPath != "" {
-		hashFile, err := atomicwriter.New(hashPath, perm)
+		hashFile, err := ioutils.NewAtomicFileWriter(hashPath, perm)
 		if err != nil {
-			return errSystem{err}
+			return errdefs.System(err)
 		}
 		defer hashFile.Close()
 
-		if _, err = hashFile.Write([]byte(digest.FromBytes(content))); err != nil {
+		digest := digest.FromBytes(content)
+		if _, err = hashFile.Write([]byte(digest)); err != nil {
 			return err
 		}
 	}
@@ -479,17 +497,4 @@ func removeInvalidNDots(options []string) []string {
 	}
 	clear(options[n:]) // Zero out the obsolete elements, for GC.
 	return options[:n]
-}
-
-// errSystem implements [github.com/docker/docker/errdefs.ErrSystem].
-//
-// We don't use the errdefs helpers here, because the resolvconf package
-// is imported in BuildKit, and this is the only location that used the
-// errdefs package outside of the client.
-type errSystem struct{ error }
-
-func (errSystem) System() {}
-
-func (e errSystem) Unwrap() error {
-	return e.error
 }

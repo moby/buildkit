@@ -1,6 +1,6 @@
 //go:build !windows
 
-package archive
+package archive // import "github.com/docker/docker/pkg/archive"
 
 import (
 	"archive/tar"
@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/docker/docker/pkg/idtools"
+	"github.com/docker/docker/pkg/system"
 	"golang.org/x/sys/unix"
 )
 
@@ -108,7 +109,7 @@ func handleTarTypeBlockCharFifo(hdr *tar.Header, path string) error {
 		mode |= unix.S_IFIFO
 	}
 
-	return mknod(path, mode, unix.Mkdev(uint32(hdr.Devmajor), uint32(hdr.Devminor)))
+	return system.Mknod(path, mode, int(system.Mkdev(hdr.Devmajor, hdr.Devminor)))
 }
 
 func handleLChmod(hdr *tar.Header, path string, hdrInfo os.FileInfo) error {

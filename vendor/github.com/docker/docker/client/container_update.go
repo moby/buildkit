@@ -9,18 +9,13 @@ import (
 
 // ContainerUpdate updates the resources of a container.
 func (cli *Client) ContainerUpdate(ctx context.Context, containerID string, updateConfig container.UpdateConfig) (container.ContainerUpdateOKBody, error) {
-	containerID, err := trimID("container", containerID)
-	if err != nil {
-		return container.ContainerUpdateOKBody{}, err
-	}
-
+	var response container.ContainerUpdateOKBody
 	serverResp, err := cli.post(ctx, "/containers/"+containerID+"/update", nil, updateConfig, nil)
 	defer ensureReaderClosed(serverResp)
 	if err != nil {
-		return container.ContainerUpdateOKBody{}, err
+		return response, err
 	}
 
-	var response container.ContainerUpdateOKBody
 	err = json.NewDecoder(serverResp.body).Decode(&response)
 	return response, err
 }

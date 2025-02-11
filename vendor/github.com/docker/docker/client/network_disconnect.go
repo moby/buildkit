@@ -8,16 +8,6 @@ import (
 
 // NetworkDisconnect disconnects a container from an existent network in the docker host.
 func (cli *Client) NetworkDisconnect(ctx context.Context, networkID, containerID string, force bool) error {
-	networkID, err := trimID("network", networkID)
-	if err != nil {
-		return err
-	}
-
-	containerID, err = trimID("container", containerID)
-	if err != nil {
-		return err
-	}
-
 	nd := network.DisconnectOptions{
 		Container: containerID,
 		Force:     force,

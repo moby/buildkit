@@ -13,12 +13,7 @@ import (
 )
 
 // PluginUpgrade upgrades a plugin
-func (cli *Client) PluginUpgrade(ctx context.Context, name string, options types.PluginInstallOptions) (io.ReadCloser, error) {
-	name, err := trimID("plugin", name)
-	if err != nil {
-		return nil, err
-	}
-
+func (cli *Client) PluginUpgrade(ctx context.Context, name string, options types.PluginInstallOptions) (rc io.ReadCloser, err error) {
 	if err := cli.NewVersionError(ctx, "1.26", "plugin upgrade"); err != nil {
 		return nil, err
 	}

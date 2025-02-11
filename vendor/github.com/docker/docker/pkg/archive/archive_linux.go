@@ -1,13 +1,14 @@
-package archive
+package archive // import "github.com/docker/docker/pkg/archive"
 
 import (
 	"archive/tar"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/docker/docker/pkg/system"
 	"github.com/moby/sys/userns"
+	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
 
@@ -38,7 +39,7 @@ func (overlayWhiteoutConverter) ConvertWrite(hdr *tar.Header, path string, fi os
 		}
 
 		// convert opaque dirs to AUFS format by writing an empty file with the prefix
-		opaque, err := lgetxattr(path, opaqueXattrName)
+		opaque, err := system.Lgetxattr(path, opaqueXattrName)
 		if err != nil {
 			return nil, err
 		}
@@ -78,7 +79,7 @@ func (c overlayWhiteoutConverter) ConvertRead(hdr *tar.Header, path string) (boo
 
 		err := unix.Setxattr(dir, opaqueXattrName, []byte{'y'}, 0)
 		if err != nil {
-			return false, fmt.Errorf("setxattr('%s', %s=y): %w", dir, opaqueXattrName, err)
+			return false, errors.Wrapf(err, "setxattr(%q, %s=y)", dir, opaqueXattrName)
 		}
 		// don't write the file itself
 		return false, err
@@ -90,7 +91,7 @@ func (c overlayWhiteoutConverter) ConvertRead(hdr *tar.Header, path string) (boo
 		originalPath := filepath.Join(dir, originalBase)
 
 		if err := unix.Mknod(originalPath, unix.S_IFCHR, 0); err != nil {
-			return false, fmt.Errorf("failed to mknod('%s', S_IFCHR, 0): %w", originalPath, err)
+			return false, errors.Wrapf(err, "failed to mknod(%q, S_IFCHR, 0)", originalPath)
 		}
 		if err := os.Chown(originalPath, hdr.Uid, hdr.Gid); err != nil {
 			return false, err

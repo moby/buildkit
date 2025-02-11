@@ -1,4 +1,4 @@
-package archive
+package archive // import "github.com/docker/docker/pkg/archive"
 
 import (
 	"archive/tar"
@@ -6,15 +6,17 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/containerd/log"
 	"github.com/docker/docker/pkg/idtools"
+	"github.com/docker/docker/pkg/pools"
+	"github.com/docker/docker/pkg/system"
 )
 
 // ChangeType represents the change type.
@@ -70,6 +72,11 @@ func sameFsTime(a, b time.Time) bool {
 	return a.Equal(b) ||
 		(a.Unix() == b.Unix() &&
 			(a.Nanosecond() == 0 || b.Nanosecond() == 0))
+}
+
+func sameFsTimeSpec(a, b syscall.Timespec) bool {
+	return a.Sec == b.Sec &&
+		(a.Nsec == b.Nsec || a.Nsec == 0 || b.Nsec == 0)
 }
 
 // Changes walks the path rw and determines changes for the files in the path,
@@ -203,7 +210,7 @@ func changes(layers []string, rw string, dc deleteChange, sc skipChange) ([]Chan
 type FileInfo struct {
 	parent     *FileInfo
 	name       string
-	stat       fs.FileInfo
+	stat       *system.StatT
 	children   map[string]*FileInfo
 	capability []byte
 	added      bool
@@ -387,6 +394,9 @@ func ExportChanges(dir string, changes []Change, idMap idtools.IdentityMapping) 
 	reader, writer := io.Pipe()
 	go func() {
 		ta := newTarAppender(idMap, writer, nil)
+
+		// this buffer is needed for the duration of this piped stream
+		defer pools.BufioWriter32KPool.Put(ta.Buffer)
 
 		sort.Sort(changesByPath(changes))
 

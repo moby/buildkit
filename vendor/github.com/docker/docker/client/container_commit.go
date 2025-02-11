@@ -12,12 +12,7 @@ import (
 )
 
 // ContainerCommit applies changes to a container and creates a new tagged image.
-func (cli *Client) ContainerCommit(ctx context.Context, containerID string, options container.CommitOptions) (types.IDResponse, error) {
-	containerID, err := trimID("container", containerID)
-	if err != nil {
-		return types.IDResponse{}, err
-	}
-
+func (cli *Client) ContainerCommit(ctx context.Context, container string, options container.CommitOptions) (types.IDResponse, error) {
 	var repository, tag string
 	if options.Reference != "" {
 		ref, err := reference.ParseNormalizedNamed(options.Reference)
@@ -37,7 +32,7 @@ func (cli *Client) ContainerCommit(ctx context.Context, containerID string, opti
 	}
 
 	query := url.Values{}
-	query.Set("container", containerID)
+	query.Set("container", container)
 	query.Set("repo", repository)
 	query.Set("tag", tag)
 	query.Set("comment", options.Comment)
