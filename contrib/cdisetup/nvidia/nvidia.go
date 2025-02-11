@@ -302,31 +302,3 @@ func isDebianOrUbuntu() (bool, error) {
 
 	return id == "debian" || id == "ubuntu", nil
 }
-
-func checkSBSA() (bool, error) {
-	file, err := os.Open("/proc/cpuinfo")
-	if err != nil {
-		return false, errors.Errorf("failed to open /proc/cpuinfo: %v", err)
-	}
-	defer file.Close()
-
-	serverVendors := []string{"Ampere", "Graviton", "Marvell", "ThunderX"}
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, "model name") || strings.HasPrefix(line, "Hardware") || strings.HasPrefix(line, "vendor_id") {
-			for _, vendor := range serverVendors {
-				if strings.Contains(line, vendor) {
-					return true, nil // Likely SBSA
-				}
-			}
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return false, errors.Errorf("error reading /proc/cpuinfo: %v", err)
-	}
-
-	return false, nil // Generic ARM64
-}
