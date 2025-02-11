@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	obdlabel "github.com/containerd/accelerated-container-image/pkg/label"
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/images"
 	"github.com/containerd/containerd/v2/core/leases"
@@ -41,7 +42,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var additionalAnnotations = append(compression.EStargzAnnotations, labels.LabelUncompressed)
+var additionalAnnotations = append(append(compression.EStargzAnnotations, obdlabel.OverlayBDAnnotations...), labels.LabelUncompressed)
 
 // Ref is a reference to cacheable objects.
 type Ref interface {
@@ -419,7 +420,11 @@ func (cr *cacheRecord) mount(ctx context.Context) (_ snapshot.Mountable, rerr er
 		// Return the mount direct from View rather than setting it using the Mounts call below.
 		// The two are equivalent for containerd snapshotters but the moby snapshotter requires
 		// the use of the mountable returned by View in this case.
-		mnts, err := cr.cm.Snapshotter.View(ctx, mountSnapshotID, cr.getSnapshotID())
+		labels := make(map[string]string)
+		if cr.cm.Snapshotter.Name() == "overlaybd" {
+			labels["containerd.io/snapshot/overlaybd.writable"] = "dev"
+		}
+		mnts, err := cr.cm.Snapshotter.View(ctx, mountSnapshotID, cr.getSnapshotID(), snapshots.WithLabels(labels))
 		if err != nil && !cerrdefs.IsAlreadyExists(err) {
 			return nil, err
 		}
@@ -1014,6 +1019,10 @@ func (sr *immutableRef) Extract(ctx context.Context, s session.Group) (rerr erro
 			return err
 		}
 		return rerr
+	} else if sr.cm.Snapshotter.Name() == "overlaybd" {
+		if rerr = sr.prepareRemoteSnapshotsOverlaybdMode(ctx); rerr == nil {
+			return sr.unlazy(ctx, sr.descHandlers, sr.progress, s, true, false)
+		}
 	}
 
 	return sr.unlazy(ctx, sr.descHandlers, sr.progress, s, true, false)
@@ -1136,6 +1145,55 @@ func (sr *immutableRef) prepareRemoteSnapshotsStargzMode(ctx context.Context, s 
 			break
 		}
 
+		return nil, nil
+	})
+	return err
+}
+
+func (sr *immutableRef) prepareRemoteSnapshotsOverlaybdMode(ctx context.Context) error {
+	_, err := g.Do(ctx, sr.ID()+"-prepare-remote-snapshot", func(ctx context.Context) (_ *leaseutil.LeaseRef, rerr error) {
+		dhs := sr.descHandlers
+		for _, r := range sr.layerChain() {
+			r := r
+			snapshotID := r.getSnapshotID()
+			if _, err := r.cm.Snapshotter.Stat(ctx, snapshotID); err == nil {
+				continue
+			}
+			dh := dhs[digest.Digest(r.getBlob())]
+			if dh == nil {
+				// We cannot prepare remote snapshots without descHandler.
+				return nil, nil
+			}
+			defaultLabels := snapshots.FilterInheritedLabels(dh.SnapshotLabels)
+			if defaultLabels == nil {
+				defaultLabels = make(map[string]string)
+			}
+			defaultLabels["containerd.io/snapshot.ref"] = snapshotID
+			// Prepare remote snapshots
+			var (
+				key  = fmt.Sprintf("tmp-%s %s", identity.NewID(), r.getChainID())
+				opts = []snapshots.Opt{
+					snapshots.WithLabels(defaultLabels),
+				}
+			)
+			parentID := ""
+			if r.layerParent != nil {
+				parentID = r.layerParent.getSnapshotID()
+			}
+			if err := r.cm.Snapshotter.Prepare(ctx, key, parentID, opts...); err != nil {
+				if cerrdefs.IsAlreadyExists(err) {
+					// Check if the targeting snapshot ID has been prepared as
+					// a remote snapshot in the snapshotter.
+					_, err := r.cm.Snapshotter.Stat(ctx, snapshotID)
+					if err == nil { // usable as remote snapshot without unlazying.
+						// Try the next layer as well.
+						continue
+					}
+				}
+			}
+			// This layer and all upper layers cannot be prepared without unlazying.
+			break
+		}
 		return nil, nil
 	})
 	return err
@@ -1310,7 +1368,12 @@ func (sr *immutableRef) unlazyLayer(ctx context.Context, dhs DescHandlers, pg pr
 
 	key := fmt.Sprintf("extract-%s %s", identity.NewID(), sr.getChainID())
 
-	err = sr.cm.Snapshotter.Prepare(ctx, key, parentID)
+	if sr.cm.Snapshotter.Name() == "overlaybd" {
+		err = sr.cm.Snapshotter.Prepare(ctx, key, parentID,
+			snapshots.WithLabels(map[string]string{"containerd.io/snapshot.ref": string(desc.Digest)}))
+	} else {
+		err = sr.cm.Snapshotter.Prepare(ctx, key, parentID)
+	}
 	if err != nil {
 		return err
 	}

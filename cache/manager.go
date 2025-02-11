@@ -8,9 +8,11 @@ import (
 	"sync"
 	"time"
 
+	obdlabel "github.com/containerd/accelerated-container-image/pkg/label"
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/diff"
 	"github.com/containerd/containerd/v2/core/leases"
+	"github.com/containerd/containerd/v2/core/snapshots"
 	"github.com/containerd/containerd/v2/pkg/filters"
 	"github.com/containerd/containerd/v2/pkg/gc"
 	"github.com/containerd/containerd/v2/pkg/labels"
@@ -626,6 +628,10 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, sess session.Gr
 		}); rerr != nil {
 			return nil, rerr
 		}
+	} else if cm.Snapshotter.Name() == "overlaybd" && parent != nil {
+		// Snapshotter will create a R/W block device directly as rootfs with this label
+		rwLabels := map[string]string{obdlabel.SupportReadWriteMode: "dev"}
+		err = cm.Snapshotter.Prepare(ctx, snapshotID, parentSnapshotID, snapshots.WithLabels(rwLabels))
 	} else {
 		err = cm.Snapshotter.Prepare(ctx, snapshotID, parentSnapshotID)
 	}
