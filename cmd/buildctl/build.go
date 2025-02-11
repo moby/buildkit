@@ -294,6 +294,12 @@ func buildAction(clicontext *cli.Context) error {
 		solveOpt.FrontendAttrs["no-cache"] = ""
 	}
 
+	if _, isSubRequest := solveOpt.FrontendAttrs["requestid"]; isSubRequest {
+		if _, ok := solveOpt.FrontendAttrs["frontend.caps"]; !ok {
+			solveOpt.FrontendAttrs["frontend.caps"] = "moby.buildkit.frontend.subrequests"
+		}
+	}
+
 	refFile := clicontext.String("ref-file")
 	if refFile != "" {
 		defer func() {
@@ -376,18 +382,14 @@ func buildAction(clicontext *cli.Context) error {
 		if def != nil {
 			sreq.Definition = def.ToPB()
 		}
+
 		resp, err := c.Build(ctx, solveOpt, "buildctl", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
-			_, isSubRequest := sreq.FrontendOpt["requestid"]
-			if isSubRequest {
-				if _, ok := sreq.FrontendOpt["frontend.caps"]; !ok {
-					sreq.FrontendOpt["frontend.caps"] = "moby.buildkit.frontend.subrequests"
-				}
-			}
 			res, err := c.Solve(ctx, sreq)
 			if err != nil {
 				return nil, err
 			}
-			if isSubRequest && res != nil {
+
+			if isSubRequest := solveOpt.FrontendAttrs["requestid"] != ""; isSubRequest && res != nil {
 				subMetadata = res.Metadata
 			}
 			return res, err
