@@ -52,11 +52,11 @@ func (m *Manager) ListDevices() []Device {
 	kinds := make(map[string]struct{})
 	for _, dev := range devs {
 		kind, _, _ := strings.Cut(dev, "=")
-		spec := m.cache.GetDevice(dev).GetSpec()
+		dd := m.cache.GetDevice(dev)
 		out = append(out, Device{
 			Name:        dev,
 			AutoAllow:   true, // TODO
-			Annotations: spec.Annotations,
+			Annotations: deviceAnnotations(dd),
 		})
 		kinds[kind] = struct{}{}
 	}
@@ -154,8 +154,8 @@ func (m *Manager) parseDevice(dev *pb.CDIDevice) ([]string, error) {
 				if !strings.HasPrefix(d, kind+"=") {
 					continue
 				}
-				if dd := m.cache.GetDevice(d).Device; dd != nil {
-					if class, ok := dd.Annotations[deviceAnnotationClass]; ok && class == name {
+				if a := deviceAnnotations(m.cache.GetDevice(d)); a != nil {
+					if class, ok := a[deviceAnnotationClass]; ok && class == name {
 						out = append(out, d)
 					}
 				}
@@ -216,6 +216,22 @@ func (m *Manager) OnDemandInstaller(name string) (func(context.Context) error, b
 
 		return nil
 	}, true
+}
+
+func deviceAnnotations(dev *cdi.Device) map[string]string {
+	if dev == nil {
+		return nil
+	}
+	out := make(map[string]string)
+	// spec annotations
+	for k, v := range dev.GetSpec().Annotations {
+		out[k] = v
+	}
+	// device annotations
+	for k, v := range dev.Device.Annotations {
+		out[k] = v
+	}
+	return out
 }
 
 func dedupSlice(s []string) []string {
