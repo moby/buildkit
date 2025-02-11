@@ -73,6 +73,7 @@ import (
 	"google.golang.org/grpc/health"
 	healthv1 "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
+	"tags.cncf.io/container-device-interface/pkg/cdi"
 )
 
 func init() {
@@ -214,6 +215,14 @@ func main() {
 		cli.StringFlag{
 			Name:  "otel-socket-path",
 			Usage: "OTEL collector trace socket path",
+		},
+		cli.BoolFlag{
+			Name:  "cdi-disabled",
+			Usage: "disables support of the Container Device Interface (CDI)",
+		},
+		cli.StringSliceFlag{
+			Name:  "cdi-spec-dir",
+			Usage: "list of directories to scan for CDI spec files",
 		},
 	)
 	app.Flags = append(app.Flags, appFlags...)
@@ -536,6 +545,10 @@ func setDefaultConfig(cfg *config.Config) {
 	if cfg.OTEL.SocketPath == "" {
 		cfg.OTEL.SocketPath = appdefaults.TraceSocketPath(isRootlessConfig())
 	}
+
+	if len(cfg.CDI.SpecDirs) == 0 {
+		cfg.CDI.SpecDirs = appdefaults.CDISpecDirs
+	}
 }
 
 // isRootlessConfig is true if we should be using the rootless config
@@ -616,6 +629,14 @@ func applyMainFlags(c *cli.Context, cfg *config.Config) error {
 
 	if c.IsSet("otel-socket-path") {
 		cfg.OTEL.SocketPath = c.String("otel-socket-path")
+	}
+
+	if c.IsSet("cdi-disabled") {
+		cdiDisabled := c.Bool("cdi-disabled")
+		cfg.CDI.Disabled = &cdiDisabled
+	}
+	if c.IsSet("cdi-spec-dir") {
+		cfg.CDI.SpecDirs = c.StringSlice("cdi-spec-dir")
 	}
 
 	applyPlatformFlags(c)
@@ -1020,4 +1041,31 @@ func newMeterProvider(ctx context.Context) (*sdkmetric.MeterProvider, error) {
 		opts = append(opts, sdkmetric.WithReader(r))
 	}
 	return sdkmetric.NewMeterProvider(opts...), nil
+}
+
+// getCDIManager returns a new CDI registry with disabled auto-refresh.
+func getCDIManager(disabled *bool, specDirs []string) (*cdi.Cache, error) {
+	if disabled != nil && *disabled {
+		return nil, nil
+	}
+	if len(specDirs) == 0 {
+		return nil, errors.New("No CDI specification directories specified")
+	}
+	cdiCache, err := func() (*cdi.Cache, error) {
+		cdiCache, err := cdi.NewCache(
+			cdi.WithSpecDirs(specDirs...),
+			cdi.WithAutoRefresh(false),
+		)
+		if err != nil {
+			return nil, err
+		}
+		if err := cdiCache.Refresh(); err != nil {
+			return nil, err
+		}
+		return cdiCache, nil
+	}()
+	if err != nil {
+		return nil, errors.Wrapf(err, "CDI registry initialization failure")
+	}
+	return cdiCache, nil
 }

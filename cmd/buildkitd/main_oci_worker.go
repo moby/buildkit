@@ -298,6 +298,11 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 
 	dns := getDNSConfig(common.config.DNS)
 
+	cdiManager, err := getCDIManager(common.config.CDI.Disabled, common.config.CDI.SpecDirs)
+	if err != nil {
+		return nil, err
+	}
+
 	nc := netproviders.Opt{
 		Mode: common.config.Workers.OCI.NetworkConfig.Mode,
 		CNI: cniprovider.Opt{
@@ -315,7 +320,7 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 		parallelismSem = semaphore.NewWeighted(int64(cfg.MaxParallelism))
 	}
 
-	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping, nc, dns, cfg.Binary, cfg.ApparmorProfile, cfg.SELinux, parallelismSem, common.traceSocket, cfg.DefaultCgroupParent)
+	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping, nc, dns, cfg.Binary, cfg.ApparmorProfile, cfg.SELinux, parallelismSem, common.traceSocket, cfg.DefaultCgroupParent, cdiManager)
 	if err != nil {
 		return nil, err
 	}

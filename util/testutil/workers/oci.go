@@ -47,7 +47,13 @@ func (s *OCI) New(ctx context.Context, cfg *integration.BackendConfig) (integrat
 		return nil, nil, err
 	}
 	// Include use of --oci-worker-labels to trigger https://github.com/moby/buildkit/pull/603
-	buildkitdArgs := []string{"buildkitd", "--oci-worker=true", "--containerd-worker=false", "--oci-worker-gc=false", "--oci-worker-labels=org.mobyproject.buildkit.worker.sandbox=true"}
+	buildkitdArgs := []string{"buildkitd",
+		"--oci-worker=true",
+		"--containerd-worker=false",
+		"--oci-worker-gc=false",
+		"--oci-worker-labels=org.mobyproject.buildkit.worker.sandbox=true",
+		"--cdi-spec-dir=" + cfg.CDISpecDir,
+	}
 
 	if s.Snapshotter != "" {
 		buildkitdArgs = append(buildkitdArgs,

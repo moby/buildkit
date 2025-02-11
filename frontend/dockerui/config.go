@@ -66,6 +66,7 @@ type Config struct {
 	ShmSize          int64
 	Target           string
 	Ulimits          []*pb.Ulimit
+	Devices          []*pb.CDIDevice
 	LinterConfig     *linter.Config
 
 	CacheImports           []client.CacheOptionsEntry

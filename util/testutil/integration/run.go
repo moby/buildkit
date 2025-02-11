@@ -60,12 +60,14 @@ type Sandbox interface {
 	NewRegistry() (string, error)
 	Value(string) interface{} // chosen matrix value
 	Name() string
+	CDISpecDir() string
 }
 
 // BackendConfig is used to configure backends created by a worker.
 type BackendConfig struct {
 	Logs         map[string]*bytes.Buffer
 	DaemonConfig []ConfigUpdater
+	CDISpecDir   string
 }
 
 type Worker interface {

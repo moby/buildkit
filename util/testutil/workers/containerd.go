@@ -212,6 +212,7 @@ disabled_plugins = ["io.containerd.grpc.v1.cri"]
 		"--containerd-worker=true",
 		"--containerd-worker-addr", address,
 		"--containerd-worker-labels=org.mobyproject.buildkit.worker.sandbox=true", // Include use of --containerd-worker-labels to trigger https://github.com/moby/buildkit/pull/603
+		"--cdi-spec-dir=" + cfg.CDISpecDir,
 	}
 	buildkitdArgs = applyBuildkitdPlatformFlags(buildkitdArgs)
 	buildkitdArgs = append(buildkitdArgs, snBuildkitdArgs...)
