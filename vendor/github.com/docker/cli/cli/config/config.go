@@ -143,7 +143,7 @@ func load(configDir string) (*configfile.ConfigFile, error) {
 	defer file.Close()
 	err = configFile.LoadFromReader(file)
 	if err != nil {
-		err = errors.Wrapf(err, "parsing config file (%s)", filename)
+		err = errors.Wrapf(err, "loading config file: %s: ", filename)
 	}
 	return configFile, err
 }
