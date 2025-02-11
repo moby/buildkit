@@ -11,24 +11,25 @@ import (
 
 // ImagesPrune requests the daemon to delete unused data
 func (cli *Client) ImagesPrune(ctx context.Context, pruneFilters filters.Args) (image.PruneReport, error) {
+	var report image.PruneReport
+
 	if err := cli.NewVersionError(ctx, "1.25", "image prune"); err != nil {
-		return image.PruneReport{}, err
+		return report, err
 	}
 
 	query, err := getFiltersQuery(pruneFilters)
 	if err != nil {
-		return image.PruneReport{}, err
+		return report, err
 	}
 
 	serverResp, err := cli.post(ctx, "/images/prune", query, nil, nil)
 	defer ensureReaderClosed(serverResp)
 	if err != nil {
-		return image.PruneReport{}, err
+		return report, err
 	}
 
-	var report image.PruneReport
 	if err := json.NewDecoder(serverResp.body).Decode(&report); err != nil {
-		return image.PruneReport{}, fmt.Errorf("Error retrieving disk usage: %v", err)
+		return report, fmt.Errorf("Error retrieving disk usage: %v", err)
 	}
 
 	return report, nil

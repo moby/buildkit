@@ -1,6 +1,6 @@
 //go:build unix && !linux
 
-package chrootarchive
+package chrootarchive // import "github.com/docker/docker/pkg/chrootarchive"
 
 import (
 	"bytes"
@@ -12,6 +12,7 @@ import (
 
 	"github.com/docker/docker/pkg/archive"
 	"github.com/moby/sys/reexec"
+	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
 
@@ -75,15 +76,15 @@ func doUnpack(decompressedArchive io.Reader, relDest, root string, options *arch
 	}
 
 	if err = cmd.Start(); err != nil {
-		return fmt.Errorf("re-exec error: %w", err)
+		return errors.Wrap(err, "re-exec error")
 	}
 
 	if err = json.NewEncoder(optionsW).Encode(options); err != nil {
-		return fmt.Errorf("tar options encoding failed: %w", err)
+		return errors.Wrap(err, "tar options encoding failed")
 	}
 
 	if err = cmd.Wait(); err != nil {
-		return fmt.Errorf("%s: %w", stderr.String(), err)
+		return errors.Wrap(err, stderr.String())
 	}
 
 	return nil
@@ -111,21 +112,21 @@ func doPack(relSrc, root string, options *archive.TarOptions) (io.ReadCloser, er
 	r, w := io.Pipe()
 
 	if err = cmd.Start(); err != nil {
-		return nil, fmt.Errorf("re-exec error: %w", err)
+		return nil, errors.Wrap(err, "re-exec error")
 	}
 
 	go func() {
 		_, _ = io.Copy(w, stdout)
 		// Cleanup once stdout pipe is closed.
 		if err = cmd.Wait(); err != nil {
-			r.CloseWithError(fmt.Errorf("%s: %w", stderr.String(), err))
+			r.CloseWithError(errors.Wrap(err, stderr.String()))
 		} else {
 			r.Close()
 		}
 	}()
 
 	if err = json.NewEncoder(optionsW).Encode(options); err != nil {
-		return nil, fmt.Errorf("tar options encoding failed: %w", err)
+		return nil, errors.Wrap(err, "tar options encoding failed")
 	}
 
 	return r, nil
@@ -150,19 +151,19 @@ func doUnpackLayer(root string, layer io.Reader, options *archive.TarOptions) (i
 	}
 
 	if err = cmd.Start(); err != nil {
-		return 0, fmt.Errorf("re-exec error: %w", err)
+		return 0, errors.Wrap(err, "re-exec error")
 	}
 
 	if err = json.NewEncoder(optionsW).Encode(options); err != nil {
-		return 0, fmt.Errorf("tar options encoding failed: %w", err)
+		return 0, errors.Wrap(err, "tar options encoding failed")
 	}
 
 	if err = cmd.Wait(); err != nil {
-		return 0, fmt.Errorf("%s: %w", buffer.String(), err)
+		return 0, errors.Wrap(err, buffer.String())
 	}
 
 	if err = json.NewDecoder(buffer).Decode(&result); err != nil {
-		return 0, fmt.Errorf("json decoding error: %w", err)
+		return 0, errors.Wrap(err, "json decoding error")
 	}
 
 	return result, nil

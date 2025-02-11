@@ -11,11 +11,9 @@ import (
 
 // TaskInspectWithRaw returns the task information and its raw representation.
 func (cli *Client) TaskInspectWithRaw(ctx context.Context, taskID string) (swarm.Task, []byte, error) {
-	taskID, err := trimID("task", taskID)
-	if err != nil {
-		return swarm.Task{}, nil, err
+	if taskID == "" {
+		return swarm.Task{}, nil, objectNotFoundError{object: "task", id: taskID}
 	}
-
 	serverResp, err := cli.get(ctx, "/tasks/"+taskID, nil, nil)
 	defer ensureReaderClosed(serverResp)
 	if err != nil {

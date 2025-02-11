@@ -33,12 +33,7 @@ import (
 //
 // You can use github.com/docker/docker/pkg/stdcopy.StdCopy to demultiplex this
 // stream.
-func (cli *Client) ContainerLogs(ctx context.Context, containerID string, options container.LogsOptions) (io.ReadCloser, error) {
-	containerID, err := trimID("container", containerID)
-	if err != nil {
-		return nil, err
-	}
-
+func (cli *Client) ContainerLogs(ctx context.Context, container string, options container.LogsOptions) (io.ReadCloser, error) {
 	query := url.Values{}
 	if options.ShowStdout {
 		query.Set("stdout", "1")
@@ -77,7 +72,7 @@ func (cli *Client) ContainerLogs(ctx context.Context, containerID string, option
 	}
 	query.Set("tail", options.Tail)
 
-	resp, err := cli.get(ctx, "/containers/"+containerID+"/logs", query, nil)
+	resp, err := cli.get(ctx, "/containers/"+container+"/logs", query, nil)
 	if err != nil {
 		return nil, err
 	}

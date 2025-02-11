@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/docker/go-connections/sockets"
@@ -195,8 +194,8 @@ func WithTLSClientConfigFromEnv() Opt {
 // (see [WithAPIVersionNegotiation]).
 func WithVersion(version string) Opt {
 	return func(c *Client) error {
-		if v := strings.TrimPrefix(version, "v"); v != "" {
-			c.version = v
+		if version != "" {
+			c.version = version
 			c.manualOverride = true
 		}
 		return nil

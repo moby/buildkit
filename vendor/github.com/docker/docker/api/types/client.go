@@ -11,7 +11,7 @@ import (
 	"github.com/docker/docker/api/types/registry"
 )
 
-// NewHijackedResponse initializes a [HijackedResponse] type.
+// NewHijackedResponse intializes a HijackedResponse type
 func NewHijackedResponse(conn net.Conn, mediaType string) HijackedResponse {
 	return HijackedResponse{Conn: conn, Reader: bufio.NewReader(conn), mediaType: mediaType}
 }
@@ -129,6 +129,14 @@ type ImageBuildResponse struct {
 	OSType string
 }
 
+// RequestPrivilegeFunc is a function interface that
+// clients can supply to retry operations after
+// getting an authorization error.
+// This function returns the registry authentication
+// header value in base 64 format, or an error
+// if the privilege request fails.
+type RequestPrivilegeFunc func(context.Context) (string, error)
+
 // NodeListOptions holds parameters to list nodes with.
 type NodeListOptions struct {
 	Filters filters.Args
@@ -227,18 +235,11 @@ type PluginDisableOptions struct {
 
 // PluginInstallOptions holds parameters to install a plugin.
 type PluginInstallOptions struct {
-	Disabled             bool
-	AcceptAllPermissions bool
-	RegistryAuth         string // RegistryAuth is the base64 encoded credentials for the registry
-	RemoteRef            string // RemoteRef is the plugin name on the registry
-
-	// PrivilegeFunc is a function that clients can supply to retry operations
-	// after getting an authorization error. This function returns the registry
-	// authentication header value in base64 encoded format, or an error if the
-	// privilege request fails.
-	//
-	// For details, refer to [github.com/docker/docker/api/types/registry.RequestAuthConfig].
-	PrivilegeFunc         func(context.Context) (string, error)
+	Disabled              bool
+	AcceptAllPermissions  bool
+	RegistryAuth          string // RegistryAuth is the base64 encoded credentials for the registry
+	RemoteRef             string // RemoteRef is the plugin name on the registry
+	PrivilegeFunc         RequestPrivilegeFunc
 	AcceptPermissionsFunc func(context.Context, PluginPrivileges) (bool, error)
 	Args                  []string
 }

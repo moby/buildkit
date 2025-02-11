@@ -21,18 +21,10 @@ func (cli *Client) ImageImport(ctx context.Context, source image.ImportSource, r
 	}
 
 	query := url.Values{}
-	if source.SourceName != "" {
-		query.Set("fromSrc", source.SourceName)
-	}
-	if ref != "" {
-		query.Set("repo", ref)
-	}
-	if options.Tag != "" {
-		query.Set("tag", options.Tag)
-	}
-	if options.Message != "" {
-		query.Set("message", options.Message)
-	}
+	query.Set("fromSrc", source.SourceName)
+	query.Set("repo", ref)
+	query.Set("tag", options.Tag)
+	query.Set("message", options.Message)
 	if options.Platform != "" {
 		query.Set("platform", strings.ToLower(options.Platform))
 	}
