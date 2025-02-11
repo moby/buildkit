@@ -52,7 +52,6 @@ func (s *OCI) New(ctx context.Context, cfg *integration.BackendConfig) (integrat
 		"--containerd-worker=false",
 		"--oci-worker-gc=false",
 		"--oci-worker-labels=org.mobyproject.buildkit.worker.sandbox=true",
-		"--cdi-spec-dir=" + cfg.CDISpecDir,
 	}
 
 	if s.Snapshotter != "" {

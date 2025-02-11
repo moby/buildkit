@@ -25,6 +25,20 @@ func (osp otelSocketPath) UpdateConfigFile(in string) string {
 `, in, osp)
 }
 
+func withCDISpecDir(specDir string) integration.ConfigUpdater {
+	return cdiSpecDir(specDir)
+}
+
+type cdiSpecDir string
+
+func (csd cdiSpecDir) UpdateConfigFile(in string) string {
+	return fmt.Sprintf(`%s
+
+[cdi]
+  specDirs = [%q]
+`, in, csd)
+}
+
 func runBuildkitd(
 	conf *integration.BackendConfig,
 	args []string,
@@ -61,7 +75,11 @@ func runBuildkitd(
 	deferF.Append(func() error { return os.RemoveAll(tmpdir) })
 
 	cfgfile, err := integration.WriteConfig(
-		append(conf.DaemonConfig, withOTELSocketPath(getTraceSocketPath(tmpdir))))
+		append(conf.DaemonConfig,
+			withOTELSocketPath(getTraceSocketPath(tmpdir)),
+			withCDISpecDir(conf.CDISpecDir),
+		),
+	)
 	if err != nil {
 		return "", "", nil, err
 	}
