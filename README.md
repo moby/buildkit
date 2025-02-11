@@ -67,7 +67,6 @@ Join `#buildkit` channel on [Docker Community Slack](https://dockr.ly/comm-slack
     - [Local directory](#local-directory-1)
     - [GitHub Actions cache (experimental)](#github-actions-cache-experimental)
     - [S3 cache (experimental)](#s3-cache-experimental)
-    - [Azure Blob Storage cache (experimental)](#azure-blob-storage-cache-experimental)
   - [Consistent hashing](#consistent-hashing)
 - [Metadata](#metadata)
 - [Systemd socket activation](#systemd-socket-activation)
@@ -589,55 +588,6 @@ Other options are:
 * `blobs_prefix=<prefix>`: set global prefix to store / read blobs on s3 (default: `blobs/`)
 * `manifests_prefix=<prefix>`: set global prefix to store / read manifests on s3 (default: `manifests/`)
 * `name=<manifest>`: name of the manifest to use (default `buildkit`)
-
-#### Azure Blob Storage cache (experimental)
-
-```bash
-buildctl build ... \
-  --output type=image,name=docker.io/username/image,push=true \
-  --export-cache type=azblob,account_url=https://myaccount.blob.core.windows.net,name=my_image \
-  --import-cache type=azblob,account_url=https://myaccount.blob.core.windows.net,name=my_image
-```
-
-The following attributes are required:
-* `account_url`: The Azure Blob Storage account URL (default: `$BUILDKIT_AZURE_STORAGE_ACCOUNT_URL`)
-
-Storage locations:
-* blobs: `<account_url>/<container>/<prefix><blobs_prefix>/<sha256>`, default: `<account_url>/<container>/blobs/<sha256>`
-* manifests: `<account_url>/<container>/<prefix><manifests_prefix>/<name>`, default: `<account_url>/<container>/manifests/<name>`
-
-Azure Blob Storage configuration:
-* `container`: The Azure Blob Storage container name (default: `buildkit-cache` or `$BUILDKIT_AZURE_STORAGE_CONTAINER` if set)
-* `blobs_prefix`: Global prefix to store / read blobs on the Azure Blob Storage container (`<container>`) (default: `blobs/`)
-* `manifests_prefix`: Global prefix to store / read blobs on the Azure Blob Storage container (`<container>`) (default: `manifests/`)
-
-Azure Blob Storage authentication:
-
-There are 2 options supported for Azure Blob Storage authentication:
-
-* Any system using environment variables supported by the [Azure SDK for Go](https://docs.microsoft.com/en-us/azure/developer/go/azure-sdk-authentication). The configuration must be available for the buildkit daemon, not for the client.
-* Secret Access Key, using the `secret_access_key` attribute to specify the primary or secondary account key for your Azure Blob Storage account. [Azure Blob Storage account keys](https://docs.microsoft.com/en-us/azure/storage/common/storage-account-keys-manage)
-
-> [!NOTE]
-> Account name can also be specified with `account_name` attribute (or `$BUILDKIT_AZURE_STORAGE_ACCOUNT_NAME`)
-> if it is not part of the account URL host.
-
-`--export-cache` options:
-* `type=azblob`
-* `mode=<min|max>`: specify cache layers to export (default: `min`)
-  * `min`: only export layers for the resulting image
-  * `max`: export all the layers of all intermediate steps
-* `prefix=<prefix>`: set global prefix to store / read files on the Azure Blob Storage container (`<container>`) (default: empty)
-* `name=<manifest>`: specify name of the manifest to use (default: `buildkit`)
-  * Multiple manifest names can be specified at the same time, separated by `;`. The standard use case is to use the git sha1 as name, and the branch name as duplicate, and load both with 2 `import-cache` commands.
-* `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
-
-`--import-cache` options:
-* `type=azblob`
-* `prefix=<prefix>`: set global prefix to store / read files on the Azure Blob Storage container (`<container>`) (default: empty)
-* `blobs_prefix=<prefix>`: set global prefix to store / read blobs on the Azure Blob Storage container (`<container>`) (default: `blobs/`)
-* `manifests_prefix=<prefix>`: set global prefix to store / read manifests on the Azure Blob Storage container (`<container>`) (default: `manifests/`)
-* `name=<manifest>`: name of the manifest to use (default: `buildkit`)
 
 ### Consistent hashing
 
