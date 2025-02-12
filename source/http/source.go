@@ -20,6 +20,7 @@ import (
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/secrets"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/pb"
@@ -92,6 +93,8 @@ func (hs *httpSource) Identifier(scheme, ref string, attrs map[string]string, pl
 				return nil, err
 			}
 			id.GID = int(i)
+		case pb.AttrHTTPAuthHeaderSecret:
+			id.AuthHeaderSecret = v
 		}
 	}
 
@@ -188,6 +191,24 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, inde
 	req = req.WithContext(ctx)
 	req.Header.Add("User-Agent", version.UserAgent())
 	m := map[string]cacheRefMetadata{}
+
+	// Add an Authorization header if an HTTP auth header secret was defined
+	if hs.src.AuthHeaderSecret != "" {
+		err := hs.sm.Any(ctx, g, func(ctx context.Context, _ string, caller session.Caller) error {
+			dt, err := secrets.GetSecret(ctx, caller, hs.src.AuthHeaderSecret)
+			if err != nil {
+				return err
+			}
+
+			req.Header.Add("Authorization", string(dt))
+
+			return nil
+		})
+
+		if err != nil {
+			return "", "", nil, false, errors.Wrapf(err, "failed to retrieve HTTP auth secret %s", hs.src.AuthHeaderSecret)
+		}
+	}
 
 	// If we request a single ETag in 'If-None-Match', some servers omit the
 	// unambiguous ETag in their response.
