@@ -20,6 +20,7 @@ import (
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/secrets"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/pb"
@@ -92,6 +93,8 @@ func (hs *httpSource) Identifier(scheme, ref string, attrs map[string]string, pl
 				return nil, err
 			}
 			id.GID = int(i)
+		case pb.AttrHTTPAuthHeaderSecret:
+			id.AuthHeaderSecret = v
 		}
 	}
 
@@ -127,16 +130,18 @@ func (hs *httpSourceHandler) client(g session.Group) *http.Client {
 // this package.
 func (hs *httpSourceHandler) urlHash() (digest.Digest, error) {
 	dt, err := json.Marshal(struct {
-		Filename       []byte
-		Perm, UID, GID int
+		Filename         []byte
+		Perm, UID, GID   int
+		AuthHeaderSecret string `json:",omitempty"`
 	}{
 		Filename: bytes.Join([][]byte{
 			[]byte(hs.src.URL),
 			[]byte(hs.src.Filename),
 		}, []byte{0}),
-		Perm: hs.src.Perm,
-		UID:  hs.src.UID,
-		GID:  hs.src.GID,
+		Perm:             hs.src.Perm,
+		UID:              hs.src.UID,
+		GID:              hs.src.GID,
+		AuthHeaderSecret: hs.src.AuthHeaderSecret,
 	})
 	if err != nil {
 		return "", err
@@ -146,17 +151,19 @@ func (hs *httpSourceHandler) urlHash() (digest.Digest, error) {
 
 func (hs *httpSourceHandler) formatCacheKey(filename string, dgst digest.Digest, lastModTime string) digest.Digest {
 	dt, err := json.Marshal(struct {
-		Filename       string
-		Perm, UID, GID int
-		Checksum       digest.Digest
-		LastModTime    string `json:",omitempty"`
+		Filename         string
+		Perm, UID, GID   int
+		Checksum         digest.Digest
+		LastModTime      string `json:",omitempty"`
+		AuthHeaderSecret string `json:",omitempty"`
 	}{
-		Filename:    filename,
-		Perm:        hs.src.Perm,
-		UID:         hs.src.UID,
-		GID:         hs.src.GID,
-		Checksum:    dgst,
-		LastModTime: lastModTime,
+		Filename:         filename,
+		Perm:             hs.src.Perm,
+		UID:              hs.src.UID,
+		GID:              hs.src.GID,
+		Checksum:         dgst,
+		LastModTime:      lastModTime,
+		AuthHeaderSecret: hs.src.AuthHeaderSecret,
 	})
 	if err != nil {
 		return dgst
@@ -181,7 +188,7 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, inde
 		return "", "", nil, false, errors.Wrapf(err, "failed to search metadata for %s", uh)
 	}
 
-	req, err := hs.newHTTPRequest(ctx)
+	req, err := hs.newHTTPRequest(ctx, g)
 	if err != nil {
 		return "", "", nil, false, err
 	}
@@ -441,7 +448,7 @@ func (hs *httpSourceHandler) Snapshot(ctx context.Context, g session.Group) (cac
 		}
 	}
 
-	req, err := hs.newHTTPRequest(ctx)
+	req, err := hs.newHTTPRequest(ctx, g)
 	if err != nil {
 		return nil, err
 	}
@@ -468,13 +475,30 @@ func (hs *httpSourceHandler) Snapshot(ctx context.Context, g session.Group) (cac
 	return ref, nil
 }
 
-func (hs *httpSourceHandler) newHTTPRequest(ctx context.Context) (*http.Request, error) {
+func (hs *httpSourceHandler) newHTTPRequest(ctx context.Context, g session.Group) (*http.Request, error) {
 	req, err := http.NewRequest("GET", hs.src.URL, nil)
 	if err != nil {
 		return nil, err
 	}
 
 	req.Header.Set("User-Agent", version.UserAgent())
+
+	if hs.src.AuthHeaderSecret != "" {
+		err := hs.sm.Any(ctx, g, func(ctx context.Context, _ string, caller session.Caller) error {
+			dt, err := secrets.GetSecret(ctx, caller, hs.src.AuthHeaderSecret)
+			if err != nil {
+				return err
+			}
+
+			req.Header.Set("Authorization", string(dt))
+
+			return nil
+		})
+
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to retrieve HTTP auth secret %s", hs.src.AuthHeaderSecret)
+		}
+	}
 
 	return req.WithContext(ctx), nil
 }

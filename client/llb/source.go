@@ -360,13 +360,6 @@ func AuthTokenSecret(v string) GitOption {
 	})
 }
 
-func AuthHeaderSecret(v string) GitOption {
-	return gitOptionFunc(func(gi *GitInfo) {
-		gi.AuthHeaderSecret = v
-		gi.addAuthCap = true
-	})
-}
-
 func KnownSSHHosts(key string) GitOption {
 	key = strings.TrimSuffix(key, "\n")
 	return gitOptionFunc(func(gi *GitInfo) {
@@ -378,6 +371,29 @@ func MountSSHSock(sshID string) GitOption {
 	return gitOptionFunc(func(gi *GitInfo) {
 		gi.MountSSHSock = sshID
 	})
+}
+
+// AuthOption can be used with either HTTP or Git sources.
+type AuthOption interface {
+	GitOption
+	HTTPOption
+}
+
+// AuthHeaderSecret returns an AuthOption that defines the name of a
+// secret to use for HTTP based authentication.
+func AuthHeaderSecret(secretName string) AuthOption {
+	return struct {
+		GitOption
+		HTTPOption
+	}{
+		GitOption: gitOptionFunc(func(gi *GitInfo) {
+			gi.AuthHeaderSecret = secretName
+			gi.addAuthCap = true
+		}),
+		HTTPOption: httpOptionFunc(func(hi *HTTPInfo) {
+			hi.AuthHeaderSecret = secretName
+		}),
+	}
 }
 
 // Scratch returns a state that represents an empty filesystem.
@@ -595,6 +611,10 @@ func HTTP(url string, opts ...HTTPOption) State {
 		attrs[pb.AttrHTTPGID] = strconv.Itoa(hi.GID)
 		addCap(&hi.Constraints, pb.CapSourceHTTPUIDGID)
 	}
+	if hi.AuthHeaderSecret != "" {
+		attrs[pb.AttrHTTPAuthHeaderSecret] = hi.AuthHeaderSecret
+		addCap(&hi.Constraints, pb.CapSourceHTTPAuth)
+	}
 
 	addCap(&hi.Constraints, pb.CapSourceHTTP)
 	source := NewSource(url, attrs, hi.Constraints)
@@ -603,11 +623,12 @@ func HTTP(url string, opts ...HTTPOption) State {
 
 type HTTPInfo struct {
 	constraintsWrapper
-	Checksum digest.Digest
-	Filename string
-	Perm     int
-	UID      int
-	GID      int
+	Checksum         digest.Digest
+	Filename         string
+	Perm             int
+	UID              int
+	GID              int
+	AuthHeaderSecret string
 }
 
 type HTTPOption interface {
