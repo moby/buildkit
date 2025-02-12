@@ -8,6 +8,9 @@ name.
 Since BuildKit 0.20.0, you can access devices using the CDI interface. This
 allows you to use devices like GPUs in your builds.
 
+> [!NOTE]
+> CDI support is yet to be tested on Windows.
+
 ## Usage
 
 To use CDI with BuildKit, you need to create the [CDI configuration file](https://github.com/cncf-tags/container-device-interface/blob/main/SPEC.md#cdi-json-specification)
