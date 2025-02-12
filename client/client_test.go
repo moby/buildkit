@@ -10960,6 +10960,7 @@ func testCDI(t *testing.T, sb integration.Sandbox) {
 	}
 
 	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureCDI)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -11024,6 +11025,7 @@ func testCDIFirst(t *testing.T, sb integration.Sandbox) {
 	}
 
 	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureCDI)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -11088,6 +11090,7 @@ func testCDIWildcard(t *testing.T, sb integration.Sandbox) {
 	}
 
 	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureCDI)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -11142,6 +11145,7 @@ func testCDIClass(t *testing.T, sb integration.Sandbox) {
 	}
 
 	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureCDI)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()

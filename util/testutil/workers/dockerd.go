@@ -41,6 +41,7 @@ func InitDockerdWorker() {
 			FeatureSBOM,
 			FeatureSecurityMode,
 			FeatureCNINetwork,
+			FeatureCDI,
 		},
 	})
 	integration.Register(&Moby{
@@ -51,6 +52,7 @@ func InitDockerdWorker() {
 			FeatureSecurityMode,
 			FeatureCNINetwork,
 			FeatureContentCheck,
+			FeatureCDI,
 		},
 	})
 }
