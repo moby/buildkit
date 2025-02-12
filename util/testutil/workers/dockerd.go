@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/docker/client"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/util/testutil/dockerd"
+	"github.com/moby/buildkit/util/testutil/dockerd/client"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
