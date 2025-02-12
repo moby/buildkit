@@ -31,6 +31,7 @@ const (
 	FeatureSourceDateEpoch      = "source_date_epoch"
 	FeatureCNINetwork           = "cni_network"
 	FeatureContentCheck         = "content_check"
+	FeatureCDI                  = "cdi"
 )
 
 var features = map[string]struct{}{
@@ -58,6 +59,7 @@ var features = map[string]struct{}{
 	FeatureSourceDateEpoch:      {},
 	FeatureCNINetwork:           {},
 	FeatureContentCheck:         {},
+	FeatureCDI:                  {},
 }
 
 func CheckFeatureCompat(t *testing.T, sb integration.Sandbox, reason ...string) {
