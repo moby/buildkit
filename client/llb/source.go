@@ -250,10 +250,22 @@ const (
 // By default the git repository is cloned with `--depth=1` to reduce the amount of data downloaded.
 // Additionally the ".git" directory is removed after the clone, you can keep ith with the [KeepGitDir] [GitOption].
 func Git(url, ref string, opts ...GitOption) State {
+	gi := &GitInfo{
+		AuthHeaderSecret: GitAuthHeaderKey,
+		AuthTokenSecret:  GitAuthTokenKey,
+	}
+	for _, o := range opts {
+		o.SetGitOption(gi)
+	}
+	attrs := map[string]string{}
+
 	remote, err := gitutil.ParseURL(url)
 	if errors.Is(err, gitutil.ErrUnknownProtocol) {
 		url = "https://" + url
 		remote, err = gitutil.ParseURL(url)
+	}
+	if remote.RemoteSCPStyleURL != nil && remote.RemoteSCPStyleURL.User == nil {
+		addCap(&gi.Constraints, pb.CapSourceGitImplicitUsername)
 	}
 	if remote != nil {
 		url = remote.Remote
@@ -274,14 +286,6 @@ func Git(url, ref string, opts ...GitOption) State {
 		}
 	}
 
-	gi := &GitInfo{
-		AuthHeaderSecret: GitAuthHeaderKey,
-		AuthTokenSecret:  GitAuthTokenKey,
-	}
-	for _, o := range opts {
-		o.SetGitOption(gi)
-	}
-	attrs := map[string]string{}
 	if gi.KeepGitDir {
 		attrs[pb.AttrKeepGitDir] = "true"
 		addCap(&gi.Constraints, pb.CapSourceGitKeepDir)
