@@ -14,7 +14,7 @@ ARG DNSNAME_VERSION=v1.3.1
 ARG NYDUS_VERSION=v2.2.4
 ARG MINIO_VERSION=RELEASE.2022-05-03T20-36-08Z
 ARG MINIO_MC_VERSION=RELEASE.2022-05-04T06-07-55Z
-ARG AZURITE_VERSION=3.18.0
+ARG AZURITE_VERSION=3.33.0
 ARG GOTESTSUM_VERSION=v1.9.0
 ARG DELVE_VERSION=v1.23.1
 
@@ -413,6 +413,9 @@ RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables ip6tables dnsmasq 
 ARG NERDCTL_VERSION
 RUN curl -Ls https://raw.githubusercontent.com/containerd/nerdctl/$NERDCTL_VERSION/extras/rootless/containerd-rootless.sh > /usr/bin/containerd-rootless.sh \
   && chmod 0755 /usr/bin/containerd-rootless.sh
+ARG AZURITE_VERSION
+RUN apk add --no-cache nodejs npm \
+  && npm install -g azurite@${AZURITE_VERSION}
 # The entrypoint script is needed for enabling nested cgroup v2 (https://github.com/moby/buildkit/issues/3265#issuecomment-1309631736)
 RUN curl -Ls https://raw.githubusercontent.com/moby/moby/v25.0.1/hack/dind > /docker-entrypoint.sh \
   && chmod 0755 /docker-entrypoint.sh

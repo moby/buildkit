@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
@@ -120,6 +121,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testBasicRegistryCacheImportExport,
 	testBasicLocalCacheImportExport,
 	testBasicS3CacheImportExport,
+	testBasicAzblobCacheImportExport,
 	testCachedMounts,
 	testCopyFromEmptyImage,
 	testProxyEnv,
@@ -5972,6 +5974,44 @@ func testBasicS3CacheImportExport(t *testing.T, sb integration.Sandbox) {
 			"bucket":            s3Bucket,
 			"endpoint_url":      s3Addr,
 			"use_path_style":    "true",
+		},
+	}
+	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
+}
+
+func testBasicAzblobCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb,
+		workers.FeatureCacheExport,
+		workers.FeatureCacheImport,
+		workers.FeatureCacheBackendAzblob,
+	)
+
+	opts := helpers.AzuriteOpts{
+		AccountName: "azblobcacheaccount",
+		AccountKey:  base64.StdEncoding.EncodeToString([]byte("azblobcacheaccountkey")),
+	}
+
+	azAddr, cleanup, err := helpers.NewAzuriteServer(t, sb, opts)
+	require.NoError(t, err)
+	defer cleanup()
+
+	im := CacheOptionsEntry{
+		Type: "azblob",
+		Attrs: map[string]string{
+			"account_url":       azAddr,
+			"account_name":      opts.AccountName,
+			"secret_access_key": opts.AccountKey,
+			"container":         "cachecontainer",
+		},
+	}
+	ex := CacheOptionsEntry{
+		Type: "azblob",
+		Attrs: map[string]string{
+			"account_url":       azAddr,
+			"account_name":      opts.AccountName,
+			"secret_access_key": opts.AccountKey,
+			"container":         "cachecontainer",
 		},
 	}
 	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
