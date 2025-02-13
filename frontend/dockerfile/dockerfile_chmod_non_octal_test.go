@@ -1,5 +1,3 @@
-//go:build dfcopychmodnonoctal
-
 package dockerfile
 
 import (
