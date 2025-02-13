@@ -595,6 +595,10 @@ func HTTP(url string, opts ...HTTPOption) State {
 		attrs[pb.AttrHTTPGID] = strconv.Itoa(hi.GID)
 		addCap(&hi.Constraints, pb.CapSourceHTTPUIDGID)
 	}
+	if hi.Header != nil {
+		hi.Header.setAttrs(attrs)
+		addCap(&hi.Constraints, pb.CapSourceHTTPHeader)
+	}
 
 	addCap(&hi.Constraints, pb.CapSourceHTTP)
 	source := NewSource(url, attrs, hi.Constraints)
@@ -608,6 +612,7 @@ type HTTPInfo struct {
 	Perm     int
 	UID      int
 	GID      int
+	Header   *HTTPHeader
 }
 
 type HTTPOption interface {
@@ -643,6 +648,33 @@ func Chown(uid, gid int) HTTPOption {
 		hi.UID = uid
 		hi.GID = gid
 	})
+}
+
+// Header returns an [HTTPOption] that ensures additional request headers will
+// be sent when retrieving the HTTP source.
+func Header(header HTTPHeader) HTTPOption {
+	return httpOptionFunc(func(hi *HTTPInfo) {
+		hi.Header = &header
+	})
+}
+
+type HTTPHeader struct {
+	Accept    string
+	UserAgent string
+}
+
+func (hh *HTTPHeader) setAttrs(attrs map[string]string) {
+	if hh.Accept != "" {
+		attrs[hh.attr("accept")] = hh.Accept
+	}
+
+	if hh.UserAgent != "" {
+		attrs[hh.attr("user-agent")] = hh.UserAgent
+	}
+}
+
+func (hh *HTTPHeader) attr(name string) string {
+	return pb.AttrHTTPHeader + name
 }
 
 func platformSpecificSource(id string) bool {
