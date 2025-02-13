@@ -218,6 +218,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testOCIIndexMediatype,
 	testLayerLimitOnMounts,
 	testFrontendVerifyPlatforms,
+	testFrontendLintSkipVerifyPlatforms,
 	testRunValidExitCodes,
 	testFileOpSymlink,
 }
@@ -10414,6 +10415,52 @@ func testFrontendVerifyPlatforms(t *testing.T, sb integration.Sandbox) {
 	require.Contains(t, string(warnings[0].Short), "do not match result platforms linux/amd64,linux/arm64")
 }
 
+func testFrontendLintSkipVerifyPlatforms(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		dockerfile := `
+FROM scratch
+COPY foo /foo
+    `
+		st := llb.Scratch().File(
+			llb.Mkfile("Dockerfile", 0600, []byte(dockerfile)).
+				Mkfile("foo", 0600, []byte("data")))
+
+		def, err := st.Marshal(sb.Context())
+		if err != nil {
+			return nil, err
+		}
+
+		return c.Solve(ctx, gateway.SolveRequest{
+			FrontendInputs: map[string]*pb.Definition{
+				"context":    def.ToPB(),
+				"dockerfile": def.ToPB(),
+			},
+			FrontendOpt: map[string]string{
+				"requestid":     "frontend.lint",
+				"frontend.caps": "moby.buildkit.frontend.subrequests",
+			},
+		})
+	}
+
+	wc := newWarningsCapture()
+	_, err = c.Build(sb.Context(), SolveOpt{
+		FrontendAttrs: map[string]string{
+			"platform": "linux/amd64,linux/arm64",
+		},
+	}, "", frontend, wc.status)
+	require.NoError(t, err)
+	warnings := wc.wait()
+
+	for _, w := range warnings {
+		t.Logf("warning: %s", string(w.Short))
+	}
+	require.Len(t, warnings, 0)
+}
+
 type warningsCapture struct {
 	status     chan *SolveStatus
 	statusDone chan struct{}
@@ -10876,7 +10923,8 @@ func testClientCustomGRPCOpts(t *testing.T, sb integration.Sandbox) {
 		reply interface{},
 		cc *grpc.ClientConn,
 		invoker grpc.UnaryInvoker,
-		opts ...grpc.CallOption) error {
+		opts ...grpc.CallOption,
+	) error {
 		interceptedMethods = append(interceptedMethods, method)
 		return invoker(ctx, method, req, reply, cc, opts...)
 	}
