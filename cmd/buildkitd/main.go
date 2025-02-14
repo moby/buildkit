@@ -1052,7 +1052,6 @@ func newMeterProvider(ctx context.Context) (*sdkmetric.MeterProvider, error) {
 	return sdkmetric.NewMeterProvider(opts...), nil
 }
 
-// getCDIManager returns a new CDI registry with disabled auto-refresh.
 func getCDIManager(cfg config.CDIConfig) (*cdidevices.Manager, error) {
 	if cfg.Disabled != nil && *cfg.Disabled {
 		return nil, nil
@@ -1061,10 +1060,7 @@ func getCDIManager(cfg config.CDIConfig) (*cdidevices.Manager, error) {
 		return nil, errors.New("no CDI specification directories specified")
 	}
 	cdiCache, err := func() (*cdi.Cache, error) {
-		cdiCache, err := cdi.NewCache(
-			cdi.WithSpecDirs(cfg.SpecDirs...),
-			cdi.WithAutoRefresh(false),
-		)
+		cdiCache, err := cdi.NewCache(cdi.WithSpecDirs(cfg.SpecDirs...))
 		if err != nil {
 			return nil, err
 		}
