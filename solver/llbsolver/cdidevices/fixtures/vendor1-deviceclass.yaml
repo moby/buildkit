@@ -1,0 +1,28 @@
+cdiVersion: "0.6.0"
+kind: "vendor1.com/deviceclass"
+annotations:
+  foo.bar.baz: FOO
+  org.mobyproject.buildkit.device.autoallow: true
+devices:
+  - name: foo
+    annotations:
+      org.mobyproject.buildkit.device.class: class1
+    containerEdits:
+      env:
+        - FOO=injected
+  - name: bar
+    annotations:
+      org.mobyproject.buildkit.device.class: class1
+    containerEdits:
+      env:
+        - BAR=injected
+  - name: baz
+    annotations:
+      org.mobyproject.buildkit.device.class: class2
+    containerEdits:
+      env:
+        - BAZ=injected
+  - name: qux
+    containerEdits:
+      env:
+        - QUX=injected
