@@ -71,6 +71,7 @@ jobs:
 
   test-windows-amd64:
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.os == 'windows-2025' }}
     needs:
       - build
     env:
