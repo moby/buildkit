@@ -4,15 +4,13 @@ import (
 	"github.com/moby/buildkit/util/entitlements"
 )
 
-// ParseAllow parses --allow
-func ParseAllow(inp []string) ([]entitlements.Entitlement, error) {
-	ent := make([]entitlements.Entitlement, 0, len(inp))
+// ValidateAllow parses --allow
+func ValidateAllow(inp []string) error {
 	for _, v := range inp {
-		e, err := entitlements.Parse(v)
+		_, _, err := entitlements.Parse(v)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		ent = append(ent, e)
 	}
-	return ent, nil
+	return nil
 }

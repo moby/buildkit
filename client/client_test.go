@@ -400,9 +400,9 @@ func testHostNetworking(t *testing.T, sb integration.Sandbox) {
 		t.SkipNow()
 	}
 	netMode := sb.Value("netmode")
-	var allowedEntitlements []entitlements.Entitlement
+	var allowedEntitlements []string
 	if netMode == hostNetwork {
-		allowedEntitlements = []entitlements.Entitlement{entitlements.EntitlementNetworkHost}
+		allowedEntitlements = []string{entitlements.EntitlementNetworkHost.String()}
 	}
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -1063,7 +1063,7 @@ func testSecurityMode(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureSecurityMode)
 	command := `sh -c 'cat /proc/self/status | grep CapEff | cut -f 2 > /out'`
 	mode := llb.SecurityModeSandbox
-	var allowedEntitlements []entitlements.Entitlement
+	var allowedEntitlements []string
 	var assertCaps func(caps uint64)
 	secMode := sb.Value("secmode")
 	if secMode == securitySandbox {
@@ -1075,7 +1075,7 @@ func testSecurityMode(t *testing.T, sb integration.Sandbox) {
 			*/
 			require.Equal(t, uint64(0xa80425fb), caps)
 		}
-		allowedEntitlements = []entitlements.Entitlement{}
+		allowedEntitlements = []string{}
 	} else {
 		assertCaps = func(caps uint64) {
 			/*
@@ -1091,7 +1091,7 @@ func testSecurityMode(t *testing.T, sb integration.Sandbox) {
 			require.Equal(t, uint64(0x3fffffffff), caps&0x3fffffffff)
 		}
 		mode = llb.SecurityModeInsecure
-		allowedEntitlements = []entitlements.Entitlement{entitlements.EntitlementSecurityInsecure}
+		allowedEntitlements = []string{entitlements.EntitlementSecurityInsecure.String()}
 	}
 
 	c, err := New(sb.Context(), sb.Address())
@@ -1138,13 +1138,13 @@ func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
 	}
 
 	mode := llb.SecurityModeSandbox
-	var allowedEntitlements []entitlements.Entitlement
+	var allowedEntitlements []string
 	secMode := sb.Value("secmode")
 	if secMode == securitySandbox {
-		allowedEntitlements = []entitlements.Entitlement{}
+		allowedEntitlements = []string{}
 	} else {
 		mode = llb.SecurityModeInsecure
-		allowedEntitlements = []entitlements.Entitlement{entitlements.EntitlementSecurityInsecure}
+		allowedEntitlements = []string{entitlements.EntitlementSecurityInsecure.String()}
 	}
 
 	c, err := New(sb.Context(), sb.Address())
@@ -1191,7 +1191,7 @@ func testSecurityModeErrors(t *testing.T, sb integration.Sandbox) {
 		require.NoError(t, err)
 
 		_, err = c.Solve(sb.Context(), def, SolveOpt{
-			AllowedEntitlements: []entitlements.Entitlement{entitlements.EntitlementSecurityInsecure},
+			AllowedEntitlements: []string{entitlements.EntitlementSecurityInsecure.String()},
 		}, nil)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "security.insecure is not allowed")
@@ -11054,22 +11054,26 @@ func testCDI(t *testing.T, sb integration.Sandbox) {
 	defer c.Close()
 
 	require.NoError(t, os.WriteFile(filepath.Join(sb.CDISpecDir(), "vendor1-device.yaml"), []byte(`
-cdiVersion: "0.3.0"
+cdiVersion: "0.6.0"
 kind: "vendor1.com/device"
 devices:
 - name: foo
   containerEdits:
     env:
     - FOO=injected
+annotations:
+  org.mobyproject.buildkit.device.autoallow: true
 `), 0600))
 	require.NoError(t, os.WriteFile(filepath.Join(sb.CDISpecDir(), "vendor2-device.yaml"), []byte(`
-cdiVersion: "0.3.0"
+cdiVersion: "0.6.0"
 kind: "vendor2.com/device"
 devices:
 - name: bar
   containerEdits:
     env:
     - BAR=injected
+annotations:
+  org.mobyproject.buildkit.device.autoallow: true
 `), 0600))
 
 	busybox := llb.Image("busybox:latest")
@@ -11119,7 +11123,7 @@ func testCDIFirst(t *testing.T, sb integration.Sandbox) {
 	defer c.Close()
 
 	require.NoError(t, os.WriteFile(filepath.Join(sb.CDISpecDir(), "vendor1-device.yaml"), []byte(`
-cdiVersion: "0.3.0"
+cdiVersion: "0.6.0"
 kind: "vendor1.com/device"
 devices:
 - name: foo
@@ -11138,6 +11142,8 @@ devices:
   containerEdits:
     env:
     - QUX=injected
+annotations:
+  org.mobyproject.buildkit.device.autoallow: true
 `), 0600))
 
 	busybox := llb.Image("busybox:latest")
@@ -11184,7 +11190,7 @@ func testCDIWildcard(t *testing.T, sb integration.Sandbox) {
 	defer c.Close()
 
 	require.NoError(t, os.WriteFile(filepath.Join(sb.CDISpecDir(), "vendor1-device.yaml"), []byte(`
-cdiVersion: "0.3.0"
+cdiVersion: "0.6.0"
 kind: "vendor1.com/device"
 devices:
 - name: foo
@@ -11195,6 +11201,8 @@ devices:
   containerEdits:
     env:
     - BAR=injected
+annotations:
+  org.mobyproject.buildkit.device.autoallow: true
 `), 0600))
 
 	busybox := llb.Image("busybox:latest")
@@ -11243,6 +11251,7 @@ cdiVersion: "0.6.0"
 kind: "vendor1.com/device"
 annotations:
   foo.bar.baz: FOO
+  org.mobyproject.buildkit.device.autoallow: true
 devices:
 - name: foo
   annotations:
