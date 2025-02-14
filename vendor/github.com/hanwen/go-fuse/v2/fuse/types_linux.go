@@ -6,6 +6,8 @@ package fuse
 
 import (
 	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -49,4 +51,9 @@ func (s *StatfsOut) FromStatfsT(statfs *syscall.Statfs_t) {
 func (o *InitOut) setFlags(flags uint64) {
 	o.Flags = uint32(flags) | CAP_INIT_EXT
 	o.Flags2 = uint32(flags >> 32)
+}
+
+func (t *SxTime) FromStatxTimestamp(ts *unix.StatxTimestamp) {
+	t.Sec = uint64(ts.Sec)
+	t.Nsec = ts.Nsec
 }
