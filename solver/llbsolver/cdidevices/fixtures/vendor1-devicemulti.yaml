@@ -1,0 +1,21 @@
+cdiVersion: "0.6.0"
+kind: "vendor1.com/devicemulti"
+devices:
+  - name: foo
+    containerEdits:
+      env:
+        - FOO=injected
+  - name: bar
+    containerEdits:
+      env:
+        - BAR=injected
+  - name: baz
+    containerEdits:
+      env:
+        - BAZ=injected
+  - name: qux
+    containerEdits:
+      env:
+        - QUX=injected
+annotations:
+  org.mobyproject.buildkit.device.autoallow: true

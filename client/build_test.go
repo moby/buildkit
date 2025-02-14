@@ -1838,7 +1838,7 @@ func testClientGatewayContainerSecurityMode(t *testing.T, sb integration.Sandbox
 
 	command := []string{"sh", "-c", `cat /proc/self/status | grep CapEff | cut -f 2`}
 	mode := llb.SecurityModeSandbox
-	var allowedEntitlements []entitlements.Entitlement
+	var allowedEntitlements []string
 	var assertCaps func(caps uint64)
 	secMode := sb.Value("secmode")
 	if secMode == securitySandbox {
@@ -1850,7 +1850,7 @@ func testClientGatewayContainerSecurityMode(t *testing.T, sb integration.Sandbox
 			*/
 			require.Equal(t, uint64(0xa80425fb), caps)
 		}
-		allowedEntitlements = []entitlements.Entitlement{}
+		allowedEntitlements = []string{}
 		if expectFail {
 			return
 		}
@@ -1869,9 +1869,9 @@ func testClientGatewayContainerSecurityMode(t *testing.T, sb integration.Sandbox
 			require.Equal(t, uint64(0x3fffffffff), caps&0x3fffffffff)
 		}
 		mode = llb.SecurityModeInsecure
-		allowedEntitlements = []entitlements.Entitlement{entitlements.EntitlementSecurityInsecure}
+		allowedEntitlements = []string{entitlements.EntitlementSecurityInsecure.String()}
 		if expectFail {
-			allowedEntitlements = []entitlements.Entitlement{}
+			allowedEntitlements = []string{}
 		}
 	}
 
@@ -2046,13 +2046,13 @@ func testClientGatewayContainerHostNetworking(t *testing.T, sb integration.Sandb
 	ctx := sb.Context()
 	product := "buildkit_test"
 
-	var allowedEntitlements []entitlements.Entitlement
+	var allowedEntitlements []string
 	netMode := pb.NetMode_UNSET
 	if sb.Value("netmode") == hostNetwork {
 		netMode = pb.NetMode_HOST
-		allowedEntitlements = []entitlements.Entitlement{entitlements.EntitlementNetworkHost}
+		allowedEntitlements = []string{entitlements.EntitlementNetworkHost.String()}
 		if expectFail {
-			allowedEntitlements = []entitlements.Entitlement{}
+			allowedEntitlements = []string{}
 		}
 	}
 	c, err := New(sb.Context(), sb.Address())

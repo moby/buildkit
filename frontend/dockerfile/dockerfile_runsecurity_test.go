@@ -71,7 +71,7 @@ RUN --security=insecure ls -l /dev && dd if=/dev/zero of=disk.img bs=20M count=1
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
-		AllowedEntitlements: []entitlements.Entitlement{entitlements.EntitlementSecurityInsecure},
+		AllowedEntitlements: []string{entitlements.EntitlementSecurityInsecure.String()},
 	}, nil)
 
 	secMode := sb.Value("security.insecure")
@@ -109,7 +109,7 @@ RUN [ "$(cat /proc/self/status | grep CapBnd)" == "CapBnd:	00000000a80425fb" ]
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
-		AllowedEntitlements: []entitlements.Entitlement{entitlements.EntitlementSecurityInsecure},
+		AllowedEntitlements: []string{entitlements.EntitlementSecurityInsecure.String()},
 	}, nil)
 
 	secMode := sb.Value("security.insecure")
@@ -173,7 +173,7 @@ RUN [ "$(cat /proc/self/status | grep CapBnd)" == "CapBnd:	00000000a80425fb" ]
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
-		AllowedEntitlements: []entitlements.Entitlement{entitlements.EntitlementSecurityInsecure},
+		AllowedEntitlements: []string{entitlements.EntitlementSecurityInsecure.String()},
 	}, nil)
 
 	secMode := sb.Value("security.insecure")

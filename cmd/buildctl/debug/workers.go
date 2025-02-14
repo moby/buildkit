@@ -94,7 +94,7 @@ func printWorkersVerbose(tw *tabwriter.Writer, winfo []*client.WorkerInfo) {
 
 				for _, k := range sortedKeys(d.Annotations) {
 					v := d.Annotations[k]
-					fmt.Fprintf(tw, "\t\t%s:\t%s\n", k, v)
+					fmt.Fprintf(tw, "\tAnnotations:\t%s:\t%s\n", k, v)
 				}
 			}
 			fmt.Fprint(tw, "\n")
