@@ -30,13 +30,15 @@ func testDeviceRunEnv(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
 	require.NoError(t, os.WriteFile(filepath.Join(sb.CDISpecDir(), "vendor1-device.yaml"), []byte(`
-cdiVersion: "0.3.0"
+cdiVersion: "0.6.0"
 kind: "vendor1.com/device"
 devices:
 - name: foo
   containerEdits:
     env:
     - FOO=injected
+  annotations:
+    org.mobyproject.buildkit.device.autoallow: true
 `), 0600))
 
 	dockerfile := []byte(`

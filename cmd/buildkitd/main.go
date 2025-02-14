@@ -39,6 +39,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/bboltcachestorage"
+	"github.com/moby/buildkit/solver/llbsolver/cdidevices"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/appdefaults"
@@ -846,6 +847,11 @@ func newController(ctx context.Context, c *cli.Context, cfg *config.Config) (*co
 		"s3":       s3remotecache.ResolveCacheImporterFunc(),
 		"azblob":   azblob.ResolveCacheImporterFunc(),
 	}
+
+	if cfg.CDI.Disabled == nil || !*cfg.CDI.Disabled {
+		cfg.Entitlements = append(cfg.Entitlements, "device")
+	}
+
 	return control.NewController(control.Opt{
 		SessionManager:            sessionManager,
 		WorkerController:          wc,
@@ -1047,16 +1053,16 @@ func newMeterProvider(ctx context.Context) (*sdkmetric.MeterProvider, error) {
 }
 
 // getCDIManager returns a new CDI registry with disabled auto-refresh.
-func getCDIManager(disabled *bool, specDirs []string) (*cdi.Cache, error) {
-	if disabled != nil && *disabled {
+func getCDIManager(cfg config.CDIConfig) (*cdidevices.Manager, error) {
+	if cfg.Disabled != nil && *cfg.Disabled {
 		return nil, nil
 	}
-	if len(specDirs) == 0 {
-		return nil, errors.New("No CDI specification directories specified")
+	if len(cfg.SpecDirs) == 0 {
+		return nil, errors.New("no CDI specification directories specified")
 	}
 	cdiCache, err := func() (*cdi.Cache, error) {
 		cdiCache, err := cdi.NewCache(
-			cdi.WithSpecDirs(specDirs...),
+			cdi.WithSpecDirs(cfg.SpecDirs...),
 			cdi.WithAutoRefresh(false),
 		)
 		if err != nil {
@@ -1070,5 +1076,5 @@ func getCDIManager(disabled *bool, specDirs []string) (*cdi.Cache, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "CDI registry initialization failure")
 	}
-	return cdiCache, nil
+	return cdidevices.NewManager(cdiCache, cfg.AutoAllowed), nil
 }
