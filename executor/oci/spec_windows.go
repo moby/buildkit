@@ -119,3 +119,16 @@ func generateCDIOpts(_ *cdidevices.Manager, devices []*pb.CDIDevice) ([]oci.Spec
 	// https://github.com/cncf-tags/container-device-interface/issues/28
 	return nil, errors.New("no support for CDI on Windows")
 }
+
+func getMountType(_ string) string {
+	// HCS shim doesn't expect a named type
+	// for the mount.
+	return ""
+}
+
+// For Windows, the mounting by HCS doesn't go through
+// WCIFS, hence we have to give the direct path of the
+// mount, which is in the /Files subdirectory.
+func getCompleteSourcePath(p string) string {
+	return filepath.Join(p, "Files")
+}
