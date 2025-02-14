@@ -278,6 +278,8 @@ func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sa
 
 	integration.Run(t, integration.TestFuncs(
 		testCDI,
+		testCDINotAllowed,
+		testCDIEntitlement,
 		testCDIFirst,
 		testCDIWildcard,
 		testCDIClass,
@@ -11109,6 +11111,104 @@ annotations:
 	dt2, err := os.ReadFile(filepath.Join(destDir, "bar.env"))
 	require.NoError(t, err)
 	require.Contains(t, strings.TrimSpace(string(dt2)), `BAR=injected`)
+}
+
+func testCDINotAllowed(t *testing.T, sb integration.Sandbox) {
+	if sb.Rootless() {
+		t.SkipNow()
+	}
+
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureCDI)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	require.NoError(t, os.WriteFile(filepath.Join(sb.CDISpecDir(), "vendor1-device.yaml"), []byte(`
+cdiVersion: "0.6.0"
+kind: "vendor1.com/device"
+devices:
+- name: foo
+  containerEdits:
+    env:
+    - FOO=injected
+`), 0600))
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+
+	run := func(cmd string, ro ...llb.RunOption) {
+		st = busybox.Run(append(ro, llb.Shlex(cmd), llb.Dir("/wd"))...).AddMount("/wd", st)
+	}
+
+	run(`sh -c 'env|sort | tee foo.env'`, llb.AddCDIDevice(llb.CDIDeviceName("vendor1.com/device=foo")))
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "requested by the build but not allowed")
+}
+
+func testCDIEntitlement(t *testing.T, sb integration.Sandbox) {
+	if sb.Rootless() {
+		t.SkipNow()
+	}
+
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureCDI)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	require.NoError(t, os.WriteFile(filepath.Join(sb.CDISpecDir(), "vendor1-device.yaml"), []byte(`
+cdiVersion: "0.6.0"
+kind: "vendor1.com/device"
+devices:
+- name: foo
+  containerEdits:
+    env:
+    - FOO=injected
+`), 0600))
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+
+	run := func(cmd string, ro ...llb.RunOption) {
+		st = busybox.Run(append(ro, llb.Shlex(cmd), llb.Dir("/wd"))...).AddMount("/wd", st)
+	}
+
+	run(`sh -c 'env|sort | tee foo.env'`, llb.AddCDIDevice(llb.CDIDeviceName("vendor1.com/device=foo")))
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		AllowedEntitlements: []string{"device=vendor1.com/device"},
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "foo.env"))
+	require.NoError(t, err)
+	require.Contains(t, strings.TrimSpace(string(dt)), `FOO=injected`)
 }
 
 func testCDIFirst(t *testing.T, sb integration.Sandbox) {
