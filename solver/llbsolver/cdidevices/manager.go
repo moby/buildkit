@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	deviceAnnotationClass = "org.mobyproject.buildkit.device.class"
-	deviceAutoAllow       = "org.mobyproject.buildkit.device.autoallow"
+	deviceAnnotationClass     = "org.mobyproject.buildkit.device.class"
+	deviceAnnotationAutoAllow = "org.mobyproject.buildkit.device.autoallow"
 )
 
 var installers = map[string]Setup{}
@@ -63,7 +63,7 @@ func (m *Manager) isAutoAllowed(kind, name string, annotations map[string]string
 	if _, ok := m.autoAllowed[kind]; ok {
 		return true
 	}
-	if v, ok := annotations[deviceAutoAllow]; ok {
+	if v, ok := annotations[deviceAnnotationAutoAllow]; ok {
 		if b, err := strconv.ParseBool(v); err == nil && b {
 			return true
 		}
