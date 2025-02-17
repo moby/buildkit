@@ -17,7 +17,7 @@ on:
 
 env:
   SETUP_BUILDX_VERSION: "edge"
-  SETUP_BUILDKIT_IMAGE: "moby/buildkit:latest"
+  SETUP_BUILDKIT_IMAGE: "moby/buildkit:v0.20.0-rc2"
 
 jobs:
   prepare:
