@@ -516,7 +516,8 @@ GitHub Actions cache saves both cache metadata and layers to GitHub's Cache serv
 Similarly to using [actions/cache](https://github.com/actions/cache), caches are [scoped by branch](https://docs.github.com/en/actions/advanced-guides/caching-dependencies-to-speed-up-workflows#restrictions-for-accessing-a-cache), with the default and target branches being available to every branch.
 
 Following attributes are required to authenticate against the [GitHub Actions Cache service API](https://github.com/tonistiigi/go-actions-cache/blob/master/api.md#authentication):
-* `url`: Cache server URL (default `$ACTIONS_CACHE_URL`)
+* `url`: Cache server URL (default `$ACTIONS_CACHE_URL` or fallback to `$ACTIONS_RESULTS_URL`)
+* `url_v2`: Cache v2 server URL if `$ACTIONS_CACHE_SERVICE_V2` set on the runner (default `$ACTIONS_RESULTS_URL`)
 * `token`: Access token (default `$ACTIONS_RUNTIME_TOKEN`)
 
 :information_source: This type of cache can be used with [Docker Build Push Action](https://github.com/docker/build-push-action)

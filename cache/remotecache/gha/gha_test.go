@@ -1,8 +1,10 @@
 package gha
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -57,10 +59,25 @@ func testBasicGhaCacheImportExportExtraTimeout(t *testing.T, sb integration.Sand
 
 	destDir := t.TempDir()
 
-	runtimeToken := os.Getenv("ACTIONS_RUNTIME_TOKEN")
-	cacheURL := os.Getenv("ACTIONS_CACHE_URL")
-	if runtimeToken == "" || cacheURL == "" {
-		t.Skip("ACTIONS_RUNTIME_TOKEN and ACTIONS_CACHE_URL must be set")
+	var cacheVersion string
+	if v, ok := os.LookupEnv("ACTIONS_CACHE_SERVICE_V2"); ok {
+		if b, err := strconv.ParseBool(v); err == nil && b {
+			cacheVersion = "2"
+		}
+	}
+
+	cacheAttrs := map[string]string{}
+	if cacheVersion == "2" {
+		cacheAttrs["url_v2"] = os.Getenv("ACTIONS_RESULTS_URL")
+	}
+	cacheAttrs["url"] = os.Getenv("ACTIONS_CACHE_URL")
+	if cacheAttrs["url"] == "" {
+		cacheAttrs["url"] = os.Getenv("ACTIONS_RESULTS_URL")
+	}
+	cacheAttrs["token"] = os.Getenv("ACTIONS_RUNTIME_TOKEN")
+
+	if cacheAttrs["token"] == "" || (cacheAttrs["url"] == "" && cacheAttrs["url_v2"] == "") {
+		t.Skip("actions runtime token and cache url must be set")
 	}
 
 	scope := "buildkit-" + t.Name()
@@ -74,6 +91,12 @@ func testBasicGhaCacheImportExportExtraTimeout(t *testing.T, sb integration.Sand
 		}
 	}
 
+	cacheExportAttrs := map[string]string{
+		"scope": scope,
+		"mode":  "max",
+	}
+	maps.Copy(cacheExportAttrs, cacheAttrs)
+
 	_, err = c.Solve(sb.Context(), def, client.SolveOpt{
 		Exports: []client.ExportEntry{
 			{
@@ -82,13 +105,8 @@ func testBasicGhaCacheImportExportExtraTimeout(t *testing.T, sb integration.Sand
 			},
 		},
 		CacheExports: []client.CacheOptionsEntry{{
-			Type: "gha",
-			Attrs: map[string]string{
-				"url":   cacheURL,
-				"token": runtimeToken,
-				"scope": scope,
-				"mode":  "max",
-			},
+			Type:  "gha",
+			Attrs: cacheExportAttrs,
 		}},
 	}, nil)
 	require.NoError(t, err)
@@ -104,6 +122,11 @@ func testBasicGhaCacheImportExportExtraTimeout(t *testing.T, sb integration.Sand
 
 	destDir = t.TempDir()
 
+	cacheImportAttrs := map[string]string{
+		"scope": scope,
+	}
+	maps.Copy(cacheImportAttrs, cacheAttrs)
+
 	_, err = c.Solve(sb.Context(), def, client.SolveOpt{
 		Exports: []client.ExportEntry{
 			{
@@ -112,12 +135,8 @@ func testBasicGhaCacheImportExportExtraTimeout(t *testing.T, sb integration.Sand
 			},
 		},
 		CacheImports: []client.CacheOptionsEntry{{
-			Type: "gha",
-			Attrs: map[string]string{
-				"url":   cacheURL,
-				"token": runtimeToken,
-				"scope": scope,
-			},
+			Type:  "gha",
+			Attrs: cacheImportAttrs,
 		}},
 	}, nil)
 	require.NoError(t, err)
