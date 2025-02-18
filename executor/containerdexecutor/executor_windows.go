@@ -87,6 +87,25 @@ func (w *containerdExecutor) createOCISpec(ctx context.Context, id, _, _ string,
 		containerdoci.WithUser(meta.User),
 	}
 
+	// TODO: will need to come from buildctl, as a fag: --isolated
+	// or custom --opt
+	// For prototyping, set env var BUILKIT_HYPERV_ISOLATION=1
+	// when running buildkitd to do all runs in hyperv-isolation
+	// or per image basis with dockerfile ENV or equivalent.
+	key := "BUILDKIT_HYPERV_ISOLATED"
+	isolated := func() bool {
+		for _, env := range meta.Env {
+			parts := strings.SplitN(env, "=", 2)
+			if len(parts) == 2 && parts[0] == key && parts[1] == "1" {
+				return true
+			}
+		}
+		return false
+	}
+	if os.Getenv(key) == "1" || isolated() {
+		opts = append(opts, containerdoci.WithWindowsHyperV)
+	}
+
 	processMode := oci.ProcessSandbox // FIXME(AkihiroSuda)
 	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, "", "", namespace, "", processMode, nil, "", false, w.traceSocket, nil, opts...)
 	if err != nil {
