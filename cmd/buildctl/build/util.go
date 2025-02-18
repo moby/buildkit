@@ -4,10 +4,9 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/pkg/errors"
-
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/pkg/errors"
 )
 
 // loadGithubEnv verify that url and token attributes exists in the
@@ -18,6 +17,7 @@ import (
 func loadGithubEnv(cache client.CacheOptionsEntry) (client.CacheOptionsEntry, error) {
 	version, ok := cache.Attrs["version"]
 	if !ok {
+		// https://github.com/actions/toolkit/blob/2b08dc18f261b9fdd978b70279b85cbef81af8bc/packages/cache/src/internal/config.ts#L19
 		if v, ok := os.LookupEnv("ACTIONS_CACHE_SERVICE_V2"); ok {
 			if b, err := strconv.ParseBool(v); err == nil && b {
 				version = "2"
@@ -26,18 +26,23 @@ func loadGithubEnv(cache client.CacheOptionsEntry) (client.CacheOptionsEntry, er
 	}
 
 	if _, ok := cache.Attrs["url_v2"]; !ok && version == "2" {
-		url, ok := os.LookupEnv("ACTIONS_RESULTS_URL")
-		if !ok {
-			return cache, errors.New("cache with type gha requires url parameter or $ACTIONS_RESULTS_URL")
+		// https://github.com/actions/toolkit/blob/2b08dc18f261b9fdd978b70279b85cbef81af8bc/packages/cache/src/internal/config.ts#L34-L35
+		if v, ok := os.LookupEnv("ACTIONS_RESULTS_URL"); ok {
+			cache.Attrs["url_v2"] = v
 		}
-		cache.Attrs["url_v2"] = url
 	}
 	if _, ok := cache.Attrs["url"]; !ok {
-		url, ok := os.LookupEnv("ACTIONS_CACHE_URL")
-		if !ok {
-			return cache, errors.New("cache with type gha requires url parameter or $ACTIONS_CACHE_URL")
+		// https://github.com/actions/toolkit/blob/2b08dc18f261b9fdd978b70279b85cbef81af8bc/packages/cache/src/internal/config.ts#L28-L33
+		if v, ok := os.LookupEnv("ACTIONS_CACHE_URL"); ok {
+			cache.Attrs["url"] = v
+		} else if v, ok := os.LookupEnv("ACTIONS_RESULTS_URL"); ok {
+			cache.Attrs["url"] = v
 		}
-		cache.Attrs["url"] = url
+	}
+	if _, ok := cache.Attrs["url"]; !ok {
+		if _, ok := cache.Attrs["url_v2"]; !ok {
+			return cache, errors.New("cache with type gha requires url parameter to be set")
+		}
 	}
 
 	if _, ok := cache.Attrs["token"]; !ok {
