@@ -213,8 +213,7 @@ func buildAction(clicontext *cli.Context) error {
 		attachable = append(attachable, secretProvider)
 	}
 
-	allowed, err := build.ParseAllow(clicontext.StringSlice("allow"))
-	if err != nil {
+	if err := build.ValidateAllow(clicontext.StringSlice("allow")); err != nil {
 		return err
 	}
 
@@ -258,7 +257,7 @@ func buildAction(clicontext *cli.Context) error {
 		CacheExports:        cacheExports,
 		CacheImports:        cacheImports,
 		Session:             attachable,
-		AllowedEntitlements: allowed,
+		AllowedEntitlements: clicontext.StringSlice("allow"),
 		SourcePolicy:        srcPol,
 		Ref:                 ref,
 	}

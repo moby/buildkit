@@ -132,7 +132,7 @@ RUN --network=host nc 127.0.0.1 %s | grep foo
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
-		AllowedEntitlements: []entitlements.Entitlement{entitlements.EntitlementNetworkHost},
+		AllowedEntitlements: []string{entitlements.EntitlementNetworkHost.String()},
 	}, nil)
 
 	hostAllowed := sb.Value("network.host")
@@ -180,7 +180,7 @@ RUN --network=none ! nc -z 127.0.0.1 %s
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
-		AllowedEntitlements: []entitlements.Entitlement{entitlements.EntitlementNetworkHost},
+		AllowedEntitlements: []string{entitlements.EntitlementNetworkHost.String()},
 		FrontendAttrs: map[string]string{
 			"force-network-mode": "host",
 		},
