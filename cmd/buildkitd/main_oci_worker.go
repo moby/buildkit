@@ -298,7 +298,7 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 
 	dns := getDNSConfig(common.config.DNS)
 
-	cdiManager, err := getCDIManager(common.config.CDI.Disabled, common.config.CDI.SpecDirs)
+	cdiManager, err := getCDIManager(common.config.CDI)
 	if err != nil {
 		return nil, err
 	}
