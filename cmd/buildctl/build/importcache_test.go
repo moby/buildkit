@@ -54,8 +54,22 @@ func TestParseImportCache(t *testing.T) {
 				{
 					Type: "gha",
 					Attrs: map[string]string{
-						"url":   "https://foo.bar",
-						"token": "foo",
+						"url":    "https://foo.bar",
+						"url_v2": "https://github.com/testv2", // Set from env below
+						"token":  "foo",
+					},
+				},
+			},
+		},
+		{
+			importCaches: []string{"type=gha,url_v2=https://foo.bar,token=foo"},
+			expected: []client.CacheOptionsEntry{
+				{
+					Type: "gha",
+					Attrs: map[string]string{
+						"url":    "https://github.com/test", // Set from env below
+						"url_v2": "https://foo.bar",
+						"token":  "foo",
 					},
 				},
 			},
@@ -66,8 +80,9 @@ func TestParseImportCache(t *testing.T) {
 				{
 					Type: "gha",
 					Attrs: map[string]string{
-						"url":   "https://github.com/test", // Set from env below
-						"token": "bar",                     // Set from env below
+						"url":    "https://github.com/test",   // Set from env below
+						"url_v2": "https://github.com/testv2", // Set from env below
+						"token":  "bar",                       // Set from env below
 					},
 				},
 			},
@@ -75,7 +90,9 @@ func TestParseImportCache(t *testing.T) {
 	}
 
 	// Set values for GitHub parse cache
+	t.Setenv("ACTIONS_CACHE_SERVICE_V2", "True")
 	t.Setenv("ACTIONS_CACHE_URL", "https://github.com/test")
+	t.Setenv("ACTIONS_RESULTS_URL", "https://github.com/testv2")
 	t.Setenv("ACTIONS_RUNTIME_TOKEN", "bar")
 
 	for _, tc := range testCases {
