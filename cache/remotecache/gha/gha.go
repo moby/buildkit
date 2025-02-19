@@ -317,8 +317,9 @@ type importer struct {
 
 func NewImporter(c *Config) (remotecache.Importer, error) {
 	cache, err := actionscache.New(c.Token, c.URL, c.Version > 1, actionscache.Opt{
-		Client:  tracing.DefaultClient,
-		Timeout: c.Timeout,
+		Client:    tracing.DefaultClient,
+		Timeout:   c.Timeout,
+		UserAgent: bkversion.UserAgent(),
 	})
 	if err != nil {
 		return nil, err
