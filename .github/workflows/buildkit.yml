@@ -23,7 +23,7 @@ on:
 env:
   GO_VERSION: "1.23"
   SETUP_BUILDX_VERSION: "edge"
-  SETUP_BUILDKIT_IMAGE: "moby/buildkit:v0.20.0-rc2"
+  SETUP_BUILDKIT_IMAGE: "moby/buildkit:v0.20.0-rc3"
   SCOUT_VERSION: "1.13.0"
   IMAGE_NAME: "moby/buildkit"
   PLATFORMS: "linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le,linux/riscv64"
