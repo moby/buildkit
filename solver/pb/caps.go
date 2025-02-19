@@ -34,6 +34,7 @@ const (
 	CapSourceHTTPChecksum apicaps.CapID = "source.http.checksum"
 	CapSourceHTTPPerm     apicaps.CapID = "source.http.perm"
 	CapSourceHTTPUIDGID   apicaps.CapID = "soruce.http.uidgid"
+	CapSourceHTTPAuth     apicaps.CapID = "soruce.http.auth"
 
 	CapSourceOCILayout apicaps.CapID = "source.ocilayout"
 
@@ -225,6 +226,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapSourceHTTPPerm,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapSourceHTTPAuth,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

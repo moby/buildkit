@@ -105,6 +105,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testBuildMultiMount,
 	testBuildHTTPSource,
 	testBuildHTTPSourceEtagScope,
+	testBuildHTTPSourceAuthHeaderSecret,
 	testBuildPushAndValidate,
 	testBuildExportWithUncompressed,
 	testBuildExportScratch,
@@ -2985,6 +2986,47 @@ func testBuildHTTPSourceEtagScope(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, "gzip", allReqs[1].Header.Get("Accept-Encoding"))
 
 	require.NoError(t, os.RemoveAll(filepath.Join(out2, "foo")))
+}
+
+func testBuildHTTPSourceAuthHeaderSecret(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	modTime := time.Now().Add(-24 * time.Hour) // avoid false positive with current time
+
+	resp := httpserver.Response{
+		Etag:         identity.NewID(),
+		Content:      []byte("content1"),
+		LastModified: &modTime,
+	}
+
+	server := httpserver.NewTestServer(map[string]httpserver.Response{
+		"/foo": resp,
+	})
+	defer server.Close()
+
+	st := llb.HTTP(server.URL+"/foo", llb.AuthHeaderSecret("http-secret"))
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(
+		sb.Context(),
+		def,
+		SolveOpt{
+			Session: []session.Attachable{secretsprovider.FromMap(map[string][]byte{
+				"http-secret": []byte("Bearer foo"),
+			})},
+		},
+		nil,
+	)
+	require.NoError(t, err)
+
+	allReqs := server.Stats("/foo").Requests
+	require.Equal(t, 1, len(allReqs))
+	require.Equal(t, http.MethodGet, allReqs[0].Method)
+	require.Equal(t, "Bearer foo", allReqs[0].Header.Get("Authorization"))
 }
 
 func testResolveAndHosts(t *testing.T, sb integration.Sandbox) {
