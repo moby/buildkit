@@ -1570,15 +1570,22 @@ func testLocalSymlinkEscape(t *testing.T, sb integration.Sandbox) {
 }
 
 func testRelativeWorkDir(t *testing.T, sb integration.Sandbox) {
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	pwd := llb.Image("docker.io/library/busybox:latest").
+	imgName := integration.UnixOrWindows(
+		"docker.io/library/busybox:latest",
+		"mcr.microsoft.com/windows/nanoserver:ltsc2022",
+	)
+	cmdStr := integration.UnixOrWindows(
+		`sh -c "pwd > /out/pwd"`,
+		`cmd /C "cd > /out/pwd"`,
+	)
+	pwd := llb.Image(imgName).
 		Dir("test1").
 		Dir("test2").
-		Run(llb.Shlex(`sh -c "pwd > /out/pwd"`)).
+		Run(llb.Shlex(cmdStr)).
 		AddMount("/out", llb.Scratch())
 
 	def, err := pwd.Marshal(sb.Context())
@@ -1598,22 +1605,32 @@ func testRelativeWorkDir(t *testing.T, sb integration.Sandbox) {
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "pwd"))
 	require.NoError(t, err)
-	require.Equal(t, []byte("/test1/test2\n"), dt)
+	pathStr := integration.UnixOrWindows(
+		"/test1/test2\n",
+		"C:\\test1\\test2\r\n",
+	)
+	require.Equal(t, []byte(pathStr), dt)
 }
 
 // TODO: remove this test once `client.SolveOpt.LocalDirs`, now marked as deprecated, is removed.
 // For more context on this test, please check:
 // https://github.com/moby/buildkit/pull/4583#pullrequestreview-1847043452
 func testSolverOptLocalDirsStillWorks(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
-
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	out := llb.Image("docker.io/library/busybox:latest").
+	imgName := integration.UnixOrWindows(
+		"docker.io/library/busybox:latest",
+		"mcr.microsoft.com/windows/nanoserver:ltsc2022",
+	)
+	cmdStr := integration.UnixOrWindows(
+		`sh -c "/bin/rev < input.txt > /out/output.txt"`,
+		`cmd /C "type input.txt > /out/output.txt"`,
+	)
+	out := llb.Image(imgName).
 		File(llb.Copy(llb.Local("mylocal"), "input.txt", "input.txt")).
-		Run(llb.Shlex(`sh -c "/bin/rev < input.txt > /out/output.txt"`)).
+		Run(llb.Shlex(cmdStr)).
 		AddMount(`/out`, llb.Scratch())
 
 	def, err := out.Marshal(sb.Context())
@@ -1641,7 +1658,12 @@ func testSolverOptLocalDirsStillWorks(t *testing.T, sb integration.Sandbox) {
 
 	dt, err := os.ReadFile(filepath.Join(destDir.Name, "output.txt"))
 	require.NoError(t, err)
-	require.Equal(t, []byte("dlroW olleH"), dt)
+	// not reversed on Windows since there's no handy rev utility
+	revStr := integration.UnixOrWindows(
+		"dlroW olleH",
+		"Hello World",
+	)
+	require.Equal(t, []byte(revStr), dt)
 }
 
 func testFileOpMkdirMkfile(t *testing.T, sb integration.Sandbox) {
@@ -6838,12 +6860,19 @@ func testCacheMountNoCache(t *testing.T, sb integration.Sandbox) {
 }
 
 func testCopyFromEmptyImage(t *testing.T, sb integration.Sandbox) {
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	for _, image := range []llb.State{llb.Scratch(), llb.Image("tonistiigi/test:nolayers")} {
+	// On Windows, the error messages are different for the Scratch image
+	// (which is coming from the OS). While the one for the no-layers image
+	// is being returned by Buildkit (in unix style).
+	winErrMsgs := []string{
+		"foo: The system cannot find the file specified", // for llb.Scratch()
+		"/foo: no such file or directory",                // for tonistiigi/test:nolayers
+	}
+
+	for i, image := range []llb.State{llb.Scratch(), llb.Image("tonistiigi/test:nolayers")} {
 		st := llb.Scratch().File(llb.Copy(image, "/", "/"))
 		def, err := st.Marshal(sb.Context())
 		require.NoError(t, err)
@@ -6857,11 +6886,23 @@ func testCopyFromEmptyImage(t *testing.T, sb integration.Sandbox) {
 
 		_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "/foo: no such file or directory")
+		errMsg := integration.UnixOrWindows(
+			"/foo: no such file or directory",
+			winErrMsgs[i],
+		)
+		require.Contains(t, err.Error(), errMsg)
 
-		busybox := llb.Image("busybox:latest")
+		imgName := integration.UnixOrWindows(
+			"busybox:latest",
+			"mcr.microsoft.com/windows/nanoserver:ltsc2022",
+		)
+		busybox := llb.Image(imgName)
 
-		out := busybox.Run(llb.Shlex(`sh -e -c '[ $(ls /scratch | wc -l) = '0' ]'`))
+		cmdStr := integration.UnixOrWindows(
+			`sh -e -c '[ $(ls /scratch | wc -l) = '0' ]'`,
+			`cmd /C dir \scratch`,
+		)
+		out := busybox.Run(llb.Shlex(cmdStr))
 		out.AddMount("/scratch", image, llb.Readonly)
 
 		def, err = out.Marshal(sb.Context())
