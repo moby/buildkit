@@ -54,9 +54,11 @@ func (bc *Client) Build(ctx context.Context, fn BuildFunc) (*ResultBuilder, erro
 				}
 			}
 
-			p := platforms.DefaultSpec()
+			var p ocispecs.Platform
 			if tp != nil {
 				p = *tp
+			} else {
+				p = platforms.DefaultSpec()
 			}
 
 			// in certain conditions we allow input platform to be extended from base image

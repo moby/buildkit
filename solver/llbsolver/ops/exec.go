@@ -123,7 +123,7 @@ func (e *ExecOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 	}
 	op.Meta.ProxyEnv = nil
 
-	p := platforms.DefaultSpec()
+	var p ocispecs.Platform
 	if e.platform != nil {
 		p = ocispecs.Platform{
 			OS:           e.platform.OS,
@@ -132,6 +132,8 @@ func (e *ExecOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 			OSVersion:    e.platform.OSVersion,
 			OSFeatures:   e.platform.OSFeatures,
 		}
+	} else {
+		p = platforms.DefaultSpec()
 	}
 
 	// Special case for cache compatibility with buggy versions that wrongly
