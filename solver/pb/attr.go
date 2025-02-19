@@ -20,6 +20,7 @@ const AttrHTTPFilename = "http.filename"
 const AttrHTTPPerm = "http.perm"
 const AttrHTTPUID = "http.uid"
 const AttrHTTPGID = "http.gid"
+const AttrHTTPHeader = "http.header."
 
 const AttrImageResolveMode = "image.resolvemode"
 const AttrImageResolveModeDefault = "default"

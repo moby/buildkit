@@ -25,6 +25,12 @@ type HTTPIdentifier struct {
 	Perm     int
 	UID      int
 	GID      int
+	Header   []HeaderField
+}
+
+type HeaderField struct {
+	Name  string
+	Value string
 }
 
 var _ source.Identifier = (*HTTPIdentifier)(nil)
