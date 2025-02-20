@@ -181,12 +181,10 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, inde
 		return "", "", nil, false, errors.Wrapf(err, "failed to search metadata for %s", uh)
 	}
 
-	req, err := http.NewRequest("GET", hs.src.URL, nil)
+	req, err := hs.newHTTPRequest(ctx)
 	if err != nil {
 		return "", "", nil, false, err
 	}
-	req = req.WithContext(ctx)
-	req.Header.Add("User-Agent", version.UserAgent())
 	m := map[string]cacheRefMetadata{}
 
 	// If we request a single ETag in 'If-None-Match', some servers omit the
@@ -443,11 +441,10 @@ func (hs *httpSourceHandler) Snapshot(ctx context.Context, g session.Group) (cac
 		}
 	}
 
-	req, err := http.NewRequest("GET", hs.src.URL, nil)
+	req, err := hs.newHTTPRequest(ctx)
 	if err != nil {
 		return nil, err
 	}
-	req = req.WithContext(ctx)
 
 	client := hs.client(g)
 
@@ -469,6 +466,17 @@ func (hs *httpSourceHandler) Snapshot(ctx context.Context, g session.Group) (cac
 	}
 
 	return ref, nil
+}
+
+func (hs *httpSourceHandler) newHTTPRequest(ctx context.Context) (*http.Request, error) {
+	req, err := http.NewRequest("GET", hs.src.URL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("User-Agent", version.UserAgent())
+
+	return req.WithContext(ctx), nil
 }
 
 func getFileName(urlStr, manualFilename string, resp *http.Response) string {
