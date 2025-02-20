@@ -31,9 +31,11 @@ const (
 	CapSourceGitSubdir        apicaps.CapID = "source.git.subdir"
 
 	CapSourceHTTP         apicaps.CapID = "source.http"
+	CapSourceHTTPAuth     apicaps.CapID = "source.http.auth"
 	CapSourceHTTPChecksum apicaps.CapID = "source.http.checksum"
 	CapSourceHTTPPerm     apicaps.CapID = "source.http.perm"
-	CapSourceHTTPUIDGID   apicaps.CapID = "soruce.http.uidgid"
+	// NOTE the historical typo
+	CapSourceHTTPUIDGID apicaps.CapID = "soruce.http.uidgid"
 
 	CapSourceOCILayout apicaps.CapID = "source.ocilayout"
 
@@ -225,6 +227,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapSourceHTTPPerm,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapSourceHTTPAuth,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})
