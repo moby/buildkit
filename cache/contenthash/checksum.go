@@ -110,6 +110,9 @@ func (cm *cacheManager) Checksum(ctx context.Context, ref cache.ImmutableRef, p 
 	if err != nil {
 		return "", nil
 	}
+	// only applies for Windows, it's a no-op on non-Windows.
+	enableProcessPrivileges()
+	defer disableProcessPrivileges()
 	return cc.Checksum(ctx, ref, p, opts, s)
 }
 

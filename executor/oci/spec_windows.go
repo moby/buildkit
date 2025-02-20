@@ -119,3 +119,9 @@ func generateCDIOpts(_ *cdidevices.Manager, devices []*pb.CDIDevice) ([]oci.Spec
 	// https://github.com/cncf-tags/container-device-interface/issues/28
 	return nil, errors.New("no support for CDI on Windows")
 }
+
+func normalizeMountType(_ string) string {
+	// HCS shim doesn't expect a named type
+	// for the mount.
+	return ""
+}
