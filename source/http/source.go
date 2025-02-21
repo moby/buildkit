@@ -2,6 +2,7 @@ package http
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -32,6 +34,13 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
+
+// supportedUserHeaders defines supported user-defined header fields. Fields
+// not included here will be silently dropped.
+var supportedUserDefinedHeaders = map[string]bool{
+	http.CanonicalHeaderKey("accept"):     true,
+	http.CanonicalHeaderKey("user-agent"): true,
+}
 
 type Opt struct {
 	CacheAccessor cache.Accessor
@@ -95,8 +104,21 @@ func (hs *httpSource) Identifier(scheme, ref string, attrs map[string]string, pl
 			id.GID = int(i)
 		case pb.AttrHTTPAuthHeaderSecret:
 			id.AuthHeaderSecret = v
+		default:
+			if name, found := strings.CutPrefix(k, pb.AttrHTTPHeaderPrefix); found {
+				name = http.CanonicalHeaderKey(name)
+				if supportedUserDefinedHeaders[name] {
+					id.Header = append(id.Header, HeaderField{Name: name, Value: v})
+				}
+			}
 		}
 	}
+
+	// Sort header fields to ensure consistent hashing (see urlHash() and
+	// formatCacheKey())
+	slices.SortFunc(id.Header, func(a, b HeaderField) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
 
 	return id, nil
 }
@@ -133,6 +155,7 @@ func (hs *httpSourceHandler) urlHash() (digest.Digest, error) {
 		Filename         []byte
 		Perm, UID, GID   int
 		AuthHeaderSecret string `json:",omitempty"`
+		Header           []HeaderField
 	}{
 		Filename: bytes.Join([][]byte{
 			[]byte(hs.src.URL),
@@ -142,6 +165,7 @@ func (hs *httpSourceHandler) urlHash() (digest.Digest, error) {
 		UID:              hs.src.UID,
 		GID:              hs.src.GID,
 		AuthHeaderSecret: hs.src.AuthHeaderSecret,
+		Header:           hs.src.Header,
 	})
 	if err != nil {
 		return "", err
@@ -154,8 +178,9 @@ func (hs *httpSourceHandler) formatCacheKey(filename string, dgst digest.Digest,
 		Filename         string
 		Perm, UID, GID   int
 		Checksum         digest.Digest
-		LastModTime      string `json:",omitempty"`
-		AuthHeaderSecret string `json:",omitempty"`
+		LastModTime      string        `json:",omitempty"`
+		AuthHeaderSecret string        `json:",omitempty"`
+		Header           []HeaderField `json:",omitempty"`
 	}{
 		Filename:         filename,
 		Perm:             hs.src.Perm,
@@ -164,6 +189,7 @@ func (hs *httpSourceHandler) formatCacheKey(filename string, dgst digest.Digest,
 		Checksum:         dgst,
 		LastModTime:      lastModTime,
 		AuthHeaderSecret: hs.src.AuthHeaderSecret,
+		Header:           hs.src.Header,
 	})
 	if err != nil {
 		return dgst
@@ -219,7 +245,7 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, inde
 			for t := range m {
 				etags = append(etags, t)
 			}
-			req.Header.Add("If-None-Match", strings.Join(etags, ", "))
+			req.Header.Set("If-None-Match", strings.Join(etags, ", "))
 
 			if len(etags) == 1 {
 				onlyETag = etags[0]
@@ -236,7 +262,7 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, inde
 		req.Method = "HEAD"
 		// we need to add accept-encoding header manually because stdlib only adds it to GET requests
 		// some servers will return different etags if Accept-Encoding header is different
-		req.Header.Add("Accept-Encoding", "gzip")
+		req.Header.Set("Accept-Encoding", "gzip")
 		resp, err := client.Do(req)
 		if err == nil {
 			if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNotModified {
@@ -482,6 +508,9 @@ func (hs *httpSourceHandler) newHTTPRequest(ctx context.Context, g session.Group
 	}
 
 	req.Header.Set("User-Agent", version.UserAgent())
+	for _, field := range hs.src.Header {
+		req.Header.Set(field.Name, field.Value)
+	}
 
 	if hs.src.AuthHeaderSecret != "" {
 		err := hs.sm.Any(ctx, g, func(ctx context.Context, _ string, caller session.Caller) error {

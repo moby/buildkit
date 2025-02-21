@@ -36,6 +36,7 @@ const (
 	CapSourceHTTPPerm     apicaps.CapID = "source.http.perm"
 	// NOTE the historical typo
 	CapSourceHTTPUIDGID apicaps.CapID = "soruce.http.uidgid"
+	CapSourceHTTPHeader apicaps.CapID = "source.http.header"
 
 	CapSourceOCILayout apicaps.CapID = "source.ocilayout"
 
@@ -238,13 +239,19 @@ func init() {
 	})
 
 	Caps.Init(apicaps.Cap{
-		ID:      CapSourceOCILayout,
+		ID:      CapSourceHTTPUIDGID,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})
 
 	Caps.Init(apicaps.Cap{
-		ID:      CapSourceHTTPUIDGID,
+		ID:      CapSourceHTTPHeader,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapSourceOCILayout,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

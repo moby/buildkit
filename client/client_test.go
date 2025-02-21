@@ -106,6 +106,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testBuildHTTPSource,
 	testBuildHTTPSourceEtagScope,
 	testBuildHTTPSourceAuthHeaderSecret,
+	testBuildHTTPSourceHeader,
 	testBuildPushAndValidate,
 	testBuildExportWithUncompressed,
 	testBuildExportScratch,
@@ -3049,6 +3050,45 @@ func testBuildHTTPSourceAuthHeaderSecret(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, 1, len(allReqs))
 	require.Equal(t, http.MethodGet, allReqs[0].Method)
 	require.Equal(t, "Bearer foo", allReqs[0].Header.Get("Authorization"))
+}
+
+func testBuildHTTPSourceHeader(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	modTime := time.Now().Add(-24 * time.Hour) // avoid falso positive with current time
+
+	resp := httpserver.Response{
+		Etag:         identity.NewID(),
+		Content:      []byte("content1"),
+		LastModified: &modTime,
+	}
+
+	server := httpserver.NewTestServer(map[string]httpserver.Response{
+		"/foo": resp,
+	})
+	defer server.Close()
+
+	st := llb.HTTP(
+		server.URL+"/foo",
+		llb.Header(llb.HTTPHeader{
+			Accept:    "application/vnd.foo",
+			UserAgent: "fooagent",
+		}),
+	)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+
+	allReqs := server.Stats("/foo").Requests
+	require.Equal(t, 1, len(allReqs))
+	require.Equal(t, http.MethodGet, allReqs[0].Method)
+	require.Equal(t, "application/vnd.foo", allReqs[0].Header.Get("accept"))
+	require.Equal(t, "fooagent", allReqs[0].Header.Get("user-agent"))
 }
 
 func testResolveAndHosts(t *testing.T, sb integration.Sandbox) {
