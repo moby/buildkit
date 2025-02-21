@@ -21,7 +21,7 @@ func TestParseExportCache(t *testing.T) {
 					Type: "registry",
 					Attrs: map[string]string{
 						"ref":  "example.com/foo/bar",
-						"mode": "min",
+						"mode": "max",
 					},
 				},
 			},
@@ -33,7 +33,7 @@ func TestParseExportCache(t *testing.T) {
 					Type: "registry",
 					Attrs: map[string]string{
 						"ref":  "example.com/foo/bar",
-						"mode": "min",
+						"mode": "max",
 					},
 				},
 			},

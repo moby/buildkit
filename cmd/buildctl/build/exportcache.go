@@ -35,7 +35,7 @@ func parseExportCacheCSV(s string) (client.CacheOptionsEntry, error) {
 		return ex, errors.New("--export-cache requires type=<type>")
 	}
 	if _, ok := ex.Attrs["mode"]; !ok {
-		ex.Attrs["mode"] = "min"
+		ex.Attrs["mode"] = "max"
 	}
 	if ex.Type == "gha" {
 		return loadGithubEnv(ex)
@@ -54,7 +54,7 @@ func ParseExportCache(exportCaches []string) ([]client.CacheOptionsEntry, error)
 			exports = append(exports, client.CacheOptionsEntry{
 				Type: "registry",
 				Attrs: map[string]string{
-					"mode": "min",
+					"mode": "max",
 					"ref":  exportCache,
 				},
 			})
