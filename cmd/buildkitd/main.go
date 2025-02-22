@@ -1067,6 +1067,13 @@ func getCDIManager(cfg config.CDIConfig) (*cdidevices.Manager, error) {
 		if err := cdiCache.Refresh(); err != nil {
 			return nil, err
 		}
+		if errs := cdiCache.GetErrors(); len(errs) > 0 {
+			for dir, errs := range errs {
+				for _, err := range errs {
+					bklog.L.Warnf("CDI setup error %v: %+v", dir, err)
+				}
+			}
+		}
 		return cdiCache, nil
 	}()
 	if err != nil {
