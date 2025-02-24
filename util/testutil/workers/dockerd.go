@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/docker/client"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/util/testutil/dockerd"
+	"github.com/moby/buildkit/util/testutil/dockerd/client"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -252,7 +252,7 @@ func waitForAPI(ctx context.Context, apiClient *client.Client, d time.Duration) 
 	step := 50 * time.Millisecond
 	i := 0
 	for {
-		if _, err := apiClient.Ping(ctx); err == nil {
+		if err := apiClient.Ping(ctx); err == nil {
 			break
 		}
 		i++
