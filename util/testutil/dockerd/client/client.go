@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/go-connections/sockets"
 	"github.com/pkg/errors"
 )
 
@@ -164,14 +163,11 @@ func defaultHTTPClient(hostURL *url.URL) (*http.Client, error) {
 	// Necessary to prevent long-lived processes using the
 	// client from leaking connections due to idle connections
 	// not being released.
-	// TODO: see if we can also address this from the server side,
-	// or in go-connections.
-	// see: https://github.com/moby/moby/issues/45539
 	transport := &http.Transport{
 		MaxIdleConns:    6,
 		IdleConnTimeout: 30 * time.Second,
 	}
-	if err := sockets.ConfigureTransport(transport, hostURL.Scheme, hostURL.Host); err != nil {
+	if err := configureTransport(transport, hostURL.Scheme, hostURL.Host); err != nil {
 		return nil, err
 	}
 	return &http.Client{
@@ -241,7 +237,7 @@ func (cli *Client) Dialer() func(context.Context) (net.Conn, error) {
 		case "unix":
 			return net.Dial(cli.proto, cli.addr)
 		case "npipe":
-			return sockets.DialPipe(cli.addr, 32*time.Second)
+			return DialPipe(cli.addr, 32*time.Second)
 		default:
 			if tlsConfig := cli.tlsConfig(); tlsConfig != nil {
 				return tls.Dial(cli.proto, cli.addr, tlsConfig)
