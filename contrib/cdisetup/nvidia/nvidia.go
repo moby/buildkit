@@ -268,6 +268,13 @@ func hasNvidiaDevices() (bool, error) {
 		}
 	}
 
+	if !found {
+		// WSL-specific GPU mapping that doesn't expose PCI info.
+		if _, err := os.Stat("/dev/dxg"); err == nil {
+			found = true
+		}
+	}
+
 	return found, nil
 }
 
