@@ -63,23 +63,20 @@ type writer struct {
 	grpc.ServerStream
 }
 
-func (w *writer) Write(dt []byte) (int, error) {
-	// avoid sending too big messages on grpc stream
+func (w *writer) Write(dt []byte) (n int, err error) {
 	const maxChunkSize = 3 * 1024 * 1024
-	if len(dt) > maxChunkSize {
-		n1, err := w.Write(dt[:maxChunkSize])
-		if err != nil {
-			return n1, err
+	for len(dt) > 0 {
+		data := dt
+		if len(data) > maxChunkSize {
+			data = data[:maxChunkSize]
 		}
-		dt = dt[maxChunkSize:]
-		var n2 int
-		if n2, err := w.Write(dt); err != nil {
-			return n1 + n2, err
+
+		msg := &upload.BytesMessage{Data: data}
+		if err := w.SendMsg(msg); err != nil {
+			return n, err
 		}
-		return n1 + n2, nil
+		n += len(data)
+		dt = dt[len(data):]
 	}
-	if err := w.SendMsg(&upload.BytesMessage{Data: dt}); err != nil {
-		return 0, err
-	}
-	return len(dt), nil
+	return n, nil
 }
