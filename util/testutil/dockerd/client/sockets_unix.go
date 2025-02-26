@@ -1,21 +1,22 @@
 //go:build !windows
 
-package sockets
+package client
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"net/http"
 	"syscall"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 const maxUnixSocketPathSize = len(syscall.RawSockaddrUnix{}.Path)
 
 func configureUnixTransport(tr *http.Transport, proto, addr string) error {
 	if len(addr) > maxUnixSocketPathSize {
-		return fmt.Errorf("unix socket path %q is too long", addr)
+		return errors.Errorf("unix socket path %q is too long", addr)
 	}
 	// No need for compression in local communications.
 	tr.DisableCompression = true
@@ -28,8 +29,8 @@ func configureUnixTransport(tr *http.Transport, proto, addr string) error {
 	return nil
 }
 
-func configureNpipeTransport(tr *http.Transport, proto, addr string) error {
-	return ErrProtocolNotAvailable
+func configureNpipeTransport(_ *http.Transport, _, _ string) error {
+	return errors.New("protocol not available")
 }
 
 // DialPipe connects to a Windows named pipe.

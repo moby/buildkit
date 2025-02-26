@@ -1,4 +1,4 @@
-package sockets
+package client
 
 import (
 	"context"
@@ -7,13 +7,14 @@ import (
 	"time"
 
 	"github.com/Microsoft/go-winio"
+	"github.com/pkg/errors"
 )
 
-func configureUnixTransport(tr *http.Transport, proto, addr string) error {
-	return ErrProtocolNotAvailable
+func configureUnixTransport(_ *http.Transport, _, _ string) error {
+	return errors.New("protocol not available")
 }
 
-func configureNpipeTransport(tr *http.Transport, proto, addr string) error {
+func configureNpipeTransport(tr *http.Transport, _, addr string) error {
 	// No need for compression in local communications.
 	tr.DisableCompression = true
 	tr.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
