@@ -342,7 +342,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 	}
 	idxDone := progress.OneOff(ctx, "exporting manifest list "+idxDigest.String())
 
-	if err := content.WriteBlob(ctx, ic.opt.ContentStore, idxDigest.String(), bytes.NewReader(idxBytes), idxDesc, content.WithLabels(labels)); err != nil {
+	if err := content.WriteBlob(ctx, ic.opt.ContentStore, idxDigest.String(), newBytesReader(idxBytes), idxDesc, content.WithLabels(labels)); err != nil {
 		return nil, idxDone(errors.Wrapf(err, "error writing manifest list blob %s", idxDigest))
 	}
 	idxDone(nil)
@@ -530,7 +530,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *Ima
 	}
 	mfstDone := progress.OneOff(ctx, "exporting manifest "+mfstDigest.String())
 
-	if err := content.WriteBlob(ctx, ic.opt.ContentStore, mfstDigest.String(), bytes.NewReader(mfstJSON), mfstDesc, content.WithLabels((labels))); err != nil {
+	if err := content.WriteBlob(ctx, ic.opt.ContentStore, mfstDigest.String(), newBytesReader(mfstJSON), mfstDesc, content.WithLabels((labels))); err != nil {
 		return nil, nil, mfstDone(errors.Wrapf(err, "error writing manifest blob %s", mfstDigest))
 	}
 	mfstDone(nil)
@@ -542,7 +542,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *Ima
 	}
 	configDone := progress.OneOff(ctx, "exporting config "+configDigest.String())
 
-	if err := content.WriteBlob(ctx, ic.opt.ContentStore, configDigest.String(), bytes.NewReader(config), configDesc); err != nil {
+	if err := content.WriteBlob(ctx, ic.opt.ContentStore, configDigest.String(), newBytesReader(config), configDesc); err != nil {
 		return nil, nil, configDone(errors.Wrap(err, "error writing config blob"))
 	}
 	configDone(nil)
@@ -584,7 +584,7 @@ func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *Ima
 			},
 		}
 
-		if err := content.WriteBlob(ctx, ic.opt.ContentStore, digest.String(), bytes.NewReader(data), desc); err != nil {
+		if err := content.WriteBlob(ctx, ic.opt.ContentStore, digest.String(), newBytesReader(data), desc); err != nil {
 			return nil, errors.Wrapf(err, "error writing data blob %s", digest)
 		}
 		layers[i] = desc
@@ -641,10 +641,10 @@ func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *Ima
 	}
 
 	done := progress.OneOff(ctx, "exporting attestation manifest "+mfstDigest.String())
-	if err := content.WriteBlob(ctx, ic.opt.ContentStore, mfstDigest.String(), bytes.NewReader(mfstJSON), mfstDesc, content.WithLabels((labels))); err != nil {
+	if err := content.WriteBlob(ctx, ic.opt.ContentStore, mfstDigest.String(), newBytesReader(mfstJSON), mfstDesc, content.WithLabels((labels))); err != nil {
 		return nil, done(errors.Wrapf(err, "error writing manifest blob %s", mfstDigest))
 	}
-	if err := content.WriteBlob(ctx, ic.opt.ContentStore, configDesc.Digest.String(), bytes.NewReader(config), configDesc); err != nil {
+	if err := content.WriteBlob(ctx, ic.opt.ContentStore, configDesc.Digest.String(), newBytesReader(config), configDesc); err != nil {
 		return nil, done(errors.Wrap(err, "error writing config blob"))
 	}
 	done(nil)
@@ -946,4 +946,24 @@ func getRefMetadata(ref cache.ImmutableRef, limit int) []refMetadata {
 		meta.createdAt = &createdAt
 	}
 	return metas
+}
+
+// bytesReader is a wrapper around bytes.Reader that only exposes the io.Reader
+// interface. This is to prevent any accidental usage of WriteTo that causes the
+// entire buffer to be written at once.
+//
+// This is needed to workaround https://github.com/containerd/containerd/issues/11440.
+// When that is fixed, this can be removed.
+type bytesReader struct {
+	r *bytes.Reader
+}
+
+func newBytesReader(p []byte) *bytesReader {
+	return &bytesReader{
+		r: bytes.NewReader(p),
+	}
+}
+
+func (r *bytesReader) Read(p []byte) (n int, err error) {
+	return r.r.Read(p)
 }
