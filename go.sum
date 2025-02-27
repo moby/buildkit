@@ -395,8 +395,8 @@ github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635 h1:kdXcSzyDtse
 github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635/go.mod h1:hkRG7XYTFWNJGYcbNJQlaLq0fg1yr4J4t/NcTQtrfww=
 github.com/tonistiigi/dchapes-mode v0.0.0-20241001053921-ca0759fec205 h1:eUk79E1w8yMtXeHSzjKorxuC8qJOnyXQnLaJehxpJaI=
 github.com/tonistiigi/dchapes-mode v0.0.0-20241001053921-ca0759fec205/go.mod h1:3Iuxbr0P7D3zUzBMAZB+ois3h/et0shEz0qApgHYGpY=
-github.com/tonistiigi/fsutil v0.0.0-20250113203817-b14e27f4135a h1:EfGw4G0x/8qXWgtcZ6KVaPS+wpWOQMaypczzP8ojkMY=
-github.com/tonistiigi/fsutil v0.0.0-20250113203817-b14e27f4135a/go.mod h1:Dl/9oEjK7IqnjAm21Okx/XIxUCFJzvh+XdVHUlBwXTw=
+github.com/tonistiigi/fsutil v0.0.0-20250227023350-13604323a291 h1:1WRvmYdTkwjgFIlnOwo6Y15BMwQBUQT423y1zHad4Eo=
+github.com/tonistiigi/fsutil v0.0.0-20250227023350-13604323a291/go.mod h1:Dl/9oEjK7IqnjAm21Okx/XIxUCFJzvh+XdVHUlBwXTw=
 github.com/tonistiigi/go-actions-cache v0.0.0-20250219102945-1a5174abd055 h1:ocuqZe/ImPTYgDocnHTDOTBachfQ9m0JxvP4uGeDtBE=
 github.com/tonistiigi/go-actions-cache v0.0.0-20250219102945-1a5174abd055/go.mod h1:h0oRlVs3NoFIHysRQ4rU1+RG4QmU0M2JVSwTYrB4igk=
 github.com/tonistiigi/go-archvariant v1.0.0 h1:5LC1eDWiBNflnTF1prCiX09yfNHIxDC/aukdhCdTyb0=
