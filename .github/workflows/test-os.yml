@@ -70,17 +70,15 @@ jobs:
           retention-days: 1
 
   test-windows-amd64:
-    runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.os == 'windows-2025' }}
+    runs-on: windows-2022
     needs:
       - build
     env:
-      TESTFLAGS: "-v --timeout=60m"
+      TESTFLAGS: "-v --parallel=6 --timeout=30m"
       GOTESTSUM_FORMAT: "standard-verbose"
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2022, windows-2025]
         worker:
           - containerd
         pkg:
@@ -91,12 +89,7 @@ jobs:
           - ./frontend
           - ./frontend/dockerfile
         include:
-          - os: windows-2022
-            worker: containerd
-            pkg: ./...
-            skip-integration-tests: 1
-          - os: windows-2025
-            worker: containerd
+          - worker: containerd
             pkg: ./...
             skip-integration-tests: 1
     steps:
