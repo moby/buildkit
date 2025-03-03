@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -14,7 +13,6 @@ import (
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/llbsolver/ops/fileoptypes"
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/moby/buildkit/util/system"
 	"github.com/pkg/errors"
 	copy "github.com/tonistiigi/fsutil/copy"
 )
@@ -145,10 +143,7 @@ func rm(d string, action *pb.FileActionRm) (err error) {
 	}()
 
 	if action.AllowWildcard {
-		src, err := cleanPath(action.Path)
-		if err != nil {
-			return errors.Wrap(err, "cleaning path")
-		}
+		src := cleanPath(action.Path)
 		m, err := copy.ResolveWildcards(d, src, false)
 		if err != nil {
 			return errors.WithStack(err)
@@ -190,14 +185,9 @@ func rmPath(root, src string, allowNotFound bool) error {
 }
 
 func docopy(ctx context.Context, src, dest string, action *pb.FileActionCopy, u *copy.User, idmap *idtools.IdentityMapping) (err error) {
-	srcPath, err := cleanPath(action.Src)
-	if err != nil {
-		return errors.Wrap(err, "cleaning source path")
-	}
-	destPath, err := cleanPath(action.Dest)
-	if err != nil {
-		return errors.Wrap(err, "cleaning destination path")
-	}
+	srcPath := cleanPath(action.Src)
+	destPath := cleanPath(action.Dest)
+
 	if !action.CreateDestPath {
 		p, err := fs.RootPath(dest, filepath.Join("/", action.Dest))
 		if err != nil {
@@ -434,11 +424,7 @@ func (fb *Backend) readUserWrapper(owner *pb.ChownOpt, user, group fileoptypes.M
 	return u, nil
 }
 
-func cleanPath(s string) (string, error) {
-	s, err := system.CheckSystemDriveAndRemoveDriveLetter(s, runtime.GOOS)
-	if err != nil {
-		return "", errors.Wrap(err, "removing drive letter")
-	}
+func cleanPath(s string) string {
 	s = filepath.FromSlash(s)
 	s2 := filepath.Join("/", s)
 	if strings.HasSuffix(s, string(filepath.Separator)+".") {
@@ -449,5 +435,5 @@ func cleanPath(s string) (string, error) {
 	} else if strings.HasSuffix(s, string(filepath.Separator)) && s2 != string(filepath.Separator) {
 		s2 += string(filepath.Separator)
 	}
-	return s2, nil
+	return s2
 }

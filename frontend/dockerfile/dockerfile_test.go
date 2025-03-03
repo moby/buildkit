@@ -159,6 +159,7 @@ var allTests = integration.TestFuncs(
 	testNamedMultiplatformInputContext,
 	testNamedFilteredContext,
 	testEmptyDestDir,
+	testPreserveDestDirSlash,
 	testCopyLinkDotDestDir,
 	testCopyLinkEmptyDestDir,
 	testCopyChownCreateDest,
@@ -539,6 +540,42 @@ RUN [ "$(cat testfile)" == "contents0" ]
 FROM nanoserver
 COPY testfile ''
 RUN cmd /V:on /C "set /p tfcontent=<testfile \
+	& if !tfcontent! NEQ contents0 (exit 1)"
+`,
+	))
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("testfile", []byte("contents0"), 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+}
+
+func testPreserveDestDirSlash(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
+FROM busybox
+COPY testfile /sample/
+RUN [ "$(cat /sample/testfile)" == "contents0" ]
+`,
+		`
+FROM nanoserver
+COPY testfile /sample/
+RUN cmd /V:on /C "set /p tfcontent=<\sample\testfile \
 	& if !tfcontent! NEQ contents0 (exit 1)"
 `,
 	))
