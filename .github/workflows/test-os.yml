@@ -89,7 +89,18 @@ jobs:
           - ./worker/containerd
           - ./solver
           - ./frontend
-          - ./frontend/dockerfile
+          - ./frontend/dockerfile#1-12
+          - ./frontend/dockerfile#2-12
+          - ./frontend/dockerfile#3-12
+          - ./frontend/dockerfile#4-12
+          - ./frontend/dockerfile#5-12
+          - ./frontend/dockerfile#6-12
+          - ./frontend/dockerfile#7-12
+          - ./frontend/dockerfile#8-12
+          - ./frontend/dockerfile#9-12
+          - ./frontend/dockerfile#10-12
+          - ./frontend/dockerfile#11-12
+          - ./frontend/dockerfile#12-12
         include:
           - os: windows-2022
             worker: containerd
@@ -103,10 +114,18 @@ jobs:
       -
         name: Prepare
         run: |
+          TESTPKG=$(echo "${{ matrix.pkg }}" | awk '-F#' '{print $1}')
+          TESTSLICE=$(echo "${{ matrix.pkg }}" | awk '-F#' '{print $2}')
+          echo "TESTPKG=$TESTPKG" >> $GITHUB_ENV
           echo "TEST_REPORT_NAME=${{ github.job }}-$(echo "${{ matrix.pkg }}-${{ matrix.skip-integration-tests }}-${{ matrix.worker }}" | tr -dc '[:alnum:]-\n\r' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
           testFlags="${{ env.TESTFLAGS }}"
+          testSliceOffset=""
+          if [ -n "$TESTSLICE" ]; then
+            echo "TESTSLICE=$TESTSLICE" >> $GITHUB_ENV
+            testSliceOffset="slice=$TESTSLICE/"
+          fi
           if [ -n "${{ matrix.worker }}" ]; then
-            testFlags="${testFlags} --run=TestIntegration/.*/worker=${{ matrix.worker }}"
+            testFlags="${testFlags} --run=TestIntegration/$testSliceOffset.*/worker=${{ matrix.worker }}"
           fi
           echo "TESTFLAGS=${testFlags}" >> $GITHUB_ENV
         shell: bash
@@ -142,7 +161,7 @@ jobs:
           gotestsum \
             --jsonfile="./bin/testreports/go-test-report-${{ env.TEST_REPORT_NAME }}.json" \
             --junitfile="./bin/testreports/junit-report-${{ env.TEST_REPORT_NAME }}.xml" \
-            --packages="${{ matrix.pkg }}" \
+            --packages="${{ env.TESTPKG }}" \
             -- \
               "-mod=vendor" \
               "-coverprofile" "./bin/testreports/coverage-${{ env.TEST_REPORT_NAME }}.txt" \

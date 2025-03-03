@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"math"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -12,6 +13,7 @@ import (
 	"reflect"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -161,6 +163,24 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 		t.Skip("skipping integration tests")
 	}
 
+	var sliceSplit int
+	v, ok := os.LookupEnv("TESTSLICE")
+	if ok {
+		t.Logf("TESTSLICE=%s", v)
+		offsetS, totalS, ok := strings.Cut(v, "-")
+		if !ok {
+			t.Fatalf("invalid TESTSLICE=%s", v)
+		}
+		offset, err := strconv.Atoi(offsetS)
+		require.NoError(t, err)
+		total, err := strconv.Atoi(totalS)
+		require.NoError(t, err)
+		if offset < 1 || total < 1 || offset > total {
+			t.Fatalf("invalid TESTSLICE=%s", v)
+		}
+		sliceSplit = total
+	}
+
 	var tc testConf
 	for _, o := range opt {
 		o(&tc)
@@ -182,9 +202,14 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 	})
 
 	for _, br := range list {
-		for _, tc := range testCases {
+		for i, tc := range testCases {
 			for _, mv := range matrix {
 				fn := tc.Name()
+				if sliceSplit > 0 {
+					pageLimit := int(math.Ceil(float64(len(testCases)) / float64(sliceSplit)))
+					sliceName := fmt.Sprintf("slice=%d-%d/", i/pageLimit+1, sliceSplit)
+					fn = sliceName + fn
+				}
 				name := fn + "/worker=" + br.Name() + mv.functionSuffix()
 				func(fn, testName string, br Worker, tc Test, mv matrixValue) {
 					ok := t.Run(testName, func(t *testing.T) {
