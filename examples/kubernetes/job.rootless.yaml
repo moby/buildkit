@@ -4,19 +4,16 @@ metadata:
   name: buildkit
 spec:
   template:
-    metadata:
-      annotations:
-        container.apparmor.security.beta.kubernetes.io/buildkit: unconfined
     # see buildkit/docs/rootless.md for caveats of rootless mode
     spec:
       restartPolicy: Never
       initContainers:
         - name: prepare
-          image: alpine:3.10
+          image: busybox
           command:
             - sh
             - -c
-            - "echo FROM hello-world > /workspace/Dockerfile"
+            - "echo -e 'FROM alpine\nRUN apk add gcc\n' > /workspace/Dockerfile"
           securityContext:
             runAsUser: 1000
             runAsGroup: 1000
@@ -44,6 +41,9 @@ spec:
           securityContext:
             # Needs Kubernetes >= 1.19
             seccompProfile:
+              type: Unconfined
+            # Needs Kubernetes >= 1.30
+            appArmorProfile:
               type: Unconfined
             # To change UID/GID, you need to rebuild the image
             runAsUser: 1000

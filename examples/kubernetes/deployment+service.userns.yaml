@@ -1,3 +1,4 @@
+# Depends on feature gate UserNamespacesSupport
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -13,14 +14,14 @@ spec:
     metadata:
       labels:
         app: buildkitd
-    # see buildkit/docs/rootless.md for caveats of rootless mode
     spec:
+      hostUsers: false
       containers:
         - name: buildkitd
-          image: moby/buildkit:master-rootless
+          image: moby/buildkit:master
           args:
             - --addr
-            - unix:///run/user/1000/buildkit/buildkitd.sock
+            - unix:///run/buildkit/buildkitd.sock
             - --addr
             - tcp://0.0.0.0:1234
             - --tlscacert
@@ -29,7 +30,6 @@ spec:
             - /certs/cert.pem
             - --tlskey
             - /certs/key.pem
-            - --oci-worker-no-process-sandbox
           # the probe below will only work after Release v0.6.3
           readinessProbe:
             exec:
@@ -49,34 +49,19 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 30
           securityContext:
-            # Needs Kubernetes >= 1.19
-            seccompProfile:
-              type: Unconfined
-            # Needs Kubernetes >= 1.30
-            appArmorProfile:
-              type: Unconfined
-            # To change UID/GID, you need to rebuild the image
-            runAsUser: 1000
-            runAsGroup: 1000
+            # Not really privileged
+            privileged: true
           ports:
             - containerPort: 1234
           volumeMounts:
             - name: certs
               readOnly: true
               mountPath: /certs
-            # Dockerfile has `VOLUME /home/user/.local/share/buildkit` by default too,
-            # but the default VOLUME does not work with rootless on Google's Container-Optimized OS
-            # as it is mounted with `nosuid,nodev`.
-            # https://github.com/moby/buildkit/issues/879#issuecomment-1240347038
-            - mountPath: /home/user/.local/share/buildkit
-              name: buildkitd
       volumes:
         # buildkit-daemon-certs must contain ca.pem, cert.pem, and key.pem
         - name: certs
           secret:
             secretName: buildkit-daemon-certs
-        - name: buildkitd
-          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
