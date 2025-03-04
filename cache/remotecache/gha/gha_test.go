@@ -127,6 +127,10 @@ func testBasicGhaCacheImportExportExtraTimeout(t *testing.T, sb integration.Sand
 	}
 	maps.Copy(cacheImportAttrs, cacheAttrs)
 
+	// Github Cache Service v2 has a problem of not being immediately consistent
+	// so we need to wait for the changes to propagate.
+	time.Sleep(3 * time.Second)
+
 	_, err = c.Solve(sb.Context(), def, client.SolveOpt{
 		Exports: []client.ExportEntry{
 			{
