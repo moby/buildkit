@@ -31,7 +31,7 @@ env:
 
 jobs:
   prepare:
-    runs-on: ubuntu-24.04
+    runs-on: devzero-ubuntu-24.04
     outputs:
       tag: ${{ steps.prep.outputs.tag }}
       push: ${{ steps.prep.outputs.push }}
