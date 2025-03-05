@@ -211,7 +211,7 @@ func testResultReleaseSingleLevel(t *testing.T, st solver.CacheKeyStorage) {
 	require.Equal(t, 0, len(m))
 
 	st.Walk(func(id string) error {
-		require.False(t, true, fmt.Sprintf("id %s should have been released", id))
+		require.False(t, true, "id %s should have been released", id)
 		return nil
 	})
 }
@@ -339,7 +339,7 @@ func testResultReleaseMultiLevel(t *testing.T, st solver.CacheKeyStorage) {
 	require.False(t, st.Exists("foo"))
 
 	st.Walk(func(id string) error {
-		require.False(t, true, fmt.Sprintf("id %s should have been released", id))
+		require.False(t, true, "id %s should have been released", id)
 		return nil
 	})
 }
