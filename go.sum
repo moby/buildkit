@@ -97,8 +97,8 @@ github.com/containerd/console v1.0.4 h1:F2g4+oChYvBTsASRTz8NP6iIAi97J3TtSAsLbIFn
 github.com/containerd/console v1.0.4/go.mod h1:YynlIjWYF8myEu6sdkwKIvGQq+cOckRm6So2avqoYAk=
 github.com/containerd/containerd/api v1.8.0 h1:hVTNJKR8fMc/2Tiw60ZRijntNMd1U+JVMyTRdsD2bS0=
 github.com/containerd/containerd/api v1.8.0/go.mod h1:dFv4lt6S20wTu/hMcP4350RL87qPWLVa/OHOwmmdnYc=
-github.com/containerd/containerd/v2 v2.0.2 h1:GmH/tRBlTvrXOLwSpWE2vNAm8+MqI6nmxKpKBNKY8Wc=
-github.com/containerd/containerd/v2 v2.0.2/go.mod h1:wIqEvQ/6cyPFUGJ5yMFanspPabMLor+bF865OHvNTTI=
+github.com/containerd/containerd/v2 v2.0.3 h1:zBKgwgZsuu+LPCMzCLgA4sC4MiZzZ59ZT31XkmiISQM=
+github.com/containerd/containerd/v2 v2.0.3/go.mod h1:5j9QUUaV/cy9ZeAx4S+8n9ffpf+iYnEj4jiExgcbuLY=
 github.com/containerd/continuity v0.4.5 h1:ZRoN1sXq9u7V6QoHMcVWGhOwDFqZ4B9i5H6un1Wh0x4=
 github.com/containerd/continuity v0.4.5/go.mod h1:/lNJvtJKUQStBzpVQ1+rasXO1LAWtUQssk28EZvJ3nE=
 github.com/containerd/errdefs v1.0.0 h1:tg5yIfIlQIrxYtu9ajqY42W3lpS19XqdxRQeEwYG8PI=
@@ -401,8 +401,8 @@ github.com/tonistiigi/dchapes-mode v0.0.0-20241001053921-ca0759fec205 h1:eUk79E1
 github.com/tonistiigi/dchapes-mode v0.0.0-20241001053921-ca0759fec205/go.mod h1:3Iuxbr0P7D3zUzBMAZB+ois3h/et0shEz0qApgHYGpY=
 github.com/tonistiigi/fsutil v0.0.0-20250113203817-b14e27f4135a h1:EfGw4G0x/8qXWgtcZ6KVaPS+wpWOQMaypczzP8ojkMY=
 github.com/tonistiigi/fsutil v0.0.0-20250113203817-b14e27f4135a/go.mod h1:Dl/9oEjK7IqnjAm21Okx/XIxUCFJzvh+XdVHUlBwXTw=
-github.com/tonistiigi/go-actions-cache v0.0.0-20250219102945-1a5174abd055 h1:ocuqZe/ImPTYgDocnHTDOTBachfQ9m0JxvP4uGeDtBE=
-github.com/tonistiigi/go-actions-cache v0.0.0-20250219102945-1a5174abd055/go.mod h1:h0oRlVs3NoFIHysRQ4rU1+RG4QmU0M2JVSwTYrB4igk=
+github.com/tonistiigi/go-actions-cache v0.0.0-20250228231703-3e9a6642607f h1:q/SWz3Bz0KtAsqaBo73CHVXjaz5O8PDnmD2JHVhgYnE=
+github.com/tonistiigi/go-actions-cache v0.0.0-20250228231703-3e9a6642607f/go.mod h1:h0oRlVs3NoFIHysRQ4rU1+RG4QmU0M2JVSwTYrB4igk=
 github.com/tonistiigi/go-archvariant v1.0.0 h1:5LC1eDWiBNflnTF1prCiX09yfNHIxDC/aukdhCdTyb0=
 github.com/tonistiigi/go-archvariant v1.0.0/go.mod h1:TxFmO5VS6vMq2kvs3ht04iPXtu2rUT/erOnGFYfk5Ho=
 github.com/tonistiigi/go-csvvalue v0.0.0-20240710180619-ddb21b71c0b4 h1:7I5c2Ig/5FgqkYOh/N87NzoyI9U15qUPXhDD8uCupv8=
@@ -594,7 +594,7 @@ kernel.org/pub/linux/libs/security/libcap/psx v1.2.73/go.mod h1:+l6Ee2F59XiJ2I6W
 sigs.k8s.io/yaml v1.3.0/go.mod h1:GeOyir5tyXNByN85N/dRIT9es5UQNerPYEKK56eTBm8=
 sigs.k8s.io/yaml v1.4.0 h1:Mk1wCc2gy/F0THH0TAp1QYyJNzRm2KCLy3o5ASXVI5E=
 sigs.k8s.io/yaml v1.4.0/go.mod h1:Ejl7/uTz7PSA4eKMyQCUTnhZYNmLIl+5c2lQPGR2BPY=
-tags.cncf.io/container-device-interface v0.8.0 h1:8bCFo/g9WODjWx3m6EYl3GfUG31eKJbaggyBDxEldRc=
-tags.cncf.io/container-device-interface v0.8.0/go.mod h1:Apb7N4VdILW0EVdEMRYXIDVRZfNJZ+kmEUss2kRRQ6Y=
+tags.cncf.io/container-device-interface v0.8.1 h1:c0jN4Mt6781jD67NdPajmZlD1qrqQyov/Xfoab37lj0=
+tags.cncf.io/container-device-interface v0.8.1/go.mod h1:Apb7N4VdILW0EVdEMRYXIDVRZfNJZ+kmEUss2kRRQ6Y=
 tags.cncf.io/container-device-interface/specs-go v0.8.0 h1:QYGFzGxvYK/ZLMrjhvY0RjpUavIn4KcmRmVP/JjdBTA=
 tags.cncf.io/container-device-interface/specs-go v0.8.0/go.mod h1:BhJIkjjPh4qpys+qm4DAYtUyryaTDg9zris+AczXyws=
