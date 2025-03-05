@@ -68,7 +68,7 @@ http:
 	deferF.Append(stop)
 
 	ctx, cancel := context.WithCancelCause(context.Background())
-	ctx, _ = context.WithTimeoutCause(ctx, 5*time.Second, errors.WithStack(context.DeadlineExceeded))
+	ctx, _ = context.WithTimeoutCause(ctx, 5*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
 	defer func() { cancel(errors.WithStack(context.Canceled)) }()
 	url, err = detectPort(ctx, rc)
 	if err != nil {
