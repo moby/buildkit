@@ -89,7 +89,7 @@ RUN ls
 	require.True(t, ok)
 	require.Equal(t, "x", ref)
 
-	dt = `{"syntax": "foo"}`
+	dt = `{"syntax": "foo", "bar": ["abc"]}`
 	ref, _, _, ok = DetectSyntax([]byte(dt))
 	require.True(t, ok)
 	require.Equal(t, "foo", ref)
