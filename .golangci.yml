@@ -3,7 +3,7 @@ run:
   modules-download-mode: vendor
   # default uses Go version from the go.mod file, fallback on the env var
   # `GOVERSION`, fallback on 1.17: https://golangci-lint.run/usage/configuration/#run-configuration
-  go: "1.23"
+  go: "1.24"
 
 linters:
   enable:
