@@ -251,7 +251,7 @@ func init() {
 	frontends := map[string]interface{}{}
 
 	images := integration.UnixOrWindows(
-		[]string{"busybox:latest", "alpine:latest"},
+		[]string{"busybox:latest", "alpine:latest", "busybox:stable-musl"},
 		[]string{"nanoserver:latest", "nanoserver:plus", "nanoserver:plus-busybox"})
 	opts = []integration.TestOpt{
 		integration.WithMirroredImages(integration.OfficialImages(images...)),
@@ -288,7 +288,7 @@ func TestIntegration(t *testing.T) {
 	integration.Run(t, reproTests, append(opts,
 		// Only use the amd64 digest,  regardless to the host platform
 		integration.WithMirroredImages(map[string]string{
-			"amd64/bullseye-20230109-slim:latest": "docker.io/amd64/debian:bullseye-20230109-slim@sha256:1acb06a0c31fb467eb8327ad361f1091ab265e0bf26d452dea45dcb0c0ea5e75",
+			"amd64/debian:bullseye-20230109-slim": "docker.io/amd64/debian:bullseye-20230109-slim@sha256:1acb06a0c31fb467eb8327ad361f1091ab265e0bf26d452dea45dcb0c0ea5e75",
 		}),
 	)...)
 
