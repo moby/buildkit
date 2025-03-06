@@ -164,21 +164,26 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 	}
 
 	var sliceSplit int
-	v, ok := os.LookupEnv("TESTSLICE")
-	if ok {
-		t.Logf("TESTSLICE=%s", v)
-		offsetS, totalS, ok := strings.Cut(v, "-")
-		if !ok {
-			t.Fatalf("invalid TESTSLICE=%s", v)
+	if filter, ok := lookupTestFilter(); ok {
+		parts := strings.Split(filter, "/")
+		if len(parts) >= 2 {
+			const prefix = "slice="
+			if strings.HasPrefix(parts[1], prefix) {
+				conf := strings.TrimPrefix(parts[1], prefix)
+				offsetS, totalS, ok := strings.Cut(conf, "-")
+				if !ok {
+					t.Fatalf("invalid slice=%q", conf)
+				}
+				offset, err := strconv.Atoi(offsetS)
+				require.NoError(t, err)
+				total, err := strconv.Atoi(totalS)
+				require.NoError(t, err)
+				if offset < 1 || total < 1 || offset > total {
+					t.Fatalf("invalid slice=%q", conf)
+				}
+				sliceSplit = total
+			}
 		}
-		offset, err := strconv.Atoi(offsetS)
-		require.NoError(t, err)
-		total, err := strconv.Atoi(totalS)
-		require.NoError(t, err)
-		if offset < 1 || total < 1 || offset > total {
-			t.Fatalf("invalid TESTSLICE=%s", v)
-		}
-		sliceSplit = total
 	}
 
 	var tc testConf
@@ -487,4 +492,14 @@ func UnixOrWindows[T any](unix, windows T) T {
 		return windows
 	}
 	return unix
+}
+
+func lookupTestFilter() (string, bool) {
+	const prefix = "-test.run="
+	for _, arg := range os.Args {
+		if strings.HasPrefix(arg, prefix) {
+			return strings.TrimPrefix(arg, prefix), true
+		}
+	}
+	return "", false
 }
