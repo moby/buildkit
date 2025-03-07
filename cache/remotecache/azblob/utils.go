@@ -138,7 +138,7 @@ func createContainerClient(ctx context.Context, config *Config) (*container.Clie
 	}
 
 	ctx, cnclFn := context.WithCancelCause(ctx)
-	ctx, _ = context.WithTimeoutCause(ctx, time.Second*60, errors.WithStack(context.DeadlineExceeded))
+	ctx, _ = context.WithTimeoutCause(ctx, time.Second*60, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
 	defer cnclFn(errors.WithStack(context.Canceled))
 
 	containerClient := client.ServiceClient().NewContainerClient(config.Container)
@@ -150,7 +150,7 @@ func createContainerClient(ctx context.Context, config *Config) (*container.Clie
 
 	if bloberror.HasCode(err, bloberror.ContainerNotFound) {
 		ctx, cnclFn := context.WithCancelCause(ctx)
-		ctx, _ = context.WithTimeoutCause(ctx, time.Minute*5, errors.WithStack(context.DeadlineExceeded))
+		ctx, _ = context.WithTimeoutCause(ctx, time.Minute*5, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
 		defer cnclFn(errors.WithStack(context.Canceled))
 		_, err := containerClient.Create(ctx, &container.CreateOptions{})
 		if err != nil {
@@ -175,7 +175,7 @@ func blobKey(config *Config, digest digest.Digest) string {
 func blobExists(ctx context.Context, containerClient *container.Client, blobKey string) (bool, error) {
 	blobClient := containerClient.NewBlobClient(blobKey)
 	ctx, cnclFn := context.WithCancelCause(ctx)
-	ctx, _ = context.WithTimeoutCause(ctx, time.Second*60, errors.WithStack(context.DeadlineExceeded))
+	ctx, _ = context.WithTimeoutCause(ctx, time.Second*60, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
 	defer cnclFn(errors.WithStack(context.Canceled))
 	_, err := blobClient.GetProperties(ctx, &blob.GetPropertiesOptions{})
 	if err == nil {

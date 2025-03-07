@@ -153,7 +153,7 @@ func (ce *exporter) uploadManifest(ctx context.Context, manifestKey string, read
 	blobClient := ce.containerClient.NewBlockBlobClient(manifestKey)
 
 	ctx, cnclFn := context.WithCancelCause(ctx)
-	ctx, _ = context.WithTimeoutCause(ctx, time.Minute*5, errors.WithStack(context.DeadlineExceeded))
+	ctx, _ = context.WithTimeoutCause(ctx, time.Minute*5, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
 	defer cnclFn(errors.WithStack(context.Canceled))
 
 	_, err := blobClient.Upload(ctx, reader, &blockblob.UploadOptions{})
@@ -171,7 +171,7 @@ func (ce *exporter) uploadBlobIfNotExists(ctx context.Context, blobKey string, r
 	blobClient := ce.containerClient.NewBlockBlobClient(blobKey)
 
 	uploadCtx, cnclFn := context.WithCancelCause(ctx)
-	uploadCtx, _ = context.WithTimeoutCause(uploadCtx, time.Minute*5, errors.WithStack(context.DeadlineExceeded))
+	uploadCtx, _ = context.WithTimeoutCause(uploadCtx, time.Minute*5, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
 	defer cnclFn(errors.WithStack(context.Canceled))
 
 	// Only upload if the blob doesn't exist

@@ -549,7 +549,7 @@ func (k procKiller) Kill(ctx context.Context) (err error) {
 	// this timeout is generally a no-op, the Kill ctx should already have a
 	// shorter timeout but here as a fail-safe for future refactoring.
 	ctx, cancel := context.WithCancelCause(ctx)
-	ctx, _ = context.WithTimeoutCause(ctx, 10*time.Second, errors.WithStack(context.DeadlineExceeded))
+	ctx, _ = context.WithTimeoutCause(ctx, 10*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
 	defer func() { cancel(errors.WithStack(context.Canceled)) }()
 
 	if k.pidfile == "" {
@@ -637,13 +637,14 @@ func runcProcessHandle(ctx context.Context, killer procKiller) (*procHandle, con
 		for {
 			select {
 			case <-ctx.Done():
-				killCtx, timeout := context.WithCancelCause(context.Background())
-				killCtx, _ = context.WithTimeoutCause(killCtx, 7*time.Second, errors.WithStack(context.DeadlineExceeded))
+				// these contexts are canceled through the parent context for cleanup, govet doesn't understand this
+				killCtx, timeout := context.WithCancelCause(context.Background())                                         //nolint:govet
+				killCtx, _ = context.WithTimeoutCause(killCtx, 7*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
 				if err := p.killer.Kill(killCtx); err != nil {
 					select {
 					case <-killCtx.Done():
 						cancel(errors.WithStack(context.Cause(ctx)))
-						return
+						return //nolint:govet
 					default:
 					}
 				}
@@ -696,7 +697,7 @@ func (p *procHandle) WaitForReady(ctx context.Context) error {
 // callback is non-nil it will be called after receiving the pid.
 func (p *procHandle) WaitForStart(ctx context.Context, startedCh <-chan int, started func()) error {
 	ctx, cancel := context.WithCancelCause(ctx)
-	ctx, _ = context.WithTimeoutCause(ctx, 10*time.Second, errors.WithStack(context.DeadlineExceeded))
+	ctx, _ = context.WithTimeoutCause(ctx, 10*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
 	defer func() { cancel(errors.WithStack(context.Canceled)) }()
 	select {
 	case <-ctx.Done():

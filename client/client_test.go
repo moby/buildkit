@@ -3193,7 +3193,7 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 	dt, err = os.ReadFile(filepath.Join(destDir, "root_supplementary"))
 	require.NoError(t, err)
 	require.True(t, strings.HasPrefix(string(dt), "root "))
-	require.True(t, strings.Contains(string(dt), "wheel"))
+	require.Contains(t, string(dt), "wheel")
 
 	dt2, err := os.ReadFile(filepath.Join(destDir, "default_supplementary"))
 	require.NoError(t, err)
