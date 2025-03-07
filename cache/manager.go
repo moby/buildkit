@@ -366,7 +366,7 @@ func (cm *cacheManager) get(ctx context.Context, id string, pg progress.Controll
 
 	triggerUpdate := true
 	for _, o := range opts {
-		if o == NoUpdateLastUsed {
+		if _, ok := o.(NoUpdateLastUsedOpt); ok {
 			triggerUpdate = false
 		}
 	}
@@ -523,7 +523,7 @@ func (cm *cacheManager) parentsOf(ctx context.Context, md *cacheMetadata, opts .
 		}
 	}()
 	if parentID := md.getParent(); parentID != "" {
-		p, err := cm.get(ctx, parentID, nil, append(opts, NoUpdateLastUsed))
+		p, err := cm.get(ctx, parentID, nil, append(opts, NoUpdateLastUsed)...)
 		if err != nil {
 			return ps, err
 		}
@@ -531,14 +531,14 @@ func (cm *cacheManager) parentsOf(ctx context.Context, md *cacheMetadata, opts .
 		return ps, nil
 	}
 	for _, parentID := range md.getMergeParents() {
-		p, err := cm.get(ctx, parentID, nil, append(opts, NoUpdateLastUsed))
+		p, err := cm.get(ctx, parentID, nil, append(opts, NoUpdateLastUsed)...)
 		if err != nil {
 			return ps, err
 		}
 		ps.mergeParents = append(ps.mergeParents, p)
 	}
 	if lowerParentID := md.getLowerDiffParent(); lowerParentID != "" {
-		p, err := cm.get(ctx, lowerParentID, nil, append(opts, NoUpdateLastUsed))
+		p, err := cm.get(ctx, lowerParentID, nil, append(opts, NoUpdateLastUsed)...)
 		if err != nil {
 			return ps, err
 		}
@@ -548,7 +548,7 @@ func (cm *cacheManager) parentsOf(ctx context.Context, md *cacheMetadata, opts .
 		ps.diffParents.lower = p
 	}
 	if upperParentID := md.getUpperDiffParent(); upperParentID != "" {
-		p, err := cm.get(ctx, upperParentID, nil, append(opts, NoUpdateLastUsed))
+		p, err := cm.get(ctx, upperParentID, nil, append(opts, NoUpdateLastUsed)...)
 		if err != nil {
 			return ps, err
 		}
@@ -1505,7 +1505,20 @@ func IsNotFound(err error) bool {
 	return errors.Is(err, errNotFound)
 }
 
-type RefOption interface{}
+type RefOption interface {
+	opt()
+}
+
+func (NoUpdateLastUsedOpt) opt()   {}
+func (CachePolicyRetainOpt) opt()  {}
+func (CachePolicyDefaultOpt) opt() {}
+func (DescriptionOpt) opt()        {}
+func (RecordTypeOpt) opt()         {}
+func (CreationTimeOpt) opt()       {}
+func (ImageRefOpt) opt()           {}
+func (SnapshotIDOpt) opt()         {}
+func (DescHandlers) opt()          {}
+func (UnlazyOpt) opt()             {}
 
 type cachePolicy int
 
@@ -1514,64 +1527,77 @@ const (
 	cachePolicyRetain
 )
 
-type noUpdateLastUsed struct{}
+type NoUpdateLastUsedOpt struct{}
 
-var NoUpdateLastUsed noUpdateLastUsed
+var (
+	NoUpdateLastUsed  RefOption = NoUpdateLastUsedOpt{}
+	CachePolicyRetain RefOption = CachePolicyRetainOpt{}
+)
 
-func CachePolicyRetain(m *cacheMetadata) error {
-	return m.SetCachePolicyRetain()
+type CachePolicyRetainOpt struct{}
+
+func CachePolicyDefault() RefOption {
+	return CachePolicyDefaultOpt{}
 }
 
-func CachePolicyDefault(m *cacheMetadata) error {
-	return m.SetCachePolicyDefault()
-}
+type CachePolicyDefaultOpt struct{}
 
 func WithDescription(descr string) RefOption {
-	return func(m *cacheMetadata) error {
-		return m.queueDescription(descr)
-	}
+	return DescriptionOpt{Description: descr}
+}
+
+type DescriptionOpt struct {
+	Description string
 }
 
 func WithRecordType(t client.UsageRecordType) RefOption {
-	return func(m *cacheMetadata) error {
-		return m.queueRecordType(t)
-	}
+	return RecordTypeOpt{RecordType: t}
+}
+
+type RecordTypeOpt struct {
+	RecordType client.UsageRecordType
 }
 
 func WithCreationTime(tm time.Time) RefOption {
-	return func(m *cacheMetadata) error {
-		return m.queueCreatedAt(tm)
-	}
+	return CreationTimeOpt{CreationTime: tm}
 }
 
-// Need a separate type for imageRef because it needs to be called outside
-// initializeMetadata while still being a RefOption, so wrapping it in a
-// different type ensures initializeMetadata won't catch it too and duplicate
-// setting the metadata.
-type imageRefOption func(m *cacheMetadata) error
+type CreationTimeOpt struct {
+	CreationTime time.Time
+}
 
 // WithImageRef appends the given imageRef to the cache ref's metadata
 func WithImageRef(imageRef string) RefOption {
-	return imageRefOption(func(m *cacheMetadata) error {
-		return m.appendImageRef(imageRef)
-	})
+	return ImageRefOpt{ImageRef: imageRef}
+}
+
+type ImageRefOpt struct {
+	ImageRef string
 }
 
 func setImageRefMetadata(m *cacheMetadata, opts ...RefOption) error {
 	for _, opt := range opts {
-		if fn, ok := opt.(imageRefOption); ok {
-			if err := fn(m); err != nil {
+		switch opt := opt.(type) {
+		case ImageRefOpt:
+			if err := m.appendImageRef(opt.ImageRef); err != nil {
+				return err
+			}
+		case SnapshotIDOpt:
+			if err := m.queueSnapshotID(opt.SnapshotID); err != nil {
 				return err
 			}
 		}
 	}
+
 	return m.commitMetadata()
 }
 
 func withSnapshotID(id string) RefOption {
-	return imageRefOption(func(m *cacheMetadata) error {
-		return m.queueSnapshotID(id)
-	})
+	return SnapshotIDOpt{SnapshotID: id}
+}
+
+type SnapshotIDOpt struct {
+	SnapshotID string
 }
 
 func initializeMetadata(m *cacheMetadata, parents parentRefs, opts ...RefOption) error {
@@ -1610,10 +1636,37 @@ func initializeMetadata(m *cacheMetadata, parents parentRefs, opts ...RefOption)
 	}
 
 	for _, opt := range opts {
-		if fn, ok := opt.(func(*cacheMetadata) error); ok {
-			if err := fn(m); err != nil {
+		switch opt := opt.(type) {
+		case DescriptionOpt:
+			if err := m.queueDescription(opt.Description); err != nil {
 				return err
 			}
+		case RecordTypeOpt:
+			if err := m.queueRecordType(opt.RecordType); err != nil {
+				return err
+			}
+		case CreationTimeOpt:
+			if err := m.queueCreatedAt(opt.CreationTime); err != nil {
+				return err
+			}
+		case ImageRefOpt:
+			if err := m.appendImageRef(opt.ImageRef); err != nil {
+				return err
+			}
+		case SnapshotIDOpt:
+			if err := m.queueSnapshotID(opt.SnapshotID); err != nil {
+				return err
+			}
+		case CachePolicyRetainOpt:
+			if err := m.SetCachePolicyRetain(); err != nil {
+				return err
+			}
+		case CachePolicyDefaultOpt:
+			if err := m.SetCachePolicyDefault(); err != nil {
+				return err
+			}
+		case NoUpdateLastUsedOpt:
+			// do nothing
 		}
 	}
 
