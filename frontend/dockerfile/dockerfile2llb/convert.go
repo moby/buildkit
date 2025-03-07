@@ -2603,8 +2603,20 @@ func buildMetaArgs(args *llb.EnvList, shlex *shell.Lex, argCommands []instructio
 					if err != nil {
 						return nil, nil, parser.WithLocation(err, cmd.Location())
 					}
+
 					kp.Value = &result.Result
 					info.deps = result.Matched
+					if _, ok := result.Matched[kp.Key]; ok {
+						delete(info.deps, kp.Key)
+						if old, ok := allArgs[kp.Key]; ok {
+							for k := range old.deps {
+								if info.deps == nil {
+									info.deps = make(map[string]struct{})
+								}
+								info.deps[k] = struct{}{}
+							}
+						}
+					}
 				}
 			} else {
 				kp.Value = &v
