@@ -266,7 +266,7 @@ func (gs *gitSourceHandler) getAuthToken(ctx context.Context, g session.Group) e
 				return err
 			}
 			if s.token {
-				dt = []byte("basic " + base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("x-access-token:%s", dt))))
+				dt = []byte("basic " + base64.StdEncoding.EncodeToString(fmt.Appendf(nil, "x-access-token:%s", dt)))
 			}
 			gs.authArgs = []string{"-c", "http." + tokenScope(gs.src.Remote) + ".extraheader=Authorization: " + string(dt)}
 			break

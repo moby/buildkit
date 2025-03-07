@@ -59,7 +59,7 @@ func TestExecOpMarshalConsistency(t *testing.T) {
 			AddMount("/b", Scratch().File(Mkfile("file1", 0644, []byte("file1 contents")))),
 		).AddMount("/a", Scratch().File(Mkfile("file2", 0644, []byte("file2 contents"))))
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		def, err := st.Marshal(context.TODO())
 		require.NoError(t, err)
 

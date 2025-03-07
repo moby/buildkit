@@ -214,7 +214,7 @@ func (e *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 		close(tasks)
 	}()
 
-	for k := 0; k < e.config.UploadParallelism; k++ {
+	for range e.config.UploadParallelism {
 		eg.Go(func() error {
 			for index := range tasks {
 				blob := cacheConfig.Layers[index].Blob

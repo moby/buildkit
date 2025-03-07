@@ -646,11 +646,11 @@ EOF
 	}, nil)
 	require.NoError(t, err)
 
-	dockerfile = []byte(fmt.Sprintf(`
+	dockerfile = fmt.Appendf(nil, `
 	FROM %s AS base
 	FROM scratch
 	COPY --from=base /dest /dest
-	`, target))
+	`, target)
 
 	dir = integration.Tmpdir(
 		t,

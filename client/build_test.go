@@ -68,7 +68,7 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewayContainerSecurityModeCaps,
 		testClientGatewayContainerSecurityModeValidation,
 	), integration.WithMirroredImages(integration.OfficialImages("busybox:latest")),
-		integration.WithMatrix("secmode", map[string]interface{}{
+		integration.WithMatrix("secmode", map[string]any{
 			"sandbox":  securitySandbox,
 			"insecure": securityInsecure,
 		}),
@@ -79,7 +79,7 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewayContainerHostNetworkingValidation,
 	),
 		integration.WithMirroredImages(integration.OfficialImages("busybox:latest")),
-		integration.WithMatrix("netmode", map[string]interface{}{
+		integration.WithMatrix("netmode", map[string]any{
 			"default": defaultNetwork,
 			"host":    hostNetwork,
 		}),
@@ -1061,7 +1061,7 @@ func newTestPrompt(ctx context.Context, t *testing.T, input io.Writer, output *b
 func (p *testPrompt) String() string { return p.prompt }
 
 func (p *testPrompt) SendExit(status int) {
-	p.input.Write([]byte(fmt.Sprintf("exit %d\n", status)))
+	p.input.Write(fmt.Appendf(nil, "exit %d\n", status))
 }
 
 func (p *testPrompt) Send(cmd string) {

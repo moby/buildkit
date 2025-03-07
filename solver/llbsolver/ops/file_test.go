@@ -2,6 +2,7 @@ package ops
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -696,7 +697,7 @@ func (b *testFileRefBackend) Prepare(ctx context.Context, ref fileoptypes.Ref, r
 	b.mounts[m.initID] = m
 	b.mu.Unlock()
 	m2 := *m
-	m2.chain = append([]mod{}, m2.chain...)
+	m2.chain = slices.Clone(m2.chain)
 	return &m2, nil
 }
 

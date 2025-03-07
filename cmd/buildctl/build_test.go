@@ -140,7 +140,7 @@ func testBuildMetadataFile(t *testing.T, sb integration.Sandbox) {
 	metadataBytes, err := os.ReadFile(metadataFile)
 	require.NoError(t, err)
 
-	var metadata map[string]interface{}
+	var metadata map[string]any
 	err = json.Unmarshal(metadataBytes, &metadata)
 	require.NoError(t, err)
 

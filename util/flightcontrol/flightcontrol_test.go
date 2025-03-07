@@ -209,8 +209,8 @@ func TestContention(t *testing.T) {
 
 	g := &Group[int]{}
 
-	for i := 0; i < threads; i++ {
-		for j := 0; j < perthread; j++ {
+	for range threads {
+		for range perthread {
 			_, err := g.Do(context.TODO(), "foo", func(ctx context.Context) (int, error) {
 				time.Sleep(time.Microsecond)
 				return 0, nil
@@ -227,7 +227,7 @@ func TestMassiveParallel(t *testing.T) {
 	var retryCount int64
 	g := &Group[string]{}
 	eg, ctx := errgroup.WithContext(context.Background())
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		eg.Go(func() error {
 			_, err := g.Do(ctx, "key", func(ctx context.Context) (string, error) {
 				return "", errors.Errorf("always fail")

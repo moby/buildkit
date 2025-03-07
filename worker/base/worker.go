@@ -305,7 +305,7 @@ func (w *Worker) LoadRef(ctx context.Context, id string, hidden bool) (cache.Imm
 	var needsRemoteProviders cache.NeedsRemoteProviderError
 	if errors.As(err, &needsRemoteProviders) {
 		if optGetter := solver.CacheOptGetterOf(ctx); optGetter != nil {
-			var keys []interface{}
+			var keys []any
 			for _, dgst := range needsRemoteProviders {
 				keys = append(keys, cache.DescHandlerKey(dgst))
 			}

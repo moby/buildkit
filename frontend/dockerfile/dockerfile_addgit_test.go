@@ -99,7 +99,7 @@ RUN cd /buildkit-chowned && \
 	require.NoError(t, err)
 }
 
-func applyTemplate(tmpl string, x interface{}) (string, error) {
+func applyTemplate(tmpl string, x any) (string, error) {
 	var buf bytes.Buffer
 	parsed, err := template.New("").Parse(tmpl)
 	if err != nil {

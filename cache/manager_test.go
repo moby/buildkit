@@ -391,10 +391,10 @@ func TestMergeBlobchainID(t *testing.T) {
 	var mergeInputs []ImmutableRef
 	var descs []ocispecs.Descriptor
 	descHandlers := DescHandlers(map[digest.Digest]*DescHandler{})
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		contentBuffer := contentutil.NewBuffer()
 		var curBlob ImmutableRef
-		for j := 0; j < 3; j++ {
+		for j := range 3 {
 			blobBytes, desc, err := mapToBlob(map[string]string{strconv.Itoa(i): strconv.Itoa(j)}, true)
 			require.NoError(t, err)
 			cw, err := contentBuffer.Writer(ctx)
@@ -1194,7 +1194,7 @@ func TestLoopLeaseContent(t *testing.T) {
 	gotChain := []digest.Digest{orgDesc.Digest}
 	cur := orgDesc
 	previous := chain[len(chain)-1].Digest
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		dgst := cur.Digest
 		visited[dgst] = struct{}{}
 		info, err := co.cs.Info(ctx, dgst)
@@ -1632,7 +1632,7 @@ func TestGetRemotes(t *testing.T) {
 	// make some lazy refs from blobs
 	expectedContent := map[digest.Digest]struct{}{}
 	var descs []ocispecs.Descriptor
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		blobmap := map[string]string{"foo": strconv.Itoa(i)}
 		blobBytes, desc, err := mapToBlob(blobmap, true)
 		require.NoError(t, err)
@@ -1670,10 +1670,10 @@ func TestGetRemotes(t *testing.T) {
 	require.NoError(t, err)
 
 	refs := []ImmutableRef{lazyRef}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		var newRefs []ImmutableRef
 		for j, ir := range refs {
-			for k := 0; k < 2; k++ {
+			for k := range 2 {
 				mutRef, err := cm.New(ctx, ir, nil, descHandlers)
 				require.NoError(t, err)
 
@@ -1834,7 +1834,7 @@ func TestGetRemotes(t *testing.T) {
 				require.Equal(t, 1, len(mainOnly))
 				mainRemote := mainOnly[0]
 				require.Equal(t, len(mainRemote.Descriptors), len(gotMain.Descriptors))
-				for i := 0; i < len(mainRemote.Descriptors); i++ {
+				for i := range mainRemote.Descriptors {
 					require.Equal(t, mainRemote.Descriptors[i].Digest, gotMain.Descriptors[i].Digest)
 				}
 
@@ -2053,7 +2053,7 @@ func TestMergeOp(t *testing.T) {
 	require.Nil(t, emptyMerge)
 
 	var baseRefs []ImmutableRef
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		active, err := cm.New(ctx, nil, nil)
 		require.NoError(t, err)
 		m, err := active.Mount(ctx, false, nil)
@@ -2352,7 +2352,7 @@ func TestMountReadOnly(t *testing.T) {
 	mutRef, err := cm.New(ctx, nil, nil)
 	require.NoError(t, err)
 
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		rwMntable, err := mutRef.Mount(ctx, false, nil)
 		require.NoError(t, err)
 		rwMnts, release, err := rwMntable.Mount()

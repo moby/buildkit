@@ -60,7 +60,7 @@ type Sandbox interface {
 	PrintLogs(*testing.T)
 	ClearLogs()
 	NewRegistry() (string, error)
-	Value(string) interface{} // chosen matrix value
+	Value(string) any // chosen matrix value
 	Name() string
 	CDISpecDir() string
 }
@@ -131,10 +131,10 @@ func List() []Worker {
 // tests.
 type TestOpt func(*testConf)
 
-func WithMatrix(key string, m map[string]interface{}) TestOpt {
+func WithMatrix(key string, m map[string]any) TestOpt {
 	return func(tc *testConf) {
 		if tc.matrix == nil {
-			tc.matrix = map[string]map[string]interface{}{}
+			tc.matrix = map[string]map[string]any{}
 		}
 		tc.matrix[key] = m
 	}
@@ -150,7 +150,7 @@ func WithMirroredImages(m map[string]string) TestOpt {
 }
 
 type testConf struct {
-	matrix         map[string]map[string]interface{}
+	matrix         map[string]map[string]any
 	mirroredImages map[string]string
 }
 
@@ -251,7 +251,7 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 	}
 }
 
-func getFunctionName(i interface{}) string {
+func getFunctionName(i any) string {
 	fullname := runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
 	dot := strings.LastIndex(fullname, ".") + 1
 	return strings.Title(fullname[dot:]) //nolint:staticcheck // ignoring "SA1019: strings.Title is deprecated", as for our use we don't need full unicode support
@@ -430,10 +430,10 @@ func (mv matrixValue) functionSuffix() string {
 
 type matrixValueChoice struct {
 	name  string
-	value interface{}
+	value any
 }
 
-func newMatrixValue(key, name string, v interface{}) matrixValue {
+func newMatrixValue(key, name string, v any) matrixValue {
 	return matrixValue{
 		fn: []string{key},
 		values: map[string]matrixValueChoice{

@@ -117,7 +117,7 @@ RUN --mount=type=ssh apk update \
 	sshAgentCmd.Stderr = sshAgentOutputBuf
 	require.NoError(t, sshAgentCmd.Start())
 	var found bool
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		_, err := os.Stat(sockPath)
 		if err == nil {
 			found = true

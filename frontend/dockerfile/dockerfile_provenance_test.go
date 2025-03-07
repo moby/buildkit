@@ -1283,7 +1283,7 @@ func testFrontendDeduplicateSources(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	dockerfile := []byte(fmt.Sprintf(
+	dockerfile := fmt.Appendf(nil,
 		`
 FROM %s as base
 COPY foo foo2
@@ -1291,7 +1291,7 @@ COPY foo foo2
 FROM linked
 COPY bar bar2
 `,
-		integration.UnixOrWindows("scratch", "nanoserver")),
+		integration.UnixOrWindows("scratch", "nanoserver"),
 	)
 
 	dir := integration.Tmpdir(

@@ -75,7 +75,7 @@ func diskUsage(clicontext *cli.Context) error {
 	return nil
 }
 
-func printKV(w io.Writer, k string, v interface{}) {
+func printKV(w io.Writer, k string, v any) {
 	fmt.Fprintf(w, "%s:\t%v\n", k, v)
 }
 
