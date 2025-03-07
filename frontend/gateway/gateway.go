@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -405,11 +406,14 @@ type bindMount struct {
 }
 
 func (b *bindMount) Mount() ([]mount.Mount, func() error, error) {
-	return []mount.Mount{{
-		Type:    "bind",
-		Source:  b.dir,
-		Options: []string{"bind", "ro", "nosuid", "nodev", "noexec"},
-	}}, func() error { return nil }, nil
+	if runtime.GOOS != "windows" {
+		return []mount.Mount{{
+			Type:    "bind",
+			Source:  b.dir,
+			Options: []string{"bind", "ro", "nosuid", "nodev", "noexec"},
+		}}, func() error { return nil }, nil
+	}
+	return nil, func() error { return nil }, nil
 }
 
 func (b *bindMount) IdentityMapping() *idtools.IdentityMapping {
