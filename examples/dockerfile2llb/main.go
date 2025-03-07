@@ -74,7 +74,7 @@ func xmain() error {
 	return nil
 }
 
-func writeJSON(f string, x interface{}) error {
+func writeJSON(f string, x any) error {
 	b, err := json.Marshal(x)
 	if err != nil {
 		return err

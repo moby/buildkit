@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -113,11 +114,9 @@ func (gf *gatewayFrontend) checkSourceIsAllowed(source string) error {
 
 	taglessSource := reference.TrimNamed(sourceRef).Name()
 
-	for _, allowedRepository := range gf.allowedRepositories {
-		if taglessSource == allowedRepository {
-			// Allowed
-			return nil
-		}
+	if slices.Contains(gf.allowedRepositories, taglessSource) {
+		// Allowed
+		return nil
 	}
 	return errors.Errorf("'%s' is not an allowed gateway source", source)
 }

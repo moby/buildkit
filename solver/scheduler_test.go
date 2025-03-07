@@ -3040,7 +3040,7 @@ func TestMergedEdgesLookup(t *testing.T) {
 	t.Parallel()
 
 	// this test requires multiple runs to trigger the race
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		func() {
 			ctx := context.TODO()
 
@@ -3092,7 +3092,7 @@ func TestMergedEdgesLookup(t *testing.T) {
 func TestMergedEdgesCycle(t *testing.T) {
 	t.Parallel()
 
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		ctx := context.TODO()
 
 		cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
@@ -3147,7 +3147,7 @@ func TestMergedEdgesCycle(t *testing.T) {
 func TestMergedEdgesCycleMultipleOwners(t *testing.T) {
 	t.Parallel()
 
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		ctx := context.TODO()
 
 		cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
@@ -3586,10 +3586,7 @@ func generateSubGraph(nodes int) (Edge, int) {
 		return Edge{Vertex: vtxConst(value, vtxOpt{})}, value
 	}
 	spread := rand.Int()%5 + 2 //nolint:gosec
-	inc := int(math.Ceil(float64(nodes) / float64(spread)))
-	if inc > nodes {
-		inc = nodes
-	}
+	inc := min(int(math.Ceil(float64(nodes)/float64(spread))), nodes)
 	added := 1
 	value := 0
 	inputs := []Edge{}
@@ -3648,7 +3645,7 @@ type vertex struct {
 func (v *vertex) Digest() digest.Digest {
 	return digest.FromBytes([]byte(v.opt.name))
 }
-func (v *vertex) Sys() interface{} {
+func (v *vertex) Sys() any {
 	return v
 }
 func (v *vertex) Inputs() []Edge {
@@ -3727,7 +3724,7 @@ func (v *vertex) CacheMap(ctx context.Context, g session.Group, index int) (*Cac
 		return v.makeCacheMap(), len(v.opt.cacheKeySeeds) == index, nil
 	}
 	return &CacheMap{
-		Digest: digest.FromBytes([]byte(fmt.Sprintf("seed:%s", v.opt.cacheKeySeeds[index-1]()))),
+		Digest: digest.FromBytes(fmt.Appendf(nil, "seed:%s", v.opt.cacheKeySeeds[index-1]())),
 	}, len(v.opt.cacheKeySeeds) == index, nil
 }
 
@@ -3769,7 +3766,7 @@ func (v *vertex) Acquire(ctx context.Context) (ReleaseFunc, error) {
 
 func (v *vertex) makeCacheMap() *CacheMap {
 	m := &CacheMap{
-		Digest: digest.FromBytes([]byte(fmt.Sprintf("seed:%s", v.opt.cacheKeySeed))),
+		Digest: digest.FromBytes(fmt.Appendf(nil, "seed:%s", v.opt.cacheKeySeed)),
 		Deps: make([]struct {
 			Selector          digest.Digest
 			ComputeDigestFunc ResultBasedCacheFunc
@@ -3801,7 +3798,7 @@ type vertexConst struct {
 	value int
 }
 
-func (v *vertexConst) Sys() interface{} {
+func (v *vertexConst) Sys() any {
 	return v
 }
 
@@ -3832,7 +3829,7 @@ type vertexSum struct {
 	value int
 }
 
-func (v *vertexSum) Sys() interface{} {
+func (v *vertexSum) Sys() any {
 	return v
 }
 
@@ -3871,7 +3868,7 @@ type vertexAdd struct {
 	value int
 }
 
-func (v *vertexAdd) Sys() interface{} {
+func (v *vertexAdd) Sys() any {
 	return v
 }
 
@@ -3909,7 +3906,7 @@ type vertexSubBuild struct {
 	b Builder
 }
 
-func (v *vertexSubBuild) Sys() interface{} {
+func (v *vertexSubBuild) Sys() any {
 	return v
 }
 
@@ -3945,7 +3942,7 @@ type dummyResult struct {
 
 func (r *dummyResult) ID() string                    { return r.id }
 func (r *dummyResult) Release(context.Context) error { return nil }
-func (r *dummyResult) Sys() interface{}              { return r }
+func (r *dummyResult) Sys() any                      { return r }
 func (r *dummyResult) Clone() Result                 { return r }
 
 func testOpResolver(v Vertex, b Builder) (Op, error) {
@@ -4029,12 +4026,12 @@ func testExporterOpts(all bool) CacheExportOpt {
 
 func newTestExporterTarget() *testExporterTarget {
 	return &testExporterTarget{
-		visited: map[interface{}]struct{}{},
+		visited: map[any]struct{}{},
 	}
 }
 
 type testExporterTarget struct {
-	visited map[interface{}]struct{}
+	visited map[any]struct{}
 	records []*testExporterRecord
 }
 
@@ -4044,11 +4041,11 @@ func (t *testExporterTarget) Add(dgst digest.Digest) CacheExporterRecord {
 	return r
 }
 
-func (t *testExporterTarget) Visit(v interface{}) {
+func (t *testExporterTarget) Visit(v any) {
 	t.visited[v] = struct{}{}
 }
 
-func (t *testExporterTarget) Visited(v interface{}) bool {
+func (t *testExporterTarget) Visited(v any) bool {
 	_, ok := t.visited[v]
 	return ok
 }

@@ -382,12 +382,12 @@ func testWalkIDsByResult(t *testing.T, st solver.CacheKeyStorage) {
 	require.False(t, ok)
 }
 
-func getFunctionName(i interface{}) string {
+func getFunctionName(i any) string {
 	fullname := runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
 	dot := strings.LastIndex(fullname, ".") + 1
 	return strings.Title(fullname[dot:]) //nolint:staticcheck // ignoring "SA1019: strings.Title is deprecated", as for our use we don't need full unicode support
 }
 
 func rootKey(dgst digest.Digest, output solver.Index) digest.Digest {
-	return digest.FromBytes([]byte(fmt.Sprintf("%s@%d", dgst, output)))
+	return digest.FromBytes(fmt.Appendf(nil, "%s@%d", dgst, output))
 }

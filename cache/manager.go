@@ -1505,7 +1505,7 @@ func IsNotFound(err error) bool {
 	return errors.Is(err, errNotFound)
 }
 
-type RefOption interface{}
+type RefOption any
 
 type cachePolicy int
 

@@ -9,7 +9,7 @@ import (
 )
 
 // getRuntimeOptionsType gets empty runtime options by the runtime type name.
-func getRuntimeOptionsType(t string) interface{} {
+func getRuntimeOptionsType(t string) any {
 	if t == plugins.RuntimeRuncV2 {
 		return &runcoptions.Options{}
 	}

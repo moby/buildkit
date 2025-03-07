@@ -104,7 +104,7 @@ func reduceCalc(ctx context.Context, total int) (int, error) {
 		return 0, err
 	}
 	// parallel steps
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		func(i int) {
 			eg.Go(func() error {
 				_, err := calc(ctx, total, fmt.Sprintf("calc-%d", i))

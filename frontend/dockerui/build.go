@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 
 	"github.com/containerd/platforms"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
@@ -67,7 +68,7 @@ func (bc *Client) Build(ctx context.Context, fn BuildFunc) (*ResultBuilder, erro
 					p.OSVersion = img.OSVersion
 				}
 				if p.OSFeatures == nil && len(img.OSFeatures) > 0 {
-					p.OSFeatures = append([]string{}, img.OSFeatures...)
+					p.OSFeatures = slices.Clone(img.OSFeatures)
 				}
 			}
 

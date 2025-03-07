@@ -248,7 +248,7 @@ type frontend interface {
 }
 
 func init() {
-	frontends := map[string]interface{}{}
+	frontends := map[string]any{}
 
 	images := integration.UnixOrWindows(
 		[]string{"busybox:latest", "alpine:latest", "busybox:stable-musl"},
@@ -293,13 +293,13 @@ func TestIntegration(t *testing.T) {
 	)...)
 
 	integration.Run(t, securityTests, append(append(opts, securityOpts...),
-		integration.WithMatrix("security.insecure", map[string]interface{}{
+		integration.WithMatrix("security.insecure", map[string]any{
 			"granted": securityInsecureGranted,
 			"denied":  securityInsecureDenied,
 		}))...)
 
 	integration.Run(t, networkTests, append(opts,
-		integration.WithMatrix("network.host", map[string]interface{}{
+		integration.WithMatrix("network.host", map[string]any{
 			"granted": networkHostGranted,
 			"denied":  networkHostDenied,
 		}))...)
@@ -1284,7 +1284,7 @@ FROM target
 `,
 	)
 	for _, src := range []string{"/", "/d2"} {
-		dockerfile := []byte(fmt.Sprintf(dockerfile, src))
+		dockerfile := fmt.Appendf(nil, dockerfile, src)
 
 		dir := integration.Tmpdir(
 			t,
@@ -1652,10 +1652,10 @@ func testGlobalArgErrors(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
 	imgName := integration.UnixOrWindows("busybox", "nanoserver")
-	dockerfile := []byte(fmt.Sprintf(`
+	dockerfile := fmt.Appendf(nil, `
 ARG FOO=${FOO:?"custom error"}
 FROM %s
-`, imgName))
+`, imgName)
 
 	dir := integration.Tmpdir(
 		t,
@@ -1691,11 +1691,11 @@ FROM %s
 func testArgDefaultExpansion(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(fmt.Sprintf(`
+	dockerfile := fmt.Appendf(nil, `
 FROM %s
 ARG FOO
 ARG BAR=${FOO:?"foo missing"}
-`, integration.UnixOrWindows("scratch", "nanoserver")))
+`, integration.UnixOrWindows("scratch", "nanoserver"))
 
 	dir := integration.Tmpdir(
 		t,
@@ -1981,11 +1981,11 @@ COPY --from=base /out/ /
 
 	// stage name defined in Dockerfile but not passed in request
 	imgName := integration.UnixOrWindows("scratch", "nanoserver")
-	dockerfile = append(dockerfile, []byte(fmt.Sprintf(`
+	dockerfile = append(dockerfile, fmt.Appendf(nil, `
 	
 	FROM %s AS final
 	COPY --from=base /out/ /
-	`, imgName))...)
+	`, imgName)...)
 
 	dir = integration.Tmpdir(
 		t,
@@ -2517,11 +2517,11 @@ CMD ["test"]
 	}, nil)
 	require.NoError(t, err)
 
-	dockerfile = []byte(fmt.Sprintf(`
+	dockerfile = fmt.Appendf(nil, `
 FROM %s
 SHELL ["ls"]
 ENTRYPOINT my entrypoint
-`, target))
+`, target)
 
 	dir = integration.Tmpdir(
 		t,
@@ -3002,10 +3002,10 @@ func testDockerfileADDFromURL(t *testing.T, sb integration.Sandbox) {
 	})
 	defer server.Close()
 
-	dockerfile := []byte(fmt.Sprintf(`
+	dockerfile := fmt.Appendf(nil, `
 FROM scratch
 ADD %s /dest/
-`, server.URL+"/foo"))
+`, server.URL+"/foo")
 
 	dir := integration.Tmpdir(
 		t,
@@ -3031,10 +3031,10 @@ ADD %s /dest/
 	require.NoError(t, err)
 
 	// test the default properties
-	dockerfile = []byte(fmt.Sprintf(`
+	dockerfile = fmt.Appendf(nil, `
 FROM scratch
 ADD %s /dest/
-`, server.URL+"/"))
+`, server.URL+"/")
 
 	dir = integration.Tmpdir(
 		t,
@@ -3088,10 +3088,10 @@ func testDockerfileAddArchive(t *testing.T, sb integration.Sandbox) {
 
 	baseImage := integration.UnixOrWindows("scratch", "nanoserver")
 
-	dockerfile := []byte(fmt.Sprintf(`
+	dockerfile := fmt.Appendf(nil, `
 FROM %s
 ADD t.tar /
-`, baseImage))
+`, baseImage)
 
 	dir := integration.Tmpdir(
 		t,
@@ -3119,10 +3119,10 @@ ADD t.tar /
 	err = gz.Close()
 	require.NoError(t, err)
 
-	dockerfile = []byte(fmt.Sprintf(`
+	dockerfile = fmt.Appendf(nil, `
 FROM %s
 ADD t.tar.gz /
-`, baseImage))
+`, baseImage)
 
 	dir = integration.Tmpdir(
 		t,
@@ -3143,10 +3143,10 @@ ADD t.tar.gz /
 	require.Equal(t, expectedContent, dt)
 
 	// COPY doesn't extract
-	dockerfile = []byte(fmt.Sprintf(`
+	dockerfile = fmt.Appendf(nil, `
 FROM %s
 COPY t.tar.gz /
-`, baseImage))
+`, baseImage)
 
 	dir = integration.Tmpdir(
 		t,
@@ -3177,10 +3177,10 @@ COPY t.tar.gz /
 	})
 	defer server.Close()
 
-	dockerfile = []byte(fmt.Sprintf(`
+	dockerfile = fmt.Appendf(nil, `
 FROM %s
 ADD %s /
-`, baseImage, server.URL+"/t.tar.gz"))
+`, baseImage, server.URL+"/t.tar.gz")
 
 	dir = integration.Tmpdir(
 		t,
@@ -3200,10 +3200,10 @@ ADD %s /
 	require.Equal(t, buf2.Bytes(), dt)
 
 	// https://github.com/moby/buildkit/issues/386
-	dockerfile = []byte(fmt.Sprintf(`
+	dockerfile = fmt.Appendf(nil, `
 FROM %s
 ADD %s /newname.tar.gz
-`, baseImage, server.URL+"/t.tar.gz"))
+`, baseImage, server.URL+"/t.tar.gz")
 
 	dir = integration.Tmpdir(
 		t,
@@ -4494,7 +4494,7 @@ func testAddURLChmod(t *testing.T, sb integration.Sandbox) {
 	})
 	defer server.Close()
 
-	dockerfile := []byte(fmt.Sprintf(`
+	dockerfile := fmt.Appendf(nil, `
 FROM busybox AS build
 ADD --chmod=644 %[1]s /tmp/foo1
 ADD --chmod=755 %[1]s /tmp/foo2
@@ -4510,7 +4510,7 @@ RUN stat -c "%%04a" /tmp/foo1 >> /dest && \
 
 FROM scratch
 COPY --from=build /dest /dest
-`, server.URL+"/foo"))
+`, server.URL+"/foo")
 
 	dir := integration.Tmpdir(
 		t,
@@ -4855,7 +4855,7 @@ FROM %s
 COPY --from=stage1 baz bax
 `
 	baseImage := integration.UnixOrWindows("scratch", "nanoserver")
-	dockerfile := []byte(fmt.Sprintf(dockerfileStr, baseImage, baseImage, baseImage))
+	dockerfile := fmt.Appendf(nil, dockerfileStr, baseImage, baseImage, baseImage)
 	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
@@ -5063,9 +5063,9 @@ ONBUILD RUN mkdir \out && echo 11>> \out\foo
 	}, nil)
 	require.NoError(t, err)
 
-	dockerfile = []byte(fmt.Sprintf(`
+	dockerfile = fmt.Appendf(nil, `
 	FROM %s 
-	`, target))
+	`, target)
 
 	dir = integration.Tmpdir(
 		t,
@@ -5091,11 +5091,11 @@ ONBUILD RUN mkdir \out && echo 11>> \out\foo
 	}, nil)
 	require.NoError(t, err)
 
-	dockerfile = []byte(fmt.Sprintf(`
+	dockerfile = fmt.Appendf(nil, `
 	FROM %s AS base
 	FROM %s
 	COPY --from=base /out /
-	`, target2, integration.UnixOrWindows("scratch", "nanoserver")))
+	`, target2, integration.UnixOrWindows("scratch", "nanoserver"))
 
 	dir = integration.Tmpdir(
 		t,
@@ -5169,7 +5169,7 @@ ONBUILD RUN mkdir -p /out && echo -n yes >> /out/didrun
 	}, nil)
 	require.NoError(t, err)
 
-	dockerfile = []byte(fmt.Sprintf(`
+	dockerfile = fmt.Appendf(nil, `
 FROM %s AS base
 RUN [ -f /out/didrun ] && touch /step1
 RUN rm /out/didrun
@@ -5180,7 +5180,7 @@ RUN [ ! -f /out/didrun ] && touch /step3
 
 FROM scratch
 COPY --from=child /step* /
-	`, target))
+	`, target)
 
 	dir = integration.Tmpdir(
 		t,
@@ -5460,12 +5460,12 @@ ONBUILD COPY --from=alpine /etc/alpine-release /out/alpine-release2
 	}, nil)
 	require.NoError(t, err)
 
-	dockerfile = []byte(fmt.Sprintf(`
+	dockerfile = fmt.Appendf(nil, `
 	FROM %s AS base
 	RUN cat /out/alpine-release2 > /out/alpine-release3
 	FROM scratch
 	COPY --from=base /out /
-	`, target))
+	`, target)
 
 	dir = integration.Tmpdir(
 		t,
@@ -5521,7 +5521,7 @@ ONBUILD RUN --mount=type=bind,target=/in,from=inputstage mkdir /out && cat /in/f
 	}, nil)
 	require.NoError(t, err)
 
-	dockerfile = []byte(fmt.Sprintf(`
+	dockerfile = fmt.Appendf(nil, `
 	FROM %s AS inputstage
 	RUN cat /out/alpine-release2 > /out/alpine-release4
 	RUN echo -n foo > /foo
@@ -5529,7 +5529,7 @@ ONBUILD RUN --mount=type=bind,target=/in,from=inputstage mkdir /out && cat /in/f
 	RUN echo -n bar3 > /out/bar3
 	FROM scratch
 	COPY --from=base /out /
-	`, target, target2))
+	`, target, target2)
 
 	dir = integration.Tmpdir(
 		t,
@@ -5608,9 +5608,9 @@ ONBUILD RUN --mount=type=cache,target=/cache echo -n 42 >> /cache/foo && echo -n
 	}, nil)
 	require.NoError(t, err)
 
-	dockerfile = []byte(fmt.Sprintf(`FROM %s
+	dockerfile = fmt.Appendf(nil, `FROM %s
 RUN --mount=type=cache,target=/cache [ "$(cat /cache/foo)" = "42" ] && [ "$(cat /bar)" = "11" ]
-	`, target))
+	`, target)
 
 	dir = integration.Tmpdir(
 		t,
@@ -5711,7 +5711,7 @@ COPY --from=base arch /
 	dtarm := imgs.Find("linux/arm/v7").Layers[0]["unique"].Data
 	require.NotEqual(t, dtamd, dtarm)
 
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		ensurePruneAll(t, c, sb)
 
 		_, err = f.Solve(sb.Context(), c, client.SolveOpt{
@@ -6279,7 +6279,7 @@ COPY foo2 bar2
 `,
 	)
 
-	dockerfile := []byte(fmt.Sprintf(dockerfileStr, runtime.GOOS))
+	dockerfile := fmt.Appendf(nil, dockerfileStr, runtime.GOOS)
 
 	dir := integration.Tmpdir(
 		t,
@@ -6496,9 +6496,9 @@ func testTarContext(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
 	imgName := integration.UnixOrWindows("scratch", "nanoserver")
-	dockerfile := []byte(fmt.Sprintf(`
+	dockerfile := fmt.Appendf(nil, `
 FROM %s
-COPY foo /`, imgName))
+COPY foo /`, imgName)
 
 	foo := []byte("contents")
 
@@ -6561,10 +6561,10 @@ func testTarContextExternalDockerfile(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	imgName := integration.UnixOrWindows("scratch", "nanoserver")
-	dockerfile := []byte(fmt.Sprintf(`
+	dockerfile := fmt.Appendf(nil, `
 FROM %s
 COPY foo bar
-`, imgName))
+`, imgName)
 	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
@@ -6613,7 +6613,7 @@ func testFrontendUseForwardedSolveResults(t *testing.T, sb integration.Sandbox) 
 FROM %s
 COPY foo foo2
 `
-	dockerfile := []byte(fmt.Sprintf(dockerfileStr, integration.UnixOrWindows("scratch", "nanoserver")))
+	dockerfile := fmt.Appendf(nil, dockerfileStr, integration.UnixOrWindows("scratch", "nanoserver"))
 	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
@@ -7375,7 +7375,7 @@ func testNamedImageContextPlatform(t *testing.T, sb integration.Sandbox) {
 		"nanoserver",
 	)
 
-	dockerfile := []byte(fmt.Sprintf(`FROM --platform=$BUILDPLATFORM %s:latest`, baseImage))
+	dockerfile := fmt.Appendf(nil, `FROM --platform=$BUILDPLATFORM %s:latest`, baseImage)
 
 	target := registry + "/buildkit/testnamedimagecontextplatform:latest"
 
@@ -7406,10 +7406,10 @@ func testNamedImageContextPlatform(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dockerfile = []byte(fmt.Sprintf(`
+	dockerfile = fmt.Appendf(nil, `
 		FROM --platform=$BUILDPLATFORM %s AS target
 		RUN echo hello
-		`, baseImage))
+		`, baseImage)
 
 	dir = integration.Tmpdir(
 		t,
@@ -7526,14 +7526,14 @@ func testNamedImageContextScratch(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	dockerfile := []byte(fmt.Sprintf(
+	dockerfile := fmt.Appendf(nil,
 		`	
 FROM %s AS build
 COPY <<EOF /out
 hello world!
 EOF
 `,
-		integration.UnixOrWindows("busybox", "nanoserver")))
+		integration.UnixOrWindows("busybox", "nanoserver"))
 
 	dir := integration.Tmpdir(
 		t,
@@ -8548,7 +8548,7 @@ EOF
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
-	require.Subset(t, attest.Predicate, map[string]interface{}{"name": "sbom-scan"})
+	require.Subset(t, attest.Predicate, map[string]any{"name": "sbom-scan"})
 }
 
 func testSBOMScannerArgs(t *testing.T, sb integration.Sandbox) {
@@ -8666,7 +8666,7 @@ FROM base
 	require.Equal(t, 1, len(att.LayersRaw))
 	var attest intoto.Statement
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
-	require.Subset(t, attest.Predicate, map[string]interface{}{"name": "core"})
+	require.Subset(t, attest.Predicate, map[string]any{"name": "core"})
 
 	dockerfile = []byte(`
 ARG BUILDKIT_SBOM_SCAN_CONTEXT=true
@@ -8731,7 +8731,7 @@ ARG BUILDKIT_SBOM_SCAN_STAGE=true
 	for _, l := range att.LayersRaw {
 		var attest intoto.Statement
 		require.NoError(t, json.Unmarshal(l, &attest))
-		att := attest.Predicate.(map[string]interface{})
+		att := attest.Predicate.(map[string]any)
 		switch att["name"] {
 		case "core":
 		case "extra":
@@ -9353,10 +9353,10 @@ COPY foo /foo
 	}, nil)
 	require.NoError(t, err)
 
-	dockerfile = []byte(fmt.Sprintf(`
+	dockerfile = fmt.Appendf(nil, `
 FROM %s
 ENV foo=bar
-	`, target))
+	`, target)
 
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile: dockerfile,
@@ -9789,12 +9789,12 @@ EOF
 	require.Len(t, info.Images, 1)
 	require.Equal(t, info.Images[0].Img.Platform.OSVersion, p1.OSVersion)
 
-	dockerfile = []byte(fmt.Sprintf(`
+	dockerfile = fmt.Appendf(nil, `
 FROM %s
 COPY <<EOF /other
 hello
 EOF
-`, target))
+`, target)
 
 	dir = integration.Tmpdir(
 		t,
@@ -9855,9 +9855,9 @@ func runShell(dir string, cmds ...string) error {
 // cleanup cache because some records still haven't been released.
 // This function tries to ensure prune by retrying it.
 func ensurePruneAll(t *testing.T, c *client.Client, sb integration.Sandbox) {
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		require.NoError(t, c.Prune(sb.Context(), nil, client.PruneAll))
-		for j := 0; j < 20; j++ {
+		for range 20 {
 			du, err := c.DiskUsage(sb.Context())
 			require.NoError(t, err)
 			if len(du) == 0 {

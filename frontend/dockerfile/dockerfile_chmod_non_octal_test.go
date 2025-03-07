@@ -77,7 +77,7 @@ func testChmodNonOctal(t *testing.T, sb integration.Sandbox) {
 		verifyCommands += "RUN [ \"$(stat -c %A /actual/" + tc.dst + ")\" = \"$(stat -c %A /expected/" + tc.dst + ")\" ]\n"
 	}
 
-	dockerfile := []byte(fmt.Sprintf(`
+	dockerfile := fmt.Appendf(nil, `
 FROM alpine as base
 RUN <<eot
 	set -ex
@@ -97,7 +97,7 @@ FROM base
 COPY --from=result / /actual/
 %s
 
-`, expectedCommands, copyCommands, verifyCommands))
+`, expectedCommands, copyCommands, verifyCommands)
 
 	dir := integration.Tmpdir(
 		t,

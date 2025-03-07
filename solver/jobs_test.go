@@ -24,7 +24,7 @@ func TestJobsIntegration(t *testing.T) {
 		testParallelism,
 	),
 		mirrors,
-		integration.WithMatrix("max-parallelism", map[string]interface{}{
+		integration.WithMatrix("max-parallelism", map[string]any{
 			"single":    maxParallelismSingle,
 			"unlimited": maxParallelismUnlimited,
 		}),

@@ -684,7 +684,7 @@ COPY --from=b2 /License.txt p2
 	require.NoError(t, err)
 	defer c.Close()
 
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 			FrontendAttrs: map[string]string{
 				"no-cache": "",

@@ -8,7 +8,7 @@ import (
 	"os"
 	"path"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/containerd/platforms"
@@ -247,9 +247,7 @@ func dedupePaths(inp []string) []string {
 			paths = append(paths, p1)
 		}
 	}
-	sort.Slice(paths, func(i, j int) bool {
-		return paths[i] < paths[j]
-	})
+	slices.Sort(paths)
 	return paths
 }
 

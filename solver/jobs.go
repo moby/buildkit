@@ -28,7 +28,7 @@ type ResolveOpFunc func(Vertex, Builder) (Op, error)
 type Builder interface {
 	Build(ctx context.Context, e Edge) (CachedResultWithProvenance, error)
 	InContext(ctx context.Context, f func(ctx context.Context, g session.Group) error) error
-	EachValue(ctx context.Context, key string, fn func(interface{}) error) error
+	EachValue(ctx context.Context, key string, fn func(any) error) error
 }
 
 // Solver provides a shared graph of all the vertexes currently being
@@ -283,7 +283,7 @@ func (sb *subBuilder) InContext(ctx context.Context, f func(context.Context, ses
 	return f(ctx, sb.state)
 }
 
-func (sb *subBuilder) EachValue(ctx context.Context, key string, fn func(interface{}) error) error {
+func (sb *subBuilder) EachValue(ctx context.Context, key string, fn func(any) error) error {
 	sb.mu.Lock()
 	defer sb.mu.Unlock()
 	for j := range sb.jobs {
@@ -465,7 +465,7 @@ func (jl *Solver) loadUnlocked(ctx context.Context, v, parent Vertex, j *Job, ca
 
 	dgst := v.Digest()
 
-	dgstWithoutCache := digest.FromBytes([]byte(fmt.Sprintf("%s-ignorecache", dgst)))
+	dgstWithoutCache := digest.FromBytes(fmt.Appendf(nil, "%s-ignorecache", dgst))
 
 	// if same vertex is already loaded without cache just use that
 	st, ok := jl.actives[dgstWithoutCache]
@@ -810,11 +810,11 @@ func (j *Job) InContext(ctx context.Context, f func(context.Context, session.Gro
 	return f(progress.WithProgress(ctx, j.pw), session.NewGroup(j.SessionID))
 }
 
-func (j *Job) SetValue(key string, v interface{}) {
+func (j *Job) SetValue(key string, v any) {
 	j.values.Store(key, v)
 }
 
-func (j *Job) EachValue(ctx context.Context, key string, fn func(interface{}) error) error {
+func (j *Job) EachValue(ctx context.Context, key string, fn func(any) error) error {
 	v, ok := j.values.Load(key)
 	if ok {
 		return fn(v)
@@ -1036,7 +1036,7 @@ func (s *sharedOp) CacheMap(ctx context.Context, index int) (resp *cacheMapResp,
 		if complete {
 			if err == nil {
 				if res.Opts == nil {
-					res.Opts = CacheOpts(make(map[interface{}]interface{}))
+					res.Opts = CacheOpts(make(map[any]any))
 				}
 				res.Opts[progressKey{}] = &controller.Controller{
 					WriterFactory: progress.FromContext(ctx),

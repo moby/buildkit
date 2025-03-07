@@ -114,7 +114,7 @@ func ParseTemplate(format string) (*template.Template, error) {
 	}
 	// funcs is from https://github.com/docker/cli/blob/v20.10.12/templates/templates.go#L12-L20 (Apache License 2.0)
 	funcs := template.FuncMap{
-		"json": func(v interface{}) string {
+		"json": func(v any) string {
 			buf := &bytes.Buffer{}
 			enc := json.NewEncoder(buf)
 			enc.SetEscapeHTML(false)

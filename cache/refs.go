@@ -6,6 +6,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -1714,14 +1715,8 @@ func (sm *sharableMountable) Mount() (_ []mount.Mount, _ func() error, retErr er
 				release()
 			}
 		}()
-		var isOverlay bool
-		for _, m := range mounts {
-			if overlay.IsOverlayMountType(m) {
-				isOverlay = true
-				break
-			}
-		}
-		if !isOverlay {
+
+		if !slices.ContainsFunc(mounts, overlay.IsOverlayMountType) {
 			// Don't need temporary mount wrapper for non-overlayfs mounts
 			return mounts, release, nil
 		}

@@ -433,14 +433,14 @@ func buildAction(clicontext *cli.Context) error {
 }
 
 func writeMetadataFile(filename string, exporterResponse map[string]string) error {
-	out := make(map[string]interface{})
+	out := make(map[string]any)
 	for k, v := range exporterResponse {
 		dt, err := base64.StdEncoding.DecodeString(v)
 		if err != nil {
 			out[k] = v
 			continue
 		}
-		var raw map[string]interface{}
+		var raw map[string]any
 		if err = json.Unmarshal(dt, &raw); err != nil || len(raw) == 0 {
 			out[k] = v
 			continue

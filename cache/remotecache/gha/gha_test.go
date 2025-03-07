@@ -155,9 +155,9 @@ func testBasicGhaCacheImportExportExtraTimeout(t *testing.T, sb integration.Sand
 }
 
 func ensurePruneAll(t *testing.T, c *client.Client, sb integration.Sandbox) {
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		require.NoError(t, c.Prune(sb.Context(), nil, client.PruneAll))
-		for j := 0; j < 20; j++ {
+		for range 20 {
 			du, err := c.DiskUsage(sb.Context())
 			require.NoError(t, err)
 			if len(du) == 0 {

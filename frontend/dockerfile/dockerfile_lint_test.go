@@ -659,7 +659,7 @@ COPY Dockerfile /bar
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 
-	dockerfile = []byte(fmt.Sprintf(
+	dockerfile = fmt.Appendf(nil,
 		`
 FROM %s
 RUN <<'EOT'
@@ -668,7 +668,7 @@ EOT
 `,
 		integration.UnixOrWindows("alpine", "nanoserver"),
 		integration.UnixOrWindows("env", "set"),
-	))
+	)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 }
 
@@ -925,14 +925,14 @@ COPY Dockerfile .
 
 	osName := integration.UnixOrWindows("linux", "windows")
 	baseImg := integration.UnixOrWindows("busybox", "nanoserver")
-	dockerfile = []byte(fmt.Sprintf(
+	dockerfile = fmt.Appendf(nil,
 		`
 ARG MY_OS=%s
 ARG MY_ARCH=amd64
 FROM --platform=%s/${MYARCH} %s
 COPY Dockerfile .
 	`,
-		osName, osName, baseImg))
+		osName, osName, baseImg)
 
 	osStr := integration.UnixOrWindows("linux", "windows")
 	buildErr := fmt.Sprintf(
@@ -954,13 +954,13 @@ COPY Dockerfile .
 		BuildErrLocation: 4,
 	})
 
-	dockerfile = []byte(fmt.Sprintf(
+	dockerfile = fmt.Appendf(nil,
 		`
 ARG tag=latest
 FROM %s:${tag}${version} AS b
 COPY Dockerfile .
 `,
-		baseImg))
+		baseImg)
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
@@ -1014,7 +1014,7 @@ COPY Dockerfile${foo} .
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 
 	baseImg := integration.UnixOrWindows("alpine", "nanoserver")
-	dockerfile = []byte(fmt.Sprintf(
+	dockerfile = fmt.Appendf(nil,
 		`
 FROM %s AS base
 ARG foo=Dockerfile
@@ -1022,25 +1022,25 @@ ARG foo=Dockerfile
 FROM base
 COPY $foo .
 `,
-		baseImg))
+		baseImg)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 
-	dockerfile = []byte(fmt.Sprintf(
+	dockerfile = fmt.Appendf(nil,
 		`
 FROM %s
 RUN echo $PATH
 `,
-		baseImg))
+		baseImg)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 
-	dockerfile = []byte(fmt.Sprintf(
+	dockerfile = fmt.Appendf(nil,
 		`
 FROM %s
 COPY $foo .
 ARG foo=bar
 RUN echo $foo
 `,
-		baseImg))
+		baseImg)
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
@@ -1055,7 +1055,7 @@ RUN echo $foo
 		},
 	})
 
-	dockerfile = []byte(fmt.Sprintf(
+	dockerfile = fmt.Appendf(nil,
 		`
 FROM %s
 ARG DIR_BINARIES=binaries/
@@ -1063,7 +1063,7 @@ ARG DIR_ASSETS=assets/
 ARG DIR_CONFIG=config/
 COPY $DIR_ASSET .
 	`,
-		baseImg))
+		baseImg)
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
@@ -1078,12 +1078,12 @@ COPY $DIR_ASSET .
 		},
 	})
 
-	dockerfile = []byte(fmt.Sprintf(
+	dockerfile = fmt.Appendf(nil,
 		`
 FROM %s
 ENV PATH=$PAHT:/tmp/bin
 		`,
-		baseImg))
+		baseImg)
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
@@ -1273,12 +1273,12 @@ FROM --platform=${TARGETPLATFORM} scratch
 
 func testInvalidDefaultArgInFrom(t *testing.T, sb integration.Sandbox) {
 	baseImg := integration.UnixOrWindows("busybox", "nanoserver")
-	dockerfile := []byte(fmt.Sprintf(
+	dockerfile := fmt.Appendf(nil,
 		`
 ARG VERSION
 FROM %s:$VERSION
 `,
-		baseImg))
+		baseImg)
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile: dockerfile,
 		FrontendAttrs: map[string]string{
@@ -1350,12 +1350,12 @@ FROM nano${SFX}
 		},
 	})
 
-	dockerfile = []byte(fmt.Sprintf(
+	dockerfile = fmt.Appendf(nil,
 		`
 ARG VERSION="latest"
 FROM %s:${VERSION}
 `,
-		baseImg))
+		baseImg)
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile: dockerfile,
 		FrontendAttrs: map[string]string{

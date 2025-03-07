@@ -253,7 +253,7 @@ func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sa
 		testSecurityModeErrors,
 	),
 		mirrors,
-		integration.WithMatrix("secmode", map[string]interface{}{
+		integration.WithMatrix("secmode", map[string]any{
 			"sandbox":  securitySandbox,
 			"insecure": securityInsecure,
 		}),
@@ -263,7 +263,7 @@ func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sa
 		testHostNetworking,
 	),
 		mirrors,
-		integration.WithMatrix("netmode", map[string]interface{}{
+		integration.WithMatrix("netmode", map[string]any{
 			"default": defaultNetwork,
 			"host":    hostNetwork,
 		}),
@@ -273,7 +273,7 @@ func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sa
 		t,
 		integration.TestFuncs(testBridgeNetworkingDNSNoRootless),
 		mirrors,
-		integration.WithMatrix("netmode", map[string]interface{}{
+		integration.WithMatrix("netmode", map[string]any{
 			"dns": bridgeDNSNetwork,
 		}),
 	)
@@ -8065,9 +8065,9 @@ func requiresLinux(t *testing.T) {
 // cleanup cache because some records still haven't been released.
 // This function tries to ensure prune by retrying it.
 func ensurePruneAll(t *testing.T, c *Client, sb integration.Sandbox) {
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		require.NoError(t, c.Prune(sb.Context(), nil, PruneAll))
-		for j := 0; j < 20; j++ {
+		for range 20 {
 			du, err := c.DiskUsage(sb.Context())
 			require.NoError(t, err)
 			if len(du) == 0 {
@@ -8308,7 +8308,7 @@ func testParallelLocalBuilds(t *testing.T, sb integration.Sandbox) {
 
 	eg, ctx := errgroup.WithContext(ctx)
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		func(i int) {
 			eg.Go(func() error {
 				fn := fmt.Sprintf("test%d", i)
@@ -8944,7 +8944,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 
 			// build image
 			st := llb.Scratch().File(
-				llb.Mkfile("/greeting", 0600, []byte(fmt.Sprintf("hello %s!", pk))),
+				llb.Mkfile("/greeting", 0600, fmt.Appendf(nil, "hello %s!", pk)),
 			)
 			def, err := st.Marshal(ctx)
 			if err != nil {
@@ -9056,7 +9056,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 			require.NotNil(t, img)
 			require.Equal(t, pk, platforms.Format(*img.Desc.Platform))
 			require.Equal(t, 1, len(img.Layers))
-			require.Equal(t, []byte(fmt.Sprintf("hello %s!", pk)), img.Layers[0]["greeting"].Data)
+			require.Equal(t, fmt.Appendf(nil, "hello %s!", pk), img.Layers[0]["greeting"].Data)
 			bases = append(bases, img)
 		}
 
@@ -9103,7 +9103,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 
 			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 			require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
-			require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
+			require.Equal(t, map[string]any{"success": true}, attest.Predicate)
 			subjects := []intoto.Subject{
 				{
 					Name: purls[targets[0]],
@@ -9174,7 +9174,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 
 			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 			require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
-			require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
+			require.Equal(t, map[string]any{"success": true}, attest.Predicate)
 
 			require.Equal(t, []intoto.Subject{{
 				Name:   "greeting",
@@ -9232,7 +9232,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 
 			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 			require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
-			require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
+			require.Equal(t, map[string]any{"success": true}, attest.Predicate)
 
 			require.Equal(t, []intoto.Subject{{
 				Name:   "greeting",
@@ -9287,7 +9287,7 @@ func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
 
 			// build image
 			st := llb.Scratch().File(
-				llb.Mkfile("/greeting", 0600, []byte(fmt.Sprintf("hello %s!", pk))),
+				llb.Mkfile("/greeting", 0600, fmt.Appendf(nil, "hello %s!", pk)),
 			)
 			def, err := st.Marshal(ctx)
 			if err != nil {
@@ -9383,7 +9383,7 @@ func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
 
 		require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 		require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
-		require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
+		require.Equal(t, map[string]any{"success": true}, attest.Predicate)
 
 		name := fmt.Sprintf("pkg:docker/%s/buildkit/testattestationsemptysubject@latest?platform=%s", url.QueryEscape(registry), url.QueryEscape(platforms.Format(ps[i])))
 		subjects := []intoto.Subject{{
@@ -9423,7 +9423,7 @@ func testAttestationBundle(t *testing.T, sb integration.Sandbox) {
 
 			// build image
 			st := llb.Scratch().File(
-				llb.Mkfile("/greeting", 0600, []byte(fmt.Sprintf("hello %s!", pk))),
+				llb.Mkfile("/greeting", 0600, fmt.Appendf(nil, "hello %s!", pk)),
 			)
 			def, err := st.Marshal(ctx)
 			if err != nil {
@@ -9450,7 +9450,7 @@ func testAttestationBundle(t *testing.T, sb integration.Sandbox) {
 					Type:          intoto.StatementInTotoV01,
 					PredicateType: "https://example.com/attestations/v1.0",
 				},
-				Predicate: map[string]interface{}{
+				Predicate: map[string]any{
 					"foo": "1",
 				},
 			}
@@ -9535,7 +9535,7 @@ func testAttestationBundle(t *testing.T, sb integration.Sandbox) {
 		require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 
 		require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
-		require.Equal(t, map[string]interface{}{"foo": "1"}, attest.Predicate)
+		require.Equal(t, map[string]any{"foo": "1"}, attest.Predicate)
 		name := fmt.Sprintf("pkg:docker/%s/buildkit/testattestationsbundle@latest?platform=%s", url.QueryEscape(registry), url.QueryEscape(platforms.Format(ps[i])))
 		subjects := []intoto.Subject{{
 			Name: name,
@@ -9765,7 +9765,7 @@ EOF
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
-	require.Subset(t, attest.Predicate, map[string]interface{}{"name": "frontend"})
+	require.Subset(t, attest.Predicate, map[string]any{"name": "frontend"})
 
 	// test the specified fallback scanner
 	target = registry + "/buildkit/testsbom3:latest"
@@ -9797,7 +9797,7 @@ EOF
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
-	require.Subset(t, attest.Predicate, map[string]interface{}{"name": "fallback"})
+	require.Subset(t, attest.Predicate, map[string]any{"name": "fallback"})
 
 	// test the builtin frontend scanner and the specified fallback scanner together
 	target = registry + "/buildkit/testsbom3:latest"
@@ -9829,7 +9829,7 @@ EOF
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
-	require.Subset(t, attest.Predicate, map[string]interface{}{"name": "frontend"})
+	require.Subset(t, attest.Predicate, map[string]any{"name": "frontend"})
 
 	// test configuring the scanner (simple)
 	target = registry + "/buildkit/testsbom4:latest"
@@ -9861,8 +9861,8 @@ EOF
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
-	require.Subset(t, attest.Predicate, map[string]interface{}{
-		"extraParams": map[string]interface{}{"ARG1": "foo", "ARG2": "bar"},
+	require.Subset(t, attest.Predicate, map[string]any{
+		"extraParams": map[string]any{"ARG1": "foo", "ARG2": "bar"},
 	})
 
 	// test configuring the scanner (complex)
@@ -9895,8 +9895,8 @@ EOF
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
-	require.Subset(t, attest.Predicate, map[string]interface{}{
-		"extraParams": map[string]interface{}{"ARG1": "foo", "ARG2": "hello,world"},
+	require.Subset(t, attest.Predicate, map[string]any{
+		"extraParams": map[string]any{"ARG1": "foo", "ARG2": "hello,world"},
 	})
 }
 
@@ -10065,7 +10065,7 @@ EOF
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
-	require.Subset(t, attest.Predicate, map[string]interface{}{"name": "fallback"})
+	require.Subset(t, attest.Predicate, map[string]any{"name": "fallback"})
 }
 
 func testSBOMSupplements(t *testing.T, sb integration.Sandbox) {
@@ -11025,7 +11025,7 @@ func testLLBMountPerformance(t *testing.T, sb integration.Sandbox) {
 	mntInput := llb.Image("busybox:latest")
 	st := llb.Image("busybox:latest")
 	var mnts []llb.State
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		execSt := st.Run(
 			llb.Args([]string{"true"}),
 		)
@@ -11058,7 +11058,7 @@ func testLayerLimitOnMounts(t *testing.T, sb integration.Sandbox) {
 
 	const numLayers = 110
 
-	for i := 0; i < numLayers; i++ {
+	for range numLayers {
 		base = base.Run(llb.Shlex("sh -c 'echo hello >> /hello'")).Root()
 	}
 
@@ -11085,7 +11085,7 @@ func testClientCustomGRPCOpts(t *testing.T, sb integration.Sandbox) {
 		ctx context.Context,
 		method string,
 		req,
-		reply interface{},
+		reply any,
 		cc *grpc.ClientConn,
 		invoker grpc.UnaryInvoker,
 		opts ...grpc.CallOption,

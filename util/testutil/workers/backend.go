@@ -2,6 +2,7 @@ package workers
 
 import (
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -52,23 +53,14 @@ func (b backend) ExtraEnv() []string {
 
 func (b backend) Supports(feature string) bool {
 	if enabledFeatures := os.Getenv("BUILDKIT_TEST_ENABLE_FEATURES"); enabledFeatures != "" {
-		for _, enabledFeature := range strings.Split(enabledFeatures, ",") {
-			if feature == enabledFeature {
-				return true
-			}
+		if slices.Contains(strings.Split(enabledFeatures, ","), feature) {
+			return true
 		}
 	}
 	if disabledFeatures := os.Getenv("BUILDKIT_TEST_DISABLE_FEATURES"); disabledFeatures != "" {
-		for _, disabledFeature := range strings.Split(disabledFeatures, ",") {
-			if feature == disabledFeature {
-				return false
-			}
-		}
-	}
-	for _, unsupportedFeature := range b.unsupportedFeatures {
-		if feature == unsupportedFeature {
+		if slices.Contains(strings.Split(disabledFeatures, ","), feature) {
 			return false
 		}
 	}
-	return true
+	return !slices.Contains(b.unsupportedFeatures, feature)
 }

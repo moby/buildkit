@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sync"
 	"time"
 )
@@ -98,7 +99,7 @@ type Request struct {
 func newRequest(r *http.Request) Request {
 	headers := http.Header{}
 	for k, v := range r.Header {
-		headers[k] = append([]string{}, v...)
+		headers[k] = slices.Clone(v)
 	}
 	return Request{
 		Method: r.Method,

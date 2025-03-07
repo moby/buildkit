@@ -219,7 +219,7 @@ func TestFileSymlink(t *testing.T) {
 		{Oldpath: "/src/dir/subdir", Newpath: "/src/dir/subdir/nested"},
 	}
 
-	for i := 0; i < numActions; i++ {
+	for i := range numActions {
 		expectedOutput := -1
 		if i == numActions-1 {
 			expectedOutput = 0
@@ -788,7 +788,7 @@ func TestFileOpMarshalConsistency(t *testing.T) {
 		File(Copy(f1, "/foo", "/bar")).
 		File(Copy(f2, "/a", "/b"))
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		def, err := st.Marshal(context.TODO())
 		require.NoError(t, err)
 
@@ -803,7 +803,7 @@ func TestFileOpMarshalConsistency(t *testing.T) {
 func TestParallelMarshal(t *testing.T) {
 	st := Scratch().File(Mkfile("/tmp", 0644, []byte("tmp 1")))
 	eg, ctx := errgroup.WithContext(context.Background())
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		eg.Go(func() error {
 			_, err := st.Marshal(ctx)
 			return err
