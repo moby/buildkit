@@ -74,6 +74,7 @@ var srcCompressions = map[string]tutil.CompressionFactory{
 func TestSuiteLayer(t *testing.T, store metadata.Store) {
 	testPrefetch(t, store)
 	testNodeRead(t, store)
+	testPassThroughRead(t, store)
 	testNodes(t, store)
 }
 
@@ -218,6 +219,7 @@ func testPrefetch(t *testing.T, factory metadata.Store) {
 					ocispec.Descriptor{Digest: testStateLayerDigest},
 					&blobRef{blob, func() {}},
 					vr,
+					false,
 				)
 				if err := l.Verify(dgst); err != nil {
 					t.Errorf("failed to verify reader: %v", err)
@@ -379,7 +381,15 @@ const (
 	lastChunkOffset1   = sampleChunkSize * (int64(len(sampleData1)) / sampleChunkSize)
 )
 
+func testPassThroughRead(t *testing.T, factory metadata.Store) {
+	nodeRead(t, factory, true)
+}
+
 func testNodeRead(t *testing.T, factory metadata.Store) {
+	nodeRead(t, factory, false)
+}
+
+func nodeRead(t *testing.T, factory metadata.Store, pth bool) {
 	sizeCond := map[string]int64{
 		"single_chunk": sampleChunkSize - sampleMiddleOffset,
 		"multi_chunks": sampleChunkSize + sampleMiddleOffset,
@@ -428,7 +438,7 @@ func testNodeRead(t *testing.T, factory metadata.Store) {
 							}
 
 							// data we get from the file node.
-							f, closeFn := makeNodeReader(t, []byte(sampleData1)[:filesize], sampleChunkSize, factory, cl)
+							f, closeFn := makeNodeReader(t, []byte(sampleData1)[:filesize], sampleChunkSize, factory, cl, pth)
 							defer closeFn()
 							tmpbuf := make([]byte, size) // fuse library can request bigger than remain
 							rr, errno := f.Read(context.Background(), tmpbuf, offset)
@@ -459,7 +469,7 @@ func testNodeRead(t *testing.T, factory metadata.Store) {
 	}
 }
 
-func makeNodeReader(t *testing.T, contents []byte, chunkSize int, factory metadata.Store, cl tutil.Compression) (_ *file, closeFn func() error) {
+func makeNodeReader(t *testing.T, contents []byte, chunkSize int, factory metadata.Store, cl tutil.Compression, pth bool) (_ *file, closeFn func() error) {
 	testName := "test"
 	sr, tocDgst, err := tutil.BuildEStargz(
 		[]tutil.TarEntry{tutil.File(testName, string(contents))},
@@ -472,7 +482,7 @@ func makeNodeReader(t *testing.T, contents []byte, chunkSize int, factory metada
 	if err != nil {
 		t.Fatalf("failed to create reader: %v", err)
 	}
-	rootNode := getRootNode(t, r, OverlayOpaqueAll, tocDgst, cache.NewMemoryCache())
+	rootNode := getRootNode(t, r, OverlayOpaqueAll, tocDgst, cache.NewMemoryCache(), pth)
 	var eo fuse.EntryOut
 	inode, errno := rootNode.Lookup(context.Background(), testName, &eo)
 	if errno != 0 {
@@ -724,7 +734,7 @@ func testNodesWithOpaque(t *testing.T, factory metadata.Store, opaque OverlayOpa
 				}
 				defer r.Close()
 				mcache := cache.NewMemoryCache()
-				rootNode := getRootNode(t, r, opaque, tocDgst, mcache)
+				rootNode := getRootNode(t, r, opaque, tocDgst, mcache, false)
 				for _, want := range tt.want {
 					want(t, rootNode, mcache, testR)
 				}
@@ -733,7 +743,7 @@ func testNodesWithOpaque(t *testing.T, factory metadata.Store, opaque OverlayOpa
 	}
 }
 
-func getRootNode(t *testing.T, r metadata.Reader, opaque OverlayOpaqueType, tocDgst digest.Digest, cc cache.BlobCache) *node {
+func getRootNode(t *testing.T, r metadata.Reader, opaque OverlayOpaqueType, tocDgst digest.Digest, cc cache.BlobCache, pth bool) *node {
 	vr, err := reader.NewReader(r, cc, digest.FromString(""))
 	if err != nil {
 		t.Fatalf("failed to create reader: %v", err)
@@ -742,7 +752,7 @@ func getRootNode(t *testing.T, r metadata.Reader, opaque OverlayOpaqueType, tocD
 	if err != nil {
 		t.Fatalf("failed to verify reader: %v", err)
 	}
-	rootNode, err := newNode(testStateLayerDigest, rr, &testBlobState{10, 5}, 100, opaque)
+	rootNode, err := newNode(testStateLayerDigest, rr, &testBlobState{10, 5}, 100, opaque, pth)
 	if err != nil {
 		t.Fatalf("failed to get root node: %v", err)
 	}

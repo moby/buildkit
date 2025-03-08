@@ -148,4 +148,7 @@ type FuseConfig struct {
 
 	// EntryTimeout defines TTL for directory, name lookup in seconds.
 	EntryTimeout int64 `toml:"entry_timeout"`
+
+	// PassThrough indicates whether to enable FUSE passthrough mode to improve local file read performance. Default is false.
+	PassThrough bool `toml:"passthrough" default:"false"`
 }

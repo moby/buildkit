@@ -53,6 +53,7 @@ var (
 		{CAP_PASSTHROUGH, "PASSTHROUGH"},
 		{CAP_NO_EXPORT_SUPPORT, "NO_EXPORT_SUPPORT"},
 		{CAP_HAS_RESEND, "HAS_RESEND"},
+		{CAP_ALLOW_IDMAP, "ALLOW_IDMAP"},
 	})
 	releaseFlagNames = newFlagNames([]flagNameEntry{
 		{RELEASE_FLUSH, "FLUSH"},
@@ -384,4 +385,9 @@ func (a *Attr) string() string {
 
 func (m *BackingMap) string() string {
 	return fmt.Sprintf("{fd %d, flags 0x%x}", m.Fd, m.Flags)
+}
+
+func (o *_IoctlIn) string() string {
+	return fmt.Sprintf("{Fh %d Flags %x Cmd %d Arg x%x, insz %d outsz %d}",
+		o.Fh, o.Flags, o.Cmd, o.Arg, o.InSize, o.OutSize)
 }
