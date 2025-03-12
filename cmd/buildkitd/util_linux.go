@@ -3,12 +3,12 @@ package main
 import (
 	"strings"
 
-	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/sys/user"
 	"github.com/pkg/errors"
 )
 
-func parseIdentityMapping(str string) (*idtools.IdentityMapping, error) {
+func parseIdentityMapping(str string) (*user.IdentityMapping, error) {
 	if str == "" {
 		return nil, nil
 	}
@@ -22,7 +22,7 @@ func parseIdentityMapping(str string) (*idtools.IdentityMapping, error) {
 
 	bklog.L.Debugf("user namespaces: ID ranges will be mapped to subuid ranges of: %s", username)
 
-	mappings, err := idtools.LoadIdentityMapping(username)
+	mappings, err := user.LoadIdentityMapping(username)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create ID mappings")
 	}

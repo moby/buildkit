@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/containerd/continuity/fs"
-	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/llbsolver/ops/fileoptypes"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/sys/user"
 	"github.com/pkg/errors"
 	copy "github.com/tonistiigi/fsutil/copy"
 )
@@ -25,7 +25,7 @@ func timestampToTime(ts int64) *time.Time {
 	return &tm
 }
 
-func mkdir(d string, action *pb.FileActionMkDir, user *copy.User, idmap *idtools.IdentityMapping) (err error) {
+func mkdir(d string, action *pb.FileActionMkDir, user *copy.User, idmap *user.IdentityMapping) (err error) {
 	defer func() {
 		var osErr *os.PathError
 		if errors.As(err, &osErr) {
@@ -65,7 +65,7 @@ func mkdir(d string, action *pb.FileActionMkDir, user *copy.User, idmap *idtools
 	return nil
 }
 
-func symlink(d string, action *pb.FileActionSymlink, user *copy.User, idmap *idtools.IdentityMapping) (err error) {
+func symlink(d string, action *pb.FileActionSymlink, user *copy.User, idmap *user.IdentityMapping) (err error) {
 	defer func() {
 		var osErr *os.PathError
 		if errors.As(err, &osErr) {
@@ -99,7 +99,7 @@ func symlink(d string, action *pb.FileActionSymlink, user *copy.User, idmap *idt
 	return nil
 }
 
-func mkfile(d string, action *pb.FileActionMkFile, user *copy.User, idmap *idtools.IdentityMapping) (err error) {
+func mkfile(d string, action *pb.FileActionMkFile, user *copy.User, idmap *user.IdentityMapping) (err error) {
 	defer func() {
 		var osErr *os.PathError
 		if errors.As(err, &osErr) {
@@ -184,7 +184,7 @@ func rmPath(root, src string, allowNotFound bool) error {
 	return errors.WithStack(os.RemoveAll(p))
 }
 
-func docopy(ctx context.Context, src, dest string, action *pb.FileActionCopy, u *copy.User, idmap *idtools.IdentityMapping) (err error) {
+func docopy(ctx context.Context, src, dest string, action *pb.FileActionCopy, u *copy.User, idmap *user.IdentityMapping) (err error) {
 	srcPath := cleanPath(action.Src)
 	destPath := cleanPath(action.Dest)
 
