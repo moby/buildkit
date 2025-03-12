@@ -32,6 +32,7 @@ import (
 	"github.com/moby/buildkit/util/overlay"
 	"github.com/moby/buildkit/util/progress"
 	rootlessmountopts "github.com/moby/buildkit/util/rootless/mountopts"
+	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/util/winlayers"
 	"github.com/moby/sys/mountinfo"
 	"github.com/moby/sys/userns"
@@ -39,6 +40,8 @@ import (
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -1308,6 +1311,11 @@ func (sr *immutableRef) unlazyLayer(ctx context.Context, dhs DescHandlers, pg pr
 		statusDone := pg.Status("extracting "+desc.Digest.String(), "extracting")
 		defer statusDone()
 	}
+	sp, ctx := tracing.StartSpan(ctx, "extract", trace.WithAttributes(
+		attribute.String("digest", desc.Digest.String()),
+		attribute.Int("size", int(desc.Size)),
+	))
+	defer sp.End()
 
 	key := fmt.Sprintf("extract-%s %s", identity.NewID(), sr.getChainID())
 
