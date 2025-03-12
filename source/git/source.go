@@ -256,9 +256,11 @@ func (gs *gitSourceHandler) getAuthToken(ctx context.Context, g session.Group) e
 	if err != nil {
 		return err
 	}
-	return gs.sm.Any(ctx, g, func(ctx context.Context, _ string, caller session.Caller) error {
+	err = gs.sm.Any(ctx, g, func(ctx context.Context, _ string, caller session.Caller) error {
+		var err error
 		for _, s := range sec {
-			dt, err := secrets.GetSecret(ctx, caller, s.name)
+			var dt []byte
+			dt, err = secrets.GetSecret(ctx, caller, s.name)
 			if err != nil {
 				if errors.Is(err, secrets.ErrNotFound) {
 					continue
@@ -271,8 +273,12 @@ func (gs *gitSourceHandler) getAuthToken(ctx context.Context, g session.Group) e
 			gs.authArgs = []string{"-c", "http." + tokenScope(gs.src.Remote) + ".extraheader=Authorization: " + string(dt)}
 			break
 		}
-		return nil
+		return err
 	})
+	if errors.Is(err, secrets.ErrNotFound) {
+		err = nil
+	}
+	return err
 }
 
 func (gs *gitSourceHandler) mountSSHAuthSock(ctx context.Context, sshID string, g session.Group) (string, func() error, error) {
