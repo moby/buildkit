@@ -5,4 +5,4 @@
 package version
 
 // Version is the version of this client package that is communicated to the server.
-const Version = "0.6.0"
+const Version = "1.2.0"

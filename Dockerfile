@@ -7,7 +7,7 @@ ARG CONTAINERD_VERSION=v1.7.11
 ARG CONTAINERD_ALT_VERSION_16=v1.6.24
 ARG REGISTRY_VERSION=v2.8.3
 ARG ROOTLESSKIT_VERSION=v2.0.0
-ARG CNI_VERSION=v1.6.0
+ARG CNI_VERSION=v1.6.2
 ARG STARGZ_SNAPSHOTTER_VERSION=v0.15.1
 ARG NERDCTL_VERSION=v1.6.2
 ARG DNSNAME_VERSION=v1.3.1
@@ -18,8 +18,9 @@ ARG AZURITE_VERSION=3.18.0
 ARG GOTESTSUM_VERSION=v1.9.0
 ARG DELVE_VERSION=v1.21.0
 
-ARG GO_VERSION=1.23
-ARG ALPINE_VERSION=3.19
+ARG GO_VERSION=1.24
+ARG ALPINE_VERSION=3.20
+ARG ALPINE_VERSION_ALAUDA=3.20.6-alauda-202502271510
 ARG ALPINE_IMAGE=build-harbor.alauda.cn/ops/alpine
 ARG XX_VERSION=1.4.0
 ARG BUILDKIT_DEBUG
@@ -30,11 +31,11 @@ FROM minio/mc:${MINIO_MC_VERSION} AS minio-mc
 
 # alpine base for buildkit image
 # TODO: remove this when alpine image supports riscv64
-FROM ${ALPINE_IMAGE}:${ALPINE_VERSION} AS alpine-amd64
-FROM ${ALPINE_IMAGE}:${ALPINE_VERSION} AS alpine-arm
-FROM ${ALPINE_IMAGE}:${ALPINE_VERSION} AS alpine-arm64
-FROM ${ALPINE_IMAGE}:${ALPINE_VERSION} AS alpine-s390x
-FROM ${ALPINE_IMAGE}:${ALPINE_VERSION} AS alpine-ppc64le
+FROM ${ALPINE_IMAGE}:${ALPINE_VERSION_ALAUDA} AS alpine-amd64
+FROM ${ALPINE_IMAGE}:${ALPINE_VERSION_ALAUDA} AS alpine-arm
+FROM ${ALPINE_IMAGE}:${ALPINE_VERSION_ALAUDA} AS alpine-arm64
+FROM ${ALPINE_IMAGE}:${ALPINE_VERSION_ALAUDA} AS alpine-s390x
+FROM ${ALPINE_IMAGE}:${ALPINE_VERSION_ALAUDA} AS alpine-ppc64le
 FROM ${ALPINE_IMAGE}:edge@sha256:2d01a16bab53a8405876cec4c27235d47455a7b72b75334c614f2fb0968b3f90 AS alpine-riscv64
 FROM alpine-$TARGETARCH AS alpinebase
 
@@ -45,7 +46,7 @@ FROM --platform=$BUILDPLATFORM ${MIRROR_REGISTRY}/tonistiigi/xx:${XX_VERSION} AS
 FROM --platform=$BUILDPLATFORM ${MIRROR_REGISTRY}/library/golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS golatest
 
 # git stage is used for checking out remote repository sources
-FROM --platform=$BUILDPLATFORM ${ALPINE_IMAGE}:${ALPINE_VERSION} AS git
+FROM --platform=$BUILDPLATFORM ${ALPINE_IMAGE}:${ALPINE_VERSION_ALAUDA} AS git
 RUN apk add --no-cache git
 
 # gobuild is base stage for compiling go/cgo
@@ -67,6 +68,11 @@ WORKDIR /usr/src
 RUN git clone https://github.com/opencontainers/runc.git runc \
   && cd runc && git checkout -q "$RUNC_VERSION"
 
+FROM ${MIRROR_REGISTRY}/library/golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS runc-src-modifed
+COPY --from=runc-src /usr/src/runc /usr/src/runc
+WORKDIR /usr/src/runc
+RUN go get golang.org/x/net@v0.37.0 && go mod tidy && go mod vendor
+
 # build runc binary
 FROM gobuild-base AS runc
 WORKDIR $GOPATH/src/github.com/opencontainers/runc
@@ -75,7 +81,7 @@ ARG TARGETPLATFORM
 # lld has issues building static binaries for ppc so prefer ld for it
 RUN set -e; xx-apk add musl-dev gcc libseccomp-dev libseccomp-static; \
   [ "$(xx-info arch)" != "ppc64le" ] || XX_CC_PREFER_LINKER=ld xx-clang --setup-target-triple
-RUN --mount=from=runc-src,src=/usr/src/runc,target=. \
+RUN --mount=from=runc-src-modifed,src=/usr/src/runc,target=. \
   --mount=target=/root/.cache,type=cache <<EOT
   set -ex
   CGO_ENABLED=1 xx-go build -mod=vendor -ldflags '-extldflags -static' -tags 'apparmor seccomp netgo cgo static_build osusergo' -o /usr/bin/runc ./
@@ -166,7 +172,7 @@ RUN --mount=from=dnsname-src,src=/usr/src/dnsname,target=.,rw \
     CGO_ENABLED=0 xx-go build -o /usr/bin/dnsname ./plugins/meta/dnsname && \
     xx-verify --static /usr/bin/dnsname
 
-FROM --platform=$BUILDPLATFORM ${ALPINE_IMAGE}:${ALPINE_VERSION} AS cni-plugins
+FROM --platform=$BUILDPLATFORM ${ALPINE_IMAGE}:${ALPINE_VERSION_ALAUDA} AS cni-plugins
 RUN apk add --no-cache curl
 COPY --from=xx / /
 ARG CNI_VERSION
@@ -212,7 +218,7 @@ FROM binaries-$TARGETOS AS binaries
 # enable scanning for this stage
 ARG BUILDKIT_SBOM_SCAN_STAGE=true
 
-FROM --platform=$BUILDPLATFORM ${ALPINE_IMAGE}:${ALPINE_VERSION} AS releaser
+FROM --platform=$BUILDPLATFORM ${ALPINE_IMAGE}:${ALPINE_VERSION_ALAUDA} AS releaser
 RUN apk add --no-cache tar gzip
 WORKDIR /work
 ARG TARGETPLATFORM
