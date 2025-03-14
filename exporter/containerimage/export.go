@@ -256,7 +256,14 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 		targetNames := strings.Split(e.opts.ImageName, ",")
 		for _, targetName := range targetNames {
 			if e.opt.Images != nil && e.store {
-				tagDone := progress.OneOff(ctx, "naming to "+targetName)
+				var tagDone func(err error) error
+				if !e.isDanglingImageName(targetName) {
+					tagDone = progress.OneOff(ctx, "naming to "+targetName)
+				} else {
+					tagDone = func(err error) error {
+						return err
+					}
+				}
 
 				// imageClientCtx is used for propagating the epoch to e.opt.Images.Update() and e.opt.Images.Create().
 				//
@@ -417,7 +424,11 @@ func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Imag
 		return nil
 	}
 
-	unpackDone := progress.OneOff(ctx, "unpacking to "+img.Name)
+	unpackMessage := "unpacking to " + img.Name
+	if dgst, found := e.parseDanglingImageName(img.Name); found {
+		unpackMessage = "unpacking " + dgst
+	}
+	unpackDone := progress.OneOff(ctx, unpackMessage)
 	defer func() {
 		unpackDone(err0)
 	}()
@@ -475,6 +486,16 @@ func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Imag
 	}
 	_, err = contentStore.Update(ctx, cinfo, fmt.Sprintf("labels.%s", keyGCLabel))
 	return err
+}
+
+func (e *imageExporterInstance) isDanglingImageName(imageName string) bool {
+	_, found := e.parseDanglingImageName(imageName)
+	return found
+}
+
+func (e *imageExporterInstance) parseDanglingImageName(imageName string) (string, bool) {
+	before, dgst, found := strings.Cut(imageName, "@")
+	return dgst, found && before == e.danglingPrefix
 }
 
 func getLayers(descs []ocispecs.Descriptor, manifest ocispecs.Manifest) ([]rootfs.Layer, error) {
