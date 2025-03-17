@@ -221,6 +221,7 @@ COPY --link examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 VOLUME /var/lib/buildkit
 
 FROM buildkit-export-${EXPORT_BASE} AS buildkit-export
+RUN mkdir -p /etc/cdi /var/run/cdi /etc/buildkit/cdi
 
 FROM gobuild-base AS containerd-build
 WORKDIR /go/src/github.com/containerd/containerd
