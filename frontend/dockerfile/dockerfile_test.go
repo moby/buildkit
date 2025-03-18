@@ -3628,7 +3628,7 @@ COPY . .
 	)
 
 	ctx, cancel := context.WithCancelCause(sb.Context())
-	ctx, _ = context.WithTimeoutCause(ctx, 15*time.Second, errors.WithStack(context.DeadlineExceeded))
+	ctx, _ = context.WithTimeoutCause(ctx, 15*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
 	defer func() { cancel(errors.WithStack(context.Canceled)) }()
 
 	c, err := client.New(ctx, sb.Address())

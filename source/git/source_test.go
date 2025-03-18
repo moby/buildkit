@@ -673,7 +673,7 @@ func TestCredentialRedaction(t *testing.T) {
 
 	_, _, _, _, err = g.CacheKey(ctx, nil, 0)
 	require.Error(t, err)
-	require.False(t, strings.Contains(err.Error(), "keepthissecret"))
+	require.NotContains(t, err.Error(), "keepthissecret")
 }
 
 func TestSubdir(t *testing.T) {

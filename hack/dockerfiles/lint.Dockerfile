@@ -1,12 +1,11 @@
 # syntax=docker/dockerfile-upstream:master
 
-ARG GO_VERSION=1.23
+ARG GO_VERSION=1.24
 ARG ALPINE_VERSION=3.21
 ARG XX_VERSION=1.6.1
 ARG PROTOLINT_VERSION=0.50.5
-ARG GOLANGCI_LINT_VERSION=1.61.0
-# v0.31 requires go1.24
-ARG GOPLS_VERSION=v0.30.0
+ARG GOLANGCI_LINT_VERSION=1.64.8
+ARG GOPLS_VERSION=v0.31.0
 # GOPLS_ANALYZERS defines gopls analyzers to be run. disabled by default: deprecated unusedvariable simplifyrange
 ARG GOPLS_ANALYZERS="embeddirective fillreturns hostport infertypeargs modernize nonewvars noresultvalues simplifycompositelit simplifyslice unusedparams yield"
 
