@@ -27,6 +27,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestMain(m *testing.M) {
+	defer tests.RunMirror()()
+	m.Run()
+}
+
 func newWorkerOpt(t *testing.T, processMode oci.ProcessMode) base.WorkerOpt {
 	tmpdir := t.TempDir()
 
