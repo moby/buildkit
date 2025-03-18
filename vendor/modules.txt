@@ -774,10 +774,10 @@ github.com/stretchr/testify/require
 # github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
 ## explicit
 github.com/syndtr/gocapability/capability
-# github.com/tonistiigi/dchapes-mode v0.0.0-20241001053921-ca0759fec205
+# github.com/tonistiigi/dchapes-mode v0.0.0-20250318174251-73d941a28323
 ## explicit; go 1.21
 github.com/tonistiigi/dchapes-mode
-# github.com/tonistiigi/fsutil v0.0.0-20250227023350-13604323a291
+# github.com/tonistiigi/fsutil v0.0.0-20250318190121-d73a4b3b8a7e
 ## explicit; go 1.21
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy
