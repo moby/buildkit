@@ -45,7 +45,7 @@ type DockerAuthProviderConfig struct {
 	TLSConfigs map[string]*AuthTLSConfig
 	// ExpireCachedAuth is a function that returns true auth config should be refreshed
 	// instead of using a pre-cached result.
-	// If nil then the cached result will expire after 10 minutes.
+	// If nil then the cached result will expire after 4 minutes and 50 seconds.
 	// The function is called with the time the cached auth config was created
 	// and the server URL the auth config is for.
 	ExpireCachedAuth func(created time.Time, serverURL string) bool
@@ -59,7 +59,8 @@ type authConfigCacheEntry struct {
 func NewDockerAuthProvider(cfg DockerAuthProviderConfig) session.Attachable {
 	if cfg.ExpireCachedAuth == nil {
 		cfg.ExpireCachedAuth = func(created time.Time, _ string) bool {
-			return time.Since(created) > 10*time.Minute
+			// Tokens for Google Artifact Registry via Workload Identity expire after 5 minutes.
+			return time.Since(created) > 4*time.Minute+50*time.Second
 		}
 	}
 	return &authProvider{
