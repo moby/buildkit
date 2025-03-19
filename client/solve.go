@@ -142,9 +142,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		}
 
 		contentStores := map[string]content.Store{}
-		for key, store := range cacheOpt.contentStores {
-			contentStores[key] = store
-		}
+		maps.Copy(contentStores, cacheOpt.contentStores)
 		for key, store := range opt.OCIStores {
 			key2 := "oci:" + key
 			if _, ok := contentStores[key2]; ok {
@@ -538,9 +536,7 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 func prepareMounts(opt *SolveOpt) (map[string]fsutil.FS, error) {
 	// merge local mounts and fallback local directories together
 	mounts := make(map[string]fsutil.FS)
-	for k, mount := range opt.LocalMounts {
-		mounts[k] = mount
-	}
+	maps.Copy(mounts, opt.LocalMounts)
 	for k, dir := range opt.LocalDirs {
 		mount, err := fsutil.NewFS(dir)
 		if err != nil {

@@ -3,6 +3,7 @@ package solver
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sync"
 	"time"
 
@@ -568,9 +569,7 @@ func (jl *Solver) loadUnlocked(ctx context.Context, v, parent Vertex, j *Job, ca
 			}
 			parentState.childVtx[dgst] = struct{}{}
 
-			for id, c := range parentState.cache {
-				st.cache[id] = c
-			}
+			maps.Copy(st.cache, parentState.cache)
 		}
 	}
 

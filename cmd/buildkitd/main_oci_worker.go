@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -190,9 +191,7 @@ func applyOCIFlags(c *cli.Context, cfg *config.Config) error {
 	if cfg.Workers.OCI.Labels == nil {
 		cfg.Workers.OCI.Labels = make(map[string]string)
 	}
-	for k, v := range labels {
-		cfg.Workers.OCI.Labels[k] = v
-	}
+	maps.Copy(cfg.Workers.OCI.Labels, labels)
 	if c.GlobalIsSet("oci-worker-snapshotter") {
 		cfg.Workers.OCI.Snapshotter = c.GlobalString("oci-worker-snapshotter")
 	}
