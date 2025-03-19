@@ -4,6 +4,7 @@ package runc
 
 import (
 	"context"
+	"maps"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -128,9 +129,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		xlabels[wlabel.ApparmorProfile] = apparmorProfile
 	}
 
-	for k, v := range labels {
-		xlabels[k] = v
-	}
+	maps.Copy(xlabels, labels)
 	lm := leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), "buildkit")
 	snap := containerdsnapshot.NewSnapshotter(snFactory.Name, mdb.Snapshotter(snFactory.Name), "buildkit", idmap)
 	if err := cache.MigrateV2(

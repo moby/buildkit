@@ -1,6 +1,7 @@
 package solver
 
 import (
+	"maps"
 	"slices"
 	"sync"
 
@@ -101,9 +102,7 @@ func (ck *CacheKey) clone() *CacheKey {
 		output: ck.output,
 		ids:    make(map[*cacheManager]string, len(ck.ids)),
 	}
-	for cm, id := range ck.ids {
-		nk.ids[cm] = id
-	}
+	maps.Copy(nk.ids, ck.ids)
 	ck.mu.RUnlock()
 	return nk
 }

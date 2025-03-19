@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 	"sync"
@@ -742,9 +743,7 @@ func (cm *cacheManager) Merge(ctx context.Context, inputParents []ImmutableRef, 
 		default:
 			parents.mergeParents = append(parents.mergeParents, parent.clone())
 		}
-		for dgst, handler := range parent.descHandlers {
-			dhs[dgst] = handler
-		}
+		maps.Copy(dhs, parent.descHandlers)
 	}
 
 	// On success, createMergeRef takes ownership of parents
@@ -868,9 +867,7 @@ func (cm *cacheManager) Diff(ctx context.Context, lower, upper ImmutableRef, pg 
 		} else {
 			dps.upper = parent.clone()
 		}
-		for dgst, handler := range parent.descHandlers {
-			dhs[dgst] = handler
-		}
+		maps.Copy(dhs, parent.descHandlers)
 	}
 
 	// Check to see if lower is an ancestor of upper. If so, define the diff as a merge
