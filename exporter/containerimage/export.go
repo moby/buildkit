@@ -344,7 +344,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 				}
 			}
 		}
-		resp["image.name"] = e.opts.ImageName
+		resp[exptypes.ExporterImageNameKey] = e.opts.ImageName
 	}
 
 	resp[exptypes.ExporterImageDigestKey] = desc.Digest.String()
