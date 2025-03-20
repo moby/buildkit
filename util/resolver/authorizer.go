@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -481,7 +481,7 @@ func (s scopes) normalize() []string {
 	for n := range s {
 		names = append(names, n)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 
 	out := make([]string, 0, len(s))
 
@@ -490,7 +490,7 @@ func (s scopes) normalize() []string {
 		for a := range s[n] {
 			actions = append(actions, a)
 		}
-		sort.Strings(actions)
+		slices.Sort(actions)
 
 		out = append(out, n+":"+strings.Join(actions, ","))
 	}
