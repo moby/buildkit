@@ -1096,6 +1096,8 @@ func calculateKeepBytes(totalSize int64, dstat disk.DiskStat, opt client.PruneIn
 		} else {
 			keepBytes = min(keepBytes, totalSize-excess)
 		}
+	} else if opt.MinFreeSpace != 0 && keepBytes == 0 {
+		keepBytes = totalSize
 	}
 
 	// but make sure we don't take the total below the reserved space
