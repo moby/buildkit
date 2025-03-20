@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"strings"
 	"sync"
@@ -665,9 +666,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	}
 
 	for _, resp := range exporterResponses {
-		for k, v := range resp.Data {
-			exporterResponse.ExporterResponseDeprecated[k] = v
-		}
+		maps.Copy(exporterResponse.ExporterResponseDeprecated, resp.Data)
 	}
 	for _, resp := range cacheExporterResponses {
 		for k, v := range resp.Data {
