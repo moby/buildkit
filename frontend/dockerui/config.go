@@ -54,20 +54,21 @@ const (
 )
 
 type Config struct {
-	BuildArgs        map[string]string
-	CacheIDNamespace string
-	CgroupParent     string
-	Epoch            *time.Time
-	ExtraHosts       []llb.HostIP
-	Hostname         string
-	ImageResolveMode llb.ResolveMode
-	Labels           map[string]string
-	NetworkMode      pb.NetMode
-	ShmSize          int64
-	Target           string
-	Ulimits          []*pb.Ulimit
-	Devices          []*pb.CDIDevice
-	LinterConfig     *linter.Config
+	BuildArgs            map[string]string
+	CacheIDNamespace     string
+	CgroupParent         string
+	Epoch                *time.Time
+	ExtraHosts           []llb.HostIP
+	Hostname             string
+	ImageResolveMode     llb.ResolveMode
+	Labels               map[string]string
+	NetworkMode          pb.NetMode
+	ShmSize              int64
+	Target               string
+	Ulimits              []*pb.Ulimit
+	Devices              []*pb.CDIDevice
+	LinterConfig         *linter.Config
+	ExtraEntrypointFiles []EntrypointFile
 
 	CacheImports           []client.CacheOptionsEntry
 	TargetPlatforms        []ocispecs.Platform // nil means default
@@ -313,6 +314,20 @@ func (bc *Client) buildContext(ctx context.Context) (*buildContext, error) {
 }
 
 func (bc *Client) ReadEntrypoint(ctx context.Context, lang string, opts ...llb.LocalOption) (*Source, error) {
+	sources, err := bc.ReadEntrypointFiles(ctx, lang, opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(sources) < 1 {
+		// this feels a bit obtuse but it should never occur
+		return nil, errors.New("no sources returned for entrypoint")
+	}
+
+	return sources[0], nil
+}
+
+func (bc *Client) ReadEntrypointFiles(ctx context.Context, lang string, opts ...llb.LocalOption) ([]*Source, error) {
 	bctx, err := bc.buildContext(ctx)
 	if err != nil {
 		return nil, err
@@ -334,6 +349,10 @@ func (bc *Client) ReadEntrypoint(ctx context.Context, lang string, opts ...llb.L
 		// dockerfile is also supported casing moby/moby#10858
 		if path.Base(bctx.filename) == DefaultDockerfileName {
 			filenames = append(filenames, path.Join(path.Dir(bctx.filename), strings.ToLower(DefaultDockerfileName)))
+		}
+
+		for _, xfile := range bc.ExtraEntrypointFiles {
+			filenames = append(filenames, xfile.RelativeTo(bctx.filename))
 		}
 
 		sessionID := bc.bopts.SessionID
@@ -375,51 +394,70 @@ func (bc *Client) ReadEntrypoint(ctx context.Context, lang string, opts ...llb.L
 		return nil, err
 	}
 
-	dt, err := ref.ReadFile(ctx, client.ReadRequest{
-		Filename: bctx.filename,
-	})
-	if err != nil {
-		if path.Base(bctx.filename) == DefaultDockerfileName {
-			var err1 error
-			dt, err1 = ref.ReadFile(ctx, client.ReadRequest{
-				Filename: path.Join(path.Dir(bctx.filename), strings.ToLower(DefaultDockerfileName)),
-			})
-			if err1 == nil {
-				err = nil
-			}
+	nfiles := len(bc.ExtraEntrypointFiles) + 1
+	sources := make([]*Source, nfiles)
+	for i := 0; i < nfiles; i++ {
+		isPrimaryEntrypoint := i == 0
+		var filename, filelang string
+
+		if isPrimaryEntrypoint {
+			filename = bctx.filename
+			filelang = lang
+		} else {
+			filename = bc.ExtraEntrypointFiles[i-1].RelativeTo(bctx.filename)
+			filelang = bc.ExtraEntrypointFiles[i-1].Language
 		}
+
+		dt, err := ref.ReadFile(ctx, client.ReadRequest{
+			Filename: filename,
+		})
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to read dockerfile")
-		}
-	}
-	smap := llb.NewSourceMap(src, bctx.filename, lang, dt)
-	smap.Definition = def
-
-	dt, err = ref.ReadFile(ctx, client.ReadRequest{
-		Filename: bctx.filename + ".dockerignore",
-	})
-	if err == nil {
-		bc.dockerignore = dt
-		bc.dockerignoreName = bctx.filename + ".dockerignore"
-	}
-
-	return &Source{
-		SourceMap: smap,
-		Warn: func(ctx context.Context, msg string, opts client.WarnOpts) {
-			if opts.Level == 0 {
-				opts.Level = 1
-			}
-			if opts.SourceInfo == nil {
-				opts.SourceInfo = &pb.SourceInfo{
-					Data:       smap.Data,
-					Filename:   smap.Filename,
-					Language:   smap.Language,
-					Definition: smap.Definition.ToPB(),
+			if isPrimaryEntrypoint && path.Base(filename) == DefaultDockerfileName {
+				var err1 error
+				dt, err1 = ref.ReadFile(ctx, client.ReadRequest{
+					Filename: path.Join(path.Dir(filename), strings.ToLower(DefaultDockerfileName)),
+				})
+				if err1 == nil {
+					err = nil
 				}
 			}
-			bc.client.Warn(ctx, defVtx, msg, opts)
-		},
-	}, nil
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to read dockerfile")
+			}
+		}
+		smap := llb.NewSourceMap(src, filename, filelang, dt)
+		smap.Definition = def
+
+		if isPrimaryEntrypoint {
+			dt, err = ref.ReadFile(ctx, client.ReadRequest{
+				Filename: filename + ".dockerignore",
+			})
+			if err == nil {
+				bc.dockerignore = dt
+				bc.dockerignoreName = filename + ".dockerignore"
+			}
+		}
+
+		sources[i] = &Source{
+			SourceMap: smap,
+			Warn: func(ctx context.Context, msg string, opts client.WarnOpts) {
+				if opts.Level == 0 {
+					opts.Level = 1
+				}
+				if opts.SourceInfo == nil {
+					opts.SourceInfo = &pb.SourceInfo{
+						Data:       smap.Data,
+						Filename:   smap.Filename,
+						Language:   smap.Language,
+						Definition: smap.Definition.ToPB(),
+					}
+				}
+				bc.client.Warn(ctx, defVtx, msg, opts)
+			},
+		}
+	}
+
+	return sources, nil
 }
 
 func (bc *Client) MainContext(ctx context.Context, opts ...llb.LocalOption) (*llb.State, error) {
