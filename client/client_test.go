@@ -1229,8 +1229,8 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 			// Nothing to check
 		},
 		ExporterDocker: func(out, imageName string, exporterResponse map[string]string) {
-			require.Contains(t, exporterResponse, "image.name")
-			require.Equal(t, exporterResponse["image.name"], "docker.io/library/"+imageName)
+			require.Contains(t, exporterResponse, exptypes.ExporterImageNameKey)
+			require.Equal(t, exporterResponse[exptypes.ExporterImageNameKey], "docker.io/library/"+imageName)
 
 			dt, err := os.ReadFile(out)
 			require.NoError(t, err)
@@ -1257,8 +1257,8 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 			require.Equal(t, imageName, dockerMfst[0].RepoTags[0])
 		},
 		ExporterImage: func(_, imageName string, exporterResponse map[string]string) {
-			require.Contains(t, exporterResponse, "image.name")
-			require.Equal(t, exporterResponse["image.name"], imageName)
+			require.Contains(t, exporterResponse, exptypes.ExporterImageNameKey)
+			require.Equal(t, exporterResponse[exptypes.ExporterImageNameKey], imageName)
 
 			// check if we can pull (requires containerd)
 			cdAddress := sb.ContainerdAddress()
@@ -3291,9 +3291,9 @@ func testMultipleExporters(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	if workers.IsTestDockerd() {
-		require.Equal(t, resp.ExporterResponse["image.name"], target1+","+target2)
+		require.Equal(t, resp.ExporterResponse[exptypes.ExporterImageNameKey], target1+","+target2)
 	} else {
-		require.Equal(t, resp.ExporterResponse["image.name"], target2)
+		require.Equal(t, resp.ExporterResponse[exptypes.ExporterImageNameKey], target2)
 	}
 	require.FileExists(t, filepath.Join(destDir, "out.tar"))
 	require.FileExists(t, filepath.Join(destDir, "out2.tar"))
