@@ -76,7 +76,7 @@ var opaqueXattrs = map[OverlayOpaqueType][]string{
 	OverlayOpaqueUser:    {"user.overlay.opaque"},
 }
 
-func newNode(layerDgst digest.Digest, r reader.Reader, blob remote.Blob, baseInode uint32, opaque OverlayOpaqueType) (fusefs.InodeEmbedder, error) {
+func newNode(layerDgst digest.Digest, r reader.Reader, blob remote.Blob, baseInode uint32, opaque OverlayOpaqueType, pth bool) (fusefs.InodeEmbedder, error) {
 	rootID := r.Metadata().RootID()
 	rootAttr, err := r.Metadata().GetAttr(rootID)
 	if err != nil {
@@ -92,6 +92,7 @@ func newNode(layerDgst digest.Digest, r reader.Reader, blob remote.Blob, baseIno
 		baseInode:    baseInode,
 		rootID:       rootID,
 		opaqueXattrs: opq,
+		passThrough:  pth,
 	}
 	ffs.s = ffs.newState(layerDgst, blob)
 	return &node{
@@ -109,6 +110,7 @@ type fs struct {
 	baseInode    uint32
 	rootID       uint32
 	opaqueXattrs []string
+	passThrough  bool
 }
 
 func (fs *fs) inodeOfState() uint64 {
@@ -344,10 +346,26 @@ func (n *node) Open(ctx context.Context, flags uint32) (fh fusefs.FileHandle, fu
 		n.fs.s.report(fmt.Errorf("node.Open: %v", err))
 		return nil, 0, syscall.EIO
 	}
-	return &file{
+
+	f := &file{
 		n:  n,
 		ra: ra,
-	}, fuse.FOPEN_KEEP_CACHE, 0
+		fd: -1,
+	}
+
+	if n.fs.passThrough {
+		if getter, ok := ra.(reader.PassthroughFdGetter); ok {
+			fd, err := getter.GetPassthroughFd()
+			if err != nil {
+				n.fs.s.report(fmt.Errorf("passThrough model failed due to node.Open: %v", err))
+				n.fs.passThrough = false
+			} else {
+				f.InitFd(int(fd))
+			}
+		}
+	}
+
+	return f, fuse.FOPEN_KEEP_CACHE, 0
 }
 
 var _ = (fusefs.NodeGetattrer)((*node)(nil))
@@ -424,6 +442,7 @@ func (n *node) Statfs(ctx context.Context, out *fuse.StatfsOut) syscall.Errno {
 type file struct {
 	n  *node
 	ra io.ReaderAt
+	fd int
 }
 
 var _ = (fusefs.FileReader)((*file)(nil))
@@ -449,6 +468,20 @@ func (f *file) Getattr(ctx context.Context, out *fuse.AttrOut) syscall.Errno {
 	}
 	entryToAttr(ino, f.n.attr, &out.Attr)
 	return 0
+}
+
+// Implement PassthroughFd to enable go-fuse passthrough
+var _ = (fusefs.FilePassthroughFder)((*file)(nil))
+
+func (f *file) PassthroughFd() (int, bool) {
+	if f.fd <= 0 {
+		return -1, false
+	}
+	return f.fd, true
+}
+
+func (f *file) InitFd(fd int) {
+	f.fd = fd
 }
 
 // whiteout is a whiteout abstraction compliant to overlayfs.

@@ -26,6 +26,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -46,7 +47,6 @@ import (
 	"github.com/containerd/stargz-snapshotter/fs/config"
 	commonmetrics "github.com/containerd/stargz-snapshotter/fs/metrics/common"
 	"github.com/containerd/stargz-snapshotter/fs/source"
-	"github.com/hashicorp/go-multierror"
 	rhttp "github.com/hashicorp/go-retryablehttp"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -129,18 +129,20 @@ func (r *Resolver) resolveFetcher(ctx context.Context, hosts source.RegistryHost
 		minWaitMSec: time.Duration(blobConfig.MinWaitMSec) * time.Millisecond,
 		maxWaitMSec: time.Duration(blobConfig.MaxWaitMSec) * time.Millisecond,
 	}
-	var handlersErr error
+	var errs []error
 	for name, p := range r.handlers {
 		// TODO: allow to configure the selection of readers based on the hostname in refspec
 		r, size, err := p.Handle(ctx, desc)
 		if err != nil {
-			handlersErr = multierror.Append(handlersErr, err)
+			errs = append(errs, err)
 			continue
 		}
 		log.G(ctx).WithField("handler name", name).WithField("ref", refspec.String()).WithField("digest", desc.Digest).
 			Debugf("contents is provided by a handler")
 		return &remoteFetcher{r}, size, nil
 	}
+
+	handlersErr := errors.Join(errs...)
 
 	log.G(ctx).WithError(handlersErr).WithField("ref", refspec.String()).WithField("digest", desc.Digest).Debugf("using default handler")
 	hf, size, err := newHTTPFetcher(ctx, fc)
