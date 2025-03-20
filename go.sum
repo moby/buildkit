@@ -393,10 +393,10 @@ github.com/stretchr/testify v1.10.0 h1:Xv5erBjTwe/5IxqUQTdXv5kgmIvbHo3QQyRwhJsOf
 github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635 h1:kdXcSzyDtseVEc4yCz2qF8ZrQvIDBJLl4S1c3GCXmoI=
 github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635/go.mod h1:hkRG7XYTFWNJGYcbNJQlaLq0fg1yr4J4t/NcTQtrfww=
-github.com/tonistiigi/dchapes-mode v0.0.0-20241001053921-ca0759fec205 h1:eUk79E1w8yMtXeHSzjKorxuC8qJOnyXQnLaJehxpJaI=
-github.com/tonistiigi/dchapes-mode v0.0.0-20241001053921-ca0759fec205/go.mod h1:3Iuxbr0P7D3zUzBMAZB+ois3h/et0shEz0qApgHYGpY=
-github.com/tonistiigi/fsutil v0.0.0-20250227023350-13604323a291 h1:1WRvmYdTkwjgFIlnOwo6Y15BMwQBUQT423y1zHad4Eo=
-github.com/tonistiigi/fsutil v0.0.0-20250227023350-13604323a291/go.mod h1:Dl/9oEjK7IqnjAm21Okx/XIxUCFJzvh+XdVHUlBwXTw=
+github.com/tonistiigi/dchapes-mode v0.0.0-20250318174251-73d941a28323 h1:r0p7fK56l8WPequOaR3i9LBqfPtEdXIQbUTzT55iqT4=
+github.com/tonistiigi/dchapes-mode v0.0.0-20250318174251-73d941a28323/go.mod h1:3Iuxbr0P7D3zUzBMAZB+ois3h/et0shEz0qApgHYGpY=
+github.com/tonistiigi/fsutil v0.0.0-20250318190121-d73a4b3b8a7e h1:AiXT0JHwQA52AEOVMsxRytSI9mdJSie5gUp6OQ1R8fU=
+github.com/tonistiigi/fsutil v0.0.0-20250318190121-d73a4b3b8a7e/go.mod h1:BKdcez7BiVtBvIcef90ZPc6ebqIWr4JWD7+EvLm6J98=
 github.com/tonistiigi/go-actions-cache v0.0.0-20250228231703-3e9a6642607f h1:q/SWz3Bz0KtAsqaBo73CHVXjaz5O8PDnmD2JHVhgYnE=
 github.com/tonistiigi/go-actions-cache v0.0.0-20250228231703-3e9a6642607f/go.mod h1:h0oRlVs3NoFIHysRQ4rU1+RG4QmU0M2JVSwTYrB4igk=
 github.com/tonistiigi/go-archvariant v1.0.0 h1:5LC1eDWiBNflnTF1prCiX09yfNHIxDC/aukdhCdTyb0=
