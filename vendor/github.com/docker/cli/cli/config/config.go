@@ -69,6 +69,11 @@ func getHomeDir() string {
 	return home
 }
 
+// Provider defines an interface for providing the CLI config.
+type Provider interface {
+	ConfigFile() *configfile.ConfigFile
+}
+
 // Dir returns the directory the configuration file is stored in
 func Dir() string {
 	initConfigDir.Do(func() {
