@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Microsoft/go-winio"
+	"github.com/moby/buildkit/util/appdefaults"
 	"io"
 	"maps"
 	"net"
@@ -332,8 +334,23 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		}
 	}
 
-	lbf, ctx := serveLLBBridgeForwarder(ctx, llbBridge, exec, gf.workers, inputs, sid, sm)
-	defer lbf.conn.Close()
+	//switch between npipe and anonymous[stdio] base if its custom frontends contexts
+	// serveLLBBridgeForwarder1 handles 'well' npipes
+	lbf, ctx := serveLLBBridgeForwarder1(ctx, llbBridge, exec, gf.workers, inputs, sid, sm)
+	defer func(conn net.Conn) {
+		if conn != nil {
+			err := conn.Close()
+			if err != nil {
+			}
+		}
+
+		if lbf.conn != nil {
+			err := lbf.conn.Close()
+			if err != nil {
+				fmt.Printf("Error closing connection: %v\n", err)
+			}
+		}
+	}(lbf.conn)
 	defer lbf.Discard()
 
 	mdmnt, release, err := metadataMount(frontendDef)
@@ -524,6 +541,80 @@ func serveLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLB
 	}()
 
 	return lbf, ctx
+}
+
+func serveLLBBridgeForwarder1(
+	ctx context.Context,
+	llbBridge frontend.FrontendLLBBridge,
+	exec executor.Executor,
+	workers worker.Infos,
+	inputs map[string]*opspb.Definition,
+	sid string,
+	sm *session.Manager,
+) (*llbBridgeForwarder, context.Context) {
+
+	listener := createNPipeListener()
+	if listener == nil {
+		return nil, ctx
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+
+	lbf := newBridgeForwarder(ctx, llbBridge, exec, workers, inputs, sid, sm)
+
+	serverOpts := []grpc.ServerOption{
+		grpc.UnaryInterceptor(grpcerrors.UnaryServerInterceptor),
+		grpc.StreamInterceptor(grpcerrors.StreamServerInterceptor),
+		grpc.MaxRecvMsgSize(defaults.DefaultMaxRecvMsgSize),
+		grpc.MaxSendMsgSize(defaults.DefaultMaxSendMsgSize),
+	}
+
+	grpcServer := grpc.NewServer(serverOpts...)
+	grpc_health_v1.RegisterHealthServer(grpcServer, health.NewServer())
+	pb.RegisterLLBBridgeServer(grpcServer, lbf)
+
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			lbf.conn = conn
+			if err != nil {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					fmt.Printf("Error accepting connection: %v\n", err)
+					continue
+				}
+			}
+			go serve(ctx, grpcServer, conn)
+		}
+	}()
+
+	// Graceful shutdown handling
+	go func() {
+		<-ctx.Done()
+		lbf.isErrServerClosed = true
+		_ = listener.Close()
+		grpcServer.GracefulStop()
+		cancel()
+	}()
+
+	return lbf, ctx
+}
+
+func createNPipeListener() net.Listener {
+	pipeCfg := &winio.PipeConfig{
+		SecurityDescriptor: "D:P(A;;GA;;;AU)",
+		MessageMode:        false,
+		InputBufferSize:    4096,
+		OutputBufferSize:   4096,
+	}
+	listener, err := winio.ListenPipe(appdefaults.FrontendGRPCPipe, pipeCfg)
+	if err != nil {
+		bklog.L.Errorf("Failed to initialize named pipe listener: %s", err)
+		return nil
+	}
+	return listener
 }
 
 type pipe struct {
@@ -1627,14 +1718,29 @@ func (lbf *llbBridgeForwarder) cloneRef(id string) (solver.ResultProxy, error) {
 	lbf.refs[id] = s1
 	return s2, nil
 }
-
 func serve(ctx context.Context, grpcServer *grpc.Server, conn net.Conn) {
 	go func() {
 		<-ctx.Done()
-		conn.Close()
+		if conn != nil {
+			err := conn.Close()
+			if err != nil {
+				return
+			}
+		}
 	}()
 	bklog.G(ctx).Debugf("serving grpc connection")
 	(&http2.Server{}).ServeConn(conn, &http2.ServeConnOpts{Handler: grpcServer})
+}
+
+// wrapConn ensures pre-read HTTP/2 preface is included in the connection stream
+type wrapConn struct {
+	net.Conn
+	reader io.Reader
+}
+
+// Read first uses our buffered reader, then falls back to the original Conn
+func (w *wrapConn) Read(p []byte) (int, error) {
+	return w.reader.Read(p)
 }
 
 type markTypeFrontend struct{}

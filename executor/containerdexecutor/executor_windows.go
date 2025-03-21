@@ -2,7 +2,10 @@ package containerdexecutor
 
 import (
 	"context"
+	"github.com/moby/buildkit/util/appdefaults"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 
 	ctd "github.com/containerd/containerd/v2/client"
@@ -94,6 +97,17 @@ func (w *containerdExecutor) createOCISpec(ctx context.Context, id, _, _ string,
 		return nil, nil, err
 	}
 	releasers = append(releasers, cleanup)
+
+	if runtime.GOOS == "windows" && isFrontendArgs(meta.Args, appdefaults.AllowedCustomFrontends()) {
+		if spec.Annotations == nil {
+			spec.Annotations = make(map[string]string)
+		}
+		spec.Mounts = append(spec.Mounts, specs.Mount{
+			Source:      appdefaults.FrontendGRPCPipe,
+			Destination: appdefaults.FrontendGRPCPipe,
+			Type:        "",
+		})
+	}
 	return spec, releaseAll, nil
 }
 
@@ -103,4 +117,14 @@ func (d *containerState) getTaskOpts() ([]ctd.NewTaskOpts, error) {
 
 func setArgs(spec *specs.Process, args []string) {
 	spec.CommandLine = strings.Join(args, " ")
+}
+
+func isFrontendArgs(args []string, allowedFrontends map[string]struct{}) bool {
+	if len(args) == 0 {
+		return false
+	}
+	base := filepath.Base(args[0])
+	name := strings.TrimSuffix(base, filepath.Ext(base))
+	_, exists := allowedFrontends[strings.ToLower(name)]
+	return exists
 }
