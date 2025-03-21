@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -501,6 +502,7 @@ func newBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridg
 }
 
 func serveLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, exec executor.Executor, workers worker.Infos, inputs map[string]*opspb.Definition, sid string, sm *session.Manager) (*llbBridgeForwarder, context.Context) {
+	var listener net.Listener
 	ctx, cancel := context.WithCancelCause(ctx)
 	lbf := newBridgeForwarder(ctx, llbBridge, exec, workers, inputs, sid, sm)
 	serverOpt := []grpc.ServerOption{
@@ -514,11 +516,19 @@ func serveLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLB
 	pb.RegisterLLBBridgeServer(server, lbf)
 
 	go func() {
+		isWinCustomFrontend := runtime.GOOS == "windows"
+		if isWinCustomFrontend {
+			listener = createNPipeListener()
+			lbf.conn, _ = listener.Accept()
+		}
 		serve(ctx, server, lbf.conn)
 		select {
 		case <-ctx.Done():
 		default:
 			lbf.isErrServerClosed = true
+			if isWinCustomFrontend && listener != nil {
+				_ = listener.Close()
+			}
 		}
 		cancel(errors.WithStack(context.Canceled))
 	}()

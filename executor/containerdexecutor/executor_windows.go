@@ -3,6 +3,8 @@ package containerdexecutor
 import (
 	"context"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 
 	ctd "github.com/containerd/containerd/v2/client"
@@ -13,6 +15,7 @@ import (
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/util/windows"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -94,6 +97,14 @@ func (w *containerdExecutor) createOCISpec(ctx context.Context, id, _, _ string,
 		return nil, nil, err
 	}
 	releasers = append(releasers, cleanup)
+
+	if runtime.GOOS == "windows" && isFrontendArgs(meta.Args, appdefaults.AllowedCustomFrontends()) {
+		spec.Mounts = append(spec.Mounts, specs.Mount{
+			Source:      appdefaults.FrontendGRPCPipe,
+			Destination: appdefaults.FrontendGRPCPipe,
+			Type:        "",
+		})
+	}
 	return spec, releaseAll, nil
 }
 
@@ -103,4 +114,14 @@ func (d *containerState) getTaskOpts() ([]ctd.NewTaskOpts, error) {
 
 func setArgs(spec *specs.Process, args []string) {
 	spec.CommandLine = strings.Join(args, " ")
+}
+
+func isFrontendArgs(args []string, allowedFrontends map[string]struct{}) bool {
+	if len(args) == 0 {
+		return false
+	}
+	base := filepath.Base(args[0])
+	name := strings.TrimSuffix(base, filepath.Ext(base))
+	_, exists := allowedFrontends[strings.ToLower(name)]
+	return exists
 }
