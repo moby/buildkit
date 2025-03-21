@@ -2,6 +2,7 @@ package builder
 
 import (
 	"context"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/solver/result"
+	"github.com/moby/buildkit/util/appdefaults"
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -59,6 +61,9 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 			}
 			return res, err
 		} else if ref, cmdline, loc, ok := parser.DetectSyntax(src.Data); ok {
+			if runtime.GOOS == "windows" {
+				ctx = context.WithValue(ctx, appdefaults.ContextKeyCustomFrontend, true)
+			}
 			res, err := forwardGateway(ctx, c, ref, cmdline)
 			if err != nil && len(errdefs.Sources(err)) == 0 {
 				return nil, wrapSource(err, src.SourceMap, loc)
