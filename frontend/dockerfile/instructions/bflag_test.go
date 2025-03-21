@@ -1,7 +1,7 @@
 package instructions
 
 import (
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -206,7 +206,7 @@ func TestBuilderFlags(t *testing.T) {
 		t.Fatalf("Test %q was supposed to work: %s", bf.Args, err)
 	}
 	used := bf.Used()
-	sort.Strings(used)
+	slices.Sort(used)
 	expected = "bool2, bool3, bool4, bool5, str2, str3, str4"
 	actual := strings.Join(used, ", ")
 	if actual != expected {
