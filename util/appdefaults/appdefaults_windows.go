@@ -6,7 +6,8 @@ import (
 )
 
 const (
-	Address = "npipe:////./pipe/buildkitd"
+	Address          = "npipe:////./pipe/buildkitd"
+	FrontendGRPCPipe = `\\.\pipe\buildkit-frontend-bridge`
 )
 
 var (
@@ -14,6 +15,7 @@ var (
 	ConfigDir            = filepath.Join(os.Getenv("ProgramData"), "buildkitd")
 	DefaultCNIBinDir     = filepath.Join(ConfigDir, "bin")
 	DefaultCNIConfigPath = filepath.Join(ConfigDir, "cni.json")
+	CustomFrontends      = map[string]struct{}{"customfrontend": {}}
 )
 
 var (
@@ -39,4 +41,8 @@ func UserConfigDir() string {
 
 func TraceSocketPath(inUserNS bool) string {
 	return `\\.\pipe\buildkit-otel-grpc`
+}
+
+func AllowedCustomFrontends() map[string]struct{} {
+	return CustomFrontends
 }

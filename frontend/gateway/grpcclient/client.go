@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Microsoft/go-winio"
+	"github.com/moby/buildkit/util/appdefaults"
 	"io"
 	"net"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -1235,10 +1238,10 @@ func (r *reference) StatFile(ctx context.Context, req client.StatRequest) (*fsty
 }
 
 func grpcClientConn(ctx context.Context) (context.Context, *grpc.ClientConn, error) {
+	addr, dialer := getDialer()
+
 	dialOpts := []grpc.DialOption{
-		grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
-			return stdioConn(), nil
-		}),
+		dialer,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithUnaryInterceptor(grpcerrors.UnaryClientInterceptor),
 		grpc.WithStreamInterceptor(grpcerrors.StreamClientInterceptor),
@@ -1246,17 +1249,37 @@ func grpcClientConn(ctx context.Context) (context.Context, *grpc.ClientConn, err
 		grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(16 << 20)),
 	}
 
-	//nolint:staticcheck // ignore SA1019 NewClient has different behavior and needs to be tested
-	cc, err := grpc.DialContext(ctx, "localhost", dialOpts...)
+	cc, err := grpc.DialContext(ctx, addr, dialOpts...)
 	if err != nil {
 		return ctx, nil, errors.Wrap(err, "failed to create grpc client")
 	}
 
 	ctx, cancel := context.WithCancelCause(ctx)
 	_ = cancel
-	// go monitorHealth(ctx, cc, cancel)
 
 	return ctx, cc, nil
+}
+
+func getDialer() (string, grpc.DialOption) {
+	var addr string
+	var dialFn func(ctx context.Context, addr string) (net.Conn, error)
+
+	if runtime.GOOS == "windows" {
+		addr = appdefaults.FrontendGRPCPipe
+		dialFn = func(ctx context.Context, _ string) (net.Conn, error) {
+			conn, err := winio.DialPipe(addr, nil)
+			if err != nil {
+				return nil, errors.Wrap(err, "Failed to connect to gRPC server")
+			}
+			return conn, nil
+		}
+	} else {
+		addr = "localhost"
+		dialFn = func(ctx context.Context, _ string) (net.Conn, error) {
+			return stdioConn(), nil
+		}
+	}
+	return addr, grpc.WithContextDialer(dialFn)
 }
 
 func stdioConn() net.Conn {
