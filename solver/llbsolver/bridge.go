@@ -192,6 +192,10 @@ func (b *llbBridge) Exec(ctx context.Context, id string, process executor.Proces
 	return b.executor.Exec(ctx, id, process)
 }
 
+func (b *llbBridge) GetFrontendID() string {
+	return identity.NewID()
+}
+
 func (b *llbBridge) loadExecutor() error {
 	b.executorOnce.Do(func() {
 		w, err := b.resolveWorker()

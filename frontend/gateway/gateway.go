@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -41,6 +42,7 @@ import (
 	llberrdefs "github.com/moby/buildkit/solver/llbsolver/errdefs"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
+	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/stack"
@@ -495,13 +497,17 @@ func newBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridg
 		sm:            sm,
 		ctrs:          map[string]gwclient.Container{},
 		executor:      exec,
+		id:            identity.NewID(),
 	}
 	return lbf
 }
 
 func serveLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, exec executor.Executor, workers worker.Infos, inputs map[string]*opspb.Definition, sid string, sm *session.Manager) (*llbBridgeForwarder, context.Context) {
+	var listener net.Listener
+	isWindowsPlatform := runtime.GOOS == "windows"
 	ctx, cancel := context.WithCancelCause(ctx)
 	lbf := newBridgeForwarder(ctx, llbBridge, exec, workers, inputs, sid, sm)
+
 	serverOpt := []grpc.ServerOption{
 		grpc.UnaryInterceptor(grpcerrors.UnaryServerInterceptor),
 		grpc.StreamInterceptor(grpcerrors.StreamServerInterceptor),
@@ -513,11 +519,20 @@ func serveLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLB
 	pb.RegisterLLBBridgeServer(server, lbf)
 
 	go func() {
+		if isWindowsPlatform {
+			listener = createNPipeListener(llbBridge.GetFrontendID())
+			if err := handleWindowsPipeConn(ctx, listener, lbf, cancel); err != nil {
+				return
+			}
+		}
 		serve(ctx, server, lbf.conn)
 		select {
 		case <-ctx.Done():
 		default:
 			lbf.isErrServerClosed = true
+			if isWindowsPlatform && listener != nil {
+				_ = listener.Close()
+			}
 		}
 		cancel(errors.WithStack(context.Canceled))
 	}()
@@ -609,6 +624,7 @@ type llbBridgeForwarder struct {
 	*pipe
 	ctrs   map[string]gwclient.Container
 	ctrsMu sync.Mutex
+	id     string
 }
 
 func (lbf *llbBridgeForwarder) ResolveSourceMeta(ctx context.Context, req *pb.ResolveSourceMetaRequest) (*pb.ResolveSourceMetaResponse, error) {
@@ -764,6 +780,10 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 		if p == nil {
 			return nil, errors.Errorf("invalid nil source policy")
 		}
+	}
+
+	if runtime.GOOS == "windows" {
+		ctx = context.WithValue(ctx, appdefaults.ContextKeyCustomFrontend, true)
 	}
 
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)

@@ -6,7 +6,8 @@ import (
 )
 
 const (
-	Address = "npipe:////./pipe/buildkitd"
+	Address          = "npipe:////./pipe/buildkitd"
+	FrontendGRPCPipe = `\\.\pipe\buildkitd-frontend-`
 )
 
 var (

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -1235,10 +1236,17 @@ func (r *reference) StatFile(ctx context.Context, req client.StatRequest) (*fsty
 }
 
 func grpcClientConn(ctx context.Context) (context.Context, *grpc.ClientConn, error) {
+	addr := "localhost"
+	dialer := grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
+		return stdioConn(), nil
+	})
+
+	if runtime.GOOS == "windows" {
+		addr, dialer = nPipeDialer()
+	}
+
 	dialOpts := []grpc.DialOption{
-		grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
-			return stdioConn(), nil
-		}),
+		dialer,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithUnaryInterceptor(grpcerrors.UnaryClientInterceptor),
 		grpc.WithStreamInterceptor(grpcerrors.StreamClientInterceptor),
@@ -1247,7 +1255,7 @@ func grpcClientConn(ctx context.Context) (context.Context, *grpc.ClientConn, err
 	}
 
 	//nolint:staticcheck // ignore SA1019 NewClient has different behavior and needs to be tested
-	cc, err := grpc.DialContext(ctx, "localhost", dialOpts...)
+	cc, err := grpc.DialContext(ctx, addr, dialOpts...)
 	if err != nil {
 		return ctx, nil, errors.Wrap(err, "failed to create grpc client")
 	}
