@@ -3,6 +3,7 @@ package containerdexecutor
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 
 	ctd "github.com/containerd/containerd/v2/client"
@@ -13,6 +14,7 @@ import (
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/util/windows"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -94,6 +96,14 @@ func (w *containerdExecutor) createOCISpec(ctx context.Context, id, _, _ string,
 		return nil, nil, err
 	}
 	releasers = append(releasers, cleanup)
+
+	if isDockerfileFrontend(meta.Args) {
+		spec.Mounts = append(spec.Mounts, specs.Mount{
+			Source:      appdefaults.FrontendGRPCPipe,
+			Destination: appdefaults.FrontendGRPCPipe,
+			Type:        "",
+		})
+	}
 	return spec, releaseAll, nil
 }
 
@@ -103,4 +113,9 @@ func (d *containerState) getTaskOpts() ([]ctd.NewTaskOpts, error) {
 
 func setArgs(spec *specs.Process, args []string) {
 	spec.CommandLine = strings.Join(args, " ")
+}
+
+// 'dockerfile-frontend',is the binary name for the Dockerfile frontend
+func isDockerfileFrontend(args []string) bool {
+	return len(args) > 0 && strings.Contains(filepath.Base(args[0]), "dockerfile-frontend")
 }
