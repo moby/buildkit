@@ -136,6 +136,11 @@ func ValidateEntitlements(ent entitlements.Set, cdiManager *cdidevices.Manager) 
 
 				var allowedDevices []*pb.CDIDevice
 				var nonAliasedDevices []*pb.CDIDevice
+				for _, d := range cdiManager.ListDevices() {
+					if d.OnDemand && d.AutoAllow {
+						allowedDevices = append(allowedDevices, &pb.CDIDevice{Name: d.Name})
+					}
+				}
 				if cfg != nil {
 					for _, d := range op.Exec.CdiDevices {
 						if newName, ok := cfg.Devices[d.Name]; ok && newName != "" {
