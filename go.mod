@@ -108,7 +108,7 @@ require (
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.5.1
 	google.golang.org/protobuf v1.35.2
 	kernel.org/pub/linux/libs/security/libcap/cap v1.2.73
-	tags.cncf.io/container-device-interface v0.8.1
+	tags.cncf.io/container-device-interface v1.0.1
 )
 
 require (
@@ -183,7 +183,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	kernel.org/pub/linux/libs/security/libcap/psx v1.2.73 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
-	tags.cncf.io/container-device-interface/specs-go v0.8.0 // indirect
+	tags.cncf.io/container-device-interface/specs-go v1.0.0 // indirect
 )
 
 exclude (
