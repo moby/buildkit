@@ -18,6 +18,7 @@ package cache
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -26,7 +27,6 @@ import (
 
 	"github.com/containerd/stargz-snapshotter/util/cacheutil"
 	"github.com/containerd/stargz-snapshotter/util/namedmutex"
-	"github.com/hashicorp/go-multierror"
 )
 
 const (
@@ -82,6 +82,9 @@ type BlobCache interface {
 type Reader interface {
 	io.ReaderAt
 	Close() error
+
+	// If a blob is backed by a file, it should return *os.File so that it can be used for FUSE passthrough
+	GetReaderAt() io.ReaderAt
 }
 
 // Writer enables the client to cache byte data. Commit() must be
@@ -94,7 +97,8 @@ type Writer interface {
 }
 
 type cacheOpt struct {
-	direct bool
+	direct      bool
+	passThrough bool
 }
 
 type Option func(o *cacheOpt) *cacheOpt
@@ -106,6 +110,15 @@ type Option func(o *cacheOpt) *cacheOpt
 func Direct() Option {
 	return func(o *cacheOpt) *cacheOpt {
 		o.direct = true
+		return o
+	}
+}
+
+// PassThrough option indicates whether to enable FUSE passthrough mode
+// to improve local file read performance.
+func PassThrough() Option {
+	return func(o *cacheOpt) *cacheOpt {
+		o.passThrough = true
 		return o
 	}
 }
@@ -229,8 +242,16 @@ func (dc *directoryCache) Get(key string, opts ...Option) (Reader, error) {
 	// that won't be accessed immediately.
 	if dc.direct || opt.direct {
 		return &reader{
-			ReaderAt:  file,
-			closeFunc: func() error { return file.Close() },
+			ReaderAt: file,
+			closeFunc: func() error {
+				// In passthough model, close will be toke over by go-fuse
+				// If "passThrough" option is specified, "direct" option also will
+				// be specified, so adding this branch here is enough
+				if opt.passThrough {
+					return nil
+				}
+				return file.Close()
+			},
 		}, nil
 	}
 
@@ -273,12 +294,12 @@ func (dc *directoryCache) Add(key string, opts ...Option) (Writer, error) {
 			// Commit the cache contents
 			c := dc.cachePath(key)
 			if err := os.MkdirAll(filepath.Dir(c), os.ModePerm); err != nil {
-				var allErr error
+				var errs []error
 				if err := os.Remove(wip.Name()); err != nil {
-					allErr = multierror.Append(allErr, err)
+					errs = append(errs, err)
 				}
-				return multierror.Append(allErr,
-					fmt.Errorf("failed to create cache directory %q: %w", c, err))
+				errs = append(errs, fmt.Errorf("failed to create cache directory %q: %w", c, err))
+				return errors.Join(errs...)
 			}
 			return os.Rename(wip.Name(), c)
 		},
@@ -413,6 +434,10 @@ type reader struct {
 }
 
 func (r *reader) Close() error { return r.closeFunc() }
+
+func (r *reader) GetReaderAt() io.ReaderAt {
+	return r.ReaderAt
+}
 
 type writer struct {
 	io.WriteCloser
