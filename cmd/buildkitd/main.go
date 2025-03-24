@@ -10,7 +10,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -107,10 +107,9 @@ var (
 
 func registerWorkerInitializer(wi workerInitializer, flags ...cli.Flag) {
 	workerInitializers = append(workerInitializers, wi)
-	sort.Slice(workerInitializers,
-		func(i, j int) bool {
-			return workerInitializers[i].priority < workerInitializers[j].priority
-		})
+	slices.SortFunc(workerInitializers, func(a, b workerInitializer) int {
+		return a.priority - b.priority
+	})
 	appFlags = append(appFlags, flags...)
 }
 
