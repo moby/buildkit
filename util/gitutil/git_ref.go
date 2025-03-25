@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	cerrdefs "github.com/containerd/errdefs"
-	"github.com/pkg/errors"
 )
 
 // GitRef represents a git ref.
@@ -67,10 +66,7 @@ func ParseGitRef(ref string) (*GitRef, error) {
 			Path:   strings.TrimPrefix(ref, "github.com/"),
 		})
 	} else {
-		remote, err = ParseURL(ref)
-		if errors.Is(err, ErrUnknownProtocol) {
-			return nil, err
-		}
+		remote, err = ParseURL(ref, NoImplicitSCPUsername())
 		if err != nil {
 			return nil, err
 		}
