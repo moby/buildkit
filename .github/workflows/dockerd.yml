@@ -16,7 +16,7 @@ on:
 env:
   SETUP_BUILDX_VERSION: "edge"
   SETUP_BUILDKIT_IMAGE: "moby/buildkit:latest"
-  TESTFLAGS: "-v --parallel=1 --timeout=30m"
+  TESTFLAGS: "-v --parallel=6 --timeout=30m"
 
 jobs:
   prepare:
