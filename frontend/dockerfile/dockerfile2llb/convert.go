@@ -400,7 +400,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		var ok bool
 		target, ok = allDispatchStates.findStateByName(opt.Target)
 		if !ok {
-			return nil, errors.Errorf("target stage %q could not be found", opt.Target)
+			return nil, suggest.WrapError(errors.Errorf("target stage %q could not be found", opt.Target), opt.Target, allDispatchStates.names(), true)
 		}
 	}
 
@@ -430,13 +430,6 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 
 	if len(allDispatchStates.states) == 1 {
 		allDispatchStates.states[0].stageName = ""
-	}
-
-	allStageNames := make([]string, 0, len(allDispatchStates.states))
-	for _, s := range allDispatchStates.states {
-		if s.stageName != "" {
-			allStageNames = append(allStageNames, s.stageName)
-		}
 	}
 
 	resolveReachableStages := func(ctx context.Context, all []*dispatchState, target *dispatchState) (map[*dispatchState]struct{}, error) {
@@ -547,7 +540,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 								},
 							})
 							if err != nil {
-								return suggest.WrapError(errors.Wrap(err, origName), origName, append(allStageNames, commonImageNames()...), true)
+								return suggest.WrapError(errors.Wrap(err, origName), origName, append(allDispatchStates.names(), commonImageNames()...), true)
 							}
 
 							if ref.String() != mutRef {
@@ -1109,6 +1102,16 @@ type dispatchStates struct {
 
 func newDispatchStates() *dispatchStates {
 	return &dispatchStates{statesByName: map[string]*dispatchState{}}
+}
+
+func (dss *dispatchStates) names() []string {
+	names := make([]string, 0, len(dss.states))
+	for _, s := range dss.states {
+		if s.stageName != "" {
+			names = append(names, s.stageName)
+		}
+	}
+	return names
 }
 
 func (dss *dispatchStates) addState(ds *dispatchState) {

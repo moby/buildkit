@@ -219,6 +219,7 @@ var allTests = integration.TestFuncs(
 	testOCILayoutMultiname,
 	testPlatformWithOSVersion,
 	testMaintainBaseOSVersion,
+	testTargetMistype,
 )
 
 // Tests that depend on the `security.*` entitlements
@@ -9831,6 +9832,45 @@ EOF
 	require.NoError(t, err)
 	require.Len(t, info.Images, 1)
 	require.Equal(t, info.Images[0].Img.Platform.OSVersion, p1.OSVersion)
+}
+
+func testTargetMistype(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
+
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM scratch AS build
+COPY Dockerfile /out
+
+FROM scratch
+COPY --from=build /out /
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"target": "bulid",
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "target stage \"bulid\" could not be found (did you mean build?)")
 }
 
 func runShell(dir string, cmds ...string) error {
