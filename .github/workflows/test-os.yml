@@ -87,7 +87,10 @@ jobs:
         worker:
           - containerd
         pkg:
-          - ./client
+          - ./client#1-4
+          - ./client#2-4
+          - ./client#3-4
+          - ./client#4-4
           - ./cmd/buildctl
           - ./worker/containerd
           - ./solver
