@@ -39,8 +39,7 @@ type setup struct{}
 var _ cdidevices.Setup = &setup{}
 
 func (s *setup) Validate() error {
-	_, err := readVersion()
-	if err == nil {
+	if _, err := readVersion(); err == nil {
 		return nil
 	}
 	b, err := hasNvidiaDevices()
@@ -94,8 +93,11 @@ func (s *setup) Run(ctx context.Context) (err error) {
 	}
 
 	var needsDriver bool
-
-	if _, err := os.Stat("/proc/driver/nvidia"); err != nil {
+	if nvidiaSmi, err := exec.LookPath("nvidia-smi"); err == nil && nvidiaSmi != "" {
+		if err := run(ctx, []string{nvidiaSmi, "-L"}, pw, dgst); err != nil {
+			needsDriver = true
+		}
+	} else if _, err := os.Stat("/proc/driver/nvidia"); err != nil {
 		needsDriver = true
 	}
 
@@ -119,16 +121,22 @@ func (s *setup) Run(ctx context.Context) (err error) {
 		})
 	}
 
-	version, err := readVersion()
-	if err != nil && !needsDriver {
-		return errors.Wrapf(err, "failed to read NVIDIA driver version")
-	}
-	if version == "" {
-		version = defaultVersion
-	}
-	v1, _, ok := strings.Cut(version, ".")
-	if !ok {
-		return errors.Errorf("failed to parse NVIDIA driver version %q", version)
+	var dv string
+	if !hasWSLGPU() {
+		version, err := readVersion()
+		if err != nil && !needsDriver {
+			return errors.Wrapf(err, "failed to read NVIDIA driver version")
+		}
+		if version == "" {
+			version = defaultVersion
+		}
+		var ok bool
+		dv, _, ok = strings.Cut(version, ".")
+		if !ok {
+			return errors.Errorf("failed to parse NVIDIA driver version %q", version)
+		}
+	} else if needsDriver {
+		return errors.Errorf("NVIDIA drivers are required for WSL with non PCI-based GPUs")
 	}
 
 	if err := run(ctx, []string{"apt-get", "update"}, pw, dgst); err != nil {
@@ -174,11 +182,11 @@ func (s *setup) Run(ctx context.Context) (err error) {
 		return err
 	}
 
-	if needsDriver {
+	if needsDriver && dv != "" {
 		// this pretty much never works, is it even worth having?
 		// better approach could be to try to create another chroot/container that is built with same kernel packages as the host
 		// could nvidia-headless-no-dkms- be reusable
-		if err := run(ctx, []string{"apt-get", "install", "-y", "nvidia-driver-" + v1}, pw, dgst); err != nil {
+		if err := run(ctx, []string{"apt-get", "install", "-y", "nvidia-driver-" + dv}, pw, dgst); err != nil {
 			return err
 		}
 		_, err := os.Stat("/proc/driver/nvidia")
@@ -187,13 +195,19 @@ func (s *setup) Run(ctx context.Context) (err error) {
 		}
 	}
 
-	if err := run(ctx, []string{"apt-get", "install", "-y", "--no-install-recommends",
-		"libnvidia-compute-" + v1,
-		"libnvidia-extra-" + v1,
-		"libnvidia-gl-" + v1,
-		"nvidia-utils-" + v1,
+	pkgs := []string{
 		"nvidia-container-toolkit-base",
-	}, pw, dgst); err != nil {
+	}
+	if dv != "" {
+		pkgs = append(pkgs, []string{
+			"libnvidia-compute-" + dv,
+			"libnvidia-extra-" + dv,
+			"libnvidia-gl-" + dv,
+			"nvidia-utils-" + dv,
+		}...)
+	}
+
+	if err := run(ctx, append([]string{"apt-get", "install", "-y", "--no-install-recommends"}, pkgs...), pw, dgst); err != nil {
 		return err
 	}
 
@@ -268,6 +282,10 @@ func hasNvidiaDevices() (bool, error) {
 		}
 	}
 
+	if !found {
+		found = hasWSLGPU()
+	}
+
 	return found, nil
 }
 
@@ -301,4 +319,10 @@ func isDebianOrUbuntu() (bool, error) {
 	}
 
 	return id == "debian" || id == "ubuntu", nil
+}
+
+func hasWSLGPU() bool {
+	// WSL-specific GPU mapping that doesn't expose PCI info.
+	_, err := os.Stat("/dev/dxg")
+	return err == nil
 }
