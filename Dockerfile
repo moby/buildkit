@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile-upstream:master
 
-ARG RUNC_VERSION=v1.2.6
+ARG RUNC_VERSION=b2658005fa3847c465c7a03429f46fa05b848936
 ARG CONTAINERD_VERSION=v2.0.4
 # CONTAINERD_ALT_VERSION_... defines fallback containerd version for integration tests
 ARG CONTAINERD_ALT_VERSION_17=v1.7.25
@@ -43,7 +43,7 @@ COPY --link --from=xx / /
 FROM gobuild-base AS runc
 WORKDIR $GOPATH/src/github.com/opencontainers/runc
 ARG RUNC_VERSION
-ADD --keep-git-dir=true "https://github.com/opencontainers/runc.git#$RUNC_VERSION" .
+ADD --keep-git-dir=true "https://github.com/rata/runc.git#$RUNC_VERSION" .
 ARG TARGETPLATFORM
 # gcc is only installed for libgcc
 # lld has issues building static binaries for ppc so prefer ld for it
