@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"strings"
 	"sync"
@@ -1235,10 +1234,10 @@ func (r *reference) StatFile(ctx context.Context, req client.StatRequest) (*fsty
 }
 
 func grpcClientConn(ctx context.Context) (context.Context, *grpc.ClientConn, error) {
+	addr, dialer := getDialer()
+
 	dialOpts := []grpc.DialOption{
-		grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
-			return stdioConn(), nil
-		}),
+		dialer,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithUnaryInterceptor(grpcerrors.UnaryClientInterceptor),
 		grpc.WithStreamInterceptor(grpcerrors.StreamClientInterceptor),
@@ -1247,7 +1246,7 @@ func grpcClientConn(ctx context.Context) (context.Context, *grpc.ClientConn, err
 	}
 
 	//nolint:staticcheck // ignore SA1019 NewClient has different behavior and needs to be tested
-	cc, err := grpc.DialContext(ctx, "localhost", dialOpts...)
+	cc, err := grpc.DialContext(ctx, addr, dialOpts...)
 	if err != nil {
 		return ctx, nil, errors.Wrap(err, "failed to create grpc client")
 	}
@@ -1257,46 +1256,6 @@ func grpcClientConn(ctx context.Context) (context.Context, *grpc.ClientConn, err
 	// go monitorHealth(ctx, cc, cancel)
 
 	return ctx, cc, nil
-}
-
-func stdioConn() net.Conn {
-	return &conn{os.Stdin, os.Stdout, os.Stdout}
-}
-
-type conn struct {
-	io.Reader
-	io.Writer
-	io.Closer
-}
-
-func (s *conn) LocalAddr() net.Addr {
-	return dummyAddr{}
-}
-
-func (s *conn) RemoteAddr() net.Addr {
-	return dummyAddr{}
-}
-
-func (s *conn) SetDeadline(t time.Time) error {
-	return nil
-}
-
-func (s *conn) SetReadDeadline(t time.Time) error {
-	return nil
-}
-
-func (s *conn) SetWriteDeadline(t time.Time) error {
-	return nil
-}
-
-type dummyAddr struct{}
-
-func (d dummyAddr) Network() string {
-	return "pipe"
-}
-
-func (d dummyAddr) String() string {
-	return "localhost"
 }
 
 func opts() map[string]string {
