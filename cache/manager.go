@@ -16,7 +16,6 @@ import (
 	"github.com/containerd/containerd/v2/pkg/gc"
 	"github.com/containerd/containerd/v2/pkg/labels"
 	cerrdefs "github.com/containerd/errdefs"
-	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/identity"
@@ -26,6 +25,7 @@ import (
 	"github.com/moby/buildkit/util/disk"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/progress"
+	"github.com/moby/sys/user"
 	digest "github.com/opencontainers/go-digest"
 	imagespecidentity "github.com/opencontainers/image-spec/identity"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -62,7 +62,7 @@ type Accessor interface {
 
 	New(ctx context.Context, parent ImmutableRef, s session.Group, opts ...RefOption) (MutableRef, error)
 	GetMutable(ctx context.Context, id string, opts ...RefOption) (MutableRef, error) // Rebase?
-	IdentityMapping() *idtools.IdentityMapping
+	IdentityMapping() *user.IdentityMapping
 	Merge(ctx context.Context, parents []ImmutableRef, pg progress.Controller, opts ...RefOption) (ImmutableRef, error)
 	Diff(ctx context.Context, lower, upper ImmutableRef, pg progress.Controller, opts ...RefOption) (ImmutableRef, error)
 }
@@ -338,7 +338,7 @@ func (cm *cacheManager) init(ctx context.Context) error {
 }
 
 // IdentityMapping returns the userns remapping used for refs
-func (cm *cacheManager) IdentityMapping() *idtools.IdentityMapping {
+func (cm *cacheManager) IdentityMapping() *user.IdentityMapping {
 	return cm.Snapshotter.IdentityMapping()
 }
 
