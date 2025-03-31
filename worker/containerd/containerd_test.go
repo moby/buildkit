@@ -14,6 +14,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestMain(m *testing.M) {
+	defer tests.RunMirror()()
+	m.Run()
+}
+
 func init() {
 	workers.InitContainerdWorker()
 }
