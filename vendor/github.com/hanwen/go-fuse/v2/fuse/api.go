@@ -329,6 +329,12 @@ type MountOptions struct {
 	// directory queries (i.e. 'ls' without '-l') can be faster with
 	// ReadDir, as no per-file stat calls are needed
 	DisableReadDirPlus bool
+
+	// Disable splicing from files to the FUSE device.
+	DisableSplice bool
+
+	// Maximum stacking depth for passthrough files. Defaults to 1.
+	MaxStackDepth int
 }
 
 // RawFileSystem is an interface close to the FUSE wire protocol.
@@ -439,6 +445,7 @@ type RawFileSystem interface {
 
 	StatFs(cancel <-chan struct{}, input *InHeader, out *StatfsOut) (code Status)
 
+	Statx(cancel <-chan struct{}, input *StatxIn, out *StatxOut) (code Status)
 	// This is called on processing the first request. The
 	// filesystem implementation can use the server argument to
 	// talk back to the kernel (through notify methods).
