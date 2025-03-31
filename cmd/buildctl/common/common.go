@@ -37,18 +37,21 @@ func ResolveClient(c *cli.Context) (*client.Client, error) {
 	tlsDir := c.GlobalString("tlsdir")
 
 	if tlsDir != "" {
-		// Look for ca.pem and, if it exists, set caCert to that
-		// Look for cert.pem and, if it exists, set key to that
-		// Look for key.pem and, if it exists, set tlsDir to that
-		for _, v := range [3]string{"ca.pem", "cert.pem", "key.pem"} {
+		// Look for ca.pem or ca.crt and, if it exists, set caCert to that
+		// Look for cert.pem or tls.crt and, if it exists, set cert to that
+		// Look for key.pem or tls.key and, if it exists, set key to that
+		for _, v := range [6]string{"ca.pem", "cert.pem", "key.pem", "ca.crt", "tls.crt", "tls.key"} {
 			file := filepath.Join(tlsDir, v)
 			if _, err := os.Stat(file); err == nil {
 				switch v {
 				case "ca.pem":
+				case "ca.crt":
 					caCert = file
 				case "cert.pem":
+				case "tls.crt":
 					cert = file
 				case "key.pem":
+				case "tls.key":
 					key = file
 				}
 			} else {
