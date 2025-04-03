@@ -486,7 +486,7 @@ github.com/dimchansky/utfbom
 # github.com/distribution/reference v0.6.0
 ## explicit; go 1.20
 github.com/distribution/reference
-# github.com/docker/cli v28.0.2+incompatible
+# github.com/docker/cli v28.0.4+incompatible
 ## explicit
 github.com/docker/cli/cli/config
 github.com/docker/cli/cli/config/configfile
@@ -504,8 +504,8 @@ github.com/docker/docker/pkg/atomicwriter
 github.com/docker/docker/pkg/chrootarchive
 github.com/docker/docker/pkg/idtools
 github.com/docker/docker/profiles/seccomp
-# github.com/docker/docker-credential-helpers v0.8.2
-## explicit; go 1.19
+# github.com/docker/docker-credential-helpers v0.9.3
+## explicit; go 1.21
 github.com/docker/docker-credential-helpers/client
 github.com/docker/docker-credential-helpers/credentials
 # github.com/docker/go-connections v0.5.0
