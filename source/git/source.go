@@ -641,9 +641,9 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 	}
 
 	if idmap := mount.IdentityMapping(); idmap != nil {
-		u := idmap.RootPair()
+		uid, gid := idmap.RootPair()
 		err := filepath.WalkDir(gitDir, func(p string, _ os.DirEntry, _ error) error {
-			return os.Lchown(p, u.UID, u.GID)
+			return os.Lchown(p, uid, gid)
 		})
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to remap git checkout")
@@ -749,10 +749,12 @@ func getDefaultBranch(ctx context.Context, git *gitutil.GitCLI, remoteURL string
 	return ss[0][1], nil
 }
 
-const keyGitRemote = "git-remote"
-const gitRemoteIndex = keyGitRemote + "::"
-const keyGitSnapshot = "git-snapshot"
-const gitSnapshotIndex = keyGitSnapshot + "::"
+const (
+	keyGitRemote     = "git-remote"
+	gitRemoteIndex   = keyGitRemote + "::"
+	keyGitSnapshot   = "git-snapshot"
+	gitSnapshotIndex = keyGitSnapshot + "::"
+)
 
 func search(ctx context.Context, store cache.MetadataStore, key string, idx string) ([]cacheRefMetadata, error) {
 	var results []cacheRefMetadata
