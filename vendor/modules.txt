@@ -486,14 +486,14 @@ github.com/dimchansky/utfbom
 # github.com/distribution/reference v0.6.0
 ## explicit; go 1.20
 github.com/distribution/reference
-# github.com/docker/cli v28.0.2+incompatible
+# github.com/docker/cli v28.0.4+incompatible
 ## explicit
 github.com/docker/cli/cli/config
 github.com/docker/cli/cli/config/configfile
 github.com/docker/cli/cli/config/credentials
 github.com/docker/cli/cli/config/types
 github.com/docker/cli/cli/connhelper/commandconn
-# github.com/docker/docker v28.0.2+incompatible
+# github.com/docker/docker v28.0.4+incompatible
 ## explicit
 github.com/docker/docker/internal/mounttree
 github.com/docker/docker/internal/unshare
@@ -504,8 +504,8 @@ github.com/docker/docker/pkg/atomicwriter
 github.com/docker/docker/pkg/chrootarchive
 github.com/docker/docker/pkg/idtools
 github.com/docker/docker/profiles/seccomp
-# github.com/docker/docker-credential-helpers v0.8.2
-## explicit; go 1.19
+# github.com/docker/docker-credential-helpers v0.9.3
+## explicit; go 1.21
 github.com/docker/docker-credential-helpers/client
 github.com/docker/docker-credential-helpers/credentials
 # github.com/docker/go-connections v0.5.0
@@ -648,7 +648,7 @@ github.com/moby/sys/sequential
 # github.com/moby/sys/signal v0.7.1
 ## explicit; go 1.17
 github.com/moby/sys/signal
-# github.com/moby/sys/user v0.3.1-0.20250227193707-71f0c5ead442
+# github.com/moby/sys/user v0.4.0
 ## explicit; go 1.17
 github.com/moby/sys/user
 # github.com/moby/sys/userns v0.1.0
@@ -663,7 +663,7 @@ github.com/munnerz/goautoneg
 # github.com/opencontainers/go-digest v1.0.0
 ## explicit; go 1.13
 github.com/opencontainers/go-digest
-# github.com/opencontainers/image-spec v1.1.0
+# github.com/opencontainers/image-spec v1.1.1
 ## explicit; go 1.18
 github.com/opencontainers/image-spec/identity
 github.com/opencontainers/image-spec/specs-go
