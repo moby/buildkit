@@ -3,8 +3,9 @@ package debug
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"text/tabwriter"
 
@@ -135,15 +136,8 @@ func printWorkersTable(tw *tabwriter.Writer, winfo []*client.WorkerInfo) {
 	tw.Flush()
 }
 
-func sortedKeys(m map[string]string) []string {
-	s := make([]string, len(m))
-	i := 0
-	for k := range m {
-		s[i] = k
-		i++
-	}
-	sort.Strings(s)
-	return s
+func sortedKeys[T any](m map[string]T) []string {
+	return slices.Sorted(maps.Keys(m))
 }
 
 func commandContext(c *cli.Context) context.Context {

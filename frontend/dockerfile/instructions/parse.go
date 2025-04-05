@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -688,7 +687,7 @@ func parseExpose(req parseRequest) (*ExposeCommand, error) {
 		return nil, err
 	}
 
-	sort.Strings(portsTab)
+	slices.Sort(portsTab)
 	return &ExposeCommand{
 		Ports:           portsTab,
 		withNameAndCode: newWithNameAndCode(req),

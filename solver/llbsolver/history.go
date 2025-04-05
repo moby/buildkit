@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -336,8 +335,8 @@ func (h *HistoryQueue) gc() error {
 	}
 
 	// sort array by newest records first
-	sort.Slice(records, func(i, j int) bool {
-		return records[i].CompletedAt.AsTime().After(records[j].CompletedAt.AsTime())
+	slices.SortFunc(records, func(a, b *controlapi.BuildHistoryRecord) int {
+		return -a.CompletedAt.AsTime().Compare(b.CompletedAt.AsTime())
 	})
 
 	h.mu.Lock()

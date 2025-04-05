@@ -14,7 +14,6 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -2380,8 +2379,8 @@ func mergeLocations(locations ...[]parser.Range) []parser.Range {
 		return allRanges
 	}
 
-	sort.Slice(allRanges, func(i, j int) bool {
-		return allRanges[i].Start.Line < allRanges[j].Start.Line
+	slices.SortFunc(allRanges, func(a, b parser.Range) int {
+		return a.Start.Line - b.Start.Line
 	})
 
 	location := []parser.Range{}
