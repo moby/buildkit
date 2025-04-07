@@ -6,9 +6,8 @@ import (
 	"time"
 
 	"github.com/containerd/continuity/fs"
-	"github.com/docker/docker/pkg/archive"
-	"github.com/docker/docker/pkg/chrootarchive"
-	"github.com/docker/docker/pkg/idtools"
+	archive "github.com/moby/go-archive"
+	"github.com/moby/go-archive/chrootarchive"
 	"github.com/moby/sys/user"
 	copy "github.com/tonistiigi/fsutil/copy"
 )
@@ -40,23 +39,7 @@ func unpack(srcRoot string, src string, destRoot string, dest string, ch copy.Ch
 		BestEffortXattrs: true,
 	}
 	if idmap != nil {
-		// TODO: chrootarchive should be moved into moby/sys like idtools
-		// was moved into moby/sys/user. This section can be removed
-		// when chrootarchive accepts moby/sys/user arguments.
-		for _, uid := range idmap.UIDMaps {
-			opts.IDMap.UIDMaps = append(opts.IDMap.UIDMaps, idtools.IDMap{
-				ContainerID: int(uid.ID),
-				HostID:      int(uid.ParentID),
-				Size:        int(uid.Count),
-			})
-		}
-		for _, gid := range idmap.GIDMaps {
-			opts.IDMap.GIDMaps = append(opts.IDMap.GIDMaps, idtools.IDMap{
-				ContainerID: int(gid.ID),
-				HostID:      int(gid.ParentID),
-				Size:        int(gid.Count),
-			})
-		}
+		opts.IDMap = *idmap
 	}
 	return true, chrootarchive.Untar(file, dest, opts)
 }
