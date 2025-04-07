@@ -1782,10 +1782,11 @@ func testFileOpCopyChmodText(t *testing.T, sb integration.Sandbox) {
 		{"file", "f4", "u+rw,g+r,o-x,o+w"},
 		{"dir", "d1", "a+X"},
 		{"dir", "d2", "g+rw,o+rw"},
+		{"dir", "d3", "u=rwX,go=rX"},
 	}
 
 	st := llb.Image("alpine").
-		Run(llb.Shlex(`sh -c "mkdir /input && touch /input/file && mkdir /input/dir && chmod 0400 /input/dir && mkdir /expected"`))
+		Run(llb.Shlex(`sh -c "mkdir /input && touch /input/file && mkdir /input/dir && chmod 0500 /input/dir && mkdir /expected"`))
 
 	for _, tc := range tcases {
 		st = st.Run(llb.Shlex(`sh -c "cp -a /input/` + tc.src + ` /expected/` + tc.dest + ` && chmod ` + tc.mode + ` /expected/` + tc.dest + `"`))
