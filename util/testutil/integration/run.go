@@ -360,37 +360,80 @@ func lazyMirrorRunnerFunc(t *testing.T, images map[string]string) func() string 
 	var mirror string
 	return func() string {
 		once.Do(func() {
-			host, cleanup, err := runMirror(t, images)
+			m, err := RunMirror()
 			require.NoError(t, err)
-			t.Cleanup(func() { _ = cleanup() })
-			mirror = host
+			require.NoError(t, m.AddImages(t, images))
+			t.Cleanup(func() { _ = m.Close() })
+			mirror = m.Host
 		})
 		return mirror
 	}
 }
 
-func runMirror(t *testing.T, mirroredImages map[string]string) (host string, _ func() error, err error) {
+type Mirror struct {
+	Host    string
+	dir     string
+	cleanup func() error
+}
+
+func (m *Mirror) lock() (*flock.Flock, error) {
+	if m.dir == "" {
+		return nil, nil
+	}
+	if err := os.MkdirAll(m.dir, 0700); err != nil {
+		return nil, err
+	}
+	lock := flock.New(filepath.Join(m.dir, "lock"))
+	if err := lock.Lock(); err != nil {
+		return nil, err
+	}
+	return lock, nil
+}
+
+func (m *Mirror) Close() error {
+	if m.cleanup != nil {
+		return m.cleanup()
+	}
+	return nil
+}
+
+func (m *Mirror) AddImages(t *testing.T, images map[string]string) (err error) {
+	lock, err := m.lock()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if lock != nil {
+			lock.Unlock()
+		}
+	}()
+
+	if err := copyImagesLocal(t, m.Host, images); err != nil {
+		return err
+	}
+	return nil
+}
+
+func RunMirror() (_ *Mirror, err error) {
 	mirrorDir := os.Getenv("BUILDKIT_REGISTRY_MIRROR_DIR")
 
-	var lock *flock.Flock
-	if mirrorDir != "" {
-		if err := os.MkdirAll(mirrorDir, 0700); err != nil {
-			return "", nil, err
-		}
-		lock = flock.New(filepath.Join(mirrorDir, "lock"))
-		if err := lock.Lock(); err != nil {
-			return "", nil, err
-		}
-		defer func() {
-			if err != nil {
-				lock.Unlock()
-			}
-		}()
+	m := &Mirror{
+		dir: mirrorDir,
 	}
 
-	mirror, cleanup, err := NewRegistry(mirrorDir)
+	lock, err := m.lock()
 	if err != nil {
-		return "", nil, err
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			lock.Unlock()
+		}
+	}()
+
+	host, cleanup, err := NewRegistry(mirrorDir)
+	if err != nil {
+		return nil, err
 	}
 	defer func() {
 		if err != nil {
@@ -398,17 +441,16 @@ func runMirror(t *testing.T, mirroredImages map[string]string) (host string, _ f
 		}
 	}()
 
-	if err := copyImagesLocal(t, mirror, mirroredImages); err != nil {
-		return "", nil, err
-	}
+	m.Host = host
+	m.cleanup = cleanup
 
-	if mirrorDir != "" {
+	if lock != nil {
 		if err := lock.Unlock(); err != nil {
-			return "", nil, err
+			return nil, err
 		}
 	}
 
-	return mirror, cleanup, err
+	return m, err
 }
 
 type matrixValue struct {
