@@ -1,6 +1,4 @@
-//go:build go1.10
-
-package unshare // import "github.com/docker/docker/internal/unshare"
+package unshare
 
 import (
 	"fmt"

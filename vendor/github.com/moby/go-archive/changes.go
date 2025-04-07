@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/containerd/log"
-	"github.com/docker/docker/pkg/idtools"
+	"github.com/moby/sys/user"
 )
 
 // ChangeType represents the change type.
@@ -383,7 +383,7 @@ func ChangesSize(newDir string, changes []Change) int64 {
 }
 
 // ExportChanges produces an Archive from the provided changes, relative to dir.
-func ExportChanges(dir string, changes []Change, idMap idtools.IdentityMapping) (io.ReadCloser, error) {
+func ExportChanges(dir string, changes []Change, idMap user.IdentityMapping) (io.ReadCloser, error) {
 	reader, writer := io.Pipe()
 	go func() {
 		ta := newTarAppender(idMap, writer, nil)
