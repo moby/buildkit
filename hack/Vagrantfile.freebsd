@@ -11,7 +11,10 @@ Vagrant.configure("2") do |config|
     sh.inline = <<~SHELL
       #!/usr/bin/env bash
       set -eux -o pipefail
+      freebsd-version -kru
       kldload nullfs
+      # switching to "release_2" ensures compatibility with the current Vagrant box
+      sed -i '' 's/latest/release_2/' /usr/local/etc/pkg/repos/FreeBSD.conf
       pkg install -y git runj
       mkdir -p /vagrant/coverage /vagrant/.tmp/logs
     SHELL
