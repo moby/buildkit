@@ -484,7 +484,9 @@ func (b *rawBridge) Create(cancel <-chan struct{}, input *fuse.CreateIn, name st
 	}
 
 	child, fe := b.addNewChild(parent, name, child, f, input.Flags|syscall.O_CREAT|syscall.O_EXCL, &out.EntryOut)
-	out.Fh = uint64(fe.fh)
+	if fe != nil {
+		out.Fh = uint64(fe.fh)
+	}
 	out.OpenFlags = flags
 
 	b.addBackingID(child, f, &out.OpenOut)

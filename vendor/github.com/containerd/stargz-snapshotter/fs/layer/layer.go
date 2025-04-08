@@ -315,7 +315,7 @@ func (r *Resolver) Resolve(ctx context.Context, hosts source.RegistryHosts, refs
 	}
 
 	// Combine layer information together and cache it.
-	l := newLayer(r, desc, blobR, vr)
+	l := newLayer(r, desc, blobR, vr, r.config.FuseConfig.PassThrough)
 	r.layerCacheMu.Lock()
 	cachedL, done2, added := r.layerCache.Add(name, l)
 	r.layerCacheMu.Unlock()
@@ -375,6 +375,7 @@ func newLayer(
 	desc ocispec.Descriptor,
 	blob *blobRef,
 	vr *reader.VerifiableReader,
+	pth bool,
 ) *layer {
 	return &layer{
 		resolver:         resolver,
@@ -382,6 +383,7 @@ func newLayer(
 		blob:             blob,
 		verifiableReader: vr,
 		prefetchWaiter:   newWaiter(),
+		passThrough:      pth,
 	}
 }
 
@@ -402,6 +404,7 @@ type layer struct {
 
 	prefetchOnce        sync.Once
 	backgroundFetchOnce sync.Once
+	passThrough         bool
 }
 
 func (l *layer) Info() Info {
@@ -583,7 +586,7 @@ func (l *layer) RootNode(baseInode uint32) (fusefs.InodeEmbedder, error) {
 	if l.r == nil {
 		return nil, fmt.Errorf("layer hasn't been verified yet")
 	}
-	return newNode(l.desc.Digest, l.r, l.blob, baseInode, l.resolver.overlayOpaqueType)
+	return newNode(l.desc.Digest, l.r, l.blob, baseInode, l.resolver.overlayOpaqueType, l.passThrough)
 }
 
 func (l *layer) ReadAt(p []byte, offset int64, opts ...remote.Option) (int, error) {
