@@ -5802,7 +5802,6 @@ COPY --from=base unique /
 				Attrs: map[string]string{
 					"ref":            target,
 					"oci-mediatypes": "true",
-					"image-manifest": "true",
 				},
 			},
 		},
@@ -8985,7 +8984,6 @@ COPY --link foo foo
 						Attrs: map[string]string{
 							"ref":            target + "-cache",
 							"oci-mediatypes": "true",
-							"image-manifest": "true",
 						},
 					},
 				},
