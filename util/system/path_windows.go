@@ -5,6 +5,10 @@ import (
 	"strings"
 )
 
+// DefaultPathEnvWindows is left empty to be loaded from the Windows registry hive
+// during container run. See discussions at https://github.com/moby/buildkit/issues/5445
+const DefaultPathEnvWindows = ""
+
 // DefaultSystemVolumeName is the default system volume label on Windows
 const DefaultSystemVolumeName = "C:"
 
