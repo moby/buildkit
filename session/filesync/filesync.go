@@ -3,7 +3,7 @@ package filesync
 import (
 	"context"
 	"fmt"
-	io "io"
+	"io"
 	"net/url"
 	"os"
 	"strconv"
@@ -145,7 +145,7 @@ type progressCb func(int, bool)
 type protocol struct {
 	name   string
 	sendFn func(stream Stream, fs fsutil.FS, progress progressCb) error
-	recvFn func(stream grpc.ClientStream, destDir string, cu CacheUpdater, progress progressCb, differ fsutil.DiffType, mapFunc func(string, *fstypes.Stat) bool) error
+	recvFn func(stream grpc.ClientStream, destDir string, cu CacheUpdater, progress progressCb, differ fsutil.DiffType, mapFunc, metadataOnlyFilter func(string, *fstypes.Stat) bool) error
 }
 
 var supportedProtocols = []protocol{
@@ -158,15 +158,17 @@ var supportedProtocols = []protocol{
 
 // FSSendRequestOpt defines options for FSSend request
 type FSSendRequestOpt struct {
-	Name            string
-	IncludePatterns []string
-	ExcludePatterns []string
-	FollowPaths     []string
-	DestDir         string
-	CacheUpdater    CacheUpdater
-	ProgressCb      func(int, bool)
-	Filter          func(string, *fstypes.Stat) bool
-	Differ          fsutil.DiffType
+	Name               string
+	IncludePatterns    []string
+	ExcludePatterns    []string
+	FollowPaths        []string
+	DestDir            string
+	CacheUpdater       CacheUpdater
+	ProgressCb         func(int, bool)
+	Filter             func(string, *fstypes.Stat) bool
+	Differ             fsutil.DiffType
+	MetadataOnly       bool
+	MetadataOnlyFilter func(string, *fstypes.Stat) bool
 }
 
 // CacheUpdater is an object capable of sending notifications for the cache hash changes
@@ -233,7 +235,16 @@ func FSSync(ctx context.Context, c session.Caller, opt FSSendRequestOpt) error {
 		panic(fmt.Sprintf("invalid protocol: %q", pr.name))
 	}
 
-	return pr.recvFn(stream, opt.DestDir, opt.CacheUpdater, opt.ProgressCb, opt.Differ, opt.Filter)
+	var metadataOnlyFilter func(string, *fstypes.Stat) bool
+	if opt.MetadataOnly {
+		if opt.MetadataOnlyFilter != nil {
+			metadataOnlyFilter = opt.MetadataOnlyFilter
+		} else {
+			metadataOnlyFilter = func(string, *fstypes.Stat) bool { return false }
+		}
+	}
+
+	return pr.recvFn(stream, opt.DestDir, opt.CacheUpdater, opt.ProgressCb, opt.Differ, opt.Filter, metadataOnlyFilter)
 }
 
 type FSSyncTarget interface {

@@ -9,6 +9,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
@@ -70,6 +71,7 @@ import (
 	"github.com/spdx/tools-golang/spdx"
 	"github.com/stretchr/testify/require"
 	"github.com/tonistiigi/fsutil"
+	fsutiltypes "github.com/tonistiigi/fsutil/types"
 	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/mod/semver"
 	"golang.org/x/sync/errgroup"
@@ -225,6 +227,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testFrontendLintSkipVerifyPlatforms,
 	testRunValidExitCodes,
 	testFileOpSymlink,
+	testMetadataOnlyLocal,
 }
 
 func TestIntegration(t *testing.T) {
@@ -8452,6 +8455,150 @@ func testParallelLocalBuilds(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 }
 
+func testMetadataOnlyLocal(t *testing.T, sb integration.Sandbox) {
+	ctx, cancel := context.WithCancelCause(sb.Context())
+	defer func() { cancel(errors.WithStack(context.Canceled)) }()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	srcDir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("data", []byte("contents"), 0600),
+		fstest.CreateDir("dir", 0700),
+		fstest.CreateFile("dir/file1", []byte("file1"), 0600),
+		fstest.CreateFile("dir/file2", []byte("file2"), 0600),
+		fstest.CreateDir("dir/subdir", 0700),
+		fstest.CreateDir("dir/subdir2", 0700),
+		fstest.CreateFile("dir/subdir/bar1", []byte("bar1"), 0600),
+		fstest.CreateFile("dir/subdir/bar2", []byte("bar2"), 0600),
+		fstest.CreateFile("dir/subdir2/bar3", []byte("bar3"), 0600),
+		fstest.CreateFile("foo", []byte("foo"), 0602),
+	)
+
+	def, err := llb.Local("source", llb.MetadataOnlyTransfer([]string{"dir/**/*1", "foo"})).Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+
+	_, err = c.Solve(ctx, def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			"source": srcDir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	_, err = os.ReadFile(filepath.Join(destDir, "data"))
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
+
+	act, err := os.ReadFile(filepath.Join(destDir, "dir/file1"))
+	require.NoError(t, err)
+	require.Equal(t, "file1", string(act))
+
+	act, err = os.ReadFile(filepath.Join(destDir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, "foo", string(act))
+
+	_, err = os.ReadFile(filepath.Join(destDir, "dir/file2"))
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
+
+	act, err = os.ReadFile(filepath.Join(destDir, "dir/subdir/bar1"))
+	require.NoError(t, err)
+	require.Equal(t, "bar1", string(act))
+
+	_, err = os.Stat(filepath.Join(destDir, "dir/subdir2"))
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
+
+	_, err = os.ReadFile(filepath.Join(destDir, "dir/subdir/bar2"))
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
+
+	dt, err := os.ReadFile(filepath.Join(destDir, ".fsutil-metadata"))
+	require.NoError(t, err)
+
+	stats := parseFSMetadata(t, dt)
+	require.Equal(t, 10, len(stats))
+
+	require.Equal(t, "data", stats[0].Path)
+	require.Equal(t, "dir", stats[1].Path)
+	require.Equal(t, "dir/file1", stats[2].Path)
+	require.Equal(t, "dir/file2", stats[3].Path)
+	require.Equal(t, "dir/subdir", stats[4].Path)
+	require.Equal(t, "dir/subdir/bar1", stats[5].Path)
+	require.Equal(t, "dir/subdir/bar2", stats[6].Path)
+	require.Equal(t, "dir/subdir2", stats[7].Path)
+	require.Equal(t, "dir/subdir2/bar3", stats[8].Path)
+	require.Equal(t, "foo", stats[9].Path)
+
+	err = os.RemoveAll(filepath.Join(srcDir.Name, "dir/subdir"))
+	require.NoError(t, err)
+
+	err = os.WriteFile(filepath.Join(srcDir.Name, "dir/file1"), []byte("file1-updated"), 0600)
+	require.NoError(t, err)
+
+	err = os.WriteFile(filepath.Join(srcDir.Name, "dir/bar1"), []byte("bar1"), 0600)
+	require.NoError(t, err)
+
+	def, err = llb.Local("source", llb.MetadataOnlyTransfer([]string{"dir/**/*1", "foo"})).Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir = t.TempDir()
+
+	_, err = c.Solve(ctx, def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			"source": srcDir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	_, err = os.ReadFile(filepath.Join(destDir, "data"))
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
+
+	act, err = os.ReadFile(filepath.Join(destDir, "dir/file1"))
+	require.NoError(t, err)
+	require.Equal(t, "file1-updated", string(act))
+
+	act, err = os.ReadFile(filepath.Join(destDir, "dir/bar1"))
+	require.NoError(t, err)
+	require.Equal(t, "bar1", string(act))
+
+	_, err = os.Stat(filepath.Join(destDir, "dir/subdir"))
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
+
+	dt, err = os.ReadFile(filepath.Join(destDir, ".fsutil-metadata"))
+	require.NoError(t, err)
+
+	stats = parseFSMetadata(t, dt)
+	require.Equal(t, 8, len(stats))
+
+	require.Equal(t, "data", stats[0].Path)
+	require.Equal(t, "dir", stats[1].Path)
+	require.Equal(t, "dir/bar1", stats[2].Path)
+	require.Equal(t, "dir/file1", stats[3].Path)
+	require.Equal(t, "dir/file2", stats[4].Path)
+	require.Equal(t, "dir/subdir2", stats[5].Path)
+	require.Equal(t, "dir/subdir2/bar3", stats[6].Path)
+	require.Equal(t, "foo", stats[7].Path)
+}
+
 // testRelativeMountpoint is a test that relative paths for mountpoints don't
 // fail when runc is upgraded to at least rc95, which introduces an error when
 // mountpoints are not absolute. Relative paths should be transformed to
@@ -11661,4 +11808,18 @@ devices:
 	require.Contains(t, strings.TrimSpace(string(dt)), `BAR=injected`)
 	require.NotContains(t, strings.TrimSpace(string(dt)), `BAZ=injected`)
 	require.NotContains(t, strings.TrimSpace(string(dt)), `QUX=injected`)
+}
+
+func parseFSMetadata(t *testing.T, dt []byte) []fsutiltypes.Stat {
+	var m []fsutiltypes.Stat
+	for len(dt) > 0 {
+		var s fsutiltypes.Stat
+		n := binary.LittleEndian.Uint32(dt[:4])
+		dt = dt[4:]
+		err := s.Unmarshal(dt[:n])
+		require.NoError(t, err)
+		m = append(m, *s.CloneVT())
+		dt = dt[n:]
+	}
+	return m
 }
