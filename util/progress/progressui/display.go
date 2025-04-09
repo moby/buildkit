@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -518,8 +519,8 @@ func mergeIntervals(intervals []interval) []interval {
 	}
 
 	// sort intervals by start time
-	sort.Slice(intervals, func(i, j int) bool {
-		return intervals[i].start.Before(*intervals[j].start)
+	slices.SortFunc(intervals, func(a, b interval) int {
+		return a.start.Compare(*b.start)
 	})
 
 	var merged []interval

@@ -1,12 +1,14 @@
 package dockerfile
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"testing"
 	"time"
@@ -1483,14 +1485,10 @@ func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestPara
 
 		require.Equal(t, len(warnings), len(lintResults.Warnings))
 
-		sort.Slice(lintResults.Warnings, func(i, j int) bool {
-			// sort by line number in ascending order
-			firstRange := lintResults.Warnings[i].Location.Ranges[0]
-			secondRange := lintResults.Warnings[j].Location.Ranges[0]
-			if firstRange.Start.Line == secondRange.Start.Line {
-				return lintResults.Warnings[i].Detail < lintResults.Warnings[j].Detail
-			}
-			return firstRange.Start.Line < secondRange.Start.Line
+		slices.SortFunc(lintResults.Warnings, func(a, b lint.Warning) int {
+			firstRange := a.Location.Ranges[0]
+			secondRange := b.Location.Ranges[0]
+			return cmp.Or(cmp.Compare(firstRange.Start.Line, secondRange.Start.Line), cmp.Compare(a.Detail, b.Detail))
 		})
 		// Compare expectedLintWarning with actual lint results
 		for i, w := range lintResults.Warnings {

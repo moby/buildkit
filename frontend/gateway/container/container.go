@@ -1,11 +1,12 @@
 package container
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"path/filepath"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -276,8 +277,8 @@ func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manage
 	}
 
 	// sort mounts so parents are mounted first
-	sort.Slice(p.Mounts, func(i, j int) bool {
-		return p.Mounts[i].Dest < p.Mounts[j].Dest
+	slices.SortFunc(p.Mounts, func(a, b executor.Mount) int {
+		return cmp.Compare(a.Dest, b.Dest)
 	})
 
 	return p, nil

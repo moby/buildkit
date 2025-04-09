@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -462,7 +462,7 @@ func (mv matrixValue) functionSuffix() string {
 	if len(mv.fn) == 0 {
 		return ""
 	}
-	sort.Strings(mv.fn)
+	slices.Sort(mv.fn)
 	sb := &strings.Builder{}
 	for _, f := range mv.fn {
 		sb.Write([]byte("/" + f + "=" + mv.values[f].name))
