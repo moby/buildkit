@@ -18,7 +18,6 @@ import (
 	authutil "github.com/containerd/containerd/v2/core/remotes/docker/auth"
 	remoteserrors "github.com/containerd/containerd/v2/core/remotes/errors"
 	"github.com/docker/cli/cli/config"
-	"github.com/docker/cli/cli/config/configfile"
 	"github.com/docker/cli/cli/config/types"
 	http "github.com/hashicorp/go-cleanhttp"
 	"github.com/moby/buildkit/session"
@@ -32,6 +31,11 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// ConfigFile Interface exposes GetAuthConfig method.
+type AuthConfigProvider interface {
+	GetAuthConfig(registryHostname string) (types.AuthConfig, error)
+}
+
 const (
 	defaultExpiration      = 60
 	dockerHubConfigfileKey = "https://index.docker.io/v1/"
@@ -40,7 +44,7 @@ const (
 
 type DockerAuthProviderConfig struct {
 	// ConfigFile is the docker config file
-	ConfigFile *configfile.ConfigFile
+	ConfigFile AuthConfigProvider
 	// TLSConfigs is a map of host to TLS config
 	TLSConfigs map[string]*AuthTLSConfig
 	// ExpireCachedAuth is a function that returns true auth config should be refreshed
@@ -76,7 +80,7 @@ func NewDockerAuthProvider(cfg DockerAuthProviderConfig) session.Attachable {
 type authProvider struct {
 	authConfigCache map[string]authConfigCacheEntry
 	expireAc        func(time.Time, string) bool
-	config          *configfile.ConfigFile
+	config          AuthConfigProvider
 	seeds           *tokenSeeds
 	logger          progresswriter.Logger
 	loggerCache     map[string]struct{}
