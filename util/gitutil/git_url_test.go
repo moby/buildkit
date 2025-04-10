@@ -184,7 +184,7 @@ func TestParseURL(t *testing.T) {
 				Scheme:   HTTPSProtocol,
 				Host:     "github.com",
 				Path:     "/moby/buildkit",
-				Fragment: &GitURLFragment{Ref: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", Subdir: "/subdir"},
+				Fragment: &GitURLFragment{Ref: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", CommitHash: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", Subdir: "/subdir"},
 			},
 		},
 		{
@@ -193,7 +193,12 @@ func TestParseURL(t *testing.T) {
 		},
 		{
 			url: "https://github.com/moby/buildkit##tag=v1.0.0,commit=deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
-			err: true, // tag and commit are exclusive (FIXME)
+			result: GitURL{
+				Scheme:   HTTPSProtocol,
+				Host:     "github.com",
+				Path:     "/moby/buildkit",
+				Fragment: &GitURLFragment{Ref: "v1.0.0", CommitHash: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"},
+			},
 		},
 	}
 	for _, test := range tests {

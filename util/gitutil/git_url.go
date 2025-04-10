@@ -61,6 +61,8 @@ type GitURL struct {
 type GitURLFragment struct {
 	// Ref is the git reference
 	Ref string
+	// CommitHash is verified against Ref if specified
+	CommitHash string
 	// Subdir is the sub-directory inside the git repository to use
 	Subdir string
 }
@@ -105,7 +107,7 @@ func splitGitFragmentCSVForm(fragment string) (*GitURLFragment, error) {
 			if !IsCommitSHA(value) {
 				return nil, errors.Errorf("invalid commit hash %q", value)
 			}
-			fallthrough
+			res.CommitHash = value
 		case "tag", "branch":
 			refs[key] = value
 		case "subdir":
@@ -116,13 +118,15 @@ func splitGitFragmentCSVForm(fragment string) (*GitURLFragment, error) {
 	}
 	if len(refs) > 0 {
 		if len(refs) > 1 {
-			// TODO: allow specifying tag and commit together https://github.com/moby/buildkit/issues/5871
-			return nil, errors.New("tag, branch, and commit are exclusive")
+			return nil, errors.New("tag and branch are exclusive")
 		}
 		for _, v := range refs {
 			res.Ref = v
 			break
 		}
+	}
+	if res.CommitHash != "" && res.Ref == "" {
+		res.Ref = res.CommitHash
 	}
 	return res, nil
 }
