@@ -19,6 +19,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -46,6 +47,8 @@ import (
 	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/exporter"
+	"github.com/moby/buildkit/session/exporter/exporterprovider"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/session/secrets/secretsprovider"
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
@@ -114,6 +117,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testUser,
 	testOCIExporter,
 	testOCIExporterContentStore,
+	testSessionExporter,
 	testWhiteoutParentDir,
 	testFrontendImageNaming,
 	testDuplicateWhiteouts,
@@ -2308,6 +2312,88 @@ func testOCILayoutSource(t *testing.T, sb integration.Sandbox) {
 	dt, err = os.ReadFile(filepath.Join(destDir, "bar"))
 	require.NoError(t, err)
 	require.Equal(t, []byte("second"+newLine), dt)
+}
+
+func testSessionExporter(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureOCILayout)
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	// make an image that is exported there
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	busybox := llb.Image(imgName)
+	st := integration.UnixOrWindows(
+		llb.Scratch(),
+		llb.Image(imgName),
+	)
+
+	run := func(cmd string) {
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+
+	cmdPrefix := integration.UnixOrWindows(
+		`sh -c "echo -n`,
+		`cmd /C "echo`,
+	)
+	run(fmt.Sprintf(`%s first > foo"`, cmdPrefix))
+	run(fmt.Sprintf(`%s second > bar"`, cmdPrefix))
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	var attachable []session.Attachable
+	target := filesync.NewFSSyncTarget()
+
+	attachable = append(attachable, target)
+
+	outW := bytes.NewBuffer(nil)
+	exporterCalled := false
+	exporter := exporterprovider.New(func(ctx context.Context, md map[string][]byte) ([]*exporter.ExporterRequest, error) {
+		exporterCalled = true
+		target.Add(filesync.WithFSSync(0, fixedWriteCloser(nopWriteCloser{outW})))
+		return []*exporter.ExporterRequest{
+			{
+				Type: ExporterOCI,
+				Attrs: map[string]string{
+					"compression": "zstd",
+				},
+			},
+		}, nil
+	})
+	require.NoError(t, err)
+	attachable = append(attachable, exporter)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		EnableSessionExporter: true,
+		Session:               attachable,
+	}, nil)
+	require.NoError(t, err)
+
+	require.True(t, exporterCalled)
+
+	// extract the tar stream to the directory as OCI layout
+	m, err := testutil.ReadTarToMap(outW.Bytes(), false)
+	require.NoError(t, err)
+
+	var index ocispecs.Index
+	err = json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &index)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(index.Manifests))
+	digest := index.Manifests[0].Digest
+
+	var mfst ocispecs.Manifest
+	err = json.Unmarshal(m[path.Join("blobs/sha256", digest.Hex())].Data, &mfst)
+	require.NoError(t, err)
+
+	if runtime.GOOS == "windows" {
+		mfst.Layers = mfst.Layers[1:] // skip base layer
+	}
+
+	require.Equal(t, 2, len(mfst.Layers))
+	for _, layer := range mfst.Layers {
+		require.Contains(t, layer.MediaType, "application/vnd.oci.image.layer.v1.tar+zstd")
+	}
 }
 
 func testOCILayoutPlatformSource(t *testing.T, sb integration.Sandbox) {

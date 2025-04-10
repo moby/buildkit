@@ -95,6 +95,7 @@ const (
 	CapSourceDateEpoch apicaps.CapID = "exporter.sourcedateepoch"
 
 	CapMultipleExporters apicaps.CapID = "exporter.multiple"
+	CapSessionExporter   apicaps.CapID = "exporter.session"
 
 	CapSourcePolicy apicaps.CapID = "source.policy"
 
@@ -515,6 +516,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapMultipleExporters,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapSessionExporter,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})
