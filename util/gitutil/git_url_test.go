@@ -151,6 +151,50 @@ func TestParseURL(t *testing.T) {
 				Path:   "/moby/buildkit",
 			},
 		},
+		{
+			url: "https://github.com/moby/buildkit##tag=v1.0.0,subdir=/subdir",
+			result: GitURL{
+				Scheme:   HTTPSProtocol,
+				Host:     "github.com",
+				Path:     "/moby/buildkit",
+				Fragment: &GitURLFragment{Ref: "v1.0.0", Subdir: "/subdir"},
+			},
+		},
+		{
+			url: `https://github.com/moby/buildkit##"tag=tag,with,comma",subdir=/subdir`,
+			result: GitURL{
+				Scheme:   HTTPSProtocol,
+				Host:     "github.com",
+				Path:     "/moby/buildkit",
+				Fragment: &GitURLFragment{Ref: "tag,with,comma", Subdir: "/subdir"},
+			},
+		},
+		{
+			url: "https://github.com/moby/buildkit##branch=v1.0,subdir=subdir",
+			result: GitURL{
+				Scheme:   HTTPSProtocol,
+				Host:     "github.com",
+				Path:     "/moby/buildkit",
+				Fragment: &GitURLFragment{Ref: "v1.0", Subdir: "subdir"},
+			},
+		},
+		{
+			url: "https://github.com/moby/buildkit##commit=deadbeefdeadbeefdeadbeefdeadbeefdeadbeef,subdir=/subdir",
+			result: GitURL{
+				Scheme:   HTTPSProtocol,
+				Host:     "github.com",
+				Path:     "/moby/buildkit",
+				Fragment: &GitURLFragment{Ref: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", Subdir: "/subdir"},
+			},
+		},
+		{
+			url: "https://github.com/moby/buildkit##tag=v1.0.0,branch=v1.0",
+			err: true, // tag and branch are exclusive
+		},
+		{
+			url: "https://github.com/moby/buildkit##tag=v1.0.0,commit=deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+			err: true, // tag and commit are exclusive (FIXME)
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.url, func(t *testing.T) {
