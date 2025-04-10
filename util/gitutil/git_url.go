@@ -7,6 +7,7 @@ import (
 
 	"github.com/moby/buildkit/util/sshutil"
 	"github.com/pkg/errors"
+	"github.com/tonistiigi/go-csvvalue"
 )
 
 const (
@@ -66,12 +67,48 @@ type GitURLFragment struct {
 
 // splitGitFragment splits a git URL fragment into its respective git
 // reference and subdirectory components.
-func splitGitFragment(fragment string) *GitURLFragment {
+func splitGitFragment(fragment string) (*GitURLFragment, error) {
+	if strings.HasPrefix(fragment, "#") {
+		// Double-hash in the unparsed URL.
+		// e.g., https://github.com/user/repo.git##ref=tag,subdir=/dir
+		return splitGitFragmentCSVForm(fragment)
+	}
+	// Single-hash in the unparsed URL.
+	// e.g., https://github.com/user/repo.git#branch_or_tag_or_commit:dir
 	if fragment == "" {
-		return nil
+		return nil, nil
 	}
 	ref, subdir, _ := strings.Cut(fragment, ":")
-	return &GitURLFragment{Ref: ref, Subdir: subdir}
+	return &GitURLFragment{Ref: ref, Subdir: subdir}, nil
+}
+
+func splitGitFragmentCSVForm(fragment string) (*GitURLFragment, error) {
+	fragment = strings.TrimPrefix(fragment, "#")
+	if fragment == "" {
+		return nil, nil
+	}
+	fields, err := csvvalue.Fields(fragment, nil)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to parse CSV %q", fragment)
+	}
+
+	res := &GitURLFragment{}
+	for _, field := range fields {
+		key, value, ok := strings.Cut(field, "=")
+		if !ok {
+			return nil, errors.Errorf("invalid field '%s' must be a key=value pair", field)
+		}
+		key = strings.ToLower(key)
+		switch key {
+		case "ref":
+			res.Ref = value
+		case "subdir":
+			res.Subdir = value
+		default:
+			return nil, errors.Errorf("unexpected key '%s' in '%s' (supported keys: ref, subdir)", key, field)
+		}
+	}
+	return res, nil
 }
 
 // ParseURL parses a BuildKit-style Git URL (that may contain additional
@@ -86,11 +123,11 @@ func ParseURL(remote string) (*GitURL, error) {
 		if err != nil {
 			return nil, err
 		}
-		return fromURL(url), nil
+		return fromURL(url)
 	}
 
 	if url, err := sshutil.ParseSCPStyleURL(remote); err == nil {
-		return fromSCPStyleURL(url), nil
+		return fromSCPStyleURL(url)
 	}
 
 	return nil, ErrUnknownProtocol
@@ -105,28 +142,46 @@ func IsGitTransport(remote string) bool {
 	return sshutil.IsImplicitSSHTransport(remote)
 }
 
-func fromURL(url *url.URL) *GitURL {
+// ErrInvalidURLFragemnt is returned for an invalid URL fragment
+type ErrInvalidURLFragemnt struct {
+	error
+}
+
+func fromURL(url *url.URL) (*GitURL, error) {
 	withoutFragment := *url
 	withoutFragment.Fragment = ""
-	return &GitURL{
+	fragment, err := splitGitFragment(url.Fragment)
+	if err != nil {
+		return nil, &ErrInvalidURLFragemnt{
+			error: errors.Wrapf(err, "failed to parse URL fragment %q", url.Fragment),
+		}
+	}
+	gitURL := &GitURL{
 		Scheme:   url.Scheme,
 		User:     url.User,
 		Host:     url.Host,
 		Path:     url.Path,
-		Fragment: splitGitFragment(url.Fragment),
+		Fragment: fragment,
 		Remote:   withoutFragment.String(),
 	}
+	return gitURL, nil
 }
 
-func fromSCPStyleURL(url *sshutil.SCPStyleURL) *GitURL {
+func fromSCPStyleURL(url *sshutil.SCPStyleURL) (*GitURL, error) {
 	withoutFragment := *url
 	withoutFragment.Fragment = ""
+	fragment, err := splitGitFragment(url.Fragment)
+	if err != nil {
+		return nil, &ErrInvalidURLFragemnt{
+			error: errors.Wrapf(err, "failed to parse URL fragment %q", url.Fragment),
+		}
+	}
 	return &GitURL{
 		Scheme:   SSHProtocol,
 		User:     url.User,
 		Host:     url.Host,
 		Path:     url.Path,
-		Fragment: splitGitFragment(url.Fragment),
+		Fragment: fragment,
 		Remote:   withoutFragment.String(),
-	}
+	}, nil
 }

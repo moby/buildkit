@@ -151,6 +151,37 @@ func TestParseURL(t *testing.T) {
 				Path:   "/moby/buildkit",
 			},
 		},
+		{
+			url: "https://github.com/moby/buildkit##ref=v1.0.0,subdir=/subdir",
+			result: GitURL{
+				Scheme:   HTTPSProtocol,
+				Host:     "github.com",
+				Path:     "/moby/buildkit",
+				Fragment: &GitURLFragment{Ref: "v1.0.0", Subdir: "/subdir"},
+			},
+		},
+		{
+			url: "https://github.com/moby/buildkit##ref=v1.0.0,subdir=/subdir,unknown-fragment=invalid",
+			err: true,
+		},
+		{
+			url: `https://github.com/moby/buildkit##"ref=ref,with,comma",subdir=/subdir`,
+			result: GitURL{
+				Scheme:   HTTPSProtocol,
+				Host:     "github.com",
+				Path:     "/moby/buildkit",
+				Fragment: &GitURLFragment{Ref: "ref,with,comma", Subdir: "/subdir"},
+			},
+		},
+		{
+			url: `https://github.com/moby/buildkit##ref=#ref-starts-with-sharp,subdir=/subdir`,
+			result: GitURL{
+				Scheme:   HTTPSProtocol,
+				Host:     "github.com",
+				Path:     "/moby/buildkit",
+				Fragment: &GitURLFragment{Ref: "#ref-starts-with-sharp", Subdir: "/subdir"},
+			},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.url, func(t *testing.T) {
