@@ -322,6 +322,15 @@ func Git(url, ref string, opts ...GitOption) State {
 		addCap(&gi.Constraints, pb.CapSourceGitMountSSHSock)
 	}
 
+	commitHash := gi.CommitHash
+	if commitHash == "" && remote != nil && remote.Fragment != nil {
+		commitHash = remote.Fragment.CommitHash
+	}
+	if commitHash != "" {
+		attrs[pb.AttrCommitHash] = commitHash
+		addCap(&gi.Constraints, pb.CapSourceGitCommitHash)
+	}
+
 	addCap(&gi.Constraints, pb.CapSourceGit)
 
 	source := NewSource("git://"+id, attrs, gi.Constraints)
@@ -345,6 +354,7 @@ type GitInfo struct {
 	addAuthCap       bool
 	KnownSSHHosts    string
 	MountSSHSock     string
+	CommitHash       string
 }
 
 func KeepGitDir() GitOption {
@@ -370,6 +380,12 @@ func KnownSSHHosts(key string) GitOption {
 func MountSSHSock(sshID string) GitOption {
 	return gitOptionFunc(func(gi *GitInfo) {
 		gi.MountSSHSock = sshID
+	})
+}
+
+func CommitHash(v string) GitOption {
+	return gitOptionFunc(func(gi *GitInfo) {
+		gi.CommitHash = v
 	})
 }
 

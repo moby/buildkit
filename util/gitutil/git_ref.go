@@ -25,6 +25,10 @@ type GitRef struct {
 	// Commit is optional.
 	Commit string
 
+	// CommitHash verifies Commit if specified.
+	// CommitHash is optional.
+	CommitHash string
+
 	// SubDir is a directory path inside the repo.
 	// SubDir is optional.
 	SubDir string
@@ -97,7 +101,7 @@ func ParseGitRef(ref string) (*GitRef, error) {
 		_, res.Remote, _ = strings.Cut(res.Remote, "://")
 	}
 	if remote.Fragment != nil {
-		res.Commit, res.SubDir = remote.Fragment.Ref, remote.Fragment.Subdir
+		res.Commit, res.CommitHash, res.SubDir = remote.Fragment.Ref, remote.Fragment.CommitHash, remote.Fragment.Subdir
 	}
 
 	repoSplitBySlash := strings.Split(res.Remote, "/")

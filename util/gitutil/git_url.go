@@ -61,6 +61,8 @@ type GitURL struct {
 type GitURLFragment struct {
 	// Ref is the git reference
 	Ref string
+	// CommitHash is verified against Ref if specified
+	CommitHash string
 	// Subdir is the sub-directory inside the git repository to use
 	Subdir string
 }
@@ -102,11 +104,16 @@ func splitGitFragmentCSVForm(fragment string) (*GitURLFragment, error) {
 		switch key {
 		case "ref":
 			res.Ref = value
+		case "commit":
+			res.CommitHash = value
 		case "subdir":
 			res.Subdir = value
 		default:
-			return nil, errors.Errorf("unexpected key '%s' in '%s' (supported keys: ref, subdir)", key, field)
+			return nil, errors.Errorf("unexpected key '%s' in '%s' (supported keys: ref, commit, subdir)", key, field)
 		}
+	}
+	if res.CommitHash != "" && res.Ref == "" {
+		res.Ref = res.CommitHash
 	}
 	return res, nil
 }

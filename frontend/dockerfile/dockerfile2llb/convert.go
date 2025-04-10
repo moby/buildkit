@@ -1513,7 +1513,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 			if gitRef.SubDir != "" {
 				commit += ":" + gitRef.SubDir
 			}
-			gitOptions := []llb.GitOption{llb.WithCustomName(pgName)}
+			gitOptions := []llb.GitOption{llb.WithCustomName(pgName), llb.CommitHash(gitRef.CommitHash)}
 			if cfg.keepGitDir {
 				gitOptions = append(gitOptions, llb.KeepGitDir())
 			}
