@@ -92,6 +92,8 @@ func (gs *gitSource) Identifier(scheme, ref string, attrs map[string]string, pla
 			id.KnownSSHHosts = v
 		case pb.AttrMountSSHSock:
 			id.MountSSHSock = v
+		case pb.AttrGitChecksum:
+			id.Checksum = v
 		}
 	}
 
@@ -349,10 +351,19 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 	gs.locker.Lock(remote)
 	defer gs.locker.Unlock(remote)
 
-	if ref := gs.src.Ref; ref != "" && gitutil.IsCommitSHA(ref) {
-		cacheKey := gs.shaToCacheKey(ref, "")
+	var refCommitFullHash, ref2 string
+	if gitutil.IsCommitSHA(gs.src.Checksum) && !gs.src.KeepGitDir {
+		refCommitFullHash = gs.src.Checksum
+		ref2 = gs.src.Ref
+	}
+	if refCommitFullHash == "" && gitutil.IsCommitSHA(gs.src.Ref) {
+		refCommitFullHash = gs.src.Ref
+	}
+	if refCommitFullHash != "" {
+		cacheKey := gs.shaToCacheKey(refCommitFullHash, ref2)
 		gs.cacheKey = cacheKey
-		return cacheKey, ref, nil, true, nil
+		// gs.src.Checksum is verified when checking out the commit
+		return cacheKey, refCommitFullHash, nil, true, nil
 	}
 
 	gs.getAuthToken(ctx, g)
@@ -415,7 +426,9 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 	if !gitutil.IsCommitSHA(sha) {
 		return "", "", nil, false, errors.Errorf("invalid commit sha %q", sha)
 	}
-
+	if gs.src.Checksum != "" && !strings.HasPrefix(sha, gs.src.Checksum) {
+		return "", "", nil, false, errors.Errorf("expected checksum to match %s, got %s", gs.src.Checksum, sha)
+	}
 	cacheKey := gs.shaToCacheKey(sha, usedRef)
 	gs.cacheKey = cacheKey
 	return cacheKey, sha, nil, true, nil
@@ -536,6 +549,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		subdir = "."
 	}
 
+	checkedoutRef := "HEAD"
 	if gs.src.KeepGitDir && subdir == "." {
 		checkoutDirGit := filepath.Join(checkoutDir, ".git")
 		if err := os.MkdirAll(checkoutDir, 0711); err != nil {
@@ -605,6 +619,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to checkout remote %s", urlutil.RedactCredentials(gs.src.Remote))
 		}
+		checkedoutRef = ref // HEAD may not exist
 		if subdir != "." {
 			d, err := os.Open(filepath.Join(cd, subdir))
 			if err != nil {
@@ -635,6 +650,16 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 	}
 
 	git = git.New(gitutil.WithWorkTree(checkoutDir), gitutil.WithGitDir(gitDir))
+	if gs.src.Checksum != "" {
+		actualHashBuf, err := git.Run(ctx, "rev-parse", checkedoutRef)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to rev-parse %s for %s", checkedoutRef, urlutil.RedactCredentials(gs.src.Remote))
+		}
+		actualHash := strings.TrimSpace(string(actualHashBuf))
+		if !strings.HasPrefix(actualHash, gs.src.Checksum) {
+			return nil, errors.Errorf("expected checksum to match %s, got %s", gs.src.Checksum, actualHash)
+		}
+	}
 	_, err = git.Run(ctx, "submodule", "update", "--init", "--recursive", "--depth=1")
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to update submodules for %s", urlutil.RedactCredentials(gs.src.Remote))
