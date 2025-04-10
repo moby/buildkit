@@ -1078,7 +1078,7 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 				if exit.Code == 0 {
 					continue
 				}
-				exitError = grpcerrors.FromGRPC(status.ErrorProto(&spb.Status{
+				exitError = grpcerrors.FromGRPC(ctx, status.ErrorProto(&spb.Status{
 					Code:    exit.Error.Code,
 					Message: exit.Error.Message,
 					Details: exit.Error.Details,

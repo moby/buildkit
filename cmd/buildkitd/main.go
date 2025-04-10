@@ -724,7 +724,7 @@ func unaryInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, 
 	if err != nil {
 		bklog.G(ctx).Errorf("%s returned error: %v", info.FullMethod, err)
 		if logrus.GetLevel() >= logrus.DebugLevel {
-			fmt.Fprintf(os.Stderr, "%+v", stack.Formatter(grpcerrors.FromGRPC(err)))
+			fmt.Fprintf(os.Stderr, "%+v", stack.Formatter(grpcerrors.FromGRPC(ctx, err)))
 		}
 	}
 	return resp, err

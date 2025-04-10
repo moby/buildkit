@@ -149,7 +149,7 @@ func AsGRPCStatus(err error) (*status.Status, bool) {
 	return nil, false
 }
 
-func FromGRPC(err error) error {
+func FromGRPC(ctx context.Context, err error) error {
 	if err == nil {
 		return nil
 	}
@@ -172,6 +172,7 @@ func FromGRPC(err error) error {
 	for _, d := range pb.Details {
 		m, err := typeurl.UnmarshalAny(d)
 		if err != nil {
+			bklog.G(ctx).Warnf("decoding type %q: %v", d.GetTypeUrl(), err)
 			continue
 		}
 

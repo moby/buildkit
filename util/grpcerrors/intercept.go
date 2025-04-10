@@ -38,7 +38,7 @@ func StreamServerInterceptor(srv any, ss grpc.ServerStream, info *grpc.StreamSer
 }
 
 func UnaryClientInterceptor(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-	err := FromGRPC(invoker(ctx, method, req, reply, cc, opts...))
+	err := FromGRPC(ctx, invoker(ctx, method, req, reply, cc, opts...))
 	if err != nil {
 		stack.Helper()
 	}

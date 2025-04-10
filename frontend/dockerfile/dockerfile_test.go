@@ -9459,7 +9459,7 @@ COPY notexist /foo
 			}
 		}
 
-		err = grpcerrors.FromGRPC(status.FromProto(&statuspb.Status{
+		err = grpcerrors.FromGRPC(ctx, status.FromProto(&statuspb.Status{
 			Code:    int32(st.Code),
 			Message: st.Message,
 			Details: details,

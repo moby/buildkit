@@ -1025,7 +1025,7 @@ func (lbf *llbBridgeForwarder) Ping(context.Context, *pb.PingRequest) (*pb.PongR
 
 func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest) (*pb.ReturnResponse, error) {
 	if in.Error != nil {
-		return lbf.setResult(nil, grpcerrors.FromGRPC(status.ErrorProto(&spb.Status{
+		return lbf.setResult(nil, grpcerrors.FromGRPC(ctx, status.ErrorProto(&spb.Status{
 			Code:    in.Error.Code,
 			Message: in.Error.Message,
 			Details: in.Error.Details,
