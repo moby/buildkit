@@ -264,34 +264,39 @@ func WithFSSyncDir(id int, outdir string) FSSyncTarget {
 	}
 }
 
-func NewFSSyncTarget(targets ...FSSyncTarget) session.Attachable {
-	fs := make(map[int]FileOutputFunc)
-	outdirs := make(map[int]string)
-	for _, t := range targets {
-		t := t.target()
-		if t.f != nil {
-			fs[t.id] = t.f
-		}
-		if t.outdir != "" {
-			outdirs[t.id] = t.outdir
-		}
+func NewFSSyncTarget(targets ...FSSyncTarget) *SyncTarget {
+	st := &SyncTarget{
+		fs:      make(map[int]FileOutputFunc),
+		outdirs: make(map[int]string),
 	}
-	return &fsSyncAttachable{
-		fs:      fs,
-		outdirs: outdirs,
-	}
+	st.Add(targets...)
+	return st
 }
 
-type fsSyncAttachable struct {
+type SyncTarget struct {
 	fs      map[int]FileOutputFunc
 	outdirs map[int]string
 }
 
-func (sp *fsSyncAttachable) Register(server *grpc.Server) {
+var _ session.Attachable = &SyncTarget{}
+
+func (sp *SyncTarget) Add(targets ...FSSyncTarget) {
+	for _, t := range targets {
+		t := t.target()
+		if t.f != nil {
+			sp.fs[t.id] = t.f
+		}
+		if t.outdir != "" {
+			sp.outdirs[t.id] = t.outdir
+		}
+	}
+}
+
+func (sp *SyncTarget) Register(server *grpc.Server) {
 	RegisterFileSendServer(server, sp)
 }
 
-func (sp *fsSyncAttachable) chooser(ctx context.Context) int {
+func (sp *SyncTarget) chooser(ctx context.Context) int {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return 0
@@ -307,7 +312,7 @@ func (sp *fsSyncAttachable) chooser(ctx context.Context) int {
 	return int(id)
 }
 
-func (sp *fsSyncAttachable) DiffCopy(stream FileSend_DiffCopyServer) (err error) {
+func (sp *SyncTarget) DiffCopy(stream FileSend_DiffCopyServer) (err error) {
 	id := sp.chooser(stream.Context())
 	if outdir, ok := sp.outdirs[id]; ok {
 		return syncTargetDiffCopy(stream, outdir)
