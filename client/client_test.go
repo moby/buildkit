@@ -2315,6 +2315,7 @@ func testOCILayoutSource(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSessionExporter(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureOCILayout)
 	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
@@ -2332,10 +2333,7 @@ func testSessionExporter(t *testing.T, sb integration.Sandbox) {
 		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
 	}
 
-	cmdPrefix := integration.UnixOrWindows(
-		`sh -c "echo -n`,
-		`cmd /C "echo`,
-	)
+	cmdPrefix := `sh -c "echo -n`
 	run(fmt.Sprintf(`%s first > foo"`, cmdPrefix))
 	run(fmt.Sprintf(`%s second > bar"`, cmdPrefix))
 
@@ -2347,9 +2345,26 @@ func testSessionExporter(t *testing.T, sb integration.Sandbox) {
 
 	attachable = append(attachable, target)
 
+	buildID := identity.NewID()
+
 	outW := bytes.NewBuffer(nil)
 	exporterCalled := false
-	exporter := exporterprovider.New(func(ctx context.Context, md map[string][]byte) ([]*exporter.ExporterRequest, error) {
+	exporter := exporterprovider.New(func(ctx context.Context, md map[string][]byte, refs []string) ([]*exporter.ExporterRequest, error) {
+		require.Len(t, refs, 1)
+		g := c.GatewayClientForBuild(buildID)
+		resp, err := g.ReadDir(sb.Context(), &gatewaypb.ReadDirRequest{
+			Ref:     refs[0],
+			DirPath: "/",
+		})
+		if err != nil {
+			return nil, err
+		}
+		t.Logf("readdir: %v", resp)
+
+		require.Equal(t, 2, len(resp.Entries))
+		require.Equal(t, "bar", resp.Entries[0].Path)
+		require.Equal(t, "foo", resp.Entries[1].Path)
+
 		exporterCalled = true
 		target.Add(filesync.WithFSSync(0, fixedWriteCloser(nopWriteCloser{outW})))
 		return []*exporter.ExporterRequest{
@@ -2364,9 +2379,14 @@ func testSessionExporter(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	attachable = append(attachable, exporter)
 
-	_, err = c.Solve(sb.Context(), def, SolveOpt{
+	_, err = c.Build(sb.Context(), SolveOpt{
 		EnableSessionExporter: true,
 		Session:               attachable,
+		Ref:                   buildID,
+	}, "", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		return c.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
 	}, nil)
 	require.NoError(t, err)
 
