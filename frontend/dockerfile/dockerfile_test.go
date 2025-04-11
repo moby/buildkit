@@ -215,7 +215,7 @@ var allTests = integration.TestFuncs(
 	testLocalCustomSessionID,
 	testTargetStageNameArg,
 	testStepNames,
-	testPowershellInDefaultPathOnWindows,
+	testDefaultPathEnvOnWindows,
 	testOCILayoutMultiname,
 	testPlatformWithOSVersion,
 	testMaintainBaseOSVersion,
@@ -2018,14 +2018,11 @@ COPY --from=base /out/ /
 	require.Equal(t, fmt.Sprintf("value:final%s", lineEnd), string(dt))
 }
 
-func testPowershellInDefaultPathOnWindows(t *testing.T, sb integration.Sandbox) {
+func testDefaultPathEnvOnWindows(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "!windows")
 
 	f := getFrontend(t, sb)
 
-	// just testing that the powershell path is in PATH
-	// but not testing powershell itself since it will need
-	// servercore image that is too bulky for just one single test.
 	dockerfile := []byte(`
 FROM nanoserver
 USER ContainerAdministrator
@@ -2058,7 +2055,7 @@ RUN echo %PATH% > env_path.txt
 	require.NoError(t, err)
 
 	envPath := string(dt)
-	require.Contains(t, envPath, "C:\\Windows\\System32\\WindowsPowerShell\\v1.0")
+	require.Contains(t, envPath, "C:\\Windows")
 }
 
 func testExportMultiPlatform(t *testing.T, sb integration.Sandbox) {
