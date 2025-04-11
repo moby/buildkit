@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type Callback func(ctx context.Context, md map[string][]byte) ([]*exporter.ExporterRequest, error)
+type Callback func(ctx context.Context, md map[string][]byte, refs []string) ([]*exporter.ExporterRequest, error)
 
 func New(cb Callback) *Exporter {
 	return &Exporter{
@@ -29,7 +29,7 @@ func (e *Exporter) FindExporters(ctx context.Context, in *exporter.FindExporters
 	if e.cb == nil {
 		return nil, status.Errorf(codes.Unavailable, "no exporter callback registered")
 	}
-	res, err := e.cb(ctx, in.Metadata)
+	res, err := e.cb(ctx, in.Metadata, in.Refs)
 	if err != nil {
 		return nil, err
 	}

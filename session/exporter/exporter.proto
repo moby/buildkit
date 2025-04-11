@@ -10,6 +10,7 @@ service Exporter {
 
 message FindExportersRequest{
 	map<string, bytes> metadata = 1;
+	repeated string refs = 2;
 }
 
 message FindExportersResponse {

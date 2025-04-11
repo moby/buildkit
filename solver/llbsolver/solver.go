@@ -684,7 +684,20 @@ func (s *Solver) getSessionExporters(ctx context.Context, sessionID string, id i
 		return nil, err
 	}
 
-	res, err := sessionexporter.New(ctx, caller, inp.Metadata)
+	client := sessionexporter.NewExporterClient(caller.Conn())
+
+	var ids []string
+	if err := inp.EachRef(func(ref cache.ImmutableRef) error {
+		ids = append(ids, ref.ID())
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	res, err := client.FindExporters(ctx, &sessionexporter.FindExportersRequest{
+		Metadata: inp.Metadata,
+		Refs:     ids,
+	})
 	if err != nil {
 		switch grpcerrors.Code(err) {
 		case codes.Unavailable, codes.Unimplemented:
@@ -700,7 +713,7 @@ func (s *Solver) getSessionExporters(ctx context.Context, sessionID string, id i
 	}
 
 	var out []exporter.ExporterInstance
-	for i, req := range res {
+	for i, req := range res.Exporters {
 		exp, err := w.Exporter(req.Type, s.sm)
 		if err != nil {
 			return nil, err
