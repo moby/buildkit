@@ -25,6 +25,10 @@ type GitRef struct {
 	// Commit is optional.
 	Commit string
 
+	// CommitHash verifies Commit if specified.
+	// CommitHash is optional.
+	CommitHash string
+
 	// SubDir is a directory path inside the repo.
 	// SubDir is optional.
 	SubDir string
@@ -61,11 +65,14 @@ func ParseGitRef(ref string) (*GitRef, error) {
 		return nil, cerrdefs.ErrInvalidArgument
 	} else if strings.HasPrefix(ref, "github.com/") {
 		res.IndistinguishableFromLocal = true // Deprecated
-		remote = fromURL(&url.URL{
+		remote, err = fromURL(&url.URL{
 			Scheme: "https",
 			Host:   "github.com",
 			Path:   strings.TrimPrefix(ref, "github.com/"),
 		})
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		remote, err = ParseURL(ref)
 		if errors.Is(err, ErrUnknownProtocol) {
@@ -94,7 +101,7 @@ func ParseGitRef(ref string) (*GitRef, error) {
 		_, res.Remote, _ = strings.Cut(res.Remote, "://")
 	}
 	if remote.Fragment != nil {
-		res.Commit, res.SubDir = remote.Fragment.Ref, remote.Fragment.Subdir
+		res.Commit, res.CommitHash, res.SubDir = remote.Fragment.Ref, remote.Fragment.CommitHash, remote.Fragment.Subdir
 	}
 
 	repoSplitBySlash := strings.Split(res.Remote, "/")
