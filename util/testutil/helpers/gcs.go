@@ -20,7 +20,6 @@ func NewFakeGCSServer(t *testing.T, sb integration.Sandbox) (address, bucket str
 	if _, err := exec.LookPath("fake-gcs-server"); err != nil {
 		return "", "", nil, fmt.Errorf("fake-gcs-server binary not found: %w", err)
 	}
-	t.Logf("Found fake-gcs-server binary")
 
 	deferF := &integration.MultiCloser{}
 	cleanup = deferF.F()
@@ -89,8 +88,6 @@ func waitForServer(addr string, timeout time.Duration) error {
 func createBucket(addr, bucket string) error {
 	reqBody := fmt.Sprintf(`{"name": "%s"}`, bucket)
 	url := fmt.Sprintf("%s/b?project=test", addr)
-	fmt.Printf("Creating bucket at %s with body: %s\n", url, reqBody)
-
 	resp, err := http.Post(url, "application/json", strings.NewReader(reqBody))
 	if err != nil {
 		return fmt.Errorf("failed to create bucket: %v", err)
@@ -99,10 +96,7 @@ func createBucket(addr, bucket string) error {
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("Failed to create bucket, status: %s, body: %s\n", resp.Status, string(body))
 		return fmt.Errorf("failed to create bucket, status: %s, body: %s", resp.Status, string(body))
 	}
-
-	fmt.Printf("Successfully created bucket %s, response: %s\n", bucket, string(body))
 	return nil
 }
