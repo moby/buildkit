@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/util/testutil/integration"
+	"github.com/pkg/errors"
 )
 
 func NewFakeGCSServer(t *testing.T, sb integration.Sandbox) (address, bucket string, cleanup func() error, err error) {
@@ -18,7 +19,7 @@ func NewFakeGCSServer(t *testing.T, sb integration.Sandbox) (address, bucket str
 
 	bucket = randomString(10)
 	if _, err := exec.LookPath("fake-gcs-server"); err != nil {
-		return "", "", nil, fmt.Errorf("fake-gcs-server binary not found: %w", err)
+		return "", "", nil, errors.Errorf("fake-gcs-server binary not found: %w", err)
 	}
 
 	deferF := &integration.MultiCloser{}
@@ -75,6 +76,7 @@ func NewFakeGCSServer(t *testing.T, sb integration.Sandbox) (address, bucket str
 func waitForServer(addr string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
+		// #nosec G107 -- addr is local and for integration tests
 		resp, err := http.Get(addr)
 		if err == nil {
 			resp.Body.Close()
@@ -82,21 +84,22 @@ func waitForServer(addr string, timeout time.Duration) error {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	return fmt.Errorf("server did not become ready within %s", timeout)
+	return errors.Errorf("server did not become ready within %s", timeout)
 }
 
 func createBucket(addr, bucket string) error {
 	reqBody := fmt.Sprintf(`{"name": "%s"}`, bucket)
 	url := fmt.Sprintf("%s/b?project=test", addr)
+	// #nosec G107 -- addr is local and for integration tests
 	resp, err := http.Post(url, "application/json", strings.NewReader(reqBody))
 	if err != nil {
-		return fmt.Errorf("failed to create bucket: %v", err)
+		return errors.Errorf("failed to create bucket: %v", err)
 	}
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to create bucket, status: %s, body: %s", resp.Status, string(body))
+		return errors.Errorf("failed to create bucket, status: %s, body: %s", resp.Status, string(body))
 	}
 	return nil
 }

@@ -314,12 +314,6 @@ func (e *exporter) Config() remotecache.Config {
 	}
 }
 
-type nopCloserSectionReader struct {
-	*io.SectionReader
-}
-
-func (*nopCloserSectionReader) Close() error { return nil }
-
 func (e *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 	cacheConfig, descs, err := e.chains.Marshal(ctx)
 	if err != nil {
