@@ -35,19 +35,19 @@ import (
 )
 
 type SolveOpt struct {
-	Exports             []ExportEntry
+	Exports               []ExportEntry
 	EnableSessionExporter bool
-	LocalDirs           map[string]string // Deprecated: use LocalMounts
-	LocalMounts         map[string]fsutil.FS
-	OCIStores           map[string]content.Store
-	SharedKey           string
-	Frontend            string
-	FrontendAttrs       map[string]string
-	FrontendInputs      map[string]llb.State
-	CacheExports        []CacheOptionsEntry
-	CacheImports        []CacheOptionsEntry
-	Session             []session.Attachable
-	AllowedEntitlements []string
+	LocalDirs             map[string]string // Deprecated: use LocalMounts
+	LocalMounts           map[string]fsutil.FS
+	OCIStores             map[string]content.Store
+	SharedKey             string
+	Frontend              string
+	FrontendAttrs         map[string]string
+	FrontendInputs        map[string]llb.State
+	CacheExports          []CacheOptionsEntry
+	CacheImports          []CacheOptionsEntry
+	Session               []session.Attachable
+	AllowedEntitlements   []string
 	// When the session is custom-initialized, Init can be used to
 	// set up the session for export automatically.
 	SharedSession         *session.Session // TODO: refactor to better session syncing
