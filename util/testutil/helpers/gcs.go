@@ -19,7 +19,7 @@ func NewFakeGCSServer(t *testing.T, sb integration.Sandbox) (address, bucket str
 
 	bucket = randomString(10)
 	if _, err := exec.LookPath("fake-gcs-server"); err != nil {
-		return "", "", nil, errors.Errorf("fake-gcs-server binary not found: %w", err)
+		return "", "", nil, errors.Errorf("fake-gcs-server binary not found: %s", err)
 	}
 
 	deferF := &integration.MultiCloser{}
