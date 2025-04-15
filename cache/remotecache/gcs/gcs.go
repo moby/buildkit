@@ -39,7 +39,7 @@ const (
 	attrName                    = "name"
 	attrTouchRefresh            = "touch_refresh"
 	attrEndpointURL             = "endpoint_url"
-	attrUsePathStyle            = "use_path_style"
+	attrWithoutAuth             = "without_auth"
 	attrGcpJSONKey              = "gcp_json_key"
 	attrOIDCTokenID             = "oidc_token_id"
 	attrOIDCProjectID           = "oidc_project_id"
@@ -68,7 +68,7 @@ type Config struct {
 	Names                   []string
 	TouchRefresh            time.Duration
 	EndpointURL             string
-	UsePathStyle            bool
+	WithoutAuth             bool
 	AccountID               string
 	Token                   string
 	OIDCTokenID             string
@@ -118,12 +118,12 @@ func getConfig(attrs map[string]string) (Config, error) {
 
 	endpointURL := attrs[attrEndpointURL]
 
-	usePathStyle := false
-	usePathStyleStr, ok := attrs[attrUsePathStyle]
+	withoutAuth := false
+	withoutAuthStr, ok := attrs[attrWithoutAuth]
 	if ok {
-		usePathStyleUser, err := strconv.ParseBool(usePathStyleStr)
+		withoutAuthUser, err := strconv.ParseBool(withoutAuthStr)
 		if err == nil {
-			usePathStyle = usePathStyleUser
+			withoutAuth = withoutAuthUser
 		}
 	}
 
@@ -142,7 +142,7 @@ func getConfig(attrs map[string]string) (Config, error) {
 		Names:                   names,
 		TouchRefresh:            touchRefresh,
 		EndpointURL:             endpointURL,
-		UsePathStyle:            usePathStyle,
+		WithoutAuth:             withoutAuth,
 		GcpJSONKey:              gcpJSONKey,
 		OIDCTokenID:             oidcTokenID,
 		OIDCProjectID:           oidcProjectID,
@@ -182,9 +182,14 @@ func newGCSClient(c Config) (*gcsClient, error) {
 	} else {
 		creds, err := google.FindDefaultCredentials(ctx, storage.ScopeFullControl)
 		if err != nil {
-			return nil, errors.New("error finding default credentials for gcs")
+			opts = append(opts, option.WithCredentials(creds))
 		}
-		opts = append(opts, option.WithCredentials(creds))
+	}
+	if c.EndpointURL != "" {
+		opts = append(opts, option.WithEndpoint(c.EndpointURL))
+	}
+	if c.WithoutAuth {
+		opts = append(opts, option.WithoutAuthentication())
 	}
 	client, err := storage.NewClient(ctx, opts...)
 	if err != nil {
@@ -522,14 +527,14 @@ func (gcsClient *gcsClient) saveMutable(ctx context.Context, key string, value [
 
 func (gcsClient *gcsClient) exists(ctx context.Context, key string) (*time.Time, error) {
 	obj := gcsClient.client.Bucket(gcsClient.bucket).Object(key)
-	_, err := obj.Attrs(ctx)
+	attrs, err := obj.Attrs(ctx)
 	if err != nil {
 		if err == storage.ErrObjectNotExist {
 			return nil, nil
 		}
 		return nil, err
 	}
-	return nil, nil
+	return &attrs.Updated, nil
 }
 
 func (gcsClient *gcsClient) touch(ctx context.Context, key string) error {

@@ -17,6 +17,7 @@ ARG MINIO_MC_VERSION=RELEASE.2022-05-04T06-07-55Z
 ARG AZURITE_VERSION=3.33.0
 ARG GOTESTSUM_VERSION=v1.9.0
 ARG DELVE_VERSION=v1.23.1
+ARG FAKE_GCS_VERSION=v1.52.2
 
 ARG GO_VERSION=1.23
 ARG ALPINE_VERSION=3.21
@@ -422,6 +423,15 @@ RUN curl -Ls https://raw.githubusercontent.com/containerd/nerdctl/$NERDCTL_VERSI
 ARG AZURITE_VERSION
 RUN apk add --no-cache nodejs npm \
   && npm install -g azurite@${AZURITE_VERSION}
+ARG FAKE_GCS_VERSION
+ARG TARGETARCH
+
+RUN ARCH=$([ "${TARGETARCH}" = "arm64" ] && echo "arm64" || echo "amd64") && \
+    curl -L -o /tmp/fake-gcs-server.tar.gz https://github.com/fsouza/fake-gcs-server/releases/download/${FAKE_GCS_VERSION}/fake-gcs-server_${FAKE_GCS_VERSION#v}_Linux_${ARCH}.tar.gz && \
+    tar -xz -C /usr/local/bin -f /tmp/fake-gcs-server.tar.gz fake-gcs-server && \
+    chmod +x /usr/local/bin/fake-gcs-server && \
+    rm /tmp/fake-gcs-server.tar.gz
+
 # The entrypoint script is needed for enabling nested cgroup v2 (https://github.com/moby/buildkit/issues/3265#issuecomment-1309631736)
 RUN curl -Ls https://raw.githubusercontent.com/moby/moby/v25.0.1/hack/dind > /docker-entrypoint.sh \
   && chmod 0755 /docker-entrypoint.sh

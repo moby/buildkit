@@ -15,6 +15,7 @@ const (
 	FeatureCacheBackendLocal    = "cache_backend_local"
 	FeatureCacheBackendRegistry = "cache_backend_registry"
 	FeatureCacheBackendS3       = "cache_backend_s3"
+	FeatureCacheBackendGCS      = "cache_backend_gcs"
 	FeatureDirectPush           = "direct_push"
 	FeatureFrontendOutline      = "frontend_outline"
 	FeatureFrontendTargets      = "frontend_targets"
@@ -43,6 +44,7 @@ var features = map[string]struct{}{
 	FeatureCacheBackendLocal:    {},
 	FeatureCacheBackendRegistry: {},
 	FeatureCacheBackendS3:       {},
+	FeatureCacheBackendGCS:      {},
 	FeatureDirectPush:           {},
 	FeatureFrontendOutline:      {},
 	FeatureFrontendTargets:      {},
