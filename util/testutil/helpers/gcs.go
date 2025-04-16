@@ -75,7 +75,7 @@ func NewFakeGCSServer(t *testing.T, sb integration.Sandbox) (address, bucket str
 }
 
 func waitForServer(addr string, timeout time.Duration) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeoutCause(context.Background(), timeout, errors.New("timeout waiting for server"))
 	defer cancel()
 
 	ticker := time.NewTicker(100 * time.Millisecond)
@@ -84,7 +84,7 @@ func waitForServer(addr string, timeout time.Duration) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return errors.Errorf("server did not become ready within %s", timeout)
+			return errors.Wrap(ctx.Err(), "server did not become ready")
 		case <-ticker.C:
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, addr, nil)
 			if err != nil {
@@ -101,7 +101,7 @@ func waitForServer(addr string, timeout time.Duration) error {
 }
 
 func createBucket(addr, bucket string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeoutCause(context.Background(), 5*time.Second, errors.New("timeout creating bucket"))
 	defer cancel()
 
 	reqBody := fmt.Sprintf(`{"name": "%s"}`, bucket)

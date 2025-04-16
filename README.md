@@ -68,6 +68,7 @@ Join `#buildkit` channel on [Docker Community Slack](https://dockr.ly/comm-slack
     - [GitHub Actions cache (experimental)](#github-actions-cache-experimental)
     - [S3 cache (experimental)](#s3-cache-experimental)
     - [Azure Blob Storage cache (experimental)](#azure-blob-storage-cache-experimental)
+    - [GCS cache (experimental)](#gcs-cache-experimental)
   - [Consistent hashing](#consistent-hashing)
 - [Metadata](#metadata)
 - [Systemd socket activation](#systemd-socket-activation)
