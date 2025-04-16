@@ -94,6 +94,8 @@ You will be asked to restart your machine, do so, and then continue with the res
         --containerd-cni-config-path="C:\Program Files\containerd\cni\conf\0-containerd-nat.conf" `
         --containerd-cni-binary-dir="C:\Program Files\containerd\cni\bin"
     ```
+   
+    > **NOTE:** the above CNI paths are now set by default, you can now just run `buildkitd`.
 
     You can also run `buildkitd` as a _Windows Service_:
 
@@ -239,6 +241,20 @@ Below is a simple setup based on the `nat` network that comes by default, with e
 _containers_ and _Hyper-V_ features.
 
 ```powershell
+# get the CNI plugins (binaries)
+$cniPluginVersion = "0.3.1"
+$cniBinDir = "$env:ProgramFiles\containerd\cni\bin"
+mkdir $cniBinDir -Force
+curl.exe -LO https://github.com/microsoft/windows-container-networking/releases/download/v$cniPluginVersion/windows-container-networking-cni-amd64-v$cniPluginVersion.zip
+tar xvf windows-container-networking-cni-amd64-v$cniPluginVersion.zip -C $cniBinDir
+
+# NOTE: depending on your host setup, the IPs may change after restart
+# you can only run this script from here to end for a refresh.
+# without downloading the binaries again.
+
+$cniVersion = "1.0.0"
+$cniConfPath = "$env:ProgramFiles\containerd\cni\conf\0-containerd-nat.conf"
+
 $networkName = 'nat'
 # Get-HnsNetwork is available once you have enabled the 'Hyper-V Host Compute Service' feature
 # which must have been done at the Quick setup above
@@ -250,16 +266,6 @@ if ($null -eq $natInfo) {
 }
 $gateway = $natInfo.Subnets[0].GatewayAddress
 $subnet = $natInfo.Subnets[0].AddressPrefix
-
-$cniConfPath = "$env:ProgramFiles\containerd\cni\conf\0-containerd-nat.conf"
-$cniBinDir = "$env:ProgramFiles\containerd\cni\bin"
-$cniVersion = "1.0.0"
-$cniPluginVersion = "0.3.1"
-
-# get the CNI plugins (binaries)
-mkdir $cniBinDir -Force
-curl.exe -LO https://github.com/microsoft/windows-container-networking/releases/download/v$cniPluginVersion/windows-container-networking-cni-amd64-v$cniPluginVersion.zip
-tar xvf windows-container-networking-cni-amd64-v$cniPluginVersion.zip -C $cniBinDir
 
 $natConfig = @"
 {
