@@ -379,7 +379,7 @@ ENV BUILDKIT_SETUP_CGROUPV2_ROOT=1
 ENTRYPOINT ["buildkitd"]
 
 FROM buildkit-linux AS buildkit-linux-debug
-COPY --link --from=dlv /usr/bin/dlv /usr/bin/dlv
+COPY --link --from=dlv /out/dlv /usr/bin/dlv
 COPY --link --chmod=755 <<EOF /docker-entrypoint.sh
 #!/bin/sh
 exec dlv exec /usr/bin/buildkitd \\
