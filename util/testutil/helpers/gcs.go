@@ -84,7 +84,7 @@ func waitForServer(addr string, timeout time.Duration) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return errors.Wrap(ctx.Err(), "server did not become ready")
+			return errors.Wrap(context.Cause(ctx), "server did not become ready")
 		case <-ticker.C:
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, addr, nil)
 			if err != nil {
