@@ -48,7 +48,7 @@ require (
 	github.com/klauspost/compress v1.18.0
 	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/moby/docker-image-spec v1.3.1
-	github.com/moby/go-archive v0.0.0-20250404171912-21f3f3385ab7
+	github.com/moby/go-archive v0.1.0
 	github.com/moby/locker v1.0.1
 	github.com/moby/patternmatcher v0.6.0
 	github.com/moby/sys/mountinfo v0.7.2
