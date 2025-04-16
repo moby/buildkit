@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -74,24 +75,45 @@ func NewFakeGCSServer(t *testing.T, sb integration.Sandbox) (address, bucket str
 }
 
 func waitForServer(addr string, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		// #nosec G107 -- addr is local and for integration tests
-		resp, err := http.Get(addr)
-		if err == nil {
-			resp.Body.Close()
-			return nil
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Errorf("server did not become ready within %s", timeout)
+		case <-ticker.C:
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, addr, nil)
+			if err != nil {
+				continue
+			}
+
+			resp, err := http.DefaultClient.Do(req)
+			if err == nil {
+				resp.Body.Close()
+				return nil
+			}
 		}
-		time.Sleep(100 * time.Millisecond)
 	}
-	return errors.Errorf("server did not become ready within %s", timeout)
 }
 
 func createBucket(addr, bucket string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	reqBody := fmt.Sprintf(`{"name": "%s"}`, bucket)
 	url := fmt.Sprintf("%s/b?project=test", addr)
-	// #nosec G107 -- addr is local and for integration tests
-	resp, err := http.Post(url, "application/json", strings.NewReader(reqBody))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(reqBody))
+	if err != nil {
+		return errors.Wrap(err, "failed to create HTTP request")
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return errors.Errorf("failed to create bucket: %v", err)
 	}
