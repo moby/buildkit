@@ -429,7 +429,6 @@ RUN ARCH=$([ "${TARGETARCH}" = "arm64" ] && echo "arm64" || echo "amd64") && \
     tar -xz -C /usr/local/bin -f /tmp/fake-gcs-server.tar.gz fake-gcs-server && \
     chmod +x /usr/local/bin/fake-gcs-server && \
     rm /tmp/fake-gcs-server.tar.gz
-
 # The entrypoint script is needed for enabling nested cgroup v2 (https://github.com/moby/buildkit/issues/3265#issuecomment-1309631736)
 RUN curl -Ls https://raw.githubusercontent.com/moby/moby/v25.0.1/hack/dind > /docker-entrypoint.sh \
   && chmod 0755 /docker-entrypoint.sh
