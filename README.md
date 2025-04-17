@@ -681,7 +681,7 @@ Options are:
 * `mode=<min|max>`: specify cache layers to export (default: `min`)
   * `min`: only export layers for the resulting image
   * `max`: export all the layers of all intermediate steps
-* `prefix=<prefix>`: set global prefix to store / read files on s3 (default: empty)
+* `prefix=<prefix>`: set global prefix to store / read files on gcs (default: empty)
 * `name=<manifest>`: specify name of the manifest to use (default `buildkit`)
   * Multiple manifest names can be specified at the same time, separated by `;`. The standard use case is to use the git sha1 as name, and the branch name as duplicate, and load both with 2 `import-cache` commands.
 * `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
@@ -689,9 +689,9 @@ Options are:
 
 `--import-cache` options:
 * `type=gcs`
-* `prefix=<prefix>`: set global prefix to store / read files on s3 (default: empty)
-* `blobs_prefix=<prefix>`: set global prefix to store / read blobs on s3 (default: `blobs/`)
-* `manifests_prefix=<prefix>`: set global prefix to store / read manifests on s3 (default: `manifests/`)
+* `prefix=<prefix>`: set global prefix to store / read files on gcs (default: empty)
+* `blobs_prefix=<prefix>`: set global prefix to store / read blobs on gcs (default: `blobs/`)
+* `manifests_prefix=<prefix>`: set global prefix to store / read manifests on gcs (default: `manifests/`)
 * `name=<manifest>`: name of the manifest to use (default `buildkit`)
 
 ### Consistent hashing
