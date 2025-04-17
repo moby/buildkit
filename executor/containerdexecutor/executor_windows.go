@@ -12,6 +12,7 @@ import (
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/network"
 	"github.com/moby/sys/user"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -88,6 +89,18 @@ func (w *containerdExecutor) createOCISpec(ctx context.Context, id, _, _ string,
 		return nil, nil, err
 	}
 	releasers = append(releasers, cleanup)
+
+	if v, ok := ctx.Value(appdefaults.ContextKeyCustomFrontend).(bool); ok && v {
+		frontendGrpcBridge := os.Getenv("FrontendGRPCPipe")
+		spec.Mounts = append(spec.Mounts, specs.Mount{
+			Source:      frontendGrpcBridge,
+			Destination: frontendGrpcBridge,
+			Type:        "",
+		})
+		spec.Process.Env = append(spec.Process.Env,
+			"FrontendGRPCPipe="+frontendGrpcBridge,
+		)
+	}
 	return spec, releaseAll, nil
 }
 
