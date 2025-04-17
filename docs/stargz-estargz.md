@@ -92,7 +92,7 @@ Hello, world!
 ```
 
 Note that when a stage is exported (e.g. to the registry), the base image (even stargz/eStargz) of that stage needs to be pulled to copy it to the destination.
-However if the destination is a registry and the target repository already contains some blobs of that image or [cross repository blob mount](https://docs.docker.com/registry/spec/api/#cross-repository-blob-mount) can be used, buildkit keeps these blobs lazy.
+However if the destination is a registry and the target repository already contains some blobs of that image or [cross repository blob mount](https://distribution.github.io/distribution/spec/api/#cross-repository-blob-mount) can be used, buildkit keeps these blobs lazy.
 
 ### Using proxy (standalone) snapshotter
 
