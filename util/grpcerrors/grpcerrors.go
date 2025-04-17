@@ -45,7 +45,7 @@ func ToGRPC(ctx context.Context, err error) error {
 
 	// If the original error was wrapped with more context than the GRPCStatus error,
 	// copy the original message to the GRPCStatus error
-	if err.Error() != st.Message() {
+	if errorHasMoreContext(err, st) {
 		pb := st.Proto()
 		pb.Message = err.Error()
 		st = status.FromProto(pb)
@@ -70,6 +70,21 @@ func ToGRPC(ctx context.Context, err error) error {
 	}
 
 	return st.Err()
+}
+
+// errorHasMoreContext checks if the original error provides more context by having
+// a different message or additional details than the Status.
+func errorHasMoreContext(err error, st *status.Status) bool {
+	if errMessage := err.Error(); len(errMessage) > len(st.Message()) {
+		// check if the longer message in errMessage is only due to
+		// prepending with the status code
+		var grpcStatusError *grpcStatusError
+		if errors.As(err, &grpcStatusError) {
+			return st.Code() != grpcStatusError.st.Code() || st.Message() != grpcStatusError.st.Message()
+		}
+		return true
+	}
+	return false
 }
 
 func withDetails(ctx context.Context, s *status.Status, details ...proto.Message) (*status.Status, error) {
@@ -172,6 +187,8 @@ func FromGRPC(err error) error {
 	for _, d := range pb.Details {
 		m, err := typeurl.UnmarshalAny(d)
 		if err != nil {
+			bklog.L.Debugf("failed to unmarshal error detail with type %q: %v", d.GetTypeUrl(), err)
+			n.Details = append(n.Details, d)
 			continue
 		}
 
@@ -181,6 +198,7 @@ func FromGRPC(err error) error {
 		case TypedErrorProto:
 			details = append(details, v)
 		default:
+			bklog.L.Debugf("unknown detail with type %T", v)
 			n.Details = append(n.Details, d)
 		}
 	}
