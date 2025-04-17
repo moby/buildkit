@@ -51,7 +51,7 @@ func v1TarHeaderSelect(h *tar.Header) (orderedHeaders [][2]string) {
 	for k := range pax {
 		if strings.HasPrefix(k, "SCHILY.xattr.") {
 			k = strings.TrimPrefix(k, "SCHILY.xattr.")
-			if k == "security.capability" || !strings.HasPrefix(k, "security.") && !strings.HasPrefix(k, "system.") {
+			if k == "security.capability" || !strings.HasPrefix(k, "security.") && !strings.HasPrefix(k, "system.") && !strings.HasPrefix(k, "com.apple.") {
 				xAttrKeys = append(xAttrKeys, k)
 			}
 		}
