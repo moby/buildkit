@@ -677,7 +677,7 @@ Options are:
   * `oidc_service_account_email`: Service account email to impersonate
 
 `--export-cache` options:
-* `type=s3`
+* `type=gcs`
 * `mode=<min|max>`: specify cache layers to export (default: `min`)
   * `min`: only export layers for the resulting image
   * `max`: export all the layers of all intermediate steps
@@ -688,7 +688,7 @@ Options are:
 * `touch_refresh=24h`: Instead of being uploaded again when not changed, blobs files will be "touched" on gcs every `touch_refresh`, default is 24h. Due to this, an expiration policy can be set on the GCS bucket to cleanup useless files automatically. Manifests files are systematically rewritten, there is no need to touch them.
 
 `--import-cache` options:
-* `type=s3`
+* `type=gcs`
 * `prefix=<prefix>`: set global prefix to store / read files on s3 (default: empty)
 * `blobs_prefix=<prefix>`: set global prefix to store / read blobs on s3 (default: `blobs/`)
 * `manifests_prefix=<prefix>`: set global prefix to store / read manifests on s3 (default: `manifests/`)

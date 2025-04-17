@@ -424,8 +424,6 @@ ARG AZURITE_VERSION
 RUN apk add --no-cache nodejs npm \
   && npm install -g azurite@${AZURITE_VERSION}
 ARG FAKE_GCS_VERSION
-ARG TARGETARCH
-
 RUN ARCH=$([ "${TARGETARCH}" = "arm64" ] && echo "arm64" || echo "amd64") && \
     curl -L -o /tmp/fake-gcs-server.tar.gz https://github.com/fsouza/fake-gcs-server/releases/download/${FAKE_GCS_VERSION}/fake-gcs-server_${FAKE_GCS_VERSION#v}_Linux_${ARCH}.tar.gz && \
     tar -xz -C /usr/local/bin -f /tmp/fake-gcs-server.tar.gz fake-gcs-server && \
