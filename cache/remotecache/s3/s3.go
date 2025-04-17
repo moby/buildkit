@@ -14,10 +14,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	aws_config "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+	stscreds "github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/pkg/labels"
 	"github.com/moby/buildkit/cache/remotecache"
@@ -34,36 +36,44 @@ import (
 )
 
 const (
-	attrBucket            = "bucket"
-	attrRegion            = "region"
-	attrPrefix            = "prefix"
-	attrManifestsPrefix   = "manifests_prefix"
-	attrBlobsPrefix       = "blobs_prefix"
-	attrName              = "name"
-	attrTouchRefresh      = "touch_refresh"
-	attrEndpointURL       = "endpoint_url"
-	attrAccessKeyID       = "access_key_id"
-	attrSecretAccessKey   = "secret_access_key"
-	attrSessionToken      = "session_token"
-	attrUsePathStyle      = "use_path_style"
-	attrUploadParallelism = "upload_parallelism"
-	maxCopyObjectSize     = 5 * 1024 * 1024 * 1024
+	attrBucket                = "bucket"
+	attrRegion                = "region"
+	attrPrefix                = "prefix"
+	attrManifestsPrefix       = "manifests_prefix"
+	attrBlobsPrefix           = "blobs_prefix"
+	attrName                  = "name"
+	attrTouchRefresh          = "touch_refresh"
+	attrEndpointURL           = "endpoint_url"
+	attrAccessKeyID           = "access_key_id"
+	attrSecretAccessKey       = "secret_access_key"
+	attrSessionToken          = "session_token"
+	attrAssumeRoleARN         = "assume_role_arn"
+	attrOIDCTokenID           = "oidc_token_id"
+	attrAssumeRoleSessionName = "assume_role_session_name"
+	attrExternalID            = "external_id"
+	attrUsePathStyle          = "use_path_style"
+	attrUploadParallelism     = "upload_parallelism"
+	maxCopyObjectSize         = 5 * 1024 * 1024 * 1024
 )
 
 type Config struct {
-	Bucket            string
-	Region            string
-	Prefix            string
-	ManifestsPrefix   string
-	BlobsPrefix       string
-	Names             []string
-	TouchRefresh      time.Duration
-	EndpointURL       string
-	AccessKeyID       string
-	SecretAccessKey   string
-	SessionToken      string
-	UsePathStyle      bool
-	UploadParallelism int
+	Bucket                string
+	Region                string
+	Prefix                string
+	ManifestsPrefix       string
+	BlobsPrefix           string
+	Names                 []string
+	TouchRefresh          time.Duration
+	EndpointURL           string
+	AccessKeyID           string
+	SecretAccessKey       string
+	SessionToken          string
+	AssumeRoleARN         string
+	OIDCTokenID           string
+	AssumeRoleSessionName string
+	ExternalID            string
+	UsePathStyle          bool
+	UploadParallelism     int
 }
 
 func getConfig(attrs map[string]string) (Config, error) {
@@ -119,6 +129,11 @@ func getConfig(attrs map[string]string) (Config, error) {
 	secretAccessKey := attrs[attrSecretAccessKey]
 	sessionToken := attrs[attrSessionToken]
 
+	assumeRoleARN := attrs[attrAssumeRoleARN]
+	oidcTokenID := attrs[attrOIDCTokenID]
+	assumeRoleSessionName := attrs[attrAssumeRoleSessionName]
+	externalID := attrs[attrExternalID]
+
 	usePathStyle := false
 	usePathStyleStr, ok := attrs[attrUsePathStyle]
 	if ok {
@@ -142,19 +157,23 @@ func getConfig(attrs map[string]string) (Config, error) {
 	}
 
 	return Config{
-		Bucket:            bucket,
-		Region:            region,
-		Prefix:            prefix,
-		ManifestsPrefix:   manifestsPrefix,
-		BlobsPrefix:       blobsPrefix,
-		Names:             names,
-		TouchRefresh:      touchRefresh,
-		EndpointURL:       endpointURL,
-		AccessKeyID:       accessKeyID,
-		SecretAccessKey:   secretAccessKey,
-		SessionToken:      sessionToken,
-		UsePathStyle:      usePathStyle,
-		UploadParallelism: uploadParallelism,
+		Bucket:                bucket,
+		Region:                region,
+		Prefix:                prefix,
+		ManifestsPrefix:       manifestsPrefix,
+		BlobsPrefix:           blobsPrefix,
+		Names:                 names,
+		TouchRefresh:          touchRefresh,
+		EndpointURL:           endpointURL,
+		AccessKeyID:           accessKeyID,
+		SecretAccessKey:       secretAccessKey,
+		SessionToken:          sessionToken,
+		AssumeRoleARN:         assumeRoleARN,
+		OIDCTokenID:           oidcTokenID,
+		AssumeRoleSessionName: assumeRoleSessionName,
+		ExternalID:            externalID,
+		UsePathStyle:          usePathStyle,
+		UploadParallelism:     uploadParallelism,
 	}, nil
 }
 
@@ -411,6 +430,22 @@ func newS3Client(ctx context.Context, config Config) (*s3Client, error) {
 	client := s3.NewFromConfig(cfg, func(options *s3.Options) {
 		if config.AccessKeyID != "" && config.SecretAccessKey != "" {
 			options.Credentials = credentials.NewStaticCredentialsProvider(config.AccessKeyID, config.SecretAccessKey, config.SessionToken)
+		} else if config.AssumeRoleARN != "" {
+			if config.OIDCTokenID != "" {
+				// Assume Role with OIDC
+				creds, err := assumeRoleWithWebIdentity(ctx, cfg, config.AssumeRoleARN, config.AssumeRoleSessionName, config.OIDCTokenID)
+				if err != nil {
+					return
+				}
+				options.Credentials = creds
+			} else {
+				// Assume Role with external ID
+				creds, err := assumeRole(ctx, cfg, config.AssumeRoleARN, config.AssumeRoleSessionName, config.ExternalID)
+				if err != nil {
+					return
+				}
+				options.Credentials = creds
+			}
 		}
 		if config.EndpointURL != "" {
 			options.UsePathStyle = config.UsePathStyle
@@ -426,6 +461,52 @@ func newS3Client(ctx context.Context, config Config) (*s3Client, error) {
 		blobsPrefix:     config.BlobsPrefix,
 		manifestsPrefix: config.ManifestsPrefix,
 	}, nil
+}
+
+func assumeRole(ctx context.Context, cfg aws.Config, roleArn, roleSessionName, externalID string) (aws.CredentialsProvider, error) {
+	// Create a new STS client
+	stsClient := sts.NewFromConfig(cfg)
+
+	// Create the AssumeRoleProvider
+	provider := stscreds.NewAssumeRoleProvider(stsClient, roleArn, func(o *stscreds.AssumeRoleOptions) {
+		o.RoleSessionName = roleSessionName
+		o.Duration = 1 * time.Hour
+		if externalID != "" {
+			o.ExternalID = aws.String(externalID)
+		}
+	})
+
+	// Return the credentials provider
+	return aws.NewCredentialsCache(provider), nil
+}
+
+// Define the custom IdentityTokenRetriever implementation
+type InMemoryTokenRetriever struct {
+	Token string
+}
+
+func (r *InMemoryTokenRetriever) GetIdentityToken() ([]byte, error) {
+	if r.Token == "" {
+		return nil, errors.New("ID token is empty")
+	}
+	return []byte(r.Token), nil
+}
+
+func assumeRoleWithWebIdentity(ctx context.Context, cfg aws.Config, roleArn, roleSessionName, webIdentityToken string) (aws.CredentialsProvider, error) {
+	// Create a new STS client
+	stsClient := sts.NewFromConfig(cfg)
+	tokenRetriever := &InMemoryTokenRetriever{
+		Token: webIdentityToken,
+	}
+
+	// Create the WebIdentityRoleProvider
+	provider := stscreds.NewWebIdentityRoleProvider(stsClient, roleArn, tokenRetriever, func(o *stscreds.WebIdentityRoleOptions) {
+		o.RoleSessionName = roleSessionName
+		o.Duration = 1 * time.Hour
+	})
+
+	// Return the credentials provider
+	return aws.NewCredentialsCache(provider), nil
 }
 
 func (s3Client *s3Client) getManifest(ctx context.Context, key string, config *v1.CacheConfig) (bool, error) {

@@ -567,10 +567,18 @@ The simplest way is to use an IAM Instance profile.
 Other options are:
 
 * Any system using environment variables / config files supported by the [AWS Go SDK](https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html). The configuration must be available for the buildkit daemon, not for the client.
-* Using the following attributes:
+* Static Credentials:
   * `access_key_id`: Access Key ID
   * `secret_access_key`: Secret Access Key
   * `session_token`: Session Token
+* Assume Role with Web Identity (OIDC Token):
+  * `assume_role_arn`: The ARN of the role to assume
+  * `assume_role_session_name`: A name for the role session (optional)
+  * `oidc_token_id`: OIDC identity token used to authenticate via web identity
+* Assuming a role with an external ID:
+  * `assume_role_arn`: The ARN of the role to assume
+  * `assume_role_session_name`: A name for the role session (optional)
+  * `external_id`: External ID used when assuming the role (optional)
 
 `--export-cache` options:
 * `type=s3`
