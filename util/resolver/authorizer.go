@@ -288,7 +288,7 @@ func (ah *authHandler) doBearerAuth(ctx context.Context, sm *session.Manager, g 
 
 	to.Scopes = parseScopes(docker.GetTokenScopes(ctx, to.Scopes)).normalize()
 
-	// Docs: https://docs.docker.com/registry/spec/auth/scope
+	// Docs: https://distribution.github.io/distribution/spec/auth/scope
 	scoped := strings.Join(to.Scopes, " ")
 
 	res, err := ah.g.Do(ctx, scoped, func(ctx context.Context) (*authResult, error) {
@@ -444,7 +444,7 @@ func sameRequest(r1, r2 *http.Request) bool {
 type scopes map[string]map[string]struct{}
 
 func parseScopes(s []string) scopes {
-	// https://docs.docker.com/registry/spec/auth/scope/
+	// https://distribution.github.io/distribution/spec/auth/scope/
 	m := map[string]map[string]struct{}{}
 	for _, scopeStr := range s {
 		if scopeStr == "" {
