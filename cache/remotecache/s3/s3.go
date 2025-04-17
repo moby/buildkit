@@ -433,14 +433,14 @@ func newS3Client(ctx context.Context, config Config) (*s3Client, error) {
 		} else if config.AssumeRoleARN != "" {
 			if config.OIDCTokenID != "" {
 				// Assume Role with OIDC
-				creds, err := assumeRoleWithWebIdentity(ctx, cfg, config.AssumeRoleARN, config.AssumeRoleSessionName, config.OIDCTokenID)
+				creds, err := assumeRoleWithWebIdentity(cfg, config.AssumeRoleARN, config.AssumeRoleSessionName, config.OIDCTokenID)
 				if err != nil {
 					return
 				}
 				options.Credentials = creds
 			} else {
 				// Assume Role with external ID
-				creds, err := assumeRole(ctx, cfg, config.AssumeRoleARN, config.AssumeRoleSessionName, config.ExternalID)
+				creds, err := assumeRole(cfg, config.AssumeRoleARN, config.AssumeRoleSessionName, config.ExternalID)
 				if err != nil {
 					return
 				}
@@ -463,7 +463,7 @@ func newS3Client(ctx context.Context, config Config) (*s3Client, error) {
 	}, nil
 }
 
-func assumeRole(ctx context.Context, cfg aws.Config, roleArn, roleSessionName, externalID string) (aws.CredentialsProvider, error) {
+func assumeRole(cfg aws.Config, roleArn, roleSessionName, externalID string) (aws.CredentialsProvider, error) {
 	// Create a new STS client
 	stsClient := sts.NewFromConfig(cfg)
 
@@ -492,7 +492,7 @@ func (r *InMemoryTokenRetriever) GetIdentityToken() ([]byte, error) {
 	return []byte(r.Token), nil
 }
 
-func assumeRoleWithWebIdentity(ctx context.Context, cfg aws.Config, roleArn, roleSessionName, webIdentityToken string) (aws.CredentialsProvider, error) {
+func assumeRoleWithWebIdentity(cfg aws.Config, roleArn, roleSessionName, webIdentityToken string) (aws.CredentialsProvider, error) {
 	// Create a new STS client
 	stsClient := sts.NewFromConfig(cfg)
 	tokenRetriever := &InMemoryTokenRetriever{
