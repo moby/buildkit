@@ -9,6 +9,7 @@ import (
 	"github.com/containerd/containerd/v2/core/remotes"
 	"github.com/containerd/containerd/v2/core/remotes/docker"
 	cerrdefs "github.com/containerd/errdefs"
+	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/version"
 	"github.com/moby/locker"
 	digest "github.com/opencontainers/go-digest"
@@ -47,7 +48,7 @@ func ProviderFromRef(ref string, opts ...ResolveOptFunc) (ocispecs.Descriptor, c
 	}
 	if ro.Credentials != nil {
 		dro.Hosts = docker.ConfigureDefaultRegistries(
-			docker.WithAuthorizer(docker.NewDockerAuthorizer(docker.WithAuthCreds(ro.Credentials))),
+			docker.WithAuthorizer(docker.NewDockerAuthorizer(docker.WithAuthCreds(ro.Credentials), docker.WithAuthClient(tracing.DefaultClient))),
 		)
 	}
 	remote := docker.NewResolver(dro)

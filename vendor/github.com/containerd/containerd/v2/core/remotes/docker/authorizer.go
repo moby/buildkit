@@ -19,8 +19,8 @@ package docker
 import (
 	"context"
 	"encoding/base64"
-	"errors"
 	"fmt"
+	glog "log"
 	"net/http"
 	"strings"
 	"sync"
@@ -30,6 +30,8 @@ import (
 	remoteerrors "github.com/containerd/containerd/v2/core/remotes/errors"
 	"github.com/containerd/errdefs"
 	"github.com/containerd/log"
+	"github.com/pkg/errors"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace"
 )
 
 type dockerAuthorizer struct {
@@ -304,8 +306,12 @@ func (ah *authHandler) doBearerAuth(ctx context.Context) (token, refreshToken st
 		}()
 		// credential information is provided, use oauth POST endpoint
 		// TODO: Allow setting client_id
+		ctx, es := otelhttptrace.WithEventLogger(ctx)
+		st := time.Now()
 		resp, err := auth.FetchTokenWithOAuth(ctx, ah.client, ah.header, "containerd-client", to)
 		if err != nil {
+			glog.Printf("fetch error in %.5f: %+v", time.Since(st).Seconds(), errors.WithStack(err))
+			es.LogAllEvents()
 			var errStatus remoteerrors.ErrUnexpectedStatus
 			if errors.As(err, &errStatus) {
 				// Registries without support for POST may return 404 for POST /v2/token.
