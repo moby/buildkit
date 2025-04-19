@@ -176,7 +176,7 @@ require (
 	github.com/secure-systems-lab/go-securesystemslib v0.4.0 // indirect
 	github.com/shibumi/go-pathspec v1.3.0 // indirect
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635 // indirect
-	github.com/vbatts/tar-split v0.11.6 // indirect
+	github.com/vbatts/tar-split v0.12.1 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/otel/metric v1.31.0 // indirect
