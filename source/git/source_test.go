@@ -304,54 +304,75 @@ func testFetchUnreferencedRefSha(t *testing.T, ref string, keepGitDir bool) {
 }
 
 func TestFetchByTag(t *testing.T) {
-	testFetchByTag(t, "lightweight-tag", "third", false, true, false)
+	testFetchByTag(t, "lightweight-tag", "third", false, true, false, testCommitHashModeNone)
 }
 
 func TestFetchByTagKeepGitDir(t *testing.T) {
-	testFetchByTag(t, "lightweight-tag", "third", false, true, true)
+	testFetchByTag(t, "lightweight-tag", "third", false, true, true, testCommitHashModeNone)
 }
 
 func TestFetchByTagFull(t *testing.T) {
-	testFetchByTag(t, "refs/tags/lightweight-tag", "third", false, true, true)
+	testFetchByTag(t, "refs/tags/lightweight-tag", "third", false, true, true, testCommitHashModeNone)
 }
 
 func TestFetchByAnnotatedTag(t *testing.T) {
-	testFetchByTag(t, "v1.2.3", "second", true, false, false)
+	testFetchByTag(t, "v1.2.3", "second", true, false, false, testCommitHashModeNone)
 }
 
 func TestFetchByAnnotatedTagKeepGitDir(t *testing.T) {
-	testFetchByTag(t, "v1.2.3", "second", true, false, true)
+	testFetchByTag(t, "v1.2.3", "second", true, false, true, testCommitHashModeNone)
 }
 
 func TestFetchByAnnotatedTagFull(t *testing.T) {
-	testFetchByTag(t, "refs/tags/v1.2.3", "second", true, false, true)
+	testFetchByTag(t, "refs/tags/v1.2.3", "second", true, false, true, testCommitHashModeNone)
 }
 
 func TestFetchByBranch(t *testing.T) {
-	testFetchByTag(t, "feature", "withsub", false, true, false)
+	testFetchByTag(t, "feature", "withsub", false, true, false, testCommitHashModeNone)
 }
 
 func TestFetchByBranchKeepGitDir(t *testing.T) {
-	testFetchByTag(t, "feature", "withsub", false, true, true)
+	testFetchByTag(t, "feature", "withsub", false, true, true, testCommitHashModeNone)
 }
 
 func TestFetchByBranchFull(t *testing.T) {
-	testFetchByTag(t, "refs/heads/feature", "withsub", false, true, true)
+	testFetchByTag(t, "refs/heads/feature", "withsub", false, true, true, testCommitHashModeNone)
 }
 
 func TestFetchByRef(t *testing.T) {
-	testFetchByTag(t, "test", "feature", false, true, false)
+	testFetchByTag(t, "test", "feature", false, true, false, testCommitHashModeNone)
 }
 
 func TestFetchByRefKeepGitDir(t *testing.T) {
-	testFetchByTag(t, "test", "feature", false, true, true)
+	testFetchByTag(t, "test", "feature", false, true, true, testCommitHashModeNone)
 }
 
 func TestFetchByRefFull(t *testing.T) {
-	testFetchByTag(t, "refs/test", "feature", false, true, true)
+	testFetchByTag(t, "refs/test", "feature", false, true, true, testCommitHashModeNone)
 }
 
-func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotatedTag, hasFoo13File, keepGitDir bool) {
+func TestFetchByTagWithCommitHash(t *testing.T) {
+	testFetchByTag(t, "lightweight-tag", "third", false, true, false, testCommitHashModeValid)
+}
+
+func TestFetchByTagWithCommitHashPartial(t *testing.T) {
+	testFetchByTag(t, "lightweight-tag", "third", false, true, false, testCommitHashModeValidPartial)
+}
+
+func TestFetchByTagWithCommitHashInvalid(t *testing.T) {
+	testFetchByTag(t, "lightweight-tag", "third", false, true, false, testCommitHashModeInvalid)
+}
+
+type testCommitHashMode int
+
+const (
+	testCommitHashModeNone testCommitHashMode = iota
+	testCommitHashModeValid
+	testCommitHashModeValidPartial
+	testCommitHashModeInvalid
+)
+
+func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotatedTag, hasFoo13File, keepGitDir bool, commitHashMode testCommitHashMode) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
 	}
@@ -366,6 +387,28 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 
 	id := &GitIdentifier{Remote: repo.mainURL, Ref: tag, KeepGitDir: keepGitDir}
 
+	if commitHashMode != testCommitHashModeNone {
+		cmd := exec.Command("git", "rev-parse", tag)
+		cmd.Dir = repo.mainPath
+
+		out, err := cmd.Output()
+		require.NoError(t, err)
+
+		sha := strings.TrimSpace(string(out))
+		require.Equal(t, 40, len(sha))
+
+		switch commitHashMode {
+		case testCommitHashModeValid:
+			id.CommitHash = sha
+		case testCommitHashModeValidPartial:
+			id.CommitHash = sha[:8]
+		case testCommitHashModeInvalid:
+			id.CommitHash = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+		default:
+			// NOTREACHED
+		}
+	}
+
 	g, err := gs.Resolve(ctx, id, nil, nil)
 	require.NoError(t, err)
 
@@ -376,6 +419,14 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 	expLen := 40
 	if keepGitDir {
 		expLen += 4
+	}
+	if id.Subdir != "" {
+		expLen += len(":" + id.Subdir)
+	}
+	if id.CommitHash != "" {
+		expLen += len(":commit-hash=" + id.CommitHash)
+	}
+	if keepGitDir {
 		require.GreaterOrEqual(t, len(key1), expLen)
 	} else {
 		require.Equal(t, expLen, len(key1))
@@ -383,6 +434,10 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 	require.Equal(t, 40, len(pin1))
 
 	ref1, err := g.Snapshot(ctx, nil)
+	if commitHashMode == testCommitHashModeInvalid {
+		require.ErrorContains(t, err, "expected commit hash to match "+id.CommitHash)
+		return
+	}
 	require.NoError(t, err)
 	defer ref1.Release(context.TODO())
 

@@ -13,6 +13,7 @@ import (
 type GitIdentifier struct {
 	Remote           string
 	Ref              string
+	CommitHash       string
 	Subdir           string
 	KeepGitDir       bool
 	AuthTokenSecret  string
@@ -33,6 +34,7 @@ func NewGitIdentifier(remoteURL string) (*GitIdentifier, error) {
 	repo := GitIdentifier{Remote: u.Remote}
 	if u.Fragment != nil {
 		repo.Ref = u.Fragment.Ref
+		repo.CommitHash = u.Fragment.CommitHash
 		repo.Subdir = u.Fragment.Subdir
 	}
 	if sd := path.Clean(repo.Subdir); sd == "/" || sd == "." {
