@@ -8,27 +8,33 @@ import (
 )
 
 const (
-	// targetRefLabel is a label which contains image reference.
+	// TargetRefLabel is a label which contains image reference.
 	//
 	// It is a copy of [stargz-snapshotter/fs/source.targetRefLabel].
 	//
 	// [stargz-snapshotter/fs/source.targetRefLabel]: https://github.com/containerd/stargz-snapshotter/blob/v0.16.3/fs/source/source.go#L64-L65
-	targetRefLabel = "containerd.io/snapshot/remote/stargz.reference"
+	TargetRefLabel = "containerd.io/snapshot/remote/stargz.reference"
 
-	// targetDigestLabel is a label which contains layer digest.
+	// TargetDigestLabel is a label which contains layer digest.
 	//
 	// It is a copy of [stargz-snapshotter/fs/source.targetDigestLabel].
 	//
 	// [stargz-snapshotter/fs/source.targetDigestLabel]: https://github.com/containerd/stargz-snapshotter/blob/v0.16.3/fs/source/source.go#L67-L68
-	targetDigestLabel = "containerd.io/snapshot/remote/stargz.digest"
+	TargetDigestLabel = "containerd.io/snapshot/remote/stargz.digest"
 
-	// targetImageLayersLabel is a label which contains layer digests contained in
+	// TargetImageLayersLabel is a label which contains layer digests contained in
 	// the target image.
 	//
 	// It is a copy of [stargz-snapshotter/fs/source.targetImageLayersLabel].
 	//
 	// [stargz-snapshotter/fs/source.targetImageLayersLabel]: https://github.com/containerd/stargz-snapshotter/blob/v0.16.3/fs/source/source.go#L70-L72
-	targetImageLayersLabel = "containerd.io/snapshot/remote/stargz.layers"
+	TargetImageLayersLabel = "containerd.io/snapshot/remote/stargz.layers"
+
+	// TargetSessionLabel is a label which contains session IDs usable for
+	// authenticating the target snapshot.
+	//
+	// It has no equivalent in github.com/containerd/stargz-snapshotter.
+	TargetSessionLabel = "containerd.io/snapshot/remote/stargz.session"
 )
 
 const (
@@ -63,7 +69,7 @@ func SnapshotLabels(ref string, descs []ocispecs.Descriptor, targetIndex int) ma
 	for _, l := range descs[targetIndex:] {
 		// This avoids the label hits the size limitation.
 		// Skipping layers is allowed here and only affects performance.
-		if err := labels.Validate(targetImageLayersLabel, layers+l.Digest.String()); err != nil {
+		if err := labels.Validate(TargetImageLayersLabel, layers+l.Digest.String()); err != nil {
 			break
 		}
 		layers += l.Digest.String() + ","
@@ -71,8 +77,8 @@ func SnapshotLabels(ref string, descs []ocispecs.Descriptor, targetIndex int) ma
 	return map[string]string{
 		TOCJSONDigestAnnotation:         desc.Annotations[TOCJSONDigestAnnotation],
 		StoreUncompressedSizeAnnotation: desc.Annotations[StoreUncompressedSizeAnnotation],
-		targetRefLabel:                  ref,
-		targetDigestLabel:               desc.Digest.String(),
-		targetImageLayersLabel:          strings.TrimSuffix(layers, ","),
+		TargetRefLabel:                  ref,
+		TargetDigestLabel:               desc.Digest.String(),
+		TargetImageLayersLabel:          strings.TrimSuffix(layers, ","),
 	}
 }
