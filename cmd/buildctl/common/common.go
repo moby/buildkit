@@ -18,6 +18,28 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+// ResolveTLSFiles scans a TLS directory for known cert/key filenames.
+func ResolveTLSFilesFromDir(tlsDir string) (caCert, cert, key string) {
+	// Look for ca.pem or ca.crt and, if it exists, set caCert to that
+	// Look for cert.pem or tls.crt and, if it exists, set cert to that
+	// Look for key.pem or tls.key and, if it exists, set key to that
+	for _, v := range [6]string{"ca.pem", "cert.pem", "key.pem", "ca.crt", "tls.crt", "tls.key"} {
+		file := filepath.Join(tlsDir, v)
+		if _, err := os.Stat(file); err == nil {
+			switch v {
+			case "ca.pem", "ca.crt":
+				caCert = file
+			case "cert.pem", "tls.crt":
+				cert = file
+			case "key.pem", "tls.key":
+				key = file
+			}
+		}
+	}
+
+	return caCert, cert, key
+}
+
 // ResolveClient resolves a client from CLI args
 func ResolveClient(c *cli.Context) (*client.Client, error) {
 	serverName := c.GlobalString("tlsservername")
@@ -37,31 +59,12 @@ func ResolveClient(c *cli.Context) (*client.Client, error) {
 	tlsDir := c.GlobalString("tlsdir")
 
 	if tlsDir != "" {
-		// Look for ca.pem or ca.crt and, if it exists, set caCert to that
-		// Look for cert.pem or tls.crt and, if it exists, set cert to that
-		// Look for key.pem or tls.key and, if it exists, set key to that
-		for _, v := range [6]string{"ca.pem", "cert.pem", "key.pem", "ca.crt", "tls.crt", "tls.key"} {
-			file := filepath.Join(tlsDir, v)
-			if _, err := os.Stat(file); err == nil {
-				switch v {
-				case "ca.pem":
-				case "ca.crt":
-					caCert = file
-				case "cert.pem":
-				case "tls.crt":
-					cert = file
-				case "key.pem":
-				case "tls.key":
-					key = file
-				}
-			} else {
-				return nil, err
-			}
-		}
-
+		// Fail straight away if TLS was specified both ways
 		if c.GlobalString("tlscacert") != "" || c.GlobalString("tlscert") != "" || c.GlobalString("tlskey") != "" {
 			return nil, errors.New("cannot specify tlsdir and tlscacert/tlscert/tlskey at the same time")
 		}
+
+		caCert, cert, key = ResolveTLSFilesFromDir(tlsDir)
 	} else {
 		caCert = c.GlobalString("tlscacert")
 		cert = c.GlobalString("tlscert")
