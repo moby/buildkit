@@ -783,7 +783,7 @@ github.com/syndtr/gocapability/capability
 # github.com/tonistiigi/dchapes-mode v0.0.0-20250318174251-73d941a28323
 ## explicit; go 1.21
 github.com/tonistiigi/dchapes-mode
-# github.com/tonistiigi/fsutil v0.0.0-20250410151801-5b74a7ad7583
+# github.com/tonistiigi/fsutil v0.0.0-20250417144416-3f76f8130144
 ## explicit; go 1.21
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy
