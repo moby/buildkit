@@ -42,7 +42,7 @@ func ResolveTLSFilesFromDir(tlsDir string) (caCert, cert, key string, err error)
 		return caCert, cert, key, nil
 	}
 
-	return "", "", "", errors.New("Directory didn't contain one or more of the needed files")
+	return "", "", "", errors.New("directory didn't contain one or more of the needed files")
 }
 
 // ResolveClient resolves a client from CLI args
