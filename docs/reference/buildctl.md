@@ -29,7 +29,7 @@ GLOBAL OPTIONS:
    --tlscacert value      CA certificate for validation
    --tlscert value        client certificate
    --tlskey value         client key
-   --tlsdir value         directory containing CA certificate, client certificate, and client key
+   --tlsdir value         directory containing CA certificate, client certificate, and client key. Supported file names are (ca.pem, cert.pem, key.pem) or (ca.crt, tls.crt, tls.key)
    --timeout value        timeout backend connection after value seconds (default: 5)
    --wait                 block RPCs until the connection becomes available
    --help, -h             show help

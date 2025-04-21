@@ -18,26 +18,31 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// ResolveTLSFiles scans a TLS directory for known cert/key filenames.
-func ResolveTLSFilesFromDir(tlsDir string) (caCert, cert, key string) {
-	// Look for ca.pem or ca.crt and, if it exists, set caCert to that
-	// Look for cert.pem or tls.crt and, if it exists, set cert to that
-	// Look for key.pem or tls.key and, if it exists, set key to that
-	for _, v := range [6]string{"ca.pem", "cert.pem", "key.pem", "ca.crt", "tls.crt", "tls.key"} {
-		file := filepath.Join(tlsDir, v)
-		if _, err := os.Stat(file); err == nil {
-			switch v {
-			case "ca.pem", "ca.crt":
-				caCert = file
-			case "cert.pem", "tls.crt":
-				cert = file
-			case "key.pem", "tls.key":
-				key = file
-			}
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// ResolveTLSFilesFromDir scans a TLS directory for known cert/key filenames.
+func ResolveTLSFilesFromDir(tlsDir string) (caCert, cert, key string, err error) {
+	trySet := func(ca, certFile, keyFile string) (string, string, string, bool) {
+		caPath := filepath.Join(tlsDir, ca)
+		certPath := filepath.Join(tlsDir, certFile)
+		keyPath := filepath.Join(tlsDir, keyFile)
+		if fileExists(caPath) && fileExists(certPath) && fileExists(keyPath) {
+			return caPath, certPath, keyPath, true
 		}
+		return "", "", "", false
 	}
 
-	return caCert, cert, key
+	if caCert, cert, key, ok := trySet("ca.pem", "cert.pem", "key.pem"); ok {
+		return caCert, cert, key, nil
+	}
+	if caCert, cert, key, ok := trySet("ca.crt", "tls.crt", "tls.key"); ok {
+		return caCert, cert, key, nil
+	}
+
+	return "", "", "", errors.New("Directory didn't contain one or more of the needed files")
 }
 
 // ResolveClient resolves a client from CLI args
@@ -55,6 +60,7 @@ func ResolveClient(c *cli.Context) (*client.Client, error) {
 	var caCert string
 	var cert string
 	var key string
+	var err error
 
 	tlsDir := c.GlobalString("tlsdir")
 
@@ -64,7 +70,10 @@ func ResolveClient(c *cli.Context) (*client.Client, error) {
 			return nil, errors.New("cannot specify tlsdir and tlscacert/tlscert/tlskey at the same time")
 		}
 
-		caCert, cert, key = ResolveTLSFilesFromDir(tlsDir)
+		caCert, cert, key, err = ResolveTLSFilesFromDir(tlsDir)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		caCert = c.GlobalString("tlscacert")
 		cert = c.GlobalString("tlscert")

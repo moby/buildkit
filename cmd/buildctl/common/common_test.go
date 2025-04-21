@@ -24,10 +24,11 @@ func TestResolveTLSFilesFromDir(t *testing.T) {
 		cert := writeTempFile(t, dir, "tls.crt", "cert")
 		key := writeTempFile(t, dir, "tls.key", "key")
 
-		caOut, certOut, keyOut := common.ResolveTLSFilesFromDir(dir)
+		caOut, certOut, keyOut, err := common.ResolveTLSFilesFromDir(dir)
 		require.Equal(t, ca, caOut)
 		require.Equal(t, cert, certOut)
 		require.Equal(t, key, keyOut)
+		require.NoError(t, err)
 	})
 
 	t.Run("all files present for pem style", func(t *testing.T) {
@@ -36,20 +37,40 @@ func TestResolveTLSFilesFromDir(t *testing.T) {
 		cert := writeTempFile(t, dir, "cert.pem", "cert")
 		key := writeTempFile(t, dir, "key.pem", "key")
 
-		caOut, certOut, keyOut := common.ResolveTLSFilesFromDir(dir)
+		caOut, certOut, keyOut, err := common.ResolveTLSFilesFromDir(dir)
 		require.Equal(t, ca, caOut)
 		require.Equal(t, cert, certOut)
 		require.Equal(t, key, keyOut)
+		require.NoError(t, err)
 	})
 
-	t.Run("some files missing", func(t *testing.T) {
+	t.Run("no full set is present", func(t *testing.T) {
 		dir := t.TempDir()
-		ca := writeTempFile(t, dir, "ca.crt", "ca")
-		// cert and key missing
+		writeTempFile(t, dir, "ca.crt", "ca-cert-manager")
+		writeTempFile(t, dir, "cert.pem", "cert-pem")
+		writeTempFile(t, dir, "key.pem", "key-pem")
+		// ca for cert-manager, cert and key for pem
 
-		caOut, certOut, keyOut := common.ResolveTLSFilesFromDir(dir)
-		require.Equal(t, ca, caOut)
+		caOut, certOut, keyOut, err := common.ResolveTLSFilesFromDir(dir)
+		require.Empty(t, caOut)
 		require.Empty(t, certOut)
 		require.Empty(t, keyOut)
+		require.Error(t, err)
+	})
+
+	t.Run("all files present for cert-manager and pem styles and pem is chosen", func(t *testing.T) {
+		dir := t.TempDir()
+		writeTempFile(t, dir, "ca.crt", "ca-cert-manager")
+		writeTempFile(t, dir, "tls.crt", "cert-cert-manager")
+		writeTempFile(t, dir, "tls.key", "key-cert-manager")
+		ca := writeTempFile(t, dir, "ca.pem", "ca-pem")
+		cert := writeTempFile(t, dir, "cert.pem", "cert-pem")
+		key := writeTempFile(t, dir, "key.pem", "key-pem")
+
+		caOut, certOut, keyOut, err := common.ResolveTLSFilesFromDir(dir)
+		require.Equal(t, ca, caOut)
+		require.Equal(t, cert, certOut)
+		require.Equal(t, key, keyOut)
+		require.NoError(t, err)
 	})
 }
