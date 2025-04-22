@@ -44,7 +44,7 @@ jobs:
     steps:
       -
         name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         name: Expose GitHub Runtime
         uses: crazy-max/ghaction-github-runtime@v2
@@ -65,7 +65,7 @@ jobs:
       -
         name: Set outputs
         id: set
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
             const yaml = require('js-yaml');
@@ -91,7 +91,7 @@ jobs:
             });
       -
         name: Build
-        uses: docker/bake-action@v2
+        uses: docker/bake-action@v3
         with:
           targets: integration-tests-base
           set: |
@@ -119,14 +119,23 @@ jobs:
         include: ${{ fromJson(needs.prepare.outputs.includes) }}
     steps:
       -
-        name: Environment variables
+        name: Prepare
         run: |
           for l in "${{ inputs.env }}"; do
             echo "${l?}" >> $GITHUB_ENV
           done
+          echo "TEST_REPORT_NAME=${{ github.job }}-$(echo "${{ matrix.pkg }}-${{ matrix.skip-integration-tests }}-${{ matrix.kind }}-${{ matrix.worker }}-${{ matrix.tags }}" | tr -dc '[:alnum:]-\n\r' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+          testFlags="${{ env.TESTFLAGS }}"
+          if [ -n "${{ matrix.tags }}" ]; then
+            testFlags="${testFlags} --tags=${{ matrix.tags }}"
+          fi
+          if [ -n "${{ matrix.worker }}" ]; then
+            testFlags="${testFlags} --run=//worker=${{ matrix.worker }}$"
+          fi
+          echo "TESTFLAGS=${testFlags}" >> $GITHUB_ENV
       -
         name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         name: Expose GitHub Runtime
         uses: crazy-max/ghaction-github-runtime@v2
@@ -144,16 +153,9 @@ jobs:
         name: Test
         continue-on-error: ${{ matrix.tags == 'nydus' }}
         run: |
-          export TEST_REPORT_SUFFIX=-${{ github.job }}-$(echo "${{ matrix.pkg }}-${{ matrix.skip-integration-tests }}-${{ matrix.kind }}-${{ matrix.worker }}-${{ matrix.tags }}" | tr -dc '[:alnum:]-\n\r' | tr '[:upper:]' '[:lower:]')
-          if [ -n "${{ matrix.tags }}" ]; then
-            TESTFLAGS="${TESTFLAGS} --tags=${{ matrix.tags }}"
-            export BUILDKITD_TAGS="${{ matrix.tags }}"
-          fi
-          if [ -n "${{ matrix.worker }}" ]; then
-            export TESTFLAGS="${TESTFLAGS} --run=//worker=${{ matrix.worker }}$"
-          fi
           ./hack/test ${{ matrix.kind }}
         env:
+          TEST_REPORT_SUFFIX: -${{ env.TEST_REPORT_NAME }}
           TEST_COVERAGE: 1
           TESTPKGS: ${{ matrix.pkg }}
           SKIP_INTEGRATION_TESTS: ${{ matrix.skip-integration-tests }}
@@ -161,20 +163,20 @@ jobs:
       -
         name: Send to Codecov
         if: always()
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
           directory: ./bin/testreports
           flags: ${{ matrix.codecov_flags }}
       -
         name: Generate annotations
         if: always()
-        uses: crazy-max/.github/.github/actions/gotest-annotations@5af0882e0496d2f7e98a53ae4048e3d86682496f
+        uses: crazy-max/.github/.github/actions/gotest-annotations@fa6141aedf23596fb8bdcceab9cce8dadaa31bd9
         with:
           directory: ./bin/testreports
       -
         name: Upload test reports
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: test-reports
+          name: test-reports-${{ env.TEST_REPORT_NAME }}
           path: ./bin/testreports

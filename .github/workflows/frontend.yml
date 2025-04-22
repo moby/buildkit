@@ -93,7 +93,7 @@ jobs:
           fi
       -
         name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         name: Expose GitHub Runtime
         uses: crazy-max/ghaction-github-runtime@v2

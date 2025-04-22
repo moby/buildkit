@@ -5404,6 +5404,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBasicGhaCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	t.Skipf("Unsupported GHA cache v2 (v1 is EOL)")
 	integration.CheckFeatureCompat(t, sb,
 		integration.FeatureCacheExport,
 		integration.FeatureCacheImport,
