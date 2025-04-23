@@ -203,6 +203,8 @@ jobs:
       - build
     env:
       GOOS: freebsd
+      # https://github.com/hashicorp/vagrant/issues/13652
+      VAGRANT_DISABLE_STRICT_DEPENDENCY_ENFORCEMENT: 1
     steps:
       -
         name: Checkout
