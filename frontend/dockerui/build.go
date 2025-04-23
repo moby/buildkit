@@ -128,9 +128,15 @@ func extendWindowsPlatform(p, imgP ocispecs.Platform) ocispecs.Platform {
 }
 
 func normalizePlatform(p, imgP ocispecs.Platform) exptypes.Platform {
-	k := platforms.FormatAll(p)
-	p = extendWindowsPlatform(p, imgP)
-	p = platforms.Normalize(p)
+	var k string
+	if p.OS == "windows" {
+		k = platforms.FormatAll(p)
+		p = extendWindowsPlatform(p, imgP)
+		p = platforms.Normalize(p)
+	} else {
+		p = platforms.Normalize(p)
+		k = platforms.FormatAll(p)
+	}
 	return exptypes.Platform{
 		ID:       k,
 		Platform: p,
