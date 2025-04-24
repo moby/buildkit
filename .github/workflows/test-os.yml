@@ -78,12 +78,12 @@ jobs:
     needs:
       - build
     env:
-      TESTFLAGS: "-v --timeout=60m"
+      TESTFLAGS: "-v --timeout=120m"
       GOTESTSUM_FORMAT: "standard-verbose"
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2022]
+        os: [windows-2022, windows-2025]
         worker:
           - containerd
         pkg:
@@ -109,6 +109,10 @@ jobs:
           - ./frontend/dockerfile#12-12
         include:
           - os: windows-2022
+            worker: containerd
+            pkg: ./...
+            skip-integration-tests: 1
+          - os: windows-2025
             worker: containerd
             pkg: ./...
             skip-integration-tests: 1
