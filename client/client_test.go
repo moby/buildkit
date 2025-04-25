@@ -3430,9 +3430,9 @@ func testMultipleExporters(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	if workers.IsTestDockerd() {
-		require.Equal(t, resp.ExporterResponse[exptypes.ExporterImageNameKey], target1+","+target2)
+		require.Equal(t, target1+","+target2, resp.ExporterResponse[exptypes.ExporterImageNameKey])
 	} else {
-		require.Equal(t, resp.ExporterResponse[exptypes.ExporterImageNameKey], target2)
+		require.Equal(t, target2, resp.ExporterResponse[exptypes.ExporterImageNameKey])
 	}
 	require.FileExists(t, filepath.Join(destDir, "out.tar"))
 	require.FileExists(t, filepath.Join(destDir, "out2.tar"))
