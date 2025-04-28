@@ -87,7 +87,7 @@ func main() {
 		},
 		cli.StringFlag{
 			Name:  "tlsdir",
-			Usage: "directory containing CA certificate, client certificate, and client key",
+			Usage: "directory containing CA certificate, client certificate, and client key. Supported file names are (ca.pem, cert.pem, key.pem) or (ca.crt, tls.crt, tls.key)",
 			Value: "",
 		},
 		cli.IntFlag{
