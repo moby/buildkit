@@ -61,7 +61,7 @@ func (bc *Client) Build(ctx context.Context, fn BuildFunc) (*ResultBuilder, erro
 			} else {
 				p = platforms.DefaultSpec()
 			}
-			expPlat := normalizePlatform(p, img.Platform)
+			expPlat := makeExportPlatform(p, img.Platform)
 			if bc.MultiPlatformRequested {
 				res.AddRef(expPlat.ID, ref)
 				res.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterImageConfigKey, expPlat.ID), config)
@@ -127,18 +127,15 @@ func extendWindowsPlatform(p, imgP ocispecs.Platform) ocispecs.Platform {
 	return p
 }
 
-func normalizePlatform(p, imgP ocispecs.Platform) exptypes.Platform {
-	var k string
+func makeExportPlatform(p, imgP ocispecs.Platform) exptypes.Platform {
+	p = platforms.Normalize(p)
+	exp := exptypes.Platform{
+		ID: platforms.FormatAll(p),
+	}
 	if p.OS == "windows" {
-		k = platforms.FormatAll(p)
 		p = extendWindowsPlatform(p, imgP)
 		p = platforms.Normalize(p)
-	} else {
-		p = platforms.Normalize(p)
-		k = platforms.FormatAll(p)
 	}
-	return exptypes.Platform{
-		ID:       k,
-		Platform: p,
-	}
+	exp.Platform = p
+	return exp
 }
