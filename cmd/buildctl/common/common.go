@@ -30,37 +30,24 @@ func ResolveClient(c *cli.Context) (*client.Client, error) {
 		serverName = uri.Hostname()
 	}
 
-	var caCert string
-	var cert string
-	var key string
+	var (
+		caCert string
+		cert   string
+		key    string
+		err    error
+	)
 
 	tlsDir := c.GlobalString("tlsdir")
 
 	if tlsDir != "" {
-		// Look for ca.pem or ca.crt and, if it exists, set caCert to that
-		// Look for cert.pem or tls.crt and, if it exists, set cert to that
-		// Look for key.pem or tls.key and, if it exists, set key to that
-		for _, v := range [6]string{"ca.pem", "cert.pem", "key.pem", "ca.crt", "tls.crt", "tls.key"} {
-			file := filepath.Join(tlsDir, v)
-			if _, err := os.Stat(file); err == nil {
-				switch v {
-				case "ca.pem":
-				case "ca.crt":
-					caCert = file
-				case "cert.pem":
-				case "tls.crt":
-					cert = file
-				case "key.pem":
-				case "tls.key":
-					key = file
-				}
-			} else {
-				return nil, err
-			}
-		}
-
+		// Fail straight away if TLS was specified both ways
 		if c.GlobalString("tlscacert") != "" || c.GlobalString("tlscert") != "" || c.GlobalString("tlskey") != "" {
 			return nil, errors.New("cannot specify tlsdir and tlscacert/tlscert/tlskey at the same time")
+		}
+
+		caCert, cert, key, err = resolveTLSFilesFromDir(tlsDir)
+		if err != nil {
+			return nil, err
 		}
 	} else {
 		caCert = c.GlobalString("tlscacert")
@@ -127,4 +114,30 @@ func ParseTemplate(format string) (*template.Template, error) {
 		},
 	}
 	return template.New("").Funcs(funcs).Parse(format)
+}
+
+// resolveTLSFilesFromDir scans a TLS directory for known cert/key filenames.
+func resolveTLSFilesFromDir(tlsDir string) (caCert, cert, key string, err error) {
+	oneOf := func(either, or string) (string, error) {
+		for _, name := range []string{either, or} {
+			fpath := filepath.Join(tlsDir, name)
+			if _, err := os.Stat(fpath); err == nil {
+				return fpath, nil
+			} else if !os.IsNotExist(err) {
+				return "", err
+			}
+		}
+		return "", errors.Errorf("directory did not contain one of the needed files: %s or %s", either, or)
+	}
+
+	if caCert, err = oneOf("ca.pem", "ca.crt"); err != nil {
+		return "", "", "", err
+	}
+	if cert, err = oneOf("cert.pem", "tls.crt"); err != nil {
+		return "", "", "", err
+	}
+	if key, err = oneOf("key.pem", "tls.key"); err != nil {
+		return "", "", "", err
+	}
+	return caCert, cert, key, nil
 }
