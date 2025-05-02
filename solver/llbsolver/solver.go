@@ -237,7 +237,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 			if err != nil {
 				return nil, nil, err
 			}
-			pr, err := prc.Predicate()
+			pr, err := prc.Predicate(ctx)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -756,7 +756,7 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 			err = inBuilderContext(ctx, j, exp.Name(), id, func(ctx context.Context, _ session.Group) error {
 				prepareDone := progress.OneOff(ctx, "preparing build cache for export")
 				if err := result.EachRef(cached, inp, func(res solver.CachedResult, ref cache.ImmutableRef) error {
-					ctx = withDescHandlerCacheOpts(ctx, ref)
+					ctx := withDescHandlerCacheOpts(ctx, ref)
 
 					// Configure compression
 					compressionConfig := exp.Config().Compression

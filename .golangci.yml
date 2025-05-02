@@ -9,6 +9,7 @@ linters:
     - durationcheck
     - errname
     - errorlint
+    - fatcontext
     - forbidigo
     - gocritic
     - gosec

@@ -333,7 +333,7 @@ type ProvenanceCreator struct {
 	pr        *provenancetypes.ProvenancePredicate
 	j         *solver.Job
 	sampler   *resources.SysSampler
-	addLayers func() error
+	addLayers func(context.Context) error
 }
 
 func NewProvenanceCreator(ctx context.Context, cp *provenance.Capture, res solver.ResultProxy, attrs map[string]string, j *solver.Job, usage *resources.SysSampler) (*ProvenanceCreator, error) {
@@ -377,7 +377,7 @@ func NewProvenanceCreator(ctx context.Context, cp *provenance.Capture, res solve
 
 	pr.Builder.ID = attrs["builder-id"]
 
-	var addLayers func() error
+	var addLayers func(context.Context) error
 
 	switch mode {
 	case "min":
@@ -408,7 +408,7 @@ func NewProvenanceCreator(ctx context.Context, cp *provenance.Capture, res solve
 			return nil, errors.Errorf("invalid worker ref %T", r.Sys())
 		}
 
-		addLayers = func() error {
+		addLayers = func(ctx context.Context) error {
 			e := newCacheExporter()
 
 			if wref.ImmutableRef != nil {
@@ -460,12 +460,12 @@ func NewProvenanceCreator(ctx context.Context, cp *provenance.Capture, res solve
 	return pc, nil
 }
 
-func (p *ProvenanceCreator) Predicate() (*provenancetypes.ProvenancePredicate, error) {
+func (p *ProvenanceCreator) Predicate(ctx context.Context) (*provenancetypes.ProvenancePredicate, error) {
 	end := p.j.RegisterCompleteTime()
 	p.pr.Metadata.BuildFinishedOn = &end
 
 	if p.addLayers != nil {
-		if err := p.addLayers(); err != nil {
+		if err := p.addLayers(ctx); err != nil {
 			return nil, err
 		}
 	}
