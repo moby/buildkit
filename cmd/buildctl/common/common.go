@@ -71,10 +71,10 @@ func ResolveClient(c *cli.Context) (*client.Client, error) {
 		opts = append(opts, client.WithCredentials(cert, key))
 	}
 
-	timeout := time.Duration(c.GlobalInt("timeout"))
+	timeout := time.Duration(c.GlobalInt("timeout")) * time.Second
 	if timeout > 0 {
 		ctx2, cancel := context.WithCancelCause(ctx)
-		ctx2, _ = context.WithTimeoutCause(ctx2, timeout*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
+		ctx2, _ = context.WithTimeoutCause(ctx2, timeout, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
 		ctx = ctx2
 		defer func() { cancel(errors.WithStack(context.Canceled)) }()
 	}
