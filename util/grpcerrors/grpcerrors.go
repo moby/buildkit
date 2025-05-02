@@ -139,7 +139,7 @@ func Code(err error) codes.Code {
 }
 
 func WrapCode(err error, code codes.Code) error {
-	return &withCode{error: err, code: code}
+	return &withCodeError{error: err, code: code}
 }
 
 func AsGRPCStatus(err error) (*status.Status, bool) {
@@ -237,16 +237,16 @@ func (e *grpcStatusError) GRPCStatus() *status.Status {
 	return e.st
 }
 
-type withCode struct {
+type withCodeError struct {
 	code codes.Code
 	error
 }
 
-func (e *withCode) Code() codes.Code {
+func (e *withCodeError) Code() codes.Code {
 	return e.code
 }
 
-func (e *withCode) Unwrap() error {
+func (e *withCodeError) Unwrap() error {
 	return e.error
 }
 

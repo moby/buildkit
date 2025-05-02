@@ -137,7 +137,7 @@ func DockerfileLint(ctx context.Context, dt []byte, opt ConvertOpt) (*lint.LintR
 
 	_, err := toDispatchState(ctx, dt, opt)
 
-	var errLoc *parser.ErrorLocation
+	var errLoc *parser.LocationError
 	if err != nil {
 		buildErr := &lint.BuildError{
 			Message: err.Error(),

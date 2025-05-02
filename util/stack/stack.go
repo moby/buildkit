@@ -85,7 +85,7 @@ func Enable(err error) error {
 }
 
 func Wrap(err error, s *Stack) error {
-	return &withStack{stack: s, error: err}
+	return &withStackError{stack: s, error: err}
 }
 
 func hasLocalStackTrace(err error) bool {
@@ -173,15 +173,15 @@ func convertStack(s errors.StackTrace) *Stack {
 	return &out
 }
 
-type withStack struct {
+type withStackError struct {
 	stack *Stack
 	error
 }
 
-func (e *withStack) Unwrap() error {
+func (e *withStackError) Unwrap() error {
 	return e.error
 }
 
-func (e *withStack) StackTrace() *Stack {
+func (e *withStackError) StackTrace() *Stack {
 	return e.stack
 }
