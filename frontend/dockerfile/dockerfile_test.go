@@ -9461,7 +9461,7 @@ COPY notexist /foo
 		}
 
 		err = grpcerrors.FromGRPC(status.FromProto(&statuspb.Status{
-			Code:    int32(st.Code),
+			Code:    st.Code,
 			Message: st.Message,
 			Details: details,
 		}).Err())

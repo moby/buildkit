@@ -11423,7 +11423,7 @@ func testLLBMountPerformance(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	// Windows images take longer time
-	timeout := integration.UnixOrWindows(time.Duration(time.Minute), time.Duration(3*time.Minute))
+	timeout := integration.UnixOrWindows(time.Minute, 3*time.Minute)
 	timeoutCtx, cancel := context.WithTimeoutCause(sb.Context(), timeout, nil)
 	defer cancel()
 	_, err = c.Solve(timeoutCtx, def, SolveOpt{}, nil)

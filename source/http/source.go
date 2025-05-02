@@ -398,7 +398,7 @@ func (hs *httpSourceHandler) save(ctx context.Context, resp *http.Response, s se
 	uid := hs.src.UID
 	gid := hs.src.GID
 	if idmap := mount.IdentityMapping(); idmap != nil {
-		uid, gid, err = idmap.ToHost(int(uid), int(gid))
+		uid, gid, err = idmap.ToHost(uid, gid)
 		if err != nil {
 			return nil, "", err
 		}

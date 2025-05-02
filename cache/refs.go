@@ -361,12 +361,12 @@ func (cr *cacheRecord) size(ctx context.Context) (int64, error) {
 		}
 		if dgst := cr.getBlob(); dgst != "" {
 			added := make(map[digest.Digest]struct{})
-			info, err := cr.cm.ContentStore.Info(ctx, digest.Digest(dgst))
+			info, err := cr.cm.ContentStore.Info(ctx, dgst)
 			if err == nil {
 				usage.Size += info.Size
-				added[digest.Digest(dgst)] = struct{}{}
+				added[dgst] = struct{}{}
 			}
-			walkBlobVariantsOnly(ctx, cr.cm.ContentStore, digest.Digest(dgst), func(desc ocispecs.Descriptor) bool {
+			walkBlobVariantsOnly(ctx, cr.cm.ContentStore, dgst, func(desc ocispecs.Descriptor) bool {
 				if _, ok := added[desc.Digest]; !ok {
 					if info, err := cr.cm.ContentStore.Info(ctx, desc.Digest); err == nil {
 						usage.Size += info.Size
@@ -1035,7 +1035,7 @@ func (sr *immutableRef) withRemoteSnapshotLabelsStargzMode(ctx context.Context, 
 		} else if _, ok := info.Labels["containerd.io/snapshot/remote"]; !ok {
 			continue // This isn't a remote snapshot; skip
 		}
-		dh := dhs[digest.Digest(r.getBlob())]
+		dh := dhs[r.getBlob()]
 		if dh == nil {
 			continue // no info passed; skip
 		}
@@ -1075,7 +1075,7 @@ func (sr *immutableRef) prepareRemoteSnapshotsStargzMode(ctx context.Context, s 
 				continue
 			}
 
-			dh := dhs[digest.Digest(r.getBlob())]
+			dh := dhs[r.getBlob()]
 			if dh == nil {
 				// We cannot prepare remote snapshots without descHandler.
 				return nil, nil

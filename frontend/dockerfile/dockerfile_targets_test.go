@@ -49,7 +49,7 @@ FROM second AS binary
 
 	dir := integration.Tmpdir(
 		t,
-		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 
 	c, err := client.New(sb.Context(), sb.Address())

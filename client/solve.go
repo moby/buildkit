@@ -356,7 +356,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			return nil, err
 		}
 		var manifestDesc ocispecs.Descriptor
-		if err = json.Unmarshal([]byte(manifestDescDt), &manifestDesc); err != nil {
+		if err = json.Unmarshal(manifestDescDt, &manifestDesc); err != nil {
 			return nil, err
 		}
 		for _, storePath := range storesToUpdate {

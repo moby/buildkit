@@ -18,9 +18,9 @@ func (c *Client) Prune(ctx context.Context, ch chan UsageInfo, opts ...PruneOpti
 	req := &controlapi.PruneRequest{
 		Filter:        info.Filter,
 		KeepDuration:  int64(info.KeepDuration),
-		ReservedSpace: int64(info.ReservedSpace),
-		MaxUsedSpace:  int64(info.MaxUsedSpace),
-		MinFreeSpace:  int64(info.MinFreeSpace),
+		ReservedSpace: info.ReservedSpace,
+		MaxUsedSpace:  info.MaxUsedSpace,
+		MinFreeSpace:  info.MinFreeSpace,
 	}
 	if info.All {
 		req.All = true

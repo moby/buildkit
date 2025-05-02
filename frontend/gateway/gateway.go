@@ -1572,7 +1572,7 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 						}()
 						dest := &outputWriter{
 							stream:    srv,
-							fd:        uint32(fd),
+							fd:        fd,
 							processID: pid,
 						}
 						_, err := io.Copy(dest, file)
@@ -1586,7 +1586,7 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 							ProcessID: pid,
 							Input: &pb.ExecMessage_File{
 								File: &pb.FdMessage{
-									Fd:  uint32(fd),
+									Fd:  fd,
 									EOF: true,
 								},
 							},

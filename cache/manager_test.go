@@ -2807,7 +2807,7 @@ func mapToSystemTarBlob(t *testing.T, m map[string]string) ([]byte, ocispecs.Des
 		if err != nil {
 			return nil, ocispecs.Descriptor{}, err
 		}
-		if string(gotV) != string(v) {
+		if string(gotV) != v {
 			return nil, ocispecs.Descriptor{}, errors.Errorf("unexpected contents of %s", h.Name)
 		}
 	}

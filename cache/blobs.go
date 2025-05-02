@@ -351,7 +351,7 @@ func (sr *immutableRef) computeChainMetadata(ctx context.Context, filter map[str
 		}
 		diffID := sr.getDiffID()
 		chainID = diffID
-		blobChainID = imagespecidentity.ChainID([]digest.Digest{digest.Digest(sr.getBlob()), diffID})
+		blobChainID = imagespecidentity.ChainID([]digest.Digest{sr.getBlob(), diffID})
 	case Layer:
 		if _, ok := filter[sr.ID()]; !ok {
 			return nil
@@ -368,9 +368,9 @@ func (sr *immutableRef) computeChainMetadata(ctx context.Context, filter map[str
 				return errors.Errorf("failed to set blobchain for reference with non-addressable parent %q", sr.layerParent.GetDescription())
 			}
 		}
-		diffID := digest.Digest(sr.getDiffID())
+		diffID := sr.getDiffID()
 		chainID = imagespecidentity.ChainID([]digest.Digest{chainID, diffID})
-		blobID := imagespecidentity.ChainID([]digest.Digest{digest.Digest(sr.getBlob()), diffID})
+		blobID := imagespecidentity.ChainID([]digest.Digest{sr.getBlob(), diffID})
 		blobChainID = imagespecidentity.ChainID([]digest.Digest{blobChainID, blobID})
 	case Merge:
 		baseInput := sr.mergeParents[0]
@@ -386,9 +386,9 @@ func (sr *immutableRef) computeChainMetadata(ctx context.Context, filter map[str
 					// not enough information to compute chain at this time
 					return nil
 				}
-				diffID := digest.Digest(layer.getDiffID())
+				diffID := layer.getDiffID()
 				chainID = imagespecidentity.ChainID([]digest.Digest{chainID, diffID})
-				blobID := imagespecidentity.ChainID([]digest.Digest{digest.Digest(layer.getBlob()), diffID})
+				blobID := imagespecidentity.ChainID([]digest.Digest{layer.getBlob(), diffID})
 				blobChainID = imagespecidentity.ChainID([]digest.Digest{blobChainID, blobID})
 			}
 		}
@@ -397,7 +397,7 @@ func (sr *immutableRef) computeChainMetadata(ctx context.Context, filter map[str
 			// this diff is its own blob
 			diffID := sr.getDiffID()
 			chainID = diffID
-			blobChainID = imagespecidentity.ChainID([]digest.Digest{digest.Digest(sr.getBlob()), diffID})
+			blobChainID = imagespecidentity.ChainID([]digest.Digest{sr.getBlob(), diffID})
 		} else {
 			// re-using upper blob
 			chainID = sr.diffParents.upper.getChainID()
