@@ -94,22 +94,22 @@ func init() {
 		cli.StringFlag{
 			Name:  "containerd-worker-net",
 			Usage: "worker network type (auto, bridge, cni or host)",
-			Value: defaultConf.Workers.Containerd.NetworkConfig.Mode,
+			Value: defaultConf.Workers.Containerd.Mode,
 		},
 		cli.StringFlag{
 			Name:  "containerd-cni-config-path",
 			Usage: "path of cni config file",
-			Value: defaultConf.Workers.Containerd.NetworkConfig.CNIConfigPath,
+			Value: defaultConf.Workers.Containerd.CNIConfigPath,
 		},
 		cli.StringFlag{
 			Name:  "containerd-cni-binary-dir",
 			Usage: "path of cni binary files",
-			Value: defaultConf.Workers.Containerd.NetworkConfig.CNIBinaryPath,
+			Value: defaultConf.Workers.Containerd.CNIBinaryPath,
 		},
 		cli.IntFlag{
 			Name:  "containerd-cni-pool-size",
 			Usage: "size of cni network namespace pool",
-			Value: defaultConf.Workers.Containerd.NetworkConfig.CNIPoolSize,
+			Value: defaultConf.Workers.Containerd.CNIPoolSize,
 		},
 		cli.StringFlag{
 			Name:  "containerd-worker-snapshotter",
@@ -238,16 +238,16 @@ func applyContainerdFlags(c *cli.Context, cfg *config.Config) error {
 	}
 
 	if c.GlobalIsSet("containerd-worker-net") {
-		cfg.Workers.Containerd.NetworkConfig.Mode = c.GlobalString("containerd-worker-net")
+		cfg.Workers.Containerd.Mode = c.GlobalString("containerd-worker-net")
 	}
 	if c.GlobalIsSet("containerd-cni-config-path") {
-		cfg.Workers.Containerd.NetworkConfig.CNIConfigPath = c.GlobalString("containerd-cni-config-path")
+		cfg.Workers.Containerd.CNIConfigPath = c.GlobalString("containerd-cni-config-path")
 	}
 	if c.GlobalIsSet("containerd-cni-pool-size") {
-		cfg.Workers.Containerd.NetworkConfig.CNIPoolSize = c.GlobalInt("containerd-cni-pool-size")
+		cfg.Workers.Containerd.CNIPoolSize = c.GlobalInt("containerd-cni-pool-size")
 	}
 	if c.GlobalIsSet("containerd-cni-binary-dir") {
-		cfg.Workers.Containerd.NetworkConfig.CNIBinaryPath = c.GlobalString("containerd-cni-binary-dir")
+		cfg.Workers.Containerd.CNIBinaryPath = c.GlobalString("containerd-cni-binary-dir")
 	}
 	if c.GlobalIsSet("containerd-worker-snapshotter") {
 		cfg.Workers.Containerd.Snapshotter = c.GlobalString("containerd-worker-snapshotter")
@@ -275,8 +275,8 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 
 	if cfg.Rootless {
 		bklog.L.Debugf("running in rootless mode")
-		if common.config.Workers.Containerd.NetworkConfig.Mode == "auto" {
-			common.config.Workers.Containerd.NetworkConfig.Mode = "host"
+		if common.config.Workers.Containerd.Mode == "auto" {
+			common.config.Workers.Containerd.Mode = "host"
 		}
 	}
 
@@ -288,7 +288,7 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 	}
 
 	nc := netproviders.Opt{
-		Mode: common.config.Workers.Containerd.NetworkConfig.Mode,
+		Mode: common.config.Workers.Containerd.Mode,
 		CNI: cniprovider.Opt{
 			Root:         common.config.Root,
 			ConfigPath:   common.config.Workers.Containerd.CNIConfigPath,

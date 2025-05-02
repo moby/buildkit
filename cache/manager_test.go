@@ -1464,7 +1464,7 @@ func getCompressor(w io.Writer, compressionType compression.Type, customized boo
 	case compression.Gzip:
 		if customized {
 			gz, _ := gzip.NewWriterLevel(w, gzip.NoCompression)
-			gz.Header.Comment = "hello"
+			gz.Comment = "hello"
 			gz.Close()
 		}
 		return gzip.NewWriter(w), nil

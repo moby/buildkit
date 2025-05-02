@@ -170,6 +170,7 @@ target "lint" {
   args = {
     TARGETNAME = buildtags.name
     BUILDTAGS = buildtags.tags
+    GOLANGCI_FROM_SOURCE = "true"
   }
   platforms = ( buildtags.target == "golangci-lint" || buildtags.name == "gopls" ) && GOLANGCI_LINT_MULTIPLATFORM != null ? [
     "freebsd/amd64",

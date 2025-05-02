@@ -24,7 +24,7 @@ func (e *FrontendError) Error() string {
 	if e.error != nil {
 		return e.error.Error()
 	}
-	return fmt.Sprintf("frontend %s failed", e.Frontend.Name)
+	return fmt.Sprintf("frontend %s failed", e.Name)
 }
 
 func (e *FrontendError) Unwrap() error {
@@ -44,7 +44,7 @@ func Frontends(err error) []*Frontend {
 	var es *FrontendError
 	if errors.As(err, &es) {
 		out = Frontends(es.Unwrap())
-		out = append(out, es.Frontend.CloneVT())
+		out = append(out, es.CloneVT())
 	}
 	return out
 }

@@ -35,7 +35,7 @@ func Sources(err error) []*Source {
 	var es *ErrorSource
 	if errors.As(err, &es) {
 		out = Sources(es.Unwrap())
-		out = append(out, es.Source.CloneVT())
+		out = append(out, es.CloneVT())
 	}
 	return out
 }
@@ -69,10 +69,7 @@ func (s *Source) Print(w io.Writer) error {
 	var p int
 
 	prepadStart := start
-	for {
-		if p >= pad {
-			break
-		}
+	for p < pad {
 		if start > 1 {
 			start--
 			p++

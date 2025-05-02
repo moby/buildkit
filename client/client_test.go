@@ -3332,7 +3332,7 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 	dt, err = os.ReadFile(filepath.Join(destDir, "root_supplementary"))
 	require.NoError(t, err)
 	require.True(t, strings.HasPrefix(string(dt), "root "))
-	require.True(t, strings.Contains(string(dt), "wheel"))
+	require.Contains(t, string(dt), "wheel")
 
 	dt2, err := os.ReadFile(filepath.Join(destDir, "default_supplementary"))
 	require.NoError(t, err)
@@ -5249,7 +5249,7 @@ func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbo
 	require.NoError(t, err)
 
 	require.Equal(t, dgst, dgst2)
-	require.EqualValues(t, unique, unique2)
+	require.Equal(t, unique, unique2)
 
 	// clear all local state out
 	err = imageService.Delete(ctx, img.Name, images.SynchronousDelete())
@@ -5569,7 +5569,7 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	require.Equal(t, dgst, dgst2)
-	require.EqualValues(t, unique, unique2)
+	require.Equal(t, unique, unique2)
 
 	// clear all local state out
 	err = imageService.Delete(ctx, img.Name, images.SynchronousDelete())
@@ -6423,7 +6423,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	// dgst2uncompress != dgst, because the compression type is different
 	unique2uncompress, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst2uncompress, "/unique")
 	require.NoError(t, err)
-	require.EqualValues(t, unique, unique2uncompress)
+	require.Equal(t, unique, unique2uncompress)
 
 	ensurePruneAll(t, c, sb)
 
@@ -6454,7 +6454,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	// dgst3 != dgst, because inline cache is not exported for dgst3
 	unique3, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst3, "/unique")
 	require.NoError(t, err)
-	require.EqualValues(t, unique, unique3)
+	require.Equal(t, unique, unique3)
 }
 
 func testRegistryEmptyCacheExport(t *testing.T, sb integration.Sandbox) {
@@ -7932,7 +7932,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 			},
 		}}
 	default:
-		require.Fail(t, "unknown cache mode: %s", mode)
+		require.Fail(t, fmt.Sprintf("unknown cache mode: %s", mode))
 	}
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
@@ -8061,7 +8061,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 			_, err = contentStore.Info(ctx, layer.Digest)
 			require.NoError(t, err)
 		default:
-			require.Fail(t, "unexpected layer index %d", i)
+			require.Fail(t, fmt.Sprintf("unexpected layer index %d", i))
 		}
 	}
 

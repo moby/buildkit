@@ -188,7 +188,7 @@ func (p parentRefs) release(ctx context.Context) (rerr error) {
 	return rerr
 }
 
-func (p parentRefs) clone() parentRefs {
+func (p parentRefs) cloneParentRefs() parentRefs {
 	switch {
 	case p.layerParent != nil:
 		p.layerParent = p.layerParent.clone()
@@ -472,7 +472,7 @@ func (cr *cacheRecord) remove(ctx context.Context, removeSnapshot bool) (rerr er
 	if err := cr.cm.MetadataStore.Clear(cr.ID()); err != nil {
 		return errors.Wrapf(err, "failed to delete metadata of %s", cr.ID())
 	}
-	if err := cr.parentRefs.release(ctx); err != nil {
+	if err := cr.release(ctx); err != nil {
 		return errors.Wrapf(err, "failed to release parents of %s", cr.ID())
 	}
 	return nil
@@ -1479,7 +1479,7 @@ func (sr *mutableRef) commit() (_ *immutableRef, rerr error) {
 	rec := &cacheRecord{
 		mu:            sr.mu,
 		cm:            sr.cm,
-		parentRefs:    sr.parentRefs.clone(),
+		parentRefs:    sr.cloneParentRefs(),
 		equalMutable:  sr,
 		refs:          make(map[ref]struct{}),
 		cacheMetadata: md,

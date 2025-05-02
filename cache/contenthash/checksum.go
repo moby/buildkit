@@ -774,11 +774,11 @@ func splitWildcards(p string) (d1, d2 string) {
 
 func containsWildcards(name string) bool {
 	for i := 0; i < len(name); i++ {
-		ch := name[i]
-		if ch == '\\' {
-			i++
-		} else if ch == '*' || ch == '?' || ch == '[' {
+		switch name[i] {
+		case '*', '?', '[':
 			return true
+		case '\\':
+			i++
 		}
 	}
 	return false
@@ -887,10 +887,7 @@ func (cc *cacheContext) checksum(ctx context.Context, root *iradix.Node[*CacheRe
 		iter.SeekLowerBound(append(slices.Clone(next), 0))
 		subk := next
 		ok := true
-		for {
-			if !ok || !bytes.HasPrefix(subk, next) {
-				break
-			}
+		for ok && bytes.HasPrefix(subk, next) {
 			h.Write(bytes.TrimPrefix(subk, k))
 
 			// We do not follow trailing links when checksumming a directory's

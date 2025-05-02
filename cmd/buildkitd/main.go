@@ -610,7 +610,7 @@ func applyMainFlags(c *cli.Context, cfg *config.Config) error {
 			}
 			cfg.GRPC.SecurityDescriptor = secDescriptor
 		} else {
-			gid, err := groupToGid(group)
+			gid, err := groupToGID(group)
 			if err != nil {
 				return err
 			}
@@ -646,7 +646,7 @@ func applyMainFlags(c *cli.Context, cfg *config.Config) error {
 }
 
 // Convert a string containing either a group name or a stringified gid into a numeric id)
-func groupToGid(group string) (int, error) {
+func groupToGID(group string) (int, error) {
 	if group == "" {
 		return os.Getgid(), nil
 	}

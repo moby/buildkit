@@ -1485,11 +1485,11 @@ func testClientGatewayExecError(t *testing.T, sb integration.Sandbox) {
 				require.Len(t, se.InputIDs, tt.NumMounts)
 				require.Len(t, se.MountIDs, tt.NumMounts)
 
-				op := se.Solve.Op
+				op := se.Op
 				require.NotNil(t, op)
 				require.NotNil(t, op.Op)
 
-				opExec, ok := se.Solve.Op.Op.(*pb.Op_Exec)
+				opExec, ok := se.Op.Op.(*pb.Op_Exec)
 				require.True(t, ok)
 
 				exec := opExec.Exec
@@ -1499,7 +1499,7 @@ func testClientGatewayExecError(t *testing.T, sb integration.Sandbox) {
 					mounts = append(mounts, client.Mount{
 						Selector:  mnt.Selector,
 						Dest:      mnt.Dest,
-						ResultID:  se.Solve.MountIDs[i],
+						ResultID:  se.MountIDs[i],
 						Readonly:  mnt.Readonly,
 						MountType: mnt.MountType,
 						CacheOpt:  mnt.CacheOpt,
@@ -1603,14 +1603,14 @@ func testClientGatewaySlowCacheExecError(t *testing.T, sb integration.Sandbox) {
 		var se *errdefs.SolveError
 		require.ErrorAs(t, solveErr, &se)
 
-		_, ok := se.Solve.Op.Op.(*pb.Op_Exec)
+		_, ok := se.Op.Op.(*pb.Op_Exec)
 		require.True(t, ok)
 
-		_, ok = se.Solve.Subject.(*errdefs.Solve_Cache)
+		_, ok = se.Subject.(*errdefs.Solve_Cache)
 		require.True(t, ok)
 		// Slow cache errors should only have exactly one input and no outputs.
-		require.Len(t, se.Solve.InputIDs, 1)
-		require.Len(t, se.Solve.MountIDs, 0)
+		require.Len(t, se.InputIDs, 1)
+		require.Len(t, se.MountIDs, 0)
 
 		st := llb.Image("busybox:latest")
 		def, err := st.Marshal(ctx)
@@ -1632,7 +1632,7 @@ func testClientGatewaySlowCacheExecError(t *testing.T, sb integration.Sandbox) {
 			}, {
 				Dest:      "/problem",
 				MountType: pb.MountType_BIND,
-				ResultID:  se.Solve.InputIDs[0],
+				ResultID:  se.InputIDs[0],
 			}},
 		})
 		require.NoError(t, err)
@@ -1735,15 +1735,15 @@ func testClientGatewayExecFileActionError(t *testing.T, sb integration.Sandbox) 
 
 				var se *errdefs.SolveError
 				require.ErrorAs(t, err, &se)
-				require.Len(t, se.Solve.InputIDs, tt.NumInputs)
+				require.Len(t, se.InputIDs, tt.NumInputs)
 
 				// There is one output for every action in the fileop that failed.
-				require.Len(t, se.Solve.MountIDs, tt.NumOutputs)
+				require.Len(t, se.MountIDs, tt.NumOutputs)
 
-				op, ok := se.Solve.Op.Op.(*pb.Op_File)
+				op, ok := se.Op.Op.(*pb.Op_File)
 				require.True(t, ok)
 
-				subject, ok := se.Solve.Subject.(*errdefs.Solve_File)
+				subject, ok := se.Subject.(*errdefs.Solve_File)
 				require.True(t, ok)
 
 				// Retrieve the action that failed from the sbuject.

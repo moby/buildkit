@@ -168,12 +168,12 @@ func (b *provenanceBridge) Solve(ctx context.Context, req frontend.SolveRequest,
 		b.builds = append(b.builds, resultWithBridge{res: res, bridge: b})
 		b.mu.Unlock()
 	} else if req.Frontend != "" {
-		f, ok := b.llbBridge.frontends[req.Frontend]
+		f, ok := b.frontends[req.Frontend]
 		if !ok {
 			return nil, errors.Errorf("invalid frontend: %s", req.Frontend)
 		}
 		wb := &provenanceBridge{llbBridge: b.llbBridge, req: &req}
-		res, err = f.Solve(ctx, wb, b.llbBridge, req.FrontendOpt, req.FrontendInputs, sid, b.llbBridge.sm)
+		res, err = f.Solve(ctx, wb, b.llbBridge, req.FrontendOpt, req.FrontendInputs, sid, b.sm)
 		if err != nil {
 			fe := errdefs.Frontend{
 				Name:   req.Frontend,

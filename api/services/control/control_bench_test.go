@@ -1,4 +1,4 @@
-package moby_buildkit_v1 //nolint:revive
+package moby_buildkit_v1 //nolint:revive,staticcheck
 
 import (
 	"testing"

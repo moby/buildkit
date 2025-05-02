@@ -153,7 +153,8 @@ func (a *dockerAuthorizer) AddResponses(ctx context.Context, responses []*http.R
 	handler := a.handlers.get(ctx, host, a.sm, a.session)
 
 	for _, c := range auth.ParseAuthHeader(last.Header) {
-		if c.Scheme == auth.BearerAuth {
+		switch c.Scheme {
+		case auth.BearerAuth:
 			var oldScopes []string
 			if err := invalidAuthorization(c, responses); err != nil {
 				a.handlers.delete(handler)
@@ -200,7 +201,7 @@ func (a *dockerAuthorizer) AddResponses(ctx context.Context, responses []*http.R
 			a.handlers.set(host, sessionID, newAuthHandler(host, a.client, c.Scheme, pubKey, common))
 
 			return nil
-		} else if c.Scheme == auth.BasicAuth {
+		case auth.BasicAuth:
 			sessionID, username, secret, err := a.getCredentials(host)
 			if err != nil {
 				return err

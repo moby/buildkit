@@ -54,7 +54,7 @@ func (r *readerAt) ReadAt(b []byte, off int64) (int, error) {
 
 	var totalN int
 	for len(b) > 0 {
-		n, err := r.Reader.Read(b)
+		n, err := r.Read(b)
 		if err == io.EOF && n == len(b) {
 			err = nil
 		}

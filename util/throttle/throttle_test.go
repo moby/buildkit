@@ -29,9 +29,7 @@ func TestThrottle(t *testing.T) {
 		require.Less(t, retries, 10)
 		time.Sleep(60 * time.Millisecond)
 		v := atomic.LoadInt64(&i)
-		if v > 1 {
-			require.Fail(t, "invalid value %d", v)
-		}
+		require.LessOrEqual(t, v, int64(1))
 		if v == 1 {
 			break
 		}

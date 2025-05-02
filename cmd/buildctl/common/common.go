@@ -74,7 +74,7 @@ func ResolveClient(c *cli.Context) (*client.Client, error) {
 	timeout := time.Duration(c.GlobalInt("timeout"))
 	if timeout > 0 {
 		ctx2, cancel := context.WithCancelCause(ctx)
-		ctx2, _ = context.WithTimeoutCause(ctx2, timeout*time.Second, errors.WithStack(context.DeadlineExceeded))
+		ctx2, _ = context.WithTimeoutCause(ctx2, timeout*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
 		ctx = ctx2
 		defer func() { cancel(errors.WithStack(context.Canceled)) }()
 	}

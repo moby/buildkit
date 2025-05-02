@@ -127,9 +127,10 @@ func action(clicontext *cli.Context) error {
 
 func newSolveOpt(clicontext *cli.Context, w io.WriteCloser) (*client.SolveOpt, error) {
 	buildCtx := clicontext.Args().First()
-	if buildCtx == "" {
+	switch buildCtx {
+	case "":
 		return nil, errors.New("please specify build context (e.g. \".\" for the current directory)")
-	} else if buildCtx == "-" {
+	case "-":
 		return nil, errors.New("stdin not supported yet")
 	}
 

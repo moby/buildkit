@@ -271,7 +271,7 @@ func deviceAnnotations(dev *cdi.Device) map[string]string {
 	// spec annotations
 	maps.Copy(out, dev.GetSpec().Annotations)
 	// device annotations
-	maps.Copy(out, dev.Device.Annotations)
+	maps.Copy(out, dev.Annotations)
 	return out
 }
 

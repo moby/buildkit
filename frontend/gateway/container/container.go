@@ -21,10 +21,8 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/llbsolver/mounts"
-	"github.com/moby/buildkit/solver/pb"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/stack"
-	utilsystem "github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/worker"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -80,9 +78,9 @@ func NewContainer(ctx context.Context, cm cache.Manager, exec executor.Executor,
 		mnts = append(mnts, m.Mount)
 		if m.WorkerRef != nil {
 			refs = append(refs, m.WorkerRef)
-			m.Mount.Input = int64(len(refs) - 1)
+			m.Input = int64(len(refs) - 1)
 		} else {
-			m.Mount.Input = int64(opspb.Empty)
+			m.Input = int64(opspb.Empty)
 		}
 	}
 
@@ -328,7 +326,7 @@ func (gwCtr *gatewayContainer) Start(ctx context.Context, req client.StartReques
 	if procInfo.Meta.Cwd == "" {
 		procInfo.Meta.Cwd = "/"
 	}
-	procInfo.Meta.Env = addDefaultEnvvar(procInfo.Meta.Env, "PATH", utilsystem.DefaultPathEnv(gwCtr.platform.OS))
+	procInfo.Meta.Env = addDefaultEnvvar(procInfo.Meta.Env, "PATH", system.DefaultPathEnv(gwCtr.platform.OS))
 	if req.Tty {
 		procInfo.Meta.Env = addDefaultEnvvar(procInfo.Meta.Env, "TERM", "xterm")
 	}
@@ -378,7 +376,7 @@ func (gwCtr *gatewayContainer) Start(ctx context.Context, req client.StartReques
 	return gwProc, nil
 }
 
-func (gwCtr *gatewayContainer) loadSecretEnv(ctx context.Context, secretEnv []*pb.SecretEnv) ([]string, error) {
+func (gwCtr *gatewayContainer) loadSecretEnv(ctx context.Context, secretEnv []*opspb.SecretEnv) ([]string, error) {
 	out := make([]string, 0, len(secretEnv))
 	for _, sopt := range secretEnv {
 		id := sopt.ID
@@ -394,7 +392,7 @@ func (gwCtr *gatewayContainer) loadSecretEnv(ctx context.Context, secretEnv []*p
 			}
 			return nil
 		})
-		if err != nil && !(errors.Is(err, secrets.ErrNotFound) && sopt.Optional) {
+		if err != nil && (!errors.Is(err, secrets.ErrNotFound) || !sopt.Optional) {
 			return nil, err
 		}
 		out = append(out, fmt.Sprintf("%s=%s", sopt.Name, string(dt)))
