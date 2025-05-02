@@ -378,7 +378,7 @@ func (ah *authHandler) fetchToken(ctx context.Context, sm *session.Manager, g se
 				// retry with POST request
 				// As of September 2017, GCR is known to return 404.
 				// As of February 2018, JFrog Artifactory is known to return 401.
-				if (errStatus.StatusCode == 405 && to.Username != "") || errStatus.StatusCode == 404 || errStatus.StatusCode == 401 {
+				if (errStatus.StatusCode == http.StatusMethodNotAllowed && to.Username != "") || errStatus.StatusCode == http.StatusNotFound || errStatus.StatusCode == http.StatusUnauthorized {
 					resp, err := auth.FetchTokenWithOAuth(ctx, ah.client, hdr, "buildkit-client", to)
 					if err != nil {
 						return nil, err

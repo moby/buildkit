@@ -24,6 +24,7 @@ linters:
     - staticcheck
     - testifylint
     - unused
+    - usestdlibvars
     - whitespace
   settings:
     depguard:

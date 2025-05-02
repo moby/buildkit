@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"net/http"
 	"os"
 	"runtime"
 	"strconv"
@@ -20,7 +21,7 @@ import (
 	"github.com/docker/cli/cli/config"
 	"github.com/docker/cli/cli/config/configfile"
 	"github.com/docker/cli/cli/config/types"
-	http "github.com/hashicorp/go-cleanhttp"
+	cleanhttp "github.com/hashicorp/go-cleanhttp"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth"
 	"github.com/moby/buildkit/util/progress/progresswriter"
@@ -125,7 +126,7 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 
 	httpClient := tracing.DefaultClient
 	if tc, err := ap.tlsConfig(req.Host); err == nil && tc != nil {
-		transport := http.DefaultTransport()
+		transport := cleanhttp.DefaultTransport()
 		transport.TLSClientConfig = tc
 		httpClient.Transport = tracing.NewTransport(transport)
 	}
@@ -151,7 +152,7 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 				// Registries without support for POST may return 404 for POST /v2/token.
 				// As of September 2017, GCR is known to return 404.
 				// As of February 2018, JFrog Artifactory is known to return 401.
-				if (errStatus.StatusCode == 405 && to.Username != "") || errStatus.StatusCode == 404 || errStatus.StatusCode == 401 {
+				if (errStatus.StatusCode == http.StatusMethodNotAllowed && to.Username != "") || errStatus.StatusCode == http.StatusNotFound || errStatus.StatusCode == http.StatusUnauthorized {
 					resp, err := authutil.FetchToken(ctx, httpClient, nil, to)
 					if err != nil {
 						return nil, err
