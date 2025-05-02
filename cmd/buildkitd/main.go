@@ -651,17 +651,12 @@ func groupToGID(group string) (int, error) {
 		return os.Getgid(), nil
 	}
 
-	var (
-		err error
-		id  int
-	)
-
 	// Try and parse as a number, if the error is ErrSyntax
 	// (i.e. its not a number) then we carry on and try it as a
 	// name.
-	if id, err = strconv.Atoi(group); err == nil {
+	if id, err := strconv.Atoi(group); err == nil {
 		return id, nil
-	} else if err.(*strconv.NumError).Err != strconv.ErrSyntax {
+	} else if !errors.Is(err, strconv.ErrSyntax) {
 		return 0, err
 	}
 
@@ -671,11 +666,7 @@ func groupToGID(group string) (int, error) {
 	}
 	group = ginfo.Gid
 
-	if id, err = strconv.Atoi(group); err != nil {
-		return 0, err
-	}
-
-	return id, nil
+	return strconv.Atoi(group)
 }
 
 func getListener(addr string, uid, gid int, secDescriptor string, tlsConfig *tls.Config, warnTLS bool) (net.Listener, error) {

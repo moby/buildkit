@@ -557,7 +557,7 @@ func testExportedImageLabels(t *testing.T, sb integration.Sandbox) {
 
 	for {
 		resp, err := cl.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		require.NoError(t, err)
@@ -8302,7 +8302,7 @@ func checkAllReleasable(t *testing.T, c *Client, sb integration.Sandbox, checkCo
 
 	for {
 		resp, err := cl.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		require.NoError(t, err)

@@ -299,7 +299,7 @@ func (ps *progressState) run(pr progress.Reader) {
 	for {
 		p, err := pr.Read(context.TODO())
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				ps.mu.Lock()
 				ps.done = true
 				ps.mu.Unlock()

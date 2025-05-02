@@ -9419,7 +9419,7 @@ COPY notexist /foo
 	got := false
 	for {
 		resp, err := cl.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			require.Equal(t, true, got, "expected error was %+v", expectedError)
 			break
 		}
@@ -9543,7 +9543,7 @@ COPY Dockerfile /foo
 	got := false
 	for {
 		resp, err := cl.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			require.Equal(t, true, got)
 			break
 		}
@@ -9916,7 +9916,7 @@ func checkAllReleasable(t *testing.T, c *client.Client, sb integration.Sandbox, 
 
 	for {
 		resp, err := cl.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		require.NoError(t, err)

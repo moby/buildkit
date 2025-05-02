@@ -322,7 +322,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		for {
 			resp, err := stream.Recv()
 			if err != nil {
-				if err == io.EOF {
+				if errors.Is(err, io.EOF) {
 					return nil
 				}
 				return errors.Wrap(err, "failed to receive status")

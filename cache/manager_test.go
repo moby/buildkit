@@ -2788,7 +2788,7 @@ func mapToSystemTarBlob(t *testing.T, m map[string]string) ([]byte, ocispecs.Des
 	tr := tar.NewReader(bytes.NewReader(tarout))
 	for {
 		h, err := tr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

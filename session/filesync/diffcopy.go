@@ -77,7 +77,7 @@ func (wc *streamWriterCloser) Close() error {
 	}
 	// block until receiver is done
 	var bm BytesMessage
-	if err := wc.RecvMsg(&bm); err != io.EOF {
+	if err := wc.RecvMsg(&bm); !errors.Is(err, io.EOF) {
 		return errors.WithStack(err)
 	}
 	return nil

@@ -52,15 +52,18 @@ func (cli *Client) doRequest(req *http.Request) (*http.Response, error) {
 			return nil, err
 		}
 
-		if uErr, ok := err.(*url.Error); ok {
-			if nErr, ok := uErr.Err.(*net.OpError); ok {
+		uErr := &url.Error{}
+		if errors.As(err, &uErr) {
+			nErr := &net.OpError{}
+			if errors.As(uErr.Err, &nErr) {
 				if os.IsPermission(nErr.Err) {
 					return nil, errors.Wrapf(err, "permission denied while trying to connect to the Docker daemon socket at %v", cli.host)
 				}
 			}
 		}
 
-		if nErr, ok := err.(net.Error); ok {
+		var nErr net.Error
+		if errors.As(err, &nErr) {
 			// FIXME(thaJeztah): any net.Error should be considered a connection error (but we should include the original error)?
 			if nErr.Timeout() {
 				return nil, ErrorConnectionFailed(cli.host)

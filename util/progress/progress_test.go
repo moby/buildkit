@@ -126,7 +126,7 @@ func saveProgress(ctx context.Context, pr Reader, t *trace) error {
 	for {
 		p, err := pr.Read(ctx)
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				return nil
 			}
 			return err
