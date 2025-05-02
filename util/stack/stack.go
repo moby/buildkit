@@ -50,7 +50,7 @@ func Traces(err error) []*Stack {
 func traces(err error) []*Stack {
 	var st []*Stack
 
-	switch e := err.(type) {
+	switch e := err.(type) { //nolint:errorlint
 	case interface{ Unwrap() error }:
 		st = Traces(e.Unwrap())
 	case interface{ Unwrap() []error }:
@@ -63,7 +63,7 @@ func traces(err error) []*Stack {
 		}
 	}
 
-	switch ste := err.(type) {
+	switch ste := err.(type) { //nolint:errorlint
 	case interface{ StackTrace() errors.StackTrace }:
 		st = append(st, convertStack(ste.StackTrace()))
 	case interface{ StackTrace() *Stack }:
