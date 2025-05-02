@@ -17,6 +17,7 @@ import (
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/llbsolver/ops"
 	"github.com/moby/buildkit/solver/llbsolver/provenance"
 	provenancetypes "github.com/moby/buildkit/solver/llbsolver/provenance/types"
@@ -174,7 +175,11 @@ func (b *provenanceBridge) Solve(ctx context.Context, req frontend.SolveRequest,
 		wb := &provenanceBridge{llbBridge: b.llbBridge, req: &req}
 		res, err = f.Solve(ctx, wb, b.llbBridge, req.FrontendOpt, req.FrontendInputs, sid, b.llbBridge.sm)
 		if err != nil {
-			return nil, err
+			fe := errdefs.Frontend{
+				Name:   req.Frontend,
+				Source: req.FrontendOpt[frontend.KeySource],
+			}
+			return nil, fe.WrapError(err)
 		}
 		wb.builds = append(wb.builds, resultWithBridge{res: res, bridge: wb})
 		b.mu.Lock()

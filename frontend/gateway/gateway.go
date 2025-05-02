@@ -63,8 +63,7 @@ import (
 )
 
 const (
-	keySource = "source"
-	keyDevel  = "gateway-devel"
+	keyDevel = "gateway-devel"
 )
 
 func NewGatewayFrontend(workers worker.Infos, allowedRepositories []string) (frontend.Frontend, error) {
@@ -122,7 +121,7 @@ func (gf *gatewayFrontend) checkSourceIsAllowed(source string) error {
 }
 
 func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, exec executor.Executor, opts map[string]string, inputs map[string]*opspb.Definition, sid string, sm *session.Manager) (*frontend.Result, error) {
-	source, ok := opts[keySource]
+	source, ok := opts[frontend.KeySource]
 	if !ok {
 		return nil, errors.Errorf("no source specified for gateway")
 	}
