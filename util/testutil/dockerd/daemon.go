@@ -72,7 +72,7 @@ func NewDaemon(workingDir string, ops ...Option) (*Daemon, error) {
 		execRoot:      filepath.Join(os.TempDir(), "dxr", id),
 		dockerdBinary: DefaultDockerdBinary,
 		Log:           nopLog{},
-		sockPath:      filepath.Join(sockRoot, id+".sock"),
+		sockPath:      getDockerdSockPath(sockRoot, id),
 		envs:          os.Environ(),
 	}
 
@@ -96,7 +96,7 @@ func WithExtraEnv(envs []string) Option {
 }
 
 func (d *Daemon) Sock() string {
-	return "unix://" + d.sockPath
+	return socketScheme + d.sockPath
 }
 
 func (d *Daemon) StartWithError(daemonLogs map[string]*bytes.Buffer, providedArgs ...string) error {
