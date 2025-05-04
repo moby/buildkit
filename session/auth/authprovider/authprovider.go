@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"log"
 	"os"
 	"runtime"
 	"strconv"
@@ -26,6 +27,7 @@ import (
 	"github.com/moby/buildkit/util/progress/progresswriter"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace"
 	"golang.org/x/crypto/nacl/sign"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -143,9 +145,14 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 			progresswriter.Wrap(name, ap.logger, done)
 		}
 		ap.mu.Unlock()
+		ctx, es := otelhttptrace.WithEventLogger(ctx)
+		tm := time.Now()
 		// credential information is provided, use oauth POST endpoint
 		resp, err := authutil.FetchTokenWithOAuth(ctx, httpClient, nil, "buildkit-client", to)
 		if err != nil {
+			log.Printf("error in %.5f seconds: %+v", time.Since(tm).Seconds(), err)
+			es.LogAllEvents()
+
 			var errStatus remoteserrors.ErrUnexpectedStatus
 			if errors.As(err, &errStatus) {
 				// Registries without support for POST may return 404 for POST /v2/token.

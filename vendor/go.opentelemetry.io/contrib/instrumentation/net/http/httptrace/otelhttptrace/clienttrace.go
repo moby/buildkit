@@ -6,10 +6,14 @@ package otelhttptrace // import "go.opentelemetry.io/contrib/instrumentation/net
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
+	"log"
 	"net/http/httptrace"
 	"net/textproto"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -112,6 +116,38 @@ func WithTracerProvider(provider trace.TracerProvider) ClientTraceOption {
 	})
 }
 
+type Event struct {
+	Time  time.Time
+	Event string
+	Attrs map[string]string
+}
+
+type EventLogger struct {
+	tc map[*clientTracer]struct{}
+}
+
+type eventLoggerKey struct{}
+
+func WithEventLogger(ctx context.Context) (context.Context, *EventLogger) {
+	el := &EventLogger{}
+	return context.WithValue(ctx, eventLoggerKey{}, el), el
+}
+
+func (el *EventLogger) LogAllEvents() {
+	if len(el.tc) == 0 {
+		log.Println("No ClientTraces found")
+	}
+	for ct := range el.tc {
+		log.Printf("ClientTrace %p %T", ct, ct)
+		for i, event := range ct.Events {
+			log.Printf("event %d %v: %s", i, event.Time, event.Event)
+			for k, v := range event.Attrs {
+				log.Printf("  %s: %s", k, v)
+			}
+		}
+	}
+}
+
 type clientTracer struct {
 	context.Context
 
@@ -125,6 +161,9 @@ type clientTracer struct {
 	redactedHeaders map[string]struct{}
 	addHeaders      bool
 	useSpans        bool
+
+	mu     sync.Mutex
+	Events []Event
 }
 
 // NewClientTrace returns an httptrace.ClientTrace implementation that will
@@ -165,6 +204,13 @@ func NewClientTrace(ctx context.Context, opts ...ClientTraceOption) *httptrace.C
 		trace.WithInstrumentationVersion(Version()),
 	)
 
+	if es, ok := ctx.Value(eventLoggerKey{}).(*EventLogger); ok {
+		if es.tc == nil {
+			es.tc = make(map[*clientTracer]struct{})
+		}
+		es.tc[ct] = struct{}{}
+	}
+
 	return &httptrace.ClientTrace{
 		GetConn:              ct.getConn,
 		GotConn:              ct.gotConn,
@@ -183,6 +229,16 @@ func NewClientTrace(ctx context.Context, opts ...ClientTraceOption) *httptrace.C
 		Wait100Continue:      ct.wait100Continue,
 		WroteRequest:         ct.wroteRequest,
 	}
+}
+
+func (ct *clientTracer) logEvent(event string, attrs map[string]string) {
+	ct.mu.Lock()
+	defer ct.mu.Unlock()
+	ct.Events = append(ct.Events, Event{
+		Time:  time.Now(),
+		Event: event,
+		Attrs: attrs,
+	})
 }
 
 func (ct *clientTracer) start(hook, spanName string, attrs ...attribute.KeyValue) {
@@ -266,10 +322,21 @@ func (ct *clientTracer) span(hook string) trace.Span {
 }
 
 func (ct *clientTracer) getConn(host string) {
+	ct.logEvent("http.getconn", map[string]string{
+		"host": host,
+	})
 	ct.start("http.getconn", "http.getconn", semconv.NetHostName(host))
 }
 
 func (ct *clientTracer) gotConn(info httptrace.GotConnInfo) {
+	ct.logEvent("http.gotconn", map[string]string{
+		"conn.remote":   info.Conn.RemoteAddr().String(),
+		"conn.local":    info.Conn.LocalAddr().String(),
+		"conn.p":        fmt.Sprintf("%p", info.Conn),
+		"conn.reused":   strconv.FormatBool(info.Reused),
+		"conn.wasidle":  strconv.FormatBool(info.WasIdle),
+		"conn.idletime": info.IdleTime.String(),
+	})
 	attrs := []attribute.KeyValue{
 		HTTPRemoteAddr.String(info.Conn.RemoteAddr().String()),
 		HTTPLocalAddr.String(info.Conn.LocalAddr().String()),
@@ -283,18 +350,30 @@ func (ct *clientTracer) gotConn(info httptrace.GotConnInfo) {
 }
 
 func (ct *clientTracer) putIdleConn(err error) {
+	ct.logEvent("http.putidleconn", map[string]string{
+		"error": fmt.Sprintf("%v", err),
+	})
 	ct.end("http.receive", err)
 }
 
 func (ct *clientTracer) gotFirstResponseByte() {
+	ct.logEvent("http.gotfirstresponsebyte", nil)
 	ct.start("http.receive", "http.receive")
 }
 
 func (ct *clientTracer) dnsStart(info httptrace.DNSStartInfo) {
+	ct.logEvent("http.dnsStart", map[string]string{
+		"host": info.Host,
+	})
 	ct.start("http.dns", "http.dns", semconv.NetHostName(info.Host))
 }
 
 func (ct *clientTracer) dnsDone(info httptrace.DNSDoneInfo) {
+	ct.logEvent("http.dnsDone", map[string]string{
+		"addrs":     fmt.Sprintf("%v", info.Addrs),
+		"error":     fmt.Sprintf("%v", info.Err),
+		"coalesced": strconv.FormatBool(info.Coalesced),
+	})
 	var addrs []string
 	for _, netAddr := range info.Addrs {
 		addrs = append(addrs, netAddr.String())
@@ -303,6 +382,10 @@ func (ct *clientTracer) dnsDone(info httptrace.DNSDoneInfo) {
 }
 
 func (ct *clientTracer) connectStart(network, addr string) {
+	ct.logEvent("http.connectStart", map[string]string{
+		"network": network,
+		"addr":    addr,
+	})
 	ct.start("http.connect."+addr, "http.connect",
 		HTTPRemoteAddr.String(addr),
 		HTTPConnectionStartNetwork.String(network),
@@ -310,6 +393,11 @@ func (ct *clientTracer) connectStart(network, addr string) {
 }
 
 func (ct *clientTracer) connectDone(network, addr string, err error) {
+	ct.logEvent("http.connectDone", map[string]string{
+		"network": network,
+		"addr":    addr,
+		"error":   fmt.Sprintf("%v", err),
+	})
 	ct.end("http.connect."+addr, err,
 		HTTPConnectionDoneAddr.String(addr),
 		HTTPConnectionDoneNetwork.String(network),
@@ -317,14 +405,25 @@ func (ct *clientTracer) connectDone(network, addr string, err error) {
 }
 
 func (ct *clientTracer) tlsHandshakeStart() {
+	ct.logEvent("http.tlsHandshakeStart", nil)
 	ct.start("http.tls", "http.tls")
 }
 
-func (ct *clientTracer) tlsHandshakeDone(_ tls.ConnectionState, err error) {
+func (ct *clientTracer) tlsHandshakeDone(st tls.ConnectionState, err error) {
+	ct.logEvent("http.tlsHandshakeDone", map[string]string{
+		"error":      fmt.Sprintf("%v", err),
+		"version":    strconv.Itoa(int(st.Version)),
+		"handshake":  strconv.FormatBool(st.HandshakeComplete),
+		"didresume":  strconv.FormatBool(st.DidResume),
+		"servername": st.ServerName,
+	})
 	ct.end("http.tls", err)
 }
 
 func (ct *clientTracer) wroteHeaderField(k string, v []string) {
+	ct.logEvent("http.wroteHeaderField", map[string]string{
+		"key": k,
+	})
 	if ct.useSpans && ct.span("http.headers") == nil {
 		ct.start("http.headers", "http.headers")
 	}
@@ -340,6 +439,7 @@ func (ct *clientTracer) wroteHeaderField(k string, v []string) {
 }
 
 func (ct *clientTracer) wroteHeaders() {
+	ct.logEvent("http.wroteHeaders", nil)
 	if ct.useSpans && ct.span("http.headers") != nil {
 		ct.end("http.headers", nil)
 	}
@@ -347,6 +447,9 @@ func (ct *clientTracer) wroteHeaders() {
 }
 
 func (ct *clientTracer) wroteRequest(info httptrace.WroteRequestInfo) {
+	ct.logEvent("http.wroteRequest", map[string]string{
+		"error": fmt.Sprintf("%v", info.Err),
+	})
 	if info.Err != nil {
 		ct.root.SetStatus(codes.Error, info.Err.Error())
 	}
@@ -354,6 +457,7 @@ func (ct *clientTracer) wroteRequest(info httptrace.WroteRequestInfo) {
 }
 
 func (ct *clientTracer) got100Continue() {
+	ct.logEvent("http.got100Continue", nil)
 	span := ct.root
 	if ct.useSpans {
 		span = ct.span("http.receive")
@@ -362,6 +466,7 @@ func (ct *clientTracer) got100Continue() {
 }
 
 func (ct *clientTracer) wait100Continue() {
+	ct.logEvent("http.wait100Continue", nil)
 	span := ct.root
 	if ct.useSpans {
 		span = ct.span("http.send")
@@ -370,6 +475,10 @@ func (ct *clientTracer) wait100Continue() {
 }
 
 func (ct *clientTracer) got1xxResponse(code int, header textproto.MIMEHeader) error {
+	ct.logEvent("http.got1xxResponse", map[string]string{
+		"code":   strconv.Itoa(code),
+		"header": sm2s(header),
+	})
 	span := ct.root
 	if ct.useSpans {
 		span = ct.span("http.receive")
