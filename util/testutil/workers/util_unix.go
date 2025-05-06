@@ -13,6 +13,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+const buildkitdNetworkProtocol = "unix"
+
 func applyBuildkitdPlatformFlags(args []string) []string {
 	return append(args, "--oci-worker=false")
 }
@@ -74,4 +76,13 @@ func chown(name string, uid, gid int) error {
 func normalizeAddress(address string) string {
 	// for parity with windows, no effect for unix
 	return address
+}
+
+func applyDockerdPlatformFlags(flags []string, _ string) []string {
+	flags = append(flags, "--userland-proxy=false")
+	return flags
+}
+
+func getBuildkitdNetworkAddr(tmpdir string) string {
+	return tmpdir
 }

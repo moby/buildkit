@@ -111,6 +111,7 @@ func (c Moby) New(ctx context.Context, cfg *integration.BackendConfig) (b integr
 			"containerd-snapshotter": c.ContainerdSnapshotter,
 		},
 	}
+
 	if reg, ok := bkcfg.Registries["docker.io"]; ok && len(reg.Mirrors) > 0 {
 		for _, m := range reg.Mirrors {
 			dcfg.Mirrors = append(dcfg.Mirrors, "http://"+m)
@@ -158,10 +159,13 @@ func (c Moby) New(ctx context.Context, cfg *integration.BackendConfig) (b integr
 
 	dockerdFlags := []string{
 		"--config-file", dockerdConfigFile,
-		"--userland-proxy=false",
 		"--tls=false",
 		"--debug",
 	}
+
+	// add platform-specific flags
+	dockerdFlags = applyDockerdPlatformFlags(dockerdFlags, c.ID)
+
 	if s := os.Getenv("BUILDKIT_INTEGRATION_DOCKERD_FLAGS"); s != "" {
 		dockerdFlags = append(dockerdFlags, strings.Split(strings.TrimSpace(s), "\n")...)
 	}
@@ -198,7 +202,7 @@ func (c Moby) New(ctx context.Context, cfg *integration.BackendConfig) (b integr
 	f.Close()
 	os.Remove(localPath)
 
-	listener, err := net.Listen("unix", localPath)
+	listener, err := net.Listen(buildkitdNetworkProtocol, getBuildkitdNetworkAddr(localPath))
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "dockerd listener error: %s", integration.FormatLogs(cfg.Logs))
 	}
@@ -234,7 +238,7 @@ func (c Moby) New(ctx context.Context, cfg *integration.BackendConfig) (b integr
 	})
 
 	return backend{
-		address:             "unix://" + listener.Addr().String(),
+		address:             buildkitdNetworkProtocol + "://" + listener.Addr().String(),
 		dockerAddress:       d.Sock(),
 		rootless:            c.IsRootless,
 		netnsDetached:       false,
