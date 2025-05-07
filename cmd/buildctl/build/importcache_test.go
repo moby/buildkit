@@ -98,7 +98,7 @@ func TestParseImportCache(t *testing.T) {
 	for _, tc := range testCases {
 		im, err := ParseImportCache(tc.importCaches)
 		if tc.expectedErr == "" {
-			require.EqualValues(t, tc.expected, im)
+			require.Equal(t, tc.expected, im)
 		} else {
 			require.Error(t, err)
 			require.Contains(t, err.Error(), tc.expectedErr)

@@ -556,8 +556,8 @@ func scanLines(data []byte, atEOF bool) (advance int, token []byte, err error) {
 }
 
 func handleScannerError(err error) error {
-	switch err {
-	case bufio.ErrTooLong:
+	switch {
+	case errors.Is(err, bufio.ErrTooLong):
 		return errors.Errorf("dockerfile line greater than max allowed size of %d", bufio.MaxScanTokenSize-1)
 	default:
 		return err

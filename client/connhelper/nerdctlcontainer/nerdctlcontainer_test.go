@@ -22,7 +22,7 @@ func TestSpecFromURL(t *testing.T) {
 		got, err := SpecFromURL(u)
 		if expected != nil {
 			require.NoError(t, err)
-			require.EqualValues(t, expected, got, s)
+			require.Equal(t, expected, got, s)
 		} else {
 			require.Error(t, err, s)
 		}

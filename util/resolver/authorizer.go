@@ -153,7 +153,8 @@ func (a *dockerAuthorizer) AddResponses(ctx context.Context, responses []*http.R
 	handler := a.handlers.get(ctx, host, a.sm, a.session)
 
 	for _, c := range auth.ParseAuthHeader(last.Header) {
-		if c.Scheme == auth.BearerAuth {
+		switch c.Scheme {
+		case auth.BearerAuth:
 			var oldScopes []string
 			if err := invalidAuthorization(c, responses); err != nil {
 				a.handlers.delete(handler)
@@ -200,7 +201,7 @@ func (a *dockerAuthorizer) AddResponses(ctx context.Context, responses []*http.R
 			a.handlers.set(host, sessionID, newAuthHandler(host, a.client, c.Scheme, pubKey, common))
 
 			return nil
-		} else if c.Scheme == auth.BasicAuth {
+		case auth.BasicAuth:
 			sessionID, username, secret, err := a.getCredentials(host)
 			if err != nil {
 				return err
@@ -377,7 +378,7 @@ func (ah *authHandler) fetchToken(ctx context.Context, sm *session.Manager, g se
 				// retry with POST request
 				// As of September 2017, GCR is known to return 404.
 				// As of February 2018, JFrog Artifactory is known to return 401.
-				if (errStatus.StatusCode == 405 && to.Username != "") || errStatus.StatusCode == 404 || errStatus.StatusCode == 401 {
+				if (errStatus.StatusCode == http.StatusMethodNotAllowed && to.Username != "") || errStatus.StatusCode == http.StatusNotFound || errStatus.StatusCode == http.StatusUnauthorized {
 					resp, err := auth.FetchTokenWithOAuth(ctx, ah.client, hdr, "buildkit-client", to)
 					if err != nil {
 						return nil, err

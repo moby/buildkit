@@ -207,7 +207,7 @@ func TestRuncWorkerNoProcessSandbox(t *testing.T) {
 	stdout := bytes.NewBuffer(nil)
 	stderr := bytes.NewBuffer(nil)
 	_, err = w.WorkerOpt.Executor.Run(ctx, "", execMount(root, false), nil, executor.ProcessInfo{Meta: meta, Stdout: &nopCloser{stdout}, Stderr: &nopCloser{stderr}}, nil)
-	require.NoError(t, err, fmt.Sprintf("stdout=%q, stderr=%q", stdout.String(), stderr.String()))
+	require.NoError(t, err, "stdout=%q, stderr=%q", stdout.String(), stderr.String())
 	require.Equal(t, string(selfCmdline), stdout.String())
 }
 

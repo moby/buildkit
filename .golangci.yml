@@ -1,18 +1,18 @@
+version: "2"
 run:
-  timeout: 30m
   modules-download-mode: vendor
-
 linters:
+  default: none
   enable:
     - bodyclose
     - depguard
+    - durationcheck
     - errname
+    - errorlint
+    - fatcontext
     - forbidigo
     - gocritic
-    - gofmt
-    - goimports
     - gosec
-    - gosimple
     - govet
     - importas
     - ineffassign
@@ -23,105 +23,108 @@ linters:
     - revive
     - staticcheck
     - testifylint
-    - typecheck
     - unused
+    - usestdlibvars
     - whitespace
-  disable-all: true
-
-linters-settings:
-  staticcheck:
-    checks:
-      - "all"
-  gocritic:
-    disabled-checks:
-      - "ifElseChain"
-      - "assignOp"
-      - "appendAssign"
-      - "singleCaseSwitch"
-  govet:
-    enable:
-      - nilness
-      - unusedwrite
-  # enable-all: true
-  # disable:
-  #   - fieldalignment
-  #   - shadow
-  depguard:
+  settings:
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: github.com/containerd/containerd/errdefs
+              desc: The containerd errdefs package was migrated to a separate module. Use github.com/containerd/errdefs instead.
+            - pkg: github.com/containerd/containerd/log
+              desc: The containerd log package was migrated to a separate module. Use github.com/containerd/log instead.
+            - pkg: github.com/containerd/containerd/pkg/userns
+              desc: Use github.com/moby/sys/userns instead.
+            - pkg: github.com/containerd/containerd/platforms
+              desc: The containerd platforms package was migrated to a separate module. Use github.com/containerd/platforms instead.
+            - pkg: github.com/containerd/nydus-snapshotter/pkg/errdefs
+              desc: You probably meant to use github.com/containerd/errdefs
+            - pkg: github.com/opencontainers/runc/libcontainer/userns
+              desc: Use github.com/moby/sys/userns instead.
+            - pkg: io/ioutil
+              desc: The io/ioutil package has been deprecated.
+    forbidigo:
+      forbid:
+        - pattern: ^context\.WithCancel(# use context\.WithCancelCause instead)?$
+        - pattern: ^context\.WithDeadline(# use context\.WithDeadline instead)?$
+        - pattern: ^context\.WithTimeout(# use context\.WithTimeoutCause instead)?$
+        - pattern: ^ctx\.Err(# use context\.Cause instead)?$
+        - pattern: ^fmt\.Errorf(# use errors\.Errorf instead)?$
+        - pattern: ^logrus\.(Trace|Debug|Info|Warn|Warning|Error|Fatal)(f|ln)?(# use bklog\.G or bklog\.L instead of logrus directly)?$
+        - pattern: ^platforms\.DefaultString(# use platforms\.Format(platforms\.DefaultSpec()) instead\. Be aware that DefaultSpec is for the local platform, so must be avoided when working cross-platform)?$
+    gocritic:
+      disabled-checks:
+        - ifElseChain
+        - assignOp
+        - appendAssign
+        - singleCaseSwitch
+    gosec:
+      excludes:
+        - G101
+        - G402
+        - G504
+        - G601
+        - G115
+      config:
+        G306: "0644"
+    govet:
+      enable:
+        - nilness
+        - unusedwrite
+    importas:
+      alias:
+        - pkg: github.com/containerd/errdefs
+          alias: cerrdefs
+        - pkg: github.com/opencontainers/image-spec/specs-go/v1
+          alias: ocispecs
+        - pkg: github.com/opencontainers/go-digest
+          alias: digest
+      no-unaliased: true
+    staticcheck:
+      checks:
+        - all
+    testifylint:
+      disable:
+        - empty
+        - bool-compare
+        - len
+        - negative-positive
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
     rules:
-      main:
-        deny:
-          - pkg: "github.com/containerd/containerd/errdefs"
-            desc: The containerd errdefs package was migrated to a separate module. Use github.com/containerd/errdefs instead.
-          - pkg: "github.com/containerd/containerd/log"
-            desc: The containerd log package was migrated to a separate module. Use github.com/containerd/log instead.
-          - pkg: "github.com/containerd/containerd/pkg/userns"
-            desc: Use github.com/moby/sys/userns instead.
-          - pkg: "github.com/containerd/containerd/platforms"
-            desc: The containerd platforms package was migrated to a separate module. Use github.com/containerd/platforms instead.
-          - pkg: "github.com/containerd/nydus-snapshotter/pkg/errdefs"
-            desc: You probably meant to use github.com/containerd/errdefs
-          - pkg: "github.com/opencontainers/runc/libcontainer/userns"
-            desc: Use github.com/moby/sys/userns instead.
-          - pkg: "io/ioutil"
-            desc: The io/ioutil package has been deprecated.
-  forbidigo:
-    forbid:
-      - '^context\.WithCancel(# use context\.WithCancelCause instead)?$'
-      - '^context\.WithDeadline(# use context\.WithDeadline instead)?$'
-      - '^context\.WithTimeout(# use context\.WithTimeoutCause instead)?$'
-      - '^ctx\.Err(# use context\.Cause instead)?$'
-      - '^fmt\.Errorf(# use errors\.Errorf instead)?$'
-      - '^logrus\.(Trace|Debug|Info|Warn|Warning|Error|Fatal)(f|ln)?(# use bklog\.G or bklog\.L instead of logrus directly)?$'
-      - '^platforms\.DefaultString(# use platforms\.Format(platforms\.DefaultSpec()) instead\. Be aware that DefaultSpec is for the local platform, so must be avoided when working cross-platform)?$'
-  importas:
-    alias:
-      # Enforce alias to prevent it accidentally being used instead of our
-      # own errdefs package (or vice-versa).
-      - pkg: "github.com/containerd/errdefs"
-        alias: "cerrdefs"
-      - pkg: "github.com/opencontainers/image-spec/specs-go/v1"
-        alias: "ocispecs"
-      - pkg: "github.com/opencontainers/go-digest"
-        alias: "digest"
-
-    # Do not allow unaliased imports of aliased packages.
-    no-unaliased: true
-  gosec:
-    excludes:
-      - G101  # Potential hardcoded credentials (false positives)
-      - G402  # TLS MinVersion too low
-      - G504  # Import blocklist: net/http/cgi
-      - G601  # Implicit memory aliasing in for loop (false positives)
-      - G115  # integer overflow conversion (TODO: verify these)
-    config:
-      G306: "0644"
-  testifylint:
-    disable:
-      # disable rules that reduce the test condition
-      - "empty"
-      - "bool-compare"
-      - "len"
-      - "negative-positive"
-
-issues:
-  exclude-files:
-    - ".*\\.pb\\.go$"
-  exclude-rules:
-    - linters:
-        - revive
-      text: "stutters"
-    - linters:
-        - revive
-      text: "empty-block"
-    - linters:
-        - revive
-      text: "superfluous-else"
-    - linters:
-        - revive
-      text: "unused-parameter"
-    - linters:
-        - revive
-      text: "redefines-builtin-id"
-    - linters:
-        - revive
-      text: "if-return"
+      - linters:
+          - revive
+        text: stutters
+      - linters:
+          - revive
+        text: empty-block
+      - linters:
+          - revive
+        text: superfluous-else
+      - linters:
+          - revive
+        text: unused-parameter
+      - linters:
+          - revive
+        text: redefines-builtin-id
+      - linters:
+          - revive
+        text: if-return
+    paths:
+      - .*\.pb\.go$
+      - examples
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - .*\.pb\.go$

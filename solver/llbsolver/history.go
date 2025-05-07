@@ -448,7 +448,7 @@ func (h *HistoryQueue) addResource(ctx context.Context, l leases.Lease, desc *co
 				return err
 			}
 			defer lr.Discard()
-			ok, err := h.migrateBlobV2(ctx, string(desc.Digest), detectSkipLayers)
+			ok, err := h.migrateBlobV2(ctx, desc.Digest, detectSkipLayers)
 			if err != nil {
 				return err
 			}
@@ -458,7 +458,7 @@ func (h *HistoryQueue) addResource(ctx context.Context, l leases.Lease, desc *co
 		}
 	}
 	return h.hLeaseManager.AddResource(ctx, l, leases.Resource{
-		ID:   string(desc.Digest),
+		ID:   desc.Digest,
 		Type: "content",
 	})
 }

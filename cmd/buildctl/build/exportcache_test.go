@@ -44,7 +44,7 @@ func TestParseExportCache(t *testing.T) {
 	for _, tc := range testCases {
 		ex, err := ParseExportCache(tc.exportCaches)
 		if tc.expectedErr == "" {
-			require.EqualValues(t, tc.expected, ex)
+			require.Equal(t, tc.expected, ex)
 		} else {
 			require.Error(t, err)
 			require.Contains(t, err.Error(), tc.expectedErr)

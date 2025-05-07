@@ -3707,7 +3707,7 @@ COPY . .
 	)
 
 	ctx, cancel := context.WithCancelCause(sb.Context())
-	ctx, _ = context.WithTimeoutCause(ctx, 15*time.Second, errors.WithStack(context.DeadlineExceeded))
+	ctx, _ = context.WithTimeoutCause(ctx, 15*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
 	defer func() { cancel(errors.WithStack(context.Canceled)) }()
 
 	c, err := client.New(ctx, sb.Address())
@@ -7241,9 +7241,10 @@ COPY --from=base --chmod=0644 /out /out
 				}
 				visited[vtx.Name] = struct{}{}
 				t.Logf("step: %q", vtx.Name)
-				if vtx.Name == `[base 3/3] RUN echo "base" > base` {
+				switch vtx.Name {
+				case `[base 3/3] RUN echo "base" > base`:
 					hasRun = true
-				} else if vtx.Name == `[stage-1 1/1] COPY --from=base --chmod=0644 /out /out` {
+				case `[stage-1 1/1] COPY --from=base --chmod=0644 /out /out`:
 					hasCopy = true
 				}
 			}
@@ -9497,7 +9498,7 @@ COPY notexist /foo
 	got := false
 	for {
 		resp, err := cl.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			require.Equal(t, true, got, "expected error was %+v", expectedError)
 			break
 		}
@@ -9539,7 +9540,7 @@ COPY notexist /foo
 		}
 
 		err = grpcerrors.FromGRPC(status.FromProto(&statuspb.Status{
-			Code:    int32(st.Code),
+			Code:    st.Code,
 			Message: st.Message,
 			Details: details,
 		}).Err())
@@ -9621,7 +9622,7 @@ COPY Dockerfile /foo
 	got := false
 	for {
 		resp, err := cl.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			require.Equal(t, true, got)
 			break
 		}
@@ -9726,8 +9727,8 @@ EOF
 	info, err := testutil.ReadImages(ctx, provider, desc)
 	require.NoError(t, err)
 	require.Len(t, info.Images, 2)
-	require.Equal(t, info.Images[0].Img.Platform.OSVersion, p1.OSVersion)
-	require.Equal(t, info.Images[1].Img.Platform.OSVersion, p2.OSVersion)
+	require.Equal(t, info.Images[0].Img.OSVersion, p1.OSVersion)
+	require.Equal(t, info.Images[1].Img.OSVersion, p2.OSVersion)
 
 	dt, err := os.ReadFile(filepath.Join(destDir, strings.Replace(p1Str, "/", "_", 1), "osversion"))
 	require.NoError(t, err)
@@ -9864,7 +9865,7 @@ EOF
 	info, err := testutil.ReadImages(ctx, provider, desc)
 	require.NoError(t, err)
 	require.Len(t, info.Images, 1)
-	require.Equal(t, info.Images[0].Img.Platform.OSVersion, p1.OSVersion)
+	require.Equal(t, info.Images[0].Img.OSVersion, p1.OSVersion)
 
 	dockerfile = fmt.Appendf(nil, `
 FROM %s
@@ -9907,7 +9908,7 @@ EOF
 	info, err = testutil.ReadImages(ctx, provider, desc)
 	require.NoError(t, err)
 	require.Len(t, info.Images, 1)
-	require.Equal(t, info.Images[0].Img.Platform.OSVersion, p1.OSVersion)
+	require.Equal(t, info.Images[0].Img.OSVersion, p1.OSVersion)
 }
 
 func testTargetMistype(t *testing.T, sb integration.Sandbox) {
@@ -9994,7 +9995,7 @@ func checkAllReleasable(t *testing.T, c *client.Client, sb integration.Sandbox, 
 
 	for {
 		resp, err := cl.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		require.NoError(t, err)

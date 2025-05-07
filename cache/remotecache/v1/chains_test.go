@@ -69,7 +69,7 @@ func TestSimpleMarshal(t *testing.T) {
 	cfg2, descPairs, err := cc.Marshal(context.TODO())
 	require.NoError(t, err)
 
-	require.EqualValues(t, cfg, cfg2)
+	require.Equal(t, cfg, cfg2)
 
 	// marshal roundtrip
 	dt, err := json.Marshal(cfg)
@@ -81,7 +81,7 @@ func TestSimpleMarshal(t *testing.T) {
 
 	cfg3, _, err := cc.Marshal(context.TODO())
 	require.NoError(t, err)
-	require.EqualValues(t, cfg, cfg3)
+	require.Equal(t, cfg, cfg3)
 
 	// add extra item
 	cc.Add(outputKey(dgst("bay"), 0))

@@ -1427,10 +1427,7 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 	}
 	cm.mu.Unlock()
 
-	for {
-		if len(rescan) == 0 {
-			break
-		}
+	for len(rescan) != 0 {
 		for id := range rescan {
 			v := m[id]
 			if v.refs == 0 {

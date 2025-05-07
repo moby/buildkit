@@ -16,7 +16,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/pkg/labels"
@@ -546,7 +545,7 @@ func (s3Client *s3Client) touch(ctx context.Context, key string, size *int64) (e
 
 	var currentPartNumber int32 = 1
 	var currentPosition int64
-	var completedParts []types.CompletedPart
+	var completedParts []s3types.CompletedPart
 
 	for currentPosition < *size {
 		copyRange := buildCopySourceRange(currentPosition, *size)
@@ -564,7 +563,7 @@ func (s3Client *s3Client) touch(ctx context.Context, key string, size *int64) (e
 		}
 		partNumber := new(int32)
 		*partNumber = currentPartNumber
-		completedParts = append(completedParts, types.CompletedPart{
+		completedParts = append(completedParts, s3types.CompletedPart{
 			ETag:       uploadPartCopyResult.CopyPartResult.ETag,
 			PartNumber: partNumber,
 		})
@@ -577,7 +576,7 @@ func (s3Client *s3Client) touch(ctx context.Context, key string, size *int64) (e
 		Bucket:   &s3Client.bucket,
 		Key:      &key,
 		UploadId: output.UploadId,
-		MultipartUpload: &types.CompletedMultipartUpload{
+		MultipartUpload: &s3types.CompletedMultipartUpload{
 			Parts: completedParts,
 		},
 	}

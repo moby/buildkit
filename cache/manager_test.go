@@ -1464,7 +1464,7 @@ func getCompressor(w io.Writer, compressionType compression.Type, customized boo
 	case compression.Gzip:
 		if customized {
 			gz, _ := gzip.NewWriterLevel(w, gzip.NoCompression)
-			gz.Header.Comment = "hello"
+			gz.Comment = "hello"
 			gz.Close()
 		}
 		return gzip.NewWriter(w), nil
@@ -2788,7 +2788,7 @@ func mapToSystemTarBlob(t *testing.T, m map[string]string) ([]byte, ocispecs.Des
 	tr := tar.NewReader(bytes.NewReader(tarout))
 	for {
 		h, err := tr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -2807,7 +2807,7 @@ func mapToSystemTarBlob(t *testing.T, m map[string]string) ([]byte, ocispecs.Des
 		if err != nil {
 			return nil, ocispecs.Descriptor{}, err
 		}
-		if string(gotV) != string(v) {
+		if string(gotV) != v {
 			return nil, ocispecs.Descriptor{}, errors.Errorf("unexpected contents of %s", h.Name)
 		}
 	}

@@ -80,9 +80,10 @@ func testParallelism(t *testing.T, sb integration.Sandbox) {
 	elapsed := time.Since(timeStart)
 
 	maxParallelism := sb.Value("max-parallelism")
-	if maxParallelism == maxParallelismSingle {
+	switch maxParallelism {
+	case maxParallelismSingle:
 		require.Greater(t, elapsed, 10*time.Second, "parallelism not restricted")
-	} else if maxParallelism == maxParallelismUnlimited {
+	case maxParallelismUnlimited:
 		require.Less(t, elapsed, 10*time.Second, "parallelism hindered")
 	}
 }

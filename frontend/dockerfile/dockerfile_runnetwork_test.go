@@ -147,7 +147,7 @@ RUN --network=host nc 127.0.0.1 %s | grep foo
 			require.NoError(t, err)
 		}
 	default:
-		require.Fail(t, "unexpected network.host mode %q", hostAllowed)
+		require.Fail(t, fmt.Sprintf("unexpected network.host mode %q", hostAllowed))
 	}
 }
 
@@ -198,6 +198,6 @@ RUN --network=none ! nc -z 127.0.0.1 %s
 			require.NoError(t, err)
 		}
 	default:
-		require.Fail(t, "unexpected network.host mode %q", hostAllowed)
+		require.Fail(t, fmt.Sprintf("unexpected network.host mode %q", hostAllowed))
 	}
 }

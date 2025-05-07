@@ -88,11 +88,11 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 	switch p.ResolverType {
 	case ResolverTypeRegistry:
 		resolver := resolver.DefaultPool.GetResolver(p.RegistryHosts, p.Ref, "pull", p.SessionManager, g).WithImageStore(p.ImageStore, p.Mode)
-		p.Puller.Resolver = resolver
+		p.Resolver = resolver
 		getResolver = func(g session.Group) remotes.Resolver { return resolver.WithSession(g) }
 	case ResolverTypeOCILayout:
 		resolver := getOCILayoutResolver(p.store, p.SessionManager, g)
-		p.Puller.Resolver = resolver
+		p.Resolver = resolver
 		// OCILayout has no need for session
 		getResolver = func(g session.Group) remotes.Resolver { return resolver }
 	default:
@@ -203,11 +203,11 @@ func (p *puller) Snapshot(ctx context.Context, g session.Group) (ir cache.Immuta
 	switch p.ResolverType {
 	case ResolverTypeRegistry:
 		resolver := resolver.DefaultPool.GetResolver(p.RegistryHosts, p.Ref, "pull", p.SessionManager, g).WithImageStore(p.ImageStore, p.Mode)
-		p.Puller.Resolver = resolver
+		p.Resolver = resolver
 		getResolver = func(g session.Group) remotes.Resolver { return resolver.WithSession(g) }
 	case ResolverTypeOCILayout:
 		resolver := getOCILayoutResolver(p.store, p.SessionManager, g)
-		p.Puller.Resolver = resolver
+		p.Resolver = resolver
 		// OCILayout has no need for session
 		getResolver = func(g session.Group) remotes.Resolver { return resolver }
 	default:

@@ -563,7 +563,7 @@ func (e *ExecOp) loadSecretEnv(ctx context.Context, g session.Group) ([]string, 
 			}
 			return nil
 		})
-		if err != nil && !(errors.Is(err, secrets.ErrNotFound) && sopt.Optional) {
+		if err != nil && (!errors.Is(err, secrets.ErrNotFound) || !sopt.Optional) {
 			return nil, err
 		}
 		out = append(out, fmt.Sprintf("%s=%s", sopt.Name, string(dt)))
