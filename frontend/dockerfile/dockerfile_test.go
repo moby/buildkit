@@ -234,6 +234,7 @@ var heredocTests = []integration.Test{}
 // Tests that depend on reproducible env
 var reproTests = integration.TestFuncs(
 	testReproSourceDateEpoch,
+	testWorkdirSourceDateEpochReproducible,
 )
 
 var (
@@ -908,6 +909,84 @@ WORKDIR /
 	fi, err := os.Lstat(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, true, fi.IsDir())
+}
+
+// testWorkdirSourceDateEpochReproducible ensures that WORKDIR is reproducible with SOURCE_DATE_EPOCH.
+func testWorkdirSourceDateEpochReproducible(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM alpine
+WORKDIR /mydir
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir1 := t.TempDir()
+	epoch := fmt.Sprintf("%d", time.Date(2023, 1, 10, 15, 34, 56, 0, time.UTC).Unix())
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:SOURCE_DATE_EPOCH": epoch,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterOCI,
+				OutputDir: destDir1,
+				Attrs: map[string]string{
+					"tar": "false",
+				},
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	index1, err := os.ReadFile(filepath.Join(destDir1, "index.json"))
+	require.NoError(t, err)
+
+	// Prune all cache
+	ensurePruneAll(t, c, sb)
+
+	time.Sleep(3 * time.Second)
+
+	destDir2 := t.TempDir()
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:SOURCE_DATE_EPOCH": epoch,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterOCI,
+				OutputDir: destDir2,
+				Attrs: map[string]string{
+					"tar": "false",
+				},
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	index2, err := os.ReadFile(filepath.Join(destDir2, "index.json"))
+	require.NoError(t, err)
+
+	require.Equal(t, index1, index2)
 }
 
 func testCacheReleased(t *testing.T, sb integration.Sandbox) {
