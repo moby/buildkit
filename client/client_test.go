@@ -130,6 +130,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testBasicLocalCacheImportExport,
 	testBasicS3CacheImportExport,
 	testBasicAzblobCacheImportExport,
+	testBasicGCSCacheImportExport,
 	testCachedMounts,
 	testCopyFromEmptyImage,
 	testProxyEnv,
@@ -6281,6 +6282,37 @@ func testBasicAzblobCacheImportExport(t *testing.T, sb integration.Sandbox) {
 			"account_name":      opts.AccountName,
 			"secret_access_key": opts.AccountKey,
 			"container":         "cachecontainer",
+		},
+	}
+	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
+}
+
+func testBasicGCSCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb,
+		workers.FeatureCacheExport,
+		workers.FeatureCacheImport,
+		workers.FeatureCacheBackendGCS,
+	)
+
+	gcsAddr, bucket, cleanup, err := helpers.NewFakeGCSServer(t, sb)
+	require.NoError(t, err)
+	defer cleanup()
+
+	im := CacheOptionsEntry{
+		Type: "gcs",
+		Attrs: map[string]string{
+			"bucket":       bucket,
+			"endpoint_url": gcsAddr,
+			"without_auth": "true",
+		},
+	}
+	ex := CacheOptionsEntry{
+		Type: "gcs",
+		Attrs: map[string]string{
+			"bucket":       bucket,
+			"endpoint_url": gcsAddr,
+			"without_auth": "true",
 		},
 	}
 	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
