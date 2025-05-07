@@ -1399,6 +1399,9 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bo
 			if user := d.image.Config.User; user != "" {
 				mkdirOpt = append(mkdirOpt, llb.WithUser(user))
 			}
+			if d.epoch != nil {
+				mkdirOpt = append(mkdirOpt, llb.WithCreatedTime(*d.epoch))
+			}
 			platform := opt.targetPlatform
 			if d.platform != nil {
 				platform = *d.platform
