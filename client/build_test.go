@@ -1469,7 +1469,6 @@ func testClientGatewayExecError(t *testing.T, sb integration.Sandbox) {
 		}}
 
 		for _, tt := range tests {
-			tt := tt
 			t.Run(tt.Name, func(t *testing.T) {
 				def, err := tt.State.Marshal(ctx)
 				require.NoError(t, err)
@@ -1722,7 +1721,6 @@ func testClientGatewayExecFileActionError(t *testing.T, sb integration.Sandbox) 
 		}}
 
 		for _, tt := range tests {
-			tt := tt
 			t.Run(tt.Name, func(t *testing.T) {
 				def, err := tt.State.Marshal(ctx)
 				require.NoError(t, err)

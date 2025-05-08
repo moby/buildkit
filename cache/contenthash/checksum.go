@@ -569,8 +569,8 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 		//
 		// When wildcards are enabled, this translation applies to the
 		// portion of 'p' before any wildcards.
-		if strings.HasPrefix(fn, resolvedPrefix) {
-			fn = origPrefix + strings.TrimPrefix(fn, resolvedPrefix)
+		if after, ok := strings.CutPrefix(fn, resolvedPrefix); ok {
+			fn = origPrefix + after
 		}
 
 		for len(parentDirHeaders) != 0 {

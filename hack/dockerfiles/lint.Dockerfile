@@ -6,10 +6,9 @@ ARG XX_VERSION=1.6.1
 ARG PROTOLINT_VERSION=0.50.5
 ARG GOLANGCI_LINT_VERSION=v2.1.5
 ARG GOLANGCI_FROM_SOURCE=false
-# v0.31 requires go1.24
-ARG GOPLS_VERSION=v0.30.0
-# GOPLS_ANALYZERS defines gopls analyzers to be run. disabled by default: deprecated unusedvariable simplifyrange
-ARG GOPLS_ANALYZERS="embeddirective fillreturns hostport infertypeargs modernize nonewvars noresultvalues simplifycompositelit simplifyslice unusedparams yield"
+ARG GOPLS_VERSION=v0.33.0
+# GOPLS_ANALYZERS defines gopls analyzers to be run. disabled by default: deprecated simplifyrange unusedfunc unusedvariable
+ARG GOPLS_ANALYZERS="embeddirective fillreturns infertypeargs maprange modernize nonewvars noresultvalues simplifycompositelit simplifyslice unusedparams yield"
 
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS golang-base
 FROM --platform=$BUILDPLATFORM yoheimuta/protolint:${PROTOLINT_VERSION} AS protolint-base

@@ -585,7 +585,6 @@ func TestProcessWithMatches(t *testing.T) {
 	}
 
 	for _, c := range tc {
-		c := c
 		t.Run(c.input, func(t *testing.T) {
 			result, err := shlex.ProcessWordWithMatches(c.input, envsFromMap(c.envs))
 			w := result.Result

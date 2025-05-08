@@ -333,7 +333,6 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 					}
 					eg, ctx := errgroup.WithContext(ctx)
 					for _, ref := range refs {
-						ref := ref
 						eg.Go(func() error {
 							remotes, err := ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
 							if err != nil {

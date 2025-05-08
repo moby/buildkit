@@ -6993,7 +6993,6 @@ RUN  reg query "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Param
 		},
 	}
 	for _, tt := range cases {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 				FrontendAttrs: tt.attrs,

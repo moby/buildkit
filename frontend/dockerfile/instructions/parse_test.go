@@ -153,7 +153,6 @@ func TestParseOptInterval(t *testing.T) {
 
 func TestNilLinter(t *testing.T) {
 	for cmd := range command.Commands {
-		cmd := cmd
 		t.Run(cmd, func(t *testing.T) {
 			t.Parallel()
 

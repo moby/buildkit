@@ -736,7 +736,7 @@ func TestHugeGraph(t *testing.T) {
 	nodes := 1000
 
 	g, v := generateSubGraph(nodes)
-	// printGraph(g, "")
+	// PrintGraph(g, "")
 	g.Vertex.(*vertexSum).setupCallCounters()
 
 	res, err := j0.Build(ctx, g)
@@ -3925,12 +3925,11 @@ func (v *vertexSubBuild) Acquire(ctx context.Context) (ReleaseFunc, error) {
 	return func() {}, nil
 }
 
-//nolint:unused
-func printGraph(e Edge, pfx string) {
+func PrintGraph(e Edge, pfx string) {
 	name := e.Vertex.Name()
 	fmt.Printf("%s %d %s\n", pfx, e.Index, name)
 	for _, inp := range e.Vertex.Inputs() {
-		printGraph(inp, pfx+"-->")
+		PrintGraph(inp, pfx+"-->")
 	}
 }
 
