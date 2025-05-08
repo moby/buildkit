@@ -92,6 +92,8 @@ func (gs *gitSource) Identifier(scheme, ref string, attrs map[string]string, pla
 			id.KnownSSHHosts = v
 		case pb.AttrMountSSHSock:
 			id.MountSSHSock = v
+		case pb.AttrCommitHash:
+			id.CommitHash = v
 		}
 	}
 
@@ -206,6 +208,9 @@ func (gs *gitSourceHandler) shaToCacheKey(sha, ref string) string {
 	}
 	if gs.src.Subdir != "" {
 		key += ":" + gs.src.Subdir
+	}
+	if gs.src.CommitHash != "" {
+		key += ":commit-hash=" + gs.src.CommitHash
 	}
 	return key
 }
@@ -349,10 +354,18 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 	gs.locker.Lock(remote)
 	defer gs.locker.Unlock(remote)
 
-	if ref := gs.src.Ref; ref != "" && gitutil.IsCommitSHA(ref) {
-		cacheKey := gs.shaToCacheKey(ref, "")
+	var refCommitFullHash string
+	if gitutil.IsCommitSHA(gs.src.CommitHash) {
+		refCommitFullHash = gs.src.CommitHash
+	}
+	if refCommitFullHash == "" && gitutil.IsCommitSHA(gs.src.Ref) {
+		refCommitFullHash = gs.src.Ref
+	}
+	if refCommitFullHash != "" {
+		cacheKey := gs.shaToCacheKey(refCommitFullHash, "")
 		gs.cacheKey = cacheKey
-		return cacheKey, ref, nil, true, nil
+		// gs.src.CommitHash is verified after checking out the commit
+		return cacheKey, refCommitFullHash, nil, true, nil
 	}
 
 	gs.getAuthToken(ctx, g)
@@ -415,7 +428,9 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 	if !gitutil.IsCommitSHA(sha) {
 		return "", "", nil, false, errors.Errorf("invalid commit sha %q", sha)
 	}
-
+	if gs.src.CommitHash != "" && !strings.HasPrefix(sha, gs.src.CommitHash) {
+		return "", "", nil, false, errors.Errorf("expected commit hash to match %s, got %s", gs.src.CommitHash, sha)
+	}
 	cacheKey := gs.shaToCacheKey(sha, usedRef)
 	gs.cacheKey = cacheKey
 	return cacheKey, sha, nil, true, nil
@@ -536,6 +551,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		subdir = "."
 	}
 
+	checkedoutRef := "HEAD"
 	if gs.src.KeepGitDir && subdir == "." {
 		checkoutDirGit := filepath.Join(checkoutDir, ".git")
 		if err := os.MkdirAll(checkoutDir, 0711); err != nil {
@@ -605,6 +621,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to checkout remote %s", urlutil.RedactCredentials(gs.src.Remote))
 		}
+		checkedoutRef = ref // HEAD may not exist
 		if subdir != "." {
 			d, err := os.Open(filepath.Join(cd, subdir))
 			if err != nil {
@@ -635,6 +652,16 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 	}
 
 	git = git.New(gitutil.WithWorkTree(checkoutDir), gitutil.WithGitDir(gitDir))
+	if gs.src.CommitHash != "" {
+		actualHashBuf, err := git.Run(ctx, "rev-parse", checkedoutRef)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to rev-parse %s for %s", checkedoutRef, urlutil.RedactCredentials(gs.src.Remote))
+		}
+		actualHash := strings.TrimSpace(string(actualHashBuf))
+		if !strings.HasPrefix(actualHash, gs.src.CommitHash) {
+			return nil, errors.Errorf("expected commit hash to match %s, got %s", gs.src.CommitHash, actualHash)
+		}
+	}
 	_, err = git.Run(ctx, "submodule", "update", "--init", "--recursive", "--depth=1")
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to update submodules for %s", urlutil.RedactCredentials(gs.src.Remote))
