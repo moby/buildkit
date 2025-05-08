@@ -90,8 +90,11 @@ func (s *setup) Run(ctx context.Context) (err error) {
 		closeProgress(err)
 	}()
 
-	isDistro, _ := isDebianOrUbuntu()
-	if !isDistro {
+	osid, osversion, err := getOSRelease()
+	if err != nil {
+		return err
+	}
+	if osid != "debian" && osid != "ubuntu" {
 		return errors.Errorf("NVIDIA setup is currently only supported on Debian/Ubuntu")
 	}
 
@@ -131,7 +134,7 @@ func (s *setup) Run(ctx context.Context) (err error) {
 		return err
 	}
 
-	if err := installPackages(ctx, dv, pw, dgst); err != nil {
+	if err := installPackages(ctx, osid, osversion, dv, pw, dgst); err != nil {
 		return err
 	}
 
@@ -167,8 +170,20 @@ func run(ctx context.Context, args []string, pw progress.Writer, dgst digest.Dig
 	return cmd.Run()
 }
 
-func installPackages(ctx context.Context, dv string, pw progress.Writer, dgst digest.Digest) error {
-	const aptDistro = "ubuntu2404"
+func installPackages(ctx context.Context, osid string, osversion string, dv string, pw progress.Writer, dgst digest.Digest) error {
+	aptDistro := "ubuntu2404"
+	switch osid {
+	case "debian":
+		if osversion == "" {
+			aptDistro = "debian12"
+		} else {
+			aptDistro = "debian" + osversion
+		}
+	case "ubuntu":
+		if osversion != "" {
+			aptDistro = "ubuntu" + strings.ReplaceAll(osversion, ".", "")
+		}
+	}
 
 	var arch string
 	switch runtime.GOARCH {
@@ -274,36 +289,33 @@ func hasNvidiaDevices() (bool, error) {
 	return found, nil
 }
 
-func getOSID() (string, error) {
+func getOSRelease() (string, string, error) {
 	file, err := os.Open("/etc/os-release")
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	defer file.Close()
 
+	var id, versionID string
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.HasPrefix(line, "ID=") {
-			id := strings.TrimPrefix(line, "ID=")
-			return strings.Trim(id, `"`), nil // Remove potential quotes
+			id = strings.Trim(strings.TrimPrefix(line, "ID="), `"`) // Remove potential quotes
+		} else if strings.HasPrefix(line, "VERSION_ID=") {
+			versionID = strings.Trim(strings.TrimPrefix(line, "VERSION_ID="), `"`)
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
-		return "", err
+		return "", "", err
 	}
 
-	return "", errors.Errorf("ID not found in /etc/os-release")
-}
-
-func isDebianOrUbuntu() (bool, error) {
-	id, err := getOSID()
-	if err != nil {
-		return false, err
+	if id == "" {
+		return "", "", errors.Errorf("ID not found in /etc/os-release")
 	}
 
-	return id == "debian" || id == "ubuntu", nil
+	return id, versionID, nil
 }
 
 func hasWSLGPU() bool {
