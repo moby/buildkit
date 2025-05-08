@@ -3,7 +3,6 @@
 ARG GO_VERSION=1.23
 ARG DEBIAN_VERSION=bookworm
 ARG PROTOC_VERSION=3.11.4
-ARG PROTOC_GOOGLEAPIS_VERSION=2af421884dd468d565137215c946ebe4e245ae26
 
 # protoc is dynamically linked to glibc so can't use alpine base
 
@@ -22,16 +21,6 @@ RUN <<EOT
   unzip protoc-${PROTOC_VERSION}-${TARGETOS}-${arch}.zip -d /opt/protoc
 EOT
 
-FROM base AS googleapis
-ARG PROTOC_GOOGLEAPIS_VERSION
-RUN <<EOT
-  set -e
-  wget -q https://github.com/googleapis/googleapis/archive/${PROTOC_GOOGLEAPIS_VERSION}.zip -O googleapis.zip
-  unzip googleapis.zip '*.proto' -d /opt
-  mkdir -p /opt/googleapis
-  mv /opt/googleapis-${PROTOC_GOOGLEAPIS_VERSION} /opt/googleapis/include
-EOT
-
 FROM base AS gobuild-base
 WORKDIR /app
 
@@ -41,10 +30,10 @@ RUN --mount=type=bind,source=go.mod,target=/app/go.mod \
     --mount=type=cache,target=/root/.cache \
     --mount=type=cache,target=/go/pkg/mod <<EOT
   set -e
-  mkdir -p /opt/vtprotobuf
+  mkdir -p /opt/vtprotobuf/include/github.com/planetscale/vtprotobuf/vtproto
   go mod download github.com/planetscale/vtprotobuf
-  cp -R $(go list -m -f='{{.Dir}}' github.com/planetscale/vtprotobuf)/include /opt/vtprotobuf
-  chmod -R 0755 /opt/vtprotobuf
+  cp $(go list -m -f='{{.Dir}}' github.com/planetscale/vtprotobuf)/include/github.com/planetscale/vtprotobuf/vtproto/ext.proto /opt/vtprotobuf/include/github.com/planetscale/vtprotobuf/vtproto/ext.proto
+  chmod 0644 /opt/vtprotobuf/include/github.com/planetscale/vtprotobuf/vtproto/ext.proto
 EOT
 
 FROM gobuild-base AS vendored
@@ -56,7 +45,6 @@ EOT
 
 FROM scratch AS protobuf
 COPY --link --from=protoc /opt/protoc /
-COPY --link --from=googleapis /opt/googleapis /
 COPY --link --from=vtprotobuf /opt/vtprotobuf /
 COPY --link --from=vendored /opt/vendored /
 
