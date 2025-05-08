@@ -70,7 +70,6 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 	switch sr.kind() {
 	case Merge:
 		for _, parent := range sr.mergeParents {
-			parent := parent
 			eg.Go(func() error {
 				return computeBlobChain(ctx, parent, createIfNeeded, comp, s, filter)
 			})

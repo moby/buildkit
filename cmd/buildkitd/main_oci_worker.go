@@ -366,7 +366,8 @@ func snapshotterFactory(commonRoot string, cfg config.OCIConfig, sm *session.Man
 				grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(defaults.DefaultMaxRecvMsgSize)),
 				grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(defaults.DefaultMaxSendMsgSize)),
 			}
-			//nolint:staticcheck // ignore SA1019 NewClient has different behavior and needs to be tested
+			// ignore SA1019 NewClient has different behavior and needs to be tested
+			//nolint:staticcheck
 			conn, err := grpc.Dial(dialer.DialAddress(address), gopts...)
 			if err != nil {
 				return nil, errors.Wrapf(err, "failed to dial %q", address)
@@ -487,8 +488,8 @@ func sourceWithSession(hosts docker.RegistryHosts, sm *session.Manager) sgzsourc
 		// to the snapshotter API. So, first, get all these IDs
 		var ids []string
 		for k := range labels {
-			if strings.HasPrefix(k, targetRefLabel+".") {
-				ids = append(ids, strings.TrimPrefix(k, targetRefLabel+"."))
+			if after, ok := strings.CutPrefix(k, targetRefLabel+"."); ok {
+				ids = append(ids, after)
 			}
 		}
 

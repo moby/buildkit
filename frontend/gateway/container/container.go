@@ -105,13 +105,11 @@ func NewContainer(ctx context.Context, cm cache.Manager, exec executor.Executor,
 	ctr.mounts = p.Mounts
 
 	for _, o := range p.OutputRefs {
-		o := o
 		ctr.cleanup = append(ctr.cleanup, func() error {
 			return o.Ref.Release(context.TODO())
 		})
 	}
 	for _, active := range p.Actives {
-		active := active
 		ctr.cleanup = append(ctr.cleanup, func() error {
 			return active.Ref.Release(context.TODO())
 		})

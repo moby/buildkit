@@ -284,8 +284,7 @@ func getOSID() (string, error) {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if strings.HasPrefix(line, "ID=") {
-			id := strings.TrimPrefix(line, "ID=")
+		if id, ok := strings.CutPrefix(line, "ID="); ok {
 			return strings.Trim(id, `"`), nil // Remove potential quotes
 		}
 	}

@@ -35,7 +35,6 @@ func TestRedactCredentials(t *testing.T) {
 		},
 	}
 	for _, tt := range cases {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			if g, w := RedactCredentials(tt.url), tt.want; g != w {
 				t.Fatalf("got: %q\nwant: %q", g, w)

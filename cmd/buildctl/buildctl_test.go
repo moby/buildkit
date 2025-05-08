@@ -115,7 +115,6 @@ func TestWriteMetadataFile(t *testing.T) {
 	}
 
 	for _, tt := range cases {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			fname := path.Join(tmpdir, "metadata_"+tt.name)
 			require.NoError(t, writeMetadataFile(fname, tt.exporterResponse))

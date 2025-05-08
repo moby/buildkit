@@ -140,7 +140,6 @@ func TestParseGitRef(t *testing.T) {
 		},
 	}
 	for _, tt := range cases {
-		tt := tt
 		t.Run(tt.ref, func(t *testing.T) {
 			got, err := ParseGitRef(tt.ref)
 			if tt.expected == nil {

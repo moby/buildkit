@@ -86,10 +86,10 @@ func GetOverlayLayers(m mount.Mount) ([]string, error) {
 	var uFound bool
 	var l []string // l[0] = bottommost
 	for _, o := range m.Options {
-		if strings.HasPrefix(o, "upperdir=") {
-			u, uFound = strings.TrimPrefix(o, "upperdir="), true
-		} else if strings.HasPrefix(o, "lowerdir=") {
-			l = strings.Split(strings.TrimPrefix(o, "lowerdir="), ":")
+		if after, ok := strings.CutPrefix(o, "upperdir="); ok {
+			u, uFound = after, true
+		} else if after, ok := strings.CutPrefix(o, "lowerdir="); ok {
+			l = strings.Split(after, ":")
 			for i, j := 0, len(l)-1; i < j; i, j = i+1, j-1 {
 				l[i], l[j] = l[j], l[i] // make l[0] = bottommost
 			}

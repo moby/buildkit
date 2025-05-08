@@ -168,8 +168,8 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 		parts := strings.Split(filter, "/")
 		if len(parts) >= 2 {
 			const prefix = "slice="
-			if strings.HasPrefix(parts[1], prefix) {
-				conf := strings.TrimPrefix(parts[1], prefix)
+			if after, ok0 := strings.CutPrefix(parts[1], prefix); ok0 {
+				conf := after
 				offsetS, totalS, ok := strings.Cut(conf, "-")
 				if !ok {
 					t.Fatalf("invalid slice=%q", conf)
@@ -514,8 +514,8 @@ func prepareValueMatrix(tc testConf) []matrixValue {
 func SkipOnPlatform(t *testing.T, goos string) {
 	skip := false
 	// support for negation
-	if strings.HasPrefix(goos, "!") {
-		goos = strings.TrimPrefix(goos, "!")
+	if after, ok := strings.CutPrefix(goos, "!"); ok {
+		goos = after
 		skip = runtime.GOOS != goos
 	} else {
 		skip = runtime.GOOS == goos
@@ -539,8 +539,8 @@ func UnixOrWindows[T any](unix, windows T) T {
 func lookupTestFilter() (string, bool) {
 	const prefix = "-test.run="
 	for _, arg := range os.Args {
-		if strings.HasPrefix(arg, prefix) {
-			return strings.TrimPrefix(arg, prefix), true
+		if after, ok := strings.CutPrefix(arg, prefix); ok {
+			return after, true
 		}
 	}
 	return "", false

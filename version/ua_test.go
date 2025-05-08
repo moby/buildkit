@@ -34,7 +34,6 @@ func TestUserAgent(t *testing.T) {
 		},
 	}
 	for _, tt := range cases {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			Version = tt.version
 			for pname, pver := range tt.products {
