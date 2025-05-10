@@ -5,15 +5,12 @@ package fsutil
 
 import (
 	"os"
-	"strings"
 	"syscall"
 
 	"github.com/containerd/continuity/sysx"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil/types"
 )
-
-const xattrApplePrefix = "com.apple."
 
 func loadXattr(origpath string, stat *types.Stat) error {
 	xattrs, err := sysx.LListxattr(origpath)
@@ -26,27 +23,14 @@ func loadXattr(origpath string, stat *types.Stat) error {
 	if len(xattrs) > 0 {
 		m := make(map[string][]byte)
 		for _, key := range xattrs {
-			if skipXattr(key) {
-				continue
-			}
-
-			if v, err := sysx.LGetxattr(origpath, key); err == nil {
+			v, err := sysx.LGetxattr(origpath, key)
+			if err == nil {
 				m[key] = v
 			}
 		}
-
-		if len(m) > 0 {
-			stat.Xattrs = m
-		}
+		stat.Xattrs = m
 	}
 	return nil
-}
-
-func skipXattr(key string) bool {
-	if strings.HasPrefix(key, xattrApplePrefix) {
-		return true
-	}
-	return false
 }
 
 func setUnixOpt(fi os.FileInfo, stat *types.Stat, path string, seenFiles map[uint64]string) {
