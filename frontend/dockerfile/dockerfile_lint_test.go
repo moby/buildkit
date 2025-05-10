@@ -1086,6 +1086,8 @@ FROM %s
 ENV PATH=$PAHT:/tmp/bin
 		`,
 		baseImg)
+	// not hint on Windows since default PATH is not set
+	hintStr := integration.UnixOrWindows(" (did you mean $PATH?)", "")
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile: dockerfile,
 		Warnings: []expectedLintWarning{
@@ -1093,7 +1095,7 @@ ENV PATH=$PAHT:/tmp/bin
 				RuleName:    "UndefinedVar",
 				Description: "Variables should be defined before their use",
 				URL:         "https://docs.docker.com/go/dockerfile/rule/undefined-var/",
-				Detail:      "Usage of undefined variable '$PAHT' (did you mean $PATH?)",
+				Detail:      fmt.Sprintf("Usage of undefined variable '$PAHT'%s", hintStr),
 				Level:       1,
 				Line:        3,
 			},
