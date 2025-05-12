@@ -58,7 +58,10 @@ func ResolveCacheExporterFunc(sm *session.Manager) remotecache.ResolveCacheExpor
 				return nil, errors.Wrapf(err, "failed to parse %s", attrImageManifest)
 			}
 			imageManifest = b
+		} else if !ociMediatypes {
+			imageManifest = false
 		}
+
 		csID := contentStoreIDPrefix + store
 		cs, err := getContentStore(ctx, sm, g, csID)
 		if err != nil {
