@@ -76,6 +76,8 @@ func ResolveCacheExporterFunc(sm *session.Manager, hosts docker.RegistryHosts) r
 				return nil, errors.Wrapf(err, "failed to parse %s", attrImageManifest)
 			}
 			imageManifest = b
+		} else if !ociMediatypes {
+			imageManifest = false
 		}
 		insecure := false
 		if v, ok := attrs[attrInsecure]; ok {
