@@ -73,7 +73,6 @@ func TestRefToPURL(t *testing.T) {
 	}
 
 	for _, tc := range tcases {
-		tc := tc
 		t.Run(tc.ref, func(t *testing.T) {
 			purl, err := RefToPURL(packageurl.TypeDocker, tc.ref, tc.platform)
 			if tc.err {
@@ -138,7 +137,6 @@ func TestPURLToRef(t *testing.T) {
 	}
 
 	for _, tc := range tcases {
-		tc := tc
 		t.Run(tc.purl, func(t *testing.T) {
 			ref, platform, err := PURLToRef(tc.purl)
 			if tc.err {

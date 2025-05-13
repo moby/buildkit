@@ -82,10 +82,10 @@ func testBasicGhaCacheImportExportExtraTimeout(t *testing.T, sb integration.Sand
 
 	scope := "buildkit-" + t.Name()
 	if ref := os.Getenv("GITHUB_REF"); ref != "" {
-		if strings.HasPrefix(ref, "refs/heads/") {
-			scope += "-" + strings.TrimPrefix(ref, "refs/heads/")
-		} else if strings.HasPrefix(ref, "refs/tags/") {
-			scope += "-" + strings.TrimPrefix(ref, "refs/tags/")
+		if after, ok := strings.CutPrefix(ref, "refs/heads/"); ok {
+			scope += "-" + after
+		} else if after, ok := strings.CutPrefix(ref, "refs/tags/"); ok {
+			scope += "-" + after
 		} else if strings.HasPrefix(ref, "refs/pull/") {
 			scope += "-pr" + strings.TrimPrefix(strings.TrimSuffix(strings.TrimSuffix(ref, "/head"), "/merge"), "refs/pull/")
 		}

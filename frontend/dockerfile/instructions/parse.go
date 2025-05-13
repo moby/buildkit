@@ -831,8 +831,8 @@ func getComment(comments []string, name string) string {
 		return ""
 	}
 	for _, line := range comments {
-		if strings.HasPrefix(line, name+" ") {
-			return strings.TrimPrefix(line, name+" ")
+		if after, ok := strings.CutPrefix(line, name+" "); ok {
+			return after
 		}
 	}
 	return ""

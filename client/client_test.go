@@ -1306,15 +1306,12 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 
 	// A caller provided name takes precedence over one returned by the frontend. Iterate over both options.
 	for _, winner := range []string{"frontend", "caller"} {
-		winner := winner // capture loop variable.
-
 		// The double layer of `t.Run` here is required so
 		// that the inner-most tests (with the actual
 		// functionality) have definitely completed before the
 		// sandbox and registry cleanups (defered above) are run.
 		t.Run(winner, func(t *testing.T) {
 			for _, exp := range []string{ExporterOCI, ExporterDocker, ExporterImage} {
-				exp := exp // capture loop variable.
 				t.Run(exp, func(t *testing.T) {
 					destDir := t.TempDir()
 
@@ -4796,7 +4793,6 @@ func testPullZstdImage(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	for _, ociMediaTypes := range []bool{true, false} {
-		ociMediaTypes := ociMediaTypes
 		t.Run(t.Name()+fmt.Sprintf("/ociMediaTypes=%t", ociMediaTypes), func(t *testing.T) {
 			c, err := New(sb.Context(), sb.Address())
 			require.NoError(t, err)
@@ -5888,7 +5884,6 @@ func testCacheExportIgnoreError(t *testing.T, sb integration.Sandbox) {
 	for _, ignoreError := range ignoreErrorValues {
 		ignoreErrStr := strconv.FormatBool(ignoreError)
 		for n, test := range tests {
-			n := n
 			require.Equal(t, 1, len(test.Exports))
 			require.Equal(t, 1, len(test.CacheExports))
 			require.NotEmpty(t, test.CacheExports[0].Attrs)
@@ -6464,9 +6459,7 @@ func testRegistryEmptyCacheExport(t *testing.T, sb integration.Sandbox) {
 	)
 
 	for _, ociMediaTypes := range []bool{true, false} {
-		ociMediaTypes := ociMediaTypes
 		for _, imageManifest := range []bool{true, false} {
-			imageManifest := imageManifest
 			if imageManifest && !ociMediaTypes {
 				// invalid configuration for remote cache
 				continue
@@ -11296,7 +11289,6 @@ func testSourcePolicy(t *testing.T, sb integration.Sandbox) {
 		},
 	}
 	for i, tc := range testCases {
-		tc := tc
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			_, err = c.Build(sb.Context(), SolveOpt{SourcePolicy: tc.srcPol}, "", frontend, nil)
 			if tc.expectedErr == "" {

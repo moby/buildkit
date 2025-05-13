@@ -1026,7 +1026,6 @@ func (sr *immutableRef) Extract(ctx context.Context, s session.Group) (rerr erro
 func (sr *immutableRef) withRemoteSnapshotLabelsStargzMode(ctx context.Context, s session.Group, f func()) error {
 	dhs := sr.descHandlers
 	for _, r := range sr.layerChain() {
-		r := r
 		info, err := r.cm.Snapshotter.Stat(ctx, r.getSnapshotID())
 		if err != nil && !cerrdefs.IsNotFound(err) {
 			return err
@@ -1069,7 +1068,6 @@ func (sr *immutableRef) prepareRemoteSnapshotsStargzMode(ctx context.Context, s 
 	_, err := g.Do(ctx, sr.ID()+"-prepare-remote-snapshot", func(ctx context.Context) (_ *leaseutil.LeaseRef, rerr error) {
 		dhs := sr.descHandlers
 		for _, r := range sr.layerChain() {
-			r := r
 			snapshotID := r.getSnapshotID()
 			if _, err := r.cm.Snapshotter.Stat(ctx, snapshotID); err == nil {
 				continue
@@ -1635,16 +1633,16 @@ func readonlyOverlay(opt []string) []string {
 	out := make([]string, 0, len(opt))
 	upper := ""
 	for _, o := range opt {
-		if strings.HasPrefix(o, "upperdir=") {
-			upper = strings.TrimPrefix(o, "upperdir=")
+		if after, ok := strings.CutPrefix(o, "upperdir="); ok {
+			upper = after
 		} else if !strings.HasPrefix(o, "workdir=") {
 			out = append(out, o)
 		}
 	}
 	if upper != "" {
 		for i, o := range out {
-			if strings.HasPrefix(o, "lowerdir=") {
-				out[i] = "lowerdir=" + upper + ":" + strings.TrimPrefix(o, "lowerdir=")
+			if after, ok := strings.CutPrefix(o, "lowerdir="); ok {
+				out[i] = "lowerdir=" + upper + ":" + after
 			}
 		}
 	}

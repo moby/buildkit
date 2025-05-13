@@ -91,8 +91,8 @@ type gatewayFrontend struct {
 func filterPrefix(opts map[string]string, pfx string) map[string]string {
 	m := map[string]string{}
 	for k, v := range opts {
-		if strings.HasPrefix(k, pfx) {
-			m[strings.TrimPrefix(k, pfx)] = v
+		if after, ok := strings.CutPrefix(k, pfx); ok {
+			m[after] = v
 		}
 	}
 	return m

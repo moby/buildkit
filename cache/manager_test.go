@@ -1731,7 +1731,6 @@ func TestGetRemotes(t *testing.T) {
 	for _, ir := range refs {
 		ir := ir.(*immutableRef)
 		for _, compressionType := range []compression.Type{compression.Uncompressed, compression.Gzip, compression.EStargz, compression.Zstd} {
-			compressionType := compressionType
 			refCfg := config.RefConfig{Compression: compression.New(compressionType).SetForce(true)}
 			eg.Go(func() error {
 				remotes, err := ir.GetRemotes(egctx, true, refCfg, false, nil)
@@ -1820,7 +1819,6 @@ func TestGetRemotes(t *testing.T) {
 		variantsMapMu.Unlock()
 		require.True(t, ok, ir.ID())
 		for _, compressionType := range []compression.Type{compression.Uncompressed, compression.Gzip, compression.EStargz, compression.Zstd} {
-			compressionType := compressionType
 			refCfg := config.RefConfig{Compression: compression.New(compressionType)}
 			eg.Go(func() error {
 				remotes, err := ir.GetRemotes(egctx, false, refCfg, true, nil)
@@ -1877,7 +1875,6 @@ func checkVariantsCoverage(ctx context.Context, t *testing.T, variants idxToVari
 	// check the lowers as well
 	eg, egctx := errgroup.WithContext(ctx)
 	for _, lowers := range got {
-		lowers := lowers
 		eg.Go(func() error {
 			checkVariantsCoverage(egctx, t, variants, idx-1, lowers, nil) // expect all compression variants
 			return nil

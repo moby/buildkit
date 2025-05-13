@@ -104,7 +104,6 @@ func TestRootPathSymlinks(t *testing.T) {
 		{"link3/link1/../link1/final", true, "/target"},             // link3/target2
 		{"link3/link1/../link1/final", false, "/link1/final"},       // link3/target2
 	} {
-		test := test // capture range variable
 		t.Run(fmt.Sprintf("resolve(%q,followTrailing=%v)", test.path, test.followTrailing), func(t *testing.T) {
 			t.Parallel()
 

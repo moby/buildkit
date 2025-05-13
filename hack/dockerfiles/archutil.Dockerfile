@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile-upstream:master
 # check=error=true
 
-ARG GO_VERSION=1.23
+ARG GO_VERSION=1.24
 ARG ALPINE_VERSION=3.21
 ARG DEBIAN_VERSION=trixie
 
