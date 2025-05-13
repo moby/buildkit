@@ -640,7 +640,11 @@ func (t *trace) update(s *client.SolveStatus, termWidth int) {
 					subVtxs: make(map[digest.Digest]client.Vertex),
 				}
 				if t.modeConsole {
-					group.term = vt100.NewVT100(termHeight, termWidth-termPad)
+					w := termWidth - termPad
+					if w <= 0 {
+						w = 1
+					}
+					group.term = vt100.NewVT100(termHeight, w)
 				}
 				t.groups[v.ProgressGroup.Id] = group
 				t.byDigest[group.Digest] = group.vertex
@@ -661,7 +665,11 @@ func (t *trace) update(s *client.SolveStatus, termWidth int) {
 				intervals:     make(map[int64]interval),
 			}
 			if t.modeConsole {
-				t.byDigest[v.Digest].term = vt100.NewVT100(termHeight, termWidth-termPad)
+				w := termWidth - termPad
+				if w <= 0 {
+					w = 1
+				}
+				t.byDigest[v.Digest].term = vt100.NewVT100(termHeight, w)
 			}
 		}
 		t.triggerVertexEvent(v)
@@ -998,6 +1006,9 @@ func (disp *ttyDisplay) print(d displayInfo, width, height int, all bool) {
 		out = align(out, disp.desc, width-1)
 	} else {
 		out = align(out, "", width)
+	}
+	if len(out) > width {
+		out = out[:width]
 	}
 	fmt.Fprintln(disp.c, out)
 	lineCount := 0
