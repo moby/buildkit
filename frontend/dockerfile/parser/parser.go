@@ -114,7 +114,7 @@ type Heredoc struct {
 var (
 	dispatch      map[string]func(string, *directives) (*Node, map[string]bool, error)
 	reWhitespace  = regexp.MustCompile(`[\t\v\f\r ]+`)
-	reHeredoc     = regexp.MustCompile(`^(\d*)<<(-?)([^<]*)$`)
+	reHeredoc     = regexp.MustCompile(`^(\d*)<<(-?)\s*([^<]*)$`)
 	reLeadingTabs = regexp.MustCompile(`(?m)^\t+`)
 )
 
