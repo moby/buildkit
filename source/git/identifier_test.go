@@ -79,6 +79,12 @@ func TestNewGitIdentifier(t *testing.T) {
 			},
 		},
 		{
+			url: "github.com:user/repo.git",
+			expected: GitIdentifier{
+				Remote: "github.com:user/repo.git",
+			},
+		},
+		{
 			url: "git@github.com:user/repo.git#mybranch:mydir/mysubdir/",
 			expected: GitIdentifier{
 				Remote: "git@github.com:user/repo.git",

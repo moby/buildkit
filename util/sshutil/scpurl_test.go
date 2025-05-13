@@ -1,28 +1,31 @@
 package sshutil
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestIsImplicitSSHTransport(t *testing.T) {
-	require.False(t, IsImplicitSSHTransport("http://github.com/moby/buildkit"))
-	require.False(t, IsImplicitSSHTransport("github.com/moby/buildkit"))
-	require.False(t, IsImplicitSSHTransport("github.com:moby/buildkit.git"))
-	require.False(t, IsImplicitSSHTransport("helloworld.net"))
-	require.False(t, IsImplicitSSHTransport("git@helloworld.net"))
-	require.False(t, IsImplicitSSHTransport("git@helloworld.net/foo/bar.git"))
-	require.False(t, IsImplicitSSHTransport("bad:user@helloworld.net:foo/bar.git"))
-	require.False(t, IsImplicitSSHTransport(""))
-	require.True(t, IsImplicitSSHTransport("git@github.com:moby/buildkit.git"))
-	require.True(t, IsImplicitSSHTransport("nonstandarduser@example.com:/srv/repos/weird/project.git"))
-	require.True(t, IsImplicitSSHTransport("other_Funky-username52@example.com:path/to/repo.git/"))
-	require.True(t, IsImplicitSSHTransport("other_Funky-username52@example.com:/to/really:odd:repo.git/"))
-	require.True(t, IsImplicitSSHTransport("teddy@4houses-down.com:/~/catnip.git/"))
+	assert.True(t, IsImplicitSSHTransport("github.com:moby/buildkit.git"))
+	assert.True(t, IsImplicitSSHTransport("git@github.com:moby/buildkit.git"))
+	assert.True(t, IsImplicitSSHTransport("nonstandarduser@example.com:/srv/repos/weird/project.git"))
+	assert.True(t, IsImplicitSSHTransport("other_Funky-username52@example.com:path/to/repo.git/"))
+	assert.True(t, IsImplicitSSHTransport("other_Funky-username52@example.com:/to/really:odd:repo.git/"))
+	assert.True(t, IsImplicitSSHTransport("teddy@4houses-down.com:/~/catnip.git/"))
+	assert.True(t, IsImplicitSSHTransport("weird:user@helloworld.net:foo/bar.git"))
+
+	assert.False(t, IsImplicitSSHTransport("http://github.com/moby/buildkit"))
+	assert.False(t, IsImplicitSSHTransport("github.com/moby/buildkit"))
+	assert.False(t, IsImplicitSSHTransport("helloworld.net"))
+	assert.False(t, IsImplicitSSHTransport("git@helloworld.net"))
+	assert.False(t, IsImplicitSSHTransport("git@helloworld.net/foo/bar.git"))
+	assert.False(t, IsImplicitSSHTransport(""))
 
 	// explicit definitions are checked via isGitTransport, and are not implicit therefore this should fail:
-	require.False(t, IsImplicitSSHTransport("ssh://root@subdomain.example.hostname:2222/root/my/really/weird/path/foo.git"))
+	assert.False(t, IsImplicitSSHTransport("ssh://root@subdomain.example.hostname:2222/root/my/really/weird/path/foo.git"))
 }
 
 func TestParseSCPStyleURL(t *testing.T) {
@@ -43,6 +46,11 @@ func TestParseSCPStyleURL(t *testing.T) {
 			err: true,
 		},
 		{
+			url:  "github.com:moby/buildkit.git",
+			host: "github.com",
+			path: "moby/buildkit.git",
+		},
+		{
 			url:  "git@github.com:moby/buildkit.git",
 			host: "github.com",
 			path: "moby/buildkit.git",
@@ -57,7 +65,7 @@ func TestParseSCPStyleURL(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		t.Run(test.url, func(t *testing.T) {
+		t.Run(strings.ReplaceAll(test.url, "/", "_"), func(t *testing.T) {
 			remote, err := ParseSCPStyleURL(test.url)
 			if test.err {
 				require.Error(t, err)
