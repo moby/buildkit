@@ -10,6 +10,8 @@ devices:
       env:
         - BAR=injected
   - name: baz
+    annotations:
+      org.mobyproject.buildkit.device.class: class1
     containerEdits:
       env:
         - BAZ=injected
