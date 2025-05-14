@@ -39,9 +39,9 @@ func TestFindDevices(t *testing.T) {
 		{
 			name: "Find devices by class",
 			devices: []*pb.CDIDevice{
-				{Name: "vendor1.com/deviceclass=class1"},
+				{Name: "class1"},
 			},
-			expected: []string{"vendor1.com/deviceclass=foo", "vendor1.com/deviceclass=bar"},
+			expected: []string{"vendor1.com/deviceclass=foo", "vendor1.com/deviceclass=bar", "vendor1.com/devicemulti=baz"},
 		},
 		{
 			name: "Device not found",

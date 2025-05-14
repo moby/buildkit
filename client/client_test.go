@@ -11884,7 +11884,7 @@ devices:
 		st = busybox.Run(append(ro, llb.Shlex(cmd), llb.Dir("/wd"))...).AddMount("/wd", st)
 	}
 
-	run(`sh -c 'env|sort | tee class.env'`, llb.AddCDIDevice(llb.CDIDeviceName("vendor1.com/device=class1")))
+	run(`sh -c 'env|sort | tee class.env'`, llb.AddCDIDevice(llb.CDIDeviceName("class1")))
 
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
