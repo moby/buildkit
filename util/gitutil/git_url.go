@@ -64,6 +64,11 @@ type GitURLOpts struct {
 	Subdir string
 }
 
+// GitURLOptsError is returned for invalid GitURLOpts.
+type GitURLOptsError struct {
+	error
+}
+
 // parseOpts splits a git URL fragment into its respective git
 // reference and subdirectory components.
 func parseOpts(fragment string, query url.Values) (*GitURLOpts, error) {
@@ -162,7 +167,9 @@ func fromURL(url *url.URL) (*GitURL, error) {
 	withoutOpts.RawQuery = ""
 	opts, err := parseOpts(url.Fragment, url.Query())
 	if err != nil {
-		return nil, err
+		return nil, &GitURLOptsError{
+			error: errors.Wrapf(err, "failed to parse git URL opts %q", url.Redacted()),
+		}
 	}
 	return &GitURL{
 		Scheme: url.Scheme,
@@ -180,7 +187,10 @@ func fromSCPStyleURL(url *sshutil.SCPStyleURL) (*GitURL, error) {
 	withoutOpts.Query = nil
 	opts, err := parseOpts(url.Fragment, url.Query)
 	if err != nil {
-		return nil, err
+		return nil, &GitURLOptsError{
+			// *sshutil.SCPStyleURL.String() does not contain password
+			error: errors.Wrapf(err, "failed to parse git URL opts %q", url.String()),
+		}
 	}
 	return &GitURL{
 		Scheme: SSHProtocol,
