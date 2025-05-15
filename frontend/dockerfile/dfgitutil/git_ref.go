@@ -63,11 +63,14 @@ func ParseGitRef(ref string) (*GitRef, error) {
 		return nil, cerrdefs.ErrInvalidArgument
 	} else if strings.HasPrefix(ref, "github.com/") {
 		res.IndistinguishableFromLocal = true // Deprecated
-		remote = gitutil.FromURL(&url.URL{
+		remote, err = gitutil.FromURL(&url.URL{
 			Scheme: "https",
 			Host:   "github.com",
 			Path:   strings.TrimPrefix(ref, "github.com/"),
 		})
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		remote, err = gitutil.ParseURL(ref)
 		if errors.Is(err, gitutil.ErrUnknownProtocol) {
