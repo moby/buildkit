@@ -1,3 +1,7 @@
+variable "UBUNTU_VERSION" {
+  default = null
+}
+
 variable "ALPINE_VERSION" {
   default = null
 }
@@ -76,6 +80,7 @@ function "bindir" {
 
 target "_common" {
   args = {
+    UBUNTU_VERSION = UBUNTU_VERSION
     ALPINE_VERSION = ALPINE_VERSION
     GO_VERSION = GO_VERSION
     NODE_VERSION = NODE_VERSION
