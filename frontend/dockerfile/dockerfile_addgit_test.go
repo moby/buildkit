@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"text/template"
 
@@ -52,6 +54,12 @@ func testAddGit(t *testing.T, sb integration.Sandbox) {
 	err = runShell(gitDir, gitCommands...)
 	require.NoError(t, err)
 
+	revParseCmd := exec.Command("git", "rev-parse", "v0.0.2")
+	revParseCmd.Dir = gitDir
+	commitHashB, err := revParseCmd.Output()
+	require.NoError(t, err)
+	commitHash := strings.TrimSpace(string(commitHashB))
+
 	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Clean(gitDir))))
 	defer server.Close()
 	serverURL := server.URL
@@ -68,7 +76,7 @@ RUN cd /x && \
 # Complicated case
 ARG REPO="{{.ServerURL}}/.git"
 ARG TAG="v0.0.2"
-ADD --keep-git-dir=true --chown=4242:8484 ${REPO}#${TAG} /buildkit-chowned
+ADD --keep-git-dir=true --chown=4242:8484 --checksum={{.Checksum}} ${REPO}#${TAG} /buildkit-chowned
 RUN apk add git
 USER 4242
 RUN cd /buildkit-chowned && \
@@ -78,6 +86,7 @@ RUN cd /buildkit-chowned && \
   [ -z "$(git status -s)" ]
 `, map[string]string{
 		"ServerURL": serverURL,
+		"Checksum":  commitHash,
 	})
 	require.NoError(t, err)
 	t.Logf("dockerfile=%s", dockerfile)
