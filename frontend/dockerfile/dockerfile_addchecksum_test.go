@@ -162,6 +162,6 @@ ADD --checksum=%s foo /tmp/foo
 				dockerui.DefaultLocalNameContext:    dir,
 			},
 		}, nil)
-		require.Error(t, err, "checksum can't be specified for non-HTTP(S) sources")
+		require.Error(t, err, "checksum requires HTTP(S) or Git sources")
 	})
 }
