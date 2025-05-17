@@ -21,6 +21,7 @@ import (
 
 var addGitTests = integration.TestFuncs(
 	testAddGit,
+	testAddGitChecksumCache,
 )
 
 func init() {
@@ -242,6 +243,111 @@ RUN [ ! -d /nogitdir/.git ]
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid checksum")
 	require.Contains(t, err.Error(), "expected hex commit hash")
+}
+
+func testAddGitChecksumCache(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	f := getFrontend(t, sb)
+
+	gitDir, err := os.MkdirTemp("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(gitDir)
+	gitCommands := []string{
+		"git init",
+		"git config --local user.email test",
+		"git config --local user.name test",
+	}
+	makeCommit := func(tag string) []string {
+		return []string{
+			"echo foo of " + tag + " >foo",
+			"git add foo",
+			"git commit -m " + tag,
+			"git tag " + tag,
+		}
+	}
+	gitCommands = append(gitCommands, makeCommit("v0.0.1")...)
+	gitCommands = append(gitCommands, makeCommit("v0.0.2")...)
+	gitCommands = append(gitCommands, "git update-server-info")
+	err = runShell(gitDir, gitCommands...)
+	require.NoError(t, err)
+
+	revParseCmd := exec.Command("git", "rev-parse", "v0.0.2")
+	revParseCmd.Dir = gitDir
+	commitHashB, err := revParseCmd.Output()
+	require.NoError(t, err)
+	commitHash := strings.TrimSpace(string(commitHashB))
+
+	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Clean(gitDir))))
+	defer server.Close()
+	serverURL := server.URL
+
+	// First build: without checksum, from tag, generate unique.txt from /dev/urandom and copy to scratch
+	dockerfile1 := `
+FROM alpine AS src
+ADD --keep-git-dir ` + serverURL + `/.git#v0.0.2 /repo
+RUN head -c 16 /dev/urandom | base64 > /repo/unique.txt
+
+FROM scratch
+COPY --from=src /repo/unique.txt /
+`
+	dir1 := integration.Tmpdir(t,
+		fstest.CreateFile("Dockerfile", []byte(dockerfile1), 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir1 := t.TempDir()
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir1,
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir1,
+			dockerui.DefaultLocalNameContext:    dir1,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	unique1, err := os.ReadFile(filepath.Join(destDir1, "unique.txt"))
+	require.NoError(t, err)
+
+	// Second build: with checksum, should match cache even though this one sets commitHash and get same unique.txt
+	dockerfile2 := `
+FROM alpine AS src
+ADD --keep-git-dir --checksum=` + commitHash + ` ` + serverURL + `/.git#v0.0.2 /repo
+RUN head -c 16 /dev/urandom | base64 > /repo/unique.txt
+
+FROM scratch
+COPY --from=src /repo/unique.txt /
+`
+	dir2 := integration.Tmpdir(t,
+		fstest.CreateFile("Dockerfile", []byte(dockerfile2), 0600),
+	)
+
+	destDir2 := t.TempDir()
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir2,
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir2,
+			dockerui.DefaultLocalNameContext:    dir2,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	unique2, err := os.ReadFile(filepath.Join(destDir2, "unique.txt"))
+	require.NoError(t, err)
+
+	require.Equal(t, string(unique1), string(unique2), "cache should be matched and unique file content should be the same")
 }
 
 func applyTemplate(tmpl string, x any) (string, error) {
