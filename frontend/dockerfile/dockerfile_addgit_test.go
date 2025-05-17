@@ -58,7 +58,13 @@ func testAddGit(t *testing.T, sb integration.Sandbox) {
 	revParseCmd.Dir = gitDir
 	commitHashB, err := revParseCmd.Output()
 	require.NoError(t, err)
-	commitHash := strings.TrimSpace(string(commitHashB))
+	commitHashV2 := strings.TrimSpace(string(commitHashB))
+
+	revParseCmd = exec.Command("git", "rev-parse", "v0.0.3")
+	revParseCmd.Dir = gitDir
+	commitHashB, err = revParseCmd.Output()
+	require.NoError(t, err)
+	commitHashV3 := strings.TrimSpace(string(commitHashB))
 
 	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Clean(gitDir))))
 	defer server.Close()
@@ -86,10 +92,9 @@ RUN cd /buildkit-chowned && \
   [ -z "$(git status -s)" ]
 `, map[string]string{
 		"ServerURL": serverURL,
-		"Checksum":  commitHash,
+		"Checksum":  commitHashV2,
 	})
 	require.NoError(t, err)
-	t.Logf("dockerfile=%s", dockerfile)
 
 	dir := integration.Tmpdir(t,
 		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
@@ -106,6 +111,137 @@ RUN cd /buildkit-chowned && \
 		},
 	}, nil)
 	require.NoError(t, err)
+
+	// Additional test: ADD from Git URL with checksum but without keep-git-dir flag
+	dockerfile2, err := applyTemplate(`
+FROM alpine
+ARG REPO="{{.ServerURL}}/.git"
+ARG TAG="v0.0.3"
+ADD --checksum={{.Checksum}} ${REPO}#${TAG} /nogitdir
+RUN [ -f /nogitdir/foo ]
+RUN [ "$(cat /nogitdir/foo)" = "foo of v0.0.3" ]
+RUN [ ! -d /nogitdir/.git ]
+`, map[string]string{
+		"ServerURL": serverURL,
+		"Checksum":  commitHashV3,
+	})
+	require.NoError(t, err)
+
+	dir2 := integration.Tmpdir(t,
+		fstest.CreateFile("Dockerfile", []byte(dockerfile2), 0600),
+	)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir2,
+			dockerui.DefaultLocalNameContext:    dir2,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// access initial ref again that was already pulled
+	dockerfile3, err := applyTemplate(`
+		FROM alpine
+		ARG REPO="{{.ServerURL}}/.git"
+		ARG TAG="v0.0.2"
+		ADD --keep-git-dir --checksum={{.Checksum}} ${REPO}#${TAG} /nogitdir
+		RUN [ -f /nogitdir/foo ]
+		RUN [ "$(cat /nogitdir/foo)" = "foo of v0.0.2" ]
+		RUN [ -d /nogitdir/.git ]
+		`, map[string]string{
+		"ServerURL": serverURL,
+		"Checksum":  commitHashV2,
+	})
+	require.NoError(t, err)
+
+	dir3 := integration.Tmpdir(t,
+		fstest.CreateFile("Dockerfile", []byte(dockerfile3), 0600),
+	)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir3,
+			dockerui.DefaultLocalNameContext:    dir3,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// Additional test: ADD from Git URL using commitHashV3 for both checksum and ref
+	dockerfile4, err := applyTemplate(`
+	FROM alpine
+	ARG REPO="{{.ServerURL}}/.git"
+	ARG COMMIT="{{.Checksum}}"
+	ADD --keep-git-dir=true --checksum={{.Checksum}} ${REPO}#${COMMIT} /commitdir
+	RUN [ -f /commitdir/foo ]
+	RUN [ "$(cat /commitdir/foo)" = "foo of v0.0.3" ]
+	RUN [ -d /commitdir/.git ]
+	`, map[string]string{
+		"ServerURL": serverURL,
+		"Checksum":  commitHashV3,
+	})
+	require.NoError(t, err)
+
+	dir4 := integration.Tmpdir(t,
+		fstest.CreateFile("Dockerfile", []byte(dockerfile4), 0600),
+	)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir4,
+			dockerui.DefaultLocalNameContext:    dir4,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// checksum does not match
+	dockerfile5, err := applyTemplate(`
+	FROM alpine
+	ARG REPO="{{.ServerURL}}/.git"
+	ARG TAG="v0.0.3"
+	ADD --checksum={{.WrongChecksum}} ${REPO}#${TAG} /faildir
+	`, map[string]string{
+		"ServerURL":     serverURL,
+		"WrongChecksum": commitHashV2, // v0.0.2 hash, but ref is v0.0.3
+	})
+	require.NoError(t, err)
+
+	dir5 := integration.Tmpdir(t,
+		fstest.CreateFile("Dockerfile", []byte(dockerfile5), 0600),
+	)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir5,
+			dockerui.DefaultLocalNameContext:    dir5,
+		},
+	}, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "expected checksum to match")
+
+	//  checksum is garbage
+	dockerfile6, err := applyTemplate(`
+	FROM alpine
+	ARG REPO="{{.ServerURL}}/.git"
+	ARG TAG="v0.0.3"
+	ADD --checksum=foobar ${REPO}#${TAG} /faildir
+	`, map[string]string{
+		"ServerURL": serverURL,
+	})
+	require.NoError(t, err)
+
+	dir6 := integration.Tmpdir(t,
+		fstest.CreateFile("Dockerfile", []byte(dockerfile6), 0600),
+	)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir6,
+			dockerui.DefaultLocalNameContext:    dir6,
+		},
+	}, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid checksum")
+	require.Contains(t, err.Error(), "expected hex commit hash")
 }
 
 func applyTemplate(tmpl string, x any) (string, error) {
