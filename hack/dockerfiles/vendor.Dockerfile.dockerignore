@@ -1,0 +1,6 @@
+.git
+.github
+bin
+.certs
+.tmp
+vendor
