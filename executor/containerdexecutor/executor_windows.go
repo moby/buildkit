@@ -12,6 +12,7 @@ import (
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/network"
 	"github.com/moby/sys/user"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -88,6 +89,23 @@ func (w *containerdExecutor) createOCISpec(ctx context.Context, id, _, _ string,
 		return nil, nil, err
 	}
 	releasers = append(releasers, cleanup)
+
+	if v, ok := ctx.Value(appdefaults.ContextKeyCustomFrontend).(bool); ok && v {
+		const sessionIDPrefix = "BUILDKIT_SESSION_ID="
+		sid := func() string {
+			for _, e := range meta.Env {
+				if strings.HasPrefix(e, sessionIDPrefix) {
+					return strings.TrimPrefix(e, sessionIDPrefix)
+				}
+			}
+			return ""
+		}()
+		frontendGrpcBridge := appdefaults.FrontendGRPCPipe + sid
+		spec.Mounts = append(spec.Mounts, specs.Mount{
+			Source:      frontendGrpcBridge,
+			Destination: frontendGrpcBridge,
+		})
+	}
 	return spec, releaseAll, nil
 }
 
