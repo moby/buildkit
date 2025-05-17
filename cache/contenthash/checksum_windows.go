@@ -1,6 +1,7 @@
 package contenthash
 
 import (
+	"context"
 	"path/filepath"
 
 	"github.com/Microsoft/go-winio"
@@ -18,12 +19,18 @@ func (cc *cacheContext) walk(scanPath string, walkFunc filepath.WalkFunc) error 
 
 // Adds the SeBackupPrivilege to the process
 // to be able to access some special files and directories.
-func enableProcessPrivileges() {
+// Then later disables the privilege after the context is cancelled.
+func enableProcessPrivileges(ctx context.Context) {
 	_ = winio.EnableProcessPrivileges(privileges)
-}
 
-// Disables the SeBackupPrivilege on the process
-// once the group of functions that needed it is complete.
-func disableProcessPrivileges() {
-	_ = winio.DisableProcessPrivileges(privileges)
+	// spin off a goroutine that will wait
+	// until the context is cancelled, before calling
+	// winio.DisableProcessPrivileges.
+	// Previously, a defer call to this would sometimes
+	// be called earlier before all the inner goroutines
+	// are done, and cause failures. See #5906
+	go func() {
+		<-ctx.Done()
+		_ = winio.DisableProcessPrivileges(privileges)
+	}()
 }
