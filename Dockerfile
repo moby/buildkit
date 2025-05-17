@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile-upstream:master
 
-ARG RUNC_VERSION=v1.2.6
+ARG RUNC_VERSION=v1.3.0
 ARG CONTAINERD_VERSION=v2.1.1
 # CONTAINERD_ALT_VERSION_... defines fallback containerd version for integration tests
 ARG CONTAINERD_ALT_VERSION_20=v2.0.5
