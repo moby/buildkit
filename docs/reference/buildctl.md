@@ -80,6 +80,7 @@ OPTIONS:
    --ref-file value                  Write build ref to a file
    --registry-auth-tlscontext value  Overwrite TLS configuration when authenticating with registries, e.g. --registry-auth-tlscontext host=https://myserver:2376,insecure=false,ca=/path/to/my/ca.crt,cert=/path/to/my/cert.crt,key=/path/to/my/key.crt
    --debug-json-cache-metrics value  Where to output json cache metrics, use 'stdout' or 'stderr' for standard (error) output.
+   --docker-config value    Pass in credential config file path. This will override DOCKER_CONFIG path used to fetch credential. You can pass a file path or a file descriptor("fd://") or a pipe("pipe://")
    
 ```
 <!---GENERATE_END-->
