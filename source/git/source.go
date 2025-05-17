@@ -351,6 +351,13 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 	gs.locker.Lock(remote)
 	defer gs.locker.Unlock(remote)
 
+	if gs.src.Checksum != "" {
+		matched, err := regexp.MatchString("^[a-fA-F0-9]+$", gs.src.Checksum)
+		if err != nil || !matched {
+			return "", "", nil, false, errors.Errorf("invalid checksum %s for Git URL, expected hex commit hash", gs.src.Checksum)
+		}
+	}
+
 	var refCommitFullHash, ref2 string
 	if gitutil.IsCommitSHA(gs.src.Checksum) && !gs.src.KeepGitDir {
 		refCommitFullHash = gs.src.Checksum
@@ -549,7 +556,17 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		subdir = "."
 	}
 
-	checkedoutRef := "HEAD"
+	if gs.src.Checksum != "" {
+		actualHashBuf, err := git.Run(ctx, "rev-parse", ref)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to rev-parse %s for %s", ref, urlutil.RedactCredentials(gs.src.Remote))
+		}
+		actualHash := strings.TrimSpace(string(actualHashBuf))
+		if !strings.HasPrefix(actualHash, gs.src.Checksum) {
+			return nil, errors.Errorf("expected checksum to match %s, got %s", gs.src.Checksum, actualHash)
+		}
+	}
+
 	if gs.src.KeepGitDir && subdir == "." {
 		checkoutDirGit := filepath.Join(checkoutDir, ".git")
 		if err := os.MkdirAll(checkoutDir, 0711); err != nil {
@@ -619,7 +636,6 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to checkout remote %s", urlutil.RedactCredentials(gs.src.Remote))
 		}
-		checkedoutRef = ref // HEAD may not exist
 		if subdir != "." {
 			d, err := os.Open(filepath.Join(cd, subdir))
 			if err != nil {
@@ -650,16 +666,6 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 	}
 
 	git = git.New(gitutil.WithWorkTree(checkoutDir), gitutil.WithGitDir(gitDir))
-	if gs.src.Checksum != "" {
-		actualHashBuf, err := git.Run(ctx, "rev-parse", checkedoutRef)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to rev-parse %s for %s", checkedoutRef, urlutil.RedactCredentials(gs.src.Remote))
-		}
-		actualHash := strings.TrimSpace(string(actualHashBuf))
-		if !strings.HasPrefix(actualHash, gs.src.Checksum) {
-			return nil, errors.Errorf("expected checksum to match %s, got %s", gs.src.Checksum, actualHash)
-		}
-	}
 	_, err = git.Run(ctx, "submodule", "update", "--init", "--recursive", "--depth=1")
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to update submodules for %s", urlutil.RedactCredentials(gs.src.Remote))
