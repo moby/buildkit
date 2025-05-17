@@ -304,54 +304,75 @@ func testFetchUnreferencedRefSha(t *testing.T, ref string, keepGitDir bool) {
 }
 
 func TestFetchByTag(t *testing.T) {
-	testFetchByTag(t, "lightweight-tag", "third", false, true, false)
+	testFetchByTag(t, "lightweight-tag", "third", false, true, false, testChecksumModeNone)
 }
 
 func TestFetchByTagKeepGitDir(t *testing.T) {
-	testFetchByTag(t, "lightweight-tag", "third", false, true, true)
+	testFetchByTag(t, "lightweight-tag", "third", false, true, true, testChecksumModeNone)
 }
 
 func TestFetchByTagFull(t *testing.T) {
-	testFetchByTag(t, "refs/tags/lightweight-tag", "third", false, true, true)
+	testFetchByTag(t, "refs/tags/lightweight-tag", "third", false, true, true, testChecksumModeNone)
 }
 
 func TestFetchByAnnotatedTag(t *testing.T) {
-	testFetchByTag(t, "v1.2.3", "second", true, false, false)
+	testFetchByTag(t, "v1.2.3", "second", true, false, false, testChecksumModeNone)
 }
 
 func TestFetchByAnnotatedTagKeepGitDir(t *testing.T) {
-	testFetchByTag(t, "v1.2.3", "second", true, false, true)
+	testFetchByTag(t, "v1.2.3", "second", true, false, true, testChecksumModeNone)
 }
 
 func TestFetchByAnnotatedTagFull(t *testing.T) {
-	testFetchByTag(t, "refs/tags/v1.2.3", "second", true, false, true)
+	testFetchByTag(t, "refs/tags/v1.2.3", "second", true, false, true, testChecksumModeNone)
 }
 
 func TestFetchByBranch(t *testing.T) {
-	testFetchByTag(t, "feature", "withsub", false, true, false)
+	testFetchByTag(t, "feature", "withsub", false, true, false, testChecksumModeNone)
 }
 
 func TestFetchByBranchKeepGitDir(t *testing.T) {
-	testFetchByTag(t, "feature", "withsub", false, true, true)
+	testFetchByTag(t, "feature", "withsub", false, true, true, testChecksumModeNone)
 }
 
 func TestFetchByBranchFull(t *testing.T) {
-	testFetchByTag(t, "refs/heads/feature", "withsub", false, true, true)
+	testFetchByTag(t, "refs/heads/feature", "withsub", false, true, true, testChecksumModeNone)
 }
 
 func TestFetchByRef(t *testing.T) {
-	testFetchByTag(t, "test", "feature", false, true, false)
+	testFetchByTag(t, "test", "feature", false, true, false, testChecksumModeNone)
 }
 
 func TestFetchByRefKeepGitDir(t *testing.T) {
-	testFetchByTag(t, "test", "feature", false, true, true)
+	testFetchByTag(t, "test", "feature", false, true, true, testChecksumModeNone)
 }
 
 func TestFetchByRefFull(t *testing.T) {
-	testFetchByTag(t, "refs/test", "feature", false, true, true)
+	testFetchByTag(t, "refs/test", "feature", false, true, true, testChecksumModeNone)
 }
 
-func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotatedTag, hasFoo13File, keepGitDir bool) {
+func TestFetchByTagWithChecksum(t *testing.T) {
+	testFetchByTag(t, "lightweight-tag", "third", false, true, false, testChecksumModeValid)
+}
+
+func TestFetchByTagWithChecksumPartial(t *testing.T) {
+	testFetchByTag(t, "lightweight-tag", "third", false, true, false, testChecksumModeValidPartial)
+}
+
+func TestFetchByTagWithChecksumInvalid(t *testing.T) {
+	testFetchByTag(t, "lightweight-tag", "third", false, true, false, testChecksumModeInvalid)
+}
+
+type testChecksumMode int
+
+const (
+	testChecksumModeNone testChecksumMode = iota
+	testChecksumModeValid
+	testChecksumModeValidPartial
+	testChecksumModeInvalid
+)
+
+func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotatedTag, hasFoo13File, keepGitDir bool, checksumMode testChecksumMode) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
 	}
@@ -366,6 +387,28 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 
 	id := &GitIdentifier{Remote: repo.mainURL, Ref: tag, KeepGitDir: keepGitDir}
 
+	if checksumMode != testChecksumModeNone {
+		cmd := exec.Command("git", "rev-parse", tag)
+		cmd.Dir = repo.mainPath
+
+		out, err := cmd.Output()
+		require.NoError(t, err)
+
+		sha := strings.TrimSpace(string(out))
+		require.Equal(t, 40, len(sha))
+
+		switch checksumMode {
+		case testChecksumModeValid:
+			id.Checksum = sha
+		case testChecksumModeValidPartial:
+			id.Checksum = sha[:8]
+		case testChecksumModeInvalid:
+			id.Checksum = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+		default:
+			// NOTREACHED
+		}
+	}
+
 	g, err := gs.Resolve(ctx, id, nil, nil)
 	require.NoError(t, err)
 
@@ -376,6 +419,14 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 	expLen := 40
 	if keepGitDir {
 		expLen += 4
+	}
+	if id.Checksum != "" {
+		expLen += len("?checksum=" + id.Checksum)
+	}
+	if id.Subdir != "" {
+		expLen += len(":" + id.Subdir)
+	}
+	if keepGitDir {
 		require.GreaterOrEqual(t, len(key1), expLen)
 	} else {
 		require.Equal(t, expLen, len(key1))
@@ -383,6 +434,10 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 	require.Equal(t, 40, len(pin1))
 
 	ref1, err := g.Snapshot(ctx, nil)
+	if checksumMode == testChecksumModeInvalid {
+		require.ErrorContains(t, err, "expected checksum to match "+id.Checksum)
+		return
+	}
 	require.NoError(t, err)
 	defer ref1.Release(context.TODO())
 
