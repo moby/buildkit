@@ -32,29 +32,29 @@ func TestParseURL(t *testing.T) {
 		{
 			url: "http://github.com/moby/buildkit#v1.0.0",
 			result: GitURL{
-				Scheme:   HTTPProtocol,
-				Host:     "github.com",
-				Path:     "/moby/buildkit",
-				Fragment: &GitURLFragment{Ref: "v1.0.0"},
+				Scheme: HTTPProtocol,
+				Host:   "github.com",
+				Path:   "/moby/buildkit",
+				Opts:   &GitURLOpts{Ref: "v1.0.0"},
 			},
 		},
 		{
 			url: "http://github.com/moby/buildkit#v1.0.0:subdir",
 			result: GitURL{
-				Scheme:   HTTPProtocol,
-				Host:     "github.com",
-				Path:     "/moby/buildkit",
-				Fragment: &GitURLFragment{Ref: "v1.0.0", Subdir: "subdir"},
+				Scheme: HTTPProtocol,
+				Host:   "github.com",
+				Path:   "/moby/buildkit",
+				Opts:   &GitURLOpts{Ref: "v1.0.0", Subdir: "subdir"},
 			},
 		},
 		{
 			url: "http://foo:bar@github.com/moby/buildkit#v1.0.0",
 			result: GitURL{
-				Scheme:   HTTPProtocol,
-				Host:     "github.com",
-				Path:     "/moby/buildkit",
-				Fragment: &GitURLFragment{Ref: "v1.0.0"},
-				User:     url.UserPassword("foo", "bar"),
+				Scheme: HTTPProtocol,
+				Host:   "github.com",
+				Path:   "/moby/buildkit",
+				Opts:   &GitURLOpts{Ref: "v1.0.0"},
+				User:   url.UserPassword("foo", "bar"),
 			},
 		},
 		{
@@ -87,21 +87,21 @@ func TestParseURL(t *testing.T) {
 		{
 			url: "git@github.com:moby/buildkit.git#v1.0.0",
 			result: GitURL{
-				Scheme:   SSHProtocol,
-				Host:     "github.com",
-				Path:     "moby/buildkit.git",
-				Fragment: &GitURLFragment{Ref: "v1.0.0"},
-				User:     url.User("git"),
+				Scheme: SSHProtocol,
+				Host:   "github.com",
+				Path:   "moby/buildkit.git",
+				Opts:   &GitURLOpts{Ref: "v1.0.0"},
+				User:   url.User("git"),
 			},
 		},
 		{
 			url: "git@github.com:moby/buildkit.git#v1.0.0:hack",
 			result: GitURL{
-				Scheme:   SSHProtocol,
-				Host:     "github.com",
-				Path:     "moby/buildkit.git",
-				Fragment: &GitURLFragment{Ref: "v1.0.0", Subdir: "hack"},
-				User:     url.User("git"),
+				Scheme: SSHProtocol,
+				Host:   "github.com",
+				Path:   "moby/buildkit.git",
+				Opts:   &GitURLOpts{Ref: "v1.0.0", Subdir: "hack"},
+				User:   url.User("git"),
 			},
 		},
 		{
@@ -151,6 +151,65 @@ func TestParseURL(t *testing.T) {
 				Path:   "/moby/buildkit",
 			},
 		},
+		{
+			url: "https://github.com/moby/buildkit?ref=v1.0.0&subdir=/subdir",
+			result: GitURL{
+				Scheme: HTTPSProtocol,
+				Host:   "github.com",
+				Path:   "/moby/buildkit",
+				Opts:   &GitURLOpts{Ref: "v1.0.0", Subdir: "/subdir"},
+			},
+		},
+		{
+			url: "https://github.com/moby/buildkit?subdir=/subdir#v1.0.0",
+			result: GitURL{
+				Scheme: HTTPSProtocol,
+				Host:   "github.com",
+				Path:   "/moby/buildkit",
+				Opts:   &GitURLOpts{Ref: "v1.0.0", Subdir: "/subdir"},
+			},
+		},
+		{
+			url: "https://github.com/moby/buildkit?tag=v1.0.0",
+			result: GitURL{
+				Scheme: HTTPSProtocol,
+				Host:   "github.com",
+				Path:   "/moby/buildkit",
+				Opts:   &GitURLOpts{Ref: "refs/tags/v1.0.0"},
+			},
+		},
+		{
+			url: "https://github.com/moby/buildkit?branch=v1.0",
+			result: GitURL{
+				Scheme: HTTPSProtocol,
+				Host:   "github.com",
+				Path:   "/moby/buildkit",
+				Opts:   &GitURLOpts{Ref: "refs/heads/v1.0"},
+			},
+		},
+		{
+			url: "https://github.com/moby/buildkit?ref=v1.0.0#v1.2.3",
+			err: true,
+		},
+		{
+			url: "https://github.com/moby/buildkit?ref=v1.0.0&tag=v1.2.3",
+			err: true,
+		},
+		{
+			// TODO: consider allowing this, when the tag actually exists on the branch
+			url: "https://github.com/moby/buildkit?tag=v1.0.0&branch=v1.0",
+			err: true,
+		},
+		{
+			url: "git@github.com:moby/buildkit.git?subdir=/subdir#v1.0.0",
+			result: GitURL{
+				Scheme: SSHProtocol,
+				Host:   "github.com",
+				Path:   "moby/buildkit.git",
+				User:   url.User("git"),
+				Opts:   &GitURLOpts{Ref: "v1.0.0", Subdir: "/subdir"},
+			},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.url, func(t *testing.T) {
@@ -162,7 +221,7 @@ func TestParseURL(t *testing.T) {
 				require.Equal(t, test.result.Scheme, remote.Scheme)
 				require.Equal(t, test.result.Host, remote.Host)
 				require.Equal(t, test.result.Path, remote.Path)
-				require.Equal(t, test.result.Fragment, remote.Fragment)
+				require.Equal(t, test.result.Opts, remote.Opts)
 				require.Equal(t, test.result.User.String(), remote.User.String())
 			}
 		})
