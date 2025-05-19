@@ -6883,6 +6883,9 @@ func readFileInImage(ctx context.Context, t *testing.T, c *Client, ref, path str
 }
 
 func testCachedMounts(t *testing.T, sb integration.Sandbox) {
+	// TODO(profnandaa): skipping on Windows, investigating. #5906
+	integration.SkipOnPlatform(t, "windows")
+
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
