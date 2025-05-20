@@ -36,6 +36,7 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
+	"github.com/moby/buildkit/util/gitutil"
 	"github.com/moby/buildkit/util/suggest"
 	"github.com/moby/buildkit/util/system"
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
@@ -1472,7 +1473,15 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		if len(cfg.params.SourcePaths) != 1 {
 			return errors.New("checksum can't be specified for multiple sources")
 		}
-		if !isHTTPSource(cfg.params.SourcePaths[0]) && !isGitSource(cfg.params.SourcePaths[0]) {
+		isHTTPSourceV, err := isHTTPSource(cfg.params.SourcePaths[0])
+		if err != nil {
+			return err
+		}
+		isGitSourceV, err := isGitSource(cfg.params.SourcePaths[0])
+		if err != nil {
+			return err
+		}
+		if !isHTTPSourceV && !isGitSourceV {
 			return errors.New("checksum requires HTTP(S) or Git sources")
 		}
 	}
@@ -1537,96 +1546,102 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 			} else {
 				a = a.Copy(st, "/", dest, opts...)
 			}
-		} else if isHTTPSource(src) {
-			if !cfg.isAddCommand {
-				return errors.New("source can't be a URL for COPY")
-			}
-
-			// Resources from remote URLs are not decompressed.
-			// https://docs.docker.com/engine/reference/builder/#add
-			//
-			// Note: mixing up remote archives and local archives in a single ADD instruction
-			// would result in undefined behavior: https://github.com/moby/buildkit/pull/387#discussion_r189494717
-			u, err := url.Parse(src)
-			f := "__unnamed__"
-			if err == nil {
-				if base := path.Base(u.Path); base != "." && base != "/" {
-					f = base
-				}
-			}
-
-			var checksum digest.Digest
-			if cfg.checksum != "" {
-				checksum, err = digest.Parse(cfg.checksum)
-				if err != nil {
-					return err
-				}
-			}
-
-			st := llb.HTTP(src, llb.Filename(f), llb.WithCustomName(pgName), llb.Checksum(checksum), dfCmd(cfg.params))
-
-			var unpack bool
-			if cfg.unpack != nil {
-				unpack = *cfg.unpack
-			}
-
-			opts := append([]llb.CopyOption{&llb.CopyInfo{
-				Mode:           chopt,
-				CreateDestPath: true,
-				AttemptUnpack:  unpack,
-			}}, copyOpt...)
-
-			if a == nil {
-				a = llb.Copy(st, f, dest, opts...)
-			} else {
-				a = a.Copy(st, f, dest, opts...)
-			}
 		} else {
-			validateCopySourcePath(src, &cfg)
-			var patterns []string
-			if cfg.parents {
-				// detect optional pivot point
-				parent, pattern, ok := strings.Cut(src, "/./")
-				if !ok {
-					pattern = src
-					src = "/"
-				} else {
-					src = parent
+			isHTTPSourceV, err := isHTTPSource(src)
+			if err != nil {
+				return err
+			}
+			if isHTTPSourceV {
+				if !cfg.isAddCommand {
+					return errors.New("source can't be a URL for COPY")
 				}
 
-				pattern, err = system.NormalizePath("/", pattern, d.platform.OS, false)
+				// Resources from remote URLs are not decompressed.
+				// https://docs.docker.com/engine/reference/builder/#add
+				//
+				// Note: mixing up remote archives and local archives in a single ADD instruction
+				// would result in undefined behavior: https://github.com/moby/buildkit/pull/387#discussion_r189494717
+				u, err := url.Parse(src)
+				f := "__unnamed__"
+				if err == nil {
+					if base := path.Base(u.Path); base != "." && base != "/" {
+						f = base
+					}
+				}
+
+				var checksum digest.Digest
+				if cfg.checksum != "" {
+					checksum, err = digest.Parse(cfg.checksum)
+					if err != nil {
+						return err
+					}
+				}
+
+				st := llb.HTTP(src, llb.Filename(f), llb.WithCustomName(pgName), llb.Checksum(checksum), dfCmd(cfg.params))
+
+				var unpack bool
+				if cfg.unpack != nil {
+					unpack = *cfg.unpack
+				}
+
+				opts := append([]llb.CopyOption{&llb.CopyInfo{
+					Mode:           chopt,
+					CreateDestPath: true,
+					AttemptUnpack:  unpack,
+				}}, copyOpt...)
+
+				if a == nil {
+					a = llb.Copy(st, f, dest, opts...)
+				} else {
+					a = a.Copy(st, f, dest, opts...)
+				}
+			} else {
+				validateCopySourcePath(src, &cfg)
+				var patterns []string
+				if cfg.parents {
+					// detect optional pivot point
+					parent, pattern, ok := strings.Cut(src, "/./")
+					if !ok {
+						pattern = src
+						src = "/"
+					} else {
+						src = parent
+					}
+
+					pattern, err = system.NormalizePath("/", pattern, d.platform.OS, false)
+					if err != nil {
+						return errors.Wrap(err, "removing drive letter")
+					}
+
+					patterns = []string{strings.TrimPrefix(pattern, "/")}
+				}
+
+				src, err = system.NormalizePath("/", src, d.platform.OS, false)
 				if err != nil {
 					return errors.Wrap(err, "removing drive letter")
 				}
 
-				patterns = []string{strings.TrimPrefix(pattern, "/")}
-			}
+				unpack := cfg.isAddCommand
+				if cfg.unpack != nil {
+					unpack = *cfg.unpack
+				}
 
-			src, err = system.NormalizePath("/", src, d.platform.OS, false)
-			if err != nil {
-				return errors.Wrap(err, "removing drive letter")
-			}
+				opts := append([]llb.CopyOption{&llb.CopyInfo{
+					Mode:                chopt,
+					FollowSymlinks:      true,
+					CopyDirContentsOnly: true,
+					IncludePatterns:     patterns,
+					AttemptUnpack:       unpack,
+					CreateDestPath:      true,
+					AllowWildcard:       true,
+					AllowEmptyWildcard:  true,
+				}}, copyOpt...)
 
-			unpack := cfg.isAddCommand
-			if cfg.unpack != nil {
-				unpack = *cfg.unpack
-			}
-
-			opts := append([]llb.CopyOption{&llb.CopyInfo{
-				Mode:                chopt,
-				FollowSymlinks:      true,
-				CopyDirContentsOnly: true,
-				IncludePatterns:     patterns,
-				AttemptUnpack:       unpack,
-				CreateDestPath:      true,
-				AllowWildcard:       true,
-				AllowEmptyWildcard:  true,
-			}}, copyOpt...)
-
-			if a == nil {
-				a = llb.Copy(cfg.source, src, dest, opts...)
-			} else {
-				a = a.Copy(cfg.source, src, dest, opts...)
+				if a == nil {
+					a = llb.Copy(cfg.source, src, dest, opts...)
+				} else {
+					a = a.Copy(cfg.source, src, dest, opts...)
+				}
 			}
 		}
 	}
@@ -2262,19 +2277,26 @@ func commonImageNames() []string {
 	return out
 }
 
-func isHTTPSource(src string) bool {
+func isHTTPSource(src string) (bool, error) {
 	if !strings.HasPrefix(src, "http://") && !strings.HasPrefix(src, "https://") {
-		return false
+		return false, nil
 	}
-	return !isGitSource(src)
+	b, err := isGitSource(src)
+	return !b, err
 }
 
-func isGitSource(src string) bool {
+func isGitSource(src string) (bool, error) {
 	// https://github.com/ORG/REPO.git is a git source, not an http source
-	if gitRef, gitErr := dfgitutil.ParseGitRef(src); gitRef != nil && gitErr == nil {
-		return true
+	gitRef, gitErr := dfgitutil.ParseGitRef(src)
+	var guoe *gitutil.GitURLOptsError
+	if errors.As(gitErr, &guoe) {
+		// this is a git source, and it has invalid URL opts
+		return true, gitErr
 	}
-	return false
+	if gitRef != nil && gitErr == nil {
+		return true, nil
+	}
+	return false, nil
 }
 
 func isEnabledForStage(stage string, value string) bool {
