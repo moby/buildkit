@@ -17,7 +17,7 @@ ARG CNI_VERSION
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /opt/cni/bin
-RUN curl -Ls https://github.com/containernetworking/plugins/releases/download/$CNI_VERSION/cni-plugins-$TARGETOS-$TARGETARCH-$CNI_VERSION.tgz | tar xzv
+RUN curl -fsSL https://github.com/containernetworking/plugins/releases/download/$CNI_VERSION/cni-plugins-$TARGETOS-$TARGETARCH-$CNI_VERSION.tgz | tar xzv
 
 FROM moby/buildkit:${BUILDKIT_VERSION}
 ARG BUILDKIT_VERSION
