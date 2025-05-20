@@ -27,6 +27,10 @@ type GitRef struct {
 	// Commit is optional.
 	Commit string
 
+	// Checksum verifies the Commit if specified.
+	// Checksum is optional.
+	Checksum string
+
 	// SubDir is a directory path inside the repo.
 	// SubDir is optional.
 	SubDir string
@@ -99,7 +103,7 @@ func ParseGitRef(ref string) (*GitRef, error) {
 		_, res.Remote, _ = strings.Cut(res.Remote, "://")
 	}
 	if remote.Opts != nil {
-		res.Commit, res.SubDir = remote.Opts.Ref, remote.Opts.Subdir
+		res.Commit, res.Checksum, res.SubDir = remote.Opts.Ref, remote.Opts.Checksum, remote.Opts.Subdir
 	}
 
 	repoSplitBySlash := strings.Split(res.Remote, "/")

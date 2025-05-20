@@ -1517,11 +1517,14 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 			if gitRef.SubDir != "" {
 				commit += ":" + gitRef.SubDir
 			}
-			gitOptions := []llb.GitOption{llb.WithCustomName(pgName)}
+			gitOptions := []llb.GitOption{llb.WithCustomName(pgName), llb.GitChecksum(gitRef.Checksum)}
 			if cfg.keepGitDir {
 				gitOptions = append(gitOptions, llb.KeepGitDir())
 			}
 			if cfg.checksum != "" {
+				if gitRef.Checksum != "" && gitRef.Checksum != cfg.checksum {
+					return errors.Errorf("conflicting checksum: %s vs %s", gitRef.Checksum, cfg.checksum)
+				}
 				gitOptions = append(gitOptions, llb.GitChecksum(cfg.checksum))
 			}
 			st := llb.Git(gitRef.Remote, commit, gitOptions...)

@@ -60,6 +60,8 @@ type GitURL struct {
 type GitURLOpts struct {
 	// Ref is the git reference
 	Ref string
+	// Checksum is the commit hash
+	Checksum string
 	// Subdir is the sub-directory inside the git repository to use
 	Subdir string
 }
@@ -97,6 +99,8 @@ func parseOpts(fragment string, query url.Values) (*GitURLOpts, error) {
 			tag = v[0]
 		case "branch":
 			branch = v[0]
+		case "checksum", "commit":
+			opts.Checksum = v[0]
 		case "subdir":
 			if opts.Subdir != "" && opts.Subdir != v[0] {
 				return nil, errors.Errorf("subdir conflicts: %q vs %q", opts.Subdir, v[0])
@@ -121,6 +125,9 @@ func parseOpts(fragment string, query url.Values) (*GitURLOpts, error) {
 			return nil, errors.New("branch conflicts with ref")
 		}
 		opts.Ref = "refs/heads/" + branch
+	}
+	if opts.Checksum != "" && opts.Ref == "" {
+		opts.Ref = opts.Checksum
 	}
 	return opts, nil
 }

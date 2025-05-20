@@ -323,6 +323,9 @@ func Git(url, ref string, opts ...GitOption) State {
 	}
 
 	checksum := gi.Checksum
+	if checksum == "" && remote != nil && remote.Opts != nil {
+		checksum = remote.Opts.Checksum
+	}
 	if checksum != "" {
 		attrs[pb.AttrGitChecksum] = checksum
 		addCap(&gi.Constraints, pb.CapSourceGitChecksum)
