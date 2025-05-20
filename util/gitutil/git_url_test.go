@@ -170,12 +170,12 @@ func TestParseURL(t *testing.T) {
 			},
 		},
 		{
-			url: "https://github.com/moby/buildkit?tag=v1.0.0",
+			url: "https://github.com/moby/buildkit?tag=v1.0.0&commit=deadbeef",
 			result: GitURL{
 				Scheme: HTTPSProtocol,
 				Host:   "github.com",
 				Path:   "/moby/buildkit",
-				Opts:   &GitURLOpts{Ref: "refs/tags/v1.0.0"},
+				Opts:   &GitURLOpts{Ref: "refs/tags/v1.0.0", Checksum: "deadbeef"},
 			},
 		},
 		{
