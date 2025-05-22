@@ -42,6 +42,10 @@ variable "GOLANGCI_LINT_MULTIPLATFORM" {
   default = null
 }
 
+variable "ARCHUTIL_MULTIPLATFORM" {
+  default = null
+}
+
 # Defines the output folder
 variable "DESTDIR" {
   default = ""
@@ -214,6 +218,10 @@ target "validate-archutil" {
   dockerfile = "./hack/dockerfiles/archutil.Dockerfile"
   target = "validate"
   output = ["type=cacheonly"]
+  platforms = ARCHUTIL_MULTIPLATFORM != null ? [
+    "linux/amd64",
+    "linux/arm64"
+  ] : []
 }
 
 target "validate-shfmt" {
