@@ -36,9 +36,12 @@ jobs:
         name: Matrix
         id: matrix
         uses: actions/github-script@v7
+        env:
+          INPUT_PRIVATE-REPO: ${{ github.event.repository.private }}
         with:
           script: |
             let def = {};
+            const privateRepo = core.getBooleanInput('private-repo');
             await core.group(`Parsing definition`, async () => {
               const printEnv = Object.assign({}, process.env, {
                 GOLANGCI_LINT_MULTIPLATFORM: process.env.GITHUB_REPOSITORY === 'moby/buildkit' ? '1' : '',
@@ -62,7 +65,7 @@ jobs:
                     includes.push({
                       target: targetName,
                       platform: platform,
-                      runner: platform.startsWith('linux/arm') ? 'ubuntu-24.04-arm' : 'ubuntu-24.04'
+                      runner: platform.startsWith('linux/arm') && !privateRepo ? 'ubuntu-24.04-arm' : 'ubuntu-24.04'
                     });
                   });
                 } else {
