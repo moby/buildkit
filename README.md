@@ -68,6 +68,7 @@ Join `#buildkit` channel on [Docker Community Slack](https://dockr.ly/comm-slack
     - [GitHub Actions cache (experimental)](#github-actions-cache-experimental)
     - [S3 cache (experimental)](#s3-cache-experimental)
     - [Azure Blob Storage cache (experimental)](#azure-blob-storage-cache-experimental)
+    - [GCS cache (experimental)](#gcs-cache-experimental)
   - [Consistent hashing](#consistent-hashing)
 - [Metadata](#metadata)
 - [Systemd socket activation](#systemd-socket-activation)
@@ -640,6 +641,59 @@ There are 2 options supported for Azure Blob Storage authentication:
 * `blobs_prefix=<prefix>`: set global prefix to store / read blobs on the Azure Blob Storage container (`<container>`) (default: `blobs/`)
 * `manifests_prefix=<prefix>`: set global prefix to store / read manifests on the Azure Blob Storage container (`<container>`) (default: `manifests/`)
 * `name=<manifest>`: name of the manifest to use (default: `buildkit`)
+
+#### GCS cache (experimental)
+
+```bash
+buildctl build ... \
+  --output type=image,name=docker.io/username/image,push=true \
+  --export-cache type=gcs,bucket=my_bucket,name=my_image \
+  --import-cache type=gcs,bucket=my_bucket,name=my_image
+```
+
+The following attributes are required:
+* `bucket`: GCS bucket
+
+Storage locations:
+* blobs: `gcs://<bucket>/<prefix><blobs_prefix>/<sha256>`, default: `gcs://<bucket>/blobs/<sha256>`
+* manifests: `gcs://<bucket>/<prefix><manifests_prefix>/<name>`, default: `gcs://<bucket>/manifests/<name>`
+
+GCS configuration:
+* `blobs_prefix`: global prefix to store / read blobs on gcs (default: `blobs/`)
+* `manifests_prefix`: global prefix to store / read manifests on gcs (default: `manifests/`)
+* `endpoint_url`: specify a specific GCS endpoint (default: empty)
+
+GCS Authentication:
+
+Options are:
+
+* Any system using environment variables / config files supported by the GCP Go SDK. The configuration must be available for the buildkit daemon, not for the client.
+* Using Base64 encoded GCP JSON Key:
+  * `gcp_json_key`: GCP JSON Key
+* Using OIDC based authentication:
+  * `oidc_token_id`: OIDC identity token
+  * `oidc_project_id`: GCP project ID
+  * `oidc_pool_id`: Workload Identity Pool ID
+  * `oidc_provider_id`: Workload Identity Provider ID
+  * `oidc_service_account_email`: Service account email to impersonate
+
+`--export-cache` options:
+* `type=gcs`
+* `mode=<min|max>`: specify cache layers to export (default: `min`)
+  * `min`: only export layers for the resulting image
+  * `max`: export all the layers of all intermediate steps
+* `prefix=<prefix>`: set global prefix to store / read files on gcs (default: empty)
+* `name=<manifest>`: specify name of the manifest to use (default `buildkit`)
+  * Multiple manifest names can be specified at the same time, separated by `;`. The standard use case is to use the git sha1 as name, and the branch name as duplicate, and load both with 2 `import-cache` commands.
+* `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
+* `touch_refresh=24h`: Instead of being uploaded again when not changed, blobs files will be "touched" on gcs every `touch_refresh`, default is 24h. Due to this, an expiration policy can be set on the GCS bucket to cleanup useless files automatically. Manifests files are systematically rewritten, there is no need to touch them.
+
+`--import-cache` options:
+* `type=gcs`
+* `prefix=<prefix>`: set global prefix to store / read files on gcs (default: empty)
+* `blobs_prefix=<prefix>`: set global prefix to store / read blobs on gcs (default: `blobs/`)
+* `manifests_prefix=<prefix>`: set global prefix to store / read manifests on gcs (default: `manifests/`)
+* `name=<manifest>`: name of the manifest to use (default `buildkit`)
 
 ### Consistent hashing
 
