@@ -205,6 +205,7 @@ Currently, the following high-level languages have been implemented for LLB:
 -   [Bass](https://github.com/vito/bass)
 -   [kraft.yaml (Unikraft)](https://github.com/unikraft/kraftkit/tree/staging/tools/dockerfile-llb-frontend)
 -   [r2d4/llb (JSON Gateway)](https://github.com/r2d4/llb)
+-   [Massé](https://github.com/marxarelli/masse)
 -   (open a PR to add your own language)
 
 ### Exploring Dockerfiles
