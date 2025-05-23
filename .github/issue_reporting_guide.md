@@ -74,7 +74,7 @@ docker buildx inspect
 If you also want to check if the issue still appears in the `master` development branch you can run:
 
 ```bash
-docker buildx build --load -t moby/buildkit:dev "https://github.com/moby/buildkit.git"
+docker buildx build --load -t moby/buildkit:dev "https://github.com/moby/buildkit.git" --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1
 docker buildx create --name buildkit-dev --driver-opt image=moby/buildkit:dev --bootstrap
 export BUILDX_BUILDER=buildkit-dev
 docker buildx inspect
@@ -83,7 +83,7 @@ docker buildx inspect
 To check if a specific existing PR is fixing the problem you can replace the first line with:
 
 ```bash
-docker buildx build --load -t moby/buildkit:dev "https://github.com/moby/buildkit.git#pull/NR/head"
+docker buildx build --load -t moby/buildkit:dev "https://github.com/moby/buildkit.git#pull/NR/head" --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1
 ```
 
 If your issue requires a specific environment or you have only encountered it in a specific environment then make sure to describe that.
