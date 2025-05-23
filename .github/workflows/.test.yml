@@ -108,8 +108,8 @@ jobs:
         worker:
           - containerd
           - containerd-rootless
-          - containerd-1.6
           - containerd-1.7
+          - containerd-2.0
           - containerd-snapshotter-stargz
           - oci
           - oci-rootless
