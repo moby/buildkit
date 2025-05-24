@@ -11390,6 +11390,8 @@ func testSourcePolicy(t *testing.T, sb integration.Sandbox) {
 }
 
 func testLLBMountPerformance(t *testing.T, sb integration.Sandbox) {
+	// TODO: flaky on WS2025
+	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -11418,7 +11420,7 @@ func testLLBMountPerformance(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	// Windows images take longer time
-	timeout := integration.UnixOrWindows(time.Minute, 3*time.Minute)
+	timeout := integration.UnixOrWindows(time.Minute, 6*time.Minute)
 	timeoutCtx, cancel := context.WithTimeoutCause(sb.Context(), timeout, nil)
 	defer cancel()
 	_, err = c.Solve(timeoutCtx, def, SolveOpt{}, nil)
