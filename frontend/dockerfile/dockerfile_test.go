@@ -3220,6 +3220,34 @@ ADD t.tar.gz /
 	require.NoError(t, err)
 	require.Equal(t, expectedContent, dt)
 
+	// add with unpack=false
+	dockerfile = fmt.Appendf(nil, `
+	FROM %s
+	ADD --unpack=false t.tar.gz /
+	`, baseImage)
+
+	dir = integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("t.tar.gz", buf2.Bytes(), 0600),
+	)
+
+	args, trace = f.DFCmdArgs(dir.Name, dir.Name)
+	defer os.RemoveAll(trace)
+
+	destDir = t.TempDir()
+
+	cmd = sb.Cmd(args + fmt.Sprintf(" --output type=local,dest=%s", destDir))
+	require.NoError(t, cmd.Run())
+
+	_, err = os.Stat(filepath.Join(destDir, "foo"))
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "t.tar.gz"))
+	require.NoError(t, err)
+	require.Equal(t, buf2.Bytes(), dt)
+
 	// COPY doesn't extract
 	dockerfile = fmt.Appendf(nil, `
 FROM %s
@@ -3276,6 +3304,29 @@ ADD %s /
 	dt, err = os.ReadFile(filepath.Join(destDir, "t.tar.gz"))
 	require.NoError(t, err)
 	require.Equal(t, buf2.Bytes(), dt)
+
+	// ADD from URL with --unpack=true
+	dockerfile = fmt.Appendf(nil, `
+FROM %s
+ADD --unpack=true %s /dest/
+`, baseImage, server.URL+"/t.tar.gz")
+
+	dir = integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	args, trace = f.DFCmdArgs(dir.Name, dir.Name)
+	defer os.RemoveAll(trace)
+
+	destDir = t.TempDir()
+
+	cmd = sb.Cmd(args + fmt.Sprintf(" --output type=local,dest=%s", destDir))
+	require.NoError(t, cmd.Run())
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "dest/foo"))
+	require.NoError(t, err)
+	require.Equal(t, expectedContent, dt)
 
 	// https://github.com/moby/buildkit/issues/386
 	dockerfile = fmt.Appendf(nil, `
