@@ -83,6 +83,7 @@ var allTests = integration.TestFuncs(
 	testDockerfileInvalidCommand,
 	testDockerfileADDFromURL,
 	testDockerfileAddArchive,
+	testDockerfileAddChownArchive,
 	testDockerfileScratchConfig,
 	testExportedHistory,
 	testExportedHistoryFlattenArgs,
@@ -3299,6 +3300,70 @@ ADD %s /newname.tar.gz
 	dt, err = os.ReadFile(filepath.Join(destDir, "newname.tar.gz"))
 	require.NoError(t, err)
 	require.Equal(t, buf2.Bytes(), dt)
+}
+
+func testDockerfileAddChownArchive(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	f := getFrontend(t, sb)
+
+	buf := bytes.NewBuffer(nil)
+	tw := tar.NewWriter(buf)
+	content := []byte("content0")
+	err := tw.WriteHeader(&tar.Header{
+		Name:     "foo",
+		Typeflag: tar.TypeReg,
+		Size:     int64(len(content)),
+		Mode:     0644,
+	})
+	require.NoError(t, err)
+	_, err = tw.Write(content)
+	require.NoError(t, err)
+	err = tw.Close()
+	require.NoError(t, err)
+
+	dockerfile := []byte(`
+FROM scratch
+ADD --chown=100:200 t.tar /out/
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("t.tar", buf.Bytes(), 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	outBuf := &bytes.Buffer{}
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:   client.ExporterTar,
+				Output: fixedWriteCloser(&nopWriteCloser{outBuf}),
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(outBuf.Bytes(), false)
+	require.NoError(t, err)
+
+	mi, ok := m["out/foo"]
+	require.True(t, ok)
+	require.Equal(t, "content0", string(mi.Data))
+	require.Equal(t, 100, mi.Header.Uid)
+	require.Equal(t, 200, mi.Header.Gid)
+
+	mi, ok = m["out/"]
+	require.True(t, ok)
+	require.Equal(t, 100, mi.Header.Uid)
+	require.Equal(t, 200, mi.Header.Gid)
 }
 
 func testDockerfileAddArchiveWildcard(t *testing.T, sb integration.Sandbox) {
