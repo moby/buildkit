@@ -31,6 +31,7 @@ func InitDockerdWorker() {
 			FeatureCacheBackendLocal,
 			FeatureCacheBackendRegistry,
 			FeatureCacheBackendS3,
+			FeatureCacheBackendGCS,
 			FeatureDirectPush,
 			FeatureImageExporter,
 			FeatureMultiCacheExport,

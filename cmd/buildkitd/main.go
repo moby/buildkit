@@ -23,6 +23,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/cache/remotecache/azblob"
+	"github.com/moby/buildkit/cache/remotecache/gcs"
 	"github.com/moby/buildkit/cache/remotecache/gha"
 	inlineremotecache "github.com/moby/buildkit/cache/remotecache/inline"
 	localremotecache "github.com/moby/buildkit/cache/remotecache/local"
@@ -829,6 +830,7 @@ func newController(ctx context.Context, c *cli.Context, cfg *config.Config) (*co
 		"gha":      gha.ResolveCacheExporterFunc(),
 		"s3":       s3remotecache.ResolveCacheExporterFunc(),
 		"azblob":   azblob.ResolveCacheExporterFunc(),
+		"gcs":      gcs.ResolveCacheExporterFunc(),
 	}
 	remoteCacheImporterFuncs := map[string]remotecache.ResolveCacheImporterFunc{
 		"registry": registryremotecache.ResolveCacheImporterFunc(sessionManager, w.ContentStore(), resolverFn),
@@ -836,6 +838,7 @@ func newController(ctx context.Context, c *cli.Context, cfg *config.Config) (*co
 		"gha":      gha.ResolveCacheImporterFunc(),
 		"s3":       s3remotecache.ResolveCacheImporterFunc(),
 		"azblob":   azblob.ResolveCacheImporterFunc(),
+		"gcs":      gcs.ResolveCacheImporterFunc(),
 	}
 
 	if cfg.CDI.Disabled == nil || !*cfg.CDI.Disabled {
