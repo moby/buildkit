@@ -201,6 +201,7 @@ var allTests = integration.TestFuncs(
 	testDockerIgnoreMissingProvenance,
 	testCommandSourceMapping,
 	testSBOMScannerArgs,
+	testMultiNilRefsOCIExporter,
 	testNilContextInSolveGateway,
 	testMultiNilRefsInSolveGateway,
 	testCopyUnicodePath,
@@ -9235,6 +9236,66 @@ COPY --link foo foo
 			}
 		})
 	}
+}
+
+func testMultiNilRefsOCIExporter(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureMultiPlatform, workers.FeatureOCIExporter)
+
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`FROM scratch`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir := t.TempDir()
+
+	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"platform": "linux/arm64,linux/amd64",
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:   client.ExporterOCI,
+				Output: fixedWriteCloser(outW),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "out.tar"))
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(dt, false)
+	require.NoError(t, err)
+
+	var idx ocispecs.Index
+	err = json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &idx)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, len(idx.Manifests))
+	mlistHex := idx.Manifests[0].Digest.Hex()
+
+	idx = ocispecs.Index{}
+	err = json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+mlistHex].Data, &idx)
+	require.NoError(t, err)
+
+	require.Equal(t, 2, len(idx.Manifests))
 }
 
 func timeMustParse(t *testing.T, layout, value string) time.Time {
