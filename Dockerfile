@@ -1,15 +1,15 @@
 # syntax=docker/dockerfile-upstream:master
 
-ARG RUNC_VERSION=v1.2.6
-ARG CONTAINERD_VERSION=v2.0.4
+ARG RUNC_VERSION=v1.3.0
+ARG CONTAINERD_VERSION=v2.1.1
 # CONTAINERD_ALT_VERSION_... defines fallback containerd version for integration tests
-ARG CONTAINERD_ALT_VERSION_17=v1.7.25
-ARG CONTAINERD_ALT_VERSION_16=v1.6.36
+ARG CONTAINERD_ALT_VERSION_20=v2.0.5
+ARG CONTAINERD_ALT_VERSION_17=v1.7.27
 ARG REGISTRY_VERSION=v2.8.3
-ARG ROOTLESSKIT_VERSION=v2.3.4
+ARG ROOTLESSKIT_VERSION=v2.3.5
 ARG CNI_VERSION=v1.7.1
 ARG STARGZ_SNAPSHOTTER_VERSION=v0.15.1
-ARG NERDCTL_VERSION=v1.6.2
+ARG NERDCTL_VERSION=v2.1.2
 ARG DNSNAME_VERSION=v1.3.1
 ARG NYDUS_VERSION=v2.2.4
 ARG MINIO_VERSION=RELEASE.2022-05-03T20-36-08Z
@@ -256,18 +256,18 @@ ARG CONTAINERD_VERSION
 ADD --keep-git-dir=true "https://github.com/containerd/containerd.git#$CONTAINERD_VERSION" .
 RUN /build.sh
 
+# containerd-alt-20 builds containerd v2.0 for integration tests
+FROM containerd-build AS containerd-alt-20
+WORKDIR /go/src/github.com/containerd/containerd
+ARG CONTAINERD_ALT_VERSION_20
+ADD --keep-git-dir=true "https://github.com/containerd/containerd.git#$CONTAINERD_ALT_VERSION_20" .
+RUN /build.sh
+
 # containerd-alt-17 builds containerd v1.7 for integration tests
 FROM containerd-build AS containerd-alt-17
 WORKDIR /go/src/github.com/containerd/containerd
 ARG CONTAINERD_ALT_VERSION_17
 ADD --keep-git-dir=true "https://github.com/containerd/containerd.git#$CONTAINERD_ALT_VERSION_17" .
-RUN /build.sh
-
-# containerd-alt-16 builds containerd v1.6 for integration tests
-FROM containerd-build AS containerd-alt-16
-WORKDIR /go/src/github.com/containerd/containerd
-ARG CONTAINERD_ALT_VERSION_16
-ADD --keep-git-dir=true "https://github.com/containerd/containerd.git#$CONTAINERD_ALT_VERSION_16" .
 RUN /build.sh
 
 FROM gobuild-base AS registry
@@ -427,7 +427,7 @@ RUN curl -fsSL https://raw.githubusercontent.com/moby/moby/v25.0.1/hack/dind > /
   && chmod 0755 /docker-entrypoint.sh
 ENTRYPOINT ["/docker-entrypoint.sh"]
 # musl is needed to directly use the registry binary that is built on alpine
-ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.7=/opt/containerd-alt-17/bin,containerd-1.6=/opt/containerd-alt-16/bin"
+ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-2.0=/opt/containerd-alt-20/bin,containerd-1.7=/opt/containerd-alt-17/bin"
 ENV BUILDKIT_INTEGRATION_SNAPSHOTTER=stargz
 ENV BUILDKIT_SETUP_CGROUPV2_ROOT=1
 ENV CGO_ENABLED=0
@@ -438,8 +438,8 @@ COPY --link --from=minio-mc /usr/bin/mc /usr/bin/
 COPY --link --from=nydus /out/nydus-static/* /usr/bin/
 COPY --link --from=stargz-snapshotter /out/* /usr/bin/
 COPY --link --from=rootlesskit /rootlesskit /usr/bin/
+COPY --link --from=containerd-alt-20 /out/containerd* /opt/containerd-alt-20/bin/
 COPY --link --from=containerd-alt-17 /out/containerd* /opt/containerd-alt-17/bin/
-COPY --link --from=containerd-alt-16 /out/containerd* /opt/containerd-alt-16/bin/
 COPY --link --from=registry /out /usr/bin/
 COPY --link --from=runc /usr/bin/runc /usr/bin/
 COPY --link --from=containerd /out/containerd* /usr/bin/
