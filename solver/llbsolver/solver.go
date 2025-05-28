@@ -933,6 +933,7 @@ func addProvenanceToResult(res *frontend.Result, br *provenanceBridge) (*Result,
 	}
 	for k, ref := range res.Refs {
 		if ref == nil {
+			out.Provenance.Refs[k] = nil
 			continue
 		}
 		cp, err := getProvenance(ref, reqs.refs[k].bridge, k, reqs)

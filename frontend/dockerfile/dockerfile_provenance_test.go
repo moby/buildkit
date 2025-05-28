@@ -1055,22 +1055,59 @@ ENV FOO=bar
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
+	buf := &bytes.Buffer{}
 
-	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		LocalMounts: map[string]fsutil.FS{
-			dockerui.DefaultLocalNameDockerfile: dir,
-			dockerui.DefaultLocalNameContext:    dir,
-		},
-		FrontendAttrs: map[string]string{
-			"attest:provenance": "mode=max",
-		},
-		Exports: []client.ExportEntry{
-			{
+	exporters := []struct {
+		name   string
+		export client.ExportEntry
+	}{
+		{
+			name: "image",
+			export: client.ExportEntry{
 				Type: client.ExporterImage,
 			},
 		},
-	}, nil)
-	require.NoError(t, err)
+		{
+			name: "local",
+			export: client.ExportEntry{
+				Type:      client.ExporterLocal,
+				OutputDir: t.TempDir(),
+			},
+		},
+		{
+			name: "tar",
+			export: func() client.ExportEntry {
+				return client.ExportEntry{
+					Type:   client.ExporterTar,
+					Output: fixedWriteCloser(&nopWriteCloser{buf}),
+				}
+			}(),
+		},
+	}
+
+	for _, exp := range exporters {
+		for _, platformMode := range []string{"single", "multi"} {
+			t.Run(exp.name+"/"+platformMode, func(t *testing.T) {
+				attrs := map[string]string{
+					"attest:provenance": "mode=max",
+				}
+				if platformMode == "multi" {
+					attrs["platform"] = "linux/amd64,linux/arm64"
+				}
+				_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+					LocalMounts: map[string]fsutil.FS{
+						dockerui.DefaultLocalNameDockerfile: dir,
+						dockerui.DefaultLocalNameContext:    dir,
+					},
+					FrontendAttrs: attrs,
+					Exports: []client.ExportEntry{
+						exp.export,
+					},
+				}, nil)
+				require.NoError(t, err)
+			})
+		}
+	}
 }
 
 // https://github.com/moby/buildkit/issues/3562
