@@ -51,8 +51,9 @@ func Copy(ctx context.Context, conn io.ReadWriteCloser, stream Stream, closeStre
 	})
 
 	g.Go(func() (retErr error) {
+		buf := make([]byte, 32*1024)
+		p := &BytesMessage{}
 		for {
-			buf := make([]byte, 32*1024)
 			n, err := conn.Read(buf)
 			switch {
 			case errors.Is(err, io.EOF):
@@ -68,8 +69,10 @@ func Copy(ctx context.Context, conn io.ReadWriteCloser, stream Stream, closeStre
 				return context.Cause(ctx)
 			default:
 			}
-			p := &BytesMessage{Data: buf[:n]}
-			if err := stream.SendMsg(p); err != nil {
+
+			p.Reset()
+			p.Data = buf[:n]
+			if err := stream.SendMsg(&p); err != nil {
 				return errors.WithStack(err)
 			}
 		}
