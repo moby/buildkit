@@ -16,12 +16,12 @@ import (
 )
 
 type LogT interface {
-	Logf(string, ...interface{})
+	Logf(string, ...any)
 }
 
 type nopLog struct{}
 
-func (nopLog) Logf(string, ...interface{}) {}
+func (nopLog) Logf(string, ...any) {}
 
 const (
 	shortLen             = 12
@@ -72,8 +72,8 @@ func NewDaemon(workingDir string, ops ...Option) (*Daemon, error) {
 		execRoot:      filepath.Join(os.TempDir(), "dxr", id),
 		dockerdBinary: DefaultDockerdBinary,
 		Log:           nopLog{},
-		sockPath:      filepath.Join(sockRoot, id+".sock"),
-		envs:          append([]string{}, os.Environ()...),
+		sockPath:      getDockerdSockPath(sockRoot, id),
+		envs:          os.Environ(),
 	}
 
 	for _, op := range ops {
@@ -96,7 +96,7 @@ func WithExtraEnv(envs []string) Option {
 }
 
 func (d *Daemon) Sock() string {
-	return "unix://" + d.sockPath
+	return socketScheme + d.sockPath
 }
 
 func (d *Daemon) StartWithError(daemonLogs map[string]*bytes.Buffer, providedArgs ...string) error {

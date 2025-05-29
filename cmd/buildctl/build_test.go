@@ -140,12 +140,12 @@ func testBuildMetadataFile(t *testing.T, sb integration.Sandbox) {
 	metadataBytes, err := os.ReadFile(metadataFile)
 	require.NoError(t, err)
 
-	var metadata map[string]interface{}
+	var metadata map[string]any
 	err = json.Unmarshal(metadataBytes, &metadata)
 	require.NoError(t, err)
 
-	require.Contains(t, metadata, "image.name")
-	require.Equal(t, imageName, metadata["image.name"])
+	require.Contains(t, metadata, exptypes.ExporterImageNameKey)
+	require.Equal(t, imageName, metadata[exptypes.ExporterImageNameKey])
 
 	require.Contains(t, metadata, exptypes.ExporterImageDigestKey)
 	digest := metadata[exptypes.ExporterImageDigestKey]

@@ -689,7 +689,8 @@ EOF
 The available `[OPTIONS]` for the `RUN` instruction are:
 
 | Option                          | Minimum Dockerfile version |
-| ------------------------------- | -------------------------- |
+|---------------------------------|----------------------------|
+| [`--device`](#run---device)     | 1.14-labs                  |
 | [`--mount`](#run---mount)       | 1.2                        |
 | [`--network`](#run---network)   | 1.3                        |
 | [`--security`](#run---security) | 1.1.2-labs                 |
@@ -706,6 +707,87 @@ See the [Dockerfile Best Practices
 guide](https://docs.docker.com/engine/userguide/eng-image/dockerfile_best-practices/) for more information.
 
 The cache for `RUN` instructions can be invalidated by [`ADD`](#add) and [`COPY`](#copy) instructions.
+
+### RUN --device
+
+> [!NOTE]
+> Not yet available in stable syntax, use [`docker/dockerfile:1-labs`](#syntax)
+> version. It also needs BuildKit 0.20.0 or later.
+
+```dockerfile
+RUN --device=name,[required]
+```
+
+`RUN --device` allows build to request [CDI devices](https://github.com/moby/buildkit/blob/master/docs/cdi.md)
+to be available to the build step.
+
+The device `name` is provided by the CDI specification registered in BuildKit.
+
+In the following example, multiple devices are registered in the CDI
+specification for the `vendor1.com/device` vendor.
+
+```yaml
+cdiVersion: "0.6.0"
+kind: "vendor1.com/device"
+devices:
+  - name: foo
+    containerEdits:
+      env:
+        - FOO=injected
+  - name: bar
+    annotations:
+      org.mobyproject.buildkit.device.class: class1
+    containerEdits:
+      env:
+        - BAR=injected
+  - name: baz
+    annotations:
+      org.mobyproject.buildkit.device.class: class1
+    containerEdits:
+      env:
+        - BAZ=injected
+  - name: qux
+    annotations:
+      org.mobyproject.buildkit.device.class: class2
+    containerEdits:
+      env:
+        - QUX=injected
+```
+
+The device name format is flexible and accepts various patterns to support
+multiple device configurations:
+
+* `vendor1.com/device`: request the first device found for this vendor
+* `vendor1.com/device=foo`: request a specific device
+* `vendor1.com/device=*`: request all devices for this vendor
+* `class1`: request devices by `org.mobyproject.buildkit.device.class` annotation
+
+#### Example: CUDA-Powered LLaMA Inference
+
+In this example we use the `--device` flag to run `llama.cpp` inference using
+an NVIDIA GPU device through CDI:
+
+```dockerfile
+# syntax=docker/dockerfile:1-labs
+
+FROM scratch AS model
+ADD https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf /model.gguf
+
+FROM scratch AS prompt
+COPY <<EOF prompt.txt
+Q: Generate  a list of 10 unique biggest countries by population in JSON with their estimated poulation in 1900 and 2024. Answer only newline formatted JSON with keys "country", "population_1900", "population_2024" with 10 items.
+A:
+[
+    {
+
+EOF
+
+FROM ghcr.io/ggml-org/llama.cpp:full-cuda-b5124
+RUN --device=nvidia.com/gpu=all \
+    --mount=from=model,target=/models \
+    --mount=from=prompt,target=/tmp \
+    ./llama-cli -m /models/model.gguf -no-cnv -ngl 99 -f /tmp/prompt.txt
+```
 
 ### RUN --mount
 

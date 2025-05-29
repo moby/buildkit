@@ -106,7 +106,6 @@ func newSnapshotter(ctx context.Context, t *testing.T, snapshotterName string) (
 
 func TestMerge(t *testing.T) {
 	for _, snName := range []string{"overlayfs", "native", "native-nohardlink"} {
-		snName := snName
 		t.Run(snName, func(t *testing.T) {
 			t.Parallel()
 			if snName == "overlayfs" {
@@ -310,7 +309,6 @@ func TestMerge(t *testing.T) {
 
 func TestHardlinks(t *testing.T) {
 	for _, snName := range []string{"overlayfs", "native"} {
-		snName := snName
 		t.Run(snName, func(t *testing.T) {
 			t.Parallel()
 			if snName == "overlayfs" {
@@ -353,10 +351,10 @@ func TestHardlinks(t *testing.T) {
 			)
 			stat1 = statPath(ctx, t, sn, childSnap.Name, "1")
 			require.EqualValues(t, 1, stat1.Nlink)
-			require.NotEqualValues(t, stat1Ino, stat1.Ino)
+			require.NotEqual(t, stat1Ino, stat1.Ino)
 			stat2 = statPath(ctx, t, sn, childSnap.Name, "2")
 			require.EqualValues(t, 1, stat2.Nlink)
-			require.NotEqualValues(t, stat2Ino, stat2.Ino)
+			require.NotEqual(t, stat2Ino, stat2.Ino)
 
 			// verify the original files and the files inthe merge are unchanged
 			requireContents(ctx, t, sn, base1Snap.Name,
@@ -376,7 +374,6 @@ func TestHardlinks(t *testing.T) {
 func TestMergeFileCapabilities(t *testing.T) {
 	requireRoot(t)
 	for _, snName := range []string{"overlayfs", "native", "native-nohardlink"} {
-		snName := snName
 		t.Run(snName, func(t *testing.T) {
 			t.Parallel()
 
@@ -410,7 +407,6 @@ func TestMergeFileCapabilities(t *testing.T) {
 
 func TestUsage(t *testing.T) {
 	for _, snName := range []string{"overlayfs", "native", "native-nohardlink"} {
-		snName := snName
 		t.Run(snName, func(t *testing.T) {
 			t.Parallel()
 			if snName == "overlayfs" {

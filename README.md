@@ -205,6 +205,7 @@ Currently, the following high-level languages have been implemented for LLB:
 -   [Bass](https://github.com/vito/bass)
 -   [kraft.yaml (Unikraft)](https://github.com/unikraft/kraftkit/tree/staging/tools/dockerfile-llb-frontend)
 -   [r2d4/llb (JSON Gateway)](https://github.com/r2d4/llb)
+-   [Massé](https://github.com/marxarelli/masse)
 -   (open a PR to add your own language)
 
 ### Exploring Dockerfiles
@@ -462,7 +463,7 @@ buildctl build ... \
   * `min`: only export layers for the resulting image
   * `max`: export all the layers of all intermediate steps
 * `ref=<ref>`: specify repository reference to store cache, e.g. `docker.io/user/image:tag`
-* `image-manifest=<true|false>`: whether to export cache manifest as an OCI-compatible image manifest rather than a manifest list/index (default: `false`, must be used with `oci-mediatypes=true`)
+* `image-manifest=<true|false>`: whether to export cache manifest as an OCI-compatible image manifest rather than a manifest list/index (default: `true` since BuildKit `v0.21`, must be used with `oci-mediatypes=true`)
 * `oci-mediatypes=<true|false>`: whether to use OCI mediatypes in exported manifests (default: `true`, since BuildKit `v0.8`)
 * `compression=<uncompressed|gzip|estargz|zstd>`: choose compression type for layers newly created and cached, gzip is default value. estargz and zstd should be used with `oci-mediatypes=true`
 * `compression-level=<value>`: choose compression level for gzip, estargz (0-9) and zstd (0-22)
@@ -489,7 +490,7 @@ The directory layout conforms to OCI Image Spec v1.0.
   * `max`: export all the layers of all intermediate steps
 * `dest=<path>`: destination directory for cache exporter
 * `tag=<tag>`: specify custom tag of image to write to local index (default: `latest`)
-* `image-manifest=<true|false>`: whether to export cache manifest as an OCI-compatible image manifest rather than a manifest list/index (default: `false`, must be used with `oci-mediatypes=true`)
+* `image-manifest=<true|false>`: whether to export cache manifest as an OCI-compatible image manifest rather than a manifest list/index (default: `true` since BuildKit `v0.21`, must be used with `oci-mediatypes=true`)
 * `oci-mediatypes=<true|false>`: whether to use OCI mediatypes in exported manifests (default `true`, since BuildKit `v0.8`)
 * `compression=<uncompressed|gzip|estargz|zstd>`: choose compression type for layers newly created and cached, gzip is default value. estargz and zstd should be used with `oci-mediatypes=true`.
 * `compression-level=<value>`: compression level for gzip, estargz (0-9) and zstd (0-22)
@@ -563,11 +564,11 @@ S3 configuration:
 
 AWS Authentication:
 
-The simplest way is to use an IAM Instance profile.
-Other options are:
+BuildKit relies on the [AWS Go SDK](https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html](https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/config#EnvConfig). This means that all standard authentication methods through environment variables or config files are supported. This is especially true for AWS EC2 IAM Profile and AWS Web Identity Token (IAM roles in Kubernetes).
 
-* Any system using environment variables / config files supported by the [AWS Go SDK](https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html). The configuration must be available for the buildkit daemon, not for the client.
-* Using the following attributes:
+Beware, these configurations must be available at buildkit daemon level, not at client level.
+
+* The following attributes can be used to forward static credentials from a buildkit client to the daemon (buildx for example).
   * `access_key_id`: Access Key ID
   * `secret_access_key`: Secret Access Key
   * `session_token`: Session Token

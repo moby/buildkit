@@ -23,6 +23,7 @@ var outlineTests = integration.TestFuncs(
 	testOutlineArgs,
 	testOutlineSecrets,
 	testOutlineDescribeDefinition,
+	testOutlineRecursiveArgs,
 )
 
 func testOutlineArgs(t *testing.T, sb integration.Sandbox) {
@@ -91,7 +92,7 @@ FROM second
 
 	dir := integration.Tmpdir(
 		t,
-		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 
 	c, err := client.New(sb.Context(), sb.Address())
@@ -196,7 +197,7 @@ FROM second
 
 	dir := integration.Tmpdir(
 		t,
-		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 
 	c, err := client.New(sb.Context(), sb.Address())
@@ -253,6 +254,86 @@ FROM second
 		require.Equal(t, true, ssh.Required)
 		require.Equal(t, int32(0), ssh.Location.SourceIndex)
 		require.Equal(t, int32(14), ssh.Location.Ranges[0].Start.Line)
+
+		called = true
+		return nil, nil
+	}
+
+	_, err = c.Build(sb.Context(), client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+		},
+	}, "", frontend, nil)
+	require.NoError(t, err)
+
+	require.True(t, called)
+}
+
+func testOutlineRecursiveArgs(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureFrontendOutline)
+	f := getFrontend(t, sb)
+	if _, ok := f.(*clientFrontend); !ok {
+		t.Skip("only test with client frontend")
+	}
+
+	dockerfile := []byte(`
+ARG FOO=123
+ARG ABC=abc
+ARG DEF=def
+ARG FOO=${FOO}${ABC}
+ARG BAR=${FOO}456
+ARG FOO=${FOO}456${BAR}
+FROM scratch
+ARG FOO
+ARG INFOO=123
+ARG INBAR=${INFOO}456
+ARG INFOO=${INFOO}456${INBAR}
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := os.MkdirTemp("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	called := false
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		res, err := c.Solve(ctx, gateway.SolveRequest{
+			FrontendOpt: map[string]string{
+				"frontend.caps": "moby.buildkit.frontend.subrequests",
+				"requestid":     "frontend.outline",
+			},
+			Frontend: "dockerfile.v0",
+		})
+		require.NoError(t, err)
+
+		outline, err := unmarshalOutline(res)
+		require.NoError(t, err)
+
+		require.Len(t, outline.Args, 5)
+
+		require.Equal(t, "ABC", outline.Args[0].Name)
+		require.Equal(t, "abc", outline.Args[0].Value)
+
+		require.Equal(t, "BAR", outline.Args[1].Name)
+		require.Equal(t, "123abc456", outline.Args[1].Value)
+
+		require.Equal(t, "FOO", outline.Args[2].Name)
+		require.Equal(t, "123abc456123abc456", outline.Args[2].Value)
+
+		require.Equal(t, "INBAR", outline.Args[3].Name)
+		require.Equal(t, "123456", outline.Args[3].Value)
+
+		require.Equal(t, "INFOO", outline.Args[4].Name)
+		require.Equal(t, "123456123456", outline.Args[4].Value)
 
 		called = true
 		return nil, nil

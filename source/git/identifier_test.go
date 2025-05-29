@@ -110,7 +110,6 @@ func TestNewGitIdentifier(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.url, func(t *testing.T) {
 			gi, err := NewGitIdentifier(tt.url)
 			require.NoError(t, err)

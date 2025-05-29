@@ -4,7 +4,11 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/containerd/containerd/v2/defaults"
 )
+
+const buildkitdNetworkProtocol = "tcp"
 
 func applyBuildkitdPlatformFlags(args []string) []string {
 	return args
@@ -54,4 +58,16 @@ func normalizeAddress(address string) string {
 		address = "npipe://" + address
 	}
 	return address
+}
+
+func applyDockerdPlatformFlags(flags []string, workerID string) []string {
+	if workerID == "dockerd-containerd" {
+		flags = append(flags, "--default-runtime="+defaults.DefaultRuntime)
+	}
+	return flags
+}
+
+func getBuildkitdNetworkAddr(_ string) string {
+	// Using TCP on Windows, instead of Unix sockets.
+	return "localhost:0"
 }

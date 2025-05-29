@@ -41,6 +41,7 @@ func AttachAppContext(app *cli.App) error {
 					}
 				}
 
+				ctx := ctx
 				ctx, span = tracer.Start(ctx, name, trace.WithAttributes(
 					attribute.StringSlice("command", os.Args),
 				))

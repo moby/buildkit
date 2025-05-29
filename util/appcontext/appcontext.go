@@ -25,11 +25,11 @@ func Context() context.Context {
 
 		ctx := context.Background()
 		for _, f := range inits {
-			ctx = f(ctx)
+			ctx = f(ctx) //nolint:fatcontext
 		}
 
 		ctx, cancel := context.WithCancelCause(ctx)
-		appContextCache = ctx
+		appContextCache = ctx //nolint:fatcontext
 
 		go func() {
 			for {

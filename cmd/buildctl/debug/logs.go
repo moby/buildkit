@@ -57,7 +57,7 @@ func logs(clicontext *cli.Context) error {
 		}
 		he, err := cl.Recv()
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				return errors.Errorf("ref %s not found", ref)
 			}
 			return err

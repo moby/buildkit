@@ -154,7 +154,7 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 		defer releasers()
 	}
 
-	if err := w.ensureCWD(ctx, details, meta); err != nil {
+	if err := w.ensureCWD(details, meta); err != nil {
 		return nil, err
 	}
 
@@ -399,7 +399,7 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p ctd.Process, resi
 			ctxDone = nil
 			var killCtx context.Context
 			killCtx, cancel = context.WithCancelCause(context.Background())
-			killCtx, _ = context.WithTimeoutCause(killCtx, 10*time.Second, errors.WithStack(context.DeadlineExceeded))
+			killCtx, _ = context.WithTimeoutCause(killCtx, 10*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
 			killCtxDone = killCtx.Done()
 			p.Kill(killCtx, syscall.SIGKILL)
 			io.Cancel()

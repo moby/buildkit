@@ -4,6 +4,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#permissions
+permissions:
+  contents: read
+
 on:
   schedule:
     - cron: '0 10 * * *'
@@ -19,7 +23,7 @@ on:
       - 'frontend/dockerfile/docs/**'
 
 env:
-  GO_VERSION: "1.23"
+  GO_VERSION: "1.24"
   SETUP_BUILDX_VERSION: "edge"
   SETUP_BUILDKIT_IMAGE: "moby/buildkit:latest"
   DESTDIR: "./bin"
@@ -71,7 +75,6 @@ jobs:
 
   test-windows-amd64:
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.os == 'windows-2025' }}
     needs:
       - build
     env:
@@ -80,22 +83,32 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2022, windows-2025]
+        os: [windows-2022]
         worker:
           - containerd
         pkg:
-          - ./client
+          - ./client#1-4
+          - ./client#2-4
+          - ./client#3-4
+          - ./client#4-4
           - ./cmd/buildctl
           - ./worker/containerd
           - ./solver
           - ./frontend
-          - ./frontend/dockerfile
+          - ./frontend/dockerfile#1-12
+          - ./frontend/dockerfile#2-12
+          - ./frontend/dockerfile#3-12
+          - ./frontend/dockerfile#4-12
+          - ./frontend/dockerfile#5-12
+          - ./frontend/dockerfile#6-12
+          - ./frontend/dockerfile#7-12
+          - ./frontend/dockerfile#8-12
+          - ./frontend/dockerfile#9-12
+          - ./frontend/dockerfile#10-12
+          - ./frontend/dockerfile#11-12
+          - ./frontend/dockerfile#12-12
         include:
           - os: windows-2022
-            worker: containerd
-            pkg: ./...
-            skip-integration-tests: 1
-          - os: windows-2025
             worker: containerd
             pkg: ./...
             skip-integration-tests: 1
@@ -103,10 +116,17 @@ jobs:
       -
         name: Prepare
         run: |
+          TESTPKG=$(echo "${{ matrix.pkg }}" | awk '-F#' '{print $1}')
+          echo "TESTPKG=$TESTPKG" >> $GITHUB_ENV
           echo "TEST_REPORT_NAME=${{ github.job }}-$(echo "${{ matrix.pkg }}-${{ matrix.skip-integration-tests }}-${{ matrix.worker }}" | tr -dc '[:alnum:]-\n\r' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
           testFlags="${{ env.TESTFLAGS }}"
+          testSlice=$(echo "${{ matrix.pkg }}" | awk '-F#' '{print $2}')
+          testSliceOffset=""
+          if [ -n "$testSlice" ]; then
+            testSliceOffset="slice=$testSlice/"
+          fi
           if [ -n "${{ matrix.worker }}" ]; then
-            testFlags="${testFlags} --run=TestIntegration/.*/worker=${{ matrix.worker }}"
+            testFlags="${testFlags} --run=TestIntegration/$testSliceOffset.*/worker=${{ matrix.worker }}"
           fi
           echo "TESTFLAGS=${testFlags}" >> $GITHUB_ENV
         shell: bash
@@ -142,7 +162,7 @@ jobs:
           gotestsum \
             --jsonfile="./bin/testreports/go-test-report-${{ env.TEST_REPORT_NAME }}.json" \
             --junitfile="./bin/testreports/junit-report-${{ env.TEST_REPORT_NAME }}.xml" \
-            --packages="${{ matrix.pkg }}" \
+            --packages="${{ env.TESTPKG }}" \
             -- \
               "-mod=vendor" \
               "-coverprofile" "./bin/testreports/coverage-${{ env.TEST_REPORT_NAME }}.txt" \
@@ -183,6 +203,8 @@ jobs:
       - build
     env:
       GOOS: freebsd
+      # https://github.com/hashicorp/vagrant/issues/13652
+      VAGRANT_DISABLE_STRICT_DEPENDENCY_ENFORCEMENT: 1
     steps:
       -
         name: Checkout
@@ -220,7 +242,7 @@ jobs:
           vagrant up --no-tty
       -
         name: Smoke test
-        uses: nick-fields/retry@c97818ca39074beaea45180dba704f92496a0082  # v3.0.1
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08  # v3.0.2
         with:
           timeout_minutes: 20
           max_attempts: 5
@@ -238,6 +260,7 @@ jobs:
           vagrant ssh -- "sudo cat /vagrant/.tmp/logs/containerd"
 
   sandbox-build:
+    if: ${{ github.repository == 'moby/buildkit' }}
     runs-on: ${{ matrix.platform == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     strategy:
       fail-fast: false

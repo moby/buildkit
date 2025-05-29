@@ -229,8 +229,8 @@ func getenv(e solver.Edge, k string) (string, bool) {
 	env := toOp(e).GetExec().Meta.Env
 	k = k + "="
 	for _, e := range env {
-		if strings.HasPrefix(e, k) {
-			return strings.TrimPrefix(e, k), true
+		if after, ok := strings.CutPrefix(e, k); ok {
+			return after, true
 		}
 	}
 	return "", false

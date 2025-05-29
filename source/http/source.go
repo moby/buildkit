@@ -19,7 +19,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/secrets"
@@ -399,15 +398,10 @@ func (hs *httpSourceHandler) save(ctx context.Context, resp *http.Response, s se
 	uid := hs.src.UID
 	gid := hs.src.GID
 	if idmap := mount.IdentityMapping(); idmap != nil {
-		identity, err := idmap.ToHost(idtools.Identity{
-			UID: int(uid),
-			GID: int(gid),
-		})
+		uid, gid, err = idmap.ToHost(uid, gid)
 		if err != nil {
 			return nil, "", err
 		}
-		uid = identity.UID
-		gid = identity.GID
 	}
 
 	if gid != 0 || uid != 0 {
@@ -502,7 +496,7 @@ func (hs *httpSourceHandler) Snapshot(ctx context.Context, g session.Group) (cac
 }
 
 func (hs *httpSourceHandler) newHTTPRequest(ctx context.Context, g session.Group) (*http.Request, error) {
-	req, err := http.NewRequest("GET", hs.src.URL, nil)
+	req, err := http.NewRequest(http.MethodGet, hs.src.URL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -523,7 +517,6 @@ func (hs *httpSourceHandler) newHTTPRequest(ctx context.Context, g session.Group
 
 			return nil
 		})
-
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to retrieve HTTP auth secret %s", hs.src.AuthHeaderSecret)
 		}
@@ -572,9 +565,11 @@ type cacheRefMetadata struct {
 	cache.RefMetadata
 }
 
-const keyHTTPChecksum = "http.checksum"
-const keyETag = "etag"
-const keyModTime = "http.modtime"
+const (
+	keyHTTPChecksum = "http.checksum"
+	keyETag         = "etag"
+	keyModTime      = "http.modtime"
+)
 
 func (md cacheRefMetadata) getHTTPChecksum() digest.Digest {
 	return digest.Digest(md.GetString(keyHTTPChecksum))

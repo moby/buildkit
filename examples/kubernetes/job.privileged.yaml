@@ -8,11 +8,11 @@ spec:
       restartPolicy: Never
       initContainers:
         - name: prepare
-          image: alpine:3.10
+          image: busybox
           command:
             - sh
             - -c
-            - "echo FROM hello-world > /workspace/Dockerfile"
+            - "echo -e 'FROM alpine\nRUN apk add gcc\n' > /workspace/Dockerfile"
           volumeMounts:
             - name: workspace
               mountPath: /workspace

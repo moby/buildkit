@@ -104,7 +104,7 @@ type NetworkConfig struct {
 type OCIConfig struct {
 	Enabled          *bool             `toml:"enabled"`
 	Labels           map[string]string `toml:"labels"`
-	Platforms        []string          `toml:"platforms"`
+	Platforms        []string          `toml:"platforms,omitempty"`
 	Snapshotter      string            `toml:"snapshotter"`
 	Rootless         bool              `toml:"rootless"`
 	NoProcessSandbox bool              `toml:"noProcessSandbox"`
@@ -121,7 +121,7 @@ type OCIConfig struct {
 	// StargzSnapshotterConfig is configuration for stargz snapshotter.
 	// We use a generic map[string]interface{} in order to remove the dependency
 	// on stargz snapshotter's config pkg from our config.
-	StargzSnapshotterConfig map[string]interface{} `toml:"stargzSnapshotter"`
+	StargzSnapshotterConfig map[string]any `toml:"stargzSnapshotter"`
 
 	// ApparmorProfile is the name of the apparmor profile that should be used to constrain build containers.
 	// The profile should already be loaded (by a higher level system) before creating a worker.
@@ -138,7 +138,7 @@ type ContainerdConfig struct {
 	Address   string            `toml:"address"`
 	Enabled   *bool             `toml:"enabled"`
 	Labels    map[string]string `toml:"labels"`
-	Platforms []string          `toml:"platforms"`
+	Platforms []string          `toml:"platforms,omitempty"`
 	Namespace string            `toml:"namespace"`
 	Runtime   ContainerdRuntime `toml:"runtime"`
 	GCConfig
@@ -160,9 +160,9 @@ type ContainerdConfig struct {
 }
 
 type ContainerdRuntime struct {
-	Name    string                 `toml:"name"`
-	Path    string                 `toml:"path"`
-	Options map[string]interface{} `toml:"options"`
+	Name    string         `toml:"name"`
+	Path    string         `toml:"path"`
+	Options map[string]any `toml:"options"`
 }
 
 type GCPolicy struct {

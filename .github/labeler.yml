@@ -68,6 +68,14 @@ area/buildkitd:
   - changed-files:
       - any-glob-to-any-file: "cmd/buildkitd/**"
 
+# area:cdi
+area/cdi:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "contrib/cdisetup/**"
+          - "docs/cdi.md"
+          - "solver/llbsolver/cdidevices/**"
+
 # area:dependencies
 area/dependencies:
   - changed-files:

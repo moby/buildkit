@@ -10,7 +10,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -107,10 +107,9 @@ var (
 
 func registerWorkerInitializer(wi workerInitializer, flags ...cli.Flag) {
 	workerInitializers = append(workerInitializers, wi)
-	sort.Slice(workerInitializers,
-		func(i, j int) bool {
-			return workerInitializers[i].priority < workerInitializers[j].priority
-		})
+	slices.SortFunc(workerInitializers, func(a, b workerInitializer) int {
+		return a.priority - b.priority
+	})
 	appFlags = append(appFlags, flags...)
 }
 
@@ -611,7 +610,7 @@ func applyMainFlags(c *cli.Context, cfg *config.Config) error {
 			}
 			cfg.GRPC.SecurityDescriptor = secDescriptor
 		} else {
-			gid, err := groupToGid(group)
+			gid, err := groupToGID(group)
 			if err != nil {
 				return err
 			}
@@ -647,22 +646,17 @@ func applyMainFlags(c *cli.Context, cfg *config.Config) error {
 }
 
 // Convert a string containing either a group name or a stringified gid into a numeric id)
-func groupToGid(group string) (int, error) {
+func groupToGID(group string) (int, error) {
 	if group == "" {
 		return os.Getgid(), nil
 	}
 
-	var (
-		err error
-		id  int
-	)
-
 	// Try and parse as a number, if the error is ErrSyntax
 	// (i.e. its not a number) then we carry on and try it as a
 	// name.
-	if id, err = strconv.Atoi(group); err == nil {
+	if id, err := strconv.Atoi(group); err == nil {
 		return id, nil
-	} else if err.(*strconv.NumError).Err != strconv.ErrSyntax {
+	} else if !errors.Is(err, strconv.ErrSyntax) {
 		return 0, err
 	}
 
@@ -672,11 +666,7 @@ func groupToGid(group string) (int, error) {
 	}
 	group = ginfo.Gid
 
-	if id, err = strconv.Atoi(group); err != nil {
-		return 0, err
-	}
-
-	return id, nil
+	return strconv.Atoi(group)
 }
 
 func getListener(addr string, uid, gid int, secDescriptor string, tlsConfig *tls.Config, warnTLS bool) (net.Listener, error) {
@@ -1066,6 +1056,13 @@ func getCDIManager(cfg config.CDIConfig) (*cdidevices.Manager, error) {
 		}
 		if err := cdiCache.Refresh(); err != nil {
 			return nil, err
+		}
+		if errs := cdiCache.GetErrors(); len(errs) > 0 {
+			for dir, errs := range errs {
+				for _, err := range errs {
+					bklog.L.Warnf("CDI setup error %v: %+v", dir, err)
+				}
+			}
 		}
 		return cdiCache, nil
 	}()

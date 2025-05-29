@@ -6,13 +6,14 @@ import (
 	"time"
 
 	"github.com/containerd/continuity/fs"
-	"github.com/docker/docker/pkg/archive"
-	"github.com/docker/docker/pkg/chrootarchive"
-	"github.com/docker/docker/pkg/idtools"
+	"github.com/moby/go-archive"
+	"github.com/moby/go-archive/chrootarchive"
+	"github.com/moby/go-archive/compression"
+	"github.com/moby/sys/user"
 	copy "github.com/tonistiigi/fsutil/copy"
 )
 
-func unpack(srcRoot string, src string, destRoot string, dest string, ch copy.Chowner, tm *time.Time, idmap *idtools.IdentityMapping) (bool, error) {
+func unpack(srcRoot string, src string, destRoot string, dest string, ch copy.Chowner, u *copy.User, tm *time.Time, idmap *user.IdentityMapping) (bool, error) {
 	src, err := fs.RootPath(srcRoot, src)
 	if err != nil {
 		return false, err
@@ -41,6 +42,12 @@ func unpack(srcRoot string, src string, destRoot string, dest string, ch copy.Ch
 	if idmap != nil {
 		opts.IDMap = *idmap
 	}
+	if u != nil {
+		opts.ChownOpts = &archive.ChownOpts{
+			UID: u.UID,
+			GID: u.GID,
+		}
+	}
 	return true, chrootarchive.Untar(file, dest, opts)
 }
 
@@ -57,7 +64,7 @@ func isArchivePath(path string) bool {
 		return false
 	}
 	defer file.Close()
-	rdr, err := archive.DecompressStream(file)
+	rdr, err := compression.DecompressStream(file)
 	if err != nil {
 		return false
 	}

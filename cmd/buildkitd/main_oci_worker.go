@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -90,22 +91,22 @@ func init() {
 		cli.StringFlag{
 			Name:  "oci-worker-net",
 			Usage: "worker network type (auto, bridge, cni or host)",
-			Value: defaultConf.Workers.OCI.NetworkConfig.Mode,
+			Value: defaultConf.Workers.OCI.Mode,
 		},
 		cli.StringFlag{
 			Name:  "oci-cni-config-path",
 			Usage: "path of cni config file",
-			Value: defaultConf.Workers.OCI.NetworkConfig.CNIConfigPath,
+			Value: defaultConf.Workers.OCI.CNIConfigPath,
 		},
 		cli.StringFlag{
 			Name:  "oci-cni-binary-dir",
 			Usage: "path of cni binary files",
-			Value: defaultConf.Workers.OCI.NetworkConfig.CNIBinaryPath,
+			Value: defaultConf.Workers.OCI.CNIBinaryPath,
 		},
 		cli.IntFlag{
 			Name:  "oci-cni-pool-size",
 			Usage: "size of cni network namespace pool",
-			Value: defaultConf.Workers.OCI.NetworkConfig.CNIPoolSize,
+			Value: defaultConf.Workers.OCI.CNIPoolSize,
 		},
 		cli.StringFlag{
 			Name:  "oci-worker-binary",
@@ -190,9 +191,7 @@ func applyOCIFlags(c *cli.Context, cfg *config.Config) error {
 	if cfg.Workers.OCI.Labels == nil {
 		cfg.Workers.OCI.Labels = make(map[string]string)
 	}
-	for k, v := range labels {
-		cfg.Workers.OCI.Labels[k] = v
-	}
+	maps.Copy(cfg.Workers.OCI.Labels, labels)
 	if c.GlobalIsSet("oci-worker-snapshotter") {
 		cfg.Workers.OCI.Snapshotter = c.GlobalString("oci-worker-snapshotter")
 	}
@@ -230,16 +229,16 @@ func applyOCIFlags(c *cli.Context, cfg *config.Config) error {
 	}
 
 	if c.GlobalIsSet("oci-worker-net") {
-		cfg.Workers.OCI.NetworkConfig.Mode = c.GlobalString("oci-worker-net")
+		cfg.Workers.OCI.Mode = c.GlobalString("oci-worker-net")
 	}
 	if c.GlobalIsSet("oci-cni-config-path") {
-		cfg.Workers.OCI.NetworkConfig.CNIConfigPath = c.GlobalString("oci-cni-worker-path")
+		cfg.Workers.OCI.CNIConfigPath = c.GlobalString("oci-cni-worker-path")
 	}
 	if c.GlobalIsSet("oci-cni-binary-dir") {
-		cfg.Workers.OCI.NetworkConfig.CNIBinaryPath = c.GlobalString("oci-cni-binary-dir")
+		cfg.Workers.OCI.CNIBinaryPath = c.GlobalString("oci-cni-binary-dir")
 	}
 	if c.GlobalIsSet("oci-cni-pool-size") {
-		cfg.Workers.OCI.NetworkConfig.CNIPoolSize = c.GlobalInt("oci-cni-pool-size")
+		cfg.Workers.OCI.CNIPoolSize = c.GlobalInt("oci-cni-pool-size")
 	}
 	if c.GlobalIsSet("oci-worker-binary") {
 		cfg.Workers.OCI.Binary = c.GlobalString("oci-worker-binary")
@@ -282,8 +281,8 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 
 	if cfg.Rootless {
 		bklog.L.Debugf("running in rootless mode")
-		if common.config.Workers.OCI.NetworkConfig.Mode == "auto" {
-			common.config.Workers.OCI.NetworkConfig.Mode = "host"
+		if common.config.Workers.OCI.Mode == "auto" {
+			common.config.Workers.OCI.Mode = "host"
 		}
 	}
 
@@ -304,7 +303,7 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 	}
 
 	nc := netproviders.Opt{
-		Mode: common.config.Workers.OCI.NetworkConfig.Mode,
+		Mode: common.config.Workers.OCI.Mode,
 		CNI: cniprovider.Opt{
 			Root:         common.config.Root,
 			ConfigPath:   common.config.Workers.OCI.CNIConfigPath,
@@ -367,7 +366,8 @@ func snapshotterFactory(commonRoot string, cfg config.OCIConfig, sm *session.Man
 				grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(defaults.DefaultMaxRecvMsgSize)),
 				grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(defaults.DefaultMaxSendMsgSize)),
 			}
-			//nolint:staticcheck // ignore SA1019 NewClient has different behavior and needs to be tested
+			// ignore SA1019 NewClient has different behavior and needs to be tested
+			//nolint:staticcheck
 			conn, err := grpc.Dial(dialer.DialAddress(address), gopts...)
 			if err != nil {
 				return nil, errors.Wrapf(err, "failed to dial %q", address)
@@ -488,8 +488,8 @@ func sourceWithSession(hosts docker.RegistryHosts, sm *session.Manager) sgzsourc
 		// to the snapshotter API. So, first, get all these IDs
 		var ids []string
 		for k := range labels {
-			if strings.HasPrefix(k, targetRefLabel+".") {
-				ids = append(ids, strings.TrimPrefix(k, targetRefLabel+"."))
+			if after, ok := strings.CutPrefix(k, targetRefLabel+"."); ok {
+				ids = append(ids, after)
 			}
 		}
 

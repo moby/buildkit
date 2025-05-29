@@ -44,7 +44,7 @@ func testResults(t *testing.T, st solver.CacheKeyStorage) {
 
 	// Windows time.Now() resolution can be quite coarse, so frequently
 	// time.Now() will be the same between two nearby calls.
-	if time.Now() == timeNow {
+	if time.Now().Equal(timeNow) {
 		time.Sleep(time.Duration(100) * time.Millisecond)
 	}
 	require.NotEqual(t, timeNow, time.Now(), "time has stopped")
@@ -211,7 +211,7 @@ func testResultReleaseSingleLevel(t *testing.T, st solver.CacheKeyStorage) {
 	require.Equal(t, 0, len(m))
 
 	st.Walk(func(id string) error {
-		require.False(t, true, fmt.Sprintf("id %s should have been released", id))
+		require.Fail(t, fmt.Sprintf("id %s should have been released", id))
 		return nil
 	})
 }
@@ -339,7 +339,7 @@ func testResultReleaseMultiLevel(t *testing.T, st solver.CacheKeyStorage) {
 	require.False(t, st.Exists("foo"))
 
 	st.Walk(func(id string) error {
-		require.False(t, true, fmt.Sprintf("id %s should have been released", id))
+		require.Fail(t, fmt.Sprintf("id %s should have been released", id))
 		return nil
 	})
 }
@@ -382,12 +382,12 @@ func testWalkIDsByResult(t *testing.T, st solver.CacheKeyStorage) {
 	require.False(t, ok)
 }
 
-func getFunctionName(i interface{}) string {
+func getFunctionName(i any) string {
 	fullname := runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
 	dot := strings.LastIndex(fullname, ".") + 1
 	return strings.Title(fullname[dot:]) //nolint:staticcheck // ignoring "SA1019: strings.Title is deprecated", as for our use we don't need full unicode support
 }
 
 func rootKey(dgst digest.Digest, output solver.Index) digest.Digest {
-	return digest.FromBytes([]byte(fmt.Sprintf("%s@%d", dgst, output)))
+	return digest.FromBytes(fmt.Appendf(nil, "%s@%d", dgst, output))
 }

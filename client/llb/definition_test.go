@@ -27,7 +27,6 @@ func TestDefinitionEquivalence(t *testing.T) {
 		{"platform constraint", Image("ref", LinuxArm64)},
 		{"mount", Image("busybox").Run(Shlex(`sh -c "echo foo > /out/foo"`)).AddMount("/out", Scratch())},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -49,7 +48,7 @@ func TestDefinitionEquivalence(t *testing.T) {
 			require.Equal(t, len(def.Def), len(def2.Def))
 			require.Equal(t, len(def.Metadata), len(def2.Metadata))
 
-			for i := 0; i < len(def.Def); i++ {
+			for i := range def.Def {
 				res := bytes.Compare(def.Def[i], def2.Def[i])
 				require.Equal(t, 0, res)
 			}
@@ -121,9 +120,9 @@ func TestDefinitionInputCache(t *testing.T) {
 
 	// make sure that walking vertices in parallel doesn't cause panic
 	var all []RunOption
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		var sts []RunOption
-		for j := 0; j < 100; j++ {
+		for j := range 100 {
 			sts = append(sts, AddMount("/mnt", Scratch().Run(Shlex(fmt.Sprintf("%d-%d", i, j))).Root()))
 		}
 		all = append(all, AddMount("/mnt", Scratch().Run(append([]RunOption{Shlex("args")}, sts...)...).Root()))
@@ -144,7 +143,6 @@ func TestDefinitionNil(t *testing.T) {
 func testParallelWalk(ctx context.Context, out Output) error {
 	eg, egCtx := errgroup.WithContext(ctx)
 	for _, o := range out.Vertex(ctx, nil).Inputs() {
-		o := o
 		eg.Go(func() error {
 			return testParallelWalk(egCtx, o)
 		})

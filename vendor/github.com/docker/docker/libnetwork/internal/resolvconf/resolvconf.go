@@ -1,5 +1,5 @@
 // FIXME(thaJeztah): remove once we are a module; the go:build directive prevents go from downgrading language version to go1.16:
-//go:build go1.22
+//go:build go1.23
 
 // Package resolvconf is used to generate a container's /etc/resolv.conf file.
 //
@@ -31,8 +31,7 @@ import (
 	"text/template"
 
 	"github.com/containerd/log"
-	"github.com/docker/docker/errdefs"
-	"github.com/docker/docker/pkg/ioutils"
+	"github.com/moby/sys/atomicwriter"
 	"github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
@@ -86,10 +85,10 @@ type metadata struct {
 	SearchOverride  bool
 	OptionsOverride bool
 	NDotsFrom       string
-	UsedDefaultNS   bool
 	Transform       string
 	InvalidNSs      []string
 	ExtNameServers  []ExtDNSEntry
+	Warnings        []string
 }
 
 // Load opens a file at path and parses it as a resolv.conf file.
@@ -120,7 +119,7 @@ func Parse(reader io.Reader, path string) (ResolvConf, error) {
 		rc.processLine(scanner.Text())
 	}
 	if err := scanner.Err(); err != nil {
-		return ResolvConf{}, errdefs.System(err)
+		return ResolvConf{}, errSystem{err}
 	}
 	if _, ok := rc.Option("ndots"); ok {
 		rc.md.NDotsFrom = "host"
@@ -230,7 +229,7 @@ func (rc *ResolvConf) TransformForLegacyNw(ipv6 bool) {
 	if len(rc.nameServers) == 0 {
 		log.G(context.TODO()).Info("No non-localhost DNS nameservers are left in resolv.conf. Using default external servers")
 		rc.nameServers = defaultNSAddrs(ipv6)
-		rc.md.UsedDefaultNS = true
+		rc.md.Warnings = append(rc.md.Warnings, "Used default nameservers.")
 	}
 }
 
@@ -239,46 +238,30 @@ func (rc *ResolvConf) TransformForLegacyNw(ipv6 bool) {
 //   - Add internalNS as a nameserver.
 //   - Remove other nameservers, stashing them as ExtNameServers for the
 //     internal resolver to use.
-//   - Mark ExtNameServers that must be used in the host namespace.
+//   - Mark ExtNameServers that must be accessed from the host namespace.
 //   - If no ExtNameServer addresses are found, use the defaults.
-//   - Return an error if an "ndots" option inherited from the host's config, or
-//     supplied in an override is not valid.
 //   - Ensure there's an 'options' value for each entry in reqdOptions. If the
 //     option includes a ':', and an option with a matching prefix exists, it
 //     is not modified.
 func (rc *ResolvConf) TransformForIntNS(
-	ipv6 bool,
 	internalNS netip.Addr,
 	reqdOptions []string,
 ) ([]ExtDNSEntry, error) {
-	// The transformed config must list the internal nameserver.
-	newNSs := []netip.Addr{internalNS}
-	// Filter out other nameservers, keeping them for use as upstream nameservers by the
-	// internal nameserver.
+	// Add each of the nameservers read from the host's /etc/hosts or supplied as an
+	// override to ExtNameServers, for the internal resolver to talk to. Addresses
+	// read from host config should be accessed from the host's network namespace
+	// (HostLoopback=true). Addresses supplied as overrides are accessed from the
+	// container's namespace.
 	rc.md.ExtNameServers = nil
 	for _, addr := range rc.nameServers {
-		// Extract this NS. Mark addresses that did not come from an override, but will
-		// definitely not work in the container's namespace as 'HostLoopback'. Upstream
-		// requests for these servers will be made in the host's network namespace. (So,
-		// '--dns 127.0.0.53' means use a nameserver listening on the container's
-		// loopback interface. But, if the host's resolv.conf contains 'nameserver
-		// 127.0.0.53', the host's resolver will be used.)
 		rc.md.ExtNameServers = append(rc.md.ExtNameServers, ExtDNSEntry{
 			Addr:         addr,
-			HostLoopback: !rc.md.NSOverride && (addr.IsLoopback() || (addr.Is6() && !ipv6) || addr.Zone() != ""),
+			HostLoopback: !rc.md.NSOverride,
 		})
 	}
-	rc.nameServers = newNSs
 
-	// If there are no external nameservers, and the only nameserver left is the
-	// internal resolver, use the defaults as ext nameservers.
-	if len(rc.md.ExtNameServers) == 0 && len(rc.nameServers) == 1 {
-		log.G(context.TODO()).Info("No non-localhost DNS nameservers are left in resolv.conf. Using default external servers")
-		for _, addr := range defaultNSAddrs(ipv6) {
-			rc.md.ExtNameServers = append(rc.md.ExtNameServers, ExtDNSEntry{Addr: addr})
-		}
-		rc.md.UsedDefaultNS = true
-	}
+	// The transformed config only lists the internal nameserver.
+	rc.nameServers = []netip.Addr{internalNS}
 
 	// For each option required by the nameserver, add it if not already present. If
 	// the option is already present, don't override it. Apart from ndots - if the
@@ -297,6 +280,9 @@ func (rc *ResolvConf) TransformForIntNS(
 	}
 
 	rc.md.Transform = "internal resolver"
+	if len(rc.md.ExtNameServers) == 0 {
+		rc.md.Warnings = append(rc.md.Warnings, "NO EXTERNAL NAMESERVERS DEFINED")
+	}
 	return append([]ExtDNSEntry(nil), rc.md.ExtNameServers...), nil
 }
 
@@ -342,8 +328,8 @@ options {{join . " "}}
 {{join . "\n"}}
 {{end}}{{if .Comments}}
 # Based on host file: '{{.Md.SourcePath}}'{{with .Md.Transform}} ({{.}}){{end}}
-{{if .Md.UsedDefaultNS -}}
-# Used default nameservers.
+{{range .Md.Warnings -}}
+# {{.}}
 {{end -}}
 {{with .Md.ExtNameServers -}}
 # ExtServers: {{.}}
@@ -362,10 +348,10 @@ options {{join . " "}}
 	var buf bytes.Buffer
 	templ, err := template.New("summary").Funcs(funcs).Parse(templateText)
 	if err != nil {
-		return nil, errdefs.System(err)
+		return nil, errSystem{err}
 	}
 	if err := templ.Execute(&buf, s); err != nil {
-		return nil, errdefs.System(err)
+		return nil, errSystem{err}
 	}
 	return buf.Bytes(), nil
 }
@@ -382,19 +368,18 @@ func (rc *ResolvConf) WriteFile(path, hashPath string, perm os.FileMode) error {
 	// Write the resolv.conf file - it's bind-mounted into the container, so can't
 	// move a temp file into place, just have to truncate and write it.
 	if err := os.WriteFile(path, content, perm); err != nil {
-		return errdefs.System(err)
+		return errSystem{err}
 	}
 
 	// Write the hash file.
 	if hashPath != "" {
-		hashFile, err := ioutils.NewAtomicFileWriter(hashPath, perm)
+		hashFile, err := atomicwriter.New(hashPath, perm)
 		if err != nil {
-			return errdefs.System(err)
+			return errSystem{err}
 		}
 		defer hashFile.Close()
 
-		digest := digest.FromBytes(content)
-		if _, err = hashFile.Write([]byte(digest)); err != nil {
+		if _, err = hashFile.Write([]byte(digest.FromBytes(content))); err != nil {
 			return err
 		}
 	}
@@ -497,4 +482,17 @@ func removeInvalidNDots(options []string) []string {
 	}
 	clear(options[n:]) // Zero out the obsolete elements, for GC.
 	return options[:n]
+}
+
+// errSystem implements [github.com/docker/docker/errdefs.ErrSystem].
+//
+// We don't use the errdefs helpers here, because the resolvconf package
+// is imported in BuildKit, and this is the only location that used the
+// errdefs package outside of the client.
+type errSystem struct{ error }
+
+func (errSystem) System() {}
+
+func (e errSystem) Unwrap() error {
+	return e.error
 }

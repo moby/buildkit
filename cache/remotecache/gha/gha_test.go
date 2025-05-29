@@ -82,10 +82,10 @@ func testBasicGhaCacheImportExportExtraTimeout(t *testing.T, sb integration.Sand
 
 	scope := "buildkit-" + t.Name()
 	if ref := os.Getenv("GITHUB_REF"); ref != "" {
-		if strings.HasPrefix(ref, "refs/heads/") {
-			scope += "-" + strings.TrimPrefix(ref, "refs/heads/")
-		} else if strings.HasPrefix(ref, "refs/tags/") {
-			scope += "-" + strings.TrimPrefix(ref, "refs/tags/")
+		if after, ok := strings.CutPrefix(ref, "refs/heads/"); ok {
+			scope += "-" + after
+		} else if after, ok := strings.CutPrefix(ref, "refs/tags/"); ok {
+			scope += "-" + after
 		} else if strings.HasPrefix(ref, "refs/pull/") {
 			scope += "-pr" + strings.TrimPrefix(strings.TrimSuffix(strings.TrimSuffix(ref, "/head"), "/merge"), "refs/pull/")
 		}
@@ -127,6 +127,10 @@ func testBasicGhaCacheImportExportExtraTimeout(t *testing.T, sb integration.Sand
 	}
 	maps.Copy(cacheImportAttrs, cacheAttrs)
 
+	// Github Cache Service v2 has a problem of not being immediately consistent
+	// so we need to wait for the changes to propagate.
+	time.Sleep(3 * time.Second)
+
 	_, err = c.Solve(sb.Context(), def, client.SolveOpt{
 		Exports: []client.ExportEntry{
 			{
@@ -151,9 +155,9 @@ func testBasicGhaCacheImportExportExtraTimeout(t *testing.T, sb integration.Sand
 }
 
 func ensurePruneAll(t *testing.T, c *client.Client, sb integration.Sandbox) {
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		require.NoError(t, c.Prune(sb.Context(), nil, client.PruneAll))
-		for j := 0; j < 20; j++ {
+		for range 20 {
 			du, err := c.DiskUsage(sb.Context())
 			require.NoError(t, err)
 			if len(du) == 0 {

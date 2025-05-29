@@ -1,0 +1,47 @@
+# Depends on feature gate UserNamespacesSupport
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: buildkit
+spec:
+  template:
+    spec:
+      hostUsers: false
+      restartPolicy: Never
+      initContainers:
+        - name: prepare
+          image: busybox
+          command:
+            - sh
+            - -c
+            - "echo -e 'FROM alpine\nRUN apk add gcc\n' > /workspace/Dockerfile"
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+      containers:
+        - name: buildkit
+          image: moby/buildkit:master
+          command:
+            - buildctl-daemonless.sh
+          args:
+            - build
+            - --frontend
+            - dockerfile.v0
+            - --local
+            - context=/workspace
+            - --local
+            - dockerfile=/workspace
+          # To push the image to a registry, add
+          # `--output type=image,name=docker.io/username/image,push=true`
+          securityContext:
+            # Not really privileged
+            privileged: true
+          volumeMounts:
+            - name: workspace
+              readOnly: true
+              mountPath: /workspace
+      # To push the image, you also need to create `~/.docker/config.json` secret
+      # and set $DOCKER_CONFIG to `/path/to/.docker` directory.
+      volumes:
+        - name: workspace
+          emptyDir: {}

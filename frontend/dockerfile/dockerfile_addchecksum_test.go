@@ -42,10 +42,10 @@ func testAddChecksum(t *testing.T, sb integration.Sandbox) {
 	defer c.Close()
 
 	t.Run("Valid", func(t *testing.T) {
-		dockerfile := []byte(fmt.Sprintf(`
+		dockerfile := fmt.Appendf(nil, `
 FROM scratch
 ADD --checksum=%s %s /tmp/foo
-`, digest.FromBytes(resp.Content).String(), server.URL+"/foo"))
+`, digest.FromBytes(resp.Content).String(), server.URL+"/foo")
 		dir := integration.Tmpdir(
 			t,
 			fstest.CreateFile("Dockerfile", dockerfile, 0600),
@@ -59,12 +59,12 @@ ADD --checksum=%s %s /tmp/foo
 		require.NoError(t, err)
 	})
 	t.Run("DigestFromEnv", func(t *testing.T) {
-		dockerfile := []byte(fmt.Sprintf(`
+		dockerfile := fmt.Appendf(nil, `
 FROM scratch
 ENV DIGEST=%s
 ENV LINK=%s
 ADD --checksum=${DIGEST} ${LINK} /tmp/foo
-`, digest.FromBytes(resp.Content).String(), server.URL+"/foo"))
+`, digest.FromBytes(resp.Content).String(), server.URL+"/foo")
 		dir := integration.Tmpdir(
 			t,
 			fstest.CreateFile("Dockerfile", dockerfile, 0600),
@@ -78,10 +78,10 @@ ADD --checksum=${DIGEST} ${LINK} /tmp/foo
 		require.NoError(t, err)
 	})
 	t.Run("DigestMismatch", func(t *testing.T) {
-		dockerfile := []byte(fmt.Sprintf(`
+		dockerfile := fmt.Appendf(nil, `
 FROM scratch
 ADD --checksum=%s %s /tmp/foo
-`, digest.FromBytes(nil).String(), server.URL+"/foo"))
+`, digest.FromBytes(nil).String(), server.URL+"/foo")
 		dir := integration.Tmpdir(
 			t,
 			fstest.CreateFile("Dockerfile", dockerfile, 0600),
@@ -95,10 +95,10 @@ ADD --checksum=%s %s /tmp/foo
 		require.Error(t, err, "digest mismatch")
 	})
 	t.Run("DigestWithKnownButUnsupportedAlgoName", func(t *testing.T) {
-		dockerfile := []byte(fmt.Sprintf(`
+		dockerfile := fmt.Appendf(nil, `
 FROM scratch
 ADD --checksum=md5:7e55db001d319a94b0b713529a756623 %s /tmp/foo
-`, server.URL+"/foo"))
+`, server.URL+"/foo")
 		dir := integration.Tmpdir(
 			t,
 			fstest.CreateFile("Dockerfile", dockerfile, 0600),
@@ -112,10 +112,10 @@ ADD --checksum=md5:7e55db001d319a94b0b713529a756623 %s /tmp/foo
 		require.Error(t, err, "unsupported digest algorithm")
 	})
 	t.Run("DigestWithUnknownAlgoName", func(t *testing.T) {
-		dockerfile := []byte(fmt.Sprintf(`
+		dockerfile := fmt.Appendf(nil, `
 FROM scratch
 ADD --checksum=unknown:%s %s /tmp/foo
-`, digest.FromBytes(resp.Content).Encoded(), server.URL+"/foo"))
+`, digest.FromBytes(resp.Content).Encoded(), server.URL+"/foo")
 		dir := integration.Tmpdir(
 			t,
 			fstest.CreateFile("Dockerfile", dockerfile, 0600),
@@ -129,10 +129,10 @@ ADD --checksum=unknown:%s %s /tmp/foo
 		require.Error(t, err, "unsupported digest algorithm")
 	})
 	t.Run("DigestWithoutAlgoName", func(t *testing.T) {
-		dockerfile := []byte(fmt.Sprintf(`
+		dockerfile := fmt.Appendf(nil, `
 FROM scratch
 ADD --checksum=%s %s /tmp/foo
-`, digest.FromBytes(resp.Content).Encoded(), server.URL+"/foo"))
+`, digest.FromBytes(resp.Content).Encoded(), server.URL+"/foo")
 		dir := integration.Tmpdir(
 			t,
 			fstest.CreateFile("Dockerfile", dockerfile, 0600),
@@ -147,10 +147,10 @@ ADD --checksum=%s %s /tmp/foo
 	})
 	t.Run("NonHTTPSource", func(t *testing.T) {
 		foo := []byte("local file")
-		dockerfile := []byte(fmt.Sprintf(`
+		dockerfile := fmt.Appendf(nil, `
 FROM scratch
 ADD --checksum=%s foo /tmp/foo
-`, digest.FromBytes(foo).String()))
+`, digest.FromBytes(foo).String())
 		dir := integration.Tmpdir(
 			t,
 			fstest.CreateFile("foo", foo, 0600),
@@ -162,6 +162,6 @@ ADD --checksum=%s foo /tmp/foo
 				dockerui.DefaultLocalNameContext:    dir,
 			},
 		}, nil)
-		require.Error(t, err, "checksum can't be specified for non-HTTP(S) sources")
+		require.Error(t, err, "checksum requires HTTP(S) or Git sources")
 	})
 }

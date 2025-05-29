@@ -204,7 +204,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	}
 
 	if len(names) != 0 {
-		resp["image.name"] = strings.Join(names, ",")
+		resp[exptypes.ExporterImageNameKey] = strings.Join(names, ",")
 	}
 
 	expOpts := []archiveexporter.ExportOpt{archiveexporter.WithManifest(*desc, names...)}
@@ -217,7 +217,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	}
 
 	timeoutCtx, cancel := context.WithCancelCause(ctx)
-	timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, errors.WithStack(context.DeadlineExceeded))
+	timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
 	defer func() { cancel(errors.WithStack(context.Canceled)) }()
 
 	caller, err := e.opt.SessionManager.Get(timeoutCtx, sessionID, false)
@@ -235,8 +235,10 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	eg, egCtx := errgroup.WithContext(ctx)
 	mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
 	for _, ref := range refs {
-		ref := ref
 		eg.Go(func() error {
+			if ref == nil {
+				return nil
+			}
 			remotes, err := ref.GetRemotes(egCtx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
 			if err != nil {
 				return err
@@ -298,7 +300,7 @@ func normalizedNames(name string) ([]string, error) {
 		return nil, nil
 	}
 	names := strings.Split(name, ",")
-	var tagNames = make([]string, len(names))
+	tagNames := make([]string, len(names))
 	for i, name := range names {
 		parsed, err := reference.ParseNormalizedNamed(name)
 		if err != nil {

@@ -86,7 +86,7 @@ func (sb *sandbox) Cmd(args ...string) *exec.Cmd {
 	return cmd
 }
 
-func (sb *sandbox) Value(k string) interface{} {
+func (sb *sandbox) Value(k string) any {
 	return sb.mv.values[k].value
 }
 
@@ -197,7 +197,7 @@ func RootlessSupported(uid int) bool {
 	return true
 }
 
-func PrintLogs(logs map[string]*bytes.Buffer, f func(args ...interface{})) {
+func PrintLogs(logs map[string]*bytes.Buffer, f func(args ...any)) {
 	for name, l := range logs {
 		f(name)
 		s := bufio.NewScanner(l)

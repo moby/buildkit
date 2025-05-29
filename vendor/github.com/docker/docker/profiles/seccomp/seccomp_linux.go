@@ -1,6 +1,6 @@
 //go:generate go run -tags 'seccomp' generate.go
 
-package seccomp // import "github.com/docker/docker/profiles/seccomp"
+package seccomp
 
 import (
 	"encoding/json"
@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"runtime"
 
-	specs "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
 // GetDefaultProfile returns the default seccomp profile.

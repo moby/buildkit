@@ -42,6 +42,10 @@ variable "GOLANGCI_LINT_MULTIPLATFORM" {
   default = null
 }
 
+variable "ARCHUTIL_MULTIPLATFORM" {
+  default = null
+}
+
 # Defines the output folder
 variable "DESTDIR" {
   default = ""
@@ -170,6 +174,7 @@ target "lint" {
   args = {
     TARGETNAME = buildtags.name
     BUILDTAGS = buildtags.tags
+    GOLANGCI_FROM_SOURCE = "true"
   }
   platforms = ( buildtags.target == "golangci-lint" || buildtags.name == "gopls" ) && GOLANGCI_LINT_MULTIPLATFORM != null ? [
     "freebsd/amd64",
@@ -213,6 +218,10 @@ target "validate-archutil" {
   dockerfile = "./hack/dockerfiles/archutil.Dockerfile"
   target = "validate"
   output = ["type=cacheonly"]
+  platforms = ARCHUTIL_MULTIPLATFORM != null ? [
+    "linux/amd64",
+    "linux/arm64"
+  ] : []
 }
 
 target "validate-shfmt" {

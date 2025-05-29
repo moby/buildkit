@@ -104,7 +104,7 @@ func reduceCalc(ctx context.Context, total int) (int, error) {
 		return 0, err
 	}
 	// parallel steps
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		func(i int) {
 			eg.Go(func() error {
 				_, err := calc(ctx, total, fmt.Sprintf("calc-%d", i))
@@ -126,7 +126,7 @@ func saveProgress(ctx context.Context, pr Reader, t *trace) error {
 	for {
 		p, err := pr.Read(ctx)
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				return nil
 			}
 			return err

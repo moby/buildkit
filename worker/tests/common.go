@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,14 +15,38 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/source/containerimage"
+	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
+var mirrorOnce sync.Once
+var mirror *integration.Mirror
+var mirrorMu sync.Mutex
+
+func RunMirror() func() error {
+	mirrorOnce.Do(func() {
+		m, err := integration.RunMirror()
+		if err != nil {
+			panic(err)
+		}
+		mirror = m
+	})
+	return func() error { return mirror.Close() }
+}
+
+func mirrorBusybox(t *testing.T) string {
+	mirrorMu.Lock()
+	defer mirrorMu.Unlock()
+	require.NotNil(t, mirror, "mirror must be initialized")
+	require.NoError(t, mirror.AddImages(t, integration.OfficialImages("busybox:latest")))
+	return mirror.Host + "/library/busybox:latest"
+}
+
 func NewBusyboxSourceSnapshot(ctx context.Context, t *testing.T, w *base.Worker, sm *session.Manager) cache.ImmutableRef {
-	img, err := containerimage.NewImageIdentifier("docker.io/library/busybox:latest")
+	img, err := containerimage.NewImageIdentifier(mirrorBusybox(t))
 	require.NoError(t, err)
 	src, err := w.SourceManager.Resolve(ctx, img, sm, nil)
 	require.NoError(t, err)

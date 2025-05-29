@@ -9,6 +9,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -46,6 +48,8 @@ import (
 	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/exporter"
+	"github.com/moby/buildkit/session/exporter/exporterprovider"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/session/secrets/secretsprovider"
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
@@ -70,6 +74,7 @@ import (
 	"github.com/spdx/tools-golang/spdx"
 	"github.com/stretchr/testify/require"
 	"github.com/tonistiigi/fsutil"
+	fsutiltypes "github.com/tonistiigi/fsutil/types"
 	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/mod/semver"
 	"golang.org/x/sync/errgroup"
@@ -114,6 +119,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testUser,
 	testOCIExporter,
 	testOCIExporterContentStore,
+	testSessionExporter,
 	testWhiteoutParentDir,
 	testFrontendImageNaming,
 	testDuplicateWhiteouts,
@@ -225,6 +231,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testFrontendLintSkipVerifyPlatforms,
 	testRunValidExitCodes,
 	testFileOpSymlink,
+	testMetadataOnlyLocal,
 }
 
 func TestIntegration(t *testing.T) {
@@ -253,7 +260,7 @@ func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sa
 		testSecurityModeErrors,
 	),
 		mirrors,
-		integration.WithMatrix("secmode", map[string]interface{}{
+		integration.WithMatrix("secmode", map[string]any{
 			"sandbox":  securitySandbox,
 			"insecure": securityInsecure,
 		}),
@@ -263,7 +270,7 @@ func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sa
 		testHostNetworking,
 	),
 		mirrors,
-		integration.WithMatrix("netmode", map[string]interface{}{
+		integration.WithMatrix("netmode", map[string]any{
 			"default": defaultNetwork,
 			"host":    hostNetwork,
 		}),
@@ -273,7 +280,7 @@ func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sa
 		t,
 		integration.TestFuncs(testBridgeNetworkingDNSNoRootless),
 		mirrors,
-		integration.WithMatrix("netmode", map[string]interface{}{
+		integration.WithMatrix("netmode", map[string]any{
 			"dns": bridgeDNSNetwork,
 		}),
 	)
@@ -294,7 +301,6 @@ func newContainerd(cdAddress string) (*ctd.Client, error) {
 
 // moby/buildkit#1336
 func testCacheExportCacheKeyLoop(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport, workers.FeatureCacheBackendLocal)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -305,15 +311,21 @@ func testCacheExportCacheKeyLoop(t *testing.T, sb integration.Sandbox) {
 	err = os.WriteFile(filepath.Join(tmpdir.Name, "foo"), []byte("foodata"), 0600)
 	require.NoError(t, err)
 
+	imgName := integration.UnixOrWindows("alpine:latest", "nanoserver:latest")
+	scratch := integration.UnixOrWindows(
+		llb.Scratch(),
+		llb.Image(imgName),
+	)
+	cmdStr := integration.UnixOrWindows("true", "cmd /C exit 0")
 	for _, mode := range []bool{false, true} {
 		func(mode bool) {
 			t.Run(fmt.Sprintf("mode=%v", mode), func(t *testing.T) {
-				buildbase := llb.Image("alpine:latest").File(llb.Copy(llb.Local("mylocal"), "foo", "foo"))
+				buildbase := llb.Image(imgName).File(llb.Copy(llb.Local("mylocal"), "foo", "foo"))
 				if mode { // same cache keys with a separating node go to different code-path
-					buildbase = buildbase.Run(llb.Shlex("true")).Root()
+					buildbase = buildbase.Run(llb.Shlex(cmdStr)).Root()
 				}
-				intermed := llb.Image("alpine:latest").File(llb.Copy(buildbase, "foo", "foo"))
-				final := llb.Scratch().File(llb.Copy(intermed, "foo", "foooooo"))
+				intermed := llb.Image(imgName).File(llb.Copy(buildbase, "foo", "foo"))
+				final := scratch.File(llb.Copy(intermed, "foo", "foooooo"))
 
 				def, err := final.Marshal(sb.Context())
 				require.NoError(t, err)
@@ -545,7 +557,7 @@ func testExportedImageLabels(t *testing.T, sb integration.Sandbox) {
 
 	for {
 		resp, err := cl.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		require.NoError(t, err)
@@ -1229,8 +1241,8 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 			// Nothing to check
 		},
 		ExporterDocker: func(out, imageName string, exporterResponse map[string]string) {
-			require.Contains(t, exporterResponse, "image.name")
-			require.Equal(t, exporterResponse["image.name"], "docker.io/library/"+imageName)
+			require.Contains(t, exporterResponse, exptypes.ExporterImageNameKey)
+			require.Equal(t, exporterResponse[exptypes.ExporterImageNameKey], "docker.io/library/"+imageName)
 
 			dt, err := os.ReadFile(out)
 			require.NoError(t, err)
@@ -1257,8 +1269,8 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 			require.Equal(t, imageName, dockerMfst[0].RepoTags[0])
 		},
 		ExporterImage: func(_, imageName string, exporterResponse map[string]string) {
-			require.Contains(t, exporterResponse, "image.name")
-			require.Equal(t, exporterResponse["image.name"], imageName)
+			require.Contains(t, exporterResponse, exptypes.ExporterImageNameKey)
+			require.Equal(t, exporterResponse[exptypes.ExporterImageNameKey], imageName)
 
 			// check if we can pull (requires containerd)
 			cdAddress := sb.ContainerdAddress()
@@ -1294,15 +1306,12 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 
 	// A caller provided name takes precedence over one returned by the frontend. Iterate over both options.
 	for _, winner := range []string{"frontend", "caller"} {
-		winner := winner // capture loop variable.
-
 		// The double layer of `t.Run` here is required so
 		// that the inner-most tests (with the actual
 		// functionality) have definitely completed before the
 		// sandbox and registry cleanups (defered above) are run.
 		t.Run(winner, func(t *testing.T) {
 			for _, exp := range []string{ExporterOCI, ExporterDocker, ExporterImage} {
-				exp := exp // capture loop variable.
 				t.Run(exp, func(t *testing.T) {
 					destDir := t.TempDir()
 
@@ -1782,10 +1791,11 @@ func testFileOpCopyChmodText(t *testing.T, sb integration.Sandbox) {
 		{"file", "f4", "u+rw,g+r,o-x,o+w"},
 		{"dir", "d1", "a+X"},
 		{"dir", "d2", "g+rw,o+rw"},
+		{"dir", "d3", "u=rwX,go=rX"},
 	}
 
 	st := llb.Image("alpine").
-		Run(llb.Shlex(`sh -c "mkdir /input && touch /input/file && mkdir /input/dir && chmod 0400 /input/dir && mkdir /expected"`))
+		Run(llb.Shlex(`sh -c "mkdir /input && touch /input/file && mkdir /input/dir && chmod 0500 /input/dir && mkdir /expected"`))
 
 	for _, tc := range tcases {
 		st = st.Run(llb.Shlex(`sh -c "cp -a /input/` + tc.src + ` /expected/` + tc.dest + ` && chmod ` + tc.mode + ` /expected/` + tc.dest + `"`))
@@ -2201,7 +2211,6 @@ func testLocalSourceWithHardlinksFilter(t *testing.T, sb integration.Sandbox) {
 
 func testOCILayoutSource(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureOCILayout)
-	requiresLinux(t)
 	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -2210,15 +2219,23 @@ func testOCILayoutSource(t *testing.T, sb integration.Sandbox) {
 	dir := t.TempDir()
 
 	// make an image that is exported there
-	busybox := llb.Image("busybox:latest")
-	st := llb.Scratch()
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	busybox := llb.Image(imgName)
+	st := integration.UnixOrWindows(
+		llb.Scratch(),
+		llb.Image(imgName),
+	)
 
 	run := func(cmd string) {
 		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
 	}
 
-	run(`sh -c "echo -n first > foo"`)
-	run(`sh -c "echo -n second > bar"`)
+	cmdPrefix := integration.UnixOrWindows(
+		`sh -c "echo -n`,
+		`cmd /C "echo`,
+	)
+	run(fmt.Sprintf(`%s first > foo"`, cmdPrefix))
+	run(fmt.Sprintf(`%s second > bar"`, cmdPrefix))
 
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -2289,11 +2306,114 @@ func testOCILayoutSource(t *testing.T, sb integration.Sandbox) {
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
-	require.Equal(t, []byte("first"), dt)
+	newLine := integration.UnixOrWindows("", " \r\n")
+	require.Equal(t, []byte("first"+newLine), dt)
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "bar"))
 	require.NoError(t, err)
-	require.Equal(t, []byte("second"), dt)
+	require.Equal(t, []byte("second"+newLine), dt)
+}
+
+func testSessionExporter(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureOCILayout)
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	// make an image that is exported there
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	busybox := llb.Image(imgName)
+	st := integration.UnixOrWindows(
+		llb.Scratch(),
+		llb.Image(imgName),
+	)
+
+	run := func(cmd string) {
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+
+	cmdPrefix := `sh -c "echo -n`
+	run(fmt.Sprintf(`%s first > foo"`, cmdPrefix))
+	run(fmt.Sprintf(`%s second > bar"`, cmdPrefix))
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	var attachable []session.Attachable
+	target := filesync.NewFSSyncTarget()
+
+	attachable = append(attachable, target)
+
+	buildID := identity.NewID()
+
+	outW := bytes.NewBuffer(nil)
+	exporterCalled := false
+	exporter := exporterprovider.New(func(ctx context.Context, md map[string][]byte, refs []string) ([]*exporter.ExporterRequest, error) {
+		require.Len(t, refs, 1)
+		g := c.GatewayClientForBuild(buildID)
+		resp, err := g.ReadDir(sb.Context(), &gatewaypb.ReadDirRequest{
+			Ref:     refs[0],
+			DirPath: "/",
+		})
+		if err != nil {
+			return nil, err
+		}
+		t.Logf("readdir: %v", resp)
+
+		require.Equal(t, 2, len(resp.Entries))
+		require.Equal(t, "bar", resp.Entries[0].Path)
+		require.Equal(t, "foo", resp.Entries[1].Path)
+
+		exporterCalled = true
+		target.Add(filesync.WithFSSync(0, fixedWriteCloser(nopWriteCloser{outW})))
+		return []*exporter.ExporterRequest{
+			{
+				Type: ExporterOCI,
+				Attrs: map[string]string{
+					"compression": "zstd",
+				},
+			},
+		}, nil
+	})
+	require.NoError(t, err)
+	attachable = append(attachable, exporter)
+
+	_, err = c.Build(sb.Context(), SolveOpt{
+		EnableSessionExporter: true,
+		Session:               attachable,
+		Ref:                   buildID,
+	}, "", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		return c.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+	}, nil)
+	require.NoError(t, err)
+
+	require.True(t, exporterCalled)
+
+	// extract the tar stream to the directory as OCI layout
+	m, err := testutil.ReadTarToMap(outW.Bytes(), false)
+	require.NoError(t, err)
+
+	var index ocispecs.Index
+	err = json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &index)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(index.Manifests))
+	digest := index.Manifests[0].Digest
+
+	var mfst ocispecs.Manifest
+	err = json.Unmarshal(m[path.Join("blobs/sha256", digest.Hex())].Data, &mfst)
+	require.NoError(t, err)
+
+	if runtime.GOOS == "windows" {
+		mfst.Layers = mfst.Layers[1:] // skip base layer
+	}
+
+	require.Equal(t, 2, len(mfst.Layers))
+	for _, layer := range mfst.Layers {
+		require.Contains(t, layer.MediaType, "application/vnd.oci.image.layer.v1.tar+zstd")
+	}
 }
 
 func testOCILayoutPlatformSource(t *testing.T, sb integration.Sandbox) {
@@ -2612,15 +2732,31 @@ func testCallDiskUsage(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildMultiMount(t *testing.T, sb integration.Sandbox) {
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	alpine := llb.Image("docker.io/library/alpine:latest")
-	ls := alpine.Run(llb.Shlex("/bin/ls -l"))
-	busybox := llb.Image("docker.io/library/busybox:latest")
-	cp := ls.Run(llb.Shlex("/bin/cp -a /busybox/etc/passwd baz"))
+	imgAlpine := integration.UnixOrWindows(
+		"docker.io/library/alpine:latest",
+		"nanoserver",
+	)
+	imgBusybox := integration.UnixOrWindows(
+		"docker.io/library/busybox:latest",
+		"nanoserver",
+	)
+	cmdStr1 := integration.UnixOrWindows(
+		"/bin/ls -l",
+		"cmd /C dir",
+	)
+	cmdStr2 := integration.UnixOrWindows(
+		"/bin/cp -a /busybox/etc/passwd baz",
+		`cmd /C copy C:\\busybox\\License.txt baz`,
+	)
+
+	alpine := llb.Image(imgAlpine)
+	ls := alpine.Run(llb.Shlex(cmdStr1))
+	busybox := llb.Image(imgBusybox)
+	cp := ls.Run(llb.Shlex(cmdStr2))
 	cp.AddMount("/busybox", busybox)
 
 	def, err := cp.Marshal(sb.Context())
@@ -3193,7 +3329,7 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 	dt, err = os.ReadFile(filepath.Join(destDir, "root_supplementary"))
 	require.NoError(t, err)
 	require.True(t, strings.HasPrefix(string(dt), "root "))
-	require.True(t, strings.Contains(string(dt), "wheel"))
+	require.Contains(t, string(dt), "wheel")
 
 	dt2, err := os.ReadFile(filepath.Join(destDir, "default_supplementary"))
 	require.NoError(t, err)
@@ -3291,9 +3427,9 @@ func testMultipleExporters(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	if workers.IsTestDockerd() {
-		require.Equal(t, resp.ExporterResponse["image.name"], target1+","+target2)
+		require.Equal(t, target1+","+target2, resp.ExporterResponse[exptypes.ExporterImageNameKey])
 	} else {
-		require.Equal(t, resp.ExporterResponse["image.name"], target2)
+		require.Equal(t, target2, resp.ExporterResponse[exptypes.ExporterImageNameKey])
 	}
 	require.FileExists(t, filepath.Join(destDir, "out.tar"))
 	require.FileExists(t, filepath.Join(destDir, "out2.tar"))
@@ -4210,19 +4346,23 @@ func testTarExporterWithSocketCopy(t *testing.T, sb integration.Sandbox) {
 
 // moby/buildkit#1418
 func testTarExporterSymlink(t *testing.T, sb integration.Sandbox) {
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	busybox := llb.Image("busybox:latest")
-	st := llb.Scratch()
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	busybox := llb.Image(imgName)
+	st := integration.UnixOrWindows(llb.Scratch(), llb.Image(imgName))
 
 	run := func(cmd string) {
 		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
 	}
 
-	run(`sh -c "echo -n first > foo;ln -s foo bar"`)
+	cmdStr := integration.UnixOrWindows(
+		`sh -c "echo -n first > foo;ln -s foo bar"`,
+		`cmd /C "echo first> foo && mklink bar foo"`,
+	)
+	run(cmdStr)
 
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -4244,7 +4384,8 @@ func testTarExporterSymlink(t *testing.T, sb integration.Sandbox) {
 	item, ok := m["foo"]
 	require.True(t, ok)
 	require.Equal(t, tar.TypeReg, int32(item.Header.Typeflag))
-	require.Equal(t, []byte("first"), item.Data)
+	newLine := integration.UnixOrWindows("", " \r\n")
+	require.Equal(t, []byte("first"+newLine), item.Data)
 
 	item, ok = m["bar"]
 	require.True(t, ok)
@@ -4652,7 +4793,6 @@ func testPullZstdImage(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	for _, ociMediaTypes := range []bool{true, false} {
-		ociMediaTypes := ociMediaTypes
 		t.Run(t.Name()+fmt.Sprintf("/ociMediaTypes=%t", ociMediaTypes), func(t *testing.T) {
 			c, err := New(sb.Context(), sb.Address())
 			require.NoError(t, err)
@@ -5105,7 +5245,7 @@ func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbo
 	require.NoError(t, err)
 
 	require.Equal(t, dgst, dgst2)
-	require.EqualValues(t, unique, unique2)
+	require.Equal(t, unique, unique2)
 
 	// clear all local state out
 	err = imageService.Delete(ctx, img.Name, images.SynchronousDelete())
@@ -5425,7 +5565,7 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	require.Equal(t, dgst, dgst2)
-	require.EqualValues(t, unique, unique2)
+	require.Equal(t, unique, unique2)
 
 	// clear all local state out
 	err = imageService.Delete(ctx, img.Name, images.SynchronousDelete())
@@ -5626,8 +5766,9 @@ func testZstdLocalCacheExport(t *testing.T, sb integration.Sandbox) {
 			{
 				Type: "local",
 				Attrs: map[string]string{
-					"dest":        destDir,
-					"compression": "zstd",
+					"dest":           destDir,
+					"image-manifest": "false",
+					"compression":    "zstd",
 				},
 			},
 		},
@@ -5656,16 +5797,19 @@ func testZstdLocalCacheExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testCacheExportIgnoreError(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	busybox := llb.Image("busybox:latest")
-	cmd := `sh -e -c "echo -n ignore-error > data"`
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	busybox := llb.Image(imgName)
+	cmd := integration.UnixOrWindows(
+		`sh -e -c "echo -n ignore-error > data"`,
+		"cmd /C echo ignore-error> data",
+	)
 
-	st := llb.Scratch()
+	st := integration.UnixOrWindows(llb.Scratch(), llb.Image(imgName))
 	st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
 
 	def, err := st.Marshal(sb.Context())
@@ -5740,7 +5884,6 @@ func testCacheExportIgnoreError(t *testing.T, sb integration.Sandbox) {
 	for _, ignoreError := range ignoreErrorValues {
 		ignoreErrStr := strconv.FormatBool(ignoreError)
 		for n, test := range tests {
-			n := n
 			require.Equal(t, 1, len(test.Exports))
 			require.Equal(t, 1, len(test.CacheExports))
 			require.NotEmpty(t, test.CacheExports[0].Attrs)
@@ -5797,6 +5940,7 @@ func testUncompressedLocalCacheImportExport(t *testing.T, sb integration.Sandbox
 }
 
 func testUncompressedRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureCacheExport,
 		workers.FeatureCacheImport,
@@ -5826,6 +5970,8 @@ func testUncompressedRegistryCacheImportExport(t *testing.T, sb integration.Sand
 }
 
 func testZstdLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureCacheExport,
 		workers.FeatureCacheImport,
@@ -5872,7 +6018,6 @@ func testImageManifestRegistryCacheImportExport(t *testing.T, sb integration.San
 		Type: "registry",
 		Attrs: map[string]string{
 			"ref":            target,
-			"image-manifest": "true",
 			"oci-mediatypes": "true",
 			"mode":           "max",
 		},
@@ -5881,6 +6026,8 @@ func testImageManifestRegistryCacheImportExport(t *testing.T, sb integration.San
 }
 
 func testZstdRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureCacheExport,
 		workers.FeatureCacheImport,
@@ -5904,6 +6051,7 @@ func testZstdRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 			"ref":               target,
 			"compression":       "zstd",
 			"force-compression": "true",
+			"image-manifest":    "false",
 			"oci-mediatypes":    "true", // containerd applier supports only zstd with oci-mediatype.
 		},
 	}
@@ -5911,20 +6059,26 @@ func testZstdRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptionsEntryImport, cacheOptionsEntryExport []CacheOptionsEntry) {
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	busybox := llb.Image("busybox:latest")
-	st := llb.Scratch()
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	busybox := llb.Image(imgName)
+	st := integration.UnixOrWindows(llb.Scratch(), llb.Image(imgName))
 
 	run := func(cmd string) {
 		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
 	}
 
-	run(`sh -c "echo -n foobar > const"`)
-	run(`sh -c "cat /dev/urandom | head -c 100 | sha256sum > unique"`)
+	run(integration.UnixOrWindows(
+		`sh -c "echo -n foobar > const"`,
+		`cmd /C echo foobar > const`,
+	))
+	run(integration.UnixOrWindows(
+		`sh -c "cat /dev/urandom | head -c 100 | sha256sum > unique"`,
+		`cmd /C echo %RANDOM% > unique`,
+	))
 
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -5944,7 +6098,8 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "const"))
 	require.NoError(t, err)
-	require.Equal(t, "foobar", string(dt))
+	newLine := integration.UnixOrWindows("", " \r\n")
+	require.Equal(t, "foobar"+newLine, string(dt))
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
@@ -5966,7 +6121,7 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 
 	dt2, err := os.ReadFile(filepath.Join(destDir, "const"))
 	require.NoError(t, err)
-	require.Equal(t, "foobar", string(dt2))
+	require.Equal(t, "foobar"+newLine, string(dt2))
 
 	dt2, err = os.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
@@ -5974,6 +6129,7 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 }
 
 func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureCacheExport,
 		workers.FeatureCacheImport,
@@ -5995,6 +6151,7 @@ func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testMultipleRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureCacheExport,
 		workers.FeatureCacheImport,
@@ -6130,7 +6287,6 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 		workers.FeatureCacheExport,
 		workers.FeatureCacheBackendInline,
 	)
-	requiresLinux(t)
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
@@ -6141,15 +6297,22 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	busybox := llb.Image("busybox:latest")
-	st := llb.Scratch()
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	busybox := llb.Image(imgName)
+	st := integration.UnixOrWindows(llb.Scratch(), llb.Image(imgName))
 
 	run := func(cmd string) {
 		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
 	}
 
-	run(`sh -c "echo -n foobar > const"`)
-	run(`sh -c "cat /dev/urandom | head -c 100 | sha256sum > unique"`)
+	run(integration.UnixOrWindows(
+		`sh -c "echo -n foobar > const"`,
+		`cmd /C echo foobar > const`,
+	))
+	run(integration.UnixOrWindows(
+		`sh -c "cat /dev/urandom | head -c 100 | sha256sum > unique"`,
+		`cmd /C echo %RANDOM% > unique`,
+	))
 
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -6255,7 +6418,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	// dgst2uncompress != dgst, because the compression type is different
 	unique2uncompress, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst2uncompress, "/unique")
 	require.NoError(t, err)
-	require.EqualValues(t, unique, unique2uncompress)
+	require.Equal(t, unique, unique2uncompress)
 
 	ensurePruneAll(t, c, sb)
 
@@ -6286,7 +6449,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	// dgst3 != dgst, because inline cache is not exported for dgst3
 	unique3, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst3, "/unique")
 	require.NoError(t, err)
-	require.EqualValues(t, unique, unique3)
+	require.Equal(t, unique, unique3)
 }
 
 func testRegistryEmptyCacheExport(t *testing.T, sb integration.Sandbox) {
@@ -6296,9 +6459,7 @@ func testRegistryEmptyCacheExport(t *testing.T, sb integration.Sandbox) {
 	)
 
 	for _, ociMediaTypes := range []bool{true, false} {
-		ociMediaTypes := ociMediaTypes
 		for _, imageManifest := range []bool{true, false} {
-			imageManifest := imageManifest
 			if imageManifest && !ociMediaTypes {
 				// invalid configuration for remote cache
 				continue
@@ -6722,20 +6883,33 @@ func readFileInImage(ctx context.Context, t *testing.T, c *Client, ref, path str
 }
 
 func testCachedMounts(t *testing.T, sb integration.Sandbox) {
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	busybox := llb.Image("busybox:latest")
-	// setup base for one of the cache sources
-	st := busybox.Run(llb.Shlex(`sh -c "echo -n base > baz"`), llb.Dir("/wd"))
-	base := st.AddMount("/wd", llb.Scratch())
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	scratch := func() llb.State {
+		return integration.UnixOrWindows(llb.Scratch(), llb.Image(imgName))
+	}
 
-	st = busybox.Run(llb.Shlex(`sh -c "echo -n first > foo"`), llb.Dir("/wd"))
-	st.AddMount("/wd", llb.Scratch(), llb.AsPersistentCacheDir("mycache1", llb.CacheMountShared))
-	st = st.Run(llb.Shlex(`sh -c "cat foo && echo -n second > /wd2/bar"`), llb.Dir("/wd"))
-	st.AddMount("/wd", llb.Scratch(), llb.AsPersistentCacheDir("mycache1", llb.CacheMountShared))
+	busybox := llb.Image(imgName)
+	// setup base for one of the cache sources
+	cmdPrefix := integration.UnixOrWindows(
+		`sh -c "echo -n`,
+		`cmd /C "echo`,
+	)
+	st := busybox.Run(llb.Shlexf(`%s base > baz"`, cmdPrefix), llb.Dir("/wd"))
+	base := st.AddMount("/wd", scratch())
+
+	st = busybox.Run(llb.Shlexf(`%s first > foo"`, cmdPrefix), llb.Dir("/wd"))
+
+	st.AddMount("/wd", scratch(), llb.AsPersistentCacheDir("mycache1", llb.CacheMountShared))
+	cmdStr := integration.UnixOrWindows(
+		`sh -c "cat foo && echo -n second > /wd2/bar"`,
+		`cmd /C type foo && echo second > C:\\wd2\\bar`,
+	)
+	st = st.Run(llb.Shlex(cmdStr), llb.Dir("/wd"))
+	st.AddMount("/wd", scratch(), llb.AsPersistentCacheDir("mycache1", llb.CacheMountShared))
 	st.AddMount("/wd2", base, llb.AsPersistentCacheDir("mycache2", llb.CacheMountShared))
 
 	def, err := st.Marshal(sb.Context())
@@ -6749,9 +6923,13 @@ func testCachedMounts(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	// second build using cache directories
-	st = busybox.Run(llb.Shlex(`sh -c "cp /src0/foo . && cp /src1/bar . && cp /src1/baz ."`), llb.Dir("/wd"))
-	out := st.AddMount("/wd", llb.Scratch())
-	st.AddMount("/src0", llb.Scratch(), llb.AsPersistentCacheDir("mycache1", llb.CacheMountShared))
+	cmdStr = integration.UnixOrWindows(
+		`sh -c "cp /src0/foo . && cp /src1/bar . && cp /src1/baz ."`,
+		`cmd /C copy C:\\src0\\foo . && copy C:\\src1\\bar . && copy C:\\src1\\baz .`,
+	)
+	st = busybox.Run(llb.Shlex(cmdStr), llb.Dir("/wd"))
+	out := st.AddMount("/wd", scratch())
+	st.AddMount("/src0", scratch(), llb.AsPersistentCacheDir("mycache1", llb.CacheMountShared))
 	st.AddMount("/src1", base, llb.AsPersistentCacheDir("mycache2", llb.CacheMountShared))
 
 	destDir := t.TempDir()
@@ -6769,17 +6947,18 @@ func testCachedMounts(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
+	newLine := integration.UnixOrWindows("", " \r\n")
 	dt, err := os.ReadFile(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
-	require.Equal(t, "first", string(dt))
+	require.Equal(t, "first"+newLine, string(dt))
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "bar"))
 	require.NoError(t, err)
-	require.Equal(t, "second", string(dt))
+	require.Equal(t, "second"+newLine, string(dt))
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "baz"))
 	require.NoError(t, err)
-	require.Equal(t, "base", string(dt))
+	require.Equal(t, "base"+newLine, string(dt))
 
 	checkAllReleasable(t, c, sb, true)
 }
@@ -6858,16 +7037,23 @@ func testLockedCacheMounts(t *testing.T, sb integration.Sandbox) {
 }
 
 func testDuplicateCacheMount(t *testing.T, sb integration.Sandbox) {
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	busybox := llb.Image("busybox:latest")
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	busybox := llb.Image(imgName)
+	scratch := func() llb.State {
+		return integration.UnixOrWindows(llb.Scratch(), llb.Image(imgName))
+	}
 
-	out := busybox.Run(llb.Shlex(`sh -e -c "[[ ! -f /m2/foo ]]; touch /m1/foo; [[ -f /m2/foo ]];"`))
-	out.AddMount("/m1", llb.Scratch(), llb.AsPersistentCacheDir("mycache1", llb.CacheMountLocked))
-	out.AddMount("/m2", llb.Scratch(), llb.AsPersistentCacheDir("mycache1", llb.CacheMountLocked))
+	cmdStr := integration.UnixOrWindows(
+		`sh -e -c "[[ ! -f /m2/foo ]]; touch /m1/foo; [[ -f /m2/foo ]];"`,
+		`cmd /C echo a > \\m1\\foo && dir \\m2\\foo`,
+	)
+	out := busybox.Run(llb.Shlex(cmdStr))
+	out.AddMount("/m1", scratch(), llb.AsPersistentCacheDir("mycache1", llb.CacheMountLocked))
+	out.AddMount("/m2", scratch(), llb.AsPersistentCacheDir("mycache1", llb.CacheMountLocked))
 
 	def, err := out.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -6877,15 +7063,20 @@ func testDuplicateCacheMount(t *testing.T, sb integration.Sandbox) {
 }
 
 func testRunCacheWithMounts(t *testing.T, sb integration.Sandbox) {
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	busybox := llb.Image("busybox:latest")
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	busybox := llb.Image(imgName)
 
-	out := busybox.Run(llb.Shlex(`sh -e -c "[[ -f /m1/sbin/apk ]]"`))
-	out.AddMount("/m1", llb.Image("alpine:latest"), llb.Readonly)
+	cmdStr := integration.UnixOrWindows(
+		`sh -e -c "[[ -f /m1/sbin/apk ]]"`,
+		`cmd /C if exist C:\\m1\\Windows\\System32\\whoami.exe (exit 0) else (exit 1)`,
+	)
+	out := busybox.Run(llb.Shlex(cmdStr))
+	imgAlpine := integration.UnixOrWindows("alpine:latest", "nanoserver:plus")
+	out.AddMount("/m1", llb.Image(imgAlpine), llb.Readonly)
 
 	def, err := out.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -6893,14 +7084,18 @@ func testRunCacheWithMounts(t *testing.T, sb integration.Sandbox) {
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
 	require.NoError(t, err)
 
-	out = busybox.Run(llb.Shlex(`sh -e -c "[[ -f /m1/sbin/apk ]]"`))
-	out.AddMount("/m1", llb.Image("busybox:latest"), llb.Readonly)
+	cmdStr = integration.UnixOrWindows(
+		`sh -e -c "[[ ! -f /m1/sbin/apk ]]"`,
+		`cmd /C if exist C:\\m1\\Windows\\System32\\whoami.exe (exit 1)`,
+	)
+	out = busybox.Run(llb.Shlex(cmdStr))
+	out.AddMount("/m1", llb.Image(imgName), llb.Readonly)
 
 	def, err = out.Marshal(sb.Context())
 	require.NoError(t, err)
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
-	require.Error(t, err)
+	require.NoError(t, err)
 }
 
 func testCacheMountNoCache(t *testing.T, sb integration.Sandbox) {
@@ -7200,21 +7395,25 @@ func testMoveParentDir(t *testing.T, sb integration.Sandbox) {
 
 // #319
 func testMountWithNoSource(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	busybox := llb.Image("docker.io/library/busybox:latest")
-	st := llb.Scratch()
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	busybox := llb.Image(imgName)
+	st := integration.UnixOrWindows(llb.Scratch(), llb.Image(imgName))
 
 	var nilState llb.State
 
 	// This should never actually be run, but we want to succeed
 	// if it was, because we expect an error below, or a daemon
 	// panic if the issue has regressed.
+	cmdArgs := integration.UnixOrWindows(
+		[]string{"/bin/true"},
+		[]string{"cmd", "/C", "exit 0"},
+	)
 	run := busybox.Run(
-		llb.Args([]string{"/bin/true"}),
+		llb.Args(cmdArgs),
 		llb.AddMount("/nil", nilState, llb.SourcePath("/"), llb.Readonly))
 
 	st = run.AddMount("/mnt", st)
@@ -7411,13 +7610,19 @@ func testRmSymlink(t *testing.T, sb integration.Sandbox) {
 }
 
 func testProxyEnv(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	base := llb.Image("docker.io/library/busybox:latest").Dir("/out")
-	cmd := `sh -c "echo -n $HTTP_PROXY-$HTTPS_PROXY-$NO_PROXY-$no_proxy-$ALL_PROXY-$all_proxy > env"`
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	scratch := func() llb.State {
+		return integration.UnixOrWindows(llb.Scratch(), llb.Image(imgName))
+	}
+	base := llb.Image(imgName).Dir("/out")
+	cmd := integration.UnixOrWindows(
+		`sh -c "echo -n $HTTP_PROXY-$HTTPS_PROXY-$NO_PROXY-$no_proxy-$ALL_PROXY-$all_proxy > env"`,
+		`cmd /C echo %HTTP_PROXY%-%HTTPS_PROXY%-%NO_PROXY%-%no_proxy%-%ALL_PROXY%-%all_proxy% > env`,
+	)
 
 	st := base.Run(llb.Shlex(cmd), llb.WithProxy(llb.ProxyEnv{
 		HTTPProxy:  "httpvalue",
@@ -7425,7 +7630,8 @@ func testProxyEnv(t *testing.T, sb integration.Sandbox) {
 		NoProxy:    "noproxyvalue",
 		AllProxy:   "allproxyvalue",
 	}))
-	out := st.AddMount("/out", llb.Scratch())
+
+	out := st.AddMount("/out", scratch())
 
 	def, err := out.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -7444,14 +7650,15 @@ func testProxyEnv(t *testing.T, sb integration.Sandbox) {
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "env"))
 	require.NoError(t, err)
-	require.Equal(t, "httpvalue-httpsvalue-noproxyvalue-noproxyvalue-allproxyvalue-allproxyvalue", string(dt))
+	newLine := integration.UnixOrWindows("", " \r\n")
+	require.Equal(t, "httpvalue-httpsvalue-noproxyvalue-noproxyvalue-allproxyvalue-allproxyvalue"+newLine, string(dt))
 
 	// repeat to make sure proxy doesn't change cache
 	st = base.Run(llb.Shlex(cmd), llb.WithProxy(llb.ProxyEnv{
 		HTTPSProxy: "httpsvalue2",
 		NoProxy:    "noproxyvalue2",
 	}))
-	out = st.AddMount("/out", llb.Scratch())
+	out = st.AddMount("/out", scratch())
 
 	def, err = out.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -7470,7 +7677,7 @@ func testProxyEnv(t *testing.T, sb integration.Sandbox) {
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "env"))
 	require.NoError(t, err)
-	require.Equal(t, "httpvalue-httpsvalue-noproxyvalue-noproxyvalue-allproxyvalue-allproxyvalue", string(dt))
+	require.Equal(t, "httpvalue-httpsvalue-noproxyvalue-noproxyvalue-allproxyvalue-allproxyvalue"+newLine, string(dt))
 }
 
 func testMergeOp(t *testing.T, sb integration.Sandbox) {
@@ -7718,7 +7925,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 			},
 		}}
 	default:
-		require.Fail(t, "unknown cache mode: %s", mode)
+		require.Fail(t, fmt.Sprintf("unknown cache mode: %s", mode))
 	}
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
@@ -7847,7 +8054,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 			_, err = contentStore.Info(ctx, layer.Digest)
 			require.NoError(t, err)
 		default:
-			require.Fail(t, "unexpected layer index %d", i)
+			require.Fail(t, fmt.Sprintf("unexpected layer index %d", i))
 		}
 	}
 
@@ -8065,9 +8272,9 @@ func requiresLinux(t *testing.T) {
 // cleanup cache because some records still haven't been released.
 // This function tries to ensure prune by retrying it.
 func ensurePruneAll(t *testing.T, c *Client, sb integration.Sandbox) {
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		require.NoError(t, c.Prune(sb.Context(), nil, PruneAll))
-		for j := 0; j < 20; j++ {
+		for range 20 {
 			du, err := c.DiskUsage(sb.Context())
 			require.NoError(t, err)
 			if len(du) == 0 {
@@ -8088,7 +8295,7 @@ func checkAllReleasable(t *testing.T, c *Client, sb integration.Sandbox, checkCo
 
 	for {
 		resp, err := cl.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		require.NoError(t, err)
@@ -8308,7 +8515,7 @@ func testParallelLocalBuilds(t *testing.T, sb integration.Sandbox) {
 
 	eg, ctx := errgroup.WithContext(ctx)
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		func(i int) {
 			eg.Go(func() error {
 				fn := fmt.Sprintf("test%d", i)
@@ -8348,21 +8555,170 @@ func testParallelLocalBuilds(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 }
 
+func testMetadataOnlyLocal(t *testing.T, sb integration.Sandbox) {
+	ctx, cancel := context.WithCancelCause(sb.Context())
+	defer func() { cancel(errors.WithStack(context.Canceled)) }()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	srcDir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("data", []byte("contents"), 0600),
+		fstest.CreateDir("dir", 0700),
+		fstest.CreateFile("dir/file1", []byte("file1"), 0600),
+		fstest.CreateFile("dir/file2", []byte("file2"), 0600),
+		fstest.CreateDir("dir/subdir", 0700),
+		fstest.CreateDir("dir/subdir2", 0700),
+		fstest.CreateFile("dir/subdir/bar1", []byte("bar1"), 0600),
+		fstest.CreateFile("dir/subdir/bar2", []byte("bar2"), 0600),
+		fstest.CreateFile("dir/subdir2/bar3", []byte("bar3"), 0600),
+		fstest.CreateFile("foo", []byte("foo"), 0602),
+	)
+
+	def, err := llb.Local("source", llb.MetadataOnlyTransfer([]string{"dir/**/*1", "foo"})).Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+
+	_, err = c.Solve(ctx, def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			"source": srcDir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	_, err = os.ReadFile(filepath.Join(destDir, "data"))
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
+
+	act, err := os.ReadFile(filepath.Join(destDir, "dir/file1"))
+	require.NoError(t, err)
+	require.Equal(t, "file1", string(act))
+
+	act, err = os.ReadFile(filepath.Join(destDir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, "foo", string(act))
+
+	_, err = os.ReadFile(filepath.Join(destDir, "dir/file2"))
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
+
+	act, err = os.ReadFile(filepath.Join(destDir, "dir/subdir/bar1"))
+	require.NoError(t, err)
+	require.Equal(t, "bar1", string(act))
+
+	_, err = os.Stat(filepath.Join(destDir, "dir/subdir2"))
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
+
+	_, err = os.ReadFile(filepath.Join(destDir, "dir/subdir/bar2"))
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
+
+	dt, err := os.ReadFile(filepath.Join(destDir, ".fsutil-metadata"))
+	require.NoError(t, err)
+
+	stats := parseFSMetadata(t, dt)
+	require.Equal(t, 10, len(stats))
+
+	require.Equal(t, "data", stats[0].Path)
+	require.Equal(t, "dir", stats[1].Path)
+	require.Equal(t, "dir/file1", stats[2].Path)
+	require.Equal(t, "dir/file2", stats[3].Path)
+	require.Equal(t, "dir/subdir", stats[4].Path)
+	require.Equal(t, "dir/subdir/bar1", stats[5].Path)
+	require.Equal(t, "dir/subdir/bar2", stats[6].Path)
+	require.Equal(t, "dir/subdir2", stats[7].Path)
+	require.Equal(t, "dir/subdir2/bar3", stats[8].Path)
+	require.Equal(t, "foo", stats[9].Path)
+
+	err = os.RemoveAll(filepath.Join(srcDir.Name, "dir/subdir"))
+	require.NoError(t, err)
+
+	err = os.WriteFile(filepath.Join(srcDir.Name, "dir/file1"), []byte("file1-updated"), 0600)
+	require.NoError(t, err)
+
+	err = os.WriteFile(filepath.Join(srcDir.Name, "dir/bar1"), []byte("bar1"), 0600)
+	require.NoError(t, err)
+
+	def, err = llb.Local("source", llb.MetadataOnlyTransfer([]string{"dir/**/*1", "foo"})).Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir = t.TempDir()
+
+	_, err = c.Solve(ctx, def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			"source": srcDir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	_, err = os.ReadFile(filepath.Join(destDir, "data"))
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
+
+	act, err = os.ReadFile(filepath.Join(destDir, "dir/file1"))
+	require.NoError(t, err)
+	require.Equal(t, "file1-updated", string(act))
+
+	act, err = os.ReadFile(filepath.Join(destDir, "dir/bar1"))
+	require.NoError(t, err)
+	require.Equal(t, "bar1", string(act))
+
+	_, err = os.Stat(filepath.Join(destDir, "dir/subdir"))
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
+
+	dt, err = os.ReadFile(filepath.Join(destDir, ".fsutil-metadata"))
+	require.NoError(t, err)
+
+	stats = parseFSMetadata(t, dt)
+	require.Equal(t, 8, len(stats))
+
+	require.Equal(t, "data", stats[0].Path)
+	require.Equal(t, "dir", stats[1].Path)
+	require.Equal(t, "dir/bar1", stats[2].Path)
+	require.Equal(t, "dir/file1", stats[3].Path)
+	require.Equal(t, "dir/file2", stats[4].Path)
+	require.Equal(t, "dir/subdir2", stats[5].Path)
+	require.Equal(t, "dir/subdir2/bar3", stats[6].Path)
+	require.Equal(t, "foo", stats[7].Path)
+}
+
 // testRelativeMountpoint is a test that relative paths for mountpoints don't
 // fail when runc is upgraded to at least rc95, which introduces an error when
 // mountpoints are not absolute. Relative paths should be transformed to
 // absolute points based on the llb.State's current working directory.
 func testRelativeMountpoint(t *testing.T, sb integration.Sandbox) {
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
 	id := identity.NewID()
 
-	st := llb.Image("busybox:latest").Dir("/root").Run(
-		llb.Shlexf("sh -c 'echo -n %s > /root/relpath/data'", id),
-	).AddMount("relpath", llb.Scratch())
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	scratch := integration.UnixOrWindows(llb.Scratch(), llb.Image(imgName))
+	cmdStr := integration.UnixOrWindows(
+		"sh -c 'echo -n %s > /root/relpath/data'",
+		`cmd /C echo %s > \\root\\relpath\\data`,
+	)
+	st := llb.Image(imgName).Dir("/root").Run(
+		llb.Shlexf(cmdStr, id),
+	).AddMount("relpath", scratch)
 
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -8381,7 +8737,8 @@ func testRelativeMountpoint(t *testing.T, sb integration.Sandbox) {
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "data"))
 	require.NoError(t, err)
-	require.Equal(t, dt, []byte(id))
+	newLine := integration.UnixOrWindows("", " \r\n")
+	require.Equal(t, dt, []byte(id+newLine))
 }
 
 func testPullWithLayerLimit(t *testing.T, sb integration.Sandbox) {
@@ -8510,12 +8867,20 @@ func testCallInfo(t *testing.T, sb integration.Sandbox) {
 
 func testValidateDigestOrigin(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	st := llb.Image("busybox:latest").Run(llb.Shlex("touch foo"), llb.Dir("/wd")).AddMount("/wd", llb.Scratch())
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	scratch := integration.UnixOrWindows(llb.Scratch(), llb.Image(imgName))
+
+	cmdStr := integration.UnixOrWindows(
+		"touch foo",
+		"cmd /C echo a > foo",
+	)
+	st := llb.Image(imgName).
+		Run(llb.Shlex(cmdStr), llb.Dir("/wd")).
+		AddMount("/wd", scratch)
 
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -8576,7 +8941,6 @@ func testValidateDigestOrigin(t *testing.T, sb integration.Sandbox) {
 
 func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter)
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -8586,6 +8950,8 @@ func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
+
+	scratch := integration.UnixOrWindows(llb.Scratch(), llb.Image("nanoserver"))
 
 	amd64 := platforms.MustParse("linux/amd64")
 	arm64 := platforms.MustParse("linux/arm64")
@@ -8597,7 +8963,7 @@ func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 			Platforms: make([]exptypes.Platform, len(ps)),
 		}
 		for i, p := range ps {
-			st := llb.Scratch().File(
+			st := scratch.File(
 				llb.Mkfile("platform", 0600, []byte(platforms.Format(p))),
 			)
 
@@ -8793,7 +9159,6 @@ func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 
 func testExportAnnotationsMediaTypes(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -8807,13 +9172,15 @@ func testExportAnnotationsMediaTypes(t *testing.T, sb integration.Sandbox) {
 	p := platforms.DefaultSpec()
 	ps := []ocispecs.Platform{p}
 
+	scratch := integration.UnixOrWindows(llb.Scratch(), llb.Image("nanoserver"))
+
 	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 		res := gateway.NewResult()
 		expPlatforms := &exptypes.Platforms{
 			Platforms: make([]exptypes.Platform, len(ps)),
 		}
 		for i, p := range ps {
-			st := llb.Scratch().File(
+			st := scratch.File(
 				llb.Mkfile("platform", 0600, []byte(platforms.Format(p))),
 			)
 
@@ -8944,7 +9311,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 
 			// build image
 			st := llb.Scratch().File(
-				llb.Mkfile("/greeting", 0600, []byte(fmt.Sprintf("hello %s!", pk))),
+				llb.Mkfile("/greeting", 0600, fmt.Appendf(nil, "hello %s!", pk)),
 			)
 			def, err := st.Marshal(ctx)
 			if err != nil {
@@ -9056,7 +9423,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 			require.NotNil(t, img)
 			require.Equal(t, pk, platforms.Format(*img.Desc.Platform))
 			require.Equal(t, 1, len(img.Layers))
-			require.Equal(t, []byte(fmt.Sprintf("hello %s!", pk)), img.Layers[0]["greeting"].Data)
+			require.Equal(t, fmt.Appendf(nil, "hello %s!", pk), img.Layers[0]["greeting"].Data)
 			bases = append(bases, img)
 		}
 
@@ -9103,7 +9470,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 
 			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 			require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
-			require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
+			require.Equal(t, map[string]any{"success": true}, attest.Predicate)
 			subjects := []intoto.Subject{
 				{
 					Name: purls[targets[0]],
@@ -9174,7 +9541,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 
 			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 			require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
-			require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
+			require.Equal(t, map[string]any{"success": true}, attest.Predicate)
 
 			require.Equal(t, []intoto.Subject{{
 				Name:   "greeting",
@@ -9232,7 +9599,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 
 			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 			require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
-			require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
+			require.Equal(t, map[string]any{"success": true}, attest.Predicate)
 
 			require.Equal(t, []intoto.Subject{{
 				Name:   "greeting",
@@ -9260,7 +9627,6 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 
 func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -9276,6 +9642,9 @@ func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
 	}
 
 	success := []byte(`{"success": true}`)
+	scratch := func() llb.State {
+		return integration.UnixOrWindows(llb.Scratch(), llb.Image("nanoserver"))
+	}
 
 	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 		res := gateway.NewResult()
@@ -9286,8 +9655,8 @@ func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
 			expPlatforms.Platforms = append(expPlatforms.Platforms, exptypes.Platform{ID: pk, Platform: p})
 
 			// build image
-			st := llb.Scratch().File(
-				llb.Mkfile("/greeting", 0600, []byte(fmt.Sprintf("hello %s!", pk))),
+			st := scratch().File(
+				llb.Mkfile("/greeting", 0600, fmt.Appendf(nil, "hello %s!", pk)),
 			)
 			def, err := st.Marshal(ctx)
 			if err != nil {
@@ -9310,7 +9679,7 @@ func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
 			res.AddRef(pk, ref)
 
 			// build attestations
-			st = llb.Scratch().File(llb.Mkfile("/attestation.json", 0600, success))
+			st = scratch().File(llb.Mkfile("/attestation.json", 0600, success))
 			def, err = st.Marshal(ctx)
 			if err != nil {
 				return nil, err
@@ -9383,7 +9752,7 @@ func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
 
 		require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 		require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
-		require.Equal(t, map[string]interface{}{"success": true}, attest.Predicate)
+		require.Equal(t, map[string]any{"success": true}, attest.Predicate)
 
 		name := fmt.Sprintf("pkg:docker/%s/buildkit/testattestationsemptysubject@latest?platform=%s", url.QueryEscape(registry), url.QueryEscape(platforms.Format(ps[i])))
 		subjects := []intoto.Subject{{
@@ -9398,7 +9767,6 @@ func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
 
 func testAttestationBundle(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -9413,6 +9781,10 @@ func testAttestationBundle(t *testing.T, sb integration.Sandbox) {
 		platforms.MustParse("linux/amd64"),
 	}
 
+	scratch := func() llb.State {
+		return integration.UnixOrWindows(llb.Scratch(), llb.Image("nanoserver"))
+	}
+
 	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 		res := gateway.NewResult()
 		expPlatforms := &exptypes.Platforms{}
@@ -9422,8 +9794,8 @@ func testAttestationBundle(t *testing.T, sb integration.Sandbox) {
 			expPlatforms.Platforms = append(expPlatforms.Platforms, exptypes.Platform{ID: pk, Platform: p})
 
 			// build image
-			st := llb.Scratch().File(
-				llb.Mkfile("/greeting", 0600, []byte(fmt.Sprintf("hello %s!", pk))),
+			st := scratch().File(
+				llb.Mkfile("/greeting", 0600, fmt.Appendf(nil, "hello %s!", pk)),
 			)
 			def, err := st.Marshal(ctx)
 			if err != nil {
@@ -9450,7 +9822,7 @@ func testAttestationBundle(t *testing.T, sb integration.Sandbox) {
 					Type:          intoto.StatementInTotoV01,
 					PredicateType: "https://example.com/attestations/v1.0",
 				},
-				Predicate: map[string]interface{}{
+				Predicate: map[string]any{
 					"foo": "1",
 				},
 			}
@@ -9459,8 +9831,7 @@ func testAttestationBundle(t *testing.T, sb integration.Sandbox) {
 			require.NoError(t, enc.Encode(stmt))
 
 			// build attestations
-			st = llb.Scratch()
-			st = st.File(
+			st = scratch().File(
 				llb.Mkdir("/bundle", 0700),
 			)
 			st = st.File(
@@ -9535,7 +9906,7 @@ func testAttestationBundle(t *testing.T, sb integration.Sandbox) {
 		require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 
 		require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
-		require.Equal(t, map[string]interface{}{"foo": "1"}, attest.Predicate)
+		require.Equal(t, map[string]any{"foo": "1"}, attest.Predicate)
 		name := fmt.Sprintf("pkg:docker/%s/buildkit/testattestationsbundle@latest?platform=%s", url.QueryEscape(registry), url.QueryEscape(platforms.Format(ps[i])))
 		subjects := []intoto.Subject{{
 			Name: name,
@@ -9765,7 +10136,7 @@ EOF
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
-	require.Subset(t, attest.Predicate, map[string]interface{}{"name": "frontend"})
+	require.Subset(t, attest.Predicate, map[string]any{"name": "frontend"})
 
 	// test the specified fallback scanner
 	target = registry + "/buildkit/testsbom3:latest"
@@ -9797,7 +10168,7 @@ EOF
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
-	require.Subset(t, attest.Predicate, map[string]interface{}{"name": "fallback"})
+	require.Subset(t, attest.Predicate, map[string]any{"name": "fallback"})
 
 	// test the builtin frontend scanner and the specified fallback scanner together
 	target = registry + "/buildkit/testsbom3:latest"
@@ -9829,7 +10200,7 @@ EOF
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
-	require.Subset(t, attest.Predicate, map[string]interface{}{"name": "frontend"})
+	require.Subset(t, attest.Predicate, map[string]any{"name": "frontend"})
 
 	// test configuring the scanner (simple)
 	target = registry + "/buildkit/testsbom4:latest"
@@ -9861,8 +10232,8 @@ EOF
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
-	require.Subset(t, attest.Predicate, map[string]interface{}{
-		"extraParams": map[string]interface{}{"ARG1": "foo", "ARG2": "bar"},
+	require.Subset(t, attest.Predicate, map[string]any{
+		"extraParams": map[string]any{"ARG1": "foo", "ARG2": "bar"},
 	})
 
 	// test configuring the scanner (complex)
@@ -9895,8 +10266,8 @@ EOF
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
-	require.Subset(t, attest.Predicate, map[string]interface{}{
-		"extraParams": map[string]interface{}{"ARG1": "foo", "ARG2": "hello,world"},
+	require.Subset(t, attest.Predicate, map[string]any{
+		"extraParams": map[string]any{"ARG1": "foo", "ARG2": "hello,world"},
 	})
 }
 
@@ -10065,7 +10436,7 @@ EOF
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
-	require.Subset(t, attest.Predicate, map[string]interface{}{"name": "fallback"})
+	require.Subset(t, attest.Predicate, map[string]any{"name": "fallback"})
 }
 
 func testSBOMSupplements(t *testing.T, sb integration.Sandbox) {
@@ -10918,7 +11289,6 @@ func testSourcePolicy(t *testing.T, sb integration.Sandbox) {
 		},
 	}
 	for i, tc := range testCases {
-		tc := tc
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			_, err = c.Build(sb.Context(), SolveOpt{SourcePolicy: tc.srcPol}, "", frontend, nil)
 			if tc.expectedErr == "" {
@@ -11017,21 +11387,26 @@ func testSourcePolicy(t *testing.T, sb integration.Sandbox) {
 }
 
 func testLLBMountPerformance(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	mntInput := llb.Image("busybox:latest")
-	st := llb.Image("busybox:latest")
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	srcPath := integration.UnixOrWindows("/bin", "/Windows")
+
+	mntInput := llb.Image(imgName)
+	st := llb.Image(imgName)
 	var mnts []llb.State
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		execSt := st.Run(
-			llb.Args([]string{"true"}),
+			llb.Args(integration.UnixOrWindows(
+				[]string{"true"},
+				[]string{"cmd", "/C", "exit 0"},
+			)),
 		)
 		mnts = append(mnts, mntInput)
 		for j := range mnts {
-			mnts[j] = execSt.AddMount(fmt.Sprintf("/tmp/bin%d", j), mnts[j], llb.SourcePath("/bin"))
+			mnts[j] = execSt.AddMount(fmt.Sprintf("/tmp/bin%d", j), mnts[j], llb.SourcePath(srcPath))
 		}
 		st = execSt.Root()
 	}
@@ -11039,7 +11414,9 @@ func testLLBMountPerformance(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	timeoutCtx, cancel := context.WithTimeoutCause(sb.Context(), time.Minute, nil)
+	// Windows images take longer time
+	timeout := integration.UnixOrWindows(time.Minute, 3*time.Minute)
+	timeoutCtx, cancel := context.WithTimeoutCause(sb.Context(), timeout, nil)
 	defer cancel()
 	_, err = c.Solve(timeoutCtx, def, SolveOpt{}, nil)
 	require.NoError(t, err)
@@ -11058,7 +11435,7 @@ func testLayerLimitOnMounts(t *testing.T, sb integration.Sandbox) {
 
 	const numLayers = 110
 
-	for i := 0; i < numLayers; i++ {
+	for range numLayers {
 		base = base.Run(llb.Shlex("sh -c 'echo hello >> /hello'")).Root()
 	}
 
@@ -11085,7 +11462,7 @@ func testClientCustomGRPCOpts(t *testing.T, sb integration.Sandbox) {
 		ctx context.Context,
 		method string,
 		req,
-		reply interface{},
+		reply any,
 		cc *grpc.ClientConn,
 		invoker grpc.UnaryInvoker,
 		opts ...grpc.CallOption,
@@ -11507,7 +11884,7 @@ devices:
 		st = busybox.Run(append(ro, llb.Shlex(cmd), llb.Dir("/wd"))...).AddMount("/wd", st)
 	}
 
-	run(`sh -c 'env|sort | tee class.env'`, llb.AddCDIDevice(llb.CDIDeviceName("vendor1.com/device=class1")))
+	run(`sh -c 'env|sort | tee class.env'`, llb.AddCDIDevice(llb.CDIDeviceName("class1")))
 
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -11530,4 +11907,18 @@ devices:
 	require.Contains(t, strings.TrimSpace(string(dt)), `BAR=injected`)
 	require.NotContains(t, strings.TrimSpace(string(dt)), `BAZ=injected`)
 	require.NotContains(t, strings.TrimSpace(string(dt)), `QUX=injected`)
+}
+
+func parseFSMetadata(t *testing.T, dt []byte) []fsutiltypes.Stat {
+	var m []fsutiltypes.Stat
+	for len(dt) > 0 {
+		var s fsutiltypes.Stat
+		n := binary.LittleEndian.Uint32(dt[:4])
+		dt = dt[4:]
+		err := s.Unmarshal(dt[:n])
+		require.NoError(t, err)
+		m = append(m, *s.CloneVT())
+		dt = dt[n:]
+	}
+	return m
 }

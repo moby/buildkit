@@ -167,7 +167,8 @@ func (c *Controller) DiskUsage(ctx context.Context, r *controlapi.DiskUsageReque
 	}
 	for _, w := range workers {
 		du, err := w.DiskUsage(ctx, client.DiskUsageInfo{
-			Filter: r.Filter,
+			Filter:   r.Filter,
+			AgeLimit: time.Duration(r.AgeLimit),
 		})
 		if err != nil {
 			return nil, err
@@ -311,6 +312,7 @@ func (c *Controller) ListenBuildHistory(req *controlapi.BuildHistoryRequest, srv
 
 func (c *Controller) UpdateBuildHistory(ctx context.Context, req *controlapi.UpdateBuildHistoryRequest) (*controlapi.UpdateBuildHistoryResponse, error) {
 	if req.Delete {
+		c.history.Finalize(ctx, req.Ref) // ignore error
 		err := c.history.Delete(ctx, req.Ref)
 		return &controlapi.UpdateBuildHistoryResponse{}, err
 	}
@@ -375,6 +377,9 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	atomic.AddInt64(&c.buildCount, 1)
 	defer atomic.AddInt64(&c.buildCount, -1)
 
+	if req.Cache == nil {
+		req.Cache = &controlapi.CacheOptions{} // make sure cache options are initialized
+	}
 	translateLegacySolveRequest(req)
 
 	defer func() {
@@ -513,8 +518,9 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		FrontendInputs: req.FrontendInputs,
 		CacheImports:   cacheImports,
 	}, llbsolver.ExporterRequest{
-		Exporters:      expis,
-		CacheExporters: cacheExporters,
+		Exporters:             expis,
+		CacheExporters:        cacheExporters,
+		EnableSessionExporter: req.EnableSessionExporter,
 	}, entitlementsFromPB(req.Entitlements), procs, req.Internal, req.SourcePolicy)
 	if err != nil {
 		return nil, err

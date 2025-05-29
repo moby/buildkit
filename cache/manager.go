@@ -1,21 +1,24 @@
 package cache
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
+	obdlabel "github.com/containerd/accelerated-container-image/pkg/label"
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/diff"
 	"github.com/containerd/containerd/v2/core/leases"
+	"github.com/containerd/containerd/v2/core/snapshots"
 	"github.com/containerd/containerd/v2/pkg/filters"
 	"github.com/containerd/containerd/v2/pkg/gc"
 	"github.com/containerd/containerd/v2/pkg/labels"
 	cerrdefs "github.com/containerd/errdefs"
-	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/identity"
@@ -25,6 +28,7 @@ import (
 	"github.com/moby/buildkit/util/disk"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/progress"
+	"github.com/moby/sys/user"
 	digest "github.com/opencontainers/go-digest"
 	imagespecidentity "github.com/opencontainers/image-spec/identity"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -61,7 +65,7 @@ type Accessor interface {
 
 	New(ctx context.Context, parent ImmutableRef, s session.Group, opts ...RefOption) (MutableRef, error)
 	GetMutable(ctx context.Context, id string, opts ...RefOption) (MutableRef, error) // Rebase?
-	IdentityMapping() *idtools.IdentityMapping
+	IdentityMapping() *user.IdentityMapping
 	Merge(ctx context.Context, parents []ImmutableRef, pg progress.Controller, opts ...RefOption) (ImmutableRef, error)
 	Diff(ctx context.Context, lower, upper ImmutableRef, pg progress.Controller, opts ...RefOption) (ImmutableRef, error)
 }
@@ -337,7 +341,7 @@ func (cm *cacheManager) init(ctx context.Context) error {
 }
 
 // IdentityMapping returns the userns remapping used for refs
-func (cm *cacheManager) IdentityMapping() *idtools.IdentityMapping {
+func (cm *cacheManager) IdentityMapping() *user.IdentityMapping {
 	return cm.Snapshotter.IdentityMapping()
 }
 
@@ -626,6 +630,10 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, sess session.Gr
 		}); rerr != nil {
 			return nil, rerr
 		}
+	} else if cm.Snapshotter.Name() == "overlaybd" && parent != nil {
+		// Snapshotter will create a R/W block device directly as rootfs with this label
+		rwLabels := map[string]string{obdlabel.SupportReadWriteMode: "dev"}
+		err = cm.Snapshotter.Prepare(ctx, snapshotID, parentSnapshotID, snapshots.WithLabels(rwLabels))
 	} else {
 		err = cm.Snapshotter.Prepare(ctx, snapshotID, parentSnapshotID)
 	}
@@ -742,9 +750,7 @@ func (cm *cacheManager) Merge(ctx context.Context, inputParents []ImmutableRef, 
 		default:
 			parents.mergeParents = append(parents.mergeParents, parent.clone())
 		}
-		for dgst, handler := range parent.descHandlers {
-			dhs[dgst] = handler
-		}
+		maps.Copy(dhs, parent.descHandlers)
 	}
 
 	// On success, createMergeRef takes ownership of parents
@@ -868,9 +874,7 @@ func (cm *cacheManager) Diff(ctx context.Context, lower, upper ImmutableRef, pg 
 		} else {
 			dps.upper = parent.clone()
 		}
-		for dgst, handler := range parent.descHandlers {
-			dhs[dgst] = handler
-		}
+		maps.Copy(dhs, parent.descHandlers)
 	}
 
 	// Check to see if lower is an ancestor of upper. If so, define the diff as a merge
@@ -1099,6 +1103,9 @@ func calculateKeepBytes(totalSize int64, dstat disk.DiskStat, opt client.PruneIn
 		} else {
 			keepBytes = min(keepBytes, totalSize-excess)
 		}
+	} else if opt.MinFreeSpace != 0 && keepBytes == 0 {
+		// if only minFreeSpace is set and it doesn't match then we don't delete anything
+		keepBytes = totalSize
 	}
 
 	// but make sure we don't take the total below the reserved space
@@ -1426,10 +1433,7 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 	}
 	cm.mu.Unlock()
 
-	for {
-		if len(rescan) == 0 {
-			break
-		}
+	for len(rescan) != 0 {
 		for id := range rescan {
 			v := m[id]
 			if v.refs == 0 {
@@ -1448,6 +1452,7 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 	if err := cm.markShared(m); err != nil {
 		return nil, err
 	}
+	cutOff := time.Now().Add(-opt.AgeLimit)
 
 	var du []*client.UsageInfo
 	for id, cr := range m {
@@ -1464,9 +1469,15 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 			RecordType:  cr.recordType,
 			Shared:      cr.shared,
 		}
-		if filter.Match(adaptUsageInfo(c)) {
-			du = append(du, c)
+		if !filter.Match(adaptUsageInfo(c)) {
+			continue
 		}
+		if opt.AgeLimit > 0 {
+			if c.LastUsedAt != nil && c.LastUsedAt.After(cutOff) {
+				continue
+			}
+		}
+		du = append(du, c)
 	}
 
 	eg, ctx := errgroup.WithContext(ctx)
@@ -1505,7 +1516,7 @@ func IsNotFound(err error) bool {
 	return errors.Is(err, errNotFound)
 }
 
-type RefOption interface{}
+type RefOption any
 
 type cachePolicy int
 
@@ -1667,23 +1678,23 @@ type deleteRecord struct {
 	*cacheRecord
 	lastUsedAt      *time.Time
 	usageCount      int
-	lastUsedAtIndex int
-	usageCountIndex int
+	lastUsedAtIndex float64
+	usageCountIndex float64
 	released        bool
 }
 
 func sortDeleteRecords(toDelete []*deleteRecord) {
-	sort.Slice(toDelete, func(i, j int) bool {
-		if toDelete[i].lastUsedAt == nil {
-			return true
+	slices.SortFunc(toDelete, func(a, b *deleteRecord) int {
+		if a.lastUsedAt == nil {
+			return -1
 		}
-		if toDelete[j].lastUsedAt == nil {
-			return false
+		if b.lastUsedAt == nil {
+			return 1
 		}
-		return toDelete[i].lastUsedAt.Before(*toDelete[j].lastUsedAt)
+		return a.lastUsedAt.Compare(*b.lastUsedAt)
 	})
 
-	maxLastUsedIndex := 0
+	maxLastUsedIndex := 1.0
 	var val time.Time
 	for _, v := range toDelete {
 		if v.lastUsedAt != nil && v.lastUsedAt.After(val) {
@@ -1693,11 +1704,11 @@ func sortDeleteRecords(toDelete []*deleteRecord) {
 		v.lastUsedAtIndex = maxLastUsedIndex
 	}
 
-	sort.Slice(toDelete, func(i, j int) bool {
-		return toDelete[i].usageCount < toDelete[j].usageCount
+	slices.SortFunc(toDelete, func(a, b *deleteRecord) int {
+		return a.usageCount - b.usageCount
 	})
 
-	maxUsageCountIndex := 0
+	maxUsageCountIndex := 1.0
 	var count int
 	for _, v := range toDelete {
 		if v.usageCount != count {
@@ -1707,11 +1718,11 @@ func sortDeleteRecords(toDelete []*deleteRecord) {
 		v.usageCountIndex = maxUsageCountIndex
 	}
 
-	sort.Slice(toDelete, func(i, j int) bool {
-		return float64(toDelete[i].lastUsedAtIndex)/float64(maxLastUsedIndex)+
-			float64(toDelete[i].usageCountIndex)/float64(maxUsageCountIndex) <
-			float64(toDelete[j].lastUsedAtIndex)/float64(maxLastUsedIndex)+
-				float64(toDelete[j].usageCountIndex)/float64(maxUsageCountIndex)
+	slices.SortFunc(toDelete, func(a, b *deleteRecord) int {
+		return cmp.Compare(
+			a.lastUsedAtIndex/maxLastUsedIndex+a.usageCountIndex/maxUsageCountIndex,
+			b.lastUsedAtIndex/maxLastUsedIndex+b.usageCountIndex/maxUsageCountIndex,
+		)
 	})
 }
 

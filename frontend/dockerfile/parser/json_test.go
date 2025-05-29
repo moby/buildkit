@@ -2,6 +2,8 @@ package parser
 
 import (
 	"testing"
+
+	"github.com/pkg/errors"
 )
 
 var invalidJSONArraysOfStrings = []string{
@@ -48,7 +50,7 @@ func TestJSONArraysOfStrings(t *testing.T) {
 		}
 	}
 	for _, json := range invalidJSONArraysOfStrings {
-		if _, _, err := parseJSON(json); err != errDockerfileNotStringArray {
+		if _, _, err := parseJSON(json); !errors.Is(err, errDockerfileNotStringArray) {
 			t.Fatalf("%q should be an invalid JSON array of strings, but wasn't!", json)
 		}
 	}

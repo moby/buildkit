@@ -103,7 +103,6 @@ func TestResolvConf(t *testing.T) {
 	}
 
 	for _, tt := range cases {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
 			tempDir := t.TempDir()
@@ -111,7 +110,7 @@ func TestResolvConf(t *testing.T) {
 			t.Cleanup(func() {
 				resolvconfPath = oldResolvconfPath
 			})
-			for i := 0; i < tt.execution; i++ {
+			for i := range tt.execution {
 				resolvconfPath = func(netMode pb.NetMode) string {
 					if tt.dt == nil {
 						return "no-such-file"

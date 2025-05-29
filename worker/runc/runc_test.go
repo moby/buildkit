@@ -27,6 +27,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestMain(m *testing.M) {
+	defer tests.RunMirror()()
+	m.Run()
+}
+
 func newWorkerOpt(t *testing.T, processMode oci.ProcessMode) base.WorkerOpt {
 	tmpdir := t.TempDir()
 
@@ -202,7 +207,7 @@ func TestRuncWorkerNoProcessSandbox(t *testing.T) {
 	stdout := bytes.NewBuffer(nil)
 	stderr := bytes.NewBuffer(nil)
 	_, err = w.WorkerOpt.Executor.Run(ctx, "", execMount(root, false), nil, executor.ProcessInfo{Meta: meta, Stdout: &nopCloser{stdout}, Stderr: &nopCloser{stderr}}, nil)
-	require.NoError(t, err, fmt.Sprintf("stdout=%q, stderr=%q", stdout.String(), stderr.String()))
+	require.NoError(t, err, "stdout=%q, stderr=%q", stdout.String(), stderr.String())
 	require.Equal(t, string(selfCmdline), stdout.String())
 }
 

@@ -307,8 +307,8 @@ func (s *Store) emptyBranchWithParents(tx *bolt.Tx, id []byte) error {
 	}
 
 	// intentionally ignoring errors
-	tx.Bucket([]byte(linksBucket)).DeleteBucket([]byte(id))
-	tx.Bucket([]byte(resultBucket)).DeleteBucket([]byte(id))
+	tx.Bucket([]byte(linksBucket)).DeleteBucket(id)
+	tx.Bucket([]byte(resultBucket)).DeleteBucket(id)
 
 	return nil
 }
@@ -360,7 +360,7 @@ func (s *Store) WalkLinks(id string, link solver.CacheInfoLink, fn func(id strin
 		}
 		index := bytes.Join([][]byte{dt, {}}, []byte("@"))
 		c := b.Cursor()
-		k, _ := c.Seek([]byte(index))
+		k, _ := c.Seek(index)
 		for {
 			if k != nil && bytes.HasPrefix(k, index) {
 				target := bytes.TrimPrefix(k, index)
@@ -440,7 +440,7 @@ func (s *Store) WalkBacklinks(id string, fn func(id string, link solver.CacheInf
 					if err := json.Unmarshal(parts[0], &l); err != nil {
 						return err
 					}
-					l.Digest = digest.FromBytes([]byte(fmt.Sprintf("%s@%d", l.Digest, l.Output)))
+					l.Digest = digest.FromBytes(fmt.Appendf(nil, "%s@%d", l.Digest, l.Output))
 					l.Output = 0
 					outIDs = append(outIDs, string(bid))
 					outLinks = append(outLinks, l)
