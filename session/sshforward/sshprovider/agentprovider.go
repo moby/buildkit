@@ -10,13 +10,9 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/session"
-	"github.com/moby/buildkit/session/sshforward"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
-	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 )
 
 // AgentConfig is the config for a single exposed SSH agent
@@ -25,36 +21,41 @@ type AgentConfig struct {
 	Paths []string
 }
 
-// NewSSHAgentProvider creates a session provider that allows access to ssh agent
-func NewSSHAgentProvider(confs []AgentConfig) (session.Attachable, error) {
-	m := map[string]source{}
-	for _, conf := range confs {
-		if len(conf.Paths) == 0 || len(conf.Paths) == 1 && conf.Paths[0] == "" {
-			conf.Paths = []string{os.Getenv("SSH_AUTH_SOCK")}
-		}
-
-		if conf.Paths[0] == "" {
-			p, err := getFallbackAgentPath()
-			if err != nil {
-				return nil, errors.Wrap(err, "invalid empty ssh agent socket")
-			}
-			conf.Paths[0] = p
-		}
-
-		src, err := toAgentSource(conf.Paths)
-		if err != nil {
-			return nil, err
-		}
-		if conf.ID == "" {
-			conf.ID = sshforward.DefaultID
-		}
-		if _, ok := m[conf.ID]; ok {
-			return nil, errors.Errorf("invalid duplicate ID %s", conf.ID)
-		}
-		m[conf.ID] = src
+func (conf AgentConfig) ToRaw() (RawConfig, error) {
+	if len(conf.Paths) == 0 || len(conf.Paths) == 1 && conf.Paths[0] == "" {
+		conf.Paths = []string{os.Getenv("SSH_AUTH_SOCK")}
 	}
 
-	return &socketProvider{m: m}, nil
+	if conf.Paths[0] == "" {
+		p, err := getFallbackAgentPath()
+		if err != nil {
+			return RawConfig{}, errors.Wrap(err, "invalid empty ssh agent socket")
+		}
+		conf.Paths[0] = p
+	}
+
+	src, err := toAgentSource(conf.Paths)
+	if err != nil {
+		return RawConfig{}, errors.Wrapf(err, "failed to convert agent config for ID: %q", conf.ID)
+	}
+
+	return RawConfig{
+		ID:     conf.ID,
+		Dialer: src.RawDialer,
+	}, nil
+}
+
+// NewSSHAgentProvider creates a session provider that allows access to ssh agent
+func NewSSHAgentProvider(confs []AgentConfig) (session.Attachable, error) {
+	converted := make([]RawConfig, 0, len(confs))
+	for _, conf := range confs {
+		raw, err := conf.ToRaw()
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to convert agent config %v", conf)
+		}
+		converted = append(converted, raw)
+	}
+	return newRawProvider(converted)
 }
 
 type source struct {
@@ -67,75 +68,36 @@ type socketDialer struct {
 	dialer func(string) (net.Conn, error)
 }
 
+func (s source) RawDialer(ctx context.Context) (net.Conn, error) {
+	var a agent.Agent
+
+	if s.socket != nil {
+		conn, err := s.socket.Dial()
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to connect to %s", s.socket)
+		}
+
+		a = &readOnlyAgent{agent.NewClient(conn)}
+		defer conn.Close()
+	} else {
+		a = s.agent
+	}
+
+	c1, c2 := net.Pipe()
+	go func() {
+		agent.ServeAgent(a, c1)
+		c1.Close()
+	}()
+
+	return c2, nil
+}
+
 func (s socketDialer) Dial() (net.Conn, error) {
 	return s.dialer(s.path)
 }
 
 func (s socketDialer) String() string {
 	return s.path
-}
-
-type socketProvider struct {
-	m map[string]source
-}
-
-func (sp *socketProvider) Register(server *grpc.Server) {
-	sshforward.RegisterSSHServer(server, sp)
-}
-
-func (sp *socketProvider) CheckAgent(ctx context.Context, req *sshforward.CheckAgentRequest) (*sshforward.CheckAgentResponse, error) {
-	id := sshforward.DefaultID
-	if req.ID != "" {
-		id = req.ID
-	}
-	if _, ok := sp.m[id]; !ok {
-		return &sshforward.CheckAgentResponse{}, errors.Errorf("unset ssh forward key %s", id)
-	}
-	return &sshforward.CheckAgentResponse{}, nil
-}
-
-func (sp *socketProvider) ForwardAgent(stream sshforward.SSH_ForwardAgentServer) error {
-	id := sshforward.DefaultID
-
-	opts, _ := metadata.FromIncomingContext(stream.Context()) // if no metadata continue with empty object
-
-	if v, ok := opts[sshforward.KeySSHID]; ok && len(v) > 0 && v[0] != "" {
-		id = v[0]
-	}
-
-	src, ok := sp.m[id]
-	if !ok {
-		return errors.Errorf("unset ssh forward key %s", id)
-	}
-
-	var a agent.Agent
-
-	if src.socket != nil {
-		conn, err := src.socket.Dial()
-		if err != nil {
-			return errors.Wrapf(err, "failed to connect to %s", src.socket)
-		}
-
-		a = &readOnlyAgent{agent.NewClient(conn)}
-		defer conn.Close()
-	} else {
-		a = src.agent
-	}
-
-	s1, s2 := sockPair()
-
-	eg, ctx := errgroup.WithContext(context.TODO())
-
-	eg.Go(func() error {
-		return agent.ServeAgent(a, s1)
-	})
-
-	eg.Go(func() error {
-		defer s1.Close()
-		return sshforward.Copy(ctx, s2, stream, nil)
-	})
-
-	return eg.Wait()
 }
 
 func toAgentSource(paths []string) (source, error) {
@@ -205,18 +167,6 @@ func toAgentSource(paths []string) (source, error) {
 
 func unixSocketDialer(path string) (net.Conn, error) {
 	return net.DialTimeout("unix", path, 2*time.Second)
-}
-
-func sockPair() (io.ReadWriteCloser, io.ReadWriteCloser) {
-	pr1, pw1 := io.Pipe()
-	pr2, pw2 := io.Pipe()
-	return &sock{pr1, pw2, pw1}, &sock{pr2, pw1, pw2}
-}
-
-type sock struct {
-	io.Reader
-	io.Writer
-	io.Closer
 }
 
 type readOnlyAgent struct {
