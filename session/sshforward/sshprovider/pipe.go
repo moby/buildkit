@@ -7,7 +7,7 @@ import (
 )
 
 // pipeListener is a net.Listener that uses net.Pipe to create connections
-// and is useful for in-memory ProxyHandler implementations.
+// and is useful for in-memory uses of [RawProvider].
 //
 // PipelListener can be created using the zero value.
 type pipeListener struct {
