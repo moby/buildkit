@@ -264,8 +264,11 @@ func getFunctionName(i any) string {
 }
 
 var localImageCache map[string]map[string]struct{}
+var localImageCacheMu sync.Mutex
 
 func copyImagesLocal(t *testing.T, host string, images map[string]string) error {
+	localImageCacheMu.Lock()
+	defer localImageCacheMu.Unlock()
 	for to, from := range images {
 		if localImageCache == nil {
 			localImageCache = map[string]map[string]struct{}{}
