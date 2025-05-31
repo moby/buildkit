@@ -19,9 +19,14 @@ import (
 type AgentConfig struct {
 	ID    string
 	Paths []string
+	Raw   bool
 }
 
-func (conf AgentConfig) ToRaw() (RawConfig, error) {
+func (conf AgentConfig) toRaw() (rawConfig, error) {
+	if len(conf.Paths) != 1 && conf.Raw {
+		return rawConfig{}, errors.New("raw mode must supply exactly one path")
+	}
+
 	if len(conf.Paths) == 0 || len(conf.Paths) == 1 && conf.Paths[0] == "" {
 		conf.Paths = []string{os.Getenv("SSH_AUTH_SOCK")}
 	}
@@ -29,27 +34,27 @@ func (conf AgentConfig) ToRaw() (RawConfig, error) {
 	if conf.Paths[0] == "" {
 		p, err := getFallbackAgentPath()
 		if err != nil {
-			return RawConfig{}, errors.Wrap(err, "invalid empty ssh agent socket")
+			return rawConfig{}, errors.Wrap(err, "invalid empty ssh agent socket")
 		}
 		conf.Paths[0] = p
 	}
 
-	src, err := toAgentSource(conf.Paths)
+	dialer, err := toDialer(conf.Paths, conf.Raw)
 	if err != nil {
-		return RawConfig{}, errors.Wrapf(err, "failed to convert agent config for ID: %q", conf.ID)
+		return rawConfig{}, errors.Wrapf(err, "failed to convert agent config for ID: %q", conf.ID)
 	}
 
-	return RawConfig{
+	return rawConfig{
 		ID:     conf.ID,
-		Dialer: src.RawDialer,
+		Dialer: dialer,
 	}, nil
 }
 
 // NewSSHAgentProvider creates a session provider that allows access to ssh agent
 func NewSSHAgentProvider(confs []AgentConfig) (session.Attachable, error) {
-	converted := make([]RawConfig, 0, len(confs))
+	converted := make([]rawConfig, 0, len(confs))
 	for _, conf := range confs {
-		raw, err := conf.ToRaw()
+		raw, err := conf.toRaw()
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to convert agent config %v", conf)
 		}
@@ -68,17 +73,18 @@ type socketDialer struct {
 	dialer func(string) (net.Conn, error)
 }
 
-func (s source) RawDialer(ctx context.Context) (net.Conn, error) {
+func (s source) agentDialer(ctx context.Context) (net.Conn, error) {
 	var a agent.Agent
 
+	var agentConn net.Conn
 	if s.socket != nil {
-		conn, err := s.socket.Dial()
+		conn, err := s.socket.Dial(ctx)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to connect to %s", s.socket)
 		}
 
+		agentConn = conn
 		a = &readOnlyAgent{agent.NewClient(conn)}
-		defer conn.Close()
 	} else {
 		a = s.agent
 	}
@@ -87,12 +93,15 @@ func (s source) RawDialer(ctx context.Context) (net.Conn, error) {
 	go func() {
 		agent.ServeAgent(a, c1)
 		c1.Close()
+		if agentConn != nil {
+			agentConn.Close()
+		}
 	}()
 
 	return c2, nil
 }
 
-func (s socketDialer) Dial() (net.Conn, error) {
+func (s socketDialer) Dial(ctx context.Context) (net.Conn, error) {
 	return s.dialer(s.path)
 }
 
@@ -100,13 +109,13 @@ func (s socketDialer) String() string {
 	return s.path
 }
 
-func toAgentSource(paths []string) (source, error) {
+func toDialer(paths []string, raw bool) (func(context.Context) (net.Conn, error), error) {
 	var keys bool
 	var socket *socketDialer
 	a := agent.NewKeyring()
 	for _, p := range paths {
 		if socket != nil {
-			return source{}, errors.New("only single socket allowed")
+			return nil, errors.New("only single socket allowed")
 		}
 
 		if parsed := getWindowsPipeDialer(p); parsed != nil {
@@ -116,21 +125,24 @@ func toAgentSource(paths []string) (source, error) {
 
 		fi, err := os.Stat(p)
 		if err != nil {
-			return source{}, errors.WithStack(err)
+			return nil, errors.WithStack(err)
 		}
 		if fi.Mode()&os.ModeSocket > 0 {
 			socket = &socketDialer{path: p, dialer: unixSocketDialer}
 			continue
 		}
+		if raw {
+			return nil, errors.Errorf("raw mode only supported with socket paths")
+		}
 
 		f, err := os.Open(p)
 		if err != nil {
-			return source{}, errors.Wrapf(err, "failed to open %s", p)
+			return nil, errors.Wrapf(err, "failed to open %s", p)
 		}
 		dt, err := io.ReadAll(&io.LimitedReader{R: f, N: 100 * 1024})
 		_ = f.Close()
 		if err != nil {
-			return source{}, errors.Wrapf(err, "failed to read %s", p)
+			return nil, errors.Wrapf(err, "failed to read %s", p)
 		}
 
 		k, err := ssh.ParseRawPrivateKey(dt)
@@ -140,16 +152,16 @@ func toAgentSource(paths []string) (source, error) {
 			// If parsing the file fails, check to see if it kind of looks like socket-shaped.
 			if runtime.GOOS == "windows" && strings.Contains(string(dt), "socket") {
 				if keys {
-					return source{}, errors.Errorf("invalid combination of keys and sockets")
+					return nil, errors.Errorf("invalid combination of keys and sockets")
 				}
 				socket = &socketDialer{path: p, dialer: unixSocketDialer}
 				continue
 			}
 
-			return source{}, errors.Wrapf(err, "failed to parse %s", p) // TODO: prompt passphrase?
+			return nil, errors.Wrapf(err, "failed to parse %s", p) // TODO: prompt passphrase?
 		}
 		if err := a.Add(agent.AddedKey{PrivateKey: k}); err != nil {
-			return source{}, errors.Wrapf(err, "failed to add %s to agent", p)
+			return nil, errors.Wrapf(err, "failed to add %s to agent", p)
 		}
 
 		keys = true
@@ -157,12 +169,21 @@ func toAgentSource(paths []string) (source, error) {
 
 	if socket != nil {
 		if keys {
-			return source{}, errors.Errorf("invalid combination of keys and sockets")
+			return nil, errors.Errorf("invalid combination of keys and sockets")
 		}
-		return source{socket: socket}, nil
+		if raw {
+			return func(ctx context.Context) (net.Conn, error) {
+				return socket.Dial(ctx)
+			}, nil
+		}
+		return source{socket: socket}.agentDialer, nil
 	}
 
-	return source{agent: a}, nil
+	if raw {
+		return nil, errors.New("raw mode must supply exactly one socket path")
+	}
+
+	return source{agent: a}.agentDialer, nil
 }
 
 func unixSocketDialer(path string) (net.Conn, error) {

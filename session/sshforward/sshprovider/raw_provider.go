@@ -45,7 +45,7 @@ func (p *rawProvider) CheckAgent(ctx context.Context, req *sshforward.CheckAgent
 
 	_, ok := p.m[id]
 	if !ok {
-		return nil, errors.Errorf("unknown agent ID %s", id)
+		return nil, errors.Errorf("unset ssh forward key %s", id)
 	}
 	return &sshforward.CheckAgentResponse{}, nil
 }
@@ -62,7 +62,7 @@ func (p *rawProvider) ForwardAgent(stream sshforward.SSH_ForwardAgentServer) err
 
 	dialer, ok := p.m[id]
 	if !ok {
-		return errors.Errorf("unknown agent ID %s", id)
+		return errors.Errorf("unset ssh forward key %s", id)
 	}
 
 	conn, err := dialer(ctx)

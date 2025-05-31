@@ -17,7 +17,7 @@ import (
 )
 
 // echoServer implements a message based echo server
-// It expects tos end and receive discreete json messages over a net.Conn
+// It expects to send and receive discreete json messages over a net.Conn.
 // Using discreete messages is helpful for testing purposes over a literal echo.
 type echoServer struct{}
 
@@ -100,7 +100,7 @@ func TestRawProvider(t *testing.T) {
 	ctx := context.Background()
 
 	_, err = client.CheckAgent(ctx, &sshforward.CheckAgentRequest{ID: "does-not-exist"})
-	require.ErrorContains(t, err, "ID does-not-exis")
+	require.ErrorContains(t, err, "does-not-exis")
 
 	_, err = client.CheckAgent(ctx, &sshforward.CheckAgentRequest{ID: "test"})
 	require.NoError(t, err)

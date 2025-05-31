@@ -93,7 +93,7 @@ var buildCommand = cli.Command{
 		},
 		cli.StringSliceFlag{
 			Name:  "ssh",
-			Usage: "Allow forwarding SSH agent to the builder. Format default|<id>[=<socket>|<key>[,<key>]]",
+			Usage: "Allow forwarding SSH agent or a raw Unix socket to the builder. Format default|<id>[=<socket>[,raw=false]|<key>[,<key>]]",
 		},
 		cli.StringFlag{
 			Name:  "metadata-file",
