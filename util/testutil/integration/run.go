@@ -236,9 +236,15 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 
 						sb, closer, err := newSandbox(ctx, t, br, getMirror(), mv)
 						require.NoError(t, err)
-						t.Cleanup(func() { _ = closer() })
+						t.Cleanup(func() {
+							if closer != nil {
+								_ = closer()
+							}
+						})
 						defer func() {
 							if t.Failed() {
+								closer()
+								closer = nil // don't call again
 								sb.PrintLogs(t)
 							}
 						}()
