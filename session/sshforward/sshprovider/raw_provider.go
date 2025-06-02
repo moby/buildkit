@@ -4,40 +4,19 @@ import (
 	"context"
 	"net"
 
-	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/sshforward"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
 
-type rawConfig struct {
-	ID     string
-	Dialer func(context.Context) (net.Conn, error)
+type dialerFn func(ctx context.Context) (net.Conn, error)
+
+type socketProvider struct {
+	m map[string]dialerFn
 }
 
-func newRawProvider(confs []rawConfig) (session.Attachable, error) {
-	m := make(map[string]func(context.Context) (net.Conn, error), len(confs))
-
-	for _, conf := range confs {
-		if conf.ID == "" {
-			conf.ID = sshforward.DefaultID
-		}
-		_, ok := m[conf.ID]
-		if ok {
-			return nil, errors.Errorf("invalid duplicate ID %s", conf.ID)
-		}
-		m[conf.ID] = conf.Dialer
-	}
-
-	return &rawProvider{m: m}, nil
-}
-
-type rawProvider struct {
-	m map[string]func(context.Context) (net.Conn, error)
-}
-
-func (p *rawProvider) CheckAgent(ctx context.Context, req *sshforward.CheckAgentRequest) (*sshforward.CheckAgentResponse, error) {
+func (p *socketProvider) CheckAgent(ctx context.Context, req *sshforward.CheckAgentRequest) (*sshforward.CheckAgentResponse, error) {
 	id := sshforward.DefaultID
 	if req.ID != "" {
 		id = req.ID
@@ -50,7 +29,7 @@ func (p *rawProvider) CheckAgent(ctx context.Context, req *sshforward.CheckAgent
 	return &sshforward.CheckAgentResponse{}, nil
 }
 
-func (p *rawProvider) ForwardAgent(stream sshforward.SSH_ForwardAgentServer) error {
+func (p *socketProvider) ForwardAgent(stream sshforward.SSH_ForwardAgentServer) error {
 	id := sshforward.DefaultID
 
 	ctx := stream.Context()
@@ -74,6 +53,6 @@ func (p *rawProvider) ForwardAgent(stream sshforward.SSH_ForwardAgentServer) err
 	return sshforward.Copy(ctx, conn, stream, nil)
 }
 
-func (p *rawProvider) Register(srv *grpc.Server) {
+func (p *socketProvider) Register(srv *grpc.Server) {
 	sshforward.RegisterSSHServer(srv, p)
 }

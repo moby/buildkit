@@ -78,10 +78,11 @@ func TestRawProvider(t *testing.T) {
 	echo := &echoServer{}
 	go echo.Serve(echoListener)
 
-	handler, err := newRawProvider([]rawConfig{
-		{ID: "test", Dialer: echoListener.Dialer},
-	})
-	require.NoError(t, err)
+	handler := &socketProvider{
+		m: map[string]dialerFn{
+			"test": echoListener.Dialer,
+		},
+	}
 
 	srv := grpc.NewServer()
 	handler.Register(srv)

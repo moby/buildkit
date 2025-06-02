@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/sshforward"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
@@ -22,9 +23,9 @@ type AgentConfig struct {
 	Raw   bool
 }
 
-func (conf AgentConfig) toRaw() (rawConfig, error) {
+func (conf AgentConfig) toDialer() (dialerFn, error) {
 	if len(conf.Paths) != 1 && conf.Raw {
-		return rawConfig{}, errors.New("raw mode must supply exactly one path")
+		return nil, errors.New("raw mode must supply exactly one path")
 	}
 
 	if len(conf.Paths) == 0 || len(conf.Paths) == 1 && conf.Paths[0] == "" {
@@ -34,33 +35,39 @@ func (conf AgentConfig) toRaw() (rawConfig, error) {
 	if conf.Paths[0] == "" {
 		p, err := getFallbackAgentPath()
 		if err != nil {
-			return rawConfig{}, errors.Wrap(err, "invalid empty ssh agent socket")
+			return nil, errors.Wrap(err, "invalid empty ssh agent socket")
 		}
 		conf.Paths[0] = p
 	}
 
 	dialer, err := toDialer(conf.Paths, conf.Raw)
 	if err != nil {
-		return rawConfig{}, errors.Wrapf(err, "failed to convert agent config for ID: %q", conf.ID)
+		return nil, errors.Wrapf(err, "failed to convert agent config for ID: %q", conf.ID)
 	}
 
-	return rawConfig{
-		ID:     conf.ID,
-		Dialer: dialer,
-	}, nil
+	return dialer, nil
 }
 
 // NewSSHAgentProvider creates a session provider that allows access to ssh agent
 func NewSSHAgentProvider(confs []AgentConfig) (session.Attachable, error) {
-	converted := make([]rawConfig, 0, len(confs))
+	m := make(map[string]dialerFn, len(confs))
 	for _, conf := range confs {
-		raw, err := conf.toRaw()
+		if conf.ID == "" {
+			conf.ID = sshforward.DefaultID
+		}
+		if _, ok := m[conf.ID]; ok {
+			return nil, errors.Errorf("duplicate agent ID %q", conf.ID)
+		}
+
+		dialer, err := conf.toDialer()
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to convert agent config %v", conf)
 		}
-		converted = append(converted, raw)
+		m[conf.ID] = dialer
 	}
-	return newRawProvider(converted)
+	return &socketProvider{
+		m: m,
+	}, nil
 }
 
 type source struct {
