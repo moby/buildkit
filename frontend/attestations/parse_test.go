@@ -24,7 +24,8 @@ func TestParse(t *testing.T) {
 					"generator": "docker.io/foo/bar",
 				},
 				"provenance": {
-					"mode": "max",
+					"mode":    "max",
+					"version": "v0.2", // intentionally not const
 				},
 			},
 		},

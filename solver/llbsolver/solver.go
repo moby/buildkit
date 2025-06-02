@@ -11,7 +11,6 @@ import (
 	"time"
 
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
-	slsa02 "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/cache"
 	cacheconfig "github.com/moby/buildkit/cache/config"
@@ -32,6 +31,7 @@ import (
 	sessionexporter "github.com/moby/buildkit/session/exporter"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver/provenance"
+	provenancetypes "github.com/moby/buildkit/solver/llbsolver/provenance/types"
 	"github.com/moby/buildkit/solver/result"
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/bklog"
@@ -233,11 +233,12 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 			span, ctx := tracing.StartSpan(ctx, fmt.Sprintf("create %s history provenance", name))
 			defer span.End()
 
-			prc, err := NewProvenanceCreator(ctx2, cap, res, attrs, j, usage)
+			// TODO: use provenance slsa v1 for build history?
+			pc, err := NewProvenanceCreator(ctx2, provenancetypes.ProvenanceSLSA02, cap, res, attrs, j, usage)
 			if err != nil {
 				return nil, nil, err
 			}
-			pr, err := prc.Predicate(ctx)
+			pr, err := pc.Predicate(ctx)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -267,7 +268,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 				Size:      desc.Size,
 				MediaType: desc.MediaType,
 				Annotations: map[string]string{
-					"in-toto.io/predicate-type": slsa02.PredicateSLSAProvenance,
+					"in-toto.io/predicate-type": pc.PredicateType(),
 				},
 			}, release, nil
 		}

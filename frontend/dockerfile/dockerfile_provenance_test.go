@@ -76,32 +76,360 @@ RUN echo ok> /foo
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 
-	for _, mode := range []string{"", "min", "max"} {
-		t.Run(mode, func(t *testing.T) {
-			var target string
-			if target == "" {
-				target = registry + "/buildkit/testwithprovenance:none"
-			} else {
-				target = registry + "/buildkit/testwithprovenance:" + mode
+	for _, slsaVersion := range []string{"", "v1", "v0.2"} {
+		for _, mode := range []string{"", "min", "max"} {
+			var tname []string
+			if slsaVersion != "" {
+				tname = append(tname, slsaVersion)
+			}
+			if mode != "" {
+				tname = append(tname, mode)
+			}
+			t.Run(strings.Join(tname, "-"), func(t *testing.T) {
+				var target string
+				if target == "" {
+					target = registry + "/buildkit/testwithprovenance:none"
+				} else {
+					target = registry + "/buildkit/testwithprovenance:" + mode
+				}
+
+				var provArgs []string
+				if slsaVersion != "" {
+					provArgs = append(provArgs, "version="+slsaVersion)
+				}
+				if mode != "" {
+					provArgs = append(provArgs, "mode="+mode)
+				}
+				_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+					LocalMounts: map[string]fsutil.FS{
+						dockerui.DefaultLocalNameDockerfile: dir,
+						dockerui.DefaultLocalNameContext:    dir,
+					},
+					FrontendAttrs: map[string]string{
+						"attest:provenance": strings.Join(provArgs, ","),
+						"build-arg:FOO":     "bar",
+						"label:lbl":         "abc",
+						"vcs:source":        "https://user:pass@example.invalid/repo.git",
+						"vcs:revision":      "123456",
+						"filename":          "Dockerfile",
+						dockerui.DefaultLocalNameContext + ":foo": "https://foo:bar@example.invalid/foo.html",
+					},
+					Exports: []client.ExportEntry{
+						{
+							Type: client.ExporterImage,
+							Attrs: map[string]string{
+								"name": target,
+								"push": "true",
+							},
+						},
+					},
+				}, nil)
+				require.NoError(t, err)
+
+				desc, provider, err := contentutil.ProviderFromRef(target)
+				require.NoError(t, err)
+				imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
+				require.NoError(t, err)
+				require.Equal(t, 2, len(imgs.Images))
+
+				img := imgs.Find(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
+				require.NotNil(t, img)
+				outFile := integration.UnixOrWindows("foo", "Files/foo")
+				expectedFileData := integration.UnixOrWindows([]byte("ok\n"), []byte("ok\r\n"))
+				require.Equal(t, expectedFileData, img.Layers[1][outFile].Data)
+
+				att := imgs.Find("unknown/unknown")
+				require.NotNil(t, att)
+				require.Equal(t, string(img.Desc.Digest), att.Desc.Annotations["vnd.docker.reference.digest"])
+				require.Equal(t, "attestation-manifest", att.Desc.Annotations["vnd.docker.reference.type"])
+				var attest intoto.Statement
+				require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
+				require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+
+				if slsaVersion == "v1" {
+					require.Equal(t, "https://slsa.dev/provenance/v1", attest.PredicateType) // intentionally not const
+				} else {
+					require.Equal(t, "https://slsa.dev/provenance/v0.2", attest.PredicateType) // intentionally not const
+				}
+
+				_, isClient := f.(*clientFrontend)
+				_, isGateway := f.(*gatewayFrontend)
+
+				if slsaVersion == "v1" {
+					type stmtT struct {
+						Predicate provenancetypes.ProvenancePredicateSLSA1 `json:"predicate"`
+					}
+					var stmt stmtT
+					require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
+					pred := stmt.Predicate
+
+					require.Equal(t, "https://github.com/moby/buildkit/blob/master/docs/attestations/slsa-definitions.md", pred.BuildDefinition.BuildType)
+					require.Equal(t, "", pred.RunDetails.Builder.ID)
+
+					require.Equal(t, "", pred.BuildDefinition.ExternalParameters.ConfigSource.URI)
+
+					args := pred.BuildDefinition.ExternalParameters.Request.Args
+					if isClient {
+						require.Equal(t, "", pred.BuildDefinition.ExternalParameters.Request.Frontend)
+						require.Equal(t, 0, len(args), "%v", args)
+						require.False(t, pred.RunDetails.Metadata.Completeness.Request)
+						require.Equal(t, "", pred.BuildDefinition.ExternalParameters.ConfigSource.Path)
+					} else if isGateway {
+						require.Equal(t, "gateway.v0", pred.BuildDefinition.ExternalParameters.Request.Frontend)
+
+						if mode == "max" || mode == "" {
+							require.Equal(t, 4, len(args), "%v", args)
+							require.True(t, pred.RunDetails.Metadata.Completeness.Request)
+
+							require.Equal(t, "bar", args["build-arg:FOO"])
+							require.Equal(t, "abc", args["label:lbl"])
+							require.Contains(t, args["source"], "buildkit_test/")
+						} else {
+							require.False(t, pred.RunDetails.Metadata.Completeness.Request)
+							require.Equal(t, 2, len(args), "%v", args)
+							require.Contains(t, args["source"], "buildkit_test/")
+						}
+						require.Equal(t, "https://xxxxx:xxxxx@example.invalid/foo.html", args["context:foo"])
+					} else {
+						require.Equal(t, "dockerfile.v0", pred.BuildDefinition.ExternalParameters.Request.Frontend)
+
+						if mode == "max" || mode == "" {
+							require.Equal(t, 3, len(args))
+							require.True(t, pred.RunDetails.Metadata.Completeness.Request)
+
+							require.Equal(t, "bar", args["build-arg:FOO"])
+							require.Equal(t, "abc", args["label:lbl"])
+						} else {
+							require.False(t, pred.RunDetails.Metadata.Completeness.Request)
+							require.Equal(t, 1, len(args), "%v", args)
+						}
+						require.Equal(t, "https://xxxxx:xxxxx@example.invalid/foo.html", args["context:foo"])
+					}
+
+					expectedBaseImage := integration.UnixOrWindows("busybox", "nanoserver")
+					escapedPlatform := url.PathEscape(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
+					expectedBase := fmt.Sprintf("pkg:docker/%s@latest?platform=%s", expectedBaseImage, escapedPlatform)
+					if isGateway {
+						require.Equal(t, 2, len(pred.BuildDefinition.ResolvedDependencies), "%+v", pred.BuildDefinition.ResolvedDependencies)
+						require.Contains(t, pred.BuildDefinition.ResolvedDependencies[0].URI, "docker/buildkit_test")
+						require.Equal(t, expectedBase, pred.BuildDefinition.ResolvedDependencies[1].URI)
+						require.NotEmpty(t, pred.BuildDefinition.ResolvedDependencies[1].Digest["sha256"])
+					} else {
+						require.Equal(t, 1, len(pred.BuildDefinition.ResolvedDependencies), "%+v", pred.BuildDefinition.ResolvedDependencies)
+						require.Equal(t, expectedBase, pred.BuildDefinition.ResolvedDependencies[0].URI)
+						require.NotEmpty(t, pred.BuildDefinition.ResolvedDependencies[0].Digest["sha256"])
+					}
+
+					if !isClient {
+						require.Equal(t, "Dockerfile", pred.BuildDefinition.ExternalParameters.ConfigSource.Path)
+						require.Equal(t, "https://xxxxx:xxxxx@example.invalid/repo.git", pred.RunDetails.Metadata.BuildKitMetadata.VCS["source"])
+						require.Equal(t, "123456", pred.RunDetails.Metadata.BuildKitMetadata.VCS["revision"])
+					}
+
+					require.NotEmpty(t, pred.RunDetails.Metadata.InvocationID)
+
+					require.Equal(t, 2, len(pred.BuildDefinition.ExternalParameters.Request.Locals), "%+v", pred.BuildDefinition.ExternalParameters.Request.Locals)
+					require.Equal(t, "context", pred.BuildDefinition.ExternalParameters.Request.Locals[0].Name)
+					require.Equal(t, "dockerfile", pred.BuildDefinition.ExternalParameters.Request.Locals[1].Name)
+
+					require.NotNil(t, pred.RunDetails.Metadata.FinishedOn)
+					require.Less(t, time.Since(*pred.RunDetails.Metadata.FinishedOn), 5*time.Minute)
+					require.NotNil(t, pred.RunDetails.Metadata.StartedOn)
+					require.Less(t, time.Since(*pred.RunDetails.Metadata.StartedOn), 5*time.Minute)
+					require.True(t, pred.RunDetails.Metadata.StartedOn.Before(*pred.RunDetails.Metadata.FinishedOn))
+
+					require.Equal(t, platforms.Format(platforms.Normalize(platforms.DefaultSpec())), pred.BuildDefinition.InternalParameters.BuilderPlatform)
+
+					require.False(t, pred.RunDetails.Metadata.Completeness.ResolvedDependencies)
+					require.False(t, pred.RunDetails.Metadata.Reproducible)
+					require.False(t, pred.RunDetails.Metadata.Hermetic)
+
+					if mode == "max" || mode == "" {
+						require.Equal(t, 2, len(pred.RunDetails.Metadata.BuildKitMetadata.Layers))
+						require.NotNil(t, pred.RunDetails.Metadata.BuildKitMetadata.Source)
+						require.Equal(t, "Dockerfile", pred.RunDetails.Metadata.BuildKitMetadata.Source.Infos[0].Filename)
+						require.Equal(t, dockerfile, pred.RunDetails.Metadata.BuildKitMetadata.Source.Infos[0].Data)
+						require.NotNil(t, pred.BuildDefinition.InternalParameters.BuildConfig)
+						require.Equal(t, 3, len(pred.BuildDefinition.InternalParameters.BuildConfig.Definition))
+					} else {
+						require.Equal(t, 0, len(pred.RunDetails.Metadata.BuildKitMetadata.Layers))
+						require.Nil(t, pred.RunDetails.Metadata.BuildKitMetadata.Source)
+						require.Nil(t, pred.BuildDefinition.InternalParameters.BuildConfig)
+					}
+				} else {
+					type stmtT struct {
+						Predicate provenancetypes.ProvenancePredicateSLSA02 `json:"predicate"`
+					}
+					var stmt stmtT
+					require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
+					pred := stmt.Predicate
+
+					require.Equal(t, "https://mobyproject.org/buildkit@v1", pred.BuildType)
+					require.Equal(t, "", pred.Builder.ID)
+
+					require.Equal(t, "", pred.Invocation.ConfigSource.URI)
+
+					args := pred.Invocation.Parameters.Args
+					if isClient {
+						require.Equal(t, "", pred.Invocation.Parameters.Frontend)
+						require.Equal(t, 0, len(args), "%v", args)
+						require.False(t, pred.Metadata.Completeness.Parameters)
+						require.Equal(t, "", pred.Invocation.ConfigSource.EntryPoint)
+					} else if isGateway {
+						require.Equal(t, "gateway.v0", pred.Invocation.Parameters.Frontend)
+
+						if mode == "max" || mode == "" {
+							require.Equal(t, 4, len(args), "%v", args)
+							require.True(t, pred.Metadata.Completeness.Parameters)
+
+							require.Equal(t, "bar", args["build-arg:FOO"])
+							require.Equal(t, "abc", args["label:lbl"])
+							require.Contains(t, args["source"], "buildkit_test/")
+						} else {
+							require.False(t, pred.Metadata.Completeness.Parameters)
+							require.Equal(t, 2, len(args), "%v", args)
+							require.Contains(t, args["source"], "buildkit_test/")
+						}
+						require.Equal(t, "https://xxxxx:xxxxx@example.invalid/foo.html", args["context:foo"])
+					} else {
+						require.Equal(t, "dockerfile.v0", pred.Invocation.Parameters.Frontend)
+
+						if mode == "max" || mode == "" {
+							require.Equal(t, 3, len(args))
+							require.True(t, pred.Metadata.Completeness.Parameters)
+
+							require.Equal(t, "bar", args["build-arg:FOO"])
+							require.Equal(t, "abc", args["label:lbl"])
+						} else {
+							require.False(t, pred.Metadata.Completeness.Parameters)
+							require.Equal(t, 1, len(args), "%v", args)
+						}
+						require.Equal(t, "https://xxxxx:xxxxx@example.invalid/foo.html", args["context:foo"])
+					}
+
+					expectedBaseImage := integration.UnixOrWindows("busybox", "nanoserver")
+					escapedPlatform := url.PathEscape(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
+					expectedBase := fmt.Sprintf("pkg:docker/%s@latest?platform=%s", expectedBaseImage, escapedPlatform)
+					if isGateway {
+						require.Equal(t, 2, len(pred.Materials), "%+v", pred.Materials)
+						require.Contains(t, pred.Materials[0].URI, "docker/buildkit_test")
+						require.Equal(t, expectedBase, pred.Materials[1].URI)
+						require.NotEmpty(t, pred.Materials[1].Digest["sha256"])
+					} else {
+						require.Equal(t, 1, len(pred.Materials), "%+v", pred.Materials)
+						require.Equal(t, expectedBase, pred.Materials[0].URI)
+						require.NotEmpty(t, pred.Materials[0].Digest["sha256"])
+					}
+
+					if !isClient {
+						require.Equal(t, "Dockerfile", pred.Invocation.ConfigSource.EntryPoint)
+						require.Equal(t, "https://xxxxx:xxxxx@example.invalid/repo.git", pred.Metadata.BuildKitMetadata.VCS["source"])
+						require.Equal(t, "123456", pred.Metadata.BuildKitMetadata.VCS["revision"])
+					}
+
+					require.NotEmpty(t, pred.Metadata.BuildInvocationID)
+
+					require.Equal(t, 2, len(pred.Invocation.Parameters.Locals), "%+v", pred.Invocation.Parameters.Locals)
+					require.Equal(t, "context", pred.Invocation.Parameters.Locals[0].Name)
+					require.Equal(t, "dockerfile", pred.Invocation.Parameters.Locals[1].Name)
+
+					require.NotNil(t, pred.Metadata.BuildFinishedOn)
+					require.Less(t, time.Since(*pred.Metadata.BuildFinishedOn), 5*time.Minute)
+					require.NotNil(t, pred.Metadata.BuildStartedOn)
+					require.Less(t, time.Since(*pred.Metadata.BuildStartedOn), 5*time.Minute)
+					require.True(t, pred.Metadata.BuildStartedOn.Before(*pred.Metadata.BuildFinishedOn))
+
+					require.True(t, pred.Metadata.Completeness.Environment)
+					require.Equal(t, platforms.Format(platforms.Normalize(platforms.DefaultSpec())), pred.Invocation.Environment.Platform)
+
+					require.False(t, pred.Metadata.Completeness.Materials)
+					require.False(t, pred.Metadata.Reproducible)
+					require.False(t, pred.Metadata.Hermetic)
+
+					if mode == "max" || mode == "" {
+						require.Equal(t, 2, len(pred.Metadata.BuildKitMetadata.Layers))
+						require.NotNil(t, pred.Metadata.BuildKitMetadata.Source)
+						require.Equal(t, "Dockerfile", pred.Metadata.BuildKitMetadata.Source.Infos[0].Filename)
+						require.Equal(t, dockerfile, pred.Metadata.BuildKitMetadata.Source.Infos[0].Data)
+						require.NotNil(t, pred.BuildConfig)
+
+						require.Equal(t, 3, len(pred.BuildConfig.Definition))
+					} else {
+						require.Equal(t, 0, len(pred.Metadata.BuildKitMetadata.Layers))
+						require.Nil(t, pred.Metadata.BuildKitMetadata.Source)
+						require.Nil(t, pred.BuildConfig)
+					}
+				}
+			})
+		}
+	}
+}
+
+func testGitProvenanceAttestation(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	f := getFrontend(t, sb)
+
+	for _, slsaVersion := range []string{"", "v1", "v0.2"} {
+		t.Run(slsaVersion, func(t *testing.T) {
+			var provArgs []string
+			if slsaVersion != "" {
+				provArgs = append(provArgs, "version="+slsaVersion)
 			}
 
-			provReq := ""
-			if mode != "" {
-				provReq = "mode=" + mode
-			}
+			dockerfile := []byte(`
+FROM busybox:latest
+RUN --network=none echo "git" > /foo
+COPY myapp.Dockerfile /
+`)
+			dir := integration.Tmpdir(
+				t,
+				fstest.CreateFile("myapp.Dockerfile", dockerfile, 0600),
+			)
+
+			err = runShell(dir.Name,
+				"git init",
+				"git config --local user.email test",
+				"git config --local user.name test",
+				"git add myapp.Dockerfile",
+				"git commit -m initial",
+				"git branch v1",
+				"git update-server-info",
+			)
+			require.NoError(t, err)
+
+			cmd := exec.Command("git", "rev-parse", "v1")
+			cmd.Dir = dir.Name
+			expectedGitSHA, err := cmd.Output()
+			require.NoError(t, err)
+
+			server := httptest.NewServer(http.FileServer(http.Dir(filepath.Clean(dir.Name))))
+			defer server.Close()
+
+			target := registry + "/buildkit/testwithprovenance:git"
+
+			// inject dummy credentials to test that they are masked
+			expectedURL := strings.Replace(server.URL, "http://", "http://xxxxx:xxxxx@", 1)
+			require.NotEqual(t, expectedURL, server.URL)
+			server.URL = strings.Replace(server.URL, "http://", "http://user:pass@", 1)
+
 			_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-				LocalMounts: map[string]fsutil.FS{
-					dockerui.DefaultLocalNameDockerfile: dir,
-					dockerui.DefaultLocalNameContext:    dir,
-				},
 				FrontendAttrs: map[string]string{
-					"attest:provenance": provReq,
-					"build-arg:FOO":     "bar",
-					"label:lbl":         "abc",
-					"vcs:source":        "https://user:pass@example.invalid/repo.git",
-					"vcs:revision":      "123456",
-					"filename":          "Dockerfile",
-					dockerui.DefaultLocalNameContext + ":foo": "https://foo:bar@example.invalid/foo.html",
+					"context":           server.URL + "/.git#v1",
+					"attest:provenance": strings.Join(provArgs, ","),
+					"filename":          "myapp.Dockerfile",
 				},
 				Exports: []client.ExportEntry{
 					{
@@ -123,9 +451,7 @@ RUN echo ok> /foo
 
 			img := imgs.Find(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
 			require.NotNil(t, img)
-			outFile := integration.UnixOrWindows("foo", "Files/foo")
-			expectedFileData := integration.UnixOrWindows([]byte("ok\n"), []byte("ok\r\n"))
-			require.Equal(t, expectedFileData, img.Layers[1][outFile].Data)
+			require.Equal(t, []byte("git\n"), img.Layers[1]["foo"].Data)
 
 			att := imgs.Find("unknown/unknown")
 			require.NotNil(t, att)
@@ -134,263 +460,124 @@ RUN echo ok> /foo
 			var attest intoto.Statement
 			require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
-			require.Equal(t, "https://slsa.dev/provenance/v0.2", attest.PredicateType) // intentionally not const
-
-			type stmtT struct {
-				Predicate provenancetypes.ProvenancePredicate `json:"predicate"`
-			}
-			var stmt stmtT
-			require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
-			pred := stmt.Predicate
-
-			require.Equal(t, "https://mobyproject.org/buildkit@v1", pred.BuildType)
-			require.Equal(t, "", pred.Builder.ID)
-
-			require.Equal(t, "", pred.Invocation.ConfigSource.URI)
 
 			_, isClient := f.(*clientFrontend)
 			_, isGateway := f.(*gatewayFrontend)
 
-			args := pred.Invocation.Parameters.Args
-			if isClient {
-				require.Equal(t, "", pred.Invocation.Parameters.Frontend)
-				require.Equal(t, 0, len(args), "%v", args)
-				require.False(t, pred.Metadata.Completeness.Parameters)
-				require.Equal(t, "", pred.Invocation.ConfigSource.EntryPoint)
-			} else if isGateway {
-				require.Equal(t, "gateway.v0", pred.Invocation.Parameters.Frontend)
+			if slsaVersion == "v1" {
+				require.Equal(t, "https://slsa.dev/provenance/v1", attest.PredicateType) // intentionally not const
 
-				if mode == "max" || mode == "" {
-					require.Equal(t, 4, len(args), "%v", args)
-					require.True(t, pred.Metadata.Completeness.Parameters)
-
-					require.Equal(t, "bar", args["build-arg:FOO"])
-					require.Equal(t, "abc", args["label:lbl"])
-					require.Contains(t, args["source"], "buildkit_test/")
-				} else {
-					require.False(t, pred.Metadata.Completeness.Parameters)
-					require.Equal(t, 2, len(args), "%v", args)
-					require.Contains(t, args["source"], "buildkit_test/")
+				type stmtT struct {
+					Predicate provenancetypes.ProvenancePredicateSLSA1 `json:"predicate"`
 				}
-				require.Equal(t, "https://xxxxx:xxxxx@example.invalid/foo.html", args["context:foo"])
-			} else {
-				require.Equal(t, "dockerfile.v0", pred.Invocation.Parameters.Frontend)
+				var stmt stmtT
+				require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
+				pred := stmt.Predicate
 
-				if mode == "max" || mode == "" {
-					require.Equal(t, 3, len(args))
-					require.True(t, pred.Metadata.Completeness.Parameters)
-
-					require.Equal(t, "bar", args["build-arg:FOO"])
-					require.Equal(t, "abc", args["label:lbl"])
+				if isClient {
+					require.Empty(t, pred.BuildDefinition.ExternalParameters.Request.Frontend)
+					require.Equal(t, "", pred.BuildDefinition.ExternalParameters.ConfigSource.URI)
+					require.Equal(t, "", pred.BuildDefinition.ExternalParameters.ConfigSource.Path)
 				} else {
-					require.False(t, pred.Metadata.Completeness.Parameters)
-					require.Equal(t, 1, len(args), "%v", args)
+					require.NotEmpty(t, pred.BuildDefinition.ExternalParameters.Request.Frontend)
+					require.Equal(t, expectedURL+"/.git#v1", pred.BuildDefinition.ExternalParameters.ConfigSource.URI)
+					require.Equal(t, "myapp.Dockerfile", pred.BuildDefinition.ExternalParameters.ConfigSource.Path)
 				}
-				require.Equal(t, "https://xxxxx:xxxxx@example.invalid/foo.html", args["context:foo"])
-			}
 
-			expectedBaseImage := integration.UnixOrWindows("busybox", "nanoserver")
-			escapedPlatform := url.PathEscape(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
-			expectedBase := fmt.Sprintf("pkg:docker/%s@latest?platform=%s", expectedBaseImage, escapedPlatform)
-			if isGateway {
-				require.Equal(t, 2, len(pred.Materials), "%+v", pred.Materials)
-				require.Contains(t, pred.Materials[0].URI, "docker/buildkit_test")
-				require.Equal(t, expectedBase, pred.Materials[1].URI)
-				require.NotEmpty(t, pred.Materials[1].Digest["sha256"])
+				expBase := "pkg:docker/busybox@latest?platform=" + url.PathEscape(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
+				if isGateway {
+					require.Equal(t, 3, len(pred.BuildDefinition.ResolvedDependencies), "%+v", pred.BuildDefinition.ResolvedDependencies)
+
+					require.Contains(t, pred.BuildDefinition.ResolvedDependencies[0].URI, "pkg:docker/buildkit_test/")
+					require.NotEmpty(t, pred.BuildDefinition.ResolvedDependencies[0].Digest)
+
+					require.Equal(t, expBase, pred.BuildDefinition.ResolvedDependencies[1].URI)
+					require.NotEmpty(t, pred.BuildDefinition.ResolvedDependencies[1].Digest["sha256"])
+
+					require.Equal(t, expectedURL+"/.git#v1", pred.BuildDefinition.ResolvedDependencies[2].URI)
+					require.Equal(t, strings.TrimSpace(string(expectedGitSHA)), pred.BuildDefinition.ResolvedDependencies[2].Digest["sha1"])
+				} else {
+					require.Equal(t, 2, len(pred.BuildDefinition.ResolvedDependencies), "%+v", pred.BuildDefinition.ResolvedDependencies)
+
+					require.Equal(t, expBase, pred.BuildDefinition.ResolvedDependencies[0].URI)
+					require.NotEmpty(t, pred.BuildDefinition.ResolvedDependencies[0].Digest["sha256"])
+
+					require.Equal(t, expectedURL+"/.git#v1", pred.BuildDefinition.ResolvedDependencies[1].URI)
+					require.Equal(t, strings.TrimSpace(string(expectedGitSHA)), pred.BuildDefinition.ResolvedDependencies[1].Digest["sha1"])
+				}
+
+				require.Equal(t, 0, len(pred.BuildDefinition.ExternalParameters.Request.Locals))
+
+				require.True(t, pred.RunDetails.Metadata.Completeness.ResolvedDependencies)
+				require.True(t, pred.RunDetails.Metadata.Hermetic)
+
+				if isClient {
+					require.False(t, pred.RunDetails.Metadata.Completeness.Request)
+				} else {
+					require.True(t, pred.RunDetails.Metadata.Completeness.Request)
+				}
+				require.False(t, pred.RunDetails.Metadata.Reproducible)
+
+				require.Equal(t, 0, len(pred.RunDetails.Metadata.BuildKitMetadata.VCS), "%+v", pred.RunDetails.Metadata.BuildKitMetadata.VCS)
 			} else {
-				require.Equal(t, 1, len(pred.Materials), "%+v", pred.Materials)
-				require.Equal(t, expectedBase, pred.Materials[0].URI)
-				require.NotEmpty(t, pred.Materials[0].Digest["sha256"])
-			}
+				require.Equal(t, "https://slsa.dev/provenance/v0.2", attest.PredicateType) // intentionally not const
 
-			if !isClient {
-				require.Equal(t, "Dockerfile", pred.Invocation.ConfigSource.EntryPoint)
-				require.Equal(t, "https://xxxxx:xxxxx@example.invalid/repo.git", pred.Metadata.BuildKitMetadata.VCS["source"])
-				require.Equal(t, "123456", pred.Metadata.BuildKitMetadata.VCS["revision"])
-			}
+				type stmtT struct {
+					Predicate provenancetypes.ProvenancePredicateSLSA02 `json:"predicate"`
+				}
+				var stmt stmtT
+				require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
+				pred := stmt.Predicate
 
-			require.NotEmpty(t, pred.Metadata.BuildInvocationID)
+				if isClient {
+					require.Empty(t, pred.Invocation.Parameters.Frontend)
+					require.Equal(t, "", pred.Invocation.ConfigSource.URI)
+					require.Equal(t, "", pred.Invocation.ConfigSource.EntryPoint)
+				} else {
+					require.NotEmpty(t, pred.Invocation.Parameters.Frontend)
+					require.Equal(t, expectedURL+"/.git#v1", pred.Invocation.ConfigSource.URI)
+					require.Equal(t, "myapp.Dockerfile", pred.Invocation.ConfigSource.EntryPoint)
+				}
 
-			require.Equal(t, 2, len(pred.Invocation.Parameters.Locals), "%+v", pred.Invocation.Parameters.Locals)
-			require.Equal(t, "context", pred.Invocation.Parameters.Locals[0].Name)
-			require.Equal(t, "dockerfile", pred.Invocation.Parameters.Locals[1].Name)
+				expBase := "pkg:docker/busybox@latest?platform=" + url.PathEscape(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
+				if isGateway {
+					require.Equal(t, 3, len(pred.Materials), "%+v", pred.Materials)
 
-			require.NotNil(t, pred.Metadata.BuildFinishedOn)
-			require.Less(t, time.Since(*pred.Metadata.BuildFinishedOn), 5*time.Minute)
-			require.NotNil(t, pred.Metadata.BuildStartedOn)
-			require.Less(t, time.Since(*pred.Metadata.BuildStartedOn), 5*time.Minute)
-			require.True(t, pred.Metadata.BuildStartedOn.Before(*pred.Metadata.BuildFinishedOn))
+					require.Contains(t, pred.Materials[0].URI, "pkg:docker/buildkit_test/")
+					require.NotEmpty(t, pred.Materials[0].Digest)
 
-			require.True(t, pred.Metadata.Completeness.Environment)
-			require.Equal(t, platforms.Format(platforms.Normalize(platforms.DefaultSpec())), pred.Invocation.Environment.Platform)
+					require.Equal(t, expBase, pred.Materials[1].URI)
+					require.NotEmpty(t, pred.Materials[1].Digest["sha256"])
 
-			require.False(t, pred.Metadata.Completeness.Materials)
-			require.False(t, pred.Metadata.Reproducible)
-			require.False(t, pred.Metadata.Hermetic)
+					require.Equal(t, expectedURL+"/.git#v1", pred.Materials[2].URI)
+					require.Equal(t, strings.TrimSpace(string(expectedGitSHA)), pred.Materials[2].Digest["sha1"])
+				} else {
+					require.Equal(t, 2, len(pred.Materials), "%+v", pred.Materials)
 
-			if mode == "max" || mode == "" {
-				require.Equal(t, 2, len(pred.Metadata.BuildKitMetadata.Layers))
-				require.NotNil(t, pred.Metadata.BuildKitMetadata.Source)
-				require.Equal(t, "Dockerfile", pred.Metadata.BuildKitMetadata.Source.Infos[0].Filename)
-				require.Equal(t, dockerfile, pred.Metadata.BuildKitMetadata.Source.Infos[0].Data)
-				require.NotNil(t, pred.BuildConfig)
+					require.Equal(t, expBase, pred.Materials[0].URI)
+					require.NotEmpty(t, pred.Materials[0].Digest["sha256"])
 
-				require.Equal(t, 3, len(pred.BuildConfig.Definition))
-			} else {
-				require.Equal(t, 0, len(pred.Metadata.BuildKitMetadata.Layers))
-				require.Nil(t, pred.Metadata.BuildKitMetadata.Source)
-				require.Nil(t, pred.BuildConfig)
+					require.Equal(t, expectedURL+"/.git#v1", pred.Materials[1].URI)
+					require.Equal(t, strings.TrimSpace(string(expectedGitSHA)), pred.Materials[1].Digest["sha1"])
+				}
+
+				require.Equal(t, 0, len(pred.Invocation.Parameters.Locals))
+
+				require.True(t, pred.Metadata.Completeness.Materials)
+				require.True(t, pred.Metadata.Completeness.Environment)
+				require.True(t, pred.Metadata.Hermetic)
+
+				if isClient {
+					require.False(t, pred.Metadata.Completeness.Parameters)
+				} else {
+					require.True(t, pred.Metadata.Completeness.Parameters)
+				}
+				require.False(t, pred.Metadata.Reproducible)
+
+				require.Equal(t, 0, len(pred.Metadata.BuildKitMetadata.VCS), "%+v", pred.Metadata.BuildKitMetadata.VCS)
 			}
 		})
 	}
-}
-
-func testGitProvenanceAttestation(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
-	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
-	ctx := sb.Context()
-
-	c, err := client.New(ctx, sb.Address())
-	require.NoError(t, err)
-	defer c.Close()
-
-	registry, err := sb.NewRegistry()
-	if errors.Is(err, integration.ErrRequirements) {
-		t.Skip(err.Error())
-	}
-	require.NoError(t, err)
-
-	f := getFrontend(t, sb)
-
-	dockerfile := []byte(`
-FROM busybox:latest
-RUN --network=none echo "git" > /foo
-COPY myapp.Dockerfile /
-`)
-	dir := integration.Tmpdir(
-		t,
-		fstest.CreateFile("myapp.Dockerfile", dockerfile, 0600),
-	)
-
-	err = runShell(dir.Name,
-		"git init",
-		"git config --local user.email test",
-		"git config --local user.name test",
-		"git add myapp.Dockerfile",
-		"git commit -m initial",
-		"git branch v1",
-		"git update-server-info",
-	)
-	require.NoError(t, err)
-
-	cmd := exec.Command("git", "rev-parse", "v1")
-	cmd.Dir = dir.Name
-	expectedGitSHA, err := cmd.Output()
-	require.NoError(t, err)
-
-	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Clean(dir.Name))))
-	defer server.Close()
-
-	target := registry + "/buildkit/testwithprovenance:git"
-
-	// inject dummy credentials to test that they are masked
-	expectedURL := strings.Replace(server.URL, "http://", "http://xxxxx:xxxxx@", 1)
-	require.NotEqual(t, expectedURL, server.URL)
-	server.URL = strings.Replace(server.URL, "http://", "http://user:pass@", 1)
-
-	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		FrontendAttrs: map[string]string{
-			"context":           server.URL + "/.git#v1",
-			"attest:provenance": "",
-			"filename":          "myapp.Dockerfile",
-		},
-		Exports: []client.ExportEntry{
-			{
-				Type: client.ExporterImage,
-				Attrs: map[string]string{
-					"name": target,
-					"push": "true",
-				},
-			},
-		},
-	}, nil)
-	require.NoError(t, err)
-
-	desc, provider, err := contentutil.ProviderFromRef(target)
-	require.NoError(t, err)
-	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
-	require.NoError(t, err)
-	require.Equal(t, 2, len(imgs.Images))
-
-	img := imgs.Find(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
-	require.NotNil(t, img)
-	require.Equal(t, []byte("git\n"), img.Layers[1]["foo"].Data)
-
-	att := imgs.Find("unknown/unknown")
-	require.NotNil(t, att)
-	require.Equal(t, string(img.Desc.Digest), att.Desc.Annotations["vnd.docker.reference.digest"])
-	require.Equal(t, "attestation-manifest", att.Desc.Annotations["vnd.docker.reference.type"])
-	var attest intoto.Statement
-	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
-	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
-	require.Equal(t, "https://slsa.dev/provenance/v0.2", attest.PredicateType) // intentionally not const
-
-	type stmtT struct {
-		Predicate provenancetypes.ProvenancePredicate `json:"predicate"`
-	}
-	var stmt stmtT
-	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
-	pred := stmt.Predicate
-
-	_, isClient := f.(*clientFrontend)
-	_, isGateway := f.(*gatewayFrontend)
-
-	if isClient {
-		require.Empty(t, pred.Invocation.Parameters.Frontend)
-		require.Equal(t, "", pred.Invocation.ConfigSource.URI)
-		require.Equal(t, "", pred.Invocation.ConfigSource.EntryPoint)
-	} else {
-		require.NotEmpty(t, pred.Invocation.Parameters.Frontend)
-		require.Equal(t, expectedURL+"/.git#v1", pred.Invocation.ConfigSource.URI)
-		require.Equal(t, "myapp.Dockerfile", pred.Invocation.ConfigSource.EntryPoint)
-	}
-
-	expBase := "pkg:docker/busybox@latest?platform=" + url.PathEscape(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
-	if isGateway {
-		require.Equal(t, 3, len(pred.Materials), "%+v", pred.Materials)
-
-		require.Contains(t, pred.Materials[0].URI, "pkg:docker/buildkit_test/")
-		require.NotEmpty(t, pred.Materials[0].Digest)
-
-		require.Equal(t, expBase, pred.Materials[1].URI)
-		require.NotEmpty(t, pred.Materials[1].Digest["sha256"])
-
-		require.Equal(t, expectedURL+"/.git#v1", pred.Materials[2].URI)
-		require.Equal(t, strings.TrimSpace(string(expectedGitSHA)), pred.Materials[2].Digest["sha1"])
-	} else {
-		require.Equal(t, 2, len(pred.Materials), "%+v", pred.Materials)
-
-		require.Equal(t, expBase, pred.Materials[0].URI)
-		require.NotEmpty(t, pred.Materials[0].Digest["sha256"])
-
-		require.Equal(t, expectedURL+"/.git#v1", pred.Materials[1].URI)
-		require.Equal(t, strings.TrimSpace(string(expectedGitSHA)), pred.Materials[1].Digest["sha1"])
-	}
-
-	require.Equal(t, 0, len(pred.Invocation.Parameters.Locals))
-
-	require.True(t, pred.Metadata.Completeness.Materials)
-	require.True(t, pred.Metadata.Completeness.Environment)
-	require.True(t, pred.Metadata.Hermetic)
-
-	if isClient {
-		require.False(t, pred.Metadata.Completeness.Parameters)
-	} else {
-		require.True(t, pred.Metadata.Completeness.Parameters)
-	}
-	require.False(t, pred.Metadata.Reproducible)
-
-	require.Equal(t, 0, len(pred.Metadata.BuildKitMetadata.VCS), "%+v", pred.Metadata.BuildKitMetadata.VCS)
 }
 
 func testMultiPlatformProvenance(t *testing.T, sb integration.Sandbox) {
@@ -472,7 +659,7 @@ RUN echo "ok-$TARGETARCH" > /foo
 		require.Equal(t, "https://slsa.dev/provenance/v0.2", attest.PredicateType) // intentionally not const
 
 		type stmtT struct {
-			Predicate provenancetypes.ProvenancePredicate `json:"predicate"`
+			Predicate provenancetypes.ProvenancePredicateSLSA02 `json:"predicate"`
 		}
 		var stmt stmtT
 		require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
@@ -654,7 +841,7 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, "https://slsa.dev/provenance/v0.2", attest.PredicateType) // intentionally not const
 
 	type stmtT struct {
-		Predicate provenancetypes.ProvenancePredicate `json:"predicate"`
+		Predicate provenancetypes.ProvenancePredicateSLSA02 `json:"predicate"`
 	}
 	var stmt stmtT
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
@@ -800,7 +987,7 @@ func testClientLLBProvenance(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, "https://slsa.dev/provenance/v0.2", attest.PredicateType) // intentionally not const
 
 	type stmtT struct {
-		Predicate provenancetypes.ProvenancePredicate `json:"predicate"`
+		Predicate provenancetypes.ProvenancePredicateSLSA02 `json:"predicate"`
 	}
 	var stmt stmtT
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
@@ -880,7 +1067,7 @@ RUN --mount=type=secret,id=mysecret --mount=type=secret,id=othersecret --mount=t
 
 	att := imgs.FindAttestation(expPlatform)
 	type stmtT struct {
-		Predicate provenancetypes.ProvenancePredicate `json:"predicate"`
+		Predicate provenancetypes.ProvenancePredicateSLSA02 `json:"predicate"`
 	}
 	var stmt stmtT
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
@@ -1007,7 +1194,7 @@ EOF
 
 	att := imgs.FindAttestation(expPlatform)
 	type stmtT struct {
-		Predicate provenancetypes.ProvenancePredicate `json:"predicate"`
+		Predicate provenancetypes.ProvenancePredicateSLSA02 `json:"predicate"`
 	}
 	var stmt stmtT
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
@@ -1260,7 +1447,7 @@ ADD bar bar`)
 
 	att := imgs.FindAttestation(expPlatform)
 	type stmtT struct {
-		Predicate provenancetypes.ProvenancePredicate `json:"predicate"`
+		Predicate provenancetypes.ProvenancePredicateSLSA02 `json:"predicate"`
 	}
 	var stmt stmtT
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
@@ -1454,7 +1641,7 @@ COPY bar bar2
 
 	require.NotEqual(t, 0, len(provDt))
 
-	var pred provenancetypes.ProvenancePredicate
+	var pred provenancetypes.ProvenancePredicateSLSA02
 	require.NoError(t, json.Unmarshal(provDt, &pred))
 
 	sources := pred.Metadata.BuildKitMetadata.Source.Infos
@@ -1535,7 +1722,7 @@ RUN date +%s > /b.txt
 	require.NotNil(t, att)
 
 	var stmt struct {
-		Predicate provenancetypes.ProvenancePredicate `json:"predicate"`
+		Predicate provenancetypes.ProvenancePredicateSLSA02 `json:"predicate"`
 	}
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
 	pred := stmt.Predicate
