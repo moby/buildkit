@@ -128,20 +128,22 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 			lbl := "copying files"
 			if !e.opts.UsePlatformSplit(isMap) {
 				// check for duplicate paths
-				err = outputFS.Walk(ctx, "", func(p string, entry os.DirEntry, err error) error {
-					if entry.IsDir() {
+				err = runWithPrivileges(func() error {
+					return outputFS.Walk(ctx, "", func(p string, entry os.DirEntry, err error) error {
+						if entry.IsDir() {
+							return nil
+						}
+						if err != nil && !errors.Is(err, os.ErrNotExist) {
+							return err
+						}
+						visitedMu.Lock()
+						defer visitedMu.Unlock()
+						if vp, ok := visitedPath[p]; ok {
+							return errors.Errorf("cannot overwrite %s from %s with %s when split option is disabled", p, vp, k)
+						}
+						visitedPath[p] = k
 						return nil
-					}
-					if err != nil && !errors.Is(err, os.ErrNotExist) {
-						return err
-					}
-					visitedMu.Lock()
-					defer visitedMu.Unlock()
-					if vp, ok := visitedPath[p]; ok {
-						return errors.Errorf("cannot overwrite %s from %s with %s when split option is disabled", p, vp, k)
-					}
-					visitedPath[p] = k
-					return nil
+					})
 				})
 				if err != nil {
 					return err
