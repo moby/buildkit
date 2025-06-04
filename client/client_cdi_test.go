@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/util/testutil/integration"
@@ -32,7 +33,11 @@ func testCDI(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	require.NoError(t, os.WriteFile(filepath.Join(sb.CDISpecDir(), "vendor1-device.yaml"), []byte(`
+	writeCDISpecFile(t, sb, c,
+		cdiSpecFile{
+			Name:       "vendor1-device.yaml",
+			DeviceKind: "vendor1.com/device",
+			Data: []byte(`
 cdiVersion: "0.6.0"
 kind: "vendor1.com/device"
 devices:
@@ -42,8 +47,11 @@ devices:
     - FOO=injected
 annotations:
   org.mobyproject.buildkit.device.autoallow: true
-`), 0600))
-	require.NoError(t, os.WriteFile(filepath.Join(sb.CDISpecDir(), "vendor2-device.yaml"), []byte(`
+`)},
+		cdiSpecFile{
+			Name:       "vendor2-device.yaml",
+			DeviceKind: "vendor2.com/device",
+			Data: []byte(`
 cdiVersion: "0.6.0"
 kind: "vendor2.com/device"
 devices:
@@ -53,7 +61,8 @@ devices:
     - BAR=injected
 annotations:
   org.mobyproject.buildkit.device.autoallow: true
-`), 0600))
+`)},
+	)
 
 	busybox := llb.Image("busybox:latest")
 	st := llb.Scratch()
@@ -101,7 +110,10 @@ func testCDINotAllowed(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	require.NoError(t, os.WriteFile(filepath.Join(sb.CDISpecDir(), "vendor1-device.yaml"), []byte(`
+	writeCDISpecFile(t, sb, c, cdiSpecFile{
+		Name:       "vendor1-device.yaml",
+		DeviceKind: "vendor1.com/device",
+		Data: []byte(`
 cdiVersion: "0.6.0"
 kind: "vendor1.com/device"
 devices:
@@ -109,7 +121,7 @@ devices:
   containerEdits:
     env:
     - FOO=injected
-`), 0600))
+`)})
 
 	busybox := llb.Image("busybox:latest")
 	st := llb.Scratch()
@@ -148,7 +160,10 @@ func testCDIEntitlement(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	require.NoError(t, os.WriteFile(filepath.Join(sb.CDISpecDir(), "vendor1-device.yaml"), []byte(`
+	writeCDISpecFile(t, sb, c, cdiSpecFile{
+		Name:       "vendor1-device.yaml",
+		DeviceKind: "vendor1.com/device",
+		Data: []byte(`
 cdiVersion: "0.6.0"
 kind: "vendor1.com/device"
 devices:
@@ -156,7 +171,7 @@ devices:
   containerEdits:
     env:
     - FOO=injected
-`), 0600))
+`)})
 
 	busybox := llb.Image("busybox:latest")
 	st := llb.Scratch()
@@ -199,7 +214,10 @@ func testCDIFirst(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	require.NoError(t, os.WriteFile(filepath.Join(sb.CDISpecDir(), "vendor1-device.yaml"), []byte(`
+	writeCDISpecFile(t, sb, c, cdiSpecFile{
+		Name:       "vendor1-device.yaml",
+		DeviceKind: "vendor1.com/device",
+		Data: []byte(`
 cdiVersion: "0.6.0"
 kind: "vendor1.com/device"
 devices:
@@ -221,7 +239,7 @@ devices:
     - QUX=injected
 annotations:
   org.mobyproject.buildkit.device.autoallow: true
-`), 0600))
+`)})
 
 	busybox := llb.Image("busybox:latest")
 	st := llb.Scratch()
@@ -266,7 +284,10 @@ func testCDIWildcard(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	require.NoError(t, os.WriteFile(filepath.Join(sb.CDISpecDir(), "vendor1-device.yaml"), []byte(`
+	writeCDISpecFile(t, sb, c, cdiSpecFile{
+		Name:       "vendor1-device.yaml",
+		DeviceKind: "vendor1.com/device",
+		Data: []byte(`
 cdiVersion: "0.6.0"
 kind: "vendor1.com/device"
 devices:
@@ -280,7 +301,7 @@ devices:
     - BAR=injected
 annotations:
   org.mobyproject.buildkit.device.autoallow: true
-`), 0600))
+`)})
 
 	busybox := llb.Image("busybox:latest")
 	st := llb.Scratch()
@@ -323,7 +344,10 @@ func testCDIClass(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	require.NoError(t, os.WriteFile(filepath.Join(sb.CDISpecDir(), "vendor1-device.yaml"), []byte(`
+	writeCDISpecFile(t, sb, c, cdiSpecFile{
+		Name:       "vendor1-device.yaml",
+		DeviceKind: "vendor1.com/device",
+		Data: []byte(`
 cdiVersion: "0.6.0"
 kind: "vendor1.com/device"
 annotations:
@@ -352,7 +376,7 @@ devices:
   containerEdits:
     env:
     - QUX=injected
-`), 0600))
+`)})
 
 	busybox := llb.Image("busybox:latest")
 	st := llb.Scratch()
@@ -384,4 +408,51 @@ devices:
 	require.Contains(t, strings.TrimSpace(string(dt)), `BAR=injected`)
 	require.NotContains(t, strings.TrimSpace(string(dt)), `BAZ=injected`)
 	require.NotContains(t, strings.TrimSpace(string(dt)), `QUX=injected`)
+}
+
+type cdiSpecFile struct {
+	Name       string
+	DeviceKind string
+	Data       []byte
+}
+
+func writeCDISpecFile(t *testing.T, sb integration.Sandbox, c *Client, csf ...cdiSpecFile) {
+	kinds := make(map[string]struct{})
+	for _, f := range csf {
+		require.NoError(t, os.WriteFile(filepath.Join(sb.CDISpecDir(), f.Name), f.Data, 0600))
+		kinds[f.DeviceKind] = struct{}{}
+	}
+
+	// The CDI cache is automatically refreshed when a file is added to the
+	// specs directory, so we need to wait for the changes to propagate.
+	deadline := time.Now().Add(5 * time.Second)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for now := range ticker.C {
+		ws, err := c.ListWorkers(sb.Context())
+		require.NoError(t, err, "failed to list workers")
+		require.NotEmpty(t, ws, "no workers found")
+
+		found := make(map[string]struct{})
+		for _, d := range ws[0].CDIDevices {
+			if kind, _, ok := strings.Cut(d.Name, "="); ok {
+				found[kind] = struct{}{}
+			}
+		}
+
+		allFound := true
+		for k := range kinds {
+			if _, ok := found[k]; !ok {
+				allFound = false
+				break
+			}
+		}
+		if allFound {
+			return
+		}
+
+		if now.After(deadline) {
+			t.Fatalf("timeout waiting for CDI devices to appear")
+		}
+	}
 }
