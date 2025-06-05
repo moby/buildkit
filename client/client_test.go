@@ -23,6 +23,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -151,6 +152,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testFrontendMetadataReturn,
 	testFrontendUseSolveResults,
 	testSSHMount,
+	testRawSocketMount,
 	testStdinClosed,
 	testHostnameLookup,
 	testHostnameSpecifying,
@@ -841,6 +843,61 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	require.Contains(t, string(dt), "2048")
 	require.Contains(t, string(dt), "(RSA)")
+}
+
+func testRawSocketMount(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dir := t.TempDir()
+	sockPath := filepath.Join(dir, "test.sock")
+	l, err := net.Listen("unix", sockPath)
+	require.NoError(t, err)
+	defer l.Close()
+
+	var called atomic.Bool
+	srv := &http.Server{
+		ReadHeaderTimeout: 10 * time.Second,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			called.Store(true)
+			w.WriteHeader(http.StatusOK)
+		}),
+	}
+	go srv.Serve(l)
+	defer srv.Close()
+
+	st := llb.Image("alpine:latest").
+		Run(llb.Shlex(`apk add --no-cache curl`)).
+		Run(llb.Shlex(`curl --unix-socket /tmp/test.sock http://./foo`),
+			llb.AddSSHSocket(llb.SSHSocketTarget("/tmp/test.sock")),
+		).Root()
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	raw, err := sshprovider.NewSSHAgentProvider([]sshprovider.AgentConfig{{
+		Paths: []string{sockPath},
+		Raw:   true,
+	}})
+	require.NoError(t, err)
+
+	ch := make(chan *SolveStatus)
+	go func() {
+		for status := range ch {
+			for _, l := range status.Logs {
+				t.Log(string(l.Data))
+			}
+		}
+	}()
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Session: []session.Attachable{raw},
+	}, ch)
+	require.NoError(t, err)
+	require.True(t, called.Load(), "server should have been called")
 }
 
 func testExtraHosts(t *testing.T, sb integration.Sandbox) {
