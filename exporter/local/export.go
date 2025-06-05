@@ -128,7 +128,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 			lbl := "copying files"
 			if !e.opts.UsePlatformSplit(isMap) {
 				// check for duplicate paths
-				err = outputFS.Walk(ctx, "", func(p string, entry os.DirEntry, err error) error {
+				err = fsWalk(ctx, outputFS, "", func(p string, entry os.DirEntry, err error) error {
 					if entry.IsDir() {
 						return nil
 					}
