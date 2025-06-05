@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/platforms"
@@ -64,6 +65,15 @@ func (m *staticEmulatorMount) Mount() ([]mount.Mount, func() error, error) {
 	if err := copy.Copy(context.TODO(), filepath.Dir(m.path), filepath.Base(m.path), tmpdir, qemuMountName, func(ci *copy.CopyInfo) {
 		m := 0555
 		ci.Mode = &m
+		ci.XAttrErrorHandler = func(dst, src, xattrKey string, err error) error {
+			// Ignore ENOTSUP (operation not supported) errors when copying xattrs
+			// This is needed for systems with SELinux enabled where security.selinux
+			// xattrs cannot be modified
+			if errors.Is(err, syscall.ENOTSUP) {
+				return nil
+			}
+			return err
+		}
 	}, copy.WithChown(uid, gid)); err != nil {
 		return nil, nil, err
 	}
