@@ -106,7 +106,7 @@ You will be asked to restart your machine, do so, and then continue with the res
         --containerd-cni-config-path="C:\Program Files\containerd\cni\conf\0-containerd-nat.conf" `
         --containerd-cni-binary-dir="C:\Program Files\containerd\cni\bin" `
         --debug `
-        --log-file="C:\Windows\Temp\buildkitd.log
+        --log-file="C:\Windows\Temp\buildkitd.log"
     ```
 
     > **NOTE:** the above `log-file` path is just an example, but make sure to set up
