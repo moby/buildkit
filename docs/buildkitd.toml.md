@@ -176,7 +176,9 @@ insecure-entitlements = [ "network.host", "security.insecure" ]
 [registry."docker.io"]
   # mirror configuration to handle path in case a mirror registry requires a /project path rather than just a host:port
   mirrors = ["yourmirror.local:5000", "core.harbor.domain/proxy.docker.io"]
+  # Use plain HTTP to connect to the mirrors.
   http = true
+  # Use HTTPS with self-signed certificates. Do not enable this together with `http`.
   insecure = true
   ca=["/etc/config/myca.pem"]
   [[registry."docker.io".keypair]]
