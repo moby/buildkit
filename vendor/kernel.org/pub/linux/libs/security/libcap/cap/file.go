@@ -58,7 +58,9 @@ var ErrBadSize = errors.New("filecap bad size")
 // capability Set values is not supported by this package. This
 // generally implies you are using an exceptionally old
 // "../libcap/cap" package. An upgrade is needed, or failing that see
-// https://sites.google.com/site/fullycapable/ for how to file a bug.
+// [the Fully Capable site] for the way to report or review a bug.
+//
+// [the Fully Capable site]: https://sites.google.com/site/fullycapable/
 var ErrBadMagic = errors.New("unsupported magic")
 
 // ErrBadPath indicates a failed attempt to set a file capability on

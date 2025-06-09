@@ -1,9 +1,7 @@
 // Package psx provides support for system calls that are run
 // simultaneously on all threads under Linux. It supports tool chains
 // after go1.16. Earlier toolchains had no reliable way to support
-// this because of
-//
-//	https://bugzilla.kernel.org/show_bug.cgi?id=219478
+// this because of [Bug 219478].
 //
 // The package works differently depending on whether or not
 // CGO_ENABLED is 0 or 1.
@@ -36,9 +34,7 @@
 // modify the privilege of a running Go program under Linux.
 //
 // More info on how Linux privilege works and examples of using this
-// package can be found here:
-//
-//	https://sites.google.com/site/fullycapable
+// package can be found on the [Fully Capable site].
 //
 // WARNING: For older go toolchains (prior to go1.16), the code should
 // mostly work as far back as go1.11. However, like support for
@@ -49,4 +45,7 @@
 //
 // The psx package is licensed with a (you choose) BSD 3-clause or
 // GPL2. See LICENSE file for details.
+//
+// [Bug 219478]: https://bugzilla.kernel.org/show_bug.cgi?id=219478
+// [Fully Capable site]: https://sites.google.com/site/fullycapable
 package psx // import "kernel.org/pub/linux/libs/security/libcap/psx"

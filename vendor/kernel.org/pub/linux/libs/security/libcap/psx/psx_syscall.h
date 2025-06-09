@@ -43,13 +43,11 @@
 extern "C" {
 #endif
 
-#include <pthread.h>
-
 /*
  * Programmatic way to recognize feature set.
  */
 #define LIBPSX_MAJOR 2
-#define LIBPSX_MINOR 73
+#define LIBPSX_MINOR 76
 
 /*
  * psx_syscall performs the specified syscall on all psx registered

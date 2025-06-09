@@ -1,25 +1,39 @@
+version: "2"
 linters:
   enable:
     - copyloopvar
     - depguard
-    - gofmt
     - gosec
-    - govet
-    - ineffassign
     - misspell
     - nolintlint
-    - staticcheck
-    - tenv
     - unconvert
-    - unused
   disable:
     - errcheck
     - revive
-
-linters-settings:
-  depguard:
-    rules:
-      main:
-        deny:
-          - pkg: "io/ioutil"
-            desc: use "io" or "os" instead
+  settings:
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: io/ioutil
+              desc: use "io" or "os" instead
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

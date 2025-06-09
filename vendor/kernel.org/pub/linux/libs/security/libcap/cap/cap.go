@@ -5,9 +5,7 @@
 // grain permissions to perform privileged operations. Privileged
 // operations are required to do irregular system level operations
 // from code. You can read more about how Capabilities are intended to
-// work here:
-//
-//	https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/33528.pdf
+// work in this [Linux Symposium paper].
 //
 // This package supports native Go bindings for all the features
 // described in that paper as well as supporting subsequent changes to
@@ -33,18 +31,19 @@
 //	    log.Fatalf("failed to fully drop privilege: have=%q, wanted=%q", now, empty)
 //	}
 //
-// The "cap" package operates with POSIX semantics for security
+// This `"cap"` package operates with POSIX semantics for security
 // state. That is all OS threads are kept in sync at all times. The
-// package "kernel.org/pub/linux/libs/security/libcap/psx" is used to
-// implement POSIX semantics system calls that manipulate thread state
-// uniformly over the whole Go (and any CGo linked) process runtime.
+// package `"kernel.org/pub/linux/libs/security/libcap/psx"` is used
+// to implement POSIX semantics system calls that manipulate thread
+// state uniformly over the whole Go (and any CGo linked) process
+// runtime.
 //
 // Note, if the Go runtime syscall interface contains the Linux
-// variant syscall.AllThreadsSyscall() API (it debuted in go1.16 see
-// https://github.com/golang/go/issues/1435 for its history) then the
-// "libcap/psx" package will use that to invoke Capability setting
-// system calls in pure Go binaries. With such an enhanced Go runtime,
-// to force this behavior, use the CGO_ENABLED=0 environment variable.
+// variant `syscall.AllThreadsSyscall()` API (it debuted in go1.16 see
+// [Go bug 1435] for its history) then the "libcap/psx" package will
+// use that to invoke Capability setting system calls in pure Go
+// binaries. With such an enhanced Go runtime, to force this behavior,
+// use the CGO_ENABLED=0 environment variable.
 //
 // POSIX semantics are more secure than trying to manage privilege at
 // a thread level when those threads share a common memory image as
@@ -70,7 +69,7 @@
 // please read its documentation carefully, if you find that you need
 // it.
 //
-// See https://sites.google.com/site/fullycapable/ for recent updates,
+// See [the Fully Capable site] for recent updates,
 // some more complete walk-through examples of ways of using
 // 'cap.Set's etc and information on how to file bugs.
 //
@@ -78,6 +77,10 @@
 //
 // The cap and psx packages are licensed with a (you choose) BSD
 // 3-clause or GPL2. See LICENSE file for details.
+//
+// [Linux Symposium paper]: https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/33528.pdf
+// [Go bug 1435]: https://github.com/golang/go/issues/1435
+// [the Fully Capable site]: https://sites.google.com/site/fullycapable/
 package cap // import "kernel.org/pub/linux/libs/security/libcap/cap"
 
 import (

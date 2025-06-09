@@ -13,10 +13,7 @@ import "syscall"
 // 1.10.
 //
 // See these bugs for the discussion and feature assumed by the code
-// in this Launch() functionality:
-//
-//   https://github.com/golang/go/issues/20395
-//   https://github.com/golang/go/issues/20458
+// in this Launch() functionality: [Go bug 20395], [Go bug 20458].
 //
 // A value of false for this constant causes the Launch functionality
 // to fail with an error: cap.ErrNoLaunch. If this value is false you
@@ -24,6 +21,9 @@ import "syscall"
 //
 //   1) don't use cap.(*Launcher).Launch()
 //   2) upgrade your Go toolchain to 1.10+ (ie., do this one).
+//
+// [Go bug 20395]: https://github.com/golang/go/issues/20395
+// [Go bug 20458]: https://github.com/golang/go/issues/20458
 const LaunchSupported = false
 
 // validatePA confirms that the pa.Sys entry is not incompatible with

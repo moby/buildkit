@@ -269,7 +269,7 @@ github.com/containerd/accelerated-container-image/pkg/utils
 # github.com/containerd/cgroups/v3 v3.0.5
 ## explicit; go 1.22.0
 github.com/containerd/cgroups/v3/cgroup1/stats
-# github.com/containerd/console v1.0.4
+# github.com/containerd/console v1.0.5
 ## explicit; go 1.13
 github.com/containerd/console
 # github.com/containerd/containerd/api v1.9.0
@@ -395,8 +395,8 @@ github.com/containerd/errdefs/pkg/internal/types
 # github.com/containerd/fifo v1.1.0
 ## explicit; go 1.18
 github.com/containerd/fifo
-# github.com/containerd/fuse-overlayfs-snapshotter/v2 v2.1.1
-## explicit; go 1.22.0
+# github.com/containerd/fuse-overlayfs-snapshotter/v2 v2.1.6
+## explicit; go 1.23.0
 github.com/containerd/fuse-overlayfs-snapshotter/v2
 # github.com/containerd/go-cni v1.1.12
 ## explicit; go 1.21
@@ -407,7 +407,7 @@ github.com/containerd/go-runc
 # github.com/containerd/log v0.1.0
 ## explicit; go 1.20
 github.com/containerd/log
-# github.com/containerd/nydus-snapshotter v0.15.0
+# github.com/containerd/nydus-snapshotter v0.15.2
 ## explicit; go 1.22.0
 github.com/containerd/nydus-snapshotter/pkg/converter
 github.com/containerd/nydus-snapshotter/pkg/converter/tool
@@ -757,10 +757,11 @@ github.com/shibumi/go-pathspec
 # github.com/sirupsen/logrus v1.9.3
 ## explicit; go 1.13
 github.com/sirupsen/logrus
-# github.com/spdx/tools-golang v0.5.3
+# github.com/spdx/tools-golang v0.5.5
 ## explicit; go 1.13
 github.com/spdx/tools-golang/convert
 github.com/spdx/tools-golang/json
+github.com/spdx/tools-golang/json/marshal
 github.com/spdx/tools-golang/spdx
 github.com/spdx/tools-golang/spdx/common
 github.com/spdx/tools-golang/spdx/v2/common
@@ -789,7 +790,7 @@ github.com/tonistiigi/go-actions-cache
 # github.com/tonistiigi/go-archvariant v1.0.0
 ## explicit; go 1.17
 github.com/tonistiigi/go-archvariant
-# github.com/tonistiigi/go-csvvalue v0.0.0-20240710180619-ddb21b71c0b4
+# github.com/tonistiigi/go-csvvalue v0.0.0-20240814133006-030d3b2625d0
 ## explicit; go 1.16
 github.com/tonistiigi/go-csvvalue
 # github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea
@@ -804,7 +805,7 @@ github.com/urfave/cli
 # github.com/vbatts/tar-split v0.12.1
 ## explicit; go 1.17
 github.com/vbatts/tar-split/archive/tar
-# github.com/vishvananda/netlink v1.3.1-0.20250303224720-0e7078ed04c8
+# github.com/vishvananda/netlink v1.3.1
 ## explicit; go 1.12
 github.com/vishvananda/netlink
 github.com/vishvananda/netlink/nl
@@ -1125,10 +1126,10 @@ google.golang.org/protobuf/types/pluginpb
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
-# kernel.org/pub/linux/libs/security/libcap/cap v1.2.73
+# kernel.org/pub/linux/libs/security/libcap/cap v1.2.76
 ## explicit; go 1.11
 kernel.org/pub/linux/libs/security/libcap/cap
-# kernel.org/pub/linux/libs/security/libcap/psx v1.2.73
+# kernel.org/pub/linux/libs/security/libcap/psx v1.2.76
 ## explicit; go 1.11
 kernel.org/pub/linux/libs/security/libcap/psx
 # sigs.k8s.io/yaml v1.4.0
