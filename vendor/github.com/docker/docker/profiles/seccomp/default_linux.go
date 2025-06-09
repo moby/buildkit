@@ -166,6 +166,7 @@ func DefaultProfile() *Seccomp {
 					"getuid",
 					"getuid32",
 					"getxattr",
+					"getxattrat", // kernel v6.13, libseccomp v2.6.0
 					"inotify_add_watch",
 					"inotify_init",
 					"inotify_init1",
@@ -191,7 +192,9 @@ func DefaultProfile() *Seccomp {
 					"link",
 					"linkat",
 					"listen",
+					"listmount", // kernel v6.8, libseccomp v2.6.0
 					"listxattr",
+					"listxattrat", // kernel v6.13, libseccomp v2.6.0
 					"llistxattr",
 					"_llseek",
 					"lremovexattr",
@@ -224,6 +227,7 @@ func DefaultProfile() *Seccomp {
 					"mq_timedsend_time64",
 					"mq_unlink",
 					"mremap",
+					"mseal", // kernel v6.9, libseccomp v2.6.0
 					"msgctl",
 					"msgget",
 					"msgrcv",
@@ -273,10 +277,12 @@ func DefaultProfile() *Seccomp {
 					"recvmsg",
 					"remap_file_pages",
 					"removexattr",
+					"removexattrat", // kernel v6.13, libseccomp v2.6.0
 					"rename",
 					"renameat",
 					"renameat2",
 					"restart_syscall",
+					"riscv_hwprobe", // kernel v6.12, libseccomp v2.6.0
 					"rmdir",
 					"rseq",
 					"rt_sigaction",
@@ -342,6 +348,7 @@ func DefaultProfile() *Seccomp {
 					"setuid",
 					"setuid32",
 					"setxattr",
+					"setxattrat", // kernel v6.13, libseccomp v2.6.0
 					"shmat",
 					"shmctl",
 					"shmdt",
@@ -359,6 +366,7 @@ func DefaultProfile() *Seccomp {
 					"stat64",
 					"statfs",
 					"statfs64",
+					"statmount", // kernel v6.8, libseccomp v2.6.0
 					"statx",
 					"symlink",
 					"symlinkat",
@@ -390,6 +398,7 @@ func DefaultProfile() *Seccomp {
 					"uname",
 					"unlink",
 					"unlinkat",
+					"uretprobe", // kernel v6.11, libseccomp v2.6.0
 					"utime",
 					"utimensat",
 					"utimensat_time64",
@@ -593,6 +602,9 @@ func DefaultProfile() *Seccomp {
 					"fsopen",
 					"fspick",
 					"lookup_dcookie",
+					"lsm_get_self_attr", // kernel v6.8, libseccomp v2.6.0
+					"lsm_list_modules",  // kernel v6.8, libseccomp v2.6.0
+					"lsm_set_self_attr", // kernel v6.8, libseccomp v2.6.0
 					"mount",
 					"mount_setattr",
 					"move_mount",
