@@ -227,6 +227,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testSnapshotWithMultipleBlobs,
 	testExportLocalNoPlatformSplit,
 	testExportLocalNoPlatformSplitOverwrite,
+	testExportLocalForcePlatformSplit,
 	testSolverOptLocalDirsStillWorks,
 	testOCIIndexMediatype,
 	testLayerLimitOnMounts,
@@ -6951,6 +6952,62 @@ func testExportLocalNoPlatformSplitOverwrite(t *testing.T, sb integration.Sandbo
 		},
 	}, "", frontend, nil)
 	require.Error(t, err)
+	require.ErrorContains(t, err, "cannot overwrite hello-linux from")
+	require.ErrorContains(t, err, "when split option is disabled")
+}
+
+func testExportLocalForcePlatformSplit(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureMultiPlatform)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		st := llb.Scratch().File(
+			llb.Mkfile("foo", 0600, []byte("hello")),
+		)
+
+		def, err := st.Marshal(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		return c.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+	}
+
+	destDir := t.TempDir()
+	_, err = c.Build(sb.Context(), SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+				Attrs: map[string]string{
+					"platform-split": "true",
+				},
+			},
+		},
+	}, "", frontend, nil)
+	require.NoError(t, err)
+
+	fis, err := os.ReadDir(destDir)
+	require.NoError(t, err)
+
+	require.Len(t, fis, 1, "expected one files in the output directory")
+
+	expPlatform := strings.ReplaceAll(platforms.FormatAll(platforms.DefaultSpec()), "/", "_")
+	_, err = os.Stat(filepath.Join(destDir, expPlatform+"/"))
+	require.NoError(t, err)
+
+	fis, err = os.ReadDir(filepath.Join(destDir, expPlatform))
+	require.NoError(t, err)
+
+	require.Len(t, fis, 1, "expected one files in the output directory for platform "+expPlatform)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, expPlatform, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, "hello", string(dt))
 }
 
 func readFileInImage(ctx context.Context, t *testing.T, c *Client, ref, path string) ([]byte, error) {
