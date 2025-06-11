@@ -112,6 +112,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testBuildHTTPSource,
 	testBuildHTTPSourceEtagScope,
 	testBuildHTTPSourceAuthHeaderSecret,
+	testBuildHTTPSourceHostTokenSecret,
 	testBuildHTTPSourceHeader,
 	testBuildPushAndValidate,
 	testBuildExportWithUncompressed,
@@ -3243,6 +3244,47 @@ func testBuildHTTPSourceAuthHeaderSecret(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, 1, len(allReqs))
 	require.Equal(t, http.MethodGet, allReqs[0].Method)
 	require.Equal(t, "Bearer foo", allReqs[0].Header.Get("Authorization"))
+}
+
+func testBuildHTTPSourceHostTokenSecret(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	modTime := time.Now().Add(-24 * time.Hour) // avoid false positive with current time
+
+	resp := httpserver.Response{
+		Etag:         identity.NewID(),
+		Content:      []byte("content1"),
+		LastModified: &modTime,
+	}
+
+	server := httpserver.NewTestServer(map[string]httpserver.Response{
+		"/foo": resp,
+	})
+	defer server.Close()
+
+	st := llb.HTTP(server.URL + "/foo")
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(
+		sb.Context(),
+		def,
+		SolveOpt{
+			Session: []session.Attachable{secretsprovider.FromMap(map[string][]byte{
+				"HTTP_AUTH_TOKEN_127.0.0.1": []byte("123456"),
+			})},
+		},
+		nil,
+	)
+	require.NoError(t, err)
+
+	allReqs := server.Stats("/foo").Requests
+	require.Equal(t, 1, len(allReqs))
+	require.Equal(t, http.MethodGet, allReqs[0].Method)
+	require.Equal(t, "Bearer 123456", allReqs[0].Header.Get("Authorization"))
 }
 
 func testBuildHTTPSourceHeader(t *testing.T, sb integration.Sandbox) {
