@@ -6996,7 +6996,7 @@ func testExportLocalForcePlatformSplit(t *testing.T, sb integration.Sandbox) {
 
 	require.Len(t, fis, 1, "expected one files in the output directory")
 
-	expPlatform := runtime.GOOS + "_" + runtime.GOARCH
+	expPlatform := strings.ReplaceAll(platforms.FormatAll(platforms.DefaultSpec()), "/", "_")
 	_, err = os.Stat(filepath.Join(destDir, expPlatform+"/"))
 	require.NoError(t, err)
 
