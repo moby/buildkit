@@ -442,7 +442,7 @@ The field is set to the URL of the build, if available.
 > [!NOTE]
 > This value can be set using the `builder-id` attestation parameter.
 
-## `buildType`
+### `buildType`
 
 * Ref: https://slsa.dev/spec/v0.2/provenance#buildType
 * Included with `mode=min` and `mode=max`.
@@ -454,7 +454,7 @@ used to determine the structure of the provenance content.
     "buildType": "https://mobyproject.org/buildkit@v1",
 ```
 
-## `invocation.configSource`
+### `invocation.configSource`
 
 * Ref: https://slsa.dev/spec/v0.2/provenance#invocation.configSource
 * Included with `mode=min` and `mode=max`.
@@ -480,7 +480,7 @@ object defines the context URL and its immutable digest in the `uri` and
 `entryPoint` field defines the path for the frontend file that initialized the
 build (`filename` frontend option).
 
-## `invocation.parameters`
+### `invocation.parameters`
 
 * Ref: https://slsa.dev/spec/v0.2/provenance#invocation.parameters
 * Partially included with `mode=min`.
@@ -531,7 +531,7 @@ The following fields are only included with `mode=max`:
   values are not included.
 - `ssh` defines the ssh forwards used during the build.
 
-## `invocation.environment`
+### `invocation.environment`
 
 * Ref: https://slsa.dev/spec/v0.2/provenance#invocation.environment
 * Included with `mode=min` and `mode=max`.
@@ -549,7 +549,7 @@ The only value BuildKit currently sets is the `platform` of the current build
 machine. Note that this is not necessarily the platform of the build result that
 can be determined from the `in-toto` subject field.
 
-## `materials`
+### `materials`
 
 * Ref: https://slsa.dev/spec/v0.2/provenance#materials
 * Included with `mode=min` and `mode=max`.
@@ -587,7 +587,7 @@ determine if the artifact has been updated compared to when the build ran.
     ],
 ```
 
-## `buildConfig`
+### `buildConfig`
 
 * Ref: https://slsa.dev/spec/v0.2/provenance#buildConfig
 * Only included with `mode=max`.
@@ -638,7 +638,7 @@ field for every step.
   },
 ```
 
-## `metadata.buildInvocationId`
+### `metadata.buildInvocationId`
 
 * Ref: https://slsa.dev/spec/v0.2/provenance#buildInvocationId
 * Included with `mode=min` and `mode=max`.
@@ -654,7 +654,7 @@ versions of the image.
     },
 ```
 
-## `metadata.buildStartedOn`
+### `metadata.buildStartedOn`
 
 * Ref: https://slsa.dev/spec/v0.2/provenance#buildStartedOn
 * Included with `mode=min` and `mode=max`.
@@ -668,7 +668,7 @@ Timestamp when the build started.
     },
 ```
 
-## `metadata.buildFinishedOn`
+### `metadata.buildFinishedOn`
 
 * Ref: https://slsa.dev/spec/v0.2/provenance#buildFinishedOn
 * Included with `mode=min` and `mode=max`.
@@ -682,7 +682,7 @@ Timestamp when the build finished.
     },
 ```
 
-## `metadata.completeness`
+### `metadata.completeness`
 
 * Ref: https://slsa.dev/spec/v0.2/provenance#metadata.completeness
 * Included with `mode=min` and `mode=max`.
@@ -714,7 +714,7 @@ is true.
     },
 ```
 
-## `metadata.reproducible`
+### `metadata.reproducible`
 
 * Ref: https://slsa.dev/spec/v0.2/provenance#metadata.reproducible
 * Included with `mode=min` and `mode=max`.
@@ -729,7 +729,7 @@ value can be set by the user with the `reproducible=true` attestation parameter.
     },
 ```
 
-## `metadata.https://mobyproject.org/buildkit@v1#hermetic`
+### `metadata.https://mobyproject.org/buildkit@v1#hermetic`
 
 Included with `mode=min` and `mode=max`.
 
@@ -744,7 +744,7 @@ commands or disables network with `--network=none` flag.
     },
 ```
 
-## `metadata.https://mobyproject.org/buildkit@v1#metadata`
+### `metadata.https://mobyproject.org/buildkit@v1#metadata`
 
 Partially included with `mode=min`.
 
@@ -762,7 +762,7 @@ part of the SLSA provenance spec.
     },
 ```
 
-### `source`
+#### `source`
 
 Only included with `mode=max`.
 
@@ -773,7 +773,7 @@ the Dockerfile commands ran in an LLB step. `source.infos` array contains the
 source code itself. This mapping is present if the BuildKit frontend provided it
 when creating the LLB definition.
 
-### `layers`
+#### `layers`
 
 Only included with `mode=max`.
 
@@ -782,7 +782,7 @@ Defines the layer mapping of LLB build step mounts defined in
 mapping is present if the layer data was available, usually when attestation is
 for an image or if the build step pulled in image data as part of the build.
 
-### `vcs`
+#### `vcs`
 
 Included with `mode=min` and `mode=max`.
 
