@@ -11,40 +11,40 @@ import (
 // TestXAttrErrorHandler tests the XAttrErrorHandler logic used in exec_binfmt.go
 func TestXAttrErrorHandler(t *testing.T) {
 	tests := []struct {
-		name        string
-		inputErr    error
+		name         string
+		inputErr     error
 		shouldIgnore bool
-		description string
+		description  string
 	}{
 		{
-			name:        "ENOTSUP error should be ignored",
-			inputErr:    syscall.ENOTSUP,
+			name:         "ENOTSUP error should be ignored",
+			inputErr:     syscall.ENOTSUP,
 			shouldIgnore: true,
-			description: "ENOTSUP errors occur on SELinux systems and should be ignored",
+			description:  "ENOTSUP errors occur on SELinux systems and should be ignored",
 		},
 		{
-			name:        "errors.Is should work with wrapped ENOTSUP",
-			inputErr:    errors.Wrap(syscall.ENOTSUP, "failed to set xattr"),
+			name:         "errors.Is should work with wrapped ENOTSUP",
+			inputErr:     errors.Wrap(syscall.ENOTSUP, "failed to set xattr"),
 			shouldIgnore: true,
-			description: "Wrapped ENOTSUP errors should also be ignored",
+			description:  "Wrapped ENOTSUP errors should also be ignored",
 		},
 		{
-			name:        "EPERM error should not be ignored",
-			inputErr:    syscall.EPERM,
+			name:         "EPERM error should not be ignored",
+			inputErr:     syscall.EPERM,
 			shouldIgnore: false,
-			description: "Other permission errors should be propagated",
+			description:  "Other permission errors should be propagated",
 		},
 		{
-			name:        "EIO error should not be ignored",
-			inputErr:    syscall.EIO,
+			name:         "EIO error should not be ignored",
+			inputErr:     syscall.EIO,
 			shouldIgnore: false,
-			description: "I/O errors should be propagated",
+			description:  "I/O errors should be propagated",
 		},
 		{
-			name:        "nil error should return nil",
-			inputErr:    nil,
+			name:         "nil error should return nil",
+			inputErr:     nil,
 			shouldIgnore: true,
-			description: "nil errors should return nil",
+			description:  "nil errors should return nil",
 		},
 	}
 
@@ -59,7 +59,7 @@ func TestXAttrErrorHandler(t *testing.T) {
 			}
 
 			result := handler("dst", "src", "security.selinux", tt.inputErr)
-			
+
 			if tt.shouldIgnore {
 				require.NoError(t, result, tt.description)
 			} else {
