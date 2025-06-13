@@ -66,10 +66,9 @@ func (m *staticEmulatorMount) Mount() ([]mount.Mount, func() error, error) {
 		m := 0555
 		ci.Mode = &m
 	}, copy.WithChown(uid, gid), copy.WithXAttrErrorHandler(func(dst, src, xattrKey string, err error) error {
-		// Ignore ENOTSUP (operation not supported) errors when copying xattrs
-		// This is needed for systems with SELinux enabled where security.selinux
-		// xattrs cannot be modified
-		if errors.Is(err, syscall.ENOTSUP) {
+		// Only ignore ENOTSUP errors specifically for security.selinux xattr
+		// This addresses the SELinux issue while being more targeted than ignoring all ENOTSUP errors
+		if errors.Is(err, syscall.ENOTSUP) && xattrKey == "security.selinux" {
 			return nil
 		}
 		return err
