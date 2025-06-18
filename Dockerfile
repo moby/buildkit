@@ -69,9 +69,10 @@ RUN --mount=target=. <<'EOT'
     exit 1
   }
   set -ex
-  export PKG=github.com/moby/buildkit VERSION=$(git describe --match 'v[0-9]*' --dirty='.m' --always --tags) REVISION=$(git rev-parse HEAD)$(if ! git diff --no-ext-diff --quiet --exit-code; then echo .m; fi);
+  export PKG=github.com/moby/buildkit VERSION=$(git describe --match 'v[0-9]*' --dirty='.m' --always --tags) REVISION=$(git rev-parse HEAD)$(if ! git diff --no-ext-diff --quiet --exit-code; then echo .m; fi) COMMIT_DATE=$(git show -s --format=%cI HEAD);
   echo "-X ${PKG}/version.Version=${VERSION} -X ${PKG}/version.Revision=${REVISION} -X ${PKG}/version.Package=${PKG}" > /tmp/.ldflags;
   echo -n "${VERSION}" > /tmp/.version;
+  echo -n "${COMMIT_DATE}" > /tmp/.commit_date;
 EOT
 
 # buildctl builds test cli binary
@@ -195,7 +196,8 @@ WORKDIR /work
 ARG TARGETPLATFORM
 RUN --mount=from=binaries \
   --mount=source=/tmp/.version,target=/tmp/.version,from=buildkit-version \
-  mkdir -p /out && tar czvf "/out/buildkit-$(cat /tmp/.version).$(echo $TARGETPLATFORM | sed 's/\//-/g').tar.gz" --mtime='2015-10-21 00:00Z' --sort=name --transform 's/^./bin/' .
+  --mount=source=/tmp/.commit_date,target=/tmp/.commit_date,from=buildkit-version \
+  mkdir -p /out && tar czvf "/out/buildkit-$(cat /tmp/.version).$(echo $TARGETPLATFORM | sed 's/\//-/g').tar.gz" --mtime="$(cat /tmp/.commit_date)" --sort=name --transform 's/^./bin/' .
 
 FROM scratch AS release
 COPY --link --from=releaser /out/ /
