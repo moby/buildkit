@@ -17,7 +17,7 @@ import (
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/buildkit/session"
 	sessionauth "github.com/moby/buildkit/session/auth"
-	log "github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/version"
 	"github.com/pkg/errors"
@@ -390,7 +390,7 @@ func (ah *authHandler) fetchToken(ctx context.Context, sm *session.Manager, g se
 					token = resp.AccessToken
 					return nil, nil
 				}
-				log.G(ctx).WithFields(logrus.Fields{
+				bklog.G(ctx).WithFields(logrus.Fields{
 					"status": errStatus.Status,
 					"body":   string(errStatus.Body),
 				}).Debugf("token request failed")
