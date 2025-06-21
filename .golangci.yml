@@ -53,6 +53,8 @@ linters:
         - pattern: ^ctx\.Err(# use context\.Cause instead)?$
         - pattern: ^fmt\.Errorf(# use errors\.Errorf instead)?$
         - pattern: ^logrus\.(Trace|Debug|Info|Warn|Warning|Error|Fatal)(f|ln)?(# use bklog\.G or bklog\.L instead of logrus directly)?$
+        - pattern: ^log\.G\(ctx\)\.(# use bklog import instead of shadowing stdlib)?
+        - pattern: ^log\.L\.(# use bklog import instead of shadowing stdlib)?
         - pattern: ^platforms\.DefaultString(# use platforms\.Format(platforms\.DefaultSpec()) instead\. Be aware that DefaultSpec is for the local platform, so must be avoided when working cross-platform)?$
     gocritic:
       disabled-checks:
