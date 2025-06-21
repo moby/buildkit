@@ -199,6 +199,10 @@ func (b *provenanceBridge) Solve(ctx context.Context, req frontend.SolveRequest,
 	return
 }
 
+func (b *provenanceBridge) GetFrontendID() string {
+	return b.llbBridge.GetFrontendID()
+}
+
 type resultRequests struct {
 	ref       *resultWithBridge
 	refs      map[string]*resultWithBridge
