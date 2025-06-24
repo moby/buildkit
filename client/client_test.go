@@ -3703,6 +3703,38 @@ func testOCIExporterContentStore(t *testing.T, sb integration.Sandbox) {
 		}, nil)
 		require.NoError(t, err)
 
+		dt, err := os.ReadFile(outTar)
+		require.NoError(t, err)
+		m, err := testutil.ReadTarToMap(dt, false)
+		require.NoError(t, err)
+
+		checkStore := func(dir string) {
+			err = filepath.Walk(dir, func(filename string, fi os.FileInfo, err error) error {
+				filename = strings.TrimPrefix(filename, dir)
+				filename = strings.Trim(filename, "/")
+				if filename == "" || filename == "ingest" {
+					return nil
+				}
+
+				if fi.IsDir() {
+					require.Contains(t, m, filename+"/")
+				} else {
+					require.Contains(t, m, filename)
+					if filename == ocispecs.ImageIndexFile {
+						// this file has a timestamp in it, so we can't compare
+						return nil
+					}
+					f, err := os.Open(path.Join(dir, filename))
+					require.NoError(t, err)
+					data, err := io.ReadAll(f)
+					require.NoError(t, err)
+					require.Equal(t, m[filename].Data, data)
+				}
+				return nil
+			})
+			require.NoError(t, err)
+		}
+
 		outDir := filepath.Join(destDir, "out.d")
 		attrs = map[string]string{
 			"tar": "false",
@@ -3720,35 +3752,28 @@ func testOCIExporterContentStore(t *testing.T, sb integration.Sandbox) {
 			},
 		}, nil)
 		require.NoError(t, err)
+		checkStore(outDir)
 
-		dt, err := os.ReadFile(outTar)
+		outStoreDir := filepath.Join(destDir, "store.d")
+		store, err := local.NewStore(outStoreDir)
 		require.NoError(t, err)
-		m, err := testutil.ReadTarToMap(dt, false)
+		attrs = map[string]string{
+			"tar": "false",
+		}
+		if exp == ExporterDocker {
+			attrs["name"] = target
+		}
+		_, err = c.Solve(sb.Context(), def, SolveOpt{
+			Exports: []ExportEntry{
+				{
+					Type:        exp,
+					Attrs:       attrs,
+					OutputStore: store,
+				},
+			},
+		}, nil)
 		require.NoError(t, err)
-
-		filepath.Walk(outDir, func(filename string, fi os.FileInfo, err error) error {
-			filename = strings.TrimPrefix(filename, outDir)
-			filename = strings.Trim(filename, "/")
-			if filename == "" || filename == "ingest" {
-				return nil
-			}
-
-			if fi.IsDir() {
-				require.Contains(t, m, filename+"/")
-			} else {
-				require.Contains(t, m, filename)
-				if filename == ocispecs.ImageIndexFile {
-					// this file has a timestamp in it, so we can't compare
-					return nil
-				}
-				f, err := os.Open(path.Join(outDir, filename))
-				require.NoError(t, err)
-				data, err := io.ReadAll(f)
-				require.NoError(t, err)
-				require.Equal(t, m[filename].Data, data)
-			}
-			return nil
-		})
+		checkStore(outDir)
 	}
 
 	checkAllReleasable(t, c, sb, true)
