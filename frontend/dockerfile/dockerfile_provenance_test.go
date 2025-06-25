@@ -43,6 +43,26 @@ import (
 	"github.com/tonistiigi/fsutil"
 )
 
+var provenanceTests = integration.TestFuncs(
+	testProvenanceAttestation,
+	testGitProvenanceAttestation,
+	testMultiPlatformProvenance,
+	testClientFrontendProvenance,
+	testClientLLBProvenance,
+	testSecretSSHProvenance,
+	testOCILayoutProvenance,
+	testNilProvenance,
+	testDuplicatePlatformProvenance,
+	testDockerIgnoreMissingProvenance,
+	testCommandSourceMapping,
+	testFrontendDeduplicateSources,
+	testDuplicateLayersProvenance,
+)
+
+func init() {
+	allTests = append(allTests, provenanceTests...)
+}
+
 func testProvenanceAttestation(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
 	ctx := sb.Context()
