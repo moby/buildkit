@@ -57,6 +57,10 @@ var provenanceTests = integration.TestFuncs(
 	testCommandSourceMapping,
 	testFrontendDeduplicateSources,
 	testDuplicateLayersProvenance,
+	testProvenanceExportLocal,
+	testProvenanceExportLocalForceSplit,
+	testProvenanceExportLocalMultiPlatform,
+	testProvenanceExportLocalMultiPlatformNoSplit,
 )
 
 func init() {
@@ -1754,4 +1758,239 @@ RUN date +%s > /b.txt
 	layers := metadata.BuildKitMetadata.Layers["step0:0"]
 	require.NotNil(t, layers)
 	require.Len(t, layers, 1)
+}
+
+func testProvenanceExportLocal(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureProvenance)
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox:latest AS base
+COPY <<EOF /out/foo
+ok
+EOF
+
+FROM scratch
+COPY --from=base /out /
+`)
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	destDir := t.TempDir()
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"attest:provenance": "mode=max",
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, "ok\n", string(dt))
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "provenance.json"))
+	require.NoError(t, err)
+	require.NotEqual(t, 0, len(dt))
+
+	var pred provenancetypes.ProvenancePredicateSLSA02
+	require.NoError(t, json.Unmarshal(dt, &pred))
+}
+
+func testProvenanceExportLocalForceSplit(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureProvenance)
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox:latest AS base
+COPY <<EOF /out/foo
+ok
+EOF
+
+FROM scratch
+COPY --from=base /out /
+`)
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	destDir := t.TempDir()
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"attest:provenance": "mode=max",
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+				Attrs: map[string]string{
+					"platform-split": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	expPlatform := strings.ReplaceAll(platforms.FormatAll(platforms.DefaultSpec()), "/", "_")
+
+	dt, err := os.ReadFile(filepath.Join(destDir, expPlatform, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, "ok\n", string(dt))
+
+	dt, err = os.ReadFile(filepath.Join(destDir, expPlatform, "provenance.json"))
+	require.NoError(t, err)
+	require.NotEqual(t, 0, len(dt))
+
+	var pred provenancetypes.ProvenancePredicateSLSA02
+	require.NoError(t, json.Unmarshal(dt, &pred))
+}
+
+func testProvenanceExportLocalMultiPlatform(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureMultiPlatform, workers.FeatureProvenance)
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox:latest AS base
+COPY <<EOF /out/foo
+ok
+EOF
+
+FROM scratch
+COPY --from=base /out /
+`)
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	destDir := t.TempDir()
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"attest:provenance": "mode=max",
+			"platform":          "linux/amd64,linux/arm64",
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	for _, platform := range []string{"linux_amd64", "linux_arm64"} {
+		dt, err := os.ReadFile(filepath.Join(destDir, platform, "foo"))
+		require.NoError(t, err)
+		require.Equal(t, "ok\n", string(dt))
+
+		dt, err = os.ReadFile(filepath.Join(destDir, platform, "provenance.json"))
+		require.NoError(t, err)
+		require.NotEqual(t, 0, len(dt))
+
+		var pred provenancetypes.ProvenancePredicateSLSA02
+		require.NoError(t, json.Unmarshal(dt, &pred))
+	}
+}
+
+func testProvenanceExportLocalMultiPlatformNoSplit(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureMultiPlatform, workers.FeatureProvenance)
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox:latest AS base
+ARG TARGETARCH
+COPY <<EOF /out/foo_${TARGETARCH}
+ok
+EOF
+
+FROM scratch
+COPY --from=base /out /
+`)
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	destDir := t.TempDir()
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"attest:provenance": "mode=max",
+			"platform":          "linux/amd64,linux/arm64",
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+				Attrs: map[string]string{
+					"platform-split": "false",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	for _, arch := range []string{"amd64", "arm64"} {
+		dt, err := os.ReadFile(filepath.Join(destDir, "foo_"+arch))
+		require.NoError(t, err)
+		require.Equal(t, "ok\n", string(dt))
+
+		dt, err = os.ReadFile(filepath.Join(destDir, "provenance.linux_"+arch+".json"))
+		require.NoError(t, err)
+		require.NotEqual(t, 0, len(dt))
+
+		var pred provenancetypes.ProvenancePredicateSLSA02
+		require.NoError(t, json.Unmarshal(dt, &pred))
+	}
 }
