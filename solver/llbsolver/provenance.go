@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/containerd/platforms"
 	slsa02 "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
@@ -435,7 +434,7 @@ func NewProvenanceCreator(ctx context.Context, slsaVersion provenancetypes.Prove
 					continue
 				}
 
-				m[fmt.Sprintf("step%d:%d", idx, l.index)] = descs
+				m[fmt.Sprintf("step%d:%d", idx, 0)] = descs // TODO: store index in dgsts
 			}
 
 			if len(m) != 0 {
@@ -499,7 +498,7 @@ func (p *ProvenanceCreator) Predicate(ctx context.Context) (any, error) {
 
 type edge struct {
 	digest digest.Digest
-	index  int
+	// index  int
 }
 
 func newCacheExporter() *cacheExporter {
@@ -514,43 +513,25 @@ type cacheExporter struct {
 	m      map[any]struct{}
 }
 
-func (ce *cacheExporter) Add(dgst digest.Digest) solver.CacheExporterRecord {
-	return &cacheRecord{
-		ce: ce,
+func (ce *cacheExporter) Add(dgst digest.Digest, deps [][]solver.CacheLink, results []solver.CacheExportResult) (solver.CacheExporterRecord, bool, error) {
+	for _, res := range results {
+		e := edge{
+			digest: dgst,
+			// index:  idx,
+		}
+		descs := make([]ocispecs.Descriptor, len(res.Result.Descriptors))
+		for i, desc := range res.Result.Descriptors {
+			d := desc
+			d.Annotations = containerimage.RemoveInternalLayerAnnotations(d.Annotations, true)
+			descs[i] = d
+		}
+		ce.layers[e] = appendLayerChain(ce.layers[e], descs)
 	}
-}
-
-func (ce *cacheExporter) Visit(target any) {
-	ce.m[target] = struct{}{}
-}
-
-func (ce *cacheExporter) Visited(target any) bool {
-	_, ok := ce.m[target]
-	return ok
+	return &cacheRecord{}, true, nil
 }
 
 type cacheRecord struct {
-	ce *cacheExporter
-}
-
-func (c *cacheRecord) AddResult(dgst digest.Digest, idx int, createdAt time.Time, result *solver.Remote) {
-	if result == nil || dgst == "" {
-		return
-	}
-	e := edge{
-		digest: dgst,
-		index:  idx,
-	}
-	descs := make([]ocispecs.Descriptor, len(result.Descriptors))
-	for i, desc := range result.Descriptors {
-		d := desc
-		d.Annotations = containerimage.RemoveInternalLayerAnnotations(d.Annotations, true)
-		descs[i] = d
-	}
-	c.ce.layers[e] = appendLayerChain(c.ce.layers[e], descs)
-}
-
-func (c *cacheRecord) LinkFrom(rec solver.CacheExporterRecord, index int, selector string) {
+	solver.CacheExporterRecordBase
 }
 
 func resolveRemotes(ctx context.Context, res solver.Result) ([]*solver.Remote, error) {

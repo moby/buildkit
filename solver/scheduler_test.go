@@ -2120,8 +2120,6 @@ func TestCacheExporting(t *testing.T) {
 	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
-	expTarget.normalize()
-
 	require.Equal(t, 3, len(expTarget.records))
 	require.Equal(t, 1, expTarget.records[0].results)
 	require.Equal(t, 0, expTarget.records[1].results)
@@ -2151,7 +2149,6 @@ func TestCacheExporting(t *testing.T) {
 	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
-	expTarget.normalize()
 	// the order of the records isn't really significant
 	require.Equal(t, 3, len(expTarget.records))
 	require.Equal(t, 1, expTarget.records[0].results)
@@ -2208,17 +2205,15 @@ func TestCacheExportingModeMin(t *testing.T) {
 	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(false))
 	require.NoError(t, err)
 
-	expTarget.normalize()
-
 	require.Equal(t, 4, len(expTarget.records))
-	require.Equal(t, 1, expTarget.records[0].results)
+	require.Equal(t, 0, expTarget.records[0].results)
 	require.Equal(t, 0, expTarget.records[1].results)
 	require.Equal(t, 0, expTarget.records[2].results)
-	require.Equal(t, 0, expTarget.records[3].results)
-	require.Equal(t, 2, expTarget.records[0].links)
+	require.Equal(t, 1, expTarget.records[3].results)
+	require.Equal(t, 2, expTarget.records[3].links)
+	require.Equal(t, 0, expTarget.records[0].links)
 	require.Equal(t, 1, expTarget.records[1].links)
 	require.Equal(t, 0, expTarget.records[2].links)
-	require.Equal(t, 0, expTarget.records[3].links)
 
 	j1, err := l.NewJob("j1")
 	require.NoError(t, err)
@@ -2241,17 +2236,16 @@ func TestCacheExportingModeMin(t *testing.T) {
 	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(false))
 	require.NoError(t, err)
 
-	expTarget.normalize()
 	// the order of the records isn't really significant
 	require.Equal(t, 4, len(expTarget.records))
-	require.Equal(t, 1, expTarget.records[0].results)
+	require.Equal(t, 0, expTarget.records[0].results)
 	require.Equal(t, 0, expTarget.records[1].results)
 	require.Equal(t, 0, expTarget.records[2].results)
-	require.Equal(t, 0, expTarget.records[3].results)
-	require.Equal(t, 2, expTarget.records[0].links)
+	require.Equal(t, 1, expTarget.records[3].results)
+	require.Equal(t, 0, expTarget.records[0].links)
 	require.Equal(t, 1, expTarget.records[1].links)
 	require.Equal(t, 0, expTarget.records[2].links)
-	require.Equal(t, 0, expTarget.records[3].links)
+	require.Equal(t, 2, expTarget.records[3].links)
 
 	// one more check with all mode
 	j2, err := l.NewJob("j2")
@@ -2275,17 +2269,16 @@ func TestCacheExportingModeMin(t *testing.T) {
 	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
-	expTarget.normalize()
 	// the order of the records isn't really significant
 	require.Equal(t, 4, len(expTarget.records))
-	require.Equal(t, 1, expTarget.records[0].results)
+	require.Equal(t, 0, expTarget.records[0].results)
 	require.Equal(t, 1, expTarget.records[1].results)
 	require.Equal(t, 0, expTarget.records[2].results)
-	require.Equal(t, 0, expTarget.records[3].results)
-	require.Equal(t, 2, expTarget.records[0].links)
+	require.Equal(t, 1, expTarget.records[3].results)
+	require.Equal(t, 0, expTarget.records[0].links)
 	require.Equal(t, 1, expTarget.records[1].links)
 	require.Equal(t, 0, expTarget.records[2].links)
-	require.Equal(t, 0, expTarget.records[3].links)
+	require.Equal(t, 2, expTarget.records[3].links)
 }
 
 func TestSlowCacheAvoidAccess(t *testing.T) {
@@ -2577,7 +2570,6 @@ func TestCacheMultipleMaps(t *testing.T) {
 	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
-	expTarget.normalize()
 	require.Equal(t, 3, len(expTarget.records))
 
 	j1, err := l.NewJob("j1")
@@ -2613,7 +2605,7 @@ func TestCacheMultipleMaps(t *testing.T) {
 	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
-	require.Equal(t, 3, len(expTarget.records))
+	require.Equal(t, 1, expTarget.numUniqueRecords())
 	require.Equal(t, false, called)
 
 	j2, err := l.NewJob("j2")
@@ -2648,7 +2640,7 @@ func TestCacheMultipleMaps(t *testing.T) {
 	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
-	require.Equal(t, 3, len(expTarget.records))
+	require.Equal(t, 1, expTarget.numUniqueRecords())
 	require.Equal(t, true, called)
 }
 
@@ -2699,7 +2691,6 @@ func TestCacheInputMultipleMaps(t *testing.T) {
 	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
-	expTarget.normalize()
 	require.Equal(t, 3, len(expTarget.records))
 
 	require.NoError(t, j0.Discard())
@@ -2738,8 +2729,7 @@ func TestCacheInputMultipleMaps(t *testing.T) {
 	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
-	expTarget.normalize()
-	require.Equal(t, 3, len(expTarget.records))
+	require.Equal(t, 3, expTarget.numUniqueRecords())
 
 	require.NoError(t, j1.Discard())
 	j1 = nil
@@ -2799,14 +2789,13 @@ func TestCacheExportingPartialSelector(t *testing.T) {
 	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
-	expTarget.normalize()
 	require.Equal(t, 3, len(expTarget.records))
-	require.Equal(t, 1, expTarget.records[0].results)
+	require.Equal(t, 0, expTarget.records[0].results)
 	require.Equal(t, 0, expTarget.records[1].results)
-	require.Equal(t, 0, expTarget.records[2].results)
-	require.Equal(t, 2, expTarget.records[0].links)
+	require.Equal(t, 1, expTarget.records[2].results)
+	require.Equal(t, 0, expTarget.records[0].links)
 	require.Equal(t, 0, expTarget.records[1].links)
-	require.Equal(t, 0, expTarget.records[2].links)
+	require.Equal(t, 1, expTarget.records[2].links)
 
 	// repeat so that all coming from cache are retained
 	j1, err := l.NewJob("j1")
@@ -2832,16 +2821,12 @@ func TestCacheExportingPartialSelector(t *testing.T) {
 	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
-	expTarget.normalize()
-
 	// the order of the records isn't really significant
-	require.Equal(t, 3, len(expTarget.records))
-	require.Equal(t, 1, expTarget.records[0].results)
-	require.Equal(t, 0, expTarget.records[1].results)
-	require.Equal(t, 0, expTarget.records[2].results)
-	require.Equal(t, 2, expTarget.records[0].links)
-	require.Equal(t, 0, expTarget.records[1].links)
-	require.Equal(t, 0, expTarget.records[2].links)
+	require.Equal(t, 2, len(expTarget.records))
+	require.Equal(t, 0, expTarget.records[0].results)
+	require.Equal(t, 1, expTarget.records[1].results)
+	require.Equal(t, 0, expTarget.records[0].links)
+	require.Equal(t, 1, expTarget.records[1].links)
 
 	// repeat with forcing a slow key recomputation
 	j2, err := l.NewJob("j2")
@@ -2886,19 +2871,15 @@ func TestCacheExportingPartialSelector(t *testing.T) {
 	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
-	expTarget.normalize()
-
 	// the order of the records isn't really significant
 	// adds one
-	require.Equal(t, 4, len(expTarget.records))
-	require.Equal(t, 1, expTarget.records[0].results)
+	require.Equal(t, 3, len(expTarget.records))
+	require.Equal(t, 0, expTarget.records[0].results)
 	require.Equal(t, 0, expTarget.records[1].results)
-	require.Equal(t, 0, expTarget.records[2].results)
-	require.Equal(t, 0, expTarget.records[3].results)
-	require.Equal(t, 3, expTarget.records[0].links)
+	require.Equal(t, 1, expTarget.records[2].results)
+	require.Equal(t, 0, expTarget.records[0].links)
 	require.Equal(t, 0, expTarget.records[1].links)
-	require.Equal(t, 0, expTarget.records[2].links)
-	require.Equal(t, 0, expTarget.records[3].links)
+	require.Equal(t, 1, expTarget.records[2].links)
 
 	// repeat with a wrapper
 	j3, err := l.NewJob("j3")
@@ -2932,21 +2913,15 @@ func TestCacheExportingPartialSelector(t *testing.T) {
 	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
-	expTarget.normalize()
-
 	// adds one extra result
 	// the order of the records isn't really significant
-	require.Equal(t, 5, len(expTarget.records))
-	require.Equal(t, 1, expTarget.records[0].results)
+	require.Equal(t, 3, len(expTarget.records))
+	require.Equal(t, 0, expTarget.records[0].results)
 	require.Equal(t, 1, expTarget.records[1].results)
-	require.Equal(t, 0, expTarget.records[2].results)
-	require.Equal(t, 0, expTarget.records[3].results)
-	require.Equal(t, 0, expTarget.records[4].results)
-	require.Equal(t, 1, expTarget.records[0].links)
-	require.Equal(t, 3, expTarget.records[1].links)
-	require.Equal(t, 0, expTarget.records[2].links)
-	require.Equal(t, 0, expTarget.records[3].links)
-	require.Equal(t, 0, expTarget.records[4].links)
+	require.Equal(t, 1, expTarget.records[2].results)
+	require.Equal(t, 0, expTarget.records[0].links)
+	require.Equal(t, 1, expTarget.records[1].links)
+	require.Equal(t, 1, expTarget.records[2].links)
 }
 
 func TestCacheExportingMergedKey(t *testing.T) {
@@ -3030,9 +3005,7 @@ func TestCacheExportingMergedKey(t *testing.T) {
 	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
-	expTarget.normalize()
-
-	require.Equal(t, 5, len(expTarget.records))
+	require.Equal(t, 5, expTarget.numUniqueRecords())
 }
 
 // moby/buildkit#434
@@ -4084,57 +4057,23 @@ type testExporterTarget struct {
 	records []*testExporterRecord
 }
 
-func (t *testExporterTarget) Add(dgst digest.Digest) CacheExporterRecord {
-	r := &testExporterRecord{dgst: dgst}
-	t.records = append(t.records, r)
-	return r
-}
-
-func (t *testExporterTarget) Visit(v any) {
-	t.visited[v] = struct{}{}
-}
-
-func (t *testExporterTarget) Visited(v any) bool {
-	_, ok := t.visited[v]
-	return ok
-}
-
-func (t *testExporterTarget) normalize() {
-	m := map[digest.Digest]struct{}{}
-	rec := make([]*testExporterRecord, 0, len(t.records))
+func (t *testExporterTarget) numUniqueRecords() int {
+	unique := make(map[digest.Digest]struct{})
 	for _, r := range t.records {
-		if _, ok := m[r.dgst]; ok {
-			for _, r2 := range t.records {
-				delete(r2.linkMap, r.dgst)
-				r2.links = len(r2.linkMap)
-			}
-			continue
-		}
-		m[r.dgst] = struct{}{}
-		rec = append(rec, r)
+		unique[r.dgst] = struct{}{}
 	}
-	t.records = rec
+	return len(unique)
+}
+
+func (t *testExporterTarget) Add(dgst digest.Digest, links [][]CacheLink, results []CacheExportResult) (CacheExporterRecord, bool, error) {
+	r := &testExporterRecord{dgst: dgst, results: len(results), links: len(links)}
+	t.records = append(t.records, r)
+	return r, true, nil
 }
 
 type testExporterRecord struct {
+	CacheExporterRecordBase
 	dgst    digest.Digest
 	results int
 	links   int
-	linkMap map[digest.Digest]struct{}
-}
-
-func (r *testExporterRecord) AddResult(_ digest.Digest, _ int, createdAt time.Time, result *Remote) {
-	r.results++
-}
-
-func (r *testExporterRecord) LinkFrom(src CacheExporterRecord, index int, selector string) {
-	if s, ok := src.(*testExporterRecord); ok {
-		if r.linkMap == nil {
-			r.linkMap = map[digest.Digest]struct{}{}
-		}
-		if _, ok := r.linkMap[s.dgst]; !ok {
-			r.linkMap[s.dgst] = struct{}{}
-			r.links++
-		}
-	}
 }

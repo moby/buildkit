@@ -17,40 +17,62 @@ type exporter struct {
 	override *bool
 }
 
-func addBacklinks(t CacheExporterTarget, rec CacheExporterRecord, cm *cacheManager, id string, bkm map[string]CacheExporterRecord) (CacheExporterRecord, error) {
-	if rec == nil {
-		var ok bool
-		rec, ok = bkm[id]
-		if ok && rec != nil {
-			return rec, nil
-		}
-		_ = ok
+func addBacklinks(t CacheExporterTarget, cm *cacheManager, id string, bkm map[string][]CacheExporterRecord) ([]CacheExporterRecord, error) {
+	out, ok := bkm[id]
+	if ok && out != nil {
+		return out, nil
+	} else if ok && out == nil {
+		return nil, nil
 	}
 	bkm[id] = nil
+
+	m := map[digest.Digest][][]CacheLink{}
+
 	if err := cm.backend.WalkBacklinks(id, func(id string, link CacheInfoLink) error {
-		if rec == nil {
-			rec = t.Add(link.Digest)
+		recs, err := addBacklinks(t, cm, id, bkm)
+		if err != nil { // TODO: should we continue on error?
+			return err
 		}
-		r, ok := bkm[id]
-		if !ok {
-			var err error
-			r, err = addBacklinks(t, nil, cm, id, bkm)
-			if err != nil {
-				return err
-			}
+		links := m[link.Digest]
+		for int(link.Input) >= len(links) {
+			links = append(links, nil)
 		}
-		if r != nil {
-			rec.LinkFrom(r, int(link.Input), link.Selector.String())
+		for _, rec := range recs {
+			links[int(link.Input)] = append(links[int(link.Input)], CacheLink{Src: rec, Selector: link.Selector.String()})
 		}
+		m[link.Digest] = links
 		return nil
 	}); err != nil {
 		return nil, err
 	}
-	if rec == nil {
-		rec = t.Add(digest.Digest(id))
+
+	// validate that all inputs are present
+	for dgst, links := range m {
+		for _, links := range links {
+			if len(links) == 0 {
+				out = nil
+				m[dgst] = nil
+				break
+			}
+		}
 	}
-	bkm[id] = rec
-	return rec, nil
+
+	for dgst, links := range m {
+		if len(links) == 0 {
+			continue
+		}
+		rec, ok, err := t.Add(dgst, links, nil)
+		if err != nil {
+			return nil, err
+		}
+		if !ok || rec == nil {
+			continue
+		}
+		out = append(out, rec)
+	}
+
+	bkm[id] = out
+	return out, nil
 }
 
 type contextT string
@@ -61,13 +83,13 @@ var (
 )
 
 func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt CacheExportOpt) ([]CacheExporterRecord, error) {
-	var bkm map[string]CacheExporterRecord
+	var bkm map[string][]CacheExporterRecord
 
 	if bk := ctx.Value(backlinkKey); bk == nil {
-		bkm = map[string]CacheExporterRecord{}
+		bkm = map[string][]CacheExporterRecord{}
 		ctx = context.WithValue(ctx, backlinkKey, bkm)
 	} else {
-		bkm = bk.(map[string]CacheExporterRecord)
+		bkm = bk.(map[string][]CacheExporterRecord)
 	}
 
 	var res map[*exporter][]CacheExporterRecord
@@ -77,23 +99,17 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 	} else {
 		res = r.(map[*exporter][]CacheExporterRecord)
 	}
-
-	if t.Visited(e) {
-		return res[e], nil
+	if v, ok := res[e]; ok {
+		return v, nil
 	}
-	t.Visit(e)
+	res[e] = nil
 
 	deps := e.k.Deps()
 
-	type expr struct {
-		r        CacheExporterRecord
-		selector digest.Digest
-	}
 	k := e.k.clone() // protect against *CacheKey internal ids mutation from other exports
 
 	recKey := rootKey(k.Digest(), k.Output())
-	rec := t.Add(recKey)
-	allRec := []CacheExporterRecord{rec}
+	results := []CacheExportResult{}
 
 	addRecord := true
 
@@ -115,7 +131,6 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 	v := e.record
 
 	for exportRecord && addRecord {
-		var variants []CacheExporterRecord
 		if v == nil {
 			if i < len(records) {
 				v = records[i]
@@ -144,9 +159,10 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		}
 		if opt.CompressionOpt != nil {
 			for _, r := range remotes { // record all remaining remotes as well
-				rec := t.Add(recKey)
-				rec.AddResult(k.vtx, int(k.output), v.CreatedAt, r)
-				variants = append(variants, rec)
+				results = append(results, CacheExportResult{
+					CreatedAt: v.CreatedAt,
+					Result:    r,
+				})
 			}
 		}
 
@@ -165,19 +181,20 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 			}
 			if opt.CompressionOpt != nil {
 				for _, r := range remotes { // record all remaining remotes as well
-					rec := t.Add(recKey)
-					rec.AddResult(k.vtx, int(k.output), v.CreatedAt, r)
-					variants = append(variants, rec)
+					results = append(results, CacheExportResult{
+						CreatedAt: v.CreatedAt,
+						Result:    r,
+					})
 				}
 			}
 		}
 
 		if remote != nil {
-			for _, rec := range allRec {
-				rec.AddResult(k.vtx, int(k.output), v.CreatedAt, remote)
-			}
+			results = append(results, CacheExportResult{
+				CreatedAt: v.CreatedAt,
+				Result:    remote,
+			})
 		}
-		allRec = append(allRec, variants...)
 		break
 	}
 
@@ -185,16 +202,16 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		opt.Mode = CacheExportModeRemoteOnly
 	}
 
-	srcs := make([][]expr, len(deps))
+	srcs := make([][]CacheLink, len(deps))
 
 	for i, deps := range deps {
 		for _, dep := range deps {
-			recs, err := dep.CacheKey.Exporter.ExportTo(ctx, t, opt)
+			rec, err := dep.CacheKey.Exporter.ExportTo(ctx, t, opt)
 			if err != nil {
-				return nil, nil
+				return nil, err
 			}
-			for _, r := range recs {
-				srcs[i] = append(srcs[i], expr{r: r, selector: dep.Selector})
+			for _, r := range rec {
+				srcs[i] = append(srcs[i], CacheLink{Src: r, Selector: string(dep.Selector)})
 			}
 		}
 	}
@@ -206,44 +223,42 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 				return nil, nil
 			}
 			for _, r := range recs {
-				srcs[de.index] = append(srcs[de.index], expr{r: r, selector: de.cacheKey.Selector})
+				srcs[de.index] = append(srcs[de.index], CacheLink{Src: r, Selector: de.cacheKey.Selector.String()})
 			}
 		}
 	}
 
-	for _, rec := range allRec {
-		for i, srcs := range srcs {
-			for _, src := range srcs {
-				rec.LinkFrom(src.r, i, src.selector.String())
-			}
-		}
-
-		if !opt.IgnoreBacklinks {
-			for cm, id := range k.ids {
-				if _, err := addBacklinks(t, rec, cm, id, bkm); err != nil {
-					return nil, err
-				}
+	if !opt.IgnoreBacklinks {
+		for cm, id := range k.ids {
+			_, err := addBacklinks(t, cm, id, bkm)
+			if err != nil {
+				return nil, err
 			}
 		}
 	}
 
-	if v != nil && len(deps) == 0 {
-		cm := v.cacheManager
-		key := cm.getID(v.key)
-		if err := cm.backend.WalkIDsByResult(v.ID, func(id string) error {
-			if id == key {
-				return nil
-			}
-			allRec = append(allRec, t.Add(digest.Digest(id)))
-			return nil
-		}); err != nil {
-			return nil, err
-		}
+	// if v != nil && len(deps) == 0 { // TODO: what is this case?
+	// 	cm := v.cacheManager
+	// 	key := cm.getID(v.key)
+	// 	if err := cm.backend.WalkIDsByResult(v.ID, func(id string) error {
+	// 		if id == key {
+	// 			return nil
+	// 		}
+	// 		return nil
+	// 	}); err != nil {
+	// 		return nil, err
+	// 	}
+	// }
+
+	out, ok, err := t.Add(recKey, srcs, results)
+	if err != nil {
+		return nil, err
 	}
-
-	res[e] = allRec
-
-	return allRec, nil
+	res[e] = []CacheExporterRecord{}
+	if ok {
+		res[e] = append(res[e], out)
+	}
+	return res[e], nil
 }
 
 func getBestResult(records []*CacheRecord) *CacheRecord {
