@@ -19,12 +19,14 @@ import (
 	"github.com/tonistiigi/fsutil"
 )
 
-var outlineTests = integration.TestFuncs(
-	testOutlineArgs,
-	testOutlineSecrets,
-	testOutlineDescribeDefinition,
-	testOutlineRecursiveArgs,
-)
+func init() {
+	allTests = append(allTests, integration.TestFuncs(
+		testOutlineArgs,
+		testOutlineSecrets,
+		testOutlineDescribeDefinition,
+		testOutlineRecursiveArgs,
+	)...)
+}
 
 func testOutlineArgs(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureFrontendOutline)

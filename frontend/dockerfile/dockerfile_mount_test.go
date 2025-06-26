@@ -14,25 +14,23 @@ import (
 	"github.com/tonistiigi/fsutil"
 )
 
-var mountTests = integration.TestFuncs(
-	testMountContext,
-	testMountTmpfs,
-	testMountRWCache,
-	testCacheMountDefaultID,
-	testMountEnvVar,
-	testMountArg,
-	testMountEnvAcrossStages,
-	testMountMetaArg,
-	testMountFromError,
-	testMountInvalid,
-	testMountTmpfsSize,
-	testMountDuplicate,
-	testCacheMountUser,
-	testCacheMountParallel,
-)
-
 func init() {
-	allTests = append(allTests, mountTests...)
+	allTests = append(allTests, integration.TestFuncs(
+		testMountContext,
+		testMountTmpfs,
+		testMountRWCache,
+		testCacheMountDefaultID,
+		testMountEnvVar,
+		testMountArg,
+		testMountEnvAcrossStages,
+		testMountMetaArg,
+		testMountFromError,
+		testMountInvalid,
+		testMountTmpfsSize,
+		testMountDuplicate,
+		testCacheMountUser,
+		testCacheMountParallel,
+	)...)
 }
 
 func testMountContext(t *testing.T, sb integration.Sandbox) {

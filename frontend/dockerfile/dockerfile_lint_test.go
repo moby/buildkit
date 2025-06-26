@@ -26,30 +26,32 @@ import (
 	"github.com/tonistiigi/fsutil"
 )
 
-var lintTests = integration.TestFuncs(
-	testRuleCheckOption,
-	testStageName,
-	testNoEmptyContinuation,
-	testConsistentInstructionCasing,
-	testDuplicateStageName,
-	testReservedStageName,
-	testJSONArgsRecommended,
-	testMaintainerDeprecated,
-	testWarningsBeforeError,
-	testUndeclaredArg,
-	testWorkdirRelativePath,
-	testUnmatchedVars,
-	testMultipleInstructionsDisallowed,
-	testLegacyKeyValueFormat,
-	testBaseImagePlatformMismatch,
-	testAllTargetUnmarshal,
-	testRedundantTargetPlatform,
-	testSecretsUsedInArgOrEnv,
-	testInvalidDefaultArgInFrom,
-	testFromPlatformFlagConstDisallowed,
-	testCopyIgnoredFiles,
-	testDefinitionDescription,
-)
+func init() {
+	allTests = append(allTests, integration.TestFuncs(
+		testRuleCheckOption,
+		testStageName,
+		testNoEmptyContinuation,
+		testConsistentInstructionCasing,
+		testDuplicateStageName,
+		testReservedStageName,
+		testJSONArgsRecommended,
+		testMaintainerDeprecated,
+		testWarningsBeforeError,
+		testUndeclaredArg,
+		testWorkdirRelativePath,
+		testUnmatchedVars,
+		testMultipleInstructionsDisallowed,
+		testLegacyKeyValueFormat,
+		testBaseImagePlatformMismatch,
+		testAllTargetUnmarshal,
+		testRedundantTargetPlatform,
+		testSecretsUsedInArgOrEnv,
+		testInvalidDefaultArgInFrom,
+		testFromPlatformFlagConstDisallowed,
+		testCopyIgnoredFiles,
+		testDefinitionDescription,
+	)...)
+}
 
 func testDefinitionDescription(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`# check=experimental=InvalidDefinitionDescription

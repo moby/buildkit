@@ -22,13 +22,11 @@ import (
 	"github.com/tonistiigi/fsutil"
 )
 
-var sshTests = integration.TestFuncs(
-	testSSHSocketParams,
-	testSSHFileDescriptorsClosed,
-)
-
 func init() {
-	allTests = append(allTests, sshTests...)
+	allTests = append(allTests, integration.TestFuncs(
+		testSSHSocketParams,
+		testSSHFileDescriptorsClosed,
+	)...)
 }
 
 func testSSHSocketParams(t *testing.T, sb integration.Sandbox) {

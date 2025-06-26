@@ -16,20 +16,18 @@ import (
 	"github.com/tonistiigi/fsutil"
 )
 
-var hdTests = integration.TestFuncs(
-	testCopyHeredoc,
-	testCopyHeredocSpecialSymbols,
-	testRunBasicHeredoc,
-	testRunFakeHeredoc,
-	testRunShebangHeredoc,
-	testRunComplexHeredoc,
-	testHeredocIndent,
-	testHeredocVarSubstitution,
-	testOnBuildHeredoc,
-)
-
 func init() {
-	heredocTests = append(heredocTests, hdTests...)
+	allTests = append(allTests, integration.TestFuncs(
+		testCopyHeredoc,
+		testCopyHeredocSpecialSymbols,
+		testRunBasicHeredoc,
+		testRunFakeHeredoc,
+		testRunShebangHeredoc,
+		testRunComplexHeredoc,
+		testHeredocIndent,
+		testHeredocVarSubstitution,
+		testOnBuildHeredoc,
+	)...)
 }
 
 func testCopyHeredoc(t *testing.T, sb integration.Sandbox) {
