@@ -138,6 +138,15 @@ func TestParseGitRef(t *testing.T) {
 			ref:      ".git",
 			expected: nil,
 		},
+		{
+			ref: "https://github.com/docker/docker.git?ref=v1.0.0&subdir=/subdir",
+			expected: &GitRef{
+				Remote:    "https://github.com/docker/docker.git",
+				ShortName: "docker",
+				Commit:    "v1.0.0",
+				SubDir:    "/subdir",
+			},
+		},
 	}
 	for _, tt := range cases {
 		t.Run(tt.ref, func(t *testing.T) {
