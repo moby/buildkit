@@ -138,13 +138,13 @@ func (nc *NamedContext) load(ctx context.Context, count int) (*llb.State, *docke
 		}
 		return &st, &img, nil
 	case "git":
-		st, ok := DetectGitContext(nc.input, true)
+		st, ok := DetectGitContext(nc.input, true, true)
 		if !ok {
 			return nil, nil, errors.Errorf("invalid git context %s", nc.input)
 		}
 		return st, nil, nil
 	case "http", "https":
-		st, ok := DetectGitContext(nc.input, true)
+		st, ok := DetectGitContext(nc.input, true, true)
 		if !ok {
 			httpst := llb.HTTP(nc.input, llb.WithCustomName("[context "+nc.nameWithPlatform+"] "+nc.input))
 			st = &httpst

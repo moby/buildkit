@@ -73,10 +73,10 @@ func (bc *Client) initContext(ctx context.Context) (*buildContext, error) {
 	if v, err := strconv.ParseBool(opts[keyContextKeepGitDirArg]); err == nil {
 		keepGit = v
 	}
-	if st, ok := DetectGitContext(opts[localNameContext], keepGit); ok {
+	if st, ok := DetectGitContext(opts[localNameContext], keepGit, true); ok {
 		bctx.context = st
 		bctx.dockerfile = st
-	} else if st, filename, ok := DetectHTTPContext(opts[localNameContext]); ok {
+	} else if st, filename, ok := DetectHTTPContext(opts[localNameContext], true); ok {
 		def, err := st.Marshal(ctx, bc.marshalOpts()...)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to marshal httpcontext")
@@ -140,7 +140,7 @@ func (bc *Client) initContext(ctx context.Context) (*buildContext, error) {
 	return bctx, nil
 }
 
-func DetectGitContext(ref string, keepGit bool) (*llb.State, bool) {
+func DetectGitContext(ref string, keepGit bool, cache bool) (*llb.State, bool) {
 	g, err := gitutil.ParseGitRef(ref)
 	if err != nil {
 		return nil, false
@@ -153,15 +153,22 @@ func DetectGitContext(ref string, keepGit bool) (*llb.State, bool) {
 	if keepGit {
 		gitOpts = append(gitOpts, llb.KeepGitDir())
 	}
+	if !cache {
+		gitOpts = append(gitOpts, llb.IgnoreCache)
+	}
 
 	st := llb.Git(g.Remote, commit, gitOpts...)
 	return &st, true
 }
 
-func DetectHTTPContext(ref string) (*llb.State, string, bool) {
+func DetectHTTPContext(ref string, cache bool) (*llb.State, string, bool) {
 	filename := "context"
 	if httpPrefix.MatchString(ref) {
-		st := llb.HTTP(ref, llb.Filename(filename), WithInternalName("load remote build context"))
+		httpOpts := []llb.HTTPOption{WithInternalName("load remote build context"), llb.Filename(filename)}
+		if !cache {
+			httpOpts = append(httpOpts, llb.IgnoreCache)
+		}
+		st := llb.HTTP(ref, httpOpts...)
 		return &st, filename, true
 	}
 	return nil, "", false
