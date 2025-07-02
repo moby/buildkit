@@ -13,6 +13,7 @@ import (
 	"github.com/containerd/containerd/v2/defaults"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/connhelper"
+	"github.com/moby/buildkit/okteto"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/grpchijack"
 	"github.com/moby/buildkit/util/appdefaults"
@@ -75,6 +76,9 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 		}
 		if sd, ok := o.(*withSessionDialer); ok {
 			sessionDialer = sd.dialer
+		}
+		if rpc, ok := o.(*withRPCCreds); ok {
+			gopts = append(gopts, grpc.WithPerRPCCredentials(rpc.creds))
 		}
 		if opt, ok := o.(*withGRPCDialOption); ok {
 			customDialOptions = append(customDialOptions, opt.opt)
@@ -150,6 +154,7 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 	gopts = append(gopts, grpc.WithUnaryInterceptor(grpcerrors.UnaryClientInterceptor))
 	gopts = append(gopts, grpc.WithStreamInterceptor(grpcerrors.StreamClientInterceptor))
 	gopts = append(gopts, customDialOptions...)
+	gopts = append(gopts, grpc.WithKeepaliveParams(okteto.LoadKeepaliveClientParams()))
 
 	// ignore SA1019 NewClient has different behavior and needs to be tested
 	//nolint:staticcheck
@@ -303,6 +308,16 @@ func WithServerConfigSystem(serverName string) ClientOpt {
 	}
 }
 
+// WithCAAndSystemRoot is similar to WithServerConfig but it also enables
+// the system's certificate pool.
+func WithCAAndSystemRoot(serverName, caCert string) ClientOpt {
+	return &withCredentials{
+		serverName:   serverName,
+		caCert:       caCert,
+		caCertSystem: true,
+	}
+}
+
 func loadCredentials(opts *withCredentials) (grpc.DialOption, error) {
 	cfg := &tls.Config{}
 
@@ -374,6 +389,16 @@ type withSessionDialer struct {
 }
 
 func (w *withSessionDialer) isClientOpt() {}
+
+type withRPCCreds struct {
+	creds credentials.PerRPCCredentials
+}
+
+func (*withRPCCreds) isClientOpt() {}
+
+func WithRPCCreds(c credentials.PerRPCCredentials) ClientOpt {
+	return &withRPCCreds{c}
+}
 
 func resolveDialer(address string) (func(context.Context, string) (net.Conn, error), error) {
 	ch, err := connhelper.GetConnectionHelper(address)

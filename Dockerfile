@@ -478,3 +478,6 @@ ENTRYPOINT ["rootlesskit", "buildkitd"]
 
 # buildkit builds the buildkit container image
 FROM buildkit-$TARGETOS${BUILDKIT_DEBUG:+-debug} AS buildkit
+RUN apk add --no-cache iptables
+COPY --from=cni-plugins /opt/cni/bin /opt/cni/bin
+COPY --link hack/fixtures/cni.json /etc/buildkit/cni.json

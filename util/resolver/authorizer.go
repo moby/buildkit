@@ -21,10 +21,19 @@ import (
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/version"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/sirupsen/logrus"
 )
 
 const defaultExpiration = 60
+
+var (
+	fatalAuthErrorDetected = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "buildkitd_fatal_auth_error_total",
+		Help: "The total number of fatal auth errors.",
+	})
+)
 
 type authHandlerNS struct {
 	counter int64 // needs to be 64bit aligned for 32bit systems
@@ -166,7 +175,10 @@ func (a *dockerAuthorizer) AddResponses(ctx context.Context, responses []*http.R
 
 				// this hacky way seems to be the best method to detect that error is fatal and should not be retried with a new token
 				if c.Parameters["error"] == "insufficient_scope" && parseScopes(oldScopes).contains(parseScopes(strings.Split(c.Parameters["scope"], " "))) {
-					return err
+					if !isCrossRepoBlobMountRequest(last.Request) {
+						fatalAuthErrorDetected.Inc()
+						return err
+					}
 				}
 			}
 
@@ -416,6 +428,26 @@ func (ah *authHandler) fetchToken(ctx context.Context, sm *session.Manager, g se
 
 	token = resp.Token
 	return nil, nil
+}
+
+func isCrossRepoBlobMountRequest(req *http.Request) bool {
+	if req.Method != http.MethodPost {
+		return false
+	}
+
+	if !strings.HasSuffix(req.URL.Path, "/blobs/uploads/") {
+		return false
+	}
+
+	query := req.URL.Query()
+	if _, ok := query["mount"]; !ok {
+		return false
+	}
+
+	if _, ok := query["from"]; !ok {
+		return false
+	}
+	return true
 }
 
 func invalidAuthorization(c auth.Challenge, responses []*http.Response) error {
