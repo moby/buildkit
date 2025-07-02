@@ -1,3 +1,6 @@
+# cloud.google.com/go/compute/metadata v0.6.0
+## explicit; go 1.21
+cloud.google.com/go/compute/metadata
 # github.com/Azure/azure-sdk-for-go/sdk/azcore v1.16.0
 ## explicit; go 1.18
 github.com/Azure/azure-sdk-for-go/sdk/azcore
@@ -555,6 +558,11 @@ github.com/google/shlex
 # github.com/google/uuid v1.6.0
 ## explicit
 github.com/google/uuid
+# github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
+## explicit; go 1.14
+github.com/grpc-ecosystem/go-grpc-middleware
+github.com/grpc-ecosystem/go-grpc-middleware/auth
+github.com/grpc-ecosystem/go-grpc-middleware/util/metautils
 # github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.1
 ## explicit; go 1.22
 github.com/grpc-ecosystem/grpc-gateway/v2/internal/httprule
@@ -725,6 +733,7 @@ github.com/prometheus/client_golang/internal/github.com/golang/gddo/httputil
 github.com/prometheus/client_golang/internal/github.com/golang/gddo/httputil/header
 github.com/prometheus/client_golang/prometheus
 github.com/prometheus/client_golang/prometheus/internal
+github.com/prometheus/client_golang/prometheus/promauto
 github.com/prometheus/client_golang/prometheus/promhttp
 github.com/prometheus/client_golang/prometheus/promhttp/internal
 # github.com/prometheus/client_model v0.6.1
@@ -972,6 +981,18 @@ golang.org/x/net/idna
 golang.org/x/net/internal/httpcommon
 golang.org/x/net/internal/timeseries
 golang.org/x/net/trace
+# golang.org/x/oauth2 v0.27.0
+## explicit; go 1.23.0
+golang.org/x/oauth2
+golang.org/x/oauth2/authhandler
+golang.org/x/oauth2/google
+golang.org/x/oauth2/google/externalaccount
+golang.org/x/oauth2/google/internal/externalaccountauthorizeduser
+golang.org/x/oauth2/google/internal/impersonate
+golang.org/x/oauth2/google/internal/stsexchange
+golang.org/x/oauth2/internal
+golang.org/x/oauth2/jws
+golang.org/x/oauth2/jwt
 # golang.org/x/sync v0.14.0
 ## explicit; go 1.23.0
 golang.org/x/sync/errgroup
@@ -1128,6 +1149,10 @@ google.golang.org/protobuf/types/pluginpb
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
+# grpc.go4.org v0.0.0-20170609214715-11d0a25b4919
+## explicit
+grpc.go4.org/credentials
+grpc.go4.org/credentials/oauth
 # kernel.org/pub/linux/libs/security/libcap/cap v1.2.76
 ## explicit; go 1.11
 kernel.org/pub/linux/libs/security/libcap/cap
