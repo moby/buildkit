@@ -19,13 +19,11 @@ import (
 	"github.com/tonistiigi/fsutil"
 )
 
-var addGitTests = integration.TestFuncs(
-	testAddGit,
-	testAddGitChecksumCache,
-)
-
 func init() {
-	allTests = append(allTests, addGitTests...)
+	allTests = append(allTests, integration.TestFuncs(
+		testAddGit,
+		testAddGitChecksumCache,
+	)...)
 }
 
 func testAddGit(t *testing.T, sb integration.Sandbox) {
