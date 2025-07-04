@@ -24,6 +24,7 @@ import (
 	cleanhttp "github.com/hashicorp/go-cleanhttp"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth"
+	"github.com/moby/buildkit/util/errutil"
 	"github.com/moby/buildkit/util/progress/progresswriter"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/pkg/errors"
@@ -136,7 +137,7 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 			return err
 		}
 		defer func() {
-			err = errors.Wrap(err, "failed to fetch oauth token")
+			err = errors.Wrap(errutil.WithDetails(err), "failed to fetch oauth token")
 		}()
 		ap.mu.Lock()
 		name := fmt.Sprintf("[auth] %v token for %s", strings.Join(trimScopePrefix(req.Scopes), " "), req.Host)
