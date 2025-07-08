@@ -823,6 +823,7 @@ func newController(ctx context.Context, c *cli.Context, cfg *config.Config) (*co
 	if err != nil {
 		return nil, err
 	}
+	cacheStoreForDebug = cacheStorage
 
 	historyDB, err := boltutil.Open(filepath.Join(cfg.Root, "history.db"), 0600, nil)
 	if err != nil {

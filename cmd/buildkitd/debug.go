@@ -4,20 +4,28 @@ import (
 	"context"
 	"encoding/json"
 	"expvar"
+	"fmt"
+	"io"
+	"maps"
 	"net/http"
 	"net/http/pprof"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/cachedigest"
+	"github.com/moby/buildkit/util/cachestore"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/net/trace"
 )
+
+var cacheStoreForDebug solver.CacheKeyStorage
 
 func setupDebugHandlers(addr string) error {
 	m := http.NewServeMux()
@@ -31,6 +39,7 @@ func setupDebugHandlers(addr string) error {
 	m.Handle("/debug/events", http.HandlerFunc(trace.Events))
 	m.Handle("/debug/cache/all", http.HandlerFunc(handleCacheAll))
 	m.Handle("/debug/cache/lookup", http.HandlerFunc(handleCacheLookup))
+	m.Handle("/debug/cache/store", http.HandlerFunc(handleDebugCacheStore))
 
 	m.Handle("/debug/gc", http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		runtime.GC()
@@ -82,18 +91,7 @@ func handleCacheAll(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.Header().Set("Content-Type", "text/plain")
 		for _, rec := range records {
-			w.Write([]byte(rec.Digest.String() + " (" + rec.Type.String() + "):\n"))
-			for _, subRec := range rec.SubRecords {
-				w.Write([]byte("  " + subRec.Digest.String() + " (" + subRec.Type.String() + "):\n"))
-			}
-			for _, frame := range rec.Data {
-				switch frame.ID {
-				case cachedigest.FrameIDData:
-					w.Write([]byte("  " + frame.ID.String() + ": " + string(frame.Data) + "\n"))
-				case cachedigest.FrameIDSkip:
-					w.Write([]byte("  skipping " + string(frame.Data) + " bytes\n"))
-				}
-			}
+			printCacheRecord(rec, w)
 			w.Write([]byte("\n"))
 		}
 	}
@@ -127,22 +125,39 @@ func handleCacheLookup(w http.ResponseWriter, r *http.Request) {
 		}
 	default:
 		w.Header().Set("Content-Type", "text/plain")
-		w.Write([]byte(record.Digest.String() + " (" + record.Type.String() + "):\n"))
-		for _, subRec := range record.SubRecords {
-			w.Write([]byte("  " + subRec.Digest.String() + " (" + subRec.Type.String() + "):\n"))
-		}
-		for _, frame := range record.Data {
-			switch frame.ID {
-			case cachedigest.FrameIDData:
-				w.Write([]byte("  " + frame.ID.String() + ": " + string(frame.Data) + "\n"))
-			case cachedigest.FrameIDSkip:
-				w.Write([]byte("  skipping " + string(frame.Data) + " bytes\n"))
-			}
+		printCacheRecord(record, w)
+	}
+}
+
+func printCacheRecord(record *cachedigest.Record, w io.Writer) {
+	w.Write([]byte(record.Digest.String() + " (" + record.Type.String() + "):\n"))
+	for _, subRec := range record.SubRecords {
+		w.Write([]byte("  " + subRec.Digest.String() + " (" + subRec.Type.String() + "):\n"))
+	}
+	for _, frame := range record.Data {
+		switch frame.ID {
+		case cachedigest.FrameIDData:
+			w.Write([]byte("  " + frame.ID.String() + ": " + string(frame.Data) + "\n"))
+		case cachedigest.FrameIDSkip:
+			w.Write([]byte("  skipping " + string(frame.Data) + " bytes\n"))
 		}
 	}
 }
 
 func cacheRecordLookup(ctx context.Context, dgst digest.Digest) (*cachedigest.Record, error) {
+	if dgst == "sha256:8a5edab282632443219e051e4ade2d1d5bbc671c781051bf1437897cbdfea0f1" {
+		return &cachedigest.Record{
+			Digest: dgst,
+			Type:   cachedigest.TypeString,
+			Data: []cachedigest.Frame{
+				{
+					ID:   cachedigest.FrameIDData,
+					Data: []byte("/"),
+				},
+			},
+		}, nil
+	}
+
 	db := cachedigest.GetDefaultDB()
 	typ, frames, err := db.Get(ctx, dgst.String())
 	if err != nil {
@@ -199,4 +214,120 @@ func loadCacheAll(ctx context.Context) ([]*cachedigest.Record, error) {
 		}
 	}
 	return records, nil
+}
+
+func handleDebugCacheStore(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	recs, err := debugCacheStore(r.Context())
+	if err != nil {
+		http.Error(w, "Failed to debug cache store: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+
+	switch r.Header.Get("Accept") {
+	case "application/json":
+		w.Header().Set("Content-Type", "application/json")
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(recs); err != nil {
+			http.Error(w, "Failed to encode cache records: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	default:
+		w.Header().Set("Content-Type", "text/plain")
+		for _, rec := range recs {
+			randomSuffix := ""
+			if rec.Random {
+				randomSuffix = " (random)"
+			}
+			fmt.Fprintf(w, "ID: %d%s\n", rec.ID, randomSuffix)
+			if rec.Digest != "" {
+				fmt.Fprintf(w, "Digest: %s\n", rec.Digest)
+			}
+			if len(rec.Parents) > 0 {
+				fmt.Fprintln(w, "Parents:")
+				for input := range rec.Parents {
+					ids := slices.Collect(maps.Keys(rec.ParentIDs[input]))
+					s := make([]string, len(ids))
+					for i, id := range ids {
+						s[i] = fmt.Sprintf("%d", id)
+					}
+					fmt.Fprintf(w, "  Input %d:\t %s\n", input, strings.Join(s, ", "))
+				}
+			}
+			if len(rec.Children) > 0 {
+				fmt.Fprintln(w, "Children:")
+				for _, child := range rec.Children {
+					fmt.Fprintf(w, "  %d %s (input %d, output %d)\n", child.Record.ID, child.Digest, child.Input, child.Output)
+					if child.Selector != "" {
+						fmt.Fprintf(w, "    Selector: %s\n", child.Selector)
+					}
+				}
+			}
+			if len(rec.Debug) > 0 {
+				fmt.Fprintln(w, "Plaintexts:")
+				for _, debugRec := range rec.Debug {
+					printCacheRecord(debugRec, w)
+					w.Write([]byte("\n"))
+				}
+			}
+			w.Write([]byte("\n"))
+		}
+	}
+}
+
+type recordWithDebug struct {
+	*cachestore.Record
+	Debug []*cachedigest.Record `json:"debug,omitempty"`
+}
+
+func debugCacheStore(ctx context.Context) ([]*recordWithDebug, error) {
+	store := cacheStoreForDebug
+	if store == nil {
+		return nil, errors.New("cache store is not initialized for debug")
+	}
+
+	recs, err := cachestore.Records(ctx, store)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get cache records")
+	}
+
+	recsWithDebug := make([]*recordWithDebug, len(recs))
+	for i, rec := range recs {
+		debugRec := &recordWithDebug{
+			Record: rec,
+		}
+		m := map[digest.Digest]*cachedigest.Record{}
+		if rec.Digest != "" {
+			m[rec.Digest] = nil
+		}
+		for _, link := range rec.Children {
+			m[link.Digest] = nil
+			if link.Selector != "" {
+				m[link.Selector] = nil
+			}
+		}
+		for dgst := range m {
+			cr, err := cacheRecordLookup(ctx, dgst)
+			if err != nil {
+				bklog.L.Errorf("failed to lookup cache record for %s: %v", dgst, err)
+				continue
+			}
+			m[dgst] = cr
+		}
+		for _, cr := range m {
+			if cr != nil {
+				debugRec.Debug = append(debugRec.Debug, cr)
+			}
+		}
+		recsWithDebug[i] = debugRec
+	}
+
+	return recsWithDebug, nil
 }

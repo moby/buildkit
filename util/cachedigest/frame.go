@@ -28,8 +28,8 @@ func (f FrameID) String() string {
 }
 
 type Frame struct {
-	ID   FrameID
-	Data []byte
+	ID   FrameID `json:"type"`
+	Data []byte  `json:"data,omitempty"`
 }
 
 // encodeFrames encodes a series of frames: [frameID:uint32][len:uint32][data:len]

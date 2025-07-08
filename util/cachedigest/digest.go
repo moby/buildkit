@@ -91,10 +91,10 @@ func (h *Hash) Sum() digest.Digest {
 }
 
 type Record struct {
-	Digest     digest.Digest
-	Type       Type
-	Data       []Frame
-	SubRecords []Record
+	Digest     digest.Digest `json:"digest"`
+	Type       Type          `json:"type"`
+	Data       []Frame       `json:"data,omitempty"`
+	SubRecords []Record      `json:"subRecords,omitempty"`
 }
 
 var shaRegexpOnce = sync.OnceValue(func() *regexp.Regexp {
