@@ -366,6 +366,8 @@ func (s *Store) WalkLinksAll(id string, fn func(id string, link solver.CacheInfo
 			if err := json.Unmarshal(parts[0], &link); err != nil {
 				return err
 			}
+			// make digest relative to output as not all backends store output separately
+			link.Digest = digest.FromBytes(fmt.Appendf(nil, "%s@%d", link.Digest, link.Output))
 			links = append(links, linkEntry{
 				id:   string(parts[1]),
 				link: link,
