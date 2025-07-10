@@ -35,7 +35,7 @@ type storeWithLinks interface {
 func Records(ctx context.Context, store solver.CacheKeyStorage) ([]*Record, error) {
 	swl, ok := store.(storeWithLinks)
 	if !ok {
-		return nil, errors.New("cache store does not support walkin all links")
+		return nil, errors.New("cache store does not support walking all links")
 	}
 
 	roots := []string{}
