@@ -67,6 +67,6 @@ func NewContentHashFunc(selectors []Selector) solver.ResultBasedCacheFunc {
 			return "", err
 		}
 
-		return cachedigest.FromBytes(bytes.Join(dgsts, []byte{0}), cachedigest.TypeDigestArray)
+		return cachedigest.FromBytes(bytes.Join(dgsts, []byte{0}), cachedigest.TypeDigestList)
 	}
 }

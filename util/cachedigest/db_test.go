@@ -59,7 +59,7 @@ func TestNewHashAndGet(t *testing.T) {
 	db, cleanup := tempDB(t)
 	defer cleanup()
 
-	h := db.NewHash(TypeStringArray)
+	h := db.NewHash(TypeStringList)
 	inputs := [][]byte{
 		[]byte("foo"),
 		[]byte("bar"),
@@ -85,7 +85,7 @@ func TestNewHashAndGet(t *testing.T) {
 
 	gotType, frames, err := db.Get(context.Background(), sum.String())
 	require.NoError(t, err)
-	require.Equal(t, TypeStringArray, gotType)
+	require.Equal(t, TypeStringList, gotType)
 
 	var dataFrames [][]byte
 	var skipLens []uint32
@@ -154,8 +154,8 @@ func TestAll(t *testing.T) {
 		typ  Type
 	}{
 		{[]byte("foo"), TypeString},
-		{[]byte("bar"), TypeStringArray},
-		{[]byte("baz"), TypeDigestArray},
+		{[]byte("bar"), TypeStringList},
+		{[]byte("baz"), TypeDigestList},
 	}
 
 	var digests []string

@@ -158,7 +158,7 @@ func (f *fileOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 		}
 		slices.SortFunc(paths, bytes.Compare)
 		slices.Reverse(paths) // historical reasons
-		dgst, err := cachedigest.FromBytes(bytes.Join(paths, []byte{0}), cachedigest.TypeStringArray)
+		dgst, err := cachedigest.FromBytes(bytes.Join(paths, []byte{0}), cachedigest.TypeStringList)
 		if err != nil {
 			return nil, false, err
 		}

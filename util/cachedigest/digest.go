@@ -14,12 +14,12 @@ import (
 type Type string
 
 const (
-	TypeJSON        Type = "json"
-	TypeString      Type = "string"
-	TypeStringArray Type = "string-array"
-	TypeDigestArray Type = "digest-array"
-	TypeFileList    Type = "file-list"
-	TypeFile        Type = "file"
+	TypeJSON       Type = "json"
+	TypeString     Type = "string"
+	TypeStringList Type = "string-list"
+	TypeDigestList Type = "digest-list"
+	TypeFileList   Type = "file-list"
+	TypeFile       Type = "file"
 )
 
 func (t Type) String() string {
@@ -120,7 +120,7 @@ func (r *Record) LoadSubRecords(loader func(d digest.Digest) (Type, []Frame, err
 				checksums = append(checksums, string(match[0]))
 			}
 		}
-	case TypeDigestArray:
+	case TypeDigestList:
 		for _, dgst := range bytes.Split(dt, []byte{0}) {
 			checksums = append(checksums, string(dgst))
 		}
