@@ -188,12 +188,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        base:
-          - ''
-          - alpine
-        target:
-          - ''
-          - rootless
+        include:
+          -
+            base: 'ubuntu'
+          -
+            base: 'ubuntu'
+            target: 'rootless'
+          -
+            base: 'ubuntu'
+            build-tag: 'nvidia'
+          -
+            base: 'alpine'
+          -
+            base: 'alpine'
+            target: 'rootless'
     steps:
       -
         name: Checkout
@@ -226,8 +234,9 @@ jobs:
           RELEASE: ${{ github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v') }}
           BASE: ${{ matrix.base }}
           TARGET: ${{ matrix.target }}
-          CACHE_FROM: type=gha,scope=image${{ matrix.target }}
-          CACHE_TO: type=gha,scope=image${{ matrix.target }}
+          BUILD_TAG: ${{ matrix.build-tag }}
+          CACHE_FROM: type=gha,scope=image-${{ matrix.base }}-${{ matrix.target }}
+          CACHE_TO: type=gha,scope=image-${{ matrix.base }}-${{ matrix.target }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   scout:

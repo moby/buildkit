@@ -11,7 +11,10 @@ set -eu -o pipefail
 : "${PLATFORMS=}"
 : "${BASE=}"
 : "${TARGET=}"
+: "${BUILD_TAG=}"
+: "${BUILDKITD_TAGS=}"
 
+defaultBase="ubuntu"
 versionTag=$(git describe --always --tags --match "v[0-9]*")
 
 if [[ ! "$versionTag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -83,6 +86,11 @@ fi
 if [ -n "$BASE" ]; then
   tagNames="$tagNames-$BASE"
 fi
+if [ -n "$BUILD_TAG" ]; then
+  tagNames="$tagNames-$BUILD_TAG"
+elif [ "$BASE" = "$defaultBase" ]; then
+  tagNames="$tagNames $REPO:$TAG"
+fi
 
 if [[ "$versionTag" == "$TAG" ]]; then
   if [ -n "$TARGET" ]; then
@@ -90,10 +98,20 @@ if [[ "$versionTag" == "$TAG" ]]; then
     if [ -n "$BASE" ]; then
       tagNames="$tagNames-$BASE"
     fi
+    if [ -n "$BUILD_TAG" ]; then
+      tagNames="$tagNames-$BUILD_TAG"
+    elif [ "$BASE" = "$defaultBase" ]; then
+      tagNames="$tagNames $REPO:$TARGET"
+    fi
   else
     tagNames="$tagNames $REPO:latest"
     if [ -n "$BASE" ]; then
       tagNames="$tagNames-$BASE"
+    fi
+    if [ -n "$BUILD_TAG" ]; then
+      tagNames="$tagNames-$BUILD_TAG"
+    elif [ "$BASE" = "$defaultBase" ]; then
+      tagNames="$tagNames $REPO:latest"
     fi
   fi
 fi
@@ -124,6 +142,12 @@ done
 nocacheFilterFlag=""
 if [[ "$RELEASE" = "true" ]] && [[ "$GITHUB_ACTIONS" = "true" ]]; then
   nocacheFilterFlag="--no-cache-filter=buildkit-export,gobuild-base,rootless"
+fi
+
+if [ -n "$BUILD_TAG" ]; then
+  [ -n "$BUILDKITD_TAGS" ] && BUILDKITD_TAGS="$BUILDKITD_TAGS "
+  BUILDKITD_TAGS="$BUILDKITD_TAGS$BUILD_TAG"
+  export BUILDKITD_TAGS
 fi
 
 buildxCmd build --build-arg "BUILDKIT_CONTEXT_KEEP_GIT_DIR=1" --build-arg BUILDKITD_TAGS --build-arg BUILDKIT_DEBUG $exportBaseArg $platformFlag $targetFlag $importCacheFlags $exportCacheFlags $tagFlags $outputFlag $nocacheFilterFlag $attestFlags \
