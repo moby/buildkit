@@ -212,7 +212,7 @@ func main() {
 		},
 		cli.StringSliceFlag{
 			Name:  "allow-insecure-entitlement",
-			Usage: "allows insecure entitlements e.g. network.host, security.insecure",
+			Usage: "allows insecure entitlements e.g. network.host, security.insecure, device",
 		},
 		cli.StringFlag{
 			Name:  "otel-socket-path",
@@ -377,6 +377,8 @@ func main() {
 				case "security.insecure":
 					cfg.Entitlements = append(cfg.Entitlements, e)
 				case "network.host":
+					cfg.Entitlements = append(cfg.Entitlements, e)
+				case "device":
 					cfg.Entitlements = append(cfg.Entitlements, e)
 				default:
 					return errors.Errorf("invalid entitlement : %s", e)

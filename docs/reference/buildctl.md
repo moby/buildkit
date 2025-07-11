@@ -73,7 +73,7 @@ OPTIONS:
    --export-cache value              Export build cache, e.g. --export-cache type=registry,ref=example.com/foo/bar, or --export-cache type=local,dest=path/to/dir
    --import-cache value              Import build cache, e.g. --import-cache type=registry,ref=example.com/foo/bar, or --import-cache type=local,src=path/to/dir
    --secret value                    Secret value exposed to the build. Format id=secretname,src=filepath
-   --allow value                     Allow extra privileged entitlement, e.g. network.host, security.insecure
+   --allow value                     Allow extra privileged entitlement, e.g. network.host, security.insecure, device
    --ssh value                       Allow forwarding SSH agent or a raw Unix socket to the builder. Format default|<id>[=<socket>[,raw=false]|<key>[,<key>]]
    --metadata-file value             Output build metadata (e.g., image digest) to a file as JSON
    --source-policy-file value        Read source policy file from a JSON file
