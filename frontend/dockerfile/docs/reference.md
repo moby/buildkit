@@ -721,6 +721,12 @@ RUN --device=name,[required]
 `RUN --device` allows build to request [CDI devices](https://github.com/moby/buildkit/blob/master/docs/cdi.md)
 to be available to the build step.
 
+> [!WARNING]
+> The use of `--device` is protected by the `device` entitlement, which needs
+> to be enabled when starting the buildkitd daemon with
+> `--allow-insecure-entitlement device` flag or in [buildkitd config](https://github.com/moby/buildkit/blob/master/docs/buildkitd.toml.md),
+> and for a build request with [`--allow device` flag](https://docs.docker.com/engine/reference/commandline/buildx_build/#allow).
+
 The device `name` is provided by the CDI specification registered in BuildKit.
 
 In the following example, multiple devices are registered in the CDI
@@ -752,6 +758,8 @@ devices:
     containerEdits:
       env:
         - QUX=injected
+annotations:
+  org.mobyproject.buildkit.device.autoallow: true
 ```
 
 The device name format is flexible and accepts various patterns to support
@@ -761,6 +769,14 @@ multiple device configurations:
 * `vendor1.com/device=foo`: request a specific device
 * `vendor1.com/device=*`: request all devices for this vendor
 * `class1`: request devices by `org.mobyproject.buildkit.device.class` annotation
+
+> [!NOTE]
+> Annotations are supported by the CDI specification since 0.6.0.
+
+> [!NOTE]
+> To automatically allow all devices registered in the CDI specification, you
+> can set the `org.mobyproject.buildkit.device.autoallow` annotation. You can
+> also set this annotation for a specific device.
 
 #### Example: CUDA-Powered LLaMA Inference
 
