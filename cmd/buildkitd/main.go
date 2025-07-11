@@ -45,6 +45,7 @@ import (
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/archutil"
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/cachedigest"
 	"github.com/moby/buildkit/util/db/boltutil"
 	"github.com/moby/buildkit/util/disk"
 	"github.com/moby/buildkit/util/grpcerrors"
@@ -225,6 +226,10 @@ func main() {
 			Name:  "cdi-spec-dir",
 			Usage: "list of directories to scan for CDI spec files",
 		},
+		cli.BoolFlag{
+			Name:  "save-cache-debug",
+			Usage: "enable saving cache debug info",
+		},
 	)
 	app.Flags = append(app.Flags, appFlags...)
 	app.Flags = append(app.Flags, serviceFlags()...)
@@ -343,6 +348,15 @@ func main() {
 		listeners, err := newGRPCListeners(cfg.GRPC)
 		if err != nil {
 			return err
+		}
+
+		if c.GlobalBool("save-cache-debug") {
+			db, err := cachedigest.NewDB(filepath.Join(cfg.Root, "cache-debug.db"))
+			if err != nil {
+				return errors.Wrap(err, "failed to create cache debug db")
+			}
+			cachedigest.SetDefaultDB(db)
+			defer db.Close()
 		}
 
 		controller, err := newController(ctx, c, &cfg)
@@ -809,6 +823,7 @@ func newController(ctx context.Context, c *cli.Context, cfg *config.Config) (*co
 	if err != nil {
 		return nil, err
 	}
+	cacheStoreForDebug = cacheStorage
 
 	historyDB, err := boltutil.Open(filepath.Join(cfg.Root, "history.db"), 0600, nil)
 	if err != nil {
