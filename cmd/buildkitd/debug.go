@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"encoding/binary"
 	"encoding/json"
@@ -309,24 +310,28 @@ func writeCacheRecordsResponse(w http.ResponseWriter, r *http.Request, recs []*r
 			if rec.Digest != "" {
 				fmt.Fprintf(w, "Digest: %s\n", rec.Digest)
 			}
+
 			if len(rec.Parents) > 0 {
 				fmt.Fprintln(w, "Parents:")
-				for input := range rec.Parents {
-					ids := slices.Collect(maps.Keys(rec.ParentIDs[input]))
+				slices.SortStableFunc(rec.Parents, func(i, j cachestore.Link) int {
+					return cmp.Or(cmp.Compare(i.Input, j.Input), cmp.Compare(i.Digest, j.Digest))
+				})
+				for _, parent := range rec.Parents {
+					fmt.Fprintf(w, "  Input %d:\t%d\t%s\n", parent.Input, parent.Record.ID, parent.Digest)
+					if parent.Selector != "" {
+						fmt.Fprintf(w, "    Selector: %s\n", parent.Selector)
+					}
+				}
+			}
+			if len(rec.Children) > 0 {
+				fmt.Fprintln(w, "Children:")
+				for input := range rec.Children {
+					ids := slices.Collect(maps.Keys(rec.ChildIDs[input]))
 					s := make([]string, len(ids))
 					for i, id := range ids {
 						s[i] = fmt.Sprintf("%d", id)
 					}
 					fmt.Fprintf(w, "  Input %d:\t %s\n", input, strings.Join(s, ", "))
-				}
-			}
-			if len(rec.Children) > 0 {
-				fmt.Fprintln(w, "Children:")
-				for _, child := range rec.Children {
-					fmt.Fprintf(w, "  %d %s (input %d, output %d)\n", child.Record.ID, child.Digest, child.Input, child.Output)
-					if child.Selector != "" {
-						fmt.Fprintf(w, "    Selector: %s\n", child.Selector)
-					}
 				}
 			}
 			if len(rec.Debug) > 0 {
@@ -361,7 +366,7 @@ func debugCacheStore(ctx context.Context, store solver.CacheKeyStorage) ([]*reco
 		if rec.Digest != "" {
 			m[rec.Digest] = nil
 		}
-		for _, link := range rec.Children {
+		for _, link := range rec.Parents {
 			m[link.Digest] = nil
 			if link.Selector != "" {
 				m[link.Selector] = nil
