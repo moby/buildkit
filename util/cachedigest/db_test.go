@@ -95,7 +95,7 @@ func TestNewHashAndGet(t *testing.T) {
 			dataFrames = append(dataFrames, f.Data)
 		case FrameIDSkip:
 			require.Len(t, f.Data, 4)
-			skipLens = append(skipLens, uint32(f.Data[0])<<24|uint32(f.Data[1])<<16|uint32(f.Data[2])<<8|uint32(f.Data[3]))
+			skipLens = append(skipLens, uint32(f.Data[3])<<24|uint32(f.Data[2])<<16|uint32(f.Data[1])<<8|uint32(f.Data[0]))
 		}
 	}
 	require.Len(t, dataFrames, len(inputs))
