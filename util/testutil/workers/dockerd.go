@@ -124,6 +124,8 @@ func (c Moby) New(ctx context.Context, cfg *integration.BackendConfig) (b integr
 				dcfg.Builder.Entitlements.NetworkHost = true
 			case "security.insecure":
 				dcfg.Builder.Entitlements.SecurityInsecure = true
+			case "device":
+				dcfg.Builder.Entitlements.Device = true
 			}
 		}
 	}
