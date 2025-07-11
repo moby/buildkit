@@ -89,7 +89,7 @@ var buildCommand = cli.Command{
 		},
 		cli.StringSliceFlag{
 			Name:  "allow",
-			Usage: "Allow extra privileged entitlement, e.g. network.host, security.insecure",
+			Usage: "Allow extra privileged entitlement, e.g. network.host, security.insecure, device",
 		},
 		cli.StringSliceFlag{
 			Name:  "ssh",
