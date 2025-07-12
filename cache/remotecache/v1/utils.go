@@ -149,10 +149,8 @@ func (s *normalizeState) checkLoops(ctx context.Context, d digest.Digest, visite
 	if !ok {
 		return
 	}
+
 	visited[d] = struct{}{}
-	defer func() {
-		delete(visited, d)
-	}()
 
 	for l, ids := range links {
 		for id := range ids {
