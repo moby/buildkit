@@ -488,8 +488,6 @@ github.com/docker/cli/cli/config/types
 github.com/docker/cli/cli/connhelper/commandconn
 # github.com/docker/docker v28.2.2+incompatible
 ## explicit
-github.com/docker/docker/libnetwork/internal/resolvconf
-github.com/docker/docker/libnetwork/resolvconf
 github.com/docker/docker/profiles/seccomp
 # github.com/docker/docker-credential-helpers v0.9.3
 ## explicit; go 1.21
