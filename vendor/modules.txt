@@ -630,9 +630,6 @@ github.com/moby/locker
 ## explicit; go 1.19
 github.com/moby/patternmatcher
 github.com/moby/patternmatcher/ignorefile
-# github.com/moby/sys/atomicwriter v0.1.0
-## explicit; go 1.18
-github.com/moby/sys/atomicwriter
 # github.com/moby/sys/mount v0.3.4
 ## explicit; go 1.17
 github.com/moby/sys/mount
