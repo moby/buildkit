@@ -5,7 +5,6 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -61,77 +60,6 @@ func TestRCOption(t *testing.T) {
 			value, found := rc.Option(tc.search)
 			assert.Equal(t, tc.expFound, found)
 			assert.Equal(t, tc.expValue, value)
-		})
-	}
-}
-
-func TestRCWrite(t *testing.T) {
-	testcases := []struct {
-		name            string
-		fileName        string
-		perm            os.FileMode
-		hashFileName    string
-		modify          bool
-		expUserModified bool
-	}{
-		{
-			name:         "Write with hash",
-			fileName:     "testfile",
-			hashFileName: "testfile.hash",
-		},
-		{
-			name:            "Write with hash and modify",
-			fileName:        "testfile",
-			hashFileName:    "testfile.hash",
-			modify:          true,
-			expUserModified: true,
-		},
-		{
-			name:            "Write without hash and modify",
-			fileName:        "testfile",
-			modify:          true,
-			expUserModified: false,
-		},
-		{
-			name:     "Write perm",
-			fileName: "testfile",
-			perm:     0o640,
-		},
-	}
-
-	rc, err := Parse(bytes.NewBufferString("nameserver 1.2.3.4"), "")
-	require.NoError(t, err)
-
-	for _, tc := range testcases {
-		t.Run(tc.name, func(t *testing.T) {
-			tc := tc
-			d := t.TempDir()
-			path := filepath.Join(d, tc.fileName)
-			var hashPath string
-			if tc.hashFileName != "" {
-				hashPath = filepath.Join(d, tc.hashFileName)
-			}
-			if tc.perm == 0 {
-				tc.perm = 0o644
-			}
-			err := rc.WriteFile(path, hashPath, tc.perm)
-			require.NoError(t, err)
-
-			fi, err := os.Stat(path)
-			require.NoError(t, err)
-			// Windows files won't have the expected perms.
-			if runtime.GOOS != "windows" {
-				assert.Equal(t, tc.perm, fi.Mode())
-			}
-
-			if tc.modify {
-				err := os.WriteFile(path, []byte("modified"), 0o644)
-				require.NoError(t, err)
-			}
-
-			um, err := UserModified(path, hashPath)
-			require.NoError(t, err)
-			assert.Equal(t, tc.expUserModified, um)
 		})
 	}
 }

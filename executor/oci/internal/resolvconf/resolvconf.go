@@ -1,6 +1,3 @@
-// FIXME(thaJeztah): remove once we are a module; the go:build directive prevents go from downgrading language version to go1.16:
-//go:build go1.23
-
 // Package resolvconf is used to generate a container's /etc/resolv.conf file.
 //
 // Constructor Load and Parse read a resolv.conf file from the filesystem or
@@ -22,7 +19,6 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"io/fs"
 	"net/netip"
 	"os"
 	"slices"
@@ -30,9 +26,6 @@ import (
 	"strings"
 
 	"github.com/containerd/log"
-	"github.com/moby/sys/atomicwriter"
-	"github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 )
 
 // Fallback nameservers, to use if none can be obtained from the host or command
@@ -389,67 +382,6 @@ func (rc *ResolvConf) Generate(comments bool) ([]byte, error) {
 	}
 
 	return b.Bytes(), nil
-}
-
-// WriteFile generates content and writes it to path. If hashPath is non-zero, it
-// also writes a file containing a hash of the content, to enable UserModified()
-// to determine whether the file has been modified.
-func (rc *ResolvConf) WriteFile(path, hashPath string, perm os.FileMode) error {
-	content, err := rc.Generate(true)
-	if err != nil {
-		return err
-	}
-
-	// Write the resolv.conf file - it's bind-mounted into the container, so can't
-	// move a temp file into place, just have to truncate and write it.
-	if err := os.WriteFile(path, content, perm); err != nil {
-		return systemError{err}
-	}
-
-	// Write the hash file.
-	if hashPath != "" {
-		hashFile, err := atomicwriter.New(hashPath, perm)
-		if err != nil {
-			return systemError{err}
-		}
-		defer hashFile.Close()
-
-		if _, err = hashFile.Write([]byte(digest.FromBytes(content))); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// UserModified can be used to determine whether the resolv.conf file has been
-// modified since it was generated. It returns false with no error if the file
-// matches the hash, true with no error if the file no longer matches the hash,
-// and false with an error if the result cannot be determined.
-func UserModified(rcPath, rcHashPath string) (bool, error) {
-	currRCHash, err := os.ReadFile(rcHashPath)
-	if err != nil {
-		// If the hash file doesn't exist, can only assume it hasn't been written
-		// yet (so, the user hasn't modified the file it hashes).
-		if errors.Is(err, fs.ErrNotExist) {
-			return false, nil
-		}
-		return false, errors.Wrapf(err, "failed to read hash file %s", rcHashPath)
-	}
-	expected, err := digest.Parse(string(currRCHash))
-	if err != nil {
-		return false, errors.Wrapf(err, "failed to parse hash file %s", rcHashPath)
-	}
-	v := expected.Verifier()
-	currRC, err := os.Open(rcPath)
-	if err != nil {
-		return false, errors.Wrapf(err, "failed to open %s to check for modifications", rcPath)
-	}
-	defer currRC.Close()
-	if _, err := io.Copy(v, currRC); err != nil {
-		return false, errors.Wrapf(err, "failed to hash %s to check for modifications", rcPath)
-	}
-	return !v.Verified(), nil
 }
 
 func (rc *ResolvConf) processLine(line string) {
