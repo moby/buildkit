@@ -20,7 +20,7 @@ trace = true
 # root is where all buildkit state is stored.
 root = "/var/lib/buildkit"
 # insecure-entitlements allows insecure entitlements, disabled by default.
-insecure-entitlements = [ "network.host", "security.insecure" ]
+insecure-entitlements = [ "network.host", "security.insecure", "device" ]
 
 [log]
   # log formatter: json or text
