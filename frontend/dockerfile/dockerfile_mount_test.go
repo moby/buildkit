@@ -646,6 +646,8 @@ COPY --from=base /combined.txt /
 
 // moby/buildkit#5566
 func testCacheMountParallel(t *testing.T, sb integration.Sandbox) {
+	// flaky on WS2025
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(integration.UnixOrWindows(
