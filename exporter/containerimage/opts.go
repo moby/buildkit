@@ -8,7 +8,6 @@ import (
 	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/exporter/util/epoch"
-	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/pkg/errors"
 )
@@ -67,28 +66,16 @@ func (c *ImageCommitOpts) Load(ctx context.Context, opt map[string]string) (map[
 		}
 	}
 
-	if c.RefCfg.Compression.Type.OnlySupportOCITypes() {
-		c.EnableOCITypes(ctx, c.RefCfg.Compression.Type.String())
+	if c.RefCfg.Compression.Type.OnlySupportOCITypes() && !c.OCITypes {
+		return nil, errors.Errorf("exporter option \"compression=%s\" conflicts with \"oci-mediatypes=false\"", c.RefCfg.Compression.Type)
 	}
 	if c.OCIArtifact && !c.OCITypes {
-		c.EnableOCITypes(ctx, "oci-artifact")
+		return nil, errors.New("exporter option \"oci-artifact=true\" conflicts with \"oci-mediatypes=false\"")
 	}
 
 	c.Annotations = c.Annotations.Merge(as)
 
 	return rest, nil
-}
-
-func (c *ImageCommitOpts) EnableOCITypes(ctx context.Context, reason string) {
-	if !c.OCITypes {
-		message := "forcibly turning on oci-mediatype mode"
-		if reason != "" {
-			message += " for " + reason
-		}
-		bklog.G(ctx).Warn(message)
-
-		c.OCITypes = true
-	}
 }
 
 func parseBool(dest *bool, key string, value string) error {
