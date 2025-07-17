@@ -15,13 +15,11 @@ import (
 	"github.com/tonistiigi/fsutil"
 )
 
-var parentsTests = integration.TestFuncs(
-	testCopyParents,
-	testCopyRelativeParents,
-)
-
 func init() {
-	allTests = append(allTests, parentsTests...)
+	allTests = append(allTests, integration.TestFuncs(
+		testCopyParents,
+		testCopyRelativeParents,
+	)...)
 }
 
 func testCopyParents(t *testing.T, sb integration.Sandbox) {
