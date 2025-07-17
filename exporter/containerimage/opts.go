@@ -91,18 +91,6 @@ func (c *ImageCommitOpts) EnableOCITypes(ctx context.Context, reason string) {
 	}
 }
 
-func (c *ImageCommitOpts) EnableForceCompression(ctx context.Context, reason string) {
-	if !c.RefCfg.Compression.Force {
-		message := "forcibly turning on force-compression mode"
-		if reason != "" {
-			message += " for " + reason
-		}
-		bklog.G(ctx).Warn(message)
-
-		c.RefCfg.Compression.Force = true
-	}
-}
-
 func parseBool(dest *bool, key string, value string) error {
 	b, err := strconv.ParseBool(value)
 	if err != nil {
