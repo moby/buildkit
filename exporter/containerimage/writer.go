@@ -114,7 +114,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 
 	if !isMap {
 		if len(ps.Platforms) > 1 {
-			return nil, errors.Errorf("cannot export multiple platforms without multi-platform enabled")
+			return nil, errors.New("cannot export multiple platforms without multi-platform enabled")
 		}
 
 		var ref cache.ImmutableRef
