@@ -48,7 +48,7 @@ func (c *ImageCommitOpts) Load(ctx context.Context, opt map[string]string) (map[
 		case exptypes.OptKeyName:
 			c.ImageName = v
 		case exptypes.OptKeyOCITypes:
-			err = parseBoolWithDefault(&c.OCITypes, k, v, true)
+			err = parseBool(&c.OCITypes, k, v)
 		case exptypes.OptKeyOCIArtifact:
 			err = parseBool(&c.OCIArtifact, k, v)
 		case exptypes.OptKeyForceInlineAttestations:
@@ -85,14 +85,6 @@ func parseBool(dest *bool, key string, value string) error {
 	}
 	*dest = b
 	return nil
-}
-
-func parseBoolWithDefault(dest *bool, key string, value string, defaultValue bool) error {
-	if value == "" {
-		*dest = defaultValue
-		return nil
-	}
-	return parseBool(dest, key, value)
 }
 
 func toBytesMap(m map[string]string) map[string][]byte {
