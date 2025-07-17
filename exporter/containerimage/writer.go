@@ -114,7 +114,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 			}
 		}
 		if len(a.Index)+len(a.IndexDescriptor)+len(a.ManifestDescriptor) > 0 {
-			opts.EnableOCITypes(ctx, "annotations")
+			return nil, errors.New("cannot export annotations with \"oci-mediatypes=false\"")
 		}
 	}
 
@@ -202,7 +202,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 	}
 
 	if len(inp.Attestations) > 0 {
-		opts.EnableOCITypes(ctx, "attestations")
+		return nil, errors.New("cannot export attestations with \"oci-mediatypes=false\"")
 	}
 
 	refs := make([]cache.ImmutableRef, 0, len(inp.Refs))
