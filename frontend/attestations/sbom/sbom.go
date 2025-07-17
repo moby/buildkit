@@ -12,6 +12,7 @@ import (
 	"github.com/moby/buildkit/client/llb/sourceresolver"
 	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/solver/result"
+	"github.com/moby/buildkit/util/testutil/integration"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
@@ -84,7 +85,10 @@ func CreateSBOMScanner(ctx context.Context, resolver sourceresolver.MetaResolver
 		}
 
 		runscan := llb.Image(scanner).Run(runOpts...)
-		runscan.AddMount("/tmp", llb.Scratch(), llb.Tmpfs())
+		integration.UnixOrWindows(
+			runscan.AddMount("/tmp", llb.Scratch(), llb.Tmpfs()),
+			runscan.AddMount("/tmp", llb.Scratch()),
+		)
 
 		runscan.AddMount(path.Join(srcDir, "core", CoreSBOMName), ref, llb.Readonly)
 		for k, extra := range extras {
