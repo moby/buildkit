@@ -2,7 +2,6 @@ package resolvconf
 
 import (
 	"bytes"
-	"io/fs"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -10,11 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/docker/docker/internal/sliceutil"
-	"github.com/google/go-cmp/cmp/cmpopts"
-	"gotest.tools/v3/assert"
-	is "gotest.tools/v3/assert/cmp"
-	"gotest.tools/v3/golden"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRCOption(t *testing.T) {
@@ -61,10 +57,10 @@ func TestRCOption(t *testing.T) {
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			rc, err := Parse(bytes.NewBufferString("options "+tc.options), "")
-			assert.NilError(t, err)
+			require.NoError(t, err)
 			value, found := rc.Option(tc.search)
-			assert.Check(t, is.Equal(found, tc.expFound))
-			assert.Check(t, is.Equal(value, tc.expValue))
+			assert.Equal(t, tc.expFound, found)
+			assert.Equal(t, tc.expValue, value)
 		})
 	}
 }
@@ -104,7 +100,7 @@ func TestRCWrite(t *testing.T) {
 	}
 
 	rc, err := Parse(bytes.NewBufferString("nameserver 1.2.3.4"), "")
-	assert.NilError(t, err)
+	require.NoError(t, err)
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -119,30 +115,30 @@ func TestRCWrite(t *testing.T) {
 				tc.perm = 0o644
 			}
 			err := rc.WriteFile(path, hashPath, tc.perm)
-			assert.NilError(t, err)
+			require.NoError(t, err)
 
 			fi, err := os.Stat(path)
-			assert.NilError(t, err)
+			require.NoError(t, err)
 			// Windows files won't have the expected perms.
 			if runtime.GOOS != "windows" {
-				assert.Check(t, is.Equal(fi.Mode(), tc.perm))
+				assert.Equal(t, tc.perm, fi.Mode())
 			}
 
 			if tc.modify {
 				err := os.WriteFile(path, []byte("modified"), 0o644)
-				assert.NilError(t, err)
+				require.NoError(t, err)
 			}
 
 			um, err := UserModified(path, hashPath)
-			assert.NilError(t, err)
-			assert.Check(t, is.Equal(um, tc.expUserModified))
+			require.NoError(t, err)
+			assert.Equal(t, tc.expUserModified, um)
 		})
 	}
 }
 
 var (
-	a2s = sliceutil.Mapper(netip.Addr.String)
-	s2a = sliceutil.Mapper(netip.MustParseAddr)
+	a2s = sliceutilMapper(netip.Addr.String)
+	s2a = sliceutilMapper(netip.MustParseAddr)
 )
 
 // Test that a resolv.conf file can be modified using OverrideXXX() methods
@@ -212,10 +208,10 @@ func TestRCModify(t *testing.T) {
 				input += "options " + strings.Join(tc.inputOptions, " ") + "\n"
 			}
 			rc, err := Parse(bytes.NewBufferString(input), "")
-			assert.NilError(t, err)
-			assert.Check(t, is.DeepEqual(a2s(rc.NameServers()), tc.inputNS))
-			assert.Check(t, is.DeepEqual(rc.Search(), tc.inputSearch))
-			assert.Check(t, is.DeepEqual(rc.Options(), tc.inputOptions))
+			require.NoError(t, err)
+			assert.Equal(t, tc.inputNS, a2s(rc.NameServers()))
+			assert.Equal(t, tc.inputSearch, rc.Search())
+			assert.Equal(t, tc.inputOptions, rc.Options())
 
 			if !tc.noOverrides {
 				overrideNS := s2a(tc.overrideNS)
@@ -223,20 +219,20 @@ func TestRCModify(t *testing.T) {
 				rc.OverrideSearch(tc.overrideSearch)
 				rc.OverrideOptions(tc.overrideOptions)
 
-				assert.Check(t, is.DeepEqual(rc.NameServers(), overrideNS, cmpopts.EquateEmpty(), cmpopts.EquateComparable(netip.Addr{})))
-				assert.Check(t, is.DeepEqual(rc.Search(), tc.overrideSearch, cmpopts.EquateEmpty()))
-				assert.Check(t, is.DeepEqual(rc.Options(), tc.overrideOptions, cmpopts.EquateEmpty()))
+				assert.Equal(t, overrideNS, rc.NameServers())
+				assert.Equal(t, tc.overrideSearch, rc.Search())
+				assert.Equal(t, tc.overrideOptions, rc.Options())
 			}
 
 			if tc.addOption != "" {
 				options := rc.Options()
 				rc.AddOption(tc.addOption)
-				assert.Check(t, is.DeepEqual(rc.Options(), append(options, tc.addOption), cmpopts.EquateEmpty()))
+				assert.Equal(t, append(options, tc.addOption), rc.Options())
 			}
 
 			content, err := rc.Generate(true)
-			assert.NilError(t, err)
-			assert.Check(t, golden.String(string(content), t.Name()+".golden"))
+			require.NoError(t, err)
+			assertGolden(t, t.Name()+".golden", string(content))
 		})
 	}
 }
@@ -304,7 +300,7 @@ func TestRCTransformForLegacyNw(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tc := tc
 			rc, err := Parse(bytes.NewBufferString(tc.input), "/etc/resolv.conf")
-			assert.NilError(t, err)
+			require.NoError(t, err)
 			if tc.overrideNS != nil {
 				rc.OverrideNameServers(s2a(tc.overrideNS))
 			}
@@ -312,8 +308,8 @@ func TestRCTransformForLegacyNw(t *testing.T) {
 			rc.TransformForLegacyNw(tc.ipv6)
 
 			content, err := rc.Generate(true)
-			assert.NilError(t, err)
-			assert.Check(t, golden.String(string(content), t.Name()+".golden"))
+			require.NoError(t, err)
+			assertGolden(t, t.Name()+".golden", string(content))
 		})
 	}
 }
@@ -410,7 +406,7 @@ func TestRCTransformForIntNS(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tc := tc
 			rc, err := Parse(bytes.NewBufferString(tc.input), "/etc/resolv.conf")
-			assert.NilError(t, err)
+			require.NoError(t, err)
 
 			if tc.intNameServer == "" {
 				tc.intNameServer = "127.0.0.11"
@@ -424,16 +420,15 @@ func TestRCTransformForIntNS(t *testing.T) {
 			intNS := netip.MustParseAddr(tc.intNameServer)
 			extNameServers, err := rc.TransformForIntNS(intNS, tc.reqdOptions)
 			if tc.expErr != "" {
-				assert.Check(t, is.ErrorContains(err, tc.expErr))
+				assert.ErrorContains(t, err, tc.expErr)
 				return
 			}
-			assert.NilError(t, err)
+			require.NoError(t, err)
 
 			content, err := rc.Generate(true)
-			assert.NilError(t, err)
-			assert.Check(t, golden.String(string(content), t.Name()+".golden"))
-			assert.Check(t, is.DeepEqual(extNameServers, tc.expExtServers,
-				cmpopts.EquateComparable(netip.Addr{})))
+			require.NoError(t, err)
+			assertGolden(t, t.Name()+".golden", string(content))
+			assert.Equal(t, tc.expExtServers, extNameServers)
 		})
 	}
 }
@@ -479,15 +474,15 @@ func TestRCTransformForIntNSInvalidNdots(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			content := "nameserver 8.8.8.8\n" + tc.options
 			rc, err := Parse(bytes.NewBufferString(content), "/etc/resolv.conf")
-			assert.NilError(t, err)
+			require.NoError(t, err)
 			_, err = rc.TransformForIntNS(netip.MustParseAddr("127.0.0.11"), tc.reqdOptions)
-			assert.NilError(t, err)
+			require.NoError(t, err)
 
 			val, found := rc.Option("ndots")
-			assert.Check(t, is.Equal(found, true))
-			assert.Check(t, is.Equal(val, tc.expVal))
-			assert.Check(t, is.Equal(rc.md.NDotsFrom, tc.expNDotsFrom))
-			assert.Check(t, is.DeepEqual(rc.options, tc.expOptions))
+			assert.True(t, found)
+			assert.Equal(t, tc.expVal, val)
+			assert.Equal(t, tc.expNDotsFrom, rc.md.NDotsFrom)
+			assert.Equal(t, tc.expOptions, rc.options)
 		})
 	}
 }
@@ -498,44 +493,44 @@ func TestRCRead(t *testing.T) {
 
 	// Try to read a nonexistent file, equivalent to an empty file.
 	_, err := Load(path)
-	assert.Check(t, is.ErrorIs(err, fs.ErrNotExist))
+	require.ErrorIs(t, err, os.ErrNotExist)
 
 	err = os.WriteFile(path, []byte("options edns0"), 0o644)
-	assert.NilError(t, err)
+	require.NoError(t, err)
 
 	// Read that file in the constructor.
 	rc, err := Load(path)
-	assert.NilError(t, err)
-	assert.Check(t, is.DeepEqual(rc.Options(), []string{"edns0"}))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"edns0"}, rc.Options())
 
 	// Pass in an os.File, check the path is extracted.
 	file, err := os.Open(path)
-	assert.NilError(t, err)
+	require.NoError(t, err)
 	rc, err = Parse(file, "")
 	_ = file.Close()
-	assert.NilError(t, err)
-	assert.Check(t, is.Equal(rc.md.SourcePath, path))
+	require.NoError(t, err)
+	assert.Equal(t, path, rc.md.SourcePath)
 }
 
 func TestRCInvalidNS(t *testing.T) {
 	// A resolv.conf with an invalid nameserver address.
 	rc, err := Parse(bytes.NewBufferString("nameserver 1.2.3.4.5"), "")
-	assert.NilError(t, err)
+	require.NoError(t, err)
 
 	content, err := rc.Generate(true)
-	assert.NilError(t, err)
-	assert.Check(t, golden.String(string(content), t.Name()+".golden"))
+	require.NoError(t, err)
+	assertGolden(t, t.Name()+".golden", string(content))
 }
 
 func TestRCSetHeader(t *testing.T) {
 	rc, err := Parse(bytes.NewBufferString("nameserver 127.0.0.53"), "/etc/resolv.conf")
-	assert.NilError(t, err)
+	require.NoError(t, err)
 
 	rc.SetHeader("# This is a comment.")
 
 	content, err := rc.Generate(true)
-	assert.NilError(t, err)
-	assert.Check(t, golden.String(string(content), t.Name()+".golden"))
+	require.NoError(t, err)
+	assertGolden(t, t.Name()+".golden", string(content))
 }
 
 func TestRCUnknownDirectives(t *testing.T) {
@@ -546,11 +541,11 @@ options ndots:1
 unrecognised thing
 `
 	rc, err := Parse(bytes.NewBufferString(input), "/etc/resolv.conf")
-	assert.NilError(t, err)
+	require.NoError(t, err)
 
 	content, err := rc.Generate(true)
-	assert.NilError(t, err)
-	assert.Check(t, golden.String(string(content), t.Name()+".golden"))
+	require.NoError(t, err)
+	assertGolden(t, t.Name()+".golden", string(content))
 }
 
 func BenchmarkGenerate(b *testing.B) {
