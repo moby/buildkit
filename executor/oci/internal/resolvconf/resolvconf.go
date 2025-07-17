@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/containerd/log"
+	"github.com/moby/buildkit/errdefs"
 )
 
 // Fallback nameservers, to use if none can be obtained from the host or command
@@ -111,7 +112,7 @@ func Parse(reader io.Reader, path string) (ResolvConf, error) {
 		rc.processLine(scanner.Text())
 	}
 	if err := scanner.Err(); err != nil {
-		return ResolvConf{}, systemError{err}
+		return ResolvConf{}, errdefs.Internal(err)
 	}
 	if _, ok := rc.Option("ndots"); ok {
 		rc.md.NDotsFrom = "host"
@@ -455,13 +456,4 @@ func removeInvalidNDots(options []string) []string {
 	}
 	clear(options[n:]) // Zero out the obsolete elements, for GC.
 	return options[:n]
-}
-
-// systemError implements [github.com/docker/docker/errdefs.ErrSystem].
-type systemError struct{ error }
-
-func (systemError) System() {}
-
-func (e systemError) Unwrap() error {
-	return e.error
 }
