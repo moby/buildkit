@@ -484,8 +484,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 								d.dispatched = true
 								d.state = *st
 								if img != nil {
-									// timestamps are inherited as-is, regardless to SOURCE_DATE_EPOCH
-									// https://github.com/moby/buildkit/issues/4614
+									img.Created = nil
 									d.image = *img
 									if img.Architecture != "" && img.OS != "" {
 										d.platform = &ocispecs.Platform{
@@ -516,11 +515,13 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 								if err != nil {
 									return err
 								}
-								if img != nil {
-									d.image = *img
-								} else {
-									d.image = emptyImage(platformOpt.targetPlatform)
+								if img == nil {
+									imgp := emptyImage(*platform)
+									img = &imgp
 								}
+								d.baseImg = cloneX(img) // immutable
+								img.Created = nil
+								d.image = *img
 								d.state = st.Platform(*platform)
 								d.platform = platform
 								return nil
