@@ -230,3 +230,43 @@ RUN echo bar
 	assert.Equal(t, []digest.Digest{"sha256:2e112031b4b923a873c8b3d685d48037e4d5ccd967b658743d93a6e56c3064b9"}, baseImg.RootFS.DiffIDs)
 	assert.Equal(t, "2024-01-17 21:49:12 +0000 UTC", baseImg.Created.String())
 }
+
+func TestGetSecretsRegex(t *testing.T) {
+	t.Parallel()
+	deny, allow := getSecretsRegex()
+
+	testCases := []struct {
+		name     string
+		key      string
+		isSecret bool
+	}{
+		// Positive matches
+		{name: "exact api_key", key: "api_key", isSecret: true},
+		{name: "uppercase token", key: "GITHUB_TOKEN", isSecret: true},
+		{name: "contains password", key: "DATABASE_PASSWORD", isSecret: true},
+		{name: "contains secret", key: "secret_MESSAGE", isSecret: true},
+		{name: "exact auth", key: "AUTH", isSecret: true},
+		{name: "contains credential", key: "USER_CREDENTIAL", isSecret: true},
+		{name: "contains passwd", key: "DB_PASSWD", isSecret: true},
+		{name: "contains pword", key: "MY_PWORD", isSecret: true},
+
+		// Negative matches (allowed keywords)
+		{name: "public key", key: "public_key", isSecret: false},
+		{name: "ssh public key", key: "SSH_PUBLIC_KEY", isSecret: false},
+
+		// Negative matches (should not match)
+		{name: "normal variable", key: "myvar", isSecret: false},
+		{name: "contains key but not fitst of last or full", key: "new_key_file_path", isSecret: false},
+		{name: "contains auth but not as whole word", key: "authority", isSecret: false},
+		{name: "not a secret", key: "some_variable", isSecret: false},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			matched := deny.MatchString(tc.key) && !allow.MatchString(tc.key)
+			assert.Equal(t, tc.isSecret, matched)
+		})
+	}
+}

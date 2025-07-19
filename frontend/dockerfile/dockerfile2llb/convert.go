@@ -2576,7 +2576,7 @@ func getSecretsRegex() (*regexp.Regexp, *regexp.Regexp) {
 			"secret",
 			"token",
 		}
-		pattern := `(?i)(?:_|^)(?:` + strings.Join(secretTokens, "|") + `)(?:_|$)`
+		pattern := `(?i)^(?:(` + strings.Join(secretTokens, "|") + `)(?:_.*)?|.*_(` + strings.Join(secretTokens, "|") + `))$`
 		secretsRegexp = regexp.MustCompile(pattern)
 
 		allowTokens := []string{
