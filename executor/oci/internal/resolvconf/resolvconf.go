@@ -25,8 +25,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/containerd/log"
 	"github.com/moby/buildkit/errdefs"
+	"github.com/moby/buildkit/util/bklog"
 )
 
 // Fallback nameservers, to use if none can be obtained from the host or command
@@ -220,7 +220,7 @@ func (rc *ResolvConf) TransformForLegacyNw(ipv6 bool) {
 	}
 	rc.nameServers = filtered
 	if len(rc.nameServers) == 0 {
-		log.G(context.TODO()).Info("No non-localhost DNS nameservers are left in resolv.conf. Using default external servers")
+		bklog.G(context.TODO()).Info("No non-localhost DNS nameservers are left in resolv.conf. Using default external servers")
 		rc.nameServers = defaultNSAddrs(ipv6)
 		rc.md.Warnings = append(rc.md.Warnings, "Used default nameservers.")
 	}
