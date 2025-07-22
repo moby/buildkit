@@ -97,7 +97,7 @@ func testBuildExportNydusWithHybrid(t *testing.T, sb integration.Sandbox) {
 
 		mediaTypes := map[compression.Type]string{
 			compression.Gzip: ocispecs.MediaTypeImageLayerGzip,
-			compression.Zstd: ocispecs.MediaTypeImageLayer + "+zstd",
+			compression.Zstd: ocispecs.MediaTypeImageLayerZstd,
 		}
 		target := fmt.Sprintf("%s/%s/alpine:%s", registry, compType, identity.NewID())
 		_, err = c.Solve(sb.Context(), def, SolveOpt{
