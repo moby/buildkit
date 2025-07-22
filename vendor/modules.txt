@@ -488,7 +488,6 @@ github.com/docker/cli/cli/config/types
 github.com/docker/cli/cli/connhelper/commandconn
 # github.com/docker/docker v28.2.2+incompatible
 ## explicit
-github.com/docker/docker/profiles/seccomp
 # github.com/docker/docker-credential-helpers v0.9.3
 ## explicit; go 1.21
 github.com/docker/docker-credential-helpers/client
@@ -629,6 +628,9 @@ github.com/moby/locker
 ## explicit; go 1.19
 github.com/moby/patternmatcher
 github.com/moby/patternmatcher/ignorefile
+# github.com/moby/profiles/seccomp v0.1.0
+## explicit; go 1.23.0
+github.com/moby/profiles/seccomp
 # github.com/moby/sys/mount v0.3.4
 ## explicit; go 1.17
 github.com/moby/sys/mount
