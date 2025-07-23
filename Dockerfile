@@ -131,6 +131,28 @@ RUN --mount=target=. --mount=target=/root/.cache,type=cache \
   fi
 EOT
 
+# cni-plugins-build builds CNI plugins from source
+FROM gobuild-base AS cni-plugins-build
+WORKDIR /go/src/github.com/containernetworking/plugins
+ARG CNI_VERSION
+ADD --keep-git-dir=true "https://github.com/containernetworking/plugins.git#$CNI_VERSION" .
+ARG TARGETPLATFORM
+RUN --mount=target=/root/.cache,type=cache <<EOT
+  set -e
+  for d in plugins/meta/* plugins/main/* plugins/ipam/*; do
+    if [ -d "$d" ]; then
+      plugin="$(basename "$d")"
+      if [ "${plugin}" != "windows" ]; then
+        (
+          set -x
+          CGO_ENABLED=0 xx-go build -mod=vendor -o "/out/$plugin" -ldflags "-extldflags -static -X github.com/containernetworking/plugins/pkg/utils/buildversion.BuildVersion=${CNI_VERSION}" ./"$d"
+          xx-verify --static "/out/$plugin"
+        )
+      fi
+    fi
+  done
+EOT
+
 # dnsname builds dnsname CNI plugin for testing
 FROM gobuild-base AS dnsname
 WORKDIR /go/src/github.com/containers/dnsname
@@ -141,16 +163,8 @@ RUN --mount=target=/root/.cache,type=cache \
     CGO_ENABLED=0 xx-go build -o /usr/bin/dnsname ./plugins/meta/dnsname && \
     xx-verify --static /usr/bin/dnsname
 
-FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS cni-plugins
-RUN apk add --no-cache curl
-COPY --from=xx / /
-ARG CNI_VERSION
-ARG TARGETOS
-ARG TARGETARCH
-ARG TARGETPLATFORM
-WORKDIR /opt/cni/bin
-RUN curl -fsSL https://github.com/containernetworking/plugins/releases/download/${CNI_VERSION}/cni-plugins-${TARGETOS}-${TARGETARCH}-${CNI_VERSION}.tgz | tar xzv
-RUN xx-verify --static bridge loopback host-local
+FROM scratch AS cni-plugins
+COPY --link --from=cni-plugins-build /out /opt/cni/bin/
 COPY --link --from=dnsname /usr/bin/dnsname /opt/cni/bin/
 
 FROM scratch AS cni-plugins-export
