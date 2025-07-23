@@ -6,9 +6,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/moby/buildkit/executor/oci/internal/resolvconf"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/flightcontrol"
+	"github.com/moby/buildkit/util/resolvconf"
 	"github.com/moby/sys/user"
 	"github.com/pkg/errors"
 )
