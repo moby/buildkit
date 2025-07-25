@@ -22,8 +22,8 @@ cross:
 .PHONY: images
 images:
 # moby/buildkit:local and moby/buildkit:local-rootless are created on Docker
-	hack/images local moby/buildkit
-	TARGET=rootless hack/images local moby/buildkit
+	$(BUILDX_CMD) bake image
+	IMAGE_TARGET=rootless $(BUILDX_CMD) bake image
 
 .PHONY: install
 install:
@@ -32,7 +32,9 @@ install:
 
 .PHONY: release
 release:
-	./hack/release
+	$(BUILDX_CMD) bake release
+	mv -f $(CURDIR)/bin/release/**/* $(CURDIR)/bin/release/
+	find $(CURDIR)/bin/release -type d -empty -delete
 
 .PHONY: clean
 clean:
