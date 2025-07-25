@@ -124,6 +124,11 @@ func init() {
 			Name:  "containerd-worker-selinux",
 			Usage: "apply SELinux labels",
 		},
+		cli.IntFlag{
+			Name:  "containerd-max-parallelism",
+			Usage: "limit the number of parallel build steps that can run at the same time",
+			Value: defaultConf.Workers.Containerd.MaxParallelism,
+		},
 	}
 	n := "containerd-worker-rootless"
 	u := "enable rootless mode"
@@ -257,6 +262,9 @@ func applyContainerdFlags(c *cli.Context, cfg *config.Config) error {
 	}
 	if c.GlobalIsSet("containerd-worker-selinux") {
 		cfg.Workers.Containerd.SELinux = c.GlobalBool("containerd-worker-selinux")
+	}
+	if c.GlobalIsSet("containerd-max-parallelism") {
+		cfg.Workers.Containerd.MaxParallelism = c.GlobalInt("containerd-max-parallelism")
 	}
 
 	return nil

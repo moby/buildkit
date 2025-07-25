@@ -121,6 +121,11 @@ func init() {
 			Name:  "oci-worker-selinux",
 			Usage: "apply SELinux labels",
 		},
+		cli.IntFlag{
+			Name:  "oci-max-parallelism",
+			Usage: "limit the number of parallel build steps that can run at the same time",
+			Value: defaultConf.Workers.OCI.MaxParallelism,
+		},
 	}
 	n := "oci-worker-rootless"
 	u := "enable rootless mode"
@@ -251,6 +256,9 @@ func applyOCIFlags(c *cli.Context, cfg *config.Config) error {
 	}
 	if c.GlobalIsSet("oci-worker-selinux") {
 		cfg.Workers.OCI.SELinux = c.GlobalBool("oci-worker-selinux")
+	}
+	if c.GlobalIsSet("oci-max-parallelism") {
+		cfg.Workers.OCI.MaxParallelism = c.GlobalInt("oci-max-parallelism")
 	}
 
 	return nil
