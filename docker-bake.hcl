@@ -46,6 +46,18 @@ variable "ARCHUTIL_MULTIPLATFORM" {
   default = null
 }
 
+variable "IMAGE_TARGET" {
+  default = null
+}
+
+variable "FRONTEND_CHANNEL" {
+  default = "mainline"
+}
+
+variable "FRONTEND_BUILDTAGS" {
+  default = null
+}
+
 # Defines the output folder
 variable "DESTDIR" {
   default = ""
@@ -76,6 +88,14 @@ variable "BUILDKIT_SYNTAX" {
 function "bindir" {
   params = [defaultdir]
   result = DESTDIR != "" ? DESTDIR : "./bin/${defaultdir}"
+}
+
+# Special target: https://github.com/docker/metadata-action#bake-definition
+target "meta-helper" {
+  tags = [IMAGE_TARGET != null && IMAGE_TARGET != "" ? "moby/buildkit:local-${IMAGE_TARGET}" : "moby/buildkit:local"]
+}
+target "frontend-meta-helper" {
+  tags = [FRONTEND_CHANNEL != null && FRONTEND_CHANNEL != "" && FRONTEND_CHANNEL != "mainline" ? "docker/dockerfile:local-${FRONTEND_CHANNEL}" : "docker/dockerfile:local"]
 }
 
 target "_common" {
@@ -131,6 +151,53 @@ target "release" {
   inherits = ["binaries-cross"]
   target = "release"
   output = [bindir("release")]
+}
+
+target "image" {
+  inherits = ["_common", "meta-helper"]
+  target = IMAGE_TARGET
+  output = ["type=docker"]
+}
+
+target "image-cross" {
+  inherits = ["image"]
+  output = ["type=image"]
+  platforms = [
+    "linux/amd64",
+    "linux/arm/v7",
+    "linux/arm64",
+    "linux/s390x",
+    "linux/ppc64le",
+    "linux/riscv64"
+  ]
+}
+
+target "frontend-image" {
+  inherits = ["_common", "frontend-meta-helper"]
+  dockerfile = "./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile"
+  args = {
+    CHANNEL = FRONTEND_CHANNEL
+    BUILDTAGS = FRONTEND_BUILDTAGS
+  }
+  output = ["type=docker"]
+}
+
+target "frontend-image-cross" {
+  inherits = ["frontend-image"]
+  output = ["type=image"]
+  platforms = [
+    "linux/386",
+    "linux/amd64",
+    "linux/arm/v7",
+    "linux/arm64",
+    "linux/mips",
+    "linux/mipsle",
+    "linux/mips64",
+    "linux/mips64le",
+    "linux/s390x",
+    "linux/ppc64le",
+    "linux/riscv64"
+  ]
 }
 
 target "integration-tests-base" {
