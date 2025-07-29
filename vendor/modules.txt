@@ -487,7 +487,7 @@ github.com/docker/cli/cli/config/credentials
 github.com/docker/cli/cli/config/memorystore
 github.com/docker/cli/cli/config/types
 github.com/docker/cli/cli/connhelper/commandconn
-# github.com/docker/docker v28.3.0+incompatible
+# github.com/docker/docker v28.3.3+incompatible
 ## explicit
 # github.com/docker/docker-credential-helpers v0.9.3
 ## explicit; go 1.21
