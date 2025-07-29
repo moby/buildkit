@@ -70,7 +70,7 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 			gopts = append(gopts, grpc.WithContextDialer(wd.dialer))
 			needDialer = false
 		}
-		if wt, ok := o.(*withTracerDelegate); ok {
+		if wt, ok := o.(*withTracerDelegate); ok && wt.TracerDelegate != nil {
 			tracerDelegate = wt
 		}
 		if sd, ok := o.(*withSessionDialer); ok {
