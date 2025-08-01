@@ -112,9 +112,11 @@ func getAvailableBlobs(ctx context.Context, cs content.Store, chain *solver.Remo
 	if err != nil {
 		return nil, err
 	}
-	var descs []ocispecs.Descriptor
+	var descs = map[digest.Digest]ocispecs.Descriptor{}
 	if err := walkBlob(ctx, cs, target, func(desc ocispecs.Descriptor) bool {
-		descs = append(descs, desc)
+		// Nothing prevents this function from being called multiple times for the same descriptor.
+		// Using a map will prevent duplicates in the result.
+		descs[desc.Digest] = desc
 		return true
 	}); err != nil {
 		bklog.G(ctx).WithError(err).Warn("failed to walk variant blob") // is not a critical error at this moment.
