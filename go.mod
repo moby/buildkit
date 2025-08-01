@@ -143,7 +143,7 @@ require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.5 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
-	github.com/docker/docker v28.3.0+incompatible // indirect
+	github.com/docker/docker v28.3.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.3 // indirect
 	github.com/docker/go-metrics v0.0.1 // indirect
 	github.com/felixge/fgprof v0.9.3 // indirect
