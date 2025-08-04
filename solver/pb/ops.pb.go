@@ -295,6 +295,7 @@ type Op struct {
 	Op            isOp_Op            `protobuf_oneof:"op"`
 	Platform      *Platform          `protobuf:"bytes,10,opt,name=platform,proto3" json:"platform,omitempty"`
 	Constraints   *WorkerConstraints `protobuf:"bytes,11,opt,name=constraints,proto3" json:"constraints,omitempty"`
+	Identity      string             `protobuf:"bytes,12,opt,name=identity,proto3" json:"identity,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -409,6 +410,13 @@ func (x *Op) GetConstraints() *WorkerConstraints {
 		return x.Constraints
 	}
 	return nil
+}
+
+func (x *Op) GetIdentity() string {
+	if x != nil {
+		return x.Identity
+	}
+	return ""
 }
 
 type isOp_Op interface {
@@ -3384,7 +3392,7 @@ var File_github_com_moby_buildkit_solver_pb_ops_proto protoreflect.FileDescripto
 
 const file_github_com_moby_buildkit_solver_pb_ops_proto_rawDesc = "" +
 	"\n" +
-	",github.com/moby/buildkit/solver/pb/ops.proto\x12\x02pb\"\xe8\x02\n" +
+	",github.com/moby/buildkit/solver/pb/ops.proto\x12\x02pb\"\x84\x03\n" +
 	"\x02Op\x12!\n" +
 	"\x06inputs\x18\x01 \x03(\v2\t.pb.InputR\x06inputs\x12 \n" +
 	"\x04exec\x18\x02 \x01(\v2\n" +
@@ -3398,7 +3406,8 @@ const file_github_com_moby_buildkit_solver_pb_ops_proto_rawDesc = "" +
 	".pb.DiffOpH\x00R\x04diff\x12(\n" +
 	"\bplatform\x18\n" +
 	" \x01(\v2\f.pb.PlatformR\bplatform\x127\n" +
-	"\vconstraints\x18\v \x01(\v2\x15.pb.WorkerConstraintsR\vconstraintsB\x04\n" +
+	"\vconstraints\x18\v \x01(\v2\x15.pb.WorkerConstraintsR\vconstraints\x12\x1a\n" +
+	"\bidentity\x18\f \x01(\tR\bidentityB\x04\n" +
 	"\x02op\"\x96\x01\n" +
 	"\bPlatform\x12\"\n" +
 	"\fArchitecture\x18\x01 \x01(\tR\fArchitecture\x12\x0e\n" +

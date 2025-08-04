@@ -26,6 +26,7 @@ func (m *Op) CloneVT() *Op {
 	r := new(Op)
 	r.Platform = m.Platform.CloneVT()
 	r.Constraints = m.Constraints.CloneVT()
+	r.Identity = m.Identity
 	if rhs := m.Inputs; rhs != nil {
 		tmpContainer := make([]*Input, len(rhs))
 		for k, v := range rhs {
@@ -1184,6 +1185,9 @@ func (this *Op) EqualVT(that *Op) bool {
 		return false
 	}
 	if !this.Constraints.EqualVT(that.Constraints) {
+		return false
+	}
+	if this.Identity != that.Identity {
 		return false
 	}
 	return string(this.unknownFields) == string(that.unknownFields)
@@ -2965,6 +2969,13 @@ func (m *Op) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 			return 0, err
 		}
 		i -= size
+	}
+	if len(m.Identity) > 0 {
+		i -= len(m.Identity)
+		copy(dAtA[i:], m.Identity)
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(m.Identity)))
+		i--
+		dAtA[i] = 0x62
 	}
 	if m.Constraints != nil {
 		size, err := m.Constraints.MarshalToSizedBufferVT(dAtA[:i])
@@ -5984,6 +5995,10 @@ func (m *Op) SizeVT() (n int) {
 		l = m.Constraints.SizeVT()
 		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
 	}
+	l = len(m.Identity)
+	if l > 0 {
+		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
 	n += len(m.unknownFields)
 	return n
 }
@@ -7578,6 +7593,38 @@ func (m *Op) UnmarshalVT(dAtA []byte) error {
 			if err := m.Constraints.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
+			iNdEx = postIndex
+		case 12:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Identity", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Identity = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
