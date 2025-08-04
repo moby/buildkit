@@ -14,6 +14,7 @@ type jsonOp struct {
 	}
 	Platform    *Platform          `json:"platform,omitempty"`
 	Constraints *WorkerConstraints `json:"constraints,omitempty"`
+	Identity    string             `json:"identity,omitempty"`
 }
 
 func (m *Op) MarshalJSON() ([]byte, error) {
@@ -35,6 +36,7 @@ func (m *Op) MarshalJSON() ([]byte, error) {
 	}
 	v.Platform = m.Platform
 	v.Constraints = m.Constraints
+	v.Identity = m.Identity
 	return json.Marshal(v)
 }
 
@@ -61,6 +63,7 @@ func (m *Op) UnmarshalJSON(data []byte) error {
 	}
 	m.Platform = v.Platform
 	m.Constraints = v.Constraints
+	m.Identity = v.Identity
 	return nil
 }
 

@@ -2,6 +2,7 @@ package builder
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -30,7 +31,8 @@ import (
 const (
 	// Don't forget to update frontend documentation if you add
 	// a new build-arg: frontend/dockerfile/docs/reference.md
-	keySyntaxArg = "build-arg:BUILDKIT_SYNTAX"
+	keySyntaxArg      = "build-arg:BUILDKIT_SYNTAX"
+	keyWithIdentities = "build-arg:BUILDKIT_WITH_IDENTITIES"
 )
 
 func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
@@ -65,6 +67,15 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 			}
 			return res, err
 		}
+	}
+
+	var withIdentities bool
+	if v, ok := opts[keyWithIdentities]; ok {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return nil, errors.Errorf("invalid boolean value for with identities: %s", v)
+		}
+		withIdentities = b
 	}
 
 	if capsError != nil {
@@ -138,7 +149,12 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 			return nil, nil, nil, err
 		}
 
-		def, err := st.Marshal(ctx)
+		var co []llb.ConstraintsOpt
+		if withIdentities {
+			co = append(co, llb.WithIdentities())
+		}
+
+		def, err := st.Marshal(ctx, co...)
 		if err != nil {
 			return nil, nil, nil, errors.Wrapf(err, "failed to marshal LLB definition")
 		}

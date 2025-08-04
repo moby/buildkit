@@ -7,6 +7,7 @@ import (
 
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/containerd/platforms"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 	"google.golang.org/protobuf/proto"
@@ -109,12 +110,16 @@ func MarshalConstraints(base, override *Constraints) (*pb.Op, *pb.OpMetadata) {
 		opPlatform.OSFeatures = slices.Clone(c.Platform.OSFeatures)
 	}
 
-	return &pb.Op{
+	op := &pb.Op{
 		Platform: &opPlatform,
 		Constraints: &pb.WorkerConstraints{
 			Filter: c.WorkerConstraints,
 		},
-	}, c.Metadata.ToPB()
+	}
+	if c.GenerateIdentities {
+		op.Identity = identity.NewID()
+	}
+	return op, c.Metadata.ToPB()
 }
 
 type MarshalCache struct {
