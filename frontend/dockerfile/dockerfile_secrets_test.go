@@ -16,15 +16,13 @@ import (
 	"github.com/tonistiigi/fsutil"
 )
 
-var secretsTests = integration.TestFuncs(
-	testSecretFileParams,
-	testSecretRequiredWithoutValue,
-	testSecretAsEnviron,
-	testSecretAsEnvironWithFileMount,
-)
-
 func init() {
-	allTests = append(allTests, secretsTests...)
+	allTests = append(allTests, integration.TestFuncs(
+		testSecretFileParams,
+		testSecretRequiredWithoutValue,
+		testSecretAsEnviron,
+		testSecretAsEnvironWithFileMount,
+	)...)
 }
 
 func testSecretFileParams(t *testing.T, sb integration.Sandbox) {
