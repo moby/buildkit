@@ -20,7 +20,7 @@ env:
 
 jobs:
   prepare:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     steps:
       -
         name: Prepare
@@ -75,7 +75,7 @@ jobs:
           retention-days: 1
 
   test:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     needs:
       - prepare
     strategy:
