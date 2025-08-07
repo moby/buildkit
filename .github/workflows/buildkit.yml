@@ -35,7 +35,7 @@ env:
 
 jobs:
   prepare:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     outputs:
       tag: ${{ steps.prep.outputs.tag }}
       push: ${{ steps.prep.outputs.push }}
@@ -71,7 +71,7 @@ jobs:
           echo "platforms=$platforms" >>${GITHUB_OUTPUT}
 
   binaries:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     needs:
       - prepare
     strategy:
@@ -152,7 +152,7 @@ jobs:
           typ: integration
 
   govulncheck:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     permissions:
       # same as global permission
       contents: read
@@ -181,7 +181,7 @@ jobs:
           sarif_file: ${{ env.DESTDIR }}/govulncheck.out
 
   image:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     needs:
       - prepare
       - test
@@ -227,7 +227,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   scout:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     if: ${{ github.ref == 'refs/heads/master' && github.repository == 'moby/buildkit' }}
     permissions:
       # same as global permission
@@ -271,7 +271,7 @@ jobs:
           sarif_file: ${{ steps.scout.outputs.result-file }}
 
   release:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     permissions:
       # required to create GitHub release
       contents: write

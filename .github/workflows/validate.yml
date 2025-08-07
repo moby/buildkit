@@ -25,7 +25,7 @@ env:
 
 jobs:
   prepare:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     outputs:
       includes: ${{ steps.matrix.outputs.includes }}
     steps:
@@ -65,13 +65,13 @@ jobs:
                     includes.push({
                       target: targetName,
                       platform: platform,
-                      runner: platform.startsWith('linux/arm') && !privateRepo ? 'ubuntu-24.04-arm' : 'ubuntu-24.04'
+                      runner: platform.startsWith('linux/arm') && !privateRepo ? 'ubuntu-22.04-arm' : 'ubuntu-22.04'
                     });
                   });
                 } else {
                   includes.push({
                     target: targetName,
-                    runner: 'ubuntu-24.04'
+                    runner: 'ubuntu-22.04'
                   });
                 }
               }

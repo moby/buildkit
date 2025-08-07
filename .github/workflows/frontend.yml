@@ -43,7 +43,7 @@ jobs:
       codecov_flags: dockerfile-frontend
 
   prepare:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     if: github.event_name != 'schedule'
     outputs:
       typ: ${{ steps.prep.outputs.typ }}
@@ -80,7 +80,7 @@ jobs:
           fi
 
   image:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     needs:
       - test
       - prepare
@@ -131,7 +131,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   scout:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     if: ${{ github.ref == 'refs/heads/master' && github.repository == 'moby/buildkit' }}
     permissions:
       # same as global permission
@@ -175,7 +175,7 @@ jobs:
           sarif_file: ${{ steps.scout.outputs.result-file }}
 
   release:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     if: startsWith(github.ref, 'refs/tags/dockerfile')
     permissions:
       # required to create GitHub release

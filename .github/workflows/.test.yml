@@ -37,7 +37,7 @@ env:
 
 jobs:
   prepare:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     outputs:
       pkgs: ${{ steps.set.outputs.pkgs }}
       kinds: ${{ steps.set.outputs.kinds }}
@@ -95,7 +95,7 @@ jobs:
             *.cache-to=type=gha,scope=${{ inputs.cache_scope }},repository=${{ github.repository }},ghtoken=${{ secrets.GITHUB_TOKEN }}
 
   run:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     needs:
       - prepare
     env:
