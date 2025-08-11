@@ -154,7 +154,7 @@ func parsePortSpec(rawPort string) ([]nat.PortMapping, error) {
 	count := endPort - startPort + 1
 	ports := make([]nat.PortMapping, 0, count)
 
-	for i := uint64(0); i < count; i++ {
+	for i := range count {
 		cPort := nat.Port(strconv.FormatUint(startPort+i, 10) + "/" + proto)
 		hPort := ""
 		if hostPort != "" {
@@ -185,6 +185,9 @@ func parsePortRange(ports string) (uint64, uint64, error) {
 	}
 
 	parts := strings.Split(ports, "-")
+	if len(parts) != 2 {
+		return 0, 0, errors.Errorf("invalid port range format: %s", ports)
+	}
 	start, err := strconv.ParseUint(parts[0], 10, 16)
 	if err != nil {
 		return 0, 0, err
