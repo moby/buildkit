@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"runtime/trace"
 	"strconv"
@@ -13,7 +14,6 @@ import (
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/plugins/services/content/contentserver"
 	"github.com/distribution/reference"
-	"github.com/hashicorp/go-multierror"
 	"github.com/mitchellh/hashstructure/v2"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	apitypes "github.com/moby/buildkit/api/types"
@@ -138,17 +138,12 @@ func NewController(opt Opt) (*Controller, error) {
 }
 
 func (c *Controller) Close() error {
-	rerr := c.opt.HistoryDB.Close()
-	if err := c.opt.WorkerController.Close(); err != nil {
-		rerr = multierror.Append(rerr, err)
-	}
-	if err := c.opt.CacheStore.Close(); err != nil {
-		rerr = multierror.Append(rerr, err)
-	}
-	if err := c.solver.Close(); err != nil {
-		rerr = multierror.Append(rerr, err)
-	}
-	return rerr
+	return stderrors.Join(
+		c.opt.HistoryDB.Close(),
+		c.opt.WorkerController.Close(),
+		c.opt.CacheStore.Close(),
+		c.solver.Close(),
+	)
 }
 
 func (c *Controller) Register(server *grpc.Server) {
