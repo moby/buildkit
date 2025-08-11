@@ -52,29 +52,22 @@ func parsePortSpecs(ports []string) (exposedPorts []string, _ error) {
 }
 
 // splitProtoPort splits a port(range) and protocol, formatted as "<portnum>/[<proto>]"
-// "<startport-endport>/[<proto>]". It returns an empty string for both if
-// no port(range) is provided. If a port(range) is provided, but no protocol,
-// the default ("tcp") protocol is returned.
-//
-// splitProtoPort does not validate or normalize the returned values.
-func splitProtoPort(rawPort string) (proto string, port string) {
+// "<startport-endport>/[<proto>]". It returns an error if no port(range) or
+// an invalid proto is provided. If no protocol is provided, the default ("tcp")
+// protocol is returned.
+func splitProtoPort(rawPort string) (proto string, port string, _ error) {
 	port, proto, _ = strings.Cut(rawPort, "/")
 	if port == "" {
-		return "", ""
+		return "", "", errors.Errorf("no port specified: %s<empty>", rawPort)
 	}
-	if proto == "" {
-		proto = "tcp"
-	}
-	return proto, port
-}
-
-func validateProto(proto string) error {
+	proto = strings.ToLower(proto)
 	switch proto {
+	case "":
+		return "tcp", port, nil
 	case "tcp", "udp", "sctp":
-		// All good
-		return nil
+		return proto, port, nil
 	default:
-		return errors.New("invalid proto: " + proto)
+		return "", "", errors.New("invalid proto: " + proto)
 	}
 }
 
@@ -97,9 +90,8 @@ func splitParts(rawport string) (hostIP, hostPort, containerPort string) {
 // parsePortSpec parses a port specification string into a slice of "<portnum>/[<proto>]"
 func parsePortSpec(rawPort string) (portProto []string, _ error) {
 	ip, hostPort, containerPort := splitParts(rawPort)
-	proto, containerPort := splitProtoPort(containerPort)
-	proto = strings.ToLower(proto)
-	if err := validateProto(proto); err != nil {
+	proto, containerPort, err := splitProtoPort(containerPort)
+	if err != nil {
 		return nil, err
 	}
 
@@ -114,9 +106,6 @@ func parsePortSpec(rawPort string) (portProto []string, _ error) {
 	}
 	if ip != "" && net.ParseIP(ip) == nil {
 		return nil, errors.New("invalid IP address: " + ip)
-	}
-	if containerPort == "" {
-		return nil, errors.Errorf("no port specified: %s<empty>", rawPort)
 	}
 
 	startPort, endPort, err := parsePortRange(containerPort)
