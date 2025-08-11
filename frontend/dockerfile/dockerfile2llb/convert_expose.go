@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/docker/go-connections/nat"
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/pkg/errors"
@@ -43,14 +42,11 @@ func dispatchExpose(d *dispatchState, c *instructions.ExposeCommand, shlex *shel
 // and returns them as a list of "port/proto".
 func parsePortSpecs(ports []string) (exposedPorts []string, _ error) {
 	for _, p := range ports {
-		portMappings, err := parsePortSpec(p)
+		portProtos, err := parsePortSpec(p)
 		if err != nil {
 			return nil, err
 		}
-
-		for _, pm := range portMappings {
-			exposedPorts = append(exposedPorts, string(pm.Port))
-		}
+		exposedPorts = append(exposedPorts, portProtos...)
 	}
 	return exposedPorts, nil
 }
@@ -98,8 +94,8 @@ func splitParts(rawport string) (hostIP, hostPort, containerPort string) {
 	}
 }
 
-// parsePortSpec parses a port specification string into a slice of PortMappings
-func parsePortSpec(rawPort string) ([]nat.PortMapping, error) {
+// parsePortSpec parses a port specification string into a slice of "<portnum>/[<proto>]"
+func parsePortSpec(rawPort string) (portProto []string, _ error) {
 	ip, hostPort, containerPort := splitParts(rawPort)
 	proto, containerPort := splitProtoPort(containerPort)
 	proto = strings.ToLower(proto)
@@ -107,6 +103,7 @@ func parsePortSpec(rawPort string) ([]nat.PortMapping, error) {
 		return nil, err
 	}
 
+	// TODO(thaJeztah): mapping IP-addresses should not be allowed for EXPOSE; see https://github.com/moby/buildkit/issues/2173
 	if ip != "" && ip[0] == '[' {
 		// Strip [] from IPV6 addresses
 		rawIP, _, err := net.SplitHostPort(ip + ":")
@@ -127,6 +124,7 @@ func parsePortSpec(rawPort string) ([]nat.PortMapping, error) {
 		return nil, errors.New("invalid containerPort: " + containerPort)
 	}
 
+	// TODO(thaJeztah): mapping host-ports should not be allowed for EXPOSE; see https://github.com/moby/buildkit/issues/2173
 	var startHostPort, endHostPort uint64
 	if hostPort != "" {
 		startHostPort, endHostPort, err = parsePortRange(hostPort)
@@ -144,23 +142,10 @@ func parsePortSpec(rawPort string) ([]nat.PortMapping, error) {
 	}
 
 	count := endPort - startPort + 1
-	ports := make([]nat.PortMapping, 0, count)
+	ports := make([]string, 0, count)
 
 	for i := range count {
-		cPort := nat.Port(strconv.FormatUint(startPort+i, 10) + "/" + proto)
-		hPort := ""
-		if hostPort != "" {
-			hPort = strconv.FormatUint(startHostPort+i, 10)
-			// Set hostPort to a range only if there is a single container port
-			// and a dynamic host port.
-			if count == 1 && startHostPort != endHostPort {
-				hPort += "-" + strconv.FormatUint(endHostPort, 10)
-			}
-		}
-		ports = append(ports, nat.PortMapping{
-			Port:    cPort,
-			Binding: nat.PortBinding{HostIP: ip, HostPort: hPort},
-		})
+		ports = append(ports, strconv.FormatUint(startPort+i, 10)+"/"+proto)
 	}
 	return ports, nil
 }
