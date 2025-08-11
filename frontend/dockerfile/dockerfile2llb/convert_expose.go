@@ -24,7 +24,7 @@ func dispatchExpose(d *dispatchState, c *instructions.ExposeCommand, shlex *shel
 	}
 	c.Ports = ports
 
-	ps, _, err := parsePortSpecs(c.Ports)
+	ps, err := parsePortSpecs(c.Ports)
 	if err != nil {
 		return err
 	}
@@ -32,35 +32,27 @@ func dispatchExpose(d *dispatchState, c *instructions.ExposeCommand, shlex *shel
 	if d.image.Config.ExposedPorts == nil {
 		d.image.Config.ExposedPorts = make(map[string]struct{})
 	}
-	for p := range ps {
-		d.image.Config.ExposedPorts[string(p)] = struct{}{}
+	for _, p := range ps {
+		d.image.Config.ExposedPorts[p] = struct{}{}
 	}
 
 	return commitToHistory(&d.image, fmt.Sprintf("EXPOSE %v", ps), false, nil, d.epoch)
 }
 
-// parsePortSpecs receives port specs in the format of ip:public:private/proto and parses
-// these in to the internal types
-func parsePortSpecs(ports []string) (map[nat.Port]struct{}, map[nat.Port][]nat.PortBinding, error) {
-	var (
-		exposedPorts = make(map[nat.Port]struct{}, len(ports))
-		bindings     = make(map[nat.Port][]nat.PortBinding)
-	)
+// parsePortSpecs receives port specs in the format of [ip:]public:private/proto
+// and returns them as a list of "port/proto".
+func parsePortSpecs(ports []string) (exposedPorts []string, _ error) {
 	for _, p := range ports {
 		portMappings, err := parsePortSpec(p)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 
 		for _, pm := range portMappings {
-			port := pm.Port
-			if _, ok := exposedPorts[port]; !ok {
-				exposedPorts[port] = struct{}{}
-			}
-			bindings[port] = append(bindings[port], pm.Binding)
+			exposedPorts = append(exposedPorts, string(pm.Port))
 		}
 	}
-	return exposedPorts, bindings, nil
+	return exposedPorts, nil
 }
 
 // splitProtoPort splits a port(range) and protocol, formatted as "<portnum>/[<proto>]"

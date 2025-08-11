@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/docker/go-connections/nat"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestParsePortSpecFull(t *testing.T) {
@@ -122,213 +123,35 @@ func TestPartPortSpecIPV6(t *testing.T) {
 }
 
 func TestParsePortSpecs(t *testing.T) {
-	var (
-		portMap    map[nat.Port]struct{}
-		bindingMap map[nat.Port][]nat.PortBinding
-		err        error
-	)
+	exposedPorts, err := parsePortSpecs([]string{"1234/tcp", "2345/udp", "3456/sctp"})
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"1234/tcp", "2345/udp", "3456/sctp"}, exposedPorts)
 
-	portMap, bindingMap, err = parsePortSpecs([]string{"1234/tcp", "2345/udp", "3456/sctp"})
-	if err != nil {
-		t.Fatalf("Error while processing ParsePortSpecs: %s", err)
-	}
+	exposedPorts, err = parsePortSpecs([]string{"1234:1234/tcp", "2345:2345/udp", "3456:3456/sctp"})
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"1234/tcp", "2345/udp", "3456/sctp"}, exposedPorts)
 
-	if _, ok := portMap["1234/tcp"]; !ok {
-		t.Fatal("1234/tcp was not parsed properly")
-	}
+	exposedPorts, err = parsePortSpecs([]string{"0.0.0.0:1234:1234/tcp", "0.0.0.0:2345:2345/udp", "0.0.0.0:3456:3456/sctp"})
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"1234/tcp", "2345/udp", "3456/sctp"}, exposedPorts)
 
-	if _, ok := portMap["2345/udp"]; !ok {
-		t.Fatal("2345/udp was not parsed properly")
-	}
-
-	if _, ok := portMap["3456/sctp"]; !ok {
-		t.Fatal("3456/sctp was not parsed properly")
-	}
-
-	for portSpec, bindings := range bindingMap {
-		if len(bindings) != 1 {
-			t.Fatalf("%s should have exactly one binding", portSpec)
-		}
-
-		if bindings[0].HostIP != "" {
-			t.Fatalf("HostIP should not be set for %s", portSpec)
-		}
-
-		if bindings[0].HostPort != "" {
-			t.Fatalf("HostPort should not be set for %s", portSpec)
-		}
-	}
-
-	portMap, bindingMap, err = parsePortSpecs([]string{"1234:1234/tcp", "2345:2345/udp", "3456:3456/sctp"})
-	if err != nil {
-		t.Fatalf("Error while processing ParsePortSpecs: %s", err)
-	}
-
-	if _, ok := portMap["1234/tcp"]; !ok {
-		t.Fatal("1234/tcp was not parsed properly")
-	}
-
-	if _, ok := portMap["2345/udp"]; !ok {
-		t.Fatal("2345/udp was not parsed properly")
-	}
-
-	if _, ok := portMap["3456/sctp"]; !ok {
-		t.Fatal("3456/sctp was not parsed properly")
-	}
-
-	for portSpec, bindings := range bindingMap {
-		_, port := splitProtoPort(string(portSpec))
-
-		if len(bindings) != 1 {
-			t.Fatalf("%s should have exactly one binding", portSpec)
-		}
-
-		if bindings[0].HostIP != "" {
-			t.Fatalf("HostIP should not be set for %s", portSpec)
-		}
-
-		if bindings[0].HostPort != port {
-			t.Fatalf("HostPort should be %s for %s", port, portSpec)
-		}
-	}
-
-	portMap, bindingMap, err = parsePortSpecs([]string{"0.0.0.0:1234:1234/tcp", "0.0.0.0:2345:2345/udp", "0.0.0.0:3456:3456/sctp"})
-	if err != nil {
-		t.Fatalf("Error while processing ParsePortSpecs: %s", err)
-	}
-
-	if _, ok := portMap["1234/tcp"]; !ok {
-		t.Fatal("1234/tcp was not parsed properly")
-	}
-
-	if _, ok := portMap["2345/udp"]; !ok {
-		t.Fatal("2345/udp was not parsed properly")
-	}
-
-	if _, ok := portMap["3456/sctp"]; !ok {
-		t.Fatal("3456/sctp was not parsed properly")
-	}
-
-	for portSpec, bindings := range bindingMap {
-		_, port := splitProtoPort(string(portSpec))
-
-		if len(bindings) != 1 {
-			t.Fatalf("%s should have exactly one binding", portSpec)
-		}
-
-		if bindings[0].HostIP != "0.0.0.0" {
-			t.Fatalf("HostIP is not 0.0.0.0 for %s", portSpec)
-		}
-
-		if bindings[0].HostPort != port {
-			t.Fatalf("HostPort should be %s for %s", port, portSpec)
-		}
-	}
-
-	_, _, err = parsePortSpecs([]string{"localhost:1234:1234/tcp"})
-
-	if err == nil {
-		t.Fatal("Received no error while trying to parse a hostname instead of ip")
-	}
+	_, err = parsePortSpecs([]string{"localhost:1234:1234/tcp"})
+	assert.Error(t, err, "Received no error while trying to parse a hostname instead of ip")
 }
 
 func TestParsePortSpecsWithRange(t *testing.T) {
-	var (
-		portMap    map[nat.Port]struct{}
-		bindingMap map[nat.Port][]nat.PortBinding
-		err        error
-	)
+	exposedPorts, err := parsePortSpecs([]string{"1234-1236/tcp", "2345-2347/udp", "3456-3458/sctp"})
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"1234/tcp", "1235/tcp", "1236/tcp", "2345/udp", "2346/udp", "2347/udp", "3456/sctp", "3457/sctp", "3458/sctp"}, exposedPorts)
 
-	portMap, bindingMap, err = parsePortSpecs([]string{"1234-1236/tcp", "2345-2347/udp", "3456-3458/sctp"})
-	if err != nil {
-		t.Fatalf("Error while processing ParsePortSpecs: %s", err)
-	}
+	exposedPorts, err = parsePortSpecs([]string{"1234-1236:1234-1236/tcp", "2345-2347:2345-2347/udp", "3456-3458:3456-3458/sctp"})
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"1234/tcp", "1235/tcp", "1236/tcp", "2345/udp", "2346/udp", "2347/udp", "3456/sctp", "3457/sctp", "3458/sctp"}, exposedPorts)
 
-	if _, ok := portMap["1235/tcp"]; !ok {
-		t.Fatal("1234/tcp was not parsed properly")
-	}
+	exposedPorts, err = parsePortSpecs([]string{"0.0.0.0:1234-1236:1234-1236/tcp", "0.0.0.0:2345-2347:2345-2347/udp", "0.0.0.0:3456-3458:3456-3458/sctp"})
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"1234/tcp", "1235/tcp", "1236/tcp", "2345/udp", "2346/udp", "2347/udp", "3456/sctp", "3457/sctp", "3458/sctp"}, exposedPorts)
 
-	if _, ok := portMap["2346/udp"]; !ok {
-		t.Fatal("2345/udp was not parsed properly")
-	}
-
-	if _, ok := portMap["3456/sctp"]; !ok {
-		t.Fatal("3456/sctp was not parsed properly")
-	}
-
-	for portSpec, bindings := range bindingMap {
-		if len(bindings) != 1 {
-			t.Fatalf("%s should have exactly one binding", portSpec)
-		}
-
-		if bindings[0].HostIP != "" {
-			t.Fatalf("HostIP should not be set for %s", portSpec)
-		}
-
-		if bindings[0].HostPort != "" {
-			t.Fatalf("HostPort should not be set for %s", portSpec)
-		}
-	}
-
-	portMap, bindingMap, err = parsePortSpecs([]string{"1234-1236:1234-1236/tcp", "2345-2347:2345-2347/udp", "3456-3458:3456-3458/sctp"})
-	if err != nil {
-		t.Fatalf("Error while processing ParsePortSpecs: %s", err)
-	}
-
-	if _, ok := portMap["1235/tcp"]; !ok {
-		t.Fatal("1234/tcp was not parsed properly")
-	}
-
-	if _, ok := portMap["2346/udp"]; !ok {
-		t.Fatal("2345/udp was not parsed properly")
-	}
-
-	if _, ok := portMap["3456/sctp"]; !ok {
-		t.Fatal("3456/sctp was not parsed properly")
-	}
-
-	for portSpec, bindings := range bindingMap {
-		_, port := splitProtoPort(string(portSpec))
-		if len(bindings) != 1 {
-			t.Fatalf("%s should have exactly one binding", portSpec)
-		}
-
-		if bindings[0].HostIP != "" {
-			t.Fatalf("HostIP should not be set for %s", portSpec)
-		}
-
-		if bindings[0].HostPort != port {
-			t.Fatalf("HostPort should be %s for %s", port, portSpec)
-		}
-	}
-
-	portMap, bindingMap, err = parsePortSpecs([]string{"0.0.0.0:1234-1236:1234-1236/tcp", "0.0.0.0:2345-2347:2345-2347/udp", "0.0.0.0:3456-3458:3456-3458/sctp"})
-	if err != nil {
-		t.Fatalf("Error while processing ParsePortSpecs: %s", err)
-	}
-
-	if _, ok := portMap["1235/tcp"]; !ok {
-		t.Fatal("1234/tcp was not parsed properly")
-	}
-
-	if _, ok := portMap["2346/udp"]; !ok {
-		t.Fatal("2345/udp was not parsed properly")
-	}
-
-	if _, ok := portMap["3456/sctp"]; !ok {
-		t.Fatal("3456/sctp was not parsed properly")
-	}
-
-	for portSpec, bindings := range bindingMap {
-		_, port := splitProtoPort(string(portSpec))
-		if len(bindings) != 1 || bindings[0].HostIP != "0.0.0.0" || bindings[0].HostPort != port {
-			t.Fatalf("Expect single binding to port %s but found %s", port, bindings)
-		}
-	}
-
-	_, _, err = parsePortSpecs([]string{"localhost:1234-1236:1234-1236/tcp"})
-
-	if err == nil {
-		t.Fatal("Received no error while trying to parse a hostname instead of ip")
-	}
+	_, err = parsePortSpecs([]string{"localhost:1234-1236:1234-1236/tcp"})
+	assert.Error(t, err, "Received no error while trying to parse a hostname instead of ip")
 }
