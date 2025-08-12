@@ -58,7 +58,7 @@ func parsePortSpecs(ports []string) (exposedPorts []string, _ error) {
 func splitProtoPort(rawPort string) (proto string, port string, _ error) {
 	port, proto, _ = strings.Cut(rawPort, "/")
 	if port == "" {
-		return "", "", errors.Errorf("no port specified: %s<empty>", rawPort)
+		return "", "", errors.New("no port specified")
 	}
 	proto = strings.ToLower(proto)
 	switch proto {
@@ -92,7 +92,7 @@ func parsePortSpec(rawPort string) (portProto []string, _ error) {
 	ip, hostPort, containerPort := splitParts(rawPort)
 	proto, containerPort, err := splitProtoPort(containerPort)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "invalid port: %q", rawPort)
 	}
 
 	// TODO(thaJeztah): mapping IP-addresses should not be allowed for EXPOSE; see https://github.com/moby/buildkit/issues/2173
@@ -114,9 +114,8 @@ func parsePortSpec(rawPort string) (portProto []string, _ error) {
 	}
 
 	// TODO(thaJeztah): mapping host-ports should not be allowed for EXPOSE; see https://github.com/moby/buildkit/issues/2173
-	var startHostPort, endHostPort uint64
 	if hostPort != "" {
-		startHostPort, endHostPort, err = parsePortRange(hostPort)
+		startHostPort, endHostPort, err := parsePortRange(hostPort)
 		if err != nil {
 			return nil, errors.New("invalid hostPort: " + hostPort)
 		}
@@ -134,36 +133,53 @@ func parsePortSpec(rawPort string) (portProto []string, _ error) {
 	ports := make([]string, 0, count)
 
 	for i := range count {
-		ports = append(ports, strconv.FormatUint(startPort+i, 10)+"/"+proto)
+		ports = append(ports, strconv.Itoa(startPort+i)+"/"+proto)
 	}
 	return ports, nil
 }
 
-// parsePortRange parses and validates the specified string as a port-range (8000-9000)
-func parsePortRange(ports string) (uint64, uint64, error) {
+// parsePortRange parses and validates the specified string as a port range (e.g., "8000-9000").
+func parsePortRange(ports string) (startPort, endPort int, _ error) {
 	if ports == "" {
 		return 0, 0, errors.New("empty string specified for ports")
 	}
-	if !strings.Contains(ports, "-") {
-		start, err := strconv.ParseUint(ports, 10, 16)
-		end := start
-		return start, end, err
+	start, end, ok := strings.Cut(ports, "-")
+
+	startPort, err := parsePortNumber(start)
+	if err != nil {
+		return 0, 0, errors.Wrapf(err, "invalid start port '%s'", start)
+	}
+	if !ok || start == end {
+		return startPort, startPort, nil
 	}
 
-	parts := strings.Split(ports, "-")
-	if len(parts) != 2 {
-		return 0, 0, errors.Errorf("invalid port range format: %s", ports)
-	}
-	start, err := strconv.ParseUint(parts[0], 10, 16)
+	endPort, err = parsePortNumber(end)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, errors.Wrapf(err, "invalid end port '%s'", end)
 	}
-	end, err := strconv.ParseUint(parts[1], 10, 16)
+	if endPort < startPort {
+		return 0, 0, errors.New("invalid port range: " + ports)
+	}
+	return startPort, endPort, nil
+}
+
+// parsePortNumber parses rawPort into an int, unwrapping strconv errors
+// and returning a single "out of range" error for any value outside 0–65535.
+func parsePortNumber(rawPort string) (int, error) {
+	if rawPort == "" {
+		return 0, errors.New("value is empty")
+	}
+	port, err := strconv.ParseInt(rawPort, 10, 0)
 	if err != nil {
-		return 0, 0, err
+		var numErr *strconv.NumError
+		if errors.As(err, &numErr) {
+			err = numErr.Err
+		}
+		return 0, err
 	}
-	if end < start {
-		return 0, 0, errors.New("invalid range specified for port: " + ports)
+	if port < 0 || port > 65535 {
+		return 0, errors.New("value out of range (0–65535)")
 	}
-	return start, end, nil
+
+	return int(port), nil
 }
