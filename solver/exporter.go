@@ -27,8 +27,9 @@ func addBacklinks(t CacheExporterTarget, cm *cacheManager, id string, bkm map[st
 	bkm[id] = nil
 
 	m := map[digest.Digest][][]CacheLink{}
-
+	isRoot := true
 	if err := cm.backend.WalkBacklinks(id, func(id string, link CacheInfoLink) error {
+		isRoot = false
 		recs, err := addBacklinks(t, cm, id, bkm)
 		if err != nil { // TODO: should we continue on error?
 			return err
@@ -44,6 +45,19 @@ func addBacklinks(t CacheExporterTarget, cm *cacheManager, id string, bkm map[st
 		return nil
 	}); err != nil {
 		return nil, err
+	}
+
+	if isRoot {
+		dgst, err := digest.Parse(id)
+		if err == nil {
+			rec, ok, err := t.Add(dgst, nil, nil)
+			if err != nil {
+				return nil, err
+			}
+			if ok && rec != nil {
+				out = append(out, rec)
+			}
+		}
 	}
 
 	// validate that all inputs are present
@@ -237,18 +251,32 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		}
 	}
 
-	// if v != nil && len(deps) == 0 { // TODO: what is this case?
-	// 	cm := v.cacheManager
-	// 	key := cm.getID(v.key)
-	// 	if err := cm.backend.WalkIDsByResult(v.ID, func(id string) error {
-	// 		if id == key {
-	// 			return nil
-	// 		}
-	// 		return nil
-	// 	}); err != nil {
-	// 		return nil, err
-	// 	}
-	// }
+	if v != nil && len(deps) == 0 {
+		cm := v.cacheManager
+		key := cm.getID(v.key)
+		if err := cm.backend.WalkIDsByResult(v.ID, func(id string) error {
+			if id == key {
+				return nil
+			}
+			hasBacklinks := false
+			cm.backend.WalkBacklinks(id, func(id string, link CacheInfoLink) error {
+				hasBacklinks = true
+				return nil
+			})
+			if hasBacklinks {
+				return nil
+			}
+
+			dgst, err := digest.Parse(id)
+			if err != nil {
+				return nil
+			}
+			_, _, err = t.Add(dgst, nil, results)
+			return err
+		}); err != nil {
+			return nil, err
+		}
+	}
 
 	out, ok, err := t.Add(recKey, srcs, results)
 	if err != nil {
