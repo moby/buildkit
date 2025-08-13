@@ -436,8 +436,8 @@ github.com/containerd/stargz-snapshotter/task
 github.com/containerd/stargz-snapshotter/util/cacheutil
 github.com/containerd/stargz-snapshotter/util/namedmutex
 github.com/containerd/stargz-snapshotter/util/testutil
-# github.com/containerd/stargz-snapshotter/estargz v0.16.3
-## explicit; go 1.22.0
+# github.com/containerd/stargz-snapshotter/estargz v0.17.0
+## explicit; go 1.23.0
 github.com/containerd/stargz-snapshotter/estargz
 github.com/containerd/stargz-snapshotter/estargz/errorutil
 github.com/containerd/stargz-snapshotter/estargz/externaltoc
