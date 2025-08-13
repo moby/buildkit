@@ -67,11 +67,11 @@ func (h *Hash) WriteNoDebug(p []byte) (n int, err error) {
 	if n > 0 && h.db != nil {
 		if len(h.frames) > 0 && h.frames[len(h.frames)-1].ID == FrameIDSkip {
 			last := &h.frames[len(h.frames)-1]
-			prevLen := binary.BigEndian.Uint32(last.Data)
-			binary.BigEndian.PutUint32(last.Data, prevLen+uint32(n))
+			prevLen := binary.LittleEndian.Uint32(last.Data)
+			binary.LittleEndian.PutUint32(last.Data, prevLen+uint32(n))
 		} else {
 			lenBytes := make([]byte, 4)
-			binary.BigEndian.PutUint32(lenBytes, uint32(n))
+			binary.LittleEndian.PutUint32(lenBytes, uint32(n))
 			h.frames = append(h.frames, Frame{ID: FrameIDSkip, Data: lenBytes})
 		}
 	}
@@ -94,7 +94,7 @@ type Record struct {
 	Digest     digest.Digest `json:"digest"`
 	Type       Type          `json:"type"`
 	Data       []Frame       `json:"data,omitempty"`
-	SubRecords []Record      `json:"subRecords,omitempty"`
+	SubRecords []*Record     `json:"subRecords,omitempty"`
 }
 
 var shaRegexpOnce = sync.OnceValue(func() *regexp.Regexp {
@@ -149,11 +149,16 @@ func (r *Record) LoadSubRecords(loader func(d digest.Digest) (Type, []Frame, err
 			bklog.L.Warnf("failed to load sub-record for %s: %v", dgst, err)
 			continue
 		}
-		r.SubRecords = append(r.SubRecords, Record{
+		rr := &Record{
 			Digest: digest.Digest(dgst),
 			Type:   typ,
 			Data:   frames,
-		})
+		}
+		if err := rr.LoadSubRecords(loader); err != nil {
+			return err
+		}
+
+		r.SubRecords = append(r.SubRecords, rr)
 	}
 	return nil
 }

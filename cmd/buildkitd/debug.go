@@ -1,7 +1,9 @@
 package main
 
 import (
+	"cmp"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"expvar"
 	"fmt"
@@ -15,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	cacheimport "github.com/moby/buildkit/cache/remotecache/v1"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/cachedigest"
@@ -40,6 +43,7 @@ func setupDebugHandlers(addr string) error {
 	m.Handle("/debug/cache/all", http.HandlerFunc(handleCacheAll))
 	m.Handle("/debug/cache/lookup", http.HandlerFunc(handleCacheLookup))
 	m.Handle("/debug/cache/store", http.HandlerFunc(handleDebugCacheStore))
+	m.Handle("POST /debug/cache/load", http.HandlerFunc(handleCacheLoad))
 
 	m.Handle("/debug/gc", http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		runtime.GC()
@@ -139,8 +143,12 @@ func printCacheRecord(record *cachedigest.Record, w io.Writer) {
 		case cachedigest.FrameIDData:
 			w.Write([]byte("  " + frame.ID.String() + ": " + string(frame.Data) + "\n"))
 		case cachedigest.FrameIDSkip:
-			w.Write([]byte("  skipping " + string(frame.Data) + " bytes\n"))
+			fmt.Fprintf(w, "  skipping %d bytes\n", binary.LittleEndian.Uint32(frame.Data))
 		}
+	}
+	for _, subRec := range record.SubRecords {
+		w.Write([]byte("\n"))
+		printCacheRecord(subRec, w)
 	}
 }
 
@@ -216,18 +224,70 @@ func loadCacheAll(ctx context.Context) ([]*cachedigest.Record, error) {
 	return records, nil
 }
 
+func handleCacheLoad(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if r.Body == nil {
+		http.Error(w, "body is required", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	recs, err := loadCacheFromReader(r.Context(), r.Body)
+	if err != nil {
+		http.Error(w, "failed to load cache: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeCacheRecordsResponse(w, r, recs)
+}
+
+func loadCacheFromReader(ctx context.Context, rdr io.Reader) ([]*recordWithDebug, error) {
+	dt, err := io.ReadAll(rdr)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read body")
+	}
+
+	allLayers := cacheimport.DescriptorProvider{}
+	cc := cacheimport.NewCacheChains()
+	if err := cacheimport.Parse(dt, allLayers, cc); err != nil {
+		return nil, err
+	}
+
+	keyStorage, _, err := cacheimport.NewCacheKeyStorage(cc, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	recs, err := debugCacheStore(ctx, keyStorage)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to debug cache store")
+	}
+
+	return recs, nil
+}
+
 func handleDebugCacheStore(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	recs, err := debugCacheStore(r.Context())
+	store := cacheStoreForDebug
+	if store == nil {
+		http.Error(w, "Cache store is not initialized for debug", http.StatusInternalServerError)
+	}
+
+	recs, err := debugCacheStore(r.Context(), store)
 	if err != nil {
 		http.Error(w, "Failed to debug cache store: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	writeCacheRecordsResponse(w, r, recs)
+}
 
+func writeCacheRecordsResponse(w http.ResponseWriter, r *http.Request, recs []*recordWithDebug) {
 	w.WriteHeader(http.StatusOK)
 
 	switch r.Header.Get("Accept") {
@@ -250,24 +310,28 @@ func handleDebugCacheStore(w http.ResponseWriter, r *http.Request) {
 			if rec.Digest != "" {
 				fmt.Fprintf(w, "Digest: %s\n", rec.Digest)
 			}
+
 			if len(rec.Parents) > 0 {
 				fmt.Fprintln(w, "Parents:")
-				for input := range rec.Parents {
-					ids := slices.Collect(maps.Keys(rec.ParentIDs[input]))
+				slices.SortStableFunc(rec.Parents, func(i, j cachestore.Link) int {
+					return cmp.Or(cmp.Compare(i.Input, j.Input), cmp.Compare(i.Digest, j.Digest))
+				})
+				for _, parent := range rec.Parents {
+					fmt.Fprintf(w, "  Input %d:\t%d\t%s\n", parent.Input, parent.Record.ID, parent.Digest)
+					if parent.Selector != "" {
+						fmt.Fprintf(w, "    Selector: %s\n", parent.Selector)
+					}
+				}
+			}
+			if len(rec.Children) > 0 {
+				fmt.Fprintln(w, "Children:")
+				for input := range rec.Children {
+					ids := slices.Collect(maps.Keys(rec.ChildIDs[input]))
 					s := make([]string, len(ids))
 					for i, id := range ids {
 						s[i] = fmt.Sprintf("%d", id)
 					}
 					fmt.Fprintf(w, "  Input %d:\t %s\n", input, strings.Join(s, ", "))
-				}
-			}
-			if len(rec.Children) > 0 {
-				fmt.Fprintln(w, "Children:")
-				for _, child := range rec.Children {
-					fmt.Fprintf(w, "  %d %s (input %d, output %d)\n", child.Record.ID, child.Digest, child.Input, child.Output)
-					if child.Selector != "" {
-						fmt.Fprintf(w, "    Selector: %s\n", child.Selector)
-					}
 				}
 			}
 			if len(rec.Debug) > 0 {
@@ -287,12 +351,7 @@ type recordWithDebug struct {
 	Debug []*cachedigest.Record `json:"debug,omitempty"`
 }
 
-func debugCacheStore(ctx context.Context) ([]*recordWithDebug, error) {
-	store := cacheStoreForDebug
-	if store == nil {
-		return nil, errors.New("cache store is not initialized for debug")
-	}
-
+func debugCacheStore(ctx context.Context, store solver.CacheKeyStorage) ([]*recordWithDebug, error) {
 	recs, err := cachestore.Records(ctx, store)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get cache records")
@@ -307,7 +366,7 @@ func debugCacheStore(ctx context.Context) ([]*recordWithDebug, error) {
 		if rec.Digest != "" {
 			m[rec.Digest] = nil
 		}
-		for _, link := range rec.Children {
+		for _, link := range rec.Parents {
 			m[link.Digest] = nil
 			if link.Selector != "" {
 				m[link.Selector] = nil

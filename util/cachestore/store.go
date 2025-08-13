@@ -1,7 +1,10 @@
 package cachestore
 
 import (
+	"cmp"
 	"context"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/moby/buildkit/solver"
@@ -10,12 +13,12 @@ import (
 )
 
 type Record struct {
-	ID        int                          `json:"id"`
-	Parents   map[int]map[*Record]struct{} `json:"-"`
-	Children  []Link                       `json:"children,omitempty"`
-	Digest    digest.Digest                `json:"digest,omitempty"`
-	Random    bool                         `json:"random,omitempty"`
-	ParentIDs map[int]map[int]struct{}     `json:"parents,omitempty"`
+	ID       int                          `json:"id"`
+	Parents  []Link                       `json:"parents,omitempty"`
+	Children map[int]map[*Record]struct{} `json:"-"`
+	Digest   digest.Digest                `json:"digest,omitempty"`
+	Random   bool                         `json:"random,omitempty"`
+	ChildIDs map[int]map[int]struct{}     `json:"children,omitempty"`
 }
 
 type Link struct {
@@ -35,7 +38,7 @@ type storeWithLinks interface {
 func Records(ctx context.Context, store solver.CacheKeyStorage) ([]*Record, error) {
 	swl, ok := store.(storeWithLinks)
 	if !ok {
-		return nil, errors.New("cache store does not support walkin all links")
+		return nil, errors.New("cache store does not support walking all links")
 	}
 
 	roots := []string{}
@@ -72,16 +75,16 @@ func Records(ctx context.Context, store solver.CacheKeyStorage) ([]*Record, erro
 }
 
 func setLinkIDs(rec *Record) {
-	for i, child := range rec.Children {
-		child.ID = child.Record.ID
-		rec.Children[i] = child
+	for i, parent := range rec.Parents {
+		parent.ID = parent.Record.ID
+		rec.Parents[i] = parent
 	}
-	if rec.Parents != nil {
-		rec.ParentIDs = make(map[int]map[int]struct{})
-		for input, m := range rec.Parents {
-			rec.ParentIDs[input] = make(map[int]struct{})
-			for parent := range m {
-				rec.ParentIDs[input][parent.ID] = struct{}{}
+	if rec.Children != nil {
+		rec.ChildIDs = make(map[int]map[int]struct{})
+		for input, m := range rec.Children {
+			rec.ChildIDs[input] = make(map[int]struct{})
+			for child := range m {
+				rec.ChildIDs[input][child.ID] = struct{}{}
 			}
 		}
 	}
@@ -93,8 +96,14 @@ func setIndex(rec *Record, arr []*Record) []*Record {
 	}
 	arr = append(arr, rec)
 	rec.ID = len(arr)
-	for _, child := range rec.Children {
-		arr = setIndex(child.Record, arr)
+	for _, links := range rec.Children {
+		recs := slices.Collect(maps.Keys(links))
+		slices.SortFunc(recs, func(i, j *Record) int {
+			return cmp.Compare(i.Digest, j.Digest)
+		})
+		for _, child := range recs {
+			arr = setIndex(child, arr)
+		}
 	}
 	return arr
 }
@@ -122,23 +131,23 @@ func loadRecord(ctx context.Context, store storeWithLinks, id string, out map[st
 		if err != nil {
 			return errors.Wrapf(err, "failed to load link %s for %s", linkID, id)
 		}
-		rec.Children = append(rec.Children, Link{
+		child.Parents = append(child.Parents, Link{
 			Input:    int(link.Input),
 			Output:   int(link.Output),
 			Selector: link.Selector,
-			Record:   child,
+			Record:   rec,
 			Digest:   link.Digest,
 		})
 
-		if child.Parents == nil {
-			child.Parents = make(map[int]map[*Record]struct{})
+		if rec.Children == nil {
+			rec.Children = make(map[int]map[*Record]struct{})
 		}
-		m, ok := child.Parents[int(link.Input)]
+		m, ok := rec.Children[int(link.Output)]
 		if !ok {
 			m = make(map[*Record]struct{})
-			child.Parents[int(link.Input)] = m
+			rec.Children[int(link.Output)] = m
 		}
-		m[rec] = struct{}{}
+		m[child] = struct{}{}
 		return nil
 	})
 	if err != nil {
