@@ -50,6 +50,7 @@ var lintTests = integration.TestFuncs(
 	testCopyIgnoredFiles,
 	testDefinitionDescription,
 	testExposeProtoCasing,
+	testExposeInvalidFormat,
 )
 
 func testDefinitionDescription(t *testing.T, sb integration.Sandbox) {
@@ -1457,6 +1458,42 @@ EXPOSE 80/TcP 8080/TCP 8080/udp
 				Description: "Protocol in EXPOSE instruction should be lowercase",
 				URL:         "https://docs.docker.com/go/dockerfile/rule/expose-proto-casing/",
 				Detail:      "Defined protocol '8080/TCP' in EXPOSE instruction should be lowercase",
+				Level:       1,
+				Line:        3,
+			},
+		},
+	})
+}
+
+func testExposeInvalidFormat(t *testing.T, sb integration.Sandbox) {
+	dockerfile := []byte(`
+FROM scratch
+EXPOSE 127.0.0.1:80:80 [::1]:8080:8080 5000:5000 8000
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "ExposeInvalidFormat",
+				Description: "IP address and host-port mapping should not be used in EXPOSE instruction. This will become an error in a future release",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/expose-invalid-format/",
+				Detail:      "EXPOSE instruction should not define an IP address or host-port mapping, found '127.0.0.1:80:80'",
+				Level:       1,
+				Line:        3,
+			},
+			{
+				RuleName:    "ExposeInvalidFormat",
+				Description: "IP address and host-port mapping should not be used in EXPOSE instruction. This will become an error in a future release",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/expose-invalid-format/",
+				Detail:      "EXPOSE instruction should not define an IP address or host-port mapping, found '[::1]:8080:8080'",
+				Level:       1,
+				Line:        3,
+			},
+			{
+				RuleName:    "ExposeInvalidFormat",
+				Description: "IP address and host-port mapping should not be used in EXPOSE instruction. This will become an error in a future release",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/expose-invalid-format/",
+				Detail:      "EXPOSE instruction should not define an IP address or host-port mapping, found '5000:5000'",
 				Level:       1,
 				Line:        3,
 			},

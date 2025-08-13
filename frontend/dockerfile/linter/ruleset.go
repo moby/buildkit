@@ -182,4 +182,14 @@ var (
 			return fmt.Sprintf("Defined protocol '%s' in EXPOSE instruction should be lowercase", port)
 		},
 	}
+	RuleExposeInvalidFormat = LinterRule[func(string) string]{
+		Name:        "ExposeInvalidFormat",
+		Description: "IP address and host-port mapping should not be used in EXPOSE instruction. This will become an error in a future release",
+		URL:         "https://docs.docker.com/go/dockerfile/rule/expose-invalid-format/",
+		Format: func(port string) string {
+			return fmt.Sprintf("EXPOSE instruction should not define an IP address or host-port mapping, found '%s'", port)
+		},
+		// TODO(crazy-max): deprecate this rule in the future and error out instead
+		// Deprecated: true,
+	}
 )

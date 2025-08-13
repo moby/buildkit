@@ -96,6 +96,10 @@ func (ps *portSpecs) parsePort(rawPort string) (portProto []string, _ error) {
 			msg := linter.RuleExposeProtoCasing.Format(rawPort)
 			ps.lint.Run(&linter.RuleExposeProtoCasing, ps.location, msg)
 		}
+		if ip != "" || hostPort != "" {
+			msg := linter.RuleExposeInvalidFormat.Format(rawPort)
+			ps.lint.Run(&linter.RuleExposeInvalidFormat, ps.location, msg)
+		}
 	}
 
 	// TODO(thaJeztah): mapping IP-addresses should not be allowed for EXPOSE; see https://github.com/moby/buildkit/issues/2173

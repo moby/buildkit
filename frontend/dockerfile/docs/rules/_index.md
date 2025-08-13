@@ -111,5 +111,9 @@ To learn more about how to use build checks, see
       <td><a href="./expose-proto-casing/">ExposeProtoCasing</a></td>
       <td>Protocol in EXPOSE instruction should be lowercase</td>
     </tr>
+    <tr>
+      <td><a href="./expose-invalid-format/">ExposeInvalidFormat</a></td>
+      <td>IP address and host-port mapping should not be used in EXPOSE instruction. This will become an error in a future release</td>
+    </tr>
   </tbody>
 </table>
