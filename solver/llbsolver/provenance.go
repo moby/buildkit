@@ -434,7 +434,7 @@ func NewProvenanceCreator(ctx context.Context, slsaVersion provenancetypes.Prove
 					continue
 				}
 
-				m[fmt.Sprintf("step%d:%d", idx, 0)] = descs // TODO: store index in dgsts
+				m[fmt.Sprintf("step%d:%d", idx, l.index)] = descs
 			}
 
 			if len(m) != 0 {
@@ -498,7 +498,7 @@ func (p *ProvenanceCreator) Predicate(ctx context.Context) (any, error) {
 
 type edge struct {
 	digest digest.Digest
-	// index  int
+	index  int
 }
 
 func newCacheExporter() *cacheExporter {
@@ -515,9 +515,12 @@ type cacheExporter struct {
 
 func (ce *cacheExporter) Add(dgst digest.Digest, deps [][]solver.CacheLink, results []solver.CacheExportResult) (solver.CacheExporterRecord, bool, error) {
 	for _, res := range results {
+		if res.EdgeVertex == "" {
+			continue
+		}
 		e := edge{
-			digest: dgst,
-			// index:  idx,
+			digest: res.EdgeVertex,
+			index:  int(res.EdgeIndex),
 		}
 		descs := make([]ocispecs.Descriptor, len(res.Result.Descriptors))
 		for i, desc := range res.Result.Descriptors {

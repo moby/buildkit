@@ -143,8 +143,10 @@ type CacheLink struct {
 }
 
 type CacheExportResult struct {
-	CreatedAt time.Time
-	Result    *Remote
+	CreatedAt  time.Time
+	Result     *Remote
+	EdgeVertex digest.Digest
+	EdgeIndex  Index
 }
 
 // Remote is a descriptor or a list of stacked descriptors that can be pulled
