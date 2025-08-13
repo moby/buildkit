@@ -7,7 +7,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestParsePortSpecEmptyContainerPort(t *testing.T) {
+var ps = newPortSpecs()
+
+func TestParsePortEmptyContainerPort(t *testing.T) {
 	tests := []struct {
 		name     string
 		spec     string
@@ -31,7 +33,7 @@ func TestParsePortSpecEmptyContainerPort(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := parsePortSpec(tc.spec)
+			_, err := ps.parsePort(tc.spec)
 			if tc.expError != "" {
 				assert.EqualError(t, err, tc.expError)
 			} else {
@@ -41,13 +43,13 @@ func TestParsePortSpecEmptyContainerPort(t *testing.T) {
 	}
 }
 
-func TestParsePortSpecFull(t *testing.T) {
-	exposedPorts, err := parsePortSpec("0.0.0.0:1234-1235:3333-3334/tcp")
+func TestParsePortFull(t *testing.T) {
+	exposedPorts, err := ps.parsePort("0.0.0.0:1234-1235:3333-3334/tcp")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"3333/tcp", "3334/tcp"}, exposedPorts)
 }
 
-func TestPartPortSpecIPV6(t *testing.T) {
+func TestPartPortIPV6(t *testing.T) {
 	type test struct {
 		name     string
 		spec     string
@@ -82,43 +84,43 @@ func TestPartPortSpecIPV6(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			exposedPorts, err := parsePortSpec(c.spec)
+			exposedPorts, err := ps.parsePort(c.spec)
 			require.NoError(t, err)
 			assert.Equal(t, c.expected, exposedPorts)
 		})
 	}
 }
 
-func TestParsePortSpecs(t *testing.T) {
-	exposedPorts, err := parsePortSpecs([]string{"1234/tcp", "2345/udp", "3456/sctp"})
+func TestParsePorts(t *testing.T) {
+	exposedPorts, err := ps.parsePorts([]string{"1234/tcp", "2345/udp", "3456/sctp"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"1234/tcp", "2345/udp", "3456/sctp"}, exposedPorts)
 
-	exposedPorts, err = parsePortSpecs([]string{"1234:1234/tcp", "2345:2345/udp", "3456:3456/sctp"})
+	exposedPorts, err = ps.parsePorts([]string{"1234:1234/tcp", "2345:2345/udp", "3456:3456/sctp"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"1234/tcp", "2345/udp", "3456/sctp"}, exposedPorts)
 
-	exposedPorts, err = parsePortSpecs([]string{"0.0.0.0:1234:1234/tcp", "0.0.0.0:2345:2345/udp", "0.0.0.0:3456:3456/sctp"})
+	exposedPorts, err = ps.parsePorts([]string{"0.0.0.0:1234:1234/tcp", "0.0.0.0:2345:2345/udp", "0.0.0.0:3456:3456/sctp"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"1234/tcp", "2345/udp", "3456/sctp"}, exposedPorts)
 
-	_, err = parsePortSpecs([]string{"localhost:1234:1234/tcp"})
+	_, err = ps.parsePorts([]string{"localhost:1234:1234/tcp"})
 	assert.Error(t, err, "Received no error while trying to parse a hostname instead of ip")
 }
 
-func TestParsePortSpecsWithRange(t *testing.T) {
-	exposedPorts, err := parsePortSpecs([]string{"1234-1236/tcp", "2345-2347/udp", "3456-3458/sctp"})
+func TestParsePortsWithRange(t *testing.T) {
+	exposedPorts, err := ps.parsePorts([]string{"1234-1236/tcp", "2345-2347/udp", "3456-3458/sctp"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"1234/tcp", "1235/tcp", "1236/tcp", "2345/udp", "2346/udp", "2347/udp", "3456/sctp", "3457/sctp", "3458/sctp"}, exposedPorts)
 
-	exposedPorts, err = parsePortSpecs([]string{"1234-1236:1234-1236/tcp", "2345-2347:2345-2347/udp", "3456-3458:3456-3458/sctp"})
+	exposedPorts, err = ps.parsePorts([]string{"1234-1236:1234-1236/tcp", "2345-2347:2345-2347/udp", "3456-3458:3456-3458/sctp"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"1234/tcp", "1235/tcp", "1236/tcp", "2345/udp", "2346/udp", "2347/udp", "3456/sctp", "3457/sctp", "3458/sctp"}, exposedPorts)
 
-	exposedPorts, err = parsePortSpecs([]string{"0.0.0.0:1234-1236:1234-1236/tcp", "0.0.0.0:2345-2347:2345-2347/udp", "0.0.0.0:3456-3458:3456-3458/sctp"})
+	exposedPorts, err = ps.parsePorts([]string{"0.0.0.0:1234-1236:1234-1236/tcp", "0.0.0.0:2345-2347:2345-2347/udp", "0.0.0.0:3456-3458:3456-3458/sctp"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"1234/tcp", "1235/tcp", "1236/tcp", "2345/udp", "2346/udp", "2347/udp", "3456/sctp", "3457/sctp", "3458/sctp"}, exposedPorts)
 
-	_, err = parsePortSpecs([]string{"localhost:1234-1236:1234-1236/tcp"})
+	_, err = ps.parsePorts([]string{"localhost:1234-1236:1234-1236/tcp"})
 	assert.Error(t, err, "Received no error while trying to parse a hostname instead of ip")
 }

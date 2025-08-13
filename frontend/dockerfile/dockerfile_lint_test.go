@@ -49,6 +49,7 @@ var lintTests = integration.TestFuncs(
 	testFromPlatformFlagConstDisallowed,
 	testCopyIgnoredFiles,
 	testDefinitionDescription,
+	testExposeProtoCasing,
 )
 
 func testDefinitionDescription(t *testing.T, sb integration.Sandbox) {
@@ -1432,6 +1433,34 @@ FROM --platform=linux/amd64 scratch AS linux
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile: dockerfile,
+	})
+}
+
+func testExposeProtoCasing(t *testing.T, sb integration.Sandbox) {
+	dockerfile := []byte(`
+FROM scratch
+EXPOSE 80/TcP 8080/TCP 8080/udp
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "ExposeProtoCasing",
+				Description: "Protocol in EXPOSE instruction should be lowercase",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/expose-proto-casing/",
+				Detail:      "Defined protocol '80/TcP' in EXPOSE instruction should be lowercase",
+				Level:       1,
+				Line:        3,
+			},
+			{
+				RuleName:    "ExposeProtoCasing",
+				Description: "Protocol in EXPOSE instruction should be lowercase",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/expose-proto-casing/",
+				Detail:      "Defined protocol '8080/TCP' in EXPOSE instruction should be lowercase",
+				Level:       1,
+				Line:        3,
+			},
+		},
 	})
 }
 

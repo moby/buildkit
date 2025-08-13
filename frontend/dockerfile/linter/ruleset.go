@@ -174,4 +174,12 @@ var (
 		},
 		Experimental: true,
 	}
+	RuleExposeProtoCasing = LinterRule[func(string) string]{
+		Name:        "ExposeProtoCasing",
+		Description: "Protocol in EXPOSE instruction should be lowercase",
+		URL:         "https://docs.docker.com/go/dockerfile/rule/expose-proto-casing/",
+		Format: func(port string) string {
+			return fmt.Sprintf("Defined protocol '%s' in EXPOSE instruction should be lowercase", port)
+		},
+	}
 )

@@ -971,7 +971,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 	case *instructions.HealthCheckCommand:
 		err = dispatchHealthcheck(d, c, opt.lint)
 	case *instructions.ExposeCommand:
-		err = dispatchExpose(d, c, opt.shlex)
+		err = dispatchExpose(d, c, &opt)
 	case *instructions.UserCommand:
 		err = dispatchUser(d, c, true)
 	case *instructions.VolumeCommand:
