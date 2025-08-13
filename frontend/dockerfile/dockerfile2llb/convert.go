@@ -21,7 +21,6 @@ import (
 
 	"github.com/containerd/platforms"
 	"github.com/distribution/reference"
-	"github.com/docker/go-connections/nat"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/imagemetaresolver"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
@@ -1771,33 +1770,6 @@ func dispatchHealthcheck(d *dispatchState, c *instructions.HealthCheckCommand, l
 		Retries:       c.Health.Retries,
 	}
 	return commitToHistory(&d.image, fmt.Sprintf("HEALTHCHECK %q", d.image.Config.Healthcheck), false, nil, d.epoch)
-}
-
-func dispatchExpose(d *dispatchState, c *instructions.ExposeCommand, shlex *shell.Lex) error {
-	ports := []string{}
-	env := getEnv(d.state)
-	for _, p := range c.Ports {
-		ps, err := shlex.ProcessWords(p, env)
-		if err != nil {
-			return err
-		}
-		ports = append(ports, ps...)
-	}
-	c.Ports = ports
-
-	ps, _, err := nat.ParsePortSpecs(c.Ports)
-	if err != nil {
-		return err
-	}
-
-	if d.image.Config.ExposedPorts == nil {
-		d.image.Config.ExposedPorts = make(map[string]struct{})
-	}
-	for p := range ps {
-		d.image.Config.ExposedPorts[string(p)] = struct{}{}
-	}
-
-	return commitToHistory(&d.image, fmt.Sprintf("EXPOSE %v", ps), false, nil, d.epoch)
 }
 
 func dispatchUser(d *dispatchState, c *instructions.UserCommand, commit bool) error {
