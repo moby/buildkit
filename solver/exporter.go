@@ -169,8 +169,10 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		if opt.CompressionOpt != nil {
 			for _, r := range remotes { // record all remaining remotes as well
 				results = append(results, CacheExportResult{
-					CreatedAt: v.CreatedAt,
-					Result:    r,
+					CreatedAt:  v.CreatedAt,
+					Result:     r,
+					EdgeVertex: k.vtx,
+					EdgeIndex:  k.output,
 				})
 			}
 		}
@@ -191,8 +193,10 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 			if opt.CompressionOpt != nil {
 				for _, r := range remotes { // record all remaining remotes as well
 					results = append(results, CacheExportResult{
-						CreatedAt: v.CreatedAt,
-						Result:    r,
+						CreatedAt:  v.CreatedAt,
+						Result:     r,
+						EdgeVertex: k.vtx,
+						EdgeIndex:  k.output,
 					})
 				}
 			}
@@ -200,8 +204,10 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 
 		if remote != nil {
 			results = append(results, CacheExportResult{
-				CreatedAt: v.CreatedAt,
-				Result:    remote,
+				CreatedAt:  v.CreatedAt,
+				Result:     remote,
+				EdgeVertex: k.vtx,
+				EdgeIndex:  k.output,
 			})
 		}
 		break
