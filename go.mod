@@ -28,7 +28,7 @@ require (
 	github.com/containerd/log v0.1.0
 	github.com/containerd/nydus-snapshotter v0.15.4
 	github.com/containerd/platforms v1.0.0-rc.1
-	github.com/containerd/stargz-snapshotter v0.16.3
+	github.com/containerd/stargz-snapshotter v0.17.0
 	github.com/containerd/stargz-snapshotter/estargz v0.17.0
 	github.com/containerd/typeurl/v2 v2.2.3
 	github.com/containernetworking/plugins v1.7.1
@@ -153,10 +153,8 @@ require (
 	github.com/google/pprof v0.0.0-20250403155104-27863c87afa6 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.1 // indirect
-	github.com/hanwen/go-fuse/v2 v2.6.3 // indirect
-	github.com/hashicorp/errwrap v1.1.0 // indirect
-	github.com/hashicorp/go-multierror v1.1.1 // indirect
-	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
+	github.com/hanwen/go-fuse/v2 v2.8.0 // indirect
+	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/moby/sys/mount v0.3.4 // indirect
 	github.com/moby/sys/sequential v0.6.0 // indirect

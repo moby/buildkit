@@ -12,7 +12,7 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
-// MemRegularFile is a filesystem node that holds a read-only data
+// MemRegularFile is a filesystem node that holds a data
 // slice in memory.
 type MemRegularFile struct {
 	Inode
@@ -27,6 +27,24 @@ var _ = (NodeReader)((*MemRegularFile)(nil))
 var _ = (NodeWriter)((*MemRegularFile)(nil))
 var _ = (NodeSetattrer)((*MemRegularFile)(nil))
 var _ = (NodeFlusher)((*MemRegularFile)(nil))
+var _ = (NodeAllocater)((*MemRegularFile)(nil))
+
+func (f *MemRegularFile) Allocate(ctx context.Context, fh FileHandle, off uint64, size uint64, mode uint32) syscall.Errno {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	oldSz := len(f.Data)
+	if uint64(cap(f.Data)) < off+size {
+		n := make([]byte, off+size)
+		copy(n, f.Data)
+		f.Data = n
+	}
+	if keepSizeMode(mode) {
+		f.Data = f.Data[:oldSz]
+	} else if len(f.Data) < int(off+size) {
+		f.Data = f.Data[:off+size]
+	}
+	return 0
+}
 
 func (f *MemRegularFile) Open(ctx context.Context, flags uint32) (fh FileHandle, fuseFlags uint32, errno syscall.Errno) {
 	return nil, fuse.FOPEN_KEEP_CACHE, OK
