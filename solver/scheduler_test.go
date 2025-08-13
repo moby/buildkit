@@ -2120,13 +2120,13 @@ func TestCacheExporting(t *testing.T) {
 	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
-	require.Equal(t, 3, len(expTarget.records))
-	require.Equal(t, 1, expTarget.records[0].results)
+	require.Equal(t, 3, expTarget.numUniqueRecords())
+	require.Equal(t, 0, expTarget.records[0].results)
 	require.Equal(t, 0, expTarget.records[1].results)
-	require.Equal(t, 0, expTarget.records[2].results)
-	require.Equal(t, 2, expTarget.records[0].links)
+	require.Equal(t, 1, expTarget.records[5].results)
+	require.Equal(t, 0, expTarget.records[0].links)
 	require.Equal(t, 0, expTarget.records[1].links)
-	require.Equal(t, 0, expTarget.records[2].links)
+	require.Equal(t, 2, expTarget.records[5].links)
 
 	j1, err := l.NewJob("j1")
 	require.NoError(t, err)
@@ -2150,13 +2150,13 @@ func TestCacheExporting(t *testing.T) {
 	require.NoError(t, err)
 
 	// the order of the records isn't really significant
-	require.Equal(t, 3, len(expTarget.records))
-	require.Equal(t, 1, expTarget.records[0].results)
+	require.Equal(t, 3, expTarget.numUniqueRecords())
+	require.Equal(t, 0, expTarget.records[0].results)
 	require.Equal(t, 0, expTarget.records[1].results)
-	require.Equal(t, 0, expTarget.records[2].results)
-	require.Equal(t, 2, expTarget.records[0].links)
+	require.Equal(t, 1, expTarget.records[5].results)
+	require.Equal(t, 0, expTarget.records[0].links)
 	require.Equal(t, 0, expTarget.records[1].links)
-	require.Equal(t, 0, expTarget.records[2].links)
+	require.Equal(t, 2, expTarget.records[5].links)
 }
 
 func TestCacheExportingModeMin(t *testing.T) {
@@ -2205,15 +2205,16 @@ func TestCacheExportingModeMin(t *testing.T) {
 	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(false))
 	require.NoError(t, err)
 
-	require.Equal(t, 4, len(expTarget.records))
+	require.Equal(t, 4, expTarget.numUniqueRecords())
 	require.Equal(t, 0, expTarget.records[0].results)
 	require.Equal(t, 0, expTarget.records[1].results)
 	require.Equal(t, 0, expTarget.records[2].results)
-	require.Equal(t, 1, expTarget.records[3].results)
-	require.Equal(t, 2, expTarget.records[3].links)
+	require.Equal(t, 0, expTarget.records[3].results)
+	require.Equal(t, 1, expTarget.records[7].results)
 	require.Equal(t, 0, expTarget.records[0].links)
-	require.Equal(t, 1, expTarget.records[1].links)
-	require.Equal(t, 0, expTarget.records[2].links)
+	require.Equal(t, 0, expTarget.records[1].links)
+	require.Equal(t, 1, expTarget.records[2].links)
+	require.Equal(t, 2, expTarget.records[7].links)
 
 	j1, err := l.NewJob("j1")
 	require.NoError(t, err)
@@ -2237,15 +2238,17 @@ func TestCacheExportingModeMin(t *testing.T) {
 	require.NoError(t, err)
 
 	// the order of the records isn't really significant
-	require.Equal(t, 4, len(expTarget.records))
+	require.Equal(t, 4, expTarget.numUniqueRecords())
 	require.Equal(t, 0, expTarget.records[0].results)
 	require.Equal(t, 0, expTarget.records[1].results)
 	require.Equal(t, 0, expTarget.records[2].results)
-	require.Equal(t, 1, expTarget.records[3].results)
+	require.Equal(t, 1, expTarget.records[7].results)
 	require.Equal(t, 0, expTarget.records[0].links)
-	require.Equal(t, 1, expTarget.records[1].links)
-	require.Equal(t, 0, expTarget.records[2].links)
-	require.Equal(t, 2, expTarget.records[3].links)
+	require.Equal(t, 0, expTarget.records[1].links)
+	require.Equal(t, 1, expTarget.records[2].links)
+	require.Equal(t, 1, expTarget.records[3].links)
+	require.Equal(t, 2, expTarget.records[6].links)
+	require.Equal(t, 2, expTarget.records[7].links)
 
 	// one more check with all mode
 	j2, err := l.NewJob("j2")
@@ -2270,15 +2273,16 @@ func TestCacheExportingModeMin(t *testing.T) {
 	require.NoError(t, err)
 
 	// the order of the records isn't really significant
-	require.Equal(t, 4, len(expTarget.records))
+	require.Equal(t, 4, expTarget.numUniqueRecords())
 	require.Equal(t, 0, expTarget.records[0].results)
-	require.Equal(t, 1, expTarget.records[1].results)
+	require.Equal(t, 0, expTarget.records[1].results)
 	require.Equal(t, 0, expTarget.records[2].results)
 	require.Equal(t, 1, expTarget.records[3].results)
+	require.Equal(t, 1, expTarget.records[7].results)
 	require.Equal(t, 0, expTarget.records[0].links)
-	require.Equal(t, 1, expTarget.records[1].links)
-	require.Equal(t, 0, expTarget.records[2].links)
-	require.Equal(t, 2, expTarget.records[3].links)
+	require.Equal(t, 0, expTarget.records[1].links)
+	require.Equal(t, 1, expTarget.records[2].links)
+	require.Equal(t, 2, expTarget.records[6].links)
 }
 
 func TestSlowCacheAvoidAccess(t *testing.T) {
@@ -2789,13 +2793,15 @@ func TestCacheExportingPartialSelector(t *testing.T) {
 	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
-	require.Equal(t, 3, len(expTarget.records))
+	require.Equal(t, 3, expTarget.numUniqueRecords())
 	require.Equal(t, 0, expTarget.records[0].results)
 	require.Equal(t, 0, expTarget.records[1].results)
-	require.Equal(t, 1, expTarget.records[2].results)
+	require.Equal(t, 0, expTarget.records[2].results)
+	require.Equal(t, 1, expTarget.records[5].results)
 	require.Equal(t, 0, expTarget.records[0].links)
 	require.Equal(t, 0, expTarget.records[1].links)
-	require.Equal(t, 1, expTarget.records[2].links)
+	require.Equal(t, 0, expTarget.records[2].links)
+	require.Equal(t, 1, expTarget.records[5].links)
 
 	// repeat so that all coming from cache are retained
 	j1, err := l.NewJob("j1")
@@ -2822,11 +2828,13 @@ func TestCacheExportingPartialSelector(t *testing.T) {
 	require.NoError(t, err)
 
 	// the order of the records isn't really significant
-	require.Equal(t, 2, len(expTarget.records))
+	require.Equal(t, 3, expTarget.numUniqueRecords())
 	require.Equal(t, 0, expTarget.records[0].results)
-	require.Equal(t, 1, expTarget.records[1].results)
+	require.Equal(t, 0, expTarget.records[1].results)
+	require.Equal(t, 1, expTarget.records[4].results)
 	require.Equal(t, 0, expTarget.records[0].links)
-	require.Equal(t, 1, expTarget.records[1].links)
+	require.Equal(t, 0, expTarget.records[1].links)
+	require.Equal(t, 1, expTarget.records[4].links)
 
 	// repeat with forcing a slow key recomputation
 	j2, err := l.NewJob("j2")
@@ -2873,13 +2881,14 @@ func TestCacheExportingPartialSelector(t *testing.T) {
 
 	// the order of the records isn't really significant
 	// adds one
-	require.Equal(t, 3, len(expTarget.records))
+	require.Equal(t, 4, expTarget.numUniqueRecords())
 	require.Equal(t, 0, expTarget.records[0].results)
 	require.Equal(t, 0, expTarget.records[1].results)
-	require.Equal(t, 1, expTarget.records[2].results)
+	require.Equal(t, 1, expTarget.records[6].results)
 	require.Equal(t, 0, expTarget.records[0].links)
 	require.Equal(t, 0, expTarget.records[1].links)
-	require.Equal(t, 1, expTarget.records[2].links)
+	require.Equal(t, 0, expTarget.records[2].links)
+	require.Equal(t, 1, expTarget.records[6].links)
 
 	// repeat with a wrapper
 	j3, err := l.NewJob("j3")
@@ -2915,13 +2924,17 @@ func TestCacheExportingPartialSelector(t *testing.T) {
 
 	// adds one extra result
 	// the order of the records isn't really significant
-	require.Equal(t, 3, len(expTarget.records))
+	require.Equal(t, 5, expTarget.numUniqueRecords())
 	require.Equal(t, 0, expTarget.records[0].results)
-	require.Equal(t, 1, expTarget.records[1].results)
-	require.Equal(t, 1, expTarget.records[2].results)
+	require.Equal(t, 0, expTarget.records[1].results)
+	require.Equal(t, 0, expTarget.records[2].results)
+	require.Equal(t, 1, expTarget.records[5].results)
+	require.Equal(t, 1, expTarget.records[7].results)
 	require.Equal(t, 0, expTarget.records[0].links)
-	require.Equal(t, 1, expTarget.records[1].links)
-	require.Equal(t, 1, expTarget.records[2].links)
+	require.Equal(t, 0, expTarget.records[1].links)
+	require.Equal(t, 0, expTarget.records[2].links)
+	require.Equal(t, 1, expTarget.records[5].links)
+	require.Equal(t, 1, expTarget.records[7].links)
 }
 
 func TestCacheExportingMergedKey(t *testing.T) {
