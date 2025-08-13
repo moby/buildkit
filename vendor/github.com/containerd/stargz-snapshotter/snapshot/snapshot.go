@@ -115,7 +115,7 @@ type snapshotter struct {
 // the root as same as overlayfs snapshotter.
 func NewSnapshotter(ctx context.Context, root string, targetFs FileSystem, opts ...Opt) (snapshots.Snapshotter, error) {
 	if targetFs == nil {
-		return nil, fmt.Errorf("Specify filesystem to use")
+		return nil, fmt.Errorf("specify filesystem to use")
 	}
 
 	var config SnapshotterConfig
@@ -658,6 +658,7 @@ func (o *snapshotter) Close() error {
 	if err := o.cleanup(ctx, cleanupCommitted); err != nil {
 		log.G(ctx).WithError(err).Warn("failed to cleanup")
 	}
+
 	return o.ms.Close()
 }
 
@@ -722,6 +723,10 @@ func (o *snapshotter) checkAvailability(ctx context.Context, key string) bool {
 }
 
 func (o *snapshotter) restoreRemoteSnapshot(ctx context.Context) error {
+	if o.noRestore {
+		return nil
+	}
+
 	mounts, err := mountinfo.GetMounts(nil)
 	if err != nil {
 		return err
@@ -734,10 +739,6 @@ func (o *snapshotter) restoreRemoteSnapshot(ctx context.Context) error {
 		}
 	}
 
-	if o.noRestore {
-		return nil
-	}
-
 	var task []snapshots.Info
 	if err := o.Walk(ctx, func(ctx context.Context, info snapshots.Info) error {
 		if _, ok := info.Labels[remoteLabel]; ok {
@@ -748,6 +749,24 @@ func (o *snapshotter) restoreRemoteSnapshot(ctx context.Context) error {
 		return err
 	}
 	for _, info := range task {
+		// First, prepare the snapshot directory
+		if err := func() error {
+			ctx, t, err := o.ms.TransactionContext(ctx, false)
+			if err != nil {
+				return err
+			}
+			defer t.Rollback()
+			id, _, _, err := storage.GetInfo(ctx, info.Name)
+			if err != nil {
+				return err
+			}
+			if err := os.Mkdir(filepath.Join(o.root, "snapshots", id), 0700); err != nil {
+				return err
+			}
+			return os.Mkdir(o.upperPath(id), 0755)
+		}(); err != nil {
+			return fmt.Errorf("failed to create remote snapshot directory: %s: %w", info.Name, err)
+		}
 		if err := o.prepareRemoteSnapshot(ctx, info.Name, info.Labels); err != nil {
 			if o.allowInvalidMountsOnRestart {
 				log.G(ctx).WithError(err).Warnf("failed to restore remote snapshot %s; remove this snapshot manually", info.Name)

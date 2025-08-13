@@ -11,7 +11,7 @@ import (
 // do not error-out, meaning that unmount will hang.
 const useSingleReader = true
 
-func (ms *Server) systemWrite(req *request) Status {
+func (ms *Server) write(req *request) Status {
 	if req.outPayloadSize() == 0 {
 		err := handleEINTR(func() error {
 			_, err := unix.Write(ms.mountFd, req.outputBuf)
