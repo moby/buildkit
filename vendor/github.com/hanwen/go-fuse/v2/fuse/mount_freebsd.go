@@ -3,45 +3,89 @@ package fuse
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 	"syscall"
 )
 
-func callMountFuseFs(mountPoint string, opts *MountOptions) (fd int, err error) {
+func callMountFuseFs(mountPoint string, opts *MountOptions) (devFuseFd int, err error) {
 	bin, err := fusermountBinary()
-	if err != nil {
-		return 0, err
-	}
-	f, err := os.OpenFile("/dev/fuse", os.O_RDWR, 0o000)
 	if err != nil {
 		return -1, err
 	}
-	cmd := exec.Command(
+
+	// Convenience for cleaning up open FDs in the event of an error.
+	closeFd := func(fd int) {
+		if err != nil {
+			syscall.Close(fd)
+		}
+	}
+
+	// Use syscall.Open instead of os.OpenFile to avoid Go garbage collecting an
+	// [os.File], which will close the FD later, but we need to keep it open for
+	// the life of the FUSE mount.
+	const devFuse = "/dev/fuse"
+	devFuseFd, err = syscall.Open(devFuse, syscall.O_RDWR, 0)
+	if err != nil {
+		return -1, fmt.Errorf(
+			"failed to get a RDWR file descriptor for %s: %w",
+			devFuse, err)
+	}
+	defer closeFd(devFuseFd)
+	// We will also defensively direct the forked process's stdin to the null
+	// device to prevent any unintended side effects.
+	devNullFd, err := syscall.Open(os.DevNull, syscall.O_RDONLY, 0)
+	if err != nil {
+		return -1, fmt.Errorf(
+			"failed to get a RDONLY file descriptor for %s: %w",
+			os.DevNull, err)
+	}
+	defer closeFd(devNullFd)
+
+	// Use syscall.ForkExec directly instead of exec.Command because we need to
+	// pass raw file descriptors to the child, rather than a garbage collected
+	// os.File.
+	env := []string{"MOUNT_FUSEFS_CALL_BY_LIB=1"}
+	argv := []string{
 		bin,
 		"--safe",
 		"-o", strings.Join(opts.optionsStrings(), ","),
 		"3",
 		mountPoint,
-	)
-	cmd.Env = []string{"MOUNT_FUSEFS_CALL_BY_LIB=1"}
-	cmd.ExtraFiles = []*os.File{f}
-
-	if err := cmd.Start(); err != nil {
-		f.Close()
-		return -1, fmt.Errorf("mount_fusefs: %v", err)
+	}
+	fds := []uintptr{
+		uintptr(devNullFd),
+		uintptr(os.Stdout.Fd()),
+		uintptr(os.Stderr.Fd()),
+		uintptr(devFuseFd),
+	}
+	pid, err := syscall.ForkExec(bin, argv, &syscall.ProcAttr{
+		Env:   env,
+		Files: fds,
+	})
+	if err != nil {
+		return -1, fmt.Errorf("failed to fork mount_fusefs: %w", err)
 	}
 
-	if err := cmd.Wait(); err != nil {
-		// see if we have a better error to report
-		f.Close()
-		return -1, fmt.Errorf("mount_fusefs: %v", err)
+	var ws syscall.WaitStatus
+	_, err = syscall.Wait4(pid, &ws, 0, nil)
+	if err != nil {
+		return -1, fmt.Errorf(
+			"failed to wait for exit status of mount_fusefs: %w", err)
+	}
+	if ws.ExitStatus() != 0 {
+		return -1, fmt.Errorf(
+			"mount_fusefs: exited with status %d", ws.ExitStatus())
 	}
 
-	return int(f.Fd()), nil
+	return devFuseFd, nil
 }
 
 func mount(mountPoint string, opts *MountOptions, ready chan<- error) (fd int, err error) {
+	// Note: opts.DirectMount is not supported in FreeBSD, but the intended
+	// behavior is to *attempt* a direct mount when it's set, not to return an
+	// error. So in this case, we just ignore it and use the binary from
+	// fusermountBinary().
+
 	// Using the same logic from libfuse to prevent chaos
 	for {
 		f, err := os.OpenFile("/dev/null", os.O_RDWR, 0o000)
@@ -71,7 +115,7 @@ func mount(mountPoint string, opts *MountOptions, ready chan<- error) (fd int, e
 	}
 	// golang sets CLOEXEC on file descriptors when they are
 	// acquired through normal operations (e.g. open).
-	// Buf for fd, we have to set CLOEXEC manually
+	// However, for raw FDs, we have to set CLOEXEC manually.
 	syscall.CloseOnExec(fd)
 
 	close(ready)

@@ -200,6 +200,10 @@
 // disables the POLL opcode on mount. To ensure this has happened, call
 // WaitMount.
 //
+// 3. Memory mapping a file served by FUSE. Accessing the mapped
+// memory generates a page fault, which blocks the OS thread running
+// the goroutine.
+//
 // # Dynamically discovered file systems
 //
 // File system data usually cannot fit all in RAM, so the kernel must
@@ -246,8 +250,7 @@ import (
 // filesystem methods, the filesystem will react as if it is a
 // read-only filesystem with a predefined tree structure.
 type InodeEmbedder interface {
-	// populateInode and inode are used internally to link Inode
-	// to a Node.
+	// inode is used internally to link Inode to a Node.
 	//
 	// See Inode() for the public API to retrieve an inode from Node.
 	embed() *Inode
@@ -402,6 +405,10 @@ type NodeCopyFileRanger interface {
 	// Ugh. should have been called Copyfilerange
 }
 
+type NodeStatxer interface {
+	Statx(ctx context.Context, f FileHandle, flags uint32, mask uint32, out *fuse.StatxOut) syscall.Errno
+}
+
 // Lseek is used to implement holes: it should return the
 // first offset beyond `off` where there is data (SEEK_DATA)
 // or where there is a hole (SEEK_HOLE).
@@ -430,13 +437,19 @@ type NodeSetlkwer interface {
 	Setlkw(ctx context.Context, f FileHandle, owner uint64, lk *fuse.FileLock, flags uint32) syscall.Errno
 }
 
+// Ioctl implements an ioctl on an open file.
+type NodeIoctler interface {
+	Ioctl(ctx context.Context, f FileHandle, cmd uint32, arg uint64, input []byte, output []byte) (result int32, errno syscall.Errno)
+}
+
 // OnForget is called when the node becomes unreachable. This can
 // happen because the kernel issues a FORGET request,
-// ForgetPersistent() is called on the inode, or the last child of the
-// directory disappears. Implementers must make sure that the inode
-// cannot be revived concurrently by a LOOKUP call. Modifying the tree
-// using RmChild and AddChild can also trigger a spurious OnForget;
-// use MvChild instead.
+// ForgetPersistent() is called on the inode, the last child of the
+// directory disappears, or (for the root node) unmounting the file
+// system. Implementers must make sure that the inode cannot be
+// revived concurrently by a LOOKUP call. Modifying the tree using
+// RmChild and AddChild can also trigger a spurious OnForget; use
+// MvChild instead.
 type NodeOnForgetter interface {
 	OnForget()
 }
@@ -604,6 +617,10 @@ type FileGetattrer interface {
 	Getattr(ctx context.Context, out *fuse.AttrOut) syscall.Errno
 }
 
+type FileStatxer interface {
+	Statx(ctx context.Context, flags uint32, mask uint32, out *fuse.StatxOut) syscall.Errno
+}
+
 // See NodeReader.
 type FileReader interface {
 	Read(ctx context.Context, dest []byte, off int64) (fuse.ReadResult, syscall.Errno)
@@ -652,6 +669,11 @@ type FileSetattrer interface {
 // See NodeAllocater.
 type FileAllocater interface {
 	Allocate(ctx context.Context, off uint64, size uint64, mode uint32) syscall.Errno
+}
+
+// See NodeIoctler.
+type FileIoctler interface {
+	Ioctl(ctx context.Context, cmd uint32, arg uint64, input []byte, output []byte) (result int32, errno syscall.Errno)
 }
 
 // Opens a directory. This supersedes NodeOpendirer, allowing to pass

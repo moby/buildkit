@@ -14,3 +14,7 @@ type dirent struct {
 	Pad1   uint16
 	Name   [1]int8
 }
+
+func (de *dirent) nameLength() int {
+	return int(de.Namlen)
+}

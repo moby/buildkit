@@ -100,10 +100,7 @@ func (ts *BackgroundTaskManager) DonePrioritizedTask() {
 func (ts *BackgroundTaskManager) InvokeBackgroundTask(do func(context.Context), timeout time.Duration) {
 	for {
 		// Wait until all prioritized tasks are done
-		for {
-			if atomic.LoadInt64(&ts.prioritizedTasks) <= 0 {
-				break
-			}
+		for atomic.LoadInt64(&ts.prioritizedTasks) > 0 {
 
 			// waits until a prioritized task is done
 			ts.prioritizedTaskDoneCond.L.Lock()
