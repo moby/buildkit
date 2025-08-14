@@ -143,7 +143,8 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 	var remote *Remote
 	var i int
 
-	if e.recordCtxOpts != nil {
+	mainCtx := ctx
+	if CacheOptGetterOf(ctx) == nil && e.recordCtxOpts != nil {
 		ctx = e.recordCtxOpts(ctx)
 	}
 	v := e.record
@@ -241,7 +242,7 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 
 	if e.edge != nil {
 		for _, de := range e.edge.secondaryExporters {
-			recs, err := de.cacheKey.CacheKey.Exporter.ExportTo(ctx, t, opt)
+			recs, err := de.cacheKey.CacheKey.Exporter.ExportTo(mainCtx, t, opt)
 			if err != nil {
 				return nil, nil
 			}
