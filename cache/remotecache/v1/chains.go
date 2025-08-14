@@ -104,34 +104,61 @@ func (c *CacheChains) Add(dgst digest.Digest, deps [][]solver.CacheLink, results
 		}
 	}
 	items := IntersectAll(matchDeps)
-	if len(items) > 0 {
-		if len(items) > 1 {
-			return nil, false, errors.Errorf("TODO: multiple matching dependencies for %s: %v", dgst, items) // merge?
+
+	if len(items) > 1 {
+		var main *item
+		for it := range items {
+			main = it
+			break
 		}
 		for it := range items {
-			r = it
-			for _, rr := range results {
-				r.addResult(rr)
+			if it == main {
+				continue
 			}
-
-			// make sure that none of the deps are childeren of r
-			allChildren := map[*item]struct{}{}
-			if err := r.walkChildren(func(i *item) error {
-				allChildren[i] = struct{}{}
-				return nil
-			}, map[*item]struct{}{}); err != nil {
-				return nil, false, errors.Wrapf(err, "failed to walk children of %s", dgst)
-			}
-			for i, dd := range deps {
-				for j, d := range dd {
-					if _, ok := allChildren[d.Src.(*item)]; ok {
-						deps[i][j].Src = nil
+			for l, m := range it.children {
+				for ch := range m {
+					main.children[l][ch] = struct{}{}
+					for i, links := range ch.parents {
+						newlinks := map[link]struct{}{}
+						for l := range links {
+							if l.src == it {
+								l.src = main
+							}
+							newlinks[l] = struct{}{}
+						}
+						main.parents[i] = newlinks
 					}
 				}
 			}
-
-			break
+			for _, rr := range it.results {
+				main.addResult(rr)
+			}
 		}
+		items = map[*item]struct{}{main: {}}
+	}
+
+	for it := range items {
+		r = it
+		for _, rr := range results {
+			r.addResult(rr)
+		}
+
+		// make sure that none of the deps are childeren of r
+		allChildren := map[*item]struct{}{}
+		if err := r.walkChildren(func(i *item) error {
+			allChildren[i] = struct{}{}
+			return nil
+		}, map[*item]struct{}{}); err != nil {
+			return nil, false, errors.Wrapf(err, "failed to walk children of %s", dgst)
+		}
+		for i, dd := range deps {
+			for j, d := range dd {
+				if _, ok := allChildren[d.Src.(*item)]; ok {
+					deps[i][j].Src = nil
+				}
+			}
+		}
+		break
 	}
 	for i, dd := range deps {
 		for _, d := range dd {
