@@ -9,9 +9,10 @@ import (
 )
 
 type exporter struct {
-	k       *CacheKey
-	records []*CacheRecord
-	record  *CacheRecord
+	k             *CacheKey
+	records       []*CacheRecord
+	record        *CacheRecord
+	recordCtxOpts func(context.Context) context.Context
 
 	edge     *edge // for secondaryExporters
 	override *bool
@@ -139,6 +140,11 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 
 	var remote *Remote
 	var i int
+
+	if e.recordCtxOpts != nil {
+		ctx = e.recordCtxOpts(ctx)
+	}
+
 	for exportRecord && addRecord {
 		v := e.record
 		if v == nil {
