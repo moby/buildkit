@@ -2574,7 +2574,7 @@ func TestCacheMultipleMaps(t *testing.T) {
 	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
-	require.Equal(t, 3, len(expTarget.records))
+	require.Equal(t, 3, expTarget.numUniqueRecords())
 
 	j1, err := l.NewJob("j1")
 	require.NoError(t, err)
@@ -2609,7 +2609,7 @@ func TestCacheMultipleMaps(t *testing.T) {
 	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
-	require.Equal(t, 1, expTarget.numUniqueRecords())
+	require.Equal(t, 3, expTarget.numUniqueRecords())
 	require.Equal(t, false, called)
 
 	j2, err := l.NewJob("j2")
@@ -2644,7 +2644,7 @@ func TestCacheMultipleMaps(t *testing.T) {
 	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
-	require.Equal(t, 1, expTarget.numUniqueRecords())
+	require.Equal(t, 3, expTarget.numUniqueRecords())
 	require.Equal(t, true, called)
 }
 
@@ -2695,7 +2695,7 @@ func TestCacheInputMultipleMaps(t *testing.T) {
 	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
-	require.Equal(t, 3, len(expTarget.records))
+	require.Equal(t, 3, expTarget.numUniqueRecords())
 
 	require.NoError(t, j0.Discard())
 	j0 = nil

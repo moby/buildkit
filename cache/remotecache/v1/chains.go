@@ -73,8 +73,12 @@ func (c *CacheChains) Add(dgst digest.Digest, deps [][]solver.CacheLink, results
 		if len(dd) == 0 {
 			return nil, false, errors.Errorf("empty dependency for %s", dgst)
 		}
-		items := make([]*item, len(dd))
-		for i, d := range dd {
+		type itemWithSelector struct {
+			Src      *item
+			Selector string
+		}
+		items := make([]itemWithSelector, len(dd))
+		for ii, d := range dd {
 			it, ok := d.Src.(*item)
 			if !ok {
 				return nil, false, errors.Errorf("invalid dependency type %T for %s", d.Src, dgst)
@@ -82,13 +86,16 @@ func (c *CacheChains) Add(dgst digest.Digest, deps [][]solver.CacheLink, results
 			if it.cc != c {
 				return nil, false, errors.Errorf("dependency %s is not part of the same cache chain", it.dgst)
 			}
-			items[i] = it
+			items[ii] = itemWithSelector{
+				Src:      it,
+				Selector: d.Selector,
+			}
 		}
 		matchDeps[i] = func() map[*item]struct{} {
 			candidates := map[*item]struct{}{}
 			for _, it := range items {
-				maps.Copy(candidates, it.children[unique.Make(linkv2{
-					selector: dd[0].Selector,
+				maps.Copy(candidates, it.Src.children[unique.Make(linkv2{
+					selector: it.Selector,
 					index:    i,
 					digest:   dgst,
 				})])
