@@ -202,13 +202,13 @@ func marshalItem(ctx context.Context, it *item, state *marshalState) error {
 	}
 
 	if res := it.bestResult(); res != nil {
-		id := marshalRemote(ctx, it.results[0].Result, state)
+		id := marshalRemote(ctx, res.Result, state)
 		if id != "" {
 			idx, ok := state.chainsByID[id]
 			if !ok {
 				return errors.Errorf("parent chainid not found")
 			}
-			rec.Results = append(rec.Results, CacheResult{LayerIndex: idx, CreatedAt: it.results[0].CreatedAt})
+			rec.Results = append(rec.Results, CacheResult{LayerIndex: idx, CreatedAt: res.CreatedAt})
 		}
 	}
 
