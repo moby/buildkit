@@ -18,11 +18,13 @@ ARG AZURITE_VERSION=3.33.0
 ARG GOTESTSUM_VERSION=v1.9.0
 ARG DELVE_VERSION=v1.23.1
 
-ARG GO_VERSION=1.25
+ARG EXPORT_BASE=alpine
 ARG ALPINE_VERSION=3.22
+ARG UBUNTU_VERSION=24.04
+
+ARG GO_VERSION=1.25
 ARG XX_VERSION=1.7.0
 ARG BUILDKIT_DEBUG
-ARG EXPORT_BASE=alpine
 
 # minio for s3 integration tests
 FROM quay.io/minio/minio:${MINIO_VERSION} AS minio
@@ -208,7 +210,7 @@ RUN apk add --no-cache fuse3 git openssh openssl pigz xz iptables ip6tables \
 COPY --link examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 VOLUME /var/lib/buildkit
 
-FROM ubuntu:24.04 AS buildkit-export-ubuntu
+FROM ubuntu:${UBUNTU_VERSION} AS buildkit-export-ubuntu
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     fuse3 \
