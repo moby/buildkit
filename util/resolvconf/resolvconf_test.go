@@ -83,10 +83,15 @@ func TestRCModify(t *testing.T) {
 		overrideSearch  []string
 		overrideOptions []string
 		addOption       string
+		expContent      string
 	}{
 		{
 			name:    "No content no overrides",
 			inputNS: []string{},
+			expContent: `
+# Based on host file: ''
+# Overrides: [nameservers search options]
+`,
 		},
 		{
 			name:         "No overrides",
@@ -94,12 +99,24 @@ func TestRCModify(t *testing.T) {
 			inputNS:      []string{"1.2.3.4"},
 			inputSearch:  []string{"invalid"},
 			inputOptions: []string{"ndots:0"},
+			expContent: `nameserver 1.2.3.4
+search invalid
+options ndots:0
+
+# Based on host file: ''
+# Overrides: []
+# Option ndots from: host
+`,
 		},
 		{
 			name:         "Empty overrides",
 			inputNS:      []string{"1.2.3.4"},
 			inputSearch:  []string{"invalid"},
 			inputOptions: []string{"ndots:0"},
+			expContent: `
+# Based on host file: ''
+# Overrides: [nameservers search options]
+`,
 		},
 		{
 			name:            "Overrides",
@@ -109,6 +126,15 @@ func TestRCModify(t *testing.T) {
 			overrideNS:      []string{"2.3.4.5", "fdba:acdd:587c::53"},
 			overrideSearch:  []string{"com", "invalid", "example"},
 			overrideOptions: []string{"ndots:1", "edns0", "trust-ad"},
+			expContent: `nameserver 2.3.4.5
+nameserver fdba:acdd:587c::53
+search com invalid example
+options ndots:1 edns0 trust-ad
+
+# Based on host file: ''
+# Overrides: [nameservers search options]
+# Option ndots from: override
+`,
 		},
 		{
 			name:         "Add option no overrides",
@@ -117,6 +143,14 @@ func TestRCModify(t *testing.T) {
 			inputSearch:  []string{"invalid"},
 			inputOptions: []string{"ndots:0"},
 			addOption:    "attempts:3",
+			expContent: `nameserver 1.2.3.4
+search invalid
+options ndots:0 attempts:3
+
+# Based on host file: ''
+# Overrides: []
+# Option ndots from: host
+`,
 		},
 	}
 
@@ -160,7 +194,7 @@ func TestRCModify(t *testing.T) {
 
 			content, err := rc.Generate(true)
 			require.NoError(t, err)
-			assertGolden(t, t.Name()+".golden", string(content))
+			assert.Equal(t, string(tc.expContent), string(content))
 		})
 	}
 }
@@ -171,56 +205,123 @@ func TestRCTransformForLegacyNw(t *testing.T) {
 		input      string
 		ipv6       bool
 		overrideNS []string
+		expContent string
 	}{
 		{
 			name:  "Routable IPv4 only",
 			input: "nameserver 10.0.0.1",
+			expContent: `nameserver 10.0.0.1
+
+# Based on host file: '/etc/resolv.conf' (legacy)
+# Overrides: []
+`,
 		},
 		{
 			name:  "Routable IPv4 and IPv6, ipv6 enabled",
 			input: "nameserver 10.0.0.1\nnameserver fdb6:b8fe:b528::1",
 			ipv6:  true,
+			expContent: `nameserver 10.0.0.1
+nameserver fdb6:b8fe:b528::1
+
+# Based on host file: '/etc/resolv.conf' (legacy)
+# Overrides: []
+`,
 		},
 		{
 			name:  "Routable IPv4 and IPv6, ipv6 disabled",
 			input: "nameserver 10.0.0.1\nnameserver fdb6:b8fe:b528::1",
 			ipv6:  false,
+			expContent: `nameserver 10.0.0.1
+
+# Based on host file: '/etc/resolv.conf' (legacy)
+# Overrides: []
+`,
 		},
 		{
 			name:  "IPv4 localhost, ipv6 disabled",
 			input: "nameserver 127.0.0.53",
 			ipv6:  false,
+			expContent: `nameserver 8.8.8.8
+nameserver 8.8.4.4
+
+# Based on host file: '/etc/resolv.conf' (legacy)
+# Used default nameservers.
+# Overrides: []
+`,
 		},
 		{
 			name:  "IPv4 localhost, ipv6 enabled",
 			input: "nameserver 127.0.0.53",
 			ipv6:  true,
+			expContent: `nameserver 8.8.8.8
+nameserver 8.8.4.4
+nameserver 2001:4860:4860::8888
+nameserver 2001:4860:4860::8844
+
+# Based on host file: '/etc/resolv.conf' (legacy)
+# Used default nameservers.
+# Overrides: []
+`,
 		},
 		{
 			name:  "IPv4 and IPv6 localhost, ipv6 disabled",
 			input: "nameserver 127.0.0.53\nnameserver ::1",
 			ipv6:  false,
+			expContent: `nameserver 8.8.8.8
+nameserver 8.8.4.4
+
+# Based on host file: '/etc/resolv.conf' (legacy)
+# Used default nameservers.
+# Overrides: []
+`,
 		},
 		{
 			name:  "IPv4 and IPv6 localhost, ipv6 enabled",
 			input: "nameserver 127.0.0.53\nnameserver ::1",
 			ipv6:  true,
+			expContent: `nameserver 8.8.8.8
+nameserver 8.8.4.4
+nameserver 2001:4860:4860::8888
+nameserver 2001:4860:4860::8844
+
+# Based on host file: '/etc/resolv.conf' (legacy)
+# Used default nameservers.
+# Overrides: []
+`,
 		},
 		{
 			name:  "IPv4 localhost, IPv6 routeable, ipv6 enabled",
 			input: "nameserver 127.0.0.53\nnameserver fd3e:2d1a:1f5a::1",
 			ipv6:  true,
+			expContent: `nameserver fd3e:2d1a:1f5a::1
+
+# Based on host file: '/etc/resolv.conf' (legacy)
+# Overrides: []
+`,
 		},
 		{
 			name:  "IPv4 localhost, IPv6 routeable, ipv6 disabled",
 			input: "nameserver 127.0.0.53\nnameserver fd3e:2d1a:1f5a::1",
 			ipv6:  false,
+			expContent: `nameserver 8.8.8.8
+nameserver 8.8.4.4
+
+# Based on host file: '/etc/resolv.conf' (legacy)
+# Used default nameservers.
+# Overrides: []
+`,
 		},
 		{
 			name:       "Override nameservers",
 			input:      "nameserver 127.0.0.53",
 			overrideNS: []string{"127.0.0.1", "::1"},
 			ipv6:       false,
+			expContent: `nameserver 127.0.0.1
+nameserver ::1
+
+# Based on host file: '/etc/resolv.conf' (legacy)
+# Overrides: [nameservers]
+`,
 		},
 	}
 
@@ -237,7 +338,7 @@ func TestRCTransformForLegacyNw(t *testing.T) {
 
 			content, err := rc.Generate(true)
 			require.NoError(t, err)
-			assertGolden(t, t.Name()+".golden", string(content))
+			assert.Equal(t, string(tc.expContent), string(content))
 		})
 	}
 }
@@ -257,6 +358,7 @@ func TestRCTransformForIntNS(t *testing.T) {
 		overrideNS      []string
 		overrideOptions []string
 		reqdOptions     []string
+		expContent      string
 		expExtServers   []ExtDNSEntry
 		expErr          string
 	}{
@@ -264,6 +366,12 @@ func TestRCTransformForIntNS(t *testing.T) {
 			name:          "IPv4 only",
 			input:         "nameserver 10.0.0.1",
 			expExtServers: []ExtDNSEntry{mke("10.0.0.1", true)},
+			expContent: `nameserver 127.0.0.11
+
+# Based on host file: '/etc/resolv.conf' (internal resolver)
+# ExtServers: [host(10.0.0.1)]
+# Overrides: []
+`,
 		},
 		{
 			name:  "IPv4 and IPv6, ipv6 enabled",
@@ -272,11 +380,23 @@ func TestRCTransformForIntNS(t *testing.T) {
 				mke("10.0.0.1", true),
 				mke("fdb6:b8fe:b528::1", true),
 			},
+			expContent: `nameserver 127.0.0.11
+
+# Based on host file: '/etc/resolv.conf' (internal resolver)
+# ExtServers: [host(10.0.0.1) host(fdb6:b8fe:b528::1)]
+# Overrides: []
+`,
 		},
 		{
 			name:          "IPv4 localhost",
 			input:         "nameserver 127.0.0.53",
 			expExtServers: []ExtDNSEntry{mke("127.0.0.53", true)},
+			expContent: `nameserver 127.0.0.11
+
+# Based on host file: '/etc/resolv.conf' (internal resolver)
+# ExtServers: [host(127.0.0.53)]
+# Overrides: []
+`,
 		},
 		{
 			// Overriding the nameserver with a localhost address means use the container's
@@ -285,11 +405,23 @@ func TestRCTransformForIntNS(t *testing.T) {
 			input:         "nameserver 10.0.0.1",
 			overrideNS:    []string{"127.0.0.53"},
 			expExtServers: []ExtDNSEntry{mke("127.0.0.53", false)},
+			expContent: `nameserver 127.0.0.11
+
+# Based on host file: '/etc/resolv.conf' (internal resolver)
+# ExtServers: [127.0.0.53]
+# Overrides: [nameservers]
+`,
 		},
 		{
 			name:          "IPv6 only",
 			input:         "nameserver fd14:6e0e:f855::1",
 			expExtServers: []ExtDNSEntry{mke("fd14:6e0e:f855::1", true)},
+			expContent: `nameserver 127.0.0.11
+
+# Based on host file: '/etc/resolv.conf' (internal resolver)
+# ExtServers: [host(fd14:6e0e:f855::1)]
+# Overrides: []
+`,
 		},
 		{
 			name:  "IPv4 and IPv6 localhost",
@@ -298,18 +430,40 @@ func TestRCTransformForIntNS(t *testing.T) {
 				mke("127.0.0.53", true),
 				mke("::1", true),
 			},
+			expContent: `nameserver 127.0.0.11
+
+# Based on host file: '/etc/resolv.conf' (internal resolver)
+# ExtServers: [host(127.0.0.53) host(::1)]
+# Overrides: []
+`,
 		},
 		{
 			name:          "ndots present and required",
 			input:         "nameserver 127.0.0.53\noptions ndots:1",
 			reqdOptions:   []string{"ndots:0"},
 			expExtServers: []ExtDNSEntry{mke("127.0.0.53", true)},
+			expContent: `nameserver 127.0.0.11
+options ndots:1
+
+# Based on host file: '/etc/resolv.conf' (internal resolver)
+# ExtServers: [host(127.0.0.53)]
+# Overrides: []
+# Option ndots from: host
+`,
 		},
 		{
 			name:          "ndots missing but required",
 			input:         "nameserver 127.0.0.53",
 			reqdOptions:   []string{"ndots:0"},
 			expExtServers: []ExtDNSEntry{mke("127.0.0.53", true)},
+			expContent: `nameserver 127.0.0.11
+options ndots:0
+
+# Based on host file: '/etc/resolv.conf' (internal resolver)
+# ExtServers: [host(127.0.0.53)]
+# Overrides: []
+# Option ndots from: internal
+`,
 		},
 		{
 			name:            "ndots host, override and required",
@@ -317,16 +471,38 @@ func TestRCTransformForIntNS(t *testing.T) {
 			reqdOptions:     []string{"ndots:0"},
 			overrideOptions: []string{"ndots:2"},
 			expExtServers:   []ExtDNSEntry{mke("127.0.0.53", true)},
+			expContent: `nameserver 127.0.0.11
+options ndots:2
+
+# Based on host file: '/etc/resolv.conf' (internal resolver)
+# ExtServers: [host(127.0.0.53)]
+# Overrides: [options]
+# Option ndots from: override
+`,
 		},
 		{
 			name:          "Extra required options",
 			input:         "nameserver 127.0.0.53\noptions trust-ad",
 			reqdOptions:   []string{"ndots:0", "attempts:3", "edns0", "trust-ad"},
 			expExtServers: []ExtDNSEntry{mke("127.0.0.53", true)},
+			expContent: `nameserver 127.0.0.11
+options trust-ad ndots:0 attempts:3 edns0
+
+# Based on host file: '/etc/resolv.conf' (internal resolver)
+# ExtServers: [host(127.0.0.53)]
+# Overrides: []
+# Option ndots from: internal
+`,
 		},
 		{
 			name:  "No config",
 			input: "",
+			expContent: `nameserver 127.0.0.11
+
+# Based on host file: '/etc/resolv.conf' (internal resolver)
+# NO EXTERNAL NAMESERVERS DEFINED
+# Overrides: []
+`,
 		},
 	}
 
@@ -355,7 +531,7 @@ func TestRCTransformForIntNS(t *testing.T) {
 
 			content, err := rc.Generate(true)
 			require.NoError(t, err)
-			assertGolden(t, t.Name()+".golden", string(content))
+			assert.Equal(t, string(tc.expContent), string(content))
 			assert.Equal(t, tc.expExtServers, extNameServers)
 		})
 	}
@@ -447,7 +623,11 @@ func TestRCInvalidNS(t *testing.T) {
 
 	content, err := rc.Generate(true)
 	require.NoError(t, err)
-	assertGolden(t, t.Name()+".golden", string(content))
+	assert.Equal(t, `
+# Based on host file: ''
+# Invalid nameservers: [1.2.3.4.5]
+# Overrides: []
+`, string(content))
 }
 
 func TestRCSetHeader(t *testing.T) {
@@ -458,7 +638,13 @@ func TestRCSetHeader(t *testing.T) {
 
 	content, err := rc.Generate(true)
 	require.NoError(t, err)
-	assertGolden(t, t.Name()+".golden", string(content))
+	assert.Equal(t, `# This is a comment.
+
+nameserver 127.0.0.53
+
+# Based on host file: '/etc/resolv.conf'
+# Overrides: []
+`, string(content))
 }
 
 func TestRCUnknownDirectives(t *testing.T) {
@@ -473,7 +659,15 @@ unrecognised thing
 
 	content, err := rc.Generate(true)
 	require.NoError(t, err)
-	assertGolden(t, t.Name()+".golden", string(content))
+	assert.Equal(t, `nameserver 127.0.0.53
+options ndots:1
+something unexpected
+unrecognised thing
+
+# Based on host file: '/etc/resolv.conf'
+# Overrides: []
+# Option ndots from: host
+`, string(content))
 }
 
 func BenchmarkGenerate(b *testing.B) {
@@ -508,5 +702,15 @@ func BenchmarkGenerate(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+func sliceutilMapper[In, Out any](fn func(In) Out) func([]In) []Out {
+	return func(s []In) []Out {
+		res := make([]Out, len(s))
+		for i, v := range s {
+			res[i] = fn(v)
+		}
+		return res
 	}
 }
