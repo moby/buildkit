@@ -34,6 +34,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/disk"
+	"github.com/moby/buildkit/util/estargz"
 	"github.com/moby/buildkit/util/network/cniprovider"
 	"github.com/moby/buildkit/util/network/netproviders"
 	"github.com/moby/buildkit/util/resolver"
@@ -470,22 +471,6 @@ func validOCIBinary() bool {
 	return true
 }
 
-const (
-	// targetRefLabel is a label which contains image reference.
-	targetRefLabel = "containerd.io/snapshot/remote/stargz.reference"
-
-	// targetDigestLabel is a label which contains layer digest.
-	targetDigestLabel = "containerd.io/snapshot/remote/stargz.digest"
-
-	// targetImageLayersLabel is a label which contains layer digests contained in
-	// the target image.
-	targetImageLayersLabel = "containerd.io/snapshot/remote/stargz.layers"
-
-	// targetSessionLabel is a labeld which contains session IDs usable for
-	// authenticating the target snapshot.
-	targetSessionLabel = "containerd.io/snapshot/remote/stargz.session"
-)
-
 // sourceWithSession returns a callback which implements a converter from labels to the
 // typed snapshot source info. This callback is called everytime the snapshotter resolves a
 // snapshot. This callback returns configuration that is based on buildkitd's registry config
@@ -496,7 +481,7 @@ func sourceWithSession(hosts docker.RegistryHosts, sm *session.Manager) sgzsourc
 		// to the snapshotter API. So, first, get all these IDs
 		var ids []string
 		for k := range labels {
-			if after, ok := strings.CutPrefix(k, targetRefLabel+"."); ok {
+			if after, ok := strings.CutPrefix(k, estargz.TargetRefLabel+"."); ok {
 				ids = append(ids, after)
 			}
 		}
@@ -504,7 +489,7 @@ func sourceWithSession(hosts docker.RegistryHosts, sm *session.Manager) sgzsourc
 		// Parse all labels
 		for _, id := range ids {
 			// Parse session labels
-			ref, ok := labels[targetRefLabel+"."+id]
+			ref, ok := labels[estargz.TargetRefLabel+"."+id]
 			if !ok {
 				continue
 			}
@@ -514,7 +499,7 @@ func sourceWithSession(hosts docker.RegistryHosts, sm *session.Manager) sgzsourc
 			}
 			var sids []string
 			for i := 0; ; i++ {
-				sidKey := targetSessionLabel + "." + fmt.Sprintf("%d", i) + "." + id
+				sidKey := estargz.TargetSessionLabel + "." + fmt.Sprintf("%d", i) + "." + id
 				sid, ok := labels[sidKey]
 				if !ok {
 					break
@@ -529,9 +514,9 @@ func sourceWithSession(hosts docker.RegistryHosts, sm *session.Manager) sgzsourc
 					HostsFunc(ref.Hostname())
 			})
 			if s, err := parse(map[string]string{
-				targetRefLabel:         ref,
-				targetDigestLabel:      labels[targetDigestLabel+"."+id],
-				targetImageLayersLabel: labels[targetImageLayersLabel+"."+id],
+				estargz.TargetRefLabel:         ref,
+				estargz.TargetDigestLabel:      labels[estargz.TargetDigestLabel+"."+id],
+				estargz.TargetImageLayersLabel: labels[estargz.TargetImageLayersLabel+"."+id],
 			}); err == nil {
 				src = append(src, s...)
 			}
