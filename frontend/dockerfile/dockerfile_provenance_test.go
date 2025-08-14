@@ -43,28 +43,26 @@ import (
 	"github.com/tonistiigi/fsutil"
 )
 
-var provenanceTests = integration.TestFuncs(
-	testProvenanceAttestation,
-	testGitProvenanceAttestation,
-	testMultiPlatformProvenance,
-	testClientFrontendProvenance,
-	testClientLLBProvenance,
-	testSecretSSHProvenance,
-	testOCILayoutProvenance,
-	testNilProvenance,
-	testDuplicatePlatformProvenance,
-	testDockerIgnoreMissingProvenance,
-	testCommandSourceMapping,
-	testFrontendDeduplicateSources,
-	testDuplicateLayersProvenance,
-	testProvenanceExportLocal,
-	testProvenanceExportLocalForceSplit,
-	testProvenanceExportLocalMultiPlatform,
-	testProvenanceExportLocalMultiPlatformNoSplit,
-)
-
 func init() {
-	allTests = append(allTests, provenanceTests...)
+	allTests = append(allTests, integration.TestFuncs(
+		testProvenanceAttestation,
+		testGitProvenanceAttestation,
+		testMultiPlatformProvenance,
+		testClientFrontendProvenance,
+		testClientLLBProvenance,
+		testSecretSSHProvenance,
+		testOCILayoutProvenance,
+		testNilProvenance,
+		testDuplicatePlatformProvenance,
+		testDockerIgnoreMissingProvenance,
+		testCommandSourceMapping,
+		testFrontendDeduplicateSources,
+		testDuplicateLayersProvenance,
+		testProvenanceExportLocal,
+		testProvenanceExportLocalForceSplit,
+		testProvenanceExportLocalMultiPlatform,
+		testProvenanceExportLocalMultiPlatformNoSplit,
+	)...)
 }
 
 func testProvenanceAttestation(t *testing.T, sb integration.Sandbox) {

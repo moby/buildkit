@@ -19,10 +19,12 @@ import (
 	"github.com/tonistiigi/fsutil"
 )
 
-var targetsTests = integration.TestFuncs(
-	testTargetsList,
-	testTargetsDescribeDefinition,
-)
+func init() {
+	allTests = append(allTests, integration.TestFuncs(
+		testTargetsList,
+		testTargetsDescribeDefinition,
+	)...)
+}
 
 func testTargetsList(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")

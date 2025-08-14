@@ -15,12 +15,10 @@ import (
 	"github.com/tonistiigi/fsutil"
 )
 
-var addChecksumTests = integration.TestFuncs(
-	testAddChecksum,
-)
-
 func init() {
-	allTests = append(allTests, addChecksumTests...)
+	allTests = append(allTests, integration.TestFuncs(
+		testAddChecksum,
+	)...)
 }
 
 func testAddChecksum(t *testing.T, sb integration.Sandbox) {
