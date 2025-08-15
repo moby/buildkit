@@ -7,15 +7,16 @@ import (
 	"strings"
 
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
-	"github.com/moby/buildkit/frontend/dockerfile/shell"
+	"github.com/moby/buildkit/frontend/dockerfile/linter"
+	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/pkg/errors"
 )
 
-func dispatchExpose(d *dispatchState, c *instructions.ExposeCommand, shlex *shell.Lex) error {
+func dispatchExpose(d *dispatchState, c *instructions.ExposeCommand, opt *dispatchOpt) error {
 	ports := []string{}
 	env := getEnv(d.state)
 	for _, p := range c.Ports {
-		ps, err := shlex.ProcessWords(p, env)
+		ps, err := opt.shlex.ProcessWords(p, env)
 		if err != nil {
 			return err
 		}
@@ -23,7 +24,12 @@ func dispatchExpose(d *dispatchState, c *instructions.ExposeCommand, shlex *shel
 	}
 	c.Ports = ports
 
-	ps, err := parsePortSpecs(c.Ports)
+	ps := newPortSpecs(
+		withLocation(c.Location()),
+		withLint(opt.lint),
+	)
+
+	psp, err := ps.parsePorts(c.Ports)
 	if err != nil {
 		return err
 	}
@@ -31,18 +37,45 @@ func dispatchExpose(d *dispatchState, c *instructions.ExposeCommand, shlex *shel
 	if d.image.Config.ExposedPorts == nil {
 		d.image.Config.ExposedPorts = make(map[string]struct{})
 	}
-	for _, p := range ps {
+	for _, p := range psp {
 		d.image.Config.ExposedPorts[p] = struct{}{}
 	}
 
 	return commitToHistory(&d.image, fmt.Sprintf("EXPOSE %v", ps), false, nil, d.epoch)
 }
 
-// parsePortSpecs receives port specs in the format of [ip:]public:private/proto
+type portSpecs struct {
+	location []parser.Range
+	lint     *linter.Linter
+}
+
+type portSpecsOption func(ps *portSpecs)
+
+func withLocation(location []parser.Range) portSpecsOption {
+	return func(ps *portSpecs) {
+		ps.location = location
+	}
+}
+
+func withLint(lint *linter.Linter) portSpecsOption {
+	return func(ps *portSpecs) {
+		ps.lint = lint
+	}
+}
+
+func newPortSpecs(opts ...portSpecsOption) *portSpecs {
+	ps := &portSpecs{}
+	for _, opt := range opts {
+		opt(ps)
+	}
+	return ps
+}
+
+// parsePorts receives port specs in the format of [ip:]public:private/proto
 // and returns them as a list of "port/proto".
-func parsePortSpecs(ports []string) (exposedPorts []string, _ error) {
+func (ps *portSpecs) parsePorts(ports []string) (exposedPorts []string, _ error) {
 	for _, p := range ports {
-		portProtos, err := parsePortSpec(p)
+		portProtos, err := ps.parsePort(p)
 		if err != nil {
 			return nil, err
 		}
@@ -51,48 +84,22 @@ func parsePortSpecs(ports []string) (exposedPorts []string, _ error) {
 	return exposedPorts, nil
 }
 
-// splitProtoPort splits a port(range) and protocol, formatted as "<portnum>/[<proto>]"
-// "<startport-endport>/[<proto>]". It returns an error if no port(range) or
-// an invalid proto is provided. If no protocol is provided, the default ("tcp")
-// protocol is returned.
-func splitProtoPort(rawPort string) (proto string, port string, _ error) {
-	port, proto, _ = strings.Cut(rawPort, "/")
-	if port == "" {
-		return "", "", errors.New("no port specified")
-	}
-	proto = strings.ToLower(proto)
-	switch proto {
-	case "":
-		return "tcp", port, nil
-	case "tcp", "udp", "sctp":
-		return proto, port, nil
-	default:
-		return "", "", errors.New("invalid proto: " + proto)
-	}
-}
-
-func splitParts(rawport string) (hostIP, hostPort, containerPort string) {
-	parts := strings.Split(rawport, ":")
-
-	switch len(parts) {
-	case 1:
-		return "", "", parts[0]
-	case 2:
-		return "", parts[0], parts[1]
-	case 3:
-		return parts[0], parts[1], parts[2]
-	default:
-		n := len(parts)
-		return strings.Join(parts[:n-2], ":"), parts[n-2], parts[n-1]
-	}
-}
-
-// parsePortSpec parses a port specification string into a slice of "<portnum>/[<proto>]"
-func parsePortSpec(rawPort string) (portProto []string, _ error) {
-	ip, hostPort, containerPort := splitParts(rawPort)
-	proto, containerPort, err := splitProtoPort(containerPort)
+// parsePort parses a port specification string into a slice of "<portnum>/[<proto>]"
+func (ps *portSpecs) parsePort(rawPort string) (portProto []string, _ error) {
+	ip, hostPort, containerPort := ps.splitParts(rawPort)
+	proto, containerPort, err := ps.splitProtoPort(containerPort)
 	if err != nil {
 		return nil, errors.Wrapf(err, "invalid port: %q", rawPort)
+	}
+	if ps.lint != nil {
+		if proto != strings.ToLower(proto) {
+			msg := linter.RuleExposeProtoCasing.Format(rawPort)
+			ps.lint.Run(&linter.RuleExposeProtoCasing, ps.location, msg)
+		}
+		if ip != "" || hostPort != "" {
+			msg := linter.RuleExposeInvalidFormat.Format(rawPort)
+			ps.lint.Run(&linter.RuleExposeInvalidFormat, ps.location, msg)
+		}
 	}
 
 	// TODO(thaJeztah): mapping IP-addresses should not be allowed for EXPOSE; see https://github.com/moby/buildkit/issues/2173
@@ -108,14 +115,14 @@ func parsePortSpec(rawPort string) (portProto []string, _ error) {
 		return nil, errors.New("invalid IP address: " + ip)
 	}
 
-	startPort, endPort, err := parsePortRange(containerPort)
+	startPort, endPort, err := ps.parsePortRange(containerPort)
 	if err != nil {
 		return nil, errors.New("invalid containerPort: " + containerPort)
 	}
 
 	// TODO(thaJeztah): mapping host-ports should not be allowed for EXPOSE; see https://github.com/moby/buildkit/issues/2173
 	if hostPort != "" {
-		startHostPort, endHostPort, err := parsePortRange(hostPort)
+		startHostPort, endHostPort, err := ps.parsePortRange(hostPort)
 		if err != nil {
 			return nil, errors.New("invalid hostPort: " + hostPort)
 		}
@@ -133,19 +140,19 @@ func parsePortSpec(rawPort string) (portProto []string, _ error) {
 	ports := make([]string, 0, count)
 
 	for i := range count {
-		ports = append(ports, strconv.Itoa(startPort+i)+"/"+proto)
+		ports = append(ports, strconv.Itoa(startPort+i)+"/"+strings.ToLower(proto))
 	}
 	return ports, nil
 }
 
 // parsePortRange parses and validates the specified string as a port range (e.g., "8000-9000").
-func parsePortRange(ports string) (startPort, endPort int, _ error) {
+func (ps *portSpecs) parsePortRange(ports string) (startPort, endPort int, _ error) {
 	if ports == "" {
 		return 0, 0, errors.New("empty string specified for ports")
 	}
 	start, end, ok := strings.Cut(ports, "-")
 
-	startPort, err := parsePortNumber(start)
+	startPort, err := ps.parsePortNumber(start)
 	if err != nil {
 		return 0, 0, errors.Wrapf(err, "invalid start port '%s'", start)
 	}
@@ -153,7 +160,7 @@ func parsePortRange(ports string) (startPort, endPort int, _ error) {
 		return startPort, startPort, nil
 	}
 
-	endPort, err = parsePortNumber(end)
+	endPort, err = ps.parsePortNumber(end)
 	if err != nil {
 		return 0, 0, errors.Wrapf(err, "invalid end port '%s'", end)
 	}
@@ -165,7 +172,7 @@ func parsePortRange(ports string) (startPort, endPort int, _ error) {
 
 // parsePortNumber parses rawPort into an int, unwrapping strconv errors
 // and returning a single "out of range" error for any value outside 0–65535.
-func parsePortNumber(rawPort string) (int, error) {
+func (ps *portSpecs) parsePortNumber(rawPort string) (int, error) {
 	if rawPort == "" {
 		return 0, errors.New("value is empty")
 	}
@@ -182,4 +189,39 @@ func parsePortNumber(rawPort string) (int, error) {
 	}
 
 	return int(port), nil
+}
+
+// splitProtoPort splits a port(range) and protocol, formatted as "<portnum>/[<proto>]"
+// "<startport-endport>/[<proto>]". It returns an error if no port(range) or
+// an invalid proto is provided. If no protocol is provided, the default ("tcp")
+// protocol is returned.
+func (ps *portSpecs) splitProtoPort(rawPort string) (proto string, port string, _ error) {
+	port, proto, _ = strings.Cut(rawPort, "/")
+	if port == "" {
+		return "", "", errors.New("no port specified")
+	}
+	switch strings.ToLower(proto) {
+	case "":
+		return "tcp", port, nil
+	case "tcp", "udp", "sctp":
+		return proto, port, nil
+	default:
+		return "", "", errors.New("invalid proto: " + proto)
+	}
+}
+
+func (ps *portSpecs) splitParts(rawport string) (hostIP, hostPort, containerPort string) {
+	parts := strings.Split(rawport, ":")
+
+	switch len(parts) {
+	case 1:
+		return "", "", parts[0]
+	case 2:
+		return "", parts[0], parts[1]
+	case 3:
+		return parts[0], parts[1], parts[2]
+	default:
+		n := len(parts)
+		return strings.Join(parts[:n-2], ":"), parts[n-2], parts[n-1]
+	}
 }
