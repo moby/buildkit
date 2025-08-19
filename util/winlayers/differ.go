@@ -240,7 +240,7 @@ func makeWindowsLayer(ctx context.Context, w io.Writer) (io.Writer, func(error),
 					return err
 				}
 				h.Name = "Files/" + h.Name
-				if h.Linkname != "" {
+				if h.Linkname != "" && h.Typeflag != tar.TypeSymlink {
 					h.Linkname = "Files/" + h.Linkname
 				}
 				prepareWinHeader(h)
