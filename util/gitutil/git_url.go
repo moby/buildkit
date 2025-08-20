@@ -30,6 +30,22 @@ var supportedProtos = map[string]struct{}{
 
 var protoRegexp = regexp.MustCompile(`^[a-zA-Z0-9]+://`)
 
+// GitURLBase is a simplified representation of GitURL.
+type GitURLBase struct {
+	// Scheme is the protocol over which the git repo can be accessed
+	Scheme string
+
+	// Host is the remote host that hosts the git repo
+	Host string
+
+	// Path is the path on the host to access the repo
+	Path string
+
+	// Remote is a valid URL remote to pass into the Git CLI tooling (i.e.
+	// without the fragment metadata)
+	Remote string
+}
+
 // URL is a custom URL type that points to a remote Git repository.
 //
 // URLs can be parsed from both standard URLs (e.g.
@@ -38,21 +54,11 @@ var protoRegexp = regexp.MustCompile(`^[a-zA-Z0-9]+://`)
 //
 // See https://git-scm.com/book/en/v2/Git-on-the-Server-The-Protocols
 type GitURL struct {
-	// Scheme is the protocol over which the git repo can be accessed
-	Scheme string
-
-	// Host is the remote host that hosts the git repo
-	Host string
-	// Path is the path on the host to access the repo
-	Path string
+	GitURLBase
 	// User is the username/password to access the host
 	User *url.Userinfo
 	// Opts can contain additional metadata
 	Opts *GitURLOpts
-
-	// Remote is a valid URL remote to pass into the Git CLI tooling (i.e.
-	// without the fragment metadata)
-	Remote string
 }
 
 // GitURLOpts is the buildkit-specific metadata extracted from the fragment
@@ -159,6 +165,18 @@ func ParseURL(remote string) (*GitURL, error) {
 	return nil, ErrUnknownProtocol
 }
 
+// ParseURLBasic is a simplified version of ParseURL that only returns the basic components.
+// When hasOpts is true, there are optional information in the URL fragment or query.
+// Those optional information are omitted in this function. Use [ParseURL] to obtain them.
+func ParseURLBasic(remote string) (parsedBasic *GitURLBase, hasOpts bool, err error) {
+	parsed, err := ParseURL(remote)
+	if parsed != nil {
+		parsedBasic = &parsed.GitURLBase
+		hasOpts = parsed.Opts != nil
+	}
+	return
+}
+
 func IsGitTransport(remote string) bool {
 	if proto := protoRegexp.FindString(remote); proto != "" {
 		proto = strings.ToLower(strings.TrimSuffix(proto, "://"))
@@ -179,12 +197,14 @@ func FromURL(url *url.URL) (*GitURL, error) {
 		}
 	}
 	return &GitURL{
-		Scheme: url.Scheme,
-		User:   url.User,
-		Host:   url.Host,
-		Path:   url.Path,
-		Opts:   opts,
-		Remote: withoutOpts.String(),
+		GitURLBase: GitURLBase{
+			Scheme: url.Scheme,
+			Host:   url.Host,
+			Path:   url.Path,
+			Remote: withoutOpts.String(),
+		},
+		User: url.User,
+		Opts: opts,
 	}, nil
 }
 
@@ -200,11 +220,13 @@ func fromSCPStyleURL(url *sshutil.SCPStyleURL) (*GitURL, error) {
 		}
 	}
 	return &GitURL{
-		Scheme: SSHProtocol,
-		User:   url.User,
-		Host:   url.Host,
-		Path:   url.Path,
-		Opts:   opts,
-		Remote: withoutOpts.String(),
+		GitURLBase: GitURLBase{
+			Scheme: SSHProtocol,
+			Host:   url.Host,
+			Path:   url.Path,
+			Remote: withoutOpts.String(),
+		},
+		User: url.User,
+		Opts: opts,
 	}, nil
 }
