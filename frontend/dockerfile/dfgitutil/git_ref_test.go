@@ -156,7 +156,7 @@ func TestParseGitRef(t *testing.T) {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				require.Equal(t, tt.expected, got)
+				require.EqualExportedValues(t, tt.expected, got)
 			}
 		})
 	}

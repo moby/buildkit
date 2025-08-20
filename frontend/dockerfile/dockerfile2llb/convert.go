@@ -1526,7 +1526,13 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 			if gitRef.SubDir != "" {
 				commit += ":" + gitRef.SubDir
 			}
-			gitOptions := []llb.GitOption{llb.WithCustomName(pgName), llb.GitChecksum(gitRef.Checksum)}
+			gu := gitRef.GitURL()
+			fullURL := src
+			if gu.Remote != "" {
+				fullURL = gu.Remote
+			}
+			gitOptions := []llb.GitOption{llb.WithCustomName(pgName), llb.GitChecksum(gitRef.Checksum),
+				llb.GitIDSuffix(commit), llb.GitFullURL(fullURL)}
 			if cfg.keepGitDir {
 				gitOptions = append(gitOptions, llb.KeepGitDir())
 			}
@@ -1536,7 +1542,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 				}
 				gitOptions = append(gitOptions, llb.GitChecksum(cfg.checksum))
 			}
-			st := llb.Git(gitRef.Remote, commit, gitOptions...)
+			st := llb.Git2(gitRef.GitURL().GitURLBase, gitOptions...)
 			opts := append([]llb.CopyOption{&llb.CopyInfo{
 				Mode:           chopt,
 				CreateDestPath: true,

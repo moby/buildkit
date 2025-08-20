@@ -149,12 +149,17 @@ func DetectGitContext(ref string, keepGit bool) (*llb.State, bool) {
 	if g.SubDir != "" {
 		commit += ":" + g.SubDir
 	}
-	gitOpts := []llb.GitOption{WithInternalName("load git source " + ref), llb.GitChecksum(g.Checksum)}
+	gu := g.GitURL()
+	fullURL := ref
+	if gu.Remote != "" {
+		fullURL = gu.Remote
+	}
+	gitOpts := []llb.GitOption{WithInternalName("load git source " + ref), llb.GitChecksum(g.Checksum),
+		llb.GitIDSuffix(commit), llb.GitFullURL(fullURL)}
 	if keepGit {
 		gitOpts = append(gitOpts, llb.KeepGitDir())
 	}
-
-	st := llb.Git(g.Remote, commit, gitOpts...)
+	st := llb.Git2(gu.GitURLBase, gitOpts...)
 	return &st, true
 }
 

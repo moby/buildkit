@@ -249,7 +249,10 @@ const (
 //
 // By default the git repository is cloned with `--depth=1` to reduce the amount of data downloaded.
 // Additionally the ".git" directory is removed after the clone, you can keep ith with the [KeepGitDir] [GitOption].
+//
+// Git is planned to be deprecated. Use [Git2] instead whenever possible.
 func Git(url, ref string, opts ...GitOption) State {
+	// The logic is complicated for compatibility reason.
 	remote, err := gitutil.ParseURL(url)
 	if errors.Is(err, gitutil.ErrUnknownProtocol) {
 		url = "https://" + url
@@ -257,23 +260,34 @@ func Git(url, ref string, opts ...GitOption) State {
 	}
 	if remote != nil {
 		url = remote.Remote
+		if remote.Opts != nil {
+			opts = append(opts, GitChecksum(remote.Opts.Checksum))
+		}
+	}
+	if url != "" {
+		opts = append(opts, GitFullURL(url))
 	}
 
-	var id string
 	if err != nil {
 		// If we can't parse the URL, just use the full URL as the ID. The git
 		// operation will fail later on.
-		id = url
-	} else {
-		// We construct the ID manually here, so that we can create the same ID
-		// for different protocols (e.g. https and ssh) that have the same
-		// host/path/fragment combination.
-		id = remote.Host + path.Join("/", remote.Path)
-		if ref != "" {
-			id += "#" + ref
-		}
+		return git(url, nil, opts...)
 	}
 
+	opts = append(opts, GitIDSuffix(ref))
+	return Git2(remote.GitURLBase, opts...)
+}
+
+// Git2 is similar to Git but takes [gitutil.GitURLBase] as the argument.
+func Git2(remote gitutil.GitURLBase, opts ...GitOption) State {
+	// We construct the ID manually here, so that we can create the same ID
+	// for different protocols (e.g. https and ssh) that have the same
+	// host/path/fragment combination.
+	id := remote.Host + path.Join("/", remote.Path)
+	return git(id, &remote, opts...)
+}
+
+func git(id string, remote *gitutil.GitURLBase, opts ...GitOption) State {
 	gi := &GitInfo{
 		AuthHeaderSecret: GitAuthHeaderKey,
 		AuthTokenSecret:  GitAuthTokenKey,
@@ -281,13 +295,16 @@ func Git(url, ref string, opts ...GitOption) State {
 	for _, o := range opts {
 		o.SetGitOption(gi)
 	}
+	if gi.IDSuffix != "" {
+		id += "#" + gi.IDSuffix
+	}
 	attrs := map[string]string{}
 	if gi.KeepGitDir {
 		attrs[pb.AttrKeepGitDir] = "true"
 		addCap(&gi.Constraints, pb.CapSourceGitKeepDir)
 	}
-	if url != "" {
-		attrs[pb.AttrFullRemoteURL] = url
+	if gi.FullURL != "" {
+		attrs[pb.AttrFullRemoteURL] = gi.FullURL
 		addCap(&gi.Constraints, pb.CapSourceGitFullURL)
 	}
 	if gi.AuthTokenSecret != "" {
@@ -323,9 +340,6 @@ func Git(url, ref string, opts ...GitOption) State {
 	}
 
 	checksum := gi.Checksum
-	if checksum == "" && remote != nil && remote.Opts != nil {
-		checksum = remote.Opts.Checksum
-	}
 	if checksum != "" {
 		attrs[pb.AttrGitChecksum] = checksum
 		addCap(&gi.Constraints, pb.CapSourceGitChecksum)
@@ -355,6 +369,8 @@ type GitInfo struct {
 	KnownSSHHosts    string
 	MountSSHSock     string
 	Checksum         string
+	FullURL          string
+	IDSuffix         string // Appended after '#'. Exists only for sake of compatibility.
 }
 
 func KeepGitDir() GitOption {
@@ -386,6 +402,18 @@ func MountSSHSock(sshID string) GitOption {
 func GitChecksum(v string) GitOption {
 	return gitOptionFunc(func(gi *GitInfo) {
 		gi.Checksum = v
+	})
+}
+
+func GitFullURL(v string) GitOption {
+	return gitOptionFunc(func(gi *GitInfo) {
+		gi.FullURL = v
+	})
+}
+
+func GitIDSuffix(v string) GitOption {
+	return gitOptionFunc(func(gi *GitInfo) {
+		gi.IDSuffix = v
 	})
 }
 

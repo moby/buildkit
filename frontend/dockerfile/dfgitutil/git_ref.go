@@ -50,6 +50,12 @@ type GitRef struct {
 	// Discouraged, although not deprecated.
 	// Instead, consider using an encrypted TCP connection such as "git@github.com/foo/bar.git" or "https://github.com/foo/bar.git".
 	UnencryptedTCP bool
+
+	gitURL *gitutil.GitURL
+}
+
+func (r *GitRef) GitURL() *gitutil.GitURL {
+	return r.gitURL
 }
 
 // var gitURLPathWithFragmentSuffix = regexp.MustCompile(`\.git(?:#.+)?$`)
@@ -108,6 +114,7 @@ func ParseGitRef(ref string) (*GitRef, error) {
 
 	repoSplitBySlash := strings.Split(res.Remote, "/")
 	res.ShortName = strings.TrimSuffix(repoSplitBySlash[len(repoSplitBySlash)-1], ".git")
+	res.gitURL = remote
 
 	return res, nil
 }
