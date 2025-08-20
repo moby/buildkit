@@ -406,7 +406,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	for _, d := range allDispatchStates.states {
 		d.commands = make([]command, len(d.stage.Commands))
 		for i, cmd := range d.stage.Commands {
-			newCmd, err := toCommand(cmd, allDispatchStates)
+			newCmd, err := toCommand(cmd, allDispatchStates, shlex)
 			if err != nil {
 				return nil, err
 			}
@@ -628,7 +628,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			}
 
 			if len(onbuilds) > 0 {
-				if b, err := initOnBuildTriggers(d, onbuilds, allDispatchStates); err != nil {
+				if b, err := initOnBuildTriggers(d, onbuilds, allDispatchStates, shlex); err != nil {
 					return nil, parser.SetLocation(err, d.stage.Location)
 				} else if b {
 					newDeps = true
@@ -815,10 +815,17 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	return target, nil
 }
 
-func toCommand(ic instructions.Command, allDispatchStates *dispatchStates) (command, error) {
+func toCommand(ic instructions.Command, allDispatchStates *dispatchStates, shlex *shell.Lex) (command, error) {
 	cmd := command{Command: ic}
 	if c, ok := ic.(*instructions.CopyCommand); ok {
 		if c.From != "" {
+			res, err := shlex.ProcessWordWithMatches(c.From, shell.EnvsFromSlice(nil))
+			if err != nil {
+				return command{}, err
+			}
+			if res.Result != c.From {
+				return command{}, errors.Errorf("variable expansion is not supported for --from, define a new stage with FROM using ARG from global scope as a workaround")
+			}
 			var stn *dispatchState
 			index, err := strconv.Atoi(c.From)
 			if err != nil {
@@ -1148,7 +1155,7 @@ type command struct {
 
 // initOnBuildTriggers initializes the onbuild triggers and creates the commands and dependecies for them.
 // It returns true if there were any new dependencies added that need to be resolved.
-func initOnBuildTriggers(d *dispatchState, triggers []string, allDispatchStates *dispatchStates) (bool, error) {
+func initOnBuildTriggers(d *dispatchState, triggers []string, allDispatchStates *dispatchStates, shlex *shell.Lex) (bool, error) {
 	hasNewDeps := false
 	commands := make([]command, 0, len(triggers))
 
@@ -1167,7 +1174,7 @@ func initOnBuildTriggers(d *dispatchState, triggers []string, allDispatchStates 
 		if err != nil {
 			return false, err
 		}
-		cmd, err := toCommand(ic, allDispatchStates)
+		cmd, err := toCommand(ic, allDispatchStates, shlex)
 		if err != nil {
 			return false, err
 		}

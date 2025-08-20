@@ -84,6 +84,7 @@ var allTests = integration.TestFuncs(
 	testDockerfileADDFromURL,
 	testDockerfileAddArchive,
 	testDockerfileAddChownArchive,
+	testDockerfileCopyFromArgs,
 	testDockerfileScratchConfig,
 	testExportedHistory,
 	testExportedHistoryFlattenArgs,
@@ -3563,6 +3564,34 @@ COPY foo /symlink/
 	dt, err := os.ReadFile(filepath.Join(destDir, "tmp/symlink-target/foo"))
 	require.NoError(t, err)
 	require.Equal(t, expectedContent, dt)
+}
+
+func testDockerfileCopyFromArgs(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM scratch
+COPY --from=$FOO . .
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "variable expansion is not supported for --from, define a new stage with FROM using ARG from global scope as a workaround")
 }
 
 func testDockerfileScratchConfig(t *testing.T, sb integration.Sandbox) {
