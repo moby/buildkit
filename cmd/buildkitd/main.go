@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	stderrors "errors"
 	"fmt"
 	"net"
 	"os"
@@ -20,7 +21,6 @@ import (
 	"github.com/containerd/platforms"
 	sddaemon "github.com/coreos/go-systemd/v22/daemon"
 	"github.com/gofrs/flock"
-	"github.com/hashicorp/go-multierror"
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/cache/remotecache/azblob"
 	"github.com/moby/buildkit/cache/remotecache/gha"
@@ -415,12 +415,13 @@ func main() {
 	}
 
 	app.After = func(_ *cli.Context) (err error) {
+		var errs []error
 		for _, c := range closers {
 			if e := c(context.TODO()); e != nil {
-				err = multierror.Append(err, e)
+				errs = append(errs, e)
 			}
 		}
-		return err
+		return stderrors.Join(errs...)
 	}
 
 	profiler.Attach(app)
