@@ -59,6 +59,18 @@ const (
 	memoryCacheType                 = "memory"
 )
 
+// passThroughConfig contains configuration for FUSE passthrough mode
+type passThroughConfig struct {
+	// enable indicates whether to enable FUSE passthrough mode
+	enable bool
+
+	// mergeBufferSize is the size of the buffer to merge chunks (in bytes)
+	mergeBufferSize int64
+
+	// mergeWorkerCount is the number of workers to merge chunks
+	mergeWorkerCount int
+}
+
 // Layer represents a layer.
 type Layer interface {
 	// Info returns the information of this layer.
@@ -98,6 +110,10 @@ type Layer interface {
 	// Done releases the reference to this layer. The resources related to this layer will be
 	// discarded sooner or later. Queries after calling this function won't be serviced.
 	Done()
+
+	// Close is the same as Done. But this evicts the resources related to this Layer immediately.
+	// This can be used for cleaning up resources on unmount.
+	Close() error
 }
 
 // Info is the current status of a layer.
@@ -249,7 +265,7 @@ func (r *Resolver) Resolve(ctx context.Context, hosts source.RegistryHosts, refs
 			return &layerRef{l, done}, nil
 		}
 		// Cached layer is invalid
-		done()
+		done(true)
 		r.layerCacheMu.Lock()
 		r.layerCache.Remove(name)
 		r.layerCacheMu.Unlock()
@@ -264,7 +280,7 @@ func (r *Resolver) Resolve(ctx context.Context, hosts source.RegistryHosts, refs
 	}
 	defer func() {
 		if retErr != nil {
-			blobR.done()
+			blobR.done(true)
 		}
 	}()
 
@@ -315,7 +331,11 @@ func (r *Resolver) Resolve(ctx context.Context, hosts source.RegistryHosts, refs
 	}
 
 	// Combine layer information together and cache it.
-	l := newLayer(r, desc, blobR, vr)
+	l := newLayer(r, desc, blobR, vr, passThroughConfig{
+		enable:           r.config.PassThrough,
+		mergeBufferSize:  r.config.MergeBufferSize,
+		mergeWorkerCount: r.config.MergeWorkerCount,
+	})
 	r.layerCacheMu.Lock()
 	cachedL, done2, added := r.layerCache.Add(name, l)
 	r.layerCacheMu.Unlock()
@@ -340,7 +360,7 @@ func (r *Resolver) resolveBlob(ctx context.Context, hosts source.RegistryHosts, 
 			return &blobRef{blob, done}, nil
 		}
 		// invalid blob. discard this.
-		done()
+		done(true)
 		r.blobCacheMu.Lock()
 		r.blobCache.Remove(name)
 		r.blobCacheMu.Unlock()
@@ -375,6 +395,7 @@ func newLayer(
 	desc ocispec.Descriptor,
 	blob *blobRef,
 	vr *reader.VerifiableReader,
+	pth passThroughConfig,
 ) *layer {
 	return &layer{
 		resolver:         resolver,
@@ -382,6 +403,7 @@ func newLayer(
 		blob:             blob,
 		verifiableReader: vr,
 		prefetchWaiter:   newWaiter(),
+		passThrough:      pth,
 	}
 }
 
@@ -402,6 +424,7 @@ type layer struct {
 
 	prefetchOnce        sync.Once
 	backgroundFetchOnce sync.Once
+	passThrough         passThroughConfig
 }
 
 func (l *layer) Info() Info {
@@ -573,7 +596,12 @@ func (l *layer) backgroundFetch(ctx context.Context) error {
 }
 
 func (l *layerRef) Done() {
-	l.done()
+	l.done(false) // leave chances to reuse this
+}
+
+func (l *layerRef) Close() error {
+	l.done(true) // evict this from the cache
+	return nil
 }
 
 func (l *layer) RootNode(baseInode uint32) (fusefs.InodeEmbedder, error) {
@@ -583,7 +611,7 @@ func (l *layer) RootNode(baseInode uint32) (fusefs.InodeEmbedder, error) {
 	if l.r == nil {
 		return nil, fmt.Errorf("layer hasn't been verified yet")
 	}
-	return newNode(l.desc.Digest, l.r, l.blob, baseInode, l.resolver.overlayOpaqueType)
+	return newNode(l.desc.Digest, l.r, l.blob, baseInode, l.resolver.overlayOpaqueType, l.passThrough)
 }
 
 func (l *layer) ReadAt(p []byte, offset int64, opts ...remote.Option) (int, error) {
@@ -597,7 +625,7 @@ func (l *layer) close() error {
 		return nil
 	}
 	l.closed = true
-	defer l.blob.done() // Close reader first, then close the blob
+	defer l.blob.done(true) // Close reader first, then close the blob
 	l.verifiableReader.Close()
 	if l.r != nil {
 		return l.r.Close()
@@ -617,7 +645,7 @@ func (l *layer) isClosed() bool {
 // to this blob will be discarded.
 type blobRef struct {
 	remote.Blob
-	done func()
+	done func(bool)
 }
 
 // layerRef is a reference to the layer in the cache. Calling `Done` or `done` decreases the
@@ -625,7 +653,7 @@ type blobRef struct {
 // cache, resources bound to this layer will be discarded.
 type layerRef struct {
 	*layer
-	done func()
+	done func(bool)
 }
 
 func newWaiter() *waiter {
