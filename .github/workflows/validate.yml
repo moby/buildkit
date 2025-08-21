@@ -33,51 +33,35 @@ jobs:
         name: Checkout
         uses: actions/checkout@v5
       -
-        name: Matrix
+        name: Generate matrix
+        id: generate
+        uses: docker/bake-action/subaction/matrix@v6
+        with:
+          target: validate
+          fields: platforms
+        env:
+          GOLANGCI_LINT_MULTIPLATFORM: ${{ github.repository == 'moby/buildkit' && '1' || '' }}
+          ARCHUTIL_MULTIPLATFORM: ${{ github.repository == 'moby/buildkit' && '1' || '' }}
+      -
+        name: Add runner to matrix
         id: matrix
         uses: actions/github-script@v7
         env:
+          INPUT_MATRIX: ${{ steps.generate.outputs.matrix }}
           INPUT_PRIVATE-REPO: ${{ github.event.repository.private }}
         with:
           script: |
-            let def = {};
+            const matrix = JSON.parse(core.getInput('matrix'));
             const privateRepo = core.getBooleanInput('private-repo');
-            await core.group(`Parsing definition`, async () => {
-              const printEnv = Object.assign({}, process.env, {
-                GOLANGCI_LINT_MULTIPLATFORM: process.env.GITHUB_REPOSITORY === 'moby/buildkit' ? '1' : '',
-                ARCHUTIL_MULTIPLATFORM: process.env.GITHUB_REPOSITORY === 'moby/buildkit' ? '1' : ''
-              });
-              const resPrint = await exec.getExecOutput('docker', ['buildx', 'bake', 'validate', '--print'], {
-                ignoreReturnCode: true,
-                env: printEnv
-              });
-              if (resPrint.stderr.length > 0 && resPrint.exitCode != 0) {
-                throw new Error(res.stderr);
+            matrix.forEach(job => {
+              if (job.platforms && job.platforms.startsWith('linux/arm') && !privateRepo) {
+                job.runner = 'ubuntu-24.04-arm';
+              } else {
+                job.runner = 'ubuntu-24.04';
               }
-              def = JSON.parse(resPrint.stdout.trim());
             });
-            await core.group(`Generating matrix`, async () => {
-              const includes = [];
-              for (const targetName of Object.keys(def.target)) {
-                const target = def.target[targetName];
-                if (target.platforms && target.platforms.length > 0) {
-                  target.platforms.forEach(platform => {
-                    includes.push({
-                      target: targetName,
-                      platform: platform,
-                      runner: platform.startsWith('linux/arm') && !privateRepo ? 'ubuntu-24.04-arm' : 'ubuntu-24.04'
-                    });
-                  });
-                } else {
-                  includes.push({
-                    target: targetName,
-                    runner: 'ubuntu-24.04'
-                  });
-                }
-              }
-              core.info(JSON.stringify(includes, null, 2));
-              core.setOutput('includes', JSON.stringify(includes));
-            });
+            core.info(JSON.stringify(matrix, null, 2));
+            core.setOutput('includes', JSON.stringify(matrix));
 
   validate:
     runs-on: ${{ matrix.runner }}
@@ -101,4 +85,4 @@ jobs:
         with:
           targets: ${{ matrix.target }}
           set: |
-            *.platform=${{ matrix.platform }}
+            *.platform=${{ matrix.platforms }}
