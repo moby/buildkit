@@ -1,4 +1,4 @@
-package gitutil
+package dfgitutil
 
 import (
 	"testing"

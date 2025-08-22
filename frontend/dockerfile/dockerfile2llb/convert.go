@@ -24,6 +24,7 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/imagemetaresolver"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
+	"github.com/moby/buildkit/frontend/dockerfile/dfgitutil"
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	"github.com/moby/buildkit/frontend/dockerfile/linter"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
@@ -35,7 +36,6 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
-	"github.com/moby/buildkit/util/gitutil"
 	"github.com/moby/buildkit/util/suggest"
 	"github.com/moby/buildkit/util/system"
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
@@ -1507,7 +1507,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 
 	for _, src := range cfg.params.SourcePaths {
 		commitMessage.WriteString(" " + src)
-		gitRef, gitRefErr := gitutil.ParseGitRef(src)
+		gitRef, gitRefErr := dfgitutil.ParseGitRef(src)
 		if gitRefErr == nil && !gitRef.IndistinguishableFromLocal {
 			if !cfg.isAddCommand {
 				return errors.New("source can't be a git ref for COPY")
@@ -2268,7 +2268,7 @@ func isHTTPSource(src string) bool {
 
 func isGitSource(src string) bool {
 	// https://github.com/ORG/REPO.git is a git source, not an http source
-	if gitRef, gitErr := gitutil.ParseGitRef(src); gitRef != nil && gitErr == nil {
+	if gitRef, gitErr := dfgitutil.ParseGitRef(src); gitRef != nil && gitErr == nil {
 		return true
 	}
 	return false
