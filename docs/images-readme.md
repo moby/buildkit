@@ -82,7 +82,7 @@ docker run \
     --rm \
     --security-opt seccomp=unconfined \
     --security-opt apparmor=unconfined \
-    -e BUILDKITD_FLAGS=--oci-worker-no-process-sandbox \
+    --security-opt systempaths=unconfined \
     -v /path/to/dir:/tmp/work \
     --entrypoint buildctl-daemonless.sh \
     moby/buildkit:master-rootless \
