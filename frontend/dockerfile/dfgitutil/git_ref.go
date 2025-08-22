@@ -27,6 +27,10 @@ type GitRef struct {
 	// Commit is optional.
 	Commit string
 
+	// Checksum verifies the Commit if specified.
+	// Checksum is optional.
+	Checksum string
+
 	// SubDir is a directory path inside the repo.
 	// SubDir is optional.
 	SubDir string
@@ -46,6 +50,12 @@ type GitRef struct {
 	// Discouraged, although not deprecated.
 	// Instead, consider using an encrypted TCP connection such as "git@github.com/foo/bar.git" or "https://github.com/foo/bar.git".
 	UnencryptedTCP bool
+
+	gitURL *gitutil.GitURL
+}
+
+func (r *GitRef) GitURL() *gitutil.GitURL {
+	return r.gitURL
 }
 
 // var gitURLPathWithFragmentSuffix = regexp.MustCompile(`\.git(?:#.+)?$`)
@@ -63,11 +73,14 @@ func ParseGitRef(ref string) (*GitRef, error) {
 		return nil, cerrdefs.ErrInvalidArgument
 	} else if strings.HasPrefix(ref, "github.com/") {
 		res.IndistinguishableFromLocal = true // Deprecated
-		remote = gitutil.FromURL(&url.URL{
+		remote, err = gitutil.FromURL(&url.URL{
 			Scheme: "https",
 			Host:   "github.com",
 			Path:   strings.TrimPrefix(ref, "github.com/"),
 		})
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		remote, err = gitutil.ParseURL(ref)
 		if errors.Is(err, gitutil.ErrUnknownProtocol) {
@@ -96,11 +109,12 @@ func ParseGitRef(ref string) (*GitRef, error) {
 		_, res.Remote, _ = strings.Cut(res.Remote, "://")
 	}
 	if remote.Opts != nil {
-		res.Commit, res.SubDir = remote.Opts.Ref, remote.Opts.Subdir
+		res.Commit, res.Checksum, res.SubDir = remote.Opts.Ref, remote.Opts.Checksum, remote.Opts.Subdir
 	}
 
 	repoSplitBySlash := strings.Split(res.Remote, "/")
 	res.ShortName = strings.TrimSuffix(repoSplitBySlash[len(repoSplitBySlash)-1], ".git")
+	res.gitURL = remote
 
 	return res, nil
 }
