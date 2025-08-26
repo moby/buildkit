@@ -21,6 +21,7 @@ message Op {
 	}
 	Platform platform = 10;
 	WorkerConstraints constraints = 11;
+	string identity = 12;
 }
 
 // Platform is github.com/opencontainers/image-spec/specs-go/v1.Platform

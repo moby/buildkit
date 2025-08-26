@@ -644,6 +644,14 @@ func WithCaps(caps apicaps.CapSet) ConstraintsOpt {
 	})
 }
 
+// WithIdentities will add an identity to this operation that
+// will force it to be unique.
+func WithIdentities() ConstraintsOpt {
+	return constraintsOptFunc(func(c *Constraints) {
+		c.GenerateIdentities = true
+	})
+}
+
 type constraintsWrapper struct {
 	Constraints
 }
@@ -653,12 +661,13 @@ func (cw *constraintsWrapper) applyConstraints(f func(c *Constraints)) {
 }
 
 type Constraints struct {
-	Platform          *ocispecs.Platform
-	WorkerConstraints []string
-	Metadata          OpMetadata
-	LocalUniqueID     string
-	Caps              *apicaps.CapSet
-	SourceLocations   []*SourceLocation
+	Platform           *ocispecs.Platform
+	WorkerConstraints  []string
+	Metadata           OpMetadata
+	LocalUniqueID      string
+	Caps               *apicaps.CapSet
+	SourceLocations    []*SourceLocation
+	GenerateIdentities bool
 }
 
 // OpMetadata has a more friendly interface for pb.OpMetadata.
