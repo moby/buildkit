@@ -56,7 +56,7 @@ type configEnv struct {
 	AuthConfigs map[string]configEnvAuth `json:"auths"`
 }
 
-// dockerEnvConfig is an environment variable that contains a JSON encoded
+// DockerEnvConfigKey is an environment variable that contains a JSON encoded
 // credential config. It only supports storing the credentials as a base64
 // encoded string in the format base64("username:pat").
 //
@@ -71,7 +71,7 @@ type configEnv struct {
 //			}
 //		}
 //	}
-const dockerEnvConfig = "DOCKER_AUTH_CONFIG"
+const DockerEnvConfigKey = "DOCKER_AUTH_CONFIG"
 
 // ProxyConfig contains proxy configuration settings
 type ProxyConfig struct {
@@ -296,7 +296,7 @@ func (configFile *ConfigFile) GetCredentialsStore(registryHostname string) crede
 		store = newNativeStore(configFile, helper)
 	}
 
-	envConfig := os.Getenv(dockerEnvConfig)
+	envConfig := os.Getenv(DockerEnvConfigKey)
 	if envConfig == "" {
 		return store
 	}
