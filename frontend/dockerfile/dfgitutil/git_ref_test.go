@@ -221,7 +221,7 @@ func TestParseGitRef(t *testing.T) {
 	}
 	for i, tt := range cases {
 		t.Run(fmt.Sprintf("case%d", i+1), func(t *testing.T) {
-			got, err := ParseGitRef(tt.ref)
+			got, _, err := ParseGitRef(tt.ref)
 			if tt.expected == nil {
 				require.Nil(t, got)
 				require.Error(t, err)
