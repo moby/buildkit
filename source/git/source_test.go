@@ -733,6 +733,57 @@ func TestCredentialRedaction(t *testing.T) {
 	require.NotContains(t, err.Error(), "keepthissecret")
 }
 
+func TestSubmoduleSubdir(t *testing.T) {
+	testSubmoduleSubdir(t, false)
+}
+
+func TestSubmoduleSubdirKeepGitDir(t *testing.T) {
+	testSubmoduleSubdir(t, true)
+}
+
+func testSubmoduleSubdir(t *testing.T, keepGitDir bool) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+	t.Parallel()
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx = logProgressStreams(ctx, t)
+
+	gs := setupGitSource(t, t.TempDir())
+
+	repo := setupGitRepo(t)
+
+	id := &GitIdentifier{Remote: repo.mainURL, KeepGitDir: keepGitDir, Ref: "feature", Subdir: "sub"}
+
+	g, err := gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	key1, pin1, _, done, err := g.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+	require.True(t, done)
+
+	expLen := 44
+	require.GreaterOrEqual(t, len(key1), expLen)
+	require.Equal(t, 40, len(pin1))
+
+	ref1, err := g.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	defer ref1.Release(context.TODO())
+
+	mount, err := ref1.Mount(ctx, true, nil)
+	require.NoError(t, err)
+
+	lm := snapshot.LocalMounter(mount)
+	dir, err := lm.Mount()
+	require.NoError(t, err)
+	defer lm.Unmount()
+
+	dt, err := os.ReadFile(filepath.Join(dir, "subfile"))
+	require.NoError(t, err)
+
+	require.Equal(t, "subcontents\n", string(dt))
+}
+
 func TestSubdir(t *testing.T) {
 	testSubdir(t, false)
 }
