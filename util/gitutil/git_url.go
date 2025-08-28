@@ -47,9 +47,10 @@ type GitURL struct {
 	Path string
 	// User is the username/password to access the host
 	User *url.Userinfo
+	// Query is the query parameters for the URL
+	Query url.Values
 	// Opts can contain additional metadata
 	Opts *GitURLOpts
-
 	// Remote is a valid URL remote to pass into the Git CLI tooling (i.e.
 	// without the fragment metadata)
 	Remote string
@@ -66,63 +67,12 @@ type GitURLOpts struct {
 
 // parseOpts splits a git URL fragment into its respective git
 // reference and subdirectory components.
-func parseOpts(fragment string, query url.Values) (*GitURLOpts, error) {
-	if fragment == "" && len(query) == 0 {
-		return nil, nil
+func parseOpts(fragment string) *GitURLOpts {
+	if fragment == "" {
+		return nil
 	}
-	opts := &GitURLOpts{}
-	if fragment != "" {
-		opts.Ref, opts.Subdir, _ = strings.Cut(fragment, ":")
-	}
-	var tag, branch string
-	for k, v := range query {
-		switch len(v) {
-		case 0:
-			return nil, errors.Errorf("query %q has no value", k)
-		case 1:
-			if v[0] == "" {
-				return nil, errors.Errorf("query %q has no value", k)
-			}
-			// NOP
-		default:
-			return nil, errors.Errorf("query %q has multiple values", k)
-		}
-		switch k {
-		case "ref":
-			if opts.Ref != "" && opts.Ref != v[0] {
-				return nil, errors.Errorf("ref conflicts: %q vs %q", opts.Ref, v[0])
-			}
-			opts.Ref = v[0]
-		case "tag":
-			tag = v[0]
-		case "branch":
-			branch = v[0]
-		case "subdir":
-			if opts.Subdir != "" && opts.Subdir != v[0] {
-				return nil, errors.Errorf("subdir conflicts: %q vs %q", opts.Subdir, v[0])
-			}
-			opts.Subdir = v[0]
-		default:
-			return nil, errors.Errorf("unexpected query %q", k)
-		}
-	}
-	if tag != "" {
-		if opts.Ref != "" {
-			return nil, errors.New("tag conflicts with ref")
-		}
-		opts.Ref = "refs/tags/" + tag
-	}
-	if branch != "" {
-		if tag != "" {
-			// TODO: consider allowing this, when the tag actually exists on the branch
-			return nil, errors.New("branch conflicts with tag")
-		}
-		if opts.Ref != "" {
-			return nil, errors.New("branch conflicts with ref")
-		}
-		opts.Ref = "refs/heads/" + branch
-	}
-	return opts, nil
+	ref, subdir, _ := strings.Cut(fragment, ":")
+	return &GitURLOpts{Ref: ref, Subdir: subdir}
 }
 
 // ParseURL parses a BuildKit-style Git URL (that may contain additional
@@ -160,16 +110,17 @@ func FromURL(url *url.URL) (*GitURL, error) {
 	withoutOpts := *url
 	withoutOpts.Fragment = ""
 	withoutOpts.RawQuery = ""
-	opts, err := parseOpts(url.Fragment, url.Query())
-	if err != nil {
-		return nil, err
+	q := url.Query()
+	if len(q) == 0 {
+		q = nil
 	}
 	return &GitURL{
 		Scheme: url.Scheme,
 		User:   url.User,
 		Host:   url.Host,
 		Path:   url.Path,
-		Opts:   opts,
+		Query:  q,
+		Opts:   parseOpts(url.Fragment),
 		Remote: withoutOpts.String(),
 	}, nil
 }
@@ -178,16 +129,17 @@ func fromSCPStyleURL(url *sshutil.SCPStyleURL) (*GitURL, error) {
 	withoutOpts := *url
 	withoutOpts.Fragment = ""
 	withoutOpts.Query = nil
-	opts, err := parseOpts(url.Fragment, url.Query)
-	if err != nil {
-		return nil, err
+	q := url.Query
+	if len(q) == 0 {
+		q = nil
 	}
 	return &GitURL{
 		Scheme: SSHProtocol,
 		User:   url.User,
 		Host:   url.Host,
 		Path:   url.Path,
-		Opts:   opts,
+		Query:  q,
+		Opts:   parseOpts(url.Fragment),
 		Remote: withoutOpts.String(),
 	}, nil
 }

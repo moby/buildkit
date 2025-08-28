@@ -152,53 +152,17 @@ func TestParseURL(t *testing.T) {
 			},
 		},
 		{
-			url: "https://github.com/moby/buildkit?ref=v1.0.0&subdir=/subdir",
+			url: "https://github.com/moby/buildkit?ref=v1.0.0&foo=bar#v1.2.3",
 			result: GitURL{
 				Scheme: HTTPSProtocol,
 				Host:   "github.com",
 				Path:   "/moby/buildkit",
-				Opts:   &GitURLOpts{Ref: "v1.0.0", Subdir: "/subdir"},
+				Opts:   &GitURLOpts{Ref: "v1.2.3"},
+				Query: url.Values{
+					"ref": {"v1.0.0"},
+					"foo": {"bar"},
+				},
 			},
-		},
-		{
-			url: "https://github.com/moby/buildkit?subdir=/subdir#v1.0.0",
-			result: GitURL{
-				Scheme: HTTPSProtocol,
-				Host:   "github.com",
-				Path:   "/moby/buildkit",
-				Opts:   &GitURLOpts{Ref: "v1.0.0", Subdir: "/subdir"},
-			},
-		},
-		{
-			url: "https://github.com/moby/buildkit?tag=v1.0.0",
-			result: GitURL{
-				Scheme: HTTPSProtocol,
-				Host:   "github.com",
-				Path:   "/moby/buildkit",
-				Opts:   &GitURLOpts{Ref: "refs/tags/v1.0.0"},
-			},
-		},
-		{
-			url: "https://github.com/moby/buildkit?branch=v1.0",
-			result: GitURL{
-				Scheme: HTTPSProtocol,
-				Host:   "github.com",
-				Path:   "/moby/buildkit",
-				Opts:   &GitURLOpts{Ref: "refs/heads/v1.0"},
-			},
-		},
-		{
-			url: "https://github.com/moby/buildkit?ref=v1.0.0#v1.2.3",
-			err: true,
-		},
-		{
-			url: "https://github.com/moby/buildkit?ref=v1.0.0&tag=v1.2.3",
-			err: true,
-		},
-		{
-			// TODO: consider allowing this, when the tag actually exists on the branch
-			url: "https://github.com/moby/buildkit?tag=v1.0.0&branch=v1.0",
-			err: true,
 		},
 		{
 			url: "git@github.com:moby/buildkit.git?subdir=/subdir#v1.0.0",
@@ -207,7 +171,12 @@ func TestParseURL(t *testing.T) {
 				Host:   "github.com",
 				Path:   "moby/buildkit.git",
 				User:   url.User("git"),
-				Opts:   &GitURLOpts{Ref: "v1.0.0", Subdir: "/subdir"},
+				Opts: &GitURLOpts{
+					Ref: "v1.0.0",
+				},
+				Query: url.Values{
+					"subdir": {"/subdir"},
+				},
 			},
 		},
 	}
@@ -222,6 +191,7 @@ func TestParseURL(t *testing.T) {
 				require.Equal(t, test.result.Host, remote.Host)
 				require.Equal(t, test.result.Path, remote.Path)
 				require.Equal(t, test.result.Opts, remote.Opts)
+				require.Equal(t, test.result.Query, remote.Query)
 				require.Equal(t, test.result.User.String(), remote.User.String())
 			}
 		})

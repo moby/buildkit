@@ -1513,7 +1513,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 				return errors.New("source can't be a git ref for COPY")
 			}
 			// TODO: print a warning (not an error) if gitRef.UnencryptedTCP is true
-			commit := gitRef.Commit
+			commit := gitRef.Ref
 			if gitRef.SubDir != "" {
 				commit += ":" + gitRef.SubDir
 			}

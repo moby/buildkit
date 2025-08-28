@@ -1,6 +1,7 @@
 package dfgitutil
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -10,6 +11,7 @@ func TestParseGitRef(t *testing.T) {
 	cases := []struct {
 		ref      string
 		expected *GitRef
+		err      string
 	}{
 		{
 			ref:      "https://example.com/",
@@ -31,7 +33,7 @@ func TestParseGitRef(t *testing.T) {
 			expected: &GitRef{
 				Remote:    "https://example.com/foo.git",
 				ShortName: "foo",
-				Commit:    "deadbeef",
+				Ref:       "deadbeef",
 			},
 		},
 		{
@@ -39,7 +41,7 @@ func TestParseGitRef(t *testing.T) {
 			expected: &GitRef{
 				Remote:    "https://example.com/foo.git",
 				ShortName: "foo",
-				Commit:    "release/1.2",
+				Ref:       "release/1.2",
 			},
 		},
 		{
@@ -64,6 +66,15 @@ func TestParseGitRef(t *testing.T) {
 				Remote:                     "github.com/moby/buildkit",
 				ShortName:                  "buildkit",
 				IndistinguishableFromLocal: true,
+			},
+		},
+		{
+			ref: "github.com/moby/buildkit#master",
+			expected: &GitRef{
+				Remote:                     "github.com/moby/buildkit",
+				ShortName:                  "buildkit",
+				IndistinguishableFromLocal: true,
+				Ref:                        "master",
 			},
 		},
 		{
@@ -114,7 +125,7 @@ func TestParseGitRef(t *testing.T) {
 			expected: &GitRef{
 				Remote:    "https://github.com/foo/bar.git",
 				ShortName: "bar",
-				Commit:    "baz/qux",
+				Ref:       "baz/qux",
 				SubDir:    "quux/quuz",
 			},
 		},
@@ -143,17 +154,80 @@ func TestParseGitRef(t *testing.T) {
 			expected: &GitRef{
 				Remote:    "https://github.com/docker/docker.git",
 				ShortName: "docker",
-				Commit:    "v1.0.0",
+				Ref:       "v1.0.0",
 				SubDir:    "/subdir",
 			},
 		},
+		{
+			ref: "https://github.com/moby/buildkit.git?subdir=/subdir#v1.0.0",
+			expected: &GitRef{
+				Remote:    "https://github.com/moby/buildkit.git",
+				ShortName: "buildkit",
+				Ref:       "v1.0.0",
+				SubDir:    "/subdir",
+			},
+		},
+		{
+			ref: "https://github.com/moby/buildkit.git?tag=v1.0.0",
+			expected: &GitRef{
+				Remote:    "https://github.com/moby/buildkit.git",
+				ShortName: "buildkit",
+				Ref:       "refs/tags/v1.0.0",
+			},
+		},
+		{
+			ref: "github.com/moby/buildkit?tag=v1.0.0",
+			expected: &GitRef{
+				Remote:                     "github.com/moby/buildkit",
+				ShortName:                  "buildkit",
+				Ref:                        "refs/tags/v1.0.0",
+				IndistinguishableFromLocal: true,
+			},
+		},
+		{
+			ref: "https://github.com/moby/buildkit.git?branch=v1.0",
+			expected: &GitRef{
+				Remote:    "https://github.com/moby/buildkit.git",
+				ShortName: "buildkit",
+				Ref:       "refs/heads/v1.0",
+			},
+		},
+		{
+			ref: "https://github.com/moby/buildkit.git?ref=v1.0.0#v1.2.3",
+			err: "ref conflicts",
+		},
+		{
+			ref: "https://github.com/moby/buildkit.git?ref=v1.0.0&tag=v1.2.3",
+			err: "ref conflicts",
+		},
+		{
+			// TODO: consider allowing this, when the tag actually exists on the branch
+			ref: "https://github.com/moby/buildkit.git?tag=v1.0.0&branch=v1.0",
+			err: "branch conflicts with tag",
+		},
+		{
+			ref: "git@github.com:moby/buildkit.git?subdir=/subdir#v1.0.0",
+			expected: &GitRef{
+				Remote:    "git@github.com:moby/buildkit.git",
+				ShortName: "buildkit",
+				Ref:       "v1.0.0",
+				SubDir:    "/subdir",
+			},
+		},
+		{
+			ref: "https://github.com/moby/buildkit.git?invalid=123",
+			err: "unexpected query \"invalid\"",
+		},
 	}
-	for _, tt := range cases {
-		t.Run(tt.ref, func(t *testing.T) {
+	for i, tt := range cases {
+		t.Run(fmt.Sprintf("case%d", i+1), func(t *testing.T) {
 			got, err := ParseGitRef(tt.ref)
 			if tt.expected == nil {
 				require.Nil(t, got)
 				require.Error(t, err)
+				if tt.err != "" {
+					require.ErrorContains(t, err, tt.err)
+				}
 			} else {
 				require.NoError(t, err)
 				require.Equal(t, tt.expected, got)

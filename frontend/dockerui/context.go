@@ -145,7 +145,7 @@ func DetectGitContext(ref string, keepGit bool) (*llb.State, bool) {
 	if err != nil {
 		return nil, false
 	}
-	commit := g.Commit
+	commit := g.Ref
 	if g.SubDir != "" {
 		commit += ":" + g.SubDir
 	}
