@@ -398,6 +398,23 @@ COPY foo out
 	}...)
 	require.NoError(t, err)
 
+	// get commit SHA for v0.0.2
+	cmd := exec.Command("git", "rev-parse", "v0.0.2")
+	cmd.Dir = gitDir
+	dt, err := cmd.CombinedOutput()
+	require.NoError(t, err)
+	commitHashV2 := strings.TrimSpace(string(dt))
+	require.Len(t, commitHashV2, 40)
+
+	// get commit SHA for latest
+	cmd = exec.Command("git", "rev-parse", "latest")
+	cmd.Dir = gitDir
+	dt, err = cmd.CombinedOutput()
+	require.NoError(t, err)
+	commitHashLatest := strings.TrimSpace(string(dt))
+	require.Len(t, commitHashLatest, 40)
+	require.NotEqual(t, commitHashV2, commitHashLatest)
+
 	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Clean(gitDir))))
 	defer server.Close()
 	serverURL := server.URL
@@ -414,6 +431,12 @@ COPY foo out
 	}
 
 	tcases := []tcase{
+		{
+			// if this commit is already cached then this will work and ignore tag atm because tag name has no influence to the output
+			name:      "tag with invalid commit",
+			url:       serverURL + "/.git?tag=v0.0.2&commit=" + commitHashLatest,
+			expectErr: "expected checksum to match",
+		},
 		{
 			name:      "old style ref",
 			url:       serverURL + "/.git#v0.0.2",
@@ -443,6 +466,37 @@ COPY foo out
 			name:      "allowed mixed refs",
 			url:       serverURL + "/.git?tag=v0.0.2#refs/tags/v0.0.2",
 			expectOut: "v0.0.2\n",
+		},
+		{
+			name:      "v2 by commit",
+			url:       serverURL + "/.git?commit=" + commitHashV2,
+			expectOut: "v0.0.2\n",
+		},
+		{
+			name:      "v2 ref by commit",
+			url:       serverURL + "/.git?ref=" + commitHashV2,
+			expectOut: "v0.0.2\n",
+		},
+		{
+			name:      "tag with commit",
+			url:       serverURL + "/.git?tag=v0.0.2&commit=" + commitHashV2,
+			expectOut: "v0.0.2\n",
+		},
+		{
+			name:      "commit with commit",
+			url:       serverURL + "/.git?ref=" + commitHashV2 + "&commit=" + commitHashV2,
+			expectOut: "v0.0.2\n",
+		},
+		{
+			name:      "latest with commit",
+			url:       serverURL + "/.git?commit=" + commitHashLatest,
+			expectOut: "latest\n",
+		},
+		{
+			// this only works if there is already cache for commitHashLatest from previous case
+			name:      "tag with invalid commit",
+			url:       serverURL + "/.git?tag=v0.0.2&commit=" + commitHashLatest,
+			expectOut: "latest\n",
 		},
 		{
 			name:      "mismatch refs",
@@ -487,6 +541,13 @@ COPY foo out
 			require.Equal(t, tc.expectOut, string(dt))
 		})
 	}
+
+	cl, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	err = cl.Prune(sb.Context(), nil)
+	require.NoError(t, err)
 
 	for _, tc := range tcases {
 		dockerfile2 := fmt.Sprintf(`

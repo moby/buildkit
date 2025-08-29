@@ -1523,6 +1523,14 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 			if cfg.keepGitDir {
 				gitOptions = append(gitOptions, llb.KeepGitDir())
 			}
+			if cfg.checksum != "" && gitRef.Checksum != "" {
+				if cfg.checksum != gitRef.Checksum {
+					return errors.Errorf("checksum mismatch %q != %q", cfg.checksum, gitRef.Checksum)
+				}
+			}
+			if gitRef.Checksum != "" {
+				cfg.checksum = gitRef.Checksum
+			}
 			if cfg.checksum != "" {
 				gitOptions = append(gitOptions, llb.GitChecksum(cfg.checksum))
 			}
