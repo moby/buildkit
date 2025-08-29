@@ -1507,24 +1507,38 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 
 	for _, src := range cfg.params.SourcePaths {
 		commitMessage.WriteString(" " + src)
-		gitRef, gitRefErr := dfgitutil.ParseGitRef(src)
+		gitRef, isGit, gitRefErr := dfgitutil.ParseGitRef(src)
+		if gitRefErr != nil && isGit {
+			return gitRefErr
+		}
 		if gitRefErr == nil && !gitRef.IndistinguishableFromLocal {
 			if !cfg.isAddCommand {
 				return errors.New("source can't be a git ref for COPY")
 			}
 			// TODO: print a warning (not an error) if gitRef.UnencryptedTCP is true
-			commit := gitRef.Commit
-			if gitRef.SubDir != "" {
-				commit += ":" + gitRef.SubDir
+			gitOptions := []llb.GitOption{
+				llb.WithCustomName(pgName),
+				llb.GitRef(gitRef.Ref),
 			}
-			gitOptions := []llb.GitOption{llb.WithCustomName(pgName)}
 			if cfg.keepGitDir {
 				gitOptions = append(gitOptions, llb.KeepGitDir())
+			}
+			if cfg.checksum != "" && gitRef.Checksum != "" {
+				if cfg.checksum != gitRef.Checksum {
+					return errors.Errorf("checksum mismatch %q != %q", cfg.checksum, gitRef.Checksum)
+				}
+			}
+			if gitRef.Checksum != "" {
+				cfg.checksum = gitRef.Checksum
 			}
 			if cfg.checksum != "" {
 				gitOptions = append(gitOptions, llb.GitChecksum(cfg.checksum))
 			}
-			st := llb.Git(gitRef.Remote, commit, gitOptions...)
+			if gitRef.SubDir != "" {
+				gitOptions = append(gitOptions, llb.GitSubDir(gitRef.SubDir))
+			}
+
+			st := llb.Git(gitRef.Remote, "", gitOptions...)
 			opts := append([]llb.CopyOption{&llb.CopyInfo{
 				Mode:           chopt,
 				CreateDestPath: true,
@@ -2268,7 +2282,7 @@ func isHTTPSource(src string) bool {
 
 func isGitSource(src string) bool {
 	// https://github.com/ORG/REPO.git is a git source, not an http source
-	if gitRef, gitErr := dfgitutil.ParseGitRef(src); gitRef != nil && gitErr == nil {
+	if gitRef, isGit, _ := dfgitutil.ParseGitRef(src); gitRef != nil && isGit {
 		return true
 	}
 	return false

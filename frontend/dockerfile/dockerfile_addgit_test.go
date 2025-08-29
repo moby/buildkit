@@ -2,6 +2,7 @@ package dockerfile
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -22,6 +23,7 @@ import (
 var addGitTests = integration.TestFuncs(
 	testAddGit,
 	testAddGitChecksumCache,
+	testGitQueryString,
 )
 
 func init() {
@@ -348,6 +350,239 @@ COPY --from=src /repo/unique.txt /
 	require.NoError(t, err)
 
 	require.Equal(t, string(unique1), string(unique2), "cache should be matched and unique file content should be the same")
+}
+
+func testGitQueryString(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	f := getFrontend(t, sb)
+
+	gitDir, err := os.MkdirTemp("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(gitDir)
+	err = runShell(gitDir, []string{
+		"git init",
+		"git config --local user.email test",
+		"git config --local user.name test",
+		"echo base >foo",
+	}...)
+	require.NoError(t, err)
+
+	err = os.WriteFile(filepath.Join(gitDir, "Dockerfile"), []byte(`
+FROM scratch
+COPY foo out
+`), 0600)
+	require.NoError(t, err)
+
+	err = runShell(gitDir, []string{
+		"git add Dockerfile foo",
+		"git commit -m initial",
+		"git tag v0.0.1",
+		"git branch base",
+		"echo feature >foo",
+		"mkdir sub",
+		"echo subfeature >sub/foo",
+		"cp Dockerfile sub/",
+		"git add foo sub",
+		"git commit -m feature",
+		"git branch feature",
+		"git checkout -B master base",
+		"echo v0.0.2 >foo",
+		"git add foo",
+		"git commit -m v0.0.2",
+		"git tag v0.0.2",
+		"echo latest >foo",
+		"git add foo",
+		"git commit -m latest",
+		"git tag latest",
+		"git update-server-info",
+	}...)
+	require.NoError(t, err)
+
+	// get commit SHA for v0.0.2
+	cmd := exec.Command("git", "rev-parse", "v0.0.2")
+	cmd.Dir = gitDir
+	dt, err := cmd.CombinedOutput()
+	require.NoError(t, err)
+	commitHashV2 := strings.TrimSpace(string(dt))
+	require.Len(t, commitHashV2, 40)
+
+	// get commit SHA for latest
+	cmd = exec.Command("git", "rev-parse", "latest")
+	cmd.Dir = gitDir
+	dt, err = cmd.CombinedOutput()
+	require.NoError(t, err)
+	commitHashLatest := strings.TrimSpace(string(dt))
+	require.Len(t, commitHashLatest, 40)
+	require.NotEqual(t, commitHashV2, commitHashLatest)
+
+	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Clean(gitDir))))
+	defer server.Close()
+	serverURL := server.URL
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	type tcase struct {
+		name      string
+		url       string
+		expectOut string
+		expectErr string
+	}
+
+	tcases := []tcase{
+		{
+			// if this commit is already cached then this will work and ignore tag atm because tag name has no influence to the output
+			name:      "tag with invalid commit",
+			url:       serverURL + "/.git?tag=v0.0.2&commit=" + commitHashLatest,
+			expectErr: "expected checksum to match",
+		},
+		{
+			name:      "old style ref",
+			url:       serverURL + "/.git#v0.0.2",
+			expectOut: "v0.0.2\n",
+		},
+		{
+			name:      "querystring ref",
+			url:       serverURL + "/.git?ref=base",
+			expectOut: "base\n",
+		},
+		{
+			name:      "querystring branch",
+			url:       serverURL + "/.git?branch=base",
+			expectOut: "base\n",
+		},
+		{
+			name:      "querystring invalid branch",
+			url:       serverURL + "/.git?branch=invalid",
+			expectErr: "repository does not contain ref",
+		},
+		{
+			name:      "tag as branch",
+			url:       serverURL + "/.git?branch=v0.0.2",
+			expectErr: "repository does not contain ref",
+		},
+		{
+			name:      "allowed mixed refs",
+			url:       serverURL + "/.git?tag=v0.0.2#refs/tags/v0.0.2",
+			expectOut: "v0.0.2\n",
+		},
+		{
+			name:      "v2 by commit",
+			url:       serverURL + "/.git?commit=" + commitHashV2,
+			expectOut: "v0.0.2\n",
+		},
+		{
+			name:      "v2 ref by commit",
+			url:       serverURL + "/.git?ref=" + commitHashV2,
+			expectOut: "v0.0.2\n",
+		},
+		{
+			name:      "tag with commit",
+			url:       serverURL + "/.git?tag=v0.0.2&commit=" + commitHashV2,
+			expectOut: "v0.0.2\n",
+		},
+		{
+			name:      "commit with commit",
+			url:       serverURL + "/.git?ref=" + commitHashV2 + "&commit=" + commitHashV2,
+			expectOut: "v0.0.2\n",
+		},
+		{
+			name:      "latest with commit",
+			url:       serverURL + "/.git?commit=" + commitHashLatest,
+			expectOut: "latest\n",
+		},
+		{
+			// this only works if there is already cache for commitHashLatest from previous case
+			name:      "tag with invalid commit",
+			url:       serverURL + "/.git?tag=v0.0.2&commit=" + commitHashLatest,
+			expectOut: "latest\n",
+		},
+		{
+			name:      "mismatch refs",
+			url:       serverURL + "/.git?tag=v0.0.2#refs/heads/master",
+			expectErr: "ref conflicts",
+		},
+		{
+			name:      "sub old-style",
+			url:       serverURL + "/.git#feature:sub",
+			expectOut: "subfeature\n",
+		},
+		{
+			name:      "sub query",
+			url:       serverURL + "/.git?subdir=sub&ref=feature",
+			expectOut: "subfeature\n",
+		},
+	}
+
+	for _, tc := range tcases {
+		t.Run("context_"+tc.name, func(t *testing.T) {
+			dest := t.TempDir()
+			_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+				FrontendAttrs: map[string]string{
+					"context": tc.url,
+				},
+				Exports: []client.ExportEntry{
+					{
+						Type:      client.ExporterLocal,
+						OutputDir: dest,
+					},
+				},
+			}, nil)
+			if tc.expectErr != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.expectErr)
+				return
+			}
+			require.NoError(t, err)
+
+			dt, err := os.ReadFile(filepath.Join(dest, "out"))
+			require.NoError(t, err)
+			require.Equal(t, tc.expectOut, string(dt))
+		})
+	}
+
+	cl, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	err = cl.Prune(sb.Context(), nil)
+	require.NoError(t, err)
+
+	for _, tc := range tcases {
+		dockerfile2 := fmt.Sprintf(`
+FROM scratch
+ADD %s /repo/
+		`, tc.url)
+		inDir := integration.Tmpdir(t,
+			fstest.CreateFile("Dockerfile", []byte(dockerfile2), 0600),
+		)
+		t.Run("add_"+tc.name, func(t *testing.T) {
+			dest := t.TempDir()
+			_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+				Exports: []client.ExportEntry{
+					{
+						Type:      client.ExporterLocal,
+						OutputDir: dest,
+					},
+				},
+				LocalMounts: map[string]fsutil.FS{
+					dockerui.DefaultLocalNameDockerfile: inDir,
+					dockerui.DefaultLocalNameContext:    inDir,
+				},
+			}, nil)
+			if tc.expectErr != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.expectErr)
+				return
+			}
+			require.NoError(t, err)
+
+			dt, err := os.ReadFile(filepath.Join(dest, "/repo/foo"))
+			require.NoError(t, err)
+			require.Equal(t, tc.expectOut, string(dt))
+		})
+	}
 }
 
 func applyTemplate(tmpl string, x any) (string, error) {
