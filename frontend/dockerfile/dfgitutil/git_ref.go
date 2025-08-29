@@ -176,8 +176,5 @@ func (gf *GitRef) loadQuery(query url.Values) error {
 		}
 		gf.Ref = branch
 	}
-	if gf.Checksum != "" && gf.Ref == "" {
-		gf.Ref = gf.Checksum
-	}
 	return nil
 }
