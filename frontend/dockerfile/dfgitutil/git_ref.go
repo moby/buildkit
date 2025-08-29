@@ -128,11 +128,14 @@ func (gf *GitRef) loadQuery(query url.Values) error {
 	var tag, branch string
 	for k, v := range query {
 		switch len(v) {
-		case 0:
-			return errors.Errorf("query %q has no value", k)
-		case 1:
-			if v[0] == "" {
-				return errors.Errorf("query %q has no value", k)
+		case 0, 1:
+			if len(v) == 0 || v[0] == "" {
+				switch k {
+				case "submodules", "keep-git-dir":
+					v = nil
+				default:
+					return errors.Errorf("query %q has no value", k)
+				}
 			}
 			// NOP
 		default:
@@ -156,15 +159,27 @@ func (gf *GitRef) loadQuery(query url.Values) error {
 		case "checksum", "commit":
 			gf.Checksum = v[0]
 		case "keep-git-dir":
-			vv, err := strconv.ParseBool(v[0])
-			if err != nil {
-				return errors.Errorf("invalid keep-git-dir value: %q", v[0])
+			var vv bool
+			if len(v) == 0 {
+				vv = true
+			} else {
+				var err error
+				vv, err = strconv.ParseBool(v[0])
+				if err != nil {
+					return errors.Errorf("invalid keep-git-dir value: %q", v[0])
+				}
 			}
 			gf.KeepGitDir = &vv
 		case "submodules":
-			vv, err := strconv.ParseBool(v[0])
-			if err != nil {
-				return errors.Errorf("invalid submodules value: %q", v[0])
+			var vv bool
+			if len(v) == 0 {
+				vv = true
+			} else {
+				var err error
+				vv, err = strconv.ParseBool(v[0])
+				if err != nil {
+					return errors.Errorf("invalid submodules value: %q", v[0])
+				}
 			}
 			gf.Submodules = &vv
 		default:

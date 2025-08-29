@@ -557,6 +557,12 @@ COPY foo out
 			target:    "withgit",
 		},
 		{
+			name:      "withgit-valueless",
+			url:       serverURL + "/.git?keep-git-dir&submodules",
+			expectOut: commitHashLatest + "\n",
+			target:    "withgit",
+		},
+		{
 			name:      "withgit-forbidden",
 			url:       serverURL + "/.git?keep-git-dir=false",
 			expectErr: ".git/HEAD\": not found",
@@ -571,6 +577,12 @@ COPY foo out
 		{
 			name:      "withsubmodset",
 			url:       serverURL + "/.git?submodules=true",
+			expectOut: "123\n",
+			target:    "withsubmod",
+		},
+		{
+			name:      "withsubmodempty",
+			url:       serverURL + "/.git?submodules",
 			expectOut: "123\n",
 			target:    "withsubmod",
 		},
