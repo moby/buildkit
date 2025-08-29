@@ -356,8 +356,25 @@ func testGitQueryString(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	gitDir, err := os.MkdirTemp("", "buildkit")
+	subModDir := t.TempDir()
+	defer os.RemoveAll(subModDir)
+
+	err := runShell(subModDir, []string{
+		"git init",
+		"git config --local user.email test",
+		"git config --local user.name test",
+		"echo 123 >file",
+		"git add file",
+		"git commit -m initial",
+		"git update-server-info",
+	}...)
 	require.NoError(t, err)
+
+	subModServer := httptest.NewServer(http.FileServer(http.Dir(filepath.Clean(subModDir))))
+	defer subModServer.Close()
+	submodServerURL := subModServer.URL
+
+	gitDir := t.TempDir()
 	defer os.RemoveAll(gitDir)
 	err = runShell(gitDir, []string{
 		"git init",
@@ -368,13 +385,20 @@ func testGitQueryString(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	err = os.WriteFile(filepath.Join(gitDir, "Dockerfile"), []byte(`
+FROM scratch AS withgit
+COPY .git/HEAD out
+
+FROM scratch as withsubmod
+COPY submod/file out
+
 FROM scratch
 COPY foo out
 `), 0600)
 	require.NoError(t, err)
 
 	err = runShell(gitDir, []string{
-		"git add Dockerfile foo",
+		"git submodule add " + submodServerURL + "/.git submod",
+		"git add Dockerfile foo submod",
 		"git commit -m initial",
 		"git tag v0.0.1",
 		"git branch base",
@@ -426,6 +450,7 @@ COPY foo out
 	type tcase struct {
 		name      string
 		url       string
+		target    string
 		expectOut string
 		expectErr string
 	}
@@ -528,15 +553,73 @@ COPY foo out
 			url:       serverURL + "/.git?subdir=sub&ref=feature",
 			expectOut: "subfeature\n",
 		},
+		{
+			name:      "withgit",
+			url:       serverURL + "/.git?keep-git-dir=true",
+			expectOut: commitHashLatest + "\n",
+			target:    "withgit",
+		},
+		{
+			name:      "withgitandtag",
+			url:       serverURL + "/.git?tag=v0.0.2&keep-git-dir=true",
+			expectOut: commitHashV2 + "\n",
+			target:    "withgit",
+		},
+		{
+			name:      "withgit-default",
+			url:       serverURL + "/.git",
+			expectErr: ".git/HEAD\": not found",
+			target:    "withgit",
+		},
+		{
+			name:      "withgit-valueless",
+			url:       serverURL + "/.git?keep-git-dir&submodules",
+			expectOut: commitHashLatest + "\n",
+			target:    "withgit",
+		},
+		{
+			name:      "withgit-forbidden",
+			url:       serverURL + "/.git?keep-git-dir=false",
+			expectErr: ".git/HEAD\": not found",
+			target:    "withgit",
+		},
+		{
+			name:      "withsubmod",
+			url:       serverURL + "/.git",
+			expectOut: "123\n",
+			target:    "withsubmod",
+		},
+		{
+			name:      "withsubmodset",
+			url:       serverURL + "/.git?submodules=true",
+			expectOut: "123\n",
+			target:    "withsubmod",
+		},
+		{
+			name:      "withsubmodempty",
+			url:       serverURL + "/.git?submodules",
+			expectOut: "123\n",
+			target:    "withsubmod",
+		},
+		{
+			name:      "withoutsubmod",
+			url:       serverURL + "/.git?submodules=false",
+			expectErr: "submod/file\": not found",
+			target:    "withsubmod",
+		},
 	}
 
 	for _, tc := range tcases {
 		t.Run("context_"+tc.name, func(t *testing.T) {
 			dest := t.TempDir()
+			attrs := map[string]string{
+				"context": tc.url,
+			}
+			if tc.target != "" {
+				attrs["target"] = tc.target
+			}
 			_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-				FrontendAttrs: map[string]string{
-					"context": tc.url,
-				},
+				FrontendAttrs: attrs,
 				Exports: []client.ExportEntry{
 					{
 						Type:      client.ExporterLocal,
@@ -566,15 +649,28 @@ COPY foo out
 
 	for _, tc := range tcases {
 		dockerfile2 := fmt.Sprintf(`
-FROM scratch
+FROM scratch AS main
 ADD %s /repo/
+
+FROM scratch as withsubmod
+COPY --from=main /repo/submod/file /repo/foo
+
+FROM scratch AS withgit
+COPY --from=main /repo/.git/HEAD /repo/foo
+
+FROM main
 		`, tc.url)
 		inDir := integration.Tmpdir(t,
 			fstest.CreateFile("Dockerfile", []byte(dockerfile2), 0600),
 		)
 		t.Run("add_"+tc.name, func(t *testing.T) {
 			dest := t.TempDir()
+			attrs := map[string]string{}
+			if tc.target != "" {
+				attrs["target"] = tc.target
+			}
 			_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+				FrontendAttrs: attrs,
 				Exports: []client.ExportEntry{
 					{
 						Type:      client.ExporterLocal,

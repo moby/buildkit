@@ -94,6 +94,10 @@ func (gs *gitSource) Identifier(scheme, ref string, attrs map[string]string, pla
 			id.MountSSHSock = v
 		case pb.AttrGitChecksum:
 			id.Checksum = v
+		case pb.AttrGitSkipSubmodules:
+			if v == "true" {
+				id.SkipSubmodules = true
+			}
 		}
 	}
 
@@ -208,6 +212,9 @@ func (gs *gitSourceHandler) shaToCacheKey(sha, ref string) string {
 	}
 	if gs.src.Subdir != "" {
 		key += ":" + gs.src.Subdir
+	}
+	if gs.src.SkipSubmodules {
+		key += "(skip-submodules)"
 	}
 	return key
 }
@@ -639,9 +646,11 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 	}
 
 	git = git.New(gitutil.WithWorkTree(cd), gitutil.WithGitDir(gitDir))
-	_, err = git.Run(ctx, "submodule", "update", "--init", "--recursive", "--depth=1")
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to update submodules for %s", urlutil.RedactCredentials(gs.src.Remote))
+	if !gs.src.SkipSubmodules {
+		_, err = git.Run(ctx, "submodule", "update", "--init", "--recursive", "--depth=1")
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to update submodules for %s", urlutil.RedactCredentials(gs.src.Remote))
+		}
 	}
 
 	if subdir != "." {

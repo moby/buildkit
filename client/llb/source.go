@@ -341,6 +341,11 @@ func Git(url, fragment string, opts ...GitOption) State {
 		addCap(&gi.Constraints, pb.CapSourceGitChecksum)
 	}
 
+	if gi.SkipSubmodules {
+		attrs[pb.AttrGitSkipSubmodules] = "true"
+		addCap(&gi.Constraints, pb.CapSourceGitSkipSubmodules)
+	}
+
 	addCap(&gi.Constraints, pb.CapSourceGit)
 
 	source := NewSource("git://"+id, attrs, gi.Constraints)
@@ -367,6 +372,7 @@ type GitInfo struct {
 	Checksum         string
 	Ref              string
 	SubDir           string
+	SkipSubmodules   bool
 }
 
 func GitRef(v string) GitOption {
@@ -378,6 +384,12 @@ func GitRef(v string) GitOption {
 func GitSubDir(v string) GitOption {
 	return gitOptionFunc(func(gi *GitInfo) {
 		gi.SubDir = v
+	})
+}
+
+func GitSkipSubmodules() GitOption {
+	return gitOptionFunc(func(gi *GitInfo) {
+		gi.SkipSubmodules = true
 	})
 }
 
