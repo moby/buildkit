@@ -247,6 +247,10 @@ const (
 // Formats that utilize SSH may need to supply credentials as a [GitOption].
 // You may need to check the source code for a full list of supported formats.
 //
+// Fragment can be used to pass ref:subdir format that can set in (old-style)
+// Docker Git URL format after # . This is provided for backwards compatibility.
+// It is recommended to leave it empty and call GitRef(), GitSubdir() options instead.
+//
 // By default the git repository is cloned with `--depth=1` to reduce the amount of data downloaded.
 // Additionally the ".git" directory is removed after the clone, you can keep ith with the [KeepGitDir] [GitOption].
 func Git(url, fragment string, opts ...GitOption) State {

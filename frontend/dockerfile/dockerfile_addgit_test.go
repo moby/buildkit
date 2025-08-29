@@ -522,7 +522,6 @@ ADD %s /repo/
 			require.Equal(t, tc.expectOut, string(dt))
 		})
 	}
-
 }
 
 func applyTemplate(tmpl string, x any) (string, error) {
