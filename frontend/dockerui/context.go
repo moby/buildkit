@@ -164,6 +164,9 @@ func DetectGitContext(ref string, keepGit *bool) (*llb.State, bool, error) {
 	if g.Checksum != "" {
 		gitOpts = append(gitOpts, llb.GitChecksum(g.Checksum))
 	}
+	if g.Submodules != nil && !*g.Submodules {
+		gitOpts = append(gitOpts, llb.GitSkipSubmodules())
+	}
 
 	st := llb.Git(g.Remote, "", gitOpts...)
 	return &st, true, nil

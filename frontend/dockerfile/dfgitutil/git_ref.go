@@ -53,6 +53,9 @@ type GitRef struct {
 
 	// KeepGitDir is true for URL that controls whether to keep the .git directory.
 	KeepGitDir *bool
+
+	// Submodules is true for URL that controls whether to fetch git submodules.
+	Submodules *bool
 }
 
 // ParseGitRef parses a git ref.
@@ -158,6 +161,12 @@ func (gf *GitRef) loadQuery(query url.Values) error {
 				return errors.Errorf("invalid keep-git-dir value: %q", v[0])
 			}
 			gf.KeepGitDir = &vv
+		case "submodules":
+			vv, err := strconv.ParseBool(v[0])
+			if err != nil {
+				return errors.Errorf("invalid submodules value: %q", v[0])
+			}
+			gf.Submodules = &vv
 		default:
 			return errors.Errorf("unexpected query %q", k)
 		}

@@ -356,8 +356,25 @@ func testGitQueryString(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	gitDir, err := os.MkdirTemp("", "buildkit")
+	subModDir := t.TempDir()
+	defer os.RemoveAll(subModDir)
+
+	err := runShell(subModDir, []string{
+		"git init",
+		"git config --local user.email test",
+		"git config --local user.name test",
+		"echo 123 >file",
+		"git add file",
+		"git commit -m initial",
+		"git update-server-info",
+	}...)
 	require.NoError(t, err)
+
+	subModServer := httptest.NewServer(http.FileServer(http.Dir(filepath.Clean(subModDir))))
+	defer subModServer.Close()
+	submodServerURL := subModServer.URL
+
+	gitDir := t.TempDir()
 	defer os.RemoveAll(gitDir)
 	err = runShell(gitDir, []string{
 		"git init",
@@ -371,13 +388,17 @@ func testGitQueryString(t *testing.T, sb integration.Sandbox) {
 FROM scratch AS withgit
 COPY .git/HEAD out
 
+FROM scratch as withsubmod
+COPY submod/file out
+
 FROM scratch
 COPY foo out
 `), 0600)
 	require.NoError(t, err)
 
 	err = runShell(gitDir, []string{
-		"git add Dockerfile foo",
+		"git submodule add " + submodServerURL + "/.git submod",
+		"git add Dockerfile foo submod",
 		"git commit -m initial",
 		"git tag v0.0.1",
 		"git branch base",
@@ -541,6 +562,24 @@ COPY foo out
 			expectErr: ".git/HEAD\": not found",
 			target:    "withgit",
 		},
+		{
+			name:      "withsubmod",
+			url:       serverURL + "/.git",
+			expectOut: "123\n",
+			target:    "withsubmod",
+		},
+		{
+			name:      "withsubmodset",
+			url:       serverURL + "/.git?submodules=true",
+			expectOut: "123\n",
+			target:    "withsubmod",
+		},
+		{
+			name:      "withoutsubmod",
+			url:       serverURL + "/.git?submodules=false",
+			expectErr: "submod/file\": not found",
+			target:    "withsubmod",
+		},
 	}
 
 	for _, tc := range tcases {
@@ -585,6 +624,9 @@ COPY foo out
 		dockerfile2 := fmt.Sprintf(`
 FROM scratch AS main
 ADD %s /repo/
+
+FROM scratch as withsubmod
+COPY --from=main /repo/submod/file /repo/foo
 
 FROM scratch AS withgit
 COPY --from=main /repo/.git/HEAD /repo/foo

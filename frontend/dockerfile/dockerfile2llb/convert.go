@@ -1545,6 +1545,9 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 			if gitRef.SubDir != "" {
 				gitOptions = append(gitOptions, llb.GitSubDir(gitRef.SubDir))
 			}
+			if gitRef.Submodules != nil && !*gitRef.Submodules {
+				gitOptions = append(gitOptions, llb.GitSkipSubmodules())
+			}
 
 			st := llb.Git(gitRef.Remote, "", gitOptions...)
 			opts := append([]llb.CopyOption{&llb.CopyInfo{
