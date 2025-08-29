@@ -473,9 +473,19 @@ COPY foo out
 			expectOut: "v0.0.2\n",
 		},
 		{
+			name:      "v2 by commit (short)",
+			url:       serverURL + "/.git?commit=" + commitHashV2[:8],
+			expectOut: "v0.0.2\n",
+		},
+		{
 			name:      "v2 ref by commit",
 			url:       serverURL + "/.git?ref=" + commitHashV2,
 			expectOut: "v0.0.2\n",
+		},
+		{
+			name:      "v2 ref by commit (short)",
+			url:       serverURL + "/.git?ref=" + commitHashV2[:8],
+			expectErr: "repository does not contain ref",
 		},
 		{
 			name:      "tag with commit",
