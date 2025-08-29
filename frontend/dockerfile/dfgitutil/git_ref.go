@@ -3,6 +3,7 @@ package dfgitutil
 
 import (
 	"net/url"
+	"strconv"
 	"strings"
 
 	cerrdefs "github.com/containerd/errdefs"
@@ -49,6 +50,9 @@ type GitRef struct {
 	// Discouraged, although not deprecated.
 	// Instead, consider using an encrypted TCP connection such as "git@github.com/foo/bar.git" or "https://github.com/foo/bar.git".
 	UnencryptedTCP bool
+
+	// KeepGitDir is true for URL that controls whether to keep the .git directory.
+	KeepGitDir *bool
 }
 
 // ParseGitRef parses a git ref.
@@ -148,6 +152,12 @@ func (gf *GitRef) loadQuery(query url.Values) error {
 			gf.SubDir = v[0]
 		case "checksum", "commit":
 			gf.Checksum = v[0]
+		case "keep-git-dir":
+			vv, err := strconv.ParseBool(v[0])
+			if err != nil {
+				return errors.Errorf("invalid keep-git-dir value: %q", v[0])
+			}
+			gf.KeepGitDir = &vv
 		default:
 			return errors.Errorf("unexpected query %q", k)
 		}

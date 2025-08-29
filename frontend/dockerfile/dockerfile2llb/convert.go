@@ -1520,7 +1520,15 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 				llb.WithCustomName(pgName),
 				llb.GitRef(gitRef.Ref),
 			}
-			if cfg.keepGitDir {
+			if cfg.keepGitDir != nil && gitRef.KeepGitDir != nil {
+				if *cfg.keepGitDir != *gitRef.KeepGitDir {
+					return errors.New("inconsistent keep-git-dir configuration")
+				}
+			}
+			if gitRef.KeepGitDir != nil {
+				cfg.keepGitDir = gitRef.KeepGitDir
+			}
+			if cfg.keepGitDir != nil && *cfg.keepGitDir {
 				gitOptions = append(gitOptions, llb.KeepGitDir())
 			}
 			if cfg.checksum != "" && gitRef.Checksum != "" {
@@ -1711,7 +1719,7 @@ type copyConfig struct {
 	chown           string
 	chmod           string
 	link            bool
-	keepGitDir      bool
+	keepGitDir      *bool
 	checksum        string
 	parents         bool
 	location        []parser.Range
