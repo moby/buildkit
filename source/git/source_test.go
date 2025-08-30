@@ -160,14 +160,20 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	require.Equal(t, pin3, pin4)
 }
 
-func TestFetchBySHA(t *testing.T) {
-	testFetchBySHA(t, false)
+func TestFetchBySHA1(t *testing.T) {
+	testFetchBySHA(t, "sha1", false)
 }
-func TestFetchBySHAKeepGitDir(t *testing.T) {
-	testFetchBySHA(t, true)
+func TestFetchBySHA1KeepGitDir(t *testing.T) {
+	testFetchBySHA(t, "sha1", true)
+}
+func TestFetchBySHA256(t *testing.T) {
+	testFetchBySHA(t, "sha256", false)
+}
+func TestFetchBySHA256KeepGitDir(t *testing.T) {
+	testFetchBySHA(t, "sha256", true)
 }
 
-func testFetchBySHA(t *testing.T, keepGitDir bool) {
+func testFetchBySHA(t *testing.T, format string, keepGitDir bool) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
 	}
@@ -178,7 +184,7 @@ func testFetchBySHA(t *testing.T, keepGitDir bool) {
 
 	gs := setupGitSource(t, t.TempDir())
 
-	repo := setupGitRepo(t)
+	repo := setupGitRepoFormat(t, format)
 
 	cmd := exec.Command("git", "rev-parse", "feature")
 	cmd.Dir = repo.mainPath
@@ -186,8 +192,18 @@ func testFetchBySHA(t *testing.T, keepGitDir bool) {
 	out, err := cmd.Output()
 	require.NoError(t, err)
 
+	var shaLen int
+	switch format {
+	case "sha1":
+		shaLen = 40
+	case "sha256":
+		shaLen = 64
+	default:
+		t.Fatalf("unexpected format: %q", format)
+	}
+
 	sha := strings.TrimSpace(string(out))
-	require.Equal(t, 40, len(sha))
+	require.Equal(t, shaLen, len(sha))
 
 	id := &GitIdentifier{Remote: repo.mainURL, Ref: sha, KeepGitDir: keepGitDir}
 
@@ -198,14 +214,14 @@ func testFetchBySHA(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	require.True(t, done)
 
-	expLen := 40
+	expLen := shaLen
 	if keepGitDir {
 		expLen += 4
 		require.GreaterOrEqual(t, len(key1), expLen)
 	} else {
 		require.Equal(t, expLen, len(key1))
 	}
-	require.Equal(t, 40, len(pin1))
+	require.Equal(t, shaLen, len(pin1))
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
@@ -904,7 +920,13 @@ type gitRepoFixture struct {
 	mainURL, subURL   string // HTTP URLs for the respective repos
 }
 
+// small helper for the common case
 func setupGitRepo(t *testing.T) gitRepoFixture {
+	t.Helper()
+	return setupGitRepoFormat(t, "sha1")
+}
+
+func setupGitRepoFormat(t *testing.T, format string) gitRepoFixture {
 	t.Helper()
 	dir := t.TempDir()
 	srv := serveGitRepo(t, dir)
@@ -918,7 +940,7 @@ func setupGitRepo(t *testing.T) gitRepoFixture {
 	require.NoError(t, os.MkdirAll(fixture.mainPath, 0700))
 
 	runShell(t, fixture.subPath,
-		"git -c init.defaultBranch=master init",
+		"git -c init.defaultBranch=master init --object-format="+format,
 		"git config --local user.email test",
 		"git config --local user.name test",
 		"echo subcontents > subfile",
@@ -935,7 +957,7 @@ func setupGitRepo(t *testing.T) gitRepoFixture {
 	// * (tag: refs/tags/v1.2.3) second
 	// * (tag: refs/tags/a/v1.2.3, refs/tags/a/v1.2.3-same) initial
 	runShell(t, fixture.mainPath,
-		"git -c init.defaultBranch=master init",
+		"git -c init.defaultBranch=master init --object-format="+format,
 		"git config --local user.email test",
 		"git config --local user.name test",
 
