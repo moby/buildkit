@@ -1905,7 +1905,7 @@ conditions for cache reuse.
 ### COPY --parents
 
 > [!NOTE]
-> Not yet available in stable syntax, use [`docker/dockerfile:1.7-labs`](#syntax) version.
+> Not yet available in stable syntax, use [`docker/dockerfile:1-labs`](#syntax) version.
 
 ```dockerfile
 COPY [--parents[=<boolean>]] <src> ... <dest>
@@ -1962,7 +1962,7 @@ with the `--parents` flag, the Buildkit is capable of packing multiple
 ### COPY --exclude
 
 > [!NOTE]
-> Not yet available in stable syntax, use [`docker/dockerfile:1.7-labs`](#syntax) version.
+> Not yet available in stable syntax, use [`docker/dockerfile:1-labs`](#syntax) version.
 
 ```dockerfile
 COPY [--exclude=<path> ...] <src> ... <dest>
