@@ -357,8 +357,6 @@ func testGitQueryString(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
 	subModDir := t.TempDir()
-	defer os.RemoveAll(subModDir)
-
 	err := runShell(subModDir, []string{
 		"git init",
 		"git config --local user.email test",
@@ -375,7 +373,6 @@ func testGitQueryString(t *testing.T, sb integration.Sandbox) {
 	submodServerURL := subModServer.URL
 
 	gitDir := t.TempDir()
-	defer os.RemoveAll(gitDir)
 	err = runShell(gitDir, []string{
 		"git init",
 		"git config --local user.email test",
@@ -640,11 +637,7 @@ COPY foo out
 		})
 	}
 
-	cl, err := client.New(sb.Context(), sb.Address())
-	require.NoError(t, err)
-	defer c.Close()
-
-	err = cl.Prune(sb.Context(), nil)
+	err = c.Prune(sb.Context(), nil)
 	require.NoError(t, err)
 
 	for _, tc := range tcases {
