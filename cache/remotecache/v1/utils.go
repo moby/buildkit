@@ -179,6 +179,7 @@ func marshalItem(ctx context.Context, it *item, state *marshalState) error {
 	if _, ok := state.recordsByItem[it]; ok {
 		return nil
 	}
+	state.recordsByItem[it] = -1
 
 	rec := CacheRecord{
 		Digest: it.dgst,
@@ -193,6 +194,9 @@ func marshalItem(ctx context.Context, it *item, state *marshalState) error {
 			idx, ok := state.recordsByItem[l.src]
 			if !ok {
 				return errors.Errorf("invalid source record: %v", l.src)
+			}
+			if idx == -1 {
+				continue
 			}
 			rec.Inputs[i] = append(rec.Inputs[i], CacheInput{
 				Selector:  l.selector,

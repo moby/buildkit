@@ -116,6 +116,12 @@ func (c *CacheChains) Add(dgst digest.Digest, deps [][]solver.CacheLink, results
 				continue
 			}
 			for l, m := range it.children {
+				if main.children == nil {
+					main.children = map[unique.Handle[linkv2]]map[*item]struct{}{}
+				}
+				if _, ok := main.children[l]; !ok {
+					main.children[l] = map[*item]struct{}{}
+				}
 				for ch := range m {
 					main.children[l][ch] = struct{}{}
 					for i, links := range ch.parents {
@@ -126,7 +132,7 @@ func (c *CacheChains) Add(dgst digest.Digest, deps [][]solver.CacheLink, results
 							}
 							newlinks[l] = struct{}{}
 						}
-						main.parents[i] = newlinks
+						ch.parents[i] = newlinks
 					}
 				}
 			}
@@ -143,7 +149,7 @@ func (c *CacheChains) Add(dgst digest.Digest, deps [][]solver.CacheLink, results
 			r.addResult(rr)
 		}
 
-		// make sure that none of the deps are childeren of r
+		// make sure that none of the deps are children of r
 		allChildren := map[*item]struct{}{}
 		if err := r.walkChildren(func(i *item) error {
 			allChildren[i] = struct{}{}
