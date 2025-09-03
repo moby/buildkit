@@ -3210,6 +3210,56 @@ func TestMergedEdgesCycleMultipleOwners(t *testing.T) {
 	}
 }
 
+func TestCacheErrNotFound(t *testing.T) {
+	ctx := context.TODO()
+
+	cm := newTrackingCacheManager(NewInMemoryCacheManager())
+	l := NewSolver(SolverOpt{
+		ResolveOpFunc: testOpResolver,
+		DefaultCache:  cm,
+	})
+	defer l.Close()
+
+	j0, err := l.NewJob("j0")
+	require.NoError(t, err)
+
+	defer func() {
+		if j0 != nil {
+			j0.Discard()
+		}
+	}()
+
+	g0 := Edge{
+		Vertex: vtxSum(1, vtxOpt{
+			inputs: []Edge{
+				{Vertex: vtxConst(2, vtxOpt{})},
+				{Vertex: vtxConst(3, vtxOpt{})},
+			},
+		}),
+	}
+
+	res, err := j0.Build(ctx, g0)
+	require.NoError(t, err)
+	require.Equal(t, 6, unwrapInt(res))
+
+	require.NoError(t, j0.Discard())
+	j0 = nil
+
+	expTarget := newTestExporterTarget()
+
+	key := res.CacheKeys()[0]
+	internal := cm.CacheManager.(*cacheManager)
+	store := internal.backend.(*inMemoryStore)
+	exporter := key.Exporter.(*mergedExporter).exporters[0].(*exporter)
+	record := exporter.record
+
+	// Remove The first record from the internal store CacheManager to trigger an ErrNotFound
+	delete(store.byID[internal.getID(record.key)].results, record.ID)
+	_, err = exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
+
+	require.NoError(t, err)
+}
+
 func TestCacheLoadError(t *testing.T) {
 	t.Parallel()
 
