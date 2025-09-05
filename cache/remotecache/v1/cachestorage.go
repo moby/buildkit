@@ -272,6 +272,9 @@ func (cs *cacheResultStorage) LoadWithParents(ctx context.Context, res solver.Ca
 	for id := range ids {
 		v, ok := cs.byID[id]
 		if ok {
+			if _, ok := visited[v.item]; ok {
+				continue
+			}
 			for _, result := range v.results {
 				resultID := remoteID(result.Result)
 				if resultID == res.ID {
@@ -296,7 +299,6 @@ func (cs *cacheResultStorage) LoadWithParents(ctx context.Context, res solver.Ca
 						}
 						return nil, err
 					}
-					return m, nil
 				}
 			}
 		}
