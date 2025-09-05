@@ -55,8 +55,10 @@ func addBacklinks(t CacheExporterTarget, rec CacheExporterRecord, cm *cacheManag
 
 type contextT string
 
-var backlinkKey = contextT("solver/exporter/backlinks")
-var resKey = contextT("solver/exporter/res")
+var (
+	backlinkKey = contextT("solver/exporter/backlinks")
+	resKey      = contextT("solver/exporter/res")
+)
 
 func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt CacheExportOpt) ([]CacheExporterRecord, error) {
 	var bkm map[string]CacheExporterRecord
@@ -109,9 +111,11 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 
 	var remote *Remote
 	var i int
+
+	v := e.record
+
 	for exportRecord && addRecord {
 		var variants []CacheExporterRecord
-		v := e.record
 		if v == nil {
 			if i < len(records) {
 				v = records[i]
@@ -125,6 +129,7 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		res, err := cm.backend.Load(key, v.ID)
 		if err != nil {
 			if errors.Is(err, ErrNotFound) {
+				v = nil
 				continue
 			}
 			return nil, err
@@ -222,7 +227,7 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		}
 	}
 
-	if v := e.record; v != nil && len(deps) == 0 {
+	if v != nil && len(deps) == 0 {
 		cm := v.cacheManager
 		key := cm.getID(v.key)
 		if err := cm.backend.WalkIDsByResult(v.ID, func(id string) error {
