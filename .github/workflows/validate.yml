@@ -45,7 +45,7 @@ jobs:
       -
         name: Add runner to matrix
         id: matrix
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           INPUT_MATRIX: ${{ steps.generate.outputs.matrix }}
           INPUT_PRIVATE-REPO: ${{ github.event.repository.private }}

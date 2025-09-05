@@ -24,7 +24,7 @@ jobs:
     steps:
       -
         name: Prepare
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const version = `${{ inputs.version }}` || '25.0.2';
