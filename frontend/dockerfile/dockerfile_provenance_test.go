@@ -45,7 +45,8 @@ import (
 
 var provenanceTests = integration.TestFuncs(
 	testProvenanceAttestation,
-	testGitProvenanceAttestation,
+	testGitProvenanceAttestationSHA1,
+	testGitProvenanceAttestationSHA256,
 	testMultiPlatformProvenance,
 	testClientFrontendProvenance,
 	testClientLLBProvenance,
@@ -389,7 +390,15 @@ RUN echo ok> /foo
 	}
 }
 
-func testGitProvenanceAttestation(t *testing.T, sb integration.Sandbox) {
+func testGitProvenanceAttestationSHA1(t *testing.T, sb integration.Sandbox) {
+	testGitProvenanceAttestation(t, sb, "sha1")
+}
+
+func testGitProvenanceAttestationSHA256(t *testing.T, sb integration.Sandbox) {
+	testGitProvenanceAttestation(t, sb, "sha256")
+}
+
+func testGitProvenanceAttestation(t *testing.T, sb integration.Sandbox, format string) {
 	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
 	ctx := sb.Context()
@@ -423,8 +432,12 @@ COPY myapp.Dockerfile /
 				fstest.CreateFile("myapp.Dockerfile", dockerfile, 0600),
 			)
 
+			initOptions := ""
+			if format == "sha256" {
+				initOptions = " --object-format=sha256"
+			}
 			err = runShell(dir.Name,
-				"git init",
+				"git init"+initOptions,
 				"git config --local user.email test",
 				"git config --local user.name test",
 				"git add myapp.Dockerfile",
@@ -519,7 +532,7 @@ COPY myapp.Dockerfile /
 					require.NotEmpty(t, pred.BuildDefinition.ResolvedDependencies[1].Digest["sha256"])
 
 					require.Equal(t, expectedURL+"/.git#v1", pred.BuildDefinition.ResolvedDependencies[2].URI)
-					require.Equal(t, strings.TrimSpace(string(expectedGitSHA)), pred.BuildDefinition.ResolvedDependencies[2].Digest["sha1"])
+					require.Equal(t, strings.TrimSpace(string(expectedGitSHA)), pred.BuildDefinition.ResolvedDependencies[2].Digest[format])
 				} else {
 					require.Equal(t, 2, len(pred.BuildDefinition.ResolvedDependencies), "%+v", pred.BuildDefinition.ResolvedDependencies)
 
@@ -527,7 +540,7 @@ COPY myapp.Dockerfile /
 					require.NotEmpty(t, pred.BuildDefinition.ResolvedDependencies[0].Digest["sha256"])
 
 					require.Equal(t, expectedURL+"/.git#v1", pred.BuildDefinition.ResolvedDependencies[1].URI)
-					require.Equal(t, strings.TrimSpace(string(expectedGitSHA)), pred.BuildDefinition.ResolvedDependencies[1].Digest["sha1"])
+					require.Equal(t, strings.TrimSpace(string(expectedGitSHA)), pred.BuildDefinition.ResolvedDependencies[1].Digest[format])
 				}
 
 				require.Equal(t, 0, len(pred.BuildDefinition.ExternalParameters.Request.Locals))
@@ -574,7 +587,7 @@ COPY myapp.Dockerfile /
 					require.NotEmpty(t, pred.Materials[1].Digest["sha256"])
 
 					require.Equal(t, expectedURL+"/.git#v1", pred.Materials[2].URI)
-					require.Equal(t, strings.TrimSpace(string(expectedGitSHA)), pred.Materials[2].Digest["sha1"])
+					require.Equal(t, strings.TrimSpace(string(expectedGitSHA)), pred.Materials[2].Digest[format])
 				} else {
 					require.Equal(t, 2, len(pred.Materials), "%+v", pred.Materials)
 
@@ -582,7 +595,7 @@ COPY myapp.Dockerfile /
 					require.NotEmpty(t, pred.Materials[0].Digest["sha256"])
 
 					require.Equal(t, expectedURL+"/.git#v1", pred.Materials[1].URI)
-					require.Equal(t, strings.TrimSpace(string(expectedGitSHA)), pred.Materials[1].Digest["sha1"])
+					require.Equal(t, strings.TrimSpace(string(expectedGitSHA)), pred.Materials[1].Digest[format])
 				}
 
 				require.Equal(t, 0, len(pred.Invocation.Parameters.Locals))
