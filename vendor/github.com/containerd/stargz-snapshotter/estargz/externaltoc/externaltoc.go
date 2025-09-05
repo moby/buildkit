@@ -135,7 +135,7 @@ func gzipFooterBytes() ([]byte, error) {
 	header[0], header[1] = 'S', 'G'
 	subfield := "STARGZEXTERNALTOC"                                   // len("STARGZEXTERNALTOC") = 17
 	binary.LittleEndian.PutUint16(header[2:4], uint16(len(subfield))) // little-endian per RFC1952
-	gz.Header.Extra = append(header, []byte(subfield)...)
+	gz.Extra = append(header, []byte(subfield)...)
 	if err := gz.Close(); err != nil {
 		return nil, err
 	}
@@ -204,7 +204,7 @@ func (gz *GzipDecompressor) ParseFooter(p []byte) (blobPayloadSize, tocOffset, t
 		return 0, 0, 0, err
 	}
 	defer zr.Close()
-	extra := zr.Header.Extra
+	extra := zr.Extra
 	si1, si2, subfieldlen, subfield := extra[0], extra[1], extra[2:4], extra[4:]
 	if si1 != 'S' || si2 != 'G' {
 		return 0, 0, 0, fmt.Errorf("invalid subfield IDs: %q, %q; want E, S", si1, si2)
