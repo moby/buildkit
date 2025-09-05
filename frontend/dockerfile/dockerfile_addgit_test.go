@@ -21,7 +21,8 @@ import (
 )
 
 var addGitTests = integration.TestFuncs(
-	testAddGit,
+	testAddGitSHA1,
+	testAddGitSHA256,
 	testAddGitChecksumCache,
 	testGitQueryString,
 )
@@ -30,15 +31,27 @@ func init() {
 	allTests = append(allTests, addGitTests...)
 }
 
-func testAddGit(t *testing.T, sb integration.Sandbox) {
+func testAddGitSHA1(t *testing.T, sb integration.Sandbox) {
+	testAddGit(t, sb, "sha1")
+}
+
+func testAddGitSHA256(t *testing.T, sb integration.Sandbox) {
+	testAddGit(t, sb, "sha256")
+}
+
+func testAddGit(t *testing.T, sb integration.Sandbox, format string) {
 	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	gitDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(gitDir)
+	initOptions := ""
+	if format == "sha256" {
+		initOptions = " --object-format=sha256"
+	}
 	gitCommands := []string{
-		"git init",
+		"git init" + initOptions,
 		"git config --local user.email test",
 		"git config --local user.name test",
 	}

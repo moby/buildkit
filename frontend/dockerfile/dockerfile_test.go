@@ -94,7 +94,8 @@ var allTests = integration.TestFuncs(
 	testCacheReleased,
 	testDockerignore,
 	testDockerignoreInvalid,
-	testDockerfileFromGit,
+	testDockerfileFromGitSHA1,
+	testDockerfileFromGitSHA256,
 	testMultiStageImplicitFrom,
 	testMultiStageCaseInsensitive,
 	testLabels,
@@ -4808,7 +4809,15 @@ ADD --chmod=10000 foo /
 	require.ErrorContains(t, err, "invalid chmod parameter: '10000'. it should be octal string and between 0 and 07777")
 }
 
-func testDockerfileFromGit(t *testing.T, sb integration.Sandbox) {
+func testDockerfileFromGitSHA1(t *testing.T, sb integration.Sandbox) {
+	testDockerfileFromGit(t, sb, "sha1")
+}
+
+func testDockerfileFromGitSHA256(t *testing.T, sb integration.Sandbox) {
+	testDockerfileFromGit(t, sb, "sha256")
+}
+
+func testDockerfileFromGit(t *testing.T, sb integration.Sandbox, format string) {
 	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
@@ -4824,8 +4833,12 @@ COPY --from=build foo bar
 	err := os.WriteFile(filepath.Join(gitDir, "Dockerfile"), []byte(dockerfile), 0600)
 	require.NoError(t, err)
 
+	initOptions := ""
+	if format == "sha256" {
+		initOptions = " --object-format=sha256"
+	}
 	err = runShell(gitDir,
-		"git init",
+		"git init"+initOptions,
 		"git config --local user.email test",
 		"git config --local user.name test",
 		"git add Dockerfile",

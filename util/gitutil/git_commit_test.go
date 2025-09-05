@@ -10,7 +10,8 @@ import (
 func TestIsCommitSHA(t *testing.T) {
 	for truthy, commits := range map[bool][]string{
 		true: {
-			"01234567890abcdef01234567890abcdef012345", // 40 valid characters (SHA-1)
+			"01234567890abcdef01234567890abcdef012345",                         // 40 valid characters (SHA-1)
+			"01234567890abcdef01234567890abcdef01234567890abcdef01234567890ab", // 64 valid characters (SHA-256)
 		},
 		false: {
 			"",       // empty string
@@ -24,8 +25,6 @@ func TestIsCommitSHA(t *testing.T) {
 			"zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",  // 64 invalid characters
 			"01234567890abcdef01234567890abcdef01234567890abcdef01234567890abc", // 65 valid characters
 
-			// TODO: add SHA-256 support and move this up to the "true" section
-			"01234567890abcdef01234567890abcdef01234567890abcdef01234567890ab", // 64 valid characters (SHA-256)
 		},
 	} {
 		for _, commit := range commits {

@@ -39,14 +39,21 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
-func TestRepeatedFetch(t *testing.T) {
-	testRepeatedFetch(t, false)
+func TestRepeatedFetchSHA1(t *testing.T) {
+	testRepeatedFetch(t, false, "sha1")
 }
-func TestRepeatedFetchKeepGitDir(t *testing.T) {
-	testRepeatedFetch(t, true)
+func TestRepeatedFetchKeepGitDirSHA1(t *testing.T) {
+	testRepeatedFetch(t, true, "sha1")
 }
 
-func testRepeatedFetch(t *testing.T, keepGitDir bool) {
+func TestRepeatedFetchSHA256(t *testing.T) {
+	testRepeatedFetch(t, false, "sha256")
+}
+func TestRepeatedFetchKeepGitDirSHA256(t *testing.T) {
+	testRepeatedFetch(t, true, "sha256")
+}
+
+func testRepeatedFetch(t *testing.T, keepGitDir bool, format string) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
 	}
@@ -56,7 +63,7 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 
 	gs := setupGitSource(t, t.TempDir())
 
-	repo := setupGitRepo(t)
+	repo := setupGitRepo(t, format)
 
 	id := &GitIdentifier{Remote: repo.mainURL, KeepGitDir: keepGitDir}
 
@@ -68,13 +75,17 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	require.True(t, done)
 
 	expLen := 40
+	if format == "sha256" {
+		expLen = 64
+	}
+	expPinLen := expLen
 	if keepGitDir {
 		expLen += 4
 		require.GreaterOrEqual(t, len(key1), expLen)
 	} else {
 		require.Equal(t, expLen, len(key1))
 	}
-	require.Equal(t, 40, len(pin1))
+	require.Equal(t, expPinLen, len(pin1))
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
@@ -160,14 +171,20 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	require.Equal(t, pin3, pin4)
 }
 
-func TestFetchBySHA(t *testing.T) {
-	testFetchBySHA(t, false)
+func TestFetchBySHA1(t *testing.T) {
+	testFetchBySHA(t, "sha1", false)
 }
-func TestFetchBySHAKeepGitDir(t *testing.T) {
-	testFetchBySHA(t, true)
+func TestFetchBySHA1KeepGitDir(t *testing.T) {
+	testFetchBySHA(t, "sha1", true)
+}
+func TestFetchBySHA256(t *testing.T) {
+	testFetchBySHA(t, "sha256", false)
+}
+func TestFetchBySHA256KeepGitDir(t *testing.T) {
+	testFetchBySHA(t, "sha256", true)
 }
 
-func testFetchBySHA(t *testing.T, keepGitDir bool) {
+func testFetchBySHA(t *testing.T, format string, keepGitDir bool) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
 	}
@@ -178,7 +195,7 @@ func testFetchBySHA(t *testing.T, keepGitDir bool) {
 
 	gs := setupGitSource(t, t.TempDir())
 
-	repo := setupGitRepo(t)
+	repo := setupGitRepo(t, format)
 
 	cmd := exec.Command("git", "rev-parse", "feature")
 	cmd.Dir = repo.mainPath
@@ -186,8 +203,18 @@ func testFetchBySHA(t *testing.T, keepGitDir bool) {
 	out, err := cmd.Output()
 	require.NoError(t, err)
 
+	var shaLen int
+	switch format {
+	case "sha1":
+		shaLen = 40
+	case "sha256":
+		shaLen = 64
+	default:
+		t.Fatalf("unexpected format: %q", format)
+	}
+
 	sha := strings.TrimSpace(string(out))
-	require.Equal(t, 40, len(sha))
+	require.Equal(t, shaLen, len(sha))
 
 	id := &GitIdentifier{Remote: repo.mainURL, Ref: sha, KeepGitDir: keepGitDir}
 
@@ -198,14 +225,14 @@ func testFetchBySHA(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	require.True(t, done)
 
-	expLen := 40
+	expLen := shaLen
 	if keepGitDir {
 		expLen += 4
 		require.GreaterOrEqual(t, len(key1), expLen)
 	} else {
 		require.Equal(t, expLen, len(key1))
 	}
-	require.Equal(t, 40, len(pin1))
+	require.Equal(t, shaLen, len(pin1))
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
@@ -230,32 +257,56 @@ func testFetchBySHA(t *testing.T, keepGitDir bool) {
 	require.Equal(t, "subcontents\n", string(dt))
 }
 
-func TestFetchUnreferencedTagSha(t *testing.T) {
-	testFetchUnreferencedRefSha(t, "v1.2.3-special", false)
+func TestFetchUnreferencedTagShaSHA1(t *testing.T) {
+	testFetchUnreferencedRefSha(t, "v1.2.3-special", false, "sha1")
 }
 
-func TestFetchUnreferencedTagShaKeepGitDir(t *testing.T) {
-	testFetchUnreferencedRefSha(t, "v1.2.3-special", true)
+func TestFetchUnreferencedTagShaKeepGitDirSHA1(t *testing.T) {
+	testFetchUnreferencedRefSha(t, "v1.2.3-special", true, "sha1")
 }
 
-func TestFetchUnreferencedRefSha(t *testing.T) {
-	testFetchUnreferencedRefSha(t, "refs/special", false)
+func TestFetchUnreferencedRefShaSHA1(t *testing.T) {
+	testFetchUnreferencedRefSha(t, "refs/special", false, "sha1")
 }
 
-func TestFetchUnreferencedRefShaKeepGitDir(t *testing.T) {
-	testFetchUnreferencedRefSha(t, "refs/special", true)
+func TestFetchUnreferencedRefShaKeepGitDirSHA1(t *testing.T) {
+	testFetchUnreferencedRefSha(t, "refs/special", true, "sha1")
 }
 
-func TestFetchUnadvertisedRefSha(t *testing.T) {
-	testFetchUnreferencedRefSha(t, "refs/special~", false)
+func TestFetchUnadvertisedRefShaSHA1(t *testing.T) {
+	testFetchUnreferencedRefSha(t, "refs/special~", false, "sha1")
 }
 
-func TestFetchUnadvertisedRefShaKeepGitDir(t *testing.T) {
-	testFetchUnreferencedRefSha(t, "refs/special~", true)
+func TestFetchUnadvertisedRefShaKeepGitDirSHA1(t *testing.T) {
+	testFetchUnreferencedRefSha(t, "refs/special~", true, "sha1")
+}
+
+func TestFetchUnreferencedTagShaSHA256(t *testing.T) {
+	testFetchUnreferencedRefSha(t, "v1.2.3-special", false, "sha256")
+}
+
+func TestFetchUnreferencedTagShaKeepGitDirSHA256(t *testing.T) {
+	testFetchUnreferencedRefSha(t, "v1.2.3-special", true, "sha256")
+}
+
+func TestFetchUnreferencedRefShaSHA256(t *testing.T) {
+	testFetchUnreferencedRefSha(t, "refs/special", false, "sha256")
+}
+
+func TestFetchUnreferencedRefShaKeepGitDirSHA256(t *testing.T) {
+	testFetchUnreferencedRefSha(t, "refs/special", true, "sha256")
+}
+
+func TestFetchUnadvertisedRefShaSHA256(t *testing.T) {
+	testFetchUnreferencedRefSha(t, "refs/special~", false, "sha256")
+}
+
+func TestFetchUnadvertisedRefShaKeepGitDirSHA256(t *testing.T) {
+	testFetchUnreferencedRefSha(t, "refs/special~", true, "sha256")
 }
 
 // testFetchUnreferencedRefSha tests fetching a SHA that points to a ref that is not reachable from any branch.
-func testFetchUnreferencedRefSha(t *testing.T, ref string, keepGitDir bool) {
+func testFetchUnreferencedRefSha(t *testing.T, ref string, keepGitDir bool, format string) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
 	}
@@ -266,7 +317,7 @@ func testFetchUnreferencedRefSha(t *testing.T, ref string, keepGitDir bool) {
 
 	gs := setupGitSource(t, t.TempDir())
 
-	repo := setupGitRepo(t)
+	repo := setupGitRepo(t, format)
 
 	cmd := exec.Command("git", "rev-parse", ref)
 	cmd.Dir = repo.mainPath
@@ -274,8 +325,13 @@ func testFetchUnreferencedRefSha(t *testing.T, ref string, keepGitDir bool) {
 	out, err := cmd.Output()
 	require.NoError(t, err)
 
+	expSHALen := 40
+	if format == "sha256" {
+		expSHALen = 64
+	}
+
 	sha := strings.TrimSpace(string(out))
-	require.Equal(t, 40, len(sha))
+	require.Equal(t, expSHALen, len(sha))
 
 	id := &GitIdentifier{Remote: repo.mainURL, Ref: sha, KeepGitDir: keepGitDir}
 
@@ -287,13 +343,17 @@ func testFetchUnreferencedRefSha(t *testing.T, ref string, keepGitDir bool) {
 	require.True(t, done)
 
 	expLen := 40
+	if format == "sha256" {
+		expLen = 64
+	}
+	expPinLen := expLen
 	if keepGitDir {
 		expLen += 4
 		require.GreaterOrEqual(t, len(key1), expLen)
 	} else {
 		require.Equal(t, expLen, len(key1))
 	}
-	require.Equal(t, 40, len(pin1))
+	require.Equal(t, expPinLen, len(pin1))
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
@@ -313,64 +373,124 @@ func testFetchUnreferencedRefSha(t *testing.T, ref string, keepGitDir bool) {
 	require.Equal(t, "foo\n", string(dt))
 }
 
-func TestFetchByTag(t *testing.T) {
-	testFetchByTag(t, "lightweight-tag", "third", false, true, false, testChecksumModeNone)
+func TestFetchByTagSHA1(t *testing.T) {
+	testFetchByTag(t, "lightweight-tag", "third", false, true, false, testChecksumModeNone, "sha1")
 }
 
-func TestFetchByTagKeepGitDir(t *testing.T) {
-	testFetchByTag(t, "lightweight-tag", "third", false, true, true, testChecksumModeNone)
+func TestFetchByTagKeepGitDirSHA1(t *testing.T) {
+	testFetchByTag(t, "lightweight-tag", "third", false, true, true, testChecksumModeNone, "sha1")
 }
 
-func TestFetchByTagFull(t *testing.T) {
-	testFetchByTag(t, "refs/tags/lightweight-tag", "third", false, true, true, testChecksumModeNone)
+func TestFetchByTagFullSHA1(t *testing.T) {
+	testFetchByTag(t, "refs/tags/lightweight-tag", "third", false, true, true, testChecksumModeNone, "sha1")
 }
 
-func TestFetchByAnnotatedTag(t *testing.T) {
-	testFetchByTag(t, "v1.2.3", "second", true, false, false, testChecksumModeNone)
+func TestFetchByAnnotatedTagSHA1(t *testing.T) {
+	testFetchByTag(t, "v1.2.3", "second", true, false, false, testChecksumModeNone, "sha1")
 }
 
-func TestFetchByAnnotatedTagKeepGitDir(t *testing.T) {
-	testFetchByTag(t, "v1.2.3", "second", true, false, true, testChecksumModeNone)
+func TestFetchByAnnotatedTagKeepGitDirSHA1(t *testing.T) {
+	testFetchByTag(t, "v1.2.3", "second", true, false, true, testChecksumModeNone, "sha1")
 }
 
-func TestFetchByAnnotatedTagFull(t *testing.T) {
-	testFetchByTag(t, "refs/tags/v1.2.3", "second", true, false, true, testChecksumModeNone)
+func TestFetchByAnnotatedTagFullSHA1(t *testing.T) {
+	testFetchByTag(t, "refs/tags/v1.2.3", "second", true, false, true, testChecksumModeNone, "sha1")
 }
 
-func TestFetchByBranch(t *testing.T) {
-	testFetchByTag(t, "feature", "withsub", false, true, false, testChecksumModeNone)
+func TestFetchByBranchSHA1(t *testing.T) {
+	testFetchByTag(t, "feature", "withsub", false, true, false, testChecksumModeNone, "sha1")
 }
 
-func TestFetchByBranchKeepGitDir(t *testing.T) {
-	testFetchByTag(t, "feature", "withsub", false, true, true, testChecksumModeNone)
+func TestFetchByBranchKeepGitDirSHA1(t *testing.T) {
+	testFetchByTag(t, "feature", "withsub", false, true, true, testChecksumModeNone, "sha1")
 }
 
-func TestFetchByBranchFull(t *testing.T) {
-	testFetchByTag(t, "refs/heads/feature", "withsub", false, true, true, testChecksumModeNone)
+func TestFetchByBranchFullSHA1(t *testing.T) {
+	testFetchByTag(t, "refs/heads/feature", "withsub", false, true, true, testChecksumModeNone, "sha1")
 }
 
-func TestFetchByRef(t *testing.T) {
-	testFetchByTag(t, "test", "feature", false, true, false, testChecksumModeNone)
+func TestFetchByRefSHA1(t *testing.T) {
+	testFetchByTag(t, "test", "feature", false, true, false, testChecksumModeNone, "sha1")
 }
 
-func TestFetchByRefKeepGitDir(t *testing.T) {
-	testFetchByTag(t, "test", "feature", false, true, true, testChecksumModeNone)
+func TestFetchByRefKeepGitDirSHA1(t *testing.T) {
+	testFetchByTag(t, "test", "feature", false, true, true, testChecksumModeNone, "sha1")
 }
 
-func TestFetchByRefFull(t *testing.T) {
-	testFetchByTag(t, "refs/test", "feature", false, true, true, testChecksumModeNone)
+func TestFetchByRefFullSHA1(t *testing.T) {
+	testFetchByTag(t, "refs/test", "feature", false, true, true, testChecksumModeNone, "sha1")
 }
 
-func TestFetchByTagWithChecksum(t *testing.T) {
-	testFetchByTag(t, "lightweight-tag", "third", false, true, false, testChecksumModeValid)
+func TestFetchByTagWithChecksumSHA1(t *testing.T) {
+	testFetchByTag(t, "lightweight-tag", "third", false, true, false, testChecksumModeValid, "sha1")
 }
 
-func TestFetchByTagWithChecksumPartial(t *testing.T) {
-	testFetchByTag(t, "lightweight-tag", "third", false, true, false, testChecksumModeValidPartial)
+func TestFetchByTagWithChecksumPartialSHA1(t *testing.T) {
+	testFetchByTag(t, "lightweight-tag", "third", false, true, false, testChecksumModeValidPartial, "sha1")
 }
 
-func TestFetchByTagWithChecksumInvalid(t *testing.T) {
-	testFetchByTag(t, "lightweight-tag", "third", false, true, false, testChecksumModeInvalid)
+func TestFetchByTagWithChecksumInvalidSHA1(t *testing.T) {
+	testFetchByTag(t, "lightweight-tag", "third", false, true, false, testChecksumModeInvalid, "sha1")
+}
+
+func TestFetchByTagSHA256(t *testing.T) {
+	testFetchByTag(t, "lightweight-tag", "third", false, true, false, testChecksumModeNone, "sha256")
+}
+
+func TestFetchByTagKeepGitDirSHA256(t *testing.T) {
+	testFetchByTag(t, "lightweight-tag", "third", false, true, true, testChecksumModeNone, "sha256")
+}
+
+func TestFetchByTagFullSHA256(t *testing.T) {
+	testFetchByTag(t, "refs/tags/lightweight-tag", "third", false, true, true, testChecksumModeNone, "sha256")
+}
+
+func TestFetchByAnnotatedTagSHA256(t *testing.T) {
+	testFetchByTag(t, "v1.2.3", "second", true, false, false, testChecksumModeNone, "sha256")
+}
+
+func TestFetchByAnnotatedTagKeepGitDirSHA256(t *testing.T) {
+	testFetchByTag(t, "v1.2.3", "second", true, false, true, testChecksumModeNone, "sha256")
+}
+
+func TestFetchByAnnotatedTagFullSHA256(t *testing.T) {
+	testFetchByTag(t, "refs/tags/v1.2.3", "second", true, false, true, testChecksumModeNone, "sha256")
+}
+
+func TestFetchByBranchSHA256(t *testing.T) {
+	testFetchByTag(t, "feature", "withsub", false, true, false, testChecksumModeNone, "sha256")
+}
+
+func TestFetchByBranchKeepGitDirSHA256(t *testing.T) {
+	testFetchByTag(t, "feature", "withsub", false, true, true, testChecksumModeNone, "sha256")
+}
+
+func TestFetchByBranchFullSHA256(t *testing.T) {
+	testFetchByTag(t, "refs/heads/feature", "withsub", false, true, true, testChecksumModeNone, "sha256")
+}
+
+func TestFetchByRefSHA256(t *testing.T) {
+	testFetchByTag(t, "test", "feature", false, true, false, testChecksumModeNone, "sha256")
+}
+
+func TestFetchByRefKeepGitDirSHA256(t *testing.T) {
+	testFetchByTag(t, "test", "feature", false, true, true, testChecksumModeNone, "sha256")
+}
+
+func TestFetchByRefFullSHA256(t *testing.T) {
+	testFetchByTag(t, "refs/test", "feature", false, true, true, testChecksumModeNone, "sha256")
+}
+
+func TestFetchByTagWithChecksumSHA256(t *testing.T) {
+	testFetchByTag(t, "lightweight-tag", "third", false, true, false, testChecksumModeValid, "sha256")
+}
+
+func TestFetchByTagWithChecksumPartialSHA256(t *testing.T) {
+	testFetchByTag(t, "lightweight-tag", "third", false, true, false, testChecksumModeValidPartial, "sha256")
+}
+
+func TestFetchByTagWithChecksumInvalidSHA256(t *testing.T) {
+	testFetchByTag(t, "lightweight-tag", "third", false, true, false, testChecksumModeInvalid, "sha256")
 }
 
 type testChecksumMode int
@@ -382,7 +502,7 @@ const (
 	testChecksumModeInvalid
 )
 
-func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotatedTag, hasFoo13File, keepGitDir bool, checksumMode testChecksumMode) {
+func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotatedTag, hasFoo13File, keepGitDir bool, checksumMode testChecksumMode, format string) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
 	}
@@ -393,7 +513,7 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 
 	gs := setupGitSource(t, t.TempDir())
 
-	repo := setupGitRepo(t)
+	repo := setupGitRepo(t, format)
 
 	id := &GitIdentifier{Remote: repo.mainURL, Ref: tag, KeepGitDir: keepGitDir}
 
@@ -404,8 +524,12 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 		out, err := cmd.Output()
 		require.NoError(t, err)
 
+		expLen := 40
+		if format == "sha256" {
+			expLen = 64
+		}
 		sha := strings.TrimSpace(string(out))
-		require.Equal(t, 40, len(sha))
+		require.Equal(t, expLen, len(sha))
 
 		switch checksumMode {
 		case testChecksumModeValid:
@@ -414,6 +538,9 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 			id.Checksum = sha[:8]
 		case testChecksumModeInvalid:
 			id.Checksum = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+			if format == "sha256" {
+				id.Checksum = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+			}
 		default:
 			// NOTREACHED
 		}
@@ -427,13 +554,17 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 	require.True(t, done)
 
 	expLen := 40
+	if format == "sha256" {
+		expLen = 64
+	}
+	expPinLen := expLen
 	if keepGitDir {
 		expLen += 4
 		require.GreaterOrEqual(t, len(key1), expLen)
 	} else {
 		require.Equal(t, expLen, len(key1))
 	}
-	require.Equal(t, 40, len(pin1))
+	require.Equal(t, expPinLen, len(pin1))
 
 	ref1, err := g.Snapshot(ctx, nil)
 	if checksumMode == testChecksumModeInvalid {
@@ -509,15 +640,23 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 	}
 }
 
-func TestMultipleTagAccessKeepGitDir(t *testing.T) {
-	testMultipleTagAccess(t, true)
+func TestMultipleTagAccessKeepGitDirSHA1(t *testing.T) {
+	testMultipleTagAccess(t, true, "sha1")
 }
 
-func TestMultipleTagAccess(t *testing.T) {
-	testMultipleTagAccess(t, false)
+func TestMultipleTagAccessSHA1(t *testing.T) {
+	testMultipleTagAccess(t, false, "sha1")
 }
 
-func testMultipleTagAccess(t *testing.T, keepGitDir bool) {
+func TestMultipleTagAccessKeepGitDirSHA256(t *testing.T) {
+	testMultipleTagAccess(t, true, "sha256")
+}
+
+func TestMultipleTagAccessSHA256(t *testing.T) {
+	testMultipleTagAccess(t, false, "sha256")
+}
+
+func testMultipleTagAccess(t *testing.T, keepGitDir bool, format string) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
 	}
@@ -528,7 +667,7 @@ func testMultipleTagAccess(t *testing.T, keepGitDir bool) {
 
 	gs := setupGitSource(t, t.TempDir())
 
-	repo := setupGitRepo(t)
+	repo := setupGitRepo(t, format)
 
 	id := &GitIdentifier{Remote: repo.mainURL, KeepGitDir: keepGitDir, Ref: "a/v1.2.3"}
 
@@ -536,6 +675,10 @@ func testMultipleTagAccess(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 
 	expLen := 40
+	if format == "sha256" {
+		expLen = 64
+	}
+	expPinLen := expLen
 	if keepGitDir {
 		expLen += 4
 	}
@@ -547,7 +690,7 @@ func testMultipleTagAccess(t *testing.T, keepGitDir bool) {
 	} else {
 		require.Equal(t, expLen, len(key1))
 	}
-	require.Equal(t, 40, len(pin1))
+	require.Equal(t, expPinLen, len(pin1))
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
@@ -564,7 +707,7 @@ func testMultipleTagAccess(t *testing.T, keepGitDir bool) {
 	} else {
 		require.Equal(t, expLen, len(key1))
 	}
-	require.Equal(t, 40, len(pin2))
+	require.Equal(t, expPinLen, len(pin2))
 
 	require.Equal(t, pin1, pin2)
 	if !keepGitDir {
@@ -608,15 +751,23 @@ func testMultipleTagAccess(t *testing.T, keepGitDir bool) {
 	require.Equal(t, string(dt1), string(dt2))
 }
 
-func TestMultipleRepos(t *testing.T) {
-	testMultipleRepos(t, false)
+func TestMultipleReposSHA1(t *testing.T) {
+	testMultipleRepos(t, false, "sha1")
 }
 
 func TestMultipleReposKeepGitDir(t *testing.T) {
-	testMultipleRepos(t, true)
+	testMultipleRepos(t, true, "sha1")
 }
 
-func testMultipleRepos(t *testing.T, keepGitDir bool) {
+func TestMultipleReposSHA256(t *testing.T) {
+	testMultipleRepos(t, false, "sha256")
+}
+
+func TestMultipleReposKeepGitDirSHA256(t *testing.T) {
+	testMultipleRepos(t, true, "sha256")
+}
+
+func testMultipleRepos(t *testing.T, keepGitDir bool, format string) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
 	}
@@ -627,7 +778,7 @@ func testMultipleRepos(t *testing.T, keepGitDir bool) {
 
 	gs := setupGitSource(t, t.TempDir())
 
-	repo := setupGitRepo(t)
+	repo := setupGitRepo(t, format)
 
 	repodir2 := t.TempDir()
 
@@ -651,8 +802,14 @@ func testMultipleRepos(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 
 	expLen := 40
+	expLen2 := expLen
+	if format == "sha256" {
+		expLen = 64
+	}
+	expPinLen := expLen
 	if keepGitDir {
 		expLen += 4
+		expLen2 += 4
 	}
 
 	key1, pin1, _, _, err := g.CacheKey(ctx, nil, 0)
@@ -662,14 +819,14 @@ func testMultipleRepos(t *testing.T, keepGitDir bool) {
 	} else {
 		require.Equal(t, expLen, len(key1))
 	}
-	require.Equal(t, 40, len(pin1))
+	require.Equal(t, expPinLen, len(pin1))
 
 	key2, pin2, _, _, err := g2.CacheKey(ctx, nil, 0)
 	require.NoError(t, err)
 	if keepGitDir {
-		require.GreaterOrEqual(t, len(key2), expLen)
+		require.GreaterOrEqual(t, len(key2), expLen2)
 	} else {
-		require.Equal(t, expLen, len(key2))
+		require.Equal(t, expLen2, len(key2))
 	}
 	require.Equal(t, 40, len(pin2))
 
@@ -733,15 +890,23 @@ func TestCredentialRedaction(t *testing.T) {
 	require.NotContains(t, err.Error(), "keepthissecret")
 }
 
-func TestSubmoduleSubdir(t *testing.T) {
-	testSubmoduleSubdir(t, false)
+func TestSubmoduleSubdirSHA1(t *testing.T) {
+	testSubmoduleSubdir(t, false, "sha1")
 }
 
-func TestSubmoduleSubdirKeepGitDir(t *testing.T) {
-	testSubmoduleSubdir(t, true)
+func TestSubmoduleSubdirKeepGitDirSHA1(t *testing.T) {
+	testSubmoduleSubdir(t, true, "sha1")
 }
 
-func testSubmoduleSubdir(t *testing.T, keepGitDir bool) {
+func TestSubmoduleSubdirSHA256(t *testing.T) {
+	testSubmoduleSubdir(t, false, "sha256")
+}
+
+func TestSubmoduleSubdirKeepGitDirSHA256(t *testing.T) {
+	testSubmoduleSubdir(t, true, "sha256")
+}
+
+func testSubmoduleSubdir(t *testing.T, keepGitDir bool, format string) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
 	}
@@ -751,7 +916,7 @@ func testSubmoduleSubdir(t *testing.T, keepGitDir bool) {
 
 	gs := setupGitSource(t, t.TempDir())
 
-	repo := setupGitRepo(t)
+	repo := setupGitRepo(t, format)
 
 	id := &GitIdentifier{Remote: repo.mainURL, KeepGitDir: keepGitDir, Ref: "feature", Subdir: "sub"}
 
@@ -763,8 +928,13 @@ func testSubmoduleSubdir(t *testing.T, keepGitDir bool) {
 	require.True(t, done)
 
 	expLen := 44
+	expPinLen := 40
+	if format == "sha256" {
+		expLen = 68
+		expPinLen = 64
+	}
 	require.GreaterOrEqual(t, len(key1), expLen)
-	require.Equal(t, 40, len(pin1))
+	require.Equal(t, expPinLen, len(pin1))
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
@@ -904,7 +1074,7 @@ type gitRepoFixture struct {
 	mainURL, subURL   string // HTTP URLs for the respective repos
 }
 
-func setupGitRepo(t *testing.T) gitRepoFixture {
+func setupGitRepo(t *testing.T, format string) gitRepoFixture {
 	t.Helper()
 	dir := t.TempDir()
 	srv := serveGitRepo(t, dir)
@@ -918,7 +1088,7 @@ func setupGitRepo(t *testing.T) gitRepoFixture {
 	require.NoError(t, os.MkdirAll(fixture.mainPath, 0700))
 
 	runShell(t, fixture.subPath,
-		"git -c init.defaultBranch=master init",
+		"git -c init.defaultBranch=master init --object-format="+format,
 		"git config --local user.email test",
 		"git config --local user.name test",
 		"echo subcontents > subfile",
@@ -935,7 +1105,7 @@ func setupGitRepo(t *testing.T) gitRepoFixture {
 	// * (tag: refs/tags/v1.2.3) second
 	// * (tag: refs/tags/a/v1.2.3, refs/tags/a/v1.2.3-same) initial
 	runShell(t, fixture.mainPath,
-		"git -c init.defaultBranch=master init",
+		"git -c init.defaultBranch=master init --object-format="+format,
 		"git config --local user.email test",
 		"git config --local user.name test",
 
