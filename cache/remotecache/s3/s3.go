@@ -46,6 +46,7 @@ const (
 	attrSessionToken      = "session_token"
 	attrUsePathStyle      = "use_path_style"
 	attrUploadParallelism = "upload_parallelism"
+	attrDisableChecksum   = "disable_checksum"
 	maxCopyObjectSize     = 5 * 1024 * 1024 * 1024
 )
 
@@ -63,6 +64,7 @@ type Config struct {
 	SessionToken      string
 	UsePathStyle      bool
 	UploadParallelism int
+	DisableChecksum   bool
 }
 
 func getConfig(attrs map[string]string) (Config, error) {
@@ -127,6 +129,15 @@ func getConfig(attrs map[string]string) (Config, error) {
 		}
 	}
 
+	disableChecksum := false // default off
+	if v, ok := attrs[attrDisableChecksum]; ok {
+	    parsed, err := strconv.ParseBool(v)
+	    if err != nil {
+	        return Config{}, errors.Errorf("disable_checksum must be a boolean")
+	    }
+		disableChecksum = parsed
+	}
+
 	uploadParallelism := 4
 	uploadParallelismStr, ok := attrs[attrUploadParallelism]
 	if ok {
@@ -154,6 +165,7 @@ func getConfig(attrs map[string]string) (Config, error) {
 		SessionToken:      sessionToken,
 		UsePathStyle:      usePathStyle,
 		UploadParallelism: uploadParallelism,
+		DisableChecksum:   disableChecksum,
 	}, nil
 }
 
@@ -415,6 +427,11 @@ func newS3Client(ctx context.Context, config Config) (*s3Client, error) {
 			options.UsePathStyle = config.UsePathStyle
 			options.BaseEndpoint = aws.String(config.EndpointURL)
 		}
+	    // Only calculate/validate when the server requires it (helps with GCS S3-interop)
+		if config.DisableChecksum {
+	        options.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
+	        options.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
+	    }
 	})
 
 	return &s3Client{
