@@ -9613,7 +9613,11 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 			if ociArtifact {
 				subject := att.Manifest.Subject
 				require.NotNil(t, subject)
-				require.Equal(t, bases[i].Desc, *subject)
+				require.Equal(t, bases[i].Desc.MediaType, subject.MediaType)
+				require.Equal(t, bases[i].Desc.Digest, subject.Digest)
+				require.Equal(t, bases[i].Desc.Size, subject.Size)
+				require.Empty(t, subject.Annotations)
+				require.Nil(t, subject.Platform)
 				require.Equal(t, "application/vnd.docker.attestation.manifest.v1+json", att.Manifest.ArtifactType)
 				require.Equal(t, ocispecs.DescriptorEmptyJSON, att.Manifest.Config)
 			} else {
