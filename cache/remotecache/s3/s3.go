@@ -150,21 +150,21 @@ func ResolveCacheExporterFunc() remotecache.ResolveCacheExporterFunc {
 			return nil, err
 		}
 
-		mc, err := newMinioClient(config)
+		minioClient, err := newMinioClient(config)
 		if err != nil {
 			return nil, err
 		}
 
-		cc := v1.NewCacheChains()
-		return &exporter{CacheExporterTarget: cc, chains: cc, mc: mc, config: config}, nil
+		cacheChains := v1.NewCacheChains()
+		return &exporter{CacheExporterTarget: cacheChains, chains: cacheChains, minioClient: minioClient, config: config}, nil
 	}
 }
 
 type exporter struct {
 	solver.CacheExporterTarget
-	chains *v1.CacheChains
-	mc     *minioClient
-	config Config
+	chains      *v1.CacheChains
+	minioClient *minioClient
+	config      Config
 }
 
 func (*exporter) Name() string { return "exporting cache to S3" }
@@ -178,12 +178,12 @@ type nopCloserSectionReader struct{ *io.SectionReader }
 func (*nopCloserSectionReader) Close() error { return nil }
 
 func (e *exporter) Finalize(ctx context.Context) (map[string]string, error) {
-	cacheConfig, descs, err := e.chains.Marshal(ctx)
+	cacheConfig, descriptors, err := e.chains.Marshal(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	eg, groupCtx := errgroup.WithContext(ctx)
+	errorGroup, groupContext := errgroup.WithContext(ctx)
 	tasks := make(chan int, e.config.UploadParallelism)
 
 	go func() {
@@ -194,80 +194,80 @@ func (e *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 	}()
 
 	for workerIndex := 0; workerIndex < e.config.UploadParallelism; workerIndex++ {
-		eg.Go(func() error {
+		errorGroup.Go(func() error {
 			for index := range tasks {
 				blob := cacheConfig.Layers[index].Blob
-				dpp, ok := descs[blob]
+				descriptorProviderPair, ok := descriptors[blob]
 				if !ok {
 					return errors.Errorf("missing blob %s", blob)
 				}
-				if dpp.Descriptor.Annotations == nil {
+				if descriptorProviderPair.Descriptor.Annotations == nil {
 					return errors.Errorf("invalid descriptor without annotations")
 				}
-				v, ok := dpp.Descriptor.Annotations[labels.LabelUncompressed]
+				uncompressedAnnotation, ok := descriptorProviderPair.Descriptor.Annotations[labels.LabelUncompressed]
 				if !ok {
 					return errors.Errorf("invalid descriptor without uncompressed annotation")
 				}
-				diffID, err := digest.Parse(v)
+				diffID, err := digest.Parse(uncompressedAnnotation)
 				if err != nil {
 					return errors.Wrapf(err, "failed to parse uncompressed annotation")
 				}
 
-				key := e.mc.blobKey(dpp.Descriptor.Digest)
-				lastMod, err := e.mc.exists(groupCtx, key)
+				key := e.minioClient.blobKey(descriptorProviderPair.Descriptor.Digest)
+				lastMod, err := e.minioClient.exists(groupContext, key)
 				if err != nil {
 					return errors.Wrapf(err, "failed to check file presence in cache")
 				}
 				if lastMod != nil {
 					if time.Since(*lastMod) > e.config.TouchRefresh {
-						if err := e.mc.touch(groupCtx, key); err != nil {
+						if err := e.minioClient.touch(groupContext, key); err != nil {
 							return errors.Wrapf(err, "failed to touch file")
 						}
 					}
 				} else {
-					layerDone := progress.OneOff(groupCtx, fmt.Sprintf("writing layer %s", blob))
-					ra, err := dpp.Provider.ReaderAt(groupCtx, dpp.Descriptor)
+					layerDone := progress.OneOff(groupContext, fmt.Sprintf("writing layer %s", blob))
+					readerAt, err := descriptorProviderPair.Provider.ReaderAt(groupContext, descriptorProviderPair.Descriptor)
 					if err != nil {
 						return layerDone(errors.Wrap(err, "error reading layer blob from provider"))
 					}
-					defer ra.Close()
+					defer readerAt.Close()
 
-					section := &nopCloserSectionReader{io.NewSectionReader(ra, 0, ra.Size())}
-					if err := e.mc.saveMutableAt(groupCtx, key, section, ra.Size()); err != nil {
+					section := &nopCloserSectionReader{io.NewSectionReader(readerAt, 0, readerAt.Size())}
+					if err := e.minioClient.saveMutableAt(groupContext, key, section, readerAt.Size()); err != nil {
 						return layerDone(errors.Wrap(err, "error writing layer blob"))
 					}
 					layerDone(nil)
 				}
 
-				la := &v1.LayerAnnotations{
+				layerAnnotations := &v1.LayerAnnotations{
 					DiffID:    diffID,
-					Size:      dpp.Descriptor.Size,
-					MediaType: dpp.Descriptor.MediaType,
+					Size:      descriptorProviderPair.Descriptor.Size,
+					MediaType: descriptorProviderPair.Descriptor.MediaType,
 				}
-				if v, ok := dpp.Descriptor.Annotations["buildkit/createdat"]; ok {
-					var t time.Time
-					if err := (&t).UnmarshalText([]byte(v)); err != nil {
+				if createdAt, ok := descriptorProviderPair.Descriptor.Annotations["buildkit/createdat"]; ok {
+					var createdAtTime time.Time
+					if err := (&createdAtTime).UnmarshalText([]byte(createdAt)); err != nil {
 						return err
 					}
-					la.CreatedAt = t.UTC()
+					layerAnnotations.CreatedAt = createdAtTime.UTC()
 				}
-				cacheConfig.Layers[index].Annotations = la
+				cacheConfig.Layers[index].Annotations = layerAnnotations
 			}
 			return nil
 		})
 	}
 
-	if err := eg.Wait(); err != nil {
+	if err := errorGroup.Wait(); err != nil {
 		return nil, err
 	}
 
-	dt, err := json.Marshal(cacheConfig)
+	manifestData, err := json.Marshal(cacheConfig)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, name := range e.config.Names {
-		if err := e.mc.saveMutableAt(ctx, e.mc.manifestKey(name), bytes.NewReader(dt), int64(len(dt))); err != nil {
+		if err := e.minioClient.saveMutableAt(ctx, e.minioClient.manifestKey(name), bytes.NewReader(manifestData), int64(len(manifestData))); err != nil {
 			return nil, errors.Wrapf(err, "error writing manifest: %s", name)
 		}
 	}
@@ -280,48 +280,48 @@ func ResolveCacheImporterFunc() remotecache.ResolveCacheImporterFunc {
 		if err != nil {
 			return nil, ocispecs.Descriptor{}, err
 		}
-		mc, err := newMinioClient(config)
+		minioClient, err := newMinioClient(config)
 		if err != nil {
 			return nil, ocispecs.Descriptor{}, err
 		}
-		return &importer{mc: mc, config: config}, ocispecs.Descriptor{}, nil
+		return &importer{minioClient: minioClient, config: config}, ocispecs.Descriptor{}, nil
 	}
 }
 
 type importer struct {
-	mc     *minioClient
-	config Config
+	minioClient *minioClient
+	config      Config
 }
 
-func (i *importer) makeDescriptorProviderPair(l v1.CacheLayer) (*v1.DescriptorProviderPair, error) {
-	if l.Annotations == nil {
+func (i *importer) makeDescriptorProviderPair(layer v1.CacheLayer) (*v1.DescriptorProviderPair, error) {
+	if layer.Annotations == nil {
 		return nil, errors.Errorf("cache layer with missing annotations")
 	}
-	if l.Annotations.DiffID == "" {
+	if layer.Annotations.DiffID == "" {
 		return nil, errors.Errorf("cache layer with missing diffid")
 	}
-	annotations := map[string]string{labels.LabelUncompressed: l.Annotations.DiffID.String()}
-	if !l.Annotations.CreatedAt.IsZero() {
-		if txt, err := l.Annotations.CreatedAt.MarshalText(); err == nil {
-			annotations["buildkit/createdat"] = string(txt)
+	annotations := map[string]string{labels.LabelUncompressed: layer.Annotations.DiffID.String()}
+	if !layer.Annotations.CreatedAt.IsZero() {
+		if createdAtText, err := layer.Annotations.CreatedAt.MarshalText(); err == nil {
+			annotations["buildkit/createdat"] = string(createdAtText)
 		} else {
 			return nil, err
 		}
 	}
 	return &v1.DescriptorProviderPair{
-		Provider: i.mc,
+		Provider: i.minioClient,
 		Descriptor: ocispecs.Descriptor{
-			MediaType:   l.Annotations.MediaType,
-			Digest:      l.Blob,
-			Size:        l.Annotations.Size,
+			MediaType:   layer.Annotations.MediaType,
+			Digest:      layer.Blob,
+			Size:        layer.Annotations.Size,
 			Annotations: annotations,
 		},
 	}, nil
 }
 
 func (i *importer) load(ctx context.Context) (*v1.CacheChains, error) {
-	var cfg v1.CacheConfig
-	found, err := i.mc.getManifest(ctx, i.mc.manifestKey(i.config.Names[0]), &cfg)
+	var config v1.CacheConfig
+	found, err := i.minioClient.getManifest(ctx, i.minioClient.manifestKey(i.config.Names[0]), &config)
 	if err != nil {
 		return nil, err
 	}
@@ -330,26 +330,26 @@ func (i *importer) load(ctx context.Context) (*v1.CacheChains, error) {
 	}
 
 	allLayers := v1.DescriptorProvider{}
-	for _, l := range cfg.Layers {
-		dpp, err := i.makeDescriptorProviderPair(l)
+	for _, layer := range config.Layers {
+		descriptorProviderPair, err := i.makeDescriptorProviderPair(layer)
 		if err != nil {
 			return nil, err
 		}
-		allLayers[l.Blob] = *dpp
+		allLayers[layer.Blob] = *descriptorProviderPair
 	}
-	cc := v1.NewCacheChains()
-	if err := v1.ParseConfig(cfg, allLayers, cc); err != nil {
+	cacheChains := v1.NewCacheChains()
+	if err := v1.ParseConfig(config, allLayers, cacheChains); err != nil {
 		return nil, err
 	}
-	return cc, nil
+	return cacheChains, nil
 }
 
 func (i *importer) Resolve(ctx context.Context, _ ocispecs.Descriptor, id string, w worker.Worker) (solver.CacheManager, error) {
-	cc, err := i.load(ctx)
+	cacheChains, err := i.load(ctx)
 	if err != nil {
 		return nil, err
 	}
-	keysStorage, resultStorage, err := v1.NewCacheKeyStorage(cc, w)
+	keysStorage, resultStorage, err := v1.NewCacheKeyStorage(cacheChains, w)
 	if err != nil {
 		return nil, err
 	}
@@ -359,6 +359,16 @@ func (i *importer) Resolve(ctx context.Context, _ ocispecs.Descriptor, id string
 type readerAt struct {
 	ReaderAtCloser
 	size int64
+}
+
+func (r *readerAt) ReadAt(p []byte, off int64) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	if off >= r.size {
+		return 0, io.EOF
+	}
+	return r.ReaderAtCloser.ReadAt(p, off)
 }
 
 func (r *readerAt) Size() int64 { return r.size }
@@ -371,25 +381,25 @@ type minioClient struct {
 	manifestsPrefix string
 }
 
-func newMinioClient(cfg Config) (*minioClient, error) {
-	if cfg.EndpointURL == "" {
-		cfg.EndpointURL = "https://s3.amazonaws.com"
+func newMinioClient(config Config) (*minioClient, error) {
+	if config.EndpointURL == "" {
+		config.EndpointURL = "https://s3.amazonaws.com"
 	}
 
-	parsedURL, err := url.Parse(cfg.EndpointURL)
+	parsedURL, err := url.Parse(config.EndpointURL)
 	if err != nil {
 		return nil, errors.Wrap(err, "invalid endpoint_url")
 	}
 
 	bucketLookup := minio.BucketLookupDNS
-	if cfg.UsePathStyle {
+	if config.UsePathStyle {
 		bucketLookup = minio.BucketLookupPath
 	}
 
 	client, err := minio.New(parsedURL.Host, &minio.Options{
-		Creds:        credentials.NewStaticV4(cfg.AccessKeyID, cfg.SecretAccessKey, cfg.SessionToken),
+		Creds:        credentials.NewStaticV4(config.AccessKeyID, config.SecretAccessKey, config.SessionToken),
 		Secure:       parsedURL.Scheme == "https",
-		Region:       cfg.Region,
+		Region:       config.Region,
 		BucketLookup: bucketLookup,
 	})
 	if err != nil {
@@ -398,24 +408,24 @@ func newMinioClient(cfg Config) (*minioClient, error) {
 
 	return &minioClient{
 		client:          client,
-		bucket:          cfg.Bucket,
-		prefix:          cfg.Prefix,
-		blobsPrefix:     cfg.BlobsPrefix,
-		manifestsPrefix: cfg.ManifestsPrefix,
+		bucket:          config.Bucket,
+		prefix:          config.Prefix,
+		blobsPrefix:     config.BlobsPrefix,
+		manifestsPrefix: config.ManifestsPrefix,
 	}, nil
 }
 
-func (m *minioClient) getManifest(ctx context.Context, key string, cfg *v1.CacheConfig) (bool, error) {
-	obj, err := m.client.GetObject(ctx, m.bucket, key, minio.GetObjectOptions{})
+func (m *minioClient) getManifest(ctx context.Context, key string, config *v1.CacheConfig) (bool, error) {
+	object, err := m.client.GetObject(ctx, m.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
 		if isNotFound(err) {
 			return false, nil
 		}
 		return false, err
 	}
-	defer obj.Close()
-	decoder := json.NewDecoder(obj)
-	if err := decoder.Decode(cfg); err != nil {
+	defer object.Close()
+	decoder := json.NewDecoder(object)
+	if err := decoder.Decode(config); err != nil {
 		return false, errors.WithStack(err)
 	}
 	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
@@ -425,17 +435,17 @@ func (m *minioClient) getManifest(ctx context.Context, key string, cfg *v1.Cache
 }
 
 func (m *minioClient) getReader(ctx context.Context, key string, offset int64) (io.ReadCloser, error) {
-	opts := minio.GetObjectOptions{}
+	getOptions := minio.GetObjectOptions{}
 	if offset > 0 {
-		if err := opts.SetRange(offset, 0); err != nil {
+		if err := getOptions.SetRange(offset, 0); err != nil {
 			return nil, err
 		}
 	}
-	obj, err := m.client.GetObject(ctx, m.bucket, key, opts)
+	object, err := m.client.GetObject(ctx, m.bucket, key, getOptions)
 	if err != nil {
 		return nil, err
 	}
-	return obj, nil
+	return object, nil
 }
 
 func (m *minioClient) saveMutableAt(ctx context.Context, key string, body io.Reader, size int64) error {
@@ -451,33 +461,34 @@ func (m *minioClient) exists(ctx context.Context, key string) (*time.Time, error
 		}
 		return nil, err
 	}
-	lm := stat.LastModified
-	return &lm, nil
+	lastModified := stat.LastModified
+	return &lastModified, nil
 }
 
 func (m *minioClient) touch(ctx context.Context, key string) error {
-	src := minio.CopySrcOptions{Bucket: m.bucket, Object: key}
-	dst := minio.CopyDestOptions{
+	// Minio will internally perform multipart copy when supported
+	copySourceOptions := minio.CopySrcOptions{Bucket: m.bucket, Object: key}
+	copyDestinationOptions := minio.CopyDestOptions{
 		Bucket:          m.bucket,
 		Object:          key,
 		ReplaceMetadata: true,
 		UserMetadata:    map[string]string{"updated-at": time.Now().UTC().Format(time.RFC3339Nano)},
 	}
-	_, err := m.client.CopyObject(ctx, dst, src)
+	_, err := m.client.CopyObject(ctx, copyDestinationOptions, copySourceOptions)
 	return err
 }
 
-func (m *minioClient) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
+func (m *minioClient) ReaderAt(ctx context.Context, descriptor ocispecs.Descriptor) (content.ReaderAt, error) {
 	readerAtCloser := toReaderAtCloser(func(offset int64) (io.ReadCloser, error) {
-		return m.getReader(ctx, m.blobKey(desc.Digest), offset)
+		return m.getReader(ctx, m.blobKey(descriptor.Digest), offset)
 	})
-	return &readerAt{ReaderAtCloser: readerAtCloser, size: desc.Size}, nil
+	return &readerAt{ReaderAtCloser: readerAtCloser, size: descriptor.Size}, nil
 }
 
 func (m *minioClient) manifestKey(name string) string { return m.prefix + m.manifestsPrefix + name }
 
-func (m *minioClient) blobKey(dgst digest.Digest) string {
-	return m.prefix + m.blobsPrefix + dgst.String()
+func (m *minioClient) blobKey(digestValue digest.Digest) string {
+	return m.prefix + m.blobsPrefix + digestValue.String()
 }
 
 func isNotFound(err error) bool {
