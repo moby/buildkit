@@ -6,19 +6,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	aws_config "github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
-	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/pkg/labels"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/moby/buildkit/cache/remotecache"
 	v1 "github.com/moby/buildkit/cache/remotecache/v1"
 	"github.com/moby/buildkit/session"
@@ -76,40 +74,33 @@ func getConfig(attrs map[string]string) (Config, error) {
 
 	region, ok := attrs[attrRegion]
 	if !ok {
-		region, ok = os.LookupEnv("AWS_REGION")
-		if !ok {
-			return Config{}, errors.Errorf("region ($AWS_REGION) not set for s3 cache")
-		}
+		region, _ = os.LookupEnv("AWS_REGION") // optional for minio; keep semantics
 	}
 
 	prefix := attrs[attrPrefix]
 
 	manifestsPrefix, ok := attrs[attrManifestsPrefix]
-	if !ok {
+	if !ok || manifestsPrefix == "" {
 		manifestsPrefix = "manifests/"
 	}
 
 	blobsPrefix, ok := attrs[attrBlobsPrefix]
-	if !ok {
+	if !ok || blobsPrefix == "" {
 		blobsPrefix = "blobs/"
 	}
 
 	names := []string{"buildkit"}
-	name, ok := attrs[attrName]
-	if ok {
-		splittedNames := strings.Split(name, ";")
-		if len(splittedNames) > 0 {
-			names = splittedNames
+	if name, ok := attrs[attrName]; ok && name != "" {
+		splitted := strings.Split(name, ";")
+		if len(splitted) > 0 {
+			names = splitted
 		}
 	}
 
 	touchRefresh := 24 * time.Hour
-
-	touchRefreshStr, ok := attrs[attrTouchRefresh]
-	if ok {
-		touchRefreshFromUser, err := time.ParseDuration(touchRefreshStr)
-		if err == nil {
-			touchRefresh = touchRefreshFromUser
+	if v, ok := attrs[attrTouchRefresh]; ok && v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			touchRefresh = d
 		}
 	}
 
@@ -119,25 +110,20 @@ func getConfig(attrs map[string]string) (Config, error) {
 	sessionToken := attrs[attrSessionToken]
 
 	usePathStyle := false
-	usePathStyleStr, ok := attrs[attrUsePathStyle]
-	if ok {
-		usePathStyleUser, err := strconv.ParseBool(usePathStyleStr)
+	if v, ok := attrs[attrUsePathStyle]; ok && v != "" {
+		parsed, err := strconv.ParseBool(v)
 		if err == nil {
-			usePathStyle = usePathStyleUser
+			usePathStyle = parsed
 		}
 	}
 
 	uploadParallelism := 4
-	uploadParallelismStr, ok := attrs[attrUploadParallelism]
-	if ok {
-		uploadParallelismInt, err := strconv.Atoi(uploadParallelismStr)
-		if err != nil {
+	if v, ok := attrs[attrUploadParallelism]; ok && v != "" {
+		iv, err := strconv.Atoi(v)
+		if err != nil || iv <= 0 {
 			return Config{}, errors.Errorf("upload_parallelism must be a positive integer")
 		}
-		if uploadParallelismInt <= 0 {
-			return Config{}, errors.Errorf("upload_parallelism must be a positive integer")
-		}
-		uploadParallelism = uploadParallelismInt
+		uploadParallelism = iv
 	}
 
 	return Config{
@@ -157,7 +143,6 @@ func getConfig(attrs map[string]string) (Config, error) {
 	}, nil
 }
 
-// ResolveCacheExporterFunc for s3 cache exporter.
 func ResolveCacheExporterFunc() remotecache.ResolveCacheExporterFunc {
 	return func(ctx context.Context, g session.Group, attrs map[string]string) (remotecache.Exporter, error) {
 		config, err := getConfig(attrs)
@@ -165,35 +150,30 @@ func ResolveCacheExporterFunc() remotecache.ResolveCacheExporterFunc {
 			return nil, err
 		}
 
-		s3Client, err := newS3Client(ctx, config)
+		mc, err := newMinioClient(config)
 		if err != nil {
 			return nil, err
 		}
+
 		cc := v1.NewCacheChains()
-		return &exporter{CacheExporterTarget: cc, chains: cc, s3Client: s3Client, config: config}, nil
+		return &exporter{CacheExporterTarget: cc, chains: cc, mc: mc, config: config}, nil
 	}
 }
 
 type exporter struct {
 	solver.CacheExporterTarget
-	chains   *v1.CacheChains
-	s3Client *s3Client
-	config   Config
+	chains *v1.CacheChains
+	mc     *minioClient
+	config Config
 }
 
-func (*exporter) Name() string {
-	return "exporting cache to Amazon S3"
-}
+func (*exporter) Name() string { return "exporting cache to S3" }
 
 func (e *exporter) Config() remotecache.Config {
-	return remotecache.Config{
-		Compression: compression.New(compression.Default),
-	}
+	return remotecache.Config{Compression: compression.New(compression.Default)}
 }
 
-type nopCloserSectionReader struct {
-	*io.SectionReader
-}
+type nopCloserSectionReader struct{ *io.SectionReader }
 
 func (*nopCloserSectionReader) Close() error { return nil }
 
@@ -213,18 +193,18 @@ func (e *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 		close(tasks)
 	}()
 
-	for range e.config.UploadParallelism {
+	for workerIndex := 0; workerIndex < e.config.UploadParallelism; workerIndex++ {
 		eg.Go(func() error {
 			for index := range tasks {
 				blob := cacheConfig.Layers[index].Blob
-				dgstPair, ok := descs[blob]
+				dpp, ok := descs[blob]
 				if !ok {
 					return errors.Errorf("missing blob %s", blob)
 				}
-				if dgstPair.Descriptor.Annotations == nil {
+				if dpp.Descriptor.Annotations == nil {
 					return errors.Errorf("invalid descriptor without annotations")
 				}
-				v, ok := dgstPair.Descriptor.Annotations[labels.LabelUncompressed]
+				v, ok := dpp.Descriptor.Annotations[labels.LabelUncompressed]
 				if !ok {
 					return errors.Errorf("invalid descriptor without uncompressed annotation")
 				}
@@ -233,29 +213,27 @@ func (e *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 					return errors.Wrapf(err, "failed to parse uncompressed annotation")
 				}
 
-				key := e.s3Client.blobKey(dgstPair.Descriptor.Digest)
-				exists, size, err := e.s3Client.exists(groupCtx, key)
+				key := e.mc.blobKey(dpp.Descriptor.Digest)
+				lastMod, err := e.mc.exists(groupCtx, key)
 				if err != nil {
 					return errors.Wrapf(err, "failed to check file presence in cache")
 				}
-				if exists != nil {
-					if time.Since(*exists) > e.config.TouchRefresh {
-						err = e.s3Client.touch(groupCtx, key, size)
-						if err != nil {
+				if lastMod != nil {
+					if time.Since(*lastMod) > e.config.TouchRefresh {
+						if err := e.mc.touch(groupCtx, key); err != nil {
 							return errors.Wrapf(err, "failed to touch file")
 						}
 					}
 				} else {
 					layerDone := progress.OneOff(groupCtx, fmt.Sprintf("writing layer %s", blob))
-					// TODO: once buildkit uses v2, start using
-					// https://github.com/containerd/containerd/pull/9657
-					// currently inline data should never happen.
-					ra, err := dgstPair.Provider.ReaderAt(groupCtx, dgstPair.Descriptor)
+					ra, err := dpp.Provider.ReaderAt(groupCtx, dpp.Descriptor)
 					if err != nil {
 						return layerDone(errors.Wrap(err, "error reading layer blob from provider"))
 					}
 					defer ra.Close()
-					if err := e.s3Client.saveMutableAt(groupCtx, key, &nopCloserSectionReader{io.NewSectionReader(ra, 0, ra.Size())}); err != nil {
+
+					section := &nopCloserSectionReader{io.NewSectionReader(ra, 0, ra.Size())}
+					if err := e.mc.saveMutableAt(groupCtx, key, section, ra.Size()); err != nil {
 						return layerDone(errors.Wrap(err, "error writing layer blob"))
 					}
 					layerDone(nil)
@@ -263,10 +241,10 @@ func (e *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 
 				la := &v1.LayerAnnotations{
 					DiffID:    diffID,
-					Size:      dgstPair.Descriptor.Size,
-					MediaType: dgstPair.Descriptor.MediaType,
+					Size:      dpp.Descriptor.Size,
+					MediaType: dpp.Descriptor.MediaType,
 				}
-				if v, ok := dgstPair.Descriptor.Annotations["buildkit/createdat"]; ok {
+				if v, ok := dpp.Descriptor.Annotations["buildkit/createdat"]; ok {
 					var t time.Time
 					if err := (&t).UnmarshalText([]byte(v)); err != nil {
 						return err
@@ -289,31 +267,30 @@ func (e *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 	}
 
 	for _, name := range e.config.Names {
-		if err := e.s3Client.saveMutableAt(ctx, e.s3Client.manifestKey(name), bytes.NewReader(dt)); err != nil {
+		if err := e.mc.saveMutableAt(ctx, e.mc.manifestKey(name), bytes.NewReader(dt), int64(len(dt))); err != nil {
 			return nil, errors.Wrapf(err, "error writing manifest: %s", name)
 		}
 	}
 	return nil, nil
 }
 
-// ResolveCacheImporterFunc for s3 cache importer.
 func ResolveCacheImporterFunc() remotecache.ResolveCacheImporterFunc {
 	return func(ctx context.Context, _ session.Group, attrs map[string]string) (remotecache.Importer, ocispecs.Descriptor, error) {
 		config, err := getConfig(attrs)
 		if err != nil {
 			return nil, ocispecs.Descriptor{}, err
 		}
-		s3Client, err := newS3Client(ctx, config)
+		mc, err := newMinioClient(config)
 		if err != nil {
 			return nil, ocispecs.Descriptor{}, err
 		}
-		return &importer{s3Client, config}, ocispecs.Descriptor{}, nil
+		return &importer{mc: mc, config: config}, ocispecs.Descriptor{}, nil
 	}
 }
 
 type importer struct {
-	s3Client *s3Client
-	config   Config
+	mc     *minioClient
+	config Config
 }
 
 func (i *importer) makeDescriptorProviderPair(l v1.CacheLayer) (*v1.DescriptorProviderPair, error) {
@@ -323,17 +300,16 @@ func (i *importer) makeDescriptorProviderPair(l v1.CacheLayer) (*v1.DescriptorPr
 	if l.Annotations.DiffID == "" {
 		return nil, errors.Errorf("cache layer with missing diffid")
 	}
-	annotations := map[string]string{}
-	annotations[labels.LabelUncompressed] = l.Annotations.DiffID.String()
+	annotations := map[string]string{labels.LabelUncompressed: l.Annotations.DiffID.String()}
 	if !l.Annotations.CreatedAt.IsZero() {
-		txt, err := l.Annotations.CreatedAt.MarshalText()
-		if err != nil {
+		if txt, err := l.Annotations.CreatedAt.MarshalText(); err == nil {
+			annotations["buildkit/createdat"] = string(txt)
+		} else {
 			return nil, err
 		}
-		annotations["buildkit/createdat"] = string(txt)
 	}
 	return &v1.DescriptorProviderPair{
-		Provider: i.s3Client,
+		Provider: i.mc,
 		Descriptor: ocispecs.Descriptor{
 			MediaType:   l.Annotations.MediaType,
 			Digest:      l.Blob,
@@ -344,8 +320,8 @@ func (i *importer) makeDescriptorProviderPair(l v1.CacheLayer) (*v1.DescriptorPr
 }
 
 func (i *importer) load(ctx context.Context) (*v1.CacheChains, error) {
-	var config v1.CacheConfig
-	found, err := i.s3Client.getManifest(ctx, i.s3Client.manifestKey(i.config.Names[0]), &config)
+	var cfg v1.CacheConfig
+	found, err := i.mc.getManifest(ctx, i.mc.manifestKey(i.config.Names[0]), &cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -354,17 +330,15 @@ func (i *importer) load(ctx context.Context) (*v1.CacheChains, error) {
 	}
 
 	allLayers := v1.DescriptorProvider{}
-
-	for _, l := range config.Layers {
+	for _, l := range cfg.Layers {
 		dpp, err := i.makeDescriptorProviderPair(l)
 		if err != nil {
 			return nil, err
 		}
 		allLayers[l.Blob] = *dpp
 	}
-
 	cc := v1.NewCacheChains()
-	if err := v1.ParseConfig(config, allLayers, cc); err != nil {
+	if err := v1.ParseConfig(cfg, allLayers, cc); err != nil {
 		return nil, err
 	}
 	return cc, nil
@@ -375,12 +349,10 @@ func (i *importer) Resolve(ctx context.Context, _ ocispecs.Descriptor, id string
 	if err != nil {
 		return nil, err
 	}
-
 	keysStorage, resultStorage, err := v1.NewCacheKeyStorage(cc, w)
 	if err != nil {
 		return nil, err
 	}
-
 	return solver.NewCacheManager(ctx, id, keysStorage, resultStorage), nil
 }
 
@@ -389,222 +361,133 @@ type readerAt struct {
 	size int64
 }
 
-func (r *readerAt) Size() int64 {
-	return r.size
-}
+func (r *readerAt) Size() int64 { return r.size }
 
-type s3Client struct {
-	*s3.Client
-	*manager.Uploader
+type minioClient struct {
+	client          *minio.Client
 	bucket          string
 	prefix          string
 	blobsPrefix     string
 	manifestsPrefix string
 }
 
-func newS3Client(ctx context.Context, config Config) (*s3Client, error) {
-	cfg, err := aws_config.LoadDefaultConfig(ctx, aws_config.WithRegion(config.Region))
-	if err != nil {
-		return nil, errors.Errorf("Unable to load AWS SDK config, %v", err)
+func newMinioClient(cfg Config) (*minioClient, error) {
+	if cfg.EndpointURL == "" {
+		cfg.EndpointURL = "https://s3.amazonaws.com"
 	}
-	client := s3.NewFromConfig(cfg, func(options *s3.Options) {
-		if config.AccessKeyID != "" && config.SecretAccessKey != "" {
-			options.Credentials = credentials.NewStaticCredentialsProvider(config.AccessKeyID, config.SecretAccessKey, config.SessionToken)
-		}
-		if config.EndpointURL != "" {
-			options.UsePathStyle = config.UsePathStyle
-			options.BaseEndpoint = aws.String(config.EndpointURL)
-		}
-	})
 
-	return &s3Client{
-		Client:          client,
-		Uploader:        manager.NewUploader(client),
-		bucket:          config.Bucket,
-		prefix:          config.Prefix,
-		blobsPrefix:     config.BlobsPrefix,
-		manifestsPrefix: config.ManifestsPrefix,
+	parsedURL, err := url.Parse(cfg.EndpointURL)
+	if err != nil {
+		return nil, errors.Wrap(err, "invalid endpoint_url")
+	}
+
+	bucketLookup := minio.BucketLookupDNS
+	if cfg.UsePathStyle {
+		bucketLookup = minio.BucketLookupPath
+	}
+
+	client, err := minio.New(parsedURL.Host, &minio.Options{
+		Creds:        credentials.NewStaticV4(cfg.AccessKeyID, cfg.SecretAccessKey, cfg.SessionToken),
+		Secure:       parsedURL.Scheme == "https",
+		Region:       cfg.Region,
+		BucketLookup: bucketLookup,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "create minio client")
+	}
+
+	return &minioClient{
+		client:          client,
+		bucket:          cfg.Bucket,
+		prefix:          cfg.Prefix,
+		blobsPrefix:     cfg.BlobsPrefix,
+		manifestsPrefix: cfg.ManifestsPrefix,
 	}, nil
 }
 
-func (s3Client *s3Client) getManifest(ctx context.Context, key string, config *v1.CacheConfig) (bool, error) {
-	input := &s3.GetObjectInput{
-		Bucket: &s3Client.bucket,
-		Key:    &key,
-	}
-
-	output, err := s3Client.GetObject(ctx, input)
+func (m *minioClient) getManifest(ctx context.Context, key string, cfg *v1.CacheConfig) (bool, error) {
+	obj, err := m.client.GetObject(ctx, m.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
 		if isNotFound(err) {
 			return false, nil
 		}
 		return false, err
 	}
-	defer output.Body.Close()
-
-	decoder := json.NewDecoder(output.Body)
-	if err := decoder.Decode(config); err != nil {
+	defer obj.Close()
+	decoder := json.NewDecoder(obj)
+	if err := decoder.Decode(cfg); err != nil {
 		return false, errors.WithStack(err)
 	}
 	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
 		return false, errors.Errorf("unexpected data after JSON object")
 	}
-
 	return true, nil
 }
 
-func (s3Client *s3Client) getReader(ctx context.Context, key string, offset int64) (io.ReadCloser, error) {
-	input := &s3.GetObjectInput{
-		Bucket: &s3Client.bucket,
-		Key:    &key,
-	}
+func (m *minioClient) getReader(ctx context.Context, key string, offset int64) (io.ReadCloser, error) {
+	opts := minio.GetObjectOptions{}
 	if offset > 0 {
-		input.Range = aws.String(fmt.Sprintf("bytes=%d-", offset))
+		if err := opts.SetRange(offset, 0); err != nil {
+			return nil, err
+		}
 	}
-
-	output, err := s3Client.GetObject(ctx, input)
+	obj, err := m.client.GetObject(ctx, m.bucket, key, opts)
 	if err != nil {
 		return nil, err
 	}
-	return output.Body, nil
+	return obj, nil
 }
 
-func (s3Client *s3Client) saveMutableAt(ctx context.Context, key string, body io.Reader) error {
-	input := &s3.PutObjectInput{
-		Bucket: &s3Client.bucket,
-		Key:    &key,
-		Body:   body,
-	}
-	_, err := s3Client.Upload(ctx, input)
+func (m *minioClient) saveMutableAt(ctx context.Context, key string, body io.Reader, size int64) error {
+	_, err := m.client.PutObject(ctx, m.bucket, key, body, size, minio.PutObjectOptions{})
 	return err
 }
 
-func (s3Client *s3Client) exists(ctx context.Context, key string) (*time.Time, *int64, error) {
-	input := &s3.HeadObjectInput{
-		Bucket: &s3Client.bucket,
-		Key:    &key,
-	}
-
-	head, err := s3Client.HeadObject(ctx, input)
+func (m *minioClient) exists(ctx context.Context, key string) (*time.Time, error) {
+	stat, err := m.client.StatObject(ctx, m.bucket, key, minio.StatObjectOptions{})
 	if err != nil {
 		if isNotFound(err) {
-			return nil, nil, nil
+			return nil, nil
 		}
-		return nil, nil, err
+		return nil, err
 	}
-	return head.LastModified, head.ContentLength, nil
+	lm := stat.LastModified
+	return &lm, nil
 }
 
-func buildCopySourceRange(start int64, objectSize int64) string {
-	end := start + maxCopyObjectSize - 1
-	if end > objectSize {
-		end = objectSize - 1
+func (m *minioClient) touch(ctx context.Context, key string) error {
+	src := minio.CopySrcOptions{Bucket: m.bucket, Object: key}
+	dst := minio.CopyDestOptions{
+		Bucket:          m.bucket,
+		Object:          key,
+		ReplaceMetadata: true,
+		UserMetadata:    map[string]string{"updated-at": time.Now().UTC().Format(time.RFC3339Nano)},
 	}
-	startRange := strconv.FormatInt(start, 10)
-	stopRange := strconv.FormatInt(end, 10)
-	return "bytes=" + startRange + "-" + stopRange
+	_, err := m.client.CopyObject(ctx, dst, src)
+	return err
 }
 
-func (s3Client *s3Client) touch(ctx context.Context, key string, size *int64) (err error) {
-	copySource := fmt.Sprintf("%s/%s", s3Client.bucket, key)
-
-	// CopyObject does not support files > 5GB
-	if *size < maxCopyObjectSize {
-		cp := &s3.CopyObjectInput{
-			Bucket:            &s3Client.bucket,
-			CopySource:        &copySource,
-			Key:               &key,
-			Metadata:          map[string]string{"updated-at": time.Now().String()},
-			MetadataDirective: "REPLACE",
-		}
-
-		_, err := s3Client.CopyObject(ctx, cp)
-
-		return err
-	}
-	input := &s3.CreateMultipartUploadInput{
-		Bucket: &s3Client.bucket,
-		Key:    &key,
-	}
-
-	output, err := s3Client.CreateMultipartUpload(ctx, input)
-	if err != nil {
-		return err
-	}
-
-	defer func() {
-		abortIn := s3.AbortMultipartUploadInput{
-			Bucket:   &s3Client.bucket,
-			Key:      &key,
-			UploadId: output.UploadId,
-		}
-		if err != nil {
-			s3Client.AbortMultipartUpload(ctx, &abortIn)
-		}
-	}()
-
-	var currentPartNumber int32 = 1
-	var currentPosition int64
-	var completedParts []s3types.CompletedPart
-
-	for currentPosition < *size {
-		copyRange := buildCopySourceRange(currentPosition, *size)
-		partInput := s3.UploadPartCopyInput{
-			Bucket:          &s3Client.bucket,
-			CopySource:      &copySource,
-			CopySourceRange: &copyRange,
-			Key:             &key,
-			PartNumber:      &currentPartNumber,
-			UploadId:        output.UploadId,
-		}
-		uploadPartCopyResult, err := s3Client.UploadPartCopy(ctx, &partInput)
-		if err != nil {
-			return err
-		}
-		partNumber := new(int32)
-		*partNumber = currentPartNumber
-		completedParts = append(completedParts, s3types.CompletedPart{
-			ETag:       uploadPartCopyResult.CopyPartResult.ETag,
-			PartNumber: partNumber,
-		})
-
-		currentPartNumber++
-		currentPosition += maxCopyObjectSize
-	}
-
-	completeMultipartUploadInput := &s3.CompleteMultipartUploadInput{
-		Bucket:   &s3Client.bucket,
-		Key:      &key,
-		UploadId: output.UploadId,
-		MultipartUpload: &s3types.CompletedMultipartUpload{
-			Parts: completedParts,
-		},
-	}
-
-	if _, err := s3Client.CompleteMultipartUpload(ctx, completeMultipartUploadInput); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (s3Client *s3Client) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
+func (m *minioClient) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
 	readerAtCloser := toReaderAtCloser(func(offset int64) (io.ReadCloser, error) {
-		return s3Client.getReader(ctx, s3Client.blobKey(desc.Digest), offset)
+		return m.getReader(ctx, m.blobKey(desc.Digest), offset)
 	})
 	return &readerAt{ReaderAtCloser: readerAtCloser, size: desc.Size}, nil
 }
 
-func (s3Client *s3Client) manifestKey(name string) string {
-	return s3Client.prefix + s3Client.manifestsPrefix + name
-}
+func (m *minioClient) manifestKey(name string) string { return m.prefix + m.manifestsPrefix + name }
 
-func (s3Client *s3Client) blobKey(dgst digest.Digest) string {
-	return s3Client.prefix + s3Client.blobsPrefix + dgst.String()
+func (m *minioClient) blobKey(dgst digest.Digest) string {
+	return m.prefix + m.blobsPrefix + dgst.String()
 }
 
 func isNotFound(err error) bool {
-	var nf *s3types.NotFound
-	var nsk *s3types.NoSuchKey
-	return errors.As(err, &nf) || errors.As(err, &nsk)
+	resp := minio.ToErrorResponse(err)
+	if resp.StatusCode == http.StatusNotFound {
+		return true
+	}
+	switch strings.ToLower(resp.Code) {
+	case "nosuchkey", "notfound", "no such key":
+		return true
+	}
+	return false
 }
