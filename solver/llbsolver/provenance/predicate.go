@@ -40,10 +40,8 @@ func slsaMaterials(srcs provenancetypes.Sources) ([]slsa.ProvenanceMaterial, err
 
 	for _, s := range srcs.Git {
 		out = append(out, slsa.ProvenanceMaterial{
-			URI: s.URL,
-			Digest: slsa.DigestSet{
-				"sha1": s.Commit,
-			},
+			URI:    s.URL,
+			Digest: digestSetForCommit(s.Commit),
 		})
 	}
 
@@ -59,14 +57,22 @@ func slsaMaterials(srcs provenancetypes.Sources) ([]slsa.ProvenanceMaterial, err
 	return out, nil
 }
 
+func digestSetForCommit(commit string) slsa.DigestSet {
+	dset := slsa.DigestSet{}
+	if len(commit) == 64 {
+		dset["sha256"] = commit
+	} else {
+		dset["sha1"] = commit
+	}
+	return dset
+}
+
 func findMaterial(srcs provenancetypes.Sources, uri string) (*slsa.ProvenanceMaterial, bool) {
 	for _, s := range srcs.Git {
 		if s.URL == uri {
 			return &slsa.ProvenanceMaterial{
-				URI: s.URL,
-				Digest: slsa.DigestSet{
-					"sha1": s.Commit,
-				},
+				URI:    s.URL,
+				Digest: digestSetForCommit(s.Commit),
 			}, true
 		}
 	}
