@@ -13,7 +13,7 @@ var Buf []byte
 
 func BenchmarkMarshalCacheRecords(b *testing.B) {
 	v := sampleCacheRecords()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		var err error
 		Buf, err = v.MarshalVT()
 		require.NoError(b, err)
@@ -27,7 +27,7 @@ func BenchmarkUnmarshalCacheRecords(b *testing.B) {
 	buf, err := proto.Marshal(v)
 	require.NoError(b, err)
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		err := CacheRecordsOutput.UnmarshalVT(buf)
 		require.NoError(b, err)
 	}

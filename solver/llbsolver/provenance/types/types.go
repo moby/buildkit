@@ -103,33 +103,33 @@ func (ps *ProvenanceSLSA) Validate() error {
 
 type ProvenancePredicateSLSA02 struct {
 	slsa02.ProvenancePredicate
-	Invocation  ProvenanceInvocationSLSA02 `json:"invocation,omitempty"`
+	Invocation  ProvenanceInvocationSLSA02 `json:"invocation"`
 	BuildConfig *BuildConfig               `json:"buildConfig,omitempty"`
 	Metadata    *ProvenanceMetadataSLSA02  `json:"metadata,omitempty"`
 }
 
 type ProvenanceInvocationSLSA02 struct {
-	ConfigSource slsa02.ConfigSource `json:"configSource,omitempty"`
-	Parameters   Parameters          `json:"parameters,omitempty"`
-	Environment  Environment         `json:"environment,omitempty"`
+	ConfigSource slsa02.ConfigSource `json:"configSource"`
+	Parameters   Parameters          `json:"parameters"`
+	Environment  Environment         `json:"environment"`
 }
 
 type ProvenanceMetadataSLSA02 struct {
 	slsa02.ProvenanceMetadata
-	BuildKitMetadata BuildKitMetadata `json:"https://mobyproject.org/buildkit@v1#metadata,omitempty"`
+	BuildKitMetadata BuildKitMetadata `json:"https://mobyproject.org/buildkit@v1#metadata"`
 	Hermetic         bool             `json:"https://mobyproject.org/buildkit@v1#hermetic,omitempty"`
 }
 
 type ProvenancePredicateSLSA1 struct {
 	slsa1.ProvenancePredicate
-	BuildDefinition ProvenanceBuildDefinitionSLSA1 `json:"buildDefinition,omitempty"`
-	RunDetails      ProvenanceRunDetailsSLSA1      `json:"runDetails,omitempty"`
+	BuildDefinition ProvenanceBuildDefinitionSLSA1 `json:"buildDefinition"`
+	RunDetails      ProvenanceRunDetailsSLSA1      `json:"runDetails"`
 }
 
 type ProvenanceBuildDefinitionSLSA1 struct {
 	slsa1.ProvenanceBuildDefinition
-	ExternalParameters ProvenanceExternalParametersSLSA1 `json:"externalParameters,omitempty"`
-	InternalParameters ProvenanceInternalParametersSLSA1 `json:"internalParameters,omitempty"`
+	ExternalParameters ProvenanceExternalParametersSLSA1 `json:"externalParameters"`
+	InternalParameters ProvenanceInternalParametersSLSA1 `json:"internalParameters"`
 }
 
 type ProvenanceRunDetailsSLSA1 struct {
@@ -138,8 +138,8 @@ type ProvenanceRunDetailsSLSA1 struct {
 }
 
 type ProvenanceExternalParametersSLSA1 struct {
-	ConfigSource ProvenanceConfigSourceSLSA1 `json:"configSource,omitempty"`
-	Request      Parameters                  `json:"request,omitempty"`
+	ConfigSource ProvenanceConfigSourceSLSA1 `json:"configSource"`
+	Request      Parameters                  `json:"request"`
 }
 
 type ProvenanceConfigSourceSLSA1 struct {
@@ -155,9 +155,9 @@ type ProvenanceInternalParametersSLSA1 struct {
 
 type ProvenanceMetadataSLSA1 struct {
 	slsa1.BuildMetadata
-	BuildKitMetadata BuildKitMetadata `json:"buildkit_metadata,omitempty"`
+	BuildKitMetadata BuildKitMetadata `json:"buildkit_metadata"`
 	Hermetic         bool             `json:"buildkit_hermetic,omitempty"`
-	Completeness     BuildKitComplete `json:"buildkit_completeness,omitempty"`
+	Completeness     BuildKitComplete `json:"buildkit_completeness"`
 	Reproducible     bool             `json:"buildkit_reproducible,omitempty"`
 }
 

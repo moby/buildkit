@@ -15,7 +15,7 @@ var Buf []byte
 
 func BenchmarkMarshalVertex(b *testing.B) {
 	v := sampleVertex()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		var err error
 		Buf, err = v.MarshalVT()
 		require.NoError(b, err)
@@ -24,7 +24,7 @@ func BenchmarkMarshalVertex(b *testing.B) {
 
 func BenchmarkMarshalVertexStatus(b *testing.B) {
 	v := sampleVertexStatus()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		var err error
 		Buf, err = v.MarshalVT()
 		require.NoError(b, err)
@@ -33,7 +33,7 @@ func BenchmarkMarshalVertexStatus(b *testing.B) {
 
 func BenchmarkMarshalVertexLog(b *testing.B) {
 	v := sampleVertexLog()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		var err error
 		Buf, err = v.MarshalVT()
 		require.NoError(b, err)
@@ -47,7 +47,7 @@ func BenchmarkUnmarshalVertex(b *testing.B) {
 	buf, err := proto.Marshal(v)
 	require.NoError(b, err)
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		err := VertexOutput.UnmarshalVT(buf)
 		require.NoError(b, err)
 	}
@@ -60,7 +60,7 @@ func BenchmarkUnmarshalVertexStatus(b *testing.B) {
 	buf, err := proto.Marshal(v)
 	require.NoError(b, err)
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		err := VertexStatusOutput.UnmarshalVT(buf)
 		require.NoError(b, err)
 	}
@@ -73,7 +73,7 @@ func BenchmarkUnmarshalVertexLog(b *testing.B) {
 	buf, err := proto.Marshal(v)
 	require.NoError(b, err)
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		err := VertexLogOutput.UnmarshalVT(buf)
 		require.NoError(b, err)
 	}

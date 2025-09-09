@@ -44,7 +44,7 @@ func getLocalListener(listenerPath, secDescriptor string) (net.Listener, error) 
 func groupToSecurityDescriptor(group string) (string, error) {
 	sddl := "D:P(A;;GA;;;BA)(A;;GA;;;SY)"
 	if group != "" {
-		for _, g := range strings.Split(group, ",") {
+		for g := range strings.SplitSeq(group, ",") {
 			sid, err := winio.LookupSidByName(g)
 			if err != nil {
 				return "", errors.Wrapf(err, "failed to lookup sid for group %s", g)

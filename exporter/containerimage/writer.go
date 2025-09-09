@@ -296,7 +296,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 			}
 
 			var defaultSubjects []intoto.Subject
-			for _, name := range strings.Split(opts.ImageName, ",") {
+			for name := range strings.SplitSeq(opts.ImageName, ",") {
 				if name == "" {
 					continue
 				}

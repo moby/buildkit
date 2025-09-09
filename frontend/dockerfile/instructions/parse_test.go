@@ -275,7 +275,7 @@ func TestRunCmdFlagsUsed(t *testing.T) {
 func BenchmarkParseBuildStageName(b *testing.B) {
 	b.ReportAllocs()
 	stageNames := []string{"STAGE_NAME", "StageName", "St4g3N4m3"}
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		for _, s := range stageNames {
 			_, _ = parseBuildStageName([]string{"foo", "as", s})
 		}
