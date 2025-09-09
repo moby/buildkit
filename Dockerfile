@@ -12,8 +12,8 @@ ARG STARGZ_SNAPSHOTTER_VERSION=v0.15.1
 ARG NERDCTL_VERSION=v2.1.2
 ARG DNSNAME_VERSION=v1.3.1
 ARG NYDUS_VERSION=v2.2.4
-ARG MINIO_VERSION=RELEASE.2022-05-03T20-36-08Z
-ARG MINIO_MC_VERSION=RELEASE.2022-05-04T06-07-55Z
+ARG MINIO_VERSION=RELEASE.2025-09-07T16-13-09Z
+ARG MINIO_MC_VERSION=RELEASE.2025-08-13T08-35-41Z
 ARG AZURITE_VERSION=3.33.0
 ARG GOTESTSUM_VERSION=v1.9.0
 ARG DELVE_VERSION=v1.23.1
@@ -25,8 +25,8 @@ ARG BUILDKIT_DEBUG
 ARG EXPORT_BASE=alpine
 
 # minio for s3 integration tests
-FROM minio/minio:${MINIO_VERSION} AS minio
-FROM minio/mc:${MINIO_MC_VERSION} AS minio-mc
+FROM quay.io/minio/minio:${MINIO_VERSION} AS minio
+FROM quay.io/minio/mc:${MINIO_MC_VERSION} AS minio-mc
 
 # xx is a helper for cross-compilation
 FROM --platform=$BUILDPLATFORM tonistiigi/xx:${XX_VERSION} AS xx
@@ -435,7 +435,7 @@ ENV BUILDKIT_SETUP_CGROUPV2_ROOT=1
 ENV CGO_ENABLED=0
 ENV GOTESTSUM_FORMAT=standard-verbose
 COPY --link --from=gotestsum /out /usr/bin/
-COPY --link --from=minio /opt/bin/minio /usr/bin/
+COPY --link --from=minio /usr/bin/minio /usr/bin/
 COPY --link --from=minio-mc /usr/bin/mc /usr/bin/
 COPY --link --from=nydus /out/nydus-static/* /usr/bin/
 COPY --link --from=stargz-snapshotter /out/* /usr/bin/
