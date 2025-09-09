@@ -43,7 +43,7 @@ func xmain() error {
 		return err
 	}
 	var nodes []string
-	for _, s := range strings.Split(string(stdin), "\n") {
+	for s := range strings.SplitSeq(string(stdin), "\n") {
 		s = strings.TrimSpace(s)
 		if s != "" {
 			nodes = append(nodes, s)

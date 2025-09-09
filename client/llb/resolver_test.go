@@ -81,7 +81,7 @@ func (r *testResolver) ResolveImageConfig(ctx context.Context, ref string, opt s
 			Env        []string `json:"Env,omitempty"`
 			WorkingDir string   `json:"WorkingDir,omitempty"`
 			User       string   `json:"User,omitempty"`
-		} `json:"config,omitempty"`
+		} `json:"config"`
 	}
 	r.called = true
 
