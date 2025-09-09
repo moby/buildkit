@@ -994,10 +994,6 @@ func getRefProvenance(ref solver.ResultProxy, br *provenanceBridge) (*provenance
 		pr.Frontend = br.req.Frontend
 		pr.Args = provenance.FilterArgs(br.req.FrontendOpt)
 		// TODO: should also save some output options like compression
-
-		if len(br.req.FrontendInputs) > 0 {
-			pr.IncompleteMaterials = true // not implemented
-		}
 	}
 
 	return pr, nil
