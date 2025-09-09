@@ -1,6 +1,8 @@
 version: "2"
+
 run:
   modules-download-mode: vendor
+
 linters:
   default: none
   enable:
@@ -122,6 +124,7 @@ linters:
     paths:
       - .*\.pb\.go$
       - examples
+
 formatters:
   enable:
     - gofmt
@@ -130,3 +133,7 @@ formatters:
     generated: lax
     paths:
       - .*\.pb\.go$
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
