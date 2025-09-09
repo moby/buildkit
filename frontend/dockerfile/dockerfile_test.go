@@ -4837,7 +4837,7 @@ COPY --from=build foo bar
 	if format == "sha256" {
 		initOptions = " --object-format=sha256"
 	}
-	err = runShell(gitDir,
+	err = runShell(sb.Context(), gitDir,
 		"git init"+initOptions,
 		"git config --local user.email test",
 		"git config --local user.name test",
@@ -4854,7 +4854,7 @@ COPY --from=build foo bar2
 	err = os.WriteFile(filepath.Join(gitDir, "Dockerfile"), []byte(dockerfile), 0600)
 	require.NoError(t, err)
 
-	err = runShell(gitDir,
+	err = runShell(sb.Context(), gitDir,
 		"git add Dockerfile",
 		"git commit -m second",
 		"git update-server-info",
@@ -10155,13 +10155,13 @@ COPY --from=build /out /
 	require.Contains(t, err.Error(), "target stage \"bulid\" could not be found (did you mean build?)")
 }
 
-func runShell(dir string, cmds ...string) error {
+func runShell(ctx context.Context, dir string, cmds ...string) error {
 	for _, args := range cmds {
 		var cmd *exec.Cmd
 		if runtime.GOOS == "windows" {
-			cmd = exec.Command("powershell", "-command", args)
+			cmd = exec.CommandContext(ctx, "powershell", "-command", args)
 		} else {
-			cmd = exec.Command("sh", "-c", args)
+			cmd = exec.CommandContext(ctx, "sh", "-c", args)
 		}
 		cmd.Dir = dir
 		if err := cmd.Run(); err != nil {

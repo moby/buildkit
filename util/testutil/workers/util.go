@@ -2,6 +2,7 @@ package workers
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -40,6 +41,7 @@ func (csd cdiSpecDir) UpdateConfigFile(in string) string {
 }
 
 func runBuildkitd(
+	ctx context.Context,
 	conf *integration.BackendConfig,
 	args []string,
 	logs map[string]*bytes.Buffer,
@@ -92,7 +94,7 @@ func runBuildkitd(
 	debugAddress := getBuildkitdDebugAddr(tmpdir)
 
 	args = append(args, "--root", tmpdir, "--addr", address, "--debug")
-	cmd := exec.Command(args[0], args[1:]...) //nolint:gosec // test utility
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...) //nolint:gosec // test utility
 	cmd.Env = append(
 		os.Environ(),
 		"BUILDKIT_DEBUG_EXEC_OUTPUT=1",

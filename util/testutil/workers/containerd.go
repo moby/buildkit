@@ -158,7 +158,7 @@ disabled_plugins = ["io.containerd.grpc.v1.cri"]
 		snBuildkitdArgs = append(snBuildkitdArgs,
 			fmt.Sprintf("--containerd-worker-snapshotter=%s", c.Snapshotter))
 		if c.Snapshotter == "stargz" {
-			snPath, snCl, err := runStargzSnapshotter(cfg)
+			snPath, snCl, err := runStargzSnapshotter(ctx, cfg)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -191,7 +191,7 @@ disabled_plugins = ["io.containerd.grpc.v1.cri"]
 		}, c.ExtraEnv...), "containerd-rootless.sh", "-c", configFile)
 	}
 
-	cmd := exec.Command(containerdArgs[0], containerdArgs[1:]...) //nolint:gosec // test utility
+	cmd := exec.CommandContext(context.TODO(), containerdArgs[0], containerdArgs[1:]...) //nolint:gosec // test utility
 	cmd.Env = append(os.Environ(), c.ExtraEnv...)
 
 	ctdStop, err := integration.StartCmd(cmd, cfg.Logs)
@@ -232,7 +232,7 @@ disabled_plugins = ["io.containerd.grpc.v1.cri"]
 			"nsenter", "-U", "--preserve-credentials", "-m", "-t", fmt.Sprintf("%d", pid)},
 			append(buildkitdArgs, "--containerd-worker-snapshotter=native")...)
 	}
-	buildkitdSock, debugSock, stop, err := runBuildkitd(cfg, buildkitdArgs, cfg.Logs, c.UID, c.GID, c.ExtraEnv)
+	buildkitdSock, debugSock, stop, err := runBuildkitd(ctx, cfg, buildkitdArgs, cfg.Logs, c.UID, c.GID, c.ExtraEnv)
 	if err != nil {
 		integration.PrintLogs(cfg.Logs, log.Println)
 		return nil, nil, err
@@ -254,7 +254,7 @@ func (c *Containerd) Close() error {
 	return nil
 }
 
-func runStargzSnapshotter(cfg *integration.BackendConfig) (address string, cl func() error, err error) {
+func runStargzSnapshotter(ctx context.Context, cfg *integration.BackendConfig) (address string, cl func() error, err error) {
 	binary := "containerd-stargz-grpc"
 	if err := integration.LookupBinary(binary); err != nil {
 		return "", nil, err
@@ -278,7 +278,7 @@ func runStargzSnapshotter(cfg *integration.BackendConfig) (address string, cl fu
 
 	address = filepath.Join(tmpStargzDir, "containerd-stargz-grpc.sock")
 	stargzRootDir := filepath.Join(tmpStargzDir, "root")
-	cmd := exec.Command(binary,
+	cmd := exec.CommandContext(ctx, binary,
 		"--log-level", "debug",
 		"--address", address,
 		"--root", stargzRootDir)

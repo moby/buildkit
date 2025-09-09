@@ -39,7 +39,7 @@ func TestToAgentSource(t *testing.T) {
 	require.ErrorContains(t, err, "raw mode only supported with socket paths")
 
 	sockPath := filepath.Join(dir, "test.sock")
-	l, err := net.Listen("unix", sockPath)
+	l, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", sockPath)
 	require.NoError(t, err)
 	defer l.Close()
 

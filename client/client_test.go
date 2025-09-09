@@ -849,7 +849,7 @@ func testRawSocketMount(t *testing.T, sb integration.Sandbox) {
 
 	dir := t.TempDir()
 	sockPath := filepath.Join(dir, "test.sock")
-	l, err := net.Listen("unix", sockPath)
+	l, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", sockPath)
 	require.NoError(t, err)
 	defer l.Close()
 
@@ -11239,7 +11239,7 @@ func makeSSHAgentSock(t *testing.T, agent agent.Agent) (p string, err error) {
 	tmpDir := integration.Tmpdir(t)
 	sockPath := filepath.Join(tmpDir.Name, "ssh_auth_sock")
 
-	l, err := net.Listen("unix", sockPath)
+	l, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", sockPath)
 	if err != nil {
 		return "", err
 	}

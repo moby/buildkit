@@ -2,6 +2,7 @@ package dockerd
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -99,7 +100,7 @@ func (d *Daemon) Sock() string {
 	return socketScheme + d.sockPath
 }
 
-func (d *Daemon) StartWithError(daemonLogs map[string]*bytes.Buffer, providedArgs ...string) error {
+func (d *Daemon) StartWithError(ctx context.Context, daemonLogs map[string]*bytes.Buffer, providedArgs ...string) error {
 	dockerdBinary, err := exec.LookPath(d.dockerdBinary)
 	if err != nil {
 		return errors.Wrapf(err, "[%s] could not find dockerd binary %q in $PATH", d.id, d.dockerdBinary)
@@ -140,7 +141,7 @@ func (d *Daemon) StartWithError(daemonLogs map[string]*bytes.Buffer, providedArg
 	}
 
 	d.args = append(d.args, providedArgs...)
-	d.cmd = exec.Command(dockerdBinary, d.args...)
+	d.cmd = exec.CommandContext(ctx, dockerdBinary, d.args...)
 	d.cmd.Env = append(d.envs, "DOCKER_SERVICE_PREFER_OFFLINE_IMAGE=1", "BUILDKIT_DEBUG_EXEC_OUTPUT=1", "BUILDKIT_DEBUG_PANIC_ON_ERROR=1")
 
 	if daemonLogs != nil {

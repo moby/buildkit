@@ -145,7 +145,7 @@ func (cli *GitCLI) Run(ctx context.Context, args ...string) (_ []byte, err error
 		if cli.exec == nil {
 			cmd = exec.CommandContext(ctx, gitBinary)
 		} else {
-			cmd = exec.Command(gitBinary)
+			cmd = exec.Command(gitBinary) //nolint:noctx
 		}
 
 		cmd.Dir = cli.dir

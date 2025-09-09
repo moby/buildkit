@@ -67,16 +67,16 @@ func testAddGit(t *testing.T, sb integration.Sandbox, format string) {
 	gitCommands = append(gitCommands, makeCommit("v0.0.2")...)
 	gitCommands = append(gitCommands, makeCommit("v0.0.3")...)
 	gitCommands = append(gitCommands, "git update-server-info")
-	err = runShell(gitDir, gitCommands...)
+	err = runShell(sb.Context(), gitDir, gitCommands...)
 	require.NoError(t, err)
 
-	revParseCmd := exec.Command("git", "rev-parse", "v0.0.2")
+	revParseCmd := exec.CommandContext(sb.Context(), "git", "rev-parse", "v0.0.2")
 	revParseCmd.Dir = gitDir
 	commitHashB, err := revParseCmd.Output()
 	require.NoError(t, err)
 	commitHashV2 := strings.TrimSpace(string(commitHashB))
 
-	revParseCmd = exec.Command("git", "rev-parse", "v0.0.3")
+	revParseCmd = exec.CommandContext(sb.Context(), "git", "rev-parse", "v0.0.3")
 	revParseCmd.Dir = gitDir
 	commitHashB, err = revParseCmd.Output()
 	require.NoError(t, err)
@@ -283,10 +283,10 @@ func testAddGitChecksumCache(t *testing.T, sb integration.Sandbox) {
 	gitCommands = append(gitCommands, makeCommit("v0.0.1")...)
 	gitCommands = append(gitCommands, makeCommit("v0.0.2")...)
 	gitCommands = append(gitCommands, "git update-server-info")
-	err = runShell(gitDir, gitCommands...)
+	err = runShell(sb.Context(), gitDir, gitCommands...)
 	require.NoError(t, err)
 
-	revParseCmd := exec.Command("git", "rev-parse", "v0.0.2")
+	revParseCmd := exec.CommandContext(sb.Context(), "git", "rev-parse", "v0.0.2")
 	revParseCmd.Dir = gitDir
 	commitHashB, err := revParseCmd.Output()
 	require.NoError(t, err)
@@ -370,7 +370,7 @@ func testGitQueryString(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
 	subModDir := t.TempDir()
-	err := runShell(subModDir, []string{
+	err := runShell(sb.Context(), subModDir, []string{
 		"git init",
 		"git config --local user.email test",
 		"git config --local user.name test",
@@ -386,7 +386,7 @@ func testGitQueryString(t *testing.T, sb integration.Sandbox) {
 	submodServerURL := subModServer.URL
 
 	gitDir := t.TempDir()
-	err = runShell(gitDir, []string{
+	err = runShell(sb.Context(), gitDir, []string{
 		"git init",
 		"git config --local user.email test",
 		"git config --local user.name test",
@@ -406,7 +406,7 @@ COPY foo out
 `), 0600)
 	require.NoError(t, err)
 
-	err = runShell(gitDir, []string{
+	err = runShell(sb.Context(), gitDir, []string{
 		"git submodule add " + submodServerURL + "/.git submod",
 		"git add Dockerfile foo submod",
 		"git commit -m initial",
@@ -433,7 +433,7 @@ COPY foo out
 	require.NoError(t, err)
 
 	// get commit SHA for v0.0.2
-	cmd := exec.Command("git", "rev-parse", "v0.0.2")
+	cmd := exec.CommandContext(sb.Context(), "git", "rev-parse", "v0.0.2")
 	cmd.Dir = gitDir
 	dt, err := cmd.CombinedOutput()
 	require.NoError(t, err)
@@ -441,7 +441,7 @@ COPY foo out
 	require.Len(t, commitHashV2, 40)
 
 	// get commit SHA for latest
-	cmd = exec.Command("git", "rev-parse", "latest")
+	cmd = exec.CommandContext(sb.Context(), "git", "rev-parse", "latest")
 	cmd.Dir = gitDir
 	dt, err = cmd.CombinedOutput()
 	require.NoError(t, err)

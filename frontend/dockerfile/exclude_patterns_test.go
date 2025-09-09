@@ -199,7 +199,7 @@ COPY --from=builder6 / /builder6
 			"git update-server-info",
 		}
 
-		err = runShell(srcDir.Name, gitCommands...)
+		err = runShell(ctx, srcDir.Name, gitCommands...)
 		require.NoError(t, err)
 
 		server := httptest.NewServer(http.FileServer(http.Dir(filepath.Clean(srcDir.Name))))

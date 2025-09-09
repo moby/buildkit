@@ -436,7 +436,7 @@ COPY myapp.Dockerfile /
 			if format == "sha256" {
 				initOptions = " --object-format=sha256"
 			}
-			err = runShell(dir.Name,
+			err = runShell(ctx, dir.Name,
 				"git init"+initOptions,
 				"git config --local user.email test",
 				"git config --local user.name test",
@@ -447,7 +447,7 @@ COPY myapp.Dockerfile /
 			)
 			require.NoError(t, err)
 
-			cmd := exec.Command("git", "rev-parse", "v1")
+			cmd := exec.CommandContext(ctx, "git", "rev-parse", "v1")
 			cmd.Dir = dir.Name
 			expectedGitSHA, err := cmd.Output()
 			require.NoError(t, err)
