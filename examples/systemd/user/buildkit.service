@@ -8,4 +8,4 @@ NotifyAccess=all
 ExecStart=rootlesskit --net=slirp4netns --copy-up=/etc --disable-host-loopback /usr/local/bin/buildkitd --addr unix://%t/buildkit/rootless
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
