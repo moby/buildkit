@@ -90,16 +90,16 @@ func testParallelism(t *testing.T, sb integration.Sandbox) {
 
 type parallelismSetterSingle struct{}
 
-func (*parallelismSetterSingle) UpdateConfigFile(in string) string {
-	return in + "\n\n[worker.oci]\n  max-parallelism = 1\n\n[worker.containerd]\n  max-parallelism = 1\n"
+func (*parallelismSetterSingle) UpdateConfigFile(in string) (string, func() error) {
+	return in + "\n\n[worker.oci]\n  max-parallelism = 1\n\n[worker.containerd]\n  max-parallelism = 1\n", nil
 }
 
 var maxParallelismSingle integration.ConfigUpdater = &parallelismSetterSingle{}
 
 type parallelismSetterUnlimited struct{}
 
-func (*parallelismSetterUnlimited) UpdateConfigFile(in string) string {
-	return in
+func (*parallelismSetterUnlimited) UpdateConfigFile(in string) (string, func() error) {
+	return in, nil
 }
 
 var maxParallelismUnlimited integration.ConfigUpdater = &parallelismSetterUnlimited{}

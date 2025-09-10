@@ -93,9 +93,12 @@ func (c Moby) New(ctx context.Context, cfg *integration.BackendConfig) (b integr
 		}
 	}()
 
-	cfgFile, err := integration.WriteConfig(cfg.DaemonConfig)
+	cfgFile, release, err := integration.WriteConfig(cfg.DaemonConfig)
 	if err != nil {
 		return nil, nil, err
+	}
+	if release != nil {
+		deferF.Append(release)
 	}
 	deferF.Append(func() error {
 		return os.RemoveAll(filepath.Dir(cfgFile))

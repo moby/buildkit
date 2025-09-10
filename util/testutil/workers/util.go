@@ -17,12 +17,12 @@ func withOTELSocketPath(socketPath string) integration.ConfigUpdater {
 
 type otelSocketPath string
 
-func (osp otelSocketPath) UpdateConfigFile(in string) string {
+func (osp otelSocketPath) UpdateConfigFile(in string) (string, func() error) {
 	return fmt.Sprintf(`%s
 
 [otel]
   socketPath = %q
-`, in, osp)
+`, in, osp), nil
 }
 
 func withCDISpecDir(specDir string) integration.ConfigUpdater {
@@ -31,12 +31,12 @@ func withCDISpecDir(specDir string) integration.ConfigUpdater {
 
 type cdiSpecDir string
 
-func (csd cdiSpecDir) UpdateConfigFile(in string) string {
+func (csd cdiSpecDir) UpdateConfigFile(in string) (string, func() error) {
 	return fmt.Sprintf(`%s
 
 [cdi]
   specDirs = [%q]
-`, in, csd)
+`, in, csd), nil
 }
 
 func runBuildkitd(
@@ -74,7 +74,7 @@ func runBuildkitd(
 	}
 	deferF.Append(func() error { return os.RemoveAll(tmpdir) })
 
-	cfgfile, err := integration.WriteConfig(
+	cfgfile, release, err := integration.WriteConfig(
 		append(conf.DaemonConfig,
 			withOTELSocketPath(getTraceSocketPath(tmpdir)),
 			withCDISpecDir(conf.CDISpecDir),
@@ -82,6 +82,9 @@ func runBuildkitd(
 	)
 	if err != nil {
 		return "", "", nil, err
+	}
+	if release != nil {
+		deferF.Append(release)
 	}
 	deferF.Append(func() error {
 		return os.RemoveAll(filepath.Dir(cfgfile))

@@ -11323,14 +11323,14 @@ func (s *server) run(a agent.Agent) error {
 
 type secModeSandbox struct{}
 
-func (*secModeSandbox) UpdateConfigFile(in string) string {
-	return in
+func (*secModeSandbox) UpdateConfigFile(in string) (string, func() error) {
+	return in, nil
 }
 
 type secModeInsecure struct{}
 
-func (*secModeInsecure) UpdateConfigFile(in string) string {
-	return in + "\n\ninsecure-entitlements = [\"security.insecure\"]\n"
+func (*secModeInsecure) UpdateConfigFile(in string) (string, func() error) {
+	return in + "\n\ninsecure-entitlements = [\"security.insecure\"]\n", nil
 }
 
 var (
@@ -11340,19 +11340,19 @@ var (
 
 type netModeHost struct{}
 
-func (*netModeHost) UpdateConfigFile(in string) string {
-	return in + "\n\ninsecure-entitlements = [\"network.host\"]\n"
+func (*netModeHost) UpdateConfigFile(in string) (string, func() error) {
+	return in + "\n\ninsecure-entitlements = [\"network.host\"]\n", nil
 }
 
 type netModeDefault struct{}
 
-func (*netModeDefault) UpdateConfigFile(in string) string {
-	return in
+func (*netModeDefault) UpdateConfigFile(in string) (string, func() error) {
+	return in, nil
 }
 
 type netModeBridgeDNS struct{}
 
-func (*netModeBridgeDNS) UpdateConfigFile(in string) string {
+func (*netModeBridgeDNS) UpdateConfigFile(in string) (string, func() error) {
 	return in + `
 # configure bridge networking
 [worker.oci]
@@ -11365,7 +11365,7 @@ cniConfigPath = "/etc/buildkit/dns-cni.conflist"
 
 [dns]
 nameservers = ["10.11.0.1"]
-`
+`, nil
 }
 
 var (

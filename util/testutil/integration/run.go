@@ -81,7 +81,7 @@ type Worker interface {
 }
 
 type ConfigUpdater interface {
-	UpdateConfigFile(string) string
+	UpdateConfigFile(string) (string, func() error)
 }
 
 type Test interface {
@@ -336,32 +336,43 @@ func withMirrorConfig(mirror string) ConfigUpdater {
 
 type mirrorConfig string
 
-func (mc mirrorConfig) UpdateConfigFile(in string) string {
+func (mc mirrorConfig) UpdateConfigFile(in string) (string, func() error) {
 	return fmt.Sprintf(`%s
 
 [registry."docker.io"]
 mirrors=["%s"]
-`, in, mc)
+`, in, mc), nil
 }
 
-func WriteConfig(updaters []ConfigUpdater) (string, error) {
+func WriteConfig(updaters []ConfigUpdater) (_ string, _ func() error, err error) {
 	tmpdir, err := os.MkdirTemp("", "bktest_config")
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	if err := os.Chmod(tmpdir, 0711); err != nil {
-		return "", err
+		return "", nil, err
 	}
 
+	deferF := &MultiCloser{}
 	s := ""
 	for _, upt := range updaters {
-		s = upt.UpdateConfigFile(s)
+		var release func() error
+		s, release = upt.UpdateConfigFile(s)
+		if release != nil {
+			deferF.Append(release)
+		}
 	}
 
+	defer func() {
+		if err != nil {
+			deferF.F()()
+		}
+	}()
+
 	if err := os.WriteFile(filepath.Join(tmpdir, buildkitdConfigFile), []byte(s), 0644); err != nil {
-		return "", err
+		return "", nil, err
 	}
-	return filepath.Join(tmpdir, buildkitdConfigFile), nil
+	return filepath.Join(tmpdir, buildkitdConfigFile), deferF.F(), nil
 }
 
 func lazyMirrorRunnerFunc(t *testing.T, images map[string]string) func() string {

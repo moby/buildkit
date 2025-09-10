@@ -860,6 +860,11 @@ func newController(ctx context.Context, c *cli.Context, cfg *config.Config) (*co
 		cfg.Entitlements = append(cfg.Entitlements, "device")
 	}
 
+	provenanceEnv, err := loadProvenanceEnv(cfg.ProvenanceEnvDir)
+	if err != nil {
+		return nil, err
+	}
+
 	return control.NewController(control.Opt{
 		SessionManager:            sessionManager,
 		WorkerController:          wc,
@@ -876,6 +881,7 @@ func newController(ctx context.Context, c *cli.Context, cfg *config.Config) (*co
 		HistoryConfig:             cfg.History,
 		GarbageCollect:            w.GarbageCollect,
 		GracefulStop:              ctx.Done(),
+		ProvenanceEnv:             provenanceEnv,
 	})
 }
 
