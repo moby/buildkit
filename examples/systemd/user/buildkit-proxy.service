@@ -9,4 +9,4 @@ After=buildkit-proxy.socket
 ExecStart=/usr/lib/systemd/systemd-socket-proxyd %t/buildkit/rootless
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
