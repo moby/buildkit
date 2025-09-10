@@ -102,6 +102,8 @@ func NewPredicate(c *Capture) (*provenancetypes.ProvenancePredicateSLSA02, error
 	contextKey := "context"
 	if v, ok := args["contextkey"]; ok && v != "" {
 		contextKey = v
+	} else if v, ok := c.Args["input:context"]; ok && v != "" {
+		contextKey = "input:context"
 	}
 
 	if v, ok := args[contextKey]; ok && v != "" {
