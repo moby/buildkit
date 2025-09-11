@@ -163,10 +163,10 @@ FROM scratch AS cni-plugins-export-squashed
 COPY --from=cni-plugins-export / /
 
 FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS binfmt-filter
-# built from https://github.com/tonistiigi/binfmt/releases/tag/buildkit%2Fv9.2.2-54
-COPY --link --from=tonistiigi/binfmt:buildkit-v9.2.2-54@sha256:e60fbf01e26c75efa816224f4de31c2ef63c5486b20c3e8fa1e5da2aff368ba9 / /out/
+# built from https://github.com/tonistiigi/binfmt/releases/tag/buildkit%2Fv10.0.4-57
+COPY --link --from=tonistiigi/binfmt:buildkit-v10.0.4-57@sha256:370775754cd56094fff210b44968bf15777aed7eb3302df4f7ab2b647630899e / /out/
 WORKDIR /out/
-RUN rm buildkit-qemu-loongarch64 buildkit-qemu-mips64 buildkit-qemu-mips64el
+RUN rm -f buildkit-qemu-loongarch64 buildkit-qemu-mips64 buildkit-qemu-mips64el
 
 FROM scratch AS binaries-linux
 COPY --link --from=runc /usr/bin/runc /buildkit-runc
