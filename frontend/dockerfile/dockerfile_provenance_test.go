@@ -44,7 +44,6 @@ import (
 )
 
 var provenanceTests = integration.TestFuncs(
-	testProvenanceAttestation,
 	testGitProvenanceAttestationSHA1,
 	testGitProvenanceAttestationSHA256,
 	testMultiPlatformProvenance,
@@ -180,6 +179,11 @@ RUN echo ok> /foo
 				_, isClient := f.(*clientFrontend)
 				_, isGateway := f.(*gatewayFrontend)
 
+				expCustom := provenancetypes.ProvenanceCustomEnv{
+					"foo":     "bar",
+					"numbers": []any{1.0, 2.0, 3.0},
+				}
+
 				if slsaVersion == "v1" {
 					type stmtT struct {
 						Predicate provenancetypes.ProvenancePredicateSLSA1 `json:"predicate"`
@@ -192,6 +196,8 @@ RUN echo ok> /foo
 					require.Equal(t, "", pred.RunDetails.Builder.ID)
 
 					require.Equal(t, "", pred.BuildDefinition.ExternalParameters.ConfigSource.URI)
+
+					require.Equal(t, expCustom, pred.BuildDefinition.InternalParameters.ProvenanceCustomEnv)
 
 					args := pred.BuildDefinition.ExternalParameters.Request.Args
 					if isClient {
@@ -293,6 +299,8 @@ RUN echo ok> /foo
 					require.Equal(t, "", pred.Builder.ID)
 
 					require.Equal(t, "", pred.Invocation.ConfigSource.URI)
+
+					require.Equal(t, expCustom, pred.Invocation.Environment.ProvenanceCustomEnv)
 
 					args := pred.Invocation.Parameters.Args
 					if isClient {
@@ -2007,3 +2015,51 @@ COPY --from=base /out /
 		require.NoError(t, json.Unmarshal(dt, &pred))
 	}
 }
+
+type provenanceEnvSimple struct{}
+
+func (*provenanceEnvSimple) UpdateConfigFile(in string) (string, func() error) {
+	dir, err := os.MkdirTemp("", "provenanceenv")
+	if err != nil {
+		panic(err)
+	}
+	dt, err := json.Marshal(map[string]any{
+		"foo": "bar",
+	})
+	if err != nil {
+		panic(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "foo.json"), dt, 0600); err != nil {
+		panic(err)
+	}
+	dt, err = json.Marshal(map[string]any{
+		"numbers": []int{1, 2, 3},
+	})
+	if err != nil {
+		panic(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "numbers.json"), dt, 0600); err != nil {
+		panic(err)
+	}
+
+	// make all paths readable for the rootless user
+	if err := os.Chmod(dir, 0755); err != nil {
+		panic(err)
+	}
+	if err := os.Chmod(filepath.Join(dir, "foo.json"), 0644); err != nil {
+		panic(err)
+	}
+	if err := os.Chmod(filepath.Join(dir, "numbers.json"), 0644); err != nil {
+		panic(err)
+	}
+
+	in = in + fmt.Sprintf("\n\nprovenanceEnvDir = %q\n", dir)
+
+	return in, func() error {
+		return os.RemoveAll(dir)
+	}
+}
+
+var (
+	provenanceEnvSimpleConfig integration.ConfigUpdater = &provenanceEnvSimple{}
+)

@@ -298,6 +298,11 @@ func TestIntegration(t *testing.T) {
 			"granted": networkHostGranted,
 			"denied":  networkHostDenied,
 		}))...)
+
+	integration.Run(t, integration.TestFuncs(testProvenanceAttestation), append(opts,
+		integration.WithMatrix("env", map[string]any{
+			"simple": provenanceEnvSimpleConfig,
+		}))...)
 }
 
 func testEmptyStringArgInEnv(t *testing.T, sb integration.Sandbox) {
@@ -10386,14 +10391,14 @@ func (nopWriteCloser) Close() error { return nil }
 
 type secModeSandbox struct{}
 
-func (*secModeSandbox) UpdateConfigFile(in string) string {
-	return in
+func (*secModeSandbox) UpdateConfigFile(in string) (string, func() error) {
+	return in, nil
 }
 
 type secModeInsecure struct{}
 
-func (*secModeInsecure) UpdateConfigFile(in string) string {
-	return in + "\n\ninsecure-entitlements = [\"security.insecure\"]\n"
+func (*secModeInsecure) UpdateConfigFile(in string) (string, func() error) {
+	return in + "\n\ninsecure-entitlements = [\"security.insecure\"]\n", nil
 }
 
 var (
@@ -10403,14 +10408,14 @@ var (
 
 type networkModeHost struct{}
 
-func (*networkModeHost) UpdateConfigFile(in string) string {
-	return in + "\n\ninsecure-entitlements = [\"network.host\"]\n"
+func (*networkModeHost) UpdateConfigFile(in string) (string, func() error) {
+	return in + "\n\ninsecure-entitlements = [\"network.host\"]\n", nil
 }
 
 type networkModeSandbox struct{}
 
-func (*networkModeSandbox) UpdateConfigFile(in string) string {
-	return in
+func (*networkModeSandbox) UpdateConfigFile(in string) (string, func() error) {
+	return in, nil
 }
 
 var (

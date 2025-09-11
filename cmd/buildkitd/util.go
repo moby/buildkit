@@ -1,10 +1,14 @@
 package main
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/moby/buildkit/cmd/buildkitd/config"
+	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/disk"
 	"github.com/pkg/errors"
 )
@@ -65,4 +69,34 @@ func stringToGCConfig(in string) (config.GCConfig, error) {
 	}
 	cfg.GCMaxUsedSpace = config.DiskSpace{Bytes: max * 1e6}
 	return cfg, nil
+}
+
+func loadProvenanceEnv(dir string) (map[string]any, error) {
+	if dir == "" {
+		dir = filepath.Join(appdefaults.ConfigDir, "provenance.d")
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	env := make(map[string]any)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		if err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(data, &env); err != nil {
+			return nil, errors.Wrapf(err, "failed to parse %s", entry.Name())
+		}
+	}
+	return env, nil
 }

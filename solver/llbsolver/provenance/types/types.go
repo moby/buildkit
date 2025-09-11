@@ -151,6 +151,7 @@ type ProvenanceConfigSourceSLSA1 struct {
 type ProvenanceInternalParametersSLSA1 struct {
 	BuildConfig     *BuildConfig `json:"buildConfig,omitempty"`
 	BuilderPlatform string       `json:"builderPlatform"`
+	ProvenanceCustomEnv
 }
 
 type ProvenanceMetadataSLSA1 struct {
@@ -173,6 +174,7 @@ type Parameters struct {
 
 type Environment struct {
 	Platform string `json:"platform"`
+	ProvenanceCustomEnv
 }
 
 type BuildKitMetadata struct {
@@ -186,6 +188,8 @@ type BuildKitComplete struct {
 	Request              bool `json:"request"`
 	ResolvedDependencies bool `json:"resolvedDependencies"`
 }
+
+type ProvenanceCustomEnv map[string]any
 
 // ConvertToSLSA02 converts to a SLSA v0.2 provenance predicate.
 func (p *ProvenancePredicateSLSA1) ConvertToSLSA02() *ProvenancePredicateSLSA02 {
@@ -232,7 +236,8 @@ func (p *ProvenancePredicateSLSA1) ConvertToSLSA02() *ProvenancePredicateSLSA02 
 			},
 			Parameters: p.BuildDefinition.ExternalParameters.Request,
 			Environment: Environment{
-				Platform: p.BuildDefinition.InternalParameters.BuilderPlatform,
+				Platform:            p.BuildDefinition.InternalParameters.BuilderPlatform,
+				ProvenanceCustomEnv: p.BuildDefinition.InternalParameters.ProvenanceCustomEnv,
 			},
 		},
 		BuildConfig: p.BuildDefinition.InternalParameters.BuildConfig,
@@ -264,8 +269,9 @@ func (p *ProvenancePredicateSLSA02) ConvertToSLSA1() *ProvenancePredicateSLSA1 {
 			Request: p.Invocation.Parameters,
 		},
 		InternalParameters: ProvenanceInternalParametersSLSA1{
-			BuildConfig:     p.BuildConfig,
-			BuilderPlatform: p.Invocation.Environment.Platform,
+			BuildConfig:         p.BuildConfig,
+			BuilderPlatform:     p.Invocation.Environment.Platform,
+			ProvenanceCustomEnv: p.Invocation.Environment.ProvenanceCustomEnv,
 		},
 	}
 
