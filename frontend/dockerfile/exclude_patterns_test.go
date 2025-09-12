@@ -41,6 +41,7 @@ func testExcludedFilesOnCopy(t *testing.T, sb integration.Sandbox) {
 		fstest.CreateDir("dir1", fs.ModePerm),
 		fstest.CreateDir("dir2", fs.ModePerm),
 		fstest.CreateDir("dir3", fs.ModePerm),
+		fstest.CreateDir("dir4", fs.ModePerm),
 		fstest.CreateFile("dir1/file-101.png", []byte(`2`), 0600),
 		fstest.CreateFile("dir1/file-102.txt", []byte(`3`), 0600),
 		fstest.CreateFile("dir1/file-103.jpeg", []byte(`4`), 0600),
@@ -49,6 +50,9 @@ func testExcludedFilesOnCopy(t *testing.T, sb integration.Sandbox) {
 		fstest.CreateFile("dir2/file-203.png", []byte(`8`), 0600),
 		fstest.CreateFile("dir3/file-301.mp3", []byte(`9`), 0600),
 		fstest.CreateFile("dir3/file-302.mpeg", []byte(`10`), 0600),
+		fstest.CreateFile("dir4/file-401.txt", []byte(`11`), 0600),
+		fstest.Symlink("file-401.txt", "dir4/file-402.txt"),
+		fstest.Symlink("file-404.txt", "dir4/file-403.txt"),
 	)
 
 	runTest := func(dockerfile []byte, localMounts map[string]fsutil.FS) {
@@ -93,6 +97,9 @@ func testExcludedFilesOnCopy(t *testing.T, sb integration.Sandbox) {
 			{filename: "builder1/1/dir2/file-203.png", excluded: true},
 			{filename: "builder1/1/dir3/file-301.mp3", excluded: false, expectedContent: `9`},
 			{filename: "builder1/1/dir3/file-302.mpeg", excluded: false, expectedContent: `10`},
+			{filename: "builder1/1/dir4/file-401.txt", excluded: false, expectedContent: `11`},
+			{filename: "builder1/1/dir4/file-402.txt", excluded: false, expectedContent: `file-401.txt`},
+			{filename: "builder1/1/dir4/file-403.txt", excluded: false, expectedContent: `file-404.txt`},
 
 			// files copied with COPY command
 			{filename: "builder2/2/dir1/file-101.png", excluded: false, expectedContent: `2`},
@@ -103,6 +110,9 @@ func testExcludedFilesOnCopy(t *testing.T, sb integration.Sandbox) {
 			{filename: "builder2/2/dir2/file-203.png", excluded: false, expectedContent: `8`},
 			{filename: "builder2/2/dir3/file-301.mp3", excluded: false, expectedContent: `9`},
 			{filename: "builder2/2/dir3/file-302.mpeg", excluded: false, expectedContent: `10`},
+			{filename: "builder2/2/dir4/file-401.txt", excluded: true},
+			{filename: "builder2/2/dir4/file-402.txt", excluded: true},
+			{filename: "builder2/2/dir4/file-403.txt", excluded: true},
 
 			// Files copied with ADD command
 			{filename: "builder3/3/file-301.mp3", excluded: true},
@@ -118,6 +128,9 @@ func testExcludedFilesOnCopy(t *testing.T, sb integration.Sandbox) {
 			{filename: "builder4/4/file-301.mp3", excluded: true},
 			{filename: "builder4/4/file-301.mp3", excluded: true},
 			{filename: "builder4/4/file-302.mpeg", excluded: false, expectedContent: `10`},
+			{filename: "builder4/4/dir4/file-401.txt", excluded: true},
+			{filename: "builder4/4/dir4/file-402.txt", excluded: true},
+			{filename: "builder4/4/dir4/file-403.txt", excluded: true},
 
 			// Files copied with ADD wildcard
 			{filename: "builder5/5/file-101.png", excluded: true},
@@ -129,16 +142,30 @@ func testExcludedFilesOnCopy(t *testing.T, sb integration.Sandbox) {
 			{filename: "builder5/5/file-301.mp3", excluded: true},
 			{filename: "builder5/5/file-301.mp3", excluded: true},
 			{filename: "builder5/5/file-302.mpeg", excluded: true},
+			{filename: "builder5/5/file-401.txt", excluded: false, expectedContent: `11`},
+			{filename: "builder5/5/file-402.txt", excluded: false, expectedContent: `file-401.txt`},
+			{filename: "builder5/5/file-403.txt", excluded: false, expectedContent: `file-404.txt`},
 		}
 
 		for _, tc := range testCases {
-			dt, err := os.ReadFile(path.Join(destDir.Name, tc.filename))
+			fpath := path.Join(destDir.Name, tc.filename)
+
+			var dt []byte
+			st, err := os.Lstat(fpath)
 			if tc.excluded {
 				require.Errorf(t, err, "File %s should not exist: %v", tc.filename, err)
 				continue
 			}
-
 			require.NoErrorf(t, err, "File %s should exist", tc.filename)
+
+			if st.Mode()&os.ModeSymlink != 0 {
+				target, err := os.Readlink(fpath)
+				require.NoErrorf(t, err, "Readlink %s should not error", tc.filename)
+				dt = []byte(target)
+			} else {
+				dt, err = os.ReadFile(fpath)
+				require.NoErrorf(t, err, "File %s should exist", tc.filename)
+			}
 			require.Equalf(t, tc.expectedContent, string(dt), "File %s does not have matched content", tc.filename)
 		}
 
