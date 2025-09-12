@@ -1,6 +1,7 @@
 package provenance
 
 import (
+	"maps"
 	"strings"
 
 	"github.com/containerd/platforms"
@@ -96,12 +97,14 @@ func NewPredicate(c *Capture) (*provenancetypes.ProvenancePredicateSLSA02, error
 	}
 	inv := provenancetypes.ProvenanceInvocationSLSA02{}
 
+	args := maps.Clone(c.Args)
+
 	contextKey := "context"
-	if v, ok := c.Args["contextkey"]; ok && v != "" {
+	if v, ok := args["contextkey"]; ok && v != "" {
 		contextKey = v
 	}
 
-	if v, ok := c.Args[contextKey]; ok && v != "" {
+	if v, ok := args[contextKey]; ok && v != "" {
 		if m, ok := findMaterial(c.Sources, v); ok {
 			inv.ConfigSource.URI = m.URI
 			inv.ConfigSource.Digest = m.Digest
@@ -109,21 +112,21 @@ func NewPredicate(c *Capture) (*provenancetypes.ProvenancePredicateSLSA02, error
 			inv.ConfigSource.URI = v
 		}
 		inv.ConfigSource.URI = urlutil.RedactCredentials(inv.ConfigSource.URI)
-		delete(c.Args, contextKey)
+		delete(args, contextKey)
 	}
 
-	if v, ok := c.Args["filename"]; ok && v != "" {
+	if v, ok := args["filename"]; ok && v != "" {
 		inv.ConfigSource.EntryPoint = v
-		delete(c.Args, "filename")
+		delete(args, "filename")
 	}
 
 	vcs := make(map[string]string)
-	for k, v := range c.Args {
+	for k, v := range args {
 		if strings.HasPrefix(k, "vcs:") {
 			if k == "vcs:source" {
 				v = urlutil.RedactCredentials(v)
 			}
-			delete(c.Args, k)
+			delete(args, k)
 			if v != "" {
 				vcs[strings.TrimPrefix(k, "vcs:")] = v
 			}
@@ -133,7 +136,7 @@ func NewPredicate(c *Capture) (*provenancetypes.ProvenancePredicateSLSA02, error
 	inv.Environment.Platform = platforms.Format(platforms.Normalize(platforms.DefaultSpec()))
 
 	inv.Parameters.Frontend = c.Frontend
-	inv.Parameters.Args = c.Args
+	inv.Parameters.Args = args
 
 	for _, s := range c.Secrets {
 		inv.Parameters.Secrets = append(inv.Parameters.Secrets, &provenancetypes.Secret{
