@@ -527,6 +527,25 @@ func TestSymlinksNoFollow(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, expectedSym, dgst)
 
+	expectedSym = digest.Digest("sha256:9b761577efcb1239cf4be971914c5d7404914dd32ff436401af1764dc5446b83")
+
+	// Broken symlink is not followed in subdirectory.
+	dgst, err = cc.Checksum(context.TODO(), ref, "foo", ChecksumOpts{FollowLinks: true}, nil)
+	require.NoError(t, err)
+	require.Equal(t, expectedSym, dgst)
+
+	expectedSym = digest.Digest("sha256:e14a98332f46b81993ff4a3b7898bb00fc3d245d84e4c42e57c9ee6b129c7c41")
+
+	// Same with wildcard used.
+	dgst, err = cc.Checksum(context.TODO(), ref, "fo?", ChecksumOpts{FollowLinks: true, Wildcard: true}, nil)
+	require.NoError(t, err)
+	require.Equal(t, expectedSym, dgst)
+
+	// Still works with exclude pattern.
+	dgst, err = cc.Checksum(context.TODO(), ref, "foo", ChecksumOpts{FollowLinks: true, ExcludePatterns: []string{"*.git"}}, nil)
+	require.NoError(t, err)
+	require.Equal(t, expectedSym, dgst)
+
 	err = ref.Release(context.TODO())
 	require.NoError(t, err)
 }
