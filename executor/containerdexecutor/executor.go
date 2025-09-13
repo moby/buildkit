@@ -17,6 +17,7 @@ import (
 	ctd "github.com/containerd/containerd/v2/client"
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/containerd/v2/pkg/cio"
+	containerdoci "github.com/containerd/containerd/v2/pkg/oci"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/executor/oci"
 	resourcestypes "github.com/moby/buildkit/executor/resources/types"
@@ -42,6 +43,7 @@ type containerdExecutor struct {
 	rootless         bool
 	runtime          *RuntimeInfo
 	cdiManager       *cdidevices.Manager
+	specOpts         []containerdoci.SpecOpts
 }
 
 // OnCreateRuntimer provides an alternative to OCI hooks for applying network
@@ -75,6 +77,7 @@ type ExecutorOptions struct {
 	Rootless         bool
 	Runtime          *RuntimeInfo
 	CDIManager       *cdidevices.Manager
+	SpecOpts         []containerdoci.SpecOpts
 }
 
 // New creates a new executor backed by connection to containerd API
@@ -96,6 +99,7 @@ func New(executorOpts ExecutorOptions) executor.Executor {
 		rootless:         executorOpts.Rootless,
 		runtime:          executorOpts.Runtime,
 		cdiManager:       executorOpts.CDIManager,
+		specOpts:         executorOpts.SpecOpts,
 	}
 }
 
