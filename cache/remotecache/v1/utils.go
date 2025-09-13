@@ -134,13 +134,21 @@ func (s *normalizeState) removeLoops(ctx context.Context) {
 	}
 
 	visited := map[digest.Digest]struct{}{}
+	processed := map[digest.Digest]struct{}{}
 
 	for _, d := range roots {
-		s.checkLoops(ctx, d, visited)
+		s.checkLoops(ctx, d, visited, processed)
 	}
 }
 
-func (s *normalizeState) checkLoops(ctx context.Context, d digest.Digest, visited map[digest.Digest]struct{}) {
+func (s *normalizeState) checkLoops(ctx context.Context, d digest.Digest, visited map[digest.Digest]struct{}, processed map[digest.Digest]struct{}) {
+	if _, ok := processed[d]; ok {
+		return
+	}
+	defer func() {
+		processed[d] = struct{}{}
+	}()
+
 	it, ok := s.byKey[d]
 	if !ok {
 		return
@@ -166,7 +174,7 @@ func (s *normalizeState) checkLoops(ctx context.Context, d digest.Digest, visite
 				}
 				delete(links[l], id)
 			} else {
-				s.checkLoops(ctx, id, visited)
+				s.checkLoops(ctx, id, visited, processed)
 			}
 		}
 	}
