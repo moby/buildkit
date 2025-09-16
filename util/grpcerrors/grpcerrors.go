@@ -252,9 +252,22 @@ func (e *withCodeError) Unwrap() error {
 
 func each(err error, fn func(error)) {
 	fn(err)
-	if wrapped, ok := err.(interface {
+
+	type singleUnwrapper interface {
 		Unwrap() error
-	}); ok {
-		each(wrapped.Unwrap(), fn)
+	}
+
+	type multiUnwrapper interface {
+		Unwrap() []error
+	}
+
+	switch e := err.(type) { //nolint:errorlint // using errors.Is/As is not appropriate here
+	case singleUnwrapper:
+		each(e.Unwrap(), fn)
+	case multiUnwrapper:
+		for _, err := range e.Unwrap() {
+			each(err, fn)
+		}
+	default:
 	}
 }
