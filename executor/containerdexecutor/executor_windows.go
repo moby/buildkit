@@ -80,7 +80,7 @@ func (w *containerdExecutor) createOCISpec(ctx context.Context, id, _, _ string,
 	opts := []containerdoci.SpecOpts{
 		containerdoci.WithUser(meta.User),
 	}
-	if w.isolated {
+	if w.hypervIsolation {
 		opts = append(opts, containerdoci.WithWindowsHyperV)
 	}
 
