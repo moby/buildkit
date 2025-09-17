@@ -250,6 +250,7 @@ func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sa
 	mirroredImagesUnix["tonistiigi/test:nolayers"] = "docker.io/tonistiigi/test:nolayers"
 	mirroredImagesUnix["cpuguy83/buildkit-foreign:latest"] = "docker.io/cpuguy83/buildkit-foreign:latest"
 	mirroredImagesWin := integration.OfficialImages("nanoserver:latest", "nanoserver:plus")
+	mirroredImagesWin["cpuguy83/buildkit-foreign:latest"] = "docker.io/cpuguy83/buildkit-foreign:latest"
 
 	mirroredImages := integration.UnixOrWindows(mirroredImagesUnix, mirroredImagesWin)
 	mirrors := integration.WithMirroredImages(mirroredImages)
@@ -2624,6 +2625,7 @@ func testOCILayoutSource(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, []byte("second"+newLine), dt)
 }
 
+// This test passed locally on windows, but failed on github action
 func testSessionExporter(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureOCILayout)
@@ -2643,7 +2645,10 @@ func testSessionExporter(t *testing.T, sb integration.Sandbox) {
 		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
 	}
 
-	cmdPrefix := `sh -c "echo -n`
+	cmdPrefix := integration.UnixOrWindows(
+		`sh -c "echo -n`,
+		`cmd /C "echo`,
+	)
 	run(fmt.Sprintf(`%s first > foo"`, cmdPrefix))
 	run(fmt.Sprintf(`%s second > bar"`, cmdPrefix))
 
@@ -4476,7 +4481,6 @@ func testSourceDateEpochTarExporter(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSourceDateEpochImageExporter(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	cdAddress := sb.ContainerdAddress()
 	if cdAddress == "" {
 		t.SkipNow()
@@ -4485,24 +4489,36 @@ func testSourceDateEpochImageExporter(t *testing.T, sb integration.Sandbox) {
 	// https://github.com/containerd/containerd/commit/133ddce7cf18a1db175150e7a69470dea1bb3132
 	minVer := "v1.7.0-beta.1"
 	cdVersion := containerdutil.GetVersion(t, cdAddress)
-	if semver.Compare(cdVersion, minVer) < 0 {
+	// Normalize containerd version to semver format (add v prefix if missing)
+	normalizedCdVersion := cdVersion
+	if !strings.HasPrefix(cdVersion, "v") {
+		normalizedCdVersion = "v" + cdVersion
+	}
+	if semver.Compare(normalizedCdVersion, minVer) < 0 {
 		t.Skipf("containerd version %q does not satisfy minimal version %q", cdVersion, minVer)
 	}
 
 	workers.CheckFeatureCompat(t, sb, workers.FeatureSourceDateEpoch)
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 
-	busybox := llb.Image("busybox:latest")
-	st := llb.Scratch()
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	busybox := llb.Image(imgName)
+	st := integration.UnixOrWindows(
+		llb.Scratch(),
+		llb.Image(imgName),
+	)
 
 	run := func(cmd string) {
 		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
 	}
 
-	run(`sh -c "echo -n first > foo"`)
-	run(`sh -c "echo -n second > bar"`)
+	cmdPrefix := integration.UnixOrWindows(
+		`sh -c "echo -n`,
+		`cmd /C "echo`,
+	)
+	run(fmt.Sprintf(`%s first> foo"`, cmdPrefix))
+	run(fmt.Sprintf(`%s second> bar"`, cmdPrefix))
 
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -4770,12 +4786,13 @@ func testTarExporterSymlink(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildExportWithForeignLayer(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureImageExporter)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
+	// Use the Linux foreign layer test image regardless of platform
+	// Foreign layer handling is about manifest/registry behavior, not container execution
 	st := llb.Image("cpuguy83/buildkit-foreign:latest")
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -6111,6 +6128,7 @@ func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 }
 
+// This test passed locally on windows, but failed on github action
 func testZstdLocalCacheExport(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport, workers.FeatureCacheBackendLocal)
@@ -6118,11 +6136,14 @@ func testZstdLocalCacheExport(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	busybox := llb.Image("busybox:latest")
-	cmd := `sh -e -c "echo -n zstd > data"`
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	cmdStr := integration.UnixOrWindows(
+		`sh -e -c "echo -n zstd > data"`,
+		`cmd /C "echo zstd > C:\data"`,
+	)
 
-	st := llb.Scratch()
-	st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	st := integration.UnixOrWindows(llb.Scratch(), llb.Image(imgName))
+	st = llb.Image(imgName).Run(llb.Shlex(cmdStr), llb.Dir("/wd")).AddMount("/wd", st)
 
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -6316,7 +6337,6 @@ func testUncompressedLocalCacheImportExport(t *testing.T, sb integration.Sandbox
 }
 
 func testUncompressedRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureCacheExport,
 		workers.FeatureCacheImport,
@@ -6401,6 +6421,7 @@ func testImageManifestRegistryCacheImportExport(t *testing.T, sb integration.San
 	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
 }
 
+// This test passed locally on windows, but failed on github action
 func testZstdRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
 
@@ -6444,7 +6465,8 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 	st := integration.UnixOrWindows(llb.Scratch(), llb.Image(imgName))
 
 	run := func(cmd string) {
-		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+		baseState := integration.UnixOrWindows(busybox, st)
+		st = baseState.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
 	}
 
 	run(integration.UnixOrWindows(
@@ -6505,7 +6527,6 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 }
 
 func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureCacheExport,
 		workers.FeatureCacheImport,
@@ -6527,7 +6548,6 @@ func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testMultipleRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureCacheExport,
 		workers.FeatureCacheImport,
@@ -7603,7 +7623,7 @@ func testCopyFromEmptyImage(t *testing.T, sb integration.Sandbox) {
 
 		imgName := integration.UnixOrWindows(
 			"busybox:latest",
-			"mcr.microsoft.com/windows/nanoserver:ltsc2022",
+			"nanoserver:latest",
 		)
 		busybox := llb.Image(imgName)
 
@@ -8008,19 +8028,23 @@ func testSourceMapFromRef(t *testing.T, sb integration.Sandbox) {
 }
 
 func testRmSymlink(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
 	// Test that if FileOp.Rm is called on a symlink, then
 	// the symlink is removed rather than the target
-	mnt := llb.Image("alpine").
-		Run(llb.Shlex("touch /mnt/target")).
+	imgName := integration.UnixOrWindows("alpine", "nanoserver:latest")
+	mnt := llb.Image(imgName).
+		Run(llb.Shlex(integration.UnixOrWindows("touch /mnt/target", "cmd /C type nul > /mnt/target"))).
 		AddMount("/mnt", llb.Scratch())
 
-	mnt = llb.Image("alpine").
-		Run(llb.Shlex("ln -s target /mnt/link")).
+	symlinkCmd := integration.UnixOrWindows(
+		"ln -s target /mnt/link",
+		"cmd /c cd /d c:/mnt && mklink link target",
+	)
+	mnt = llb.Image(imgName).
+		Run(llb.Shlex(symlinkCmd)).
 		AddMount("/mnt", mnt)
 
 	def, err := mnt.File(llb.Rm("link")).Marshal(sb.Context())
@@ -11029,7 +11053,6 @@ func testSBOMSupplements(t *testing.T, sb integration.Sandbox) {
 }
 
 func testMultipleCacheExports(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureMultiCacheExport)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -11041,13 +11064,23 @@ func testMultipleCacheExports(t *testing.T, sb integration.Sandbox) {
 	}
 	require.NoError(t, err)
 
-	busybox := llb.Image("busybox:latest")
-	st := llb.Scratch()
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	busybox := llb.Image(imgName)
+	st := integration.UnixOrWindows(llb.Scratch(), llb.Image(imgName))
+
 	run := func(cmd string) {
 		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
 	}
-	run(`sh -c "echo -n foobar > const"`)
-	run(`sh -c "cat /dev/urandom | head -c 100 | sha256sum > unique"`)
+
+	run(integration.UnixOrWindows(
+		`sh -c "echo -n foobar > const"`,
+		`cmd /C echo foobar > const`,
+	))
+
+	run(integration.UnixOrWindows(
+		`sh -c "cat /dev/urandom | head -c 100 | sha256sum > unique"`,
+		`cmd /C echo %RANDOM% > unique`,
+	))
 
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -11143,7 +11176,7 @@ func testMultipleCacheExports(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	ensureFileContents(t, filepath.Join(destDir, "const"), "foobar")
-	ensureFileContents(t, filepath.Join(destDir, "unique"), string(uniqueFile))
+	ensureFileContents(t, filepath.Join(destDir, "unique"), strings.TrimSpace(string(uniqueFile)))
 }
 
 func testMountStubsDirectory(t *testing.T, sb integration.Sandbox) {
@@ -11490,7 +11523,9 @@ func ensureFile(t *testing.T, path string) {
 func ensureFileContents(t *testing.T, path, expectedContents string) {
 	contents, err := os.ReadFile(path)
 	require.NoError(t, err)
-	require.Equal(t, expectedContents, string(contents))
+	// Handle Windows line endings
+	actualContents := strings.TrimSpace(string(contents))
+	require.Equal(t, expectedContents, actualContents)
 }
 
 func makeSSHAgentSock(t *testing.T, agent agent.Agent) (p string, err error) {
