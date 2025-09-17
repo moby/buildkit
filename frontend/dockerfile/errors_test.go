@@ -14,7 +14,6 @@ import (
 )
 
 func testErrorsSourceMap(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	tcases := []struct {
