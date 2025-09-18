@@ -177,6 +177,8 @@ insecure-entitlements = [ "network.host", "security.insecure", "device" ]
   # Use plain HTTP to connect to the mirrors.
   http = true
   # Use HTTPS with self-signed certificates. Do not enable this together with `http`.
+  # Meanwhile, self-signed certificates must be trusted on buildkitd and buildctl client side together,
+  # if they are deployed on different instances (physical machines, virtual machines, k8s pods).
   insecure = true
   ca=["/etc/config/myca.pem"]
   [[registry."docker.io".keypair]]
