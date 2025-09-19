@@ -15,13 +15,15 @@ import (
 func TestSimpleMarshal(t *testing.T) {
 	cc := NewCacheChains()
 
+	now := time.Now()
 	addRecords := func() {
-		foo := cc.Add(outputKey(dgst("foo"), 0))
-		bar := cc.Add(outputKey(dgst("bar"), 1))
-		baz := cc.Add(outputKey(dgst("baz"), 0))
+		foo, ok, err := cc.Add(outputKey(dgst("foo"), 0), nil, nil)
+		require.NoError(t, err)
+		require.True(t, ok)
+		bar, ok, err := cc.Add(outputKey(dgst("bar"), 1), nil, nil)
+		require.NoError(t, err)
+		require.True(t, ok)
 
-		baz.LinkFrom(foo, 0, "")
-		baz.LinkFrom(bar, 1, "sel0")
 		r0 := &solver.Remote{
 			Descriptors: []ocispecs.Descriptor{{
 				Digest: dgst("d0"),
@@ -29,7 +31,16 @@ func TestSimpleMarshal(t *testing.T) {
 				Digest: dgst("d1"),
 			}},
 		}
-		baz.AddResult("", 0, time.Now(), r0)
+
+		_, ok, err = cc.Add(outputKey(dgst("baz"), 0), [][]solver.CacheLink{
+			{{Src: foo, Selector: ""}},
+			{{Src: bar, Selector: "sel0"}},
+		}, []solver.CacheExportResult{{
+			CreatedAt: now,
+			Result:    r0,
+		}})
+		require.NoError(t, err)
+		require.True(t, ok)
 	}
 
 	addRecords()
@@ -84,7 +95,9 @@ func TestSimpleMarshal(t *testing.T) {
 	require.Equal(t, cfg, cfg3)
 
 	// add extra item
-	cc.Add(outputKey(dgst("bay"), 0))
+	_, ok, err := cc.Add(outputKey(dgst("bay"), 0), nil, nil)
+	require.NoError(t, err)
+	require.True(t, ok)
 	cfg, _, err = cc.Marshal(context.TODO())
 	require.NoError(t, err)
 
