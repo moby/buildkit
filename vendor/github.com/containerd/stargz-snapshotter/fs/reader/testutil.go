@@ -59,11 +59,17 @@ var srcCompressions = map[string]tutil.CompressionFactory{
 	"externaltoc-gzip-bestspeed": tutil.ExternalTOCGzipCompressionWithLevel(gzip.BestSpeed),
 }
 
+// MockReadAtOutput defines the default output size for mocked read operations
+var (
+	MockReadAtOutput = 4194304
+)
+
 func TestSuiteReader(t *testing.T, store metadata.Store) {
 	testFileReadAt(t, store)
 	testCacheVerify(t, store)
 	testFailReader(t, store)
 	testPreReader(t, store)
+	testProcessBatchChunks(t)
 }
 
 func testFileReadAt(t *testing.T, factory metadata.Store) {
@@ -818,4 +824,184 @@ func (b longBytesView) String() string {
 		return string(b)
 	}
 	return string(b[:50]) + "...(omit)..." + string(b[len(b)-50:])
+}
+
+func makeMockFile(id uint32) *file {
+	mockCache := &mockCache{
+		getError: fmt.Errorf("mock cache get error"),
+	}
+
+	mockFile := &mockFile{}
+
+	gr := &reader{
+		cache: mockCache,
+	}
+
+	return &file{
+		id: id,
+		fr: mockFile,
+		gr: gr,
+	}
+}
+
+type mockCache struct {
+	getError error
+}
+
+func (c *mockCache) Add(key string, opts ...cache.Option) (cache.Writer, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (c *mockCache) Get(key string, opts ...cache.Option) (cache.Reader, error) {
+	return nil, c.getError
+}
+
+func (c *mockCache) Close() error {
+	return nil
+}
+
+type mockFile struct{}
+
+func (f *mockFile) ChunkEntryForOffset(offset int64) (off int64, size int64, dgst string, ok bool) {
+	return 0, 0, "", true
+}
+
+func (f *mockFile) ReadAt(p []byte, offset int64) (int, error) {
+	return MockReadAtOutput, nil
+}
+
+func testProcessBatchChunks(t *testing.T) {
+	type testCase struct {
+		name               string
+		setupMock          func()
+		createChunks       func(chunkSize int64, totalChunks int) []chunkData
+		expectErrorInHoles bool
+	}
+
+	runTest := func(t *testing.T, tc testCase) {
+		if tc.setupMock != nil {
+			tc.setupMock()
+		}
+
+		sf := makeMockFile(1)
+
+		const (
+			bufferSize  int64 = 400 * 1024 * 1024
+			chunkSize   int64 = 4 * 1024 * 1024
+			workerCount int   = 10
+			totalChunks int   = 100
+		)
+
+		chunks := tc.createChunks(chunkSize, totalChunks)
+		buffer := make([]byte, bufferSize)
+		allReadInfos := make([][]chunkReadInfo, workerCount)
+		eg := errgroup.Group{}
+
+		for i := 0; i < workerCount && i < len(chunks); i++ {
+			workerID := i
+			args := &batchWorkerArgs{
+				workerID:    workerID,
+				chunks:      chunks,
+				buffer:      buffer,
+				workerCount: workerCount,
+			}
+			eg.Go(func() error {
+				err := sf.processBatchChunks(args)
+				if err == nil && len(args.readInfos) > 0 {
+					allReadInfos[args.workerID] = args.readInfos
+				}
+				return err
+			})
+		}
+
+		if err := eg.Wait(); err != nil {
+			t.Fatalf("processBatchChunks failed: %v", err)
+		}
+
+		var mergedReadInfos []chunkReadInfo
+		for _, infos := range allReadInfos {
+			mergedReadInfos = append(mergedReadInfos, infos...)
+		}
+
+		err := sf.checkHoles(mergedReadInfos, bufferSize)
+		if tc.expectErrorInHoles {
+			if err == nil {
+				t.Fatalf("checkHoles should have detected issues but didn't")
+			}
+			t.Logf("Expected error detected: %v", err)
+		} else {
+			if err != nil {
+				t.Fatalf("checkHoles failed: %v", err)
+			}
+		}
+	}
+
+	createNormalChunks := func(chunkSize int64, totalChunks int) []chunkData {
+		var chunks []chunkData
+		for i := 0; i < totalChunks; i++ {
+			chunks = append(chunks, chunkData{
+				offset:    int64(i) * chunkSize,
+				size:      chunkSize,
+				digestStr: fmt.Sprintf("sha256:%d", i),
+				bufferPos: int64(i) * chunkSize,
+			})
+		}
+		return chunks
+	}
+
+	createOverlappingChunks := func(chunkSize int64, totalChunks int) []chunkData {
+		chunks := createNormalChunks(chunkSize, totalChunks)
+
+		for i := 0; i < totalChunks; i++ {
+			if i > 0 && i%10 == 0 {
+				chunks = append(chunks, chunkData{
+					offset:    int64(i)*chunkSize - chunkSize/2,
+					size:      chunkSize,
+					digestStr: fmt.Sprintf("sha256:overlap-%d", i),
+					bufferPos: int64(i) * chunkSize,
+				})
+
+				if i < totalChunks-1 {
+					chunks = append(chunks, chunkData{
+						offset:    int64(i+1)*chunkSize + chunkSize/2,
+						size:      chunkSize,
+						digestStr: fmt.Sprintf("sha256:gap-%d", i),
+						bufferPos: int64(i+2) * chunkSize,
+					})
+				}
+			}
+		}
+		return chunks
+	}
+
+	tests := []testCase{
+		{
+			name:               "test_process_batch_chunks_and_check_holes",
+			createChunks:       createNormalChunks,
+			expectErrorInHoles: false,
+		},
+		{
+			name: "test_process_batch_chunks_with_holes",
+			setupMock: func() {
+				originalMockReadAtOutput := MockReadAtOutput
+				MockReadAtOutput = MockReadAtOutput / 2
+				t.Cleanup(func() {
+					MockReadAtOutput = originalMockReadAtOutput
+				})
+			},
+			createChunks:       createNormalChunks,
+			expectErrorInHoles: true,
+		},
+		{
+			name:               "test_process_batch_chunks_with_overlapping",
+			createChunks:       createOverlappingChunks,
+			expectErrorInHoles: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			runTest(t, tc)
+		})
+	}
 }
