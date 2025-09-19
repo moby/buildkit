@@ -1223,7 +1223,7 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 	// Run command can potentially access any file. Mark the full filesystem as used.
 	d.paths["/"] = struct{}{}
 
-	var args = c.CmdLine
+	args := c.CmdLine
 	if len(c.Files) > 0 {
 		if len(args) != 1 || !c.PrependShell {
 			return errors.Errorf("parsing produced an invalid run command: %v", args)
@@ -1635,14 +1635,14 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 			}
 
 			opts := append([]llb.CopyOption{&llb.CopyInfo{
-				Mode:                chopt,
-				FollowSymlinks:      true,
-				CopyDirContentsOnly: true,
-				IncludePatterns:     patterns,
-				AttemptUnpack:       unpack,
-				CreateDestPath:      true,
-				AllowWildcard:       true,
-				AllowEmptyWildcard:  true,
+				Mode:                    chopt,
+				FollowSymlinks:          true,
+				CopyDirContentsOnly:     true,
+				RequiredIncludePatterns: patterns,
+				AttemptUnpack:           unpack,
+				CreateDestPath:          true,
+				AllowWildcard:           true,
+				AllowEmptyWildcard:      true,
 			}}, copyOpt...)
 
 			if a == nil {
@@ -1760,7 +1760,7 @@ func dispatchOnbuild(d *dispatchState, c *instructions.OnbuildCommand) error {
 func dispatchCmd(d *dispatchState, c *instructions.CmdCommand, lint *linter.Linter) error {
 	validateUsedOnce(c, &d.cmd, lint)
 
-	var args = c.CmdLine
+	args := c.CmdLine
 	if c.PrependShell {
 		if len(d.image.Config.Shell) == 0 {
 			msg := linter.RuleJSONArgsRecommended.Format(c.Name())
@@ -1776,7 +1776,7 @@ func dispatchCmd(d *dispatchState, c *instructions.CmdCommand, lint *linter.Lint
 func dispatchEntrypoint(d *dispatchState, c *instructions.EntrypointCommand, lint *linter.Linter) error {
 	validateUsedOnce(c, &d.entrypoint, lint)
 
-	var args = c.CmdLine
+	args := c.CmdLine
 	if c.PrependShell {
 		if len(d.image.Config.Shell) == 0 {
 			msg := linter.RuleJSONArgsRecommended.Format(c.Name())

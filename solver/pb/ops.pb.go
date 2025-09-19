@@ -2524,6 +2524,10 @@ type FileActionCopy struct {
 	IncludePatterns []string `protobuf:"bytes,12,rep,name=include_patterns,json=includePatterns,proto3" json:"include_patterns,omitempty"`
 	// exclude files/dir matching any of these patterns (even if they match an include pattern)
 	ExcludePatterns []string `protobuf:"bytes,13,rep,name=exclude_patterns,json=excludePatterns,proto3" json:"exclude_patterns,omitempty"`
+	// include only files/dirs matching at least one of these patterns
+	// every pattern must match at least one path or an error will occur.
+	// this list is merged with include_patterns.
+	RequiredIncludePatterns []string `protobuf:"bytes,16,rep,name=required_include_patterns,json=requiredIncludePatterns,proto3" json:"required_include_patterns,omitempty"`
 	// alwaysReplaceExistingDestPaths results in an existing dest path that differs in type from the src path being replaced rather than the default of returning an error
 	AlwaysReplaceExistingDestPaths bool `protobuf:"varint,14,opt,name=alwaysReplaceExistingDestPaths,proto3" json:"alwaysReplaceExistingDestPaths,omitempty"`
 	// mode in non-octal format
@@ -2649,6 +2653,13 @@ func (x *FileActionCopy) GetIncludePatterns() []string {
 func (x *FileActionCopy) GetExcludePatterns() []string {
 	if x != nil {
 		return x.ExcludePatterns
+	}
+	return nil
+}
+
+func (x *FileActionCopy) GetRequiredIncludePatterns() []string {
+	if x != nil {
+		return x.RequiredIncludePatterns
 	}
 	return nil
 }
@@ -3581,7 +3592,7 @@ const file_github_com_moby_buildkit_solver_pb_ops_proto_rawDesc = "" +
 	"\x05mkdir\x18\x06 \x01(\v2\x13.pb.FileActionMkDirH\x00R\x05mkdir\x12\"\n" +
 	"\x02rm\x18\a \x01(\v2\x10.pb.FileActionRmH\x00R\x02rm\x121\n" +
 	"\asymlink\x18\b \x01(\v2\x15.pb.FileActionSymlinkH\x00R\asymlinkB\b\n" +
-	"\x06action\"\xde\x04\n" +
+	"\x06action\"\x9a\x05\n" +
 	"\x0eFileActionCopy\x12\x10\n" +
 	"\x03src\x18\x01 \x01(\tR\x03src\x12\x12\n" +
 	"\x04dest\x18\x02 \x01(\tR\x04dest\x12\"\n" +
@@ -3596,7 +3607,8 @@ const file_github_com_moby_buildkit_solver_pb_ops_proto_rawDesc = "" +
 	" \x01(\bR\x12allowEmptyWildcard\x12\x1c\n" +
 	"\ttimestamp\x18\v \x01(\x03R\ttimestamp\x12)\n" +
 	"\x10include_patterns\x18\f \x03(\tR\x0fincludePatterns\x12)\n" +
-	"\x10exclude_patterns\x18\r \x03(\tR\x0fexcludePatterns\x12F\n" +
+	"\x10exclude_patterns\x18\r \x03(\tR\x0fexcludePatterns\x12:\n" +
+	"\x19required_include_patterns\x18\x10 \x03(\tR\x17requiredIncludePatterns\x12F\n" +
 	"\x1ealwaysReplaceExistingDestPaths\x18\x0e \x01(\bR\x1ealwaysReplaceExistingDestPaths\x12\x18\n" +
 	"\amodeStr\x18\x0f \x01(\tR\amodeStr\"\x90\x01\n" +
 	"\x10FileActionMkFile\x12\x12\n" +
