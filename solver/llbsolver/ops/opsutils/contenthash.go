@@ -16,15 +16,16 @@ import (
 )
 
 type Selector struct {
-	Path            string
-	Wildcard        bool
-	FollowLinks     bool
-	IncludePatterns []string
-	ExcludePatterns []string
+	Path                    string
+	Wildcard                bool
+	FollowLinks             bool
+	IncludePatterns         []string
+	ExcludePatterns         []string
+	RequiredIncludePatterns []string
 }
 
 func (sel Selector) HasWildcardOrFilters() bool {
-	return sel.Wildcard || len(sel.IncludePatterns) != 0 || len(sel.ExcludePatterns) != 0
+	return sel.Wildcard || len(sel.IncludePatterns) != 0 || len(sel.ExcludePatterns) != 0 || len(sel.RequiredIncludePatterns) != 0
 }
 
 func NewContentHashFunc(selectors []Selector) solver.ResultBasedCacheFunc {
@@ -48,10 +49,11 @@ func NewContentHashFunc(selectors []Selector) solver.ResultBasedCacheFunc {
 				dgst, err := contenthash.Checksum(
 					ctx, ref.ImmutableRef, path.Join("/", sel.Path),
 					contenthash.ChecksumOpts{
-						Wildcard:        sel.Wildcard,
-						FollowLinks:     sel.FollowLinks,
-						IncludePatterns: sel.IncludePatterns,
-						ExcludePatterns: sel.ExcludePatterns,
+						Wildcard:                sel.Wildcard,
+						FollowLinks:             sel.FollowLinks,
+						IncludePatterns:         sel.IncludePatterns,
+						ExcludePatterns:         sel.ExcludePatterns,
+						RequiredIncludePatterns: sel.RequiredIncludePatterns,
 					},
 					s,
 				)

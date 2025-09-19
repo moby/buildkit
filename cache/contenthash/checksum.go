@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	cerrdefs "github.com/containerd/errdefs"
 	iradix "github.com/hashicorp/go-immutable-radix/v2"
 	simplelru "github.com/hashicorp/golang-lru/v2/simplelru"
 	"github.com/moby/buildkit/cache"
@@ -55,10 +56,11 @@ const (
 // key for root, "/" for the root header
 
 type ChecksumOpts struct {
-	FollowLinks     bool
-	Wildcard        bool
-	IncludePatterns []string
-	ExcludePatterns []string
+	FollowLinks             bool
+	Wildcard                bool
+	IncludePatterns         []string
+	ExcludePatterns         []string
+	RequiredIncludePatterns []string
 }
 
 func Checksum(ctx context.Context, ref cache.ImmutableRef, path string, opts ChecksumOpts, s session.Group) (digest.Digest, error) {
@@ -423,7 +425,7 @@ func (cc *cacheContext) Checksum(ctx context.Context, mountable cache.Mountable,
 	m := &mount{mountable: mountable, session: s}
 	defer m.clean()
 
-	if !opts.Wildcard && len(opts.IncludePatterns) == 0 && len(opts.ExcludePatterns) == 0 {
+	if !opts.Wildcard && len(opts.IncludePatterns) == 0 && len(opts.ExcludePatterns) == 0 && len(opts.RequiredIncludePatterns) == 0 {
 		return cc.lazyChecksum(ctx, m, p, opts.FollowLinks)
 	}
 
@@ -490,20 +492,23 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 	endsInSep := len(p) != 0 && p[len(p)-1] == filepath.Separator
 	p = keyPath(p)
 
-	var includePatternMatcher *patternmatcher.PatternMatcher
-	if len(opts.IncludePatterns) != 0 {
-		includePatternMatcher, err = patternmatcher.New(opts.IncludePatterns)
-		if err != nil {
-			return nil, errors.Wrapf(err, "invalid includepatterns: %s", opts.IncludePatterns)
-		}
+	includePatternMatcher, err := newPatternMatcher("includepatterns", opts.IncludePatterns)
+	if err != nil {
+		return nil, err
 	}
 
-	var excludePatternMatcher *patternmatcher.PatternMatcher
-	if len(opts.ExcludePatterns) != 0 {
-		excludePatternMatcher, err = patternmatcher.New(opts.ExcludePatterns)
+	var requiredIncludePatternMatchers []*patternMatcher
+	for _, pattern := range opts.RequiredIncludePatterns {
+		pm, err := newPatternMatcher("requiredincludepatterns", []string{pattern})
 		if err != nil {
-			return nil, errors.Wrapf(err, "invalid excludepatterns: %s", opts.ExcludePatterns)
+			return nil, err
 		}
+		requiredIncludePatternMatchers = append(requiredIncludePatternMatchers, pm)
+	}
+
+	excludePatternMatcher, err := newPatternMatcher("excludepatterns", opts.ExcludePatterns)
+	if err != nil {
+		return nil, err
 	}
 
 	includedPaths := make([]*includedPath, 0, 2)
@@ -619,6 +624,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 				strings.TrimSuffix(strings.TrimPrefix(fn+"/", lastMatchedDir+"/"), "/"),
 				includePatternMatcher,
 				excludePatternMatcher,
+				requiredIncludePatternMatchers,
 				maybeIncludedPath,
 				parentDir,
 			)
@@ -634,6 +640,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 				strings.TrimSuffix(strings.TrimPrefix(fn+"/", p+"/"), "/"),
 				includePatternMatcher,
 				excludePatternMatcher,
+				requiredIncludePatternMatchers,
 				maybeIncludedPath,
 				parentDir,
 			)
@@ -688,13 +695,66 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 	cc.tree = txn.Commit()
 	cc.dirty = updated
 
+	for _, pm := range requiredIncludePatternMatchers {
+		if !pm.HasMatched() {
+			patterns := pm.Patterns()
+			if len(patterns) == 1 {
+				return nil, errors.Wrapf(cerrdefs.ErrNotFound, "%q", "/"+patterns[0])
+			}
+
+			cpy := make([]string, len(patterns))
+			for i := range patterns {
+				cpy[i] = "/" + patterns[i]
+			}
+			return nil, errors.Wrapf(cerrdefs.ErrNotFound, "%+v", cpy)
+		}
+	}
+
 	return includedPaths, nil
+}
+
+type patternMatcher struct {
+	patterns   []string
+	matcher    *patternmatcher.PatternMatcher
+	hasMatched bool
+}
+
+func newPatternMatcher(name string, patterns []string) (*patternMatcher, error) {
+	if len(patterns) == 0 {
+		return nil, nil
+	}
+
+	pm, err := patternmatcher.New(patterns)
+	if err != nil {
+		return nil, errors.Wrapf(err, "invalid %s: %s", name, patterns)
+	}
+	return &patternMatcher{
+		patterns: patterns,
+		matcher:  pm,
+	}, nil
+}
+
+func (pm *patternMatcher) MatchesUsingParentResults(file string, parentMatchInfo patternmatcher.MatchInfo) (bool, patternmatcher.MatchInfo, error) {
+	m, matchInfo, err := pm.matcher.MatchesUsingParentResults(file, parentMatchInfo)
+	if m {
+		pm.hasMatched = true
+	}
+	return m, matchInfo, err
+}
+
+func (pm *patternMatcher) Patterns() []string {
+	return pm.patterns
+}
+
+func (pm *patternMatcher) HasMatched() bool {
+	return pm.hasMatched
 }
 
 func shouldIncludePath(
 	candidate string,
-	includePatternMatcher *patternmatcher.PatternMatcher,
-	excludePatternMatcher *patternmatcher.PatternMatcher,
+	includePatternMatcher *patternMatcher,
+	excludePatternMatcher *patternMatcher,
+	requiredIncludePatternMatchers []*patternMatcher,
 	maybeIncludedPath *includedPath,
 	parentDir *includedPath,
 ) (bool, error) {
@@ -703,16 +763,31 @@ func shouldIncludePath(
 		matchInfo patternmatcher.MatchInfo
 		err       error
 	)
-	if includePatternMatcher != nil {
-		if parentDir != nil {
-			m, matchInfo, err = includePatternMatcher.MatchesUsingParentResults(candidate, parentDir.includeMatchInfo)
-		} else {
-			m, matchInfo, err = includePatternMatcher.MatchesUsingParentResults(candidate, patternmatcher.MatchInfo{})
+	if includePatternMatcher != nil || len(requiredIncludePatternMatchers) > 0 {
+		for _, requiredIncludePatternMatcher := range requiredIncludePatternMatchers {
+			if parentDir != nil {
+				m, matchInfo, err = requiredIncludePatternMatcher.MatchesUsingParentResults(candidate, parentDir.includeMatchInfo)
+			} else {
+				m, matchInfo, err = requiredIncludePatternMatcher.MatchesUsingParentResults(candidate, patternmatcher.MatchInfo{})
+			}
+			if err != nil {
+				return false, errors.Wrap(err, "failed to match requiredincludepatterns")
+			}
+			maybeIncludedPath.includeMatchInfo = matchInfo
 		}
-		if err != nil {
-			return false, errors.Wrap(err, "failed to match includepatterns")
+
+		if !m && includePatternMatcher != nil {
+			if parentDir != nil {
+				m, matchInfo, err = includePatternMatcher.MatchesUsingParentResults(candidate, parentDir.includeMatchInfo)
+			} else {
+				m, matchInfo, err = includePatternMatcher.MatchesUsingParentResults(candidate, patternmatcher.MatchInfo{})
+			}
+			if err != nil {
+				return false, errors.Wrap(err, "failed to match includepatterns")
+			}
+			maybeIncludedPath.includeMatchInfo = matchInfo
 		}
-		maybeIncludedPath.includeMatchInfo = matchInfo
+
 		if !m {
 			return false, nil
 		}
@@ -1092,7 +1167,6 @@ func (cc *cacheContext) scanPath(ctx context.Context, m *mount, p string, follow
 	}
 
 	err = cc.walk(scanPath, walkFunc)
-
 	if err != nil {
 		return err
 	}
