@@ -158,6 +158,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testHostnameLookup,
 	testHostnameSpecifying,
 	testPushByDigest,
+	testPullWithDigestCheck,
 	testBasicInlineCacheImportExport,
 	testExportBusyboxLocal,
 	testBridgeNetworking,
@@ -1124,6 +1125,119 @@ func testPushByDigest(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, resp.ExporterResponse[exptypes.ExporterImageDigestKey], desc.Digest.String())
 	require.Equal(t, images.MediaTypeDockerSchema2Manifest, desc.MediaType)
 	require.Greater(t, desc.Size, int64(0))
+}
+
+func testPullWithDigestCheck(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	st := llb.Scratch().File(llb.Mkfile("foo", 0600, []byte("data1")))
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	name1 := registry + "/foo/bar:v1.0.0"
+
+	resp, err := c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: "image",
+				Attrs: map[string]string{
+					"name": name1,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dgst1Str := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
+	dgst1, err := digest.Parse(dgst1Str)
+	require.NoError(t, err)
+
+	st = llb.Scratch().File(llb.Mkfile("foo", 0600, []byte("data2")))
+
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	name2 := registry + "/foo/bar:v2.0.0"
+
+	resp, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: "image",
+				Attrs: map[string]string{
+					"name": name2,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dgst2str := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
+	dgst2, err := digest.Parse(dgst2str)
+	require.NoError(t, err)
+
+	require.NotEqual(t, dgst1, dgst2)
+
+	// if digest is set in ref then pull happens only by the digest
+	st = llb.Image(name2 + "@" + dgst1.String())
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, "data1", string(dt))
+
+	// if digest is set by checksum then pull happens by tag
+	st = llb.Image(name2, llb.WithImageChecksum(dgst2))
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+	destDir = t.TempDir()
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, "data2", string(dt))
+
+	// if checksum doesn't match then pull fails
+	st = llb.Image(name2, llb.WithImageChecksum(dgst1))
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), fmt.Sprintf("image digest %s for %s does not match expected checksum %s", dgst2, name2, dgst1))
 }
 
 func testSecurityMode(t *testing.T, sb integration.Sandbox) {
