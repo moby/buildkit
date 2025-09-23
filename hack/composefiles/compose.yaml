@@ -13,6 +13,8 @@ services:
     environment:
       OTEL_SERVICE_NAME: buildkitd
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    command:
+      - '--save-cache-debug'
     configs:
       - source: buildkit_config
         target: /etc/buildkit/buildkitd.toml
@@ -21,22 +23,19 @@ services:
     depends_on:
       - otel-collector
 
-  jaeger:
-    image: jaegertracing/all-in-one:latest
-    ports:
-      - 127.0.0.1:16686:16686
-
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.92.0
+    image: otel/opentelemetry-collector-contrib:0.135.0
     restart: always
     configs:
       - source: otelcol_config
         target: /etc/otelcol-contrib/config.yaml
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
     ports:
-      - 127.0.0.1:4317:4317
-      - 127.0.0.1:8000:8000
-    depends_on:
-      - jaeger
+      - 127.0.0.1:16686:16686
+    profiles:
+      - tracing
 
   prometheus:
     image: prom/prometheus:v2.48.1
@@ -47,6 +46,8 @@ services:
       - prometheus:/prometheus
     depends_on:
       - buildkit
+    profiles:
+      - metrics
 
   grafana:
     image: grafana/grafana-oss:10.2.3
@@ -61,6 +62,8 @@ services:
       - grafana:/var/lib/grafana
     depends_on:
       - prometheus
+    profiles:
+      - metrics
 
 volumes:
   buildkit:

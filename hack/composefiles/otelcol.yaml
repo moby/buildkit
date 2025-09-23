@@ -6,9 +6,20 @@ exporters:
   otlp/jaeger:
     endpoint: jaeger:4317
     tls::insecure: true
+    retry_on_failure::max_elapsed_time: 1m
+
+  nop:
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
       exporters: [otlp/jaeger]
+
+    metrics:
+      receivers: [otlp]
+      exporters: [nop]
+
+  telemetry:
+    metrics::level: none
+    logs::level: ERROR
