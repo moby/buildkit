@@ -1328,7 +1328,7 @@ The available `[OPTIONS]` are:
 | [`--chown`](#add---chown---chmod)       |                            |
 | [`--chmod`](#add---chown---chmod)       | 1.2                        |
 | [`--link`](#add---link)                 | 1.4                        |
-| [`--exclude`](#add---exclude)           | 1.7-labs                   |
+| [`--exclude`](#add---exclude)           | 1.19                       |
 
 The `ADD` instruction copies new files or directories from `<src>` and adds
 them to the filesystem of the image at the path `<dest>`. Files and directories
@@ -1614,7 +1614,7 @@ The available `[OPTIONS]` are:
 | [`--chmod`](#copy---chown---chmod) | 1.2                        |
 | [`--link`](#copy---link)           | 1.4                        |
 | [`--parents`](#copy---parents)     | 1.7-labs                   |
-| [`--exclude`](#copy---exclude)     | 1.7-labs                   |
+| [`--exclude`](#copy---exclude)     | 1.19                       |
 
 The `COPY` instruction copies new files or directories from `<src>` and adds
 them to the filesystem of the image at the path `<dest>`. Files and directories
@@ -1961,9 +1961,6 @@ with the `--parents` flag, the Buildkit is capable of packing multiple
 
 ### COPY --exclude
 
-> [!NOTE]
-> Not yet available in stable syntax, use [`docker/dockerfile:1-labs`](#syntax) version.
-
 ```dockerfile
 COPY [--exclude=<path> ...] <src> ... <dest>
 ```
@@ -1976,7 +1973,7 @@ supporting wildcards and matching using Go's
 For example, to add all files starting with "hom", excluding files with a `.txt` extension:
 
 ```dockerfile
-# syntax=docker/dockerfile:1-labs
+# syntax=docker/dockerfile:1
 FROM scratch
 
 COPY --exclude=*.txt hom* /mydir/
@@ -1988,7 +1985,7 @@ even if the files paths match the pattern specified in `<src>`.
 To add all files starting with "hom", excluding files with either `.txt` or `.md` extensions:
 
 ```dockerfile
-# syntax=docker/dockerfile:1-labs
+# syntax=docker/dockerfile:1
 FROM scratch
 
 COPY --exclude=*.txt --exclude=*.md hom* /mydir/
