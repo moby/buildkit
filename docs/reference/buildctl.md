@@ -78,7 +78,7 @@ OPTIONS:
    --metadata-file value             Output build metadata (e.g., image digest) to a file as JSON
    --source-policy-file value        Read source policy file from a JSON file
    --ref-file value                  Write build ref to a file
-   --registry-auth-tlscontext value  Overwrite TLS configuration when authenticating with registries, e.g. --registry-auth-tlscontext host=https://myserver:2376,insecure=false,ca=/path/to/my/ca.crt,cert=/path/to/my/cert.crt,key=/path/to/my/key.crt
+   --registry-auth-tlscontext value  Overwrite TLS configuration when authenticating with registries, e.g. --registry-auth-tlscontext host=myserver:2376,insecure=false,ca=/path/to/my/ca.crt,cert=/path/to/my/cert.crt,key=/path/to/my/key.crt
    --debug-json-cache-metrics value  Where to output json cache metrics, use 'stdout' or 'stderr' for standard (error) output.
    
 ```
