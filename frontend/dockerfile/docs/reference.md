@@ -568,8 +568,8 @@ You can also use heredocs with the shell form to break up supported commands.
 
 ```dockerfile
 RUN <<EOF
-source $HOME/.bashrc && \
-echo $HOME
+  source $HOME/.bashrc
+  echo $HOME
 EOF
 ```
 
