@@ -427,7 +427,7 @@ func (cc *cacheContext) Checksum(ctx context.Context, mountable cache.Mountable,
 		return cc.lazyChecksum(ctx, m, p, opts.FollowLinks)
 	}
 
-	includedPaths, err := cc.includedPaths(ctx, m, p, opts)
+	prefix, includedPaths, err := cc.includedPaths(ctx, m, p, opts)
 	if err != nil {
 		return "", err
 	}
@@ -451,17 +451,19 @@ func (cc *cacheContext) Checksum(ctx context.Context, mountable cache.Mountable,
 	}
 
 	h := cachedigest.NewHash(cachedigest.TypeFileList)
-	for i, w := range includedPaths {
-		if i != 0 {
-			h.Write([]byte{0})
+	for _, w := range includedPaths {
+		path := strings.TrimPrefix(w.path, prefix)
+		k := convertPathToKey(path)
+		if len(k) == 0 {
+			k = []byte{0}
 		}
-		h.Write([]byte(path.Base(w.path)))
+		h.Write(k)
 		h.Write([]byte(w.record.Digest))
 	}
 	return h.Sum(), nil
 }
 
-func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, opts ChecksumOpts) ([]*includedPath, error) {
+func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, opts ChecksumOpts) (string, []*includedPath, error) {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
 
@@ -472,11 +474,11 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 	root := cc.tree.Root()
 	scan, err := cc.needsScan(root, "", false)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	if scan {
 		if err := cc.scanPath(ctx, m, "", false); err != nil {
-			return nil, err
+			return "", nil, err
 		}
 	}
 
@@ -494,7 +496,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 	if len(opts.IncludePatterns) != 0 {
 		includePatternMatcher, err = patternmatcher.New(opts.IncludePatterns)
 		if err != nil {
-			return nil, errors.Wrapf(err, "invalid includepatterns: %s", opts.IncludePatterns)
+			return "", nil, errors.Wrapf(err, "invalid includepatterns: %s", opts.IncludePatterns)
 		}
 	}
 
@@ -502,7 +504,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 	if len(opts.ExcludePatterns) != 0 {
 		excludePatternMatcher, err = patternmatcher.New(opts.ExcludePatterns)
 		if err != nil {
-			return nil, errors.Wrapf(err, "invalid excludepatterns: %s", opts.ExcludePatterns)
+			return "", nil, errors.Wrapf(err, "invalid excludepatterns: %s", opts.ExcludePatterns)
 		}
 	}
 
@@ -524,7 +526,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 	if opts.Wildcard {
 		origPrefix, k, keyOk, err = wildcardPrefix(root, p)
 		if err != nil {
-			return nil, err
+			return "", nil, err
 		}
 	} else {
 		origPrefix = p
@@ -536,7 +538,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 		var cr *CacheRecord
 		k, cr, err = getFollowLinks(root, k, false)
 		if err != nil {
-			return nil, err
+			return "", nil, err
 		}
 		keyOk = (cr != nil)
 	}
@@ -606,7 +608,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 			if p != "" && (lastMatchedDir == "" || !strings.HasPrefix(fn, lastMatchedDir+"/")) {
 				include, err := path.Match(p, fn)
 				if err != nil {
-					return nil, err
+					return "", nil, err
 				}
 				if !include {
 					k, _, keyOk = iter.Next()
@@ -623,7 +625,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 				parentDir,
 			)
 			if err != nil {
-				return nil, err
+				return "", nil, err
 			}
 		} else {
 			if !strings.HasPrefix(fn+"/", p+"/") {
@@ -638,7 +640,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 				parentDir,
 			)
 			if err != nil {
-				return nil, err
+				return "", nil, err
 			}
 		}
 
@@ -649,7 +651,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 
 		cr, upt, err := cc.checksum(ctx, root, txn, m, k, false)
 		if err != nil {
-			return nil, err
+			return "", nil, err
 		}
 		if upt {
 			updated = true
@@ -688,7 +690,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 	cc.tree = txn.Commit()
 	cc.dirty = updated
 
-	return includedPaths, nil
+	return origPrefix, includedPaths, nil
 }
 
 func shouldIncludePath(
@@ -1092,7 +1094,6 @@ func (cc *cacheContext) scanPath(ctx context.Context, m *mount, p string, follow
 	}
 
 	err = cc.walk(scanPath, walkFunc)
-
 	if err != nil {
 		return err
 	}
