@@ -30,7 +30,7 @@ import (
 
 var cacheStoreForDebug solver.CacheKeyStorage
 
-func setupDebugHandlers(addr string) error {
+func setupDebugHandlers(ctx context.Context, addr string) error {
 	m := http.NewServeMux()
 	m.Handle("/debug/vars", expvar.Handler())
 	m.Handle("/debug/pprof/", http.HandlerFunc(pprof.Index))
@@ -62,7 +62,7 @@ func setupDebugHandlers(addr string) error {
 	if !strings.Contains(addr, "://") {
 		addr = "tcp://" + addr
 	}
-	l, err := getListener(addr, os.Getuid(), os.Getgid(), "", nil, false)
+	l, err := getListener(ctx, addr, os.Getuid(), os.Getgid(), "", nil, false)
 	if err != nil {
 		return err
 	}

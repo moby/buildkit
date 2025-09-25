@@ -175,7 +175,7 @@ func (c Moby) New(ctx context.Context, cfg *integration.BackendConfig) (b integr
 		dockerdFlags = append(dockerdFlags, strings.Split(strings.TrimSpace(s), "\n")...)
 	}
 
-	err = d.StartWithError(cfg.Logs, dockerdFlags...)
+	err = d.StartWithError(ctx, cfg.Logs, dockerdFlags...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -207,7 +207,7 @@ func (c Moby) New(ctx context.Context, cfg *integration.BackendConfig) (b integr
 	f.Close()
 	os.Remove(localPath)
 
-	listener, err := net.Listen(buildkitdNetworkProtocol, getBuildkitdNetworkAddr(localPath))
+	listener, err := (&net.ListenConfig{}).Listen(ctx, buildkitdNetworkProtocol, getBuildkitdNetworkAddr(localPath))
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "dockerd listener error: %s", integration.FormatLogs(cfg.Logs))
 	}
