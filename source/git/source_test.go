@@ -639,6 +639,70 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 		require.Contains(t, strings.TrimSpace(string(gitLogOutput)), expectedCommitSubject)
 	}
 }
+func TestFetchAnnotatedTagAfterCloneSHA1(t *testing.T) {
+	testFetchAnnotatedTagAfterClone(t, "sha1")
+}
+
+func TestFetchAnnotatedTagAfterCloneSHA256(t *testing.T) {
+	testFetchAnnotatedTagAfterClone(t, "sha256")
+}
+
+func testFetchAnnotatedTagAfterClone(t *testing.T, format string) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
+	t.Parallel()
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx = logProgressStreams(ctx, t)
+
+	repo := setupGitRepo(t, format)
+	cmd := exec.Command("git", "rev-parse", "HEAD")
+	cmd.Dir = repo.mainPath
+
+	out, err := cmd.Output()
+	require.NoError(t, err)
+
+	expLen := 40
+	if format == "sha256" {
+		expLen = 64
+	}
+	sha := strings.TrimSpace(string(out))
+	require.Equal(t, expLen, len(sha))
+
+	gs := setupGitSource(t, t.TempDir())
+
+	id := &GitIdentifier{Remote: repo.mainURL, Ref: sha, KeepGitDir: true}
+
+	g, err := gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	key1, pin1, _, done, err := g.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+	require.True(t, done)
+
+	require.GreaterOrEqual(t, len(key1), expLen+4)
+	require.Equal(t, expLen, len(pin1))
+
+	ref, err := g.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	ref.Release(context.TODO())
+
+	id = &GitIdentifier{Remote: repo.mainURL, Ref: "refs/tags/v1.2.3", KeepGitDir: true}
+	g, err = gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	key1, pin1, _, done, err = g.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+	require.True(t, done)
+
+	require.GreaterOrEqual(t, len(key1), expLen+4)
+	require.Equal(t, expLen, len(pin1))
+
+	ref, err = g.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	ref.Release(context.TODO())
+}
 
 func TestMultipleTagAccessKeepGitDirSHA1(t *testing.T) {
 	testMultipleTagAccess(t, true, "sha1")
