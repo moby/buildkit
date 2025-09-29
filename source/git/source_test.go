@@ -704,6 +704,123 @@ func testFetchAnnotatedTagAfterClone(t *testing.T, format string) {
 	ref.Release(context.TODO())
 }
 
+func TestFetchAnnotatedTagChecksumsSHA1(t *testing.T) {
+	testFetchAnnotatedTagChecksums(t, "sha1", false)
+}
+
+func TestFetchAnnotatedTagChecksumsSHA256(t *testing.T) {
+	testFetchAnnotatedTagChecksums(t, "sha256", false)
+}
+
+func TestFetchAnnotatedTagChecksumsKeepGitDirSHA1(t *testing.T) {
+	testFetchAnnotatedTagChecksums(t, "sha1", true)
+}
+
+func TestFetchAnnotatedTagChecksumsKeepGitDirSHA256(t *testing.T) {
+	testFetchAnnotatedTagChecksums(t, "sha256", true)
+}
+
+func testFetchAnnotatedTagChecksums(t *testing.T, format string, keepGitDir bool) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
+	t.Parallel()
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx = logProgressStreams(ctx, t)
+
+	repo := setupGitRepo(t, format)
+	cmd := exec.Command("git", "rev-parse", "v1.2.3")
+	cmd.Dir = repo.mainPath
+
+	out, err := cmd.Output()
+	require.NoError(t, err)
+
+	expLen := 40
+	if format == "sha256" {
+		expLen = 64
+	}
+	shaTag := strings.TrimSpace(string(out))
+	require.Equal(t, expLen, len(shaTag))
+
+	// make sure this is an annotated tag
+	cmd = exec.Command("git", "cat-file", "-t", shaTag)
+	cmd.Dir = repo.mainPath
+
+	out, err = cmd.Output()
+	require.NoError(t, err)
+	require.Equal(t, "tag\n", string(out))
+
+	// get commit that the tag points to
+	cmd = exec.Command("git", "rev-parse", "v1.2.3^{}")
+	cmd.Dir = repo.mainPath
+
+	out, err = cmd.Output()
+	require.NoError(t, err)
+
+	shaCommit := strings.TrimSpace(string(out))
+	require.Equal(t, expLen, len(shaCommit))
+
+	require.NotEqual(t, shaTag, shaCommit)
+
+	gs := setupGitSource(t, t.TempDir())
+
+	id := &GitIdentifier{Remote: repo.mainURL, Ref: "v1.2.3", KeepGitDir: keepGitDir}
+
+	g, err := gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	key, pin, _, done, err := g.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+	require.True(t, done)
+
+	if keepGitDir {
+		require.GreaterOrEqual(t, len(key), expLen+4)
+	} else {
+		require.Equal(t, expLen, len(key))
+	}
+	require.Equal(t, expLen, len(pin))
+
+	require.Equal(t, shaTag, pin)
+
+	// key is based on commit sha if keepGitDir is false
+	if keepGitDir {
+		require.Equal(t, shaTag+".git#refs/tags/v1.2.3", key)
+	} else {
+		require.Equal(t, shaCommit, key)
+	}
+
+	ref, err := g.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	ref.Release(context.TODO())
+
+	if !keepGitDir {
+		return
+	}
+
+	mountable, err := ref.Mount(ctx, true, nil)
+	require.NoError(t, err)
+
+	lm1 := snapshot.LocalMounter(mountable)
+	dir, err := lm1.Mount()
+	require.NoError(t, err)
+	defer lm1.Unmount()
+
+	cmd = exec.Command("git", "tag", "--points-at", "HEAD")
+	cmd.Dir = dir
+
+	out, err = cmd.Output()
+	require.NoError(t, err)
+	require.Equal(t, "v1.2.3\n", string(out))
+
+	cmd = exec.Command("git", "rev-parse", "v1.2.3")
+	cmd.Dir = dir
+
+	out, err = cmd.Output()
+	require.NoError(t, err)
+	require.Equal(t, shaTag, strings.TrimSpace(string(out)))
+}
+
 func TestMultipleTagAccessKeepGitDirSHA1(t *testing.T) {
 	testMultipleTagAccess(t, true, "sha1")
 }

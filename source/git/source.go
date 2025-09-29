@@ -414,17 +414,19 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 		partialRef      = "refs/" + strings.TrimPrefix(ref, "refs/")
 		headRef         = "refs/heads/" + strings.TrimPrefix(ref, "refs/heads/")
 		tagRef          = "refs/tags/" + strings.TrimPrefix(ref, "refs/tags/")
-		annotatedTagRef = tagRef + "^{}"
+		annotatedTagRef = tagRef + "^{}" // dereferenced annotated tag
 	)
-	var sha, headSha, tagSha string
+	var sha, headSha, tagSha, annotatedTagSha string
 	var usedRef string
 	for _, line := range lines {
 		lineSha, lineRef, _ := strings.Cut(line, "\t")
 		switch lineRef {
 		case headRef:
 			headSha = lineSha
-		case tagRef, annotatedTagRef:
+		case tagRef:
 			tagSha = lineSha
+		case annotatedTagRef:
+			annotatedTagSha = lineSha
 		case partialRef:
 			sha = lineSha
 			usedRef = lineRef
@@ -436,6 +438,9 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 		sha = headSha
 		usedRef = headRef
 	}
+	if sha != "" {
+		annotatedTagSha = "" // ignore annotated tag if branch or commit matched
+	}
 	if sha == "" {
 		sha = tagSha
 		usedRef = tagRef
@@ -446,10 +451,21 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 	if !gitutil.IsCommitSHA(sha) {
 		return "", "", nil, false, errors.Errorf("invalid commit sha %q", sha)
 	}
-	if gs.src.Checksum != "" && !strings.HasPrefix(sha, gs.src.Checksum) {
-		return "", "", nil, false, errors.Errorf("expected checksum to match %s, got %s", gs.src.Checksum, sha)
+	if gs.src.Checksum != "" {
+		if !strings.HasPrefix(sha, gs.src.Checksum) && !strings.HasPrefix(annotatedTagSha, gs.src.Checksum) {
+			exp := sha
+			if annotatedTagSha != "" {
+				exp = " or " + annotatedTagSha
+			}
+			return "", "", nil, false, errors.Errorf("expected checksum to match %s, got %s", gs.src.Checksum, exp)
+		}
 	}
-	cacheKey := gs.shaToCacheKey(sha, usedRef)
+	shaForCacheKey := sha
+	if annotatedTagSha != "" && !gs.src.KeepGitDir {
+		// prefer commit sha pointed by annotated tag if no git dir is kept for more matches
+		shaForCacheKey = annotatedTagSha
+	}
+	cacheKey := gs.shaToCacheKey(shaForCacheKey, usedRef)
 	gs.cacheKey = cacheKey
 	gs.sha256 = len(sha) == 64
 	return cacheKey, sha, nil, true, nil
