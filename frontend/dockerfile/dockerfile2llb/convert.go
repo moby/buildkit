@@ -1223,7 +1223,7 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 	// Run command can potentially access any file. Mark the full filesystem as used.
 	d.paths["/"] = struct{}{}
 
-	var args = c.CmdLine
+	args := c.CmdLine
 	if len(c.Files) > 0 {
 		if len(args) != 1 || !c.PrependShell {
 			return errors.Errorf("parsing produced an invalid run command: %v", args)
@@ -1606,6 +1606,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		} else {
 			validateCopySourcePath(src, &cfg)
 			var patterns []string
+			var requiredPaths []string
 			if cfg.parents {
 				// detect optional pivot point
 				parent, pattern, ok := strings.Cut(src, "/./")
@@ -1622,6 +1623,12 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 				}
 
 				patterns = []string{strings.TrimPrefix(pattern, "/")}
+
+				// determine if we want to require any paths to exist.
+				// we only require a path to exist if wildcards aren't present.
+				if !containsWildcards(src) && !containsWildcards(pattern) {
+					requiredPaths = []string{filepath.Join(src, pattern)}
+				}
 			}
 
 			src, err = system.NormalizePath("/", src, d.platform.OS, false)
@@ -1639,6 +1646,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 				FollowSymlinks:      true,
 				CopyDirContentsOnly: true,
 				IncludePatterns:     patterns,
+				RequiredPaths:       requiredPaths,
 				AttemptUnpack:       unpack,
 				CreateDestPath:      true,
 				AllowWildcard:       true,
@@ -1760,7 +1768,7 @@ func dispatchOnbuild(d *dispatchState, c *instructions.OnbuildCommand) error {
 func dispatchCmd(d *dispatchState, c *instructions.CmdCommand, lint *linter.Linter) error {
 	validateUsedOnce(c, &d.cmd, lint)
 
-	var args = c.CmdLine
+	args := c.CmdLine
 	if c.PrependShell {
 		if len(d.image.Config.Shell) == 0 {
 			msg := linter.RuleJSONArgsRecommended.Format(c.Name())
@@ -1776,7 +1784,7 @@ func dispatchCmd(d *dispatchState, c *instructions.CmdCommand, lint *linter.Lint
 func dispatchEntrypoint(d *dispatchState, c *instructions.EntrypointCommand, lint *linter.Linter) error {
 	validateUsedOnce(c, &d.entrypoint, lint)
 
-	var args = c.CmdLine
+	args := c.CmdLine
 	if c.PrependShell {
 		if len(d.image.Config.Shell) == 0 {
 			msg := linter.RuleJSONArgsRecommended.Format(c.Name())
@@ -2691,4 +2699,16 @@ func (emptyEnvs) Get(string) (string, bool) {
 
 func (emptyEnvs) Keys() []string {
 	return nil
+}
+
+func containsWildcards(name string) bool {
+	for i := 0; i < len(name); i++ {
+		switch name[i] {
+		case '*', '?', '[':
+			return true
+		case '\\':
+			i++
+		}
+	}
+	return false
 }
