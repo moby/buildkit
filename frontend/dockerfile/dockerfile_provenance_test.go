@@ -71,6 +71,8 @@ func testProvenanceAttestation(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
 	ctx := sb.Context()
 
+	isDockerd := strings.HasPrefix(sb.Name(), "dockerd")
+
 	c, err := client.New(ctx, sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -182,6 +184,9 @@ RUN echo ok> /foo
 				expCustom := provenancetypes.ProvenanceCustomEnv{
 					"foo":     "bar",
 					"numbers": []any{1.0, 2.0, 3.0},
+				}
+				if isDockerd {
+					expCustom = nil
 				}
 
 				if slsaVersion == "v1" {
