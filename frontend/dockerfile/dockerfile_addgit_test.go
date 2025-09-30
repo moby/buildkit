@@ -504,8 +504,8 @@ COPY foo out
 		},
 		{
 			name:      "v2 by commit",
-			url:       serverURL + "/.git?commit=" + commitHashV2,
-			expectOut: "v0.0.2\n",
+			url:       serverURL + "/.git?commit=" + commitHashLatest,
+			expectOut: "latest\n",
 		},
 		{
 			name:      "v2 by commit (wrong short)",
@@ -540,12 +540,6 @@ COPY foo out
 		{
 			name:      "latest with commit",
 			url:       serverURL + "/.git?commit=" + commitHashLatest,
-			expectOut: "latest\n",
-		},
-		{
-			// this only works if there is already cache for commitHashLatest from previous case
-			name:      "tag with invalid commit",
-			url:       serverURL + "/.git?tag=v0.0.2&commit=" + commitHashLatest,
 			expectOut: "latest\n",
 		},
 		{

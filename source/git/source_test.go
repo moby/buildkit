@@ -550,6 +550,10 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 	require.NoError(t, err)
 
 	key1, pin1, _, done, err := g.CacheKey(ctx, nil, 0)
+	if checksumMode == testChecksumModeInvalid {
+		require.ErrorContains(t, err, "expected checksum to match "+id.Checksum)
+		return
+	}
 	require.NoError(t, err)
 	require.True(t, done)
 
@@ -567,10 +571,6 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 	require.Equal(t, expPinLen, len(pin1))
 
 	ref1, err := g.Snapshot(ctx, nil)
-	if checksumMode == testChecksumModeInvalid {
-		require.ErrorContains(t, err, "expected checksum to match "+id.Checksum)
-		return
-	}
 	require.NoError(t, err)
 	defer ref1.Release(context.TODO())
 
@@ -618,9 +618,6 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 		headCommit, err := git.Run(ctx, "rev-parse", "HEAD")
 		require.NoError(t, err)
 
-		// ensure that we checked out the same commit as was in the cache key
-		require.Equal(t, strings.TrimSpace(string(headCommit)), pin1)
-
 		if isAnnotatedTag {
 			// get commit sha that the annotated tag points to
 			annotatedTagCommit, err := git.Run(ctx, "rev-list", "-n", "1", tag)
@@ -629,6 +626,14 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 			// HEAD should match the actual commit sha (and not the sha of the annotated tag,
 			// since it's not possible to checkout a non-commit object)
 			require.Equal(t, string(annotatedTagCommit), string(headCommit))
+
+			annotatedTagSHA, err := git.Run(ctx, "rev-parse", tag)
+			require.NoError(t, err)
+
+			require.Equal(t, strings.TrimSpace(string(annotatedTagSHA)), pin1)
+		} else {
+			// ensure that we checked out the same commit as was in the cache key
+			require.Equal(t, strings.TrimSpace(string(headCommit)), pin1)
 		}
 
 		// test that we checked out the correct commit
@@ -765,60 +770,65 @@ func testFetchAnnotatedTagChecksums(t *testing.T, format string, keepGitDir bool
 
 	gs := setupGitSource(t, t.TempDir())
 
-	id := &GitIdentifier{Remote: repo.mainURL, Ref: "v1.2.3", KeepGitDir: keepGitDir}
-
-	g, err := gs.Resolve(ctx, id, nil, nil)
-	require.NoError(t, err)
-
-	key, pin, _, done, err := g.CacheKey(ctx, nil, 0)
-	require.NoError(t, err)
-	require.True(t, done)
-
-	if keepGitDir {
-		require.GreaterOrEqual(t, len(key), expLen+4)
-	} else {
-		require.Equal(t, expLen, len(key))
-	}
-	require.Equal(t, expLen, len(pin))
-
-	require.Equal(t, shaTag, pin)
-
-	// key is based on commit sha if keepGitDir is false
-	if keepGitDir {
-		require.Equal(t, shaTag+".git#refs/tags/v1.2.3", key)
-	} else {
-		require.Equal(t, shaCommit, key)
+	tcases := []*GitIdentifier{
+		{Remote: repo.mainURL, Ref: "v1.2.3", KeepGitDir: keepGitDir},
+		{Remote: repo.mainURL, Ref: "refs/tags/v1.2.3", KeepGitDir: keepGitDir},
+		{Remote: repo.mainURL, Ref: "v1.2.3", KeepGitDir: keepGitDir, Checksum: shaTag},
+		{Remote: repo.mainURL, Ref: "v1.2.3", KeepGitDir: keepGitDir, Checksum: shaCommit},
 	}
 
-	ref, err := g.Snapshot(ctx, nil)
-	require.NoError(t, err)
-	ref.Release(context.TODO())
+	for _, id := range tcases {
+		g, err := gs.Resolve(ctx, id, nil, nil)
+		require.NoError(t, err)
 
-	if !keepGitDir {
-		return
+		key, pin, _, done, err := g.CacheKey(ctx, nil, 0)
+		require.NoError(t, err)
+		require.True(t, done)
+
+		if keepGitDir {
+			require.GreaterOrEqual(t, len(key), expLen+4)
+		} else {
+			require.Equal(t, expLen, len(key))
+		}
+		require.Equal(t, expLen, len(pin))
+
+		require.Equal(t, shaTag, pin)
+
+		// key is based on commit sha if keepGitDir is false
+		if keepGitDir {
+			require.Equal(t, shaTag+".git#refs/tags/v1.2.3", key)
+		} else {
+			require.Equal(t, shaCommit, key)
+		}
+
+		ref, err := g.Snapshot(ctx, nil)
+		require.NoError(t, err)
+		ref.Release(context.TODO())
+
+		if keepGitDir {
+			mountable, err := ref.Mount(ctx, true, nil)
+			require.NoError(t, err)
+
+			lm1 := snapshot.LocalMounter(mountable)
+			dir, err := lm1.Mount()
+			require.NoError(t, err)
+			defer lm1.Unmount()
+
+			cmd = exec.Command("git", "tag", "--points-at", "HEAD")
+			cmd.Dir = dir
+
+			out, err = cmd.Output()
+			require.NoError(t, err)
+			require.Equal(t, "v1.2.3\n", string(out))
+
+			cmd = exec.Command("git", "rev-parse", "v1.2.3")
+			cmd.Dir = dir
+
+			out, err = cmd.Output()
+			require.NoError(t, err)
+			require.Equal(t, shaTag, strings.TrimSpace(string(out)))
+		}
 	}
-
-	mountable, err := ref.Mount(ctx, true, nil)
-	require.NoError(t, err)
-
-	lm1 := snapshot.LocalMounter(mountable)
-	dir, err := lm1.Mount()
-	require.NoError(t, err)
-	defer lm1.Unmount()
-
-	cmd = exec.Command("git", "tag", "--points-at", "HEAD")
-	cmd.Dir = dir
-
-	out, err = cmd.Output()
-	require.NoError(t, err)
-	require.Equal(t, "v1.2.3\n", string(out))
-
-	cmd = exec.Command("git", "rev-parse", "v1.2.3")
-	cmd.Dir = dir
-
-	out, err = cmd.Output()
-	require.NoError(t, err)
-	require.Equal(t, shaTag, strings.TrimSpace(string(out)))
 }
 
 func TestMultipleTagAccessKeepGitDirSHA1(t *testing.T) {
