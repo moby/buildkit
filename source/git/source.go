@@ -370,20 +370,12 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 		}
 	}
 
-	var refCommitFullHash, ref2 string
-	if gitutil.IsCommitSHA(gs.src.Checksum) && !gs.src.KeepGitDir {
-		refCommitFullHash = gs.src.Checksum
-		ref2 = gs.src.Ref
-	}
-	if refCommitFullHash == "" && gitutil.IsCommitSHA(gs.src.Ref) {
-		refCommitFullHash = gs.src.Ref
-	}
-	if refCommitFullHash != "" {
-		cacheKey := gs.shaToCacheKey(refCommitFullHash, ref2)
+	if gitutil.IsCommitSHA(gs.src.Ref) {
+		cacheKey := gs.shaToCacheKey(gs.src.Ref, gs.src.Ref)
 		gs.cacheKey = cacheKey
-		gs.sha256 = len(refCommitFullHash) == 64
+		gs.sha256 = len(gs.src.Ref) == 64
 		// gs.src.Checksum is verified when checking out the commit
-		return cacheKey, refCommitFullHash, nil, true, nil
+		return cacheKey, gs.src.Ref, nil, true, nil
 	}
 
 	gs.getAuthToken(ctx, g)
@@ -414,17 +406,20 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 		partialRef      = "refs/" + strings.TrimPrefix(ref, "refs/")
 		headRef         = "refs/heads/" + strings.TrimPrefix(ref, "refs/heads/")
 		tagRef          = "refs/tags/" + strings.TrimPrefix(ref, "refs/tags/")
-		annotatedTagRef = tagRef + "^{}"
+		annotatedTagRef = tagRef + "^{}" // dereferenced annotated tag
 	)
-	var sha, headSha, tagSha string
+	var sha, headSha, tagSha, annotatedTagSha string
 	var usedRef string
+
 	for _, line := range lines {
 		lineSha, lineRef, _ := strings.Cut(line, "\t")
 		switch lineRef {
 		case headRef:
 			headSha = lineSha
-		case tagRef, annotatedTagRef:
+		case tagRef:
 			tagSha = lineSha
+		case annotatedTagRef:
+			annotatedTagSha = lineSha
 		case partialRef:
 			sha = lineSha
 			usedRef = lineRef
@@ -436,6 +431,9 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 		sha = headSha
 		usedRef = headRef
 	}
+	if sha != "" {
+		annotatedTagSha = "" // ignore annotated tag if branch or commit matched
+	}
 	if sha == "" {
 		sha = tagSha
 		usedRef = tagRef
@@ -446,10 +444,21 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 	if !gitutil.IsCommitSHA(sha) {
 		return "", "", nil, false, errors.Errorf("invalid commit sha %q", sha)
 	}
-	if gs.src.Checksum != "" && !strings.HasPrefix(sha, gs.src.Checksum) {
-		return "", "", nil, false, errors.Errorf("expected checksum to match %s, got %s", gs.src.Checksum, sha)
+	if gs.src.Checksum != "" {
+		if !strings.HasPrefix(sha, gs.src.Checksum) && !strings.HasPrefix(annotatedTagSha, gs.src.Checksum) {
+			exp := sha
+			if annotatedTagSha != "" {
+				exp = " or " + annotatedTagSha
+			}
+			return "", "", nil, false, errors.Errorf("expected checksum to match %s, got %s", gs.src.Checksum, exp)
+		}
 	}
-	cacheKey := gs.shaToCacheKey(sha, usedRef)
+	shaForCacheKey := sha
+	if annotatedTagSha != "" && !gs.src.KeepGitDir {
+		// prefer commit sha pointed by annotated tag if no git dir is kept for more matches
+		shaForCacheKey = annotatedTagSha
+	}
+	cacheKey := gs.shaToCacheKey(shaForCacheKey, usedRef)
 	gs.cacheKey = cacheKey
 	gs.sha256 = len(sha) == 64
 	return cacheKey, sha, nil, true, nil
@@ -584,7 +593,18 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		}
 		actualHash := strings.TrimSpace(string(actualHashBuf))
 		if !strings.HasPrefix(actualHash, gs.src.Checksum) {
-			return nil, errors.Errorf("expected checksum to match %s, got %s", gs.src.Checksum, actualHash)
+			retErr := errors.Errorf("expected checksum to match %s, got %s", gs.src.Checksum, actualHash)
+			actualHashBuf2, err := git.Run(ctx, "rev-parse", ref+"^{}")
+			if err != nil {
+				return nil, retErr
+			}
+			actualHash2 := strings.TrimSpace(string(actualHashBuf2))
+			if actualHash2 == actualHash {
+				return nil, retErr
+			}
+			if !strings.HasPrefix(actualHash2, gs.src.Checksum) {
+				return nil, errors.Errorf("expected checksum to match %s, got %s or %s", gs.src.Checksum, actualHash, actualHash2)
+			}
 		}
 	}
 
