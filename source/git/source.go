@@ -105,7 +105,7 @@ func (gs *gitSource) Identifier(scheme, ref string, attrs map[string]string, pla
 }
 
 // needs to be called with repo lock
-func (gs *gitSource) mountRemote(ctx context.Context, remote string, authArgs []string, sha256 bool, g session.Group) (target string, release func() error, retErr error) {
+func (gs *gitSource) mountRemote(ctx context.Context, remote string, authArgs []string, sha256 bool, reset bool, g session.Group) (target string, release func() error, retErr error) {
 	sis, err := searchGitRemote(ctx, gs.cache, remote)
 	if err != nil {
 		return "", nil, errors.Wrapf(err, "failed to search metadata for %s", urlutil.RedactCredentials(remote))
@@ -113,16 +113,22 @@ func (gs *gitSource) mountRemote(ctx context.Context, remote string, authArgs []
 
 	var remoteRef cache.MutableRef
 	for _, si := range sis {
-		remoteRef, err = gs.cache.GetMutable(ctx, si.ID())
-		if err != nil {
-			if errors.Is(err, cache.ErrLocked) {
-				// should never really happen as no other function should access this metadata, but lets be graceful
-				bklog.G(ctx).Warnf("mutable ref for %s  %s was locked: %v", urlutil.RedactCredentials(remote), si.ID(), err)
-				continue
+		if reset {
+			if err := si.clearGitRemote(); err != nil {
+				bklog.G(ctx).Warnf("failed to clear git remote metadata for %s %s: %v", urlutil.RedactCredentials(remote), si.ID(), err)
 			}
-			return "", nil, errors.Wrapf(err, "failed to get mutable ref for %s", urlutil.RedactCredentials(remote))
+		} else {
+			remoteRef, err = gs.cache.GetMutable(ctx, si.ID())
+			if err != nil {
+				if errors.Is(err, cache.ErrLocked) {
+					// should never really happen as no other function should access this metadata, but lets be graceful
+					bklog.G(ctx).Warnf("mutable ref for %s  %s was locked: %v", urlutil.RedactCredentials(remote), si.ID(), err)
+					continue
+				}
+				return "", nil, errors.Wrapf(err, "failed to get mutable ref for %s", urlutil.RedactCredentials(remote))
+			}
+			break
 		}
-		break
 	}
 
 	initializeRepo := false
@@ -464,7 +470,7 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 	return cacheKey, sha, nil, true, nil
 }
 
-func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out cache.ImmutableRef, retErr error) {
+func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (cache.ImmutableRef, error) {
 	cacheKey := gs.cacheKey
 	if cacheKey == "" {
 		var err error
@@ -491,13 +497,35 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 	gs.locker.Lock(gs.src.Remote)
 	defer gs.locker.Unlock(gs.src.Remote)
 
+	ref, err := gs.trySnapshot(ctx, g, false)
+	if err != nil {
+		var wce *wouldClobberExistingTagError
+		if errors.As(err, &wce) {
+			// try once more with a fresh repo
+			ref, err = gs.trySnapshot(ctx, g, true)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
+	}
+
+	md := cacheRefMetadata{ref}
+	if err := md.setGitSnapshot(snapshotKey); err != nil {
+		return nil, err
+	}
+	return ref, nil
+}
+
+func (gs *gitSourceHandler) trySnapshot(ctx context.Context, g session.Group, reset bool) (out cache.ImmutableRef, retErr error) {
 	git, cleanup, err := gs.emptyGitCli(ctx, g)
 	if err != nil {
 		return nil, err
 	}
 	defer cleanup()
 
-	gitDir, unmountGitDir, err := gs.mountRemote(ctx, gs.src.Remote, gs.authArgs, gs.sha256, g)
+	gitDir, unmountGitDir, err := gs.mountRemote(ctx, gs.src.Remote, gs.authArgs, gs.sha256, reset, g)
 	if err != nil {
 		return nil, err
 	}
@@ -547,7 +575,14 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 			args = append(args, "--force", ref+":"+targetRef)
 		}
 		if _, err := git.Run(ctx, args...); err != nil {
-			return nil, errors.Wrapf(err, "failed to fetch remote %s", urlutil.RedactCredentials(gs.src.Remote))
+			err := errors.Wrapf(err, "failed to fetch remote %s", urlutil.RedactCredentials(gs.src.Remote))
+			if strings.Contains(err.Error(), "rejected") && strings.Contains(err.Error(), "(would clobber existing tag)") {
+				// this can happen if a tag was mutated to another commit in remote.
+				// only hope is to abandon the existing shared repo and start a fresh one
+				return nil, &wouldClobberExistingTagError{err}
+			}
+
+			return nil, err
 		}
 		_, err = git.Run(ctx, "reflog", "expire", "--all", "--expire=now")
 		if err != nil {
@@ -748,11 +783,15 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		}
 	}()
 
-	md := cacheRefMetadata{snap}
-	if err := md.setGitSnapshot(snapshotKey); err != nil {
-		return nil, err
-	}
 	return snap, nil
+}
+
+type wouldClobberExistingTagError struct {
+	error
+}
+
+func (e *wouldClobberExistingTagError) Unwrap() error {
+	return e.error
 }
 
 func (gs *gitSourceHandler) emptyGitCli(ctx context.Context, g session.Group, opts ...gitutil.Option) (*gitutil.GitCLI, func() error, error) {
@@ -861,6 +900,10 @@ func (md cacheRefMetadata) setGitSnapshot(key string) error {
 
 func (md cacheRefMetadata) setGitRemote(key string) error {
 	return md.SetString(keyGitRemote, key, gitRemoteIndex+key)
+}
+
+func (md cacheRefMetadata) clearGitRemote() error {
+	return md.ClearValueAndIndex(keyGitRemote, gitRemoteIndex)
 }
 
 func gitCLI(opts ...gitutil.Option) *gitutil.GitCLI {

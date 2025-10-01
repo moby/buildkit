@@ -831,6 +831,90 @@ func testFetchAnnotatedTagChecksums(t *testing.T, format string, keepGitDir bool
 	}
 }
 
+func TestFetchMutatedTagSHA1(t *testing.T) {
+	testFetchMutatedTag(t, "sha1", false)
+}
+
+func TestFetchMutatedTagKeepGitDirSHA1(t *testing.T) {
+	testFetchMutatedTag(t, "sha1", true)
+}
+
+func TestFetchMutatedTagSHA256(t *testing.T) {
+	testFetchMutatedTag(t, "sha256", false)
+}
+
+func TestFetchMutatedTagKeepGitDirSHA256(t *testing.T) {
+	testFetchMutatedTag(t, "sha256", true)
+}
+
+func testFetchMutatedTag(t *testing.T, format string, keepGitDir bool) {
+	ctx := t.Context()
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+	repo := setupGitRepo(t, format)
+	cmd := exec.Command("git", "rev-parse", "v1.2.3")
+	cmd.Dir = repo.mainPath
+
+	out, err := cmd.Output()
+	require.NoError(t, err)
+
+	expLen := 40
+	if format == "sha256" {
+		expLen = 64
+	}
+	shaTag := strings.TrimSpace(string(out))
+	require.Equal(t, expLen, len(shaTag))
+
+	id := &GitIdentifier{Remote: repo.mainURL, Ref: shaTag, KeepGitDir: keepGitDir}
+	gs := setupGitSource(t, t.TempDir())
+
+	g, err := gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	key1, pin1, _, done, err := g.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+	require.True(t, done)
+
+	ref, err := g.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	ref.Release(context.TODO())
+
+	// mutate the tag to point to another commit
+	cmd = exec.Command("git", "tag", "-f", "v1.2.3", "feature")
+	cmd.Dir = repo.mainPath
+	out, err = cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	// verify that the tag now points to a different commit
+	cmd = exec.Command("git", "rev-parse", "v1.2.3")
+	cmd.Dir = repo.mainPath
+
+	out, err = cmd.Output()
+	require.NoError(t, err)
+
+	shaTagMutated := strings.TrimSpace(string(out))
+	require.Equal(t, expLen, len(shaTagMutated))
+	require.NotEqual(t, shaTag, shaTagMutated)
+
+	id = &GitIdentifier{Remote: repo.mainURL, Ref: shaTagMutated, KeepGitDir: keepGitDir}
+
+	// fetching the original tag should still return the original commit because of caching
+	g, err = gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	key2, pin2, _, done, err := g.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+	require.True(t, done)
+
+	require.NotEqual(t, key1, key2)
+	require.NotEqual(t, pin1, pin2)
+
+	ref, err = g.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	ref.Release(context.TODO())
+}
+
 func TestMultipleTagAccessKeepGitDirSHA1(t *testing.T) {
 	testMultipleTagAccess(t, true, "sha1")
 }
