@@ -500,8 +500,8 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (cach
 	ref, err := gs.trySnapshot(ctx, g, false)
 	if err != nil {
 		var wce *wouldClobberExistingTagError
-		if errors.As(err, &wce) {
-			// try once more with a fresh repo
+		var ulre *unableToUpdateLocalRefError
+		if errors.As(err, &wce) || errors.As(err, &ulre) {
 			ref, err = gs.trySnapshot(ctx, g, true)
 			if err != nil {
 				return nil, err
@@ -580,6 +580,11 @@ func (gs *gitSourceHandler) trySnapshot(ctx context.Context, g session.Group, re
 				// this can happen if a tag was mutated to another commit in remote.
 				// only hope is to abandon the existing shared repo and start a fresh one
 				return nil, &wouldClobberExistingTagError{err}
+			}
+			if strings.Contains(err.Error(), "(unable to update local ref)") && strings.Contains(err.Error(), "some local refs could not be updated;") {
+				// this can happen if a branch updated in remote so that old branch
+				// is now a parent dir of a new branch
+				return nil, &unableToUpdateLocalRefError{err}
 			}
 
 			return nil, err
@@ -791,6 +796,14 @@ type wouldClobberExistingTagError struct {
 }
 
 func (e *wouldClobberExistingTagError) Unwrap() error {
+	return e.error
+}
+
+type unableToUpdateLocalRefError struct {
+	error
+}
+
+func (e *unableToUpdateLocalRefError) Unwrap() error {
 	return e.error
 }
 
