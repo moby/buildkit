@@ -278,7 +278,7 @@ func main() {
 		}
 
 		if cfg.GRPC.DebugAddress != "" {
-			if err := setupDebugHandlers(cfg.GRPC.DebugAddress); err != nil {
+			if err := setupDebugHandlers(ctx, cfg.GRPC.DebugAddress); err != nil {
 				return err
 			}
 		}
@@ -345,7 +345,7 @@ func main() {
 
 		// listeners have to be initialized before the controller
 		// https://github.com/moby/buildkit/issues/4618
-		listeners, err := newGRPCListeners(cfg.GRPC)
+		listeners, err := getGRPCListeners(ctx, cfg.GRPC)
 		if err != nil {
 			return err
 		}
@@ -432,7 +432,7 @@ func main() {
 	}
 }
 
-func newGRPCListeners(cfg config.GRPCConfig) ([]net.Listener, error) {
+func getGRPCListeners(ctx context.Context, cfg config.GRPCConfig) ([]net.Listener, error) {
 	addrs := cfg.Address
 	if len(addrs) == 0 {
 		return nil, errors.New("--addr cannot be empty")
@@ -452,7 +452,7 @@ func newGRPCListeners(cfg config.GRPCConfig) ([]net.Listener, error) {
 
 	listeners := make([]net.Listener, 0, len(addrs))
 	for _, addr := range addrs {
-		l, err := getListener(addr, *cfg.UID, *cfg.GID, sd, tlsConfig, true)
+		l, err := getListener(ctx, addr, *cfg.UID, *cfg.GID, sd, tlsConfig, true)
 		if err != nil {
 			for _, l := range listeners {
 				l.Close()
@@ -686,7 +686,7 @@ func groupToGID(group string) (int, error) {
 	return strconv.Atoi(group)
 }
 
-func getListener(addr string, uid, gid int, secDescriptor string, tlsConfig *tls.Config, warnTLS bool) (net.Listener, error) {
+func getListener(ctx context.Context, addr string, uid, gid int, secDescriptor string, tlsConfig *tls.Config, warnTLS bool) (net.Listener, error) {
 	addrSlice := strings.SplitN(addr, "://", 2)
 	if len(addrSlice) < 2 {
 		return nil, errors.Errorf("address %s does not contain proto, you meant unix://%s ?",
@@ -706,7 +706,7 @@ func getListener(addr string, uid, gid int, secDescriptor string, tlsConfig *tls
 	case "fd":
 		return listenFD(listenAddr, tlsConfig)
 	case "tcp":
-		l, err := net.Listen("tcp", listenAddr)
+		l, err := (&net.ListenConfig{}).Listen(ctx, "tcp", listenAddr)
 		if err != nil {
 			return nil, err
 		}
