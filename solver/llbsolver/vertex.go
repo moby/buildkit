@@ -334,7 +334,7 @@ func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEval
 		}
 		dgst := digest.FromBytes(dt)
 		if polEngine != nil {
-			if _, err := polEngine.Evaluate(ctx, pbop.GetSource()); err != nil {
+			if _, err := polEngine.Evaluate(ctx, &pbop); err != nil {
 				return solver.Edge{}, errors.Wrap(err, "error evaluating the source policy")
 			}
 		}

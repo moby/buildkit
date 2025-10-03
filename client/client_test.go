@@ -237,6 +237,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testRunValidExitCodes,
 	testFileOpSymlink,
 	testMetadataOnlyLocal,
+	testSourcePolicySession,
 }
 
 func TestIntegration(t *testing.T) {

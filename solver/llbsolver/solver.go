@@ -52,8 +52,9 @@ import (
 )
 
 const (
-	keyEntitlements = "llb.entitlements"
-	keySourcePolicy = "llb.sourcepolicy"
+	keyEntitlements        = "llb.entitlements"
+	keySourcePolicy        = "llb.sourcepolicy"
+	keySourcePolicySession = "llb.sourcepolicysession"
 )
 
 type ExporterRequest struct {
@@ -489,7 +490,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 	}, nil
 }
 
-func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement, post []Processor, internal bool, srcPol *spb.Policy) (_ *client.SolveResponse, err error) {
+func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement, post []Processor, internal bool, srcPol *spb.Policy, policySession string) (_ *client.SolveResponse, err error) {
 	j, err := s.solver.NewJob(id)
 	if err != nil {
 		return nil, err
@@ -534,6 +535,9 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 			return nil, err
 		}
 		j.SetValue(keySourcePolicy, srcPol)
+	}
+	if policySession != "" {
+		j.SetValue(keySourcePolicySession, policySession)
 	}
 
 	j.SessionID = sessionID
@@ -1247,4 +1251,22 @@ func loadSourcePolicy(b solver.Builder) (*spb.Policy, error) {
 		return nil, err
 	}
 	return &srcPol, nil
+}
+
+func loadSourcePolicySession(b solver.Builder) (string, error) {
+	var session string
+	err := b.EachValue(context.TODO(), keySourcePolicySession, func(v any) error {
+		x, ok := v.(string)
+		if !ok {
+			return errors.Errorf("invalid source policy session %T", v)
+		}
+		if x != "" {
+			session = x
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return session, nil
 }
