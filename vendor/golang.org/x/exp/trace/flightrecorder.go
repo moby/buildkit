@@ -4,6 +4,14 @@
 
 //go:build go1.22
 
+/*
+Package trace provides a mechanism to collect and retrive
+the most recent execution data without keeping the complete
+execution tracing history.
+
+The flight recorder was integrated into Go 1.25. The
+integrated flight recorder should be used when possible.
+*/
 package trace
 
 import (
@@ -15,11 +23,12 @@ import (
 	"math/bits"
 	"runtime/trace"
 	"slices"
-	"sync"
+	stdsync "sync"
 	"time"
 	_ "unsafe" // for go:linkname
 
-	"golang.org/x/exp/trace/internal/event/go122"
+	"golang.org/x/exp/trace/internal/tracev2"
+	"golang.org/x/exp/trace/internal/version"
 )
 
 // FlightRecorder represents a flight recording configuration.
@@ -32,17 +41,19 @@ type FlightRecorder struct {
 	err error
 
 	// State specific to the recorder.
-	header [16]byte
-	active rawGeneration
-	ringMu sync.Mutex
-	ring   []rawGeneration
+	header  [16]byte
+	active  rawGeneration
+	ringMu  stdsync.Mutex
+	ring    []rawGeneration
+	freq    frequency // timestamp conversion factor, from the runtime
+	version version.Version
 
 	// Externally-set options.
 	targetSize   int
 	targetPeriod time.Duration
 
-	enabled bool       // whether the flight recorder is enabled.
-	writing sync.Mutex // protects concurrent calls to WriteTo
+	enabled bool          // whether the flight recorder is enabled.
+	writing stdsync.Mutex // protects concurrent calls to WriteTo
 
 	// The values of targetSize and targetPeriod we've committed to since the last Start.
 	wantSize int
@@ -124,6 +135,9 @@ func (w *recorder) Write(p []byte) (n int, err error) {
 			return 0, fmt.Errorf("expected at least %d bytes in the first write", len(r.header))
 		}
 		rd.Read(r.header[:])
+		if r.version, err = version.ReadHeader(bytes.NewReader(r.header[:])); err != nil {
+			return len(p) - rd.Len(), fmt.Errorf("failed to parse version from header: %s", err)
+		}
 		w.headerReceived = true
 	}
 
@@ -136,6 +150,9 @@ func (w *recorder) Write(p []byte) (n int, err error) {
 	}
 	if err != nil {
 		return len(p) - rd.Len(), err
+	}
+	if b.isEndOfGeneration() {
+		gen = r.active.gen
 	}
 
 	// Check if we're entering a new generation.
@@ -179,27 +196,27 @@ func (w *recorder) Write(p []byte) (n int, err error) {
 	}
 
 	// Obtain the frequency if this is a frequency batch.
-	if b.isFreqBatch() {
-		freq, err := parseFreq(b)
-		if err != nil {
-			return len(p) - rd.Len(), err
-		}
-		r.active.freq = freq
+	if b.isSyncBatch(r.version) {
+		var s sync
+		setSyncBatch(&s, b, r.version)
+		r.active.freq = s.freq
 	}
 
 	// Append the batch to the current generation.
-	if r.active.gen == 0 {
-		r.active.gen = gen
+	if !b.isEndOfGeneration() {
+		if r.active.gen == 0 {
+			r.active.gen = gen
+		}
+		if r.active.minTime == 0 || r.active.minTime > b.time {
+			r.active.minTime = b.time
+		}
+		r.active.size += 1
+		r.active.size += uvarintSize(gen)
+		r.active.size += uvarintSize(uint64(b.m))
+		r.active.size += uvarintSize(uint64(b.time))
+		r.active.size += uvarintSize(uint64(len(b.data)))
+		r.active.size += len(b.data)
 	}
-	if r.active.minTime == 0 || r.active.minTime > b.time {
-		r.active.minTime = b.time
-	}
-	r.active.size += 1
-	r.active.size += uvarintSize(gen)
-	r.active.size += uvarintSize(uint64(b.m))
-	r.active.size += uvarintSize(uint64(b.time))
-	r.active.size += uvarintSize(uint64(len(b.data)))
-	r.active.size += len(b.data)
 	r.active.batches = append(r.active.batches, b)
 
 	return len(p) - rd.Len(), nil
@@ -277,6 +294,8 @@ func (r *FlightRecorder) WriteTo(w io.Writer) (total int, err error) {
 	//
 	// In a runtime-internal implementation this is a non-issue. The runtime is fully aware
 	// of what generations are complete, so only one flush is necessary.
+	//
+	// As of Go 1.25, it's not required to call runtime_traceAdvance twice.
 	runtime_traceAdvance(false)
 	runtime_traceAdvance(false)
 
@@ -308,23 +327,26 @@ func (r *FlightRecorder) WriteTo(w io.Writer) (total int, err error) {
 	// Write all the data.
 	for _, gen := range gens {
 		for _, batch := range gen.batches {
-			// Rewrite the batch header event with four arguments: gen, M ID, timestamp, and data length.
-			n, err := w.Write([]byte{byte(go122.EvEventBatch)})
-			total += n
-			if err != nil {
-				return total, err
-			}
-			if err := writeUvarint(gen.gen); err != nil {
-				return total, err
-			}
-			if err := writeUvarint(uint64(batch.m)); err != nil {
-				return total, err
-			}
-			if err := writeUvarint(uint64(batch.time)); err != nil {
-				return total, err
-			}
-			if err := writeUvarint(uint64(len(batch.data))); err != nil {
-				return total, err
+			var n int
+			if !batch.isEndOfGeneration() {
+				// Rewrite the batch header event with four arguments: gen, M ID, timestamp, and data length.
+				n, err := w.Write([]byte{byte(tracev2.EvEventBatch)})
+				total += n
+				if err != nil {
+					return total, err
+				}
+				if err := writeUvarint(gen.gen); err != nil {
+					return total, err
+				}
+				if err := writeUvarint(uint64(batch.m)); err != nil {
+					return total, err
+				}
+				if err := writeUvarint(uint64(batch.time)); err != nil {
+					return total, err
+				}
+				if err := writeUvarint(uint64(len(batch.data))); err != nil {
+					return total, err
+				}
 			}
 
 			// Write batch data.
