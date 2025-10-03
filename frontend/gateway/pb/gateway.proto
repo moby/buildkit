@@ -35,6 +35,11 @@ service LLBBridge {
 	rpc ReleaseContainer(ReleaseContainerRequest) returns (ReleaseContainerResponse);
 	rpc ExecProcess(stream ExecMessage) returns (stream ExecMessage);
 
+	// apicaps:CapGatewayExecFilesystem
+	rpc ReadFileContainer(ReadFileRequest) returns (ReadFileResponse);
+	rpc ReadDirContainer(ReadDirRequest) returns (ReadDirResponse);
+	rpc StatFileContainer(StatFileRequest) returns (StatFileResponse);
+
 	// apicaps:CapGatewayWarnings
 	rpc Warn(WarnRequest) returns (WarnResponse);
 }
