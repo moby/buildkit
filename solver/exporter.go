@@ -237,7 +237,7 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		for _, dep := range deps {
 			rec, err := dep.CacheKey.Exporter.ExportTo(ctx, t, opt)
 			if err != nil {
-				return nil, err
+				continue
 			}
 			for _, r := range rec {
 				srcs[i] = append(srcs[i], CacheLink{Src: r, Selector: string(dep.Selector)})
@@ -249,7 +249,7 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		for _, de := range e.edge.secondaryExporters {
 			recs, err := de.cacheKey.CacheKey.Exporter.ExportTo(mainCtx, t, opt)
 			if err != nil {
-				return nil, nil
+				continue
 			}
 			for _, r := range recs {
 				srcs[de.index] = append(srcs[de.index], CacheLink{Src: r, Selector: de.cacheKey.Selector.String()})
@@ -263,6 +263,14 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 			if err != nil {
 				return nil, err
 			}
+		}
+	}
+
+	// validate deps are present
+	for _, deps := range srcs {
+		if len(deps) == 0 {
+			res[e] = nil
+			return res[e], nil
 		}
 	}
 
