@@ -2945,7 +2945,7 @@ const file_github_com_moby_buildkit_frontend_gateway_pb_gateway_proto_rawDesc = 
 	"\x06Bundle\x10\x01*&\n" +
 	"\x11InTotoSubjectKind\x12\b\n" +
 	"\x04Self\x10\x00\x12\a\n" +
-	"\x03Raw\x10\x012\xbd\v\n" +
+	"\x03Raw\x10\x012\x84\x0e\n" +
 	"\tLLBBridge\x12\x81\x01\n" +
 	"\x12ResolveImageConfig\x124.moby.buildkit.v1.frontend.ResolveImageConfigRequest\x1a5.moby.buildkit.v1.frontend.ResolveImageConfigResponse\x12~\n" +
 	"\x11ResolveSourceMeta\x123.moby.buildkit.v1.frontend.ResolveSourceMetaRequest\x1a4.moby.buildkit.v1.frontend.ResolveSourceMetaResponse\x12Z\n" +
@@ -2959,7 +2959,10 @@ const file_github_com_moby_buildkit_frontend_gateway_pb_gateway_proto_rawDesc = 
 	"\x06Inputs\x12(.moby.buildkit.v1.frontend.InputsRequest\x1a).moby.buildkit.v1.frontend.InputsResponse\x12o\n" +
 	"\fNewContainer\x12..moby.buildkit.v1.frontend.NewContainerRequest\x1a/.moby.buildkit.v1.frontend.NewContainerResponse\x12{\n" +
 	"\x10ReleaseContainer\x122.moby.buildkit.v1.frontend.ReleaseContainerRequest\x1a3.moby.buildkit.v1.frontend.ReleaseContainerResponse\x12a\n" +
-	"\vExecProcess\x12&.moby.buildkit.v1.frontend.ExecMessage\x1a&.moby.buildkit.v1.frontend.ExecMessage(\x010\x01\x12W\n" +
+	"\vExecProcess\x12&.moby.buildkit.v1.frontend.ExecMessage\x1a&.moby.buildkit.v1.frontend.ExecMessage(\x010\x01\x12l\n" +
+	"\x11ReadFileContainer\x12*.moby.buildkit.v1.frontend.ReadFileRequest\x1a+.moby.buildkit.v1.frontend.ReadFileResponse\x12i\n" +
+	"\x10ReadDirContainer\x12).moby.buildkit.v1.frontend.ReadDirRequest\x1a*.moby.buildkit.v1.frontend.ReadDirResponse\x12l\n" +
+	"\x11StatFileContainer\x12*.moby.buildkit.v1.frontend.StatFileRequest\x1a+.moby.buildkit.v1.frontend.StatFileResponse\x12W\n" +
 	"\x04Warn\x12&.moby.buildkit.v1.frontend.WarnRequest\x1a'.moby.buildkit.v1.frontend.WarnResponseBHZFgithub.com/moby/buildkit/frontend/gateway/pb;moby_buildkit_v1_frontendb\x06proto3"
 
 var (
@@ -3123,23 +3126,29 @@ var file_github_com_moby_buildkit_frontend_gateway_pb_gateway_proto_depIdxs = []
 	34, // 69: moby.buildkit.v1.frontend.LLBBridge.NewContainer:input_type -> moby.buildkit.v1.frontend.NewContainerRequest
 	36, // 70: moby.buildkit.v1.frontend.LLBBridge.ReleaseContainer:input_type -> moby.buildkit.v1.frontend.ReleaseContainerRequest
 	38, // 71: moby.buildkit.v1.frontend.LLBBridge.ExecProcess:input_type -> moby.buildkit.v1.frontend.ExecMessage
-	32, // 72: moby.buildkit.v1.frontend.LLBBridge.Warn:input_type -> moby.buildkit.v1.frontend.WarnRequest
-	14, // 73: moby.buildkit.v1.frontend.LLBBridge.ResolveImageConfig:output_type -> moby.buildkit.v1.frontend.ResolveImageConfigResponse
-	16, // 74: moby.buildkit.v1.frontend.LLBBridge.ResolveSourceMeta:output_type -> moby.buildkit.v1.frontend.ResolveSourceMetaResponse
-	20, // 75: moby.buildkit.v1.frontend.LLBBridge.Solve:output_type -> moby.buildkit.v1.frontend.SolveResponse
-	23, // 76: moby.buildkit.v1.frontend.LLBBridge.ReadFile:output_type -> moby.buildkit.v1.frontend.ReadFileResponse
-	25, // 77: moby.buildkit.v1.frontend.LLBBridge.ReadDir:output_type -> moby.buildkit.v1.frontend.ReadDirResponse
-	27, // 78: moby.buildkit.v1.frontend.LLBBridge.StatFile:output_type -> moby.buildkit.v1.frontend.StatFileResponse
-	29, // 79: moby.buildkit.v1.frontend.LLBBridge.Evaluate:output_type -> moby.buildkit.v1.frontend.EvaluateResponse
-	31, // 80: moby.buildkit.v1.frontend.LLBBridge.Ping:output_type -> moby.buildkit.v1.frontend.PongResponse
-	10, // 81: moby.buildkit.v1.frontend.LLBBridge.Return:output_type -> moby.buildkit.v1.frontend.ReturnResponse
-	12, // 82: moby.buildkit.v1.frontend.LLBBridge.Inputs:output_type -> moby.buildkit.v1.frontend.InputsResponse
-	35, // 83: moby.buildkit.v1.frontend.LLBBridge.NewContainer:output_type -> moby.buildkit.v1.frontend.NewContainerResponse
-	37, // 84: moby.buildkit.v1.frontend.LLBBridge.ReleaseContainer:output_type -> moby.buildkit.v1.frontend.ReleaseContainerResponse
-	38, // 85: moby.buildkit.v1.frontend.LLBBridge.ExecProcess:output_type -> moby.buildkit.v1.frontend.ExecMessage
-	33, // 86: moby.buildkit.v1.frontend.LLBBridge.Warn:output_type -> moby.buildkit.v1.frontend.WarnResponse
-	73, // [73:87] is the sub-list for method output_type
-	59, // [59:73] is the sub-list for method input_type
+	21, // 72: moby.buildkit.v1.frontend.LLBBridge.ReadFileContainer:input_type -> moby.buildkit.v1.frontend.ReadFileRequest
+	24, // 73: moby.buildkit.v1.frontend.LLBBridge.ReadDirContainer:input_type -> moby.buildkit.v1.frontend.ReadDirRequest
+	26, // 74: moby.buildkit.v1.frontend.LLBBridge.StatFileContainer:input_type -> moby.buildkit.v1.frontend.StatFileRequest
+	32, // 75: moby.buildkit.v1.frontend.LLBBridge.Warn:input_type -> moby.buildkit.v1.frontend.WarnRequest
+	14, // 76: moby.buildkit.v1.frontend.LLBBridge.ResolveImageConfig:output_type -> moby.buildkit.v1.frontend.ResolveImageConfigResponse
+	16, // 77: moby.buildkit.v1.frontend.LLBBridge.ResolveSourceMeta:output_type -> moby.buildkit.v1.frontend.ResolveSourceMetaResponse
+	20, // 78: moby.buildkit.v1.frontend.LLBBridge.Solve:output_type -> moby.buildkit.v1.frontend.SolveResponse
+	23, // 79: moby.buildkit.v1.frontend.LLBBridge.ReadFile:output_type -> moby.buildkit.v1.frontend.ReadFileResponse
+	25, // 80: moby.buildkit.v1.frontend.LLBBridge.ReadDir:output_type -> moby.buildkit.v1.frontend.ReadDirResponse
+	27, // 81: moby.buildkit.v1.frontend.LLBBridge.StatFile:output_type -> moby.buildkit.v1.frontend.StatFileResponse
+	29, // 82: moby.buildkit.v1.frontend.LLBBridge.Evaluate:output_type -> moby.buildkit.v1.frontend.EvaluateResponse
+	31, // 83: moby.buildkit.v1.frontend.LLBBridge.Ping:output_type -> moby.buildkit.v1.frontend.PongResponse
+	10, // 84: moby.buildkit.v1.frontend.LLBBridge.Return:output_type -> moby.buildkit.v1.frontend.ReturnResponse
+	12, // 85: moby.buildkit.v1.frontend.LLBBridge.Inputs:output_type -> moby.buildkit.v1.frontend.InputsResponse
+	35, // 86: moby.buildkit.v1.frontend.LLBBridge.NewContainer:output_type -> moby.buildkit.v1.frontend.NewContainerResponse
+	37, // 87: moby.buildkit.v1.frontend.LLBBridge.ReleaseContainer:output_type -> moby.buildkit.v1.frontend.ReleaseContainerResponse
+	38, // 88: moby.buildkit.v1.frontend.LLBBridge.ExecProcess:output_type -> moby.buildkit.v1.frontend.ExecMessage
+	23, // 89: moby.buildkit.v1.frontend.LLBBridge.ReadFileContainer:output_type -> moby.buildkit.v1.frontend.ReadFileResponse
+	25, // 90: moby.buildkit.v1.frontend.LLBBridge.ReadDirContainer:output_type -> moby.buildkit.v1.frontend.ReadDirResponse
+	27, // 91: moby.buildkit.v1.frontend.LLBBridge.StatFileContainer:output_type -> moby.buildkit.v1.frontend.StatFileResponse
+	33, // 92: moby.buildkit.v1.frontend.LLBBridge.Warn:output_type -> moby.buildkit.v1.frontend.WarnResponse
+	76, // [76:93] is the sub-list for method output_type
+	59, // [59:76] is the sub-list for method input_type
 	59, // [59:59] is the sub-list for extension type_name
 	59, // [59:59] is the sub-list for extension extendee
 	0,  // [0:59] is the sub-list for field type_name

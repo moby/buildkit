@@ -66,6 +66,7 @@ type Mount struct {
 type Container interface {
 	Start(context.Context, StartRequest) (ContainerProcess, error)
 	Release(context.Context) error
+	MountReference
 }
 
 // StartRequest encapsulates the arguments to define a process within a
@@ -101,6 +102,10 @@ type ContainerProcess interface {
 type Reference interface {
 	ToState() (llb.State, error)
 	Evaluate(ctx context.Context) error
+	MountReference
+}
+
+type MountReference interface {
 	ReadFile(ctx context.Context, req ReadRequest) ([]byte, error)
 	StatFile(ctx context.Context, req StatRequest) (*fstypes.Stat, error)
 	ReadDir(ctx context.Context, req ReadDirRequest) ([]*fstypes.Stat, error)
