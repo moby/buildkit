@@ -32,7 +32,7 @@ buildAttestFlags() {
     if [ "$GITHUB_ACTIONS" = "true" ]; then
       prvattrs="$prvattrs,builder-id=https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
     fi
-    echo "--attest=type=sbom --attest=type=provenance,$prvattrs"
+    echo "--attest=type=sbom --attest=type=provenance,version=v1,$prvattrs"
   fi
 }
 
