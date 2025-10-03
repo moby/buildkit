@@ -11,6 +11,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/pkg/labels"
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/buildkit/cache/remotecache"
 	v1 "github.com/moby/buildkit/cache/remotecache/v1"
 	"github.com/moby/buildkit/session"
@@ -214,7 +215,7 @@ type ciProvider struct {
 
 func (p *ciProvider) Info(ctx context.Context, dgst digest.Digest) (content.Info, error) {
 	if dgst != p.desc.Digest {
-		return content.Info{}, errors.Errorf("content not found %s", dgst)
+		return content.Info{}, errors.Wrapf(cerrdefs.ErrNotFound, "blob %s", dgst)
 	}
 
 	if p.checked {
@@ -234,7 +235,7 @@ func (p *ciProvider) Info(ctx context.Context, dgst digest.Digest) (content.Info
 	}
 
 	if !exists {
-		return content.Info{}, errors.Errorf("blob %s not found", dgst)
+		return content.Info{}, errors.Wrapf(cerrdefs.ErrNotFound, "blob %s", dgst)
 	}
 
 	p.checked = true

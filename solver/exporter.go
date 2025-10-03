@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 
+	cerrdefs "github.com/containerd/errdefs"
 	digest "github.com/opencontainers/go-digest"
 )
 
@@ -189,24 +190,28 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		if (remote == nil || opt.CompressionOpt != nil) && opt.Mode != CacheExportModeRemoteOnly {
 			res, err := cm.results.Load(ctx, res)
 			if err != nil {
-				return nil, err
-			}
-			remotes, err := opt.ResolveRemotes(ctx, res)
-			if err != nil {
-				return nil, err
-			}
-			res.Release(context.TODO())
-			if remote == nil && len(remotes) > 0 {
-				remote, remotes = remotes[0], remotes[1:] // pop the first element
-			}
-			if opt.CompressionOpt != nil {
-				for _, r := range remotes { // record all remaining remotes as well
-					results = append(results, CacheExportResult{
-						CreatedAt:  v.CreatedAt,
-						Result:     r,
-						EdgeVertex: k.vtx,
-						EdgeIndex:  k.output,
-					})
+				if !errors.Is(err, cerrdefs.ErrNotFound) {
+					return nil, err
+				}
+				remote = nil
+			} else {
+				remotes, err := opt.ResolveRemotes(ctx, res)
+				if err != nil {
+					return nil, err
+				}
+				res.Release(context.TODO())
+				if remote == nil && len(remotes) > 0 {
+					remote, remotes = remotes[0], remotes[1:] // pop the first element
+				}
+				if opt.CompressionOpt != nil {
+					for _, r := range remotes { // record all remaining remotes as well
+						results = append(results, CacheExportResult{
+							CreatedAt:  v.CreatedAt,
+							Result:     r,
+							EdgeVertex: k.vtx,
+							EdgeIndex:  k.output,
+						})
+					}
 				}
 			}
 		}
