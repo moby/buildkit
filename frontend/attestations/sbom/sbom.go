@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
+	"runtime"
 	"strings"
 
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
@@ -84,7 +85,9 @@ func CreateSBOMScanner(ctx context.Context, resolver sourceresolver.MetaResolver
 		}
 
 		runscan := llb.Image(scanner).Run(runOpts...)
-		runscan.AddMount("/tmp", llb.Scratch(), llb.Tmpfs())
+		if runtime.GOOS != "windows" {
+			runscan.AddMount("/tmp", llb.Scratch(), llb.Tmpfs())
+		}
 
 		runscan.AddMount(path.Join(srcDir, "core", CoreSBOMName), ref, llb.Readonly)
 		for k, extra := range extras {
