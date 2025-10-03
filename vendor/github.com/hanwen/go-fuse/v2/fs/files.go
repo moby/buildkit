@@ -8,9 +8,11 @@ import (
 	"context"
 	"sync"
 	"syscall"
+	"unsafe"
 
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"github.com/hanwen/go-fuse/v2/internal/fallocate"
+	"github.com/hanwen/go-fuse/v2/internal/ioctl"
 	"golang.org/x/sys/unix"
 )
 
@@ -256,4 +258,20 @@ func (f *loopbackFile) Allocate(ctx context.Context, off uint64, sz uint64, mode
 		return ToErrno(err)
 	}
 	return OK
+}
+
+func (f *loopbackFile) Ioctl(ctx context.Context, cmd uint32, arg uint64, input []byte, output []byte) (result int32, errno syscall.Errno) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	argWord := uintptr(arg)
+	ioc := ioctl.Command(cmd)
+	if ioc.Read() {
+		argWord = uintptr(unsafe.Pointer(&input[0]))
+	} else if ioc.Write() {
+		argWord = uintptr(unsafe.Pointer(&output[0]))
+	}
+
+	res, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(f.fd), uintptr(cmd), argWord)
+	return int32(res), errno
 }

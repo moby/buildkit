@@ -42,7 +42,8 @@ func (d *DirEntry) Parse(buf []byte) int {
 	// when that happens in the race detector, it causes a panic
 	// "converted pointer straddles multiple allocations"
 	de := (*dirent)(unsafe.Pointer(&buf[0]))
-	nameBytes := buf[unsafe.Offsetof(dirent{}.Name):de.Reclen]
+	off := unsafe.Offsetof(dirent{}.Name)
+	nameBytes := buf[off : off+uintptr(de.nameLength())]
 	n := de.Reclen
 
 	l := bytes.IndexByte(nameBytes, 0)

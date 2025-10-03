@@ -44,7 +44,7 @@ func NewTTLCache(ttl time.Duration) *TTLCache {
 // Get retrieves the specified object from the cache and increments the reference counter of the
 // target content. Client must call `done` callback to decrease the reference count when the value
 // will no longer be used.
-func (c *TTLCache) Get(key string) (value interface{}, done func(), ok bool) {
+func (c *TTLCache) Get(key string) (value interface{}, done func(bool), ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	rc, ok := c.m[key]
@@ -59,7 +59,7 @@ func (c *TTLCache) Get(key string) (value interface{}, done func(), ok bool) {
 // If the specified content already exists in the cache, this sets `added` to false and returns
 // "already cached" content (i.e. doesn't replace the content with the new one). Client must call
 // `done` callback to decrease the counter when the value will no longer be used.
-func (c *TTLCache) Add(key string, value interface{}) (cachedValue interface{}, done func(), added bool) {
+func (c *TTLCache) Add(key string, value interface{}) (cachedValue interface{}, done func(bool), added bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if rc, ok := c.m[key]; ok {
@@ -100,12 +100,20 @@ func (c *TTLCache) evictLocked(key string) {
 	}
 }
 
-func (c *TTLCache) decreaseOnceFunc(rc *refCounterWithTimer) func() {
+func (c *TTLCache) decreaseOnceFunc(rc *refCounterWithTimer) func(bool) {
 	var once sync.Once
-	return func() {
+	return func(evict bool) {
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		once.Do(func() { rc.dec() })
+		if evict {
+			rc.t.Stop()
+			rc.finalize()
+			key := rc.key
+			if cachedRc, ok := c.m[key]; ok && cachedRc == rc {
+				delete(c.m, key)
+			}
+		}
 	}
 }
 
