@@ -105,7 +105,7 @@ func (f *fileOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 			markInvalid(action.Input)
 			processOwner(p.Owner, selectors)
 			if action.SecondaryInput != -1 && int(action.SecondaryInput) < f.numInputs {
-				addSelector(selectors, int(action.SecondaryInput), p.Src, p.AllowWildcard, p.FollowSymlink, p.IncludePatterns, p.ExcludePatterns)
+				addSelector(selectors, int(action.SecondaryInput), p.Src, p.AllowWildcard, p.FollowSymlink, p.IncludePatterns, p.ExcludePatterns, p.RequiredPaths)
 				p.Src = path.Base(p.Src)
 			}
 			dt, err = json.Marshal(p)
@@ -215,13 +215,14 @@ func (f *fileOp) Acquire(ctx context.Context) (solver.ReleaseFunc, error) {
 	}, nil
 }
 
-func addSelector(m map[int][]opsutils.Selector, idx int, sel string, wildcard, followLinks bool, includePatterns, excludePatterns []string) {
+func addSelector(m map[int][]opsutils.Selector, idx int, sel string, wildcard, followLinks bool, includePatterns, excludePatterns, requiredPaths []string) {
 	s := opsutils.Selector{
 		Path:            sel,
 		FollowLinks:     followLinks,
 		Wildcard:        wildcard && containsWildcards(sel),
 		IncludePatterns: includePatterns,
 		ExcludePatterns: excludePatterns,
+		RequiredPaths:   requiredPaths,
 	}
 
 	m[idx] = append(m[idx], s)
@@ -284,7 +285,7 @@ func processOwner(chopt *pb.ChownOpt, selectors map[int][]opsutils.Selector) err
 			if u.ByName.Input < 0 {
 				return errors.Errorf("invalid user index %d", u.ByName.Input)
 			}
-			addSelector(selectors, int(u.ByName.Input), "/etc/passwd", false, true, nil, nil)
+			addSelector(selectors, int(u.ByName.Input), "/etc/passwd", false, true, nil, nil, nil)
 		}
 	}
 	if chopt.Group != nil {
@@ -292,7 +293,7 @@ func processOwner(chopt *pb.ChownOpt, selectors map[int][]opsutils.Selector) err
 			if u.ByName.Input < 0 {
 				return errors.Errorf("invalid user index %d", u.ByName.Input)
 			}
-			addSelector(selectors, int(u.ByName.Input), "/etc/group", false, true, nil, nil)
+			addSelector(selectors, int(u.ByName.Input), "/etc/group", false, true, nil, nil, nil)
 		}
 	}
 	return nil
