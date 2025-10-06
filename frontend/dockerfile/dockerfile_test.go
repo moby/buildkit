@@ -10349,7 +10349,7 @@ hello
 EOF
 `, target), fmt.Sprintf(`
 FROM %s
-COPY <<EOF C:\other
+COPY <<EOF C:/other
 hello
 EOF
 `, target)))
