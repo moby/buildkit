@@ -14,6 +14,7 @@ import (
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/buildkit/cache/remotecache"
 	v1 "github.com/moby/buildkit/cache/remotecache/v1"
+	cacheimporttypes "github.com/moby/buildkit/cache/remotecache/v1/types"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/bklog"
@@ -118,7 +119,7 @@ func (ci *importer) loadManifest(ctx context.Context, name string) (*v1.CacheCha
 
 	bklog.G(ctx).Debugf("imported config: %s", string(bytes))
 
-	var config v1.CacheConfig
+	var config cacheimporttypes.CacheConfig
 	if err := json.Unmarshal(bytes, &config); err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -142,7 +143,7 @@ func (ci *importer) loadManifest(ctx context.Context, name string) (*v1.CacheCha
 	return cc, nil
 }
 
-func (ci *importer) makeDescriptorProviderPair(l v1.CacheLayer) (*v1.DescriptorProviderPair, error) {
+func (ci *importer) makeDescriptorProviderPair(l cacheimporttypes.CacheLayer) (*v1.DescriptorProviderPair, error) {
 	if l.Annotations == nil {
 		return nil, errors.Errorf("cache layer with missing annotations")
 	}

@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	v1 "github.com/moby/buildkit/cache/remotecache/v1"
+	cacheimporttypes "github.com/moby/buildkit/cache/remotecache/v1/types"
 	"github.com/tonistiigi/fsutil"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/status"
@@ -6052,7 +6052,7 @@ COPY --from=base unique /
 	require.NoError(t, err)
 
 	require.Equal(t, ocispecs.MediaTypeImageManifest, img.Manifest.MediaType)
-	require.Equal(t, v1.CacheConfigMediaTypeV0, img.Manifest.Config.MediaType)
+	require.Equal(t, cacheimporttypes.CacheConfigMediaTypeV0, img.Manifest.Config.MediaType)
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "const"))
 	require.NoError(t, err)

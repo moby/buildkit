@@ -1,4 +1,4 @@
-package cacheimport
+package cacheimporttypes
 
 import (
 	"time"
