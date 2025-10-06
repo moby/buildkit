@@ -531,7 +531,7 @@ func prepareValueMatrix(tc testConf) []matrixValue {
 }
 
 // Skips tests on platform
-func SkipOnPlatform(t *testing.T, goos string) {
+func SkipOnPlatform(t *testing.T, goos string, reason ...string) {
 	skip := false
 	// support for negation
 	if after, ok := strings.CutPrefix(goos, "!"); ok {
@@ -542,7 +542,11 @@ func SkipOnPlatform(t *testing.T, goos string) {
 	}
 
 	if skip {
-		t.Skipf("Skipped on %s", goos)
+		if len(reason) > 0 {
+			t.Skipf("Skipped on %s: %s", goos, strings.Join(reason, " "))
+		} else {
+			t.Skipf("Skipped on %s", goos)
+		}
 	}
 }
 

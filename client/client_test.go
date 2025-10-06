@@ -257,7 +257,6 @@ func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sa
 	mirroredImagesUnix["tonistiigi/test:nolayers"] = "docker.io/tonistiigi/test:nolayers"
 	mirroredImagesUnix["cpuguy83/buildkit-foreign:latest"] = "docker.io/cpuguy83/buildkit-foreign:latest"
 	mirroredImagesWin := integration.OfficialImages("nanoserver:latest", "nanoserver:plus")
-	mirroredImagesWin["cpuguy83/buildkit-foreign:latest"] = "docker.io/cpuguy83/buildkit-foreign:latest"
 
 	mirroredImages := integration.UnixOrWindows(mirroredImagesUnix, mirroredImagesWin)
 	mirrors := integration.WithMirroredImages(mirroredImages)
@@ -2632,9 +2631,9 @@ func testOCILayoutSource(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, []byte("second"+newLine), dt)
 }
 
-// This test passed locally on windows, but failed on github action
+// TODO: Re-enable the skipped test on Windows (see issue #6296)
 func testSessionExporter(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureOCILayout)
 	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
@@ -4509,15 +4508,11 @@ func testSourceDateEpochImageExporter(t *testing.T, sb integration.Sandbox) {
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 
-	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
-	busybox := llb.Image(imgName)
-	st := integration.UnixOrWindows(
-		llb.Scratch(),
-		llb.Image(imgName),
-	)
+	baseImg := llb.Image(integration.UnixOrWindows("busybox:latest", "nanoserver:latest"))
+	st := integration.UnixOrWindows(llb.Scratch(), baseImg)
 
 	run := func(cmd string) {
-		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+		st = baseImg.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
 	}
 
 	cmdPrefix := integration.UnixOrWindows(
@@ -6135,9 +6130,9 @@ func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 }
 
-// This test passed locally on windows, but failed on github action
+// TODO: Re-enable the skipped test on Windows (see issue #6296)
 func testZstdLocalCacheExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport, workers.FeatureCacheBackendLocal)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -6428,9 +6423,9 @@ func testImageManifestRegistryCacheImportExport(t *testing.T, sb integration.San
 	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
 }
 
-// This test passed locally on windows, but failed on github action
+// TODO: Re-enable the skipped test on Windows (see issue #6296)
 func testZstdRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureCacheExport,
@@ -11182,8 +11177,8 @@ func testMultipleCacheExports(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	ensureFileContents(t, filepath.Join(destDir, "const"), "foobar")
-	ensureFileContents(t, filepath.Join(destDir, "unique"), strings.TrimSpace(string(uniqueFile)))
+	ensureFileContents(t, filepath.Join(destDir, "const"), integration.UnixOrWindows("foobar", "foobar \r\n"))
+	ensureFileContents(t, filepath.Join(destDir, "unique"), string(uniqueFile))
 }
 
 func testMountStubsDirectory(t *testing.T, sb integration.Sandbox) {
@@ -11530,9 +11525,9 @@ func ensureFile(t *testing.T, path string) {
 func ensureFileContents(t *testing.T, path, expectedContents string) {
 	contents, err := os.ReadFile(path)
 	require.NoError(t, err)
-	// Handle Windows line endings
-	actualContents := strings.TrimSpace(string(contents))
-	require.Equal(t, expectedContents, actualContents)
+
+	actualContents := string(contents)
+	require.Equal(t, expectedContents, actualContents, "file contents mismatch for %s\nexpected: %q\nactual: %q", path, expectedContents, actualContents)
 }
 
 func makeSSHAgentSock(t *testing.T, agent agent.Agent) (p string, err error) {

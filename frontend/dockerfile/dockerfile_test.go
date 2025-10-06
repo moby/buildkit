@@ -5468,9 +5468,9 @@ COPY --from=child /step* /
 	require.NoError(t, err)
 }
 
-// This test passed locally on windows, but failed on github action
+// TODO: Re-enable the skipped test on Windows (see issue #6296)
 func testOnBuildNamedContext(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureOCILayout)
 	// create an image with onbuild that relies on "otherstage" when imported
 	ctx := sb.Context()
@@ -5588,16 +5588,13 @@ func testOnBuildNamedContext(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	// On Windows, echo adds \r\n line ending, on Unix it's just the content
-	if runtime.GOOS == "windows" {
-		require.Equal(t, []byte("hello\r\n"), dt)
-	} else {
-		require.Equal(t, []byte("hello"), dt)
-	}
+	expected := integration.UnixOrWindows([]byte("hello"), []byte("hello\r\n"))
+	require.Equal(t, expected, dt)
 }
 
-// This test passed locally on windows, but failed on github action
+// TODO: Re-enable the skipped test on Windows (see issue #6296)
 func testOnBuildInheritedStageRun(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	f := getFrontend(t, sb)
 
@@ -5648,16 +5645,13 @@ COPY --from=mid C:\\out\\bar /bar
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "bar"))
 	require.NoError(t, err)
-	if runtime.GOOS == "windows" {
-		require.Equal(t, "11\r\n", string(dt))
-	} else {
-		require.Equal(t, "11", string(dt))
-	}
+	expected := integration.UnixOrWindows("11", "11\r\n")
+	require.Equal(t, expected, string(dt))
 }
 
-// This test passed locally on windows, but failed on github action
+// TODO: Re-enable the skipped test on Windows (see issue #6296)
 func testOnBuildInheritedStageWithFrom(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	f := getFrontend(t, sb)
 
@@ -5714,11 +5708,8 @@ COPY --from=mid C:\out\bar /bar
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "bar"))
 	require.NoError(t, err)
-	if runtime.GOOS == "windows" {
-		require.Equal(t, "12\r\n", string(dt))
-	} else {
-		require.Equal(t, "12", string(dt))
-	}
+	expected := integration.UnixOrWindows("12", "12\r\n")
+	require.Equal(t, expected, string(dt))
 }
 
 func testOnBuildNewDeps(t *testing.T, sb integration.Sandbox) {
@@ -5869,9 +5860,9 @@ ONBUILD RUN --mount=type=bind,target=/in,from=inputstage mkdir /out && cat /in/f
 	require.Equal(t, "bar3", string(dt))
 }
 
-// This test passed locally on windows, but failed on github action
+// TODO: Re-enable the skipped test on Windows (see issue #6296)
 func testOnBuildWithCacheMount(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	f := getFrontend(t, sb)
 
@@ -6068,9 +6059,9 @@ COPY --from=base arch /
 	}
 }
 
-// This test passed locally on windows, but failed on github action
+// TODO: Re-enable the skipped test on Windows (see issue #6296)
 func testImageManifestCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport, workers.FeatureCacheBackendLocal)
 	f := getFrontend(t, sb)
 
@@ -6180,9 +6171,9 @@ COPY --from=base unique C:/
 	require.Equal(t, string(dt), string(dt2))
 }
 
-// This test passed locally on windows, but failed on github action
+// TODO: Re-enable the skipped test on Windows (see issue #6296)
 func testCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport, workers.FeatureCacheBackendLocal)
 	f := getFrontend(t, sb)
 
@@ -6355,9 +6346,9 @@ RUN echo bar > bar
 	require.Equal(t, img.Target, img2.Target)
 }
 
-// This test passed locally on windows, but failed on github action
+// TODO: Re-enable the skipped test on Windows (see issue #6296)
 func testImportExportReproducibleIDs(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 	cdAddress := sb.ContainerdAddress()
 	if cdAddress == "" {
 		t.Skip("test requires containerd worker")
@@ -6448,9 +6439,9 @@ RUN echo bar > bar
 	require.Equal(t, img.Target, img2.Target)
 }
 
-// This test passed locally on windows, but failed on github action
+// TODO: Re-enable the skipped test on Windows (see issue #6296)
 func testNoCache(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 	f := getFrontend(t, sb)
 
 	dockerfile := integration.UnixOrWindows([]byte(`
@@ -7474,47 +7465,35 @@ func testStepNames(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	dockerfile := integration.UnixOrWindows(
-		func() []byte {
-			return []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM busybox AS base
 WORKDIR /out
 RUN echo "base" > base
 FROM scratch
 COPY --from=base --chmod=0644 /out /out
-`)
-		},
-		func() []byte {
-			return []byte(`
+`,
+		`
 FROM nanoserver:latest AS base
 WORKDIR /out
 RUN echo base > base
 FROM nanoserver:latest
 COPY --from=base --chmod=0644 /out /out
-`)
-		},
-	)()
+`,
+	))
 
 	expectedRunStep := integration.UnixOrWindows(
-		func() string {
-			return `[base 3/3] RUN echo "base" > base`
-		},
-		func() string {
-			return `[base 3/3] RUN echo base > base`
-		},
-	)()
+		`[base 3/3] RUN echo "base" > base`,
+		`[base 3/3] RUN echo base > base`,
+	)
 
 	// Step numbering differs between platforms due to base image characteristics:
 	// - Unix uses 'scratch' (empty image) so COPY is step 1/1
 	// - Windows uses 'nanoserver' (full image) which has internal setup steps, making COPY step 2/2
 	expectedCopyStep := integration.UnixOrWindows(
-		func() string {
-			return `[stage-1 1/1] COPY --from=base --chmod=0644 /out /out`
-		},
-		func() string {
-			return `[stage-1 2/2] COPY --from=base --chmod=0644 /out /out`
-		},
-	)()
+		`[stage-1 1/1] COPY --from=base --chmod=0644 /out /out`,
+		`[stage-1 2/2] COPY --from=base --chmod=0644 /out /out`,
+	)
 
 	dir := integration.Tmpdir(
 		t,
@@ -7819,9 +7798,9 @@ func testNamedImageContextPlatform(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 }
 
-// This test passed locally on windows, but failed on github action
+// TODO: Re-enable the skipped test on Windows (see issue #6296)
 func testNamedImageContextTimestamps(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	ctx := sb.Context()
 
@@ -7837,20 +7816,16 @@ func testNamedImageContextTimestamps(t *testing.T, sb integration.Sandbox) {
 
 	f := getFrontend(t, sb)
 
-	dockerfile := integration.UnixOrWindows(
-		func() []byte {
-			return []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM alpine
 RUN echo foo >> /test
-`)
-		},
-		func() []byte {
-			return []byte(`
+`,
+		`
 FROM nanoserver:latest
 RUN echo foo >> C:\test
-`)
-		},
-	)()
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -7880,20 +7855,16 @@ RUN echo foo >> C:\test
 	img, err := testutil.ReadImage(sb.Context(), provider, desc)
 	require.NoError(t, err)
 
-	dockerfileDerived := integration.UnixOrWindows(
-		func() []byte {
-			return []byte(`
+	dockerfileDerived := []byte(integration.UnixOrWindows(
+		`
 FROM alpine
 RUN echo foo >> /test
-`)
-		},
-		func() []byte {
-			return []byte(`
+`,
+		`
 FROM nanoserver
 RUN echo foo >> C:\test
-`)
-		},
-	)()
+`,
+	))
 
 	dirDerived := integration.Tmpdir(
 		t,
@@ -7902,14 +7873,7 @@ RUN echo foo >> C:\test
 
 	targetDerived := registry + "/buildkit/testnamedimagecontexttimestampsderived:latest"
 
-	contextName := integration.UnixOrWindows(
-		func() string {
-			return "alpine"
-		},
-		func() string {
-			return "nanoserver"
-		},
-	)()
+	contextName := integration.UnixOrWindows("alpine", "nanoserver")
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
@@ -8430,55 +8394,47 @@ FROM nonexistent AS base
 	require.Contains(t, cfg.Config.Env, "foo=bar")
 }
 
-// This test passed locally on windows, but failed on github action
+// TODO: Re-enable the skipped test on Windows (see issue #6296)
 func testNamedInputContext(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	dockerfile := integration.UnixOrWindows(
-		func() []byte {
-			return []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM alpine
 ENV FOO=bar
 RUN echo first > /out
-`)
-		},
-		func() []byte {
-			return []byte(`
+`,
+		`
 FROM nanoserver:latest
 ENV FOO=bar
 RUN echo first>C:\out
-`)
-		},
-	)()
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 
-	dockerfile2 := integration.UnixOrWindows(
-		func() []byte {
-			return []byte(`
+	dockerfile2 := []byte(integration.UnixOrWindows(
+		`
 FROM base AS build
 RUN echo "foo is $FOO" > /foo
 FROM scratch
 COPY --from=build /foo /out /
-`)
-		},
-		func() []byte {
-			return []byte(`
+`,
+		`
 FROM base AS build
 RUN echo foo is %FOO%>C:\foo
 FROM nanoserver:latest
 COPY --from=build C:\foo C:\out .
-`)
-		},
-	)()
+`,
+	))
 
 	dir2 := integration.Tmpdir(
 		t,
@@ -8556,10 +8512,8 @@ COPY --from=build C:\foo C:\out .
 	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
 
-	expectedOutContent := integration.UnixOrWindows(
-		func() string { return "first\n" },
-		func() string { return "first\r\n" },
-	)()
+	expectedOutContent := integration.UnixOrWindows("first\n", "first\r\n")
+
 	require.Equal(t, expectedOutContent, string(dt))
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "foo"))
@@ -9846,21 +9800,14 @@ COPY foo C:/foo
 	)
 
 	// choose target platform that is different from the current platform
-	var targetPlatform string
-	var expectedCurrentPlatform string
-	if runtime.GOOS == "windows" {
-		// For Windows, we need to create a real platform mismatch
-		// We'll build for one platform and expect another to trigger the warning
-		targetPlatform = "windows/amd64"
-		expectedCurrentPlatform = "windows/arm64" // Force different expected platform
-	} else {
-		// Linux: use different architecture
-		targetPlatform = runtime.GOOS + "/arm64"
-		expectedCurrentPlatform = runtime.GOOS + "/" + runtime.GOARCH
-		if runtime.GOARCH == "arm64" {
-			targetPlatform = runtime.GOOS + "/amd64"
-		}
-	}
+	targetPlatform := integration.UnixOrWindows(
+		runtime.GOOS+"/"+map[bool]string{true: "amd64", false: "arm64"}[runtime.GOARCH == "arm64"],
+		"windows/amd64",
+	)
+	expectedCurrentPlatform := integration.UnixOrWindows(
+		runtime.GOOS+"/"+runtime.GOARCH,
+		"windows/arm64", // Force different expected platform
+	)
 
 	target := registry + "/buildkit/testbaseimageplatform:latest"
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
@@ -10349,7 +10296,7 @@ hello
 EOF
 `, target), fmt.Sprintf(`
 FROM %s
-COPY <<EOF C:\other
+COPY <<EOF C:/other
 hello
 EOF
 `, target)))
