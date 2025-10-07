@@ -186,7 +186,7 @@ RUN echo ok> /foo
 					"numbers": []any{1.0, 2.0, 3.0},
 				}
 				if isDockerd {
-					expCustom = nil
+					expCustom = provenancetypes.ProvenanceCustomEnv{}
 				}
 
 				if slsaVersion == "v1" {
