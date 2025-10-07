@@ -6,6 +6,10 @@ variable "ALPINE_VERSION" {
   default = null
 }
 
+variable "EXPORT_BASE" {
+  default = null
+}
+
 variable "GO_VERSION" {
   default = null
 }
@@ -94,6 +98,8 @@ target "meta-helper" {
 target "_common" {
   args = {
     ALPINE_VERSION = ALPINE_VERSION
+    UBUNTU_VERSION = UBUNTU_VERSION
+    EXPORT_BASE = EXPORT_BASE
     GO_VERSION = GO_VERSION
     NODE_VERSION = NODE_VERSION
     BUILDKITD_TAGS = BUILDKITD_TAGS

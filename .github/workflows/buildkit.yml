@@ -166,6 +166,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        base:
+          - ''
+          - ubuntu
         target:
           - ''
           - rootless
@@ -173,16 +176,27 @@ jobs:
       -
         name: Prepare
         run: |
+          tagSuffix=""
           if [ -n "${{ matrix.target }}" ]; then
-            echo "TAG_SUFFIX=-${{ matrix.target }}" >> $GITHUB_ENV
+            echo "tagSuffix=${tagSuffix}-${{ matrix.target }}" >> $GITHUB_ENV
           fi
+          if [ -n "${{ matrix.base }}" ]; then
+            echo "tagSuffix=${tagSuffix}-${{ matrix.base }}" >> $GITHUB_ENV
+          fi
+          echo "TAG_SUFFIX=${tagSuffix}" >> $GITHUB_ENV
+          
           if [[ $GITHUB_REF == refs/tags/v* ]]; then
             if [[ "${GITHUB_REF#refs/tags/}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              tagLatest=""
               if [ -n "${{ matrix.target }}" ]; then
-                echo "TAG_LATEST=${{ matrix.target }}" >> $GITHUB_ENV
+                echo "tagLatest=${{ matrix.target }}" >> $GITHUB_ENV
               else
-                echo "TAG_LATEST=latest" >> $GITHUB_ENV
+                echo "tagLatest=latest" >> $GITHUB_ENV
               fi
+              if [ -n "${{ matrix.base }}" ]; then
+                echo "tagLatest=${tagLatest}-${{ matrix.base }}" >> $GITHUB_ENV
+              fi
+              echo "TAG_LATEST=${tagLatest}" >> $GITHUB_ENV
             fi
           fi
       -
@@ -208,15 +222,25 @@ jobs:
           ### moby/buildkit:latest
           ### moby/buildkit:v0.24.0-rootless
           ### moby/buildkit:rootless
+          ### moby/buildkit:v0.24.0-ubuntu
+          ### moby/buildkit:latest-ubuntu
+          ### moby/buildkit:v0.24.0-rootless-ubuntu
+          ### moby/buildkit:rootless-ubuntu
           ## push semver prerelease tag v0.24.0-rc1
           ### moby/buildkit:v0.24.0-rc1
           ### moby/buildkit:v0.24.0-rc1-rootless
+          ### moby/buildkit:v0.24.0-rc1-ubuntu
+          ### moby/buildkit:v0.24.0-rc1-rootless-ubuntu
           ## push on master
           ### moby/buildkit:master
           ### moby/buildkit:master-rootless
+          ### moby/buildkit:master-ubuntu
+          ### moby/buildkit:master-rootless-ubuntu
           ## scheduled event on master
           ### moby/buildkit:nightly
           ### moby/buildkit:nightly-rootless
+          ### moby/buildkit:nightly-ubuntu
+          ### moby/buildkit:nightly-rootless-ubuntu
           tags: |
             type=schedule,pattern=nightly,suffix=${{ env.TAG_SUFFIX }}
             type=ref,event=branch,suffix=${{ env.TAG_SUFFIX }}
@@ -256,6 +280,7 @@ jobs:
             *.no-cache-filter=${{ (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')) && 'gobuild-base,buildkit-export-alpine,buildkit-export-ubuntu,rootless-alpine,rootless-ubuntu' || '' }}
         env:
           IMAGE_TARGET: ${{ matrix.target }}
+          EXPORT_BASE: ${{ matrix.base }}
 
   scout:
     runs-on: ubuntu-24.04
