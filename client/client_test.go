@@ -238,6 +238,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testFileOpSymlink,
 	testMetadataOnlyLocal,
 	testSourcePolicySession,
+	testSourceMetaPolicySession,
 }
 
 func TestIntegration(t *testing.T) {
