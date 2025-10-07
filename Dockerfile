@@ -18,11 +18,13 @@ ARG AZURITE_VERSION=3.33.0
 ARG GOTESTSUM_VERSION=v1.9.0
 ARG DELVE_VERSION=v1.23.1
 
-ARG GO_VERSION=1.25
+ARG EXPORT_BASE=alpine
 ARG ALPINE_VERSION=3.22
+ARG UBUNTU_VERSION=24.04
+
+ARG GO_VERSION=1.25
 ARG XX_VERSION=1.7.0
 ARG BUILDKIT_DEBUG
-ARG EXPORT_BASE=alpine
 
 # minio for s3 integration tests
 FROM quay.io/minio/minio:${MINIO_VERSION} AS minio
@@ -205,26 +207,24 @@ COPY --link --from=releaser /out/ /
 FROM alpine:${ALPINE_VERSION} AS buildkit-export-alpine
 RUN apk add --no-cache fuse3 git openssh openssl pigz xz iptables ip6tables \
   && ln -s fusermount3 /usr/bin/fusermount
-COPY --link examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
-VOLUME /var/lib/buildkit
 
-FROM ubuntu:24.04 AS buildkit-export-ubuntu
+FROM ubuntu:${UBUNTU_VERSION} AS buildkit-export-ubuntu
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
+    ca-certificates \
     fuse3 \
     git \
+    iptables \
     openssh-client \
     openssl \
     pigz \
     xz-utils \
-    iptables \
-    ca-certificates \
   && rm -rf /var/lib/apt/lists/*
-COPY --link examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
-VOLUME /var/lib/buildkit
 
 FROM buildkit-export-${EXPORT_BASE} AS buildkit-export
 RUN mkdir -p /etc/cdi /var/run/cdi /etc/buildkit/cdi
+COPY --link examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
+VOLUME /var/lib/buildkit
 
 FROM gobuild-base AS containerd-build
 WORKDIR /go/src/github.com/containerd/containerd
@@ -459,8 +459,7 @@ ENV BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS=1 BUILDKIT_CNI_INIT_LOCK_PATH=/run/bu
 FROM integration-tests AS dev-env
 VOLUME /var/lib/buildkit
 
-# rootless builds a rootless variant of buildkitd image
-FROM alpine:${ALPINE_VERSION} AS rootless
+FROM alpine:${ALPINE_VERSION} AS rootless-alpine
 RUN apk add --no-cache fuse3 fuse-overlayfs git openssh openssl pigz shadow-uidmap xz
 RUN adduser -D -u 1000 user \
   && mkdir -p /run/user/1000 /home/user/.local/tmp /home/user/.local/share/buildkit \
@@ -477,6 +476,28 @@ ENV XDG_RUNTIME_DIR=/run/user/1000
 ENV TMPDIR=/home/user/.local/tmp
 ENV BUILDKIT_HOST=unix:///run/user/1000/buildkit/buildkitd.sock
 VOLUME /home/user/.local/share/buildkit
+
+FROM ubuntu:${UBUNTU_VERSION} AS rootless-ubuntu
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends fuse3 fuse-overlayfs git openssh-client openssl pigz uidmap xz-utils \
+  && rm -rf /var/lib/apt/lists/*
+RUN mkdir -p /run/ubuntu/1000 /home/ubuntu/.local/tmp /home/ubuntu/.local/share/buildkit \
+  && chown -R ubuntu /run/ubuntu/1000 /home/ubuntu \
+  && echo ubuntu:100000:65536 | tee /etc/subuid | tee /etc/subgid
+COPY --link --from=rootlesskit /rootlesskit /usr/bin/
+COPY --link --from=binaries / /usr/bin/
+COPY --link examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
+# Kubernetes runAsNonRoot requires USER to be numeric
+USER 1000:1000
+ENV HOME=/home/ubuntu
+ENV USER=ubuntu
+ENV XDG_RUNTIME_DIR=/run/ubuntu/1000
+ENV TMPDIR=/home/ubuntu/.local/tmp
+ENV BUILDKIT_HOST=unix:///run/ubuntu/1000/buildkit/buildkitd.sock
+VOLUME /home/ubuntu/.local/share/buildkit
+
+# rootless builds a rootless variant of buildkitd image
+FROM rootless-${EXPORT_BASE} AS rootless
 ENTRYPOINT ["rootlesskit", "buildkitd"]
 
 # buildkit builds the buildkit container image

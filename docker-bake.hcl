@@ -1,3 +1,7 @@
+variable "UBUNTU_VERSION" {
+  default = null
+}
+
 variable "ALPINE_VERSION" {
   default = null
 }

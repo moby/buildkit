@@ -253,7 +253,7 @@ jobs:
           set: |
             *.cache-from=type=gha,scope=image${{ matrix.target }}
             *.cache-to=type=gha,scope=image${{ matrix.target }}
-            *.no-cache-filter=${{ (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')) && 'buildkit-export-alpine,buildkit-export-ubuntu,gobuild-base,rootless' || '' }}
+            *.no-cache-filter=${{ (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')) && 'gobuild-base,buildkit-export-alpine,buildkit-export-ubuntu,rootless-alpine,rootless-ubuntu' || '' }}
         env:
           IMAGE_TARGET: ${{ matrix.target }}
 
