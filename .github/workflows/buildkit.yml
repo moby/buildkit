@@ -166,12 +166,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        base:
-          - ''
-          - ubuntu
-        target:
-          - ''
-          - rootless
+        include:
+          -
+            base: 'ubuntu'
+          -
+            base: 'ubuntu'
+            target: 'rootless'
+          -
+            base: 'ubuntu'
+            build-tag: 'nvidia'
+          -
+            base: 'alpine'
+          -
+            base: 'alpine'
+            target: 'rootless'
     steps:
       -
         name: Prepare
@@ -183,8 +191,10 @@ jobs:
           if [ -n "${{ matrix.base }}" ]; then
             echo "tagSuffix=${tagSuffix}-${{ matrix.base }}" >> $GITHUB_ENV
           fi
+          if [ -n "${{ matrix.build-tag }}" ]; then
+            echo "tagSuffix=${tagSuffix}-${{ matrix.build-tag }}" >> $GITHUB_ENV
+          fi
           echo "TAG_SUFFIX=${tagSuffix}" >> $GITHUB_ENV
-          
           if [[ $GITHUB_REF == refs/tags/v* ]]; then
             if [[ "${GITHUB_REF#refs/tags/}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
               tagLatest=""
@@ -195,6 +205,9 @@ jobs:
               fi
               if [ -n "${{ matrix.base }}" ]; then
                 echo "tagLatest=${tagLatest}-${{ matrix.base }}" >> $GITHUB_ENV
+              fi
+              if [ -n "${{ matrix.build-tag }}" ]; then
+                echo "tagLatest=${tagLatest}-${{ matrix.build-tag }}" >> $GITHUB_ENV
               fi
               echo "TAG_LATEST=${tagLatest}" >> $GITHUB_ENV
             fi
@@ -275,12 +288,13 @@ jobs:
           provenance: mode=max
           sbom: true
           set: |
-            *.cache-from=type=gha,scope=image${{ matrix.target }}
-            *.cache-to=type=gha,scope=image${{ matrix.target }}
+            *.cache-from=type=gha,scope=image-${{ matrix.base }}${{ matrix.target }}
+            *.cache-to=type=gha,scope=image-${{ matrix.base }}${{ matrix.target }}
             *.no-cache-filter=${{ (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')) && 'gobuild-base,buildkit-export-alpine,buildkit-export-ubuntu,rootless-alpine,rootless-ubuntu' || '' }}
         env:
           IMAGE_TARGET: ${{ matrix.target }}
           EXPORT_BASE: ${{ matrix.base }}
+          BUILDKITD_TAGS: ${{ matrix.build-tag }}
 
   scout:
     runs-on: ubuntu-24.04
