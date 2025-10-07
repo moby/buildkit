@@ -170,7 +170,7 @@ type DecisionResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Action        pb2.PolicyAction       `protobuf:"varint,1,opt,name=action,proto3,enum=moby.buildkit.v1.sourcepolicy.PolicyAction" json:"action,omitempty"`
 	DenyMessages  []*DenyMessage         `protobuf:"bytes,2,rep,name=denyMessages,proto3" json:"denyMessages,omitempty"`
-	Update        *pb.SourceOp           `protobuf:"bytes,3,opt,name=update,proto3" json:"update,omitempty"` // TODO: metadata and description?
+	Update        *pb.SourceOp           `protobuf:"bytes,3,opt,name=update,proto3" json:"update,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

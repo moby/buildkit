@@ -3,16 +3,18 @@ package client
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"runtime"
 	"testing"
 
+	"github.com/containerd/platforms"
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/client/llb/sourceresolver"
+	client "github.com/moby/buildkit/frontend/gateway/client"
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
+	opspb "github.com/moby/buildkit/solver/pb"
 	sourcepolicpb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/sourcepolicy/policysession"
 	"github.com/moby/buildkit/util/testutil/integration"
-	"github.com/moby/buildkit/util/testutil/workers"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -21,7 +23,6 @@ import (
 
 func testSourcePolicySession(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter)
 
 	ctx := sb.Context()
 
@@ -88,7 +89,6 @@ func testSourcePolicySession(t *testing.T, sb integration.Sandbox) {
 					return nil, &pb.ResolveSourceMetaRequest{
 						Source:   req.Source.Source,
 						Platform: req.Platform,
-						// TODO: resolveMode
 					}, nil
 				},
 				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
@@ -128,13 +128,96 @@ func testSourcePolicySession(t *testing.T, sb integration.Sandbox) {
 
 			_, err = c.Solve(ctx, def, SolveOpt{
 				SourcePolicyProvider: p,
-				Exports: []ExportEntry{
-					{
-						Type:   ExporterOCI,
-						Output: fixedWriteCloser(nopWriteCloser{io.Discard}),
-					},
-				},
 			}, nil)
+			if tc.expectedError != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.expectedError)
+				return
+			}
+			require.NoError(t, err)
+
+			require.Equal(t, len(tc.callbacks), callCounter, "not all policy callbacks were called")
+		})
+	}
+}
+
+func testSourceMetaPolicySession(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+
+	ctx := sb.Context()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	type tcase struct {
+		name          string
+		source        func() (*opspb.SourceOp, sourceresolver.Opt)
+		callbacks     []policysession.PolicyCallback
+		expectedError string
+	}
+	tcases := []tcase{
+		{
+			name: "basic alpine",
+			source: func() (*opspb.SourceOp, sourceresolver.Opt) {
+				p := platforms.DefaultSpec()
+				return &opspb.SourceOp{
+						Identifier: "docker-image://docker.io/library/alpine:latest",
+					}, sourceresolver.Opt{
+						ImageOpt: &sourceresolver.ResolveImageOpt{
+							Platform: &p,
+						},
+					}
+			},
+			callbacks: []policysession.PolicyCallback{
+				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+					require.Equal(t, runtime.GOOS, req.Platform.OS)
+					require.Equal(t, runtime.GOARCH, req.Platform.Architecture)
+
+					require.Equal(t, "docker-image://docker.io/library/alpine:latest", req.Source.Source.Identifier)
+					return &policysession.DecisionResponse{
+						Action: sourcepolicpb.PolicyAction_ALLOW,
+					}, nil, nil
+				},
+			},
+		},
+		{
+			name: "alpine denied",
+			source: func() (*opspb.SourceOp, sourceresolver.Opt) {
+				return &opspb.SourceOp{
+					Identifier: "docker-image://docker.io/library/alpine:latest",
+				}, sourceresolver.Opt{}
+			},
+			callbacks: []policysession.PolicyCallback{
+				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+					require.Equal(t, "docker-image://docker.io/library/alpine:latest", req.Source.Source.Identifier)
+					return nil, nil, errors.New("policy denied")
+				},
+			},
+			expectedError: "policy denied",
+		},
+	}
+
+	for _, tc := range tcases {
+		t.Run(tc.name, func(t *testing.T) {
+			callCounter := 0
+
+			p := policysession.NewPolicyProvider(func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+				if callCounter >= len(tc.callbacks) {
+					return nil, nil, errors.Errorf("too many calls to policy callback %d", callCounter)
+				}
+				cb := tc.callbacks[callCounter]
+				callCounter++
+				return cb(ctx, req)
+			})
+			_, err = c.Build(ctx, SolveOpt{
+				SourcePolicyProvider: p,
+			}, "test", func(ctx context.Context, c client.Client) (*client.Result, error) {
+				sop, opts := tc.source()
+				_, err = c.ResolveSourceMetadata(ctx, sop, opts)
+				return nil, err
+			}, nil)
+
 			if tc.expectedError != "" {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tc.expectedError)

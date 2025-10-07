@@ -28,7 +28,7 @@ message CheckPolicyResponse {
 message DecisionResponse {
 	moby.buildkit.v1.sourcepolicy.PolicyAction action = 1;
 	repeated DenyMessage denyMessages = 2;
-	pb.SourceOp update = 3; // TODO: metadata and description?
+	pb.SourceOp update = 3;
 }
 
 message DenyMessage {
