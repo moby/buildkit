@@ -21,6 +21,7 @@ import (
 	"github.com/containerd/containerd/v2/pkg/labels"
 	"github.com/moby/buildkit/cache/remotecache"
 	v1 "github.com/moby/buildkit/cache/remotecache/v1"
+	cacheimporttypes "github.com/moby/buildkit/cache/remotecache/v1/types"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/compression"
@@ -261,7 +262,7 @@ func (e *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 					layerDone(nil)
 				}
 
-				la := &v1.LayerAnnotations{
+				la := &cacheimporttypes.LayerAnnotations{
 					DiffID:    diffID,
 					Size:      dgstPair.Descriptor.Size,
 					MediaType: dgstPair.Descriptor.MediaType,
@@ -316,7 +317,7 @@ type importer struct {
 	config   Config
 }
 
-func (i *importer) makeDescriptorProviderPair(l v1.CacheLayer) (*v1.DescriptorProviderPair, error) {
+func (i *importer) makeDescriptorProviderPair(l cacheimporttypes.CacheLayer) (*v1.DescriptorProviderPair, error) {
 	if l.Annotations == nil {
 		return nil, errors.Errorf("cache layer with missing annotations")
 	}
@@ -344,7 +345,7 @@ func (i *importer) makeDescriptorProviderPair(l v1.CacheLayer) (*v1.DescriptorPr
 }
 
 func (i *importer) load(ctx context.Context) (*v1.CacheChains, error) {
-	var config v1.CacheConfig
+	var config cacheimporttypes.CacheConfig
 	found, err := i.s3Client.getManifest(ctx, i.s3Client.manifestKey(i.config.Names[0]), &config)
 	if err != nil {
 		return nil, err
@@ -427,7 +428,7 @@ func newS3Client(ctx context.Context, config Config) (*s3Client, error) {
 	}, nil
 }
 
-func (s3Client *s3Client) getManifest(ctx context.Context, key string, config *v1.CacheConfig) (bool, error) {
+func (s3Client *s3Client) getManifest(ctx context.Context, key string, config *cacheimporttypes.CacheConfig) (bool, error) {
 	input := &s3.GetObjectInput{
 		Bucket: &s3Client.bucket,
 		Key:    &key,

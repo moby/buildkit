@@ -18,6 +18,7 @@ import (
 	"github.com/containerd/containerd/v2/pkg/labels"
 	"github.com/moby/buildkit/cache/remotecache"
 	v1 "github.com/moby/buildkit/cache/remotecache/v1"
+	cacheimporttypes "github.com/moby/buildkit/cache/remotecache/v1/types"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/bklog"
@@ -110,7 +111,7 @@ func (ce *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 			layerDone(nil)
 		}
 
-		la := &v1.LayerAnnotations{
+		la := &cacheimporttypes.LayerAnnotations{
 			DiffID:    diffID,
 			Size:      dgstPair.Descriptor.Size,
 			MediaType: dgstPair.Descriptor.MediaType,

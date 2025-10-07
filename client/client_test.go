@@ -42,6 +42,7 @@ import (
 	"github.com/distribution/reference"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	controlapi "github.com/moby/buildkit/api/services/control"
+	cacheimporttypes "github.com/moby/buildkit/cache/remotecache/v1/types"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
@@ -192,6 +193,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testBuildExportWithForeignLayer,
 	testZstdLocalCacheExport,
 	testCacheExportIgnoreError,
+	testCacheExportCacheDeletedContent,
 	testZstdRegistryCacheImportExport,
 	testZstdLocalCacheImportExport,
 	testUncompressedLocalCacheImportExport,
@@ -344,6 +346,148 @@ func testCacheExportCacheKeyLoop(t *testing.T, sb integration.Sandbox) {
 				require.NoError(t, err)
 			})
 		}(mode)
+	}
+}
+
+func testCacheExportCacheDeletedContent(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport, workers.FeatureCacheBackendLocal)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	tmpdir := integration.Tmpdir(t)
+
+	err = os.WriteFile(filepath.Join(tmpdir.Name, "foo"), []byte("foodata"), 0600)
+	require.NoError(t, err)
+
+	base := llb.Image("alpine:latest").Run(llb.Shlex(`sh -c "echo abc-def > /foo && echo abc > /detection-file"`)).Root()
+	st := llb.Scratch().File(llb.Copy(base, "/foo", "/out"))
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		CacheExports: []CacheOptionsEntry{
+			{
+				Type: "local",
+				Attrs: map[string]string{
+					"dest": filepath.Join(tmpdir.Name, "cache"),
+					"mode": "max",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(tmpdir.Name, "cache", "index.json"))
+	require.NoError(t, err)
+
+	var index ocispecs.Index
+	err = json.Unmarshal(dt, &index)
+	require.NoError(t, err)
+
+	require.Len(t, index.Manifests, 1)
+
+	dt, err = os.ReadFile(filepath.Join(tmpdir.Name, "cache/blobs/sha256", index.Manifests[0].Digest.Hex()))
+	require.NoError(t, err)
+
+	var mfst ocispecs.Manifest
+	err = json.Unmarshal(dt, &mfst)
+	require.NoError(t, err)
+
+	require.Len(t, mfst.Layers, 3)
+	require.Equal(t, "application/vnd.buildkit.cacheconfig.v0", mfst.Config.MediaType)
+
+	dt, err = os.ReadFile(filepath.Join(tmpdir.Name, "cache/blobs/sha256", mfst.Config.Digest.Hex()))
+	require.NoError(t, err)
+
+	var cc cacheimporttypes.CacheConfig
+	err = json.Unmarshal(dt, &cc)
+	require.NoError(t, err)
+
+	require.Equal(t, 3, len(cc.Layers))
+	require.Equal(t, 5, len(cc.Records))
+
+	var runLayer *int
+	for i, l := range cc.Layers {
+		if l.ParentIndex != -1 {
+			if runLayer != nil {
+				t.Fatal("multiple RUN layers")
+			}
+			runLayer = &i
+		}
+	}
+	require.NotNil(t, runLayer)
+
+	dt, err = os.ReadFile(filepath.Join(tmpdir.Name, "cache/blobs/sha256", cc.Layers[*runLayer].Blob.Hex()))
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(dt, true)
+	require.NoError(t, err)
+
+	require.Equal(t, "abc\n", string(m["detection-file"].Data))
+
+	// delete the blob for the run layer
+	err = os.Remove(filepath.Join(tmpdir.Name, "cache/blobs/sha256", cc.Layers[*runLayer].Blob.Hex()))
+	require.NoError(t, err)
+
+	// prune all buildkit state
+	ensurePruneAll(t, c, sb)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		CacheImports: []CacheOptionsEntry{
+			{
+				Type: "local",
+				Attrs: map[string]string{
+					"src": filepath.Join(tmpdir.Name, "cache"),
+				},
+			},
+		},
+		CacheExports: []CacheOptionsEntry{
+			{
+				Type: "local",
+				Attrs: map[string]string{
+					"dest": filepath.Join(tmpdir.Name, "cache2"),
+					"mode": "max",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err = os.ReadFile(filepath.Join(tmpdir.Name, "cache2", "index.json"))
+	require.NoError(t, err)
+
+	var index2 ocispecs.Index
+	err = json.Unmarshal(dt, &index2)
+	require.NoError(t, err)
+
+	require.Len(t, index2.Manifests, 1)
+
+	dt, err = os.ReadFile(filepath.Join(tmpdir.Name, "cache2/blobs/sha256", index2.Manifests[0].Digest.Hex()))
+	require.NoError(t, err)
+
+	var mfst2 ocispecs.Manifest
+	err = json.Unmarshal(dt, &mfst2)
+	require.NoError(t, err)
+
+	require.Len(t, mfst2.Layers, 1)
+	require.Equal(t, "application/vnd.buildkit.cacheconfig.v0", mfst2.Config.MediaType)
+
+	dt, err = os.ReadFile(filepath.Join(tmpdir.Name, "cache2/blobs/sha256", mfst2.Config.Digest.Hex()))
+	require.NoError(t, err)
+
+	var cc2 cacheimporttypes.CacheConfig
+	err = json.Unmarshal(dt, &cc2)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, len(cc2.Layers))
+	require.Equal(t, 5, len(cc2.Records))
+
+	for i, r := range cc.Records {
+		require.Equal(t, cc2.Records[i].Digest, r.Digest)
+		require.Equal(t, cc2.Records[i].Inputs, r.Inputs)
 	}
 }
 
