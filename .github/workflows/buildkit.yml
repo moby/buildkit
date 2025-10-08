@@ -161,6 +161,8 @@ jobs:
 
   image:
     runs-on: ubuntu-24.04
+    env:
+      DEFAULT_BASE: alpine
     needs:
       - test
     strategy:
@@ -186,28 +188,28 @@ jobs:
         run: |
           tagSuffix=""
           if [ -n "${{ matrix.target }}" ]; then
-            echo "tagSuffix=${tagSuffix}-${{ matrix.target }}" >> $GITHUB_ENV
+            tagSuffix=${tagSuffix}-${{ matrix.target }}
           fi
-          if [ -n "${{ matrix.base }}" ]; then
-            echo "tagSuffix=${tagSuffix}-${{ matrix.base }}" >> $GITHUB_ENV
+          if [ "${{ matrix.base }}" != "$DEFAULT_BASE" ]; then
+            tagSuffix=${tagSuffix}-${{ matrix.base }}
           fi
           if [ -n "${{ matrix.build-tag }}" ]; then
-            echo "tagSuffix=${tagSuffix}-${{ matrix.build-tag }}" >> $GITHUB_ENV
+            tagSuffix=${tagSuffix}-${{ matrix.build-tag }}
           fi
           echo "TAG_SUFFIX=${tagSuffix}" >> $GITHUB_ENV
           if [[ $GITHUB_REF == refs/tags/v* ]]; then
             if [[ "${GITHUB_REF#refs/tags/}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
               tagLatest=""
               if [ -n "${{ matrix.target }}" ]; then
-                echo "tagLatest=${{ matrix.target }}" >> $GITHUB_ENV
+                tagLatest=${{ matrix.target }}
               else
-                echo "tagLatest=latest" >> $GITHUB_ENV
+                tagLatest=latest
               fi
-              if [ -n "${{ matrix.base }}" ]; then
-                echo "tagLatest=${tagLatest}-${{ matrix.base }}" >> $GITHUB_ENV
+              if [ "${{ matrix.base }}" != "$DEFAULT_BASE" ]; then
+                tagLatest=${tagLatest}-${{ matrix.base }}
               fi
               if [ -n "${{ matrix.build-tag }}" ]; then
-                echo "tagLatest=${tagLatest}-${{ matrix.build-tag }}" >> $GITHUB_ENV
+                tagLatest=${tagLatest}-${{ matrix.build-tag }}
               fi
               echo "TAG_LATEST=${tagLatest}" >> $GITHUB_ENV
             fi
@@ -237,6 +239,8 @@ jobs:
           ### moby/buildkit:rootless
           ### moby/buildkit:v0.24.0-ubuntu
           ### moby/buildkit:latest-ubuntu
+          ### moby/buildkit:v0.24.0-ubuntu-nvidia
+          ### moby/buildkit:latest-ubuntu-nvidia
           ### moby/buildkit:v0.24.0-rootless-ubuntu
           ### moby/buildkit:rootless-ubuntu
           ## push semver prerelease tag v0.24.0-rc1
@@ -244,16 +248,19 @@ jobs:
           ### moby/buildkit:v0.24.0-rc1-rootless
           ### moby/buildkit:v0.24.0-rc1-ubuntu
           ### moby/buildkit:v0.24.0-rc1-rootless-ubuntu
+          ### moby/buildkit:v0.24.0-rc1-ubuntu-nvidia
           ## push on master
           ### moby/buildkit:master
           ### moby/buildkit:master-rootless
           ### moby/buildkit:master-ubuntu
           ### moby/buildkit:master-rootless-ubuntu
+          ### moby/buildkit:master-ubuntu-nvidia
           ## scheduled event on master
           ### moby/buildkit:nightly
           ### moby/buildkit:nightly-rootless
           ### moby/buildkit:nightly-ubuntu
           ### moby/buildkit:nightly-rootless-ubuntu
+          ### moby/buildkit:nightly-ubuntu-nvidia
           tags: |
             type=schedule,pattern=nightly,suffix=${{ env.TAG_SUFFIX }}
             type=ref,event=branch,suffix=${{ env.TAG_SUFFIX }}
