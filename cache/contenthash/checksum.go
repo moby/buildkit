@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	cerrdefs "github.com/containerd/errdefs"
 	iradix "github.com/hashicorp/go-immutable-radix/v2"
 	simplelru "github.com/hashicorp/golang-lru/v2/simplelru"
 	"github.com/moby/buildkit/cache"
@@ -59,6 +60,7 @@ type ChecksumOpts struct {
 	Wildcard        bool
 	IncludePatterns []string
 	ExcludePatterns []string
+	RequiredPaths   []string
 }
 
 func Checksum(ctx context.Context, ref cache.ImmutableRef, path string, opts ChecksumOpts, s session.Group) (digest.Digest, error) {
@@ -490,20 +492,14 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 	endsInSep := len(p) != 0 && p[len(p)-1] == filepath.Separator
 	p = keyPath(p)
 
-	var includePatternMatcher *patternmatcher.PatternMatcher
-	if len(opts.IncludePatterns) != 0 {
-		includePatternMatcher, err = patternmatcher.New(opts.IncludePatterns)
-		if err != nil {
-			return nil, errors.Wrapf(err, "invalid includepatterns: %s", opts.IncludePatterns)
-		}
+	includePatternMatcher, err := newPatternMatcher("includepatterns", opts.IncludePatterns)
+	if err != nil {
+		return nil, err
 	}
 
-	var excludePatternMatcher *patternmatcher.PatternMatcher
-	if len(opts.ExcludePatterns) != 0 {
-		excludePatternMatcher, err = patternmatcher.New(opts.ExcludePatterns)
-		if err != nil {
-			return nil, errors.Wrapf(err, "invalid excludepatterns: %s", opts.ExcludePatterns)
-		}
+	excludePatternMatcher, err := newPatternMatcher("excludepatterns", opts.ExcludePatterns)
+	if err != nil {
+		return nil, err
 	}
 
 	includedPaths := make([]*includedPath, 0, 2)
@@ -688,7 +684,34 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 	cc.tree = txn.Commit()
 	cc.dirty = updated
 
+	// Validate that all required paths exist.
+	for _, requiredPath := range opts.RequiredPaths {
+		found := false
+		for _, includedPath := range includedPaths {
+			if strings.HasPrefix(includedPath.path, requiredPath) {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			return nil, errors.Wrapf(cerrdefs.ErrNotFound, "%q", requiredPath)
+		}
+	}
+
 	return includedPaths, nil
+}
+
+func newPatternMatcher(name string, patterns []string) (*patternmatcher.PatternMatcher, error) {
+	if len(patterns) == 0 {
+		return nil, nil
+	}
+
+	pm, err := patternmatcher.New(patterns)
+	if err != nil {
+		return nil, errors.Wrapf(err, "invalid %s: %s", name, patterns)
+	}
+	return pm, nil
 }
 
 func shouldIncludePath(
@@ -1092,7 +1115,6 @@ func (cc *cacheContext) scanPath(ctx context.Context, m *mount, p string, follow
 	}
 
 	err = cc.walk(scanPath, walkFunc)
-
 	if err != nil {
 		return err
 	}
