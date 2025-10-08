@@ -72,6 +72,12 @@ const (
 )
 
 var fusermountBin = []string{"fusermount", "fusermount3"}
+var (
+	nsLock = sync.Mutex{}
+
+	ns         *metrics.Namespace
+	metricsCtr *layermetrics.Controller
+)
 
 type Option func(*options)
 
@@ -133,12 +139,12 @@ func NewFilesystem(root string, cfg config.Config, opts ...Option) (_ snapshot.F
 		maxConcurrency = defaultMaxConcurrency
 	}
 
-	attrTimeout := time.Duration(cfg.FuseConfig.AttrTimeout) * time.Second
+	attrTimeout := time.Duration(cfg.AttrTimeout) * time.Second
 	if attrTimeout == 0 {
 		attrTimeout = defaultFuseTimeout
 	}
 
-	entryTimeout := time.Duration(cfg.FuseConfig.EntryTimeout) * time.Second
+	entryTimeout := time.Duration(cfg.EntryTimeout) * time.Second
 	if entryTimeout == 0 {
 		entryTimeout = defaultFuseTimeout
 	}
@@ -160,18 +166,20 @@ func NewFilesystem(root string, cfg config.Config, opts ...Option) (_ snapshot.F
 		return nil, fmt.Errorf("failed to setup resolver: %w", err)
 	}
 
-	var ns *metrics.Namespace
-	if !cfg.NoPrometheus {
+	nsLock.Lock()
+	defer nsLock.Unlock()
+
+	if !cfg.NoPrometheus && ns == nil {
 		ns = metrics.NewNamespace("stargz", "fs", nil)
 		logLevel := log.DebugLevel
 		if fsOpts.metricsLogLevel != nil {
 			logLevel = *fsOpts.metricsLogLevel
 		}
 		commonmetrics.Register(logLevel) // Register common metrics. This will happen only once.
+		metrics.Register(ns)             // Register layer metrics.
 	}
-	c := layermetrics.NewLayerMetrics(ns)
-	if ns != nil {
-		metrics.Register(ns) // Register layer metrics.
+	if metricsCtr == nil {
+		metricsCtr = layermetrics.NewLayerMetrics(ns)
 	}
 
 	return &filesystem{
@@ -185,7 +193,7 @@ func NewFilesystem(root string, cfg config.Config, opts ...Option) (_ snapshot.F
 		backgroundTaskManager: tm,
 		allowNoVerification:   cfg.AllowNoVerification,
 		disableVerification:   cfg.DisableVerification,
-		metricsController:     c,
+		metricsController:     metricsCtr,
 		attrTimeout:           attrTimeout,
 		entryTimeout:          entryTimeout,
 	}, nil
@@ -442,8 +450,10 @@ func (fs *filesystem) Unmount(ctx context.Context, mountpoint string) error {
 		fs.layerMu.Unlock()
 		return fmt.Errorf("specified path %q isn't a mountpoint", mountpoint)
 	}
-	delete(fs.layer, mountpoint) // unregisters the corresponding layer
-	l.Done()
+	delete(fs.layer, mountpoint)      // unregisters the corresponding layer
+	if err := l.Close(); err != nil { // Cleanup associated resources
+		log.G(ctx).WithError(err).Warn("failed to release resources of the layer")
+	}
 	fs.layerMu.Unlock()
 	fs.metricsController.Remove(mountpoint)
 

@@ -53,6 +53,7 @@ var (
 		{CAP_PASSTHROUGH, "PASSTHROUGH"},
 		{CAP_NO_EXPORT_SUPPORT, "NO_EXPORT_SUPPORT"},
 		{CAP_HAS_RESEND, "HAS_RESEND"},
+		{CAP_ALLOW_IDMAP, "ALLOW_IDMAP"},
 	})
 	releaseFlagNames = newFlagNames([]flagNameEntry{
 		{RELEASE_FLUSH, "FLUSH"},
@@ -80,6 +81,12 @@ var (
 		{FOPEN_NOFLUSH, "NOFLUSH"},
 		{FOPEN_PARALLEL_DIRECT_WRITES, "PARALLEL_DIRECT_WRITES"},
 		{FOPEN_PASSTHROUGH, "PASSTHROUGH"},
+	})
+	ioctlFlagNames = newFlagNames([]flagNameEntry{
+		{IOCTL_COMPAT, "COMPAT"},
+		{IOCTL_UNRESTRICTED, "UNRESTRICTED"},
+		{IOCTL_RETRY, "RETRY"},
+		{IOCTL_DIR, "DIR"},
 	})
 	accessFlagName = newFlagNames([]flagNameEntry{
 		{X_OK, "x"},
@@ -161,7 +168,7 @@ func (in *_BatchForgetIn) string() string {
 }
 
 func (in *MkdirIn) string() string {
-	return fmt.Sprintf("{0%o (0%o)}", in.Mode, in.Umask)
+	return fmt.Sprintf("{0%o (mask 0%o)}", in.Mode, in.Umask)
 }
 
 func (in *Rename1In) string() string {
@@ -384,4 +391,18 @@ func (a *Attr) string() string {
 
 func (m *BackingMap) string() string {
 	return fmt.Sprintf("{fd %d, flags 0x%x}", m.Fd, m.Flags)
+}
+
+func (o *IoctlIn) string() string {
+	return fmt.Sprintf("{Fh %d Flags %s Cmd 0x%x Arg 0x%x, insz %d outsz %d}",
+		o.Fh,
+		flagString(ioctlFlagNames, int64(o.Flags), ""),
+		o.Cmd, o.Arg, o.InSize, o.OutSize)
+}
+
+func (o *IoctlOut) string() string {
+	return fmt.Sprintf("{Result %d Flags %s Iovs %d/%d",
+		o.Result,
+		flagString(ioctlFlagNames, int64(o.Flags), ""),
+		o.InIovs, o.OutIovs)
 }

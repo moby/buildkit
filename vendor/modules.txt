@@ -418,8 +418,8 @@ github.com/containerd/platforms
 # github.com/containerd/plugin v1.0.0
 ## explicit; go 1.20
 github.com/containerd/plugin
-# github.com/containerd/stargz-snapshotter v0.16.3
-## explicit; go 1.22.0
+# github.com/containerd/stargz-snapshotter v0.17.0
+## explicit; go 1.24.0
 github.com/containerd/stargz-snapshotter/cache
 github.com/containerd/stargz-snapshotter/fs
 github.com/containerd/stargz-snapshotter/fs/config
@@ -436,8 +436,8 @@ github.com/containerd/stargz-snapshotter/task
 github.com/containerd/stargz-snapshotter/util/cacheutil
 github.com/containerd/stargz-snapshotter/util/namedmutex
 github.com/containerd/stargz-snapshotter/util/testutil
-# github.com/containerd/stargz-snapshotter/estargz v0.16.3
-## explicit; go 1.22.0
+# github.com/containerd/stargz-snapshotter/estargz v0.17.0
+## explicit; go 1.23.0
 github.com/containerd/stargz-snapshotter/estargz
 github.com/containerd/stargz-snapshotter/estargz/errorutil
 github.com/containerd/stargz-snapshotter/estargz/externaltoc
@@ -553,30 +553,26 @@ github.com/google/uuid
 github.com/grpc-ecosystem/grpc-gateway/v2/internal/httprule
 github.com/grpc-ecosystem/grpc-gateway/v2/runtime
 github.com/grpc-ecosystem/grpc-gateway/v2/utilities
-# github.com/hanwen/go-fuse/v2 v2.6.3
+# github.com/hanwen/go-fuse/v2 v2.8.0
 ## explicit; go 1.17
 github.com/hanwen/go-fuse/v2/fs
 github.com/hanwen/go-fuse/v2/fuse
 github.com/hanwen/go-fuse/v2/internal
 github.com/hanwen/go-fuse/v2/internal/fallocate
+github.com/hanwen/go-fuse/v2/internal/ioctl
+github.com/hanwen/go-fuse/v2/internal/openat
 github.com/hanwen/go-fuse/v2/internal/renameat
 github.com/hanwen/go-fuse/v2/internal/utimens
 github.com/hanwen/go-fuse/v2/internal/xattr
 github.com/hanwen/go-fuse/v2/splice
-# github.com/hashicorp/errwrap v1.1.0
-## explicit
-github.com/hashicorp/errwrap
 # github.com/hashicorp/go-cleanhttp v0.5.2
 ## explicit; go 1.13
 github.com/hashicorp/go-cleanhttp
 # github.com/hashicorp/go-immutable-radix/v2 v2.1.0
 ## explicit; go 1.18
 github.com/hashicorp/go-immutable-radix/v2
-# github.com/hashicorp/go-multierror v1.1.1
-## explicit; go 1.13
-github.com/hashicorp/go-multierror
-# github.com/hashicorp/go-retryablehttp v0.7.7
-## explicit; go 1.19
+# github.com/hashicorp/go-retryablehttp v0.7.8
+## explicit; go 1.23
 github.com/hashicorp/go-retryablehttp
 # github.com/hashicorp/golang-lru/v2 v2.0.7
 ## explicit; go 1.18
@@ -970,7 +966,7 @@ golang.org/x/net/trace
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
 golang.org/x/sync/singleflight
-# golang.org/x/sys v0.33.0
+# golang.org/x/sys v0.34.0
 ## explicit; go 1.23.0
 golang.org/x/sys/cpu
 golang.org/x/sys/unix
@@ -987,15 +983,15 @@ golang.org/x/text/unicode/norm
 # golang.org/x/time v0.11.0
 ## explicit; go 1.23.0
 golang.org/x/time/rate
-# google.golang.org/genproto/googleapis/api v0.0.0-20250218202821-56aae31c358a
-## explicit; go 1.22
+# google.golang.org/genproto/googleapis/api v0.0.0-20250324211829-b45e905df463
+## explicit; go 1.23.0
 google.golang.org/genproto/googleapis/api/httpbody
-# google.golang.org/genproto/googleapis/rpc v0.0.0-20250218202821-56aae31c358a
-## explicit; go 1.22
+# google.golang.org/genproto/googleapis/rpc v0.0.0-20250324211829-b45e905df463
+## explicit; go 1.23.0
 google.golang.org/genproto/googleapis/rpc/errdetails
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.72.2
-## explicit; go 1.23
+# google.golang.org/grpc v1.73.0
+## explicit; go 1.23.0
 google.golang.org/grpc
 google.golang.org/grpc/attributes
 google.golang.org/grpc/backoff
