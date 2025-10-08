@@ -253,6 +253,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testImageResolveAttestationChainRequiresNetwork,
 	testSourcePolicySession,
 	testSourceMetaPolicySession,
+	testSourcePolicyParallelSession,
 }
 
 func TestIntegration(t *testing.T) {

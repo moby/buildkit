@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"runtime"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/containerd/platforms"
 	"github.com/moby/buildkit/client/llb"
@@ -228,4 +230,65 @@ func testSourceMetaPolicySession(t *testing.T, sb integration.Sandbox) {
 			require.Equal(t, len(tc.callbacks), callCounter, "not all policy callbacks were called")
 		})
 	}
+}
+
+func testSourcePolicyParallelSession(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+
+	ctx := sb.Context()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	def, err := llb.Image("alpine").File(llb.Copy(llb.Image("busybox"), "/etc/passwd", "passwd2")).Marshal(ctx)
+	require.NoError(t, err)
+
+	countAlpine := 0
+	countBusybox := 0
+	waitBusyboxStart := make(chan struct{})
+	waitAlpineDone := make(chan struct{})
+
+	p := policysession.NewPolicyProvider(func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+		switch req.Source.Source.Identifier {
+		case "docker-image://docker.io/library/alpine:latest":
+			switch countAlpine {
+			case 0:
+				<-waitBusyboxStart
+				require.Nil(t, req.Source.Image)
+				countAlpine++
+				return nil, &pb.ResolveSourceMetaRequest{
+					Source:   req.Source.Source,
+					Platform: req.Platform,
+				}, nil
+			case 1:
+				require.NotNil(t, req.Source.Image)
+				require.True(t, strings.HasPrefix(req.Source.Image.Digest, "sha256:"))
+				countAlpine++
+				close(waitAlpineDone)
+				return &policysession.DecisionResponse{
+					Action: sourcepolicpb.PolicyAction_ALLOW,
+				}, nil, nil
+			default:
+				require.Fail(t, "too many calls for alpine")
+			}
+		case "docker-image://docker.io/library/busybox:latest":
+			time.Sleep(200 * time.Millisecond)
+			close(waitBusyboxStart)
+			countBusybox++
+			<-waitAlpineDone
+			return &policysession.DecisionResponse{
+				Action: sourcepolicpb.PolicyAction_ALLOW,
+			}, nil, nil
+		}
+		return nil, nil, errors.Errorf("unexpected source %q", req.Source.Source.Identifier)
+	})
+
+	_, err = c.Solve(ctx, def, SolveOpt{
+		SourcePolicyProvider: p,
+	}, nil)
+	require.NoError(t, err)
+
+	require.Equal(t, 2, countAlpine)
+	require.Equal(t, 1, countBusybox)
 }
