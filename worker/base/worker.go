@@ -95,6 +95,7 @@ type Worker struct {
 	imageWriter     *imageexporter.ImageWriter
 	ImageSource     *containerimage.Source
 	OCILayoutSource *containerimage.Source
+	GitSource       *git.Source
 }
 
 // NewWorker instantiates a local worker
@@ -141,6 +142,7 @@ func NewWorker(ctx context.Context, opt WorkerOpt) (*Worker, error) {
 
 	sm.Register(is)
 
+	var gitSource *git.Source
 	if err := git.Supported(); err == nil {
 		gs, err := git.NewSource(git.Opt{
 			CacheAccessor: cm,
@@ -149,6 +151,7 @@ func NewWorker(ctx context.Context, opt WorkerOpt) (*Worker, error) {
 			return nil, err
 		}
 		sm.Register(gs)
+		gitSource = gs
 	} else {
 		bklog.G(ctx).Warnf("git source cannot be enabled: %v", err)
 	}
@@ -210,6 +213,7 @@ func NewWorker(ctx context.Context, opt WorkerOpt) (*Worker, error) {
 		imageWriter:     iw,
 		ImageSource:     is,
 		OCILayoutSource: os,
+		GitSource:       gitSource,
 	}, nil
 }
 

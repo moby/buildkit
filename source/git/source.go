@@ -42,7 +42,7 @@ type Opt struct {
 	CacheAccessor cache.Accessor
 }
 
-type gitSource struct {
+type Source struct {
 	cache  cache.Accessor
 	locker *locker.Locker
 }
@@ -55,19 +55,19 @@ func Supported() error {
 	return nil
 }
 
-func NewSource(opt Opt) (source.Source, error) {
-	gs := &gitSource{
+func NewSource(opt Opt) (*Source, error) {
+	gs := &Source{
 		cache:  opt.CacheAccessor,
 		locker: locker.New(),
 	}
 	return gs, nil
 }
 
-func (gs *gitSource) Schemes() []string {
+func (gs *Source) Schemes() []string {
 	return []string{srctypes.GitScheme}
 }
 
-func (gs *gitSource) Identifier(scheme, ref string, attrs map[string]string, platform *pb.Platform) (source.Identifier, error) {
+func (gs *Source) Identifier(scheme, ref string, attrs map[string]string, platform *pb.Platform) (source.Identifier, error) {
 	id, err := NewGitIdentifier(ref)
 	if err != nil {
 		return nil, err
@@ -105,7 +105,7 @@ func (gs *gitSource) Identifier(scheme, ref string, attrs map[string]string, pla
 }
 
 // needs to be called with repo lock
-func (gs *gitSource) mountRemote(ctx context.Context, remote string, authArgs []string, sha256 bool, reset bool, g session.Group) (target string, release func() error, retErr error) {
+func (gs *Source) mountRemote(ctx context.Context, remote string, authArgs []string, sha256 bool, reset bool, g session.Group) (target string, release func() error, retErr error) {
 	sis, err := searchGitRemote(ctx, gs.cache, remote)
 	if err != nil {
 		return "", nil, errors.Wrapf(err, "failed to search metadata for %s", urlutil.RedactCredentials(remote))
@@ -205,7 +205,7 @@ func (gs *gitSource) mountRemote(ctx context.Context, remote string, authArgs []
 }
 
 type gitSourceHandler struct {
-	*gitSource
+	*Source
 	src         GitIdentifier
 	cacheKey    string
 	cacheCommit string
@@ -231,16 +231,16 @@ func (gs *gitSourceHandler) shaToCacheKey(sha, ref string) string {
 	return key
 }
 
-func (gs *gitSource) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager, _ solver.Vertex) (source.SourceInstance, error) {
+func (gs *Source) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager, _ solver.Vertex) (source.SourceInstance, error) {
 	gitIdentifier, ok := id.(*GitIdentifier)
 	if !ok {
 		return nil, errors.Errorf("invalid git identifier %v", id)
 	}
 
 	return &gitSourceHandler{
-		src:       *gitIdentifier,
-		gitSource: gs,
-		sm:        sm,
+		src:    *gitIdentifier,
+		Source: gs,
+		sm:     sm,
 	}, nil
 }
 
