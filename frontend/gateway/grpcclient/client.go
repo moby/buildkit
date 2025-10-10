@@ -528,6 +528,13 @@ func (c *grpcClient) ResolveSourceMetadata(ctx context.Context, op *opspb.Source
 			Config: resp.Image.Config,
 		}
 	}
+	if resp.Git != nil {
+		r.Git = &sourceresolver.ResolveGitResponse{
+			Checksum:       resp.Git.Checksum,
+			Ref:            resp.Git.Ref,
+			CommitChecksum: resp.Git.CommitChecksum,
+		}
+	}
 	return r, nil
 }
 
