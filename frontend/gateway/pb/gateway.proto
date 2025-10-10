@@ -9,6 +9,7 @@ import "github.com/moby/buildkit/solver/pb/ops.proto";
 import "github.com/moby/buildkit/sourcepolicy/pb/policy.proto";
 import "github.com/moby/buildkit/util/apicaps/pb/caps.proto";
 import "github.com/tonistiigi/fsutil/types/stat.proto";
+import "google/protobuf/timestamp.proto";
 import "google/rpc/status.proto";
 
 service LLBBridge {
@@ -141,6 +142,7 @@ message ResolveSourceMetaResponse {
 	pb.SourceOp Source = 1;
 	ResolveSourceImageResponse Image = 2;
 	ResolveSourceGitResponse Git = 3;
+	ResolveSourceHTTPResponse HTTP = 4;
 }
 
 message ResolveSourceImageResponse {
@@ -152,6 +154,12 @@ message ResolveSourceGitResponse {
 	string Checksum = 1;
 	string Ref = 2;
 	string CommitChecksum = 3;
+}
+
+message ResolveSourceHTTPResponse {
+	string Checksum = 1;
+	string Filename = 2;
+	google.protobuf.Timestamp LastModified = 3;
 }
 
 message SolveRequest {

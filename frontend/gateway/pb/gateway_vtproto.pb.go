@@ -6,11 +6,13 @@ package moby_buildkit_v1_frontend
 
 import (
 	fmt "fmt"
+	timestamp "github.com/golang/protobuf/ptypes/timestamp"
 	types1 "github.com/moby/buildkit/api/types"
 	pb "github.com/moby/buildkit/solver/pb"
 	pb1 "github.com/moby/buildkit/sourcepolicy/pb"
 	pb2 "github.com/moby/buildkit/util/apicaps/pb"
 	protohelpers "github.com/planetscale/vtprotobuf/protohelpers"
+	timestamppb "github.com/planetscale/vtprotobuf/types/known/timestamppb"
 	types "github.com/tonistiigi/fsutil/types"
 	status "google.golang.org/genproto/googleapis/rpc/status"
 	proto "google.golang.org/protobuf/proto"
@@ -409,6 +411,7 @@ func (m *ResolveSourceMetaResponse) CloneVT() *ResolveSourceMetaResponse {
 	r.Source = m.Source.CloneVT()
 	r.Image = m.Image.CloneVT()
 	r.Git = m.Git.CloneVT()
+	r.HTTP = m.HTTP.CloneVT()
 	if len(m.unknownFields) > 0 {
 		r.unknownFields = make([]byte, len(m.unknownFields))
 		copy(r.unknownFields, m.unknownFields)
@@ -458,6 +461,25 @@ func (m *ResolveSourceGitResponse) CloneVT() *ResolveSourceGitResponse {
 }
 
 func (m *ResolveSourceGitResponse) CloneMessageVT() proto.Message {
+	return m.CloneVT()
+}
+
+func (m *ResolveSourceHTTPResponse) CloneVT() *ResolveSourceHTTPResponse {
+	if m == nil {
+		return (*ResolveSourceHTTPResponse)(nil)
+	}
+	r := new(ResolveSourceHTTPResponse)
+	r.Checksum = m.Checksum
+	r.Filename = m.Filename
+	r.LastModified = (*timestamp.Timestamp)((*timestamppb.Timestamp)(m.LastModified).CloneVT())
+	if len(m.unknownFields) > 0 {
+		r.unknownFields = make([]byte, len(m.unknownFields))
+		copy(r.unknownFields, m.unknownFields)
+	}
+	return r
+}
+
+func (m *ResolveSourceHTTPResponse) CloneMessageVT() proto.Message {
 	return m.CloneVT()
 }
 
@@ -1749,6 +1771,9 @@ func (this *ResolveSourceMetaResponse) EqualVT(that *ResolveSourceMetaResponse) 
 	if !this.Git.EqualVT(that.Git) {
 		return false
 	}
+	if !this.HTTP.EqualVT(that.HTTP) {
+		return false
+	}
 	return string(this.unknownFields) == string(that.unknownFields)
 }
 
@@ -1801,6 +1826,31 @@ func (this *ResolveSourceGitResponse) EqualVT(that *ResolveSourceGitResponse) bo
 
 func (this *ResolveSourceGitResponse) EqualMessageVT(thatMsg proto.Message) bool {
 	that, ok := thatMsg.(*ResolveSourceGitResponse)
+	if !ok {
+		return false
+	}
+	return this.EqualVT(that)
+}
+func (this *ResolveSourceHTTPResponse) EqualVT(that *ResolveSourceHTTPResponse) bool {
+	if this == that {
+		return true
+	} else if this == nil || that == nil {
+		return false
+	}
+	if this.Checksum != that.Checksum {
+		return false
+	}
+	if this.Filename != that.Filename {
+		return false
+	}
+	if !(*timestamppb.Timestamp)(this.LastModified).EqualVT((*timestamppb.Timestamp)(that.LastModified)) {
+		return false
+	}
+	return string(this.unknownFields) == string(that.unknownFields)
+}
+
+func (this *ResolveSourceHTTPResponse) EqualMessageVT(thatMsg proto.Message) bool {
+	that, ok := thatMsg.(*ResolveSourceHTTPResponse)
 	if !ok {
 		return false
 	}
@@ -3785,6 +3835,16 @@ func (m *ResolveSourceMetaResponse) MarshalToSizedBufferVT(dAtA []byte) (int, er
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
 	}
+	if m.HTTP != nil {
+		size, err := m.HTTP.MarshalToSizedBufferVT(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x22
+	}
 	if m.Git != nil {
 		size, err := m.Git.MarshalToSizedBufferVT(dAtA[:i])
 		if err != nil {
@@ -3906,6 +3966,63 @@ func (m *ResolveSourceGitResponse) MarshalToSizedBufferVT(dAtA []byte) (int, err
 		i -= len(m.Ref)
 		copy(dAtA[i:], m.Ref)
 		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(m.Ref)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.Checksum) > 0 {
+		i -= len(m.Checksum)
+		copy(dAtA[i:], m.Checksum)
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(m.Checksum)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *ResolveSourceHTTPResponse) MarshalVT() (dAtA []byte, err error) {
+	if m == nil {
+		return nil, nil
+	}
+	size := m.SizeVT()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBufferVT(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ResolveSourceHTTPResponse) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *ResolveSourceHTTPResponse) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.unknownFields != nil {
+		i -= len(m.unknownFields)
+		copy(dAtA[i:], m.unknownFields)
+	}
+	if m.LastModified != nil {
+		size, err := (*timestamppb.Timestamp)(m.LastModified).MarshalToSizedBufferVT(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if len(m.Filename) > 0 {
+		i -= len(m.Filename)
+		copy(dAtA[i:], m.Filename)
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(m.Filename)))
 		i--
 		dAtA[i] = 0x12
 	}
@@ -6021,6 +6138,10 @@ func (m *ResolveSourceMetaResponse) SizeVT() (n int) {
 		l = m.Git.SizeVT()
 		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
 	}
+	if m.HTTP != nil {
+		l = m.HTTP.SizeVT()
+		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
 	n += len(m.unknownFields)
 	return n
 }
@@ -6059,6 +6180,28 @@ func (m *ResolveSourceGitResponse) SizeVT() (n int) {
 	}
 	l = len(m.CommitChecksum)
 	if l > 0 {
+		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	n += len(m.unknownFields)
+	return n
+}
+
+func (m *ResolveSourceHTTPResponse) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Checksum)
+	if l > 0 {
+		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	l = len(m.Filename)
+	if l > 0 {
+		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	if m.LastModified != nil {
+		l = (*timestamppb.Timestamp)(m.LastModified).SizeVT()
 		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
 	}
 	n += len(m.unknownFields)
@@ -9450,6 +9593,42 @@ func (m *ResolveSourceMetaResponse) UnmarshalVT(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field HTTP", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.HTTP == nil {
+				m.HTTP = &ResolveSourceHTTPResponse{}
+			}
+			if err := m.HTTP.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := protohelpers.Skip(dAtA[iNdEx:])
@@ -9713,6 +9892,157 @@ func (m *ResolveSourceGitResponse) UnmarshalVT(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.CommitChecksum = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := protohelpers.Skip(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.unknownFields = append(m.unknownFields, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ResolveSourceHTTPResponse) UnmarshalVT(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return protohelpers.ErrIntOverflow
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ResolveSourceHTTPResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ResolveSourceHTTPResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Checksum", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Checksum = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Filename", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Filename = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LastModified", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.LastModified == nil {
+				m.LastModified = &timestamp.Timestamp{}
+			}
+			if err := (*timestamppb.Timestamp)(m.LastModified).UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

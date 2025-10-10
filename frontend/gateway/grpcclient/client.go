@@ -535,6 +535,21 @@ func (c *grpcClient) ResolveSourceMetadata(ctx context.Context, op *opspb.Source
 			CommitChecksum: resp.Git.CommitChecksum,
 		}
 	}
+	if resp.HTTP != nil {
+		dgst, err := digest.Parse(resp.HTTP.Checksum)
+		if err != nil {
+			return nil, errors.Wrapf(err, "invalid http checksum digest %q", resp.HTTP.Checksum)
+		}
+
+		r.HTTP = &sourceresolver.ResolveHTTPResponse{
+			Digest:   dgst,
+			Filename: resp.HTTP.Filename,
+		}
+		if resp.HTTP.LastModified != nil {
+			tm := resp.HTTP.LastModified.AsTime()
+			r.HTTP.LastModified = &tm
+		}
+	}
 	return r, nil
 }
 
