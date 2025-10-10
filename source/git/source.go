@@ -47,6 +47,12 @@ type Source struct {
 	locker *locker.Locker
 }
 
+type Metadata struct {
+	Ref            string
+	Checksum       string
+	CommitChecksum string
+}
+
 // Supported returns nil if the system supports Git source
 func Supported() error {
 	if err := exec.Command("git", "version").Run(); err != nil {
@@ -231,6 +237,19 @@ func (gs *gitSourceHandler) shaToCacheKey(sha, ref string) string {
 	return key
 }
 
+func (gs *Source) ResolveMetadata(ctx context.Context, id *GitIdentifier, sm *session.Manager, g session.Group) (*Metadata, error) {
+	gsh := &gitSourceHandler{
+		src:    *id,
+		Source: gs,
+		sm:     sm,
+	}
+	md, err := gsh.resolveMetadata(ctx, g)
+	if err != nil {
+		return nil, err
+	}
+	return md, nil
+}
+
 func (gs *Source) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager, _ solver.Vertex) (source.SourceInstance, error) {
 	gitIdentifier, ok := id.(*GitIdentifier)
 	if !ok {
@@ -365,7 +384,7 @@ func (gs *gitSourceHandler) mountKnownHosts() (string, func() error, error) {
 	return knownHosts.Name(), cleanup, nil
 }
 
-func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index int) (string, string, solver.CacheOpts, bool, error) {
+func (gs *gitSourceHandler) resolveMetadata(ctx context.Context, g session.Group) (*Metadata, error) {
 	remote := gs.src.Remote
 	gs.locker.Lock(remote)
 	defer gs.locker.Unlock(remote)
@@ -373,24 +392,22 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 	if gs.src.Checksum != "" {
 		matched, err := regexp.MatchString("^[a-fA-F0-9]+$", gs.src.Checksum)
 		if err != nil || !matched {
-			return "", "", nil, false, errors.Errorf("invalid checksum %s for Git URL, expected hex commit hash", gs.src.Checksum)
+			return nil, errors.Errorf("invalid checksum %s for Git URL, expected hex commit hash", gs.src.Checksum)
 		}
 	}
 
 	if gitutil.IsCommitSHA(gs.src.Ref) {
-		cacheKey := gs.shaToCacheKey(gs.src.Ref, gs.src.Ref)
-		gs.cacheKey = cacheKey
-		gs.cacheCommit = gs.src.Ref
-		gs.sha256 = len(gs.src.Ref) == 64
-		// gs.src.Checksum is verified when checking out the commit
-		return cacheKey, gs.src.Ref, nil, true, nil
+		return &Metadata{
+			Ref:      gs.src.Ref,
+			Checksum: gs.src.Ref,
+		}, nil
 	}
 
 	gs.getAuthToken(ctx, g)
 
 	tmpGit, cleanup, err := gs.emptyGitCli(ctx, g)
 	if err != nil {
-		return "", "", nil, false, err
+		return nil, err
 	}
 	defer cleanup()
 
@@ -398,7 +415,7 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 	if ref == "" {
 		ref, err = getDefaultBranch(ctx, tmpGit, gs.src.Remote)
 		if err != nil {
-			return "", "", nil, false, err
+			return nil, err
 		}
 	}
 
@@ -406,7 +423,7 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 
 	buf, err := tmpGit.Run(ctx, "ls-remote", gs.src.Remote, ref, ref+"^{}")
 	if err != nil {
-		return "", "", nil, false, errors.Wrapf(err, "failed to fetch remote %s", urlutil.RedactCredentials(remote))
+		return nil, errors.Wrapf(err, "failed to fetch remote %s", urlutil.RedactCredentials(remote))
 	}
 	lines := strings.Split(string(buf), "\n")
 
@@ -447,10 +464,10 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 		usedRef = tagRef
 	}
 	if sha == "" {
-		return "", "", nil, false, errors.Errorf("repository does not contain ref %s, output: %q", ref, string(buf))
+		return nil, errors.Errorf("repository does not contain ref %s, output: %q", ref, string(buf))
 	}
 	if !gitutil.IsCommitSHA(sha) {
-		return "", "", nil, false, errors.Errorf("invalid commit sha %q", sha)
+		return nil, errors.Errorf("invalid commit sha %q", sha)
 	}
 	if gs.src.Checksum != "" {
 		if !strings.HasPrefix(sha, gs.src.Checksum) && !strings.HasPrefix(annotatedTagSha, gs.src.Checksum) {
@@ -458,19 +475,45 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 			if annotatedTagSha != "" {
 				exp = " or " + annotatedTagSha
 			}
-			return "", "", nil, false, errors.Errorf("expected checksum to match %s, got %s", gs.src.Checksum, exp)
+			return nil, errors.Errorf("expected checksum to match %s, got %s", gs.src.Checksum, exp)
 		}
 	}
-	shaForCacheKey := sha
+	md := &Metadata{
+		Ref:      usedRef,
+		Checksum: sha,
+	}
 	if annotatedTagSha != "" && !gs.src.KeepGitDir {
 		// prefer commit sha pointed by annotated tag if no git dir is kept for more matches
-		shaForCacheKey = annotatedTagSha
+		md.CommitChecksum = annotatedTagSha
 	}
-	cacheKey := gs.shaToCacheKey(shaForCacheKey, usedRef)
+	return md, nil
+}
+
+func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index int) (string, string, solver.CacheOpts, bool, error) {
+	md, err := gs.resolveMetadata(ctx, g)
+	if err != nil {
+		return "", "", nil, false, err
+	}
+
+	if gitutil.IsCommitSHA(md.Ref) {
+		cacheKey := gs.shaToCacheKey(md.Ref, md.Ref)
+		gs.cacheKey = cacheKey
+		gs.cacheCommit = md.Ref
+		gs.sha256 = len(md.Ref) == 64
+		// gs.src.Checksum is verified when checking out the commit
+		return cacheKey, md.Ref, nil, true, nil
+	}
+
+	shaForCacheKey := md.Checksum
+	if md.CommitChecksum != "" && !gs.src.KeepGitDir {
+		// prefer commit sha pointed by annotated tag if no git dir is kept for more matches
+		shaForCacheKey = md.CommitChecksum
+	}
+	cacheKey := gs.shaToCacheKey(shaForCacheKey, md.Ref)
 	gs.cacheKey = cacheKey
-	gs.sha256 = len(sha) == 64
-	gs.cacheCommit = sha
-	return cacheKey, sha, nil, true, nil
+	gs.sha256 = len(md.Checksum) == 64
+	gs.cacheCommit = md.Checksum
+	return cacheKey, md.Checksum, nil, true, nil
 }
 
 func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (cache.ImmutableRef, error) {

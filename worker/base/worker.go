@@ -443,6 +443,22 @@ func (w *Worker) ResolveSourceMetadata(ctx context.Context, op *pb.SourceOp, opt
 				Config: config,
 			},
 		}, nil
+	case *git.GitIdentifier:
+		if w.GitSource == nil {
+			return nil, errors.New("git source is not supported")
+		}
+		md, err := w.GitSource.ResolveMetadata(ctx, idt, sm, g)
+		if err != nil {
+			return nil, err
+		}
+		return &sourceresolver.MetaResponse{
+			Op: op,
+			Git: &sourceresolver.ResolveGitResponse{
+				Checksum:       md.Checksum,
+				Ref:            md.Ref,
+				CommitChecksum: md.CommitChecksum,
+			},
+		}, nil
 	}
 
 	return &sourceresolver.MetaResponse{
