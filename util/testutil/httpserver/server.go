@@ -56,6 +56,10 @@ func (s *TestServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Encoding", resp.ContentEncoding)
 	}
 
+	if resp.ContentDisposition != "" {
+		w.Header().Set("Content-Disposition", resp.ContentDisposition)
+	}
+
 	if resp.Etag != "" {
 		w.Header().Set("ETag", resp.Etag)
 		if match := r.Header.Get("If-None-Match"); match == resp.Etag {
@@ -80,10 +84,11 @@ func (s *TestServer) Stats(name string) (st Stat) {
 }
 
 type Response struct {
-	Content         []byte
-	Etag            string
-	LastModified    *time.Time
-	ContentEncoding string
+	Content            []byte
+	Etag               string
+	LastModified       *time.Time
+	ContentEncoding    string
+	ContentDisposition string
 }
 
 type Stat struct {

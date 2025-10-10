@@ -242,6 +242,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testFileOpSymlink,
 	testMetadataOnlyLocal,
 	testGitResolveSourceMetadata,
+	testHTTPResolveSourceMetadata,
 }
 
 func TestIntegration(t *testing.T) {
@@ -12052,6 +12053,64 @@ func testGitResolveSourceMetadata(t *testing.T, sb integration.Sandbox) {
 		require.Equal(t, id, md.Op.Identifier)
 		require.Equal(t, server.URL+"/.git", md.Op.Attrs["git.fullurl"])
 
+		return nil, nil
+	}, nil)
+	require.NoError(t, err)
+}
+
+func testHTTPResolveSourceMetadata(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	modTime := time.Now().Add(-24 * time.Hour) // avoid falso positive with current time
+
+	resp := httpserver.Response{
+		Etag:         identity.NewID(),
+		Content:      []byte("content1"),
+		LastModified: &modTime,
+	}
+
+	resp2 := httpserver.Response{
+		Etag:               identity.NewID(),
+		Content:            []byte("content2"),
+		ContentDisposition: "attachment; filename=\"my img.jpg\"",
+	}
+
+	server := httpserver.NewTestServer(map[string]httpserver.Response{
+		"/foo": resp,
+		"/bar": resp2,
+	})
+	defer server.Close()
+
+	_, err = c.Build(ctx, SolveOpt{}, "test", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		id := server.URL + "/foo"
+		md, err := c.ResolveSourceMetadata(ctx, &pb.SourceOp{
+			Identifier: id,
+		}, sourceresolver.Opt{})
+		if err != nil {
+			return nil, err
+		}
+		require.NotNil(t, md.HTTP)
+		require.Equal(t, digest.FromBytes(resp.Content), md.HTTP.Digest)
+		require.Equal(t, "foo", md.HTTP.Filename)
+		require.NotNil(t, md.HTTP.LastModified)
+		require.Equal(t, modTime.Unix(), md.HTTP.LastModified.Unix())
+		require.Equal(t, id, md.Op.Identifier)
+
+		id = server.URL + "/bar"
+		md, err = c.ResolveSourceMetadata(ctx, &pb.SourceOp{
+			Identifier: id,
+		}, sourceresolver.Opt{})
+		if err != nil {
+			return nil, err
+		}
+		require.NotNil(t, md.HTTP)
+		require.Equal(t, digest.FromBytes(resp2.Content), md.HTTP.Digest)
+		require.Equal(t, "my img.jpg", md.HTTP.Filename)
+		require.Nil(t, md.HTTP.LastModified)
+		require.Equal(t, id, md.Op.Identifier)
 		return nil, nil
 	}, nil)
 	require.NoError(t, err)
