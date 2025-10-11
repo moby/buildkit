@@ -235,3 +235,174 @@ func TestParseGitRef(t *testing.T) {
 		})
 	}
 }
+
+func TestFragmentFormat(t *testing.T) {
+	cases := []struct {
+		ref      string
+		expected string
+		ok       bool
+	}{
+		{
+			ref:      "https://example.com/",
+			expected: "https://example.com/",
+			ok:       false,
+		},
+		{
+			ref:      "https://example.com/foo.git",
+			expected: "https://example.com/foo.git",
+			ok:       true,
+		},
+		{
+			ref:      "https://example.com/foo.git#deadbeef",
+			expected: "https://example.com/foo.git#deadbeef",
+			ok:       true,
+		},
+		{
+			ref:      "https://example.com/foo.git#release/1.2",
+			expected: "https://example.com/foo.git#release/1.2",
+			ok:       true,
+		},
+		{
+			ref:      "https://example.com/foo.git/",
+			expected: "https://example.com/foo.git/",
+			ok:       false,
+		},
+		{
+			ref:      "https://example.com/foo.git.bar",
+			expected: "https://example.com/foo.git.bar",
+			ok:       false,
+		},
+		{
+			ref:      "git://example.com/foo",
+			expected: "git://example.com/foo",
+			ok:       true,
+		},
+		{
+			ref:      "github.com/moby/buildkit",
+			expected: "github.com/moby/buildkit",
+			ok:       true,
+		},
+		{
+			ref:      "github.com/moby/buildkit#master",
+			expected: "github.com/moby/buildkit#master",
+			ok:       true,
+		},
+		{
+			ref:      "custom.xyz/moby/buildkit.git",
+			expected: "custom.xyz/moby/buildkit.git",
+			ok:       false,
+		},
+		{
+			ref:      "https://github.com/moby/buildkit",
+			expected: "https://github.com/moby/buildkit",
+			ok:       false,
+		},
+		{
+			ref:      "https://github.com/moby/buildkit.git",
+			expected: "https://github.com/moby/buildkit.git",
+			ok:       true,
+		},
+		{
+			ref:      "https://foo:bar@github.com/moby/buildkit.git",
+			expected: "https://foo:bar@github.com/moby/buildkit.git",
+			ok:       true,
+		},
+		{
+			ref:      "git@github.com:moby/buildkit",
+			expected: "git@github.com:moby/buildkit",
+			ok:       true,
+		},
+		{
+			ref:      "git@github.com:moby/buildkit.git",
+			expected: "git@github.com:moby/buildkit.git",
+			ok:       true,
+		},
+		{
+			ref:      "git@bitbucket.org:atlassianlabs/atlassian-docker.git",
+			expected: "git@bitbucket.org:atlassianlabs/atlassian-docker.git",
+			ok:       true,
+		},
+		{
+			ref:      "https://github.com/foo/bar.git#baz/qux:quux/quuz",
+			expected: "https://github.com/foo/bar.git#baz/qux",
+			ok:       true,
+		},
+		{
+			ref:      "http://github.com/docker/docker.git:#branch",
+			expected: "http://github.com/docker/docker.git:#branch",
+			ok:       false,
+		},
+		{
+			ref:      "https://github.com/docker/docker.git#:myfolder",
+			expected: "https://github.com/docker/docker.git",
+			ok:       true,
+		},
+		{
+			ref:      "./.git",
+			expected: "./.git",
+			ok:       false,
+		},
+		{
+			ref:      ".git",
+			expected: ".git",
+			ok:       false,
+		},
+		{
+			ref:      "https://github.com/docker/docker.git?ref=v1.0.0&subdir=/subdir",
+			expected: "https://github.com/docker/docker.git#v1.0.0",
+			ok:       true,
+		},
+		{
+			ref:      "https://github.com/moby/buildkit.git?subdir=/subdir#v1.0.0",
+			expected: "https://github.com/moby/buildkit.git#v1.0.0",
+			ok:       true,
+		},
+		{
+			ref:      "https://github.com/moby/buildkit.git?tag=v1.0.0",
+			expected: "https://github.com/moby/buildkit.git#refs/tags/v1.0.0",
+			ok:       true,
+		},
+		{
+			ref:      "github.com/moby/buildkit?tag=v1.0.0",
+			expected: "github.com/moby/buildkit#refs/tags/v1.0.0",
+			ok:       true,
+		},
+		{
+			ref:      "https://github.com/moby/buildkit.git?branch=v1.0",
+			expected: "https://github.com/moby/buildkit.git#refs/heads/v1.0",
+			ok:       true,
+		},
+		{
+			ref:      "https://github.com/moby/buildkit.git?ref=v1.0.0#v1.2.3",
+			expected: "https://github.com/moby/buildkit.git?ref=v1.0.0#v1.2.3",
+			ok:       false,
+		},
+		{
+			ref:      "https://github.com/moby/buildkit.git?ref=v1.0.0&tag=v1.2.3",
+			expected: "https://github.com/moby/buildkit.git?ref=v1.0.0&tag=v1.2.3",
+			ok:       false,
+		},
+		{
+			ref:      "https://github.com/moby/buildkit.git?tag=v1.0.0&branch=v1.0",
+			expected: "https://github.com/moby/buildkit.git?tag=v1.0.0&branch=v1.0",
+			ok:       false,
+		},
+		{
+			ref:      "git@github.com:moby/buildkit.git?subdir=/subdir#v1.0.0",
+			expected: "git@github.com:moby/buildkit.git#v1.0.0",
+			ok:       true,
+		},
+		{
+			ref:      "https://github.com/moby/buildkit.git?invalid=123",
+			expected: "https://github.com/moby/buildkit.git?invalid=123",
+			ok:       false,
+		},
+	}
+	for i, tt := range cases {
+		t.Run(fmt.Sprintf("case%d", i+1), func(t *testing.T) {
+			got, ok := FragmentFormat(tt.ref)
+			require.Equal(t, tt.expected, got)
+			require.Equal(t, tt.ok, ok)
+		})
+	}
+}
