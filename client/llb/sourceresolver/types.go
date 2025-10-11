@@ -2,6 +2,7 @@ package sourceresolver
 
 import (
 	"context"
+	"time"
 
 	"github.com/moby/buildkit/solver/pb"
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
@@ -33,6 +34,8 @@ type MetaResponse struct {
 	Op *pb.SourceOp
 
 	Image *ResolveImageResponse
+	Git   *ResolveGitResponse
+	HTTP  *ResolveHTTPResponse
 }
 
 type ResolveImageOpt struct {
@@ -42,6 +45,18 @@ type ResolveImageOpt struct {
 type ResolveImageResponse struct {
 	Digest digest.Digest
 	Config []byte
+}
+
+type ResolveGitResponse struct {
+	Checksum       string
+	Ref            string
+	CommitChecksum string
+}
+
+type ResolveHTTPResponse struct {
+	Digest       digest.Digest
+	Filename     string
+	LastModified *time.Time
 }
 
 type ResolveOCILayoutOpt struct {

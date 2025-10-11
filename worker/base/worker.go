@@ -95,6 +95,8 @@ type Worker struct {
 	imageWriter     *imageexporter.ImageWriter
 	ImageSource     *containerimage.Source
 	OCILayoutSource *containerimage.Source
+	GitSource       *git.Source
+	HTTPSource      *http.Source
 }
 
 // NewWorker instantiates a local worker
@@ -141,6 +143,7 @@ func NewWorker(ctx context.Context, opt WorkerOpt) (*Worker, error) {
 
 	sm.Register(is)
 
+	var gitSource *git.Source
 	if err := git.Supported(); err == nil {
 		gs, err := git.NewSource(git.Opt{
 			CacheAccessor: cm,
@@ -149,6 +152,7 @@ func NewWorker(ctx context.Context, opt WorkerOpt) (*Worker, error) {
 			return nil, err
 		}
 		sm.Register(gs)
+		gitSource = gs
 	} else {
 		bklog.G(ctx).Warnf("git source cannot be enabled: %v", err)
 	}
@@ -210,6 +214,8 @@ func NewWorker(ctx context.Context, opt WorkerOpt) (*Worker, error) {
 		imageWriter:     iw,
 		ImageSource:     is,
 		OCILayoutSource: os,
+		GitSource:       gitSource,
+		HTTPSource:      hs,
 	}, nil
 }
 
@@ -437,6 +443,38 @@ func (w *Worker) ResolveSourceMetadata(ctx context.Context, op *pb.SourceOp, opt
 			Image: &sourceresolver.ResolveImageResponse{
 				Digest: dgst,
 				Config: config,
+			},
+		}, nil
+	case *git.GitIdentifier:
+		if w.GitSource == nil {
+			return nil, errors.New("git source is not supported")
+		}
+		md, err := w.GitSource.ResolveMetadata(ctx, idt, sm, g)
+		if err != nil {
+			return nil, err
+		}
+		return &sourceresolver.MetaResponse{
+			Op: op,
+			Git: &sourceresolver.ResolveGitResponse{
+				Checksum:       md.Checksum,
+				Ref:            md.Ref,
+				CommitChecksum: md.CommitChecksum,
+			},
+		}, nil
+	case *http.HTTPIdentifier:
+		if w.HTTPSource == nil {
+			return nil, errors.New("http source is not supported")
+		}
+		md, err := w.HTTPSource.ResolveMetadata(ctx, idt, sm, g)
+		if err != nil {
+			return nil, err
+		}
+		return &sourceresolver.MetaResponse{
+			Op: op,
+			HTTP: &sourceresolver.ResolveHTTPResponse{
+				Digest:       md.Digest,
+				Filename:     md.Filename,
+				LastModified: md.LastModified,
 			},
 		}, nil
 	}
