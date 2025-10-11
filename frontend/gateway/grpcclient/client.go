@@ -1105,6 +1105,67 @@ func (ctr *container) Release(ctx context.Context) error {
 	return err
 }
 
+func (ctr *container) ReadFile(ctx context.Context, req client.ReadRequest) ([]byte, error) {
+	if err := ctr.caps.Supports(pb.CapGatewayExecFilesystem); err != nil {
+		return nil, err
+	}
+
+	bklog.G(ctx).Debugf("|---> ReadFileContainer %s", ctr.id)
+	in := &pb.ReadFileRequest{
+		Ref:      ctr.id,
+		FilePath: req.Filename,
+	}
+	if req.Range != nil {
+		in.Range = &pb.FileRange{
+			Length: int64(req.Range.Length),
+			Offset: int64(req.Range.Offset),
+		}
+	}
+
+	resp, err := ctr.client.ReadFileContainer(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+func (ctr *container) ReadDir(ctx context.Context, req client.ReadDirRequest) ([]*fstypes.Stat, error) {
+	if err := ctr.caps.Supports(pb.CapGatewayExecFilesystem); err != nil {
+		return nil, err
+	}
+
+	bklog.G(ctx).Debugf("|---> ReadDirContainer %s", ctr.id)
+	in := &pb.ReadDirRequest{
+		Ref:            ctr.id,
+		DirPath:        req.Path,
+		IncludePattern: req.IncludePattern,
+	}
+
+	resp, err := ctr.client.ReadDirContainer(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return resp.Entries, nil
+}
+
+func (ctr *container) StatFile(ctx context.Context, req client.StatRequest) (*fstypes.Stat, error) {
+	if err := ctr.caps.Supports(pb.CapGatewayExecFilesystem); err != nil {
+		return nil, err
+	}
+
+	bklog.G(ctx).Debugf("|---> StatFileContainer %s", ctr.id)
+	in := &pb.StatFileRequest{
+		Ref:  ctr.id,
+		Path: req.Path,
+	}
+
+	resp, err := ctr.client.StatFileContainer(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return resp.Stat, nil
+}
+
 type containerProcess struct {
 	execMsgs *messageForwarder
 	id       string
