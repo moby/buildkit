@@ -206,11 +206,12 @@ func (gs *gitSource) mountRemote(ctx context.Context, remote string, authArgs []
 
 type gitSourceHandler struct {
 	*gitSource
-	src      GitIdentifier
-	cacheKey string
-	sha256   bool
-	sm       *session.Manager
-	authArgs []string
+	src         GitIdentifier
+	cacheKey    string
+	cacheCommit string
+	sha256      bool
+	sm          *session.Manager
+	authArgs    []string
 }
 
 func (gs *gitSourceHandler) shaToCacheKey(sha, ref string) string {
@@ -379,6 +380,7 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 	if gitutil.IsCommitSHA(gs.src.Ref) {
 		cacheKey := gs.shaToCacheKey(gs.src.Ref, gs.src.Ref)
 		gs.cacheKey = cacheKey
+		gs.cacheCommit = gs.src.Ref
 		gs.sha256 = len(gs.src.Ref) == 64
 		// gs.src.Checksum is verified when checking out the commit
 		return cacheKey, gs.src.Ref, nil, true, nil
@@ -467,6 +469,7 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 	cacheKey := gs.shaToCacheKey(shaForCacheKey, usedRef)
 	gs.cacheKey = cacheKey
 	gs.sha256 = len(sha) == 64
+	gs.cacheCommit = sha
 	return cacheKey, sha, nil, true, nil
 }
 
@@ -548,6 +551,14 @@ func (gs *gitSourceHandler) trySnapshot(ctx context.Context, g session.Group, re
 		}
 	}
 
+	// local refs are needed so they would be advertised on next fetches. Force is used
+	// in case the ref is a branch and it now points to a different commit sha
+	// TODO: is there a better way to do this?
+	targetRef := ref
+	if !strings.HasPrefix(ref, "refs/tags/") {
+		targetRef = "tags/" + ref
+	}
+
 	if doFetch {
 		// make sure no old lock files have leaked
 		os.RemoveAll(filepath.Join(gitDir, "shallow.lock"))
@@ -565,13 +576,6 @@ func (gs *gitSourceHandler) trySnapshot(ctx context.Context, g session.Group, re
 		if gitutil.IsCommitSHA(ref) {
 			args = append(args, ref)
 		} else {
-			// local refs are needed so they would be advertised on next fetches. Force is used
-			// in case the ref is a branch and it now points to a different commit sha
-			// TODO: is there a better way to do this?
-			targetRef := ref
-			if !strings.HasPrefix(ref, "refs/tags/") {
-				targetRef = "tags/" + ref
-			}
 			args = append(args, "--force", ref+":"+targetRef)
 		}
 		if _, err := git.Run(ctx, args...); err != nil {
@@ -589,9 +593,49 @@ func (gs *gitSourceHandler) trySnapshot(ctx context.Context, g session.Group, re
 
 			return nil, err
 		}
-		_, err = git.Run(ctx, "reflog", "expire", "--all", "--expire=now")
+
+		// verify that commit matches the cache key commit
+		dt, err := git.Run(ctx, "rev-parse", ref)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to expire reflog for remote %s", urlutil.RedactCredentials(gs.src.Remote))
+			return nil, err
+		}
+		// if fetched ref does not match cache key, the remote side has changed the ref
+		// if possible we can try to force the commit that the cache key points to, otherwise we need to error
+		if strings.TrimSpace(string(dt)) != gs.cacheCommit {
+			uptRef := targetRef
+			if !strings.HasPrefix(uptRef, "refs/") {
+				uptRef = "refs/" + uptRef
+			}
+			// check if the commit still exists in the repo
+			if _, err := git.Run(ctx, "cat-file", "-e", gs.cacheCommit); err == nil {
+				// force the ref to point to the commit that the cache key points to
+				if _, err := git.Run(ctx, "update-ref", uptRef, gs.cacheCommit, "--no-deref"); err != nil {
+					return nil, err
+				}
+			} else {
+				// try to fetch the commit directly
+				args := []string{"fetch", "--tags"}
+				if _, err := os.Lstat(filepath.Join(gitDir, "shallow")); err == nil {
+					args = append(args, "--unshallow")
+				}
+				args = append(args, "origin", gs.cacheCommit)
+				if _, err := git.Run(ctx, args...); err != nil {
+					return nil, errors.Wrapf(err, "failed to fetch remote %s", urlutil.RedactCredentials(gs.src.Remote))
+				}
+
+				_, err = git.Run(ctx, "reflog", "expire", "--all", "--expire=now")
+				if err != nil {
+					return nil, errors.Wrapf(err, "failed to expire reflog for remote %s", urlutil.RedactCredentials(gs.src.Remote))
+				}
+				if _, err := git.Run(ctx, "cat-file", "-e", gs.cacheCommit); err == nil {
+					// force the ref to point to the commit that the cache key points to
+					if _, err := git.Run(ctx, "update-ref", uptRef, gs.cacheCommit, "--no-deref"); err != nil {
+						return nil, err
+					}
+				} else {
+					return nil, errors.Errorf("fetched ref %s does not match expected commit %s and commit can not be found in the repository", ref, gs.cacheCommit)
+				}
+			}
 		}
 	}
 
