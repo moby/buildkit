@@ -49,6 +49,8 @@ fi
 if [ -n "$localmode" ]; then
   outputFlag="--output=type=docker"
   attestFlags=""
+else
+  outputFlag="${outputFlag},oci-artifact=true"
 fi
 
 if [ -z "$localmode" ] && [ "$GITHUB_ACTIONS" = "true" ]; then
