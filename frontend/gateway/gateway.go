@@ -650,6 +650,13 @@ func (lbf *llbBridgeForwarder) ResolveSourceMeta(ctx context.Context, req *pb.Re
 			Config: resp.Image.Config,
 		}
 	}
+	if resp.Git != nil {
+		r.Git = &pb.ResolveSourceGitResponse{
+			Checksum:       resp.Git.Checksum,
+			Ref:            resp.Git.Ref,
+			CommitChecksum: resp.Git.CommitChecksum,
+		}
+	}
 	return r, nil
 }
 

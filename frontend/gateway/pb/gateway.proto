@@ -140,11 +140,18 @@ message ResolveSourceMetaRequest {
 message ResolveSourceMetaResponse {
 	pb.SourceOp Source = 1;
 	ResolveSourceImageResponse Image = 2;
+	ResolveSourceGitResponse Git = 3;
 }
 
 message ResolveSourceImageResponse {
 	string Digest = 1;
 	bytes Config = 2;
+}
+
+message ResolveSourceGitResponse {
+	string Checksum = 1;
+	string Ref = 2;
+	string CommitChecksum = 3;
 }
 
 message SolveRequest {
