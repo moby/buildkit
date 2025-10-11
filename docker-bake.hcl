@@ -1,4 +1,12 @@
+variable "UBUNTU_VERSION" {
+  default = null
+}
+
 variable "ALPINE_VERSION" {
+  default = null
+}
+
+variable "EXPORT_BASE" {
   default = null
 }
 
@@ -46,6 +54,10 @@ variable "ARCHUTIL_MULTIPLATFORM" {
   default = null
 }
 
+variable "IMAGE_TARGET" {
+  default = null
+}
+
 # Defines the output folder
 variable "DESTDIR" {
   default = ""
@@ -78,9 +90,16 @@ function "bindir" {
   result = DESTDIR != "" ? DESTDIR : "./bin/${defaultdir}"
 }
 
+# Special target: https://github.com/docker/metadata-action#bake-definition
+target "meta-helper" {
+  tags = [IMAGE_TARGET != null && IMAGE_TARGET != "" ? "moby/buildkit:local-${IMAGE_TARGET}" : "moby/buildkit:local"]
+}
+
 target "_common" {
   args = {
     ALPINE_VERSION = ALPINE_VERSION
+    UBUNTU_VERSION = UBUNTU_VERSION
+    EXPORT_BASE = EXPORT_BASE
     GO_VERSION = GO_VERSION
     NODE_VERSION = NODE_VERSION
     BUILDKITD_TAGS = BUILDKITD_TAGS
@@ -131,6 +150,26 @@ target "release" {
   inherits = ["binaries-cross"]
   target = "release"
   output = [bindir("release")]
+}
+
+target "image" {
+  inherits = ["_common", "meta-helper"]
+  target = IMAGE_TARGET
+  cache-to = ["type=inline"]
+  output = ["type=docker"]
+}
+
+target "image-cross" {
+  inherits = ["image"]
+  output = ["type=image"]
+  platforms = [
+    "linux/amd64",
+    "linux/arm/v7",
+    "linux/arm64",
+    "linux/s390x",
+    "linux/ppc64le",
+    "linux/riscv64"
+  ]
 }
 
 target "integration-tests-base" {
