@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"syscall"
-	"time"
 
 	"github.com/pkg/errors"
 )
@@ -35,6 +34,6 @@ func configureNpipeTransport(_ *http.Transport, _, _ string) error {
 
 // DialPipe connects to a Windows named pipe.
 // This is not supported on other OSes.
-func DialPipe(_ string, _ time.Duration) (net.Conn, error) {
+func DialPipe(ctx context.Context, addr string) (net.Conn, error) {
 	return nil, syscall.EAFNOSUPPORT
 }
