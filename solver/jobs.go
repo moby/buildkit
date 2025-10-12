@@ -73,6 +73,10 @@ type state struct {
 	solver    *Solver
 }
 
+func (s *state) Session() session.Group {
+	return s
+}
+
 func (s *state) SessionIterator() session.Iterator {
 	return s.sessionIterator()
 }
