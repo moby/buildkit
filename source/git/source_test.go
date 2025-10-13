@@ -831,6 +831,294 @@ func testFetchAnnotatedTagChecksums(t *testing.T, format string, keepGitDir bool
 	}
 }
 
+func TestFetchTagChangeRaceSHA1(t *testing.T) {
+	testFetchTagChangeRace(t, "sha1", false)
+}
+
+func TestFetchTagChangeRaceKeepGitDirSHA1(t *testing.T) {
+	testFetchTagChangeRace(t, "sha1", true)
+}
+
+func TestFetchTagChangeRaceSHA256(t *testing.T) {
+	testFetchTagChangeRace(t, "sha256", false)
+}
+
+func TestFetchTagChangeRaceKeepGitDirSHA256(t *testing.T) {
+	testFetchTagChangeRace(t, "sha256", true)
+}
+
+// testFetchTagChangeRace tests case where tag is change in between cache key and snapshot calls.
+func testFetchTagChangeRace(t *testing.T, format string, keepGitDir bool) {
+	ctx := t.Context()
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+	repo := setupGitRepo(t, format)
+	cmd := exec.Command("git", "rev-parse", "v1.2.3")
+	cmd.Dir = repo.mainPath
+
+	out, err := cmd.Output()
+	require.NoError(t, err)
+
+	expLen := 40
+	if format == "sha256" {
+		expLen = 64
+	}
+	shaTag := strings.TrimSpace(string(out))
+	require.Equal(t, expLen, len(shaTag))
+
+	cmd = exec.Command("git", "rev-parse", "v1.2.3^{}")
+	cmd.Dir = repo.mainPath
+
+	out, err = cmd.Output()
+	require.NoError(t, err)
+	shaTagCommit := strings.TrimSpace(string(out))
+	require.Equal(t, expLen, len(shaTagCommit))
+
+	id := &GitIdentifier{Remote: repo.mainURL, Ref: "v1.2.3", KeepGitDir: keepGitDir}
+	gs := setupGitSource(t, t.TempDir())
+
+	g, err := gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	key1, pin1, _, done, err := g.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+	require.True(t, done)
+
+	require.Equal(t, shaTag, pin1)
+	if keepGitDir {
+		require.Equal(t, shaTag+".git#refs/tags/v1.2.3", key1)
+	} else {
+		require.Equal(t, shaTagCommit, key1)
+	}
+
+	cmd = exec.Command("git", "rev-parse", "v1.2.3-special")
+	cmd.Dir = repo.mainPath
+	out, err = cmd.Output()
+	require.NoError(t, err)
+	shaTagNew := strings.TrimSpace(string(out))
+	require.NotEqual(t, shaTag, shaTagNew)
+
+	// delete tag v1.2.3
+	cmd = exec.Command("git", "tag", "-d", "v1.2.3")
+	cmd.Dir = repo.mainPath
+	out, err = cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	// recreate tag v1.2.3 to point to another commit
+	cmd = exec.Command("git", "tag", "v1.2.3", shaTagNew)
+	cmd.Dir = repo.mainPath
+	out, err = cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	ref, err := g.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	ref.Release(context.TODO())
+
+	mount, err := ref.Mount(ctx, true, nil)
+	require.NoError(t, err)
+
+	lm := snapshot.LocalMounter(mount)
+	dir, err := lm.Mount()
+	require.NoError(t, err)
+	defer lm.Unmount()
+
+	// bar only exists in the new commit
+	_, err = os.ReadFile(filepath.Join(dir, "bar"))
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
+
+	if keepGitDir {
+		// read current HEAD commit
+		cmd = exec.Command("git", "rev-parse", "HEAD")
+		cmd.Dir = dir
+
+		out, err = cmd.Output()
+		require.NoError(t, err)
+		shaHead := strings.TrimSpace(string(out))
+		require.Equal(t, shaTagCommit, shaHead)
+	}
+}
+
+func TestFetchBranchChangeRaceSHA1(t *testing.T) {
+	testFetchBranchChangeRace(t, "sha1", false)
+}
+
+func TestFetchBranchChangeRaceKeepGitDirSHA1(t *testing.T) {
+	testFetchBranchChangeRace(t, "sha1", true)
+}
+
+func TestFetchBranchChangeRaceSHA256(t *testing.T) {
+	testFetchBranchChangeRace(t, "sha256", false)
+}
+
+func TestFetchBranchChangeRaceKeepGitDirSHA256(t *testing.T) {
+	testFetchBranchChangeRace(t, "sha256", true)
+}
+
+func testFetchBranchChangeRace(t *testing.T, format string, keepGitDir bool) {
+	ctx := t.Context()
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+	repo := setupGitRepo(t, format)
+	cmd := exec.Command("git", "rev-parse", "master")
+	cmd.Dir = repo.mainPath
+
+	out, err := cmd.Output()
+	require.NoError(t, err)
+
+	expLen := 40
+	if format == "sha256" {
+		expLen = 64
+	}
+	shaMaster := strings.TrimSpace(string(out))
+	require.Equal(t, expLen, len(shaMaster))
+
+	id := &GitIdentifier{Remote: repo.mainURL, KeepGitDir: keepGitDir}
+	gs := setupGitSource(t, t.TempDir())
+
+	g, err := gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	key1, pin1, _, done, err := g.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+	require.True(t, done)
+
+	require.Equal(t, shaMaster, pin1)
+	if keepGitDir {
+		require.Equal(t, shaMaster+".git#refs/heads/master", key1)
+	} else {
+		require.Equal(t, shaMaster, key1)
+	}
+
+	cmd = exec.Command("git", "rev-parse", "feature")
+	cmd.Dir = repo.mainPath
+	out, err = cmd.Output()
+	require.NoError(t, err)
+	shaFeature := strings.TrimSpace(string(out))
+	require.NotEqual(t, shaMaster, shaFeature)
+
+	// checkout feature as master
+	cmd = exec.Command("git", "checkout", "-B", "master", "feature")
+	cmd.Dir = repo.mainPath
+	out, err = cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	ref, err := g.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	ref.Release(context.TODO())
+
+	mount, err := ref.Mount(ctx, true, nil)
+	require.NoError(t, err)
+
+	lm := snapshot.LocalMounter(mount)
+	dir, err := lm.Mount()
+	require.NoError(t, err)
+	defer lm.Unmount()
+
+	// ghi only exists in the feature branch
+	_, err = os.ReadFile(filepath.Join(dir, "ghi"))
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
+
+	if keepGitDir {
+		// read current HEAD commit
+		cmd = exec.Command("git", "rev-parse", "HEAD")
+		cmd.Dir = dir
+
+		out, err = cmd.Output()
+		require.NoError(t, err)
+		shaHead := strings.TrimSpace(string(out))
+		require.Equal(t, shaMaster, shaHead)
+	}
+}
+
+func TestFetchBranchRemoveRaceSHA1(t *testing.T) {
+	testFetchBranchRemoveRace(t, "sha1", false)
+}
+
+func TestFetchBranchRemoveRaceKeepGitDirSHA1(t *testing.T) {
+	testFetchBranchRemoveRace(t, "sha1", true)
+}
+
+func TestFetchBranchRemoveRaceSHA256(t *testing.T) {
+	testFetchBranchRemoveRace(t, "sha256", false)
+}
+
+func TestFetchBranchRemoveRaceKeepGitDirSHA256(t *testing.T) {
+	testFetchBranchRemoveRace(t, "sha256", true)
+}
+
+func testFetchBranchRemoveRace(t *testing.T, format string, keepGitDir bool) {
+	ctx := t.Context()
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+	repo := setupGitRepo(t, format)
+	cmd := exec.Command("git", "rev-parse", "feature")
+	cmd.Dir = repo.mainPath
+
+	out, err := cmd.Output()
+	require.NoError(t, err)
+
+	expLen := 40
+	if format == "sha256" {
+		expLen = 64
+	}
+	shaFeature := strings.TrimSpace(string(out))
+	require.Equal(t, expLen, len(shaFeature))
+
+	id := &GitIdentifier{Remote: repo.mainURL, Ref: "feature", KeepGitDir: keepGitDir}
+	gs := setupGitSource(t, t.TempDir())
+
+	g, err := gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	key1, pin1, _, done, err := g.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+	require.True(t, done)
+
+	require.Equal(t, shaFeature, pin1)
+	if keepGitDir {
+		require.Equal(t, shaFeature+".git#refs/heads/feature", key1)
+	} else {
+		require.Equal(t, shaFeature, key1)
+	}
+
+	cmd = exec.Command("git", "rev-parse", "master")
+	cmd.Dir = repo.mainPath
+	out, err = cmd.Output()
+	require.NoError(t, err)
+	shaMaster := strings.TrimSpace(string(out))
+	require.NotEqual(t, shaMaster, shaFeature)
+
+	// change feature to point to master
+	cmd = exec.Command("git", "branch", "-f", "feature", "master")
+	cmd.Dir = repo.mainPath
+	out, err = cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	cmd = exec.Command("git", "reflog", "expire", "--expire-unreachable=now", "--expire=now", "--all")
+	cmd.Dir = repo.mainPath
+	out, err = cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	cmd = exec.Command("git", "gc", "--prune=now", "--aggressive")
+	cmd.Dir = repo.mainPath
+	out, err = cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	cmd = exec.Command("git", "cat-file", "-t", shaFeature)
+	cmd.Dir = repo.mainPath
+	out, err = cmd.CombinedOutput()
+	require.Error(t, err, string(out))
+
+	_, err = g.Snapshot(ctx, nil)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "fetched ref feature does not match expected commit "+shaFeature)
+}
+
 func TestFetchMutatedTagSHA1(t *testing.T) {
 	testFetchMutatedTag(t, "sha1", false)
 }
