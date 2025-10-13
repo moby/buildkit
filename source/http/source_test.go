@@ -50,8 +50,9 @@ func TestHTTPSource(t *testing.T) {
 	k, p, _, _, err := h.CacheKey(ctx, nil, 0)
 	require.NoError(t, err)
 
-	expectedContent1 := "sha256:0b1a154faa3003c1fbe7fda9c8a42d55fde2df2a2c405c32038f8ac7ed6b044a"
-	expectedPin1 := "sha256:d0b425e00e15a0d36b9b361f02bab63563aed6cb4665083905386c55d5b679fa"
+	expectedPin1 := digest.FromBytes(resp.Content).String()
+	plaintext1 := `{"Filename":"foo","Perm":0,"UID":0,"GID":0,"Checksum":"` + expectedPin1 + `"}`
+	expectedContent1 := digest.FromBytes([]byte(plaintext1)).String()
 
 	require.Equal(t, expectedContent1, k)
 	require.Equal(t, expectedPin1, p)
@@ -107,8 +108,9 @@ func TestHTTPSource(t *testing.T) {
 		Content: []byte("content2"),
 	}
 
-	expectedContent2 := "sha256:888722f299c02bfae173a747a0345bb2291cf6a076c36d8eb6fab442a8adddfa"
-	expectedPin2 := "sha256:dab741b6289e7dccc1ed42330cae1accc2b755ce8079c2cd5d4b5366c9f769a6"
+	expectedPin2 := digest.FromBytes(resp2.Content).String()
+	plaintext2 := `{"Filename":"foo","Perm":0,"UID":0,"GID":0,"Checksum":"` + expectedPin2 + `"}`
+	expectedContent2 := digest.FromBytes([]byte(plaintext2)).String()
 
 	// update etag, downloads again
 	server.SetRoute("/foo", resp2)
@@ -165,8 +167,12 @@ func TestHTTPDefaultName(t *testing.T) {
 	k, p, _, _, err := h.CacheKey(ctx, nil, 0)
 	require.NoError(t, err)
 
-	require.Equal(t, "sha256:146f16ec8810a62a57ce314aba391f95f7eaaf41b8b1ebaf2ab65fd63b1ad437", k)
-	require.Equal(t, "sha256:d0b425e00e15a0d36b9b361f02bab63563aed6cb4665083905386c55d5b679fa", p)
+	expectedPin := digest.FromBytes(resp.Content).String()
+	plaintext := `{"Filename":"download","Perm":0,"UID":0,"GID":0,"Checksum":"` + expectedPin + `"}`
+	expectedContent := digest.FromBytes([]byte(plaintext)).String()
+
+	require.Equal(t, expectedContent, k)
+	require.Equal(t, expectedPin, p)
 	require.Equal(t, 1, server.Stats("/").AllRequests)
 	require.Equal(t, 0, server.Stats("/").CachedRequests)
 
@@ -223,7 +229,8 @@ func TestHTTPChecksum(t *testing.T) {
 	})
 	defer server.Close()
 
-	id := &HTTPIdentifier{URL: server.URL + "/foo", Checksum: digest.FromBytes([]byte("content-different"))}
+	expectedPinDifferent := digest.FromBytes([]byte("content-different"))
+	id := &HTTPIdentifier{URL: server.URL + "/foo", Checksum: expectedPinDifferent}
 
 	h, err := hs.Resolve(ctx, id, nil, nil)
 	require.NoError(t, err)
@@ -231,13 +238,15 @@ func TestHTTPChecksum(t *testing.T) {
 	k, p, _, _, err := h.CacheKey(ctx, nil, 0)
 	require.NoError(t, err)
 
-	expectedContentDifferent := "sha256:f25996f463dca69cffb580f8273ffacdda43332b5f0a8bea2ead33900616d44b"
-	expectedContentCorrect := "sha256:c6a440110a7757b9e1e47b52e413cba96c62377c37a474714b6b3c4f8b74e536"
-	expectedPinDifferent := "sha256:ab0d5a7aa55c1c95d59c302eb12c55368940e6f0a257646afd455cabe248edc4"
-	expectedPinCorrect := "sha256:f5fa14774044d2ec428ffe7efbfaa0a439db7bc8127d6b71aea21e1cd558d0f0"
+	plaintextDifferent := `{"Filename":"foo","Perm":0,"UID":0,"GID":0,"Checksum":"` + expectedPinDifferent + `"}`
+	expectedContentDifferent := digest.FromBytes([]byte(plaintextDifferent)).String()
+
+	expectedPinCorrect := digest.FromBytes(resp.Content).String()
+	plaintextCorrect := `{"Filename":"foo","Perm":0,"UID":0,"GID":0,"Checksum":"` + expectedPinCorrect + `"}`
+	expectedContentCorrect := digest.FromBytes([]byte(plaintextCorrect)).String()
 
 	require.Equal(t, expectedContentDifferent, k)
-	require.Equal(t, expectedPinDifferent, p)
+	require.Equal(t, expectedPinDifferent.String(), p)
 	require.Equal(t, 0, server.Stats("/foo").AllRequests)
 	require.Equal(t, 0, server.Stats("/foo").CachedRequests)
 
@@ -245,7 +254,7 @@ func TestHTTPChecksum(t *testing.T) {
 	require.Error(t, err)
 
 	require.Equal(t, expectedContentDifferent, k)
-	require.Equal(t, expectedPinDifferent, p)
+	require.Equal(t, expectedPinDifferent.String(), p)
 	require.Equal(t, 1, server.Stats("/foo").AllRequests)
 	require.Equal(t, 0, server.Stats("/foo").CachedRequests)
 
