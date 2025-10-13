@@ -52,7 +52,7 @@ func NewFileOp(v solver.Vertex, op *pb.Op_File, cm cache.Manager, parallelism *s
 	}, nil
 }
 
-func (f *fileOp) CacheMap(ctx context.Context, g session.Group, index int) (*solver.CacheMap, bool, error) {
+func (f *fileOp) CacheMap(ctx context.Context, jobCtx solver.JobContext, index int) (*solver.CacheMap, bool, error) {
 	selectors := map[int][]opsutils.Selector{}
 	invalidSelectors := map[int]struct{}{}
 
@@ -173,7 +173,7 @@ func (f *fileOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 	return cm, true, nil
 }
 
-func (f *fileOp) Exec(ctx context.Context, g session.Group, inputs []solver.Result) ([]solver.Result, error) {
+func (f *fileOp) Exec(ctx context.Context, jobCtx solver.JobContext, inputs []solver.Result) ([]solver.Result, error) {
 	inpRefs := make([]fileoptypes.Ref, 0, len(inputs))
 	for _, inp := range inputs {
 		workerRef, ok := inp.Sys().(*worker.WorkerRef)
@@ -189,7 +189,7 @@ func (f *fileOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 	}
 
 	fs := NewFileOpSolver(f.w, backend, f.refManager)
-	outs, err := fs.Solve(ctx, inpRefs, f.op.Actions, g)
+	outs, err := fs.Solve(ctx, inpRefs, f.op.Actions, jobCtx.Session())
 	if err != nil {
 		return nil, err
 	}

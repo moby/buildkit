@@ -3678,6 +3678,8 @@ type vertex struct {
 	execCallCount  *int64
 }
 
+var _ Op = &vertex{}
+
 func (v *vertex) Digest() digest.Digest {
 	return digest.FromBytes([]byte(v.opt.name))
 }
@@ -3752,7 +3754,7 @@ func (v *vertex) cacheMap(ctx context.Context) error {
 	return nil
 }
 
-func (v *vertex) CacheMap(ctx context.Context, g session.Group, index int) (*CacheMap, bool, error) {
+func (v *vertex) CacheMap(ctx context.Context, jobCtx JobContext, index int) (*CacheMap, bool, error) {
 	if index == 0 {
 		if err := v.cacheMap(ctx); err != nil {
 			return nil, false, err
@@ -3789,7 +3791,7 @@ func (v *vertex) exec(ctx context.Context, inputs []Result) error {
 	return nil
 }
 
-func (v *vertex) Exec(ctx context.Context, g session.Group, inputs []Result) (outputs []Result, err error) {
+func (v *vertex) Exec(ctx context.Context, job JobContext, inputs []Result) (outputs []Result, err error) {
 	if err := v.exec(ctx, inputs); err != nil {
 		return nil, err
 	}
@@ -3834,11 +3836,13 @@ type vertexConst struct {
 	value int
 }
 
+var _ Op = &vertexConst{}
+
 func (v *vertexConst) Sys() any {
 	return v
 }
 
-func (v *vertexConst) Exec(ctx context.Context, g session.Group, inputs []Result) (outputs []Result, err error) {
+func (v *vertexConst) Exec(ctx context.Context, jobCtx JobContext, inputs []Result) (outputs []Result, err error) {
 	if err := v.exec(ctx, inputs); err != nil {
 		return nil, err
 	}
@@ -3865,11 +3869,13 @@ type vertexSum struct {
 	value int
 }
 
+var _ Op = &vertexSum{}
+
 func (v *vertexSum) Sys() any {
 	return v
 }
 
-func (v *vertexSum) Exec(ctx context.Context, g session.Group, inputs []Result) (outputs []Result, err error) {
+func (v *vertexSum) Exec(ctx context.Context, jobCtx JobContext, inputs []Result) (outputs []Result, err error) {
 	if err := v.exec(ctx, inputs); err != nil {
 		return nil, err
 	}
@@ -3904,11 +3910,13 @@ type vertexAdd struct {
 	value int
 }
 
+var _ Op = &vertexAdd{}
+
 func (v *vertexAdd) Sys() any {
 	return v
 }
 
-func (v *vertexAdd) Exec(ctx context.Context, g session.Group, inputs []Result) (outputs []Result, err error) {
+func (v *vertexAdd) Exec(ctx context.Context, jobCtx JobContext, inputs []Result) (outputs []Result, err error) {
 	if err := v.exec(ctx, inputs); err != nil {
 		return nil, err
 	}
@@ -3942,11 +3950,13 @@ type vertexSubBuild struct {
 	b Builder
 }
 
+var _ Op = &vertexSubBuild{}
+
 func (v *vertexSubBuild) Sys() any {
 	return v
 }
 
-func (v *vertexSubBuild) Exec(ctx context.Context, g session.Group, inputs []Result) (outputs []Result, err error) {
+func (v *vertexSubBuild) Exec(ctx context.Context, jobCtx JobContext, inputs []Result) (outputs []Result, err error) {
 	if err := v.exec(ctx, inputs); err != nil {
 		return nil, err
 	}

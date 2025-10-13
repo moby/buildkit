@@ -166,13 +166,17 @@ type ReleaseFunc func()
 type Op interface {
 	// CacheMap returns structure describing how the operation is cached.
 	// Currently only roots are allowed to return multiple cache maps per op.
-	CacheMap(context.Context, session.Group, int) (*CacheMap, bool, error)
+	CacheMap(context.Context, JobContext, int) (*CacheMap, bool, error)
 
 	// Exec runs an operation given results from previous operations.
-	Exec(ctx context.Context, g session.Group, inputs []Result) (outputs []Result, err error)
+	Exec(ctx context.Context, jobCtx JobContext, inputs []Result) (outputs []Result, err error)
 
 	// Acquire acquires the necessary resources to execute the `Op`.
 	Acquire(ctx context.Context) (release ReleaseFunc, err error)
+}
+
+type JobContext interface {
+	Session() session.Group
 }
 
 type ProvenanceProvider interface {
