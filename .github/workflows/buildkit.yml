@@ -161,22 +161,38 @@ jobs:
 
   image:
     runs-on: ubuntu-24.04
+    env:
+      DEFAULT_BASE: alpine
     needs:
       - test
     strategy:
       fail-fast: false
       matrix:
-        target:
-          - ''
-          - rootless
+        include:
+          -
+            base: 'alpine'
+          -
+            base: 'alpine'
+            target: 'rootless'
+          -
+            base: 'ubuntu'
+            build-tag: 'nvidia'
     steps:
       -
         name: Prepare
         run: |
+          tagSuffix=""
           if [ -n "${{ matrix.target }}" ]; then
-            echo "TAG_SUFFIX=-${{ matrix.target }}" >> $GITHUB_ENV
+            tagSuffix="${tagSuffix}-${{ matrix.target }}"
           fi
-          if [[ $GITHUB_REF == refs/tags/v* ]]; then
+          if [ "${{ matrix.base }}" != "$DEFAULT_BASE" ]; then
+            tagSuffix="${tagSuffix}-${{ matrix.base }}"
+          fi
+          if [ -n "${{ matrix.build-tag }}" ]; then
+            tagSuffix="${tagSuffix}-${{ matrix.build-tag }}"
+          fi
+          echo "TAG_SUFFIX=${tagSuffix}" >> $GITHUB_ENV
+          if [[ $GITHUB_REF == refs/tags/v* ]] && [[ "${{ matrix.base }}" = "$DEFAULT_BASE" ]] && [[ -z "${{ matrix.build-tag }}" ]]; then
             if [[ "${GITHUB_REF#refs/tags/}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
               if [ -n "${{ matrix.target }}" ]; then
                 echo "TAG_LATEST=${{ matrix.target }}" >> $GITHUB_ENV
@@ -208,15 +224,19 @@ jobs:
           ### moby/buildkit:latest
           ### moby/buildkit:v0.24.0-rootless
           ### moby/buildkit:rootless
+          ### moby/buildkit:v0.24.0-ubuntu-nvidia
           ## push semver prerelease tag v0.24.0-rc1
           ### moby/buildkit:v0.24.0-rc1
           ### moby/buildkit:v0.24.0-rc1-rootless
+          ### moby/buildkit:v0.24.0-rc1-ubuntu-nvidia
           ## push on master
           ### moby/buildkit:master
           ### moby/buildkit:master-rootless
+          ### moby/buildkit:master-ubuntu-nvidia
           ## scheduled event on master
           ### moby/buildkit:nightly
           ### moby/buildkit:nightly-rootless
+          ### moby/buildkit:nightly-ubuntu-nvidia
           tags: |
             type=schedule,pattern=nightly,suffix=${{ env.TAG_SUFFIX }}
             type=ref,event=branch,suffix=${{ env.TAG_SUFFIX }}
@@ -251,11 +271,13 @@ jobs:
           provenance: mode=max,version=v1
           sbom: true
           set: |
-            *.cache-from=type=gha,scope=image${{ matrix.target }}
-            *.cache-to=type=gha,scope=image${{ matrix.target }}
+            *.cache-from=type=gha,scope=image${{ matrix.target }}-${{ matrix.base }}${{ matrix.build-tag }}
+            *.cache-to=type=gha,scope=image${{ matrix.target }}-${{ matrix.base }}${{ matrix.build-tag }}
             *.no-cache-filter=${{ (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')) && 'buildkit-export-alpine,buildkit-export-ubuntu,gobuild-base,rootless' || '' }}
         env:
           IMAGE_TARGET: ${{ matrix.target }}
+          EXPORT_BASE: ${{ matrix.base }}
+          BUILDKITD_TAGS: ${{ matrix.build-tag }}
 
   scout:
     runs-on: ubuntu-24.04
