@@ -33,6 +33,7 @@ type MetaResponse struct {
 	Op *pb.SourceOp
 
 	Image *ResolveImageResponse
+	Git   *ResolveGitResponse
 }
 
 type ResolveImageOpt struct {
@@ -42,6 +43,12 @@ type ResolveImageOpt struct {
 type ResolveImageResponse struct {
 	Digest digest.Digest
 	Config []byte
+}
+
+type ResolveGitResponse struct {
+	Checksum       string
+	Ref            string
+	CommitChecksum string
 }
 
 type ResolveOCILayoutOpt struct {

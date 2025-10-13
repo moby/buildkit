@@ -16,8 +16,10 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"runtime"
@@ -239,6 +241,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testRunValidExitCodes,
 	testFileOpSymlink,
 	testMetadataOnlyLocal,
+	testGitResolveSourceMetadata,
 }
 
 func TestIntegration(t *testing.T) {
@@ -11966,6 +11969,108 @@ func testRunValidExitCodes(t *testing.T, sb integration.Sandbox) {
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "exit code: 0")
+}
+
+func testGitResolveSourceMetadata(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	gitDir := t.TempDir()
+	gitCommands := []string{
+		"git init",
+		"git config --local user.email test",
+		"git config --local user.name test",
+		"touch a",
+		"git add a",
+		"git commit -m a",
+		"git tag -a v0.1 -m v0.1",
+		"echo b > b",
+		"git add b",
+		"git commit -m b",
+		"git checkout -B v2",
+		"git update-server-info",
+	}
+	err = runInDir(gitDir, gitCommands...)
+	require.NoError(t, err)
+
+	cmd := exec.Command("git", "rev-parse", "HEAD")
+	cmd.Dir = gitDir
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	commitHEAD := strings.TrimSpace(string(out))
+
+	cmd = exec.Command("git", "rev-parse", "v0.1")
+	cmd.Dir = gitDir
+	out, err = cmd.Output()
+	require.NoError(t, err)
+	commitTag := strings.TrimSpace(string(out))
+
+	cmd = exec.Command("git", "rev-parse", "v0.1^{commit}")
+	cmd.Dir = gitDir
+	out, err = cmd.Output()
+	require.NoError(t, err)
+	commitTagCommit := strings.TrimSpace(string(out))
+
+	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Clean(gitDir))))
+	defer server.Close()
+
+	_, err = c.Build(ctx, SolveOpt{}, "test", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		id := "git://" + strings.TrimPrefix(server.URL, "http://") + "/.git"
+		md, err := c.ResolveSourceMetadata(ctx, &pb.SourceOp{
+			Identifier: id,
+			Attrs: map[string]string{
+				"git.fullurl": server.URL + "/.git",
+			},
+		}, sourceresolver.Opt{})
+		if err != nil {
+			return nil, err
+		}
+		require.NotNil(t, md.Git)
+		require.Equal(t, "refs/heads/v2", md.Git.Ref) // default to branch head
+		require.Equal(t, commitHEAD, md.Git.Checksum)
+		require.Equal(t, "", md.Git.CommitChecksum) // not annotated tag
+		require.Equal(t, id, md.Op.Identifier)
+		require.Equal(t, server.URL+"/.git", md.Op.Attrs["git.fullurl"])
+
+		id += "#v0.1"
+		md, err = c.ResolveSourceMetadata(ctx, &pb.SourceOp{
+			Identifier: id,
+			Attrs: map[string]string{
+				"git.fullurl": server.URL + "/.git",
+			},
+		}, sourceresolver.Opt{})
+		if err != nil {
+			return nil, err
+		}
+		require.NotNil(t, md.Git)
+		require.Equal(t, "refs/tags/v0.1", md.Git.Ref)
+		require.Equal(t, commitTag, md.Git.Checksum) // annotated tag
+		require.Equal(t, commitTagCommit, md.Git.CommitChecksum)
+
+		require.Equal(t, id, md.Op.Identifier)
+		require.Equal(t, server.URL+"/.git", md.Op.Attrs["git.fullurl"])
+
+		return nil, nil
+	}, nil)
+	require.NoError(t, err)
+}
+
+func runInDir(dir string, cmds ...string) error {
+	for _, args := range cmds {
+		var cmd *exec.Cmd
+		if runtime.GOOS == "windows" {
+			cmd = exec.Command("powershell", "-command", args)
+		} else {
+			cmd = exec.Command("sh", "-c", args)
+		}
+		cmd.Dir = dir
+		if err := cmd.Run(); err != nil {
+			return errors.Wrapf(err, "error running %v", args)
+		}
+	}
+	return nil
 }
 
 type warningsListOutput []*VertexWarning
