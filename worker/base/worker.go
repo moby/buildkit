@@ -96,6 +96,7 @@ type Worker struct {
 	ImageSource     *containerimage.Source
 	OCILayoutSource *containerimage.Source
 	GitSource       *git.Source
+	HTTPSource      *http.Source
 }
 
 // NewWorker instantiates a local worker
@@ -214,6 +215,7 @@ func NewWorker(ctx context.Context, opt WorkerOpt) (*Worker, error) {
 		ImageSource:     is,
 		OCILayoutSource: os,
 		GitSource:       gitSource,
+		HTTPSource:      hs,
 	}, nil
 }
 
@@ -457,6 +459,22 @@ func (w *Worker) ResolveSourceMetadata(ctx context.Context, op *pb.SourceOp, opt
 				Checksum:       md.Checksum,
 				Ref:            md.Ref,
 				CommitChecksum: md.CommitChecksum,
+			},
+		}, nil
+	case *http.HTTPIdentifier:
+		if w.HTTPSource == nil {
+			return nil, errors.New("http source is not supported")
+		}
+		md, err := w.HTTPSource.ResolveMetadata(ctx, idt, sm, g)
+		if err != nil {
+			return nil, err
+		}
+		return &sourceresolver.MetaResponse{
+			Op: op,
+			HTTP: &sourceresolver.ResolveHTTPResponse{
+				Digest:       md.Digest,
+				Filename:     md.Filename,
+				LastModified: md.LastModified,
 			},
 		}, nil
 	}

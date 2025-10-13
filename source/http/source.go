@@ -52,28 +52,30 @@ type Opt struct {
 	Transport     http.RoundTripper
 }
 
-type httpSource struct {
+type Source struct {
 	cache     cache.Accessor
 	transport http.RoundTripper
 }
 
-func NewSource(opt Opt) (source.Source, error) {
+var _ source.Source = &Source{}
+
+func NewSource(opt Opt) (*Source, error) {
 	transport := opt.Transport
 	if transport == nil {
 		transport = tracing.DefaultTransport
 	}
-	hs := &httpSource{
+	hs := &Source{
 		cache:     opt.CacheAccessor,
 		transport: transport,
 	}
 	return hs, nil
 }
 
-func (hs *httpSource) Schemes() []string {
+func (hs *Source) Schemes() []string {
 	return []string{srctypes.HTTPScheme, srctypes.HTTPSScheme}
 }
 
-func (hs *httpSource) Identifier(scheme, ref string, attrs map[string]string, platform *pb.Platform) (source.Identifier, error) {
+func (hs *Source) Identifier(scheme, ref string, attrs map[string]string, platform *pb.Platform) (source.Identifier, error) {
 	id, err := NewHTTPIdentifier(ref, scheme == "https")
 	if err != nil {
 		return nil, err
@@ -128,24 +130,39 @@ func (hs *httpSource) Identifier(scheme, ref string, attrs map[string]string, pl
 	return id, nil
 }
 
+type Metadata struct {
+	Digest       digest.Digest
+	Filename     string
+	LastModified *time.Time
+}
+
 type httpSourceHandler struct {
-	*httpSource
+	*Source
 	src      HTTPIdentifier
 	refID    string
 	cacheKey digest.Digest
 	sm       *session.Manager
 }
 
-func (hs *httpSource) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager, _ solver.Vertex) (source.SourceInstance, error) {
+func (hs *Source) ResolveMetadata(ctx context.Context, id *HTTPIdentifier, sm *session.Manager, g session.Group) (*Metadata, error) {
+	hsh := &httpSourceHandler{
+		src:    *id,
+		Source: hs,
+		sm:     sm,
+	}
+	return hsh.resolveMetadata(ctx, g)
+}
+
+func (hs *Source) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager, _ solver.Vertex) (source.SourceInstance, error) {
 	httpIdentifier, ok := id.(*HTTPIdentifier)
 	if !ok {
 		return nil, errors.Errorf("invalid http identifier %v", id)
 	}
 
 	return &httpSourceHandler{
-		src:        *httpIdentifier,
-		httpSource: hs,
-		sm:         sm,
+		src:    *httpIdentifier,
+		Source: hs,
+		sm:     sm,
 	}, nil
 }
 
@@ -178,7 +195,11 @@ func (hs *httpSourceHandler) urlHash() (digest.Digest, error) {
 	return digest.FromBytes(dt), nil
 }
 
-func (hs *httpSourceHandler) formatCacheKey(filename string, dgst digest.Digest, lastModTime string) digest.Digest {
+func (hs *httpSourceHandler) formatCacheKey(filename string, dgst digest.Digest, lastModTime *time.Time) digest.Digest {
+	var lastModTimeStr string
+	if lastModTime != nil {
+		lastModTimeStr = lastModTime.Format(http.TimeFormat)
+	}
 	dt, err := json.Marshal(struct {
 		Filename         string
 		Perm, UID, GID   int
@@ -192,7 +213,7 @@ func (hs *httpSourceHandler) formatCacheKey(filename string, dgst digest.Digest,
 		UID:              hs.src.UID,
 		GID:              hs.src.GID,
 		Checksum:         dgst,
-		LastModTime:      lastModTime,
+		LastModTime:      lastModTimeStr,
 		AuthHeaderSecret: hs.src.AuthHeaderSecret,
 		Header:           hs.src.Header,
 	})
@@ -205,26 +226,28 @@ func (hs *httpSourceHandler) formatCacheKey(filename string, dgst digest.Digest,
 	return dgst
 }
 
-func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, index int) (string, string, solver.CacheOpts, bool, error) {
+func (hs *httpSourceHandler) resolveMetadata(ctx context.Context, g session.Group) (*Metadata, error) {
 	if hs.src.Checksum != "" {
-		hs.cacheKey = hs.src.Checksum
-		return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, nil), hs.src.Checksum, "").String(), hs.src.Checksum.String(), nil, true, nil
+		return &Metadata{
+			Digest:   hs.src.Checksum,
+			Filename: getFileName(hs.src.URL, hs.src.Filename, nil),
+		}, nil
 	}
 
 	uh, err := hs.urlHash()
 	if err != nil {
-		return "", "", nil, false, err
+		return nil, err
 	}
 
 	// look up metadata(previously stored headers) for that URL
 	mds, err := searchHTTPURLDigest(ctx, hs.cache, uh)
 	if err != nil {
-		return "", "", nil, false, errors.Wrapf(err, "failed to search metadata for %s", uh)
+		return nil, errors.Wrapf(err, "failed to search metadata for %s", uh)
 	}
 
 	req, err := hs.newHTTPRequest(ctx, g)
 	if err != nil {
-		return "", "", nil, false, err
+		return nil, err
 	}
 	m := map[string]cacheRefMetadata{}
 
@@ -286,10 +309,18 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, inde
 					hs.refID = md.ID()
 					dgst := md.getHTTPChecksum()
 					if dgst != "" {
-						hs.cacheKey = dgst
-						modTime := md.getHTTPModTime()
+						var modTime *time.Time
+						if modTimeStr := md.getHTTPModTime(); modTimeStr != "" {
+							if t, err := http.ParseTime(modTimeStr); err == nil {
+								modTime = &t
+							}
+						}
 						resp.Body.Close()
-						return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, resp), dgst, modTime).String(), dgst.String(), nil, true, nil
+						return &Metadata{
+							Digest:       dgst,
+							Filename:     getFileName(hs.src.URL, hs.src.Filename, resp),
+							LastModified: modTime,
+						}, nil
 					}
 				}
 			}
@@ -304,10 +335,10 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, inde
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", "", nil, false, err
+		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
-		return "", "", nil, false, errors.Errorf("invalid response status %d", resp.StatusCode)
+		return nil, errors.Errorf("invalid response status %d", resp.StatusCode)
 	}
 	if resp.StatusCode == http.StatusNotModified {
 		respETag := etagValue(resp.Header.Get("ETag"))
@@ -320,29 +351,55 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, inde
 		}
 		md, ok := m[respETag]
 		if !ok {
-			return "", "", nil, false, errors.Errorf("invalid not-modified ETag: %v", respETag)
+			return nil, errors.Errorf("invalid not-modified ETag: %v", respETag)
 		}
 		hs.refID = md.ID()
 		dgst := md.getHTTPChecksum()
 		if dgst == "" {
-			return "", "", nil, false, errors.Errorf("invalid metadata change")
+			return nil, errors.Errorf("invalid metadata change")
 		}
-		hs.cacheKey = dgst
-		modTime := md.getHTTPModTime()
-		resp.Body.Close()
 
-		return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, resp), dgst, modTime).String(), dgst.String(), nil, true, nil
+		resp.Body.Close()
+		var modTime *time.Time
+		if modTimeStr := md.getHTTPModTime(); modTimeStr != "" {
+			if t, err := http.ParseTime(modTimeStr); err == nil {
+				modTime = &t
+			}
+		}
+		return &Metadata{
+			Digest:       dgst,
+			Filename:     getFileName(hs.src.URL, hs.src.Filename, resp),
+			LastModified: modTime,
+		}, nil
 	}
 
 	ref, dgst, err := hs.save(ctx, resp, g)
 	if err != nil {
-		return "", "", nil, false, err
+		return nil, err
 	}
 	ref.Release(context.TODO())
 
-	hs.cacheKey = dgst
+	var modTime *time.Time
+	if modTimeStr := resp.Header.Get("Last-Modified"); modTimeStr != "" {
+		if t, err := http.ParseTime(modTimeStr); err == nil {
+			modTime = &t
+		}
+	}
 
-	return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, resp), dgst, resp.Header.Get("Last-Modified")).String(), dgst.String(), nil, true, nil
+	return &Metadata{
+		Digest:       dgst,
+		Filename:     getFileName(hs.src.URL, hs.src.Filename, resp),
+		LastModified: modTime,
+	}, nil
+}
+
+func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, index int) (string, string, solver.CacheOpts, bool, error) {
+	md, err := hs.resolveMetadata(ctx, g)
+	if err != nil {
+		return "", "", nil, false, err
+	}
+	hs.cacheKey = md.Digest
+	return hs.formatCacheKey(md.Filename, md.Digest, md.LastModified).String(), md.Digest.String(), nil, true, nil
 }
 
 func (hs *httpSourceHandler) save(ctx context.Context, resp *http.Response, s session.Group) (ref cache.ImmutableRef, dgst digest.Digest, retErr error) {
