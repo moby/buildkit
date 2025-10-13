@@ -391,7 +391,7 @@ func (w *Worker) PruneCacheMounts(ctx context.Context, ids map[string]bool) erro
 	return nil
 }
 
-func (w *Worker) ResolveSourceMetadata(ctx context.Context, op *pb.SourceOp, opt sourceresolver.Opt, sm *session.Manager, g session.Group) (*sourceresolver.MetaResponse, error) {
+func (w *Worker) ResolveSourceMetadata(ctx context.Context, op *pb.SourceOp, opt sourceresolver.Opt, sm *session.Manager, jobCtx solver.JobContext) (*sourceresolver.MetaResponse, error) {
 	if opt.SourcePolicies != nil {
 		return nil, errors.New("source policies can not be set for worker")
 	}
@@ -411,11 +411,17 @@ func (w *Worker) ResolveSourceMetadata(ctx context.Context, op *pb.SourceOp, opt
 		return nil, err
 	}
 
+	var g session.Group
+	if jobCtx != nil {
+		g = jobCtx.Session()
+	}
+
 	switch idt := id.(type) {
 	case *containerimage.ImageIdentifier:
 		if opt.ImageOpt == nil {
 			opt.ImageOpt = &sourceresolver.ResolveImageOpt{}
 		}
+
 		dgst, config, err := w.ImageSource.ResolveImageConfig(ctx, idt.Reference.String(), opt, sm, g)
 		if err != nil {
 			return nil, err
@@ -449,7 +455,7 @@ func (w *Worker) ResolveSourceMetadata(ctx context.Context, op *pb.SourceOp, opt
 		if w.GitSource == nil {
 			return nil, errors.New("git source is not supported")
 		}
-		md, err := w.GitSource.ResolveMetadata(ctx, idt, sm, g)
+		md, err := w.GitSource.ResolveMetadata(ctx, idt, sm, jobCtx)
 		if err != nil {
 			return nil, err
 		}
@@ -465,7 +471,7 @@ func (w *Worker) ResolveSourceMetadata(ctx context.Context, op *pb.SourceOp, opt
 		if w.HTTPSource == nil {
 			return nil, errors.New("http source is not supported")
 		}
-		md, err := w.HTTPSource.ResolveMetadata(ctx, idt, sm, g)
+		md, err := w.HTTPSource.ResolveMetadata(ctx, idt, sm, jobCtx)
 		if err != nil {
 			return nil, err
 		}

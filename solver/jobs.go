@@ -48,9 +48,10 @@ type Solver struct {
 }
 
 type state struct {
-	jobs     map[*Job]struct{}
-	parents  map[digest.Digest]struct{}
-	childVtx map[digest.Digest]struct{}
+	jobs      map[*Job]struct{}
+	parents   map[digest.Digest]struct{}
+	childVtx  map[digest.Digest]struct{}
+	releasers []func() error
 
 	mpw      *progress.MultiWriter
 	allPw    map[progress.Writer]struct{}
@@ -75,6 +76,13 @@ type state struct {
 
 func (s *state) Session() session.Group {
 	return s
+}
+
+func (s *state) Cleanup(fn func() error) error {
+	s.mu.Lock()
+	s.releasers = append(s.releasers, fn)
+	s.mu.Unlock()
+	return nil
 }
 
 func (s *state) SessionIterator() session.Iterator {
@@ -184,6 +192,8 @@ func (s *state) setEdge(index Index, targetEdge *edge, targetState *state) {
 
 	if targetState != nil {
 		targetState.addJobs(s, map[*state]struct{}{})
+		targetState.releasers = append(targetState.releasers, s.releasers...)
+		s.releasers = nil
 
 		targetState.allPwMu.Lock()
 		if _, ok := targetState.allPw[s.mpw]; !ok {
@@ -264,6 +274,11 @@ func (s *state) Release() {
 	}
 	if s.op != nil {
 		s.op.release()
+	}
+	for _, r := range s.releasers {
+		if err := r(); err != nil {
+			bklog.G(context.TODO()).WithError(err).Error("failed to cleanup job resources")
+		}
 	}
 }
 

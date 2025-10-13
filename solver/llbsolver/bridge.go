@@ -374,13 +374,25 @@ func (b *llbBridge) ResolveSourceMetadata(ctx context.Context, op *pb.SourceOp, 
 	opt.SourcePolicies = nil
 
 	err = inBuilderContext(ctx, b.builder, opt.LogName, id, func(ctx context.Context, g session.Group) error {
-		resp, err = w.ResolveSourceMetadata(ctx, op, opt, b.sm, g)
+		resp, err = w.ResolveSourceMetadata(ctx, op, opt, b.sm, dummyJobContext{g: g})
 		return err
 	})
 	if err != nil {
 		return nil, err
 	}
 	return resp, nil
+}
+
+type dummyJobContext struct {
+	g session.Group
+}
+
+func (d dummyJobContext) Session() session.Group {
+	return d.g
+}
+
+func (d dummyJobContext) Cleanup(fn func() error) error {
+	return errors.Errorf("cleanup not implemented for %T", d)
 }
 
 type lazyCacheManager struct {

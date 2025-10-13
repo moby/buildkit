@@ -237,13 +237,13 @@ func (gs *gitSourceHandler) shaToCacheKey(sha, ref string) string {
 	return key
 }
 
-func (gs *Source) ResolveMetadata(ctx context.Context, id *GitIdentifier, sm *session.Manager, g session.Group) (*Metadata, error) {
+func (gs *Source) ResolveMetadata(ctx context.Context, id *GitIdentifier, sm *session.Manager, jobCtx solver.JobContext) (*Metadata, error) {
 	gsh := &gitSourceHandler{
 		src:    *id,
 		Source: gs,
 		sm:     sm,
 	}
-	md, err := gsh.resolveMetadata(ctx, g)
+	md, err := gsh.resolveMetadata(ctx, jobCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -384,7 +384,7 @@ func (gs *gitSourceHandler) mountKnownHosts() (string, func() error, error) {
 	return knownHosts.Name(), cleanup, nil
 }
 
-func (gs *gitSourceHandler) resolveMetadata(ctx context.Context, g session.Group) (*Metadata, error) {
+func (gs *gitSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.JobContext) (*Metadata, error) {
 	remote := gs.src.Remote
 	gs.locker.Lock(remote)
 	defer gs.locker.Unlock(remote)
@@ -401,6 +401,11 @@ func (gs *gitSourceHandler) resolveMetadata(ctx context.Context, g session.Group
 			Ref:      gs.src.Ref,
 			Checksum: gs.src.Ref,
 		}, nil
+	}
+
+	var g session.Group
+	if jobCtx != nil {
+		g = jobCtx.Session()
 	}
 
 	gs.getAuthToken(ctx, g)
@@ -489,8 +494,8 @@ func (gs *gitSourceHandler) resolveMetadata(ctx context.Context, g session.Group
 	return md, nil
 }
 
-func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index int) (string, string, solver.CacheOpts, bool, error) {
-	md, err := gs.resolveMetadata(ctx, g)
+func (gs *gitSourceHandler) CacheKey(ctx context.Context, jobCtx solver.JobContext, index int) (string, string, solver.CacheOpts, bool, error) {
+	md, err := gs.resolveMetadata(ctx, jobCtx)
 	if err != nil {
 		return "", "", nil, false, err
 	}
@@ -516,16 +521,20 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 	return cacheKey, md.Checksum, nil, true, nil
 }
 
-func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (cache.ImmutableRef, error) {
+func (gs *gitSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobContext) (cache.ImmutableRef, error) {
 	cacheKey := gs.cacheKey
 	if cacheKey == "" {
 		var err error
-		cacheKey, _, _, _, err = gs.CacheKey(ctx, g, 0)
+		cacheKey, _, _, _, err = gs.CacheKey(ctx, jobCtx, 0)
 		if err != nil {
 			return nil, err
 		}
 	}
 
+	var g session.Group
+	if jobCtx != nil {
+		g = jobCtx.Session()
+	}
 	gs.getAuthToken(ctx, g)
 
 	snapshotKey := cacheKey + ":" + gs.src.Subdir
