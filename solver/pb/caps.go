@@ -73,6 +73,7 @@ const (
 	CapFileBase                               apicaps.CapID = "file.base"
 	CapFileRmWildcard                         apicaps.CapID = "file.rm.wildcard"
 	CapFileCopyIncludeExcludePatterns         apicaps.CapID = "file.copy.includeexcludepatterns"
+	CapFileCopyRequiredPaths                  apicaps.CapID = "file.copy.requiredpaths"
 	CapFileRmNoFollowSymlink                  apicaps.CapID = "file.rm.nofollowsymlink"
 	CapFileCopyAlwaysReplaceExistingDestPaths apicaps.CapID = "file.copy.alwaysreplaceexistingdestpaths"
 	CapFileCopyModeStringFormat               apicaps.CapID = "file.copy.modestring"
@@ -447,6 +448,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapFileCopyIncludeExcludePatterns,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapFileCopyRequiredPaths,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

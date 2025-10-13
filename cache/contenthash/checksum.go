@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	cerrdefs "github.com/containerd/errdefs"
 	iradix "github.com/hashicorp/go-immutable-radix/v2"
 	simplelru "github.com/hashicorp/golang-lru/v2/simplelru"
 	"github.com/moby/buildkit/cache"
@@ -59,6 +60,7 @@ type ChecksumOpts struct {
 	Wildcard        bool
 	IncludePatterns []string
 	ExcludePatterns []string
+	RequiredPaths   []string
 }
 
 func Checksum(ctx context.Context, ref cache.ImmutableRef, path string, opts ChecksumOpts, s session.Group) (digest.Digest, error) {
@@ -689,6 +691,17 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 
 	cc.tree = txn.Commit()
 	cc.dirty = updated
+
+	// Validate that all required paths exist.
+	for _, requiredPath := range opts.RequiredPaths {
+		found := slices.ContainsFunc(includedPaths, func(includedPath *includedPath) bool {
+			return strings.HasPrefix(includedPath.path, requiredPath)
+		})
+
+		if !found {
+			return "", nil, errors.Wrapf(cerrdefs.ErrNotFound, "%q", requiredPath)
+		}
+	}
 
 	return origPrefix, includedPaths, nil
 }
