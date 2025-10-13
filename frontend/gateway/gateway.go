@@ -1181,6 +1181,84 @@ func (lbf *llbBridgeForwarder) NewContainer(ctx context.Context, in *pb.NewConta
 	return &pb.NewContainerResponse{}, nil
 }
 
+func (lbf *llbBridgeForwarder) ReadFileContainer(ctx context.Context, in *pb.ReadFileRequest) (*pb.ReadFileResponse, error) {
+	bklog.G(ctx).Debugf("|<--- ReadFileContainer %s", in.Ref)
+	lbf.ctrsMu.Lock()
+	ctr, ok := lbf.ctrs[in.Ref]
+	lbf.ctrsMu.Unlock()
+	if !ok {
+		return nil, errors.Errorf("container details for %s not found", in.Ref)
+	}
+
+	var fileRange *gwclient.FileRange
+	if in.Range != nil {
+		fileRange = &gwclient.FileRange{
+			Length: int(in.Range.Length),
+			Offset: int(in.Range.Offset),
+		}
+	}
+	req := gwclient.ReadRequest{
+		Filename: in.FilePath,
+		Range:    fileRange,
+	}
+
+	data, err := ctr.ReadFile(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pb.ReadFileResponse{
+		Data: data,
+	}, nil
+}
+
+func (lbf *llbBridgeForwarder) ReadDirContainer(ctx context.Context, in *pb.ReadDirRequest) (*pb.ReadDirResponse, error) {
+	bklog.G(ctx).Debugf("|<--- ReadDirContainer %s", in.Ref)
+	lbf.ctrsMu.Lock()
+	ctr, ok := lbf.ctrs[in.Ref]
+	lbf.ctrsMu.Unlock()
+	if !ok {
+		return nil, errors.Errorf("container details for %s not found", in.Ref)
+	}
+
+	req := gwclient.ReadDirRequest{
+		Path:           in.DirPath,
+		IncludePattern: in.IncludePattern,
+	}
+
+	files, err := ctr.ReadDir(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pb.ReadDirResponse{
+		Entries: files,
+	}, nil
+}
+
+func (lbf *llbBridgeForwarder) StatFileContainer(ctx context.Context, in *pb.StatFileRequest) (*pb.StatFileResponse, error) {
+	bklog.G(ctx).Debugf("|<--- StatFileContainer %s", in.Ref)
+	lbf.ctrsMu.Lock()
+	ctr, ok := lbf.ctrs[in.Ref]
+	lbf.ctrsMu.Unlock()
+	if !ok {
+		return nil, errors.Errorf("container details for %s not found", in.Ref)
+	}
+
+	req := gwclient.StatRequest{
+		Path: in.Path,
+	}
+
+	stat, err := ctr.StatFile(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pb.StatFileResponse{
+		Stat: stat,
+	}, nil
+}
+
 func (lbf *llbBridgeForwarder) ReleaseContainer(ctx context.Context, in *pb.ReleaseContainerRequest) (*pb.ReleaseContainerResponse, error) {
 	bklog.G(ctx).Debugf("|<--- ReleaseContainer %s", in.ContainerID)
 	lbf.ctrsMu.Lock()
