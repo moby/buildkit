@@ -28,11 +28,11 @@ func testAddChecksum(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
-	resp := httpserver.Response{
+	resp := &httpserver.Response{
 		Etag:    identity.NewID(),
 		Content: []byte("content1"),
 	}
-	server := httpserver.NewTestServer(map[string]httpserver.Response{
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
 		"/foo": resp,
 	})
 	defer server.Close()

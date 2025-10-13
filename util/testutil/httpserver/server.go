@@ -13,11 +13,11 @@ import (
 type TestServer struct {
 	*httptest.Server
 	mu     sync.Mutex
-	routes map[string]Response
+	routes map[string]*Response
 	stats  map[string]*Stat
 }
 
-func NewTestServer(routes map[string]Response) *TestServer {
+func NewTestServer(routes map[string]*Response) *TestServer {
 	ts := &TestServer{
 		routes: routes,
 		stats:  map[string]*Stat{},
@@ -26,7 +26,7 @@ func NewTestServer(routes map[string]Response) *TestServer {
 	return ts
 }
 
-func (s *TestServer) SetRoute(name string, resp Response) {
+func (s *TestServer) SetRoute(name string, resp *Response) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.routes[name] = resp

@@ -382,7 +382,14 @@ func (hs *httpSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.
 	if err != nil {
 		return nil, err
 	}
-	ref.Release(context.TODO())
+	cleanup := func() error {
+		return ref.Release(context.TODO())
+	}
+	if jobCtx != nil {
+		jobCtx.Cleanup(cleanup)
+	} else {
+		cleanup()
+	}
 
 	var modTime *time.Time
 	if modTimeStr := resp.Header.Get("Last-Modified"); modTimeStr != "" {

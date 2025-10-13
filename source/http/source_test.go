@@ -14,7 +14,9 @@ import (
 	"github.com/containerd/containerd/v2/plugins/snapshots/native"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
+	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/source"
@@ -33,11 +35,11 @@ func TestHTTPSource(t *testing.T) {
 	hs, err := newHTTPSource(t)
 	require.NoError(t, err)
 
-	resp := httpserver.Response{
+	resp := &httpserver.Response{
 		Etag:    identity.NewID(),
 		Content: []byte("content1"),
 	}
-	server := httpserver.NewTestServer(map[string]httpserver.Response{
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
 		"/foo": resp,
 	})
 	defer server.Close()
@@ -103,7 +105,7 @@ func TestHTTPSource(t *testing.T) {
 	ref.Release(context.TODO())
 	ref = nil
 
-	resp2 := httpserver.Response{
+	resp2 := &httpserver.Response{
 		Etag:    identity.NewID(),
 		Content: []byte("content2"),
 	}
@@ -150,11 +152,11 @@ func TestHTTPDefaultName(t *testing.T) {
 	hs, err := newHTTPSource(t)
 	require.NoError(t, err)
 
-	resp := httpserver.Response{
+	resp := &httpserver.Response{
 		Etag:    identity.NewID(),
 		Content: []byte("content1"),
 	}
-	server := httpserver.NewTestServer(map[string]httpserver.Response{
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
 		"/": resp,
 	})
 	defer server.Close()
@@ -200,7 +202,7 @@ func TestHTTPInvalidURL(t *testing.T) {
 	hs, err := newHTTPSource(t)
 	require.NoError(t, err)
 
-	server := httpserver.NewTestServer(map[string]httpserver.Response{})
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{})
 	defer server.Close()
 
 	id := &HTTPIdentifier{URL: server.URL + "/foo"}
@@ -220,11 +222,11 @@ func TestHTTPChecksum(t *testing.T) {
 	hs, err := newHTTPSource(t)
 	require.NoError(t, err)
 
-	resp := httpserver.Response{
+	resp := &httpserver.Response{
 		Etag:    identity.NewID(),
 		Content: []byte("content-correct"),
 	}
-	server := httpserver.NewTestServer(map[string]httpserver.Response{
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
 		"/foo": resp,
 	})
 	defer server.Close()
@@ -293,6 +295,101 @@ func TestHTTPChecksum(t *testing.T) {
 	ref = nil
 }
 
+func TestPruneAfterCacheKey(t *testing.T) {
+	t.Parallel()
+	ctx := context.TODO()
+
+	cm, err := newCacheManager(t)
+	require.NoError(t, err)
+
+	hs, err := NewSource(Opt{
+		CacheAccessor: cm,
+	})
+	require.NoError(t, err)
+
+	resp := &httpserver.Response{
+		Etag:    identity.NewID(),
+		Content: []byte("content-correct"),
+	}
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
+		"/foo": resp,
+	})
+	defer server.Close()
+
+	id := &HTTPIdentifier{URL: server.URL + "/foo"}
+
+	h, err := hs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	jc := &simpleJobContext{}
+
+	k, p, _, _, err := h.CacheKey(ctx, jc, 0)
+	require.NoError(t, err)
+
+	expectedPin := digest.FromBytes(resp.Content).String()
+	plaintextCacheKey := `{"Filename":"foo","Perm":0,"UID":0,"GID":0,"Checksum":"` + expectedPin + `"}`
+	expectedCacheKey := digest.FromBytes([]byte(plaintextCacheKey)).String()
+
+	require.Equal(t, expectedCacheKey, k)
+	require.Equal(t, expectedPin, p)
+	require.Equal(t, 1, server.Stats("/foo").AllRequests)
+	require.Equal(t, 0, server.Stats("/foo").CachedRequests)
+
+	err = cm.Prune(ctx, nil, client.PruneInfo{
+		All: true,
+	})
+	require.NoError(t, err)
+
+	du, err := cm.DiskUsage(ctx, client.DiskUsageInfo{})
+	require.NoError(t, err)
+	require.Len(t, du, 1)
+	for _, u := range du {
+		require.Equal(t, "http url "+id.URL, u.Description)
+	}
+
+	resp.Etag = identity.NewID()
+	resp.Content = []byte("content-updated")
+
+	ref, err := h.Snapshot(ctx, jc)
+	require.NoError(t, err)
+	ref.Release(context.TODO())
+
+	dt, err := readFile(ctx, ref, "foo")
+	require.NoError(t, err)
+	require.Equal(t, dt, []byte("content-correct"))
+
+	require.Equal(t, 1, server.Stats("/foo").AllRequests)
+	require.Equal(t, 0, server.Stats("/foo").CachedRequests)
+
+	du, err = cm.DiskUsage(ctx, client.DiskUsageInfo{})
+	require.NoError(t, err)
+	require.Len(t, du, 1)
+
+	err = cm.Prune(ctx, nil, client.PruneInfo{
+		All: true,
+	})
+	require.NoError(t, err)
+
+	du, err = cm.DiskUsage(ctx, client.DiskUsageInfo{})
+	require.NoError(t, err)
+	require.Len(t, du, 1)
+
+	err = jc.Release()
+	require.NoError(t, err)
+
+	err = cm.Prune(ctx, nil, client.PruneInfo{
+		All: true,
+	})
+	require.NoError(t, err)
+
+	du, err = cm.DiskUsage(ctx, client.DiskUsageInfo{})
+	require.NoError(t, err)
+	for _, u := range du {
+		t.Logf("du: %+v", *u)
+	}
+	require.Len(t, du, 0)
+}
+
 func readFile(ctx context.Context, ref cache.ImmutableRef, fp string) ([]byte, error) {
 	mount, err := ref.Mount(ctx, true, nil)
 	if err != nil {
@@ -316,6 +413,16 @@ func readFile(ctx context.Context, ref cache.ImmutableRef, fp string) ([]byte, e
 }
 
 func newHTTPSource(t *testing.T) (source.Source, error) {
+	cm, err := newCacheManager(t)
+	if err != nil {
+		return nil, err
+	}
+	return NewSource(Opt{
+		CacheAccessor: cm,
+	})
+}
+
+func newCacheManager(t *testing.T) (cache.Manager, error) {
 	tmpdir := t.TempDir()
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
@@ -374,7 +481,28 @@ func newHTTPSource(t *testing.T) (source.Source, error) {
 		require.NoError(t, cm.Close())
 	})
 
-	return NewSource(Opt{
-		CacheAccessor: cm,
-	})
+	return cm, nil
+}
+
+type simpleJobContext struct {
+	releasers []func() error
+}
+
+func (s *simpleJobContext) Session() session.Group {
+	return nil
+}
+func (s *simpleJobContext) Cleanup(f func() error) error {
+	s.releasers = append(s.releasers, f)
+	return nil
+}
+
+func (s *simpleJobContext) Release() error {
+	var firstErr error
+	for _, r := range s.releasers {
+		if err := r(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	s.releasers = nil
+	return firstErr
 }
