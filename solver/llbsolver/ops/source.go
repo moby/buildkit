@@ -80,7 +80,7 @@ func (s *SourceOp) CacheMap(ctx context.Context, jobCtx solver.JobContext, index
 		return nil, false, err
 	}
 
-	k, pin, cacheOpts, done, err := src.CacheKey(ctx, jobCtx.Session(), index)
+	k, pin, cacheOpts, done, err := src.CacheKey(ctx, jobCtx, index)
 	if err != nil {
 		return nil, false, err
 	}
@@ -109,7 +109,7 @@ func (s *SourceOp) Exec(ctx context.Context, jobCtx solver.JobContext, _ []solve
 	if err != nil {
 		return nil, err
 	}
-	ref, err := src.Snapshot(ctx, jobCtx.Session())
+	ref, err := src.Snapshot(ctx, jobCtx)
 	if err != nil {
 		return nil, err
 	}

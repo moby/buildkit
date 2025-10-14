@@ -176,7 +176,11 @@ type Op interface {
 }
 
 type JobContext interface {
+	// Session returns the session group associated with the clients building current step.
 	Session() session.Group
+	// Cleanup adds a function that is called when the job is done. This can be used to associate
+	// resources with the job and keep them from being released until the job is done.
+	Cleanup(func() error) error
 }
 
 type ProvenanceProvider interface {

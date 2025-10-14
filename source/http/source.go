@@ -144,13 +144,13 @@ type httpSourceHandler struct {
 	sm       *session.Manager
 }
 
-func (hs *Source) ResolveMetadata(ctx context.Context, id *HTTPIdentifier, sm *session.Manager, g session.Group) (*Metadata, error) {
+func (hs *Source) ResolveMetadata(ctx context.Context, id *HTTPIdentifier, sm *session.Manager, jobCtx solver.JobContext) (*Metadata, error) {
 	hsh := &httpSourceHandler{
 		src:    *id,
 		Source: hs,
 		sm:     sm,
 	}
-	return hsh.resolveMetadata(ctx, g)
+	return hsh.resolveMetadata(ctx, jobCtx)
 }
 
 func (hs *Source) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager, _ solver.Vertex) (source.SourceInstance, error) {
@@ -226,12 +226,17 @@ func (hs *httpSourceHandler) formatCacheKey(filename string, dgst digest.Digest,
 	return dgst
 }
 
-func (hs *httpSourceHandler) resolveMetadata(ctx context.Context, g session.Group) (*Metadata, error) {
+func (hs *httpSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.JobContext) (*Metadata, error) {
 	if hs.src.Checksum != "" {
 		return &Metadata{
 			Digest:   hs.src.Checksum,
 			Filename: getFileName(hs.src.URL, hs.src.Filename, nil),
 		}, nil
+	}
+
+	var g session.Group
+	if jobCtx != nil {
+		g = jobCtx.Session()
 	}
 
 	uh, err := hs.urlHash()
@@ -377,7 +382,17 @@ func (hs *httpSourceHandler) resolveMetadata(ctx context.Context, g session.Grou
 	if err != nil {
 		return nil, err
 	}
-	ref.Release(context.TODO())
+	cleanup := func() error {
+		return ref.Release(context.TODO())
+	}
+	if jobCtx != nil {
+		if err := jobCtx.Cleanup(cleanup); err != nil {
+			_ = cleanup()
+			return nil, err
+		}
+	} else {
+		cleanup()
+	}
 
 	var modTime *time.Time
 	if modTimeStr := resp.Header.Get("Last-Modified"); modTimeStr != "" {
@@ -393,8 +408,8 @@ func (hs *httpSourceHandler) resolveMetadata(ctx context.Context, g session.Grou
 	}, nil
 }
 
-func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, index int) (string, string, solver.CacheOpts, bool, error) {
-	md, err := hs.resolveMetadata(ctx, g)
+func (hs *httpSourceHandler) CacheKey(ctx context.Context, jobCtx solver.JobContext, index int) (string, string, solver.CacheOpts, bool, error) {
+	md, err := hs.resolveMetadata(ctx, jobCtx)
 	if err != nil {
 		return "", "", nil, false, err
 	}
@@ -524,7 +539,7 @@ func (hs *httpSourceHandler) save(ctx context.Context, resp *http.Response, s se
 	return ref, dgst, nil
 }
 
-func (hs *httpSourceHandler) Snapshot(ctx context.Context, g session.Group) (cache.ImmutableRef, error) {
+func (hs *httpSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobContext) (cache.ImmutableRef, error) {
 	if hs.refID != "" {
 		ref, err := hs.cache.Get(ctx, hs.refID, nil)
 		if err != nil {
@@ -532,6 +547,11 @@ func (hs *httpSourceHandler) Snapshot(ctx context.Context, g session.Group) (cac
 		} else {
 			return ref, nil
 		}
+	}
+
+	var g session.Group
+	if jobCtx != nil {
+		g = jobCtx.Session()
 	}
 
 	req, err := hs.newHTTPRequest(ctx, g)

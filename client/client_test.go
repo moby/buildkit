@@ -76,6 +76,7 @@ import (
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/spdx/tools-golang/spdx"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tonistiigi/fsutil"
 	fsutiltypes "github.com/tonistiigi/fsutil/types"
@@ -243,6 +244,8 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testMetadataOnlyLocal,
 	testGitResolveSourceMetadata,
 	testHTTPResolveSourceMetadata,
+	testHTTPPruneAfterCacheKey,
+	testHTTPPruneAfterResolveMeta,
 }
 
 func TestIntegration(t *testing.T) {
@@ -3223,13 +3226,13 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 
 	modTime := time.Now().Add(-24 * time.Hour) // avoid falso positive with current time
 
-	resp := httpserver.Response{
+	resp := &httpserver.Response{
 		Etag:         identity.NewID(),
 		Content:      []byte("content1"),
 		LastModified: &modTime,
 	}
 
-	server := httpserver.NewTestServer(map[string]httpserver.Response{
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
 		"/foo": resp,
 	})
 	defer server.Close()
@@ -3293,7 +3296,7 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	require.NoError(t, gw.Close())
 	gzipBytes := buf.Bytes()
-	respGzip := httpserver.Response{
+	respGzip := &httpserver.Response{
 		Etag:            identity.NewID(),
 		Content:         gzipBytes,
 		LastModified:    &modTime,
@@ -3373,18 +3376,18 @@ func testBuildHTTPSourceEtagScope(t *testing.T, sb integration.Sandbox) {
 	modTime := time.Now().Add(-24 * time.Hour) // avoid falso positive with current time
 
 	sharedEtag := identity.NewID()
-	resp := httpserver.Response{
+	resp := &httpserver.Response{
 		Etag:         sharedEtag,
 		Content:      []byte("content1"),
 		LastModified: &modTime,
 	}
-	resp2 := httpserver.Response{
+	resp2 := &httpserver.Response{
 		Etag:         sharedEtag,
 		Content:      []byte("another"),
 		LastModified: &modTime,
 	}
 
-	server := httpserver.NewTestServer(map[string]httpserver.Response{
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
 		"/one/foo": resp,
 		"/two/foo": resp2,
 	})
@@ -3468,13 +3471,13 @@ func testBuildHTTPSourceAuthHeaderSecret(t *testing.T, sb integration.Sandbox) {
 
 	modTime := time.Now().Add(-24 * time.Hour) // avoid false positive with current time
 
-	resp := httpserver.Response{
+	resp := &httpserver.Response{
 		Etag:         identity.NewID(),
 		Content:      []byte("content1"),
 		LastModified: &modTime,
 	}
 
-	server := httpserver.NewTestServer(map[string]httpserver.Response{
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
 		"/foo": resp,
 	})
 	defer server.Close()
@@ -3509,13 +3512,13 @@ func testBuildHTTPSourceHostTokenSecret(t *testing.T, sb integration.Sandbox) {
 
 	modTime := time.Now().Add(-24 * time.Hour) // avoid false positive with current time
 
-	resp := httpserver.Response{
+	resp := &httpserver.Response{
 		Etag:         identity.NewID(),
 		Content:      []byte("content1"),
 		LastModified: &modTime,
 	}
 
-	server := httpserver.NewTestServer(map[string]httpserver.Response{
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
 		"/foo": resp,
 	})
 	defer server.Close()
@@ -3550,13 +3553,13 @@ func testBuildHTTPSourceHeader(t *testing.T, sb integration.Sandbox) {
 
 	modTime := time.Now().Add(-24 * time.Hour) // avoid falso positive with current time
 
-	resp := httpserver.Response{
+	resp := &httpserver.Response{
 		Etag:         identity.NewID(),
 		Content:      []byte("content1"),
 		LastModified: &modTime,
 	}
 
-	server := httpserver.NewTestServer(map[string]httpserver.Response{
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
 		"/foo": resp,
 	})
 	defer server.Close()
@@ -12066,19 +12069,19 @@ func testHTTPResolveSourceMetadata(t *testing.T, sb integration.Sandbox) {
 
 	modTime := time.Now().Add(-24 * time.Hour) // avoid falso positive with current time
 
-	resp := httpserver.Response{
+	resp := &httpserver.Response{
 		Etag:         identity.NewID(),
 		Content:      []byte("content1"),
 		LastModified: &modTime,
 	}
 
-	resp2 := httpserver.Response{
+	resp2 := &httpserver.Response{
 		Etag:               identity.NewID(),
 		Content:            []byte("content2"),
 		ContentDisposition: "attachment; filename=\"my img.jpg\"",
 	}
 
-	server := httpserver.NewTestServer(map[string]httpserver.Response{
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
 		"/foo": resp,
 		"/bar": resp2,
 	})
@@ -12114,6 +12117,157 @@ func testHTTPResolveSourceMetadata(t *testing.T, sb integration.Sandbox) {
 		return nil, nil
 	}, nil)
 	require.NoError(t, err)
+}
+
+func testHTTPPruneAfterCacheKey(t *testing.T, sb integration.Sandbox) {
+	// this test depends on hitting race condition in internal functions.
+	// If debugging and expecting failure you can add small sleep in beginning of source/http.Exec() to hit reliably
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	resp := &httpserver.Response{
+		Etag:    identity.NewID(),
+		Content: []byte("content1"),
+	}
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
+		"/foo": resp,
+	})
+	defer server.Close()
+
+	done := make(chan struct{})
+
+	startScan := make(chan struct{})
+	stopScan := make(chan struct{})
+	pauseScan := make(chan struct{})
+
+	go func() {
+		// attempt to prune the HTTP record in between cachekey and snapshot
+		defer close(done)
+		for {
+			select {
+			case <-startScan:
+			scan:
+				for {
+					select {
+					case <-pauseScan:
+						break scan
+					default:
+						du, err := c.DiskUsage(ctx)
+						assert.NoError(t, err)
+						for _, entry := range du {
+							if entry.Description == "http url "+server.URL+"/foo" {
+								if !entry.InUse {
+									t.Logf("entry no longer in use, pruning")
+									err = c.Prune(ctx, nil)
+									assert.NoError(t, err)
+
+									resp.Etag = identity.NewID()
+									resp.Content = []byte("content2")
+								}
+							}
+						}
+					}
+				}
+			case <-stopScan:
+				return
+			}
+		}
+	}()
+
+	const iterations = 10
+	for range iterations {
+		startScan <- struct{}{}
+		resp.Etag = identity.NewID()
+		resp.Content = []byte("content1")
+		_, err = c.Build(ctx, SolveOpt{}, "test", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+			st := llb.Scratch().File(llb.Copy(llb.HTTP(server.URL+"/foo"), "foo", "bar"))
+			def, err := st.Marshal(sb.Context())
+			if err != nil {
+				return nil, err
+			}
+			resp, err := c.Solve(ctx, gateway.SolveRequest{
+				Definition: def.ToPB(),
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			return resp, nil
+		}, nil)
+		require.NoError(t, err)
+
+		pauseScan <- struct{}{}
+
+		err = c.Prune(ctx, nil)
+		require.NoError(t, err)
+
+		checkAllReleasable(t, c, sb, false)
+	}
+	close(stopScan)
+	<-done
+}
+
+// testHTTPPruneAfterResolveMeta ensures that pruning after ResolveSourceMetadata
+// doesn't pull in new data for same build. Once URL has been resolved once for a specific
+// build, the data should be considered immutable and remote changes don't affect ongoing build.
+func testHTTPPruneAfterResolveMeta(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	resp := &httpserver.Response{
+		Etag:    identity.NewID(),
+		Content: []byte("content1"),
+	}
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
+		"/foo": resp,
+	})
+	defer server.Close()
+
+	dest := t.TempDir()
+
+	_, err = c.Build(ctx, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: dest,
+			},
+		},
+	}, "test", func(ctx context.Context, gc gateway.Client) (*gateway.Result, error) {
+		id := server.URL + "/foo"
+		md, err := gc.ResolveSourceMetadata(ctx, &pb.SourceOp{
+			Identifier: id,
+		}, sourceresolver.Opt{})
+		if err != nil {
+			return nil, err
+		}
+		require.NotNil(t, md.HTTP)
+
+		// prune all
+		err = c.Prune(ctx, nil)
+		require.NoError(t, err)
+
+		resp.Content = []byte("content2") // etag is same so should hit cache if record not pruned
+
+		st := llb.Scratch().File(llb.Copy(llb.HTTP(id), "foo", "bar"))
+		def, err := st.Marshal(sb.Context())
+		if err != nil {
+			return nil, err
+		}
+		return gc.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(dest, "bar"))
+	require.NoError(t, err)
+	require.Equal(t, "content1", string(dt))
+
+	checkAllReleasable(t, c, sb, false)
 }
 
 func runInDir(dir string, cmds ...string) error {

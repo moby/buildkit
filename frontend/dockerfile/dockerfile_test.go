@@ -2509,12 +2509,12 @@ RUN echo foo-contents> /foo
 	err := os.WriteFile(filepath.Join(srcDir, "Dockerfile"), dockerfile, 0600)
 	require.NoError(t, err)
 
-	resp := httpserver.Response{
+	resp := &httpserver.Response{
 		Etag:    identity.NewID(),
 		Content: dockerfile,
 	}
 
-	server := httpserver.NewTestServer(map[string]httpserver.Response{
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
 		"/df": resp,
 	})
 	defer server.Close()
@@ -3061,18 +3061,18 @@ func testDockerfileADDFromURL(t *testing.T, sb integration.Sandbox) {
 
 	modTime := time.Now().Add(-24 * time.Hour) // avoid falso positive with current time
 
-	resp := httpserver.Response{
+	resp := &httpserver.Response{
 		Etag:    identity.NewID(),
 		Content: []byte("content1"),
 	}
 
-	resp2 := httpserver.Response{
+	resp2 := &httpserver.Response{
 		Etag:         identity.NewID(),
 		LastModified: &modTime,
 		Content:      []byte("content2"),
 	}
 
-	server := httpserver.NewTestServer(map[string]httpserver.Response{
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
 		"/foo": resp,
 		"/":    resp2,
 	})
@@ -3271,12 +3271,12 @@ COPY t.tar.gz /
 	require.Equal(t, buf2.Bytes(), dt)
 
 	// ADD from URL doesn't extract
-	resp := httpserver.Response{
+	resp := &httpserver.Response{
 		Etag:    identity.NewID(),
 		Content: buf2.Bytes(),
 	}
 
-	server := httpserver.NewTestServer(map[string]httpserver.Response{
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
 		"/t.tar.gz": resp,
 	})
 	defer server.Close()
@@ -4707,11 +4707,11 @@ func testAddURLChmod(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
-	resp := httpserver.Response{
+	resp := &httpserver.Response{
 		Etag:    identity.NewID(),
 		Content: []byte("content1"),
 	}
-	server := httpserver.NewTestServer(map[string]httpserver.Response{
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
 		"/foo": resp,
 	})
 	defer server.Close()
@@ -4952,12 +4952,12 @@ COPY foo bar
 
 	require.NoError(t, w.Flush())
 
-	resp := httpserver.Response{
+	resp := &httpserver.Response{
 		Etag:    identity.NewID(),
 		Content: buf.Bytes(),
 	}
 
-	server := httpserver.NewTestServer(map[string]httpserver.Response{
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
 		"/myurl": resp,
 	})
 	defer server.Close()

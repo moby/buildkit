@@ -28,7 +28,7 @@ type ResolveOpFunc func(Vertex, Builder) (Op, error)
 
 type Builder interface {
 	Build(ctx context.Context, e Edge) (CachedResultWithProvenance, error)
-	InContext(ctx context.Context, f func(ctx context.Context, g session.Group) error) error
+	InContext(ctx context.Context, f func(ctx context.Context, jobCtx JobContext) error) error
 	EachValue(ctx context.Context, key string, fn func(any) error) error
 }
 
@@ -48,9 +48,10 @@ type Solver struct {
 }
 
 type state struct {
-	jobs     map[*Job]struct{}
-	parents  map[digest.Digest]struct{}
-	childVtx map[digest.Digest]struct{}
+	jobs      map[*Job]struct{}
+	parents   map[digest.Digest]struct{}
+	childVtx  map[digest.Digest]struct{}
+	releasers []func() error
 
 	mpw      *progress.MultiWriter
 	allPw    map[progress.Writer]struct{}
@@ -75,6 +76,13 @@ type state struct {
 
 func (s *state) Session() session.Group {
 	return s
+}
+
+func (s *state) Cleanup(fn func() error) error {
+	s.mu.Lock()
+	s.releasers = append(s.releasers, fn)
+	s.mu.Unlock()
+	return nil
 }
 
 func (s *state) SessionIterator() session.Iterator {
@@ -184,6 +192,8 @@ func (s *state) setEdge(index Index, targetEdge *edge, targetState *state) {
 
 	if targetState != nil {
 		targetState.addJobs(s, map[*state]struct{}{})
+		targetState.releasers = append(targetState.releasers, s.releasers...)
+		s.releasers = nil
 
 		targetState.allPwMu.Lock()
 		if _, ok := targetState.allPw[s.mpw]; !ok {
@@ -265,6 +275,11 @@ func (s *state) Release() {
 	if s.op != nil {
 		s.op.release()
 	}
+	for _, r := range s.releasers {
+		if err := r(); err != nil {
+			bklog.G(context.TODO()).WithError(err).Error("failed to cleanup job resources")
+		}
+	}
 }
 
 type subBuilder struct {
@@ -284,7 +299,7 @@ func (sb *subBuilder) Build(ctx context.Context, e Edge) (CachedResultWithProven
 	return &withProvenance{CachedResult: res}, nil
 }
 
-func (sb *subBuilder) InContext(ctx context.Context, f func(context.Context, session.Group) error) error {
+func (sb *subBuilder) InContext(ctx context.Context, f func(context.Context, JobContext) error) error {
 	ctx = progress.WithProgress(ctx, sb.mpw)
 	if sb.mspan.Span != nil {
 		ctx = trace.ContextWithSpan(ctx, sb.mspan)
@@ -313,6 +328,7 @@ type Job struct {
 	id            string
 	startedTime   time.Time
 	completedTime time.Time
+	releasers     []func() error
 
 	progressCloser func(error)
 	SessionID      string
@@ -797,6 +813,13 @@ func (j *Job) Discard() error {
 		st.mu.Unlock()
 	}
 
+	for _, r := range j.releasers {
+		if err := r(); err != nil {
+			bklog.G(context.TODO()).WithError(err).Error("failed to cleanup job resources")
+		}
+	}
+	j.releasers = nil
+
 	go func() {
 		// don't clear job right away. there might still be a status request coming to read progress
 		time.Sleep(10 * time.Second)
@@ -824,8 +847,19 @@ func (j *Job) UniqueID() string {
 	return j.uniqueID
 }
 
-func (j *Job) InContext(ctx context.Context, f func(context.Context, session.Group) error) error {
-	return f(progress.WithProgress(ctx, j.pw), session.NewGroup(j.SessionID))
+func (j *Job) InContext(ctx context.Context, f func(context.Context, JobContext) error) error {
+	return f(progress.WithProgress(ctx, j.pw), j)
+}
+
+func (j *Job) Session() session.Group {
+	return session.NewGroup(j.SessionID)
+}
+
+func (j *Job) Cleanup(fn func() error) error {
+	j.mu.Lock()
+	j.releasers = append(j.releasers, fn)
+	j.mu.Unlock()
+	return nil
 }
 
 func (j *Job) SetValue(key string, v any) {

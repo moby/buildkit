@@ -8,6 +8,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -301,4 +302,8 @@ type jobCtx struct {
 
 func (j *jobCtx) Session() session.Group {
 	return j.g
+}
+
+func (j *jobCtx) Cleanup(f func() error) error {
+	return errors.Errorf("cleanup not implemented for %T", j)
 }
