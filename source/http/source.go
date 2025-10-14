@@ -386,7 +386,10 @@ func (hs *httpSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.
 		return ref.Release(context.TODO())
 	}
 	if jobCtx != nil {
-		jobCtx.Cleanup(cleanup)
+		if err := jobCtx.Cleanup(cleanup); err != nil {
+			_ = cleanup()
+			return nil, err
+		}
 	} else {
 		cleanup()
 	}

@@ -49,7 +49,7 @@ type llbBridge struct {
 }
 
 func (b *llbBridge) Warn(ctx context.Context, dgst digest.Digest, msg string, opts frontend.WarnOpts) error {
-	return b.builder.InContext(ctx, func(ctx context.Context, g session.Group) error {
+	return b.builder.InContext(ctx, func(ctx context.Context, _ solver.JobContext) error {
 		pw, ok, _ := progress.NewFromContext(ctx, progress.WithMetadata("vertex", dgst))
 		if !ok {
 			return nil
@@ -111,10 +111,14 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 			func(cmID string, im gw.CacheOptionsEntry) {
 				cm = newLazyCacheManager(cmID, func() (solver.CacheManager, error) {
 					var cmNew solver.CacheManager
-					if err := inBuilderContext(context.TODO(), b.builder, "importing cache manifest from "+cmID, "", func(ctx context.Context, g session.Group) error {
+					if err := inBuilderContext(context.TODO(), b.builder, "importing cache manifest from "+cmID, "", func(ctx context.Context, jobCtx solver.JobContext) error {
 						resolveCI, ok := b.resolveCacheImporterFuncs[im.Type]
 						if !ok {
 							return errors.Errorf("unknown cache importer: %s", im.Type)
+						}
+						var g session.Group
+						if jobCtx != nil {
+							g = jobCtx.Session()
 						}
 						ci, desc, err := resolveCI(ctx, g, im.Attrs)
 						if err != nil {
@@ -373,26 +377,14 @@ func (b *llbBridge) ResolveSourceMetadata(ctx context.Context, op *pb.SourceOp, 
 	// policy is evaluated, so we can remove it from the options
 	opt.SourcePolicies = nil
 
-	err = inBuilderContext(ctx, b.builder, opt.LogName, id, func(ctx context.Context, g session.Group) error {
-		resp, err = w.ResolveSourceMetadata(ctx, op, opt, b.sm, dummyJobContext{g: g})
+	err = inBuilderContext(ctx, b.builder, opt.LogName, id, func(ctx context.Context, jobCtx solver.JobContext) error {
+		resp, err = w.ResolveSourceMetadata(ctx, op, opt, b.sm, jobCtx)
 		return err
 	})
 	if err != nil {
 		return nil, err
 	}
 	return resp, nil
-}
-
-type dummyJobContext struct {
-	g session.Group
-}
-
-func (d dummyJobContext) Session() session.Group {
-	return d.g
-}
-
-func (d dummyJobContext) Cleanup(fn func() error) error {
-	return errors.Errorf("cleanup not implemented for %T", d)
 }
 
 type lazyCacheManager struct {

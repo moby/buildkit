@@ -28,7 +28,7 @@ type ResolveOpFunc func(Vertex, Builder) (Op, error)
 
 type Builder interface {
 	Build(ctx context.Context, e Edge) (CachedResultWithProvenance, error)
-	InContext(ctx context.Context, f func(ctx context.Context, g session.Group) error) error
+	InContext(ctx context.Context, f func(ctx context.Context, jobCtx JobContext) error) error
 	EachValue(ctx context.Context, key string, fn func(any) error) error
 }
 
@@ -299,7 +299,7 @@ func (sb *subBuilder) Build(ctx context.Context, e Edge) (CachedResultWithProven
 	return &withProvenance{CachedResult: res}, nil
 }
 
-func (sb *subBuilder) InContext(ctx context.Context, f func(context.Context, session.Group) error) error {
+func (sb *subBuilder) InContext(ctx context.Context, f func(context.Context, JobContext) error) error {
 	ctx = progress.WithProgress(ctx, sb.mpw)
 	if sb.mspan.Span != nil {
 		ctx = trace.ContextWithSpan(ctx, sb.mspan)
@@ -328,6 +328,7 @@ type Job struct {
 	id            string
 	startedTime   time.Time
 	completedTime time.Time
+	releasers     []func() error
 
 	progressCloser func(error)
 	SessionID      string
@@ -812,6 +813,13 @@ func (j *Job) Discard() error {
 		st.mu.Unlock()
 	}
 
+	for _, r := range j.releasers {
+		if err := r(); err != nil {
+			bklog.G(context.TODO()).WithError(err).Error("failed to cleanup job resources")
+		}
+	}
+	j.releasers = nil
+
 	go func() {
 		// don't clear job right away. there might still be a status request coming to read progress
 		time.Sleep(10 * time.Second)
@@ -839,8 +847,19 @@ func (j *Job) UniqueID() string {
 	return j.uniqueID
 }
 
-func (j *Job) InContext(ctx context.Context, f func(context.Context, session.Group) error) error {
-	return f(progress.WithProgress(ctx, j.pw), session.NewGroup(j.SessionID))
+func (j *Job) InContext(ctx context.Context, f func(context.Context, JobContext) error) error {
+	return f(progress.WithProgress(ctx, j.pw), j)
+}
+
+func (j *Job) Session() session.Group {
+	return session.NewGroup(j.SessionID)
+}
+
+func (j *Job) Cleanup(fn func() error) error {
+	j.mu.Lock()
+	j.releasers = append(j.releasers, fn)
+	j.mu.Unlock()
+	return nil
 }
 
 func (j *Job) SetValue(key string, v any) {
