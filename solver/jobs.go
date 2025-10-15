@@ -85,6 +85,21 @@ func (s *state) Cleanup(fn func() error) error {
 	return nil
 }
 
+func (s *state) ResolverCache() ResolverCache {
+	return s
+}
+
+func (s *state) Lock(key any) (values []any, release func(any) error, err error) {
+	var rcs []ResolverCache
+	s.mu.Lock()
+	for j := range s.jobs {
+		rcs = append(rcs, j.resolverCache)
+	}
+	s.mu.Unlock()
+
+	return combinedResolverCache(rcs).Lock(key)
+}
+
 func (s *state) SessionIterator() session.Iterator {
 	return s.sessionIterator()
 }
@@ -329,6 +344,7 @@ type Job struct {
 	startedTime   time.Time
 	completedTime time.Time
 	releasers     []func() error
+	resolverCache *resolverCache
 
 	progressCloser func(error)
 	SessionID      string
@@ -645,6 +661,7 @@ func (jl *Solver) NewJob(id string) (*Job, error) {
 		id:             id,
 		startedTime:    time.Now(),
 		uniqueID:       identity.NewID(),
+		resolverCache:  newResolverCache(),
 	}
 	jl.jobs[id] = j
 
@@ -860,6 +877,10 @@ func (j *Job) Cleanup(fn func() error) error {
 	j.releasers = append(j.releasers, fn)
 	j.mu.Unlock()
 	return nil
+}
+
+func (j *Job) ResolverCache() ResolverCache {
+	return j.resolverCache
 }
 
 func (j *Job) SetValue(key string, v any) {
