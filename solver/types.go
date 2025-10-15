@@ -189,8 +189,8 @@ type JobContext interface {
 type ResolverCache interface {
 	// Lock locks a key until the returned release function is called.
 	// Release function can return value that will be returned to next callers.
-	// Lock can return multiple values because two steps can be merged together after
-	// they both already completed resolve independently.
+	// Lock can return multiple values because two steps can be merged once
+	// both have independently completed their resolution.
 	Lock(key any) (values []any, release func(any) error, err error)
 }
 
