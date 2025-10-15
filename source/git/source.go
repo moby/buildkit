@@ -384,7 +384,11 @@ func (gs *gitSourceHandler) mountKnownHosts() (string, func() error, error) {
 	return knownHosts.Name(), cleanup, nil
 }
 
-func (gs *gitSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.JobContext) (*Metadata, error) {
+func (gs *gitSourceHandler) remoteKey() string {
+	return gs.src.Remote + "#" + gs.src.Ref
+}
+
+func (gs *gitSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.JobContext) (md *Metadata, retErr error) {
 	remote := gs.src.Remote
 	gs.locker.Lock(remote)
 	defer gs.locker.Unlock(remote)
@@ -397,6 +401,9 @@ func (gs *gitSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.J
 	}
 
 	if gitutil.IsCommitSHA(gs.src.Ref) {
+		if gs.src.Checksum != "" && !strings.HasPrefix(gs.src.Ref, gs.src.Checksum) {
+			return nil, errors.Errorf("expected checksum to match %s, got %s", gs.src.Checksum, gs.src.Ref)
+		}
 		return &Metadata{
 			Ref:      gs.src.Ref,
 			Checksum: gs.src.Ref,
@@ -406,6 +413,35 @@ func (gs *gitSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.J
 	var g session.Group
 	if jobCtx != nil {
 		g = jobCtx.Session()
+
+		if rc := jobCtx.ResolverCache(); rc != nil {
+			values, release, err := rc.Lock(gs.remoteKey())
+			if err != nil {
+				return nil, err
+			}
+			saveResolved := true
+			defer func() {
+				v := md
+				if retErr != nil || !saveResolved {
+					v = nil
+				}
+				if err := release(v); err != nil {
+					bklog.G(ctx).Warnf("failed to release resolver cache lock for %s: %v", gs.remoteKey(), err)
+				}
+			}()
+			for _, v := range values {
+				v2, ok := v.(*Metadata)
+				if !ok {
+					return nil, errors.Errorf("invalid resolver cache value for %s: %T", gs.remoteKey(), v)
+				}
+				if gs.src.Checksum != "" && !strings.HasPrefix(v2.Checksum, gs.src.Checksum) {
+					continue
+				}
+				saveResolved = false
+				clone := *v2
+				return &clone, nil
+			}
+		}
 	}
 
 	gs.getAuthToken(ctx, g)
@@ -483,7 +519,7 @@ func (gs *gitSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.J
 			return nil, errors.Errorf("expected checksum to match %s, got %s", gs.src.Checksum, exp)
 		}
 	}
-	md := &Metadata{
+	md = &Metadata{
 		Ref:      usedRef,
 		Checksum: sha,
 	}
