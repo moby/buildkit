@@ -161,22 +161,35 @@ jobs:
 
   image:
     runs-on: ubuntu-24.04
+    env:
+      DEFAULT_BASE: alpine
     needs:
       - test
     strategy:
       fail-fast: false
       matrix:
-        target:
-          - ''
-          - rootless
+        include:
+          -
+            base: 'alpine'
+          -
+            base: 'alpine'
+            target: 'rootless'
+          -
+            base: 'ubuntu'
+            build-tags: 'nvidia venus'
     steps:
       -
         name: Prepare
         run: |
+          tagSuffix=""
           if [ -n "${{ matrix.target }}" ]; then
-            echo "TAG_SUFFIX=-${{ matrix.target }}" >> $GITHUB_ENV
+            tagSuffix="${tagSuffix}-${{ matrix.target }}"
           fi
-          if [[ $GITHUB_REF == refs/tags/v* ]]; then
+          if [ "${{ matrix.base }}" != "$DEFAULT_BASE" ]; then
+            tagSuffix="${tagSuffix}-${{ matrix.base }}"
+          fi
+          echo "TAG_SUFFIX=${tagSuffix}" >> $GITHUB_ENV
+          if [[ $GITHUB_REF == refs/tags/v* ]] && [[ "${{ matrix.base }}" = "$DEFAULT_BASE" ]]; then
             if [[ "${GITHUB_REF#refs/tags/}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
               if [ -n "${{ matrix.target }}" ]; then
                 echo "TAG_LATEST=${{ matrix.target }}" >> $GITHUB_ENV
@@ -208,15 +221,19 @@ jobs:
           ### moby/buildkit:latest
           ### moby/buildkit:v0.24.0-rootless
           ### moby/buildkit:rootless
+          ### moby/buildkit:v0.24.0-ubuntu
           ## push semver prerelease tag v0.24.0-rc1
           ### moby/buildkit:v0.24.0-rc1
           ### moby/buildkit:v0.24.0-rc1-rootless
+          ### moby/buildkit:v0.24.0-rc1-ubuntu
           ## push on master
           ### moby/buildkit:master
           ### moby/buildkit:master-rootless
+          ### moby/buildkit:master-ubuntu
           ## scheduled event on master
           ### moby/buildkit:nightly
           ### moby/buildkit:nightly-rootless
+          ### moby/buildkit:nightly-ubuntu
           tags: |
             type=schedule,pattern=nightly,suffix=${{ env.TAG_SUFFIX }}
             type=ref,event=branch,suffix=${{ env.TAG_SUFFIX }}
@@ -251,11 +268,13 @@ jobs:
           provenance: mode=max,version=v1
           sbom: true
           set: |
-            *.cache-from=type=gha,scope=image${{ matrix.target }}
-            *.cache-to=type=gha,scope=image${{ matrix.target }}
+            *.cache-from=type=gha,scope=image${{ matrix.target }}-${{ matrix.base }}
+            *.cache-to=type=gha,scope=image${{ matrix.target }}-${{ matrix.base }}
             *.no-cache-filter=${{ (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')) && 'buildkit-export-alpine,buildkit-export-ubuntu,gobuild-base,rootless' || '' }}
         env:
           IMAGE_TARGET: ${{ matrix.target }}
+          EXPORT_BASE: ${{ matrix.base }}
+          BUILDKITD_TAGS: ${{ matrix.build-tags }}
 
   scout:
     runs-on: ubuntu-24.04
