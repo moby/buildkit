@@ -588,18 +588,24 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobConte
 	gs.locker.Lock(gs.src.Remote)
 	defer gs.locker.Unlock(gs.src.Remote)
 
-	ref, err := gs.trySnapshot(ctx, g, false)
+	repo, err := gs.tryRemoteFetch(ctx, g, false)
 	if err != nil {
 		var wce *wouldClobberExistingTagError
 		var ulre *unableToUpdateLocalRefError
 		if errors.As(err, &wce) || errors.As(err, &ulre) {
-			ref, err = gs.trySnapshot(ctx, g, true)
+			repo, err = gs.tryRemoteFetch(ctx, g, true)
 			if err != nil {
 				return nil, err
 			}
 		} else {
 			return nil, err
 		}
+	}
+	defer repo.Release()
+
+	ref, err := gs.checkout(ctx, repo, g)
+	if err != nil {
+		return nil, err
 	}
 
 	md := cacheRefMetadata{ref}
@@ -609,19 +615,47 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobConte
 	return ref, nil
 }
 
-func (gs *gitSourceHandler) trySnapshot(ctx context.Context, g session.Group, reset bool) (out cache.ImmutableRef, retErr error) {
+type gitRepo struct {
+	*gitutil.GitCLI
+	dir       string
+	releasers []func() error
+}
+
+func (g *gitRepo) Release() error {
+	var err error
+	for _, r := range g.releasers {
+		if err1 := r(); err == nil {
+			err = err1
+		}
+	}
+	return err
+}
+
+func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, g session.Group, reset bool) (_ *gitRepo, retErr error) {
+	repo := &gitRepo{}
+
+	defer func() {
+		if retErr != nil {
+			repo.Release()
+			repo = nil
+		}
+	}()
+
 	git, cleanup, err := gs.emptyGitCli(ctx, g)
 	if err != nil {
 		return nil, err
 	}
-	defer cleanup()
+	repo.releasers = append(repo.releasers, cleanup)
 
 	gitDir, unmountGitDir, err := gs.mountRemote(ctx, gs.src.Remote, gs.authArgs, gs.sha256, reset, g)
 	if err != nil {
 		return nil, err
 	}
-	defer unmountGitDir()
+	repo.releasers = append(repo.releasers, unmountGitDir)
+	repo.dir = gitDir
+
 	git = git.New(gitutil.WithGitDir(gitDir))
+	repo.GitCLI = git
 
 	ref := gs.src.Ref
 	if ref == "" {
@@ -629,6 +663,7 @@ func (gs *gitSourceHandler) trySnapshot(ctx context.Context, g session.Group, re
 		if err != nil {
 			return nil, err
 		}
+		gs.src.Ref = ref
 	}
 
 	doFetch := true
@@ -727,6 +762,11 @@ func (gs *gitSourceHandler) trySnapshot(ctx context.Context, g session.Group, re
 		}
 	}
 
+	return repo, nil
+}
+
+func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g session.Group) (_ cache.ImmutableRef, retErr error) {
+	ref := gs.src.Ref
 	checkoutRef, err := gs.cache.New(ctx, nil, g, cache.WithRecordType(client.UsageRecordTypeGitCheckout), cache.WithDescription(fmt.Sprintf("git snapshot for %s#%s", urlutil.RedactCredentials(gs.src.Remote), ref)))
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create new mutable for %s", urlutil.RedactCredentials(gs.src.Remote))
@@ -737,6 +777,9 @@ func (gs *gitSourceHandler) trySnapshot(ctx context.Context, g session.Group, re
 			checkoutRef.Release(context.WithoutCancel(ctx))
 		}
 	}()
+
+	git := repo.GitCLI
+	gitDir := repo.dir
 
 	mount, err := checkoutRef.Mount(ctx, false, g)
 	if err != nil {
