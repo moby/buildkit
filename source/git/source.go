@@ -51,6 +51,13 @@ type Metadata struct {
 	Ref            string
 	Checksum       string
 	CommitChecksum string
+
+	CommitObject []byte
+	TagObject    []byte
+}
+
+type MetadataOpts struct {
+	ReturnObject bool
 }
 
 // Supported returns nil if the system supports Git source
@@ -237,7 +244,7 @@ func (gs *gitSourceHandler) shaToCacheKey(sha, ref string) string {
 	return key
 }
 
-func (gs *Source) ResolveMetadata(ctx context.Context, id *GitIdentifier, sm *session.Manager, jobCtx solver.JobContext) (*Metadata, error) {
+func (gs *Source) ResolveMetadata(ctx context.Context, id *GitIdentifier, sm *session.Manager, jobCtx solver.JobContext, opt MetadataOpts) (*Metadata, error) {
 	gsh := &gitSourceHandler{
 		src:    *id,
 		Source: gs,
@@ -247,6 +254,56 @@ func (gs *Source) ResolveMetadata(ctx context.Context, id *GitIdentifier, sm *se
 	if err != nil {
 		return nil, err
 	}
+
+	if !opt.ReturnObject {
+		return md, nil
+	}
+
+	gsh.cacheCommit = md.Checksum
+	gsh.sha256 = len(md.Checksum) == 64
+	repo, err := gsh.remoteFetch(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer repo.Release()
+
+	// if ref was commit sha then we don't know the type of the object yet
+	buf, err := repo.Run(ctx, "cat-file", "-t", md.Checksum)
+	if err != nil {
+		return nil, err
+	}
+	objType := strings.TrimSpace(string(buf))
+
+	if objType != "commit" && objType != "tag" {
+		return nil, errors.Errorf("expected commit or tag object, got %s", objType)
+	}
+
+	if objType == "tag" && md.CommitChecksum == "" {
+		buf, err := repo.Run(ctx, "rev-parse", md.Checksum+"^{commit}")
+		if err != nil {
+			return nil, err
+		}
+		md.CommitChecksum = strings.TrimSpace(string(buf))
+	} else if objType == "commit" {
+		md.CommitChecksum = ""
+	}
+
+	commitChecksum := md.Checksum
+	if md.CommitChecksum != "" {
+		buf, err := repo.Run(ctx, "cat-file", "tag", md.Checksum)
+		if err != nil {
+			return nil, err
+		}
+		md.TagObject = buf
+		commitChecksum = md.CommitChecksum
+	}
+
+	buf, err = repo.Run(ctx, "cat-file", "commit", commitChecksum)
+	if err != nil {
+		return nil, err
+	}
+	md.CommitObject = buf
+
 	return md, nil
 }
 
@@ -557,6 +614,65 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, jobCtx solver.JobConte
 	return cacheKey, md.Checksum, nil, true, nil
 }
 
+func (gs *gitSourceHandler) remoteFetch(ctx context.Context, g session.Group) (_ *gitRepo, retErr error) {
+	gs.locker.Lock(gs.src.Remote)
+	cleanup := func() error { return gs.locker.Unlock(gs.src.Remote) }
+
+	defer func() {
+		if retErr != nil {
+			cleanup()
+		}
+	}()
+
+	repo, err := gs.tryRemoteFetch(ctx, g, false)
+	if err != nil {
+		var wce *wouldClobberExistingTagError
+		var ulre *unableToUpdateLocalRefError
+		if errors.As(err, &wce) || errors.As(err, &ulre) {
+			repo, err = gs.tryRemoteFetch(ctx, g, true)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
+	}
+	repo.releasers = append(repo.releasers, cleanup)
+
+	defer func() {
+		if retErr != nil {
+			repo.Release()
+			repo = nil
+		}
+	}()
+
+	ref := gs.src.Ref
+	git := repo.GitCLI
+	if gs.src.Checksum != "" {
+		actualHashBuf, err := repo.Run(ctx, "rev-parse", ref)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to rev-parse %s for %s", ref, urlutil.RedactCredentials(gs.src.Remote))
+		}
+		actualHash := strings.TrimSpace(string(actualHashBuf))
+		if !strings.HasPrefix(actualHash, gs.src.Checksum) {
+			retErr := errors.Errorf("expected checksum to match %s, got %s", gs.src.Checksum, actualHash)
+			actualHashBuf2, err := git.Run(ctx, "rev-parse", ref+"^{}")
+			if err != nil {
+				return nil, retErr
+			}
+			actualHash2 := strings.TrimSpace(string(actualHashBuf2))
+			if actualHash2 == actualHash {
+				return nil, retErr
+			}
+			if !strings.HasPrefix(actualHash2, gs.src.Checksum) {
+				return nil, errors.Errorf("expected checksum to match %s, got %s or %s", gs.src.Checksum, actualHash, actualHash2)
+			}
+		}
+	}
+
+	return repo, nil
+}
+
 func (gs *gitSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobContext) (cache.ImmutableRef, error) {
 	cacheKey := gs.cacheKey
 	if cacheKey == "" {
@@ -585,21 +701,9 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobConte
 		return gs.cache.Get(ctx, sis[0].ID(), nil)
 	}
 
-	gs.locker.Lock(gs.src.Remote)
-	defer gs.locker.Unlock(gs.src.Remote)
-
-	repo, err := gs.tryRemoteFetch(ctx, g, false)
+	repo, err := gs.remoteFetch(ctx, g)
 	if err != nil {
-		var wce *wouldClobberExistingTagError
-		var ulre *unableToUpdateLocalRefError
-		if errors.As(err, &wce) || errors.As(err, &ulre) {
-			repo, err = gs.tryRemoteFetch(ctx, g, true)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			return nil, err
-		}
+		return nil, err
 	}
 	defer repo.Release()
 
@@ -799,28 +903,6 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 	subdir := path.Clean(gs.src.Subdir)
 	if subdir == "/" {
 		subdir = "."
-	}
-
-	if gs.src.Checksum != "" {
-		actualHashBuf, err := git.Run(ctx, "rev-parse", ref)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to rev-parse %s for %s", ref, urlutil.RedactCredentials(gs.src.Remote))
-		}
-		actualHash := strings.TrimSpace(string(actualHashBuf))
-		if !strings.HasPrefix(actualHash, gs.src.Checksum) {
-			retErr := errors.Errorf("expected checksum to match %s, got %s", gs.src.Checksum, actualHash)
-			actualHashBuf2, err := git.Run(ctx, "rev-parse", ref+"^{}")
-			if err != nil {
-				return nil, retErr
-			}
-			actualHash2 := strings.TrimSpace(string(actualHashBuf2))
-			if actualHash2 == actualHash {
-				return nil, retErr
-			}
-			if !strings.HasPrefix(actualHash2, gs.src.Checksum) {
-				return nil, errors.Errorf("expected checksum to match %s, got %s or %s", gs.src.Checksum, actualHash, actualHash2)
-			}
-		}
 	}
 
 	cd := checkoutDir

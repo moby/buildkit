@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/containerd/containerd/v2/core/diff/apply"
 	ctdmetadata "github.com/containerd/containerd/v2/core/metadata"
@@ -28,8 +29,8 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/snapshot"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
-	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/gitutil"
+	"github.com/moby/buildkit/util/gitutil/gitobject"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/progress/logs"
@@ -1397,6 +1398,92 @@ func testMultipleTagAccess(t *testing.T, keepGitDir bool, format string) {
 	require.Equal(t, string(dt1), string(dt2))
 }
 
+func TestResolveMetadataObjectSHA1(t *testing.T) {
+	testResolveMetadataObject(t, false, "sha1")
+}
+
+func TestResolveMetadataObjectKeepGitDirSHA1(t *testing.T) {
+	testResolveMetadataObject(t, true, "sha1")
+}
+
+func TestResolveMetadataObjectSHA256(t *testing.T) {
+	testResolveMetadataObject(t, false, "sha256")
+}
+
+func TestResolveMetadataObjectKeepGitDirSHA256(t *testing.T) {
+	testResolveMetadataObject(t, true, "sha256")
+}
+
+func testResolveMetadataObject(t *testing.T, keepGitDir bool, format string) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
+	t.Parallel()
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx = logProgressStreams(ctx, t)
+
+	gs := setupGitSource(t, t.TempDir())
+
+	repo := setupGitRepo(t, format)
+
+	id := &GitIdentifier{Remote: repo.mainURL, KeepGitDir: keepGitDir, Ref: "v1.2.3"}
+
+	md, err := gs.ResolveMetadata(ctx, id, nil, nil, MetadataOpts{
+		ReturnObject: true,
+	})
+	require.NoError(t, err)
+
+	expLen := 40
+	if format == "sha256" {
+		expLen = 64
+	}
+	require.Len(t, md.Checksum, expLen)
+	require.Len(t, md.CommitChecksum, expLen)
+
+	tagObject, err := gitobject.Parse(md.TagObject)
+	require.NoError(t, err)
+
+	err = tagObject.VerifyChecksum(md.Checksum)
+	require.NoError(t, err)
+
+	tag, err := tagObject.ToTag()
+	require.NoError(t, err)
+
+	require.Equal(t, "v1.2.3", tag.Tag)
+	require.Equal(t, "this is an annotated tag\n", tag.Message)
+	require.Equal(t, "test-user", tag.Tagger.Name)
+	require.Equal(t, "test-user@example.com", tag.Tagger.Email)
+
+	tagTime := tag.Tagger.When
+	require.NotNil(t, tagTime)
+	require.WithinDuration(t, time.Now(), *tagTime, 5*time.Minute)
+
+	require.Equal(t, "commit", tag.Type)
+	require.Equal(t, md.CommitChecksum, tag.Object)
+
+	commitObject, err := gitobject.Parse(md.CommitObject)
+	require.NoError(t, err)
+
+	err = commitObject.VerifyChecksum(md.CommitChecksum)
+	require.NoError(t, err)
+
+	commit, err := commitObject.ToCommit()
+	require.NoError(t, err)
+
+	require.Equal(t, "second\n", commit.Message)
+	require.Equal(t, "test-user", commit.Author.Name)
+	require.Equal(t, "test-user@example.com", commit.Author.Email)
+	require.Equal(t, "test-user", commit.Committer.Name)
+	require.Equal(t, "test-user@example.com", commit.Committer.Email)
+	commitTime := commit.Committer.When
+	require.NotNil(t, commitTime)
+	require.WithinDuration(t, time.Now(), *commitTime, 5*time.Minute)
+
+	require.Equal(t, 1, len(commit.Parents))
+	require.Len(t, commit.Tree, len(md.Checksum))
+}
+
 func TestMultipleReposSHA1(t *testing.T) {
 	testMultipleRepos(t, false, "sha1")
 }
@@ -1673,7 +1760,7 @@ func testSubdir(t *testing.T, keepGitDir bool) {
 	require.Equal(t, "abc\n", string(dt))
 }
 
-func setupGitSource(t *testing.T, tmpdir string) source.Source {
+func setupGitSource(t *testing.T, tmpdir string) *Source {
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 
@@ -1752,8 +1839,8 @@ func setupGitRepo(t *testing.T, format string) gitRepoFixture {
 	// * (tag: refs/tags/a/v1.2.3, refs/tags/a/v1.2.3-same) initial
 	runShell(t, fixture.mainPath,
 		"git -c init.defaultBranch=master init --object-format="+format,
-		"git config --local user.email test",
-		"git config --local user.name test",
+		"git config --local user.email test-user@example.com",
+		"git config --local user.name test-user",
 
 		"echo foo > abc",
 		"git add abc",

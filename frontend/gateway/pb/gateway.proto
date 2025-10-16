@@ -136,6 +136,7 @@ message ResolveSourceMetaRequest {
 	string LogName = 3;
 	string ResolveMode = 4;
 	repeated moby.buildkit.v1.sourcepolicy.Policy SourcePolicies = 8;
+	ResolveSourceGitRequest Git = 5;
 }
 
 message ResolveSourceMetaResponse {
@@ -150,10 +151,17 @@ message ResolveSourceImageResponse {
 	bytes Config = 2;
 }
 
+message ResolveSourceGitRequest {
+	// Return full commit and tag object bytes.
+	bool ReturnObject = 1;
+}
+
 message ResolveSourceGitResponse {
 	string Checksum = 1;
 	string Ref = 2;
 	string CommitChecksum = 3;
+	bytes CommitObject = 4;
+	bytes TagObject = 5;
 }
 
 message ResolveSourceHTTPResponse {

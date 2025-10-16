@@ -514,6 +514,12 @@ func (c *grpcClient) ResolveSourceMetadata(ctx context.Context, op *opspb.Source
 		LogName:        opt.LogName,
 		SourcePolicies: opt.SourcePolicies,
 	}
+	if opt.GitOpt != nil {
+		req.Git = &pb.ResolveSourceGitRequest{
+			ReturnObject: opt.GitOpt.ReturnObject,
+		}
+	}
+
 	resp, err := c.client.ResolveSourceMeta(ctx, req)
 	if err != nil {
 		return nil, err
@@ -533,6 +539,8 @@ func (c *grpcClient) ResolveSourceMetadata(ctx context.Context, op *opspb.Source
 			Checksum:       resp.Git.Checksum,
 			Ref:            resp.Git.Ref,
 			CommitChecksum: resp.Git.CommitChecksum,
+			CommitObject:   resp.Git.CommitObject,
+			TagObject:      resp.Git.TagObject,
 		}
 	}
 	if resp.HTTP != nil {
