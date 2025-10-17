@@ -6345,10 +6345,10 @@ RUN echo bar > bar
 }
 
 func testNoCache(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM busybox AS s0
 RUN cat /dev/urandom | head -c 100 | sha256sum | tee unique
 FROM busybox AS s1
@@ -6356,7 +6356,20 @@ RUN cat /dev/urandom | head -c 100 | sha256sum | tee unique2
 FROM scratch
 COPY --from=s0 unique /
 COPY --from=s1 unique2 /
-`)
+`,
+		`
+FROM nanoserver AS s0
+USER ContainerAdministrator
+RUN echo test> unique
+FROM nanoserver AS s1
+USER ContainerAdministrator
+RUN echo test> unique2
+FROM nanoserver
+COPY --from=s0 unique /
+COPY --from=s1 unique2 /
+`,
+	))
+
 	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
@@ -6405,8 +6418,8 @@ COPY --from=s1 unique2 /
 	unique2Dir2, err := os.ReadFile(filepath.Join(destDir2, "unique2"))
 	require.NoError(t, err)
 
-	require.NotEqual(t, string(unique1Dir1), string(unique1Dir2))
-	require.NotEqual(t, string(unique2Dir1), string(unique2Dir2))
+	require.NotEqual(t, integration.UnixOrWindows(string(unique1Dir1), string(unique1Dir1)+"\r\n"), string(unique1Dir2))
+	require.NotEqual(t, integration.UnixOrWindows(string(unique2Dir1), string(unique2Dir1)+"\r\n"), string(unique2Dir2))
 
 	destDir3 := t.TempDir()
 
@@ -6423,7 +6436,7 @@ COPY --from=s1 unique2 /
 	require.NoError(t, err)
 
 	require.Equal(t, string(unique1Dir2), string(unique1Dir3))
-	require.NotEqual(t, string(unique2Dir1), string(unique2Dir3))
+	require.NotEqual(t, integration.UnixOrWindows(string(unique2Dir1), string(unique2Dir1)+"\r\n"), string(unique2Dir3))
 }
 
 // moby/buildkit#5305
