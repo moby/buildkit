@@ -189,13 +189,18 @@ jobs:
             tagSuffix="${tagSuffix}-${{ matrix.base }}"
           fi
           echo "TAG_SUFFIX=${tagSuffix}" >> $GITHUB_ENV
-          if [[ $GITHUB_REF == refs/tags/v* ]] && [[ "${{ matrix.base }}" = "$DEFAULT_BASE" ]]; then
+          if [[ $GITHUB_REF == refs/tags/v* ]]; then
             if [[ "${GITHUB_REF#refs/tags/}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              tagLatest=""
               if [ -n "${{ matrix.target }}" ]; then
-                echo "TAG_LATEST=${{ matrix.target }}" >> $GITHUB_ENV
+                tagLatest=${{ matrix.target }}
               else
-                echo "TAG_LATEST=latest" >> $GITHUB_ENV
+                tagLatest=latest
               fi
+              if [ "${{ matrix.base }}" != "$DEFAULT_BASE" ]; then
+                tagLatest="${tagLatest}-${{ matrix.base }}"
+              fi
+              echo "TAG_LATEST=${tagLatest}" >> $GITHUB_ENV
             fi
           fi
       -
@@ -222,6 +227,7 @@ jobs:
           ### moby/buildkit:v0.24.0-rootless
           ### moby/buildkit:rootless
           ### moby/buildkit:v0.24.0-ubuntu
+          ### moby/buildkit:latest-ubuntu
           ## push semver prerelease tag v0.24.0-rc1
           ### moby/buildkit:v0.24.0-rc1
           ### moby/buildkit:v0.24.0-rc1-rootless
