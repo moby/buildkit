@@ -636,6 +636,12 @@ func (lbf *llbBridgeForwarder) ResolveSourceMeta(ctx context.Context, req *pb.Re
 	resolveopt.ImageOpt = &sourceresolver.ResolveImageOpt{
 		ResolveMode: req.ResolveMode,
 	}
+	if req.Git != nil {
+		resolveopt.GitOpt = &sourceresolver.ResolveGitOpt{
+			ReturnObject: req.Git.ReturnObject,
+		}
+	}
+
 	resp, err := lbf.llbBridge.ResolveSourceMetadata(ctx, req.Source, resolveopt)
 	if err != nil {
 		return nil, err
@@ -656,6 +662,8 @@ func (lbf *llbBridgeForwarder) ResolveSourceMeta(ctx context.Context, req *pb.Re
 			Checksum:       resp.Git.Checksum,
 			Ref:            resp.Git.Ref,
 			CommitChecksum: resp.Git.CommitChecksum,
+			CommitObject:   resp.Git.CommitObject,
+			TagObject:      resp.Git.TagObject,
 		}
 	}
 	if resp.HTTP != nil {
