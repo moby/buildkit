@@ -19,6 +19,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
+	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/testutil/httpserver"
@@ -505,4 +506,8 @@ func (s *simpleJobContext) Release() error {
 	}
 	s.releasers = nil
 	return firstErr
+}
+
+func (s *simpleJobContext) ResolverCache() solver.ResolverCache {
+	return nil
 }

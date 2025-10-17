@@ -139,9 +139,13 @@ type Metadata struct {
 type httpSourceHandler struct {
 	*Source
 	src      HTTPIdentifier
-	refID    string
-	cacheKey digest.Digest
+	resolved *metadataWithRef
 	sm       *session.Manager
+}
+
+type metadataWithRef struct {
+	Metadata
+	refID string
 }
 
 func (hs *Source) ResolveMetadata(ctx context.Context, id *HTTPIdentifier, sm *session.Manager, jobCtx solver.JobContext) (*Metadata, error) {
@@ -226,7 +230,7 @@ func (hs *httpSourceHandler) formatCacheKey(filename string, dgst digest.Digest,
 	return dgst
 }
 
-func (hs *httpSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.JobContext) (*Metadata, error) {
+func (hs *httpSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.JobContext) (md *Metadata, retErr error) {
 	if hs.src.Checksum != "" {
 		return &Metadata{
 			Digest:   hs.src.Checksum,
@@ -242,6 +246,43 @@ func (hs *httpSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.
 	uh, err := hs.urlHash()
 	if err != nil {
 		return nil, err
+	}
+
+	if hs.resolved != nil {
+		return &hs.resolved.Metadata, nil
+	}
+	if jobCtx != nil {
+		if rc := jobCtx.ResolverCache(); rc != nil {
+			vals, release, err := rc.Lock(uh)
+			if err != nil {
+				return nil, err
+			}
+			saveResolved := true
+			defer func() {
+				ret := hs.resolved
+				if retErr != nil || !saveResolved {
+					ret = nil
+				}
+				if err := release(ret); err != nil {
+					bklog.G(ctx).WithError(err).Warn("failed to release resolver cache lock")
+				}
+			}()
+			for _, v := range vals {
+				v2, ok := v.(*metadataWithRef)
+				if !ok {
+					return nil, errors.Errorf("invalid HTTP resolver cache value: %T", v)
+				}
+				if hs.src.Checksum != "" && v2.Digest != hs.src.Checksum {
+					continue
+				}
+				hs.resolved = v2
+				saveResolved = false
+				return &hs.resolved.Metadata, nil
+			}
+			if hs.src.Checksum != "" && len(vals) > 0 {
+				return nil, errors.Errorf("digest mismatch for %s: %s (expected: %s)", hs.src.URL, vals[0], hs.src.Checksum)
+			}
+		}
 	}
 
 	// look up metadata(previously stored headers) for that URL
@@ -311,7 +352,6 @@ func (hs *httpSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.
 				}
 				md, ok := m[respETag]
 				if ok {
-					hs.refID = md.ID()
 					dgst := md.getHTTPChecksum()
 					if dgst != "" {
 						var modTime *time.Time
@@ -321,11 +361,16 @@ func (hs *httpSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.
 							}
 						}
 						resp.Body.Close()
-						return &Metadata{
+						m := &Metadata{
 							Digest:       dgst,
 							Filename:     getFileName(hs.src.URL, hs.src.Filename, resp),
 							LastModified: modTime,
-						}, nil
+						}
+						hs.resolved = &metadataWithRef{
+							Metadata: *m,
+							refID:    md.ID(),
+						}
+						return m, nil
 					}
 				}
 			}
@@ -358,7 +403,6 @@ func (hs *httpSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.
 		if !ok {
 			return nil, errors.Errorf("invalid not-modified ETag: %v", respETag)
 		}
-		hs.refID = md.ID()
 		dgst := md.getHTTPChecksum()
 		if dgst == "" {
 			return nil, errors.Errorf("invalid metadata change")
@@ -371,11 +415,16 @@ func (hs *httpSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.
 				modTime = &t
 			}
 		}
-		return &Metadata{
+		m := &Metadata{
 			Digest:       dgst,
 			Filename:     getFileName(hs.src.URL, hs.src.Filename, resp),
 			LastModified: modTime,
-		}, nil
+		}
+		hs.resolved = &metadataWithRef{
+			Metadata: *m,
+			refID:    md.ID(),
+		}
+		return m, nil
 	}
 
 	ref, dgst, err := hs.save(ctx, resp, g)
@@ -401,11 +450,16 @@ func (hs *httpSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.
 		}
 	}
 
-	return &Metadata{
+	out := &Metadata{
 		Digest:       dgst,
 		Filename:     getFileName(hs.src.URL, hs.src.Filename, resp),
 		LastModified: modTime,
-	}, nil
+	}
+	hs.resolved = &metadataWithRef{
+		Metadata: *out,
+		refID:    ref.ID(),
+	}
+	return out, nil
 }
 
 func (hs *httpSourceHandler) CacheKey(ctx context.Context, jobCtx solver.JobContext, index int) (string, string, solver.CacheOpts, bool, error) {
@@ -413,7 +467,11 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, jobCtx solver.JobCont
 	if err != nil {
 		return "", "", nil, false, err
 	}
-	hs.cacheKey = md.Digest
+	if hs.resolved == nil {
+		hs.resolved = &metadataWithRef{
+			Metadata: *md,
+		}
+	}
 	return hs.formatCacheKey(md.Filename, md.Digest, md.LastModified).String(), md.Digest.String(), nil, true, nil
 }
 
@@ -513,7 +571,6 @@ func (hs *httpSourceHandler) save(ctx context.Context, resp *http.Response, s se
 	newRef = nil
 	md := cacheRefMetadata{ref}
 
-	hs.refID = ref.ID()
 	dgst = digest.NewDigest(digest.SHA256, h)
 
 	if respETag := resp.Header.Get("ETag"); respETag != "" {
@@ -540,10 +597,43 @@ func (hs *httpSourceHandler) save(ctx context.Context, resp *http.Response, s se
 }
 
 func (hs *httpSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobContext) (cache.ImmutableRef, error) {
-	if hs.refID != "" {
-		ref, err := hs.cache.Get(ctx, hs.refID, nil)
+	refID := ""
+	if hs.resolved != nil && hs.resolved.refID != "" {
+		refID = hs.resolved.refID
+	} else if jobCtx != nil {
+		if rc := jobCtx.ResolverCache(); rc != nil {
+			uh, err := hs.urlHash()
+			if err != nil {
+				return nil, err
+			}
+			vals, release, err := rc.Lock(uh)
+			if err != nil {
+				return nil, err
+			}
+			for _, v := range vals {
+				v2, ok := v.(*metadataWithRef)
+				if !ok {
+					return nil, errors.Errorf("invalid HTTP resolver cache value: %T", vals[0])
+				}
+				if hs.src.Checksum != "" && v2.Digest != hs.src.Checksum {
+					continue
+				}
+				if v2.refID != "" {
+					hs.resolved = v2
+					refID = v2.refID
+				}
+			}
+			release(nil)
+			if hs.src.Checksum != "" && len(vals) > 0 && refID == "" {
+				return nil, errors.Errorf("digest mismatch for %s: %s (expected: %s)", hs.src.URL, vals[0], hs.src.Checksum)
+			}
+		}
+	}
+
+	if refID != "" {
+		ref, err := hs.cache.Get(ctx, hs.resolved.refID, nil)
 		if err != nil {
-			bklog.G(ctx).WithError(err).Warnf("failed to get HTTP snapshot for ref %s (%s)", hs.refID, hs.src.URL)
+			bklog.G(ctx).WithError(err).Warnf("failed to get HTTP snapshot for ref %s (%s)", hs.resolved.refID, hs.src.URL)
 		} else {
 			return ref, nil
 		}
@@ -573,9 +663,9 @@ func (hs *httpSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobCont
 	if err != nil {
 		return nil, err
 	}
-	if dgst != hs.cacheKey {
+	if hs.resolved != nil && dgst != hs.resolved.Digest {
 		ref.Release(context.TODO())
-		return nil, errors.Errorf("digest mismatch %s: %s", dgst, hs.cacheKey)
+		return nil, errors.Errorf("digest mismatch %s: %s", dgst, hs.resolved.Digest)
 	}
 
 	return ref, nil

@@ -246,6 +246,9 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testHTTPResolveSourceMetadata,
 	testHTTPPruneAfterCacheKey,
 	testHTTPPruneAfterResolveMeta,
+	testHTTPResolveMetaReuse,
+	testHTTPResolveMultiBuild,
+	testGitResolveMutatedSource,
 }
 
 func TestIntegration(t *testing.T) {
@@ -12266,6 +12269,265 @@ func testHTTPPruneAfterResolveMeta(t *testing.T, sb integration.Sandbox) {
 	dt, err := os.ReadFile(filepath.Join(dest, "bar"))
 	require.NoError(t, err)
 	require.Equal(t, "content1", string(dt))
+
+	checkAllReleasable(t, c, sb, false)
+}
+
+func testHTTPResolveMetaReuse(t *testing.T, sb integration.Sandbox) {
+	// the difference with testHTTPPruneAfterResolveMeta is that here we change content with the etag on the server
+	// but because the URL was already resolved once, the new content should not be seen
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	resp := &httpserver.Response{
+		Etag:    identity.NewID(),
+		Content: []byte("content1"),
+	}
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
+		"/foo": resp,
+	})
+	defer server.Close()
+
+	dest := t.TempDir()
+	_, err = c.Build(ctx, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: dest,
+			},
+		},
+	}, "test", func(ctx context.Context, gc gateway.Client) (*gateway.Result, error) {
+		id := server.URL + "/foo"
+		md, err := gc.ResolveSourceMetadata(ctx, &pb.SourceOp{
+			Identifier: id,
+		}, sourceresolver.Opt{})
+		if err != nil {
+			return nil, err
+		}
+		require.NotNil(t, md.HTTP)
+
+		resp.Etag = identity.NewID()
+		resp.Content = []byte("content2") // etag changed so new content would be returned if re-resolving
+
+		st := llb.Scratch().File(llb.Copy(llb.HTTP(id), "foo", "bar"))
+		def, err := st.Marshal(sb.Context())
+		if err != nil {
+			return nil, err
+		}
+		return gc.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(dest, "bar"))
+	require.NoError(t, err)
+	require.Equal(t, "content1", string(dt))
+}
+
+// testHTTPResolveMultiBuild is a negative test for testHTTPResolveMetaReuse to ensure that
+// URLs are resolved in between separate builds
+func testHTTPResolveMultiBuild(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	resp := &httpserver.Response{
+		Etag:    identity.NewID(),
+		Content: []byte("content1"),
+	}
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
+		"/foo": resp,
+	})
+	defer server.Close()
+
+	dest := t.TempDir()
+	_, err = c.Build(ctx, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: dest,
+			},
+		},
+	}, "test", func(ctx context.Context, gc gateway.Client) (*gateway.Result, error) {
+		id := server.URL + "/foo"
+		md, err := gc.ResolveSourceMetadata(ctx, &pb.SourceOp{
+			Identifier: id,
+		}, sourceresolver.Opt{})
+		if err != nil {
+			return nil, err
+		}
+		require.NotNil(t, md.HTTP)
+		require.Equal(t, digest.FromBytes(resp.Content), md.HTTP.Digest)
+
+		st := llb.Scratch().File(llb.Copy(llb.HTTP(id), "foo", "bar"))
+		def, err := st.Marshal(sb.Context())
+		if err != nil {
+			return nil, err
+		}
+		return gc.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(dest, "bar"))
+	require.NoError(t, err)
+	require.Equal(t, "content1", string(dt))
+
+	resp.Etag = identity.NewID()
+	resp.Content = []byte("content2")
+
+	_, err = c.Build(ctx, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: dest,
+			},
+		},
+	}, "test", func(ctx context.Context, gc gateway.Client) (*gateway.Result, error) {
+		id := server.URL + "/foo"
+		md, err := gc.ResolveSourceMetadata(ctx, &pb.SourceOp{
+			Identifier: id,
+		}, sourceresolver.Opt{})
+		if err != nil {
+			return nil, err
+		}
+		require.NotNil(t, md.HTTP)
+		require.Equal(t, digest.FromBytes(resp.Content), md.HTTP.Digest)
+		st := llb.Scratch().File(llb.Copy(llb.HTTP(id), "foo", "bar"))
+		def, err := st.Marshal(sb.Context())
+		if err != nil {
+			return nil, err
+		}
+		return gc.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err = os.ReadFile(filepath.Join(dest, "bar"))
+	require.NoError(t, err)
+	require.Equal(t, "content2", string(dt))
+}
+
+func testGitResolveMutatedSource(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	gitDir := t.TempDir()
+	gitCommands := []string{
+		"git init",
+		"git config --local user.email test",
+		"git config --local user.name test",
+		"echo a > a",
+		"git add a",
+		"git commit -m a",
+		"git tag -a v0.1 -m v0.1",
+		"echo b > b",
+		"git add b",
+		"git commit -m b",
+		"git checkout -B v2",
+		"git update-server-info",
+	}
+	err = runInDir(gitDir, gitCommands...)
+	require.NoError(t, err)
+
+	// cmd := exec.Command("git", "rev-parse", "HEAD")
+	// cmd.Dir = gitDir
+	// out, err := cmd.Output()
+	// require.NoError(t, err)
+	// commitHEAD := strings.TrimSpace(string(out))
+
+	cmd := exec.Command("git", "rev-parse", "v0.1")
+	cmd.Dir = gitDir
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	commitTag := strings.TrimSpace(string(out))
+
+	cmd = exec.Command("git", "rev-parse", "v0.1^{commit}")
+	cmd.Dir = gitDir
+	out, err = cmd.Output()
+	require.NoError(t, err)
+	commitTagCommit := strings.TrimSpace(string(out))
+
+	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Clean(gitDir))))
+	defer server.Close()
+
+	dest := t.TempDir()
+
+	_, err = c.Build(ctx, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: dest,
+			},
+		},
+	}, "test", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		id := "git://" + strings.TrimPrefix(server.URL, "http://") + "/.git#v0.1"
+		md, err := c.ResolveSourceMetadata(ctx, &pb.SourceOp{
+			Identifier: id,
+			Attrs: map[string]string{
+				"git.fullurl": server.URL + "/.git",
+			},
+		}, sourceresolver.Opt{})
+		if err != nil {
+			return nil, err
+		}
+		require.NotNil(t, md.Git)
+		require.Equal(t, "refs/tags/v0.1", md.Git.Ref)
+		require.Equal(t, commitTag, md.Git.Checksum)
+		require.Equal(t, commitTagCommit, md.Git.CommitChecksum)
+		require.Equal(t, id, md.Op.Identifier)
+		require.Equal(t, server.URL+"/.git", md.Op.Attrs["git.fullurl"])
+
+		// update the tag to point to a different commit
+		err = runInDir(gitDir, []string{
+			"git tag -f v0.1",
+			"git update-server-info",
+		}...)
+		require.NoError(t, err)
+
+		md, err = c.ResolveSourceMetadata(ctx, &pb.SourceOp{
+			Identifier: id,
+			Attrs: map[string]string{
+				"git.fullurl": server.URL + "/.git",
+			},
+		}, sourceresolver.Opt{})
+		if err != nil {
+			return nil, err
+		}
+		require.NotNil(t, md.Git)
+		require.Equal(t, "refs/tags/v0.1", md.Git.Ref)
+		require.Equal(t, commitTag, md.Git.Checksum)
+		require.Equal(t, commitTagCommit, md.Git.CommitChecksum)
+		require.Equal(t, id, md.Op.Identifier)
+		require.Equal(t, server.URL+"/.git", md.Op.Attrs["git.fullurl"])
+
+		st := llb.Git(server.URL+"/.git", "", llb.GitRef("v0.1"))
+		def, err := st.Marshal(sb.Context())
+		if err != nil {
+			return nil, err
+		}
+		return c.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+	}, nil)
+	require.NoError(t, err)
+
+	_, err = os.ReadFile(filepath.Join(dest, "b"))
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err), "expected file b to not exist")
+
+	dt, err := os.ReadFile(filepath.Join(dest, "a"))
+	require.NoError(t, err)
+	require.Equal(t, "a\n", string(dt))
 
 	checkAllReleasable(t, c, sb, false)
 }

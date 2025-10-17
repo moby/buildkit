@@ -181,6 +181,17 @@ type JobContext interface {
 	// Cleanup adds a function that is called when the job is done. This can be used to associate
 	// resources with the job and keep them from being released until the job is done.
 	Cleanup(func() error) error
+	// ResolverCache returns object for memorizing/synchronizing remote resolving decisions during the job.
+	// Steps from same build job will share the same resolver cache.
+	ResolverCache() ResolverCache
+}
+
+type ResolverCache interface {
+	// Lock locks a key until the returned release function is called.
+	// Release function can return value that will be returned to next callers.
+	// Lock can return multiple values because two steps can be merged once
+	// both have independently completed their resolution.
+	Lock(key any) (values []any, release func(any) error, err error)
 }
 
 type ProvenanceProvider interface {
