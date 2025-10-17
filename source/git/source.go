@@ -55,7 +55,7 @@ type Metadata struct {
 
 // Supported returns nil if the system supports Git source
 func Supported() error {
-	if err := exec.Command("git", "version").Run(); err != nil {
+	if err := exec.CommandContext(context.TODO(), "git", "version").Run(); err != nil {
 		return errors.Wrap(err, "failed to find git binary")
 	}
 	return nil

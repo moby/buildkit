@@ -2783,7 +2783,7 @@ func mapToSystemTarBlob(t *testing.T, m map[string]string) ([]byte, ocispecs.Des
 		}
 	}
 
-	cmd := exec.Command("tar", "-C", tmpdir, "-c", ".")
+	cmd := exec.CommandContext(t.Context(), "tar", "-C", tmpdir, "-c", ".")
 	tarout, err := cmd.Output()
 	if err != nil {
 		return nil, ocispecs.Descriptor{}, err
