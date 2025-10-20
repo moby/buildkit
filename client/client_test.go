@@ -4938,7 +4938,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 		mfst, err := images.Manifest(ctx, client.ContentStore(), img.Target(), nil)
 		require.NoError(t, err)
 		require.Equal(t, 1, len(mfst.Layers))
-		require.Equal(t, images.MediaTypeDockerSchema2Layer, mfst.Layers[0].MediaType)
+		require.Equal(t, ocispecs.MediaTypeImageLayer, mfst.Layers[0].MediaType)
 	}
 
 	// new layer with gzip compression
@@ -5414,10 +5414,10 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	err = json.Unmarshal(dt, &mfst)
 	require.NoError(t, err)
 
-	require.Equal(t, images.MediaTypeDockerSchema2Manifest, mfst.MediaType)
+	require.Equal(t, ocispecs.MediaTypeImageManifest, mfst.MediaType)
 	require.Equal(t, 3, len(mfst.Layers))
-	require.Equal(t, images.MediaTypeDockerSchema2LayerGzip, mfst.Layers[0].MediaType)
-	require.Equal(t, images.MediaTypeDockerSchema2LayerGzip, mfst.Layers[1].MediaType)
+	require.Equal(t, ocispecs.MediaTypeImageLayerGzip, mfst.Layers[0].MediaType)
+	require.Equal(t, ocispecs.MediaTypeImageLayerGzip, mfst.Layers[1].MediaType)
 
 	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispecs.Descriptor{Digest: mfst.Layers[0].Digest})
 	require.NoError(t, err)
