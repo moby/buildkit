@@ -77,6 +77,7 @@ func (e *imageExporter) Resolve(ctx context.Context, id int, opt map[string]stri
 			RefCfg: cacheconfig.RefConfig{
 				Compression: compression.New(compression.Default),
 			},
+			OCIArtifact:             true,
 			ForceInlineAttestations: true,
 		},
 		store: true,
