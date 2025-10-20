@@ -26,12 +26,11 @@ func TestCLIIntegration(t *testing.T) {
 		testPrune,
 		testUsage,
 	),
-		integration.WithMirroredImages(integration.OfficialImages("busybox:latest")),
+		integration.WithMirroredImages(integration.OfficialImages(integration.UnixOrWindows("busybox:latest", "nanoserver:latest"))),
 	)
 }
 
 func testUsage(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	require.NoError(t, sb.Cmd().Run())
 
 	require.NoError(t, sb.Cmd("--help").Run())
