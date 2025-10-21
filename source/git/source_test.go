@@ -31,6 +31,7 @@ import (
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/util/gitutil"
 	"github.com/moby/buildkit/util/gitutil/gitobject"
+	"github.com/moby/buildkit/util/gitutil/gitsign"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/progress/logs"
@@ -39,6 +40,8 @@ import (
 	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
 )
+
+const signFixturesPathEnv = "BUILDKIT_TEST_SIGN_FIXTURES"
 
 func TestRepeatedFetchSHA1(t *testing.T) {
 	testRepeatedFetch(t, false, "sha1")
@@ -1687,6 +1690,47 @@ func testSubmoduleSubdir(t *testing.T, keepGitDir bool, format string) {
 	require.Equal(t, "subcontents\n", string(dt))
 }
 
+func TestCheckSignaturesSHA1(t *testing.T) {
+	testCheckSignatures(t, false, "sha1")
+}
+
+func testCheckSignatures(t *testing.T, keepGitDir bool, format string) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+	t.Parallel()
+	requireSignFixtures(t)
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx = logProgressStreams(ctx, t)
+
+	gs := setupGitSource(t, t.TempDir())
+
+	repo := setupGitRepo(t, format)
+
+	id := &GitIdentifier{Remote: repo.mainURL, KeepGitDir: keepGitDir, Ref: "a/v1.2.3"}
+
+	md, err := gs.ResolveMetadata(ctx, id, nil, nil, MetadataOpts{
+		ReturnObject: true,
+	})
+	require.NoError(t, err)
+
+	ob, err := gitobject.Parse(md.CommitObject)
+	require.NoError(t, err)
+
+	pubkey, err := os.ReadFile(os.Getenv("BUILDKIT_TEST_SIGN_FIXTURES") + "/user1.gpg.pub")
+	require.NoError(t, err)
+
+	err = gitsign.VerifySignature(ob, pubkey, nil)
+	require.NoError(t, err)
+
+	pubkey, err = os.ReadFile(os.Getenv("BUILDKIT_TEST_SIGN_FIXTURES") + "/user2.gpg.pub")
+	require.NoError(t, err)
+
+	err = gitsign.VerifySignature(ob, pubkey, nil)
+	require.ErrorContains(t, err, "signature made by unknown entity")
+	require.ErrorContains(t, err, "signature by")
+}
+
 func TestSubdir(t *testing.T) {
 	testSubdir(t, false)
 }
@@ -1807,6 +1851,29 @@ type gitRepoFixture struct {
 	mainURL, subURL   string // HTTP URLs for the respective repos
 }
 
+func checkSignFixtures() error {
+	fixturesPath, ok := os.LookupEnv(signFixturesPathEnv)
+	if !ok {
+		return errors.Errorf("environment variable %s must be set to run signing tests", signFixturesPathEnv)
+	}
+
+	for _, method := range []string{"gpg", "ssh"} {
+		for _, user := range []string{"user1", "user2"} {
+			path := filepath.Join(fixturesPath, user+"."+method+".gitconfig")
+			_, err := os.Stat(path)
+			if err != nil {
+				return errors.Errorf("missing signing fixture at %s", path)
+			}
+		}
+	}
+	return nil
+}
+
+func requireSignFixtures(t *testing.T) {
+	t.Helper()
+	require.NoError(t, checkSignFixtures())
+}
+
 func setupGitRepo(t *testing.T, format string) gitRepoFixture {
 	t.Helper()
 	dir := t.TempDir()
@@ -1819,6 +1886,14 @@ func setupGitRepo(t *testing.T, format string) gitRepoFixture {
 	}
 	require.NoError(t, os.MkdirAll(fixture.subPath, 0700))
 	require.NoError(t, os.MkdirAll(fixture.mainPath, 0700))
+
+	withSignatures := checkSignFixtures() == nil
+
+	withSign := func(user, method string) []string {
+		return []string{
+			"GIT_CONFIG_GLOBAL=" + filepath.Join(os.Getenv(signFixturesPathEnv), user+"."+method+".gitconfig"),
+		}
+	}
 
 	runShell(t, fixture.subPath,
 		"git -c init.defaultBranch=master init --object-format="+format,
@@ -1844,7 +1919,17 @@ func setupGitRepo(t *testing.T, format string) gitRepoFixture {
 
 		"echo foo > abc",
 		"git add abc",
-		"git commit -m initial",
+	)
+	if withSignatures {
+		runShellEnv(t, fixture.mainPath, withSign("user1", "gpg"),
+			"git commit -S -m initial",
+		)
+	} else {
+		runShell(t, fixture.mainPath,
+			"git commit -m initial",
+		)
+	}
+	runShell(t, fixture.mainPath,
 		"git tag --no-sign a/v1.2.3",
 		"git tag --no-sign a/v1.2.3-same",
 		"echo bar > def",
@@ -1937,6 +2022,11 @@ func serveGitRepo(t *testing.T, root string) string {
 
 func runShell(t *testing.T, dir string, cmds ...string) {
 	t.Helper()
+	runShellEnv(t, dir, nil, cmds...)
+}
+
+func runShellEnv(t *testing.T, dir string, env []string, cmds ...string) {
+	t.Helper()
 	for _, args := range cmds {
 		var cmd *exec.Cmd
 		if runtime.GOOS == "windows" {
@@ -1945,6 +2035,7 @@ func runShell(t *testing.T, dir string, cmds ...string) {
 			cmd = exec.Command("sh", "-c", args)
 		}
 		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), env...)
 		// cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		require.NoErrorf(t, cmd.Run(), "error running %v", args)
