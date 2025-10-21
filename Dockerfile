@@ -437,6 +437,7 @@ ENV BUILDKIT_INTEGRATION_SNAPSHOTTER=stargz
 ENV BUILDKIT_SETUP_CGROUPV2_ROOT=1
 ENV BUILDKIT_TEST_SIGN_FIXTURES=/tmp/buildkit_test_sign_fixtures
 RUN --mount=target=/tmp/gen_gpg_test_env.sh,source=hack/fixtures/gen_gpg_test_env.sh sh /tmp/gen_gpg_test_env.sh user1 && sh /tmp/gen_gpg_test_env.sh user2
+RUN --mount=target=/tmp/gen_ssh_test_env.sh,source=hack/fixtures/gen_ssh_test_env.sh sh /tmp/gen_ssh_test_env.sh user1 && sh /tmp/gen_ssh_test_env.sh user2
 ENV CGO_ENABLED=0
 ENV GOTESTSUM_FORMAT=standard-verbose
 COPY --link --from=gotestsum /out /usr/bin/
