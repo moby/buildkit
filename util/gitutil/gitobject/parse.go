@@ -110,6 +110,7 @@ func Parse(raw []byte) (*GitObject, error) {
 	}
 
 	obj.Message = strings.Join(messageLines, "\n")
+	obj.Message = strings.TrimSuffix(obj.Message, "\n") // body ends with newline but no extra newline between message and signature
 	if len(sigLines) > 0 {
 		obj.Signature = strings.Join(sigLines, "\n")
 	}

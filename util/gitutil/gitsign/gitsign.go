@@ -35,6 +35,10 @@ type VerifyPolicy struct {
 }
 
 func VerifySignature(obj *gitobject.GitObject, pubKeyData []byte, policy *VerifyPolicy) error {
+	if len(obj.Signature) == 0 {
+		return errors.New("git object is not signed")
+	}
+
 	s, err := ParseSignature([]byte(obj.Signature))
 	if err != nil {
 		return err

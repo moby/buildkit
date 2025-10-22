@@ -28,6 +28,8 @@ import (
 	srctypes "github.com/moby/buildkit/source/types"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/gitutil"
+	"github.com/moby/buildkit/util/gitutil/gitobject"
+	"github.com/moby/buildkit/util/gitutil/gitsign"
 	"github.com/moby/buildkit/util/progress/logs"
 	"github.com/moby/buildkit/util/urlutil"
 	"github.com/moby/locker"
@@ -255,56 +257,65 @@ func (gs *Source) ResolveMetadata(ctx context.Context, id *GitIdentifier, sm *se
 		return nil, err
 	}
 
-	if !opt.ReturnObject {
+	if !opt.ReturnObject && id.VerifySignature == nil {
 		return md, nil
 	}
 
 	gsh.cacheCommit = md.Checksum
 	gsh.sha256 = len(md.Checksum) == 64
-	repo, err := gsh.remoteFetch(ctx, nil)
-	if err != nil {
+
+	if err := gsh.addGitObjectsToMetadata(ctx, jobCtx, md); err != nil {
 		return nil, err
 	}
-	defer repo.Release()
 
-	// if ref was commit sha then we don't know the type of the object yet
-	buf, err := repo.Run(ctx, "cat-file", "-t", md.Checksum)
-	if err != nil {
-		return nil, err
-	}
-	objType := strings.TrimSpace(string(buf))
-
-	if objType != "commit" && objType != "tag" {
-		return nil, errors.Errorf("expected commit or tag object, got %s", objType)
-	}
-
-	if objType == "tag" && md.CommitChecksum == "" {
-		buf, err := repo.Run(ctx, "rev-parse", md.Checksum+"^{commit}")
-		if err != nil {
+	if id.VerifySignature != nil {
+		if err := verifyGitSignature(md, id.VerifySignature); err != nil {
 			return nil, err
 		}
-		md.CommitChecksum = strings.TrimSpace(string(buf))
-	} else if objType == "commit" {
-		md.CommitChecksum = ""
 	}
-
-	commitChecksum := md.Checksum
-	if md.CommitChecksum != "" {
-		buf, err := repo.Run(ctx, "cat-file", "tag", md.Checksum)
-		if err != nil {
-			return nil, err
-		}
-		md.TagObject = buf
-		commitChecksum = md.CommitChecksum
-	}
-
-	buf, err = repo.Run(ctx, "cat-file", "commit", commitChecksum)
-	if err != nil {
-		return nil, err
-	}
-	md.CommitObject = buf
 
 	return md, nil
+}
+
+func verifyGitSignature(md *Metadata, opts *GitSignatureVerifyOptions) error {
+	var tagVerifyError error
+	if !opts.IgnoreSignedTag {
+		if len(md.TagObject) > 0 {
+			tagObj, err := gitobject.Parse(md.TagObject)
+			if err != nil {
+				return errors.Wrap(err, "failed to parse git tag object")
+			}
+			if err := tagObj.VerifyChecksum(md.Checksum); err != nil {
+				return errors.Wrap(err, "tag object checksum verification failed")
+			}
+			tagVerifyError = gitsign.VerifySignature(tagObj, opts.PubKey, &gitsign.VerifyPolicy{
+				RejectExpiredKeys: opts.RejectExpiredKeys,
+			})
+			if tagVerifyError == nil {
+				return nil
+			}
+		}
+	}
+	if opts.RequireSignedTag {
+		if tagVerifyError != nil {
+			return tagVerifyError
+		}
+		return errors.New("signed tag required but no signed tag found")
+	}
+	commitObj, err := gitobject.Parse(md.CommitObject)
+	if err != nil {
+		return errors.Wrap(err, "failed to parse git commit object")
+	}
+	expected := md.Checksum
+	if md.CommitChecksum != "" {
+		expected = md.CommitChecksum
+	}
+	if err := commitObj.VerifyChecksum(expected); err != nil {
+		return errors.Wrap(err, "commit object checksum verification failed")
+	}
+	return gitsign.VerifySignature(commitObj, opts.PubKey, &gitsign.VerifyPolicy{
+		RejectExpiredKeys: opts.RejectExpiredKeys,
+	})
 }
 
 func (gs *Source) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager, _ solver.Vertex) (source.SourceInstance, error) {
@@ -587,17 +598,74 @@ func (gs *gitSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.J
 	return md, nil
 }
 
+func (gs *gitSourceHandler) addGitObjectsToMetadata(ctx context.Context, jobCtx solver.JobContext, md *Metadata) error {
+	repo, err := gs.remoteFetch(ctx, jobCtx)
+	if err != nil {
+		return err
+	}
+	defer repo.Release()
+
+	// if ref was commit sha then we don't know the type of the object yet
+	buf, err := repo.Run(ctx, "cat-file", "-t", md.Checksum)
+	if err != nil {
+		return err
+	}
+	objType := strings.TrimSpace(string(buf))
+
+	if objType != "commit" && objType != "tag" {
+		return errors.Errorf("expected commit or tag object, got %s", objType)
+	}
+
+	if objType == "tag" && md.CommitChecksum == "" {
+		buf, err := repo.Run(ctx, "rev-parse", md.Checksum+"^{commit}")
+		if err != nil {
+			return err
+		}
+		md.CommitChecksum = strings.TrimSpace(string(buf))
+	} else if objType == "commit" {
+		md.CommitChecksum = ""
+	}
+
+	commitChecksum := md.Checksum
+	if md.CommitChecksum != "" {
+		buf, err := repo.Run(ctx, "cat-file", "tag", md.Checksum)
+		if err != nil {
+			return err
+		}
+		md.TagObject = buf
+		commitChecksum = md.CommitChecksum
+	}
+
+	buf, err = repo.Run(ctx, "cat-file", "commit", commitChecksum)
+	if err != nil {
+		return err
+	}
+	md.CommitObject = buf
+	return nil
+}
+
 func (gs *gitSourceHandler) CacheKey(ctx context.Context, jobCtx solver.JobContext, index int) (string, string, solver.CacheOpts, bool, error) {
 	md, err := gs.resolveMetadata(ctx, jobCtx)
 	if err != nil {
 		return "", "", nil, false, err
 	}
 
+	gs.sha256 = len(md.Checksum) == 64
+
+	if gs.src.VerifySignature != nil {
+		gs.cacheCommit = md.Checksum
+		if err := gs.addGitObjectsToMetadata(ctx, jobCtx, md); err != nil {
+			return "", "", nil, false, err
+		}
+		if err := verifyGitSignature(md, gs.src.VerifySignature); err != nil {
+			return "", "", nil, false, err
+		}
+	}
+
 	if gitutil.IsCommitSHA(md.Ref) {
 		cacheKey := gs.shaToCacheKey(md.Ref, md.Ref)
 		gs.cacheKey = cacheKey
 		gs.cacheCommit = md.Ref
-		gs.sha256 = len(md.Ref) == 64
 		// gs.src.Checksum is verified when checking out the commit
 		return cacheKey, md.Ref, nil, true, nil
 	}
@@ -609,12 +677,11 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, jobCtx solver.JobConte
 	}
 	cacheKey := gs.shaToCacheKey(shaForCacheKey, md.Ref)
 	gs.cacheKey = cacheKey
-	gs.sha256 = len(md.Checksum) == 64
 	gs.cacheCommit = md.Checksum
 	return cacheKey, md.Checksum, nil, true, nil
 }
 
-func (gs *gitSourceHandler) remoteFetch(ctx context.Context, g session.Group) (_ *gitRepo, retErr error) {
+func (gs *gitSourceHandler) remoteFetch(ctx context.Context, jobCtx solver.JobContext) (_ *gitRepo, retErr error) {
 	gs.locker.Lock(gs.src.Remote)
 	cleanup := func() error { return gs.locker.Unlock(gs.src.Remote) }
 
@@ -623,6 +690,11 @@ func (gs *gitSourceHandler) remoteFetch(ctx context.Context, g session.Group) (_
 			cleanup()
 		}
 	}()
+
+	var g session.Group
+	if jobCtx != nil {
+		g = jobCtx.Session()
+	}
 
 	repo, err := gs.tryRemoteFetch(ctx, g, false)
 	if err != nil {
@@ -701,7 +773,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobConte
 		return gs.cache.Get(ctx, sis[0].ID(), nil)
 	}
 
-	repo, err := gs.remoteFetch(ctx, g)
+	repo, err := gs.remoteFetch(ctx, jobCtx)
 	if err != nil {
 		return nil, err
 	}

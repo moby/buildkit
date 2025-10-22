@@ -159,7 +159,8 @@ type commit
 tag v0.25.0-rc1
 tagger Tonis Tiigi <tonistiigi@gmail.com> 1758658255 -0700
 
-v0.25.0-rc1`
+v0.25.0-rc1
+`
 	require.Equal(t, expectedTagSignedData, obj.SignedData)
 
 	sum, err = obj.Checksum(sha1.New)
