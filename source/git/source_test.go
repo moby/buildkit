@@ -1694,6 +1694,18 @@ func TestCheckSignaturesSHA1(t *testing.T) {
 	testCheckSignatures(t, false, "sha1")
 }
 
+func TestCheckSignaturesKeepGitDirSHA1(t *testing.T) {
+	testCheckSignatures(t, true, "sha1")
+}
+
+func TestCheckSignaturesSHA256(t *testing.T) {
+	testCheckSignatures(t, false, "sha256")
+}
+
+func TestCheckSignaturesKeepGitDirSHA256(t *testing.T) {
+	testCheckSignatures(t, true, "sha256")
+}
+
 func testCheckSignatures(t *testing.T, keepGitDir bool, format string) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
@@ -1717,18 +1729,53 @@ func testCheckSignatures(t *testing.T, keepGitDir bool, format string) {
 	ob, err := gitobject.Parse(md.CommitObject)
 	require.NoError(t, err)
 
-	pubkey, err := os.ReadFile(os.Getenv("BUILDKIT_TEST_SIGN_FIXTURES") + "/user1.gpg.pub")
+	fixturesBase := os.Getenv("BUILDKIT_TEST_SIGN_FIXTURES")
+
+	pubkey, err := os.ReadFile(fixturesBase + "/user1.gpg.pub")
 	require.NoError(t, err)
 
 	err = gitsign.VerifySignature(ob, pubkey, nil)
 	require.NoError(t, err)
 
-	pubkey, err = os.ReadFile(os.Getenv("BUILDKIT_TEST_SIGN_FIXTURES") + "/user2.gpg.pub")
+	pubkey, err = os.ReadFile(fixturesBase + "/user2.gpg.pub")
 	require.NoError(t, err)
 
 	err = gitsign.VerifySignature(ob, pubkey, nil)
 	require.ErrorContains(t, err, "signature made by unknown entity")
 	require.ErrorContains(t, err, "signature by")
+
+	id = &GitIdentifier{Remote: repo.mainURL, KeepGitDir: keepGitDir, Ref: "v1.2.3"}
+
+	md, err = gs.ResolveMetadata(ctx, id, nil, nil, MetadataOpts{
+		ReturnObject: true,
+	})
+	require.NoError(t, err)
+
+	ob, err = gitobject.Parse(md.TagObject)
+	require.NoError(t, err)
+
+	sshkey1, err := os.ReadFile(fixturesBase + "/user1.ssh.pub")
+	require.NoError(t, err)
+
+	sshkey2, err := os.ReadFile(fixturesBase + "/user2.ssh.pub")
+	require.NoError(t, err)
+
+	err = gitsign.VerifySignature(ob, sshkey2, nil)
+	require.NoError(t, err)
+
+	err = gitsign.VerifySignature(ob, sshkey1, nil)
+	require.ErrorContains(t, err, "failed to verify ssh signature")
+	require.ErrorContains(t, err, "public key does not match")
+
+	cob, err := gitobject.Parse(md.CommitObject)
+	require.NoError(t, err)
+
+	err = gitsign.VerifySignature(cob, sshkey1, nil)
+	require.NoError(t, err)
+
+	err = gitsign.VerifySignature(cob, sshkey2, nil)
+	require.ErrorContains(t, err, "failed to verify ssh signature")
+	require.ErrorContains(t, err, "public key does not match")
 }
 
 func TestSubdir(t *testing.T) {
@@ -1936,9 +1983,23 @@ func setupGitRepo(t *testing.T, format string) gitRepoFixture {
 		"mkdir subdir",
 		"echo subcontents > subdir/subfile",
 		"git add def subdir",
-		"git commit -m second",
-		"git tag -a -m \"this is an annotated tag\" v1.2.3",
+	)
 
+	if withSignatures {
+		runShellEnv(t, fixture.mainPath, withSign("user1", "ssh"),
+			"git commit -S -m second",
+		)
+		runShellEnv(t, fixture.mainPath, withSign("user2", "ssh"),
+			"git tag -s -a -m \"this is an annotated tag\" v1.2.3",
+		)
+	} else {
+		runShell(t, fixture.mainPath,
+			"git commit -m second",
+			"git tag -a -m \"this is an annotated tag\" v1.2.3",
+		)
+	}
+
+	runShell(t, fixture.mainPath,
 		"echo foo > bar",
 		"git add bar",
 		"git commit -m tagonly-leaf",

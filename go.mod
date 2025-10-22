@@ -44,6 +44,7 @@ require (
 	github.com/hashicorp/go-cleanhttp v0.5.2
 	github.com/hashicorp/go-immutable-radix/v2 v2.1.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
+	github.com/hiddeco/sshsig v0.2.0
 	github.com/in-toto/in-toto-golang v0.9.0
 	github.com/klauspost/compress v1.18.0
 	github.com/mitchellh/hashstructure/v2 v2.0.2

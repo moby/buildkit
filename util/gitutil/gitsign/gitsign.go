@@ -4,14 +4,18 @@ import (
 	"bytes"
 	"crypto"
 	"crypto/rsa"
+	"encoding/pem"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/ProtonMail/go-crypto/openpgp"
 	"github.com/ProtonMail/go-crypto/openpgp/armor"
 	"github.com/ProtonMail/go-crypto/openpgp/packet"
+	"github.com/hiddeco/sshsig"
 	"github.com/moby/buildkit/util/gitutil/gitobject"
 	"github.com/pkg/errors"
+	"golang.org/x/crypto/ssh"
 )
 
 type sigType int
@@ -23,6 +27,7 @@ const (
 
 type Signature struct {
 	PGPSignature *packet.Signature
+	SSHSignature *sshsig.Signature
 }
 
 type VerifyPolicy struct {
@@ -30,24 +35,28 @@ type VerifyPolicy struct {
 }
 
 func VerifySignature(obj *gitobject.GitObject, pubKeyData []byte, policy *VerifyPolicy) error {
+	s, err := ParseSignature([]byte(obj.Signature))
+	if err != nil {
+		return err
+	}
+	if s.PGPSignature != nil {
+		return verifyPGPSignature(obj, s.PGPSignature, pubKeyData, policy)
+	} else if s.SSHSignature != nil {
+		return verifySSHSignature(obj, s.SSHSignature, pubKeyData)
+	}
+	return errors.New("no valid signature found")
+}
+
+func verifyPGPSignature(obj *gitobject.GitObject, sig *packet.Signature, pubKeyData []byte, policy *VerifyPolicy) error {
+	sigBlock, _, err := parseSignatureBlock([]byte(obj.Signature))
+	if err != nil {
+		return err
+	}
+
 	ents, err := openpgp.ReadArmoredKeyRing(bytes.NewReader(pubKeyData))
 	if err != nil {
 		return errors.Wrap(err, "failed to read armored public key")
 	}
-
-	sigBlock, st, err := parseSignatureBlock([]byte(obj.GPGSig))
-	if err != nil {
-		return err
-	}
-	if st != sigTypePGP {
-		return errors.Errorf("unsupported signature type")
-	}
-
-	s, err := ParseSignature([]byte(obj.GPGSig))
-	if err != nil {
-		return err
-	}
-	sig := s.PGPSignature
 
 	// add addition algorithm constraints
 	if err := checkAlgoPolicy(sig); err != nil {
@@ -57,7 +66,7 @@ func VerifySignature(obj *gitobject.GitObject, pubKeyData []byte, policy *Verify
 	signer, err := openpgp.CheckDetachedSignature(
 		ents,
 		bytes.NewReader([]byte(obj.SignedData)),
-		sigBlock,
+		bytes.NewReader(sigBlock),
 		&packet.Config{},
 	)
 	if err != nil {
@@ -75,6 +84,33 @@ func VerifySignature(obj *gitobject.GitObject, pubKeyData []byte, policy *Verify
 		return err
 	}
 
+	return nil
+}
+
+func verifySSHSignature(obj *gitobject.GitObject, sig *sshsig.Signature, pubKeyData []byte) error {
+	// future proofing
+	if sig.Version != 1 {
+		return errors.Errorf("unsupported SSH signature version: %d", sig.Version)
+	}
+
+	switch sig.HashAlgorithm {
+	case sshsig.HashSHA256, sshsig.HashSHA512:
+		// OK
+	default:
+		return errors.Errorf("unsupported SSH signature hash algorithm: %s", sig.HashAlgorithm)
+	}
+	if sig.Namespace != "git" {
+		return errors.Errorf("unexpected SSH signature namespace: %q", sig.Namespace)
+	}
+
+	pubKey, _, _, _, err := ssh.ParseAuthorizedKey(pubKeyData)
+	if err != nil {
+		return errors.Wrap(err, "failed to parse ssh public key")
+	}
+
+	if err := sshsig.Verify(strings.NewReader(obj.SignedData), sig, pubKey, sig.HashAlgorithm, sig.Namespace); err != nil {
+		return errors.Wrap(err, "failed to verify ssh signature")
+	}
 	return nil
 }
 
@@ -129,40 +165,55 @@ func checkEntityRevocation(e *openpgp.Entity) error {
 	return nil
 }
 
-func parseSignatureBlock(data []byte) (io.Reader, sigType, error) {
-	block, err := armor.Decode(bytes.NewReader(data))
-	if err != nil {
-		return nil, 0, errors.Wrap(err, "failed to decode armored signature")
+func parseSignatureBlock(data []byte) ([]byte, sigType, error) {
+	if strings.HasPrefix(string(data), "-----BEGIN SSH SIGNATURE-----") {
+		block, _ := pem.Decode(data)
+		if block == nil || block.Type != "SSH SIGNATURE" {
+			return nil, 0, errors.New("failed to decode ssh signature PEM block")
+		}
+		return block.Bytes, sigTypeSSH, nil
+	} else if strings.HasPrefix(string(data), "-----BEGIN PGP SIGNATURE-----") {
+		block, err := armor.Decode(bytes.NewReader(data))
+		if err != nil {
+			return nil, 0, errors.Wrap(err, "failed to decode armored signature")
+		}
+		dt, err := io.ReadAll(block.Body)
+		if err != nil {
+			return nil, 0, errors.Wrap(err, "failed to read armored signature body")
+		}
+		return dt, sigTypePGP, nil
 	}
-	switch block.Type {
-	case "PGP SIGNATURE":
-		return block.Body, sigTypePGP, nil
-	case "SSH SIGNATURE":
-		return block.Body, sigTypeSSH, nil
-	default:
-		return nil, 0, errors.Errorf("unknown block type: %s", block.Type)
-	}
+	return nil, 0, errors.Errorf("invalid signature format")
 }
 
 func ParseSignature(data []byte) (*Signature, error) {
-	sigBlock, _, err := parseSignatureBlock(data)
+	sigBlock, typ, err := parseSignatureBlock(data)
 	if err != nil {
 		return nil, err
 	}
-	pr := packet.NewReader(sigBlock)
-	for {
-		p, err := pr.Next()
-		if err == io.EOF {
-			break
+	switch typ {
+	case sigTypePGP:
+		pr := packet.NewReader(bytes.NewReader(sigBlock))
+		for {
+			p, err := pr.Next()
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to read next packet")
+			}
+			sig, ok := p.(*packet.Signature)
+			if !ok {
+				continue
+			}
+			return &Signature{PGPSignature: sig}, nil
 		}
+	case sigTypeSSH:
+		sig, err := sshsig.ParseSignature(sigBlock)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to read next packet")
+			return nil, errors.Wrap(err, "failed to parse ssh signature")
 		}
-		sig, ok := p.(*packet.Signature)
-		if !ok {
-			continue
-		}
-		return &Signature{sig}, nil
+		return &Signature{SSHSignature: sig}, nil
 	}
 
 	return nil, errors.Errorf("no signature packet found")

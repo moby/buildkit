@@ -18,7 +18,7 @@ type GitObject struct {
 	Type       string
 	Headers    map[string][]string
 	Message    string
-	GPGSig     string
+	Signature  string
 	SignedData string
 	Raw        []byte
 }
@@ -78,6 +78,11 @@ func Parse(raw []byte) (*GitObject, error) {
 				sigLines = append(sigLines, strings.TrimPrefix(l, "gpgsig "))
 				continue
 			}
+			if !isTag && strings.HasPrefix(l, "gpgsig-sha256 ") {
+				inSig = true
+				sigLines = append(sigLines, strings.TrimPrefix(l, "gpgsig-sha256 "))
+				continue
+			}
 			if inSig {
 				if v, ok := strings.CutPrefix(l, " "); ok {
 					sigLines = append(sigLines, v)
@@ -106,10 +111,13 @@ func Parse(raw []byte) (*GitObject, error) {
 
 	obj.Message = strings.Join(messageLines, "\n")
 	if len(sigLines) > 0 {
-		obj.GPGSig = strings.Join(sigLines, "\n")
+		obj.Signature = strings.Join(sigLines, "\n")
 	}
 
 	obj.SignedData = strings.Join(signedDataLines, "\n")
+	if isTag {
+		obj.SignedData += "\n"
+	}
 
 	// basic validation
 	requiredHeaders := []string{}
