@@ -5469,9 +5469,7 @@ COPY --from=child /step* /
 	require.NoError(t, err)
 }
 
-// TODO: Re-enable the skipped test on Windows (see issue #6296)
 func testOnBuildNamedContext(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureOCILayout)
 	// create an image with onbuild that relies on "otherstage" when imported
 	ctx := sb.Context()
@@ -5550,7 +5548,8 @@ func testOnBuildNamedContext(t *testing.T, sb integration.Sandbox) {
 	COPY --from=inputstage /out/foo /bar
 `, `
 	FROM nanoserver:latest AS otherstage
-	RUN cmd /S /C "echo hello>C:/testfile"
+	USER ContainerAdministrator
+	RUN echo hello>C:/testfile
 	
 	FROM base AS inputstage
 
@@ -5593,9 +5592,7 @@ func testOnBuildNamedContext(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, expected, dt)
 }
 
-// TODO: Re-enable the skipped test on Windows (see issue #6296)
 func testOnBuildInheritedStageRun(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	f := getFrontend(t, sb)
 
@@ -5610,7 +5607,7 @@ FROM scratch
 COPY --from=mid /out/bar /
 `, `
 FROM nanoserver:latest AS base
-ONBUILD RUN cmd /S /C "mkdir C:\out && echo 11 > C:\out\foo"
+ONBUILD RUN cmd /S /C "mkdir C:\out && echo 11> C:\out\foo"
 
 FROM base AS mid
 RUN cmd /S /C "copy C:\out\foo C:\out\bar"
@@ -5650,9 +5647,7 @@ COPY --from=mid C:\\out\\bar /bar
 	require.Equal(t, expected, string(dt))
 }
 
-// TODO: Re-enable the skipped test on Windows (see issue #6296)
 func testOnBuildInheritedStageWithFrom(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	f := getFrontend(t, sb)
 
@@ -5670,16 +5665,16 @@ FROM scratch
 COPY --from=mid /out/bar /
 `), []byte(`
 FROM nanoserver:latest AS src
-RUN cmd /S /C "mkdir C:\in && echo 12 > C:\in\file"
+RUN cmd /S /C "mkdir C:\in && echo 12> C:\in\file"
 
 FROM nanoserver:latest AS base
-ONBUILD COPY --from=src C:\in\file C:\out\foo
+ONBUILD COPY --from=src /in/file /out/foo
 
 FROM base AS mid
 RUN cmd /S /C "copy C:\out\foo C:\out\bar"
 
 FROM nanoserver:latest
-COPY --from=mid C:\out\bar /bar
+COPY --from=mid /out/bar /bar
 `))
 
 	dir := integration.Tmpdir(
@@ -5861,9 +5856,7 @@ ONBUILD RUN --mount=type=bind,target=/in,from=inputstage mkdir /out && cat /in/f
 	require.Equal(t, "bar3", string(dt))
 }
 
-// TODO: Re-enable the skipped test on Windows (see issue #6296)
 func testOnBuildWithCacheMount(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	f := getFrontend(t, sb)
 
@@ -5878,7 +5871,8 @@ FROM busybox
 ONBUILD RUN --mount=type=cache,target=/cache echo -n 42 >> /cache/foo && echo -n 11 >> /bar
 `), []byte(`
 FROM nanoserver:latest
-ONBUILD RUN --mount=type=cache,target=C:\cache mkdir C:\cache && echo 42 > C:\cache\foo && echo 11 > C:\bar
+USER ContainerAdministrator
+ONBUILD RUN --mount=type=cache,target=C:\cache mkdir C:\cache && echo 42> C:\cache\foo && echo 11> C:\bar
 `))
 
 	dir := integration.Tmpdir(
@@ -6060,9 +6054,7 @@ COPY --from=base arch /
 	}
 }
 
-// TODO: Re-enable the skipped test on Windows (see issue #6296)
 func testImageManifestCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport, workers.FeatureCacheBackendLocal)
 	f := getFrontend(t, sb)
 
@@ -6082,12 +6074,13 @@ COPY --from=base const /
 COPY --from=base unique /
 `), []byte(`
 FROM nanoserver:latest AS base
+USER ContainerAdministrator
 COPY foo const
 # RUN echo foobar > const
-RUN echo %RANDOM%%RANDOM% > unique
+RUN echo %RANDOM%%RANDOM%> unique
 FROM nanoserver:latest
-COPY --from=base const C:/
-COPY --from=base unique C:/
+COPY --from=base const /
+COPY --from=base unique /
 `))
 
 	dir := integration.Tmpdir(
@@ -6172,9 +6165,7 @@ COPY --from=base unique C:/
 	require.Equal(t, string(dt), string(dt2))
 }
 
-// TODO: Re-enable the skipped test on Windows (see issue #6296)
 func testCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport, workers.FeatureCacheBackendLocal)
 	f := getFrontend(t, sb)
 
@@ -6194,12 +6185,13 @@ COPY --from=base const /
 COPY --from=base unique /
 `), []byte(`
 FROM nanoserver:latest AS base
+USER ContainerAdministrator
 COPY foo const
 # RUN echo foobar > const
-RUN echo %RANDOM%%RANDOM% > unique
+RUN echo %RANDOM%%RANDOM%> unique
 FROM nanoserver:latest
-COPY --from=base const C:/
-COPY --from=base unique C:/
+COPY --from=base const /
+COPY --from=base unique /
 `))
 
 	dir := integration.Tmpdir(
@@ -6347,9 +6339,7 @@ RUN echo bar > bar
 	require.Equal(t, img.Target, img2.Target)
 }
 
-// TODO: Re-enable the skipped test on Windows (see issue #6296)
 func testImportExportReproducibleIDs(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 	cdAddress := sb.ContainerdAddress()
 	if cdAddress == "" {
 		t.Skip("test requires containerd worker")
@@ -6370,9 +6360,10 @@ COPY foo /
 RUN echo bar > bar
 `), []byte(`
 FROM nanoserver:latest
+USER ContainerAdministrator
 ENV foo=bar
-COPY foo C:/
-RUN echo bar > bar
+COPY foo /
+RUN echo bar> bar
 `))
 
 	dir := integration.Tmpdir(
@@ -6440,9 +6431,7 @@ RUN echo bar > bar
 	require.Equal(t, img.Target, img2.Target)
 }
 
-// TODO: Re-enable the skipped test on Windows (see issue #6296)
 func testNoCache(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 	f := getFrontend(t, sb)
 
 	dockerfile := integration.UnixOrWindows([]byte(`
@@ -6455,12 +6444,14 @@ COPY --from=s0 unique /
 COPY --from=s1 unique2 /
 `), []byte(`
 FROM nanoserver:latest AS s0
-RUN echo %RANDOM%%RANDOM%%RANDOM% > unique
+USER ContainerAdministrator
+RUN echo %RANDOM%%RANDOM%%RANDOM%> unique
 FROM nanoserver:latest AS s1
-RUN echo %RANDOM%%RANDOM%%RANDOM% > unique2
+USER ContainerAdministrator
+RUN echo %RANDOM%%RANDOM%%RANDOM%> unique2
 FROM nanoserver:latest
-COPY --from=s0 unique C:/
-COPY --from=s1 unique2 C:/
+COPY --from=s0 unique /
+COPY --from=s1 unique2 /
 `))
 	dir := integration.Tmpdir(
 		t,
@@ -7800,9 +7791,7 @@ func testNamedImageContextPlatform(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 }
 
-// TODO: Re-enable the skipped test on Windows (see issue #6296)
 func testNamedImageContextTimestamps(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	ctx := sb.Context()
 
@@ -7825,7 +7814,8 @@ RUN echo foo >> /test
 `,
 		`
 FROM nanoserver:latest
-RUN echo foo >> C:\test
+USER ContainerAdministrator
+RUN echo foo>> C:\test
 `,
 	))
 
@@ -7864,7 +7854,8 @@ RUN echo foo >> /test
 `,
 		`
 FROM nanoserver
-RUN echo foo >> C:\test
+USER ContainerAdministrator
+RUN echo foo>> C:\test
 `,
 	))
 
@@ -8396,9 +8387,7 @@ FROM nonexistent AS base
 	require.Contains(t, cfg.Config.Env, "foo=bar")
 }
 
-// TODO: Re-enable the skipped test on Windows (see issue #6296)
 func testNamedInputContext(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -8413,6 +8402,7 @@ RUN echo first > /out
 `,
 		`
 FROM nanoserver:latest
+USER ContainerAdministrator
 ENV FOO=bar
 RUN echo first>C:\out
 `,
@@ -8432,9 +8422,11 @@ COPY --from=build /foo /out /
 `,
 		`
 FROM base AS build
+USER ContainerAdministrator
 RUN echo foo is %FOO%>C:\foo
 FROM nanoserver:latest
-COPY --from=build C:\foo C:\out .
+USER ContainerAdministrator
+COPY --from=build /foo /out /
 `,
 	))
 
