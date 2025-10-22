@@ -28,6 +28,7 @@ type Opt struct {
 
 	ImageOpt     *ResolveImageOpt
 	OCILayoutOpt *ResolveOCILayoutOpt
+	GitOpt       *ResolveGitOpt
 }
 
 type MetaResponse struct {
@@ -47,10 +48,16 @@ type ResolveImageResponse struct {
 	Config []byte
 }
 
+type ResolveGitOpt struct {
+	ReturnObject bool
+}
+
 type ResolveGitResponse struct {
 	Checksum       string
 	Ref            string
 	CommitChecksum string
+	CommitObject   []byte
+	TagObject      []byte
 }
 
 type ResolveHTTPResponse struct {

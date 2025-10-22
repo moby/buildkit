@@ -455,7 +455,11 @@ func (w *Worker) ResolveSourceMetadata(ctx context.Context, op *pb.SourceOp, opt
 		if w.GitSource == nil {
 			return nil, errors.New("git source is not supported")
 		}
-		md, err := w.GitSource.ResolveMetadata(ctx, idt, sm, jobCtx)
+		mdOpt := git.MetadataOpts{}
+		if opt.GitOpt != nil {
+			mdOpt.ReturnObject = opt.GitOpt.ReturnObject
+		}
+		md, err := w.GitSource.ResolveMetadata(ctx, idt, sm, jobCtx, mdOpt)
 		if err != nil {
 			return nil, err
 		}
@@ -465,6 +469,8 @@ func (w *Worker) ResolveSourceMetadata(ctx context.Context, op *pb.SourceOp, opt
 				Checksum:       md.Checksum,
 				Ref:            md.Ref,
 				CommitChecksum: md.CommitChecksum,
+				CommitObject:   md.CommitObject,
+				TagObject:      md.TagObject,
 			},
 		}, nil
 	case *http.HTTPIdentifier:

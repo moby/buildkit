@@ -65,6 +65,7 @@ import (
 	"github.com/moby/buildkit/util/attestation"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/entitlements"
+	"github.com/moby/buildkit/util/gitutil/gitobject"
 	"github.com/moby/buildkit/util/testutil"
 	containerdutil "github.com/moby/buildkit/util/testutil/containerd"
 	"github.com/moby/buildkit/util/testutil/echoserver"
@@ -12058,12 +12059,12 @@ func testGitResolveSourceMetadata(t *testing.T, sb integration.Sandbox) {
 	gitDir := t.TempDir()
 	gitCommands := []string{
 		"git init",
-		"git config --local user.email test",
+		"git config --local user.email test@example.com",
 		"git config --local user.name test",
 		"touch a",
 		"git add a",
-		"git commit -m a",
-		"git tag -a v0.1 -m v0.1",
+		"git commit -m msg",
+		"git tag -a v0.1 -m v0.1release",
 		"echo b > b",
 		"git add b",
 		"git commit -m b",
@@ -12111,6 +12112,8 @@ func testGitResolveSourceMetadata(t *testing.T, sb integration.Sandbox) {
 		require.Equal(t, "", md.Git.CommitChecksum) // not annotated tag
 		require.Equal(t, id, md.Op.Identifier)
 		require.Equal(t, server.URL+"/.git", md.Op.Attrs["git.fullurl"])
+		require.Nil(t, md.Git.CommitObject)
+		require.Nil(t, md.Git.TagObject)
 
 		id += "#v0.1"
 		md, err = c.ResolveSourceMetadata(ctx, &pb.SourceOp{
@@ -12129,7 +12132,60 @@ func testGitResolveSourceMetadata(t *testing.T, sb integration.Sandbox) {
 
 		require.Equal(t, id, md.Op.Identifier)
 		require.Equal(t, server.URL+"/.git", md.Op.Attrs["git.fullurl"])
+		require.Nil(t, md.Git.CommitObject)
+		require.Nil(t, md.Git.TagObject)
 
+		md, err = c.ResolveSourceMetadata(ctx, &pb.SourceOp{
+			Identifier: id,
+			Attrs: map[string]string{
+				"git.fullurl": server.URL + "/.git",
+			},
+		}, sourceresolver.Opt{
+			GitOpt: &sourceresolver.ResolveGitOpt{
+				ReturnObject: true,
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		require.NotNil(t, md.Git)
+		require.Equal(t, "refs/tags/v0.1", md.Git.Ref)
+		require.Equal(t, commitTag, md.Git.Checksum) // annotated tag
+		require.Equal(t, commitTagCommit, md.Git.CommitChecksum)
+
+		require.Equal(t, id, md.Op.Identifier)
+		require.Equal(t, server.URL+"/.git", md.Op.Attrs["git.fullurl"])
+		require.NotNil(t, md.Git.CommitObject)
+		require.NotNil(t, md.Git.TagObject)
+
+		commitObj, err := gitobject.Parse(md.Git.CommitObject)
+		require.NoError(t, err)
+		require.NoError(t, commitObj.VerifyChecksum(md.Git.CommitChecksum))
+
+		commit, err := commitObj.ToCommit()
+		require.NoError(t, err)
+		require.Equal(t, "msg\n", commit.Message)
+		require.Equal(t, "test", commit.Author.Name)
+		require.Equal(t, "test@example.com", commit.Author.Email)
+		require.Equal(t, "test", commit.Committer.Name)
+		require.Equal(t, "test@example.com", commit.Committer.Email)
+		commitTime := commit.Committer.When
+		require.NotNil(t, commitTime)
+		require.WithinDuration(t, time.Now(), *commitTime, 2*time.Minute)
+
+		tagObj, err := gitobject.Parse(md.Git.TagObject)
+		require.NoError(t, err)
+		require.NoError(t, tagObj.VerifyChecksum(md.Git.Checksum))
+
+		tag, err := tagObj.ToTag()
+		require.NoError(t, err)
+		require.Equal(t, "v0.1release\n", tag.Message)
+		require.Equal(t, "v0.1", tag.Tag)
+		require.Equal(t, "test", tag.Tagger.Name)
+		require.Equal(t, "test@example.com", tag.Tagger.Email)
+		tagTime := tag.Tagger.When
+		require.NotNil(t, tagTime)
+		require.WithinDuration(t, time.Now(), *tagTime, 2*time.Minute)
 		return nil, nil
 	}, nil)
 	require.NoError(t, err)
@@ -12509,12 +12565,6 @@ func testGitResolveMutatedSource(t *testing.T, sb integration.Sandbox) {
 	}
 	err = runInDir(gitDir, gitCommands...)
 	require.NoError(t, err)
-
-	// cmd := exec.Command("git", "rev-parse", "HEAD")
-	// cmd.Dir = gitDir
-	// out, err := cmd.Output()
-	// require.NoError(t, err)
-	// commitHEAD := strings.TrimSpace(string(out))
 
 	cmd := exec.Command("git", "rev-parse", "v0.1")
 	cmd.Dir = gitDir
