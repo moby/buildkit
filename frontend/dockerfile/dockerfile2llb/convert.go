@@ -30,6 +30,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/moby/buildkit/frontend/dockerui"
+	"github.com/moby/buildkit/frontend/subrequests/convertllb"
 	"github.com/moby/buildkit/frontend/subrequests/lint"
 	"github.com/moby/buildkit/frontend/subrequests/outline"
 	"github.com/moby/buildkit/frontend/subrequests/targets"
@@ -121,6 +122,14 @@ func Dockerfile2Outline(ctx context.Context, dt []byte, opt ConvertOpt) (*outlin
 	}
 	o := ds.Outline(dt)
 	return &o, nil
+}
+
+func DockerfileConvertLLB(ctx context.Context, dt []byte, opt ConvertOpt) (*convertllb.Result, error) {
+	ds, err := toDispatchState(ctx, dt, opt)
+	if err != nil {
+		return nil, err
+	}
+	return ds.ConvertLLB(ctx)
 }
 
 func DockerfileLint(ctx context.Context, dt []byte, opt ConvertOpt) (*lint.LintResults, error) {
