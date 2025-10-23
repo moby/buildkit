@@ -206,7 +206,7 @@ Currently, the following high-level languages have been implemented for LLB:
 -   [kraft.yaml (Unikraft)](https://github.com/unikraft/kraftkit/tree/staging/tools/dockerfile-llb-frontend)
 -   [r2d4/llb (JSON Gateway)](https://github.com/r2d4/llb)
 -   [Massé](https://github.com/marxarelli/masse)
--   [DALEC](https://github.com/Azure/dalec)
+-   [DALEC](https://github.com/project-dalec/dalec)
 -   (open a PR to add your own language)
 
 ### Exploring Dockerfiles
