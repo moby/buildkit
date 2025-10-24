@@ -1434,9 +1434,8 @@ ADD arr[[]0].txt /dest/
 
 When using a local tar archive as the source for `ADD`, and the archive is in a
 recognized compression format (`gzip`, `bzip2` or `xz`, or uncompressed), the
-archive is decompressed and extracted into the specified destination. Only
-local tar archives are extracted. If the tar archive is a remote URL, the
-archive is not extracted, but downloaded and placed at the destination.
+archive is decompressed and extracted into the specified destination. Local tar
+archives are extracted by default, see the [`ADD --unpack` flag].
 
 When a directory is extracted, it has the same behavior as `tar -x`.
 The result is the union of:
@@ -1460,6 +1459,9 @@ timestamp from that header will be used to set the `mtime` on the destination
 file. However, like any other file processed during an `ADD`, `mtime` isn't
 included in the determination of whether or not the file has changed and the
 cache should be updated.
+
+If remote file is a tar archive, the archive is not extracted by default. To
+download and extract the archive, use the [`ADD --unpack` flag].
 
 If the destination ends with a trailing slash, then the filename is inferred
 from the URL path. For example, `ADD http://example.com/foobar /` would create
@@ -1594,6 +1596,26 @@ See [`COPY --link`](#copy---link).
 ### ADD --exclude
 
 See [`COPY --exclude`](#copy---exclude).
+
+### ADD --unpack
+
+```dockerfile
+ADD [--unpack=<bool>] <src> ... <dir>
+```
+
+The `--unpack` flag controls whether or not to automatically unpack tar
+archives (including compressed formats like `gzip` or `bzip2`) when adding them
+to the image. Local tar archives are unpacked by default, whereas remote tar
+archives (where `src` is a URL) are downloaded without unpacking.
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM alpine
+# Download and unpack archive.tar.gz into /download:
+ADD --unpack=true https://example.com/archive.tar.gz /download
+# Add local tar without unpacking:
+ADD --unpack=false my-archive.tar.gz .
+```
 
 ## COPY
 
