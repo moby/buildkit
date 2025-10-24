@@ -414,7 +414,7 @@ COPY --link --from=binaries / /
 
 FROM buildkit-base AS integration-tests-base
 ENV BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR="1000:1000"
-RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables ip6tables dnsmasq fuse curl git-daemon openssh-client openssl slirp4netns iproute2 \
+RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables ip6tables dnsmasq fuse curl git-daemon openssh-client openssl slirp4netns iproute2 gpg gpg-agent \
   && useradd --create-home --home-dir /home/user --uid 1000 -s /bin/sh user \
   && echo "XDG_RUNTIME_DIR=/run/user/1000; export XDG_RUNTIME_DIR" >> /home/user/.profile \
   && mkdir -m 0700 -p /run/user/1000 \
@@ -435,6 +435,9 @@ ENTRYPOINT ["/docker-entrypoint.sh"]
 ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-2.0=/opt/containerd-alt-20/bin,containerd-1.7=/opt/containerd-alt-17/bin"
 ENV BUILDKIT_INTEGRATION_SNAPSHOTTER=stargz
 ENV BUILDKIT_SETUP_CGROUPV2_ROOT=1
+ENV BUILDKIT_TEST_SIGN_FIXTURES=/tmp/buildkit_test_sign_fixtures
+RUN --mount=target=/tmp/gen_gpg_test_env.sh,source=hack/fixtures/gen_gpg_test_env.sh sh /tmp/gen_gpg_test_env.sh user1 && sh /tmp/gen_gpg_test_env.sh user2
+RUN --mount=target=/tmp/gen_ssh_test_env.sh,source=hack/fixtures/gen_ssh_test_env.sh sh /tmp/gen_ssh_test_env.sh user1 && sh /tmp/gen_ssh_test_env.sh user2
 ENV CGO_ENABLED=0
 ENV GOTESTSUM_FORMAT=standard-verbose
 COPY --link --from=gotestsum /out /usr/bin/
