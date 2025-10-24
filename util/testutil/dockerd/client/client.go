@@ -235,14 +235,16 @@ func (cli *Client) Dialer() func(context.Context) (net.Conn, error) {
 		}
 		switch cli.proto {
 		case "unix":
-			return net.Dial(cli.proto, cli.addr)
+			return (&net.Dialer{}).DialContext(ctx, cli.proto, cli.addr)
 		case "npipe":
-			return DialPipe(cli.addr, 32*time.Second)
+			ctx, cancel := context.WithTimeoutCause(ctx, 32*time.Second, errors.WithStack(context.DeadlineExceeded))
+			defer cancel()
+			return DialPipe(ctx, cli.addr)
 		default:
 			if tlsConfig := cli.tlsConfig(); tlsConfig != nil {
-				return tls.Dial(cli.proto, cli.addr, tlsConfig)
+				return (&tls.Dialer{}).DialContext(ctx, cli.proto, cli.addr)
 			}
-			return net.Dial(cli.proto, cli.addr)
+			return (&net.Dialer{}).DialContext(ctx, cli.proto, cli.addr)
 		}
 	}
 }

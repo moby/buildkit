@@ -4,7 +4,7 @@ ARG GO_VERSION=1.25
 ARG ALPINE_VERSION=3.22
 ARG XX_VERSION=1.6.1
 ARG PROTOLINT_VERSION=0.50.5
-ARG GOLANGCI_LINT_VERSION=v2.1.5
+ARG GOLANGCI_LINT_VERSION=v2.4.0
 ARG GOLANGCI_FROM_SOURCE=false
 ARG GOPLS_VERSION=v0.33.0
 # GOPLS_ANALYZERS defines gopls analyzers to be run. disabled by default: deprecated simplifyrange unusedfunc unusedvariable
