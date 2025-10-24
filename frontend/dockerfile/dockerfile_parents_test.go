@@ -1,5 +1,3 @@
-//go:build dfparents
-
 package dockerfile
 
 import (
