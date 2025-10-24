@@ -31,6 +31,7 @@ type FrontendLLBBridge interface {
 	sourceresolver.MetaResolver
 	Solve(ctx context.Context, req SolveRequest, sid string) (*Result, error)
 	Warn(ctx context.Context, dgst digest.Digest, msg string, opts WarnOpts) error
+	GetFrontendID() string
 }
 
 type SolveRequest = gw.SolveRequest
