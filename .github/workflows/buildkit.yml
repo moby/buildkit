@@ -343,7 +343,7 @@ jobs:
     steps:
       -
         name: Download artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           path: ${{ env.DESTDIR }}
           pattern: buildkit-*
