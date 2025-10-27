@@ -98,7 +98,7 @@ jobs:
           find . -name 'sbom*.json' -exec rm {} \;
       -
         name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: buildkit-${{ env.PLATFORM_PAIR }}
           path: ${{ env.DESTDIR }}/*
