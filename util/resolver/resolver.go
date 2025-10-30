@@ -185,7 +185,7 @@ func newMirrorRegistryHost(mirror string) docker.RegistryHost {
 
 func newDefaultClient() *http.Client {
 	return &http.Client{
-		Transport: tracing.NewTransport(newDefaultTransport()),
+		Transport: docker.NewHTTPFallback(newDefaultTransport()),
 	}
 }
 
