@@ -14,8 +14,10 @@ import (
 
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/pkg/labels"
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/buildkit/cache/remotecache"
 	v1 "github.com/moby/buildkit/cache/remotecache/v1"
+	cacheimporttypes "github.com/moby/buildkit/cache/remotecache/v1/types"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/bklog"
@@ -266,7 +268,7 @@ func (ce *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 			}
 			layerDone(nil)
 		}
-		la := &v1.LayerAnnotations{
+		la := &cacheimporttypes.LayerAnnotations{
 			DiffID:    diffID,
 			Size:      dgstPair.Descriptor.Size,
 			MediaType: dgstPair.Descriptor.MediaType,
@@ -327,7 +329,7 @@ func NewImporter(c *Config) (remotecache.Importer, error) {
 	return &importer{cache: cache, config: c}, nil
 }
 
-func (ci *importer) makeDescriptorProviderPair(l v1.CacheLayer) (*v1.DescriptorProviderPair, error) {
+func (ci *importer) makeDescriptorProviderPair(l cacheimporttypes.CacheLayer) (*v1.DescriptorProviderPair, error) {
 	if l.Annotations == nil {
 		return nil, errors.Errorf("cache layer with missing annotations")
 	}
@@ -375,7 +377,7 @@ func (ci *importer) loadScope(ctx context.Context, scope string) (*v1.CacheChain
 		return nil, err
 	}
 
-	var config v1.CacheConfig
+	var config cacheimporttypes.CacheConfig
 	if err := json.Unmarshal(buf.Bytes(), &config); err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -440,7 +442,7 @@ type ciProvider struct {
 
 func (p *ciProvider) Info(ctx context.Context, dgst digest.Digest) (content.Info, error) {
 	if dgst != p.desc.Digest {
-		return content.Info{}, errors.Errorf("content not found %s", dgst)
+		return content.Info{}, errors.Wrapf(cerrdefs.ErrNotFound, "blob %s", dgst)
 	}
 
 	if _, err := p.loadEntry(ctx, p.desc); err != nil {
@@ -465,7 +467,7 @@ func (p *ciProvider) loadEntry(ctx context.Context, desc ocispecs.Descriptor) (*
 		return nil, err
 	}
 	if ce == nil {
-		return nil, errors.Errorf("blob %s not found", desc.Digest)
+		return nil, errors.Wrapf(cerrdefs.ErrNotFound, "blob %s", desc.Digest)
 	}
 	if p.entries == nil {
 		p.entries = make(map[digest.Digest]*actionscache.Entry)

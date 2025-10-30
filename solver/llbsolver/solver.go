@@ -776,7 +776,7 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 		i, exp := i, exp
 		eg.Go(func() (err error) {
 			id := fmt.Sprint(j.SessionID, "-cache-", i)
-			err = inBuilderContext(ctx, j, exp.Name(), id, func(ctx context.Context, _ session.Group) error {
+			err = inBuilderContext(ctx, j, exp.Name(), id, func(ctx context.Context, _ solver.JobContext) error {
 				prepareDone := progress.OneOff(ctx, "preparing build cache for export")
 				if err := result.EachRef(cached, inp, func(res solver.CachedResult, ref cache.ImmutableRef) error {
 					ctx := withDescHandlerCacheOpts(ctx, ref)
@@ -847,11 +847,12 @@ func (s *Solver) runExporters(ctx context.Context, exporters []exporter.Exporter
 	eg, ctx := errgroup.WithContext(ctx)
 	resps := make([]map[string]string, len(exporters))
 	descs := make([]exporter.DescriptorReference, len(exporters))
+	var inlineCacheMu sync.Mutex
 	for i, exp := range exporters {
 		i, exp := i, exp
 		eg.Go(func() error {
 			id := fmt.Sprint(job.SessionID, "-export-", i)
-			return inBuilderContext(ctx, job, exp.Name(), id, func(ctx context.Context, _ session.Group) error {
+			return inBuilderContext(ctx, job, exp.Name(), id, func(ctx context.Context, _ solver.JobContext) error {
 				span, ctx := tracing.StartSpan(ctx, exp.Name())
 				defer span.End()
 
@@ -865,6 +866,8 @@ func (s *Solver) runExporters(ctx context.Context, exporters []exporter.Exporter
 					}
 				}
 				inlineCache := exptypes.InlineCache(func(ctx context.Context) (*result.Result[*exptypes.InlineCacheEntry], error) {
+					inlineCacheMu.Lock() // ensure only one inline cache exporter runs at a time
+					defer inlineCacheMu.Unlock()
 					return runInlineCacheExporter(ctx, exp, inlineCacheExporter, job, cached)
 				})
 
@@ -881,7 +884,7 @@ func (s *Solver) runExporters(ctx context.Context, exporters []exporter.Exporter
 	}
 
 	if len(exporters) == 0 && len(warnings) > 0 {
-		err := inBuilderContext(ctx, job, "Verifying build result", identity.NewID(), func(ctx context.Context, _ session.Group) error {
+		err := inBuilderContext(ctx, job, "Verifying build result", identity.NewID(), func(ctx context.Context, _ solver.JobContext) error {
 			pw, _, _ := progress.NewFromContext(ctx)
 			for _, w := range warnings {
 				pw.Write(identity.NewID(), w)
@@ -1149,7 +1152,7 @@ func allWorkers(wc *worker.Controller) func(func(w worker.Worker) error) error {
 	}
 }
 
-func inBuilderContext(ctx context.Context, b solver.Builder, name, id string, f func(ctx context.Context, g session.Group) error) error {
+func inBuilderContext(ctx context.Context, b solver.Builder, name, id string, f func(ctx context.Context, jobCtx solver.JobContext) error) error {
 	if id == "" {
 		id = name
 	}
@@ -1157,11 +1160,11 @@ func inBuilderContext(ctx context.Context, b solver.Builder, name, id string, f 
 		Digest: digest.FromBytes([]byte(id)),
 		Name:   name,
 	}
-	return b.InContext(ctx, func(ctx context.Context, g session.Group) error {
+	return b.InContext(ctx, func(ctx context.Context, jobCtx solver.JobContext) error {
 		pw, _, ctx := progress.NewFromContext(ctx, progress.WithMetadata("vertex", v.Digest))
 		notifyCompleted := notifyStarted(ctx, &v)
 		defer pw.Close()
-		err := f(ctx, g)
+		err := f(ctx, jobCtx)
 		notifyCompleted(err)
 		return err
 	})

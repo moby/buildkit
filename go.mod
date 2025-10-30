@@ -23,18 +23,18 @@ require (
 	github.com/containerd/continuity v0.4.5
 	github.com/containerd/errdefs v1.0.0
 	github.com/containerd/fuse-overlayfs-snapshotter/v2 v2.1.6
-	github.com/containerd/go-cni v1.1.12
+	github.com/containerd/go-cni v1.1.13
 	github.com/containerd/go-runc v1.1.0
 	github.com/containerd/log v0.1.0
-	github.com/containerd/nydus-snapshotter v0.15.2
+	github.com/containerd/nydus-snapshotter v0.15.4
 	github.com/containerd/platforms v1.0.0-rc.1
-	github.com/containerd/stargz-snapshotter v0.16.3
-	github.com/containerd/stargz-snapshotter/estargz v0.16.3
+	github.com/containerd/stargz-snapshotter v0.17.0
+	github.com/containerd/stargz-snapshotter/estargz v0.17.0
 	github.com/containerd/typeurl/v2 v2.2.3
 	github.com/containernetworking/plugins v1.7.1
 	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/distribution/reference v0.6.0
-	github.com/docker/cli v28.4.0+incompatible
+	github.com/docker/cli v28.5.0+incompatible
 	github.com/docker/go-units v0.5.0
 	github.com/gofrs/flock v0.12.1
 	github.com/golang/protobuf v1.5.4
@@ -98,14 +98,14 @@ require (
 	go.opentelemetry.io/otel/trace v1.35.0
 	go.opentelemetry.io/proto/otlp v1.5.0
 	golang.org/x/crypto v0.37.0
-	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0
-	golang.org/x/mod v0.24.0
+	golang.org/x/exp v0.0.0-20250911091902-df9299821621
+	golang.org/x/mod v0.28.0
 	golang.org/x/net v0.39.0
-	golang.org/x/sync v0.16.0
-	golang.org/x/sys v0.33.0
+	golang.org/x/sync v0.17.0
+	golang.org/x/sys v0.34.0
 	golang.org/x/time v0.11.0
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250218202821-56aae31c358a
-	google.golang.org/grpc v1.72.2
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250324211829-b45e905df463
+	google.golang.org/grpc v1.73.0
 	google.golang.org/protobuf v1.36.9
 	kernel.org/pub/linux/libs/security/libcap/cap v1.2.76
 	tags.cncf.io/container-device-interface v1.0.1
@@ -153,10 +153,8 @@ require (
 	github.com/google/pprof v0.0.0-20250403155104-27863c87afa6 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.1 // indirect
-	github.com/hanwen/go-fuse/v2 v2.6.3 // indirect
-	github.com/hashicorp/errwrap v1.1.0 // indirect
-	github.com/hashicorp/go-multierror v1.1.1 // indirect
-	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
+	github.com/hanwen/go-fuse/v2 v2.8.0 // indirect
+	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/moby/sys/mount v0.3.4 // indirect
 	github.com/moby/sys/sequential v0.6.0 // indirect
@@ -178,7 +176,7 @@ require (
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/otel/metric v1.35.0 // indirect
 	golang.org/x/text v0.24.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20250218202821-56aae31c358a // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20250324211829-b45e905df463 // indirect
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.5.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	kernel.org/pub/linux/libs/security/libcap/psx v1.2.76 // indirect

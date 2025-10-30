@@ -12,6 +12,7 @@ func TestDuplicateCacheOptions(t *testing.T) {
 		name     string
 		opts     []*controlapi.CacheOptionsEntry
 		expected []*controlapi.CacheOptionsEntry
+		rest     []*controlapi.CacheOptionsEntry
 	}{
 		{
 			name: "avoids unique opts",
@@ -74,13 +75,67 @@ func TestDuplicateCacheOptions(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "skip inline with attrs",
+			opts: []*controlapi.CacheOptionsEntry{
+				{
+					Type: "inline",
+				},
+				{
+					Type: "registry",
+					Attrs: map[string]string{
+						"ref": "example.com/ref:v1.0.0",
+					},
+				},
+				{
+					Type: "inline",
+					Attrs: map[string]string{
+						"foo": "bar",
+					},
+				},
+			},
+			rest: []*controlapi.CacheOptionsEntry{
+				{
+					Type: "inline",
+				},
+				{
+					Type: "registry",
+					Attrs: map[string]string{
+						"ref": "example.com/ref:v1.0.0",
+					},
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "skip inline simple",
+			opts: []*controlapi.CacheOptionsEntry{
+				{
+					Type: "inline",
+				},
+				{
+					Type: "inline",
+				},
+			},
+			rest: []*controlapi.CacheOptionsEntry{
+				{
+					Type: "inline",
+				},
+			},
+			expected: nil,
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := findDuplicateCacheOptions(tc.opts)
+			rest, result, err := findDuplicateCacheOptions(tc.opts)
 			require.NoError(t, err)
 			require.ElementsMatch(t, tc.expected, result)
+			if tc.rest != nil {
+				require.ElementsMatch(t, tc.rest, rest)
+			} else if len(result) == 0 {
+				require.ElementsMatch(t, tc.opts, rest)
+			}
 		})
 	}
 }

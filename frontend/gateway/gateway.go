@@ -19,6 +19,7 @@ import (
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/containerd/v2/defaults"
 	"github.com/distribution/reference"
+	"github.com/golang/protobuf/ptypes/timestamp"
 	apitypes "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/cache"
 	cacheutil "github.com/moby/buildkit/cache/util"
@@ -635,6 +636,12 @@ func (lbf *llbBridgeForwarder) ResolveSourceMeta(ctx context.Context, req *pb.Re
 	resolveopt.ImageOpt = &sourceresolver.ResolveImageOpt{
 		ResolveMode: req.ResolveMode,
 	}
+	if req.Git != nil {
+		resolveopt.GitOpt = &sourceresolver.ResolveGitOpt{
+			ReturnObject: req.Git.ReturnObject,
+		}
+	}
+
 	resp, err := lbf.llbBridge.ResolveSourceMetadata(ctx, req.Source, resolveopt)
 	if err != nil {
 		return nil, err
@@ -648,6 +655,28 @@ func (lbf *llbBridgeForwarder) ResolveSourceMeta(ctx context.Context, req *pb.Re
 		r.Image = &pb.ResolveSourceImageResponse{
 			Digest: string(resp.Image.Digest),
 			Config: resp.Image.Config,
+		}
+	}
+	if resp.Git != nil {
+		r.Git = &pb.ResolveSourceGitResponse{
+			Checksum:       resp.Git.Checksum,
+			Ref:            resp.Git.Ref,
+			CommitChecksum: resp.Git.CommitChecksum,
+			CommitObject:   resp.Git.CommitObject,
+			TagObject:      resp.Git.TagObject,
+		}
+	}
+	if resp.HTTP != nil {
+		var lastModified *timestamp.Timestamp
+		if resp.HTTP.LastModified != nil {
+			lastModified = &timestamp.Timestamp{
+				Seconds: resp.HTTP.LastModified.Unix(),
+			}
+		}
+		r.HTTP = &pb.ResolveSourceHTTPResponse{
+			Checksum:     resp.HTTP.Digest.String(),
+			Filename:     resp.HTTP.Filename,
+			LastModified: lastModified,
 		}
 	}
 	return r, nil

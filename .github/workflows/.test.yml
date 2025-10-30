@@ -189,7 +189,7 @@ jobs:
       -
         name: Upload test reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: test-reports-${{ env.TEST_REPORT_NAME }}
           path: ./bin/testreports

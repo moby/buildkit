@@ -8,7 +8,7 @@ package fuse
 const pollHackName = ".go-fuse-epoll-hack"
 const pollHackInode = ^uint64(0)
 
-func doPollHackLookup(ms *Server, req *request) {
+func doPollHackLookup(ms *protocolServer, req *request) {
 	attr := Attr{
 		Ino:   pollHackInode,
 		Mode:  S_IFREG | 0644,

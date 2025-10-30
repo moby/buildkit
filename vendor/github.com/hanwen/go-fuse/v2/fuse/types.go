@@ -286,7 +286,7 @@ const (
 	CAP_SPLICE_READ      = (1 << 9)
 	CAP_FLOCK_LOCKS      = (1 << 10)
 	CAP_IOCTL_DIR        = (1 << 11)
-	CAP_AUTO_INVAL_DATA  = (1 << 12)
+	CAP_AUTO_INVAL_DATA  = (1 << 12) // mtime changes invalidate page cache.
 	CAP_READDIRPLUS      = (1 << 13)
 	CAP_READDIRPLUS_AUTO = (1 << 14)
 	CAP_ASYNC_DIO        = (1 << 15)
@@ -309,6 +309,7 @@ const (
 	CAP_PASSTHROUGH          = (1 << 37)
 	CAP_NO_EXPORT_SUPPORT    = (1 << 38)
 	CAP_HAS_RESEND           = (1 << 39)
+	CAP_ALLOW_IDMAP          = (1 << 40)
 )
 
 type InitIn struct {
@@ -383,23 +384,36 @@ type _BmapOut struct {
 }
 
 const (
-	FUSE_IOCTL_COMPAT       = (1 << 0)
-	FUSE_IOCTL_UNRESTRICTED = (1 << 1)
-	FUSE_IOCTL_RETRY        = (1 << 2)
+	IOCTL_COMPAT       = (1 << 0)
+	IOCTL_UNRESTRICTED = (1 << 1)
+	IOCTL_RETRY        = (1 << 2)
+	IOCTL_DIR          = (1 << 4)
 )
 
-type _IoctlIn struct {
+type IoctlIn struct {
 	InHeader
-	Fh      uint64
-	Flags   uint32
-	Cmd     uint32
-	Arg     uint64
-	InSize  uint32
+	Fh    uint64
+	Flags uint32
+
+	// The command, consisting of 16-bits metadata (direction + size) and 16-bits to encode the ioctl number
+	Cmd uint32
+
+	// The uint64 argument. If there is a payload, this is the
+	// payload address in the caller, and should not be used.
+	Arg uint64
+
+	// Size for the payload, non-zero if Cmd is WRITE or READ/WRITE.
+	InSize uint32
+
+	// Size for the payload, non-zero if Cmd is READ or READ/WRITE.
 	OutSize uint32
 }
 
-type _IoctlOut struct {
-	Result  int32
+type IoctlOut struct {
+	Result int32
+
+	// The following fields are used for unrestricted ioctls,
+	// which are only enabled on CUSE.
 	Flags   uint32
 	InIovs  uint32
 	OutIovs uint32
@@ -785,4 +799,70 @@ type BackingMap struct {
 	Fd      int32
 	Flags   uint32
 	padding uint64
+}
+
+type SxTime struct {
+	Sec       uint64
+	Nsec      uint32
+	_reserved uint32
+}
+
+func (t *SxTime) Seconds() float64 {
+	return ft(t.Sec, t.Nsec)
+}
+
+type Statx struct {
+	Mask       uint32
+	Blksize    uint32
+	Attributes uint64
+	Nlink      uint32
+
+	Uid            uint32
+	Gid            uint32
+	Mode           uint16
+	_spare0        uint16
+	Ino            uint64
+	Size           uint64
+	Blocks         uint64
+	AttributesMask uint64
+
+	Atime SxTime
+	Btime SxTime
+	Ctime SxTime
+	Mtime SxTime
+
+	RdevMajor uint32
+	RdevMinor uint32
+	DevMajor  uint32
+	DevMinor  uint32
+	_spare2   [14]uint64
+}
+
+type StatxIn struct {
+	InHeader
+
+	GetattrFlags uint32
+	_reserved    uint32
+	Fh           uint64
+	SxFlags      uint32
+	SxMask       uint32
+}
+
+type StatxOut struct {
+	AttrValid     uint64
+	AttrValidNsec uint32
+	Flags         uint32
+	_spare        [2]uint64
+
+	Statx
+}
+
+func (o *StatxOut) Timeout() time.Duration {
+	return time.Duration(uint64(o.AttrValidNsec) + o.AttrValid*1e9)
+}
+
+func (o *StatxOut) SetTimeout(dt time.Duration) {
+	ns := int64(dt)
+	o.AttrValidNsec = uint32(ns % 1e9)
+	o.AttrValid = uint64(ns / 1e9)
 }

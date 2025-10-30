@@ -11,18 +11,20 @@ ARG CNI_VERSION=v1.8.0
 ARG STARGZ_SNAPSHOTTER_VERSION=v0.15.1
 ARG NERDCTL_VERSION=v2.1.2
 ARG DNSNAME_VERSION=v1.3.1
-ARG NYDUS_VERSION=v2.2.4
+ARG NYDUS_VERSION=v2.3.7
 ARG MINIO_VERSION=RELEASE.2025-09-07T16-13-09Z
 ARG MINIO_MC_VERSION=RELEASE.2025-08-13T08-35-41Z
 ARG AZURITE_VERSION=3.33.0
 ARG GOTESTSUM_VERSION=v1.9.0
 ARG DELVE_VERSION=v1.23.1
 
-ARG GO_VERSION=1.25
+ARG EXPORT_BASE=alpine
 ARG ALPINE_VERSION=3.22
+ARG UBUNTU_VERSION=24.04
+
+ARG GO_VERSION=1.25
 ARG XX_VERSION=1.7.0
 ARG BUILDKIT_DEBUG
-ARG EXPORT_BASE=alpine
 
 # minio for s3 integration tests
 FROM quay.io/minio/minio:${MINIO_VERSION} AS minio
@@ -203,17 +205,18 @@ FROM scratch AS release
 COPY --link --from=releaser /out/ /
 
 FROM alpine:${ALPINE_VERSION} AS buildkit-export-alpine
-RUN apk add --no-cache fuse3 git openssh pigz xz iptables ip6tables \
+RUN apk add --no-cache fuse3 git openssh openssl pigz xz iptables ip6tables \
   && ln -s fusermount3 /usr/bin/fusermount
 COPY --link examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 VOLUME /var/lib/buildkit
 
-FROM ubuntu:24.04 AS buildkit-export-ubuntu
+FROM ubuntu:${UBUNTU_VERSION} AS buildkit-export-ubuntu
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     fuse3 \
     git \
     openssh-client \
+    openssl \
     pigz \
     xz-utils \
     iptables \
@@ -411,7 +414,7 @@ COPY --link --from=binaries / /
 
 FROM buildkit-base AS integration-tests-base
 ENV BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR="1000:1000"
-RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables ip6tables dnsmasq fuse curl git-daemon openssh-client slirp4netns iproute2 \
+RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables ip6tables dnsmasq fuse curl git-daemon openssh-client openssl slirp4netns iproute2 \
   && useradd --create-home --home-dir /home/user --uid 1000 -s /bin/sh user \
   && echo "XDG_RUNTIME_DIR=/run/user/1000; export XDG_RUNTIME_DIR" >> /home/user/.profile \
   && mkdir -m 0700 -p /run/user/1000 \
@@ -460,7 +463,7 @@ VOLUME /var/lib/buildkit
 
 # rootless builds a rootless variant of buildkitd image
 FROM alpine:${ALPINE_VERSION} AS rootless
-RUN apk add --no-cache fuse3 fuse-overlayfs git openssh pigz shadow-uidmap xz
+RUN apk add --no-cache fuse3 fuse-overlayfs git openssh openssl pigz shadow-uidmap xz
 RUN adduser -D -u 1000 user \
   && mkdir -p /run/user/1000 /home/user/.local/tmp /home/user/.local/share/buildkit \
   && chown -R user /run/user/1000 /home/user \

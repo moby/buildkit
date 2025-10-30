@@ -514,6 +514,12 @@ func (c *grpcClient) ResolveSourceMetadata(ctx context.Context, op *opspb.Source
 		LogName:        opt.LogName,
 		SourcePolicies: opt.SourcePolicies,
 	}
+	if opt.GitOpt != nil {
+		req.Git = &pb.ResolveSourceGitRequest{
+			ReturnObject: opt.GitOpt.ReturnObject,
+		}
+	}
+
 	resp, err := c.client.ResolveSourceMeta(ctx, req)
 	if err != nil {
 		return nil, err
@@ -526,6 +532,30 @@ func (c *grpcClient) ResolveSourceMetadata(ctx context.Context, op *opspb.Source
 		r.Image = &sourceresolver.ResolveImageResponse{
 			Digest: digest.Digest(resp.Image.Digest),
 			Config: resp.Image.Config,
+		}
+	}
+	if resp.Git != nil {
+		r.Git = &sourceresolver.ResolveGitResponse{
+			Checksum:       resp.Git.Checksum,
+			Ref:            resp.Git.Ref,
+			CommitChecksum: resp.Git.CommitChecksum,
+			CommitObject:   resp.Git.CommitObject,
+			TagObject:      resp.Git.TagObject,
+		}
+	}
+	if resp.HTTP != nil {
+		dgst, err := digest.Parse(resp.HTTP.Checksum)
+		if err != nil {
+			return nil, errors.Wrapf(err, "invalid http checksum digest %q", resp.HTTP.Checksum)
+		}
+
+		r.HTTP = &sourceresolver.ResolveHTTPResponse{
+			Digest:   dgst,
+			Filename: resp.HTTP.Filename,
+		}
+		if resp.HTTP.LastModified != nil {
+			tm := resp.HTTP.LastModified.AsTime()
+			r.HTTP.LastModified = &tm
 		}
 	}
 	return r, nil

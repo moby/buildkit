@@ -16,8 +16,10 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"runtime"
@@ -42,6 +44,7 @@ import (
 	"github.com/distribution/reference"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	controlapi "github.com/moby/buildkit/api/services/control"
+	cacheimporttypes "github.com/moby/buildkit/cache/remotecache/v1/types"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
@@ -62,6 +65,7 @@ import (
 	"github.com/moby/buildkit/util/attestation"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/entitlements"
+	"github.com/moby/buildkit/util/gitutil/gitobject"
 	"github.com/moby/buildkit/util/testutil"
 	containerdutil "github.com/moby/buildkit/util/testutil/containerd"
 	"github.com/moby/buildkit/util/testutil/echoserver"
@@ -73,6 +77,7 @@ import (
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/spdx/tools-golang/spdx"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tonistiigi/fsutil"
 	fsutiltypes "github.com/tonistiigi/fsutil/types"
@@ -192,6 +197,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testBuildExportWithForeignLayer,
 	testZstdLocalCacheExport,
 	testCacheExportIgnoreError,
+	testCacheExportCacheDeletedContent,
 	testZstdRegistryCacheImportExport,
 	testZstdLocalCacheImportExport,
 	testUncompressedLocalCacheImportExport,
@@ -237,6 +243,13 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testRunValidExitCodes,
 	testFileOpSymlink,
 	testMetadataOnlyLocal,
+	testGitResolveSourceMetadata,
+	testHTTPResolveSourceMetadata,
+	testHTTPPruneAfterCacheKey,
+	testHTTPPruneAfterResolveMeta,
+	testHTTPResolveMetaReuse,
+	testHTTPResolveMultiBuild,
+	testGitResolveMutatedSource,
 }
 
 func TestIntegration(t *testing.T) {
@@ -344,6 +357,148 @@ func testCacheExportCacheKeyLoop(t *testing.T, sb integration.Sandbox) {
 				require.NoError(t, err)
 			})
 		}(mode)
+	}
+}
+
+func testCacheExportCacheDeletedContent(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport, workers.FeatureCacheBackendLocal)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	tmpdir := integration.Tmpdir(t)
+
+	err = os.WriteFile(filepath.Join(tmpdir.Name, "foo"), []byte("foodata"), 0600)
+	require.NoError(t, err)
+
+	base := llb.Image("alpine:latest").Run(llb.Shlex(`sh -c "echo abc-def > /foo && echo abc > /detection-file"`)).Root()
+	st := llb.Scratch().File(llb.Copy(base, "/foo", "/out"))
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		CacheExports: []CacheOptionsEntry{
+			{
+				Type: "local",
+				Attrs: map[string]string{
+					"dest": filepath.Join(tmpdir.Name, "cache"),
+					"mode": "max",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(tmpdir.Name, "cache", "index.json"))
+	require.NoError(t, err)
+
+	var index ocispecs.Index
+	err = json.Unmarshal(dt, &index)
+	require.NoError(t, err)
+
+	require.Len(t, index.Manifests, 1)
+
+	dt, err = os.ReadFile(filepath.Join(tmpdir.Name, "cache/blobs/sha256", index.Manifests[0].Digest.Hex()))
+	require.NoError(t, err)
+
+	var mfst ocispecs.Manifest
+	err = json.Unmarshal(dt, &mfst)
+	require.NoError(t, err)
+
+	require.Len(t, mfst.Layers, 3)
+	require.Equal(t, "application/vnd.buildkit.cacheconfig.v0", mfst.Config.MediaType)
+
+	dt, err = os.ReadFile(filepath.Join(tmpdir.Name, "cache/blobs/sha256", mfst.Config.Digest.Hex()))
+	require.NoError(t, err)
+
+	var cc cacheimporttypes.CacheConfig
+	err = json.Unmarshal(dt, &cc)
+	require.NoError(t, err)
+
+	require.Equal(t, 3, len(cc.Layers))
+	require.Equal(t, 5, len(cc.Records))
+
+	var runLayer *int
+	for i, l := range cc.Layers {
+		if l.ParentIndex != -1 {
+			if runLayer != nil {
+				t.Fatal("multiple RUN layers")
+			}
+			runLayer = &i
+		}
+	}
+	require.NotNil(t, runLayer)
+
+	dt, err = os.ReadFile(filepath.Join(tmpdir.Name, "cache/blobs/sha256", cc.Layers[*runLayer].Blob.Hex()))
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(dt, true)
+	require.NoError(t, err)
+
+	require.Equal(t, "abc\n", string(m["detection-file"].Data))
+
+	// delete the blob for the run layer
+	err = os.Remove(filepath.Join(tmpdir.Name, "cache/blobs/sha256", cc.Layers[*runLayer].Blob.Hex()))
+	require.NoError(t, err)
+
+	// prune all buildkit state
+	ensurePruneAll(t, c, sb)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		CacheImports: []CacheOptionsEntry{
+			{
+				Type: "local",
+				Attrs: map[string]string{
+					"src": filepath.Join(tmpdir.Name, "cache"),
+				},
+			},
+		},
+		CacheExports: []CacheOptionsEntry{
+			{
+				Type: "local",
+				Attrs: map[string]string{
+					"dest": filepath.Join(tmpdir.Name, "cache2"),
+					"mode": "max",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err = os.ReadFile(filepath.Join(tmpdir.Name, "cache2", "index.json"))
+	require.NoError(t, err)
+
+	var index2 ocispecs.Index
+	err = json.Unmarshal(dt, &index2)
+	require.NoError(t, err)
+
+	require.Len(t, index2.Manifests, 1)
+
+	dt, err = os.ReadFile(filepath.Join(tmpdir.Name, "cache2/blobs/sha256", index2.Manifests[0].Digest.Hex()))
+	require.NoError(t, err)
+
+	var mfst2 ocispecs.Manifest
+	err = json.Unmarshal(dt, &mfst2)
+	require.NoError(t, err)
+
+	require.Len(t, mfst2.Layers, 1)
+	require.Equal(t, "application/vnd.buildkit.cacheconfig.v0", mfst2.Config.MediaType)
+
+	dt, err = os.ReadFile(filepath.Join(tmpdir.Name, "cache2/blobs/sha256", mfst2.Config.Digest.Hex()))
+	require.NoError(t, err)
+
+	var cc2 cacheimporttypes.CacheConfig
+	err = json.Unmarshal(dt, &cc2)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, len(cc2.Layers))
+	require.Equal(t, 5, len(cc2.Records))
+
+	for i, r := range cc.Records {
+		require.Equal(t, cc2.Records[i].Digest, r.Digest)
+		require.Equal(t, cc2.Records[i].Inputs, r.Inputs)
 	}
 }
 
@@ -638,22 +793,32 @@ func testHostnameSpecifying(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
+	type testVars struct {
+		imgName string
+		cmdStr1 string
+		cmdStr2 string
+	}
+
+	v := integration.UnixOrWindows(
+		testVars{
+			imgName: "busybox:latest",
+			cmdStr1: "sh -c 'echo $HOSTNAME | grep %s'",
+			cmdStr2: "sh -c 'echo $(hostname) | grep %s'",
+		},
+		testVars{
+			imgName: "nanoserver:latest",
+			// NOTE: Windows capitalizes the hostname hence
+			// case insensitive findstr (findstr /I)
+			// testtest --> TESTTEST
+			cmdStr1: "cmd /C echo %%COMPUTERNAME%% | findstr /I %s",
+			cmdStr2: "cmd /C echo %%COMPUTERNAME%% | findstr /I %s",
+		},
+	)
+
 	hostname := "testtest"
-	// NOTE: Windows capitalizes the hostname hence
-	// case insensitive findstr (findstr /I)
-	// testtest --> TESTTEST
-	cmdStr1 := integration.UnixOrWindows(
-		"sh -c 'echo $HOSTNAME | grep %s'",
-		"cmd /C echo %%COMPUTERNAME%% | findstr /I %s",
-	)
-	cmdStr2 := integration.UnixOrWindows(
-		"sh -c 'echo $(hostname) | grep %s'",
-		"cmd /C echo %%COMPUTERNAME%% | findstr /I %s",
-	)
-	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
-	st := llb.Image(imgName).With(llb.Hostname(hostname)).
-		Run(llb.Shlexf(cmdStr1, hostname)).
-		Run(llb.Shlexf(cmdStr2, hostname))
+	st := llb.Image(v.imgName).With(llb.Hostname(hostname)).
+		Run(llb.Shlexf(v.cmdStr1, hostname)).
+		Run(llb.Shlexf(v.cmdStr2, hostname))
 
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -2480,8 +2645,9 @@ func testOCILayoutSource(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, []byte("second"+newLine), dt)
 }
 
+// TODO: Re-enable the skipped test on Windows (see issue #6296)
 func testSessionExporter(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureOCILayout)
 	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
@@ -2499,7 +2665,10 @@ func testSessionExporter(t *testing.T, sb integration.Sandbox) {
 		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
 	}
 
-	cmdPrefix := `sh -c "echo -n`
+	cmdPrefix := integration.UnixOrWindows(
+		`sh -c "echo -n`,
+		`cmd /C "echo`,
+	)
 	run(fmt.Sprintf(`%s first > foo"`, cmdPrefix))
 	run(fmt.Sprintf(`%s second > bar"`, cmdPrefix))
 
@@ -3075,13 +3244,13 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 
 	modTime := time.Now().Add(-24 * time.Hour) // avoid falso positive with current time
 
-	resp := httpserver.Response{
+	resp := &httpserver.Response{
 		Etag:         identity.NewID(),
 		Content:      []byte("content1"),
 		LastModified: &modTime,
 	}
 
-	server := httpserver.NewTestServer(map[string]httpserver.Response{
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
 		"/foo": resp,
 	})
 	defer server.Close()
@@ -3145,7 +3314,7 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	require.NoError(t, gw.Close())
 	gzipBytes := buf.Bytes()
-	respGzip := httpserver.Response{
+	respGzip := &httpserver.Response{
 		Etag:            identity.NewID(),
 		Content:         gzipBytes,
 		LastModified:    &modTime,
@@ -3225,18 +3394,18 @@ func testBuildHTTPSourceEtagScope(t *testing.T, sb integration.Sandbox) {
 	modTime := time.Now().Add(-24 * time.Hour) // avoid falso positive with current time
 
 	sharedEtag := identity.NewID()
-	resp := httpserver.Response{
+	resp := &httpserver.Response{
 		Etag:         sharedEtag,
 		Content:      []byte("content1"),
 		LastModified: &modTime,
 	}
-	resp2 := httpserver.Response{
+	resp2 := &httpserver.Response{
 		Etag:         sharedEtag,
 		Content:      []byte("another"),
 		LastModified: &modTime,
 	}
 
-	server := httpserver.NewTestServer(map[string]httpserver.Response{
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
 		"/one/foo": resp,
 		"/two/foo": resp2,
 	})
@@ -3320,13 +3489,13 @@ func testBuildHTTPSourceAuthHeaderSecret(t *testing.T, sb integration.Sandbox) {
 
 	modTime := time.Now().Add(-24 * time.Hour) // avoid false positive with current time
 
-	resp := httpserver.Response{
+	resp := &httpserver.Response{
 		Etag:         identity.NewID(),
 		Content:      []byte("content1"),
 		LastModified: &modTime,
 	}
 
-	server := httpserver.NewTestServer(map[string]httpserver.Response{
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
 		"/foo": resp,
 	})
 	defer server.Close()
@@ -3361,13 +3530,13 @@ func testBuildHTTPSourceHostTokenSecret(t *testing.T, sb integration.Sandbox) {
 
 	modTime := time.Now().Add(-24 * time.Hour) // avoid false positive with current time
 
-	resp := httpserver.Response{
+	resp := &httpserver.Response{
 		Etag:         identity.NewID(),
 		Content:      []byte("content1"),
 		LastModified: &modTime,
 	}
 
-	server := httpserver.NewTestServer(map[string]httpserver.Response{
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
 		"/foo": resp,
 	})
 	defer server.Close()
@@ -3402,13 +3571,13 @@ func testBuildHTTPSourceHeader(t *testing.T, sb integration.Sandbox) {
 
 	modTime := time.Now().Add(-24 * time.Hour) // avoid falso positive with current time
 
-	resp := httpserver.Response{
+	resp := &httpserver.Response{
 		Etag:         identity.NewID(),
 		Content:      []byte("content1"),
 		LastModified: &modTime,
 	}
 
-	server := httpserver.NewTestServer(map[string]httpserver.Response{
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
 		"/foo": resp,
 	})
 	defer server.Close()
@@ -4332,7 +4501,6 @@ func testSourceDateEpochTarExporter(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSourceDateEpochImageExporter(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	cdAddress := sb.ContainerdAddress()
 	if cdAddress == "" {
 		t.SkipNow()
@@ -4341,24 +4509,46 @@ func testSourceDateEpochImageExporter(t *testing.T, sb integration.Sandbox) {
 	// https://github.com/containerd/containerd/commit/133ddce7cf18a1db175150e7a69470dea1bb3132
 	minVer := "v1.7.0-beta.1"
 	cdVersion := containerdutil.GetVersion(t, cdAddress)
-	if semver.Compare(cdVersion, minVer) < 0 {
+	// Normalize containerd version to semver format (add v prefix if missing)
+	normalizedCdVersion := cdVersion
+	if !strings.HasPrefix(cdVersion, "v") {
+		normalizedCdVersion = "v" + cdVersion
+	}
+	if semver.Compare(normalizedCdVersion, minVer) < 0 {
 		t.Skipf("containerd version %q does not satisfy minimal version %q", cdVersion, minVer)
 	}
 
 	workers.CheckFeatureCompat(t, sb, workers.FeatureSourceDateEpoch)
-	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 
-	busybox := llb.Image("busybox:latest")
-	st := llb.Scratch()
-
-	run := func(cmd string) {
-		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	type testVars struct {
+		baseImgName string
+		st          llb.State
+		cmdPrefix   string
 	}
 
-	run(`sh -c "echo -n first > foo"`)
-	run(`sh -c "echo -n second > bar"`)
+	baseImg := llb.Image(integration.UnixOrWindows("busybox:latest", "nanoserver:latest"))
+	v := integration.UnixOrWindows(
+		testVars{
+			baseImgName: "busybox:latest",
+			st:          llb.Scratch(),
+			cmdPrefix:   `sh -c "echo -n`,
+		},
+		testVars{
+			baseImgName: "nanoserver:latest",
+			st:          baseImg,
+			cmdPrefix:   `cmd /C "echo`,
+		},
+	)
+
+	st := v.st
+	run := func(cmd string) {
+		st = baseImg.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+
+	run(fmt.Sprintf(`%s first> foo"`, v.cmdPrefix))
+	run(fmt.Sprintf(`%s second> bar"`, v.cmdPrefix))
 
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -4626,12 +4816,13 @@ func testTarExporterSymlink(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildExportWithForeignLayer(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureImageExporter)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
+	// Use the Linux foreign layer test image regardless of platform
+	// Foreign layer handling is about manifest/registry behavior, not container execution
 	st := llb.Image("cpuguy83/buildkit-foreign:latest")
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -5967,18 +6158,22 @@ func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 }
 
+// TODO: Re-enable the skipped test on Windows (see issue #6296)
 func testZstdLocalCacheExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport, workers.FeatureCacheBackendLocal)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	busybox := llb.Image("busybox:latest")
-	cmd := `sh -e -c "echo -n zstd > data"`
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	cmdStr := integration.UnixOrWindows(
+		`sh -e -c "echo -n zstd > data"`,
+		`cmd /C "echo zstd > C:\data"`,
+	)
 
-	st := llb.Scratch()
-	st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	st := integration.UnixOrWindows(llb.Scratch(), llb.Image(imgName))
+	st = llb.Image(imgName).Run(llb.Shlex(cmdStr), llb.Dir("/wd")).AddMount("/wd", st)
 
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -6172,7 +6367,6 @@ func testUncompressedLocalCacheImportExport(t *testing.T, sb integration.Sandbox
 }
 
 func testUncompressedRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureCacheExport,
 		workers.FeatureCacheImport,
@@ -6257,8 +6451,9 @@ func testImageManifestRegistryCacheImportExport(t *testing.T, sb integration.San
 	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
 }
 
+// TODO: Re-enable the skipped test on Windows (see issue #6296)
 func testZstdRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureCacheExport,
@@ -6300,7 +6495,8 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 	st := integration.UnixOrWindows(llb.Scratch(), llb.Image(imgName))
 
 	run := func(cmd string) {
-		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+		baseState := integration.UnixOrWindows(busybox, st)
+		st = baseState.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
 	}
 
 	run(integration.UnixOrWindows(
@@ -6361,7 +6557,6 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 }
 
 func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureCacheExport,
 		workers.FeatureCacheImport,
@@ -6383,7 +6578,6 @@ func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testMultipleRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureCacheExport,
 		workers.FeatureCacheImport,
@@ -7459,7 +7653,7 @@ func testCopyFromEmptyImage(t *testing.T, sb integration.Sandbox) {
 
 		imgName := integration.UnixOrWindows(
 			"busybox:latest",
-			"mcr.microsoft.com/windows/nanoserver:ltsc2022",
+			"nanoserver:latest",
 		)
 		busybox := llb.Image(imgName)
 
@@ -7864,19 +8058,37 @@ func testSourceMapFromRef(t *testing.T, sb integration.Sandbox) {
 }
 
 func testRmSymlink(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
 	// Test that if FileOp.Rm is called on a symlink, then
 	// the symlink is removed rather than the target
-	mnt := llb.Image("alpine").
-		Run(llb.Shlex("touch /mnt/target")).
+	type testVars struct {
+		imgName    string
+		touchCmd   string
+		symlinkCmd string
+	}
+
+	v := integration.UnixOrWindows(
+		testVars{
+			imgName:    "alpine",
+			touchCmd:   "touch /mnt/target",
+			symlinkCmd: "ln -s target /mnt/link",
+		},
+		testVars{
+			imgName:    "nanoserver:latest",
+			touchCmd:   "cmd /C type nul > /mnt/target",
+			symlinkCmd: "cmd /c cd /d c:/mnt && mklink link target",
+		},
+	)
+
+	mnt := llb.Image(v.imgName).
+		Run(llb.Shlex(v.touchCmd)).
 		AddMount("/mnt", llb.Scratch())
 
-	mnt = llb.Image("alpine").
-		Run(llb.Shlex("ln -s target /mnt/link")).
+	mnt = llb.Image(v.imgName).
+		Run(llb.Shlex(v.symlinkCmd)).
 		AddMount("/mnt", mnt)
 
 	def, err := mnt.File(llb.Rm("link")).Marshal(sb.Context())
@@ -10885,7 +11097,6 @@ func testSBOMSupplements(t *testing.T, sb integration.Sandbox) {
 }
 
 func testMultipleCacheExports(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureMultiCacheExport)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -10897,13 +11108,25 @@ func testMultipleCacheExports(t *testing.T, sb integration.Sandbox) {
 	}
 	require.NoError(t, err)
 
-	busybox := llb.Image("busybox:latest")
-	st := llb.Scratch()
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	busybox := llb.Image(imgName)
+	st := integration.UnixOrWindows(llb.Scratch(), llb.Image(imgName))
+
 	run := func(cmd string) {
 		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
 	}
-	run(`sh -c "echo -n foobar > const"`)
-	run(`sh -c "cat /dev/urandom | head -c 100 | sha256sum > unique"`)
+
+	constCmd := integration.UnixOrWindows(
+		`sh -c "echo -n foobar > const"`,
+		`cmd /C echo foobar > const`,
+	)
+	uniqueCmd := integration.UnixOrWindows(
+		`sh -c "cat /dev/urandom | head -c 100 | sha256sum > unique"`,
+		`cmd /C echo %RANDOM% > unique`,
+	)
+
+	run(constCmd)
+	run(uniqueCmd)
 
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -10998,7 +11221,7 @@ func testMultipleCacheExports(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	ensureFileContents(t, filepath.Join(destDir, "const"), "foobar")
+	ensureFileContents(t, filepath.Join(destDir, "const"), integration.UnixOrWindows("foobar", "foobar \r\n"))
 	ensureFileContents(t, filepath.Join(destDir, "unique"), string(uniqueFile))
 }
 
@@ -11346,7 +11569,10 @@ func ensureFile(t *testing.T, path string) {
 func ensureFileContents(t *testing.T, path, expectedContents string) {
 	contents, err := os.ReadFile(path)
 	require.NoError(t, err)
-	require.Equal(t, expectedContents, string(contents))
+
+	actualContents := string(contents)
+	require.Equal(t, expectedContents, actualContents,
+		"file contents mismatch for %s\nexpected: %q\nactual: %q", path, expectedContents, actualContents)
 }
 
 func makeSSHAgentSock(t *testing.T, agent agent.Agent) (p string, err error) {
@@ -11822,6 +12048,625 @@ func testRunValidExitCodes(t *testing.T, sb integration.Sandbox) {
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "exit code: 0")
+}
+
+func testGitResolveSourceMetadata(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	gitDir := t.TempDir()
+	gitCommands := []string{
+		"git init",
+		"git config --local user.email test@example.com",
+		"git config --local user.name test",
+		"touch a",
+		"git add a",
+		"git commit -m msg",
+		"git tag -a v0.1 -m v0.1release",
+		"echo b > b",
+		"git add b",
+		"git commit -m b",
+		"git checkout -B v2",
+		"git update-server-info",
+	}
+	err = runInDir(gitDir, gitCommands...)
+	require.NoError(t, err)
+
+	cmd := exec.Command("git", "rev-parse", "HEAD")
+	cmd.Dir = gitDir
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	commitHEAD := strings.TrimSpace(string(out))
+
+	cmd = exec.Command("git", "rev-parse", "v0.1")
+	cmd.Dir = gitDir
+	out, err = cmd.Output()
+	require.NoError(t, err)
+	commitTag := strings.TrimSpace(string(out))
+
+	cmd = exec.Command("git", "rev-parse", "v0.1^{commit}")
+	cmd.Dir = gitDir
+	out, err = cmd.Output()
+	require.NoError(t, err)
+	commitTagCommit := strings.TrimSpace(string(out))
+
+	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Clean(gitDir))))
+	defer server.Close()
+
+	_, err = c.Build(ctx, SolveOpt{}, "test", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		id := "git://" + strings.TrimPrefix(server.URL, "http://") + "/.git"
+		md, err := c.ResolveSourceMetadata(ctx, &pb.SourceOp{
+			Identifier: id,
+			Attrs: map[string]string{
+				"git.fullurl": server.URL + "/.git",
+			},
+		}, sourceresolver.Opt{})
+		if err != nil {
+			return nil, err
+		}
+		require.NotNil(t, md.Git)
+		require.Equal(t, "refs/heads/v2", md.Git.Ref) // default to branch head
+		require.Equal(t, commitHEAD, md.Git.Checksum)
+		require.Equal(t, "", md.Git.CommitChecksum) // not annotated tag
+		require.Equal(t, id, md.Op.Identifier)
+		require.Equal(t, server.URL+"/.git", md.Op.Attrs["git.fullurl"])
+		require.Nil(t, md.Git.CommitObject)
+		require.Nil(t, md.Git.TagObject)
+
+		id += "#v0.1"
+		md, err = c.ResolveSourceMetadata(ctx, &pb.SourceOp{
+			Identifier: id,
+			Attrs: map[string]string{
+				"git.fullurl": server.URL + "/.git",
+			},
+		}, sourceresolver.Opt{})
+		if err != nil {
+			return nil, err
+		}
+		require.NotNil(t, md.Git)
+		require.Equal(t, "refs/tags/v0.1", md.Git.Ref)
+		require.Equal(t, commitTag, md.Git.Checksum) // annotated tag
+		require.Equal(t, commitTagCommit, md.Git.CommitChecksum)
+
+		require.Equal(t, id, md.Op.Identifier)
+		require.Equal(t, server.URL+"/.git", md.Op.Attrs["git.fullurl"])
+		require.Nil(t, md.Git.CommitObject)
+		require.Nil(t, md.Git.TagObject)
+
+		md, err = c.ResolveSourceMetadata(ctx, &pb.SourceOp{
+			Identifier: id,
+			Attrs: map[string]string{
+				"git.fullurl": server.URL + "/.git",
+			},
+		}, sourceresolver.Opt{
+			GitOpt: &sourceresolver.ResolveGitOpt{
+				ReturnObject: true,
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		require.NotNil(t, md.Git)
+		require.Equal(t, "refs/tags/v0.1", md.Git.Ref)
+		require.Equal(t, commitTag, md.Git.Checksum) // annotated tag
+		require.Equal(t, commitTagCommit, md.Git.CommitChecksum)
+
+		require.Equal(t, id, md.Op.Identifier)
+		require.Equal(t, server.URL+"/.git", md.Op.Attrs["git.fullurl"])
+		require.NotNil(t, md.Git.CommitObject)
+		require.NotNil(t, md.Git.TagObject)
+
+		commitObj, err := gitobject.Parse(md.Git.CommitObject)
+		require.NoError(t, err)
+		require.NoError(t, commitObj.VerifyChecksum(md.Git.CommitChecksum))
+
+		commit, err := commitObj.ToCommit()
+		require.NoError(t, err)
+		require.Equal(t, "msg\n", commit.Message)
+		require.Equal(t, "test", commit.Author.Name)
+		require.Equal(t, "test@example.com", commit.Author.Email)
+		require.Equal(t, "test", commit.Committer.Name)
+		require.Equal(t, "test@example.com", commit.Committer.Email)
+		commitTime := commit.Committer.When
+		require.NotNil(t, commitTime)
+		require.WithinDuration(t, time.Now(), *commitTime, 2*time.Minute)
+
+		tagObj, err := gitobject.Parse(md.Git.TagObject)
+		require.NoError(t, err)
+		require.NoError(t, tagObj.VerifyChecksum(md.Git.Checksum))
+
+		tag, err := tagObj.ToTag()
+		require.NoError(t, err)
+		require.Equal(t, "v0.1release\n", tag.Message)
+		require.Equal(t, "v0.1", tag.Tag)
+		require.Equal(t, "test", tag.Tagger.Name)
+		require.Equal(t, "test@example.com", tag.Tagger.Email)
+		tagTime := tag.Tagger.When
+		require.NotNil(t, tagTime)
+		require.WithinDuration(t, time.Now(), *tagTime, 2*time.Minute)
+		return nil, nil
+	}, nil)
+	require.NoError(t, err)
+}
+
+func testHTTPResolveSourceMetadata(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	modTime := time.Now().Add(-24 * time.Hour) // avoid falso positive with current time
+
+	resp := &httpserver.Response{
+		Etag:         identity.NewID(),
+		Content:      []byte("content1"),
+		LastModified: &modTime,
+	}
+
+	resp2 := &httpserver.Response{
+		Etag:               identity.NewID(),
+		Content:            []byte("content2"),
+		ContentDisposition: "attachment; filename=\"my img.jpg\"",
+	}
+
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
+		"/foo": resp,
+		"/bar": resp2,
+	})
+	defer server.Close()
+
+	_, err = c.Build(ctx, SolveOpt{}, "test", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		id := server.URL + "/foo"
+		md, err := c.ResolveSourceMetadata(ctx, &pb.SourceOp{
+			Identifier: id,
+		}, sourceresolver.Opt{})
+		if err != nil {
+			return nil, err
+		}
+		require.NotNil(t, md.HTTP)
+		require.Equal(t, digest.FromBytes(resp.Content), md.HTTP.Digest)
+		require.Equal(t, "foo", md.HTTP.Filename)
+		require.NotNil(t, md.HTTP.LastModified)
+		require.Equal(t, modTime.Unix(), md.HTTP.LastModified.Unix())
+		require.Equal(t, id, md.Op.Identifier)
+
+		id = server.URL + "/bar"
+		md, err = c.ResolveSourceMetadata(ctx, &pb.SourceOp{
+			Identifier: id,
+		}, sourceresolver.Opt{})
+		if err != nil {
+			return nil, err
+		}
+		require.NotNil(t, md.HTTP)
+		require.Equal(t, digest.FromBytes(resp2.Content), md.HTTP.Digest)
+		require.Equal(t, "my img.jpg", md.HTTP.Filename)
+		require.Nil(t, md.HTTP.LastModified)
+		require.Equal(t, id, md.Op.Identifier)
+		return nil, nil
+	}, nil)
+	require.NoError(t, err)
+}
+
+func testHTTPPruneAfterCacheKey(t *testing.T, sb integration.Sandbox) {
+	// this test depends on hitting race condition in internal functions.
+	// If debugging and expecting failure you can add small sleep in beginning of source/http.Exec() to hit reliably
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	resp := &httpserver.Response{
+		Etag:    identity.NewID(),
+		Content: []byte("content1"),
+	}
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
+		"/foo": resp,
+	})
+	defer server.Close()
+
+	done := make(chan struct{})
+
+	startScan := make(chan struct{})
+	stopScan := make(chan struct{})
+	pauseScan := make(chan struct{})
+
+	go func() {
+		// attempt to prune the HTTP record in between cachekey and snapshot
+		defer close(done)
+		for {
+			select {
+			case <-startScan:
+			scan:
+				for {
+					select {
+					case <-pauseScan:
+						break scan
+					default:
+						du, err := c.DiskUsage(ctx)
+						assert.NoError(t, err)
+						for _, entry := range du {
+							if entry.Description == "http url "+server.URL+"/foo" {
+								if !entry.InUse {
+									t.Logf("entry no longer in use, pruning")
+									err = c.Prune(ctx, nil)
+									assert.NoError(t, err)
+
+									resp.Etag = identity.NewID()
+									resp.Content = []byte("content2")
+								}
+							}
+						}
+					}
+				}
+			case <-stopScan:
+				return
+			}
+		}
+	}()
+
+	const iterations = 10
+	for range iterations {
+		startScan <- struct{}{}
+		resp.Etag = identity.NewID()
+		resp.Content = []byte("content1")
+		_, err = c.Build(ctx, SolveOpt{}, "test", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+			st := llb.Scratch().File(llb.Copy(llb.HTTP(server.URL+"/foo"), "foo", "bar"))
+			def, err := st.Marshal(sb.Context())
+			if err != nil {
+				return nil, err
+			}
+			resp, err := c.Solve(ctx, gateway.SolveRequest{
+				Definition: def.ToPB(),
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			return resp, nil
+		}, nil)
+		require.NoError(t, err)
+
+		pauseScan <- struct{}{}
+
+		err = c.Prune(ctx, nil)
+		require.NoError(t, err)
+
+		checkAllReleasable(t, c, sb, false)
+	}
+	close(stopScan)
+	<-done
+}
+
+// testHTTPPruneAfterResolveMeta ensures that pruning after ResolveSourceMetadata
+// doesn't pull in new data for same build. Once URL has been resolved once for a specific
+// build, the data should be considered immutable and remote changes don't affect ongoing build.
+func testHTTPPruneAfterResolveMeta(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	resp := &httpserver.Response{
+		Etag:    identity.NewID(),
+		Content: []byte("content1"),
+	}
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
+		"/foo": resp,
+	})
+	defer server.Close()
+
+	dest := t.TempDir()
+
+	_, err = c.Build(ctx, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: dest,
+			},
+		},
+	}, "test", func(ctx context.Context, gc gateway.Client) (*gateway.Result, error) {
+		id := server.URL + "/foo"
+		md, err := gc.ResolveSourceMetadata(ctx, &pb.SourceOp{
+			Identifier: id,
+		}, sourceresolver.Opt{})
+		if err != nil {
+			return nil, err
+		}
+		require.NotNil(t, md.HTTP)
+
+		// prune all
+		err = c.Prune(ctx, nil)
+		require.NoError(t, err)
+
+		resp.Content = []byte("content2") // etag is same so should hit cache if record not pruned
+
+		st := llb.Scratch().File(llb.Copy(llb.HTTP(id), "foo", "bar"))
+		def, err := st.Marshal(sb.Context())
+		if err != nil {
+			return nil, err
+		}
+		return gc.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(dest, "bar"))
+	require.NoError(t, err)
+	require.Equal(t, "content1", string(dt))
+
+	checkAllReleasable(t, c, sb, false)
+}
+
+func testHTTPResolveMetaReuse(t *testing.T, sb integration.Sandbox) {
+	// the difference with testHTTPPruneAfterResolveMeta is that here we change content with the etag on the server
+	// but because the URL was already resolved once, the new content should not be seen
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	resp := &httpserver.Response{
+		Etag:    identity.NewID(),
+		Content: []byte("content1"),
+	}
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
+		"/foo": resp,
+	})
+	defer server.Close()
+
+	dest := t.TempDir()
+	_, err = c.Build(ctx, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: dest,
+			},
+		},
+	}, "test", func(ctx context.Context, gc gateway.Client) (*gateway.Result, error) {
+		id := server.URL + "/foo"
+		md, err := gc.ResolveSourceMetadata(ctx, &pb.SourceOp{
+			Identifier: id,
+		}, sourceresolver.Opt{})
+		if err != nil {
+			return nil, err
+		}
+		require.NotNil(t, md.HTTP)
+
+		resp.Etag = identity.NewID()
+		resp.Content = []byte("content2") // etag changed so new content would be returned if re-resolving
+
+		st := llb.Scratch().File(llb.Copy(llb.HTTP(id), "foo", "bar"))
+		def, err := st.Marshal(sb.Context())
+		if err != nil {
+			return nil, err
+		}
+		return gc.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(dest, "bar"))
+	require.NoError(t, err)
+	require.Equal(t, "content1", string(dt))
+}
+
+// testHTTPResolveMultiBuild is a negative test for testHTTPResolveMetaReuse to ensure that
+// URLs are resolved in between separate builds
+func testHTTPResolveMultiBuild(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	resp := &httpserver.Response{
+		Etag:    identity.NewID(),
+		Content: []byte("content1"),
+	}
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
+		"/foo": resp,
+	})
+	defer server.Close()
+
+	dest := t.TempDir()
+	_, err = c.Build(ctx, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: dest,
+			},
+		},
+	}, "test", func(ctx context.Context, gc gateway.Client) (*gateway.Result, error) {
+		id := server.URL + "/foo"
+		md, err := gc.ResolveSourceMetadata(ctx, &pb.SourceOp{
+			Identifier: id,
+		}, sourceresolver.Opt{})
+		if err != nil {
+			return nil, err
+		}
+		require.NotNil(t, md.HTTP)
+		require.Equal(t, digest.FromBytes(resp.Content), md.HTTP.Digest)
+
+		st := llb.Scratch().File(llb.Copy(llb.HTTP(id), "foo", "bar"))
+		def, err := st.Marshal(sb.Context())
+		if err != nil {
+			return nil, err
+		}
+		return gc.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(dest, "bar"))
+	require.NoError(t, err)
+	require.Equal(t, "content1", string(dt))
+
+	resp.Etag = identity.NewID()
+	resp.Content = []byte("content2")
+
+	_, err = c.Build(ctx, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: dest,
+			},
+		},
+	}, "test", func(ctx context.Context, gc gateway.Client) (*gateway.Result, error) {
+		id := server.URL + "/foo"
+		md, err := gc.ResolveSourceMetadata(ctx, &pb.SourceOp{
+			Identifier: id,
+		}, sourceresolver.Opt{})
+		if err != nil {
+			return nil, err
+		}
+		require.NotNil(t, md.HTTP)
+		require.Equal(t, digest.FromBytes(resp.Content), md.HTTP.Digest)
+		st := llb.Scratch().File(llb.Copy(llb.HTTP(id), "foo", "bar"))
+		def, err := st.Marshal(sb.Context())
+		if err != nil {
+			return nil, err
+		}
+		return gc.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err = os.ReadFile(filepath.Join(dest, "bar"))
+	require.NoError(t, err)
+	require.Equal(t, "content2", string(dt))
+}
+
+func testGitResolveMutatedSource(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	gitDir := t.TempDir()
+	gitCommands := []string{
+		"git init",
+		"git config --local user.email test",
+		"git config --local user.name test",
+		"echo a > a",
+		"git add a",
+		"git commit -m a",
+		"git tag -a v0.1 -m v0.1",
+		"echo b > b",
+		"git add b",
+		"git commit -m b",
+		"git checkout -B v2",
+		"git update-server-info",
+	}
+	err = runInDir(gitDir, gitCommands...)
+	require.NoError(t, err)
+
+	cmd := exec.Command("git", "rev-parse", "v0.1")
+	cmd.Dir = gitDir
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	commitTag := strings.TrimSpace(string(out))
+
+	cmd = exec.Command("git", "rev-parse", "v0.1^{commit}")
+	cmd.Dir = gitDir
+	out, err = cmd.Output()
+	require.NoError(t, err)
+	commitTagCommit := strings.TrimSpace(string(out))
+
+	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Clean(gitDir))))
+	defer server.Close()
+
+	dest := t.TempDir()
+
+	_, err = c.Build(ctx, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: dest,
+			},
+		},
+	}, "test", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		id := "git://" + strings.TrimPrefix(server.URL, "http://") + "/.git#v0.1"
+		md, err := c.ResolveSourceMetadata(ctx, &pb.SourceOp{
+			Identifier: id,
+			Attrs: map[string]string{
+				"git.fullurl": server.URL + "/.git",
+			},
+		}, sourceresolver.Opt{})
+		if err != nil {
+			return nil, err
+		}
+		require.NotNil(t, md.Git)
+		require.Equal(t, "refs/tags/v0.1", md.Git.Ref)
+		require.Equal(t, commitTag, md.Git.Checksum)
+		require.Equal(t, commitTagCommit, md.Git.CommitChecksum)
+		require.Equal(t, id, md.Op.Identifier)
+		require.Equal(t, server.URL+"/.git", md.Op.Attrs["git.fullurl"])
+
+		// update the tag to point to a different commit
+		err = runInDir(gitDir, []string{
+			"git tag -f v0.1",
+			"git update-server-info",
+		}...)
+		require.NoError(t, err)
+
+		md, err = c.ResolveSourceMetadata(ctx, &pb.SourceOp{
+			Identifier: id,
+			Attrs: map[string]string{
+				"git.fullurl": server.URL + "/.git",
+			},
+		}, sourceresolver.Opt{})
+		if err != nil {
+			return nil, err
+		}
+		require.NotNil(t, md.Git)
+		require.Equal(t, "refs/tags/v0.1", md.Git.Ref)
+		require.Equal(t, commitTag, md.Git.Checksum)
+		require.Equal(t, commitTagCommit, md.Git.CommitChecksum)
+		require.Equal(t, id, md.Op.Identifier)
+		require.Equal(t, server.URL+"/.git", md.Op.Attrs["git.fullurl"])
+
+		st := llb.Git(server.URL+"/.git", "", llb.GitRef("v0.1"))
+		def, err := st.Marshal(sb.Context())
+		if err != nil {
+			return nil, err
+		}
+		return c.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+	}, nil)
+	require.NoError(t, err)
+
+	_, err = os.ReadFile(filepath.Join(dest, "b"))
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err), "expected file b to not exist")
+
+	dt, err := os.ReadFile(filepath.Join(dest, "a"))
+	require.NoError(t, err)
+	require.Equal(t, "a\n", string(dt))
+
+	checkAllReleasable(t, c, sb, false)
+}
+
+func runInDir(dir string, cmds ...string) error {
+	for _, args := range cmds {
+		var cmd *exec.Cmd
+		if runtime.GOOS == "windows" {
+			cmd = exec.Command("powershell", "-command", args)
+		} else {
+			cmd = exec.Command("sh", "-c", args)
+		}
+		cmd.Dir = dir
+		if err := cmd.Run(); err != nil {
+			return errors.Wrapf(err, "error running %v", args)
+		}
+	}
+	return nil
 }
 
 type warningsListOutput []*VertexWarning

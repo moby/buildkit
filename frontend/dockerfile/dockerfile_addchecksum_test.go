@@ -24,15 +24,15 @@ func init() {
 }
 
 func testAddChecksum(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
-	resp := httpserver.Response{
+	baseImage := integration.UnixOrWindows("scratch", "nanoserver:latest")
+	resp := &httpserver.Response{
 		Etag:    identity.NewID(),
 		Content: []byte("content1"),
 	}
-	server := httpserver.NewTestServer(map[string]httpserver.Response{
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
 		"/foo": resp,
 	})
 	defer server.Close()
@@ -43,9 +43,9 @@ func testAddChecksum(t *testing.T, sb integration.Sandbox) {
 
 	t.Run("Valid", func(t *testing.T) {
 		dockerfile := fmt.Appendf(nil, `
-FROM scratch
+FROM %s
 ADD --checksum=%s %s /tmp/foo
-`, digest.FromBytes(resp.Content).String(), server.URL+"/foo")
+`, baseImage, digest.FromBytes(resp.Content).String(), server.URL+"/foo")
 		dir := integration.Tmpdir(
 			t,
 			fstest.CreateFile("Dockerfile", dockerfile, 0600),
@@ -60,11 +60,11 @@ ADD --checksum=%s %s /tmp/foo
 	})
 	t.Run("DigestFromEnv", func(t *testing.T) {
 		dockerfile := fmt.Appendf(nil, `
-FROM scratch
+FROM %s
 ENV DIGEST=%s
 ENV LINK=%s
 ADD --checksum=${DIGEST} ${LINK} /tmp/foo
-`, digest.FromBytes(resp.Content).String(), server.URL+"/foo")
+`, baseImage, digest.FromBytes(resp.Content).String(), server.URL+"/foo")
 		dir := integration.Tmpdir(
 			t,
 			fstest.CreateFile("Dockerfile", dockerfile, 0600),
@@ -79,9 +79,9 @@ ADD --checksum=${DIGEST} ${LINK} /tmp/foo
 	})
 	t.Run("DigestMismatch", func(t *testing.T) {
 		dockerfile := fmt.Appendf(nil, `
-FROM scratch
+FROM %s
 ADD --checksum=%s %s /tmp/foo
-`, digest.FromBytes(nil).String(), server.URL+"/foo")
+`, baseImage, digest.FromBytes(nil).String(), server.URL+"/foo")
 		dir := integration.Tmpdir(
 			t,
 			fstest.CreateFile("Dockerfile", dockerfile, 0600),
@@ -96,9 +96,9 @@ ADD --checksum=%s %s /tmp/foo
 	})
 	t.Run("DigestWithKnownButUnsupportedAlgoName", func(t *testing.T) {
 		dockerfile := fmt.Appendf(nil, `
-FROM scratch
+FROM %s
 ADD --checksum=md5:7e55db001d319a94b0b713529a756623 %s /tmp/foo
-`, server.URL+"/foo")
+`, baseImage, server.URL+"/foo")
 		dir := integration.Tmpdir(
 			t,
 			fstest.CreateFile("Dockerfile", dockerfile, 0600),
@@ -113,9 +113,9 @@ ADD --checksum=md5:7e55db001d319a94b0b713529a756623 %s /tmp/foo
 	})
 	t.Run("DigestWithUnknownAlgoName", func(t *testing.T) {
 		dockerfile := fmt.Appendf(nil, `
-FROM scratch
+FROM %s
 ADD --checksum=unknown:%s %s /tmp/foo
-`, digest.FromBytes(resp.Content).Encoded(), server.URL+"/foo")
+`, baseImage, digest.FromBytes(resp.Content).Encoded(), server.URL+"/foo")
 		dir := integration.Tmpdir(
 			t,
 			fstest.CreateFile("Dockerfile", dockerfile, 0600),
@@ -130,9 +130,9 @@ ADD --checksum=unknown:%s %s /tmp/foo
 	})
 	t.Run("DigestWithoutAlgoName", func(t *testing.T) {
 		dockerfile := fmt.Appendf(nil, `
-FROM scratch
+FROM %s
 ADD --checksum=%s %s /tmp/foo
-`, digest.FromBytes(resp.Content).Encoded(), server.URL+"/foo")
+`, baseImage, digest.FromBytes(resp.Content).Encoded(), server.URL+"/foo")
 		dir := integration.Tmpdir(
 			t,
 			fstest.CreateFile("Dockerfile", dockerfile, 0600),
@@ -148,9 +148,9 @@ ADD --checksum=%s %s /tmp/foo
 	t.Run("NonHTTPSource", func(t *testing.T) {
 		foo := []byte("local file")
 		dockerfile := fmt.Appendf(nil, `
-FROM scratch
+FROM %s
 ADD --checksum=%s foo /tmp/foo
-`, digest.FromBytes(foo).String())
+`, baseImage, digest.FromBytes(foo).String())
 		dir := integration.Tmpdir(
 			t,
 			fstest.CreateFile("foo", foo, 0600),

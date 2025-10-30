@@ -67,7 +67,7 @@ jobs:
           wget -qO- "https://download.docker.com/linux/static/stable/x86_64/docker-${{ env.DOCKER_VERSION }}.tgz" | tar xvz --strip 1
       -
         name: Upload dockerd
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: dockerd
           path: /tmp/moby/dockerd
@@ -114,7 +114,7 @@ jobs:
           buildkitd-flags: --debug
       -
         name: Download dockerd
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: dockerd
           path: ./build/

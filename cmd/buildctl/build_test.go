@@ -46,9 +46,13 @@ func testBuildWithLocalFiles(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildLocalExporter(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
-	st := llb.Image("busybox").
-		Run(llb.Shlex("sh -c 'echo -n bar > /out/foo'"))
+	img := integration.UnixOrWindows("busybox", "nanoserver:latest")
+	cmdStr := integration.UnixOrWindows(
+		"sh -c 'echo -n bar > /out/foo'",
+		`cmd /c "echo bar > C:/out/foo"`,
+	)
+
+	st := llb.Image(img).Run(llb.Shlex(cmdStr))
 
 	out := st.AddMount("/out", llb.Scratch())
 
@@ -65,18 +69,25 @@ func testBuildLocalExporter(t *testing.T, sb integration.Sandbox) {
 
 	dt, err := os.ReadFile(filepath.Join(tmpdir, "foo"))
 	require.NoError(t, err)
-	require.Equal(t, "bar", string(dt))
+
+	// in windows plain echo in cmd.exe will always append \r\n (CRLF)
+	actualContent := integration.UnixOrWindows(string(dt), strings.TrimSpace(string(dt)))
+	require.Equal(t, "bar", actualContent)
 }
 
 func testBuildContainerdExporter(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	cdAddress := sb.ContainerdAddress()
 	if cdAddress == "" {
 		t.Skip("test is only for containerd worker")
 	}
 
-	st := llb.Image("busybox").
-		Run(llb.Shlex("sh -c 'echo -n bar > /foo'"))
+	baseImg := integration.UnixOrWindows("busybox", "nanoserver:latest")
+	cmdStr := integration.UnixOrWindows(
+		"sh -c 'echo -n bar > /foo'",
+		`cmd /c "echo bar > C:/foo"`,
+	)
+
+	st := llb.Image(baseImg).Run(llb.Shlex(cmdStr))
 
 	rdr, err := marshal(sb.Context(), st.Root())
 	require.NoError(t, err)
@@ -102,8 +113,8 @@ func testBuildContainerdExporter(t *testing.T, sb integration.Sandbox) {
 	img, err := client.GetImage(ctx, imageName)
 	require.NoError(t, err)
 
-	// NOTE: by default, it is overlayfs
-	snapshotter := "overlayfs"
+	// NOTE: by default, it is overlayfs on Linux, windows on Windows
+	snapshotter := integration.UnixOrWindows("overlayfs", "windows")
 	if sn := sb.Snapshotter(); sn != "" {
 		snapshotter = sn
 	}
@@ -113,9 +124,13 @@ func testBuildContainerdExporter(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildMetadataFile(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
-	st := llb.Image("busybox").
-		Run(llb.Shlex("sh -c 'echo -n bar > /foo'"))
+	img := integration.UnixOrWindows("busybox", "nanoserver:latest")
+	cmdStr := integration.UnixOrWindows(
+		"sh -c 'echo -n bar > /foo'",
+		`cmd /c "echo bar > C:/foo"`,
+	)
+
+	st := llb.Image(img).Run(llb.Shlex(cmdStr))
 
 	rdr, err := marshal(sb.Context(), st.Root())
 	require.NoError(t, err)

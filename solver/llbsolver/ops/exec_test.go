@@ -6,7 +6,9 @@ import (
 
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -110,11 +112,11 @@ func TestExecOpCacheMap(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			m1, ok, err := tc.op1.CacheMap(ctx, session.NewGroup(t.Name()), 1)
+			m1, ok, err := tc.op1.CacheMap(ctx, testJobContext(t), 1)
 			require.NoError(t, err)
 			require.True(t, ok)
 
-			m2, ok, err := tc.op2.CacheMap(ctx, session.NewGroup(t.Name()), 1)
+			m2, ok, err := tc.op2.CacheMap(ctx, testJobContext(t), 1)
 			require.NoError(t, err)
 			require.True(t, ok)
 
@@ -195,7 +197,7 @@ func TestExecOpContentCache(t *testing.T) {
 			t.Parallel()
 
 			// default is always valid, and can sometimes have slow-cache
-			m, ok, err := tc.op.CacheMap(ctx, session.NewGroup(t.Name()), 1)
+			m, ok, err := tc.op.CacheMap(ctx, testJobContext(t), 1)
 			require.NoError(t, err)
 			require.True(t, ok)
 			for _, dep := range m.Deps {
@@ -210,7 +212,7 @@ func TestExecOpContentCache(t *testing.T) {
 			for _, mnt := range tc.op.op.Mounts {
 				mnt.ContentCache = pb.MountContentCache_OFF
 			}
-			m, ok, err = tc.op.CacheMap(ctx, session.NewGroup(t.Name()), 1)
+			m, ok, err = tc.op.CacheMap(ctx, testJobContext(t), 1)
 			require.NoError(t, err)
 			require.True(t, ok)
 			for _, dep := range m.Deps {
@@ -221,7 +223,7 @@ func TestExecOpContentCache(t *testing.T) {
 			for _, mnt := range tc.op.op.Mounts {
 				mnt.ContentCache = pb.MountContentCache_ON
 			}
-			m, ok, err = tc.op.CacheMap(ctx, session.NewGroup(t.Name()), 1)
+			m, ok, err = tc.op.CacheMap(ctx, testJobContext(t), 1)
 			if tc.cacheIsSafe {
 				require.NoError(t, err)
 				require.True(t, ok)
@@ -288,4 +290,24 @@ func withoutOutput() func(*pb.Mount) {
 	return func(m *pb.Mount) {
 		m.Output = int64(pb.SkipOutput)
 	}
+}
+
+func testJobContext(t *testing.T) solver.JobContext {
+	return &jobCtx{g: session.NewGroup(t.Name())}
+}
+
+type jobCtx struct {
+	g session.Group
+}
+
+func (j *jobCtx) Session() session.Group {
+	return j.g
+}
+
+func (j *jobCtx) Cleanup(f func() error) error {
+	return errors.Errorf("cleanup not implemented for %T", j)
+}
+
+func (j *jobCtx) ResolverCache() solver.ResolverCache {
+	return nil
 }

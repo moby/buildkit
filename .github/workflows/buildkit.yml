@@ -30,45 +30,24 @@ env:
   SETUP_BUILDKIT_IMAGE: "moby/buildkit:latest"
   SCOUT_VERSION: "1.13.0"
   IMAGE_NAME: "moby/buildkit"
-  PLATFORMS: "linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le,linux/riscv64"
   DESTDIR: "./bin"
 
 jobs:
   prepare:
     runs-on: ubuntu-24.04
     outputs:
-      tag: ${{ steps.prep.outputs.tag }}
-      push: ${{ steps.prep.outputs.push }}
-      platforms: ${{ steps.prep.outputs.platforms }}
+      binaries-platforms: ${{ steps.platforms.outputs.matrix }}
     steps:
       -
         name: Checkout
         uses: actions/checkout@v5
       -
-        name: Prepare
-        id: prep
-        run: |
-          TAG=pr
-          PUSH=false
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            TAG=nightly
-            PUSH=push
-          elif [[ $GITHUB_REF == refs/tags/v* ]]; then
-            TAG=${GITHUB_REF#refs/tags/}
-            PUSH=push
-          elif [[ $GITHUB_REF == refs/heads/* ]]; then
-            TAG=$(echo ${GITHUB_REF#refs/heads/} | sed -r 's#/+#-#g')
-            if [ $GITHUB_REF = "refs/heads/${{ github.event.repository.default_branch }}" ]; then
-              PUSH=push
-            fi
-          fi
-          if [ "$GITHUB_REPOSITORY" != "moby/buildkit" ]; then
-            PUSH=false
-          fi
-          echo "tag=${TAG}" >>${GITHUB_OUTPUT}
-          echo "push=${PUSH}" >>${GITHUB_OUTPUT}
-          platforms=$(docker buildx bake release --print | jq -cr '.target."release".platforms')
-          echo "platforms=$platforms" >>${GITHUB_OUTPUT}
+        name: Platforms matrix
+        id: platforms
+        uses: docker/bake-action/subaction/matrix@v6
+        with:
+          target: release
+          fields: platforms
 
   binaries:
     runs-on: ubuntu-24.04
@@ -77,21 +56,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: ${{ fromJson(needs.prepare.outputs.platforms) }}
+        include: ${{ fromJson(needs.prepare.outputs.binaries-platforms) }}
     steps:
       -
         name: Prepare
         run: |
-          platform=${{ matrix.platform }}
+          platform=${{ matrix.platforms }}
           echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
-      -
-        name: Checkout
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-      -
-        name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v3
       -
         name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -104,17 +75,30 @@ jobs:
           buildkitd-flags: --debug
       -
         name: Build
+        uses: docker/bake-action@v6
+        with:
+          # FIXME: remove context once git context with query string implemented in actions-toolkit
+          source: ${{ github.server_url }}/${{ github.repository }}.git#${{ github.ref }}
+          targets: release
+          provenance: mode=max
+          sbom: true
+          set: |
+            *.platform=${{ matrix.platforms }}
+            *.cache-from=type=gha,scope=binaries
+            *.cache-to=type=gha,scope=binaries
+            *.no-cache-filter=${{ startsWith(github.ref, 'refs/tags/v') && 'gobuild-base' || '' }}
+      -
+        name: Rename provenance and sbom
+        working-directory: ${{ env.DESTDIR }}
         run: |
-          make release
-        env:
-          RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
-          PLATFORMS: ${{ matrix.platform }}
-          CACHE_FROM: type=gha,scope=binaries-${{ env.PLATFORM_PAIR }}
-          CACHE_TO: type=gha,scope=binaries-${{ env.PLATFORM_PAIR }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          binname=$(find . -name 'buildkit-*')
+          filename=$(basename "$binname" | sed -E 's/\.(tar\.gz|zip)$//')
+          mv "provenance.json" "${filename}.provenance.json"
+          mv "sbom-binaries.spdx.json" "${filename}.sbom.json"
+          find . -name 'sbom*.json' -exec rm {} \;
       -
         name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: buildkit-${{ env.PLATFORM_PAIR }}
           path: ${{ env.DESTDIR }}/*
@@ -176,28 +160,54 @@ jobs:
       -
         name: Upload SARIF report
         if: ${{ github.ref == 'refs/heads/master' && github.repository == 'moby/buildkit' }}
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: ${{ env.DESTDIR }}/govulncheck.out
 
   image:
     runs-on: ubuntu-24.04
+    env:
+      DEFAULT_BASE: alpine
     needs:
-      - prepare
       - test
     strategy:
       fail-fast: false
       matrix:
-        target-stage:
-          - ''
-          - rootless
+        include:
+          -
+            base: 'alpine'
+          -
+            base: 'alpine'
+            target: 'rootless'
+          -
+            base: 'ubuntu'
+            build-tags: 'nvidia venus'
     steps:
       -
-        name: Checkout
-        uses: actions/checkout@v5
-      -
-        name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v3
+        name: Prepare
+        run: |
+          tagSuffix=""
+          if [ -n "${{ matrix.target }}" ]; then
+            tagSuffix="${tagSuffix}-${{ matrix.target }}"
+          fi
+          if [ "${{ matrix.base }}" != "$DEFAULT_BASE" ]; then
+            tagSuffix="${tagSuffix}-${{ matrix.base }}"
+          fi
+          echo "TAG_SUFFIX=${tagSuffix}" >> $GITHUB_ENV
+          if [[ $GITHUB_REF == refs/tags/v* ]]; then
+            if [[ "${GITHUB_REF#refs/tags/}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              tagLatest=""
+              if [ -n "${{ matrix.target }}" ]; then
+                tagLatest=${{ matrix.target }}
+              else
+                tagLatest=latest
+              fi
+              if [ "${{ matrix.base }}" != "$DEFAULT_BASE" ]; then
+                tagLatest="${tagLatest}-${{ matrix.base }}"
+              fi
+              echo "TAG_LATEST=${tagLatest}" >> $GITHUB_ENV
+            fi
+          fi
       -
         name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -209,22 +219,73 @@ jobs:
           driver-opts: image=${{ env.SETUP_BUILDKIT_IMAGE }}
           buildkitd-flags: --debug
       -
+        name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.IMAGE_NAME }}
+          # versioning strategy
+          ## push semver tag v0.24.0
+          ### moby/buildkit:v0.24.0
+          ### moby/buildkit:latest
+          ### moby/buildkit:v0.24.0-rootless
+          ### moby/buildkit:rootless
+          ### moby/buildkit:v0.24.0-ubuntu
+          ### moby/buildkit:latest-ubuntu
+          ## push semver prerelease tag v0.24.0-rc1
+          ### moby/buildkit:v0.24.0-rc1
+          ### moby/buildkit:v0.24.0-rc1-rootless
+          ### moby/buildkit:v0.24.0-rc1-ubuntu
+          ## push on master
+          ### moby/buildkit:master
+          ### moby/buildkit:master-rootless
+          ### moby/buildkit:master-ubuntu
+          ## scheduled event on master
+          ### moby/buildkit:nightly
+          ### moby/buildkit:nightly-rootless
+          ### moby/buildkit:nightly-ubuntu
+          tags: |
+            type=schedule,pattern=nightly,suffix=${{ env.TAG_SUFFIX }}
+            type=ref,event=branch,suffix=${{ env.TAG_SUFFIX }}
+            type=ref,event=pr,suffix=${{ env.TAG_SUFFIX }}
+            type=semver,pattern={{raw}},suffix=${{ env.TAG_SUFFIX }}
+            type=raw,value=${{ env.TAG_LATEST }}
+          flavor: |
+            latest=false
+          annotations: |
+            org.opencontainers.image.title=BuildKit
+            org.opencontainers.image.vendor=Moby
+          bake-target: meta-helper
+      -
         name: Login to DockerHub
-        if: needs.prepare.outputs.push == 'push'
+        if: ${{ github.repository == 'moby/buildkit' && (github.event_name == 'schedule' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')) }}
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       -
-        name: Build ${{ needs.prepare.outputs.tag }}
-        run: |
-          ./hack/images "${{ needs.prepare.outputs.tag }}" "$IMAGE_NAME" "${{ needs.prepare.outputs.push }}"
+        name: Build
+        uses: docker/bake-action@v6
+        with:
+          # FIXME: remove context once git context with query string implemented in actions-toolkit
+          source: ${{ github.server_url }}/${{ github.repository }}.git#${{ github.ref }}
+          files: |
+            ./docker-bake.hcl
+            cwd://${{ steps.meta.outputs.bake-file-tags }}
+            cwd://${{ steps.meta.outputs.bake-file-annotations }}
+          targets: image-cross
+          push: ${{ github.repository == 'moby/buildkit' && (github.event_name == 'schedule' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')) }}
+          provenance: mode=max,version=v1
+          sbom: true
+          set: |
+            *.cache-from=type=gha,scope=image${{ matrix.target }}-${{ matrix.base }}
+            *.cache-to=type=gha,scope=image${{ matrix.target }}-${{ matrix.base }}
+            *.no-cache-filter=${{ (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')) && 'buildkit-export-alpine,buildkit-export-ubuntu,gobuild-base,rootless' || '' }}
         env:
-          RELEASE: ${{ github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v') }}
-          TARGET: ${{ matrix.target-stage }}
-          CACHE_FROM: type=gha,scope=image${{ matrix.target-stage }}
-          CACHE_TO: type=gha,scope=image${{ matrix.target-stage }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE_TARGET: ${{ matrix.target }}
+          EXPORT_BASE: ${{ matrix.base }}
+          BUILDKITD_TAGS: ${{ matrix.build-tags }}
 
   scout:
     runs-on: ubuntu-24.04
@@ -266,7 +327,7 @@ jobs:
           jq . ${{ steps.scout.outputs.result-file }}
       -
         name: Upload SARIF report
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: ${{ steps.scout.outputs.result-file }}
 
@@ -276,14 +337,13 @@ jobs:
       # required to create GitHub release
       contents: write
     needs:
-      - prepare
       - test
       - binaries
       - image
     steps:
       -
         name: Download artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           path: ${{ env.DESTDIR }}
           pattern: buildkit-*
@@ -295,10 +355,9 @@ jobs:
       -
         name: GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@6cbd405e2c4e67a21c47fa9e383d020e4e28b836  # v2.3.3
+        uses: softprops/action-gh-release@6da8fa9354ddfdc4aeace5fc48d7f679b5214090  # v2.4.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           draft: true
           files: ${{ env.DESTDIR }}/*
-          name: ${{ needs.prepare.outputs.tag }}
