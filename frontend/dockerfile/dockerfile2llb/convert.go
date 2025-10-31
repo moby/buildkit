@@ -1645,6 +1645,14 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 				return errors.Wrap(err, "removing drive letter")
 			}
 
+			for i, requiredPath := range requiredPaths {
+				p, err := system.NormalizePath("/", requiredPath, d.platform.OS, false)
+				if err != nil {
+					return errors.Wrap(err, "removing drive letter")
+				}
+				requiredPaths[i] = p
+			}
+
 			unpack := cfg.isAddCommand
 			if cfg.unpack != nil {
 				unpack = *cfg.unpack
