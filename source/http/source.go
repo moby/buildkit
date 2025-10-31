@@ -387,6 +387,7 @@ func (hs *httpSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
 		return nil, errors.Errorf("invalid response status %d", resp.StatusCode)
 	}
@@ -408,7 +409,6 @@ func (hs *httpSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.
 			return nil, errors.Errorf("invalid metadata change")
 		}
 
-		resp.Body.Close()
 		var modTime *time.Time
 		if modTimeStr := md.getHTTPModTime(); modTimeStr != "" {
 			if t, err := http.ParseTime(modTimeStr); err == nil {
