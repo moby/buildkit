@@ -76,7 +76,7 @@ func (sb *sandbox) Cmd(args ...string) *exec.Cmd {
 			args = split
 		}
 	}
-	cmd := exec.Command("buildctl", args...)
+	cmd := exec.CommandContext(sb.Context(), "buildctl", args...)
 	cmd.Env = append(cmd.Env, os.Environ()...)
 	cmd.Env = append(cmd.Env, "BUILDKIT_HOST="+sb.Address())
 	if v := os.Getenv("GO_TEST_COVERPROFILE"); v != "" {
@@ -188,7 +188,7 @@ func printBuildkitdDebugLogs(t *testing.T, addr string) {
 }
 
 func RootlessSupported(uid int) bool {
-	cmd := exec.Command("sudo", "-u", fmt.Sprintf("#%d", uid), "-i", "--", "exec", "unshare", "-U", "true") //nolint:gosec // test utility
+	cmd := exec.CommandContext(context.TODO(), "sudo", "-u", fmt.Sprintf("#%d", uid), "-i", "--", "exec", "unshare", "-U", "true") //nolint:gosec // test utility
 	b, err := cmd.CombinedOutput()
 	if err != nil {
 		bklog.L.Warnf("rootless mode is not supported on this host: %v (%s)", err, string(b))

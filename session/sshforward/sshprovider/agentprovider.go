@@ -7,7 +7,6 @@ import (
 	"os"
 	"runtime"
 	"strings"
-	"time"
 
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/sshforward"
@@ -77,7 +76,7 @@ type source struct {
 
 type socketDialer struct {
 	path   string
-	dialer func(string) (net.Conn, error)
+	dialer func(context.Context, string) (net.Conn, error)
 }
 
 func (s source) agentDialer(ctx context.Context) (net.Conn, error) {
@@ -109,7 +108,7 @@ func (s source) agentDialer(ctx context.Context) (net.Conn, error) {
 }
 
 func (s socketDialer) Dial(ctx context.Context) (net.Conn, error) {
-	return s.dialer(s.path)
+	return s.dialer(ctx, s.path)
 }
 
 func (s socketDialer) String() string {
@@ -193,8 +192,8 @@ func toDialer(paths []string, raw bool) (func(context.Context) (net.Conn, error)
 	return source{agent: a}.agentDialer, nil
 }
 
-func unixSocketDialer(path string) (net.Conn, error) {
-	return net.DialTimeout("unix", path, 2*time.Second)
+func unixSocketDialer(ctx context.Context, path string) (net.Conn, error) {
+	return (&net.Dialer{}).DialContext(ctx, "unix", path)
 }
 
 type readOnlyAgent struct {
