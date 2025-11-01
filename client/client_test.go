@@ -12164,7 +12164,7 @@ func testGitResolveSourceMetadata(t *testing.T, sb integration.Sandbox) {
 
 		commit, err := commitObj.ToCommit()
 		require.NoError(t, err)
-		require.Equal(t, "msg\n", commit.Message)
+		require.Equal(t, "msg", commit.Message)
 		require.Equal(t, "test", commit.Author.Name)
 		require.Equal(t, "test@example.com", commit.Author.Email)
 		require.Equal(t, "test", commit.Committer.Name)
@@ -12179,7 +12179,7 @@ func testGitResolveSourceMetadata(t *testing.T, sb integration.Sandbox) {
 
 		tag, err := tagObj.ToTag()
 		require.NoError(t, err)
-		require.Equal(t, "v0.1release\n", tag.Message)
+		require.Equal(t, "v0.1release", tag.Message)
 		require.Equal(t, "v0.1", tag.Tag)
 		require.Equal(t, "test", tag.Tagger.Name)
 		require.Equal(t, "test@example.com", tag.Tagger.Email)

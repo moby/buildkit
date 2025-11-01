@@ -67,7 +67,7 @@ Mq9vT7yP08mV6474Ihno
 =sixl
 -----END PGP SIGNATURE-----
 `
-	require.Equal(t, expectedSig, obj.GPGSig)
+	require.Equal(t, expectedSig, obj.Signature)
 
 	const expectedSignedData = `tree c60378fad086260463884449208b0545cef5703d
 parent 2777c1b86e59a951188b81e310d3dc8b05b6ac9c
@@ -152,14 +152,15 @@ yVkI8y/p
 =12Xx
 -----END PGP SIGNATURE-----
 `
-	require.Equal(t, expectedTagSig, obj.GPGSig)
+	require.Equal(t, expectedTagSig, obj.Signature)
 
 	const expectedTagSignedData = `object c8fad61a079f8272be5559fe473171a8f6333679
 type commit
 tag v0.25.0-rc1
 tagger Tonis Tiigi <tonistiigi@gmail.com> 1758658255 -0700
 
-v0.25.0-rc1`
+v0.25.0-rc1
+`
 	require.Equal(t, expectedTagSignedData, obj.SignedData)
 
 	sum, err = obj.Checksum(sha1.New)
