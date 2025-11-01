@@ -693,7 +693,7 @@ The available `[OPTIONS]` for the `RUN` instruction are:
 | [`--device`](#run---device)     | 1.14-labs                  |
 | [`--mount`](#run---mount)       | 1.2                        |
 | [`--network`](#run---network)   | 1.3                        |
-| [`--security`](#run---security) | 1.1.2-labs                 |
+| [`--security`](#run---security) | 1.20                       |
 
 ### Cache invalidation for RUN instructions
 
@@ -1039,9 +1039,6 @@ The command is run in the host's network environment (similar to
 
 ### RUN --security
 
-> [!NOTE]
-> Not yet available in stable syntax, use [`docker/dockerfile:1-labs`](#syntax) version.
-
 ```dockerfile
 RUN --security=<sandbox|insecure>
 ```
@@ -1062,7 +1059,7 @@ Default sandbox mode can be activated via `--security=sandbox`, but that is no-o
 #### Example: check entitlements
 
 ```dockerfile
-# syntax=docker/dockerfile:1-labs
+# syntax=docker/dockerfile:1
 FROM ubuntu
 RUN --security=insecure cat /proc/self/status | grep CapEff
 ```
