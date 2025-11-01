@@ -171,11 +171,10 @@ if [ "$TEST_DOCKERFILE" == 1 ]; then
   fi
 
   for release in $DOCKERFILE_RELEASES; do
-    buildtags=$(cat ./frontend/dockerfile/release/$release/tags)
     tarout=$(mktemp -t dockerfile-frontend.XXXXXXXXXX)
 
     buildxCmd build $cacheFromFlags \
-      --build-arg "BUILDTAGS=$buildtags" --build-arg "BUILDKIT_CONTEXT_KEEP_GIT_DIR=1" \
+      --build-arg "CHANNEL=$release" --build-arg "BUILDKIT_CONTEXT_KEEP_GIT_DIR=1" \
       --file "./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile" \
       --output "type=oci,dest=$tarout" \
       $currentcontext
@@ -187,7 +186,7 @@ if [ "$TEST_DOCKERFILE" == 1 ]; then
           -e FRONTEND_GATEWAY_ONLY=local:/$release.tar \
           -e EXTERNAL_DF_FRONTEND=/dockerfile-frontend \
           $TEST_IMAGE_NAME \
-          gotestsumandcover $gotestsumArgs --packages=./frontend/dockerfile -- $gotestArgs --count=1 -tags "$buildtags" ${TESTFLAGS:--v})
+          gotestsumandcover $gotestsumArgs --packages=./frontend/dockerfile -- $gotestArgs --count=1 -tags "$(cat ./frontend/dockerfile/release/$release/tags)" ${TESTFLAGS:--v})
         dockerCmd cp $tarout $cid:/$release.tar
         if [ "$TEST_DOCKERD" = "1" ]; then
           dockerCmd cp "$TEST_DOCKERD_BINARY" $cid:/usr/bin/dockerd
