@@ -1,0 +1,608 @@
+import React, { useState, useEffect } from ‘react’;
+import { MapPin, Phone, Mail, Menu, X, Home, Briefcase, DollarSign, MessageSquare, User, LogOut, FolderOpen, Plus, Trash2, Edit, Save, Image as ImageIcon } from ‘lucide-react’;
+
+const BestestAsphalt = () => {
+const [isMenuOpen, setIsMenuOpen] = useState(false);
+const [isLoggedIn, setIsLoggedIn] = useState(false);
+const [currentView, setCurrentView] = useState(‘home’);
+const [loginEmail, setLoginEmail] = useState(’’);
+const [loginPassword, setLoginPassword] = useState(’’);
+
+// CRM State
+const [projects, setProjects] = useState([]);
+const [folders, setFolders] = useState([‘Active Projects’, ‘Pending’, ‘Completed’]);
+const [selectedFolder, setSelectedFolder] = useState(‘Active Projects’);
+const [editingProject, setEditingProject] = useState(null);
+const [newProject, setNewProject] = useState({
+name: ‘’,
+address: ‘’,
+area: ‘’,
+service: ‘paving’,
+folder: ‘Active Projects’,
+notes: ‘’
+});
+
+// Pricing calculator
+const [measurementArea, setMeasurementArea] = useState(’’);
+const [selectedService, setSelectedService] = useState(‘paving’);
+const [calculatedPrice, setCalculatedPrice] = useState(null);
+
+const serviceRates = {
+paving: 4.50, // per sq ft
+sealcoating: 0.35, // per sq ft
+repair: 3.25 // per sq ft
+};
+
+const calculatePrice = (area, service) => {
+const sqft = parseFloat(area);
+if (isNaN(sqft) || sqft <= 0) return null;
+
+```
+const basePrice = sqft * serviceRates[service];
+const laborCost = basePrice * 0.4;
+const materialCost = basePrice * 0.6;
+
+return {
+  sqft,
+  service,
+  basePrice: basePrice.toFixed(2),
+  laborCost: laborCost.toFixed(2),
+  materialCost: materialCost.toFixed(2),
+  total: basePrice.toFixed(2)
+};
+```
+
+};
+
+const handleLogin = (e) => {
+e.preventDefault();
+// Simple demo login - in production, use proper authentication
+if (loginEmail && loginPassword) {
+setIsLoggedIn(true);
+setCurrentView(‘crm’);
+setLoginEmail(’’);
+setLoginPassword(’’);
+}
+};
+
+const handleLogout = () => {
+setIsLoggedIn(false);
+setCurrentView(‘home’);
+};
+
+const addProject = () => {
+if (newProject.name && newProject.address && newProject.area) {
+const pricing = calculatePrice(newProject.area, newProject.service);
+const project = {
+id: Date.now(),
+…newProject,
+pricing,
+createdAt: new Date().toISOString()
+};
+setProjects([…projects, project]);
+setNewProject({
+name: ‘’,
+address: ‘’,
+area: ‘’,
+service: ‘paving’,
+folder: selectedFolder,
+notes: ‘’
+});
+}
+};
+
+const deleteProject = (id) => {
+setProjects(projects.filter(p => p.id !== id));
+};
+
+const updateProject = (id, updates) => {
+setProjects(projects.map(p => {
+if (p.id === id) {
+const pricing = calculatePrice(updates.area || p.area, updates.service || p.service);
+return { …p, …updates, pricing };
+}
+return p;
+}));
+setEditingProject(null);
+};
+
+const addFolder = () => {
+const folderName = prompt(‘Enter new folder name:’);
+if (folderName && !folders.includes(folderName)) {
+setFolders([…folders, folderName]);
+}
+};
+
+const filteredProjects = projects.filter(p => p.folder === selectedFolder);
+
+return (
+<div className="min-h-screen bg-gray-50">
+{/* Navigation */}
+<nav className="bg-gray-900 text-white sticky top-0 z-50 shadow-lg">
+<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+<div className="flex justify-between items-center h-16">
+<div className="flex items-center">
+<h1 className="text-2xl font-bold text-yellow-400">The Bestest</h1>
+<span className="ml-2 text-sm text-gray-300">Asphalt Paving & Seal Coating</span>
+</div>
+
+```
+        {/* Desktop Menu */}
+        <div className="hidden md:flex space-x-8">
+          {!isLoggedIn ? (
+            <>
+              <button onClick={() => setCurrentView('home')} className="hover:text-yellow-400 transition">Home</button>
+              <button onClick={() => setCurrentView('services')} className="hover:text-yellow-400 transition">Services</button>
+              <button onClick={() => setCurrentView('calculator')} className="hover:text-yellow-400 transition">Quote Calculator</button>
+              <button onClick={() => setCurrentView('contact')} className="hover:text-yellow-400 transition">Contact</button>
+              <button onClick={() => setCurrentView('login')} className="bg-yellow-400 text-gray-900 px-4 py-2 rounded hover:bg-yellow-500 transition">Manager Login</button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => setCurrentView('crm')} className="hover:text-yellow-400 transition">CRM Dashboard</button>
+              <button onClick={handleLogout} className="flex items-center hover:text-yellow-400 transition">
+                <LogOut className="w-4 h-4 mr-1" />
+                Logout
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Mobile menu button */}
+        <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="md:hidden">
+          {isMenuOpen ? <X /> : <Menu />}
+        </button>
+      </div>
+
+      {/* Mobile Menu */}
+      {isMenuOpen && (
+        <div className="md:hidden pb-4 space-y-2">
+          {!isLoggedIn ? (
+            <>
+              <button onClick={() => { setCurrentView('home'); setIsMenuOpen(false); }} className="block w-full text-left py-2 hover:text-yellow-400">Home</button>
+              <button onClick={() => { setCurrentView('services'); setIsMenuOpen(false); }} className="block w-full text-left py-2 hover:text-yellow-400">Services</button>
+              <button onClick={() => { setCurrentView('calculator'); setIsMenuOpen(false); }} className="block w-full text-left py-2 hover:text-yellow-400">Quote Calculator</button>
+              <button onClick={() => { setCurrentView('contact'); setIsMenuOpen(false); }} className="block w-full text-left py-2 hover:text-yellow-400">Contact</button>
+              <button onClick={() => { setCurrentView('login'); setIsMenuOpen(false); }} className="block w-full text-left py-2 text-yellow-400">Manager Login</button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => { setCurrentView('crm'); setIsMenuOpen(false); }} className="block w-full text-left py-2 hover:text-yellow-400">CRM Dashboard</button>
+              <button onClick={() => { handleLogout(); setIsMenuOpen(false); }} className="block w-full text-left py-2 hover:text-yellow-400">Logout</button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  </nav>
+
+  {/* Home View */}
+  {currentView === 'home' && (
+    <div>
+      {/* Hero Section */}
+      <div className="bg-gradient-to-r from-gray-800 to-gray-900 text-white py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h2 className="text-5xl font-bold mb-4">Premium Asphalt Solutions</h2>
+          <p className="text-xl text-gray-300 mb-8">Your trusted partner for paving, seal coating, and asphalt repairs</p>
+          <button onClick={() => setCurrentView('contact')} className="bg-yellow-400 text-gray-900 px-8 py-3 rounded-lg text-lg font-semibold hover:bg-yellow-500 transition">
+            Get Free Estimate
+          </button>
+        </div>
+      </div>
+
+      {/* Features */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        <div className="grid md:grid-cols-3 gap-8">
+          <div className="bg-white p-6 rounded-lg shadow-lg text-center">
+            <div className="bg-yellow-400 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Home className="w-8 h-8 text-gray-900" />
+            </div>
+            <h3 className="text-xl font-bold mb-2">20+ Years Experience</h3>
+            <p className="text-gray-600">Trusted by thousands of residential and commercial clients</p>
+          </div>
+          <div className="bg-white p-6 rounded-lg shadow-lg text-center">
+            <div className="bg-yellow-400 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Briefcase className="w-8 h-8 text-gray-900" />
+            </div>
+            <h3 className="text-xl font-bold mb-2">Professional Team</h3>
+            <p className="text-gray-600">Certified and experienced asphalt professionals</p>
+          </div>
+          <div className="bg-white p-6 rounded-lg shadow-lg text-center">
+            <div className="bg-yellow-400 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+              <DollarSign className="w-8 h-8 text-gray-900" />
+            </div>
+            <h3 className="text-xl font-bold mb-2">Competitive Pricing</h3>
+            <p className="text-gray-600">Quality work at fair and transparent prices</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )}
+
+  {/* Services View */}
+  {currentView === 'services' && (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+      <h2 className="text-4xl font-bold text-center mb-12">Our Services</h2>
+      <div className="grid md:grid-cols-3 gap-8">
+        <div className="bg-white p-8 rounded-lg shadow-lg">
+          <h3 className="text-2xl font-bold mb-4 text-yellow-600">Asphalt Paving</h3>
+          <p className="text-gray-600 mb-4">New driveways, parking lots, and roadways with premium materials and expert installation.</p>
+          <ul className="space-y-2 text-gray-700">
+            <li>• Residential driveways</li>
+            <li>• Commercial parking lots</li>
+            <li>• Road construction</li>
+            <li>• Pathway installation</li>
+          </ul>
+        </div>
+        <div className="bg-white p-8 rounded-lg shadow-lg">
+          <h3 className="text-2xl font-bold mb-4 text-yellow-600">Seal Coating</h3>
+          <p className="text-gray-600 mb-4">Protect and extend the life of your asphalt with professional seal coating services.</p>
+          <ul className="space-y-2 text-gray-700">
+            <li>• Surface protection</li>
+            <li>• Weather resistance</li>
+            <li>• Enhanced appearance</li>
+            <li>• Cost-effective maintenance</li>
+          </ul>
+        </div>
+        <div className="bg-white p-8 rounded-lg shadow-lg">
+          <h3 className="text-2xl font-bold mb-4 text-yellow-600">Repairs & Maintenance</h3>
+          <p className="text-gray-600 mb-4">Expert crack filling, patching, and restoration services to keep your asphalt in top condition.</p>
+          <ul className="space-y-2 text-gray-700">
+            <li>• Crack repair</li>
+            <li>• Pothole patching</li>
+            <li>• Surface leveling</li>
+            <li>• Drainage solutions</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  )}
+
+  {/* Quote Calculator View */}
+  {currentView === 'calculator' && (
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+      <h2 className="text-4xl font-bold text-center mb-8">Instant Quote Calculator</h2>
+      <div className="bg-white p-8 rounded-lg shadow-lg">
+        <div className="mb-6">
+          <label className="block text-gray-700 font-semibold mb-2">Service Type</label>
+          <select 
+            value={selectedService}
+            onChange={(e) => setSelectedService(e.target.value)}
+            className="w-full p-3 border border-gray-300 rounded-lg"
+          >
+            <option value="paving">Asphalt Paving - $4.50/sq ft</option>
+            <option value="sealcoating">Seal Coating - $0.35/sq ft</option>
+            <option value="repair">Repair & Maintenance - $3.25/sq ft</option>
+          </select>
+        </div>
+        
+        <div className="mb-6">
+          <label className="block text-gray-700 font-semibold mb-2">Area (Square Feet)</label>
+          <input
+            type="number"
+            value={measurementArea}
+            onChange={(e) => setMeasurementArea(e.target.value)}
+            placeholder="Enter area in square feet"
+            className="w-full p-3 border border-gray-300 rounded-lg"
+          />
+          <p className="text-sm text-gray-500 mt-2">💡 Tip: Use satellite imagery tools like Google Maps to measure your area</p>
+        </div>
+
+        <button
+          onClick={() => setCalculatedPrice(calculatePrice(measurementArea, selectedService))}
+          className="w-full bg-yellow-400 text-gray-900 py-3 rounded-lg font-semibold hover:bg-yellow-500 transition"
+        >
+          Calculate Estimate
+        </button>
+
+        {calculatedPrice && (
+          <div className="mt-8 p-6 bg-gray-50 rounded-lg">
+            <h3 className="text-2xl font-bold mb-4">Estimated Quote</h3>
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Area:</span>
+                <span className="font-semibold">{calculatedPrice.sqft} sq ft</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Service:</span>
+                <span className="font-semibold capitalize">{calculatedPrice.service}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Materials:</span>
+                <span className="font-semibold">${calculatedPrice.materialCost}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Labor:</span>
+                <span className="font-semibold">${calculatedPrice.laborCost}</span>
+              </div>
+              <div className="border-t pt-2 mt-2 flex justify-between text-xl">
+                <span className="font-bold">Total Estimate:</span>
+                <span className="font-bold text-yellow-600">${calculatedPrice.total}</span>
+              </div>
+            </div>
+            <p className="text-sm text-gray-500 mt-4">* This is an estimate. Final pricing may vary based on site conditions and specific requirements.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )}
+
+  {/* Contact View */}
+  {currentView === 'contact' && (
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+      <h2 className="text-4xl font-bold text-center mb-8">Contact Us</h2>
+      <div className="grid md:grid-cols-2 gap-8">
+        <div className="bg-white p-8 rounded-lg shadow-lg">
+          <h3 className="text-2xl font-bold mb-6">Get in Touch</h3>
+          <div className="space-y-4">
+            <div className="flex items-start">
+              <Phone className="w-6 h-6 text-yellow-400 mr-3 mt-1" />
+              <div>
+                <p className="font-semibold">Phone</p>
+                <p className="text-gray-600">(555) 123-4567</p>
+              </div>
+            </div>
+            <div className="flex items-start">
+              <Mail className="w-6 h-6 text-yellow-400 mr-3 mt-1" />
+              <div>
+                <p className="font-semibold">Email</p>
+                <p className="text-gray-600">info@bestestasphalt.com</p>
+              </div>
+            </div>
+            <div className="flex items-start">
+              <MapPin className="w-6 h-6 text-yellow-400 mr-3 mt-1" />
+              <div>
+                <p className="font-semibold">Location</p>
+                <p className="text-gray-600">Serving the Greater Metro Area</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white p-8 rounded-lg shadow-lg">
+          <h3 className="text-2xl font-bold mb-6">Request a Quote</h3>
+          <form className="space-y-4">
+            <input type="text" placeholder="Your Name" className="w-full p-3 border border-gray-300 rounded-lg" />
+            <input type="email" placeholder="Email Address" className="w-full p-3 border border-gray-300 rounded-lg" />
+            <input type="tel" placeholder="Phone Number" className="w-full p-3 border border-gray-300 rounded-lg" />
+            <textarea placeholder="Project Details" rows="4" className="w-full p-3 border border-gray-300 rounded-lg"></textarea>
+            <button type="submit" className="w-full bg-yellow-400 text-gray-900 py-3 rounded-lg font-semibold hover:bg-yellow-500 transition">
+              Submit Request
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  )}
+
+  {/* Login View */}
+  {currentView === 'login' && !isLoggedIn && (
+    <div className="max-w-md mx-auto px-4 py-16">
+      <div className="bg-white p-8 rounded-lg shadow-lg">
+        <h2 className="text-3xl font-bold text-center mb-8">Manager Login</h2>
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="block text-gray-700 font-semibold mb-2">Email</label>
+            <input
+              type="email"
+              value={loginEmail}
+              onChange={(e) => setLoginEmail(e.target.value)}
+              placeholder="manager@bestestasphalt.com"
+              className="w-full p-3 border border-gray-300 rounded-lg"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-gray-700 font-semibold mb-2">Password</label>
+            <input
+              type="password"
+              value={loginPassword}
+              onChange={(e) => setLoginPassword(e.target.value)}
+              placeholder="••••••••"
+              className="w-full p-3 border border-gray-300 rounded-lg"
+              required
+            />
+          </div>
+          <button type="submit" className="w-full bg-yellow-400 text-gray-900 py-3 rounded-lg font-semibold hover:bg-yellow-500 transition">
+            Login to CRM
+          </button>
+        </form>
+        <p className="text-sm text-gray-500 text-center mt-4">Demo: Enter any email and password to access</p>
+      </div>
+    </div>
+  )}
+
+  {/* CRM Dashboard */}
+  {currentView === 'crm' && isLoggedIn && (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <h2 className="text-3xl font-bold mb-8">Project Management CRM</h2>
+      
+      <div className="grid md:grid-cols-4 gap-6">
+        {/* Sidebar - Folders */}
+        <div className="md:col-span-1">
+          <div className="bg-white rounded-lg shadow-lg p-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-lg">Folders</h3>
+              <button onClick={addFolder} className="text-yellow-600 hover:text-yellow-700">
+                <Plus className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-2">
+              {folders.map(folder => (
+                <button
+                  key={folder}
+                  onClick={() => setSelectedFolder(folder)}
+                  className={`w-full text-left p-3 rounded flex items-center ${
+                    selectedFolder === folder ? 'bg-yellow-400 text-gray-900' : 'hover:bg-gray-100'
+                  }`}
+                >
+                  <FolderOpen className="w-4 h-4 mr-2" />
+                  {folder}
+                  <span className="ml-auto text-sm">
+                    ({projects.filter(p => p.folder === folder).length})
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content - Projects */}
+        <div className="md:col-span-3">
+          {/* Add New Project */}
+          <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h3 className="font-bold text-xl mb-4">Add New Project</h3>
+            <div className="grid md:grid-cols-2 gap-4">
+              <input
+                type="text"
+                placeholder="Client Name"
+                value={newProject.name}
+                onChange={(e) => setNewProject({...newProject, name: e.target.value})}
+                className="p-3 border border-gray-300 rounded-lg"
+              />
+              <input
+                type="text"
+                placeholder="Project Address"
+                value={newProject.address}
+                onChange={(e) => setNewProject({...newProject, address: e.target.value})}
+                className="p-3 border border-gray-300 rounded-lg"
+              />
+              <input
+                type="number"
+                placeholder="Area (sq ft) - measure from satellite"
+                value={newProject.area}
+                onChange={(e) => setNewProject({...newProject, area: e.target.value})}
+                className="p-3 border border-gray-300 rounded-lg"
+              />
+              <select
+                value={newProject.service}
+                onChange={(e) => setNewProject({...newProject, service: e.target.value})}
+                className="p-3 border border-gray-300 rounded-lg"
+              >
+                <option value="paving">Asphalt Paving</option>
+                <option value="sealcoating">Seal Coating</option>
+                <option value="repair">Repair & Maintenance</option>
+              </select>
+              <select
+                value={newProject.folder}
+                onChange={(e) => setNewProject({...newProject, folder: e.target.value})}
+                className="p-3 border border-gray-300 rounded-lg"
+              >
+                {folders.map(folder => (
+                  <option key={folder} value={folder}>{folder}</option>
+                ))}
+              </select>
+              <textarea
+                placeholder="Project Notes"
+                value={newProject.notes}
+                onChange={(e) => setNewProject({...newProject, notes: e.target.value})}
+                className="p-3 border border-gray-300 rounded-lg md:col-span-2"
+                rows="2"
+              ></textarea>
+            </div>
+            <button
+              onClick={addProject}
+              className="mt-4 bg-yellow-400 text-gray-900 px-6 py-2 rounded-lg font-semibold hover:bg-yellow-500 transition flex items-center"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Project
+            </button>
+          </div>
+
+          {/* Projects List */}
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <h3 className="font-bold text-xl mb-4">{selectedFolder} ({filteredProjects.length})</h3>
+            <div className="space-y-4">
+              {filteredProjects.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">No projects in this folder</p>
+              ) : (
+                filteredProjects.map(project => (
+                  <div key={project.id} className="border border-gray-200 rounded-lg p-4">
+                    {editingProject === project.id ? (
+                      <div className="space-y-3">
+                        <input
+                          type="text"
+                          value={project.name}
+                          onChange={(e) => updateProject(project.id, { name: e.target.value })}
+                          className="w-full p-2 border border-gray-300 rounded"
+                        />
+                        <input
+                          type="text"
+                          value={project.address}
+                          onChange={(e) => updateProject(project.id, { address: e.target.value })}
+                          className="w-full p-2 border border-gray-300 rounded"
+                        />
+                        <input
+                          type="number"
+                          value={project.area}
+                          onChange={(e) => updateProject(project.id, { area: e.target.value })}
+                          className="w-full p-2 border border-gray-300 rounded"
+                        />
+                        <button
+                          onClick={() => setEditingProject(null)}
+                          className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 flex items-center"
+                        >
+                          <Save className="w-4 h-4 mr-2" />
+                          Save
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h4 className="font-bold text-lg">{project.name}</h4>
+                            <p className="text-gray-600 text-sm">{project.address}</p>
+                          </div>
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => setEditingProject(project.id)}
+                              className="text-blue-600 hover:text-blue-700"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => deleteProject(project.id)}
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4 text-sm mb-3">
+                          <div>
+                            <span className="text-gray-600">Service:</span>
+                            <span className="ml-2 font-semibold capitalize">{project.service}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Area:</span>
+                            <span className="ml-2 font-semibold">{project.area} sq ft</span>
+                          </div>
+                        </div>
+
+                        {project.pricing && (
+                          <div className="bg-gray-50 p-3 rounded mb-3">
+                            <div className="flex justify-between text-sm mb-1">
+                              <span className="text-gray-600">Materials:</span>
+                              <span>${project.pricing.materialCost}</span>
+                            </div>
+                            <div className="flex justify-between text-sm mb-1">
+                              <span className="text-gray-600">Labor:</span>
+                              <span>${project.pricing.laborCost}</span>
+                            </div>
+                            <div className="flex justify-between font-bold pt-2 border-t">
+                              <span>Total Estimate:</span>
+                              <span className="text-yellow-600">${project.pricing.total}</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {project.notes && (
+                          <div className="text-sm text-gray-600 bg-blue-50 p-2 rounded">
+                            <strong>Notes:</strong> {project.notes}
+                          </div>
+                        )}
+
+                        <div className="mt-3 text-xs text-gray-500">
+                          Created: {new Date(project.createdAt).
+```
