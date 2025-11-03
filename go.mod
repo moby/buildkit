@@ -37,7 +37,7 @@ require (
 	github.com/distribution/reference v0.6.0
 	github.com/docker/cli v28.5.0+incompatible
 	github.com/docker/go-units v0.5.0
-	github.com/gofrs/flock v0.12.1
+	github.com/gofrs/flock v0.13.0
 	github.com/golang/protobuf v1.5.4
 	github.com/google/go-cmp v0.7.0
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
