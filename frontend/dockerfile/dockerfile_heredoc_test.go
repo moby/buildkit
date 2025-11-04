@@ -110,7 +110,6 @@ COPY --from=build /dest /
 }
 
 func testCopyHeredocSpecialSymbols(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -602,7 +601,6 @@ COPY --from=build /dest /
 }
 
 func testOnBuildHeredoc(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	f := getFrontend(t, sb)
 
@@ -612,12 +610,16 @@ func testOnBuildHeredoc(t *testing.T, sb integration.Sandbox) {
 	}
 	require.NoError(t, err)
 
-	dockerfile := []byte(`
-FROM busybox
-ONBUILD RUN <<EOF
-echo "hello world" >> /dest
+	baseImage := integration.UnixOrWindows("busybox", "nanoserver:latest")
+	echoCmd := integration.UnixOrWindows(`echo "hello world" >> /dest`, `echo hello world > /dest`)
+	userDirective := integration.UnixOrWindows("", "USER ContainerAdministrator\n")
+
+	dockerfile := fmt.Appendf(nil, `
+FROM %s
+%sONBUILD RUN <<EOF
+%s
 EOF
-`)
+`, baseImage, userDirective, echoCmd)
 
 	dir := integration.Tmpdir(
 		t,
@@ -675,5 +677,7 @@ EOF
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "dest"))
 	require.NoError(t, err)
-	require.Equal(t, "hello world\n", string(dt))
+	// Windows cmd echo adds trailing space and uses CRLF line endings
+	expectedContent := integration.UnixOrWindows("hello world\n", "hello world \r\n")
+	require.Equal(t, expectedContent, string(dt))
 }
