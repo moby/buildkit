@@ -1,12 +1,12 @@
 # source  latest
-# dest    buildx-stable-1
-# result  moby/buildkit:latest   > moby/buildkit:buildx-stable-1
-#         moby/buildkit:rootless > moby/buildkit:buildx-stable-1-rootless
+# result  moby/buildkit:latest          > moby/buildkit:buildx-stable-1
+#         moby/buildkit:rootless        > moby/buildkit:buildx-stable-1-rootless
+#         moby/buildkit:ubuntu-latest   > moby/buildkit:buildx-stable-1-gpu
 #
 # source  v0.8.1
-# dest    buildx-stable-1
 # result  moby/buildkit:v0.8.1          > moby/buildkit:buildx-stable-1
 #         moby/buildkit:v0.8.1-rootless > moby/buildkit:buildx-stable-1-rootless
+#         moby/buildkit:v0.8.1-ubuntu   > moby/buildkit:buildx-stable-1-gpu
 name: buildx-image
 
 concurrency:
@@ -24,14 +24,12 @@ on:
         description: 'BuildKit source Docker tag'
         required: true
         default: 'latest'
-      dest-tag:
-        description: 'Default BuildKit Docker tag for buildx'
-        required: true
-        default: 'buildx-stable-1'
+        type: string
       dry-run:
         description: 'Dry run'
         required: false
-        default: 'true'
+        default: true
+        type: boolean
 
 env:
   SETUP_BUILDX_VERSION: "edge"
@@ -43,9 +41,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        tag:
+          - 'buildx-stable-1'
         flavor:
           - ''
           - 'rootless'
+          - 'ubuntu'
     steps:
       -
         name: Set up Docker Buildx
@@ -62,24 +63,38 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       -
         name: Create
-        run: |
-          DRYRUN_FLAG=""
-          if [ "${{ github.event.inputs.dry-run }}" = "true" ]; then
-            DRYRUN_FLAG="--dry-run"
-          fi
-
-          SOURCE_TAG="${{ github.event.inputs.source-tag }}"
-          DEST_TAG="${{ github.event.inputs.dest-tag }}"
-          if [ "${{ matrix.flavor }}" != "" ]; then
-            if [ "$SOURCE_TAG" = "latest" ]; then
-              SOURCE_TAG="${{ matrix.flavor }}"
-            else
-              SOURCE_TAG="${SOURCE_TAG}-${{ matrix.flavor }}"
-            fi
-            DEST_TAG="${DEST_TAG}-${{ matrix.flavor }}"
-          fi
-
-          set -x
-          docker buildx imagetools create ${DRYRUN_FLAG} --tag \
-            "${{ env.REPO_SLUG_TARGET }}:${DEST_TAG}" \
-            "${{ env.REPO_SLUG_TARGET }}:${SOURCE_TAG}"
+        uses: actions/github-script@v8
+        env:
+          INPUT_SOURCE-TAG: ${{ inputs.source-tag }}
+          INPUT_DRY-RUN: ${{ inputs.dry-run }}
+          INPUT_DEST-TAG: ${{ matrix.tag }}
+          INPUT_FLAVOR: ${{ matrix.flavor }}
+        with:
+          script: |
+            const inpSourceTag = core.getInput('source-tag');
+            const inpDryRun = core.getBooleanInput('dry-run');
+            const inpDestTag = core.getInput('dest-tag');
+            const inpFlavor = core.getInput('flavor');
+            const createArgs = ['buildx', 'imagetools', 'create'];
+            if (inpDryRun) {
+              createArgs.push('--dry-run');
+            }
+            let sourceTag = inpSourceTag;
+            let destTag = inpDestTag;
+            if (inpFlavor !== '') {
+              if (inpFlavor === 'ubuntu') {
+                sourceTag = `${inpSourceTag}-${inpFlavor}`;
+                destTag = `${inpDestTag}-gpu`;
+              } else {
+                sourceTag = inpSourceTag === 'latest' ? inpFlavor : `${inpSourceTag}-${inpFlavor}`;
+                destTag = `${inpDestTag}-${inpFlavor}`;
+              }
+            }
+            createArgs.push('--tag', `moby/buildkit:${destTag}`, `moby/buildkit:${sourceTag}`);
+            await exec.getExecOutput('docker', createArgs, {
+              ignoreReturnCode: true
+            }).then(res => {
+              if (res.stderr.length > 0 && res.exitCode != 0) {
+                throw new Error(res.stderr);
+              }
+            });
