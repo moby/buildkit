@@ -8,6 +8,7 @@ This troubleshooting guide covers failure investigation techniques, common error
   - [Permission issues](#permission-issues)
 - [Find relevant information in errors](#find-relevant-information-in-errors)
 - [Enable and configure logging](#enable-and-configure-logging)
+- [Troubleshoot persistent token caching issues](#troubleshoot-persistent-token-caching-issues)
 - [Troubleshoot AzureCLICredential authentication issues](#troubleshoot-azureclicredential-authentication-issues)
 - [Troubleshoot AzureDeveloperCLICredential authentication issues](#troubleshoot-azuredeveloperclicredential-authentication-issues)
 - [Troubleshoot AzurePipelinesCredential authentication issues](#troubleshoot-azurepipelinescredential-authentication-issues)
@@ -19,7 +20,6 @@ This troubleshooting guide covers failure investigation techniques, common error
   - [Azure App Service and Azure Functions managed identity](#azure-app-service-and-azure-functions-managed-identity)
   - [Azure Kubernetes Service managed identity](#azure-kubernetes-service-managed-identity)
   - [Azure Virtual Machine managed identity](#azure-virtual-machine-managed-identity)
-- [Troubleshoot UsernamePasswordCredential authentication issues](#troubleshoot-usernamepasswordcredential-authentication-issues)
 - [Troubleshoot WorkloadIdentityCredential authentication issues](#troubleshoot-workloadidentitycredential-authentication-issues)
 - [Get additional help](#get-additional-help)
 
@@ -86,6 +86,7 @@ azlog.SetEvents(azidentity.EventAuthentication)
 |"DefaultAzureCredential failed to acquire a token"|No credential in the `DefaultAzureCredential` chain provided a token|<ul><li>[Enable logging](#enable-and-configure-logging) to get further diagnostic information.</li><li>Consult the troubleshooting guide for underlying credential types for more information.</li><ul><li>[EnvironmentCredential](#troubleshoot-environmentcredential-authentication-issues)</li><li>[ManagedIdentityCredential](#troubleshoot-managedidentitycredential-authentication-issues)</li><li>[AzureCLICredential](#troubleshoot-azureclicredential-authentication-issues)</li></ul>|
 |Error from the client with a status code of 401 or 403|Authentication succeeded but the authorizing Azure service responded with a 401 (Unauthorized), or 403 (Forbidden) status code|<ul><li>[Enable logging](#enable-and-configure-logging) to determine which credential in the chain returned the authenticating token.</li><li>If an unexpected credential is returning a token, check application configuration such as environment variables.</li><li>Ensure the correct role is assigned to the authenticated identity. For example, a service specific role rather than the subscription Owner role.</li></ul>|
 |"managed identity timed out"|`DefaultAzureCredential` sets a short timeout on its first managed identity authentication attempt to prevent very long timeouts during local development when no managed identity is available. That timeout causes this error in production when an application requests a token before the hosting environment is ready to provide one.|Use [ManagedIdentityCredential](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity#ManagedIdentityCredential) directly, at least in production. It doesn't set a timeout on its authentication attempts.|
+|invalid AZURE_TOKEN_CREDENTIALS value "..."|AZURE_TOKEN_CREDENTIALS has an unexpected value|Specify a valid value as described in [DefaultAzureCredential documentation](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity#DefaultAzureCredential)
 
 ## Troubleshoot EnvironmentCredential authentication issues
 
@@ -109,13 +110,6 @@ azlog.SetEvents(azidentity.EventAuthentication)
 |---|---|---|
 |AADSTS700027|Client assertion contains an invalid signature.|Ensure the specified certificate has been uploaded to the application registration as described in [Microsoft Entra ID documentation](https://learn.microsoft.com/entra/identity-platform/howto-create-service-principal-portal#option-1-upload-a-certificate).|
 |AADSTS700016|The specified application wasn't found in the specified tenant.|Ensure the client and tenant IDs provided to the credential constructor are correct for your application registration. For multi-tenant apps, ensure the application has been added to the desired tenant by a tenant admin. To add a new application in the desired tenant, follow the [Microsoft Entra ID instructions](https://learn.microsoft.com/entra/identity-platform/howto-create-service-principal-portal).|
-
-<a id="username-password"></a>
-## Troubleshoot UsernamePasswordCredential authentication issues
-
-| Error Code | Issue | Mitigation |
-|---|---|---|
-|AADSTS50126|The provided username or password is invalid.|Ensure the username and password provided to the credential constructor are valid.|
 
 <a id="managed-id"></a>
 ## Troubleshoot ManagedIdentityCredential authentication issues
@@ -180,6 +174,7 @@ curl "$IDENTITY_ENDPOINT?resource=https://management.core.windows.net&api-versio
 |---|---|---|
 |Azure CLI not found on path|The Azure CLI isn’t installed or isn't on the application's path.|<ul><li>Ensure the Azure CLI is installed as described in [Azure CLI documentation](https://learn.microsoft.com/cli/azure/install-azure-cli).</li><li>Validate the installation location is in the application's `PATH` environment variable.</li></ul>|
 |Please run 'az login' to set up account|No account is currently logged into the Azure CLI, or the login has expired.|<ul><li>Run `az login` to log into the Azure CLI. More information about Azure CLI authentication is available in the [Azure CLI documentation](https://learn.microsoft.com/cli/azure/authenticate-azure-cli).</li><li>Verify that the Azure CLI can obtain tokens. See [below](#verify-the-azure-cli-can-obtain-tokens) for instructions.</li></ul>|
+|Subscription "[your subscription]" contains invalid characters. If this is the name of a subscription, use its ID instead|The subscription name contains a character that may not be safe in a command line.|Use the subscription's ID instead of its name. You can get this from the Azure CLI: `az account show --name "[your subscription]" --query "id"`
 
 #### Verify the Azure CLI can obtain tokens
 
@@ -225,7 +220,7 @@ azd auth token --output json --scope https://management.core.windows.net/.defaul
 
 | Error Message |Description| Mitigation |
 |---|---|---|
-|no client ID/tenant ID/token file specified|Incomplete configuration|In most cases these values are provided via environment variables set by Azure Workload Identity.<ul><li>If your application runs on Azure Kubernetes Servide (AKS) or a cluster that has deployed the Azure Workload Identity admission webhook, check pod labels and service account configuration. See the [AKS documentation](https://learn.microsoft.com/azure/aks/workload-identity-deploy-cluster#disable-workload-identity) and [Azure Workload Identity troubleshooting guide](https://azure.github.io/azure-workload-identity/docs/troubleshooting.html) for more details.<li>If your application isn't running on AKS or your cluster hasn't deployed the Workload Identity admission webhook, set these values in `WorkloadIdentityCredentialOptions`
+|no client ID/tenant ID/token file specified|Incomplete configuration|In most cases these values are provided via environment variables set by Azure Workload Identity.<ul><li>If your application runs on Azure Kubernetes Service (AKS) or a cluster that has deployed the Azure Workload Identity admission webhook, check pod labels and service account configuration. See the [AKS documentation](https://learn.microsoft.com/azure/aks/workload-identity-deploy-cluster#disable-workload-identity) and [Azure Workload Identity troubleshooting guide](https://azure.github.io/azure-workload-identity/docs/troubleshooting.html) for more details.<li>If your application isn't running on AKS or your cluster hasn't deployed the Workload Identity admission webhook, set these values in `WorkloadIdentityCredentialOptions`
 
 <a id="apc"></a>
 ## Troubleshoot AzurePipelinesCredential authentication issues
@@ -235,6 +230,29 @@ azd auth token --output json --scope https://management.core.windows.net/.defaul
 | AADSTS900023: Specified tenant identifier 'some tenant ID' is neither a valid DNS name, nor a valid external domain.|The `tenantID` argument to `NewAzurePipelinesCredential` is incorrect| Verify the tenant ID. It must identify the tenant of the user-assigned managed identity or service principal configured for the service connection.|
 | No service connection found with identifier |The `serviceConnectionID` argument to `NewAzurePipelinesCredential` is incorrect| Verify the service connection ID. This parameter refers to the `resourceId` of the Azure Service Connection. It can also be found in the query string of the service connection's configuration in Azure DevOps. [Azure Pipelines documentation](https://learn.microsoft.com/azure/devops/pipelines/library/service-endpoints?view=azure-devops&tabs=yaml) has more information about service connections.|
 |401 (Unauthorized) response from OIDC endpoint|The `systemAccessToken` argument to `NewAzurePipelinesCredential` is incorrect|Check pipeline configuration. This value comes from the predefined variable `System.AccessToken` [as described in Azure Pipelines documentation](https://learn.microsoft.com/azure/devops/pipelines/build/variables?view=azure-devops&tabs=yaml#systemaccesstoken).|
+
+## Troubleshoot persistent token caching issues
+
+### macOS
+
+[azidentity/cache](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache) encrypts persistent caches with the system Keychain on macOS. You may see build and runtime errors there because calling the Keychain API requires cgo and macOS prohibits Keychain access in some scenarios.
+
+#### Build errors
+
+Build errors about undefined `accessor` symbols indicate that cgo wasn't enabled. For example:
+```
+$ GOOS=darwin go build
+# github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache
+../../go/pkg/mod/github.com/!azure/azure-sdk-for-go/sdk/azidentity/cache@v0.3.0/darwin.go:18:19: undefined: accessor.New
+../../go/pkg/mod/github.com/!azure/azure-sdk-for-go/sdk/azidentity/cache@v0.3.0/darwin.go:18:38: undefined: accessor.WithAccount
+```
+
+Try `go build` again with `CGO_ENABLED=1`. You may need to install native build tools.
+
+#### Runtime errors
+
+macOS prohibits Keychain access from environments without a GUI such as SSH sessions. If your application calls the persistent cache constructor ([cache.New](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache#New)) from an SSH session on a macOS host, you'll see an error like
+`persistent storage isn't available due to error "User interaction is not allowed. (-25308)"`. This doesn't mean authentication is impossible, only that credentials can't persist data and the application must reauthenticate the next time it runs.
 
 ## Get additional help
 
