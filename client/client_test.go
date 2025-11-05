@@ -250,6 +250,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testHTTPResolveMetaReuse,
 	testHTTPResolveMultiBuild,
 	testGitResolveMutatedSource,
+	testImageResolveAttestationChainRequiresNetwork,
 }
 
 func TestIntegration(t *testing.T) {
@@ -12244,6 +12245,92 @@ func testHTTPResolveSourceMetadata(t *testing.T, sb integration.Sandbox) {
 		require.Equal(t, "my img.jpg", md.HTTP.Filename)
 		require.Nil(t, md.HTTP.LastModified)
 		require.Equal(t, id, md.Op.Identifier)
+		return nil, nil
+	}, nil)
+	require.NoError(t, err)
+}
+
+func testImageResolveAttestationChainRequiresNetwork(t *testing.T, sb integration.Sandbox) {
+	// this test temporarily requires direct registry access as the integration test
+	// mirroring system does not support mirroring attestation chains yet.
+	// Support is coming in future buildx release.
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	amd64, err := platforms.Parse("linux/amd64")
+	require.NoError(t, err)
+
+	_, err = c.Build(ctx, SolveOpt{}, "test", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		const rootDigest = "sha256:4e91099af134f4b1f509fecbd1a55981dfff18d8029d6782e28413210ef468b7"
+		const imageDigest = "sha256:d2f0b39234a66c3d58f24200d3fda9e4e3d2263c09f9b7286a826ab639713047"
+		const attestationDigest = "sha256:fb4c46b14f52d1bf790f593921c52dddc698fc6780792fb8469fc60efc0e609b"
+		const sigDigest = "sha256:bd0a6b088440ba9838e8eec79e736128fe52afce934578eae30ca8675f6d3142"
+
+		id := "registry-1-stage.docker.io/docker/github-builder-test@" + rootDigest
+		md, err := c.ResolveSourceMetadata(ctx, &pb.SourceOp{
+			Identifier: "docker-image://" + id,
+		}, sourceresolver.Opt{
+			ImageOpt: &sourceresolver.ResolveImageOpt{
+				NoConfig:         true,
+				AttestationChain: true,
+				Platform:         &amd64,
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		require.Equal(t, rootDigest, md.Image.Digest.String())
+		require.Nil(t, md.Image.Config)
+		require.NotNil(t, md.Image)
+		require.NotNil(t, md.Image.AttestationChain)
+		ac := md.Image.AttestationChain
+		require.Equal(t, rootDigest, ac.Root.String())
+		require.Equal(t, imageDigest, ac.ImageManifest.String())
+		require.Equal(t, attestationDigest, ac.AttestationManifest.String())
+		require.Len(t, ac.SignatureManifests, 1)
+		require.Equal(t, sigDigest, ac.SignatureManifests[0].String())
+
+		desc := ac.Blobs[ac.Root]
+		require.Equal(t, rootDigest, desc.Descriptor.Digest.String())
+		require.Len(t, desc.Data, int(desc.Descriptor.Size))
+		require.Equal(t, ocispecs.MediaTypeImageIndex, desc.Descriptor.MediaType)
+		chk := digest.FromBytes(desc.Data)
+		require.Equal(t, rootDigest, chk.String())
+
+		desc = ac.Blobs[ac.ImageManifest]
+		// image manifest is expected to be missing as content is not needed to verify attestation chain
+		_, ok := ac.Blobs[digest.Digest(imageDigest)]
+		require.False(t, ok)
+
+		desc = ac.Blobs[ac.AttestationManifest]
+		require.Equal(t, attestationDigest, desc.Descriptor.Digest.String())
+		require.Equal(t, ocispecs.MediaTypeImageManifest, desc.Descriptor.MediaType)
+		require.Len(t, desc.Data, int(desc.Descriptor.Size))
+		chk = digest.FromBytes(desc.Data)
+		require.Equal(t, attestationDigest, chk.String())
+
+		desc = ac.Blobs[ac.SignatureManifests[0]]
+		require.Equal(t, sigDigest, desc.Descriptor.Digest.String())
+		require.Equal(t, ocispecs.MediaTypeImageManifest, desc.Descriptor.MediaType)
+		require.Len(t, desc.Data, int(desc.Descriptor.Size))
+		chk = digest.FromBytes(desc.Data)
+		require.Equal(t, sigDigest, chk.String())
+
+		var sigMfst ocispecs.Manifest
+		err = json.Unmarshal(ac.Blobs[ac.SignatureManifests[0]].Data, &sigMfst)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(sigMfst.Layers))
+		sigLayer := sigMfst.Layers[0]
+		sigDesc := ac.Blobs[digest.Digest(sigLayer.Digest)]
+		require.Equal(t, sigLayer.Digest, sigDesc.Descriptor.Digest)
+		require.Len(t, sigDesc.Data, int(sigDesc.Descriptor.Size))
+		require.Equal(t, "application/vnd.dev.sigstore.bundle.v0.3+json", sigDesc.Descriptor.MediaType)
+		chk = digest.FromBytes(sigDesc.Data)
+		require.Equal(t, sigLayer.Digest, chk)
+
+		require.Len(t, md.Image.AttestationChain.Blobs, 4)
 		return nil, nil
 	}, nil)
 	require.NoError(t, err)

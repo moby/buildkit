@@ -541,9 +541,9 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 							}
 							prefix += "internal]"
 							mutRef, dgst, dt, err := metaResolver.ResolveImageConfig(ctx, d.stage.BaseName, sourceresolver.Opt{
-								LogName:  fmt.Sprintf("%s load metadata for %s", prefix, d.stage.BaseName),
-								Platform: platform,
+								LogName: fmt.Sprintf("%s load metadata for %s", prefix, d.stage.BaseName),
 								ImageOpt: &sourceresolver.ResolveImageOpt{
+									Platform:    platform,
 									ResolveMode: opt.ImageResolveMode.String(),
 								},
 							})

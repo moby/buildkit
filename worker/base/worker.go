@@ -396,8 +396,15 @@ func (w *Worker) ResolveSourceMetadata(ctx context.Context, op *pb.SourceOp, opt
 		return nil, errors.New("source policies can not be set for worker")
 	}
 
+	var p *ocispecs.Platform
+	if imgOpt := opt.ImageOpt; imgOpt != nil && imgOpt.Platform != nil {
+		p = imgOpt.Platform
+	} else if ociOpt := opt.OCILayoutOpt; ociOpt != nil && ociOpt.Platform != nil {
+		p = ociOpt.Platform
+	}
+
 	var platform *pb.Platform
-	if p := opt.Platform; p != nil {
+	if p != nil {
 		platform = &pb.Platform{
 			Architecture: p.Architecture,
 			OS:           p.OS,
@@ -421,35 +428,31 @@ func (w *Worker) ResolveSourceMetadata(ctx context.Context, op *pb.SourceOp, opt
 		if opt.ImageOpt == nil {
 			opt.ImageOpt = &sourceresolver.ResolveImageOpt{}
 		}
-
-		dgst, config, err := w.ImageSource.ResolveImageConfig(ctx, idt.Reference.String(), opt, sm, g)
+		if p != nil {
+			opt.ImageOpt.Platform = p
+		}
+		resp, err := w.ImageSource.ResolveImageMetadata(ctx, idt, opt.ImageOpt, sm, g)
 		if err != nil {
 			return nil, err
 		}
 		return &sourceresolver.MetaResponse{
-			Op: op,
-			Image: &sourceresolver.ResolveImageResponse{
-				Digest: dgst,
-				Config: config,
-			},
+			Op:    op,
+			Image: resp,
 		}, nil
 	case *containerimage.OCIIdentifier:
-		opt.OCILayoutOpt = &sourceresolver.ResolveOCILayoutOpt{
-			Store: sourceresolver.ResolveImageConfigOptStore{
-				StoreID:   idt.StoreID,
-				SessionID: idt.SessionID,
-			},
+		if opt.OCILayoutOpt == nil {
+			opt.OCILayoutOpt = &sourceresolver.ResolveOCILayoutOpt{}
 		}
-		dgst, config, err := w.OCILayoutSource.ResolveImageConfig(ctx, idt.Reference.String(), opt, sm, g)
+		if p != nil {
+			opt.OCILayoutOpt.Platform = p
+		}
+		resp, err := w.OCILayoutSource.ResolveOCILayoutMetadata(ctx, idt, opt.OCILayoutOpt, sm, g)
 		if err != nil {
 			return nil, err
 		}
 		return &sourceresolver.MetaResponse{
-			Op: op,
-			Image: &sourceresolver.ResolveImageResponse{
-				Digest: dgst,
-				Config: config,
-			},
+			Op:    op,
+			Image: resp,
 		}, nil
 	case *git.GitIdentifier:
 		if w.GitSource == nil {

@@ -52,6 +52,7 @@ require (
 	github.com/moby/go-archive v0.1.0
 	github.com/moby/locker v1.0.1
 	github.com/moby/patternmatcher v0.6.0
+	github.com/moby/policy-helpers v0.0.0-20251105011237-bcaa71c99f14
 	github.com/moby/profiles/seccomp v0.1.0
 	github.com/moby/sys/mountinfo v0.7.2
 	github.com/moby/sys/reexec v0.1.0
@@ -102,7 +103,7 @@ require (
 	golang.org/x/crypto v0.42.0
 	golang.org/x/exp v0.0.0-20250911091902-df9299821621
 	golang.org/x/mod v0.29.0
-	golang.org/x/net v0.43.0
+	golang.org/x/net v0.44.0
 	golang.org/x/sync v0.17.0
 	golang.org/x/sys v0.37.0
 	golang.org/x/time v0.14.0
@@ -145,6 +146,7 @@ require (
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/docker/docker-credential-helpers v0.9.3 // indirect
 	github.com/docker/go-metrics v0.0.1 // indirect
+	github.com/fatih/color v1.18.0 // indirect
 	github.com/felixge/fgprof v0.9.3 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
@@ -159,6 +161,7 @@ require (
 	github.com/hanwen/go-fuse/v2 v2.8.0 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
+	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/moby/sys/capability v0.4.0 // indirect
 	github.com/moby/sys/mount v0.3.4 // indirect
 	github.com/moby/sys/sequential v0.6.0 // indirect
@@ -176,7 +179,7 @@ require (
 	github.com/vbatts/tar-split v0.12.1 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	go.opencensus.io v0.24.0 // indirect
-	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
+	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel/metric v1.38.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	golang.org/x/text v0.29.0 // indirect
