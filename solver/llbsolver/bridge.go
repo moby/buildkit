@@ -85,7 +85,7 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 	if err != nil {
 		return nil, err
 	}
-	var polEngine SourcePolicyEvaluator
+	var polEngine *sourcepolicy.Engine
 	if srcPol != nil || len(pol) > 0 {
 		for _, p := range pol {
 			if p == nil {
@@ -143,7 +143,7 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 	}
 	dpc := &detectPrunedCacheID{}
 
-	edge, err := Load(ctx, def, polEngine, dpc.Load, ValidateEntitlements(ent, w.CDIManager()), WithCacheSources(cms), NormalizeRuntimePlatforms(), WithValidateCaps())
+	edge, err := Load(ctx, def, b.policy(polEngine), dpc.Load, ValidateEntitlements(ent, w.CDIManager()), WithCacheSources(cms), NormalizeRuntimePlatforms(), WithValidateCaps())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to load LLB")
 	}
@@ -161,6 +161,13 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 		return nil, err
 	}
 	return res, nil
+}
+
+func (b *llbBridge) policy(engine *sourcepolicy.Engine) SourcePolicyEvaluator {
+	return &policyEvaluator{
+		llbBridge: b,
+		engine:    engine,
+	}
 }
 
 func (b *llbBridge) validateEntitlements(p executor.ProcessInfo) error {
@@ -349,6 +356,10 @@ func (rp *resultProxy) Result(ctx context.Context) (res solver.CachedResult, err
 }
 
 func (b *llbBridge) ResolveSourceMetadata(ctx context.Context, op *pb.SourceOp, opt sourceresolver.Opt) (resp *sourceresolver.MetaResponse, err error) {
+	return b.resolveSourceMetadata(ctx, op, opt, true)
+}
+
+func (b *llbBridge) resolveSourceMetadata(ctx context.Context, op *pb.SourceOp, opt sourceresolver.Opt, withPolicy bool) (resp *sourceresolver.MetaResponse, err error) {
 	w, err := b.resolveWorker()
 	if err != nil {
 		return nil, err
@@ -379,8 +390,25 @@ func (b *llbBridge) ResolveSourceMetadata(ctx context.Context, op *pb.SourceOp, 
 		opt.SourcePolicies = append(opt.SourcePolicies, pol)
 	}
 
-	if _, err := sourcepolicy.NewEngine(opt.SourcePolicies).Evaluate(ctx, op); err != nil {
-		return nil, errors.Wrap(err, "could not resolve image due to policy")
+	engine := sourcepolicy.NewEngine(opt.SourcePolicies)
+
+	if !withPolicy {
+		if _, err := engine.Evaluate(ctx, op); err != nil {
+			return nil, errors.Wrap(err, "could not resolve image due to policy")
+		}
+	} else {
+		var p *ocispecs.Platform
+		if opt.ImageOpt != nil {
+			p = opt.ImageOpt.Platform
+		} else if opt.OCILayoutOpt != nil {
+			p = opt.OCILayoutOpt.Platform
+		}
+		if _, err := b.policy(engine).Evaluate(ctx, &pb.Op{
+			Op:       &pb.Op_Source{Source: op},
+			Platform: toPBPlatform(p),
+		}); err != nil {
+			return nil, errors.Wrap(err, "could not resolve image due to policy")
+		}
 	}
 
 	// policy is evaluated, so we can remove it from the options
