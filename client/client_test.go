@@ -12300,11 +12300,9 @@ func testImageResolveAttestationChainRequiresNetwork(t *testing.T, sb integratio
 		require.Equal(t, rootDigest, chk.String())
 
 		desc = ac.Blobs[ac.ImageManifest]
-		require.Equal(t, imageDigest, desc.Descriptor.Digest.String())
-		require.Len(t, desc.Data, int(desc.Descriptor.Size))
-		require.Equal(t, ocispecs.MediaTypeImageManifest, desc.Descriptor.MediaType)
-		chk = digest.FromBytes(desc.Data)
-		require.Equal(t, imageDigest, chk.String())
+		// image manifest is expected to be missing as content is not needed to verify attestation chain
+		_, ok := ac.Blobs[digest.Digest(imageDigest)]
+		require.False(t, ok)
 
 		desc = ac.Blobs[ac.AttestationManifest]
 		require.Equal(t, attestationDigest, desc.Descriptor.Digest.String())
@@ -12332,7 +12330,7 @@ func testImageResolveAttestationChainRequiresNetwork(t *testing.T, sb integratio
 		chk = digest.FromBytes(sigDesc.Data)
 		require.Equal(t, sigLayer.Digest, chk)
 
-		require.Len(t, md.Image.AttestationChain.Blobs, 5)
+		require.Len(t, md.Image.AttestationChain.Blobs, 4)
 		return nil, nil
 	}, nil)
 	require.NoError(t, err)

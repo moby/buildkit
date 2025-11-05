@@ -211,8 +211,10 @@ func (is *Source) ResolveImageMetadata(ctx context.Context, id *ImageIdentifier,
 			}
 			descs := []ocispecs.Descriptor{desc}
 			if sc.ImageManifest != nil {
+				// not adding image manifest to descs as it is not really needed for verification
+				// still adding digest to provide hint of what the image manifest was resolved by platform
+				// for better debugging experience  and error messages
 				ac.ImageManifest = sc.ImageManifest.Digest
-				descs = append(descs, sc.ImageManifest.Descriptor)
 			}
 			if sc.AttestationManifest != nil {
 				ac.AttestationManifest = sc.AttestationManifest.Digest
