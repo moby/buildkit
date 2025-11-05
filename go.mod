@@ -42,7 +42,7 @@ require (
 	github.com/hiddeco/sshsig v0.2.0
 	github.com/in-toto/in-toto-golang v0.9.0
 	github.com/klauspost/compress v1.18.1
-	github.com/minio/minio-go/v7 v7.0.95
+	github.com/minio/minio-go/v7 v7.0.97
 	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/moby/docker-image-spec v1.3.1
 	github.com/moby/go-archive v0.1.0
@@ -135,7 +135,6 @@ require (
 	github.com/go-ini/ini v1.67.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.0 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
@@ -145,9 +144,10 @@ require (
 	github.com/hanwen/go-fuse/v2 v2.8.0 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.11 // indirect
+	github.com/klauspost/crc32 v1.3.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
-	github.com/minio/crc64nvme v1.0.2 // indirect
+	github.com/minio/crc64nvme v1.1.0 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/moby/sys/capability v0.4.0 // indirect
 	github.com/moby/sys/mount v0.3.4 // indirect

@@ -432,17 +432,6 @@ github.com/go-logr/logr/funcr
 # github.com/go-logr/stdr v1.2.2
 ## explicit; go 1.16
 github.com/go-logr/stdr
-# github.com/goccy/go-json v0.10.5
-## explicit; go 1.19
-github.com/goccy/go-json
-github.com/goccy/go-json/internal/decoder
-github.com/goccy/go-json/internal/encoder
-github.com/goccy/go-json/internal/encoder/vm
-github.com/goccy/go-json/internal/encoder/vm_color
-github.com/goccy/go-json/internal/encoder/vm_color_indent
-github.com/goccy/go-json/internal/encoder/vm_indent
-github.com/goccy/go-json/internal/errors
-github.com/goccy/go-json/internal/runtime
 # github.com/gofrs/flock v0.13.0
 ## explicit; go 1.24.0
 github.com/gofrs/flock
@@ -532,29 +521,30 @@ github.com/klauspost/compress/zstd/internal/xxhash
 # github.com/klauspost/cpuid/v2 v2.2.11
 ## explicit; go 1.22
 github.com/klauspost/cpuid/v2
+# github.com/klauspost/crc32 v1.3.0
+## explicit; go 1.23.0
+github.com/klauspost/crc32
 # github.com/kylelemons/godebug v1.1.0
 ## explicit; go 1.11
 github.com/kylelemons/godebug/diff
 github.com/kylelemons/godebug/pretty
 # github.com/mattn/go-colorable v0.1.14
 ## explicit; go 1.18
-# github.com/minio/crc64nvme v1.0.2
+# github.com/minio/crc64nvme v1.1.0
 ## explicit; go 1.22
 github.com/minio/crc64nvme
 # github.com/minio/md5-simd v1.1.2
 ## explicit; go 1.14
 github.com/minio/md5-simd
-# github.com/minio/minio-go/v7 v7.0.95
+# github.com/minio/minio-go/v7 v7.0.97
 ## explicit; go 1.23.0
 github.com/minio/minio-go/v7
-github.com/minio/minio-go/v7/internal/json
 github.com/minio/minio-go/v7/pkg/cors
 github.com/minio/minio-go/v7/pkg/credentials
 github.com/minio/minio-go/v7/pkg/encrypt
 github.com/minio/minio-go/v7/pkg/kvcache
 github.com/minio/minio-go/v7/pkg/lifecycle
 github.com/minio/minio-go/v7/pkg/notification
-github.com/minio/minio-go/v7/pkg/peeker
 github.com/minio/minio-go/v7/pkg/replication
 github.com/minio/minio-go/v7/pkg/s3utils
 github.com/minio/minio-go/v7/pkg/set
