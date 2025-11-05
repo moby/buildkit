@@ -1635,7 +1635,7 @@ The available `[OPTIONS]` are:
 | [`--chown`](#copy---chown---chmod) |                            |
 | [`--chmod`](#copy---chown---chmod) | 1.2                        |
 | [`--link`](#copy---link)           | 1.4                        |
-| [`--parents`](#copy---parents)     | 1.7-labs                   |
+| [`--parents`](#copy---parents)     | 1.20                       |
 | [`--exclude`](#copy---exclude)     | 1.19                       |
 
 The `COPY` instruction copies new files or directories from `<src>` and adds
@@ -1926,9 +1926,6 @@ conditions for cache reuse.
 
 ### COPY --parents
 
-> [!NOTE]
-> Not yet available in stable syntax, use [`docker/dockerfile:1-labs`](#syntax) version.
-
 ```dockerfile
 COPY [--parents[=<boolean>]] <src> ... <dest>
 ```
@@ -1936,7 +1933,7 @@ COPY [--parents[=<boolean>]] <src> ... <dest>
 The `--parents` flag preserves parent directories for `src` entries. This flag defaults to `false`.
 
 ```dockerfile
-# syntax=docker/dockerfile:1-labs
+# syntax=docker/dockerfile:1
 FROM scratch
 
 COPY ./x/a.txt ./y/a.txt /no_parents/
@@ -1956,7 +1953,7 @@ directories after it will be preserved. This may be especially useful copies bet
 with `--from` where the source paths need to be absolute.
 
 ```dockerfile
-# syntax=docker/dockerfile:1-labs
+# syntax=docker/dockerfile:1
 FROM scratch
 
 COPY --parents ./x/./y/*.txt /parents/
