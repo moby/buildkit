@@ -1,5 +1,3 @@
-//go:build dfparents
-
 package dockerfile
 
 import (
@@ -78,6 +76,7 @@ COPY --parents foo1/foo2/ba* .
 }
 
 func testCopyRelativeParents(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -183,6 +182,7 @@ eot
 }
 
 func testCopyParentsMissingDirectory(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
