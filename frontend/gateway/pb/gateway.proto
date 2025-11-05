@@ -135,8 +135,9 @@ message ResolveSourceMetaRequest {
 	pb.Platform Platform = 2;
 	string LogName = 3;
 	string ResolveMode = 4;
-	repeated moby.buildkit.v1.sourcepolicy.Policy SourcePolicies = 8;
 	ResolveSourceGitRequest Git = 5;
+	ResolveSourceImageRequest Image = 6;
+	repeated moby.buildkit.v1.sourcepolicy.Policy SourcePolicies = 8;
 }
 
 message ResolveSourceMetaResponse {
@@ -146,9 +147,23 @@ message ResolveSourceMetaResponse {
 	ResolveSourceHTTPResponse HTTP = 4;
 }
 
+message ResolveSourceImageRequest {
+	bool NoConfig = 1;
+	bool AttestationChain = 2;
+}
+
+message AttestationChain {
+	string Root = 1;
+	string ImageManifest = 2;
+	string AttestationManifest = 3;
+	repeated string SignatureManifests = 4;
+	map<string, Blob> Blobs = 5;
+}
+
 message ResolveSourceImageResponse {
 	string Digest = 1;
 	bytes Config = 2;
+	AttestationChain AttestationChain = 3;
 }
 
 message ResolveSourceGitRequest {
@@ -347,4 +362,16 @@ message SignalMessage {
 	// we only send name (ie HUP, INT) because the int values
 	// are platform dependent.
 	string Name = 1;
+}
+
+message Blob {
+	Descriptor descriptor = 1;
+	bytes data = 2;
+}
+
+message Descriptor {
+	string media_type = 1;
+	string digest = 2;
+	int64 size = 3;
+	map<string, string> annotations = 5;
 }

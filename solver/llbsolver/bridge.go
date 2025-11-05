@@ -30,6 +30,7 @@ import (
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
@@ -357,8 +358,16 @@ func (b *llbBridge) ResolveSourceMetadata(ctx context.Context, op *pb.SourceOp, 
 		opt.LogName = fmt.Sprintf("resolve image config for %s", op.Identifier)
 	}
 	id := op.Identifier
-	if opt.Platform != nil {
-		id += platforms.FormatAll(*opt.Platform)
+
+	var platform *ocispecs.Platform
+	if opt.ImageOpt != nil && opt.ImageOpt.Platform != nil {
+		platform = opt.ImageOpt.Platform
+	} else if opt.OCILayoutOpt != nil && opt.OCILayoutOpt.Platform != nil {
+		platform = opt.OCILayoutOpt.Platform
+	}
+
+	if platform != nil {
+		id += platforms.FormatAll(*platform)
 	} else {
 		id += platforms.FormatAll(platforms.DefaultSpec())
 	}

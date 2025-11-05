@@ -631,10 +631,13 @@ func (lbf *llbBridgeForwarder) ResolveSourceMeta(ctx context.Context, req *pb.Re
 	resolveopt := sourceresolver.Opt{
 		LogName:        req.LogName,
 		SourcePolicies: req.SourcePolicies,
-		Platform:       platform,
 	}
 	resolveopt.ImageOpt = &sourceresolver.ResolveImageOpt{
 		ResolveMode: req.ResolveMode,
+		Platform:    platform,
+	}
+	resolveopt.OCILayoutOpt = &sourceresolver.ResolveOCILayoutOpt{
+		Platform: platform,
 	}
 	if req.Git != nil {
 		resolveopt.GitOpt = &sourceresolver.ResolveGitOpt{
@@ -698,11 +701,11 @@ func (lbf *llbBridgeForwarder) ResolveImageConfig(ctx context.Context, req *pb.R
 	resolveopt := sourceresolver.Opt{
 		LogName:        req.LogName,
 		SourcePolicies: req.SourcePolicies,
-		Platform:       platform,
 	}
 	if sourceresolver.ResolverType(req.ResolverType) == sourceresolver.ResolverTypeRegistry {
 		resolveopt.ImageOpt = &sourceresolver.ResolveImageOpt{
 			ResolveMode: req.ResolveMode,
+			Platform:    platform,
 		}
 	} else if sourceresolver.ResolverType(req.ResolverType) == sourceresolver.ResolverTypeOCILayout {
 		resolveopt.OCILayoutOpt = &sourceresolver.ResolveOCILayoutOpt{
@@ -710,6 +713,7 @@ func (lbf *llbBridgeForwarder) ResolveImageConfig(ctx context.Context, req *pb.R
 				SessionID: req.SessionID,
 				StoreID:   req.StoreID,
 			},
+			Platform: platform,
 		}
 	}
 

@@ -24,7 +24,6 @@ type MetaResolver interface {
 type Opt struct {
 	LogName        string
 	SourcePolicies []*spb.Policy
-	Platform       *ocispecs.Platform
 
 	ImageOpt     *ResolveImageOpt
 	OCILayoutOpt *ResolveOCILayoutOpt
@@ -40,12 +39,27 @@ type MetaResponse struct {
 }
 
 type ResolveImageOpt struct {
+	Platform    *ocispecs.Platform
 	ResolveMode string
 }
 
 type ResolveImageResponse struct {
-	Digest digest.Digest
-	Config []byte
+	Digest           digest.Digest
+	Config           []byte
+	AttestationChain *AttestationChain
+}
+
+type AttestationChain struct {
+	Root                digest.Digest
+	ImageManifest       digest.Digest
+	AttestationManifest digest.Digest
+	SignatureManifests  []digest.Digest
+	Blobs               map[digest.Digest]Blob
+}
+
+type Blob struct {
+	Descriptor ocispecs.Descriptor
+	Data       []byte
 }
 
 type ResolveGitOpt struct {
@@ -67,7 +81,8 @@ type ResolveHTTPResponse struct {
 }
 
 type ResolveOCILayoutOpt struct {
-	Store ResolveImageConfigOptStore
+	Platform *ocispecs.Platform
+	Store    ResolveImageConfigOptStore
 }
 
 type ResolveImageConfigOptStore struct {

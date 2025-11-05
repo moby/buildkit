@@ -9,7 +9,6 @@ import (
 	"github.com/containerd/containerd/v2/core/diff"
 	"github.com/containerd/containerd/v2/core/images"
 	"github.com/containerd/containerd/v2/core/leases"
-	"github.com/containerd/containerd/v2/core/remotes"
 	"github.com/containerd/containerd/v2/core/remotes/docker"
 	"github.com/containerd/containerd/v2/pkg/reference"
 	"github.com/containerd/platforms"
@@ -153,42 +152,28 @@ func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session
 	return p, nil
 }
 
-func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt sourceresolver.Opt, sm *session.Manager, g session.Group) (digest digest.Digest, config []byte, retErr error) {
+func (is *Source) ResolveImageMetadata(ctx context.Context, id *ImageIdentifier, opt *sourceresolver.ResolveImageOpt, sm *session.Manager, g session.Group) (_ *sourceresolver.ResolveImageResponse, retErr error) {
+	if is.ResolverType != ResolverTypeRegistry {
+		return nil, errors.Errorf("invalid resolver type for image metadata: %v", is.ResolverType)
+	}
+	ref := id.Reference.String()
+
 	span, ctx := tracing.StartSpan(ctx, "resolving "+ref)
 	defer func() {
 		tracing.FinishWithError(span, retErr)
 	}()
 
 	key := ref
-	var (
-		rm    resolver.ResolveMode
-		rslvr remotes.Resolver
-		err   error
-	)
 	if platform := opt.Platform; platform != nil {
 		key += platforms.FormatAll(*platform)
 	}
-
-	switch is.ResolverType {
-	case ResolverTypeRegistry:
-		iopt := opt.ImageOpt
-		if iopt == nil {
-			return "", nil, errors.Errorf("missing imageopt for resolve")
-		}
-		rm, err = resolver.ParseImageResolveMode(iopt.ResolveMode)
-		if err != nil {
-			return "", nil, err
-		}
-		rslvr = resolver.DefaultPool.GetResolver(is.RegistryHosts, ref, "pull", sm, g).WithImageStore(is.ImageStore, rm)
-	case ResolverTypeOCILayout:
-		iopt := opt.OCILayoutOpt
-		if iopt == nil {
-			return "", nil, errors.Errorf("missing ocilayoutopt for resolve")
-		}
-		rm = resolver.ResolveModeForcePull
-		rslvr = getOCILayoutResolver(iopt.Store, sm, g)
+	rm, err := resolver.ParseImageResolveMode(opt.ResolveMode)
+	if err != nil {
+		return nil, err
 	}
+	rslvr := resolver.DefaultPool.GetResolver(is.RegistryHosts, ref, "pull", sm, g).WithImageStore(is.ImageStore, rm)
 	key += rm.String()
+
 	res, err := is.g.Do(ctx, key, func(ctx context.Context) (*resolveImageResult, error) {
 		dgst, dt, err := imageutil.Config(ctx, ref, rslvr, is.ContentStore, is.LeaseManager, opt.Platform)
 		if err != nil {
@@ -197,9 +182,51 @@ func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt source
 		return &resolveImageResult{dgst: dgst, dt: dt}, nil
 	})
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
-	return res.dgst, res.dt, nil
+	return &sourceresolver.ResolveImageResponse{
+		Digest: res.dgst,
+		Config: res.dt,
+	}, nil
+}
+
+func (is *Source) ResolveOCILayoutMetadata(ctx context.Context, id *OCIIdentifier, opt *sourceresolver.ResolveOCILayoutOpt, sm *session.Manager, g session.Group) (_ *sourceresolver.ResolveImageResponse, retErr error) {
+	if is.ResolverType != ResolverTypeOCILayout {
+		return nil, errors.Errorf("invalid resolver type for image metadata: %v", is.ResolverType)
+	}
+	ref := id.Reference.String()
+
+	span, ctx := tracing.StartSpan(ctx, "resolving "+ref)
+	defer func() {
+		tracing.FinishWithError(span, retErr)
+	}()
+
+	key := ref
+	if platform := opt.Platform; platform != nil {
+		key += platforms.FormatAll(*platform)
+	}
+
+	if opt.Store.StoreID == "" {
+		opt.Store.StoreID = id.StoreID
+	}
+
+	rslvr := getOCILayoutResolver(opt.Store, sm, g)
+	key += resolver.ResolveModeForcePull.String()
+
+	res, err := is.g.Do(ctx, key, func(ctx context.Context) (*resolveImageResult, error) {
+		dgst, dt, err := imageutil.Config(ctx, ref, rslvr, is.ContentStore, is.LeaseManager, opt.Platform)
+		if err != nil {
+			return nil, err
+		}
+		return &resolveImageResult{dgst: dgst, dt: dt}, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &sourceresolver.ResolveImageResponse{
+		Digest: res.dgst,
+		Config: res.dt,
+	}, nil
 }
 
 type resolveImageResult struct {
