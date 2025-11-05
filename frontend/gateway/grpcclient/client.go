@@ -522,6 +522,13 @@ func (c *grpcClient) ResolveSourceMetadata(ctx context.Context, op *opspb.Source
 		LogName:        opt.LogName,
 		SourcePolicies: opt.SourcePolicies,
 	}
+	if opt.ImageOpt != nil {
+		req.Image = &pb.ResolveSourceImageRequest{
+			NoConfig:         opt.ImageOpt.NoConfig,
+			AttestationChain: opt.ImageOpt.AttestationChain,
+		}
+	}
+
 	if opt.GitOpt != nil {
 		req.Git = &pb.ResolveSourceGitRequest{
 			ReturnObject: opt.GitOpt.ReturnObject,

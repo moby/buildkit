@@ -636,6 +636,10 @@ func (lbf *llbBridgeForwarder) ResolveSourceMeta(ctx context.Context, req *pb.Re
 		ResolveMode: req.ResolveMode,
 		Platform:    platform,
 	}
+	if req.Image != nil {
+		resolveopt.ImageOpt.NoConfig = req.Image.NoConfig
+		resolveopt.ImageOpt.AttestationChain = req.Image.AttestationChain
+	}
 	resolveopt.OCILayoutOpt = &sourceresolver.ResolveOCILayoutOpt{
 		Platform: platform,
 	}
@@ -658,6 +662,9 @@ func (lbf *llbBridgeForwarder) ResolveSourceMeta(ctx context.Context, req *pb.Re
 		r.Image = &pb.ResolveSourceImageResponse{
 			Digest: string(resp.Image.Digest),
 			Config: resp.Image.Config,
+		}
+		if resp.Image.AttestationChain != nil {
+			r.Image.AttestationChain = toPBAttestationChain(resp.Image.AttestationChain)
 		}
 	}
 	if resp.Git != nil {
@@ -1693,6 +1700,33 @@ func getCaps(label string) map[string]struct{} {
 		name := strings.SplitN(c, "+", 2)
 		if name[0] != "" {
 			out[name[0]] = struct{}{}
+		}
+	}
+	return out
+}
+
+func toPBAttestationChain(ac *sourceresolver.AttestationChain) *pb.AttestationChain {
+	if ac == nil {
+		return nil
+	}
+	out := &pb.AttestationChain{
+		Root:                string(ac.Root),
+		ImageManifest:       string(ac.ImageManifest),
+		AttestationManifest: string(ac.AttestationManifest),
+		Blobs:               make(map[string]*pb.Blob),
+	}
+	for _, s := range ac.SignatureManifests {
+		out.SignatureManifests = append(out.SignatureManifests, string(s))
+	}
+	for k, v := range ac.Blobs {
+		out.Blobs[k.String()] = &pb.Blob{
+			Descriptor_: &pb.Descriptor{
+				MediaType:   v.Descriptor.MediaType,
+				Size:        v.Descriptor.Size,
+				Digest:      string(v.Descriptor.Digest),
+				Annotations: maps.Clone(v.Descriptor.Annotations),
+			},
+			Data: v.Data,
 		}
 	}
 	return out
