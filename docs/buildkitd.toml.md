@@ -102,6 +102,12 @@ provenanceEnvDir = "/etc/buildkit/provenance.d"
   # maintain a pool of reusable CNI network namespaces to amortize the overhead
   # of allocating and releasing the namespaces
   cniPoolSize = 16
+  # defaultCgroupParent sets the parent cgroup of all containers.
+  defaultCgroupParent = "buildkit"
+  # isolateCgroups keeps all buildkitd managed cgroups under the cgroup
+  # hierarchy of the buildkitd process. if you are running buildkitd in
+  # Kubernetes, set this to true to ensure resource limits work as expected.
+  isolateCgroups = true
 
   [worker.oci.labels]
     "foo" = "bar"

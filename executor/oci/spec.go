@@ -38,6 +38,9 @@ const (
 	// Note that NoProcessSandbox allows build containers to kill (and potentially ptrace) an arbitrary process in the BuildKit host namespace.
 	// NoProcessSandbox should be enabled only when the BuildKit is running in a container as an unprivileged user.
 	NoProcessSandbox
+
+	// cgroupNamespace is the cgroup under which container cgroups are created.
+	cgroupNamespace = "buildkit"
 )
 
 var tracingEnvVars = []string{
@@ -61,7 +64,7 @@ func (pm ProcessMode) String() string {
 
 // GenerateSpec generates spec using containerd functionality.
 // opts are ignored for s.Process, s.Hostname, and s.Mounts .
-func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mount, id, resolvConf, hostsFile string, namespace network.Namespace, cgroupParent string, processMode ProcessMode, idmap *user.IdentityMapping, apparmorProfile string, selinuxB bool, tracingSocket string, cdiManager *cdidevices.Manager, opts ...oci.SpecOpts) (*specs.Spec, func(), error) {
+func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mount, id, resolvConf, hostsFile string, namespace network.Namespace, cgroupParent string, cgroupRoot string, processMode ProcessMode, idmap *user.IdentityMapping, apparmorProfile string, selinuxB bool, tracingSocket string, cdiManager *cdidevices.Manager, opts ...oci.SpecOpts) (*specs.Spec, func(), error) {
 	c := &containers.Container{
 		ID: id,
 	}
@@ -75,15 +78,17 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 		if strings.Contains(cgroupParent, ".slice") && lastSeparator == ":" {
 			cgroupsPath = cgroupParent + id
 		} else {
-			cgroupsPath = filepath.Join("/", cgroupParent, "buildkit", id)
+			cgroupsPath = filepath.Join(cgroupParent, cgroupNamespace, id)
 		}
-		opts = append(opts, oci.WithCgroup(cgroupsPath))
+		opts = append(opts, oci.WithCgroup(filepath.Join("/", cgroupRoot, cgroupsPath)))
+	} else if cgroupRoot != "" {
+		opts = append(opts, oci.WithCgroup(filepath.Join("/", cgroupRoot, cgroupNamespace, id)))
 	}
 
 	// containerd/oci.GenerateSpec requires a namespace, which
 	// will be used to namespace specs.Linux.CgroupsPath if generated
 	if _, ok := namespaces.Namespace(ctx); !ok {
-		ctx = namespaces.WithNamespace(ctx, "buildkit")
+		ctx = namespaces.WithNamespace(ctx, cgroupNamespace)
 	}
 
 	opts = append(opts, generateMountOpts(resolvConf, hostsFile)...)
