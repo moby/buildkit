@@ -130,7 +130,7 @@ func (e *Engine) evaluatePolicy(ctx context.Context, pol *spb.Policy, srcOp *pb.
 	var deny bool
 	for _, rule := range pol.Rules {
 		selector := e.selectorCache(rule.Selector)
-		matched, err := match(selector, ident, srcOp.Attrs)
+		matched, err := match(selector, ident, rule.Selector.Constraints, srcOp.Attrs)
 		if err != nil {
 			return false, errors.Wrap(err, "error matching source policy")
 		}
