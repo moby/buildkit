@@ -113,6 +113,26 @@ func (gs *Source) Identifier(scheme, ref string, attrs map[string]string, platfo
 			if v == "true" {
 				id.SkipSubmodules = true
 			}
+		case pb.AttrGitSignatureVerifyPubKey:
+			if id.VerifySignature == nil {
+				id.VerifySignature = &GitSignatureVerifyOptions{}
+			}
+			id.VerifySignature.PubKey = []byte(v)
+		case pb.AttrGitSignatureVerifyRejectExpired:
+			if id.VerifySignature == nil {
+				id.VerifySignature = &GitSignatureVerifyOptions{}
+			}
+			id.VerifySignature.RejectExpiredKeys = v == "true"
+		case pb.AttrGitSignatureVerifyRequireSignedTag:
+			if id.VerifySignature == nil {
+				id.VerifySignature = &GitSignatureVerifyOptions{}
+			}
+			id.VerifySignature.RequireSignedTag = v == "true"
+		case pb.AttrGitSignatureVerifyIgnoreSignedTag:
+			if id.VerifySignature == nil {
+				id.VerifySignature = &GitSignatureVerifyOptions{}
+			}
+			id.VerifySignature.IgnoreSignedTag = v == "true"
 		}
 	}
 

@@ -254,6 +254,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testSourcePolicySession,
 	testSourceMetaPolicySession,
 	testSourcePolicyParallelSession,
+	testSourcePolicySignedCommit,
 }
 
 func TestIntegration(t *testing.T) {
@@ -12744,6 +12745,10 @@ func testGitResolveMutatedSource(t *testing.T, sb integration.Sandbox) {
 }
 
 func runInDir(dir string, cmds ...string) error {
+	return runInDirEnv(dir, nil, cmds...)
+}
+
+func runInDirEnv(dir string, env []string, cmds ...string) error {
 	for _, args := range cmds {
 		var cmd *exec.Cmd
 		if runtime.GOOS == "windows" {
@@ -12751,6 +12756,7 @@ func runInDir(dir string, cmds ...string) error {
 		} else {
 			cmd = exec.Command("sh", "-c", args)
 		}
+		cmd.Env = append(os.Environ(), env...)
 		cmd.Dir = dir
 		if err := cmd.Run(); err != nil {
 			return errors.Wrapf(err, "error running %v", args)
